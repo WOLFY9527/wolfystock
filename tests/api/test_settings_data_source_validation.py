@@ -85,6 +85,63 @@ class SettingsDataSourceValidationApiTestCase(unittest.TestCase):
             timeout_seconds=5.0,
         )
 
+    def test_builtin_data_source_validation_endpoint_preserves_twelve_data_hk_diagnostic_checks(self) -> None:
+        service = Mock()
+        expected = {
+            "provider": "twelve_data",
+            "ok": False,
+            "status": "partial",
+            "checked_at": "2026-05-14T00:00:00+00:00",
+            "duration_ms": 88,
+            "key_masked": "td-s...-key",
+            "checks": [
+                {
+                    "name": "hk_quote",
+                    "endpoint": "/quote",
+                    "ok": True,
+                    "http_status": 200,
+                    "duration_ms": 32,
+                    "error_type": None,
+                    "message": "quote endpoint 可用。",
+                },
+                {
+                    "name": "hk_history",
+                    "endpoint": "/time_series",
+                    "ok": False,
+                    "http_status": 429,
+                    "duration_ms": 56,
+                    "error_type": "RateLimited",
+                    "message": "history endpoint 返回 429，可能已触发 provider 频率限制或额度耗尽。",
+                },
+                {
+                    "name": "hk_quote_history",
+                    "endpoint": "/quote + /time_series",
+                    "ok": False,
+                    "http_status": 429,
+                    "duration_ms": 88,
+                    "error_type": "quota_limited",
+                    "message": "Twelve Data 已配置，但 HK quote/history 诊断命中额度或频率限制。",
+                },
+            ],
+            "summary": "Twelve Data 已配置，但 HK quote/history 诊断命中额度或频率限制。",
+            "suggestion": "请检查 Twelve Data credits/quota/frequency limit，稍后重试或切换可用 key。",
+        }
+        service.test_builtin_data_source.return_value = expected
+
+        payload = system_config.test_builtin_data_source(
+            request=TestBuiltinDataSourceRequest(provider="twelve_data", symbol="HK00700"),
+            service=service,
+        ).model_dump()
+
+        self.assertEqual(payload, expected)
+        service.test_builtin_data_source.assert_called_once_with(
+            provider="twelve_data",
+            symbol="HK00700",
+            credential="",
+            secret="",
+            timeout_seconds=5.0,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

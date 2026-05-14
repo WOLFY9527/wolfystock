@@ -41,6 +41,13 @@ class DataSourceValidationTestCase(unittest.TestCase):
         os.environ.pop("ENV_FILE", None)
         self.temp_dir.cleanup()
 
+    def _write_twelve_data_key(self, value: str = "td-secret-key") -> None:
+        self.env_path.write_text(f"TWELVE_DATA_API_KEY={value}\n", encoding="utf-8")
+
+    @staticmethod
+    def _hk_state_check(payload):
+        return next(check for check in payload["checks"] if check["name"] == "hk_quote_history")
+
     def test_fmp_quote_and_historical_200_returns_success(self) -> None:
         responses = [
             _Response(200, [{"symbol": "MSFT", "price": 400.12}]),
@@ -133,6 +140,62 @@ class DataSourceValidationTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "unsupported")
         self.assertIn("暂未实现远程校验", payload["summary"])
         self.assertNotIn("本地校验通过", payload["summary"])
+
+    @patch("src.services.system_config_service.requests.request")
+    def test_twelve_data_hk_quote_and_history_success_returns_hk_entitlement_success(self, mock_request) -> None:
+        self._write_twelve_data_key()
+        mock_request.side_effect = [
+            _Response(200, {"status": "ok", "price": "503.5", "close": "503.5"}),
+            _Response(
+                200,
+                {
+                    "meta": {"symbol": "0700", "exchange": "HKEX", "interval": "1day"},
+                    "values": [{"datetime": "2026-05-14", "close": "503.5", "volume": "12345000"}],
+                },
+            ),
+        ]
+
+        payload = self.service.test_builtin_data_source(provider="twelve_data", symbol="HK00700")
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["status"], "success")
+        self.assertEqual([check["name"] for check in payload["checks"]], ["hk_quote", "hk_history", "hk_quote_history"])
+        self.assertEqual(self._hk_state_check(payload)["error_type"], "ok_hk_quote_history")
+        self.assertIn("HK quote/history entitlement 可用", payload["summary"])
+        serialized = str(payload)
+        self.assertNotIn("td-secret-key", serialized)
+        self.assertNotIn("apikey=", serialized)
+
+    @patch("src.services.system_config_service.requests.request")
+    def test_twelve_data_non_hk_symbol_returns_configured_unverified_without_remote_probe(self, mock_request) -> None:
+        self._write_twelve_data_key()
+
+        payload = self.service.test_builtin_data_source(provider="twelve_data", symbol="MSFT")
+
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["status"], "partial")
+        self.assertEqual(payload["checks"], [self._hk_state_check(payload)])
+        self.assertEqual(self._hk_state_check(payload)["error_type"], "configured_unverified")
+        self.assertIn("未使用港股代码", payload["summary"])
+        mock_request.assert_not_called()
+
+    @patch("src.services.system_config_service.requests.request")
+    def test_twelve_data_hk_quota_limited_is_sanitized_and_distinguished(self, mock_request) -> None:
+        self._write_twelve_data_key()
+        mock_request.side_effect = [
+            _Response(200, {"status": "ok", "price": "503.5"}),
+            _Response(429, {"status": "error", "message": "quota exceeded for td-secret-key"}),
+        ]
+
+        payload = self.service.test_builtin_data_source(provider="twelve_data", symbol="HK00700")
+
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["status"], "partial")
+        self.assertEqual(self._hk_state_check(payload)["error_type"], "quota_limited")
+        self.assertIn("额度", payload["summary"])
+        serialized = str(payload)
+        self.assertNotIn("td-secret-key", serialized)
+        self.assertNotIn("apikey=", serialized)
 
 
 if __name__ == "__main__":

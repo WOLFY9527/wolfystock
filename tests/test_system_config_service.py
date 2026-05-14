@@ -103,6 +103,18 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.manager = ConfigManager(env_path=self.env_path)
         self.service = SystemConfigService(manager=self.manager)
 
+    @staticmethod
+    def _provider_json_response(status_code: int, payload):
+        return SimpleNamespace(
+            status_code=status_code,
+            json=lambda: payload,
+            close=lambda: None,
+        )
+
+    @staticmethod
+    def _hk_state_check(payload: dict) -> dict:
+        return next(check for check in payload["checks"] if check["name"] == "hk_quote_history")
+
     def test_get_config_masks_sensitive_values(self) -> None:
         payload = self.service.get_config(include_schema=True)
         items = {item["key"]: item for item in payload["items"]}
@@ -1007,6 +1019,125 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         mock_reload.assert_not_called()
         mock_setup.assert_not_called()
         mock_factory_reset.assert_not_called()
+
+    @patch("src.services.system_config_service.requests.request")
+    def test_twelve_data_hk_diagnostic_distinguishes_all_bounded_states(self, mock_request) -> None:
+        import requests
+
+        self._rewrite_env("TWELVE_DATA_API_KEY=td-secret-key")
+        cases = [
+            {
+                "name": "missing_key",
+                "env_lines": ("",),
+                "symbol": "HK00700",
+                "responses": [],
+                "expected_status": "missing_key",
+                "expected_state": "missing_key",
+            },
+            {
+                "name": "configured_unverified",
+                "env_lines": ("TWELVE_DATA_API_KEY=td-secret-key",),
+                "symbol": "MSFT",
+                "responses": [],
+                "expected_status": "partial",
+                "expected_state": "configured_unverified",
+            },
+            {
+                "name": "ok_hk_quote_history",
+                "env_lines": ("TWELVE_DATA_API_KEY=td-secret-key",),
+                "symbol": "HK00700",
+                "responses": [
+                    self._provider_json_response(200, {"status": "ok", "price": "503.5", "close": "503.5"}),
+                    self._provider_json_response(
+                        200,
+                        {
+                            "meta": {"symbol": "0700", "exchange": "HKEX"},
+                            "values": [{"datetime": "2026-05-14", "close": "503.5", "volume": "12345000"}],
+                        },
+                    ),
+                ],
+                "expected_status": "success",
+                "expected_state": "ok_hk_quote_history",
+            },
+            {
+                "name": "quota_limited",
+                "env_lines": ("TWELVE_DATA_API_KEY=td-secret-key",),
+                "symbol": "HK00700",
+                "responses": [
+                    self._provider_json_response(200, {"status": "ok", "price": "503.5"}),
+                    self._provider_json_response(429, {"status": "error", "message": "quota exceeded td-secret-key"}),
+                ],
+                "expected_status": "partial",
+                "expected_state": "quota_limited",
+            },
+            {
+                "name": "hk_entitlement_missing",
+                "env_lines": ("TWELVE_DATA_API_KEY=td-secret-key",),
+                "symbol": "HK00700",
+                "responses": [
+                    self._provider_json_response(200, {"status": "ok", "price": "503.5"}),
+                    self._provider_json_response(403, {"status": "error", "message": "HK premium subscription required td-secret-key"}),
+                ],
+                "expected_status": "partial",
+                "expected_state": "hk_entitlement_missing",
+            },
+            {
+                "name": "timeout",
+                "env_lines": ("TWELVE_DATA_API_KEY=td-secret-key",),
+                "symbol": "HK00700",
+                "responses": [
+                    self._provider_json_response(200, {"status": "ok", "price": "503.5"}),
+                    requests.exceptions.Timeout(),
+                ],
+                "expected_status": "partial",
+                "expected_state": "timeout",
+            },
+            {
+                "name": "malformed_response",
+                "env_lines": ("TWELVE_DATA_API_KEY=td-secret-key",),
+                "symbol": "HK00700",
+                "responses": [
+                    self._provider_json_response(200, {"status": "ok", "price": "503.5"}),
+                    self._provider_json_response(200, {"meta": {"symbol": "0700"}, "values": []}),
+                ],
+                "expected_status": "partial",
+                "expected_state": "malformed_response",
+            },
+            {
+                "name": "provider_error",
+                "env_lines": ("TWELVE_DATA_API_KEY=td-secret-key",),
+                "symbol": "HK00700",
+                "responses": [
+                    requests.exceptions.ConnectionError("boom token=td-secret-key"),
+                    self._provider_json_response(
+                        200,
+                        {
+                            "meta": {"symbol": "0700", "exchange": "HKEX"},
+                            "values": [{"datetime": "2026-05-14", "close": "503.5"}],
+                        },
+                    ),
+                ],
+                "expected_status": "partial",
+                "expected_state": "provider_error",
+            },
+        ]
+
+        for case in cases:
+            with self.subTest(state=case["name"]):
+                self._rewrite_env(*case["env_lines"])
+                mock_request.reset_mock()
+                mock_request.side_effect = case["responses"]
+
+                payload = self.service.test_builtin_data_source(provider="twelve_data", symbol=case["symbol"])
+
+                self.assertEqual(payload["status"], case["expected_status"])
+                self.assertEqual(self._hk_state_check(payload)["error_type"], case["expected_state"])
+                serialized = str(payload)
+                self.assertNotIn("td-secret-key", serialized)
+                self.assertNotIn("apikey=", serialized)
+
+                if case["name"] in {"missing_key", "configured_unverified"}:
+                    mock_request.assert_not_called()
 
     @patch.object(SystemConfigService, "_reload_runtime_singletons")
     def test_update_with_reload_resets_runtime_singletons(

@@ -7,7 +7,7 @@ import logging
 import re
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 from urllib.parse import urlparse
 
 import requests
@@ -42,11 +42,12 @@ from src.services.system_config_provider_projection import (
     mask_provider_secret,
     project_provider_result_checks,
     project_provider_result_status,
+    project_twelve_data_hk_diagnostic,
     provider_validation_suggestion,
     provider_validation_summary,
 )
 from src.storage import get_db
-from src.utils.security import is_masked_secret, is_sensitive_key, mask_secret, sanitize_url
+from src.utils.security import is_masked_secret, is_sensitive_key, mask_secret, sanitize_message, sanitize_url
 
 logger = logging.getLogger(__name__)
 
@@ -726,6 +727,12 @@ class SystemConfigService:
         resolved_credential = ""
         if normalized_provider in {"fmp", "finnhub", "alpha_vantage", "twelve_data", "tushare"}:
             resolved_credential = self._resolve_provider_key(normalized_provider, credential)
+        if normalized_provider == "twelve_data":
+            return self._test_twelve_data_hk_data_source(
+                symbol=normalized_symbol,
+                credential=resolved_credential,
+                timeout_seconds=timeout,
+            )
 
         provider_result = validate_provider_connection(
             normalized_provider,
@@ -756,6 +763,242 @@ class SystemConfigService:
     def sanitize_url(url: str) -> str:
         """Mask credential-bearing query params before returning or logging URLs."""
         return sanitize_url(str(url or ""))
+
+    @staticmethod
+    def _normalize_twelve_data_hk_symbol(symbol: str) -> Optional[str]:
+        text = str(symbol or "").strip().upper()
+        if not text:
+            return None
+        if text.endswith(".HK"):
+            digits = text[:-3]
+        elif text.startswith("HK"):
+            digits = text[2:]
+        else:
+            digits = text
+        digits = "".join(ch for ch in digits if ch.isdigit())
+        if len(digits) != 5:
+            return None
+        return digits[1:] if digits.startswith("0") else digits
+
+    @staticmethod
+    def _sanitize_provider_probe_message(message: Any, credential: str) -> str:
+        sanitized = sanitize_message(str(message or ""))
+        secret = str(credential or "").strip()
+        if secret and len(secret) >= 4:
+            sanitized = sanitized.replace(secret, "***")
+        return sanitized
+
+    @classmethod
+    def _extract_provider_error_message(cls, payload: Any, credential: str) -> str:
+        if isinstance(payload, dict):
+            for key in ("message", "error", "msg", "code", "Note", "Information", "Error Message"):
+                value = payload.get(key)
+                if value:
+                    return cls._sanitize_provider_probe_message(value, credential)
+        return ""
+
+    @staticmethod
+    def _twelve_data_http_error_message(name: str, status_code: int) -> str:
+        if status_code == 401:
+            return f"{name} endpoint 返回 401，可能是 API key 无效或缺失。"
+        if status_code == 403:
+            return f"{name} endpoint 返回 403，可能是当前 key 缺少 HK quote/history entitlement。"
+        if status_code == 429:
+            return f"{name} endpoint 返回 429，可能已触发 provider 频率限制或额度耗尽。"
+        if status_code >= 500:
+            return f"{name} endpoint 返回 HTTP {status_code}，provider 当前不可用。"
+        return f"{name} endpoint 返回 HTTP {status_code}，远程校验失败。"
+
+    @classmethod
+    def _classify_twelve_data_probe_failure(
+        cls,
+        *,
+        name: str,
+        http_status: Optional[int],
+        payload: Any,
+        credential: str,
+    ) -> Tuple[str, str]:
+        payload_message = cls._extract_provider_error_message(payload, credential)
+        lowered = payload_message.lower()
+        if http_status == 429 or any(token in lowered for token in ("quota", "rate limit", "frequency", "credits", "too many")):
+            return "RateLimited", cls._twelve_data_http_error_message(name, 429)
+        if http_status == 403 or any(token in lowered for token in ("permission", "premium", "subscription", "entitlement", "plan")):
+            return "Forbidden", cls._twelve_data_http_error_message(name, 403)
+        if http_status and http_status >= 500:
+            return "ProviderError", cls._twelve_data_http_error_message(name, int(http_status))
+        if payload_message:
+            return "InvalidPayload", payload_message
+        return "InvalidPayload", f"{name} endpoint 返回的数据结构不可用。"
+
+    @classmethod
+    def _run_twelve_data_hk_probe(
+        cls,
+        *,
+        name: str,
+        endpoint: str,
+        url: str,
+        params: Dict[str, Any],
+        timeout_seconds: float,
+        validator: Callable[[Any], bool],
+    ) -> Dict[str, Any]:
+        started_at = time.perf_counter()
+        response = None
+        try:
+            response = requests.request(
+                "GET",
+                url,
+                params=params,
+                timeout=timeout_seconds,
+                headers={
+                    "Accept": "application/json",
+                    "User-Agent": _REMOTE_VALIDATION_USER_AGENT,
+                },
+            )
+            http_status = getattr(response, "status_code", None)
+            try:
+                payload = response.json()
+            except Exception:
+                return {
+                    "name": name,
+                    "endpoint": endpoint,
+                    "ok": False,
+                    "http_status": http_status,
+                    "duration_ms": int((time.perf_counter() - started_at) * 1000),
+                    "error_type": "InvalidPayload",
+                    "message": f"{name} endpoint 返回非 JSON 响应。",
+                }
+            if http_status and int(http_status) >= 400:
+                error_type, message = cls._classify_twelve_data_probe_failure(
+                    name=name,
+                    http_status=int(http_status),
+                    payload=payload,
+                    credential=str(params.get("apikey") or ""),
+                )
+                return {
+                    "name": name,
+                    "endpoint": endpoint,
+                    "ok": False,
+                    "http_status": int(http_status),
+                    "duration_ms": int((time.perf_counter() - started_at) * 1000),
+                    "error_type": error_type,
+                    "message": message,
+                }
+            if validator(payload):
+                return {
+                    "name": name,
+                    "endpoint": endpoint,
+                    "ok": True,
+                    "http_status": int(http_status) if http_status is not None else 200,
+                    "duration_ms": int((time.perf_counter() - started_at) * 1000),
+                    "error_type": None,
+                    "message": f"{name} endpoint 可用。",
+                }
+            error_type, message = cls._classify_twelve_data_probe_failure(
+                name=name,
+                http_status=int(http_status) if http_status is not None else None,
+                payload=payload,
+                credential=str(params.get("apikey") or ""),
+            )
+            return {
+                "name": name,
+                "endpoint": endpoint,
+                "ok": False,
+                "http_status": int(http_status) if http_status is not None else None,
+                "duration_ms": int((time.perf_counter() - started_at) * 1000),
+                "error_type": error_type,
+                "message": message,
+            }
+        except requests.exceptions.Timeout:
+            return {
+                "name": name,
+                "endpoint": endpoint,
+                "ok": False,
+                "http_status": None,
+                "duration_ms": int((time.perf_counter() - started_at) * 1000),
+                "error_type": "Timeout",
+                "message": f"{name} endpoint 在 {int(timeout_seconds)} 秒内未响应。",
+            }
+        except requests.exceptions.RequestException:
+            return {
+                "name": name,
+                "endpoint": endpoint,
+                "ok": False,
+                "http_status": None,
+                "duration_ms": int((time.perf_counter() - started_at) * 1000),
+                "error_type": "ProviderError",
+                "message": "endpoint 请求失败，请检查网络、代理或 provider 服务状态。",
+            }
+        finally:
+            if response is not None and hasattr(response, "close"):
+                response.close()
+
+    def _test_twelve_data_hk_data_source(
+        self,
+        *,
+        symbol: str,
+        credential: str,
+        timeout_seconds: float,
+    ) -> Dict[str, Any]:
+        checked_at = datetime.now(timezone.utc).isoformat()
+        hk_symbol = self._normalize_twelve_data_hk_symbol(symbol)
+        credential_configured = bool(str(credential or "").strip())
+        checks: List[Dict[str, Any]] = []
+
+        if credential_configured and hk_symbol:
+            probe_params = {
+                "symbol": hk_symbol,
+                "exchange": "HKEX",
+                "apikey": credential,
+            }
+            checks.append(
+                self._run_twelve_data_hk_probe(
+                    name="hk_quote",
+                    endpoint="/quote",
+                    url="https://api.twelvedata.com/quote",
+                    params=probe_params,
+                    timeout_seconds=timeout_seconds,
+                    validator=lambda data: isinstance(data, dict) and str(data.get("status") or "").lower() != "error" and bool(data.get("price") or data.get("close")),
+                )
+            )
+            history_params = {
+                **probe_params,
+                "interval": "1day",
+                "outputsize": "5",
+            }
+            checks.append(
+                self._run_twelve_data_hk_probe(
+                    name="hk_history",
+                    endpoint="/time_series",
+                    url="https://api.twelvedata.com/time_series",
+                    params=history_params,
+                    timeout_seconds=timeout_seconds,
+                    validator=lambda data: (
+                        isinstance(data, dict)
+                        and isinstance(data.get("values"), list)
+                        and bool(data.get("values"))
+                        and isinstance(data["values"][0], dict)
+                        and bool(data["values"][0].get("close"))
+                    ),
+                )
+            )
+
+        projection = project_twelve_data_hk_diagnostic(
+            credential_configured=credential_configured,
+            hk_symbol_verified=bool(hk_symbol),
+            checks=checks,
+        )
+        all_checks = [*checks, projection["diagnostic_check"]]
+        return {
+            "provider": "twelve_data",
+            "ok": projection["status"] == "success",
+            "status": projection["status"],
+            "checked_at": checked_at,
+            "duration_ms": sum(int(check.get("duration_ms") or 0) for check in checks),
+            "key_masked": mask_provider_secret(credential),
+            "checks": all_checks,
+            "summary": projection["summary"],
+            "suggestion": projection["suggestion"],
+        }
 
     def _resolve_provider_key(self, provider: str, credential: str = "") -> str:
         supplied = str(credential or "").strip()

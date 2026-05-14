@@ -119,6 +119,84 @@ def provider_validation_suggestion(provider: str, status: str) -> str:
     return "请检查 provider 凭据、网络连通性和套餐权限后重试。"
 
 
+def project_twelve_data_hk_diagnostic(
+    *,
+    credential_configured: bool,
+    hk_symbol_verified: bool,
+    checks: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Project HK-specific Twelve Data entitlement diagnostics onto the stable settings payload."""
+
+    ok_checks = [check for check in checks if check.get("ok")]
+    failed_checks = [check for check in checks if not check.get("ok")]
+
+    if not credential_configured:
+        state = "missing_key"
+        status = "missing_key"
+        http_status = None
+    elif not hk_symbol_verified:
+        state = "configured_unverified"
+        status = "partial"
+        http_status = None
+    elif failed_checks:
+        first_failure = failed_checks[0]
+        error_type = str(first_failure.get("error_type") or "")
+        http_status = first_failure.get("http_status")
+        if error_type == "RateLimited" or http_status == 429:
+            state = "quota_limited"
+        elif error_type == "Forbidden" or http_status == 403:
+            state = "hk_entitlement_missing"
+        elif error_type == "Timeout":
+            state = "timeout"
+        elif error_type in {"InvalidPayload", "NoData"}:
+            state = "malformed_response"
+        else:
+            state = "provider_error"
+        status = "partial" if ok_checks else "failed"
+    else:
+        state = "ok_hk_quote_history"
+        status = "success"
+        http_status = 200
+
+    summary_map = {
+        "missing_key": "Twelve Data 未配置 API key，无法验证 HK quote/history entitlement。",
+        "configured_unverified": "Twelve Data key 已配置，但当前未使用港股代码进行 HK quote/history entitlement 校验。",
+        "ok_hk_quote_history": "Twelve Data HK quote/history entitlement 可用：quote 与 daily history endpoint 均通过。",
+        "quota_limited": "Twelve Data 已配置，但 HK quote/history 诊断命中额度或频率限制。",
+        "hk_entitlement_missing": "Twelve Data 已配置，但当前 key 缺少 HK quote/history entitlement。",
+        "timeout": "Twelve Data 已配置，但 HK quote/history 诊断超时。",
+        "malformed_response": "Twelve Data 可达，但 HK quote/history 返回格式异常或缺少必要字段。",
+        "provider_error": "Twelve Data 已配置，但 HK quote/history 诊断失败。",
+    }
+    suggestion_map = {
+        "missing_key": "请先在系统设置中保存 Twelve Data key，再使用 hk00700 等港股代码重新校验。",
+        "configured_unverified": "请使用 hk00700 / HK00700 / 00700 等港股代码重新校验 HK quote/history entitlement。",
+        "ok_hk_quote_history": "当前 key 已验证可用于 HK quote/history；如后续失败，再检查额度或套餐权限。",
+        "quota_limited": "请检查 Twelve Data credits/quota/frequency limit，稍后重试或切换可用 key。",
+        "hk_entitlement_missing": "请确认当前套餐或 market entitlement 是否覆盖 HK quote 与 daily history。",
+        "timeout": "请检查网络或代理设置并稍后重试；若持续超时，再排查 provider 可用性。",
+        "malformed_response": "请稍后重试；若持续返回异常结构，请核对 Twelve Data HK quote/history 响应是否完整。",
+        "provider_error": "请检查 Twelve Data 服务状态、凭据权限与远程 endpoint 健康后重试。",
+    }
+    duration_ms = sum(int(check.get("duration_ms") or 0) for check in checks) or None
+    diagnostic_check = {
+        "name": "hk_quote_history",
+        "endpoint": "/quote + /time_series",
+        "ok": state == "ok_hk_quote_history",
+        "http_status": http_status,
+        "duration_ms": duration_ms,
+        "error_type": state,
+        "message": summary_map[state],
+    }
+    return {
+        "diagnostic_state": state,
+        "status": status,
+        "summary": summary_map[state],
+        "suggestion": suggestion_map[state],
+        "diagnostic_check": diagnostic_check,
+    }
+
+
 _TICKFLOW_REASON_CODES = (
     "tickflow_not_configured",
     "tickflow_permission_unavailable",
