@@ -169,6 +169,7 @@ def test_portfolio_snapshot_golden_fixture_matches_public_read_model_contract() 
     assert snapshot["riskDiagnostics"]["authority"] == "backend_read_model"
     assert snapshot["riskDiagnostics"]["calculation_owner"] == "backend"
     assert all(set(item) == RISK_DIAGNOSTIC_WARNING_KEYS for item in snapshot["riskDiagnostics"]["warnings"])
+    assert snapshot["portfolioRiskEvidence"]["source"] == "backend_snapshot"
     assert snapshot["portfolioRiskEvidence"]["source_payload_redacted"] is True
     assert snapshot["sourceAuthorityState"] == "backend_authoritative_read_model"
     assert snapshot["fxFreshnessState"] == "stale"

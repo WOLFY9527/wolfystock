@@ -754,6 +754,34 @@ class PortfolioServiceTestCase(unittest.TestCase):
 
         self.assertIn("riskDiagnostics", report)
         self.assertIn("portfolioRiskEvidence", report)
+        self.assertEqual(report["riskDiagnostics"]["sourceAuthority"]["state"], "manual")
+        source_refs = {
+            item["source_ref_id"]: item
+            for item in report["portfolioRiskEvidence"]["source_refs"]
+        }
+        self.assertEqual(
+            {
+                key: (
+                    value["provider"],
+                    value["source_class"],
+                    value["sanitized_reason_code"],
+                    value["raw_payload_stored"],
+                )
+                for key, value in source_refs.items()
+            },
+            {
+                "portfolio_snapshot": ("portfolio_snapshot", "local", "snapshot_summary_only", False),
+                "fx_snapshot": ("fx_cache", "local", "fx_summary_only", False),
+            },
+        )
+        required_evidence = {
+            item["key"]: item
+            for item in report["portfolioRiskEvidence"]["required_evidence"]
+        }
+        self.assertEqual(required_evidence["source.authority"]["reason_codes"], ["source_authority_manual"])
+        self.assertEqual(required_evidence["source.authority"]["source_ref_ids"], ["portfolio_snapshot"])
+        self.assertTrue(report["portfolioRiskEvidence"]["admin_diagnostics"]["sanitized_only"])
+        self.assertFalse(report["portfolioRiskEvidence"]["admin_diagnostics"]["raw_payload_stored"])
 
         with self.db.get_session() as session:
             snapshot_rows = session.execute(
@@ -868,10 +896,30 @@ class PortfolioServiceTestCase(unittest.TestCase):
                 expected_industry,
             )
             self.assertEqual(snapshot["sourceAuthorityState"], "manual")
+            self.assertEqual(snapshot["riskDiagnostics"]["sourceAuthority"]["state"], "manual")
             self.assertEqual(report["sourceAuthorityState"], "manual")
+            self.assertEqual(report["riskDiagnostics"]["sourceAuthority"]["state"], "manual")
             self.assertEqual(report["fxFreshnessState"], "fresh")
             self.assertTrue(report["portfolioRiskEvidence"]["admin_diagnostics"]["sanitized_only"])
             self.assertFalse(report["portfolioRiskEvidence"]["admin_diagnostics"]["raw_payload_stored"])
+            report_source_refs = {
+                item["source_ref_id"]: item
+                for item in report["portfolioRiskEvidence"]["source_refs"]
+            }
+            self.assertEqual(
+                {
+                    key: (
+                        value["provider"],
+                        value["source_class"],
+                        value["sanitized_reason_code"],
+                    )
+                    for key, value in report_source_refs.items()
+                },
+                {
+                    "portfolio_snapshot": ("portfolio_snapshot", "local", "snapshot_summary_only"),
+                    "fx_snapshot": ("fx_cache", "local", "fx_summary_only"),
+                },
+            )
             self.assertEqual(report["industry_attribution"]["top_industries"][0]["industry"], expected_industry)
             self.assertEqual(report["sector_concentration"]["top_sectors"][0]["sector"], expected_industry)
             self.assertEqual(report["industry_attribution"]["coverage"]["failed_count"], expected_failed_count)

@@ -148,3 +148,72 @@ def test_options_lab_fixture_and_stub_sources_have_inert_provenance_labels() -> 
     assert disabled_live_stub["sourceType"] == "disabled_live_stub"
     assert disabled_live_stub["sourceLabel"] == "Disabled Live Stub"
     assert disabled_live_stub["freshnessLabel"] == "不可用"
+
+
+def test_portfolio_risk_provenance_aliases_remain_inert_and_non_live() -> None:
+    cases = {
+        "ledger_snapshot": {
+            "freshness": "cached",
+            "expected": {
+                "sourceType": "cache_snapshot",
+                "sourceLabel": "缓存快照",
+                "freshnessLabel": "缓存快照",
+            },
+        },
+        "projection_cache": {
+            "freshness": "cached",
+            "expected": {
+                "sourceType": "cache_snapshot",
+                "sourceLabel": "缓存快照",
+                "freshnessLabel": "缓存快照",
+            },
+        },
+        "fx_frankfurter_public": {
+            "freshness": "live",
+            "expected": {
+                "sourceType": "official_public",
+                "sourceLabel": "Frankfurter",
+                "freshnessLabel": "实时",
+            },
+        },
+        "fx_fallback": {
+            "freshness": "live",
+            "expected": {
+                "sourceType": "fallback_static",
+                "sourceLabel": "备用数据",
+                "freshnessLabel": "备用/缺失",
+            },
+        },
+        "board_lookup_provider": {
+            "freshness": "delayed",
+            "expected": {
+                "sourceType": "public_proxy",
+                "sourceLabel": "Board Lookup Provider",
+                "freshnessLabel": "延迟",
+            },
+        },
+        "board_lookup_missing": {
+            "freshness": "unavailable",
+            "expected": {
+                "sourceType": "missing",
+                "sourceLabel": "未接入",
+                "freshnessLabel": "不可用",
+            },
+        },
+        "risk_diagnostics_sanitized": {
+            "freshness": "cached",
+            "expected": {
+                "sourceType": "cache_snapshot",
+                "sourceLabel": "缓存快照",
+                "freshnessLabel": "缓存快照",
+            },
+        },
+    }
+
+    for source, case in cases.items():
+        provenance = project_source_provenance(
+            source=source,
+            freshness=case["freshness"],
+        )
+
+        assert provenance == case["expected"]

@@ -451,6 +451,12 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
             "pbkdf2:ops-secret-hash",
             "admin-session-raw",
             "user-session-raw",
+            "frontend_authoritative_accounting",
+            "ui_authoritative_accounting",
+            "client_authoritative_accounting",
+            "frontend_mutation_authority",
+            "ui_mutation_authority",
+            "client_mutation_authority",
         ]
         for needle in forbidden:
             self.assertNotIn(needle, text)

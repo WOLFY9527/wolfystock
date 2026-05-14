@@ -154,6 +154,12 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
             "raw_provider_payload",
             "submit_order",
             "sync_metadata_json",
+            "frontend_authoritative_accounting",
+            "ui_authoritative_accounting",
+            "client_authoritative_accounting",
+            "frontend_mutation_authority",
+            "ui_mutation_authority",
+            "client_mutation_authority",
         ]
         for needle in forbidden:
             self.assertNotIn(needle, text)
@@ -396,8 +402,48 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
 
         self.assertEqual(snapshot.status_code, 200)
         self.assertEqual(risk.status_code, 200)
+        snapshot_payload = snapshot.json()
+        risk_payload = risk.json()
         self.assertIn("riskDiagnostics", self._json_text(snapshot))
         self.assertIn("riskDiagnostics", self._json_text(risk))
+        self.assertEqual(snapshot_payload["sourceAuthorityState"], "manual")
+        self.assertEqual(snapshot_payload["riskDiagnostics"]["sourceAuthority"]["state"], "manual")
+        self.assertEqual(risk_payload["sourceAuthorityState"], "manual")
+        self.assertEqual(risk_payload["riskDiagnostics"]["sourceAuthority"]["state"], "manual")
+        self.assertTrue(snapshot_payload["portfolioRiskEvidence"]["admin_diagnostics"]["sanitized_only"])
+        self.assertFalse(snapshot_payload["portfolioRiskEvidence"]["admin_diagnostics"]["raw_payload_stored"])
+        self.assertTrue(risk_payload["portfolioRiskEvidence"]["admin_diagnostics"]["sanitized_only"])
+        self.assertFalse(risk_payload["portfolioRiskEvidence"]["admin_diagnostics"]["raw_payload_stored"])
+        self.assertEqual(
+            [
+                (
+                    item["source_ref_id"],
+                    item["provider"],
+                    item["source_class"],
+                    item["sanitized_reason_code"],
+                )
+                for item in snapshot_payload["portfolioRiskEvidence"]["source_refs"]
+            ],
+            [
+                ("portfolio_snapshot", "portfolio_snapshot", "local", "snapshot_summary_only"),
+                ("fx_snapshot", "fx_cache", "local", "fx_summary_only"),
+            ],
+        )
+        self.assertEqual(
+            [
+                (
+                    item["source_ref_id"],
+                    item["provider"],
+                    item["source_class"],
+                    item["sanitized_reason_code"],
+                )
+                for item in risk_payload["portfolioRiskEvidence"]["source_refs"]
+            ],
+            [
+                ("portfolio_snapshot", "portfolio_snapshot", "local", "snapshot_summary_only"),
+                ("fx_snapshot", "fx_cache", "local", "fx_summary_only"),
+            ],
+        )
         self.assertEqual(self._portfolio_counts(), before)
 
     def test_import_idempotency_stays_with_authenticated_owner(self) -> None:

@@ -136,6 +136,14 @@ class PortfolioRiskDiagnosticsTestCase(unittest.TestCase):
         )
         self.assertTrue(diagnostics["portfolioRiskEvidence"]["admin_diagnostics"]["sanitized_only"])
         self.assertFalse(diagnostics["portfolioRiskEvidence"]["admin_diagnostics"]["raw_payload_stored"])
+        required_evidence = {
+            item["key"]: item
+            for item in diagnostics["portfolioRiskEvidence"]["required_evidence"]
+        }
+        self.assertEqual(required_evidence["source.authority"]["source_ref_ids"], ["portfolio_snapshot"])
+        self.assertEqual(required_evidence["source.authority"]["reason_codes"], ["source_authority_manual"])
+        self.assertEqual(required_evidence["fx.freshness"]["source_ref_ids"], ["fx_snapshot"])
+        self.assertEqual(required_evidence["fx.freshness"]["reason_codes"], ["fx_freshness_stale"])
         self.assertEqual(
             [
                 {
@@ -214,12 +222,27 @@ class PortfolioRiskDiagnosticsTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["holdingsLineageState"], "missing")
         self.assertEqual(diagnostics["cashLedgerCompletenessState"], "missing")
         self.assertEqual(diagnostics["sourceAuthorityState"], "unknown")
+        self.assertEqual(diagnostics["riskDiagnostics"]["sourceAuthority"]["state"], "unknown")
         self.assertEqual(diagnostics["confidenceCap"]["decision_status"], "禁止判断")
         self.assertLessEqual(diagnostics["confidenceCap"]["value"], 40)
         self.assertIn("持仓来源待核验", diagnostics["confidenceCap"]["limitation_labels"])
         self.assertIn("现金流水不完整", diagnostics["confidenceCap"]["limitation_labels"])
         self.assertIn("依据需复核", diagnostics["confidenceCap"]["limitation_labels"])
         self.assertIn("数据不足，禁止判断", diagnostics["confidenceCap"]["limitation_labels"])
+        source_refs = {
+            item["source_ref_id"]: item
+            for item in diagnostics["portfolioRiskEvidence"]["source_refs"]
+        }
+        required_evidence = {
+            item["key"]: item
+            for item in diagnostics["portfolioRiskEvidence"]["required_evidence"]
+        }
+        self.assertEqual(source_refs["portfolio_snapshot"]["source_class"], "inferred")
+        self.assertEqual(source_refs["fx_snapshot"]["source_class"], "fallback")
+        self.assertEqual(required_evidence["source.authority"]["reason_codes"], ["source_authority_unknown"])
+        self.assertEqual(required_evidence["fx.freshness"]["reason_codes"], ["fx_freshness_unavailable"])
+        self.assertTrue(diagnostics["portfolioRiskEvidence"]["admin_diagnostics"]["sanitized_only"])
+        self.assertFalse(diagnostics["portfolioRiskEvidence"]["admin_diagnostics"]["raw_payload_stored"])
 
     def test_benchmark_factor_gaps_and_sensitive_fields_are_sanitized(self) -> None:
         snapshot = {
