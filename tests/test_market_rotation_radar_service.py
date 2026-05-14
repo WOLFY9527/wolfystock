@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
+from src.services.market_data_source_registry import project_source_provenance
 from src.services.market_rotation_radar_service import MarketRotationRadarService
 from src.services.rotation_radar_quote_provider import load_rotation_radar_quotes
 
@@ -236,6 +237,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(provider_meta["usableSymbolCount"], provider_meta["requestedSymbolCount"])
         self.assertEqual(provider_meta["asOf"], "2026-05-07T09:45:00+00:00")
         self.assertTrue(payload["metadata"]["noExternalCalls"])
+        self.assertNotEqual(provider_meta["sourceType"], "unofficial_proxy")
 
     def test_observed_evidence_snapshot_is_consumed_without_quote_provider_calls(self) -> None:
         provider_calls: list[list[str]] = []
@@ -319,6 +321,12 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
 
         quote = payload["quotes"]["APP"]
         metadata = payload["metadata"]
+        provenance = project_source_provenance(
+            source=quote["source"],
+            source_type=metadata["sourceType"],
+            freshness=metadata["freshness"],
+            no_external_calls=metadata["noExternalCalls"],
+        )
 
         mock_fetch.assert_called_once_with("APP")
         self.assertEqual(metadata["quoteMode"], "proxy")
@@ -329,6 +337,8 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(quote["source"], "yfinance_proxy")
         self.assertEqual(quote["sourceLabel"], "Yahoo Finance")
         self.assertEqual(quote["freshness"], "delayed")
+        self.assertEqual(provenance["sourceType"], "unofficial_proxy")
+        self.assertEqual(provenance["freshnessLabel"], "延迟")
         self.assertAlmostEqual(quote["changePercent"], 1.942, places=3)
         self.assertAlmostEqual(quote["volumeRatio"], 1.364, places=3)
         self.assertEqual(quote["timeWindows"]["1d"]["changePercent"], quote["changePercent"])

@@ -993,6 +993,18 @@ def test_decision_delayed_fixture_provider_selection_cannot_emit_tradeable_label
     assert provenance["freshnessLabel"] == "延迟"
 
 
+def test_options_unknown_catch_all_provider_alias_does_not_promote_to_official_or_live() -> None:
+    provenance = project_source_provenance(
+        source="options_review_feed",
+        source_type="public_api",
+        freshness="live",
+    )
+
+    assert provenance["sourceType"] == "missing"
+    assert provenance["sourceLabel"] == "未接入"
+    assert provenance["freshnessLabel"] == "不可用"
+
+
 def test_decision_long_call_breakeven_realism_calculation() -> None:
     response = _service().evaluate_decision(
         {

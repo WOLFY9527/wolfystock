@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from src.services.market_data_source_registry import project_source_provenance
 from src.services.official_macro_transport import (
     FRED_OBSERVATIONS_URL,
     NYFED_SOFR_UNSUPPORTED_REASON,
@@ -132,6 +133,17 @@ def test_parse_fred_observations_payload_returns_unavailable_for_missing_values(
     assert observation.date is None
     assert observation.as_of is None
     assert observation.unavailable_reason == "fred_observation_value_unavailable"
+
+
+def test_official_macro_transport_observations_remain_official_but_non_live() -> None:
+    observation = parse_fred_observations_payload("DGS10", _load_json_fixture("fred_dgs10.json"))
+    delayed = project_source_provenance(source_type=observation.source_type, freshness="delayed")
+    stale = project_source_provenance(source_type=observation.source_type, freshness="stale", is_stale=True)
+
+    assert delayed["sourceType"] == "official_public"
+    assert delayed["freshnessLabel"] == "延迟"
+    assert stale["sourceType"] == "official_public"
+    assert stale["freshnessLabel"] == "过期"
 
 
 def test_parse_fred_observation_points_payload_returns_latest_two_valid_points() -> None:

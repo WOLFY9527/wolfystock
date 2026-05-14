@@ -20,6 +20,7 @@ from api.v1.schemas.portfolio import (
     PortfolioSnapshotResponse,
     PortfolioTradeListResponse,
 )
+from src.services.market_data_source_registry import project_source_provenance
 
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "portfolio"
@@ -278,6 +279,25 @@ def test_portfolio_cash_fx_fixture_freezes_public_staleness_and_native_display_s
 
     _assert_no_sensitive_public_payload(payload)
     _assert_no_ui_owned_accounting_authority(payload)
+
+
+def test_portfolio_source_aliases_do_not_replace_backend_accounting_authority() -> None:
+    snapshot = PortfolioSnapshotResponse(**_load_fixture("portfolio_snapshot_read_model_dto.json")).model_dump()
+    expected = {
+        "ledger_snapshot": "cache_snapshot",
+        "projection_cache": "cache_snapshot",
+        "fx_frankfurter_public": "official_public",
+        "fx_fallback": "fallback_static",
+        "board_lookup_provider": "public_proxy",
+    }
+    resolved = {
+        source: project_source_provenance(source=source, freshness="cached")["sourceType"]
+        for source in expected
+    }
+
+    assert resolved == expected
+    assert snapshot["sourceAuthorityState"] == "backend_authoritative_read_model"
+    assert snapshot["sourceAuthorityState"] not in set(resolved.values())
 
 
 def test_portfolio_broker_import_and_sync_fixtures_expose_sanitized_public_status_only() -> None:

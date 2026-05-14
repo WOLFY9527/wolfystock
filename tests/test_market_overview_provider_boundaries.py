@@ -6,6 +6,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from src.services.market_data_source_registry import project_source_provenance
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MARKET_ENDPOINT_FILE = REPO_ROOT / "api" / "v1" / "endpoints" / "market.py"
@@ -277,6 +279,22 @@ def test_market_overview_service_keeps_cn_flows_and_tickflow_breadth_separate() 
     assert "fetch_tickflow_cn_breadth_snapshot" in cn_breadth_calls
     assert "fetch_tickflow_cn_breadth_snapshot" not in cn_flows_calls
     assert "_fallback_cn_flows_snapshot" in cn_flows_calls
+
+
+def test_market_overview_tickflow_source_contract_stays_explicit_public_provider_not_snapshot() -> None:
+    source_text = MARKET_OVERVIEW_TICKFLOW_BREADTH_PROVIDER_FILE.read_text(encoding="utf-8")
+    provenance = project_source_provenance(
+        source="tickflow",
+        source_type="public_api",
+        freshness="delayed",
+    )
+
+    assert '_TICKFLOW_SOURCE = "tickflow"' in source_text
+    assert '_TICKFLOW_SOURCE_LABEL = "TickFlow"' in source_text
+    assert '_TICKFLOW_SOURCE_TYPE = "public_api"' in source_text
+    assert provenance["sourceType"] == "public_proxy"
+    assert provenance["sourceLabel"] == "TickFlow"
+    assert provenance["sourceType"] != "cache_snapshot"
 
 
 def test_market_overview_transport_modules_stay_runtime_lightweight() -> None:

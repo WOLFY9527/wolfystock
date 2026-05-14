@@ -426,6 +426,7 @@ def test_crypto_funding_uses_binance_public_endpoint_when_cache_snapshot_lacks_f
     assert "ETH" in str(indicators["crypto_funding"]["summary"])
     assert "Binance" in str(indicators["crypto_funding"]["summary"])
     assert "exchange_public" in str(indicators["crypto_funding"]["summary"])
+    assert "cache_snapshot" not in str(indicators["crypto_funding"]["summary"])
 
 
 def test_crypto_funding_stays_unavailable_when_binance_public_endpoint_fails(isolated_db: DatabaseManager) -> None:
@@ -730,6 +731,7 @@ def test_yfinance_proxy_panels_remain_delayed_and_not_live_provider_labels(isola
     assert "新鲜度 delayed" in str(indicator["summary"])
     assert "新鲜度 live" not in str(indicator["summary"])
     assert "类型 unofficial_proxy" in str(indicator["summary"])
+    assert "类型 official_public" not in str(indicator["summary"])
 
 
 def test_usd_pressure_uses_yfinance_dxy_proxy_when_fx_panel_is_unavailable(isolated_db: DatabaseManager) -> None:

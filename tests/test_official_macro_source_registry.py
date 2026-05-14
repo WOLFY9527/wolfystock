@@ -7,7 +7,7 @@ import json
 import subprocess
 import sys
 
-from src.services.market_data_source_registry import CANONICAL_SOURCE_TYPES
+from src.services.market_data_source_registry import CANONICAL_SOURCE_TYPES, project_source_provenance
 from src.services.official_macro_source_registry import (
     get_official_macro_source,
     get_official_macro_source_for_transport_source,
@@ -66,6 +66,22 @@ def test_transport_source_lookup_maps_runtime_source_ids_back_to_contracts() -> 
     assert treasury_contract.source_id == "TREASURY_DAILY_RATES"
     assert vix_contract is not None
     assert vix_contract.source_id == "FRED_VIXCLS"
+
+
+def test_official_macro_contracts_project_to_non_live_daily_observation_provenance() -> None:
+    delayed = project_source_provenance(source_type="official_public", freshness="delayed")
+    stale = project_source_provenance(source_type="official_public", freshness="stale", is_stale=True)
+
+    assert delayed == {
+        "sourceType": "official_public",
+        "sourceLabel": "公开数据",
+        "freshnessLabel": "延迟",
+    }
+    assert stale == {
+        "sourceType": "official_public",
+        "sourceLabel": "公开数据",
+        "freshnessLabel": "过期",
+    }
 
 
 def test_optional_credit_spread_contract_stays_observation_only_placeholder() -> None:

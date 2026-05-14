@@ -32,6 +32,18 @@ def test_yfinance_proxy_remains_delayed_unofficial_proxy() -> None:
     assert provenance["freshnessLabel"] == "延迟"
 
 
+def test_tickflow_explicit_public_provider_label_does_not_collapse_into_official_or_cache() -> None:
+    provenance = project_source_provenance(
+        source="tickflow",
+        source_type="public_api",
+        freshness="delayed",
+    )
+
+    assert provenance["sourceType"] == "public_proxy"
+    assert provenance["sourceLabel"] == "TickFlow"
+    assert provenance["freshnessLabel"] == "延迟"
+
+
 def test_yfinance_proxy_with_cached_freshness_stays_proxy_when_not_snapshot_marked() -> None:
     provenance = project_source_provenance(
         source="yfinance_proxy",
@@ -67,6 +79,18 @@ def test_cache_snapshot_is_distinguishable_from_live_provider_data() -> None:
     assert provenance["sourceType"] == "cache_snapshot"
     assert provenance["sourceLabel"] == "缓存快照"
     assert provenance["freshnessLabel"] == "缓存快照"
+
+
+def test_unknown_catch_all_public_aliases_do_not_promote_to_official_or_live() -> None:
+    provenance = project_source_provenance(
+        source="mystery_public_feed",
+        source_type="public_api",
+        freshness="live",
+    )
+
+    assert provenance["sourceType"] == "missing"
+    assert provenance["sourceLabel"] == "未接入"
+    assert provenance["freshnessLabel"] == "不可用"
 
 
 def test_missing_source_defaults_to_missing_labels() -> None:

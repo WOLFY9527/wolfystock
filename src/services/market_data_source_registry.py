@@ -60,6 +60,7 @@ SOURCE_TYPE_BY_SOURCE = {
     "tickflow": "public_proxy",
     "synthetic": "synthetic_fixture",
     "synthetic_fixture": "synthetic_fixture",
+    "tickflow": "public_proxy",
     "tusharefetcher": "official_public",
     "unit_fixture": "synthetic_fixture",
     "unavailable": "missing",
@@ -131,6 +132,7 @@ SOURCE_LABEL_BY_SOURCE = {
     "tickflow": "TickFlow",
     "synthetic": "Synthetic Fixture",
     "synthetic_fixture": "Synthetic Fixture",
+    "tickflow": "TickFlow",
     "tusharefetcher": "Tushare",
     "unit_fixture": "Unit Fixture",
     "unavailable": "未接入",
@@ -190,6 +192,15 @@ def resolve_source_type(
     if normalized_source in SOURCE_TYPE_BY_SOURCE:
         return SOURCE_TYPE_BY_SOURCE[normalized_source]
     if normalized_type in SOURCE_TYPE_ALIASES:
+        if normalized_source and normalized_type in {
+            "official_api",
+            "official_public",
+            "public",
+            "public_api",
+            "proxy_public",
+            "public_or_live",
+        }:
+            return "missing"
         return SOURCE_TYPE_ALIASES[normalized_type]
     if no_external_calls and normalized_freshness == "cached":
         return "cache_snapshot"
@@ -247,6 +258,8 @@ def resolve_freshness_label(
         return "备用/缺失"
     if is_stale or normalized_freshness == "stale":
         return "过期"
+    if resolved_type == "missing":
+        return "不可用"
     if is_from_snapshot or resolved_type == "cache_snapshot":
         return "缓存快照" if normalized_freshness in {"cached", "live", ""} else FRESHNESS_LABELS.get(normalized_freshness, "缓存快照")
     return FRESHNESS_LABELS.get(normalized_freshness or "unavailable", "不可用")
