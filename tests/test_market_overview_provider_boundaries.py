@@ -9,10 +9,16 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MARKET_ENDPOINT_FILE = REPO_ROOT / "api" / "v1" / "endpoints" / "market.py"
+MARKET_OVERVIEW_SERVICE_FILE = REPO_ROOT / "src" / "services" / "market_overview_service.py"
+MARKET_OVERVIEW_BINANCE_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_binance_transport.py"
 
 
 def _market_endpoint_tree() -> ast.AST:
     return ast.parse(MARKET_ENDPOINT_FILE.read_text(encoding="utf-8"), filename=str(MARKET_ENDPOINT_FILE))
+
+
+def _python_tree(path: Path) -> ast.AST:
+    return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
 
 def _function_node(name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
@@ -41,6 +47,31 @@ def _module_imports() -> set[str]:
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             imports.add(node.module)
     return imports
+
+
+def _module_imports_for_file(path: Path) -> set[str]:
+    imports: set[str] = set()
+    for node in ast.walk(_python_tree(path)):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            imports.add(node.module)
+    return imports
+
+
+def _requests_get_urls(path: Path) -> set[str]:
+    urls: set[str] = set()
+    for node in ast.walk(_python_tree(path)):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if not isinstance(node.func.value, ast.Name) or node.func.value.id != "requests" or node.func.attr != "get":
+            continue
+        if not node.args:
+            continue
+        url_arg = node.args[0]
+        if isinstance(url_arg, ast.Constant) and isinstance(url_arg.value, str):
+            urls.add(url_arg.value)
+    return urls
 
 
 def test_market_endpoints_delegate_to_market_overview_service() -> None:
@@ -83,3 +114,21 @@ def test_market_endpoint_module_avoids_direct_provider_client_imports() -> None:
     }
 
     assert forbidden_imports == set()
+
+
+def test_market_overview_service_extracts_binance_raw_transport_boundary() -> None:
+    service_imports = _module_imports_for_file(MARKET_OVERVIEW_SERVICE_FILE)
+    service_urls = _requests_get_urls(MARKET_OVERVIEW_SERVICE_FILE)
+
+    assert "src.services.market_overview_binance_transport" in service_imports
+    assert not {url for url in service_urls if "binance.com" in url}
+
+
+def test_market_overview_binance_transport_limits_raw_http_calls_to_binance() -> None:
+    transport_urls = _requests_get_urls(MARKET_OVERVIEW_BINANCE_TRANSPORT_FILE)
+
+    assert transport_urls == {
+        "https://api.binance.com/api/v3/ticker/24hr",
+        "https://api.binance.com/api/v3/klines",
+        "https://fapi.binance.com/fapi/v1/premiumIndex",
+    }

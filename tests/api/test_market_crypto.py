@@ -259,12 +259,39 @@ class MarketCryptoApiTestCase(unittest.TestCase):
         self.assertFalse(payload["isFallback"])
         self.assertIn(payload["freshness"], {"live", "delayed", "cached"})
 
-        with patch.object(service, "get_crypto", return_value=payload):
-            inputs = service._build_market_temperature_inputs()
+    def test_fetch_crypto_market_snapshot_keeps_shape_via_binance_transport_boundary(self) -> None:
+        service = MarketOverviewService()
+        updated_at = datetime(2026, 4, 30, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
 
-        crypto_items = inputs["crypto"]["items"]
-        self.assertTrue(any(item["symbol"] == "BTC" and not item["isFallback"] for item in crypto_items))
-        self.assertGreater(service._summarize_market_temperature_confidence({"crypto": inputs["crypto"]})["reliableInputCount"], 0)
+        with (
+            patch("src.services.market_overview_service.fetch_binance_ticker_snapshot") as ticker_fetch,
+            patch.object(service, "_fetch_binance_kline_histories", return_value={"BTCUSDT": [70000.0, 71000.0]}),
+            patch.object(service, "_fetch_binance_funding_items", return_value=[]),
+            patch("src.services.market_overview_service._now_iso", return_value=updated_at),
+        ):
+            ticker_fetch.return_value = [
+                {
+                    "symbol": "BTCUSDT",
+                    "lastPrice": "71000",
+                    "priceChangePercent": "1.5",
+                    "quoteVolume": "123456789",
+                    "highPrice": "71500",
+                    "lowPrice": "69500",
+                }
+            ]
+
+            payload = service._fetch_crypto_market_snapshot()
+
+        ticker_fetch.assert_called_once_with(["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"])
+        self.assertEqual(payload["source"], "binance")
+        self.assertFalse(payload["fallback_used"])
+        self.assertEqual(payload["last_update"], updated_at)
+        self.assertEqual(payload["items"][0]["symbol"], "BTC")
+        self.assertEqual(payload["items"][0]["label"], "Bitcoin")
+        self.assertEqual(payload["items"][0]["price"], 71000.0)
+        self.assertEqual(payload["items"][0]["change"], 1.5)
+        self.assertEqual(payload["items"][0]["trend"], [70000.0, 71000.0])
+        self.assertEqual(payload["items"][0]["hover_details"][0], "24H +1.50%")
 
 
 if __name__ == "__main__":

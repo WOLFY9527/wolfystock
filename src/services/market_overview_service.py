@@ -14,6 +14,11 @@ from typing import Any, Callable, Dict, List, Optional
 import requests
 
 from src.services.execution_log_service import ExecutionLogService
+from src.services.market_overview_binance_transport import (
+    fetch_binance_funding_row,
+    fetch_binance_kline_history_rows,
+    fetch_binance_ticker_snapshot,
+)
 from src.services.market_cache import MARKET_CACHE_TTLS, REFRESH_WARNING, market_cache
 from src.storage import DatabaseManager
 
@@ -1151,13 +1156,7 @@ class MarketOverviewService:
 
     def _fetch_crypto_market_snapshot(self) -> Dict[str, Any]:
         symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]
-        ticker_response = requests.get(
-            "https://api.binance.com/api/v3/ticker/24hr",
-            params={"symbols": '["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT"]'},
-            timeout=2,
-        )
-        ticker_response.raise_for_status()
-        ticker_rows = ticker_response.json()
+        ticker_rows = fetch_binance_ticker_snapshot(symbols)
         history_map = self._fetch_binance_kline_histories(symbols)
         labels = {
             "BTCUSDT": ("BTC", "Bitcoin"),
@@ -1261,13 +1260,7 @@ class MarketOverviewService:
         last_update: str,
     ) -> Optional[Dict[str, Any]]:
         try:
-            response = requests.get(
-                "https://fapi.binance.com/fapi/v1/premiumIndex",
-                params={"symbol": futures_symbol},
-                timeout=2,
-            )
-            response.raise_for_status()
-            row = response.json()
+            row = fetch_binance_funding_row(futures_symbol)
             funding_rate = self._clean_number(row.get("lastFundingRate"))
         except Exception:
             funding_rate = None
@@ -1411,13 +1404,7 @@ class MarketOverviewService:
         return {"history": history, "source": "alternative_me"}
 
     def _fetch_binance_kline_history(self, symbol: str) -> List[float]:
-        response = requests.get(
-            "https://api.binance.com/api/v3/klines",
-            params={"symbol": symbol, "interval": "1d", "limit": 8},
-            timeout=2,
-        )
-        response.raise_for_status()
-        rows = response.json()
+        rows = fetch_binance_kline_history_rows(symbol)
         closes = []
         for row in rows:
             if isinstance(row, list) and len(row) >= 5:

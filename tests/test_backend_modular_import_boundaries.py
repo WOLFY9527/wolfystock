@@ -283,6 +283,7 @@ MARKET_OVERVIEW_RUNTIME_FILES = (
     "api/v1/endpoints/market.py",
     "api/v1/endpoints/market_overview.py",
     "src/services/crypto_realtime_service.py",
+    "src/services/market_overview_binance_transport.py",
     "src/services/market_overview_service.py",
     "src/services/market_rotation_radar_service.py",
 )
@@ -290,6 +291,7 @@ EXPECTED_MARKET_OVERVIEW_RUNTIME_DIRECT_IMPORTS = {
     "api/v1/endpoints/market.py": set(),
     "api/v1/endpoints/market_overview.py": set(),
     "src/services/crypto_realtime_service.py": set(),
+    "src/services/market_overview_binance_transport.py": {"requests"},
     "src/services/market_overview_service.py": {"requests", "yfinance"},
     "src/services/market_rotation_radar_service.py": set(),
 }
@@ -670,8 +672,8 @@ def test_market_overview_runtime_direct_provider_imports_stay_frozen() -> None:
 
     assert actual_mapping == EXPECTED_MARKET_OVERVIEW_RUNTIME_DIRECT_IMPORTS, (
         "Market Overview runtime files should keep direct requests/yfinance "
-        "imports isolated to src/services/market_overview_service.py until an "
-        "approved adapter slice exists. "
+        "imports limited to the current service boundary plus the dedicated "
+        "Binance transport seam. "
         f"Expected {EXPECTED_MARKET_OVERVIEW_RUNTIME_DIRECT_IMPORTS}, found {actual_mapping}"
     )
 
