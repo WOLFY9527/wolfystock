@@ -457,6 +457,45 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('117.40')).toHaveClass('text-emerald-400');
   });
 
+  it('lazy-loads the full decision report drawer only after the trigger is opened', async () => {
+    vi.resetModules();
+    const moduleLoadSpy = vi.fn();
+
+    vi.doMock('../../components/home-bento/FullDecisionReportDrawer', () => {
+      moduleLoadSpy();
+      return {
+        default: ({ isOpen }: { isOpen: boolean }) => (isOpen ? <div data-testid="home-bento-full-report-drawer">lazy drawer mock</div> : null),
+      };
+    });
+
+    try {
+      const { default: LazyHomeSurfacePage } = await import('../HomeSurfacePage');
+      useProductSurfaceMock.mockReturnValue({ isGuest: false });
+
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <UiPreferencesProvider>
+            <UiLanguageProvider>
+              <LazyHomeSurfacePage />
+            </UiLanguageProvider>
+          </UiPreferencesProvider>
+        </MemoryRouter>,
+      );
+
+      await screen.findByText('Oracle Corporation');
+      expect(moduleLoadSpy).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('home-bento-full-report-drawer')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: '完整报告' }));
+
+      await waitFor(() => expect(moduleLoadSpy).toHaveBeenCalledTimes(1));
+      expect(await screen.findByTestId('home-bento-full-report-drawer')).toHaveTextContent('lazy drawer mock');
+    } finally {
+      vi.doUnmock('../../components/home-bento/FullDecisionReportDrawer');
+      vi.resetModules();
+    }
+  });
+
   it('opens the full decision report drawer with structured report sections and copy support', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', {
