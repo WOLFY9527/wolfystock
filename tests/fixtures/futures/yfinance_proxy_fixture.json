@@ -1,0 +1,11 @@
+{
+  "source": "yfinance_proxy",
+  "sourceLabel": "Yahoo Finance",
+  "sourceType": "unofficial_public_api",
+  "updatedAt": "2026-05-14T08:15:00-04:00",
+  "asOf": "2026-05-14T08:15:00-04:00",
+  "items": [
+    {"symbol": "NQ=F", "label": "Nasdaq Futures", "value": 18420.5, "unit": "index_points"},
+    {"symbol": "ES=F", "label": "S&P Futures", "value": 5236.25, "unit": "index_points"}
+  ]
+}

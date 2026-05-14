@@ -1,0 +1,10 @@
+{
+  "errorCode": "permission_denied",
+  "message": "403 forbidden token=SECRET url=https://proxy.vendor.test/raw",
+  "error": {
+    "providerPayload": {
+      "provider": "MacroVendor",
+      "scope": "fx_commodities"
+    }
+  }
+}

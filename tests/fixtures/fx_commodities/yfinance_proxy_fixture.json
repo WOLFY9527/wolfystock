@@ -1,0 +1,11 @@
+{
+  "source": "yfinance_proxy",
+  "sourceLabel": "Yahoo Finance",
+  "sourceType": "unofficial_public_api",
+  "updatedAt": "2026-05-14T09:30:00-04:00",
+  "asOf": "2026-05-14T09:30:00-04:00",
+  "items": [
+    {"symbol": "DXY", "label": "US Dollar Index", "value": 104.32, "unit": "index_points"},
+    {"symbol": "GOLD", "label": "Gold", "value": 2368.7, "unit": "USD/oz"}
+  ]
+}

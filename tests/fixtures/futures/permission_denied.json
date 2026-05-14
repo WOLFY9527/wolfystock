@@ -1,0 +1,10 @@
+{
+  "errorCode": "permission_denied",
+  "message": "403 forbidden token=SECRET url=https://premarket.proxy.test/raw",
+  "error": {
+    "providerPayload": {
+      "provider": "FuturesFeedCo",
+      "scope": "futures"
+    }
+  }
+}

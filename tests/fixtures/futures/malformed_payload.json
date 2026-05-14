@@ -1,0 +1,8 @@
+{
+  "status": "ok",
+  "as_of": "2026-05-14T08:15:00-04:00",
+  "observations": [
+    {"symbol": "NQ", "value": "N/A", "unit": "index_points"},
+    {"symbol": "ES", "value": 5236.25, "unit": "index_points"}
+  ]
+}

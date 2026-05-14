@@ -1,0 +1,10 @@
+{
+  "source_class": "synthetic_fixture",
+  "as_of": "2026-05-14T08:15:00-04:00",
+  "observations": [
+    {"symbol": "NQ", "value": 18420.5, "unit": "index_points"},
+    {"symbol": "ES", "value": 5236.25, "unit": "index_points"},
+    {"symbol": "YM", "value": 39520.0, "unit": "index_points"},
+    {"symbol": "RTY", "value": 2068.4, "unit": "index_points"}
+  ]
+}
