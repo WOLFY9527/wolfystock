@@ -36,12 +36,48 @@ FORBIDDEN_LIQUIDITY_MONITOR_CACHE_PATTERNS = (
 )
 
 
+class _FakeSeries:
+    def __init__(self, values: list[Any]) -> None:
+        self._values = values
+
+    def tolist(self) -> list[Any]:
+        return list(self._values)
+
+
+class _FakeHistoryFrame:
+    def __init__(self, closes: list[float], *, volumes: list[float] | None = None, index: list[datetime] | None = None) -> None:
+        self._data: Dict[str, list[Any]] = {"Close": list(closes)}
+        if volumes is not None:
+            self._data["Volume"] = list(volumes)
+        self.index = list(index or [])
+
+    @property
+    def empty(self) -> bool:
+        return not self._data.get("Close")
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._data
+
+    def __getitem__(self, key: str) -> _FakeSeries:
+        return _FakeSeries(self._data[key])
+
+
 @pytest.fixture()
 def isolated_db(tmp_path: Path):
     DatabaseManager.reset_instance()
     DatabaseManager(db_url=f"sqlite:///{tmp_path / 'liquidity-monitor.sqlite'}")
     yield DatabaseManager.get_instance()
     DatabaseManager.reset_instance()
+
+
+@pytest.fixture(autouse=True)
+def mock_macro_quote_transport():
+    with patch(
+        "src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame",
+        return_value=_FakeHistoryFrame([]),
+        create=True,
+    ):
+        yield
 
 
 def _cache_entry(
@@ -107,12 +143,12 @@ def test_liquidity_monitor_runtime_source_stays_cache_only() -> None:
         )
 
 
-def test_liquidity_monitor_metadata_declares_cache_only_boundary(isolated_db: DatabaseManager) -> None:
+def test_liquidity_monitor_metadata_declares_read_only_runtime_boundary(isolated_db: DatabaseManager) -> None:
     payload = _make_service().get_liquidity_monitor()
 
     assert payload["endpoint"] == "/api/v1/market/liquidity-monitor"
     assert payload["sourceMetadata"] == {
-        "externalProviderCalls": False,
+        "externalProviderCalls": True,
         "providerRuntimeChanged": False,
         "marketCacheMutation": False,
     }
@@ -421,12 +457,12 @@ def test_crypto_funding_stays_unavailable_when_binance_public_endpoint_fails(iso
     assert "暂不可用" in str(indicators["crypto_funding"]["summary"])
 
 
-def test_response_source_metadata_reports_no_external_calls_runtime_change_or_cache_mutation(isolated_db: DatabaseManager) -> None:
+def test_response_source_metadata_reports_runtime_and_cache_boundaries(isolated_db: DatabaseManager) -> None:
     service = _make_service()
     payload = service.get_liquidity_monitor()
 
     assert payload["sourceMetadata"] == {
-        "externalProviderCalls": False,
+        "externalProviderCalls": True,
         "providerRuntimeChanged": False,
         "marketCacheMutation": False,
     }
@@ -602,3 +638,86 @@ def test_cn_flow_indicator_uses_reliable_flow_basket_and_cn_breadth_context(isol
     assert indicators["cn_hk_flows"]["includedInScore"] is True
     assert indicators["cn_hk_flows"]["scoreContribution"] == 6
     assert "宽度" in indicators["cn_hk_flows"]["summary"]
+
+
+def test_vix_indicator_uses_yfinance_proxy_when_volatility_panel_is_unavailable(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    quote_index = [
+        datetime(2026, 5, 12, 16, 0, tzinfo=timezone.utc),
+        datetime(2026, 5, 13, 16, 0, tzinfo=timezone.utc),
+    ]
+    quote_map = {
+        "^VIX": _FakeHistoryFrame([18.0, 15.0], index=quote_index),
+    }
+
+    def _fake_quote_history(ticker: str) -> _FakeHistoryFrame:
+        return quote_map.get(ticker, _FakeHistoryFrame([]))
+
+    with patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", side_effect=_fake_quote_history, create=True):
+        payload = service.get_liquidity_monitor()
+
+    indicators = {item["key"]: item for item in payload["indicators"]}
+
+    assert payload["sourceMetadata"]["externalProviderCalls"] is True
+    assert indicators["vix_pressure"]["includedInScore"] is True
+    assert indicators["vix_pressure"]["status"] == "partial"
+    assert indicators["vix_pressure"]["freshness"] == "delayed"
+    assert indicators["vix_pressure"]["scoreContribution"] == 8
+    assert "Yahoo Finance" in str(indicators["vix_pressure"]["summary"])
+    assert "proxy_public" in str(indicators["vix_pressure"]["summary"])
+
+
+def test_usd_pressure_uses_yfinance_dxy_proxy_when_fx_panel_is_unavailable(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    quote_index = [
+        datetime(2026, 5, 12, 16, 0, tzinfo=timezone.utc),
+        datetime(2026, 5, 13, 16, 0, tzinfo=timezone.utc),
+    ]
+    quote_map = {
+        "DX-Y.NYB": _FakeHistoryFrame([104.9, 104.2], index=quote_index),
+    }
+
+    def _fake_quote_history(ticker: str) -> _FakeHistoryFrame:
+        return quote_map.get(ticker, _FakeHistoryFrame([]))
+
+    with patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", side_effect=_fake_quote_history, create=True):
+        payload = service.get_liquidity_monitor()
+
+    indicators = {item["key"]: item for item in payload["indicators"]}
+
+    assert payload["sourceMetadata"]["externalProviderCalls"] is True
+    assert indicators["usd_pressure"]["includedInScore"] is True
+    assert indicators["usd_pressure"]["status"] == "partial"
+    assert indicators["usd_pressure"]["freshness"] == "delayed"
+    assert indicators["usd_pressure"]["scoreContribution"] == 6
+    assert "DXY" in str(indicators["usd_pressure"]["summary"])
+    assert "Yahoo Finance" in str(indicators["usd_pressure"]["summary"])
+
+
+def test_us_rates_indicator_uses_yfinance_treasury_proxies_when_rates_panel_is_unavailable(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    quote_index = [
+        datetime(2026, 5, 12, 16, 0, tzinfo=timezone.utc),
+        datetime(2026, 5, 13, 16, 0, tzinfo=timezone.utc),
+    ]
+    quote_map = {
+        "^TNX": _FakeHistoryFrame([45.8, 44.9], index=quote_index),
+        "^TYX": _FakeHistoryFrame([47.5, 46.9], index=quote_index),
+    }
+
+    def _fake_quote_history(ticker: str) -> _FakeHistoryFrame:
+        return quote_map.get(ticker, _FakeHistoryFrame([]))
+
+    with patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", side_effect=_fake_quote_history, create=True):
+        payload = service.get_liquidity_monitor()
+
+    indicators = {item["key"]: item for item in payload["indicators"]}
+
+    assert payload["sourceMetadata"]["externalProviderCalls"] is True
+    assert indicators["us_rates_pressure"]["includedInScore"] is True
+    assert indicators["us_rates_pressure"]["status"] == "partial"
+    assert indicators["us_rates_pressure"]["freshness"] == "delayed"
+    assert indicators["us_rates_pressure"]["scoreContribution"] == 6
+    assert "US10Y" in str(indicators["us_rates_pressure"]["summary"])
+    assert "US30Y" in str(indicators["us_rates_pressure"]["summary"])
+    assert "Yahoo Finance" in str(indicators["us_rates_pressure"]["summary"])

@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from src.services.market_cache import MarketCache, market_cache
 from src.services.market_overview_binance_transport import fetch_binance_funding_row
+from src.services.market_overview_yfinance_transport import fetch_yfinance_quote_history_frame
 from src.storage import DatabaseManager
 
 
@@ -204,7 +205,30 @@ class LiquidityMonitorService:
     def _vix_indicator(self, panel: PanelState) -> Dict[str, Any]:
         item = self._first_reliable_item(panel, {"VIX"})
         if item is None:
-            return self._indicator("vix_pressure", "VIX / 波动率压力", panel, "unavailable", 0, 8, False, "未读取到可靠 VIX")
+            proxy_panel = self._fetch_macro_proxy_panel(
+                "volatility_proxy",
+                [{"symbol": "VIX", "label": "VIX", "ticker": "^VIX", "unit": "pts"}],
+            )
+            if proxy_panel is not None:
+                panel = proxy_panel
+                item = self._first_reliable_item(panel, {"VIX"})
+        if item is None:
+            return self._indicator(
+                "vix_pressure",
+                "VIX / 波动率压力",
+                panel,
+                "unavailable",
+                0,
+                8,
+                False,
+                self._summary_with_metadata(
+                    "未读取到可靠 VIX",
+                    source="yfinance_proxy",
+                    source_label="Yahoo Finance",
+                    source_type="proxy_public",
+                    reason=self._panel_unavailable_reason(panel, "VIX 代理不可用"),
+                ),
+            )
         change = self._change_value(item)
         value = self._numeric(item.get("value") or item.get("price"))
         contribution = 0
@@ -216,12 +240,47 @@ class LiquidityMonitorService:
             contribution = 8
         elif value is not None and value >= 25:
             contribution = -8
-        return self._indicator("vix_pressure", "VIX / 波动率压力", panel, "live", contribution, 8, True, self._signed_percent_text(change), freshness=self._item_freshness(item, panel))
+        freshness = self._item_freshness(item, panel)
+        status = "live" if freshness in {"live", "cached"} and str(item.get("source") or panel.source) != "yfinance_proxy" else "partial"
+        return self._indicator(
+            "vix_pressure",
+            "VIX / 波动率压力",
+            panel,
+            status,
+            contribution,
+            8,
+            True,
+            self._summary_with_metadata(self._signed_percent_text(change), item=item, freshness=freshness),
+            freshness=freshness,
+        )
 
     def _usd_pressure_indicator(self, fx_panel: PanelState, rates_panel: PanelState) -> Dict[str, Any]:
         components = self._extract_usd_pressure_components(fx_panel, rates_panel)
         if not components:
-            return self._indicator("usd_pressure", "DXY / 美元压力", fx_panel, "unavailable", 0, 6, False, "仅在可靠 FX / 宏观缓存存在时启用")
+            proxy_panel = self._fetch_macro_proxy_panel(
+                "fx_commodities_proxy",
+                [{"symbol": "DXY", "label": "DXY", "ticker": "DX-Y.NYB", "unit": "idx"}],
+            )
+            if proxy_panel is not None:
+                fx_panel = proxy_panel
+                components = self._extract_usd_pressure_components(fx_panel, rates_panel)
+        if not components:
+            return self._indicator(
+                "usd_pressure",
+                "DXY / 美元压力",
+                fx_panel,
+                "unavailable",
+                0,
+                6,
+                False,
+                self._summary_with_metadata(
+                    "仅在可靠 FX / 宏观缓存存在时启用",
+                    source="yfinance_proxy",
+                    source_label="Yahoo Finance",
+                    source_type="proxy_public",
+                    reason=self._panel_unavailable_reason(fx_panel, "DXY 代理不可用"),
+                ),
+            )
         positive = sum(1 for component in components if float(component["signal"]) > 0)
         negative = sum(1 for component in components if float(component["signal"]) < 0)
         direction = self._direction_from_counts(positive, negative)
@@ -229,12 +288,48 @@ class LiquidityMonitorService:
         summary = " | ".join(f"{component['label']} {self._signed_percent_text(float(component['change']))}" for component in components)
         freshness = self._weakest_freshness([str(component["freshness"]) for component in components])
         status = "live" if len(components) >= 2 and freshness in {"live", "cached"} else "partial"
-        return self._indicator("usd_pressure", "DXY / 美元压力", base_panel, status, -6 if direction > 0 else 6 if direction < 0 else 0, 6, True, summary, freshness=freshness)
+        return self._indicator(
+            "usd_pressure",
+            "DXY / 美元压力",
+            base_panel,
+            status,
+            -6 if direction > 0 else 6 if direction < 0 else 0,
+            6,
+            True,
+            self._summary_with_metadata(summary, item=components[0], freshness=freshness),
+            freshness=freshness,
+        )
 
     def _us_rates_indicator(self, panel: PanelState) -> Dict[str, Any]:
         components = self._extract_us_rates_components(panel)
         if not components:
-            return self._indicator("us_rates_pressure", "US Rates / 利率压力", panel, "unavailable", 0, 6, False, "仅在可靠利率缓存存在时启用")
+            proxy_panel = self._fetch_macro_proxy_panel(
+                "rates_proxy",
+                [
+                    {"symbol": "US10Y", "label": "10Y yield", "ticker": "^TNX", "unit": "%", "value_scale": 10.0, "market": "US"},
+                    {"symbol": "US30Y", "label": "30Y yield", "ticker": "^TYX", "unit": "%", "value_scale": 10.0, "market": "US"},
+                ],
+            )
+            if proxy_panel is not None:
+                panel = proxy_panel
+                components = self._extract_us_rates_components(panel)
+        if not components:
+            return self._indicator(
+                "us_rates_pressure",
+                "US Rates / 利率压力",
+                panel,
+                "unavailable",
+                0,
+                6,
+                False,
+                self._summary_with_metadata(
+                    "仅在可靠利率缓存存在时启用",
+                    source="yfinance_proxy",
+                    source_label="Yahoo Finance",
+                    source_type="proxy_public",
+                    reason=self._panel_unavailable_reason(panel, "US rates 代理不可用"),
+                ),
+            )
         positive = sum(1 for component in components if float(component["signal"]) > 0)
         negative = sum(1 for component in components if float(component["signal"]) < 0)
         direction = self._direction_from_counts(positive, negative)
@@ -252,7 +347,17 @@ class LiquidityMonitorService:
             summary = f"{summary} | {' | '.join(curve_parts)}" if summary else " | ".join(curve_parts)
         freshness = self._weakest_freshness([str(component["freshness"]) for component in components])
         status = "live" if sum(1 for component in components if component["kind"] == "yield") >= 2 and freshness in {"live", "cached"} else "partial"
-        return self._indicator("us_rates_pressure", "US Rates / 利率压力", panel, status, 6 if direction > 0 else -6 if direction < 0 else 0, 6, True, summary, freshness=freshness)
+        return self._indicator(
+            "us_rates_pressure",
+            "US Rates / 利率压力",
+            panel,
+            status,
+            6 if direction > 0 else -6 if direction < 0 else 0,
+            6,
+            True,
+            self._summary_with_metadata(summary, item=components[0], freshness=freshness),
+            freshness=freshness,
+        )
 
     def _us_etf_flow_indicator(self, panel: PanelState) -> Dict[str, Any]:
         item = self._first_reliable_item(panel, {"ETF"})
@@ -429,6 +534,10 @@ class LiquidityMonitorService:
                     "signal": -change if invert else change,
                     "freshness": self._item_freshness(item, panel),
                     "panel": panel,
+                    "source": item.get("source") or panel.source,
+                    "sourceLabel": item.get("sourceLabel") or panel.payload.get("sourceLabel"),
+                    "sourceType": item.get("sourceType") or panel.payload.get("sourceType"),
+                    "asOf": item.get("asOf") or item.get("updatedAt") or panel.as_of or panel.updated_at,
                 }
             )
         return items
@@ -450,6 +559,10 @@ class LiquidityMonitorService:
                     "change": change,
                     "signal": -change,
                     "freshness": self._item_freshness(item, panel),
+                    "source": item.get("source") or panel.source,
+                    "sourceLabel": item.get("sourceLabel") or panel.payload.get("sourceLabel"),
+                    "sourceType": item.get("sourceType") or panel.payload.get("sourceType"),
+                    "asOf": item.get("asOf") or item.get("updatedAt") or panel.as_of or panel.updated_at,
                 }
             )
         for symbol in ("US10Y2Y", "US10Y3M"):
@@ -466,6 +579,10 @@ class LiquidityMonitorService:
                     "value": value,
                     "unit": str(item.get("unit") or ""),
                     "freshness": self._item_freshness(item, panel),
+                    "source": item.get("source") or panel.source,
+                    "sourceLabel": item.get("sourceLabel") or panel.payload.get("sourceLabel"),
+                    "sourceType": item.get("sourceType") or panel.payload.get("sourceType"),
+                    "asOf": item.get("asOf") or item.get("updatedAt") or panel.as_of or panel.updated_at,
                 }
             )
         return items
@@ -650,6 +767,81 @@ class LiquidityMonitorService:
             is_stale=False,
         )
 
+    def _fetch_macro_proxy_panel(self, key: str, specs: List[Dict[str, Any]]) -> Optional[PanelState]:
+        if not specs:
+            return None
+        self._external_provider_calls_used = True
+        items = []
+        for spec in specs:
+            item = self._fetch_macro_proxy_item(spec)
+            if item is not None:
+                items.append(item)
+        if not items:
+            return None
+        as_of_values = [str(item.get("asOf") or "") for item in items if item.get("asOf")]
+        latest_as_of = max(as_of_values) if as_of_values else self._now().isoformat(timespec="seconds")
+        payload = {
+            "source": "yfinance_proxy",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "proxy_public",
+            "freshness": "delayed",
+            "asOf": latest_as_of,
+            "updatedAt": latest_as_of,
+            "isFallback": False,
+            "fallbackUsed": False,
+            "items": items,
+        }
+        return PanelState(
+            key=key,
+            payload=payload,
+            source="yfinance_proxy",
+            freshness="delayed",
+            as_of=latest_as_of,
+            updated_at=latest_as_of,
+            is_fallback=False,
+            is_stale=False,
+        )
+
+    def _fetch_macro_proxy_item(self, spec: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        ticker = str(spec.get("ticker") or "").strip()
+        if not ticker:
+            return None
+        try:
+            frame = fetch_yfinance_quote_history_frame(ticker)
+        except Exception:
+            return None
+        closes = self._frame_column_values(frame, "Close")
+        closes = [value for value in closes if value is not None]
+        if not closes:
+            return None
+        latest_raw = closes[-1]
+        previous_raw = closes[-2] if len(closes) > 1 else latest_raw
+        value_scale = float(spec.get("value_scale") or 1.0)
+        latest_value = latest_raw / value_scale if value_scale else latest_raw
+        change_percent = ((latest_raw - previous_raw) / previous_raw * 100.0) if previous_raw else 0.0
+        as_of = self._frame_last_as_of(frame) or self._now().isoformat(timespec="seconds")
+        item = {
+            "symbol": spec["symbol"],
+            "label": spec["label"],
+            "value": round(latest_value, 3),
+            "price": round(latest_value, 3),
+            "unit": spec.get("unit"),
+            "change": round(change_percent, 3),
+            "changePercent": round(change_percent, 3),
+            "source": "yfinance_proxy",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "proxy_public",
+            "freshness": "delayed",
+            "asOf": as_of,
+            "updatedAt": as_of,
+            "isFallback": False,
+            "fallbackUsed": False,
+        }
+        market = self._text(spec.get("market"))
+        if market:
+            item["market"] = market
+        return item
+
     @staticmethod
     def _direction_from_counts(positive: int, negative: int) -> int:
         if positive > negative:
@@ -685,6 +877,8 @@ class LiquidityMonitorService:
             return "fallback"
         if panel.is_stale:
             return "stale"
+        if source == "yfinance_proxy":
+            return "delayed"
         item_as_of = self._parse_time(item.get("asOf") or item.get("updatedAt"))
         panel_as_of = self._parse_time(panel.as_of or panel.updated_at)
         if item_as_of and panel_as_of:
@@ -736,6 +930,74 @@ class LiquidityMonitorService:
         if parsed.tzinfo is None:
             return parsed.replace(tzinfo=CN_TZ)
         return parsed.astimezone(CN_TZ)
+
+    @staticmethod
+    def _frame_column_values(frame: Any, column: str) -> List[Optional[float]]:
+        if frame is None:
+            return []
+        try:
+            values = frame[column].tolist()
+        except Exception:
+            return []
+        return [LiquidityMonitorService._numeric(value) for value in values]
+
+    @staticmethod
+    def _frame_last_as_of(frame: Any) -> Optional[str]:
+        index = getattr(frame, "index", None)
+        if index is None:
+            return None
+        try:
+            if len(index) == 0:
+                return None
+            value = index[-1]
+        except Exception:
+            return None
+        if hasattr(value, "to_pydatetime"):
+            value = value.to_pydatetime()
+        if isinstance(value, datetime):
+            dt = value
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(CN_TZ).isoformat(timespec="seconds")
+        parsed = LiquidityMonitorService._parse_time(value)
+        return parsed.isoformat(timespec="seconds") if parsed else None
+
+    def _summary_with_metadata(
+        self,
+        summary: str,
+        *,
+        item: Optional[Dict[str, Any]] = None,
+        source: Optional[str] = None,
+        source_label: Optional[str] = None,
+        source_type: Optional[str] = None,
+        as_of: Optional[str] = None,
+        freshness: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> str:
+        item = item or {}
+        resolved_source = self._text(item.get("source")) or self._text(source)
+        resolved_source_label = self._text(item.get("sourceLabel")) or self._text(source_label)
+        resolved_source_type = self._text(item.get("sourceType")) or self._text(source_type)
+        resolved_as_of = self._text(item.get("asOf") or item.get("updatedAt")) or self._text(as_of)
+        resolved_freshness = self._text(item.get("freshness")) or self._text(freshness)
+        parts = [summary]
+        if resolved_source_label or resolved_source:
+            label = resolved_source_label or resolved_source or ""
+            if resolved_source and resolved_source != label:
+                label = f"{label} ({resolved_source})"
+            parts.append(f"来源 {label}")
+        if resolved_source_type:
+            parts.append(f"类型 {resolved_source_type}")
+        if resolved_as_of:
+            parts.append(f"截至 {resolved_as_of}")
+        if resolved_freshness:
+            parts.append(f"新鲜度 {resolved_freshness}")
+        if reason:
+            parts.append(f"原因 {reason}")
+        return " | ".join(part for part in parts if part)
+
+    def _panel_unavailable_reason(self, panel: PanelState, default: str) -> str:
+        return self._text(panel.payload.get("warning")) or self._text(panel.payload.get("error")) or default
 
     @staticmethod
     def _timestamp_millis_to_iso(value: Any) -> Optional[str]:
