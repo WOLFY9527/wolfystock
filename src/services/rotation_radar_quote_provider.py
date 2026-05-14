@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional
+from time import monotonic
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence
 
 import pandas as pd
 
@@ -16,6 +17,9 @@ _QUOTE_SOURCE = "yfinance_proxy"
 _QUOTE_SOURCE_LABEL = "Yahoo Finance"
 _QUOTE_MODE = "proxy"
 _QUOTE_SOURCE_TYPE = "unofficial_public_api"
+_FAILED_SYMBOL_LIST_LIMIT = 8
+_UNAVAILABLE_SYMBOL_COOLDOWN_SECONDS = 1800.0
+_UNAVAILABLE_SYMBOL_STATE: Dict[str, Dict[str, Any]] = {}
 
 
 def get_rotation_radar_quote_provider() -> QuoteProvider:
@@ -29,14 +33,35 @@ def load_rotation_radar_quotes(symbols: Iterable[str]) -> Dict[str, Any]:
     freshness_counts: Dict[str, int] = {}
     source_counts: Dict[str, int] = {}
     source_label_counts: Dict[str, int] = {}
+    failed_symbols: list[str] = []
+    failed_symbol_count = 0
+    unavailable_reason_counts: Dict[str, int] = {}
+    now_monotonic = monotonic()
 
     for symbol in requested_symbols:
+        cooldown_reason = _cooldown_reason(symbol, now_monotonic)
+        if cooldown_reason:
+            failed_symbols.append(symbol)
+            failed_symbol_count += 1
+            unavailable_reason_counts[cooldown_reason] = unavailable_reason_counts.get(cooldown_reason, 0) + 1
+            continue
         try:
             frame = fetch_yfinance_quote_history_frame(symbol)
-        except Exception:
+        except Exception as exc:
+            reason = _sanitize_unavailable_reason(str(exc))
+            if reason in {"symbol_unavailable", "quote_unavailable"}:
+                _mark_symbol_unavailable(symbol, reason, now_monotonic)
+            failed_symbols.append(symbol)
+            failed_symbol_count += 1
+            unavailable_reason_counts[reason] = unavailable_reason_counts.get(reason, 0) + 1
             continue
         quote = _quote_from_history_frame(symbol, frame)
         if quote is None:
+            reason = "symbol_unavailable"
+            _mark_symbol_unavailable(symbol, reason, now_monotonic)
+            failed_symbols.append(symbol)
+            failed_symbol_count += 1
+            unavailable_reason_counts[reason] = unavailable_reason_counts.get(reason, 0) + 1
             continue
         quotes[symbol] = quote
         freshness = str(quote.get("freshness") or "unknown")
@@ -53,15 +78,21 @@ def load_rotation_radar_quotes(symbols: Iterable[str]) -> Dict[str, Any]:
     coverage_percent = round((usable_symbol_count / requested_symbol_count) * 100, 1) if requested_symbol_count else 0.0
     freshness = _dominant_label(freshness_counts, default="fallback")
     as_of = max(as_of_candidates) if as_of_candidates else None
+    status = "fallback" if usable_symbol_count == 0 and requested_symbol_count else "partial" if failed_symbol_count else "success"
+    unavailable_reason = _dominant_label(unavailable_reason_counts, default="symbol_unavailable") if unavailable_reason_counts else None
 
     return {
         "quotes": quotes,
         "metadata": {
+            "status": status,
             "quoteMode": _QUOTE_MODE,
             "sourceType": _QUOTE_SOURCE_TYPE,
             "freshness": freshness,
             "asOf": as_of,
             "noExternalCalls": False,
+            "failedSymbols": _bounded_unique_symbols(failed_symbols),
+            "failedSymbolCount": failed_symbol_count,
+            "unavailableReason": unavailable_reason,
             "coverage": {
                 "requestedSymbolCount": requested_symbol_count,
                 "usableSymbolCount": usable_symbol_count,
@@ -214,3 +245,46 @@ def _dominant_label(counts: Mapping[str, int], *, default: str) -> str:
     if not counts:
         return default
     return max(counts.items(), key=lambda item: (item[1], item[0]))[0]
+
+
+def _bounded_unique_symbols(symbols: Sequence[str]) -> list[str]:
+    bounded: list[str] = []
+    seen: set[str] = set()
+    for symbol in symbols:
+        normalized = str(symbol).strip().upper()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        bounded.append(normalized)
+        if len(bounded) >= _FAILED_SYMBOL_LIST_LIMIT:
+            break
+    return bounded
+
+
+def _sanitize_unavailable_reason(raw_reason: str) -> str:
+    normalized = str(raw_reason or "").strip().lower()
+    if not normalized:
+        return "quote_unavailable"
+    if "delisted" in normalized or "no price data" in normalized or "no data" in normalized:
+        return "symbol_unavailable"
+    if "timeout" in normalized or "request" in normalized or "fetch" in normalized:
+        return "quote_fetch_failed"
+    return "quote_unavailable"
+
+
+def _cooldown_reason(symbol: str, now_monotonic: float) -> Optional[str]:
+    state = _UNAVAILABLE_SYMBOL_STATE.get(symbol)
+    if not state:
+        return None
+    retry_after = state.get("retryAfterMonotonic")
+    if not isinstance(retry_after, (int, float)) or retry_after <= now_monotonic:
+        _UNAVAILABLE_SYMBOL_STATE.pop(symbol, None)
+        return None
+    return str(state.get("reason") or "symbol_unavailable")
+
+
+def _mark_symbol_unavailable(symbol: str, reason: str, now_monotonic: float) -> None:
+    _UNAVAILABLE_SYMBOL_STATE[symbol] = {
+        "reason": reason,
+        "retryAfterMonotonic": now_monotonic + _UNAVAILABLE_SYMBOL_COOLDOWN_SECONDS,
+    }

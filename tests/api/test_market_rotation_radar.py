@@ -336,3 +336,113 @@ def test_market_rotation_radar_default_us_route_uses_injected_quote_provider_whe
         assert any(theme["id"] == "ai_applications" and theme["source"] != "fallback" for theme in payload["themes"])
     finally:
         client.close()
+
+
+def test_market_rotation_radar_partial_quote_failures_are_sanitized_in_api_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    quotes = {
+        "QQQ": {
+            "price": 500.0,
+            "changePercent": 0.8,
+            "volumeRatio": 1.2,
+            "vwap": 495.0,
+            "freshness": "delayed",
+            "source": "unit_fixture",
+            "sourceLabel": "Unit Fixture",
+            "asOf": "2026-05-13T09:30:00+00:00",
+        },
+        "SPY": {
+            "price": 450.0,
+            "changePercent": 0.4,
+            "volumeRatio": 1.0,
+            "vwap": 448.0,
+            "freshness": "delayed",
+            "source": "unit_fixture",
+            "sourceLabel": "Unit Fixture",
+            "asOf": "2026-05-13T09:30:00+00:00",
+        },
+        "IWM": {
+            "price": 200.0,
+            "changePercent": 0.2,
+            "volumeRatio": 0.9,
+            "vwap": 199.0,
+            "freshness": "delayed",
+            "source": "unit_fixture",
+            "sourceLabel": "Unit Fixture",
+            "asOf": "2026-05-13T09:30:00+00:00",
+        },
+        "IGV": {
+            "price": 100.0,
+            "changePercent": 1.0,
+            "volumeRatio": 1.4,
+            "vwap": 99.0,
+            "freshness": "delayed",
+            "source": "unit_fixture",
+            "sourceLabel": "Unit Fixture",
+            "asOf": "2026-05-13T09:30:00+00:00",
+        },
+        "APP": {
+            "price": 300.0,
+            "changePercent": 5.0,
+            "volumeRatio": 2.0,
+            "vwap": 295.0,
+            "freshness": "delayed",
+            "source": "unit_fixture",
+            "sourceLabel": "Unit Fixture",
+            "asOf": "2026-05-13T09:30:00+00:00",
+        },
+        "PLTR": {
+            "price": 130.0,
+            "changePercent": 4.5,
+            "volumeRatio": 1.8,
+            "vwap": 127.0,
+            "freshness": "delayed",
+            "source": "unit_fixture",
+            "sourceLabel": "Unit Fixture",
+            "asOf": "2026-05-13T09:30:00+00:00",
+        },
+        "CRM": {
+            "price": 280.0,
+            "changePercent": 2.5,
+            "volumeRatio": 1.3,
+            "vwap": 278.0,
+            "freshness": "delayed",
+            "source": "unit_fixture",
+            "sourceLabel": "Unit Fixture",
+            "asOf": "2026-05-13T09:30:00+00:00",
+        },
+    }
+
+    def provider_factory():
+        def provider(symbols):
+            return {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "proxy",
+                    "sourceType": "unofficial_public_api",
+                    "freshness": "delayed",
+                    "failedSymbols": ["sq", "IRBT", "X", "  "],
+                    "failedSymbolCount": 5,
+                    "unavailableReason": "possibly delisted / no price data",
+                    "noExternalCalls": False,
+                },
+            }
+
+        return provider
+
+    client = _client(monkeypatch, provider_factory=provider_factory)
+    try:
+        response = client.get("/api/v1/market/rotation-radar")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["isFallback"] is False
+        assert payload["metadata"]["quoteProvider"]["status"] == "partial"
+        assert payload["metadata"]["quoteProvider"]["failedSymbols"] == ["SQ", "IRBT", "X"]
+        assert payload["metadata"]["quoteProvider"]["failedSymbolCount"] == 5
+        assert payload["metadata"]["quoteProvider"]["unavailableReason"] == "symbol_unavailable"
+        assert "部分主题行情暂不可用" in payload["warning"]
+        assert "possibly delisted" not in json.dumps(payload, ensure_ascii=False).lower()
+    finally:
+        client.close()

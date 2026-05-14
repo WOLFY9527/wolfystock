@@ -297,9 +297,49 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(payload["freshness"], "fallback")
         self.assertIn("quote provider 暂不可用", payload["warning"])
         self.assertTrue(provider_meta["present"])
-        self.assertEqual(provider_meta["status"], "failed")
+        self.assertEqual(provider_meta["status"], "fallback")
         self.assertEqual(provider_meta["usableSymbolCount"], 0)
+        self.assertEqual(provider_meta["unavailableReason"], "provider_unavailable")
+        self.assertEqual(provider_meta["failedSymbols"], [])
+        self.assertEqual(provider_meta["failedSymbolCount"], 0)
         self.assertFalse(payload["metadata"]["noExternalCalls"])
+
+    def test_partial_quote_provider_sanitizes_failed_symbols_and_keeps_payload_computed(self) -> None:
+        quotes = {
+            "QQQ": _quote("QQQ", 0.5),
+            "SPY": _quote("SPY", 0.3),
+            "IWM": _quote("IWM", 0.1),
+            "IGV": _quote("IGV", 0.8),
+            "APP": _quote("APP", 3.0, volume_ratio=1.8),
+            "PLTR": _quote("PLTR", 2.5, volume_ratio=1.6),
+            "CRM": _quote("CRM", 1.7, volume_ratio=1.3),
+        }
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "proxy",
+                    "sourceType": "unofficial_public_api",
+                    "freshness": "delayed",
+                    "failedSymbols": ["sq", "X", "IRBT", "bad symbol", "sq", "X  ", "  "],
+                    "failedSymbolCount": 9,
+                    "unavailableReason": "possibly delisted; no price data found 404 timeout",
+                },
+            },
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        provider_meta = payload["metadata"]["quoteProvider"]
+
+        self.assertFalse(payload["isFallback"])
+        self.assertEqual(payload["source"], "computed")
+        self.assertEqual(provider_meta["status"], "partial")
+        self.assertEqual(provider_meta["unavailableReason"], "symbol_unavailable")
+        self.assertEqual(provider_meta["failedSymbols"], ["SQ", "X", "IRBT", "BAD SYMBOL"])
+        self.assertEqual(provider_meta["failedSymbolCount"], 9)
+        self.assertIn("部分主题行情暂不可用", payload["warning"])
+        self.assertNotIn("possibly delisted", json.dumps(payload, ensure_ascii=False).lower())
 
     def test_rotation_radar_yfinance_quote_provider_reuses_history_transport(self) -> None:
         frame = pd.DataFrame(
@@ -343,6 +383,39 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertAlmostEqual(quote["volumeRatio"], 1.364, places=3)
         self.assertEqual(quote["timeWindows"]["1d"]["changePercent"], quote["changePercent"])
         self.assertEqual(quote["timeWindows"]["1d"]["freshness"], "delayed")
+
+    def test_rotation_radar_yfinance_quote_provider_bounds_unavailable_symbols_and_skips_retry_within_cooldown(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "Open": [100.0, 101.0, 103.0],
+                "High": [101.0, 104.0, 106.0],
+                "Low": [99.0, 100.0, 102.0],
+                "Close": [100.0, 103.0, 105.0],
+                "Volume": [1_000_000.0, 1_200_000.0, 1_500_000.0],
+            },
+            index=pd.DatetimeIndex(["2026-05-09", "2026-05-12", "2026-05-13"]),
+        )
+
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}):
+            with patch(
+                "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+                side_effect=[RuntimeError("possibly delisted; no price data found"), frame, frame],
+            ) as mock_fetch:
+                first_payload = load_rotation_radar_quotes(["SQ", "APP"])
+                second_payload = load_rotation_radar_quotes(["SQ", "APP"])
+
+        self.assertEqual(
+            [call.args[0] for call in mock_fetch.call_args_list],
+            ["SQ", "APP", "APP"],
+        )
+        self.assertEqual(first_payload["metadata"]["status"], "partial")
+        self.assertEqual(first_payload["metadata"]["unavailableReason"], "symbol_unavailable")
+        self.assertEqual(first_payload["metadata"]["failedSymbols"], ["SQ"])
+        self.assertEqual(first_payload["metadata"]["failedSymbolCount"], 1)
+        self.assertEqual(second_payload["metadata"]["status"], "partial")
+        self.assertEqual(second_payload["metadata"]["failedSymbols"], ["SQ"])
+        self.assertEqual(second_payload["metadata"]["failedSymbolCount"], 1)
+        self.assertEqual(second_payload["metadata"]["coverage"]["usableSymbolCount"], 1)
 
     def test_non_us_market_returns_taxonomy_only_entries_without_quote_provider_calls(self) -> None:
         provider_calls: list[list[str]] = []

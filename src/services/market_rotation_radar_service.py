@@ -47,6 +47,7 @@ STAGE_LABELS = {
     "cooling_watch",
     "weak_or_no_signal",
 }
+FAILED_SYMBOL_LIST_LIMIT = 8
 
 
 @dataclass(frozen=True)
@@ -401,9 +402,14 @@ class MarketRotationRadarService:
                 quotes={},
                 warning="quote provider 暂不可用，已降级为静态篮子。",
                 provider_present=True,
-                provider_status="failed",
+                provider_status="fallback",
                 requested_symbols=symbols,
-                provider_metadata={"noExternalCalls": False},
+                provider_metadata={
+                    "noExternalCalls": False,
+                    "failedSymbols": [],
+                    "failedSymbolCount": 0,
+                    "unavailableReason": "provider_unavailable",
+                },
             )
         raw_quotes, provider_metadata = self._unpack_quote_provider_result(raw_result)
         normalized: Dict[str, Dict[str, Any]] = {}
@@ -418,19 +424,28 @@ class MarketRotationRadarService:
                 quotes={},
                 warning="quote provider 未返回可用行情，已降级为静态篮子。",
                 provider_present=True,
-                provider_status="empty",
+                provider_status="fallback",
                 requested_symbols=symbols,
                 provider_metadata={"noExternalCalls": False, **provider_metadata},
             )
-        provider_status = "success" if len(normalized) == len(symbols) else "partial"
+        failed_symbol_count = self._failed_symbol_count(
+            provider_metadata,
+            requested_symbols=symbols,
+            quotes=normalized,
+        )
+        provider_status = "partial" if failed_symbol_count or len(normalized) < len(symbols) else "success"
+        warning = (
+            "部分主题行情暂不可用，已使用可用 quote 与静态篮子继续计算。"
+            if provider_status == "partial" else None
+        )
         return QuoteLoadResult(
             quotes=normalized,
-            warning=None,
+            warning=warning,
             provider_present=True,
             provider_status=provider_status,
             requested_symbols=symbols,
-                provider_metadata={"noExternalCalls": False, **provider_metadata},
-            )
+            provider_metadata={"noExternalCalls": False, **provider_metadata},
+        )
 
     def _load_observed_evidence(self, symbols: Sequence[str]) -> Optional[QuoteLoadResult]:
         if not isinstance(self.observed_evidence, Mapping):
@@ -566,13 +581,29 @@ class MarketRotationRadarService:
             source=None,
             source_type=metadata.get("sourceType"),
             freshness=metadata_freshness,
-            is_fallback=usable_symbol_count == 0 and source_status in {"failed", "absent"},
+            is_fallback=usable_symbol_count == 0 and source_status in {"fallback", "absent"},
             no_external_calls=no_external_calls,
         )["sourceType"]
         if not metadata.get("sourceType") and source_type_counts:
             canonical_source_type = self._dominant_label(source_type_counts, default=canonical_source_type)
         elif not metadata.get("sourceType") and usable_symbol_count == 0:
-            canonical_source_type = "fallback_static" if source_status == "failed" else "missing"
+            canonical_source_type = "fallback_static" if source_status == "fallback" else "missing"
+        failed_symbols = self._failed_symbols(
+            metadata,
+            requested_symbols=requested_symbols,
+            quotes=quotes,
+            source_status=source_status,
+        )
+        failed_symbol_count = self._failed_symbol_count(
+            metadata,
+            requested_symbols=requested_symbols,
+            quotes=quotes,
+        )
+        unavailable_reason = self._unavailable_reason(
+            metadata,
+            source_status=source_status,
+            failed_symbol_count=failed_symbol_count,
+        )
         return {
             "present": source_present,
             "status": source_status,
@@ -590,11 +621,90 @@ class MarketRotationRadarService:
             "asOf": str(metadata.get("asOf") or max(as_of_candidates)) if as_of_candidates or metadata.get("asOf") else None,
             "fallbackQuoteCount": fallback_count,
             "staleQuoteCount": stale_count,
+            "failedSymbols": failed_symbols,
+            "failedSymbolCount": failed_symbol_count,
+            "unavailableReason": unavailable_reason,
             "sourceCounts": source_counts,
             "sourceLabelCounts": source_label_counts,
             "freshnessCounts": freshness_counts,
             "noExternalCalls": no_external_calls,
         }
+
+    def _failed_symbols(
+        self,
+        metadata: Mapping[str, Any],
+        *,
+        requested_symbols: Sequence[str],
+        quotes: Mapping[str, Dict[str, Any]],
+        source_status: str,
+    ) -> List[str]:
+        raw_failed = metadata.get("failedSymbols", metadata.get("failed_symbols"))
+        if isinstance(raw_failed, Sequence) and not isinstance(raw_failed, (str, bytes)):
+            return self._sanitize_symbol_list(raw_failed)
+        if source_status != "partial":
+            return []
+        derived_missing = [symbol for symbol in requested_symbols if symbol not in quotes]
+        return self._sanitize_symbol_list(derived_missing)
+
+    def _failed_symbol_count(
+        self,
+        metadata: Mapping[str, Any],
+        *,
+        requested_symbols: Sequence[str],
+        quotes: Mapping[str, Dict[str, Any]],
+    ) -> int:
+        raw_count = metadata.get("failedSymbolCount", metadata.get("failed_symbol_count"))
+        if isinstance(raw_count, int) and raw_count >= 0:
+            return raw_count
+        if isinstance(raw_count, str) and raw_count.isdigit():
+            return int(raw_count)
+        return max(len(requested_symbols) - len(quotes), 0)
+
+    def _unavailable_reason(
+        self,
+        metadata: Mapping[str, Any],
+        *,
+        source_status: str,
+        failed_symbol_count: int,
+    ) -> Optional[str]:
+        raw_reason = metadata.get("unavailableReason", metadata.get("unavailable_reason"))
+        normalized = self._sanitize_unavailable_reason(raw_reason)
+        if normalized:
+            return normalized
+        if failed_symbol_count > 0:
+            return "symbol_unavailable"
+        if source_status == "fallback":
+            return "provider_unavailable"
+        return None
+
+    def _sanitize_symbol_list(self, values: Sequence[Any]) -> List[str]:
+        sanitized: List[str] = []
+        seen: set[str] = set()
+        for value in values:
+            normalized = " ".join(str(value).strip().upper().split())
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            sanitized.append(normalized)
+            if len(sanitized) >= FAILED_SYMBOL_LIST_LIMIT:
+                break
+        return sanitized
+
+    def _sanitize_unavailable_reason(self, reason: Any) -> Optional[str]:
+        if not reason:
+            return None
+        normalized = str(reason).strip().lower()
+        if not normalized:
+            return None
+        if normalized in {"symbol_unavailable", "provider_unavailable", "quote_fetch_failed", "quote_unavailable"}:
+            return normalized
+        if "delisted" in normalized or "no price data" in normalized or "no data" in normalized:
+            return "symbol_unavailable"
+        if "provider" in normalized or "service" in normalized:
+            return "provider_unavailable"
+        if "timeout" in normalized or "request" in normalized or "fetch" in normalized:
+            return "quote_fetch_failed"
+        return "quote_unavailable"
 
     def _build_benchmarks(self, quotes: Mapping[str, Dict[str, Any]], generated_at: str) -> Dict[str, Dict[str, Any]]:
         benchmarks: Dict[str, Dict[str, Any]] = {}
