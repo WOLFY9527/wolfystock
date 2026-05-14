@@ -123,12 +123,14 @@ describe('PersonalSettingsPage', () => {
     );
 
     const heading = screen.getByRole('heading', { level: 1, name: '设置' });
+    const workspace = screen.getByTestId('personal-settings-workspace');
     expect(heading).toHaveClass('text-xl', 'md:text-2xl');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(container.querySelectorAll('main')).toHaveLength(0);
-    expect(screen.getByTestId('personal-settings-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'gap-4');
-    expect(screen.getByTestId('personal-settings-workspace')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'py-8');
-    expect(screen.getByTestId('personal-settings-workspace')).not.toHaveClass('max-w-4xl', 'mx-auto');
+    expect(workspace).toHaveAttribute('data-terminal-primitive', 'page-shell');
+    expect(workspace).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6', 'py-5', 'md:py-6');
+    expect(workspace).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'py-8');
+    expect(workspace).not.toHaveClass('max-w-4xl');
     expect(screen.getByText(zh('settings.personalGuestPreferencesTitle'))).toBeInTheDocument();
     expect(screen.queryByText(zh('settings.personalGuestPreferencesBody'))).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: zh('language.zh') })).not.toBeInTheDocument();
@@ -208,9 +210,11 @@ describe('PersonalSettingsPage', () => {
       </MemoryRouter>,
     );
 
+    const workspace = screen.getByTestId('personal-settings-workspace');
     expect(container.querySelectorAll('main')).toHaveLength(0);
-    expect(screen.getByTestId('personal-settings-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'gap-4');
-    expect(screen.getByTestId('personal-settings-workspace')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'py-8');
+    expect(workspace).toHaveAttribute('data-terminal-primitive', 'page-shell');
+    expect(workspace).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6', 'py-5', 'md:py-6');
+    expect(workspace).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'py-8');
     await waitFor(() => expect(getNotificationPreferences).toHaveBeenCalledTimes(1));
     expect(screen.queryByText(zh('settings.personalAdminConsoleTitle'))).not.toBeInTheDocument();
     expect(screen.queryByText(zh('settings.personalAdminConsoleDesc'))).not.toBeInTheDocument();
