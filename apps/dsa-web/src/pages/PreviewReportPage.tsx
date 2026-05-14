@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useEffect, useMemo } from 'react';
 import { WorkspacePageHeader } from '../components/common';
+import { TerminalPageShell } from '../components/terminal';
 import { StandardReportPanel } from '../components/report';
 import { previewChartFixtures, previewReport } from '../dev/reportPreviewFixture';
 import { normalizeFrontendReportContract } from '../api/reportNormalizer';
@@ -18,7 +19,10 @@ const PreviewReportPage: React.FC = () => {
   }, [t]);
 
   return (
-    <div className="workspace-page workspace-page--preview min-w-0" data-testid="preview-report-page">
+    <TerminalPageShell
+      className="flex-1 min-h-0 min-w-0 py-5 md:py-6"
+      data-testid="preview-report-page"
+    >
       <WorkspacePageHeader
         eyebrow={t('previewReport.eyebrow')}
         title={t('previewReport.title')}
@@ -27,7 +31,7 @@ const PreviewReportPage: React.FC = () => {
       />
 
       <StandardReportPanel report={normalizedPreviewReport} chartFixtures={previewChartFixtures} />
-    </div>
+    </TerminalPageShell>
   );
 };
 

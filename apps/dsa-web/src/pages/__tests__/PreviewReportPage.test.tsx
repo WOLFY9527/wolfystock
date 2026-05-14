@@ -17,7 +17,11 @@ describe('PreviewReportPage', () => {
       </UiLanguageProvider>,
     );
 
-    expect(screen.getByTestId('preview-report-page')).toBeInTheDocument();
+    const page = screen.getByTestId('preview-report-page');
+    expect(page).toBeInTheDocument();
+    expect(page).toHaveAttribute('data-terminal-primitive', 'page-shell');
+    expect(page).not.toHaveClass('workspace-page');
+    expect(page).not.toHaveClass('workspace-page--preview');
     expect(screen.getByText(translate('zh', 'previewReport.title'))).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'previewReport.description'))).toBeInTheDocument();
     expect(document.title).toBe(translate('zh', 'previewReport.documentTitle'));

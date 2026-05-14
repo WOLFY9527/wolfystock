@@ -26,6 +26,11 @@ describe('PreviewFullReportDrawerPage', () => {
       </MemoryRouter>,
     );
 
+    const page = screen.getByTestId('preview-full-report-page');
+    expect(page).toHaveAttribute('data-terminal-primitive', 'page-shell');
+    expect(page).not.toHaveClass('workspace-page');
+    expect(page).not.toHaveClass('workspace-page--preview');
+
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'previewFullReport.openChinese') }));
     expect(screen.getByTestId('report-markdown')).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'previewFullReport.stockName'))).toBeInTheDocument();

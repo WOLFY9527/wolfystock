@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { WorkspacePageHeader } from '../components/common';
+import { TerminalPageShell } from '../components/terminal';
 import { ReportMarkdown } from '../components/report';
 import { previewReport } from '../dev/reportPreviewFixture';
 import { normalizeFrontendReportContract } from '../api/reportNormalizer';
@@ -29,7 +30,10 @@ const PreviewFullReportDrawerPage: React.FC = () => {
     : translate('zh', 'previewFullReport.stockName');
 
   return (
-    <div className="workspace-page workspace-page--preview" data-testid="preview-full-report-page">
+    <TerminalPageShell
+      className="flex-1 min-h-0 min-w-0 py-5 md:py-6"
+      data-testid="preview-full-report-page"
+    >
       <WorkspacePageHeader
         eyebrow={t('previewFullReport.eyebrow')}
         title={t('previewFullReport.title')}
@@ -76,7 +80,7 @@ const PreviewFullReportDrawerPage: React.FC = () => {
           initialContent={content}
         />
       ) : null}
-    </div>
+    </TerminalPageShell>
   );
 };
 
