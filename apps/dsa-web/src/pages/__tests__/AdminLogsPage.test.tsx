@@ -452,6 +452,7 @@ describe('AdminLogsPage', () => {
 
     expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'overflow-x-hidden');
     expect(screen.getByTestId('admin-logs-page-shell')).toHaveAttribute('data-terminal-primitive', 'page-shell');
+    expect(screen.getByTestId('admin-logs-page-shell')).toHaveClass('py-5', 'md:py-6');
     expect(screen.getByTestId('admin-logs-header-panel')).toHaveAttribute('data-terminal-primitive', 'panel');
     expect(screen.getByTestId('admin-logs-storage-disclosure')).toHaveAttribute('data-terminal-primitive', 'disclosure');
     expect(screen.getByRole('tab', { name: '业务事件' })).toBeInTheDocument();

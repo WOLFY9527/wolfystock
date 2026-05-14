@@ -1318,7 +1318,7 @@ const AdminLogsPage: React.FC = () => {
 
   return (
     <section data-testid="admin-logs-workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-x-hidden">
-      <TerminalPageShell data-testid="admin-logs-page-shell" className="min-h-0 flex-1 overflow-x-hidden">
+      <TerminalPageShell data-testid="admin-logs-page-shell" className="min-h-0 flex-1 overflow-x-hidden py-5 md:py-6">
         <TerminalPanel as="section" data-testid="admin-logs-header-panel" className="overflow-hidden">
           <div className="flex min-w-0 flex-col gap-4">
             <div className="min-w-0">
