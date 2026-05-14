@@ -109,6 +109,17 @@ FORBIDDEN_EXPORT_TEXT_MARKERS = (
     "下单",
 )
 
+FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS = (
+    "optimizer",
+    "optimization",
+    "parameter_tuning",
+    "parameter tuning",
+    "auto_tune",
+    "auto-tune",
+    "grid_search",
+    "grid search",
+)
+
 
 def _reset_auth_globals() -> None:
     auth._auth_enabled = None
@@ -269,6 +280,11 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
 
         walk(payload)
 
+    def _assert_robustness_payload_avoids_optimizer_semantics(self, payload: dict) -> None:
+        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True).lower()
+        for needle in FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS:
+            self.assertNotIn(needle, serialized)
+
     def _fetch_support_bundle_surface(self, run_id: int) -> dict:
         export_index_response = self.client.get(f"/api/v1/backtest/rule/runs/{run_id}/export-index")
         self.assertEqual(export_index_response.status_code, 200)
@@ -364,6 +380,8 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
             self.assertIn("source", http_payload)
             self.assertIsNone(http_payload["profile"])
             self.assertIsNone(http_payload["source"])
+            self._assert_robustness_payload_avoids_optimizer_semantics(service_payload)
+            self._assert_robustness_payload_avoids_optimizer_semantics(http_payload)
         else:
             with self.assertRaisesRegex(ValueError, "has no stored robustness evidence to export"):
                 service.get_robustness_evidence_export_json(run_id)
@@ -392,6 +410,26 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         self.assertEqual(manifest["run_diagnostics"], reproducibility["run_diagnostics"])
         self.assertEqual(manifest["artifact_availability"], reproducibility["artifact_availability"])
         self.assertEqual(manifest["readback_integrity"], reproducibility["readback_integrity"])
+        self.assertEqual(
+            manifest["result_authority"]["contract_version"],
+            reproducibility["result_authority"]["contract_version"],
+        )
+        self.assertEqual(
+            manifest["result_authority"]["read_mode"],
+            reproducibility["result_authority"]["read_mode"],
+        )
+        self.assertEqual(manifest["result_authority"]["read_mode"], "stored_first")
+        self.assertEqual(
+            reproducibility["result_authority"]["domains"],
+            {
+                domain_name: {
+                    "source": domain_payload["source"],
+                    "completeness": domain_payload["completeness"],
+                    "state": domain_payload["state"],
+                }
+                for domain_name, domain_payload in manifest["result_authority"]["domains"].items()
+            },
+        )
         self.assertEqual(
             reproducibility["execution_assumptions_fingerprint"]["source"],
             manifest["result_authority"]["domains"]["execution_assumptions_snapshot"]["source"],
@@ -535,6 +573,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 )
             )
             payloads["robustness"] = robustness_response.json()
+            self._assert_robustness_payload_avoids_optimizer_semantics(payloads["robustness"])
         else:
             self.assertEqual(
                 export_index["exports"][4]["availability_reason"],

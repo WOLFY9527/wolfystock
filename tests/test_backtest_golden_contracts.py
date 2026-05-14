@@ -65,6 +65,16 @@ EXPORT_KEYS = [
     "execution_trace_csv",
     "robustness_evidence_json",
 ]
+FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS = (
+    "optimizer",
+    "optimization",
+    "parameter_tuning",
+    "parameter tuning",
+    "auto_tune",
+    "auto-tune",
+    "grid_search",
+    "grid search",
+)
 
 
 def _load_fixture(name: str) -> dict[str, Any]:
@@ -104,6 +114,12 @@ def _assert_no_live_provider_authority(value: Any) -> None:
     assert '"providercalls": true' not in serialized
     assert "rerun" not in serialized
     assert "recalculate" not in serialized
+
+
+def _assert_no_robustness_optimizer_semantics(value: Any) -> None:
+    serialized = json.dumps(value, ensure_ascii=False, sort_keys=True).lower()
+    for term in FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS:
+        assert term not in serialized
 
 
 def test_backtest_result_summary_golden_fixture_matches_public_readback_contract() -> None:
@@ -233,6 +249,7 @@ def test_robustness_evidence_export_fixture_freezes_stored_payload_shape() -> No
 
     _assert_no_sensitive_public_payload(evidence)
     _assert_no_live_provider_authority(evidence)
+    _assert_no_robustness_optimizer_semantics(evidence)
 
 
 def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_boundary() -> None:
@@ -242,6 +259,14 @@ def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_bou
     manifest = RuleBacktestSupportBundleManifestResponse(
         **_load_fixture("rule_backtest_support_bundle_manifest_dto.json")
     ).model_dump()
+    reproducibility_authority_projection = {
+        domain_name: {
+            "source": domain_payload["source"],
+            "completeness": domain_payload["completeness"],
+            "state": domain_payload["state"],
+        }
+        for domain_name, domain_payload in manifest["result_authority"]["domains"].items()
+    }
 
     assert export_index["run_id"] == 7001
     assert export_index["status"] == "completed"
@@ -262,6 +287,17 @@ def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_bou
     assert manifest["manifest_kind"] == "rule_backtest_support_bundle"
     assert manifest["run"]["id"] == export_index["run_id"]
     assert manifest["result_authority"]["read_mode"] == "stored_first"
+    assert manifest["result_authority"]["contract_version"] == "v1"
+    assert reproducibility_authority_projection["execution_trace"] == {
+        "source": "summary.execution_trace",
+        "completeness": "complete",
+        "state": "available",
+    }
+    assert reproducibility_authority_projection["summary"] == {
+        "source": "row.summary_json",
+        "completeness": "complete",
+        "state": "available",
+    }
     assert manifest["result_authority"]["domains"]["execution_trace"]["source"] == "summary.execution_trace"
     assert manifest["result_authority"]["domains"]["execution_trace"]["state"] == "available"
     assert manifest["artifact_availability"]["has_summary"] is True

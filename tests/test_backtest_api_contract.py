@@ -97,8 +97,26 @@ EXPECTED_TRACE_EXPORT_FIELD_LABELS = [
     "fallback",
 ]
 
+FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS = (
+    "optimizer",
+    "optimization",
+    "parameter_tuning",
+    "parameter tuning",
+    "auto_tune",
+    "auto-tune",
+    "grid_search",
+    "grid search",
+)
+
 
 class BacktestApiContractTestCase(unittest.TestCase):
+    @staticmethod
+    def _assert_robustness_payload_stays_research_prototype(payload: dict) -> None:
+        assert payload["state"] == "research_prototype"
+        serialized = str(payload).lower()
+        for needle in FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS:
+            assert needle not in serialized, needle
+
     @staticmethod
     def _professional_readiness_payload(*, local_data_coverage_state: str = "not_applicable_single_symbol") -> dict:
         return {
@@ -656,6 +674,26 @@ class BacktestApiContractTestCase(unittest.TestCase):
             self.assertEqual(manifest_response.artifact_availability, reproducibility_response.artifact_availability)
             self.assertEqual(manifest_response.readback_integrity, reproducibility_response.readback_integrity)
             self.assertEqual(
+                manifest_response.result_authority["contract_version"],
+                reproducibility_response.result_authority["contract_version"],
+            )
+            self.assertEqual(
+                manifest_response.result_authority["read_mode"],
+                reproducibility_response.result_authority["read_mode"],
+            )
+            self.assertEqual(manifest_response.result_authority["read_mode"], "stored_first")
+            self.assertEqual(
+                reproducibility_response.result_authority["domains"],
+                {
+                    domain_name: {
+                        "source": domain_payload["source"],
+                        "completeness": domain_payload["completeness"],
+                        "state": domain_payload["state"],
+                    }
+                    for domain_name, domain_payload in manifest_response.result_authority["domains"].items()
+                },
+            )
+            self.assertEqual(
                 reproducibility_response.execution_assumptions_fingerprint["source"],
                 reproducibility_response.result_authority["domains"]["execution_assumptions_snapshot"]["source"],
             )
@@ -816,6 +854,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "stored_robustness_analysis_present",
                 )
                 self.assertEqual(robustness_response.model_dump(), robustness_payload)
+                self._assert_robustness_payload_stays_research_prototype(robustness_response.model_dump())
 
     def test_run_rule_backtest_async_path_enqueues_background_processing(self) -> None:
         request = RuleBacktestRunRequest(
@@ -2352,8 +2391,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
             response = get_rule_backtest_robustness_evidence_json(123, db_manager=MagicMock())
 
         self.assertIsInstance(response, RuleBacktestRobustnessEvidenceExportResponse)
+        self.assertEqual(response.model_dump()["state"], "research_prototype")
         self.assertEqual(response.model_dump()["source"], "summary.robustness_analysis")
         self.assertEqual(response.model_dump()["seed"], 4242)
+        self._assert_robustness_payload_stays_research_prototype(response.model_dump())
         service.get_robustness_evidence_export_json.assert_called_once_with(123)
 
     def test_get_rule_backtest_robustness_evidence_json_returns_unavailable_when_missing(self) -> None:

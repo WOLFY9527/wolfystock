@@ -23,6 +23,7 @@ from src.services.rule_backtest_support_exports import (
     build_reproducibility_authority_summary,
     build_support_bundle_manifest,
     build_support_export_index,
+    resolve_stored_robustness_evidence_payload,
 )
 from src.services.rule_backtest_text_completion import create_rule_backtest_text_completion
 from src.services.rule_backtest_service import RuleBacktestService, run_backtest_automated
@@ -102,6 +103,17 @@ FORBIDDEN_BACKTEST_MUTATION_SURFACES = [
     "submit_order",
     "execute_order",
     "portfolio_mutation",
+]
+
+FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS = [
+    "optimizer",
+    "optimization",
+    "parameter_tuning",
+    "parameter tuning",
+    "auto_tune",
+    "auto-tune",
+    "grid_search",
+    "grid search",
 ]
 
 
@@ -192,6 +204,12 @@ class RuleBacktestTestCase(unittest.TestCase):
             assert needle.lower() not in normalized, needle
         for needle in FORBIDDEN_BACKTEST_MUTATION_SURFACES:
             assert needle.lower() not in normalized, needle
+
+    @staticmethod
+    def _assert_robustness_payload_avoids_optimizer_semantics(payload: dict) -> None:
+        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True).lower()
+        for needle in FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS:
+            assert needle not in serialized, needle
 
     @staticmethod
     def _compare_run_payload(
@@ -2119,6 +2137,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(payload["seed"], 4242)
         self.assertEqual(payload["configuration"]["walk_forward"]["train_window"], 36)
         self.assertEqual(payload["configuration"]["monte_carlo"]["simulation_count"], 16)
+        self._assert_robustness_payload_avoids_optimizer_semantics(payload)
         self._assert_public_backtest_text_is_analytical(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
     def test_service_marks_robustness_evidence_export_unavailable_when_stored_payload_missing(self) -> None:
@@ -2151,6 +2170,53 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(robustness_item["availability_reason"], "stored_robustness_analysis_missing")
         with self.assertRaisesRegex(ValueError, "has no stored robustness evidence to export"):
             service.get_robustness_evidence_export_json(response["id"])
+
+    def test_resolve_stored_robustness_evidence_payload_prefers_summary_authority(self) -> None:
+        summary_payload = {
+            "state": "research_prototype",
+            "seed": 7,
+            "configuration": {
+                "walk_forward": {
+                    "train_window": 24,
+                    "test_window": 12,
+                    "step": 12,
+                    "max_windows": 4,
+                },
+                "monte_carlo": {
+                    "simulation_count": 12,
+                    "seed": 7,
+                    "noise_scale": 0.75,
+                },
+            },
+        }
+        run_payload = {
+            "state": "research_prototype",
+            "seed": 99,
+            "configuration": {
+                "walk_forward": {
+                    "train_window": 36,
+                    "test_window": 18,
+                    "step": 9,
+                    "max_windows": 3,
+                },
+                "monte_carlo": {
+                    "simulation_count": 16,
+                    "seed": 99,
+                    "noise_scale": 0.5,
+                },
+            },
+        }
+
+        payload = resolve_stored_robustness_evidence_payload(
+            {
+                "summary": {"robustness_analysis": summary_payload},
+                "robustness_analysis": run_payload,
+            }
+        )
+
+        self.assertEqual(payload, summary_payload)
+        self.assertNotEqual(payload["seed"], run_payload["seed"])
+        self._assert_robustness_payload_avoids_optimizer_semantics(payload)
 
     def _assert_support_bundle_export_contract(
         self,
@@ -2199,11 +2265,18 @@ class RuleBacktestTestCase(unittest.TestCase):
             },
         )
         self.assertEqual(
-            reproducibility["result_authority"]["domains"]["execution_trace"],
+            reproducibility["result_authority"],
             {
-                "source": run["result_authority"]["domains"]["execution_trace"]["source"],
-                "completeness": run["result_authority"]["domains"]["execution_trace"]["completeness"],
-                "state": run["result_authority"]["domains"]["execution_trace"]["state"],
+                "contract_version": run["result_authority"]["contract_version"],
+                "read_mode": run["result_authority"]["read_mode"],
+                "domains": {
+                    domain_name: {
+                        "source": domain_payload["source"],
+                        "completeness": domain_payload["completeness"],
+                        "state": domain_payload["state"],
+                    }
+                    for domain_name, domain_payload in run["result_authority"]["domains"].items()
+                },
             },
         )
         self.assertEqual(
@@ -2409,6 +2482,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         if expected_robustness_available:
             robustness_payload = service.get_robustness_evidence_export_json(run_id)
             self.assertEqual(robustness_payload, run["robustness_analysis"])
+            self._assert_robustness_payload_avoids_optimizer_semantics(robustness_payload)
             self._assert_public_backtest_text_is_analytical(
                 json.dumps(robustness_payload, ensure_ascii=False, sort_keys=True)
             )
@@ -2474,12 +2548,14 @@ class RuleBacktestTestCase(unittest.TestCase):
             manifest = service.get_support_bundle_manifest(response["id"])
             reproducibility = service.get_support_bundle_reproducibility_manifest(response["id"])
             export_index = service.get_support_export_index(response["id"])
+            robustness_payload = service.get_robustness_evidence_export_json(response["id"])
             with self.assertRaisesRegex(ValueError, "has no audit rows to export"):
                 service.get_execution_trace_export_json(response["id"])
             with self.assertRaisesRegex(ValueError, "has no audit rows to export"):
                 service.get_execution_trace_export_csv_text(response["id"])
 
         engine_run_mock.assert_not_called()
+        self._assert_robustness_payload_avoids_optimizer_semantics(robustness_payload)
         self.assertFalse(manifest["artifact_availability"]["has_execution_trace"])
         self.assertEqual(manifest["artifact_counts"]["execution_trace_rows_count"], 0)
         self.assertEqual(
