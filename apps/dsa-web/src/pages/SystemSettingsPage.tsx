@@ -29,7 +29,7 @@ const SystemSettingsPage: React.FC = () => {
   return (
     <TerminalPageShell
       data-testid="system-settings-page"
-      className="min-h-0 flex-1 overflow-x-hidden py-4 text-white md:py-6"
+      className="min-h-0 flex-1 overflow-x-hidden py-5 text-white md:py-6"
     >
       <div data-testid="system-settings-shell-header" className="flex min-w-0 flex-col gap-4">
         <TerminalPageHeading

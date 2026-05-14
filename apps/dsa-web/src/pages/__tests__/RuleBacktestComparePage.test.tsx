@@ -413,6 +413,7 @@ describe('RuleBacktestComparePage', () => {
     expect(pageShell).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6');
     expect(pageShell).not.toHaveClass('theme-page-transition', 'backtest-v1-page', 'workspace-page--backtest');
     expect(pageShell.querySelector('.workspace-page--backtest')).toBeNull();
+    expect(pageShell.closest('main')).not.toHaveClass('py-4');
     expect(await screen.findByRole('heading', { name: '规则回测比较工作台' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '比较区块导航' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '比较摘要' })).toHaveAttribute('href', '#compare-summary');

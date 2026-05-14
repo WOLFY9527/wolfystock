@@ -1268,7 +1268,7 @@ const RuleBacktestComparePage: React.FC = () => {
   }, [runIds, searchParams, setSearchParams]);
 
   return (
-    <main className="w-full overflow-x-hidden py-4 text-white">
+    <main className="w-full overflow-x-hidden text-white">
       <TerminalPageShell data-testid="rule-backtest-compare-page">
         <WorkspacePageHeader
           eyebrow="WolfyStock"

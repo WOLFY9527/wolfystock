@@ -717,7 +717,7 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
 
   return (
     <div data-testid="admin-provider-circuit-diagnostics-page" className="admin-provider-circuit-page flex min-h-0 w-full flex-1 overflow-y-auto no-scrollbar text-white">
-      <TerminalPageShell className="flex min-h-0 flex-1 py-5">
+      <TerminalPageShell className="flex min-h-0 flex-1 py-5 md:py-6">
         <TerminalPanel as="section" className="relative overflow-hidden">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/50 to-transparent" />
           <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">

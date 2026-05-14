@@ -212,8 +212,11 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     render(<AdminProviderCircuitDiagnosticsPage />);
 
     const routeRoot = await screen.findByTestId('admin-provider-circuit-diagnostics-page');
+    const shell = routeRoot.querySelector('[data-terminal-primitive="page-shell"]');
 
     expect(routeRoot).not.toHaveClass('bg-[#050505]');
+    expect(routeRoot).not.toHaveClass('py-5', 'md:py-6');
+    expect(shell).toHaveClass('py-5', 'md:py-6');
   });
 
   it('does not render or fetch when provider read capability is missing', () => {

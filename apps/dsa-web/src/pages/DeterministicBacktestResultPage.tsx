@@ -1301,7 +1301,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
   };
 
   return (
-    <main className="w-full overflow-x-hidden py-4 text-white">
+    <main className="w-full overflow-x-hidden text-white">
       <TerminalPageShell
         className="min-h-0"
         data-testid="deterministic-backtest-result-page"

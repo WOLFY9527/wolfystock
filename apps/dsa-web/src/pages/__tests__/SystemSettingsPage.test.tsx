@@ -21,7 +21,7 @@ describe('SystemSettingsPage', () => {
     expect(screen.getByRole('heading', { name: '系统设置' })).toBeInTheDocument();
     expect(screen.getByText('settings-page-core')).toBeInTheDocument();
     expect(pageRoot).toHaveAttribute('data-terminal-primitive', 'page-shell');
-    expect(pageRoot).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6');
+    expect(pageRoot).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6', 'py-5', 'md:py-6');
     expect(pageRoot.className).not.toContain('bg-[#050505]');
     expect(shellHeader.className).not.toContain('max-w-[1600px]');
     expect(shellHeader.className).not.toContain('mx-auto');
