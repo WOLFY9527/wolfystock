@@ -39,18 +39,19 @@ _CONTRACTS = tuple(
     sorted(
         (
             OfficialMacroSourceContract(
-                source_id="FRED_CREDIT_SPREAD_OPTIONAL",
-                display_name="FRED Credit Spread Series (Optional)",
+                source_id="FRED_BAMLH0A0HYM2",
+                display_name="FRED ICE BofA US High Yield Index Option-Adjusted Spread",
                 source_type=_SOURCE_TYPE_OFFICIAL_PUBLIC,
                 cadence="business_daily",
-                expected_freshness_window="Only after an approved FRED spread series is selected; not wired by default.",
-                series_codes=(),
+                expected_freshness_window="Expect one published daily close per US business day after the FRED credit-spread release posts.",
+                series_codes=("BAMLH0A0HYM2",),
                 requires_api_key_or_config=False,
                 live_eligible=False,
-                delayed_eligible=False,
+                delayed_eligible=True,
                 observation_only=True,
                 notes=_notes(
-                    "Optional placeholder only; approve concrete credit-spread series codes before runtime wiring.",
+                    "High yield OAS observation only; not-live eligible and not approved for runtime scoring or panel wiring.",
+                    "Use as delayed credit-stress evidence only after an explicit consumer contract is approved.",
                 ),
             ),
             OfficialMacroSourceContract(
@@ -165,6 +166,7 @@ _CONTRACTS = tuple(
 
 _CONTRACTS_BY_ID = MappingProxyType({item.source_id: item for item in _CONTRACTS})
 _CONTRACT_IDS_BY_TRANSPORT_SOURCE = MappingProxyType({
+    "fred:BAMLH0A0HYM2": "FRED_BAMLH0A0HYM2",
     "fred:DGS10": "FRED_DGS10",
     "fred:DGS2": "FRED_DGS2",
     "fred:DGS30": "FRED_DGS30",

@@ -19,7 +19,8 @@ TREASURY_DAILY_RATES_CSV_URL = (
     "interest-rates/daily-treasury-rates.csv/all/all"
 )
 OFFICIAL_SOURCE_TYPE = "official_public"
-FRED_SERIES_IDS = ("VIXCLS", "DGS2", "DGS10", "DGS30", "SOFR")
+FRED_SUPPORTED_SERIES_IDS = ("BAMLH0A0HYM2", "VIXCLS", "DGS2", "DGS10", "DGS30", "SOFR")
+FRED_DEFAULT_REQUEST_SERIES_IDS = ("VIXCLS", "DGS2", "DGS10", "DGS30", "SOFR")
 TREASURY_RATE_SYMBOLS = ("DGS2", "DGS10", "DGS30")
 TREASURY_COLUMN_ALIASES = {
     "DGS2": ("2 Yr", "2 YR", "2-Year", "2 Year"),
@@ -27,6 +28,7 @@ TREASURY_COLUMN_ALIASES = {
     "DGS30": ("30 Yr", "30 YR", "30-Year", "30 Year"),
 }
 FRED_FRESHNESS_HINTS = {
+    "BAMLH0A0HYM2": "daily_credit_stress",
     "VIXCLS": "daily_close",
     "DGS2": "daily_rate",
     "DGS10": "daily_rate",
@@ -74,7 +76,10 @@ class MacroObservation:
 
 
 def build_supported_fred_requests(*, api_key: str | None = None, limit: int = 5) -> list[MacroTransportRequest]:
-    return [build_fred_observations_request(series_id, api_key=api_key, limit=limit) for series_id in FRED_SERIES_IDS]
+    return [
+        build_fred_observations_request(series_id, api_key=api_key, limit=limit)
+        for series_id in FRED_DEFAULT_REQUEST_SERIES_IDS
+    ]
 
 
 def build_fred_observations_request(
@@ -357,7 +362,7 @@ def _unavailable_observation(
 
 def _validate_fred_series_id(series_id: str) -> str:
     normalized = _text(series_id).upper()
-    if normalized not in FRED_SERIES_IDS:
+    if normalized not in FRED_SUPPORTED_SERIES_IDS:
         raise ValueError(f"unsupported FRED series: {series_id}")
     return normalized
 

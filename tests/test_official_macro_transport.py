@@ -85,6 +85,23 @@ def test_build_fred_observations_request_omits_api_key_when_not_supplied() -> No
     assert request.requires_api_key is True
 
 
+def test_build_fred_observations_request_supports_credit_stress_series_without_expanding_runtime_default_set() -> None:
+    request = build_fred_observations_request("BAMLH0A0HYM2", limit=3)
+
+    assert request.method == "GET"
+    assert request.url == FRED_OBSERVATIONS_URL
+    assert request.params == {
+        "series_id": "BAMLH0A0HYM2",
+        "file_type": "json",
+        "sort_order": "desc",
+        "limit": "3",
+    }
+    assert request.source_id == "fred:BAMLH0A0HYM2"
+    assert request.source_type == "official_public"
+    assert request.requires_api_key is True
+    assert [item.params["series_id"] for item in build_supported_fred_requests()] == ["VIXCLS", "DGS2", "DGS10", "DGS30", "SOFR"]
+
+
 def test_build_fred_observations_request_rejects_unsupported_series() -> None:
     with pytest.raises(ValueError, match="unsupported FRED series"):
         build_fred_observations_request("DXY")
@@ -93,6 +110,7 @@ def test_build_fred_observations_request_rejects_unsupported_series() -> None:
 @pytest.mark.parametrize(
     ("series_id", "fixture_name", "expected_value", "expected_date", "expected_hint"),
     [
+        ("BAMLH0A0HYM2", "fred_bamlh0a0hym2.json", 3.31, "2026-05-13", "daily_credit_stress"),
         ("VIXCLS", "fred_vixcls.json", 18.22, "2026-05-13", "daily_close"),
         ("DGS2", "fred_dgs2.json", 3.87, "2026-05-13", "daily_rate"),
         ("DGS10", "fred_dgs10.json", 4.45, "2026-05-12", "daily_rate"),

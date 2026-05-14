@@ -16,6 +16,7 @@ from src.services.official_macro_source_registry import (
 
 
 EXPECTED_SOURCE_SERIES = {
+    "FRED_BAMLH0A0HYM2": ("BAMLH0A0HYM2",),
     "FRED_VIXCLS": ("VIXCLS",),
     "FRED_DGS2": ("DGS2",),
     "FRED_DGS10": ("DGS10",),
@@ -23,7 +24,6 @@ EXPECTED_SOURCE_SERIES = {
     "FRED_SOFR": ("SOFR",),
     "TREASURY_DAILY_RATES": ("BC_2YEAR", "BC_10YEAR", "BC_30YEAR"),
     "NYFED_SOFR": ("SOFR",),
-    "FRED_CREDIT_SPREAD_OPTIONAL": (),
 }
 
 
@@ -84,15 +84,17 @@ def test_official_macro_contracts_project_to_non_live_daily_observation_provenan
     }
 
 
-def test_optional_credit_spread_contract_stays_observation_only_placeholder() -> None:
-    contract = get_official_macro_source("FRED_CREDIT_SPREAD_OPTIONAL")
+def test_credit_stress_contract_uses_single_explicit_high_yield_oas_series() -> None:
+    contract = get_official_macro_source("FRED_BAMLH0A0HYM2")
 
     assert contract is not None
-    assert contract.series_codes == ()
+    assert contract.display_name == "FRED ICE BofA US High Yield Index Option-Adjusted Spread"
+    assert contract.series_codes == ("BAMLH0A0HYM2",)
     assert contract.live_eligible is False
-    assert contract.delayed_eligible is False
+    assert contract.delayed_eligible is True
     assert contract.observation_only is True
-    assert any("optional" in note.lower() for note in contract.notes)
+    assert any("high yield" in note.lower() for note in contract.notes)
+    assert any("not-live" in note.lower() or "not live" in note.lower() for note in contract.notes)
 
 
 def test_registry_import_has_no_runtime_or_provider_side_effects() -> None:
