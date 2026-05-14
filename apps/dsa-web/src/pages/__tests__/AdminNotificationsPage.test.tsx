@@ -140,8 +140,11 @@ describe('AdminNotificationsPage', () => {
   it('renders the admin notifications route with terminal primitives', async () => {
     render(<AdminNotificationsPage />);
 
+    const pageShell = screen.getByTestId('admin-notifications-workspace');
+
     expect(await screen.findByRole('heading', { level: 1, name: 'Admin notifications' })).toBeInTheDocument();
-    expect(screen.getByTestId('admin-notifications-workspace')).toHaveAttribute('data-terminal-primitive', 'page-shell');
+    expect(pageShell).toHaveAttribute('data-terminal-primitive', 'page-shell');
+    expect(pageShell).toHaveClass('py-5', 'md:py-6');
     expect(screen.getByTestId('admin-notifications-summary-grid')).toHaveAttribute('data-terminal-primitive', 'grid');
     expect(screen.getByTestId('admin-notifications-rules-panel')).toHaveAttribute('data-terminal-primitive', 'panel');
     expect(screen.getByTestId('admin-notifications-events-panel')).toHaveAttribute('data-terminal-primitive', 'panel');

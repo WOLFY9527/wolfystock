@@ -456,7 +456,7 @@ const AdminNotificationsPage: React.FC = () => {
   return (
     <TerminalPageShell
       data-testid="admin-notifications-workspace"
-      className="min-h-0 flex-1 overflow-x-hidden"
+      className="min-h-0 flex-1 overflow-x-hidden py-5 md:py-6"
     >
       <TerminalPanel as="section" className="relative overflow-hidden">
         <TerminalPageHeading
