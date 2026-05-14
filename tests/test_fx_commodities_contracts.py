@@ -13,6 +13,7 @@ import sys
 import pytest
 
 from src.services.fx_commodities_contracts import (
+    FX_COMMODITY_DELAYED_PROXY_SYMBOLS,
     FX_COMMODITY_SYMBOLS,
     SAFE_UNAVAILABLE_REASON_BUCKETS,
     get_fx_commodity_contract,
@@ -56,6 +57,7 @@ def test_fx_commodities_contract_registry_keeps_expected_symbols_in_order() -> N
     contracts = list_fx_commodity_contracts()
 
     assert [item.symbol for item in contracts] == list(FX_COMMODITY_SYMBOLS)
+    assert FX_COMMODITY_DELAYED_PROXY_SYMBOLS == FX_COMMODITY_SYMBOLS
 
 
 def test_fx_commodities_contracts_remain_inert_disabled_live_stubs() -> None:

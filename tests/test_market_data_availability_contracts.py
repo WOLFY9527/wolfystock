@@ -23,6 +23,29 @@ from src.storage import DatabaseManager
 CN_TZ = timezone(timedelta(hours=8))
 
 
+class _FrameColumn:
+    def __init__(self, values: list[float]) -> None:
+        self._values = values
+
+    def tolist(self) -> list[float]:
+        return list(self._values)
+
+
+class _HistoryFrame:
+    def __init__(self, closes: list[float], *, as_of: datetime) -> None:
+        self.empty = False
+        self.index = [as_of - timedelta(days=1), as_of]
+        self._columns = {
+            "Close": _FrameColumn(closes),
+        }
+
+    def __getitem__(self, key: str) -> _FrameColumn:
+        return self._columns[key]
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._columns
+
+
 @pytest.fixture()
 def isolated_db(tmp_path: Path):
     DatabaseManager.reset_instance()
@@ -244,7 +267,7 @@ def test_official_daily_macro_observations_stay_delayed_or_stale_not_live() -> N
 def test_market_overview_fallback_only_panels_project_to_fallback_static_not_live() -> None:
     service = MarketOverviewService()
 
-    for getter in (service.get_cn_flows, service.get_rates, service.get_fx_commodities):
+    for getter in (service.get_cn_flows, service.get_rates):
         payload = getter()
         provenance = _payload_provenance(payload)
 
@@ -254,6 +277,45 @@ def test_market_overview_fallback_only_panels_project_to_fallback_static_not_liv
         assert provenance["sourceType"] == "fallback_static"
         assert provenance["sourceLabel"] == "备用数据"
         assert provenance["freshnessLabel"] != "实时"
+
+
+def test_market_overview_fx_commodities_proxy_payload_projects_to_unofficial_proxy_not_live() -> None:
+    service = MarketOverviewService()
+    as_of = datetime.now(CN_TZ) - timedelta(minutes=30)
+    frames = {
+        "DX-Y.NYB": _HistoryFrame([104.0, 104.3], as_of=as_of),
+        "CNH=X": _HistoryFrame([7.20, 7.24], as_of=as_of),
+        "JPY=X": _HistoryFrame([155.3, 156.4], as_of=as_of),
+        "EURUSD=X": _HistoryFrame([1.071, 1.066], as_of=as_of),
+        "GC=F": _HistoryFrame([2350.0, 2368.7], as_of=as_of),
+        "CL=F": _HistoryFrame([79.1, 78.4], as_of=as_of),
+        "BZ=F": _HistoryFrame([82.7, 82.1], as_of=as_of),
+        "HG=F": _HistoryFrame([4.58, 4.63], as_of=as_of),
+    }
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(
+            "src.services.market_overview_service.fetch_yfinance_quote_history_frame",
+            lambda ticker: frames[ticker],
+        )
+        with pytest.MonkeyPatch.context() as log_mp:
+            class _LogService:
+                def record_market_overview_fetch(self, **_: Any) -> str:
+                    return "log-3"
+
+            log_mp.setattr("src.services.market_overview_service.ExecutionLogService", _LogService)
+            payload = service.get_fx_commodities()
+
+    provenance = _payload_provenance(payload)
+    dxy_provenance = _payload_provenance(next(item for item in payload["items"] if item["symbol"] == "DXY"))
+
+    assert payload["source"] == "yfinance_proxy"
+    assert payload["freshness"] == "delayed"
+    assert payload["providerHealth"]["status"] == "cache"
+    assert provenance["sourceType"] == "unofficial_proxy"
+    assert dxy_provenance["sourceType"] == "unofficial_proxy"
+    assert provenance["freshnessLabel"] != "实时"
+    assert dxy_provenance["freshnessLabel"] != "实时"
 
 
 def test_liquidity_monitor_only_scores_reliable_non_fallback_signals(

@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from src.services.execution_log_service import ExecutionLogService
+from src.services.fx_commodities_contracts import FX_COMMODITY_DELAYED_PROXY_SYMBOLS
 from src.services.market_data_source_registry import resolve_source_label
 from src.services.official_macro_source_registry import get_official_macro_source_for_transport_source
 from src.services.official_macro_transport import (
@@ -366,6 +367,16 @@ class MarketOverviewService:
         "DXY": ("US Dollar Index", "DX-Y.NYB", "idx"),
         "GOLD": ("Gold futures", "GC=F", "USD"),
         "OIL": ("WTI crude", "CL=F", "USD"),
+    }
+    FX_COMMODITY_PROXY_TICKERS = {
+        "DXY": "DX-Y.NYB",
+        "USDCNH": "CNH=X",
+        "USDJPY": "JPY=X",
+        "EURUSD": "EURUSD=X",
+        "GOLD": "GC=F",
+        "WTI": "CL=F",
+        "BRENT": "BZ=F",
+        "COPPER": "HG=F",
     }
     OFFICIAL_RATE_SERIES = {
         "US2Y": ("DGS2", "US 2Y", "%", "US"),
@@ -1898,7 +1909,75 @@ class MarketOverviewService:
         return resolve_source_label(source_type="official_public")
 
     def _fetch_fx_commodities_snapshot(self) -> Dict[str, Any]:
-        return self._fallback_fx_commodities_snapshot()
+        fallback = self._fallback_fx_commodities_snapshot()
+        fallback_items = [
+            item for item in fallback.get("items", [])
+            if isinstance(item, dict)
+        ]
+        delayed_proxy_symbols = set(FX_COMMODITY_DELAYED_PROXY_SYMBOLS)
+        updated_at = _now_iso()
+        merged_items: List[Dict[str, Any]] = []
+        proxy_as_of_values: List[str] = []
+        proxy_count = 0
+
+        for fallback_item in fallback_items:
+            symbol = str(fallback_item.get("symbol") or "")
+            ticker = self.FX_COMMODITY_PROXY_TICKERS.get(symbol)
+            if symbol not in delayed_proxy_symbols or not ticker:
+                merged_items.append(fallback_item)
+                continue
+            try:
+                frame = fetch_yfinance_quote_history_frame(ticker)
+                closes, as_of = self._history_frame_closes_and_as_of(frame, ticker)
+            except Exception:
+                merged_items.append(fallback_item)
+                continue
+
+            latest = closes[-1]
+            previous = closes[-2] if len(closes) > 1 else latest
+            change = latest - previous
+            change_percent = ((latest - previous) / previous * 100) if previous else 0.0
+            trend = [round(value, 3) for value in closes[-8:]]
+            merged_items.append({
+                **fallback_item,
+                "value": round(latest, 3),
+                "price": round(latest, 3),
+                "change": round(change, 3),
+                "changePercent": round(change_percent, 3),
+                "change_text": f"{change:+.2f}",
+                "sparkline": trend,
+                "trend": trend,
+                "source": "yfinance_proxy",
+                "sourceLabel": self._source_label("yfinance_proxy"),
+                "sourceType": "unofficial_proxy",
+                "updatedAt": updated_at,
+                "asOf": as_of or updated_at,
+                "isFallback": False,
+                "warning": None,
+            })
+            proxy_count += 1
+            if as_of:
+                proxy_as_of_values.append(as_of)
+
+        if proxy_count == 0:
+            return fallback
+
+        partial = proxy_count != len(fallback_items)
+        warning = "代理延迟数据，不代表实时/官方行情"
+        if partial:
+            warning = f"{warning}；部分品种仍为备用数据"
+        return {
+            "source": "mixed" if partial else "yfinance_proxy",
+            "sourceLabel": self._source_label("mixed" if partial else "yfinance_proxy"),
+            "sourceType": "unofficial_proxy",
+            "updatedAt": updated_at,
+            "asOf": min(proxy_as_of_values) if proxy_as_of_values else updated_at,
+            "items": merged_items,
+            "fallbackUsed": partial,
+            "isFallback": False,
+            "warning": warning,
+            "explanation": fallback.get("explanation"),
+        }
 
     def _fetch_futures_snapshot(self) -> Dict[str, Any]:
         return self._fallback_futures_snapshot()
@@ -2703,12 +2782,7 @@ class MarketOverviewService:
 
     def _latest_quote(self, ticker: str) -> Dict[str, Any]:
         frame = fetch_yfinance_quote_history_frame(ticker)
-        if frame is None or frame.empty:
-            raise RuntimeError(f"No market data returned for {ticker}")
-        closes = [self._clean_number(value) for value in frame["Close"].tolist()]
-        closes = [value for value in closes if value is not None]
-        if not closes:
-            raise RuntimeError(f"No close prices returned for {ticker}")
+        closes, _ = self._history_frame_closes_and_as_of(frame, ticker)
         latest = closes[-1]
         previous = closes[-2] if len(closes) > 1 else latest
         change_pct = ((latest - previous) / previous * 100) if previous else 0.0
@@ -2719,6 +2793,26 @@ class MarketOverviewService:
             "trend": [round(value, 3) for value in closes[-8:]],
             "volume": volume,
         }
+
+    def _history_frame_closes_and_as_of(self, frame: Any, ticker: str) -> tuple[List[float], Optional[str]]:
+        if frame is None or frame.empty:
+            raise RuntimeError(f"No market data returned for {ticker}")
+        closes = [self._clean_number(value) for value in frame["Close"].tolist()]
+        closes = [value for value in closes if value is not None]
+        if len(closes) < 2:
+            raise RuntimeError(f"Insufficient close prices returned for {ticker}")
+        index = getattr(frame, "index", None)
+        last_index = None
+        if index is not None:
+            try:
+                last_index = index[-1]
+            except Exception:
+                last_index = None
+        if hasattr(last_index, "to_pydatetime"):
+            last_index = last_index.to_pydatetime()
+        parsed_as_of = _parse_market_time(last_index)
+        as_of = parsed_as_of.isoformat(timespec="seconds") if parsed_as_of else None
+        return closes, as_of
 
     def _atr_item(self) -> Optional[Dict[str, Any]]:
         frame = fetch_yfinance_spy_atr_history_frame()

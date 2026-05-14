@@ -160,6 +160,11 @@ _CONTRACTS = (
 )
 
 _CONTRACTS_BY_SYMBOL = MappingProxyType({item.symbol: item for item in _CONTRACTS})
+FX_COMMODITY_DELAYED_PROXY_SYMBOLS = tuple(
+    item.symbol
+    for item in _CONTRACTS
+    if item.delayed_proxy_eligible
+)
 
 
 def list_fx_commodity_contracts() -> tuple[FxCommodityContract, ...]:

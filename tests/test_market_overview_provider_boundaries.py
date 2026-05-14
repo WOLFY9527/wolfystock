@@ -297,6 +297,17 @@ def test_market_overview_service_keeps_cn_flows_and_sector_rotation_fetchers_fal
     assert sector_rotation_calls == {"_fallback_sector_rotation_snapshot"}
 
 
+def test_market_overview_service_fx_commodities_fetcher_uses_yfinance_proxy_transport_with_item_fallback() -> None:
+    fx_calls = _method_call_names(
+        MARKET_OVERVIEW_SERVICE_FILE,
+        "MarketOverviewService",
+        "_fetch_fx_commodities_snapshot",
+    )
+
+    assert "fetch_yfinance_quote_history_frame" in fx_calls
+    assert "_fallback_fx_commodities_snapshot" in fx_calls
+
+
 def test_market_overview_tickflow_source_contract_stays_explicit_public_provider_not_snapshot() -> None:
     source_text = MARKET_OVERVIEW_TICKFLOW_BREADTH_PROVIDER_FILE.read_text(encoding="utf-8")
     provenance = project_source_provenance(
