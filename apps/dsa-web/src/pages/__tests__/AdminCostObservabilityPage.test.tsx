@@ -371,7 +371,12 @@ describe('AdminCostObservabilityPage', () => {
     const page = screen.getByTestId('admin-cost-observability-page');
     expect(await screen.findByRole('heading', { name: '成本观测' })).toBeInTheDocument();
     await openCostSecondaryDisclosure();
+    const pageShell = page.querySelector('[data-terminal-primitive="page-shell"]');
+    const shellChildren = Array.from(pageShell?.children ?? []);
     expect(page.querySelector('[data-terminal-primitive="page-shell"]')).not.toBeNull();
+    expect(page.className).toContain('py-5');
+    expect(page.className).not.toContain('py-4');
+    expect(shellChildren.some((child) => child.getAttribute('data-terminal-primitive') === 'disclosure')).toBe(true);
     expect(page.querySelectorAll('[data-terminal-primitive="panel"]').length).toBeGreaterThan(4);
     expect(page.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThan(4);
     expect(page.querySelectorAll('[data-terminal-primitive="notice"]').length).toBeGreaterThan(1);

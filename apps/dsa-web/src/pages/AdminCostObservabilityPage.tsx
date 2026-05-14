@@ -962,7 +962,10 @@ const AdminCostObservabilityPage: React.FC = () => {
       : '暂无明显成本压力';
 
   return (
-    <div data-testid="admin-cost-observability-page" className="min-h-0 flex-1 overflow-y-auto no-scrollbar py-4 text-white md:py-6">
+    <div
+      data-testid="admin-cost-observability-page"
+      className="min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto no-scrollbar py-5 text-white md:py-6"
+    >
       <TerminalPageShell>
         <TerminalPanel as="section" className="relative overflow-hidden">
           <TerminalPageHeading
@@ -1008,7 +1011,7 @@ const AdminCostObservabilityPage: React.FC = () => {
           </TerminalPanel>
         ) : null}
         {data ? (
-          <div className="grid gap-6">
+          <>
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
               <TerminalPanel as="section" className="xl:col-span-8">
                 <TerminalSectionHeader
@@ -1097,7 +1100,7 @@ const AdminCostObservabilityPage: React.FC = () => {
                 </div>
               </div>
             </TerminalDisclosure>
-          </div>
+          </>
         ) : null}
       </TerminalPageShell>
     </div>
