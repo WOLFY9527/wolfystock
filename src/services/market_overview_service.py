@@ -1522,7 +1522,7 @@ class MarketOverviewService:
         return self._success_panel("FundsFlowCard", items)
 
     def _fetch_macro(self) -> PanelPayload:
-        official_points = self._official_macro_points()
+        official_points = self._official_macro_points(include_credit_stress=True)
         item_map = {
             str(item.get("symbol") or ""): item
             for item in self._quote_items(self.MACRO_SYMBOLS)
@@ -1537,6 +1537,18 @@ class MarketOverviewService:
         official_vix = self._official_macro_item("VIX", "VIX", official_points.get("VIXCLS", []), unit="pts", change_scale=1.0)
         if official_vix:
             item_map["VIX"] = official_vix
+        official_credit = self._official_macro_item(
+            "CREDIT",
+            "Credit spreads",
+            official_points.get("BAMLH0A0HYM2", []),
+            unit="bps",
+            value_scale=100.0,
+            change_scale=100.0,
+        )
+        if official_credit:
+            official_credit["observationOnly"] = True
+            official_credit["includedInScore"] = False
+            item_map["CREDIT"] = official_credit
         for symbol, label, unit in (
             ("FEDFUNDS", "Fed Funds", "%"),
             ("CPI", "CPI", "YoY %"),
@@ -1809,13 +1821,16 @@ class MarketOverviewService:
             "warning": FALLBACK_WARNING if any(bool(item.get("isFallback")) for item in items) else None,
         }
 
-    def _official_macro_points(self) -> Dict[str, List[MacroObservation]]:
+    def _official_macro_points(self, *, include_credit_stress: bool = False) -> Dict[str, List[MacroObservation]]:
         points: Dict[str, List[MacroObservation]] = {}
         try:
             points.update(fetch_treasury_daily_rate_observation_points(limit=2))
         except Exception:
             pass
-        for series_id in ("DGS2", "DGS10", "DGS30", "VIXCLS", "SOFR"):
+        fred_series_ids = ["DGS2", "DGS10", "DGS30", "VIXCLS", "SOFR"]
+        if include_credit_stress:
+            fred_series_ids.append("BAMLH0A0HYM2")
+        for series_id in fred_series_ids:
             if series_id in points and points[series_id]:
                 continue
             try:
@@ -1834,6 +1849,7 @@ class MarketOverviewService:
         *,
         unit: str,
         market: Optional[str] = None,
+        value_scale: float = 1.0,
         change_scale: float = 100.0,
     ) -> Optional[Dict[str, Any]]:
         latest = observations[0] if observations else None
@@ -1847,17 +1863,19 @@ class MarketOverviewService:
         change = None if previous_value is None else round((latest.value - previous_value) * change_scale, 3)
         change_percent = self._percent_change(previous_value, latest.value)
         source_label = self._official_source_label(latest.source_id)
+        scaled_value = round(latest.value * value_scale, 3)
+        scaled_trend = [round(point.value * value_scale, 3) for point in reversed(observations) if point.value is not None]
         item: Dict[str, Any] = {
             "name": label,
             "label": label,
             "symbol": symbol,
-            "value": round(latest.value, 3),
-            "price": round(latest.value, 3),
+            "value": scaled_value,
+            "price": scaled_value,
             "change": change,
             "changePercent": round(change_percent, 3) if change_percent is not None else None,
             "change_text": f"{change:+.2f}" if change is not None else "待确认",
-            "sparkline": [round(point.value, 3) for point in reversed(observations) if point.value is not None],
-            "trend": [round(point.value, 3) for point in reversed(observations) if point.value is not None],
+            "sparkline": scaled_trend,
+            "trend": scaled_trend,
             "unit": unit,
             "source": latest.source_id.split(":", 1)[0],
             "sourceId": latest.source_id,

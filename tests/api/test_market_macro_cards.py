@@ -82,6 +82,10 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
             ],
         }
         fred_points = {
+            "BAMLH0A0HYM2": [
+                MacroObservation("BAMLH0A0HYM2", 3.31, "2026-05-13", "2026-05-13", "fred:BAMLH0A0HYM2", "official_public", "daily_credit_stress"),
+                MacroObservation("BAMLH0A0HYM2", 3.45, "2026-05-12", "2026-05-12", "fred:BAMLH0A0HYM2", "official_public", "daily_credit_stress"),
+            ],
             "VIXCLS": [
                 MacroObservation("VIXCLS", 18.22, "2026-05-13", "2026-05-13", "fred:VIXCLS", "official_public", "daily_close"),
                 MacroObservation("VIXCLS", 19.11, "2026-05-12", "2026-05-12", "fred:VIXCLS", "official_public", "daily_close"),
@@ -114,6 +118,7 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
         self.assertEqual(rates_items["SOFR"]["sourceId"], "fred:SOFR")
         self.assertFalse(rates_items["US10Y"]["isFallback"])
         self.assertTrue(rates_payload["fallbackUsed"])
+        self.assertNotIn("CREDIT", rates_items)
 
         macro_items = {item["symbol"]: item for item in macro_payload["items"]}
         self.assertEqual(macro_items["US2Y"]["sourceType"], "official_public")
@@ -121,6 +126,16 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
         self.assertEqual(macro_items["VIX"]["sourceLabel"], "FRED CBOE VIX Close")
         self.assertEqual(macro_items["SOFR"]["sourceType"], "official_public")
         self.assertEqual(macro_items["SOFR"]["freshness"], "delayed")
+        self.assertEqual(macro_items["CREDIT"]["sourceType"], "official_public")
+        self.assertEqual(macro_items["CREDIT"]["sourceId"], "fred:BAMLH0A0HYM2")
+        self.assertEqual(
+            macro_items["CREDIT"]["sourceLabel"],
+            "FRED ICE BofA US High Yield Index Option-Adjusted Spread",
+        )
+        self.assertEqual(macro_items["CREDIT"]["asOf"], "2026-05-13")
+        self.assertEqual(macro_items["CREDIT"]["freshness"], "delayed")
+        self.assertTrue(macro_items["CREDIT"]["observationOnly"])
+        self.assertFalse(macro_items["CREDIT"]["includedInScore"])
 
 
 if __name__ == "__main__":
