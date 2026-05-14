@@ -185,6 +185,7 @@ def test_market_overview_service_extracts_raw_transport_boundaries() -> None:
     service_imports = _module_imports_for_file(MARKET_OVERVIEW_SERVICE_FILE)
     service_urls = _requests_get_urls(MARKET_OVERVIEW_SERVICE_FILE)
 
+    assert "src.services.market_data_source_registry" in service_imports
     assert "src.services.market_overview_binance_transport" in service_imports
     assert "src.services.market_overview_sentiment_transport" in service_imports
     assert "src.services.market_overview_sina_transport" in service_imports

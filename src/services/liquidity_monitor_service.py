@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
 from src.services.market_cache import MarketCache, market_cache
+from src.services.market_data_source_registry import project_source_provenance
 from src.services.market_overview_binance_transport import fetch_binance_funding_row
 from src.services.market_overview_yfinance_transport import fetch_yfinance_quote_history_frame
 from src.storage import DatabaseManager
@@ -187,8 +188,16 @@ class LiquidityMonitorService:
             f"{str(item.get('symbol') or '').replace('_FUNDING', '')} {float(self._numeric(item.get('value')) or 0.0):+.4f}%"
             for item in items
         ]
-        source_label = self._text(items[0].get("sourceLabel")) or "Binance"
-        source_type = self._text(items[0].get("sourceType")) or "exchange_public"
+        source_meta = project_source_provenance(
+            source=items[0].get("source") or funding_panel.source,
+            source_type=items[0].get("sourceType"),
+            source_label=items[0].get("sourceLabel"),
+            freshness=freshness,
+            is_fallback=bool(items[0].get("isFallback") or items[0].get("fallbackUsed") or funding_panel.is_fallback),
+            is_stale=bool(items[0].get("isStale") or funding_panel.is_stale),
+        )
+        source_label = source_meta["sourceLabel"]
+        source_type = source_meta["sourceType"]
         status = "live" if len(items) >= 2 and freshness == "live" else "partial"
         return self._indicator(
             "crypto_funding",
@@ -715,6 +724,7 @@ class LiquidityMonitorService:
         self._external_provider_calls_used = True
         items: List[Dict[str, Any]] = []
         updated_at = self._now().isoformat(timespec="seconds")
+        provenance = project_source_provenance(source="binance", freshness="live")
         for futures_symbol, short_symbol in (("BTCUSDT", "BTC"), ("ETHUSDT", "ETH")):
             try:
                 row = fetch_binance_funding_row(futures_symbol)
@@ -733,8 +743,8 @@ class LiquidityMonitorService:
                     "change": funding_percent,
                     "changePercent": funding_percent,
                     "source": "binance",
-                    "sourceLabel": "Binance",
-                    "sourceType": "exchange_public",
+                    "sourceLabel": provenance["sourceLabel"],
+                    "sourceType": provenance["sourceType"],
                     "asOf": as_of,
                     "updatedAt": updated_at,
                     "freshness": "live",
@@ -747,8 +757,8 @@ class LiquidityMonitorService:
         latest_as_of = max(str(item.get("asOf") or updated_at) for item in items)
         payload = {
             "source": "binance",
-            "sourceLabel": "Binance",
-            "sourceType": "exchange_public",
+            "sourceLabel": provenance["sourceLabel"],
+            "sourceType": provenance["sourceType"],
             "freshness": "live",
             "asOf": latest_as_of,
             "updatedAt": updated_at,
@@ -771,6 +781,7 @@ class LiquidityMonitorService:
         if not specs:
             return None
         self._external_provider_calls_used = True
+        provenance = project_source_provenance(source="yfinance_proxy", source_type="proxy_public", freshness="delayed")
         items = []
         for spec in specs:
             item = self._fetch_macro_proxy_item(spec)
@@ -782,8 +793,8 @@ class LiquidityMonitorService:
         latest_as_of = max(as_of_values) if as_of_values else self._now().isoformat(timespec="seconds")
         payload = {
             "source": "yfinance_proxy",
-            "sourceLabel": "Yahoo Finance",
-            "sourceType": "proxy_public",
+            "sourceLabel": provenance["sourceLabel"],
+            "sourceType": provenance["sourceType"],
             "freshness": "delayed",
             "asOf": latest_as_of,
             "updatedAt": latest_as_of,
@@ -820,6 +831,7 @@ class LiquidityMonitorService:
         latest_value = latest_raw / value_scale if value_scale else latest_raw
         change_percent = ((latest_raw - previous_raw) / previous_raw * 100.0) if previous_raw else 0.0
         as_of = self._frame_last_as_of(frame) or self._now().isoformat(timespec="seconds")
+        provenance = project_source_provenance(source="yfinance_proxy", source_type="proxy_public", freshness="delayed")
         item = {
             "symbol": spec["symbol"],
             "label": spec["label"],
@@ -829,8 +841,8 @@ class LiquidityMonitorService:
             "change": round(change_percent, 3),
             "changePercent": round(change_percent, 3),
             "source": "yfinance_proxy",
-            "sourceLabel": "Yahoo Finance",
-            "sourceType": "proxy_public",
+            "sourceLabel": provenance["sourceLabel"],
+            "sourceType": provenance["sourceType"],
             "freshness": "delayed",
             "asOf": as_of,
             "updatedAt": as_of,

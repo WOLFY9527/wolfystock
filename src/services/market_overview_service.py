@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from src.services.execution_log_service import ExecutionLogService
+from src.services.market_data_source_registry import resolve_source_label
 from src.services.market_overview_binance_transport import (
     fetch_binance_funding_row,
     fetch_binance_kline_history_rows,
@@ -69,23 +70,23 @@ SOURCE_TYPE_BY_SOURCE = {
 }
 
 SOURCE_LABELS = {
-    "eastmoney": "东方财富",
-    "sina": "新浪财经",
-    "yahoo": "Yahoo Finance",
-    "yfinance": "Yahoo Finance",
-    "yfinance_proxy": "Yahoo Finance",
-    "binance": "Binance",
-    "binance_ws": "Binance WS",
-    "alternative": "Alternative.me",
-    "alternative_me": "Alternative.me",
-    "cnn": "CNN",
+    "eastmoney": resolve_source_label("eastmoney"),
+    "sina": resolve_source_label("sina"),
+    "yahoo": resolve_source_label("yahoo"),
+    "yfinance": resolve_source_label("yfinance"),
+    "yfinance_proxy": resolve_source_label("yfinance_proxy"),
+    "binance": resolve_source_label("binance"),
+    "binance_ws": resolve_source_label("binance_ws"),
+    "alternative": resolve_source_label("alternative"),
+    "alternative_me": resolve_source_label("alternative_me"),
+    "cnn": resolve_source_label("cnn"),
     "computed": "系统计算",
     "mixed": "多来源",
-    "cached": "缓存快照",
-    "fallback": "备用数据",
-    "mock": "模拟数据",
+    "cached": resolve_source_label("cached"),
+    "fallback": resolve_source_label("fallback"),
+    "mock": resolve_source_label("mock"),
     "public": "公开数据",
-    "unavailable": "不可用",
+    "unavailable": resolve_source_label("unavailable"),
 }
 
 PROVIDER_HEALTH_STATUSES = {

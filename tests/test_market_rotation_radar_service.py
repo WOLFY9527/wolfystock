@@ -101,7 +101,8 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(provider_meta["present"])
         self.assertEqual(provider_meta["status"], "partial")
         self.assertEqual(provider_meta["quoteMode"], "proxy")
-        self.assertEqual(provider_meta["sourceType"], "public_or_live")
+        self.assertEqual(provider_meta["sourceType"], "synthetic_fixture")
+        self.assertEqual(provider_meta["sourceLabelCounts"], {"Unit Fixture": len(quotes)})
         self.assertEqual(provider_meta["usableSymbolCount"], len(quotes))
         self.assertFalse(payload["metadata"]["noExternalCalls"])
         self.assertIn("rotationStateEvidence", theme)
@@ -222,7 +223,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(provider_meta["present"])
         self.assertEqual(provider_meta["status"], "success")
         self.assertEqual(provider_meta["quoteMode"], "proxy")
-        self.assertEqual(provider_meta["sourceType"], "public")
+        self.assertEqual(provider_meta["sourceType"], "cache_snapshot")
         self.assertEqual(provider_meta["freshness"], "cached")
         self.assertEqual(
             provider_meta["coverage"],

@@ -14,6 +14,10 @@ from datetime import datetime, timezone
 from statistics import mean
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
 
+from src.services.market_data_source_registry import (
+    project_source_provenance,
+    resolve_freshness_label,
+)
 from src.services.sector_rotation_taxonomy import (
     ROTATION_TAXONOMY_VERSION,
     SUPPORTED_ROTATION_MARKETS,
@@ -435,15 +439,29 @@ class MarketRotationRadarService:
         freshness_counts: Dict[str, int] = {}
         source_counts: Dict[str, int] = {}
         source_label_counts: Dict[str, int] = {}
+        source_type_counts: Dict[str, int] = {}
         as_of_candidates: List[str] = []
         fallback_count = 0
         stale_count = 0
+        provider_no_external_calls = bool(provider_metadata.get("noExternalCalls", not quote_result.provider_present))
         for quote in quotes.values():
             freshness = str(quote.get("freshness") or "unknown")
             freshness_counts[freshness] = freshness_counts.get(freshness, 0) + 1
             source = str(quote.get("source") or "unknown")
             source_counts[source] = source_counts.get(source, 0) + 1
-            source_label = str(quote.get("sourceLabel") or source)
+            provenance = project_source_provenance(
+                source=quote.get("source"),
+                source_type=quote.get("sourceType"),
+                source_label=quote.get("sourceLabel"),
+                freshness=freshness,
+                is_fallback=bool(quote.get("isFallback")),
+                is_stale=bool(quote.get("isStale")),
+                is_from_snapshot=bool(quote.get("isFromSnapshot")),
+                no_external_calls=provider_no_external_calls,
+            )
+            source_type = provenance["sourceType"]
+            source_type_counts[source_type] = source_type_counts.get(source_type, 0) + 1
+            source_label = provenance["sourceLabel"]
             source_label_counts[source_label] = source_label_counts.get(source_label, 0) + 1
             as_of = quote.get("asOf")
             if as_of:
@@ -455,6 +473,18 @@ class MarketRotationRadarService:
         requested_symbol_count = len(quote_result.requested_symbols)
         usable_symbol_count = len(quotes)
         coverage_percent = round((usable_symbol_count / requested_symbol_count) * 100, 1) if requested_symbol_count else 0.0
+        metadata_freshness = str(provider_metadata.get("freshness") or self._dominant_label(freshness_counts, default="fallback"))
+        canonical_source_type = project_source_provenance(
+            source=None,
+            source_type=provider_metadata.get("sourceType"),
+            freshness=metadata_freshness,
+            is_fallback=usable_symbol_count == 0 and quote_result.provider_status in {"failed", "absent"},
+            no_external_calls=provider_no_external_calls,
+        )["sourceType"]
+        if not provider_metadata.get("sourceType") and source_type_counts:
+            canonical_source_type = self._dominant_label(source_type_counts, default=canonical_source_type)
+        elif not provider_metadata.get("sourceType") and usable_symbol_count == 0:
+            canonical_source_type = "fallback_static" if quote_result.provider_status == "failed" else "missing"
         return {
             "present": quote_result.provider_present,
             "status": quote_result.provider_status,
@@ -467,21 +497,15 @@ class MarketRotationRadarService:
                 "coveragePercent": coverage_percent,
             },
             "quoteMode": str(provider_metadata.get("quoteMode") or "proxy"),
-            "sourceType": str(
-                provider_metadata.get("sourceType")
-                or ("public_or_live" if usable_symbol_count else "absent")
-            ),
-            "freshness": str(
-                provider_metadata.get("freshness")
-                or self._dominant_label(freshness_counts, default="fallback")
-            ),
+            "sourceType": canonical_source_type,
+            "freshness": metadata_freshness,
             "asOf": str(provider_metadata.get("asOf") or max(as_of_candidates)) if as_of_candidates or provider_metadata.get("asOf") else None,
             "fallbackQuoteCount": fallback_count,
             "staleQuoteCount": stale_count,
             "sourceCounts": source_counts,
             "sourceLabelCounts": source_label_counts,
             "freshnessCounts": freshness_counts,
-            "noExternalCalls": bool(provider_metadata.get("noExternalCalls", not quote_result.provider_present)),
+            "noExternalCalls": provider_no_external_calls,
         }
 
     def _build_benchmarks(self, quotes: Mapping[str, Dict[str, Any]], generated_at: str) -> Dict[str, Dict[str, Any]]:
@@ -1716,17 +1740,11 @@ class MarketRotationRadarService:
 
     @staticmethod
     def _freshness_label(freshness: str, is_fallback: bool, is_stale: bool) -> str:
-        if is_fallback or freshness == "fallback":
-            return "备用/缺失"
-        if is_stale or freshness == "stale":
-            return "过期"
-        if freshness == "live":
-            return "实时"
-        if freshness == "mock":
-            return "模拟"
-        if freshness == "cached":
-            return "缓存"
-        return "延迟"
+        return resolve_freshness_label(
+            freshness,
+            is_fallback=is_fallback,
+            is_stale=is_stale,
+        )
 
     def _leaders(self, observed: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
         sortable = [

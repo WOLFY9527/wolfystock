@@ -425,6 +425,7 @@ def test_crypto_funding_uses_binance_public_endpoint_when_cache_snapshot_lacks_f
     assert "BTC" in str(indicators["crypto_funding"]["summary"])
     assert "ETH" in str(indicators["crypto_funding"]["summary"])
     assert "Binance" in str(indicators["crypto_funding"]["summary"])
+    assert "exchange_public" in str(indicators["crypto_funding"]["summary"])
 
 
 def test_crypto_funding_stays_unavailable_when_binance_public_endpoint_fails(isolated_db: DatabaseManager) -> None:
@@ -664,7 +665,32 @@ def test_vix_indicator_uses_yfinance_proxy_when_volatility_panel_is_unavailable(
     assert indicators["vix_pressure"]["freshness"] == "delayed"
     assert indicators["vix_pressure"]["scoreContribution"] == 8
     assert "Yahoo Finance" in str(indicators["vix_pressure"]["summary"])
-    assert "proxy_public" in str(indicators["vix_pressure"]["summary"])
+    assert "unofficial_proxy" in str(indicators["vix_pressure"]["summary"])
+
+
+def test_yfinance_proxy_panels_remain_delayed_and_not_live_provider_labels(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    quote_index = [
+        datetime(2026, 5, 12, 16, 0, tzinfo=timezone.utc),
+        datetime(2026, 5, 13, 16, 0, tzinfo=timezone.utc),
+    ]
+    quote_map = {
+        "^VIX": _FakeHistoryFrame([18.0, 15.0], index=quote_index),
+    }
+
+    def _fake_quote_history(ticker: str) -> _FakeHistoryFrame:
+        return quote_map.get(ticker, _FakeHistoryFrame([]))
+
+    with patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", side_effect=_fake_quote_history, create=True):
+        payload = service.get_liquidity_monitor()
+
+    indicator = {item["key"]: item for item in payload["indicators"]}["vix_pressure"]
+
+    assert indicator["freshness"] == "delayed"
+    assert indicator["status"] == "partial"
+    assert "新鲜度 delayed" in str(indicator["summary"])
+    assert "新鲜度 live" not in str(indicator["summary"])
+    assert "类型 unofficial_proxy" in str(indicator["summary"])
 
 
 def test_usd_pressure_uses_yfinance_dxy_proxy_when_fx_panel_is_unavailable(isolated_db: DatabaseManager) -> None:
