@@ -55,6 +55,19 @@ class MarketCnFlowsApiTestCase(unittest.TestCase):
         self.assertNotIn("tickflow", str(payload).lower())
         self.assertNotIn("TickFlow", str(payload))
 
+    def test_cn_flows_fallback_snapshot_stays_explicitly_non_live(self) -> None:
+        payload = MarketOverviewService().get_cn_flows()
+
+        self.assertEqual(payload["source"], "fallback")
+        self.assertEqual(payload["freshness"], "fallback")
+        self.assertTrue(payload["isFallback"])
+        self.assertTrue(payload["fallbackUsed"])
+        self.assertEqual(payload["providerHealth"]["status"], "fallback")
+        self.assertTrue(all(item["source"] == "fallback" for item in payload["items"]))
+        self.assertTrue(all(item["freshness"] == "fallback" for item in payload["items"]))
+        self.assertTrue(all(item["isFallback"] is True for item in payload["items"]))
+        self.assertFalse(any(item["freshness"] == "live" for item in payload["items"]))
+
 
 if __name__ == "__main__":
     unittest.main()

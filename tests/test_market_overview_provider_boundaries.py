@@ -281,6 +281,22 @@ def test_market_overview_service_keeps_cn_flows_and_tickflow_breadth_separate() 
     assert "_fallback_cn_flows_snapshot" in cn_flows_calls
 
 
+def test_market_overview_service_keeps_cn_flows_and_sector_rotation_fetchers_fallback_only() -> None:
+    cn_flows_calls = _method_call_names(
+        MARKET_OVERVIEW_SERVICE_FILE,
+        "MarketOverviewService",
+        "_fetch_cn_flows_snapshot",
+    )
+    sector_rotation_calls = _method_call_names(
+        MARKET_OVERVIEW_SERVICE_FILE,
+        "MarketOverviewService",
+        "_fetch_sector_rotation_snapshot",
+    )
+
+    assert cn_flows_calls == {"_fallback_cn_flows_snapshot"}
+    assert sector_rotation_calls == {"_fallback_sector_rotation_snapshot"}
+
+
 def test_market_overview_tickflow_source_contract_stays_explicit_public_provider_not_snapshot() -> None:
     source_text = MARKET_OVERVIEW_TICKFLOW_BREADTH_PROVIDER_FILE.read_text(encoding="utf-8")
     provenance = project_source_provenance(

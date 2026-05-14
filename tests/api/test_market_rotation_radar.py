@@ -140,6 +140,8 @@ def test_market_rotation_radar_crypto_market_is_available_when_tab_exists(monkey
         assert any(theme["name"] == "Layer 1" for theme in payload["themes"])
         assert all(theme["staticThemeOnly"] is True for theme in payload["themes"])
         assert all(theme["source"] == "local_taxonomy" for theme in payload["themes"])
+        assert all(theme["freshness"] == "fallback" for theme in payload["themes"])
+        assert all(theme["isFallback"] is True for theme in payload["themes"])
     finally:
         client.close()
 

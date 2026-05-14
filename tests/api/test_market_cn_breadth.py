@@ -127,6 +127,39 @@ class MarketCnBreadthApiTestCase(unittest.TestCase):
         self.assertTrue(all(item["sourceLabel"] == "TickFlow" for item in payload["items"]))
         self.assertTrue(all(item["sourceType"] == "public_api" for item in payload["items"]))
 
+    def test_cn_breadth_tickflow_snapshot_stays_cached_and_non_official_when_not_fresh(self) -> None:
+        service = MarketOverviewService()
+        service._market_cache.clear()
+        MarketOverviewService._market_data_cache.clear()
+
+        with patch(
+            "src.services.market_overview_service.fetch_tickflow_cn_breadth_snapshot",
+            return_value={
+                "source": "tickflow",
+                "sourceLabel": "TickFlow",
+                "sourceType": "public_api",
+                "updatedAt": "2026-05-13T09:30:00+08:00",
+                "asOf": "2026-05-13T09:30:00+08:00",
+                "advancers": 2800,
+                "decliners": 1700,
+                "limitUp": 72,
+                "limitDown": 19,
+                "advRatio": 61.2,
+                "effect": 61,
+            },
+        ):
+            payload = service.get_cn_breadth()
+
+        self.assertEqual(payload["source"], "tickflow")
+        self.assertEqual(payload["sourceLabel"], "TickFlow")
+        self.assertEqual(payload["sourceType"], "public_api")
+        self.assertNotIn(payload["sourceType"], {"official_public", "exchange_public"})
+        self.assertEqual(payload["freshness"], "cached")
+        self.assertEqual(payload["providerHealth"]["status"], "cache")
+        self.assertFalse(payload["isFallback"])
+        self.assertTrue(all(item["freshness"] == "cached" for item in payload["items"]))
+        self.assertTrue(all(item["isFallback"] is False for item in payload["items"]))
+
     def test_cn_breadth_falls_back_for_tickflow_guard_reason_codes(self) -> None:
         service = MarketOverviewService()
         service._market_cache.clear()

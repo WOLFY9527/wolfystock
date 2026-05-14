@@ -4,10 +4,15 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from api.v1.endpoints import market
-from src.services.market_overview_service import MarketOverviewService, classify_market_payload_reliability
+from src.services.market_overview_service import (
+    MarketOverviewService,
+    classify_market_payload_reliability,
+    get_freshness_status,
+)
 
 
 class MarketTemperatureApiTestCase(unittest.TestCase):
@@ -177,6 +182,32 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertGreaterEqual(payload["reliableInputCount"], 5)
         self.assertEqual(payload["fallbackInputCount"], 0)
         self.assertGreater(payload["confidence"], 0.7)
+
+    def test_official_macro_daily_rates_remain_delayed_or_stale_not_live(self) -> None:
+        delayed = get_freshness_status(
+            "2026-05-14T15:00:00+08:00",
+            "macro_rate",
+            "treasury",
+            False,
+            source_type="official_public",
+            now=datetime(2026, 5, 14, 16, 0, tzinfo=timezone.utc),
+        )
+        stale = get_freshness_status(
+            "2026-05-10T15:00:00+08:00",
+            "macro_rate",
+            "treasury",
+            False,
+            source_type="official_public",
+            now=datetime(2026, 5, 14, 16, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(delayed["freshness"], "delayed")
+        self.assertFalse(delayed["isFallback"])
+        self.assertFalse(delayed["isStale"])
+        self.assertNotEqual(delayed["freshness"], "live")
+        self.assertEqual(stale["freshness"], "stale")
+        self.assertFalse(stale["isFallback"])
+        self.assertTrue(stale["isStale"])
 
     def test_missing_required_market_inputs_blocks_temperature_decision_output(self) -> None:
         service = MarketOverviewService()
