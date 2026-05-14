@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from src.services.market_data_source_registry import (
+    CANONICAL_SOURCE_TYPES,
     project_source_provenance,
     resolve_freshness_label,
     resolve_source_label,
@@ -112,3 +113,38 @@ def test_scanner_fetcher_and_manager_sources_keep_provider_labels() -> None:
     for source, (source_type, source_label) in expected.items():
         assert resolve_source_type(source=source) == source_type
         assert resolve_source_label(source=source, source_type=source_type) == source_label
+
+
+def test_options_lab_fixture_and_stub_sources_have_inert_provenance_labels() -> None:
+    assert {
+        "synthetic_fixture",
+        "delayed_fixture",
+        "malformed_fixture",
+        "disabled_live_stub",
+        "missing",
+    }.issubset(CANONICAL_SOURCE_TYPES)
+
+    synthetic = project_source_provenance(source="synthetic_fixture", freshness="synthetic_delayed")
+    assert synthetic["sourceType"] == "synthetic_fixture"
+    assert synthetic["sourceLabel"] == "Synthetic Fixture"
+    assert synthetic["freshnessLabel"] != "实时"
+
+    delayed = project_source_provenance(source="delayed_fixture", freshness="delayed")
+    assert delayed["sourceType"] == "delayed_fixture"
+    assert delayed["sourceLabel"] == "Delayed Fixture"
+    assert delayed["freshnessLabel"] == "延迟"
+
+    delayed_alias = project_source_provenance(source="real_shaped_delayed_fixture", freshness="delayed")
+    assert delayed_alias["sourceType"] == "delayed_fixture"
+    assert delayed_alias["sourceLabel"] == "Delayed Fixture"
+    assert delayed_alias["freshnessLabel"] == "延迟"
+
+    malformed = project_source_provenance(source="malformed_fixture", freshness="error")
+    assert malformed["sourceType"] == "malformed_fixture"
+    assert malformed["sourceLabel"] == "Malformed Fixture"
+    assert malformed["freshnessLabel"] == "不可用"
+
+    disabled_live_stub = project_source_provenance(source="disabled_live_stub", freshness="unavailable")
+    assert disabled_live_stub["sourceType"] == "disabled_live_stub"
+    assert disabled_live_stub["sourceLabel"] == "Disabled Live Stub"
+    assert disabled_live_stub["freshnessLabel"] == "不可用"

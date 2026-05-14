@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
+from src.services.market_data_source_registry import project_source_provenance
 from src.services.options_lab_domain_models import (
     AnalyzeCandidateModel,
     AnalyzeResultModel,
@@ -140,6 +141,19 @@ def test_tem_chain_returns_calls_puts_and_safe_derived_fields() -> None:
     assert isinstance(response.metadata, OptionsLabMetadataModel)
     assert response.metadata.provider_name == "synthetic_fixture"
     assert response.metadata.live_provider_enabled is False
+
+
+def test_default_options_lab_provider_projects_to_synthetic_fixture_provenance() -> None:
+    response = _service().get_chain("TEM", expiration="2026-06-19")
+    provenance = project_source_provenance(
+        source=response.metadata.provider_name,
+        freshness=response.calls[0].freshness,
+    )
+
+    assert provenance["sourceType"] == "synthetic_fixture"
+    assert provenance["sourceLabel"] == "Synthetic Fixture"
+    assert provenance["freshnessLabel"] != "实时"
+    assert provenance["sourceType"] not in {"exchange_public", "official_public", "public_proxy", "unofficial_proxy"}
 
 
 def test_chain_filters_side_expiration_liquidity_spread_and_greeks() -> None:
@@ -969,6 +983,14 @@ def test_decision_delayed_fixture_provider_selection_cannot_emit_tradeable_label
     assert response.freshness.freshness == "delayed"
     assert response.decision_label != "有条件可交易"
     assert all(item.decision_label != "有条件可交易" for item in response.ranked_alternatives)
+
+    provenance = project_source_provenance(
+        source=response.metadata.provider_name,
+        freshness=response.freshness.freshness,
+    )
+    assert provenance["sourceType"] == "delayed_fixture"
+    assert provenance["sourceLabel"] == "Delayed Fixture"
+    assert provenance["freshnessLabel"] == "延迟"
 
 
 def test_decision_long_call_breakeven_realism_calculation() -> None:

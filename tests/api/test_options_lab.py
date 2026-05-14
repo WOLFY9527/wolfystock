@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.v1.endpoints import options
+from src.services.market_data_source_registry import project_source_provenance
 from src.services.options_lab_domain_models import (
     AnalyzeCandidateModel,
     AnalyzeResultModel,
@@ -267,6 +268,13 @@ def test_chain_endpoint_filters_side_expiration_liquidity_and_spread() -> None:
         assert payload["metadata"]["forceRefreshIgnored"] is True
         assert payload["metadata"]["providerName"] == "synthetic_fixture"
         assert payload["metadata"]["liveProviderEnabled"] is False
+        provenance = project_source_provenance(
+            source=payload["metadata"]["providerName"],
+            freshness=payload["calls"][0]["freshness"],
+        )
+        assert provenance["sourceType"] == "synthetic_fixture"
+        assert provenance["sourceLabel"] == "Synthetic Fixture"
+        assert provenance["freshnessLabel"] != "实时"
     finally:
         client.close()
 
@@ -1242,6 +1250,13 @@ def test_decision_endpoint_delayed_fixture_keeps_tradeability_cap() -> None:
         assert payload["decisionGrade"] is False
         assert payload["gateDecision"] in {"数据不足，禁止判断", "仅观察", "需人工复核"}
         assert all(item["decisionLabel"] != "有条件可交易" for item in payload["rankedAlternatives"])
+        provenance = project_source_provenance(
+            source=payload["metadata"]["providerName"],
+            freshness=payload["freshness"]["freshness"],
+        )
+        assert provenance["sourceType"] == "delayed_fixture"
+        assert provenance["sourceLabel"] == "Delayed Fixture"
+        assert provenance["freshnessLabel"] == "延迟"
     finally:
         client.close()
 
