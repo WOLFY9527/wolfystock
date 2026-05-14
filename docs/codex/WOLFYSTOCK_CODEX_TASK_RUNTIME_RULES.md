@@ -45,6 +45,7 @@ Task prompts should remain model-agnostic and focus only on task scope.
 Each task prompt should still include these task-specific fields:
 
 ```text
+Task ID:
 Task title:
 Branch:
 Workspace:
@@ -62,9 +63,26 @@ Final report:
 
 The prompt may omit sections only when clearly not applicable, such as Browser for backend-only tasks.
 
+Task ID should be a stable numeric ledger identifier, for example `T-059`. Every execution prompt must include, at minimum, `Task ID`, `Task title`, `Branch`, and `Workspace` so the worker and final report map back to the same ledger row.
+
 ---
 
-## 4. Execution modes
+## 4. Task ledger statuses
+
+Use one exact status in prompt/final report closeout:
+
+```text
+RUNNING       active worker task, not ready to land yet
+READY TO LAND validated/committed/pushed task awaiting review or merge
+LANDED        merged or otherwise landed into the target branch
+NO-OP         no code/doc change was required after verification
+BLOCKED       cannot continue because of a concrete blocker
+PLANNED       scoped only; implementation has not started
+```
+
+---
+
+## 5. Execution modes
 
 ### SERIAL-MAIN
 
@@ -107,7 +125,7 @@ Rules:
 
 ---
 
-## 5. Parallelization rules
+## 6. Parallelization rules
 
 Parallelize only when workers do not write overlapping files or semantically coupled domains.
 
@@ -133,7 +151,7 @@ If not clearly safe, serialize.
 
 ---
 
-## 6. Protected domains
+## 7. Protected domains
 
 Unless the prompt explicitly scopes the domain and names the allowed files, do not modify these.
 

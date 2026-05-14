@@ -4,6 +4,19 @@ Purpose: keep user prompts short while preserving the WolfyStock guardrails.
 
 Task labels should stay outside the code block.
 
+## Minimum task metadata
+
+Every execution prompt should include this compact metadata block before the task body:
+
+```text
+Task ID: T-###
+Task title:
+Branch:
+Workspace:
+```
+
+Use the same Task ID in the final report so the task can be reconciled against the ledger without guesswork.
+
 ## Universal header
 
 Use this header unless the user explicitly requests same-main/manual-worktree mode:
@@ -181,6 +194,12 @@ Final report:
 
 Task: <docs-only or tests-only guard task>.
 
+Task metadata:
+- Task ID: T-###
+- Task title: <title>
+- Branch: <branch>
+- Workspace: <absolute path>
+
 Scope:
 Change:
 - <allowed docs/tests>
@@ -204,6 +223,7 @@ Commit:
 
 Final report:
 - use WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md
+- include Task ID, ledger status, branch/workspace, commit, push status, files changed, validation, risks, rollback
 - state no runtime behavior changed
 ```
 

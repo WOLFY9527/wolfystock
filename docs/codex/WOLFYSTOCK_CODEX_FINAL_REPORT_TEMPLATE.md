@@ -4,6 +4,20 @@ Purpose: standardize Codex completion, blocker, read-only, and report-only respo
 
 Execution-class tasks should use this template unless the user asks otherwise.
 
+## Ledger-required fields
+
+Every execution-class final report should carry these identifiers near the top:
+
+```text
+Task ID: T-###
+Task title: <title>
+Ledger status: RUNNING | READY TO LAND | LANDED | NO-OP | BLOCKED | PLANNED
+Branch: <branch>
+Workspace: <cwd>
+```
+
+Success-class closeout should also state commit, push status, files changed, validation, main risks, and rollback. Keep this concise and reuse the sections below instead of adding a second SOP.
+
 ## Progress header
 
 Start every response to the user with a short progress update:
@@ -21,6 +35,10 @@ Progress update:
 
 ```text
 Implemented, validated, committed, and pushed.
+
+Task ID: <T-###>
+Task title: <title>
+Ledger status: READY TO LAND
 
 Actual workspace:
 - cwd: <path>
@@ -78,6 +96,9 @@ Validation:
 - <command> -> <result>
 - <command> -> <result>
 
+Risks:
+- <remaining risk or `none beyond normal review`>
+
 Browser verification, if frontend:
 - Method:
 - Route(s):
@@ -114,6 +135,10 @@ git revert <hash>
 
 ```text
 Stopped at <phase>.
+
+Task ID: <T-###>
+Task title: <title>
+Ledger status: BLOCKED
 
 Actual workspace:
 - cwd:
@@ -152,6 +177,10 @@ Safe next options:
 
 ```text
 Read-only task completed.
+
+Task ID: <T-###>
+Task title: <title>
+Ledger status: PLANNED
 
 Actual workspace:
 - cwd:
@@ -224,6 +253,10 @@ If committed but not pushed:
 ```text
 Committed locally but not pushed.
 
+Task ID: <T-###>
+Task title: <title>
+Ledger status: RUNNING
+
 Commit:
 <hash>
 
@@ -237,6 +270,10 @@ Final git status:
 If not committed:
 
 ```text
+Task ID: <T-###>
+Task title: <title>
+Ledger status: NO-OP
+
 No commit was created.
 No push was performed.
 ```
