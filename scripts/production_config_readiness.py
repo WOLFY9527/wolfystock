@@ -51,7 +51,7 @@ SECRET_GROUPS: dict[str, tuple[str, ...]] = {
         "FINNHUB_API_KEY",
         "FINNHUB_API_KEYS",
         "ALPHA_VANTAGE_API_KEY",
-        "ALPHA_VANTAGE_API_KEYS",
+        "FRED_API_KEY",
         "TWELVE_DATA_API_KEY",
         "TWELVE_DATA_API_KEYS",
         "TUSHARE_TOKEN",

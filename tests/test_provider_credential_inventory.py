@@ -9,6 +9,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_CONFIG_PATH = REPO_ROOT / "src/config.py"
 CONFIG_REGISTRY_PATH = REPO_ROOT / "src/core/config_registry.py"
+ENV_EXAMPLE_PATH = REPO_ROOT / ".env.example"
+READINESS_SCRIPT_PATH = REPO_ROOT / "scripts/production_config_readiness.py"
+RELEASE_SECRET_SCAN_PATH = REPO_ROOT / "scripts/release_secret_scan.sh"
 SYSTEM_CONFIG_SERVICE_PATH = REPO_ROOT / "src/services/system_config_service.py"
 PROVIDER_BASE_PATH = REPO_ROOT / "data_provider/base.py"
 PROVIDER_CREDENTIALS_PATH = REPO_ROOT / "data_provider/provider_credentials.py"
@@ -23,6 +26,9 @@ OFFICIAL_MACRO_TRANSPORT_PATH = REPO_ROOT / "src/services/official_macro_transpo
 
 SRC_CONFIG_TEXT = SRC_CONFIG_PATH.read_text(encoding="utf-8")
 CONFIG_REGISTRY_TEXT = CONFIG_REGISTRY_PATH.read_text(encoding="utf-8")
+ENV_EXAMPLE_TEXT = ENV_EXAMPLE_PATH.read_text(encoding="utf-8")
+READINESS_SCRIPT_TEXT = READINESS_SCRIPT_PATH.read_text(encoding="utf-8")
+RELEASE_SECRET_SCAN_TEXT = RELEASE_SECRET_SCAN_PATH.read_text(encoding="utf-8")
 SYSTEM_CONFIG_SERVICE_TEXT = SYSTEM_CONFIG_SERVICE_PATH.read_text(encoding="utf-8")
 PROVIDER_BASE_TEXT = PROVIDER_BASE_PATH.read_text(encoding="utf-8")
 PROVIDER_CREDENTIALS_TEXT = PROVIDER_CREDENTIALS_PATH.read_text(encoding="utf-8")
@@ -49,6 +55,14 @@ def test_provider_credential_inventory_freezes_configured_and_wired_sources_with
             "runtime_markers": (
                 'getattr(config, "tickflow_api_key", None)',
                 "project_tickflow_entitlement_health(",
+            ),
+        },
+        "fred": {
+            "env_names": ("FRED_API_KEY",),
+            "config_markers": ("fred_api_key=os.getenv('FRED_API_KEY') or None",),
+            "runtime_markers": (
+                'return _text(getattr(Config.get_instance(), "fred_api_key", None)) or None',
+                'params["api_key"] = resolved_api_key',
             ),
         },
         "twelve_data": {
@@ -119,22 +133,60 @@ def test_provider_credential_inventory_freezes_configured_and_wired_sources_with
                 or marker in SYSTEM_CONFIG_PROVIDER_PROJECTION_TEXT
                 or marker in US_FUNDAMENTALS_PROVIDER_TEXT
                 or marker in MARKET_OVERVIEW_SERVICE_TEXT
+                or marker in OFFICIAL_MACRO_TRANSPORT_TEXT
             )
 
 
-def test_alpha_vantage_stays_registry_only_until_it_has_a_real_config_surface() -> None:
-    for env_name in (
-        "ALPHA_VANTAGE_API_KEY",
-        "ALPHA_VANTAGE_API_KEYS",
-        "ALPHAVANTAGE_API_KEY",
-        "ALPHAVANTAGE_API_KEYS",
-    ):
+def test_provider_env_docs_and_inventory_match_active_runtime_contracts() -> None:
+    documented_runtime_contracts = {
+        "fred": {
+            "active_runtime_env_names": ("FRED_API_KEY",),
+            "env_example_markers": ("# FRED API Key", "# FRED_API_KEY="),
+            "readiness_markers": ('"FRED_API_KEY"',),
+            "secret_scan_provider_tokens": ("FRED",),
+        },
+        "finnhub": {
+            "active_runtime_env_names": ("FINNHUB_API_KEY", "FINNHUB_API_KEYS"),
+            "env_example_markers": ("# FINNHUB_API_KEY=", "# FINNHUB_API_KEYS=key1,key2"),
+            "readiness_markers": ('"FINNHUB_API_KEY"', '"FINNHUB_API_KEYS"'),
+            "secret_scan_provider_tokens": ("FINNHUB",),
+        },
+        "fmp": {
+            "active_runtime_env_names": ("FMP_API_KEY", "FMP_API_KEYS"),
+            "env_example_markers": ("# FMP_API_KEY=", "# FMP_API_KEYS=key1,key2"),
+            "readiness_markers": ('"FMP_API_KEY"', '"FMP_API_KEYS"'),
+            "secret_scan_provider_tokens": ("FMP",),
+        },
+    }
+
+    for contract in documented_runtime_contracts.values():
+        for env_name in contract["active_runtime_env_names"]:
+            assert env_name in CONFIG_REGISTRY_TEXT
+        for marker in contract["env_example_markers"]:
+            assert marker in ENV_EXAMPLE_TEXT
+        for marker in contract["readiness_markers"]:
+            assert marker in READINESS_SCRIPT_TEXT
+        for provider_token in contract["secret_scan_provider_tokens"]:
+            assert provider_token in RELEASE_SECRET_SCAN_TEXT
+
+
+def test_alpha_vantage_runtime_contract_stays_singular_while_settings_aliases_remain_diagnostics_only() -> None:
+    for env_name in ("ALPHA_VANTAGE_API_KEY", "ALPHA_VANTAGE_API_KEYS"):
         assert env_name in CONFIG_REGISTRY_TEXT or env_name in SYSTEM_CONFIG_SERVICE_TEXT
 
-    assert '"alpha_vantage": ("ALPHA_VANTAGE_API_KEYS", "ALPHA_VANTAGE_API_KEY", "ALPHAVANTAGE_API_KEYS", "ALPHAVANTAGE_API_KEY")' in SYSTEM_CONFIG_SERVICE_TEXT
     assert 'API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")' in ALPHAVANTAGE_PROVIDER_TEXT
     assert "alpha_vantage_api_key" not in SRC_CONFIG_TEXT
     assert "alpha_vantage_api_keys" not in SRC_CONFIG_TEXT
+    assert "# ALPHA_VANTAGE_API_KEY=" in ENV_EXAMPLE_TEXT
+    assert "ALPHA_VANTAGE_API_KEYS=key1,key2" not in ENV_EXAMPLE_TEXT
+    assert '"ALPHA_VANTAGE_API_KEY"' in READINESS_SCRIPT_TEXT
+    assert '"ALPHA_VANTAGE_API_KEYS"' not in READINESS_SCRIPT_TEXT
+    assert 'alpha_vantage": ("ALPHA_VANTAGE_API_KEYS", "ALPHA_VANTAGE_API_KEY", "ALPHAVANTAGE_API_KEYS", "ALPHAVANTAGE_API_KEY")' in SYSTEM_CONFIG_SERVICE_TEXT
+    assert "ALPHAVANTAGE_API_KEY" not in ENV_EXAMPLE_TEXT
+    assert "ALPHAVANTAGE_API_KEYS" not in ENV_EXAMPLE_TEXT
+    assert "ALPHAVANTAGE_API_KEY" not in READINESS_SCRIPT_TEXT
+    assert "ALPHAVANTAGE_API_KEYS" not in READINESS_SCRIPT_TEXT
+    assert "ALPHA" in RELEASE_SECRET_SCAN_TEXT
 
 
 def test_proxy_and_public_sources_stay_no_key_or_presence_only_by_contract() -> None:
@@ -161,7 +213,7 @@ def test_proxy_and_public_sources_stay_no_key_or_presence_only_by_contract() -> 
         },
         "fred": {
             "runtime_markers": ('"fred": "official_public"', 'source_id=f"fred:{normalized_series}"'),
-            "forbidden_secret_envs": ("FRED_API_KEY", "FRED_TOKEN", "FRED_SECRET"),
+            "forbidden_secret_envs": ("FRED_TOKEN", "FRED_SECRET"),
         },
         "treasury": {
             "runtime_markers": ('"treasury": "official_public"', 'source_id="treasury:daily_treasury_yield_curve"'),
