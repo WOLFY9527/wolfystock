@@ -11,6 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MARKET_ENDPOINT_FILE = REPO_ROOT / "api" / "v1" / "endpoints" / "market.py"
 MARKET_OVERVIEW_SERVICE_FILE = REPO_ROOT / "src" / "services" / "market_overview_service.py"
 MARKET_OVERVIEW_BINANCE_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_binance_transport.py"
+MARKET_OVERVIEW_SINA_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_sina_transport.py"
 
 
 def _market_endpoint_tree() -> ast.AST:
@@ -60,17 +61,25 @@ def _module_imports_for_file(path: Path) -> set[str]:
 
 
 def _requests_get_urls(path: Path) -> set[str]:
+    def _string_prefix(node: ast.AST) -> str | None:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            return _string_prefix(node.left)
+        return None
+
     urls: set[str] = set()
     for node in ast.walk(_python_tree(path)):
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
             continue
         if not isinstance(node.func.value, ast.Name) or node.func.value.id != "requests" or node.func.attr != "get":
             continue
-        if not node.args:
+        url_arg = node.args[0] if node.args else next((kw.value for kw in node.keywords if kw.arg == "url"), None)
+        if url_arg is None:
             continue
-        url_arg = node.args[0]
-        if isinstance(url_arg, ast.Constant) and isinstance(url_arg.value, str):
-            urls.add(url_arg.value)
+        url_prefix = _string_prefix(url_arg)
+        if url_prefix:
+            urls.add(url_prefix)
     return urls
 
 
@@ -121,7 +130,8 @@ def test_market_overview_service_extracts_binance_raw_transport_boundary() -> No
     service_urls = _requests_get_urls(MARKET_OVERVIEW_SERVICE_FILE)
 
     assert "src.services.market_overview_binance_transport" in service_imports
-    assert not {url for url in service_urls if "binance.com" in url}
+    assert "src.services.market_overview_sina_transport" in service_imports
+    assert not {url for url in service_urls if "binance.com" in url or "sinajs.cn" in url}
 
 
 def test_market_overview_binance_transport_limits_raw_http_calls_to_binance() -> None:
@@ -131,4 +141,12 @@ def test_market_overview_binance_transport_limits_raw_http_calls_to_binance() ->
         "https://api.binance.com/api/v3/ticker/24hr",
         "https://api.binance.com/api/v3/klines",
         "https://fapi.binance.com/fapi/v1/premiumIndex",
+    }
+
+
+def test_market_overview_sina_transport_limits_raw_http_calls_to_sina() -> None:
+    transport_urls = _requests_get_urls(MARKET_OVERVIEW_SINA_TRANSPORT_FILE)
+
+    assert transport_urls == {
+        "https://hq.sinajs.cn/list=",
     }

@@ -19,6 +19,7 @@ from src.services.market_overview_binance_transport import (
     fetch_binance_kline_history_rows,
     fetch_binance_ticker_snapshot,
 )
+from src.services.market_overview_sina_transport import fetch_sina_cn_index_rows
 from src.services.market_cache import MARKET_CACHE_TTLS, REFRESH_WARNING, market_cache
 from src.storage import DatabaseManager
 
@@ -1498,15 +1499,7 @@ class MarketOverviewService:
         }
 
     def _fetch_sina_cn_index_quotes(self) -> Dict[str, Dict[str, Any]]:
-        sina_symbols = sorted(set(self.CN_SINA_SYMBOLS.values()))
-        response = requests.get(
-            "https://hq.sinajs.cn/list=" + ",".join(sina_symbols),
-            headers={"Referer": "https://finance.sina.com.cn/"},
-            timeout=8,
-        )
-        response.raise_for_status()
-        response.encoding = response.apparent_encoding or "gbk"
-        rows = self._parse_sina_quote_response(response.text)
+        rows = fetch_sina_cn_index_rows(sorted(set(self.CN_SINA_SYMBOLS.values())))
         quotes: Dict[str, Dict[str, Any]] = {}
         for canonical_symbol, sina_symbol in self.CN_SINA_SYMBOLS.items():
             if canonical_symbol in {"000001.SS", "sh000001", "000300.SS"}:
@@ -1518,18 +1511,6 @@ class MarketOverviewService:
             if quote:
                 quotes[canonical_symbol] = quote
         return quotes
-
-    def _parse_sina_quote_response(self, text: str) -> Dict[str, List[str]]:
-        rows: Dict[str, List[str]] = {}
-        for line in text.splitlines():
-            if "hq_str_" not in line or '="' not in line:
-                continue
-            prefix, raw_values = line.split('="', 1)
-            symbol = prefix.rsplit("hq_str_", 1)[-1]
-            values = raw_values.rstrip('";').split(",")
-            if values and values[0]:
-                rows[symbol] = values
-        return rows
 
     def _sina_cn_index_item(self, canonical_symbol: str, row: List[str]) -> Optional[Dict[str, Any]]:
         value = self._clean_number(row[3] if len(row) > 3 else None)

@@ -173,6 +173,37 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         self.assertTrue(all(not item["isFallback"] for item in live_items))
         self.assertTrue(all(item["freshness"] in {"live", "cached", "delayed"} for item in live_items))
 
+    def test_sina_transport_rows_map_to_canonical_cn_symbols(self) -> None:
+        service = MarketOverviewService()
+
+        def row(name: str, open_price: str, previous: str, latest: str, high: str, low: str) -> list[str]:
+            values = [""] * 32
+            values[0] = name
+            values[1] = open_price
+            values[2] = previous
+            values[3] = latest
+            values[4] = high
+            values[5] = low
+            values[30] = "2026-05-14"
+            values[31] = "15:00:00"
+            return values
+
+        transport_rows = {
+            "sh000001": row("上证指数", "4090.00", "4078.63", "4107.51", "4112.00", "4088.10"),
+            "sz399001": row("深证成指", "10210.00", "10239.22", "10288.10", "10302.50", "10198.00"),
+            "sh000300": row("沪深300", "3900.00", "3892.00", "3918.88", "3928.50", "3888.20"),
+        }
+
+        with patch("src.services.market_overview_service.fetch_sina_cn_index_rows", return_value=transport_rows) as mock_fetch:
+            quotes = service._fetch_sina_cn_index_quotes()
+
+        mock_fetch.assert_called_once()
+        self.assertEqual(quotes["000001.SH"]["symbol"], "000001.SH")
+        self.assertEqual(quotes["399001.SZ"]["symbol"], "399001.SZ")
+        self.assertEqual(quotes["000300.SH"]["symbol"], "000300.SH")
+        self.assertNotIn("000001.SS", quotes)
+        self.assertNotIn("000300.SS", quotes)
+
     def test_cn_indices_uses_cache_within_ttl(self) -> None:
         calls = 0
 
