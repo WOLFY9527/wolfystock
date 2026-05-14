@@ -9,7 +9,7 @@ public safety.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from statistics import mean
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
@@ -77,6 +77,9 @@ class QuoteLoadResult:
     provider_status: str
     requested_symbols: Sequence[str]
     provider_metadata: Mapping[str, Any]
+    observed_present: bool = False
+    observed_status: str = "absent"
+    observed_metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
 def _theme_basket_from_taxonomy(entry: RotationTaxonomyEntry) -> ThemeBasket:
@@ -130,9 +133,11 @@ class MarketRotationRadarService:
         self,
         *,
         quote_provider: Optional[QuoteProvider] = None,
+        observed_evidence: Optional[Mapping[str, Any]] = None,
         now_provider: Optional[NowProvider] = None,
     ) -> None:
         self.quote_provider = quote_provider
+        self.observed_evidence = observed_evidence
         self.now_provider = now_provider or (lambda: datetime.now(timezone.utc))
 
     def get_rotation_radar(self, market: str = "US") -> Dict[str, Any]:
@@ -142,6 +147,7 @@ class MarketRotationRadarService:
         generated_at = self._now_iso()
         quote_result = self._load_quotes()
         quote_provider_metadata = self._quote_provider_metadata(quote_result)
+        observed_evidence_metadata = self._observed_evidence_metadata(quote_result)
         benchmarks = self._build_benchmarks(quote_result.quotes, generated_at)
         themes = [
             self._analyze_theme(theme, quote_result.quotes, benchmarks, generated_at)
@@ -194,6 +200,7 @@ class MarketRotationRadarService:
                 "requiredPersistenceWindows": list(TIME_WINDOW_KEYS),
                 "proxyQualityRequired": True,
                 "quoteProvider": quote_provider_metadata,
+                "observedEvidence": observed_evidence_metadata,
                 "benchmarkProxies": {
                     "market": list(MARKET_BENCHMARK_SYMBOLS),
                     "sector": list(SECTOR_BENCHMARK_SYMBOLS),
@@ -247,6 +254,7 @@ class MarketRotationRadarService:
                 "confidenceRange": "0-1",
                 "timeWindows": list(TIME_WINDOW_KEYS),
                 "proxyQualityRequired": False,
+                "observedEvidence": self._observed_evidence_metadata(None),
             },
         }
 
@@ -374,6 +382,9 @@ class MarketRotationRadarService:
                 | set(MARKET_BENCHMARK_SYMBOLS)
             )
         )
+        observed_result = self._load_observed_evidence(symbols)
+        if observed_result is not None:
+            return observed_result
         if self.quote_provider is None:
             return QuoteLoadResult(
                 quotes={},
@@ -418,8 +429,52 @@ class MarketRotationRadarService:
             provider_present=True,
             provider_status=provider_status,
             requested_symbols=symbols,
-            provider_metadata={"noExternalCalls": False, **provider_metadata},
+                provider_metadata={"noExternalCalls": False, **provider_metadata},
+            )
+
+    def _load_observed_evidence(self, symbols: Sequence[str]) -> Optional[QuoteLoadResult]:
+        if not isinstance(self.observed_evidence, Mapping):
+            return None
+        raw_quotes, observed_metadata = self._unpack_quote_provider_result(self.observed_evidence)
+        normalized = self._normalize_quotes(raw_quotes, symbols)
+        if not normalized:
+            return QuoteLoadResult(
+                quotes={},
+                warning="已提供缓存观测证据，但未包含可用行情，已降级为静态篮子。",
+                provider_present=False,
+                provider_status="absent",
+                requested_symbols=symbols,
+                provider_metadata={"noExternalCalls": True},
+                observed_present=True,
+                observed_status="empty",
+                observed_metadata={"noExternalCalls": True, **observed_metadata},
+            )
+        observed_status = "success" if len(normalized) == len(symbols) else "partial"
+        return QuoteLoadResult(
+            quotes=normalized,
+            warning=None,
+            provider_present=False,
+            provider_status="absent",
+            requested_symbols=symbols,
+            provider_metadata={"noExternalCalls": True},
+            observed_present=True,
+            observed_status=observed_status,
+            observed_metadata={"noExternalCalls": True, **observed_metadata},
         )
+
+    def _normalize_quotes(
+        self,
+        raw_quotes: Mapping[str, Any],
+        symbols: Sequence[str],
+    ) -> Dict[str, Dict[str, Any]]:
+        normalized: Dict[str, Dict[str, Any]] = {}
+        for symbol in symbols:
+            raw_quote = raw_quotes.get(symbol) if isinstance(raw_quotes, Mapping) else None
+            if isinstance(raw_quote, Mapping):
+                quote = self._normalize_quote(symbol, raw_quote)
+                if quote:
+                    normalized[symbol] = quote
+        return normalized
 
     def _unpack_quote_provider_result(
         self,
@@ -434,8 +489,41 @@ class MarketRotationRadarService:
         return raw_result, {}
 
     def _quote_provider_metadata(self, quote_result: QuoteLoadResult) -> Dict[str, Any]:
-        provider_metadata = dict(quote_result.provider_metadata)
-        quotes = quote_result.quotes
+        return self._source_snapshot_metadata(
+            quotes=quote_result.quotes,
+            requested_symbols=quote_result.requested_symbols,
+            source_present=quote_result.provider_present,
+            source_status=quote_result.provider_status,
+            source_metadata=quote_result.provider_metadata,
+        )
+
+    def _observed_evidence_metadata(self, quote_result: Optional[QuoteLoadResult]) -> Dict[str, Any]:
+        if quote_result is None:
+            return self._source_snapshot_metadata(
+                quotes={},
+                requested_symbols=(),
+                source_present=False,
+                source_status="absent",
+                source_metadata={"noExternalCalls": True},
+            )
+        return self._source_snapshot_metadata(
+            quotes=quote_result.quotes,
+            requested_symbols=quote_result.requested_symbols,
+            source_present=quote_result.observed_present,
+            source_status=quote_result.observed_status,
+            source_metadata=quote_result.observed_metadata,
+        )
+
+    def _source_snapshot_metadata(
+        self,
+        *,
+        quotes: Mapping[str, Dict[str, Any]],
+        requested_symbols: Sequence[str],
+        source_present: bool,
+        source_status: str,
+        source_metadata: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        metadata = dict(source_metadata)
         freshness_counts: Dict[str, int] = {}
         source_counts: Dict[str, int] = {}
         source_label_counts: Dict[str, int] = {}
@@ -443,7 +531,7 @@ class MarketRotationRadarService:
         as_of_candidates: List[str] = []
         fallback_count = 0
         stale_count = 0
-        provider_no_external_calls = bool(provider_metadata.get("noExternalCalls", not quote_result.provider_present))
+        no_external_calls = bool(metadata.get("noExternalCalls", not source_present))
         for quote in quotes.values():
             freshness = str(quote.get("freshness") or "unknown")
             freshness_counts[freshness] = freshness_counts.get(freshness, 0) + 1
@@ -457,7 +545,7 @@ class MarketRotationRadarService:
                 is_fallback=bool(quote.get("isFallback")),
                 is_stale=bool(quote.get("isStale")),
                 is_from_snapshot=bool(quote.get("isFromSnapshot")),
-                no_external_calls=provider_no_external_calls,
+                no_external_calls=no_external_calls,
             )
             source_type = provenance["sourceType"]
             source_type_counts[source_type] = source_type_counts.get(source_type, 0) + 1
@@ -470,24 +558,24 @@ class MarketRotationRadarService:
                 fallback_count += 1
             if quote.get("isStale"):
                 stale_count += 1
-        requested_symbol_count = len(quote_result.requested_symbols)
+        requested_symbol_count = len(requested_symbols)
         usable_symbol_count = len(quotes)
         coverage_percent = round((usable_symbol_count / requested_symbol_count) * 100, 1) if requested_symbol_count else 0.0
-        metadata_freshness = str(provider_metadata.get("freshness") or self._dominant_label(freshness_counts, default="fallback"))
+        metadata_freshness = str(metadata.get("freshness") or self._dominant_label(freshness_counts, default="fallback"))
         canonical_source_type = project_source_provenance(
             source=None,
-            source_type=provider_metadata.get("sourceType"),
+            source_type=metadata.get("sourceType"),
             freshness=metadata_freshness,
-            is_fallback=usable_symbol_count == 0 and quote_result.provider_status in {"failed", "absent"},
-            no_external_calls=provider_no_external_calls,
+            is_fallback=usable_symbol_count == 0 and source_status in {"failed", "absent"},
+            no_external_calls=no_external_calls,
         )["sourceType"]
-        if not provider_metadata.get("sourceType") and source_type_counts:
+        if not metadata.get("sourceType") and source_type_counts:
             canonical_source_type = self._dominant_label(source_type_counts, default=canonical_source_type)
-        elif not provider_metadata.get("sourceType") and usable_symbol_count == 0:
-            canonical_source_type = "fallback_static" if quote_result.provider_status == "failed" else "missing"
+        elif not metadata.get("sourceType") and usable_symbol_count == 0:
+            canonical_source_type = "fallback_static" if source_status == "failed" else "missing"
         return {
-            "present": quote_result.provider_present,
-            "status": quote_result.provider_status,
+            "present": source_present,
+            "status": source_status,
             "requestedSymbolCount": requested_symbol_count,
             "usableSymbolCount": usable_symbol_count,
             "coveragePercent": coverage_percent,
@@ -496,16 +584,16 @@ class MarketRotationRadarService:
                 "usableSymbolCount": usable_symbol_count,
                 "coveragePercent": coverage_percent,
             },
-            "quoteMode": str(provider_metadata.get("quoteMode") or "proxy"),
+            "quoteMode": str(metadata.get("quoteMode") or "proxy"),
             "sourceType": canonical_source_type,
             "freshness": metadata_freshness,
-            "asOf": str(provider_metadata.get("asOf") or max(as_of_candidates)) if as_of_candidates or provider_metadata.get("asOf") else None,
+            "asOf": str(metadata.get("asOf") or max(as_of_candidates)) if as_of_candidates or metadata.get("asOf") else None,
             "fallbackQuoteCount": fallback_count,
             "staleQuoteCount": stale_count,
             "sourceCounts": source_counts,
             "sourceLabelCounts": source_label_counts,
             "freshnessCounts": freshness_counts,
-            "noExternalCalls": provider_no_external_calls,
+            "noExternalCalls": no_external_calls,
         }
 
     def _build_benchmarks(self, quotes: Mapping[str, Dict[str, Any]], generated_at: str) -> Dict[str, Dict[str, Any]]:

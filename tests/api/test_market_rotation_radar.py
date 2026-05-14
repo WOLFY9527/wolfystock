@@ -47,6 +47,8 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
         assert payload["metadata"]["noExternalCalls"] is True
         assert payload["metadata"]["quoteProvider"]["present"] is False
         assert payload["metadata"]["quoteProvider"]["status"] == "absent"
+        assert payload["metadata"]["observedEvidence"]["present"] is False
+        assert payload["metadata"]["observedEvidence"]["status"] == "absent"
         assert payload["metadata"]["schemaVersion"] == "market_rotation_radar_phase4_v1"
         assert payload["metadata"]["timeWindows"] == ["5m", "15m", "60m", "1d"]
         assert payload["metadata"]["proxyQualityRequired"] is True
@@ -120,6 +122,7 @@ def test_market_rotation_radar_market_query_switches_theme_universe(monkeypatch:
         assert all(theme["confidenceLabel"] == "待行情确认" for theme in cn_payload["themes"])
         assert all(theme["rotationStateEvidence"]["state"] == "insufficient_evidence" for theme in cn_payload["themes"])
         assert all(theme["rotationStateEvidence"]["flowEvidenceType"] == "none" for theme in cn_payload["themes"])
+        assert cn_payload["metadata"]["observedEvidence"]["present"] is False
         assert "静态主题库" in cn_payload["warning"]
     finally:
         client.close()
@@ -302,6 +305,8 @@ def test_market_rotation_radar_default_us_route_uses_injected_quote_provider_whe
         assert payload["metadata"]["quoteProvider"]["sourceType"] == "unofficial_proxy"
         assert payload["metadata"]["quoteProvider"]["freshness"] == "delayed"
         assert payload["metadata"]["quoteProvider"]["noExternalCalls"] is False
+        assert payload["metadata"]["observedEvidence"]["present"] is False
+        assert payload["metadata"]["observedEvidence"]["status"] == "absent"
         assert payload["metadata"]["quoteProvider"]["coverage"]["usableSymbolCount"] > 0
         assert payload["source"] == "computed"
         assert any(theme["id"] == "ai_applications" and theme["source"] != "fallback" for theme in payload["themes"])

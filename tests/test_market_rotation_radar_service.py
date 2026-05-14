@@ -237,6 +237,51 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(provider_meta["asOf"], "2026-05-07T09:45:00+00:00")
         self.assertTrue(payload["metadata"]["noExternalCalls"])
 
+    def test_observed_evidence_snapshot_is_consumed_without_quote_provider_calls(self) -> None:
+        provider_calls: list[list[str]] = []
+        observed_evidence = {
+            "quotes": {
+                "QQQ": _quote("QQQ", 0.4, freshness="cached"),
+                "SPY": _quote("SPY", 0.2, freshness="cached"),
+                "IWM": _quote("IWM", 0.1, freshness="cached"),
+                "IGV": _quote("IGV", 0.7, freshness="cached"),
+                "APP": _quote("APP", 3.0, volume_ratio=1.8, freshness="cached"),
+                "PLTR": _quote("PLTR", 2.4, volume_ratio=1.5, freshness="cached"),
+                "CRM": _quote("CRM", 1.8, volume_ratio=1.3, freshness="cached"),
+            },
+            "metadata": {
+                "quoteMode": "proxy",
+                "sourceType": "cache_snapshot",
+                "freshness": "cached",
+                "asOf": "2026-05-07T09:45:00+00:00",
+                "noExternalCalls": True,
+            },
+        }
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: provider_calls.append(list(symbols)) or {},
+            observed_evidence=observed_evidence,
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        provider_meta = payload["metadata"]["quoteProvider"]
+        observed_meta = payload["metadata"]["observedEvidence"]
+
+        self.assertEqual(provider_calls, [])
+        self.assertFalse(payload["isFallback"])
+        self.assertTrue(payload["metadata"]["noExternalCalls"])
+        self.assertEqual(provider_meta["present"], False)
+        self.assertEqual(provider_meta["status"], "absent")
+        self.assertTrue(observed_meta["present"])
+        self.assertEqual(observed_meta["status"], "partial")
+        self.assertEqual(observed_meta["sourceType"], "cache_snapshot")
+        self.assertEqual(observed_meta["freshness"], "cached")
+        self.assertEqual(observed_meta["coverage"]["usableSymbolCount"], 7)
+        self.assertEqual(observed_meta["asOf"], "2026-05-07T09:45:00+00:00")
+        self.assertTrue(
+            any(theme["id"] == "ai_applications" and theme["isFallback"] is False for theme in payload["themes"])
+        )
+
     def test_quote_provider_failure_falls_back_and_marks_external_call_boundary_honestly(self) -> None:
         service = MarketRotationRadarService(
             quote_provider=lambda symbols: (_ for _ in ()).throw(RuntimeError("provider down")),
