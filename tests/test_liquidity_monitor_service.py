@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -12,6 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
+from api.v1.schemas.liquidity_monitor import LiquidityMonitorResponse
 from src.services.liquidity_monitor_service import LiquidityMonitorService
 from src.services.market_cache import MarketCache
 from src.storage import DatabaseManager
@@ -19,7 +21,36 @@ from src.storage import DatabaseManager
 
 CN_TZ = timezone(timedelta(hours=8))
 REPO_ROOT = Path(__file__).resolve().parents[1]
+FIXTURE_DIR = REPO_ROOT / "tests/fixtures/liquidity_monitor"
 LIQUIDITY_MONITOR_SERVICE_PATH = REPO_ROOT / "src/services/liquidity_monitor_service.py"
+FROZEN_GOLDEN_NOW = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ)
+FROZEN_GOLDEN_NOW_ISO = FROZEN_GOLDEN_NOW.isoformat(timespec="seconds")
+LIQUIDITY_GOLDEN_FIXTURE_NAMES = (
+    "official_cached_macro_rates_context.json",
+    "mixed_official_proxy_context.json",
+    "missing_macro_rates_proxy_fallback_context.json",
+    "credit_stress_observation_only_context.json",
+    "delayed_proxy_fx_commodities_context.json",
+    "provider_unavailable_stale_malformed_context.json",
+)
+FORBIDDEN_PUBLIC_TERMS = (
+    "authorization",
+    "bearer ",
+    "cookie",
+    "set-cookie",
+    "session_id",
+    "api_key",
+    "access_token",
+    "refresh_token",
+    "password",
+    "credential",
+    "raw_provider_payload",
+    "provider_payload",
+    "stack_trace",
+    "traceback",
+    "http://",
+    "https://",
+)
 FORBIDDEN_LIQUIDITY_MONITOR_IMPORT_PREFIXES = (
     "data_provider",
     "requests",
@@ -60,6 +91,30 @@ class _FakeHistoryFrame:
 
     def __getitem__(self, key: str) -> _FakeSeries:
         return _FakeSeries(self._data[key])
+
+
+def _load_fixture(name: str) -> dict[str, Any]:
+    return json.loads((FIXTURE_DIR / name).read_text(encoding="utf-8"))
+
+
+def _iter_strings(value: Any):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            yield str(key)
+            yield from _iter_strings(item)
+        return
+    if isinstance(value, list):
+        for item in value:
+            yield from _iter_strings(item)
+        return
+    if isinstance(value, str):
+        yield value
+
+
+def _assert_no_sensitive_public_payload(value: Any) -> None:
+    public_text = "\n".join(_iter_strings(value)).lower()
+    for term in FORBIDDEN_PUBLIC_TERMS:
+        assert term not in public_text
 
 
 @pytest.fixture()
@@ -116,6 +171,616 @@ def _liquidity_monitor_imports() -> set[str]:
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported_modules.add(node.module)
     return imported_modules
+
+
+def _cache_only_liquidity_service_payload(build_seed) -> dict[str, Any]:
+    service = _make_service()
+    quote_map: dict[str, _FakeHistoryFrame] = {}
+    build_seed(service, quote_map)
+    with (
+        patch.object(LiquidityMonitorService, "_now", return_value=FROZEN_GOLDEN_NOW),
+        patch(
+            "src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame",
+            side_effect=lambda ticker: quote_map.get(ticker, _FakeHistoryFrame([])),
+            create=True,
+        ),
+        patch(
+            "src.services.liquidity_monitor_service.fetch_binance_funding_row",
+            side_effect=RuntimeError("network disabled for golden fixtures"),
+        ),
+    ):
+        return LiquidityMonitorResponse(**service.get_liquidity_monitor()).model_dump()
+
+
+def _seed_official_cached_macro_rates_context(
+    service: LiquidityMonitorService,
+    quote_map: dict[str, _FakeHistoryFrame],
+) -> None:
+    del quote_map
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 18.22,
+                    "changePercent": -4.66,
+                    "source": "fred",
+                    "sourceId": "fred:VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                },
+                {
+                    "symbol": "US2Y",
+                    "label": "US 2Y",
+                    "value": 4.62,
+                    "changePercent": -0.22,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS2",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                },
+                {
+                    "symbol": "US10Y",
+                    "label": "US 10Y",
+                    "value": 4.31,
+                    "changePercent": -0.31,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS10",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "US 30Y",
+                    "value": 4.58,
+                    "changePercent": -0.18,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS30",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                },
+                {
+                    "symbol": "SOFR",
+                    "label": "SOFR",
+                    "value": 5.31,
+                    "source": "fred",
+                    "sourceId": "fred:SOFR",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED SOFR",
+                    "unit": "%",
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                },
+            ],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "fx_commodities",
+        _cache_entry(
+            source="yahoo",
+            freshness="live",
+            items=[{"symbol": "DXY", "label": "DXY", "changePercent": 0.30, "value": 104.2}],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "us_breadth",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="live",
+            items=[
+                {"symbol": "SECTORS_UP", "label": "Sectors Up", "value": 8},
+                {"symbol": "SECTORS_DOWN", "label": "Sectors Down", "value": 3},
+            ],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "funds_flow",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="live",
+            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+
+
+def _seed_mixed_official_proxy_context(
+    service: LiquidityMonitorService,
+    quote_map: dict[str, _FakeHistoryFrame],
+) -> None:
+    del quote_map
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 18.22,
+                    "changePercent": -4.66,
+                    "source": "fred",
+                    "sourceId": "fred:VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                },
+                {
+                    "symbol": "US2Y",
+                    "label": "US 2Y",
+                    "value": 4.62,
+                    "changePercent": -0.22,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS2",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                },
+                {
+                    "symbol": "US10Y",
+                    "label": "US 10Y",
+                    "value": 4.31,
+                    "changePercent": -0.31,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS10",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "US 30Y",
+                    "value": 4.58,
+                    "changePercent": -0.18,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS30",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                },
+            ],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "fx_commodities",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {
+                    "symbol": "DXY",
+                    "label": "DXY",
+                    "changePercent": 0.30,
+                    "value": 104.2,
+                    "source": "yfinance_proxy",
+                    "sourceType": "proxy_public",
+                    "sourceLabel": "Yahoo Finance",
+                    "freshness": "delayed",
+                }
+            ],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "us_breadth",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {"symbol": "SECTORS_UP", "label": "Sectors Up", "value": 8},
+                {"symbol": "SECTORS_DOWN", "label": "Sectors Down", "value": 3},
+            ],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "funds_flow",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+
+
+def _seed_missing_macro_rates_proxy_fallback_context(
+    service: LiquidityMonitorService,
+    quote_map: dict[str, _FakeHistoryFrame],
+) -> None:
+    service.cache.set(
+        "us_breadth",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="live",
+            items=[
+                {"symbol": "SECTORS_UP", "label": "Sectors Up", "value": 8},
+                {"symbol": "SECTORS_DOWN", "label": "Sectors Down", "value": 3},
+            ],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "funds_flow",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="live",
+            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+    quote_index = [
+        datetime(2026, 5, 6, 16, 0, tzinfo=timezone.utc),
+        datetime(2026, 5, 7, 16, 0, tzinfo=timezone.utc),
+    ]
+    quote_map.update(
+        {
+            "^VIX": _FakeHistoryFrame([18.0, 15.0], index=quote_index),
+            "DX-Y.NYB": _FakeHistoryFrame([104.9, 104.2], index=quote_index),
+            "^TNX": _FakeHistoryFrame([45.8, 44.9], index=quote_index),
+            "^TYX": _FakeHistoryFrame([47.5, 46.9], index=quote_index),
+        }
+    )
+
+
+def _seed_credit_stress_observation_only_context(
+    service: LiquidityMonitorService,
+    quote_map: dict[str, _FakeHistoryFrame],
+) -> None:
+    del quote_map
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 18.22,
+                    "changePercent": -4.66,
+                    "source": "fred",
+                    "sourceId": "fred:VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                },
+                {
+                    "symbol": "US2Y",
+                    "label": "US 2Y",
+                    "value": 4.62,
+                    "changePercent": -0.22,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS2",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                },
+                {
+                    "symbol": "US10Y",
+                    "label": "US 10Y",
+                    "value": 4.31,
+                    "changePercent": -0.31,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS10",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "US 30Y",
+                    "value": 4.58,
+                    "changePercent": -0.18,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS30",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                },
+                {
+                    "symbol": "SOFR",
+                    "label": "SOFR",
+                    "value": 5.31,
+                    "source": "fred",
+                    "sourceId": "fred:SOFR",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED SOFR",
+                    "unit": "%",
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                },
+                {
+                    "symbol": "CREDIT",
+                    "label": "Credit spreads",
+                    "value": 341.0,
+                    "change": 12.0,
+                    "changePercent": 3.65,
+                    "source": "fred",
+                    "sourceId": "fred:BAMLH0A0HYM2",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED ICE BofA US High Yield Index Option-Adjusted Spread",
+                    "unit": "bps",
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                    "observationOnly": True,
+                    "includedInScore": False,
+                },
+            ],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "fx_commodities",
+        _cache_entry(
+            source="yahoo",
+            freshness="live",
+            items=[{"symbol": "DXY", "label": "DXY", "changePercent": 0.30, "value": 104.2}],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "us_breadth",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="live",
+            items=[
+                {"symbol": "SECTORS_UP", "label": "Sectors Up", "value": 8},
+                {"symbol": "SECTORS_DOWN", "label": "Sectors Down", "value": 3},
+            ],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "funds_flow",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="live",
+            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+
+
+def _seed_delayed_proxy_fx_commodities_context(
+    service: LiquidityMonitorService,
+    quote_map: dict[str, _FakeHistoryFrame],
+) -> None:
+    del quote_map
+    service.cache.set(
+        "volatility",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "changePercent": -2.5,
+                    "value": 15.2,
+                    "source": "yfinance_proxy",
+                    "sourceType": "proxy_public",
+                    "sourceLabel": "Yahoo Finance",
+                    "freshness": "delayed",
+                }
+            ],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "fx_commodities",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {
+                    "symbol": "DXY",
+                    "label": "DXY",
+                    "changePercent": -0.4,
+                    "value": 104.2,
+                    "source": "yfinance_proxy",
+                    "sourceType": "proxy_public",
+                    "sourceLabel": "Yahoo Finance",
+                    "freshness": "delayed",
+                }
+            ],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {
+                    "symbol": "US10Y",
+                    "label": "10Y yield",
+                    "changePercent": -0.2,
+                    "value": 4.1,
+                    "source": "yfinance_proxy",
+                    "sourceType": "proxy_public",
+                    "sourceLabel": "Yahoo Finance",
+                    "freshness": "delayed",
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "30Y yield",
+                    "changePercent": -0.1,
+                    "value": 4.6,
+                    "source": "yfinance_proxy",
+                    "sourceType": "proxy_public",
+                    "sourceLabel": "Yahoo Finance",
+                    "freshness": "delayed",
+                },
+            ],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "us_breadth",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {"symbol": "SECTORS_UP", "label": "Sectors Up", "value": 8},
+                {"symbol": "SECTORS_DOWN", "label": "Sectors Down", "value": 3},
+            ],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "funds_flow",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+
+
+def _seed_provider_unavailable_stale_malformed_context(
+    service: LiquidityMonitorService,
+    quote_map: dict[str, _FakeHistoryFrame],
+) -> None:
+    del quote_map
+    stale_as_of = (FROZEN_GOLDEN_NOW - timedelta(hours=8)).isoformat(timespec="seconds")
+    service.cache.set(
+        "volatility",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="live",
+            items=[
+                {"symbol": "VIX", "label": "VIX", "changePercent": "oops", "value": None},
+                "malformed-entry",
+            ],
+            updated_at=stale_as_of,
+            as_of=stale_as_of,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="yahoo",
+            freshness="stale",
+            items=[{"symbol": "US10Y", "label": "10Y yield", "changePercent": "nan", "value": "n/a"}],
+            updated_at=stale_as_of,
+            as_of=stale_as_of,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "fx_commodities",
+        _cache_entry(
+            source="mock",
+            freshness="mock",
+            is_fallback=True,
+            items=[{"symbol": "DXY", "label": "DXY", "changePercent": -0.4, "value": 104.2}],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "cn_flows",
+        _cache_entry(
+            source="fallback",
+            freshness="fallback",
+            is_fallback=True,
+            items=[{"symbol": "NORTHBOUND", "label": "北向资金", "value": 88.8}],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+            warning="备用快照",
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "futures",
+        _cache_entry(
+            source="fallback",
+            freshness="fallback",
+            is_fallback=True,
+            items=[{"symbol": "NQ", "label": "纳指期货", "changePercent": 1.5, "value": 18420.0}],
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+            warning="备用快照",
+        ),
+        ttl_seconds=30,
+    )
 
 
 def test_liquidity_monitor_runtime_source_stays_cache_only() -> None:
@@ -1063,3 +1728,58 @@ def test_official_credit_stress_observation_is_summary_only_and_does_not_change_
     assert with_credit_indicator["scoreWeight"] == 6
     assert with_credit_indicator["scoreContribution"] == 6
     assert "CREDIT +341.00bps" in str(with_credit_indicator["summary"])
+
+
+LIQUIDITY_GOLDEN_SCENARIOS = (
+    ("official_cached_macro_rates_context.json", _seed_official_cached_macro_rates_context),
+    ("mixed_official_proxy_context.json", _seed_mixed_official_proxy_context),
+    ("missing_macro_rates_proxy_fallback_context.json", _seed_missing_macro_rates_proxy_fallback_context),
+    ("credit_stress_observation_only_context.json", _seed_credit_stress_observation_only_context),
+    ("delayed_proxy_fx_commodities_context.json", _seed_delayed_proxy_fx_commodities_context),
+    ("provider_unavailable_stale_malformed_context.json", _seed_provider_unavailable_stale_malformed_context),
+)
+
+
+@pytest.mark.parametrize(("fixture_name", "build_seed"), LIQUIDITY_GOLDEN_SCENARIOS)
+def test_liquidity_monitor_golden_fixtures_match_public_dto_contract(
+    isolated_db: DatabaseManager,
+    fixture_name: str,
+    build_seed,
+) -> None:
+    del isolated_db
+    expected = LiquidityMonitorResponse(**_load_fixture(fixture_name)).model_dump()
+    actual = _cache_only_liquidity_service_payload(build_seed)
+
+    assert actual == expected
+    _assert_no_sensitive_public_payload(actual)
+
+
+def test_liquidity_monitor_credit_stress_fixture_remains_observation_only_and_preserves_baseline_score(
+    isolated_db: DatabaseManager,
+) -> None:
+    del isolated_db
+    baseline = _cache_only_liquidity_service_payload(_seed_official_cached_macro_rates_context)
+    with_credit = _cache_only_liquidity_service_payload(_seed_credit_stress_observation_only_context)
+
+    baseline_indicator = {item["key"]: item for item in baseline["indicators"]}["us_rates_pressure"]
+    with_credit_indicator = {item["key"]: item for item in with_credit["indicators"]}["us_rates_pressure"]
+
+    assert baseline["score"] == with_credit["score"] == {
+        "value": 69,
+        "regime": "supportive",
+        "confidence": 0.72,
+        "includedIndicatorCount": 5,
+        "possibleIndicatorWeight": 43,
+        "includedIndicatorWeight": 31,
+    }
+    assert "CREDIT" not in str(baseline_indicator["summary"])
+    assert "CREDIT +341.00bps" in str(with_credit_indicator["summary"])
+    assert baseline_indicator["scoreContribution"] == with_credit_indicator["scoreContribution"] == 6
+
+
+def test_all_liquidity_golden_fixtures_are_explicitly_enumerated_and_sanitized() -> None:
+    fixture_paths = sorted(FIXTURE_DIR.glob("*.json"))
+
+    assert {path.name for path in fixture_paths} == set(LIQUIDITY_GOLDEN_FIXTURE_NAMES)
+    for path in fixture_paths:
+        _assert_no_sensitive_public_payload(json.loads(path.read_text(encoding="utf-8")))

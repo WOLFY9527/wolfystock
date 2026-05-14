@@ -1,0 +1,146 @@
+{
+  "advisoryDisclosure": "仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。",
+  "endpoint": "/api/v1/market/liquidity-monitor",
+  "freshness": {
+    "latestAsOf": "2026-05-07T10:00:00+08:00",
+    "status": "delayed",
+    "weakestIndicatorFreshness": "delayed"
+  },
+  "generatedAt": "2026-05-07T10:00:00+08:00",
+  "indicators": [
+    {
+      "freshness": "unavailable",
+      "includedInScore": false,
+      "key": "crypto_spot_momentum",
+      "label": "Crypto 现货动量",
+      "scoreContribution": 0,
+      "scoreWeight": 6,
+      "status": "unavailable",
+      "summary": "BTC / ETH / BNB 缓存不足",
+      "updatedAt": null
+    },
+    {
+      "freshness": "unavailable",
+      "includedInScore": false,
+      "key": "crypto_funding",
+      "label": "Crypto Funding",
+      "scoreContribution": 0,
+      "scoreWeight": 0,
+      "status": "unavailable",
+      "summary": "缺少 BTC/ETH 现货上下文，未触发实时 funding 查询",
+      "updatedAt": null
+    },
+    {
+      "freshness": "cached",
+      "includedInScore": true,
+      "key": "vix_pressure",
+      "label": "VIX / 波动率压力",
+      "scoreContribution": 8,
+      "scoreWeight": 8,
+      "status": "partial",
+      "summary": "-4.66% | 来源 FRED VIXCLS (fred) | 类型 official_public | 截至 2026-05-07T10:00:00+08:00 | 新鲜度 cached",
+      "updatedAt": "2026-05-07T10:00:00+08:00"
+    },
+    {
+      "freshness": "live",
+      "includedInScore": true,
+      "key": "usd_pressure",
+      "label": "DXY / 美元压力",
+      "scoreContribution": -6,
+      "scoreWeight": 6,
+      "status": "partial",
+      "summary": "DXY +0.30% | 来源 yahoo | 截至 2026-05-07T10:00:00+08:00 | 新鲜度 live",
+      "updatedAt": "2026-05-07T10:00:00+08:00"
+    },
+    {
+      "freshness": "cached",
+      "includedInScore": true,
+      "key": "us_rates_pressure",
+      "label": "US Rates / 利率压力",
+      "scoreContribution": 6,
+      "scoreWeight": 6,
+      "status": "partial",
+      "summary": "US2Y -0.22% | US10Y -0.31% | US30Y -0.18% | SOFR +5.31% | 来源 US Treasury (treasury) | 类型 official_public | 截至 2026-05-07T10:00:00+08:00 | 新鲜度 cached",
+      "updatedAt": null
+    },
+    {
+      "freshness": "delayed",
+      "includedInScore": true,
+      "key": "us_etf_flow_proxy",
+      "label": "US ETF 资金代理",
+      "scoreContribution": 5,
+      "scoreWeight": 5,
+      "status": "partial",
+      "summary": "+1.20",
+      "updatedAt": "2026-05-07T10:00:00+08:00"
+    },
+    {
+      "freshness": "delayed",
+      "includedInScore": true,
+      "key": "us_breadth_proxy",
+      "label": "US 广度代理",
+      "scoreContribution": 6,
+      "scoreWeight": 6,
+      "status": "partial",
+      "summary": "8/3",
+      "updatedAt": "2026-05-07T10:00:00+08:00"
+    },
+    {
+      "freshness": "unavailable",
+      "includedInScore": false,
+      "key": "cn_hk_index_context",
+      "label": "CN/HK 指数环境",
+      "scoreContribution": 0,
+      "scoreWeight": 0,
+      "status": "unavailable",
+      "summary": "缺少可靠指数快照",
+      "updatedAt": null
+    },
+    {
+      "freshness": "unavailable",
+      "includedInScore": false,
+      "key": "cn_hk_flows",
+      "label": "CN/HK 资金流",
+      "scoreContribution": 0,
+      "scoreWeight": 6,
+      "status": "unavailable",
+      "summary": "Phase 1 仅在非 fallback 真实流量数据存在时启用",
+      "updatedAt": null
+    },
+    {
+      "freshness": "unavailable",
+      "includedInScore": false,
+      "key": "cn_money_market_rates",
+      "label": "CN 货币市场利率",
+      "scoreContribution": 0,
+      "scoreWeight": 0,
+      "status": "unavailable",
+      "summary": "Phase 1 仅观察，不单独计分",
+      "updatedAt": null
+    },
+    {
+      "freshness": "unavailable",
+      "includedInScore": false,
+      "key": "futures_premarket",
+      "label": "期货 / 盘前方向",
+      "scoreContribution": 0,
+      "scoreWeight": 0,
+      "status": "unavailable",
+      "summary": "Phase 1 fallback-only，不参与判断",
+      "updatedAt": null
+    }
+  ],
+  "score": {
+    "confidence": 0.72,
+    "includedIndicatorCount": 5,
+    "includedIndicatorWeight": 31,
+    "possibleIndicatorWeight": 43,
+    "regime": "supportive",
+    "value": 69
+  },
+  "sourceMetadata": {
+    "externalProviderCalls": false,
+    "marketCacheMutation": false,
+    "providerRuntimeChanged": false
+  }
+}

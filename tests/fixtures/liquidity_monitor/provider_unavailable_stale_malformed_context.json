@@ -1,0 +1,146 @@
+{
+  "advisoryDisclosure": "仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。",
+  "endpoint": "/api/v1/market/liquidity-monitor",
+  "freshness": {
+    "latestAsOf": "2026-05-07T02:00:00+08:00",
+    "status": "delayed",
+    "weakestIndicatorFreshness": "delayed"
+  },
+  "generatedAt": "2026-05-07T10:00:00+08:00",
+  "indicators": [
+    {
+      "freshness": "unavailable",
+      "includedInScore": false,
+      "key": "crypto_spot_momentum",
+      "label": "Crypto 现货动量",
+      "scoreContribution": 0,
+      "scoreWeight": 6,
+      "status": "unavailable",
+      "summary": "BTC / ETH / BNB 缓存不足",
+      "updatedAt": null
+    },
+    {
+      "freshness": "unavailable",
+      "includedInScore": false,
+      "key": "crypto_funding",
+      "label": "Crypto Funding",
+      "scoreContribution": 0,
+      "scoreWeight": 0,
+      "status": "unavailable",
+      "summary": "缺少 BTC/ETH 现货上下文，未触发实时 funding 查询",
+      "updatedAt": null
+    },
+    {
+      "freshness": "delayed",
+      "includedInScore": true,
+      "key": "vix_pressure",
+      "label": "VIX / 波动率压力",
+      "scoreContribution": 0,
+      "scoreWeight": 8,
+      "status": "partial",
+      "summary": "待确认 | 新鲜度 delayed",
+      "updatedAt": "2026-05-07T02:00:00+08:00"
+    },
+    {
+      "freshness": "mock",
+      "includedInScore": false,
+      "key": "usd_pressure",
+      "label": "DXY / 美元压力",
+      "scoreContribution": 0,
+      "scoreWeight": 6,
+      "status": "unavailable",
+      "summary": "仅在可靠 FX / 宏观缓存存在时启用 | 来源 Yahoo Finance (yfinance_proxy) | 类型 proxy_public | 原因 DXY 代理不可用",
+      "updatedAt": "2026-05-07T10:00:00+08:00"
+    },
+    {
+      "freshness": "stale",
+      "includedInScore": false,
+      "key": "us_rates_pressure",
+      "label": "US Rates / 利率压力",
+      "scoreContribution": 0,
+      "scoreWeight": 6,
+      "status": "unavailable",
+      "summary": "仅在可靠利率缓存存在时启用 | 来源 Yahoo Finance (yfinance_proxy) | 类型 proxy_public | 原因 US rates 代理不可用",
+      "updatedAt": "2026-05-07T02:00:00+08:00"
+    },
+    {
+      "freshness": "unavailable",
+      "includedInScore": false,
+      "key": "us_etf_flow_proxy",
+      "label": "US ETF 资金代理",
+      "scoreContribution": 0,
+      "scoreWeight": 5,
+      "status": "unavailable",
+      "summary": "仅在可靠 funds-flow 缓存存在时启用",
+      "updatedAt": null
+    },
+    {
+      "freshness": "unavailable",
+      "includedInScore": false,
+      "key": "us_breadth_proxy",
+      "label": "US Broadth / 广度代理",
+      "scoreContribution": 0,
+      "scoreWeight": 6,
+      "status": "unavailable",
+      "summary": "仅在可靠 breadth 缓存存在时启用",
+      "updatedAt": null
+    },
+    {
+      "freshness": "unavailable",
+      "includedInScore": false,
+      "key": "cn_hk_index_context",
+      "label": "CN/HK 指数环境",
+      "scoreContribution": 0,
+      "scoreWeight": 0,
+      "status": "unavailable",
+      "summary": "缺少可靠指数快照",
+      "updatedAt": null
+    },
+    {
+      "freshness": "fallback",
+      "includedInScore": false,
+      "key": "cn_hk_flows",
+      "label": "CN/HK 资金流",
+      "scoreContribution": 0,
+      "scoreWeight": 6,
+      "status": "unavailable",
+      "summary": "Phase 1 仅在非 fallback 真实流量数据存在时启用",
+      "updatedAt": "2026-05-07T10:00:00+08:00"
+    },
+    {
+      "freshness": "stale",
+      "includedInScore": false,
+      "key": "cn_money_market_rates",
+      "label": "CN 货币市场利率",
+      "scoreContribution": 0,
+      "scoreWeight": 0,
+      "status": "unavailable",
+      "summary": "Phase 1 仅观察，不单独计分",
+      "updatedAt": "2026-05-07T02:00:00+08:00"
+    },
+    {
+      "freshness": "fallback",
+      "includedInScore": false,
+      "key": "futures_premarket",
+      "label": "期货 / 盘前方向",
+      "scoreContribution": 0,
+      "scoreWeight": 0,
+      "status": "unavailable",
+      "summary": "Phase 1 fallback-only，不参与判断",
+      "updatedAt": "2026-05-07T10:00:00+08:00"
+    }
+  ],
+  "score": {
+    "confidence": 0.19,
+    "includedIndicatorCount": 1,
+    "includedIndicatorWeight": 8,
+    "possibleIndicatorWeight": 43,
+    "regime": "unavailable",
+    "value": 50
+  },
+  "sourceMetadata": {
+    "externalProviderCalls": true,
+    "marketCacheMutation": false,
+    "providerRuntimeChanged": false
+  }
+}

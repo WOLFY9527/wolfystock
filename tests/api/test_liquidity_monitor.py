@@ -3,12 +3,30 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import api.v1.endpoints.liquidity_monitor as liquidity_monitor
+from api.v1.schemas.liquidity_monitor import LiquidityMonitorResponse
+
+
+FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "liquidity_monitor"
+FIXTURE_NAMES = (
+    "official_cached_macro_rates_context.json",
+    "mixed_official_proxy_context.json",
+    "missing_macro_rates_proxy_fallback_context.json",
+    "credit_stress_observation_only_context.json",
+    "delayed_proxy_fx_commodities_context.json",
+    "provider_unavailable_stale_malformed_context.json",
+)
+
+
+def _load_fixture(name: str) -> dict:
+    return json.loads((FIXTURE_DIR / name).read_text(encoding="utf-8"))
 
 
 def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
@@ -120,3 +138,18 @@ def test_liquidity_monitor_route_preserves_explicit_non_live_indicator_contracts
     assert indicators["vix_pressure"]["status"] == "partial"
     assert indicators["vix_pressure"]["freshness"] == "delayed"
     assert indicators["vix_pressure"]["includedInScore"] is True
+
+
+def test_liquidity_monitor_route_accepts_all_golden_fixture_payloads() -> None:
+    app = FastAPI()
+    app.include_router(liquidity_monitor.router, prefix="/api/v1/market")
+
+    for fixture_name in FIXTURE_NAMES:
+        payload = LiquidityMonitorResponse(**_load_fixture(fixture_name)).model_dump()
+
+        with patch("api.v1.endpoints.liquidity_monitor.LiquidityMonitorService") as mock_service:
+            mock_service.return_value.get_liquidity_monitor.return_value = payload
+            response = TestClient(app).get("/api/v1/market/liquidity-monitor")
+
+        assert response.status_code == 200
+        assert response.json() == payload
