@@ -336,7 +336,10 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(item.failedStepCount, 0)
         self.assertEqual(item.status, "failed")
         self.assertIn("provider timeout", item.errorSummary or "")
+        dumped = str(item.model_dump()).lower()
         self.assertNotIn("SECRET", str(item.model_dump()))
+        for forbidden in ("raw_response", "request_body", "response_body", "traceback", "provider_payload"):
+            self.assertNotIn(forbidden, dumped)
         self.assertEqual(detail.contextLabel, "MarketSentimentCard")
         self.assertEqual(detail.steps, [])
 

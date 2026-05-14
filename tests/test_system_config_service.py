@@ -1025,6 +1025,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         import requests
 
         self._rewrite_env("TWELVE_DATA_API_KEY=td-secret-key")
+        observed_states = set()
         cases = [
             {
                 "name": "missing_key",
@@ -1125,6 +1126,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         for case in cases:
             with self.subTest(state=case["name"]):
                 self._rewrite_env(*case["env_lines"])
+                before_env = self.env_path.read_text(encoding="utf-8")
                 mock_request.reset_mock()
                 mock_request.side_effect = case["responses"]
 
@@ -1132,12 +1134,32 @@ class SystemConfigServiceTestCase(unittest.TestCase):
 
                 self.assertEqual(payload["status"], case["expected_status"])
                 self.assertEqual(self._hk_state_check(payload)["error_type"], case["expected_state"])
+                observed_states.add(self._hk_state_check(payload)["error_type"])
+                self.assertEqual(self.env_path.read_text(encoding="utf-8"), before_env)
+                self.assertTrue(payload["summary"])
+                self.assertTrue(payload["suggestion"])
                 serialized = str(payload)
                 self.assertNotIn("td-secret-key", serialized)
                 self.assertNotIn("apikey=", serialized)
+                for forbidden in ("traceback", "request_body", "response_body", "raw_response", "connectionerror", "boom"):
+                    self.assertNotIn(forbidden, serialized.lower())
 
                 if case["name"] in {"missing_key", "configured_unverified"}:
                     mock_request.assert_not_called()
+
+        self.assertEqual(
+            observed_states,
+            {
+                "missing_key",
+                "configured_unverified",
+                "ok_hk_quote_history",
+                "quota_limited",
+                "hk_entitlement_missing",
+                "timeout",
+                "malformed_response",
+                "provider_error",
+            },
+        )
 
     @patch.object(SystemConfigService, "_reload_runtime_singletons")
     def test_update_with_reload_resets_runtime_singletons(

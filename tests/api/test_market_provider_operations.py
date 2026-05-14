@@ -545,6 +545,7 @@ def test_tickflow_projection_reports_reachable_and_breadth_entitlement_usable_fr
         ("tickflow_timeout", "timeout", "timeout", False, "unknown", None),
         ("tickflow_market_stats_empty", "empty", "reachable", True, "empty", False),
         ("tickflow_market_stats_malformed", "malformed", "reachable", True, "malformed", False),
+        ("tickflow_unavailable", "unreachable", "unreachable", False, "unknown", None),
     ],
 )
 def test_tickflow_projection_distinguishes_entitlement_and_health_reason_codes(

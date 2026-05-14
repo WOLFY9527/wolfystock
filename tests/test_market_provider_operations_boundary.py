@@ -32,6 +32,11 @@ FORBIDDEN_PROVIDER_OPERATIONS_CACHE_PATTERNS = (
     r"\bself\.cache\.set\(",
     r"\bmarket_cache\.set\(",
 )
+FORBIDDEN_PROVIDER_OPERATIONS_RUNTIME_PATTERNS = (
+    r"\breset_instance\(",
+    r"\bvalidate_provider_connection\(",
+    r"\btest_builtin_data_source\(",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -81,6 +86,12 @@ def test_market_provider_operations_source_stays_read_only_and_local() -> None:
             "Market Provider Operations must stay read-only. Do not refresh or "
             "mutate MarketCache from market_provider_operations_service.py; keep "
             f"`{pattern}` out of this file"
+        )
+    for pattern in FORBIDDEN_PROVIDER_OPERATIONS_RUNTIME_PATTERNS:
+        assert re.search(pattern, source_text) is None, (
+            "Market Provider Operations must stay observer-only. Do not add "
+            "singleton resets or provider runtime validation probes to the read "
+            f"model service; keep `{pattern}` out of this file"
         )
 
 

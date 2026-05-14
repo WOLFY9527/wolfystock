@@ -142,6 +142,54 @@ class SettingsDataSourceValidationApiTestCase(unittest.TestCase):
             timeout_seconds=5.0,
         )
 
+    def test_builtin_data_source_validation_endpoint_preserves_twelve_data_hk_state_vocabulary(self) -> None:
+        service = Mock()
+        cases = (
+            ("missing_key", "missing_key"),
+            ("configured_unverified", "partial"),
+            ("ok_hk_quote_history", "success"),
+            ("quota_limited", "partial"),
+            ("hk_entitlement_missing", "partial"),
+            ("timeout", "partial"),
+            ("malformed_response", "partial"),
+            ("provider_error", "partial"),
+        )
+
+        for diagnostic_state, status in cases:
+            with self.subTest(diagnostic_state=diagnostic_state):
+                expected = {
+                    "provider": "twelve_data",
+                    "ok": status == "success",
+                    "status": status,
+                    "checked_at": "2026-05-14T00:00:00+00:00",
+                    "duration_ms": 88,
+                    "key_masked": "td-s...-key",
+                    "checks": [
+                        {
+                            "name": "hk_quote_history",
+                            "endpoint": "/quote + /time_series",
+                            "ok": diagnostic_state == "ok_hk_quote_history",
+                            "http_status": 200 if diagnostic_state == "ok_hk_quote_history" else None,
+                            "duration_ms": 88,
+                            "error_type": diagnostic_state,
+                            "message": f"diagnostic:{diagnostic_state}",
+                        }
+                    ],
+                    "summary": f"summary:{diagnostic_state}",
+                    "suggestion": f"suggestion:{diagnostic_state}",
+                }
+                service.test_builtin_data_source.return_value = expected
+
+                payload = system_config.test_builtin_data_source(
+                    request=TestBuiltinDataSourceRequest(provider="twelve_data", symbol="HK00700"),
+                    service=service,
+                ).model_dump()
+
+                self.assertEqual(payload, expected)
+                self.assertEqual(payload["checks"][0]["error_type"], diagnostic_state)
+
+        self.assertEqual(service.test_builtin_data_source.call_count, len(cases))
+
 
 if __name__ == "__main__":
     unittest.main()

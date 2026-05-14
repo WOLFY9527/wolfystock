@@ -440,6 +440,22 @@ def _provider_health_class(item: Any) -> str:
     raise AssertionError(f"Unclassified provider health item: {item!r}")
 
 
+def _provider_diagnostic_public_class(projection: dict[str, Any]) -> str:
+    status = str(projection.get("status") or "").lower()
+    credential_state = str(projection.get("credentialState") or "").lower()
+    if credential_state == "missing" or status == "key_missing":
+        return "missing credential"
+    if status == "permission_denied":
+        return "permission denied"
+    if status == "timeout":
+        return "timeout"
+    if status in {"empty", "malformed", "unreachable"}:
+        return "entitlement unavailable"
+    if status in {"key_configured", "breadth_entitlement_usable"} and bool(projection.get("credentialConfigured")):
+        return "configured"
+    raise AssertionError(f"Unclassified provider diagnostic projection: {projection!r}")
+
+
 def test_admin_logs_read_models_match_public_diagnostic_contracts() -> None:
     payload = _load_fixture("logs_read_models.json")
 
@@ -540,6 +556,68 @@ def test_provider_health_public_models_distinguish_required_operator_classes() -
         "fallback",
         "stale cache",
     }
+
+
+def test_cross_surface_provider_diagnostics_reduce_to_public_operator_vocabulary() -> None:
+    response = _build_provider_health_examples()
+    projections = [
+        {
+            "status": "key_missing",
+            "credentialState": "missing",
+            "credentialConfigured": False,
+        },
+        {
+            "status": "key_configured",
+            "credentialState": "configured",
+            "credentialConfigured": True,
+        },
+        {
+            "status": "breadth_entitlement_usable",
+            "credentialState": "configured",
+            "credentialConfigured": True,
+        },
+        {
+            "status": "permission_denied",
+            "credentialState": "configured",
+            "credentialConfigured": True,
+        },
+        {
+            "status": "timeout",
+            "credentialState": "configured",
+            "credentialConfigured": True,
+        },
+        {
+            "status": "empty",
+            "credentialState": "configured",
+            "credentialConfigured": True,
+        },
+        {
+            "status": "malformed",
+            "credentialState": "configured",
+            "credentialConfigured": True,
+        },
+        {
+            "status": "unreachable",
+            "credentialState": "configured",
+            "credentialConfigured": True,
+        },
+    ]
+
+    assert {
+        *(_provider_health_class(item) for item in response.readiness.items),
+        *(_provider_health_class(item) for item in response.operations.items),
+        *(_provider_diagnostic_public_class(item) for item in projections),
+    } == {
+        "configured",
+        "missing credential",
+        "permission denied",
+        "timeout",
+        "fallback",
+        "stale cache",
+        "entitlement unavailable",
+    }
+
+    _assert_no_sensitive_terms(projections)
 
 
 def test_provider_health_public_models_expose_presence_and_count_only_for_credentials() -> None:

@@ -197,6 +197,77 @@ class DataSourceValidationTestCase(unittest.TestCase):
         self.assertNotIn("td-secret-key", serialized)
         self.assertNotIn("apikey=", serialized)
 
+    @patch("src.services.system_config_service.requests.request")
+    def test_twelve_data_hk_bounded_error_states_stay_sanitized_without_raw_provider_details(self, mock_request) -> None:
+        import requests
+
+        cases = [
+            (
+                "hk_entitlement_missing",
+                [
+                    _Response(200, {"status": "ok", "price": "503.5"}),
+                    _Response(403, {"status": "error", "message": "HK premium required td-secret-key"}),
+                ],
+                "partial",
+            ),
+            (
+                "timeout",
+                [
+                    _Response(200, {"status": "ok", "price": "503.5"}),
+                    requests.exceptions.Timeout(),
+                ],
+                "partial",
+            ),
+            (
+                "malformed_response",
+                [
+                    _Response(200, {"status": "ok", "price": "503.5"}),
+                    _Response(200, {"meta": {"symbol": "0700"}, "values": []}),
+                ],
+                "partial",
+            ),
+            (
+                "provider_error",
+                [
+                    requests.exceptions.ConnectionError("boom token=td-secret-key"),
+                    _Response(
+                        200,
+                        {
+                            "meta": {"symbol": "0700", "exchange": "HKEX"},
+                            "values": [{"datetime": "2026-05-14", "close": "503.5"}],
+                        },
+                    ),
+                ],
+                "partial",
+            ),
+        ]
+
+        for expected_state, responses, expected_status in cases:
+            with self.subTest(expected_state=expected_state):
+                self._write_twelve_data_key()
+                before_env = self.env_path.read_text(encoding="utf-8")
+                mock_request.reset_mock()
+                mock_request.side_effect = responses
+
+                payload = self.service.test_builtin_data_source(provider="twelve_data", symbol="HK00700")
+
+                self.assertEqual(payload["status"], expected_status)
+                self.assertEqual(self._hk_state_check(payload)["error_type"], expected_state)
+                self.assertEqual(self.env_path.read_text(encoding="utf-8"), before_env)
+                serialized = str(payload).lower()
+                for forbidden in (
+                    "td-secret-key",
+                    "apikey=",
+                    "token=",
+                    "traceback",
+                    "raw_response",
+                    "request_body",
+                    "response_body",
+                    "connectionerror",
+                    "boom",
+                ):
+                    self.assertNotIn(forbidden, serialized)
+
 
 if __name__ == "__main__":
     unittest.main()
