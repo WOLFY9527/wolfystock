@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useMemo, useState } from 'react';
 import type { MarketDataMeta, MarketOverviewItem, MarketOverviewPanel, MarketProviderHealthStatus } from '../../api/marketOverview';
 import type {
   CnShortSentimentResponse,
@@ -18,13 +18,12 @@ import { FundsFlowCard } from './FundsFlowCard';
 import { MarketSentimentCard } from './MarketSentimentCard';
 import { MarketOverviewCard } from './MarketOverviewCard';
 import { VolatilityCard } from './VolatilityCard';
-import {
-  MarketOverviewWorkbenchGrid,
-  type MarketOverviewActionHintView,
-  type MarketOverviewCoverageRailView,
-  type MarketOverviewExecutiveGroupView,
-  type MarketOverviewQualityRailView,
-  type MarketOverviewSignalWatchRailItem,
+import type {
+  MarketOverviewActionHintView,
+  MarketOverviewCoverageRailView,
+  MarketOverviewExecutiveGroupView,
+  MarketOverviewQualityRailView,
+  MarketOverviewSignalWatchRailItem,
 } from './MarketOverviewWorkbenchGrid';
 import {
   MarketOverviewWorkbenchTopSurface,
@@ -43,9 +42,19 @@ import {
   MarketOverviewPanelFooter,
   MarketOverviewRefreshButton,
 } from './marketOverviewPrimitives';
-import { TerminalPageShell } from '../terminal';
+import { TerminalChip, TerminalGrid, TerminalPageShell, TerminalPanel } from '../terminal';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
+
+const MARKET_OVERVIEW_GRID_FALLBACK_MIN_MS = 120;
+
+const LazyMarketOverviewWorkbenchGrid = lazy(async () => {
+  const [module] = await Promise.all([
+    import('./MarketOverviewWorkbenchGrid'),
+    new Promise((resolve) => setTimeout(resolve, MARKET_OVERVIEW_GRID_FALLBACK_MIN_MS)),
+  ]);
+  return { default: module.MarketOverviewWorkbenchGrid };
+});
 
 export type PanelState = {
   indices?: MarketOverviewPanel;
@@ -518,6 +527,84 @@ function scoreTone(score: MarketTemperatureScore, pressure = false): string {
   }
   return score.value >= 76 ? 'text-amber-200' : score.value >= 61 ? 'text-emerald-400' : score.value <= 45 ? 'text-sky-300' : 'text-white';
 }
+
+const MarketOverviewWorkbenchGridFallback: React.FC<{ language: 'zh' | 'en' }> = ({ language }) => {
+  const isEnglish = language === 'en';
+  const loadingLabel = isEnglish ? 'Loading grid' : '加载总览网格';
+  const loadingTitle = isEnglish ? 'Preparing market panels' : '正在准备市场面板';
+  const loadingLine = isEnglish ? 'Top-level state stays live while the workbench grid loads.' : '状态和快照已就绪，网格面板正在懒加载。';
+  const railTitle = isEnglish ? 'Coverage rail' : '侧栏摘要';
+  const railLine = isEnglish ? 'The side rail returns without changing labels or data semantics.' : '侧栏会在网格返回后保持原有标签与数据语义。';
+
+  return (
+    <TerminalGrid data-testid="market-overview-grid-loading" data-workbench-split="9:3" aria-busy="true" className="gap-4">
+      <section
+        data-testid="market-overview-primary-rail-loading"
+        data-mobile-order="main"
+        className="flex min-w-0 flex-col gap-4 xl:col-span-9"
+      >
+        <TerminalPanel dense className="min-h-[152px] bg-white/[0.02]">
+          <div className="flex h-full min-w-0 flex-col justify-between gap-4">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+                  {isEnglish ? 'Workbench' : 'Workbench'}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-white/82">{loadingTitle}</p>
+              </div>
+              <TerminalChip variant="info" className="shrink-0 px-2 py-1 text-[10px] font-bold uppercase tracking-widest">
+                {loadingLabel}
+              </TerminalChip>
+            </div>
+            <p className="max-w-2xl text-xs leading-5 text-white/46">{loadingLine}</p>
+            <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+              {Array.from({ length: 2 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="min-h-[72px] rounded-xl border border-white/[0.04] bg-white/[0.03]"
+                  aria-hidden="true"
+                />
+              ))}
+            </div>
+          </div>
+        </TerminalPanel>
+        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, index) => (
+            <TerminalPanel key={index} dense className="min-h-[148px] bg-white/[0.02]">
+              <div className="flex h-full min-w-0 flex-col gap-3">
+                <div className="h-3 w-24 rounded-full bg-white/[0.08]" aria-hidden="true" />
+                <div className="h-6 w-40 rounded-full bg-white/[0.06]" aria-hidden="true" />
+                <div className="mt-auto space-y-2">
+                  <div className="h-3 w-full rounded-full bg-white/[0.05]" aria-hidden="true" />
+                  <div className="h-3 w-5/6 rounded-full bg-white/[0.05]" aria-hidden="true" />
+                  <div className="h-3 w-2/3 rounded-full bg-white/[0.05]" aria-hidden="true" />
+                </div>
+              </div>
+            </TerminalPanel>
+          ))}
+        </div>
+      </section>
+      <aside
+        data-testid="market-overview-side-rail-loading"
+        data-mobile-order="rail"
+        className="flex min-w-0 flex-col gap-3 xl:col-span-3"
+      >
+        <TerminalPanel dense className="min-h-[152px] bg-white/[0.02]">
+          <div className="flex h-full min-w-0 flex-col gap-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{railTitle}</p>
+            <p className="text-sm font-semibold text-white/82">{loadingLabel}</p>
+            <p className="text-xs leading-5 text-white/46">{railLine}</p>
+            <div className="mt-auto space-y-2">
+              <div className="h-3 w-full rounded-full bg-white/[0.05]" aria-hidden="true" />
+              <div className="h-3 w-4/5 rounded-full bg-white/[0.05]" aria-hidden="true" />
+              <div className="h-3 w-3/5 rounded-full bg-white/[0.05]" aria-hidden="true" />
+            </div>
+          </div>
+        </TerminalPanel>
+      </aside>
+    </TerminalGrid>
+  );
+};
 
 function confidenceLabel(confidence?: number): string {
   if (confidence === 0) {
@@ -1586,22 +1673,24 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
           }}
           heroAnchors={heroAnchorViews}
         />
-        <MarketOverviewWorkbenchGrid
-          heroRows={heroRows}
-          secondaryRows={secondaryRows}
-          deepRows={deepRows}
-          showDeepSection={activeRows.some((row) => row.tier === 'deep') || activeCategory === 'all'}
-          showCoverageRail={activeTabConfig.rail.includes('coverage')}
-          showQualityRail={activeTabConfig.rail.includes('quality')}
-          showSignalWatchRail={activeTabConfig.rail.includes('signalWatch')}
-          showActionHintRail={activeTabConfig.rail.includes('actionHint')}
-          coverageRail={coverageRail}
-          qualityRail={qualityRail}
-          signalWatchItems={signalWatchItems}
-          actionHint={actionHint}
-          executiveGroups={executiveGroups}
-          showExecutiveGroups={activeCategory === 'all'}
-        />
+        <Suspense fallback={<MarketOverviewWorkbenchGridFallback language={language} />}>
+          <LazyMarketOverviewWorkbenchGrid
+            heroRows={heroRows}
+            secondaryRows={secondaryRows}
+            deepRows={deepRows}
+            showDeepSection={activeRows.some((row) => row.tier === 'deep') || activeCategory === 'all'}
+            showCoverageRail={activeTabConfig.rail.includes('coverage')}
+            showQualityRail={activeTabConfig.rail.includes('quality')}
+            showSignalWatchRail={activeTabConfig.rail.includes('signalWatch')}
+            showActionHintRail={activeTabConfig.rail.includes('actionHint')}
+            coverageRail={coverageRail}
+            qualityRail={qualityRail}
+            signalWatchItems={signalWatchItems}
+            actionHint={actionHint}
+            executiveGroups={executiveGroups}
+            showExecutiveGroups={activeCategory === 'all'}
+          />
+        </Suspense>
       </TerminalPageShell>
     </div>
   );

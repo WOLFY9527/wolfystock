@@ -801,7 +801,10 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-workbench')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-shell')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-hero-ribbon')).toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-main-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-grid-loading')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-grid-loading')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByTestId('market-overview-grid-loading')).not.toHaveClass('bg-black');
+    expect(await screen.findByTestId('market-overview-main-grid')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-side-rail')).toBeInTheDocument();
 
     const usTab = screen.getByRole('button', { name: '美股' });
