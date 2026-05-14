@@ -94,8 +94,23 @@ class MarketBriefingApiTestCase(unittest.TestCase):
 
         self.assertFalse(payload["isReliable"])
         self.assertLess(payload["confidence"], 0.25)
+        self.assertEqual(payload["source"], "mixed")
+        self.assertEqual(payload["sourceLabel"], "多来源")
+        self.assertEqual(payload["sourceType"], "")
+        self.assertEqual(payload["freshness"], "live")
+        self.assertTrue(payload["fallbackUsed"])
+        self.assertFalse(payload["isFallback"])
+        self.assertEqual(payload["providerHealth"]["status"], "partial")
         self.assertIn("暂不生成强市场判断", payload["warning"])
         self.assertFalse(any(item["severity"] == "positive" for item in payload["items"]))
+        self.assertEqual(
+            [(item["title"], item["message"], item["severity"], item["category"]) for item in payload["items"]],
+            [
+                ("当前真实数据不足", "当前真实数据不足，暂不生成强市场判断。", "warning", "risk"),
+                ("备用数据已降级", "备用示例数据仅用于保持界面结构，不参与市场温度评分。", "neutral", "risk"),
+                ("等待真实行情源", "接入足够真实输入后，再恢复风险偏好、赚钱效应和流动性判断。", "neutral", "risk"),
+            ],
+        )
 
     def test_get_market_briefing_mixed_enough_data_can_still_be_reliable(self) -> None:
         service = MarketOverviewService()

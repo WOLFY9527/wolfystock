@@ -170,8 +170,13 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertTrue(payload["fallbackUsed"])
         self.assertFalse(payload["isFallback"])
         self.assertEqual(payload["source"], "mixed")
+        self.assertEqual(payload["sourceLabel"], "多来源")
+        self.assertEqual(payload["sourceType"], "public_api")
+        self.assertEqual(payload["freshness"], "live")
+        self.assertEqual(payload["providerHealth"]["status"], "live")
+        self.assertFalse(payload["providerHealth"]["isFallback"])
         self.assertIn("真实数据不足", payload["warning"])
-        self.assertEqual(payload["scores"]["overall"]["label"], "数据不足")
+        self.assertTrue(all(score["label"] == "数据不足" for score in payload["scores"].values()))
         self.assertNotIn(payload["scores"]["overall"]["label"], {"偏暖", "过热"})
 
     def test_temperature_excludes_fallback_only_inputs(self) -> None:

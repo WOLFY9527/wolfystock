@@ -11,6 +11,20 @@ from api.v1.endpoints import market
 from src.services.market_cache import market_cache
 from src.services.market_overview_service import MarketOverviewService
 
+EXPECTED_PROVIDER_HEALTH_FIELDS = {
+    "provider",
+    "status",
+    "asOf",
+    "updatedAt",
+    "latencyMs",
+    "errorSummary",
+    "isFallback",
+    "isStale",
+    "isRefreshing",
+    "sourceLabel",
+    "card",
+}
+
 
 def setup_function() -> None:
     market_cache.clear()
@@ -66,10 +80,14 @@ def test_us_breadth_sector_proxy_returns_stable_shape_with_metadata() -> None:
     assert payload["sourceLabel"] == "Yahoo Finance"
     assert payload["freshness"] in {"live", "delayed", "cached", "stale"}
     assert payload["isFallback"] is False
+    assert set(payload["providerHealth"]) == EXPECTED_PROVIDER_HEALTH_FIELDS
     assert payload["providerHealth"]["provider"] == "yfinance_proxy"
     assert payload["providerHealth"]["status"] in {"live", "cache"}
     assert isinstance(payload["providerHealth"]["latencyMs"], int)
+    assert payload["providerHealth"]["sourceLabel"] == "Yahoo Finance"
+    assert payload["providerHealth"]["card"] == "us_breadth"
     assert payload["items"][0]["sourceLabel"] == "Yahoo Finance"
+    assert payload["items"][0]["sourceType"] == "unofficial_public_api"
 
 
 def test_us_breadth_unavailable_returns_compact_fallback_shape() -> None:
@@ -112,6 +130,7 @@ def test_market_refresh_failure_serves_stale_snapshot_with_provider_health() -> 
     assert stale_payload["items"][0]["symbol"] == warm_payload["items"][0]["symbol"]
     assert served_payload["items"][0]["symbol"] == warm_payload["items"][0]["symbol"]
     assert served_payload["isStale"] is True
+    assert set(served_payload["providerHealth"]) == EXPECTED_PROVIDER_HEALTH_FIELDS
     assert served_payload["providerHealth"]["status"] == "stale"
     assert served_payload["providerHealth"]["isStale"] is True
     assert served_payload["providerHealth"]["status"] != "live"
@@ -170,12 +189,21 @@ def test_partial_provider_health_is_preserved_for_mixed_cn_indices() -> None:
         payload = service.get_cn_indices()
 
     assert payload["source"] == "mixed"
+    assert payload["sourceLabel"] == "多来源"
     assert payload["fallbackUsed"] is True
+    assert payload["isFallback"] is False
     assert payload["providerHealth"]["status"] == "partial"
     assert payload["providerHealth"]["status"] != "live"
     assert payload["providerHealth"]["isFallback"] is False
-    assert any(item["source"] == "sina" and item["isFallback"] is False for item in payload["items"])
-    assert any(item["isFallback"] is True for item in payload["items"])
+    assert payload["providerHealth"]["sourceLabel"] == "多来源"
+    live_item = next(item for item in payload["items"] if item["source"] == "sina")
+    fallback_item = next(item for item in payload["items"] if item["isFallback"] is True)
+    assert live_item["isFallback"] is False
+    assert live_item["sourceLabel"] == "新浪财经"
+    assert live_item["sourceType"] == "public_api"
+    assert fallback_item["source"] == "fallback"
+    assert fallback_item["sourceLabel"] == "备用数据"
+    assert fallback_item["sourceType"] == "public_api"
 
 
 def test_market_us_breadth_endpoint_uses_market_service() -> None:
