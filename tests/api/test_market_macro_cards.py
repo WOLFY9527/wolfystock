@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from api.v1.endpoints import market
+from src.services.market_data_source_registry import project_source_provenance
 from src.services.official_macro_transport import MacroObservation
 from src.services.market_overview_service import MarketOverviewService
 
@@ -119,6 +120,14 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
         self.assertFalse(rates_items["US10Y"]["isFallback"])
         self.assertTrue(rates_payload["fallbackUsed"])
         self.assertNotIn("CREDIT", rates_items)
+        us10y_provenance = project_source_provenance(
+            source_type=rates_items["US10Y"].get("sourceType"),
+            source_label=rates_items["US10Y"].get("sourceLabel"),
+            freshness=rates_items["US10Y"].get("freshness"),
+            is_fallback=bool(rates_items["US10Y"].get("isFallback")),
+            is_stale=bool(rates_items["US10Y"].get("isStale")),
+        )
+        self.assertEqual(us10y_provenance["sourceType"], "official_public")
 
         macro_items = {item["symbol"]: item for item in macro_payload["items"]}
         self.assertEqual(macro_items["US2Y"]["sourceType"], "official_public")
@@ -136,6 +145,14 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
         self.assertEqual(macro_items["CREDIT"]["freshness"], "delayed")
         self.assertTrue(macro_items["CREDIT"]["observationOnly"])
         self.assertFalse(macro_items["CREDIT"]["includedInScore"])
+        credit_provenance = project_source_provenance(
+            source_type=macro_items["CREDIT"].get("sourceType"),
+            source_label=macro_items["CREDIT"].get("sourceLabel"),
+            freshness=macro_items["CREDIT"].get("freshness"),
+            is_fallback=bool(macro_items["CREDIT"].get("isFallback")),
+            is_stale=bool(macro_items["CREDIT"].get("isStale")),
+        )
+        self.assertEqual(credit_provenance["sourceType"], "official_public")
 
 
 if __name__ == "__main__":

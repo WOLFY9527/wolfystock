@@ -13,6 +13,7 @@ from src.services.liquidity_monitor_service import LiquidityMonitorService
 from src.services.market_cache import MarketCache
 from src.services.market_data_source_registry import project_source_provenance
 from src.services.market_overview_service import (
+    MarketOverviewService,
     classify_market_payload_reliability,
     get_freshness_status,
 )
@@ -56,6 +57,23 @@ def _make_service() -> LiquidityMonitorService:
     return LiquidityMonitorService(
         cache=MarketCache(max_workers=1),
         db=DatabaseManager.get_instance(),
+    )
+
+
+def _payload_provenance(payload: dict[str, Any]) -> dict[str, str]:
+    return project_source_provenance(
+        source=payload.get("source"),
+        source_type=payload.get("sourceType"),
+        source_label=payload.get("sourceLabel"),
+        freshness=payload.get("freshness"),
+        is_fallback=bool(
+            payload.get("isFallback")
+            or payload.get("fallbackUsed")
+            or payload.get("fallback_used")
+        ),
+        is_stale=bool(payload.get("isStale")),
+        is_from_snapshot=bool(payload.get("isFromSnapshot")),
+        no_external_calls=bool(payload.get("noExternalCalls")),
     )
 
 
@@ -188,6 +206,21 @@ def test_official_daily_macro_observations_stay_delayed_or_stale_not_live() -> N
     assert stale["warning"]
 
 
+def test_market_overview_fallback_only_panels_project_to_fallback_static_not_live() -> None:
+    service = MarketOverviewService()
+
+    for getter in (service.get_cn_flows, service.get_rates, service.get_fx_commodities):
+        payload = getter()
+        provenance = _payload_provenance(payload)
+
+        assert payload["isFallback"] is True
+        assert payload["freshness"] == "fallback"
+        assert payload["sourceLabel"] == "备用数据"
+        assert provenance["sourceType"] == "fallback_static"
+        assert provenance["sourceLabel"] == "备用数据"
+        assert provenance["freshnessLabel"] != "实时"
+
+
 def test_liquidity_monitor_only_scores_reliable_non_fallback_signals(
     isolated_db: DatabaseManager,
 ) -> None:
@@ -263,7 +296,11 @@ def test_liquidity_monitor_only_scores_reliable_non_fallback_signals(
     assert payload["score"]["includedIndicatorCount"] >= 3
     assert indicators["vix_pressure"]["includedInScore"] is True
     assert indicators["us_etf_flow_proxy"]["includedInScore"] is True
+    assert indicators["us_etf_flow_proxy"]["label"] == "US ETF 资金代理"
+    assert indicators["us_etf_flow_proxy"]["status"] == "partial"
     assert indicators["us_breadth_proxy"]["includedInScore"] is True
+    assert indicators["us_breadth_proxy"]["label"] == "US 广度代理"
+    assert indicators["us_breadth_proxy"]["status"] == "partial"
     assert indicators["cn_hk_flows"]["includedInScore"] is False
     assert indicators["cn_hk_flows"]["status"] == "unavailable"
     assert indicators["cn_hk_flows"]["freshness"] == "fallback"

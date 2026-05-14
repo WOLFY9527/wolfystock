@@ -32,6 +32,47 @@ def test_yfinance_proxy_remains_delayed_unofficial_proxy() -> None:
     assert provenance["freshnessLabel"] == "延迟"
 
 
+def test_visible_panel_proxy_fixture_and_snapshot_classes_never_promote_to_strong_live_sources() -> None:
+    strong_cases = {
+        "binance": project_source_provenance(source="binance", freshness="live"),
+        "frankfurter": project_source_provenance(
+            source="fx_frankfurter_public",
+            freshness="live",
+        ),
+    }
+    soft_cases = {
+        "breadth_proxy": project_source_provenance(
+            source="yfinance_proxy",
+            source_type="proxy_public",
+            freshness="delayed",
+        ),
+        "fallback_flow": project_source_provenance(
+            source="fallback",
+            freshness="fallback",
+            is_fallback=True,
+        ),
+        "options_fixture": project_source_provenance(
+            source="synthetic_fixture",
+            freshness="synthetic_delayed",
+        ),
+        "portfolio_snapshot": project_source_provenance(
+            source="ledger_snapshot",
+            freshness="cached",
+        ),
+    }
+
+    assert strong_cases["binance"]["sourceType"] == "exchange_public"
+    assert strong_cases["frankfurter"]["sourceType"] == "official_public"
+    assert soft_cases["breadth_proxy"]["sourceType"] == "unofficial_proxy"
+    assert soft_cases["fallback_flow"]["sourceType"] == "fallback_static"
+    assert soft_cases["options_fixture"]["sourceType"] == "synthetic_fixture"
+    assert soft_cases["portfolio_snapshot"]["sourceType"] == "cache_snapshot"
+    assert all(
+        payload["sourceType"] not in {"exchange_public", "official_public"}
+        for payload in soft_cases.values()
+    )
+
+
 def test_tickflow_explicit_public_provider_label_does_not_collapse_into_official_or_cache() -> None:
     provenance = project_source_provenance(
         source="tickflow",

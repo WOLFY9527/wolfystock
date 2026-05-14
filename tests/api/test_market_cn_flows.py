@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from api.v1.endpoints import market
+from src.services.market_data_source_registry import project_source_provenance
 from src.services.market_overview_service import MarketOverviewService
 
 
@@ -67,6 +68,31 @@ class MarketCnFlowsApiTestCase(unittest.TestCase):
         self.assertTrue(all(item["freshness"] == "fallback" for item in payload["items"]))
         self.assertTrue(all(item["isFallback"] is True for item in payload["items"]))
         self.assertFalse(any(item["freshness"] == "live" for item in payload["items"]))
+
+    def test_cn_hk_flows_project_to_fallback_static_not_official_or_live(self) -> None:
+        payload = MarketOverviewService().get_cn_flows()
+        provenance = project_source_provenance(
+            source=payload.get("source"),
+            source_type=payload.get("sourceType"),
+            source_label=payload.get("sourceLabel"),
+            freshness=payload.get("freshness"),
+            is_fallback=bool(payload.get("isFallback") or payload.get("fallbackUsed")),
+            is_stale=bool(payload.get("isStale")),
+        )
+
+        self.assertEqual(provenance["sourceType"], "fallback_static")
+        self.assertEqual(provenance["sourceLabel"], "备用数据")
+        self.assertNotEqual(provenance["freshnessLabel"], "实时")
+        for item in payload["items"]:
+            item_provenance = project_source_provenance(
+                source=item.get("source"),
+                source_type=item.get("sourceType"),
+                source_label=item.get("sourceLabel"),
+                freshness=item.get("freshness"),
+                is_fallback=bool(item.get("isFallback") or item.get("fallbackUsed")),
+                is_stale=bool(item.get("isStale")),
+            )
+            self.assertEqual(item_provenance["sourceType"], "fallback_static")
 
 
 if __name__ == "__main__":

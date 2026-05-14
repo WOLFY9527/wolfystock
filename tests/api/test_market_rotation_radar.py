@@ -146,6 +146,28 @@ def test_market_rotation_radar_crypto_market_is_available_when_tab_exists(monkey
         client.close()
 
 
+def test_market_rotation_radar_non_us_tabs_stay_local_taxonomy_and_non_live(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    try:
+        for market_name in ("CN", "HK", "CRYPTO"):
+            response = client.get(f"/api/v1/market/rotation-radar?market={market_name}")
+
+            assert response.status_code == 200
+            payload = response.json()
+            assert payload["source"] == "local_taxonomy"
+            assert payload["sourceLabel"] == "静态主题库"
+            assert payload["freshness"] == "fallback"
+            assert payload["isFallback"] is True
+            assert all(theme["source"] == "local_taxonomy" for theme in payload["themes"])
+            assert all(theme["sourceClass"] == "local_taxonomy" for theme in payload["themes"])
+            assert all(theme["sourceClass"] not in {"exchange_public", "official_public", "live"} for theme in payload["themes"])
+            assert all(theme["freshness"] == "fallback" for theme in payload["themes"])
+            assert all(theme["isFallback"] is True for theme in payload["themes"])
+            assert all(theme["confidenceLabel"] == "待行情确认" for theme in payload["themes"])
+    finally:
+        client.close()
+
+
 def test_market_rotation_radar_default_us_route_uses_injected_quote_provider_when_available(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

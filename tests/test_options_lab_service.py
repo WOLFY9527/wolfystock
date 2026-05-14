@@ -156,6 +156,57 @@ def test_default_options_lab_provider_projects_to_synthetic_fixture_provenance()
     assert provenance["sourceType"] not in {"exchange_public", "official_public", "public_proxy", "unofficial_proxy"}
 
 
+def test_options_lab_visible_surfaces_stay_fixture_backed_and_non_live() -> None:
+    service = _service()
+    summary = service.get_summary("TEM")
+    chain = service.get_chain("TEM", expiration="2026-06-19")
+    analyze = service.analyze(
+        {
+            "symbol": "TEM",
+            "direction": "bullish",
+            "targetPrice": 65,
+            "targetDate": "2026-08-21",
+            "strategies": ["long_call"],
+        }
+    )
+    scenario = service.scenario(
+        {
+            "symbol": "TEM",
+            "strategy": "long_call",
+            "contractSymbol": "TEM260619C00055000",
+            "targetPrice": 65,
+        }
+    )
+    compare = service.compare_strategies(
+        {
+            "symbol": "TEM",
+            "direction": "bullish",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "strategies": ["long_call"],
+        }
+    )
+    decision = service.evaluate_decision(
+        {
+            "symbol": "TEM",
+            "strategy": "bull_call_spread",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+        }
+    )
+
+    assert summary.source == "synthetic_options_lab_fixture"
+    assert chain.source == "synthetic_options_lab_fixture"
+    assert analyze.option_chain_summary["source"] == "synthetic_options_lab_fixture"
+    assert decision.freshness.source == "synthetic_options_lab_fixture"
+    for payload in (summary, chain, analyze, scenario, compare, decision):
+        assert payload.metadata.fixture_backed is True
+        assert payload.metadata.live_provider_enabled is False
+        assert payload.metadata.no_external_calls is True
+    assert decision.data_quality.source_type == "synthetic"
+
+
 def test_chain_filters_side_expiration_liquidity_spread_and_greeks() -> None:
     response = _service().get_chain(
         "tem",

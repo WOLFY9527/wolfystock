@@ -7,6 +7,7 @@ import json
 from unittest.mock import Mock, patch
 
 from api.v1.endpoints import market
+from src.services.market_data_source_registry import project_source_provenance
 from src.services.market_cache import market_cache
 from src.services.market_overview_service import MarketOverviewService
 
@@ -58,6 +59,46 @@ def test_market_us_breadth_current_proxy_snapshot_stays_proxy_not_exchange_bread
     assert payload["items"][0]["sourceType"] == "unofficial_public_api"
 
 
+def test_market_us_breadth_proxy_snapshot_projects_to_unofficial_proxy_not_exchange_public() -> None:
+    service = MarketOverviewService()
+    quotes = {
+        "XLK": {"value": 220.0, "change_pct": 1.8, "trend": [216.0, 220.0], "volume": 10_000_000},
+        "XLF": {"value": 44.0, "change_pct": -0.4, "trend": [44.2, 44.0], "volume": 8_000_000},
+        "XLV": {"value": 146.0, "change_pct": 0.7, "trend": [144.8, 146.0], "volume": 7_000_000},
+        "SPY": {"value": 520.0, "change_pct": 0.6, "trend": [516.0, 520.0], "volume": 60_000_000},
+        "RSP": {"value": 168.0, "change_pct": 0.2, "trend": [167.0, 168.0], "volume": 4_000_000},
+        "QQQ": {"value": 460.0, "change_pct": 1.1, "trend": [454.0, 460.0], "volume": 45_000_000},
+        "IWM": {"value": 210.0, "change_pct": -0.3, "trend": [211.0, 210.0], "volume": 22_000_000},
+    }
+
+    with patch.object(service, "_latest_quote", side_effect=lambda ticker: quotes[ticker]):
+        payload = service.get_us_breadth()
+
+    provenance = project_source_provenance(
+        source=payload.get("source"),
+        source_type=payload.get("sourceType"),
+        source_label=payload.get("sourceLabel"),
+        freshness=payload.get("freshness"),
+        is_fallback=bool(payload.get("isFallback") or payload.get("fallbackUsed")),
+        is_stale=bool(payload.get("isStale")),
+    )
+    assert provenance["sourceType"] == "unofficial_proxy"
+    assert provenance["sourceLabel"] == "Yahoo Finance"
+    assert provenance["sourceType"] not in {"exchange_public", "official_public"}
+    assert all(
+        project_source_provenance(
+            source=item.get("source"),
+            source_type=item.get("sourceType"),
+            source_label=item.get("sourceLabel"),
+            freshness=item.get("freshness"),
+            is_fallback=bool(item.get("isFallback") or item.get("fallbackUsed")),
+            is_stale=bool(item.get("isStale")),
+        )["sourceType"]
+        == "unofficial_proxy"
+        for item in payload["items"]
+    )
+
+
 def test_market_us_breadth_fallback_stays_non_live_and_sanitized() -> None:
     service = MarketOverviewService()
 
@@ -71,11 +112,21 @@ def test_market_us_breadth_fallback_stays_non_live_and_sanitized() -> None:
         payload = service.get_us_breadth()
 
     serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    provenance = project_source_provenance(
+        source=payload.get("source"),
+        source_type=payload.get("sourceType"),
+        source_label=payload.get("sourceLabel"),
+        freshness=payload.get("freshness"),
+        is_fallback=bool(payload.get("isFallback") or payload.get("fallbackUsed")),
+        is_stale=bool(payload.get("isStale")),
+    )
     assert payload["source"] == "unavailable"
     assert payload["freshness"] == "fallback"
     assert payload["isFallback"] is True
     assert payload["providerHealth"]["status"] == "unavailable"
     assert payload["providerHealth"]["status"] != "live"
+    assert provenance["sourceType"] == "fallback_static"
+    assert provenance["freshnessLabel"] != "实时"
     assert "SECRET" not in serialized
     assert "https://api.exchange.test/raw" not in serialized
     assert "providerPayload" not in serialized

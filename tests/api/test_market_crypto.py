@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 from api.v1.endpoints import market
+from src.services.market_data_source_registry import project_source_provenance
 from src.services.market_overview_service import MarketOverviewService
 
 
@@ -255,9 +256,27 @@ class MarketCryptoApiTestCase(unittest.TestCase):
         with patch.object(service, "_fetch_crypto_market_snapshot", return_value=snapshot):
             payload = service.get_crypto()
 
+        provenance = project_source_provenance(
+            source=payload.get("source"),
+            source_type=payload.get("sourceType"),
+            source_label=payload.get("sourceLabel"),
+            freshness=payload.get("freshness"),
+            is_fallback=bool(payload.get("isFallback") or payload.get("fallbackUsed") or payload.get("fallback_used")),
+            is_stale=bool(payload.get("isStale")),
+        )
+        item_provenance = project_source_provenance(
+            source=payload["items"][0].get("source"),
+            source_type=payload["items"][0].get("sourceType"),
+            source_label=payload["items"][0].get("sourceLabel"),
+            freshness=payload["items"][0].get("freshness") or payload.get("freshness"),
+            is_fallback=bool(payload["items"][0].get("isFallback") or payload["items"][0].get("fallbackUsed")),
+            is_stale=bool(payload["items"][0].get("isStale")),
+        )
         self.assertEqual(payload["source"], "binance")
         self.assertFalse(payload["isFallback"])
         self.assertIn(payload["freshness"], {"live", "delayed", "cached"})
+        self.assertEqual(provenance["sourceType"], "exchange_public")
+        self.assertEqual(item_provenance["sourceType"], "exchange_public")
 
     def test_fetch_crypto_market_snapshot_keeps_shape_via_binance_transport_boundary(self) -> None:
         service = MarketOverviewService()

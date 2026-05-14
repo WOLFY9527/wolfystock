@@ -300,6 +300,22 @@ def test_portfolio_source_aliases_do_not_replace_backend_accounting_authority() 
     assert snapshot["sourceAuthorityState"] not in set(resolved.values())
 
 
+def test_portfolio_visible_surfaces_stay_snapshot_or_cached_not_live_market_feeds() -> None:
+    snapshot = PortfolioSnapshotResponse(**_load_fixture("portfolio_snapshot_read_model_dto.json")).model_dump()
+    cash_fx = _load_fixture("portfolio_cash_fx_dto.json")
+    cached_sources = {
+        source: project_source_provenance(source=source, freshness="cached")
+        for source in ("ledger_snapshot", "projection_cache")
+    }
+
+    assert snapshot["portfolioRiskEvidence"]["source"] == "backend_snapshot"
+    assert snapshot["sourceAuthorityState"] == "backend_authoritative_read_model"
+    assert all(entry["sourceType"] == "cache_snapshot" for entry in cached_sources.values())
+    assert cash_fx["fx_refresh"]["refresh_enabled"] is False
+    assert cash_fx["live_fx_rate"]["provider"] == "fixture_manual_rate"
+    assert cash_fx["live_fx_rate"]["stale"] is True
+
+
 def test_portfolio_broker_import_and_sync_fixtures_expose_sanitized_public_status_only() -> None:
     payload = _load_fixture("portfolio_import_sync_dto.json")
 
