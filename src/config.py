@@ -523,6 +523,7 @@ class Config:
     # === 数据源 API Token ===
     tushare_token: Optional[str] = None
     tickflow_api_key: Optional[str] = None
+    fred_api_key: Optional[str] = None
     twelve_data_api_keys: List[str] = field(default_factory=list)
     twelve_data_api_key: Optional[str] = None
     alpaca_api_key_id: Optional[str] = None
@@ -1266,6 +1267,7 @@ class Config:
             feishu_folder_token=os.getenv('FEISHU_FOLDER_TOKEN'),
             tushare_token=os.getenv('TUSHARE_TOKEN'),
             tickflow_api_key=os.getenv('TICKFLOW_API_KEY'),
+            fred_api_key=os.getenv('FRED_API_KEY') or None,
             twelve_data_api_keys=twelve_data_api_keys,
             twelve_data_api_key=single_twelve_data or (twelve_data_api_keys[0] if twelve_data_api_keys else None),
             alpaca_api_key_id=os.getenv('ALPACA_API_KEY_ID') or None,

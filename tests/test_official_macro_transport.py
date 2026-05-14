@@ -5,10 +5,13 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
+from src.config import Config
 from src.services.market_data_source_registry import project_source_provenance
 from src.services.official_macro_transport import (
     FRED_OBSERVATIONS_URL,
@@ -19,6 +22,7 @@ from src.services.official_macro_transport import (
     build_treasury_daily_rates_request,
     parse_fred_observation_points_payload,
     parse_fred_observations_payload,
+    fetch_fred_observation_points,
     parse_nyfed_sofr_payload,
     parse_treasury_daily_rate_observation_points_csv,
     parse_treasury_daily_rates_csv,
@@ -70,7 +74,14 @@ def test_build_supported_fred_requests_covers_expected_series() -> None:
 
 
 def test_build_fred_observations_request_omits_api_key_when_not_supplied() -> None:
-    request = build_fred_observations_request("DGS10", limit=7, observation_start="2026-05-01")
+    Config.reset_instance()
+    previous_key = os.environ.pop("FRED_API_KEY", None)
+    try:
+        request = build_fred_observations_request("DGS10", limit=7, observation_start="2026-05-01")
+    finally:
+        if previous_key is not None:
+            os.environ["FRED_API_KEY"] = previous_key
+        Config.reset_instance()
 
     assert request.method == "GET"
     assert request.url == FRED_OBSERVATIONS_URL
@@ -83,6 +94,34 @@ def test_build_fred_observations_request_omits_api_key_when_not_supplied() -> No
     }
     assert request.source_id == "fred:DGS10"
     assert request.requires_api_key is True
+
+
+def test_fetch_fred_observation_points_uses_runtime_configured_fred_api_key_without_exposing_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_requests = []
+
+    def _fake_fetch_transport_bytes(request, *, timeout):
+        captured_requests.append(request)
+        return json.dumps(
+            {
+                "observations": [
+                    {"date": "2026-05-13", "value": "4.45"},
+                    {"date": "2026-05-12", "value": "4.41"},
+                ]
+            }
+        ).encode("utf-8")
+
+    monkeypatch.setenv("FRED_API_KEY", "fred-secret-test-key")
+    Config.reset_instance()
+    try:
+        with patch("src.services.official_macro_transport._fetch_transport_bytes", side_effect=_fake_fetch_transport_bytes):
+            points = fetch_fred_observation_points("DGS10", limit=2)
+    finally:
+        Config.reset_instance()
+
+    assert len(captured_requests) == 1
+    assert captured_requests[0].params["api_key"] == "fred-secret-test-key"
+    assert captured_requests[0].params["series_id"] == "DGS10"
+    assert "fred-secret-test-key" not in json.dumps([point.to_dict() for point in points])
 
 
 def test_build_fred_observations_request_supports_credit_stress_series_without_expanding_runtime_default_set() -> None:

@@ -76,8 +76,9 @@ class MacroObservation:
 
 
 def build_supported_fred_requests(*, api_key: str | None = None, limit: int = 5) -> list[MacroTransportRequest]:
+    resolved_api_key = _resolve_fred_api_key(api_key)
     return [
-        build_fred_observations_request(series_id, api_key=api_key, limit=limit)
+        build_fred_observations_request(series_id, api_key=resolved_api_key, limit=limit)
         for series_id in FRED_DEFAULT_REQUEST_SERIES_IDS
     ]
 
@@ -92,6 +93,7 @@ def build_fred_observations_request(
     observation_end: str | None = None,
 ) -> MacroTransportRequest:
     normalized_series = _validate_fred_series_id(series_id)
+    resolved_api_key = _resolve_fred_api_key(api_key)
     params = {
         "series_id": normalized_series,
         "file_type": "json",
@@ -102,8 +104,8 @@ def build_fred_observations_request(
         params["observation_start"] = observation_start
     if observation_end:
         params["observation_end"] = observation_end
-    if api_key:
-        params["api_key"] = api_key
+    if resolved_api_key:
+        params["api_key"] = resolved_api_key
     return MacroTransportRequest(
         method="GET",
         url=FRED_OBSERVATIONS_URL,
@@ -321,6 +323,18 @@ def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) ->
     http_request = Request(url=url, headers=request.headers, method=request.method)
     with urlopen(http_request, timeout=timeout) as response:
         return response.read()
+
+
+def _resolve_fred_api_key(explicit_api_key: str | None) -> str | None:
+    normalized_explicit = _text(explicit_api_key)
+    if normalized_explicit:
+        return normalized_explicit
+    try:
+        from src.config import Config
+
+        return _text(getattr(Config.get_instance(), "fred_api_key", None)) or None
+    except Exception:
+        return None
 
 
 def _lookup_treasury_value(row: Mapping[str, Any], symbol: str) -> Any:

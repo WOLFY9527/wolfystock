@@ -26,6 +26,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
             "ENV_FILE",
             "STOCK_LIST",
             "GEMINI_API_KEY",
+            "FRED_API_KEY",
             "UNREGISTERED_VENDOR_API_KEY",
             "ADMIN_AUTH_ENABLED",
             "WECHAT_WEBHOOK_URL",
@@ -56,6 +57,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
                 [
                     "STOCK_LIST=600519,000001",
                     "GEMINI_API_KEY=secret-key-value",
+                    "FRED_API_KEY=fred-secret-key",
                     "UNREGISTERED_VENDOR_API_KEY=vendor-secret-value",
                     "ADMIN_AUTH_ENABLED=false",
                     "WECHAT_WEBHOOK_URL=https://hooks.example.com/secret",
@@ -123,7 +125,12 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertEqual(items["GEMINI_API_KEY"]["value"], "secr...alue")
         self.assertTrue(items["GEMINI_API_KEY"]["is_masked"])
         self.assertTrue(items["GEMINI_API_KEY"]["raw_value_exists"])
+        self.assertIn("FRED_API_KEY", items)
+        self.assertEqual(items["FRED_API_KEY"]["value"], "fred...-key")
+        self.assertTrue(items["FRED_API_KEY"]["is_masked"])
+        self.assertTrue(items["FRED_API_KEY"]["raw_value_exists"])
         self.assertNotIn("secret-key-value", str(payload))
+        self.assertNotIn("fred-secret-key", str(payload))
 
     def test_get_config_marks_dangerous_and_dedicated_fields_non_raw_editable(self) -> None:
         payload = self.service.get_config(include_schema=True)
@@ -132,6 +139,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         for key in (
             "ADMIN_AUTH_ENABLED",
             "GEMINI_API_KEY",
+            "FRED_API_KEY",
             "UNREGISTERED_VENDOR_API_KEY",
             "WECHAT_WEBHOOK_URL",
             "DISCORD_MAIN_CHANNEL_ID",
@@ -180,6 +188,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
 
         self.assertEqual(config_map["ADMIN_AUTH_ENABLED"], "false")
         self.assertEqual(config_map["GEMINI_API_KEY"], "secret-key-value")
+        self.assertEqual(config_map["FRED_API_KEY"], "fred-secret-key")
         self.assertEqual(config_map["CUSTOM_DATA_SOURCE_LIBRARY"], "[]")
 
     def test_get_task_progress_tolerates_task_without_updated_at(self) -> None:
