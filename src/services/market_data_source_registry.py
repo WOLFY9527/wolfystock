@@ -129,7 +129,7 @@ def resolve_source_type(
     normalized_type = _text(source_type).lower()
     normalized_freshness = _text(freshness).lower()
 
-    if is_from_snapshot or (no_external_calls and normalized_freshness == "cached"):
+    if is_from_snapshot:
         return "cache_snapshot"
     if is_fallback or normalized_freshness in {"fallback", "mock"} or normalized_source == "fallback":
         return "fallback_static"
@@ -137,6 +137,8 @@ def resolve_source_type(
         return SOURCE_TYPE_BY_SOURCE[normalized_source]
     if normalized_type in SOURCE_TYPE_ALIASES:
         return SOURCE_TYPE_ALIASES[normalized_type]
+    if no_external_calls and normalized_freshness == "cached":
+        return "cache_snapshot"
     if normalized_source or normalized_type:
         return "public_proxy"
     return "missing"

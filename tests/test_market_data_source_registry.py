@@ -31,6 +31,18 @@ def test_yfinance_proxy_remains_delayed_unofficial_proxy() -> None:
     assert provenance["freshnessLabel"] == "延迟"
 
 
+def test_yfinance_proxy_with_cached_freshness_stays_proxy_when_not_snapshot_marked() -> None:
+    provenance = project_source_provenance(
+        source="yfinance_proxy",
+        freshness="cached",
+        no_external_calls=True,
+    )
+
+    assert provenance["sourceType"] == "unofficial_proxy"
+    assert provenance["sourceLabel"] == "Yahoo Finance"
+    assert provenance["freshnessLabel"] == "缓存"
+
+
 def test_fallback_static_never_claims_live_freshness() -> None:
     provenance = project_source_provenance(
         source="fallback",

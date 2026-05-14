@@ -959,6 +959,8 @@ class MarketRotationRadarService:
             "isStale": is_stale,
             "source": source,
             "sourceLabel": source_label,
+            "sourceType": raw_quote.get("sourceType", raw_quote.get("source_type")),
+            "isFromSnapshot": bool(raw_quote.get("isFromSnapshot") or raw_quote.get("is_from_snapshot")),
             "asOf": as_of,
         }
 

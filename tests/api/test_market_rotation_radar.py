@@ -279,10 +279,10 @@ def test_market_rotation_radar_default_us_route_uses_injected_quote_provider_whe
                 "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
                 "metadata": {
                     "quoteMode": "proxy",
-                    "sourceType": "public",
-                    "freshness": "cached",
+                    "sourceType": "unofficial_public_api",
+                    "freshness": "delayed",
                     "asOf": "2026-05-13T09:30:00+00:00",
-                    "noExternalCalls": True,
+                    "noExternalCalls": False,
                 },
             }
 
@@ -299,8 +299,9 @@ def test_market_rotation_radar_default_us_route_uses_injected_quote_provider_whe
         assert payload["metadata"]["quoteProvider"]["present"] is True
         assert payload["metadata"]["quoteProvider"]["status"] in {"partial", "success"}
         assert payload["metadata"]["quoteProvider"]["quoteMode"] == "proxy"
-        assert payload["metadata"]["quoteProvider"]["sourceType"] == "public"
-        assert payload["metadata"]["quoteProvider"]["noExternalCalls"] is True
+        assert payload["metadata"]["quoteProvider"]["sourceType"] == "unofficial_proxy"
+        assert payload["metadata"]["quoteProvider"]["freshness"] == "delayed"
+        assert payload["metadata"]["quoteProvider"]["noExternalCalls"] is False
         assert payload["metadata"]["quoteProvider"]["coverage"]["usableSymbolCount"] > 0
         assert payload["source"] == "computed"
         assert any(theme["id"] == "ai_applications" and theme["source"] != "fallback" for theme in payload["themes"])

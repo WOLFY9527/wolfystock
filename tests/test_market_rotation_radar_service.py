@@ -204,7 +204,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
                 "quotes": quotes,
                 "metadata": {
                     "quoteMode": "proxy",
-                    "sourceType": "public",
+                    "sourceType": "cache_snapshot",
                     "freshness": "cached",
                     "asOf": "2026-05-07T09:45:00+00:00",
                     "noExternalCalls": True,
