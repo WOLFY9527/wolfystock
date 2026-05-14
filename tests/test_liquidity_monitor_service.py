@@ -8,6 +8,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict
+from unittest.mock import patch
 
 import pytest
 
@@ -347,6 +348,77 @@ def test_derived_freshness_uses_weakest_input_freshness(isolated_db: DatabaseMan
     assert indicators["crypto_spot_momentum"]["freshness"] == "delayed"
     assert indicators["us_breadth_proxy"]["freshness"] == "delayed"
     assert payload["freshness"]["weakestIndicatorFreshness"] == "delayed"
+
+
+def test_crypto_funding_uses_binance_public_endpoint_when_cache_snapshot_lacks_funding(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "crypto",
+        _cache_entry(
+            source="binance_ws",
+            freshness="live",
+            items=[
+                {"symbol": "BTC", "label": "Bitcoin", "changePercent": 2.0, "value": 65000, "asOf": now},
+                {"symbol": "ETH", "label": "Ethereum", "changePercent": 1.0, "value": 3200, "asOf": now},
+                {"symbol": "BNB", "label": "BNB", "changePercent": 0.5, "value": 600, "asOf": now},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    funding_rows = {
+        "BTCUSDT": {"lastFundingRate": "0.00012", "time": 1770000000000},
+        "ETHUSDT": {"lastFundingRate": "-0.00005", "time": 1770003600000},
+    }
+
+    with patch("src.services.liquidity_monitor_service.fetch_binance_funding_row", side_effect=lambda symbol: funding_rows[symbol]):
+        payload = service.get_liquidity_monitor()
+
+    indicators = {item["key"]: item for item in payload["indicators"]}
+
+    assert payload["sourceMetadata"] == {
+        "externalProviderCalls": True,
+        "providerRuntimeChanged": False,
+        "marketCacheMutation": False,
+    }
+    assert indicators["crypto_funding"]["status"] == "live"
+    assert indicators["crypto_funding"]["freshness"] == "live"
+    assert "BTC" in str(indicators["crypto_funding"]["summary"])
+    assert "ETH" in str(indicators["crypto_funding"]["summary"])
+    assert "Binance" in str(indicators["crypto_funding"]["summary"])
+
+
+def test_crypto_funding_stays_unavailable_when_binance_public_endpoint_fails(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "crypto",
+        _cache_entry(
+            source="binance_ws",
+            freshness="live",
+            items=[
+                {"symbol": "BTC", "label": "Bitcoin", "changePercent": 2.0, "value": 65000, "asOf": now},
+                {"symbol": "ETH", "label": "Ethereum", "changePercent": 1.0, "value": 3200, "asOf": now},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    with patch("src.services.liquidity_monitor_service.fetch_binance_funding_row", side_effect=RuntimeError("funding unavailable")):
+        payload = service.get_liquidity_monitor()
+
+    indicators = {item["key"]: item for item in payload["indicators"]}
+
+    assert payload["sourceMetadata"]["externalProviderCalls"] is True
+    assert indicators["crypto_funding"]["status"] == "unavailable"
+    assert indicators["crypto_funding"]["freshness"] == "unavailable"
+    assert "Binance" in str(indicators["crypto_funding"]["summary"])
+    assert "暂不可用" in str(indicators["crypto_funding"]["summary"])
 
 
 def test_response_source_metadata_reports_no_external_calls_runtime_change_or_cache_mutation(isolated_db: DatabaseManager) -> None:

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
 from src.services.market_cache import MarketCache, market_cache
+from src.services.market_overview_binance_transport import fetch_binance_funding_row
 from src.storage import DatabaseManager
 
 
@@ -42,8 +43,10 @@ class LiquidityMonitorService:
     ) -> None:
         self.cache = cache
         self.db = db or DatabaseManager.get_instance()
+        self._external_provider_calls_used = False
 
     def get_liquidity_monitor(self) -> Dict[str, Any]:
+        self._external_provider_calls_used = False
         panels = {
             key: self._read_panel(key)
             for key in ("crypto", "volatility", "rates", "fx_commodities", "funds_flow", "us_breadth", "cn_indices", "cn_breadth", "cn_flows", "futures")
@@ -96,7 +99,7 @@ class LiquidityMonitorService:
             "indicators": indicators,
             "advisoryDisclosure": ADVISORY_DISCLOSURE,
             "sourceMetadata": {
-                "externalProviderCalls": False,
+                "externalProviderCalls": self._external_provider_calls_used,
                 "providerRuntimeChanged": False,
                 "marketCacheMutation": False,
             },
@@ -154,11 +157,49 @@ class LiquidityMonitorService:
 
     def _crypto_funding_indicator(self, panel: PanelState) -> Dict[str, Any]:
         items = [item for item in self._reliable_items(panel, None) if str(item.get("symbol") or "").endswith("_FUNDING") and self._numeric(item.get("value")) is not None]
+        funding_panel = panel
         if not items:
-            return self._indicator("crypto_funding", "Crypto Funding", panel, "unavailable", 0, 0, False, "仅在真实 funding 快照存在时显示")
+            funding_panel = self._fetch_live_crypto_funding_panel(panel) or panel
+            items = [
+                item
+                for item in self._reliable_items(funding_panel, None)
+                if str(item.get("symbol") or "").endswith("_FUNDING") and self._numeric(item.get("value")) is not None
+            ]
+        if not items:
+            message = "Binance Futures funding 暂不可用"
+            if not self._has_live_crypto_context(panel):
+                message = "缺少 BTC/ETH 现货上下文，未触发实时 funding 查询"
+            return self._indicator(
+                "crypto_funding",
+                "Crypto Funding",
+                panel,
+                "unavailable",
+                0,
+                0,
+                False,
+                message,
+                freshness="unavailable" if panel.freshness in RELIABLE_FRESHNESS else panel.freshness,
+            )
         avg_value = sum(float(self._numeric(item.get("value")) or 0.0) for item in items) / len(items)
-        freshness = self._weakest_freshness([self._item_freshness(item, panel) for item in items])
-        return self._indicator("crypto_funding", "Crypto Funding", panel, "partial", 0, 0, False, f"均值 {avg_value:+.4f}", freshness=freshness)
+        freshness = self._weakest_freshness([self._item_freshness(item, funding_panel) for item in items])
+        values = [
+            f"{str(item.get('symbol') or '').replace('_FUNDING', '')} {float(self._numeric(item.get('value')) or 0.0):+.4f}%"
+            for item in items
+        ]
+        source_label = self._text(items[0].get("sourceLabel")) or "Binance"
+        source_type = self._text(items[0].get("sourceType")) or "exchange_public"
+        status = "live" if len(items) >= 2 and freshness == "live" else "partial"
+        return self._indicator(
+            "crypto_funding",
+            "Crypto Funding",
+            funding_panel,
+            status,
+            0,
+            0,
+            False,
+            f"{' | '.join(values)} | 均值 {avg_value:+.4f}% | 来源 {source_label} | 类型 {source_type}",
+            freshness=freshness,
+        )
 
     def _vix_indicator(self, panel: PanelState) -> Dict[str, Any]:
         item = self._first_reliable_item(panel, {"VIX"})
@@ -544,6 +585,71 @@ class LiquidityMonitorService:
             "freshness": self._weakest_freshness(freshness_values),
         }
 
+    def _has_live_crypto_context(self, panel: PanelState) -> bool:
+        symbols = {"BTC", "ETH", "BNB", "SOL"}
+        return any(
+            isinstance(item, dict) and str(item.get("symbol") or "") in symbols
+            for item in panel.payload.get("items", [])
+        )
+
+    def _fetch_live_crypto_funding_panel(self, panel: PanelState) -> Optional[PanelState]:
+        if not self._has_live_crypto_context(panel):
+            return None
+        self._external_provider_calls_used = True
+        items: List[Dict[str, Any]] = []
+        updated_at = self._now().isoformat(timespec="seconds")
+        for futures_symbol, short_symbol in (("BTCUSDT", "BTC"), ("ETHUSDT", "ETH")):
+            try:
+                row = fetch_binance_funding_row(futures_symbol)
+            except Exception:
+                continue
+            funding_rate = self._numeric(row.get("lastFundingRate"))
+            if funding_rate is None:
+                continue
+            as_of = self._timestamp_millis_to_iso(row.get("time")) or updated_at
+            funding_percent = round(funding_rate * 100, 4)
+            items.append(
+                {
+                    "symbol": f"{short_symbol}_FUNDING",
+                    "label": f"{short_symbol} Funding",
+                    "value": funding_percent,
+                    "change": funding_percent,
+                    "changePercent": funding_percent,
+                    "source": "binance",
+                    "sourceLabel": "Binance",
+                    "sourceType": "exchange_public",
+                    "asOf": as_of,
+                    "updatedAt": updated_at,
+                    "freshness": "live",
+                    "isFallback": False,
+                    "fallbackUsed": False,
+                }
+            )
+        if not items:
+            return None
+        latest_as_of = max(str(item.get("asOf") or updated_at) for item in items)
+        payload = {
+            "source": "binance",
+            "sourceLabel": "Binance",
+            "sourceType": "exchange_public",
+            "freshness": "live",
+            "asOf": latest_as_of,
+            "updatedAt": updated_at,
+            "isFallback": False,
+            "fallbackUsed": False,
+            "items": items,
+        }
+        return PanelState(
+            key="crypto_funding_live",
+            payload=payload,
+            source="binance",
+            freshness="live",
+            as_of=latest_as_of,
+            updated_at=updated_at,
+            is_fallback=False,
+            is_stale=False,
+        )
+
     @staticmethod
     def _direction_from_counts(positive: int, negative: int) -> int:
         if positive > negative:
@@ -630,6 +736,13 @@ class LiquidityMonitorService:
         if parsed.tzinfo is None:
             return parsed.replace(tzinfo=CN_TZ)
         return parsed.astimezone(CN_TZ)
+
+    @staticmethod
+    def _timestamp_millis_to_iso(value: Any) -> Optional[str]:
+        millis = LiquidityMonitorService._numeric(value)
+        if millis is None:
+            return None
+        return datetime.fromtimestamp(millis / 1000, tz=timezone.utc).astimezone(CN_TZ).isoformat(timespec="seconds")
 
     @staticmethod
     def _weakest_freshness(values: Iterable[str]) -> str:
