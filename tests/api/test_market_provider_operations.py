@@ -390,6 +390,65 @@ def test_all_admin_log_drill_through_links_remain_read_only_queries() -> None:
     assert payload["eventRollups"][0]["adminLogDrillThrough"]["eventId"] == "failed-1"
 
 
+def test_timeout_fallback_and_stale_cache_health_signals_stay_distinct_and_read_only() -> None:
+    market_cache.set(
+        "sentiment",
+        {
+            "source": "finnhub",
+            "sourceLabel": "Finnhub",
+            "freshness": "fallback",
+            "fallbackUsed": True,
+            "updatedAt": "2026-05-06T10:00:00+08:00",
+            "warning": "Fallback served after timeout token=SECRET",
+            "items": [{"symbol": "SPY", "score": 60}],
+        },
+        ttl_seconds=30,
+    )
+    DatabaseManager.get_instance().save_market_overview_snapshot(
+        key="market_overview:rates",
+        payload={
+            "source": "yahoo",
+            "sourceLabel": "Yahoo Finance",
+            "freshness": "stale",
+            "as_of": "2026-05-06T09:30:00+08:00",
+            "updated_at": "2026-05-06T09:31:00+08:00",
+            "items": [{"symbol": "US10Y", "value": 4.2}],
+        },
+    )
+    events = [
+        {
+            "id": "fallback-timeout-1",
+            "event": "MarketDataFallbackUsed",
+            "eventType": "MarketDataFallbackUsed",
+            "category": "data_source",
+            "status": "partial",
+            "summary": "MarketDataFallbackUsed",
+            "endpoint": "/api/v1/market/sentiment",
+            "provider": "finnhub",
+            "component": "MarketSentimentCard",
+            "reason": "timeout",
+            "startedAt": "2026-05-06T10:01:00+08:00",
+        },
+    ]
+
+    payload = _service(events).get_operations(window="24h")
+
+    fallback_item = next(item for item in payload["items"] if item["cacheKey"] == "sentiment")
+    stale_item = next(item for item in payload["items"] if item["cacheKey"] == "rates")
+    rollup = next(item for item in payload["eventRollups"] if item["provider"] == "finnhub")
+
+    assert payload["metadata"]["readOnly"] is True
+    assert payload["metadata"]["externalProviderCalls"] is False
+    assert payload["metadata"]["cacheMutation"] is False
+    assert fallback_item["status"] == "fallback"
+    assert fallback_item["fallbackUsed"] is True
+    assert stale_item["status"] == "stale"
+    assert stale_item["isFromSnapshot"] is True
+    assert rollup["fallbackCount"] == 1
+    assert rollup["topReasons"] == ["timeout"]
+    assert "SECRET" not in str(payload)
+
+
 def test_unavailable_cache_metadata_is_represented_honestly() -> None:
     payload = _service([]).get_operations(window="24h")
 

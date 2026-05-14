@@ -17,6 +17,7 @@ from src.storage import DatabaseManager
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MARKET_PROVIDER_OPERATIONS_SERVICE_PATH = REPO_ROOT / "src/services/market_provider_operations_service.py"
+MARKET_PROVIDER_OPERATIONS_ENDPOINT_PATH = REPO_ROOT / "api/v1/endpoints/market_provider_operations.py"
 FORBIDDEN_PROVIDER_OPERATIONS_IMPORT_PREFIXES = (
     "data_provider",
     "requests",
@@ -80,6 +81,29 @@ def test_market_provider_operations_source_stays_read_only_and_local() -> None:
             "Market Provider Operations must stay read-only. Do not refresh or "
             "mutate MarketCache from market_provider_operations_service.py; keep "
             f"`{pattern}` out of this file"
+        )
+
+
+def test_market_provider_operations_endpoint_stays_get_only_read_model_route() -> None:
+    tree = ast.parse(MARKET_PROVIDER_OPERATIONS_ENDPOINT_PATH.read_text(encoding="utf-8"))
+    route_methods: set[str] = set()
+    source_text = MARKET_PROVIDER_OPERATIONS_ENDPOINT_PATH.read_text(encoding="utf-8").lower()
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        for decorator in node.decorator_list:
+            if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Attribute):
+                route_methods.add(decorator.func.attr)
+
+    assert route_methods == {"get"}, (
+        "Market Provider Operations must remain query/read-only. Do not add "
+        f"POST/PATCH/DELETE routes here: found decorators {sorted(route_methods)}"
+    )
+    for forbidden_term in ("cleanup", "dry_run", "use_retention", "refresh", "mutate", "test provider"):
+        assert forbidden_term not in source_text, (
+            "Market Provider Operations endpoint must stay an observer surface "
+            f"without mutation/test semantics; found `{forbidden_term}`"
         )
 
 

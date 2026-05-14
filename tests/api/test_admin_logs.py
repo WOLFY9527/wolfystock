@@ -851,6 +851,60 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(payload.health_summary.status, "healthy")
         self.assertEqual(payload.health_summary.failures_by_category, [])
 
+    def test_root_health_summary_distinguishes_provider_health_reason_codes_without_secret_leakage(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            cases = (
+                ("missing", "fmp", "missing_credentials", "Provider credential missing token=SECRET", "failed"),
+                ("forbidden", "alpaca", "provider_403", "Provider returned 403 authorization=SECRET", "failed"),
+                ("timeout", "finnhub", "timeout", "Provider timeout token=SECRET", "failed"),
+                ("fallback", "local_cache", "fallback_served", "Fallback served token=SECRET", "partial"),
+                ("stale", "local_cache", "stale_cache_served", "Stale cache served token=SECRET", "partial"),
+            )
+            for prefix, provider, reason, error_message, overall_status in cases:
+                execution_id = service.start_execution(
+                    category="data_source",
+                    type="market_health",
+                    event=f"{provider}:{reason}",
+                    summary=f"{provider}:{reason}",
+                    subject=f"{provider}:{reason}",
+                    metadata={"provider": provider},
+                    actor={"actor_type": "admin"},
+                )
+                service.start_step(execution_id, "read_provider", "读取 provider", category="data_source", provider=provider)
+                service.finish_step_failed(
+                    execution_id,
+                    "read_provider",
+                    provider=provider,
+                    error_type="ProviderHealthError",
+                    error_message=error_message,
+                    reason=reason,
+                    metadata={"api_key": "SECRET", "safeLabel": prefix},
+                )
+                service.finish_execution(execution_id, status=overall_status)
+
+            payload = admin_logs.list_execution_logs_root(limit=10, _=_admin_user())
+
+        self.assertIsNotNone(payload.health_summary)
+        summary = payload.health_summary
+        assert summary is not None
+        self.assertEqual(summary.total_events, 5)
+        self.assertEqual(summary.failed_events, 3)
+        self.assertEqual(summary.warning_events, 2)
+        self.assertEqual(
+            {item.reason for item in payload.items},
+            {"provider_error", "unauthorized", "timeout", "fallback"},
+        )
+        self.assertEqual(
+            {bucket.key for bucket in summary.failures_by_reason},
+            {"provider_error", "timeout", "unauthorized"},
+        )
+        self.assertTrue(any(item.key == "fmp" for item in summary.failures_by_provider))
+        self.assertTrue(any(item.key == "alpaca" for item in summary.failures_by_provider))
+        dumped = str(summary.model_dump()).lower()
+        for forbidden in ("secret", "traceback", "raw_response", "must-not-leak"):
+            self.assertNotIn(forbidden, dumped)
+
     def test_storage_summary_returns_retention_and_volume_counts(self) -> None:
         now = datetime.now()
         self._record_event(
