@@ -159,6 +159,24 @@ const populatedPayload = {
     readOnly: true,
     externalProviderCalls: false,
     cacheMutation: false,
+    providerDiagnostics: {
+      tickflowCnBreadth: {
+        provider: 'tickflow',
+        market: 'cn',
+        diagnosticTarget: 'cn_breadth',
+        status: 'permission_denied',
+        credentialState: 'configured',
+        credentialConfigured: true,
+        reachabilityState: 'reachable',
+        tickflowReachable: true,
+        breadthEntitlementState: 'permission_denied',
+        breadthEntitlementUsable: false,
+        reasonCode: 'tickflow_permission_unavailable',
+        observedSource: 'fallback',
+        sourceType: 'public_api',
+        summary: 'TickFlow 已配置，但当前 key 没有 A 股宽度权限。',
+      },
+    },
     rawProviderToken: 'SECRET',
   },
 };
@@ -213,8 +231,13 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getAllByText('查看 Admin Logs').length).toBeGreaterThan(0);
     expect(screen.getAllByText('熔断状态').length).toBeGreaterThan(0);
     expect(screen.getAllByText('已脱敏').length).toBeGreaterThan(0);
+    expect(screen.getByText('TickFlow A股宽度')).toBeInTheDocument();
+    expect(screen.getByText('Key 已配置')).toBeInTheDocument();
+    expect(screen.getByText('可达')).toBeInTheDocument();
+    expect(screen.getByText('权限拒绝')).toBeInTheDocument();
     expect(screen.queryByText('SECRET')).not.toBeInTheDocument();
     expect(screen.queryByText(/token=/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('tickflow_permission_unavailable')).not.toBeInTheDocument();
 
     const diagnosticsDisclosure = screen.getByTestId('market-provider-diagnostics-disclosure');
     const disclosureToggle = screen.getByRole('button', { name: '展开 诊断详情' });

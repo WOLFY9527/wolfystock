@@ -39,6 +39,7 @@ const splitCsv = (value?: string): string[] => (value || '')
   .split(',')
   .map((item) => item.trim())
   .filter(Boolean);
+const builtinValidationSymbol = (sourceId: string): string => (sourceId === 'twelve_data' ? 'HK00700' : 'MSFT');
 const uniqueValues = (values: Array<string | null | undefined>): string[] => {
   const next: string[] = [];
   values.forEach((value) => {
@@ -529,7 +530,7 @@ export function useDataSourceLibraryController({
       try {
         const result = await systemConfigApi.testBuiltinDataSource({
           provider: sourceId,
-          symbol: 'MSFT',
+          symbol: builtinValidationSymbol(sourceId),
           credential,
           secret,
           timeoutSeconds: 5,
@@ -563,7 +564,7 @@ export function useDataSourceLibraryController({
       try {
         const result = await systemConfigApi.testBuiltinDataSource({
           provider: sourceId,
-          symbol: 'MSFT',
+          symbol: builtinValidationSymbol(sourceId),
           timeoutSeconds: 5,
         });
         const nextStatus: DataSourceValidationState = result.status === 'success'

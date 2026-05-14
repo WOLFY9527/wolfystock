@@ -34,6 +34,22 @@ import { cn } from '../utils/cn';
 import { formatDateTime, formatNumber, formatPercent } from '../utils/format';
 
 type StatusTone = 'live' | 'cache' | 'stale' | 'fallback' | 'partial' | 'unavailable' | 'error' | 'refreshing';
+type TickflowProjection = {
+  provider?: unknown;
+  market?: unknown;
+  diagnosticTarget?: unknown;
+  status?: unknown;
+  credentialState?: unknown;
+  credentialConfigured?: unknown;
+  reachabilityState?: unknown;
+  tickflowReachable?: unknown;
+  breadthEntitlementState?: unknown;
+  breadthEntitlementUsable?: unknown;
+  reasonCode?: unknown;
+  observedSource?: unknown;
+  sourceType?: unknown;
+  summary?: unknown;
+};
 
 const STATUS_SET = new Set<StatusTone>(['live', 'cache', 'stale', 'fallback', 'partial', 'unavailable', 'error', 'refreshing']);
 const SENSITIVE_FRAGMENT_PATTERN = /((?:token|secret|cookie|session|password|authorization|bearer|api[_-]?key|set-cookie|x-api-key)\s*[:=]?\s*)([^,\s]+)/gi;
@@ -118,6 +134,16 @@ function formatCountLabel(value?: unknown, fallback = '待统计'): string {
 function safePercent(value?: unknown, fallback = '待统计'): string {
   const numeric = safeFiniteNumber(value);
   return numeric == null ? fallback : formatPercent(numeric, { mode: 'ratio' });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readTickflowProjection(metadata: Record<string, unknown> | null | undefined): TickflowProjection | null {
+  const providerDiagnostics = isRecord(metadata?.providerDiagnostics) ? metadata.providerDiagnostics : null;
+  const projection = isRecord(providerDiagnostics?.tickflowCnBreadth) ? providerDiagnostics.tickflowCnBreadth : null;
+  return projection as TickflowProjection | null;
 }
 
 function safeRatio(numerator?: unknown, denominator?: unknown, fallback = '待统计'): string {
@@ -242,6 +268,61 @@ function providerNextAction(item: MarketProviderOperationItem): string {
   if (item.isRefreshing) return '等待刷新结束后再判断是否需要进入异常追踪。';
   return '保持只读监控，优先关注新的失败或熔断事件。';
 }
+
+function tickflowLabel(value: unknown): string {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'key_missing' || normalized === 'missing' || normalized === 'not_configured') return 'Key 未配置';
+  if (normalized === 'key_configured' || normalized === 'configured') return 'Key 已配置';
+  return 'Key 待统计';
+}
+
+function tickflowCredentialVariant(value: unknown): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'key_configured' || normalized === 'configured') return 'success';
+  if (normalized === 'key_missing' || normalized === 'missing' || normalized === 'not_configured') return 'caution';
+  return 'neutral';
+}
+
+function reachabilityLabel(value: unknown): { label: string; variant: 'neutral' | 'success' | 'caution' | 'danger' | 'info' } {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'reachable') return { label: '可达', variant: 'success' };
+  if (normalized === 'timeout') return { label: '超时', variant: 'caution' };
+  if (normalized === 'unreachable') return { label: '不可达', variant: 'danger' };
+  return { label: '待观测', variant: 'neutral' };
+}
+
+function entitlementLabel(value: unknown): { label: string; variant: 'neutral' | 'success' | 'caution' | 'danger' | 'info' } {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'usable' || normalized === 'breadth_entitlement_usable') return { label: '权限可用', variant: 'success' };
+  if (normalized === 'permission_denied') return { label: '权限拒绝', variant: 'danger' };
+  if (normalized === 'empty') return { label: '空响应', variant: 'caution' };
+  if (normalized === 'malformed') return { label: '返回异常', variant: 'caution' };
+  if (normalized === 'timeout') return { label: '超时', variant: 'caution' };
+  if (normalized === 'unreachable') return { label: '不可达', variant: 'danger' };
+  return { label: '权限待观测', variant: 'neutral' };
+}
+
+const TickflowEntitlementRow: React.FC<{ projection: TickflowProjection }> = ({ projection }) => {
+  const keyBadge = tickflowLabel(projection.credentialState || projection.status);
+  const reachability = reachabilityLabel(projection.reachabilityState);
+  const entitlement = entitlementLabel(projection.breadthEntitlementState || projection.status);
+
+  return (
+    <TerminalNestedBlock className="px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-widest text-white/35">TickFlow A股宽度</p>
+          <p className="mt-1 text-sm font-semibold text-white">权限诊断</p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <TerminalChip variant={tickflowCredentialVariant(projection.credentialState || projection.status)}>{keyBadge}</TerminalChip>
+          <TerminalChip variant={reachability.variant}>{reachability.label}</TerminalChip>
+          <TerminalChip variant={entitlement.variant}>{entitlement.label}</TerminalChip>
+        </div>
+      </div>
+    </TerminalNestedBlock>
+  );
+};
 
 function selectPreferredProvider(items: MarketProviderOperationItem[]): MarketProviderOperationItem | null {
   if (!items.length) return null;
@@ -479,52 +560,56 @@ const EventRollupsPanel: React.FC<{ eventRollups: MarketProviderEventRollup[] }>
 const DiagnosticsPanel: React.FC<{
   response: MarketProviderOperationsResponse;
   selectedItem: MarketProviderOperationItem | null;
-}> = ({ response, selectedItem }) => (
-  <TerminalPanel as="section" className="col-span-12">
-    <TerminalSectionHeader
-      eyebrow="诊断详情"
-      title="诊断详情"
-      action={response.limitations.length ? <TerminalChip variant="caution">{response.limitations.length} 条限制</TerminalChip> : <TerminalChip variant="neutral">暂无限制</TerminalChip>}
-    />
-    <div className="mt-4 flex flex-wrap gap-2">
-      {response.limitations.length ? response.limitations.map((limitation) => (
-        <TerminalChip key={limitation} variant="caution">{limitationLabel(limitation)}</TerminalChip>
-      )) : <TerminalChip variant="neutral">暂无限制</TerminalChip>}
-    </div>
-    <TerminalDisclosure
-      title="诊断详情"
-      summary="原始限制代码、只读摘要、追踪标识默认折叠"
-      className="mt-4"
-      data-testid="market-provider-diagnostics-disclosure"
-    >
-      <div className="grid gap-4 xl:grid-cols-3">
-        <TerminalNestedBlock>
-          <p className="text-[10px] uppercase tracking-widest text-white/35">限制代码</p>
-          <ul className="mt-2 space-y-1 text-[11px] leading-5 text-white/58">
-            {response.limitations.length ? response.limitations.map((limitation) => (
-              <li key={limitation} className="break-words font-mono">{limitation}</li>
-            )) : <li className="text-white/40">暂无原始限制代码</li>}
-          </ul>
-        </TerminalNestedBlock>
-        <TerminalNestedBlock className="xl:col-span-2">
-          <p className="text-[10px] uppercase tracking-widest text-white/35">JSON</p>
-          <pre className="mt-2 max-h-72 overflow-y-auto no-scrollbar whitespace-pre-wrap break-words text-[11px] leading-5 text-white/58">
-            {JSON.stringify({
-              summary: safeMetadataSummary(response),
-              selectedProvider: selectedItem ? {
-                provider: selectedItem.provider,
-                cacheKey: selectedItem.cacheKey,
-                endpoint: selectedItem.endpoint,
-                status: normalizeStatus(selectedItem.status),
-                latestLogEventId: selectedItem.adminLogDrillThrough?.eventId || null,
-              } : null,
-            }, null, 2)}
-          </pre>
-        </TerminalNestedBlock>
+}> = ({ response, selectedItem }) => {
+  const tickflowProjection = readTickflowProjection(response.metadata);
+  return (
+    <TerminalPanel as="section" className="col-span-12">
+      <TerminalSectionHeader
+        eyebrow="诊断详情"
+        title="诊断详情"
+        action={response.limitations.length ? <TerminalChip variant="caution">{response.limitations.length} 条限制</TerminalChip> : <TerminalChip variant="neutral">暂无限制</TerminalChip>}
+      />
+      {tickflowProjection ? <div className="mt-4"><TickflowEntitlementRow projection={tickflowProjection} /></div> : null}
+      <div className="mt-4 flex flex-wrap gap-2">
+        {response.limitations.length ? response.limitations.map((limitation) => (
+          <TerminalChip key={limitation} variant="caution">{limitationLabel(limitation)}</TerminalChip>
+        )) : <TerminalChip variant="neutral">暂无限制</TerminalChip>}
       </div>
-    </TerminalDisclosure>
-  </TerminalPanel>
-);
+      <TerminalDisclosure
+        title="诊断详情"
+        summary="原始限制代码、只读摘要、追踪标识默认折叠"
+        className="mt-4"
+        data-testid="market-provider-diagnostics-disclosure"
+      >
+        <div className="grid gap-4 xl:grid-cols-3">
+          <TerminalNestedBlock>
+            <p className="text-[10px] uppercase tracking-widest text-white/35">限制代码</p>
+            <ul className="mt-2 space-y-1 text-[11px] leading-5 text-white/58">
+              {response.limitations.length ? response.limitations.map((limitation) => (
+                <li key={limitation} className="break-words font-mono">{limitation}</li>
+              )) : <li className="text-white/40">暂无原始限制代码</li>}
+            </ul>
+          </TerminalNestedBlock>
+          <TerminalNestedBlock className="xl:col-span-2">
+            <p className="text-[10px] uppercase tracking-widest text-white/35">JSON</p>
+            <pre className="mt-2 max-h-72 overflow-y-auto no-scrollbar whitespace-pre-wrap break-words text-[11px] leading-5 text-white/58">
+              {JSON.stringify({
+                summary: safeMetadataSummary(response),
+                selectedProvider: selectedItem ? {
+                  provider: selectedItem.provider,
+                  cacheKey: selectedItem.cacheKey,
+                  endpoint: selectedItem.endpoint,
+                  status: normalizeStatus(selectedItem.status),
+                  latestLogEventId: selectedItem.adminLogDrillThrough?.eventId || null,
+                } : null,
+              }, null, 2)}
+            </pre>
+          </TerminalNestedBlock>
+        </div>
+      </TerminalDisclosure>
+    </TerminalPanel>
+  );
+};
 
 const LoadingOperationsState: React.FC = () => (
   <TerminalPanel as="section" role="status" aria-label="正在读取市场数据源运维快照">

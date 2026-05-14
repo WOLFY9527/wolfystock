@@ -1,6 +1,7 @@
 import type React from 'react';
 import { Button, ConfirmDialog, Drawer, Input, Select } from '../common';
 import { formatDateTime, formatDurationMs } from '../../utils/format';
+import type { BuiltinDataSourceEndpointCheck } from '../../types/systemConfig';
 import {
   DATA_SOURCE_CAPABILITY_LABEL_KEYS,
   DATA_SOURCE_CAPABILITY_OPTIONS,
@@ -19,6 +20,86 @@ const DRAWER_PANEL_CLASS = 'rounded-xl border border-white/5 bg-white/[0.02] px-
 const DRAWER_LABEL_CLASS = 'text-[10px] uppercase tracking-widest text-white/40 mb-1.5 font-bold block';
 const DRAWER_TEXTAREA_CLASS = 'min-h-[6rem] w-full resize-y rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-sm text-white transition-all placeholder:text-white/20 focus:border-indigo-500/50 focus:bg-white/[0.05] focus:outline-none focus:ring-1 focus:ring-indigo-500/50 disabled:cursor-not-allowed disabled:opacity-60';
 const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-6 flex cursor-pointer list-none items-center gap-1.5 border-t border-white/5 pt-4 text-xs text-white/30 transition-colors hover:text-white [&::-webkit-details-marker]:hidden';
+const SENSITIVE_DRAWER_FRAGMENT_PATTERN = /((?:token|secret|cookie|session|password|authorization|bearer|api[_-]?key|apikey)\s*[:=]?\s*)([^,\s]+)/gi;
+const DRAWER_URL_PATTERN = /https?:\/\/\S+/gi;
+
+function sanitizeValidationMessage(value: string): string {
+  const text = String(value || '').trim();
+  if (!text) {
+    return '详情待补充';
+  }
+  const redacted = text
+    .replace(SENSITIVE_DRAWER_FRAGMENT_PATTERN, '$1[已脱敏]')
+    .replace(DRAWER_URL_PATTERN, '[链接已脱敏]');
+  if (/exception|traceback|stack/i.test(redacted)) {
+    return '详情已脱敏';
+  }
+  return redacted.slice(0, 160);
+}
+
+function hkEntitlementTone(value: string): string {
+  if (value === 'ok_hk_quote_history') return 'border-emerald-400/20 bg-emerald-400/8 text-emerald-200';
+  if (value === 'quota_limited' || value === 'timeout') return 'border-amber-300/20 bg-amber-300/8 text-amber-100';
+  if (value === 'hk_entitlement_missing' || value === 'provider_error') return 'border-rose-400/20 bg-rose-400/8 text-rose-200';
+  if (value === 'missing_key') return 'border-white/10 bg-white/[0.04] text-white/62';
+  return 'border-white/10 bg-white/[0.04] text-white/72';
+}
+
+function hkEntitlementLabel(check?: BuiltinDataSourceEndpointCheck | null, validationResult?: BuiltinDataSourceValidationResult): string {
+  const state = String(check?.errorType || validationResult?.status || '').trim().toLowerCase();
+  if (state === 'ok_hk_quote_history' || check?.ok) return '可用';
+  if (state === 'quota_limited') return '额度受限';
+  if (state === 'hk_entitlement_missing') return '权限缺失';
+  if (state === 'timeout') return '超时';
+  if (state === 'malformed_response') return '返回异常';
+  if (state === 'provider_error') return '不可达';
+  if (state === 'missing_key') return '未配置';
+  if (state === 'configured_unverified') return '待验证';
+  return validationResult?.status === 'success' ? '可用' : '待验证';
+}
+
+function renderValidationPanel(
+  validationResult: BuiltinDataSourceValidationResult,
+  language: string,
+  t: TranslateFn,
+) {
+  const hkEntitlementCheck = validationResult.provider === 'twelve_data'
+    ? validationResult.checks.find((check) => check.name === 'hk_quote_history') || null
+    : null;
+  const visibleChecks = hkEntitlementCheck
+    ? validationResult.checks.filter((check) => check !== hkEntitlementCheck)
+    : validationResult.checks;
+  const configurationLabel = validationResult.status === 'missing_key' ? '未配置' : '已配置';
+
+  return (
+    <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3" data-testid="builtin-data-source-validation-result">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-foreground">{validationResult.summary}</p>
+        <span className={GHOST_TAG_CLASS}>{validationResult.status}</span>
+      </div>
+      {hkEntitlementCheck ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-[11px] font-semibold text-foreground">港股权限</span>
+          <span className={`${GHOST_TAG_CLASS} border-white/10 bg-white/[0.04] text-white/72`}>{configurationLabel}</span>
+          <span className={`${GHOST_TAG_CLASS} ${hkEntitlementTone(String(hkEntitlementCheck.errorType || ''))}`}>
+            {hkEntitlementLabel(hkEntitlementCheck, validationResult)}
+          </span>
+        </div>
+      ) : null}
+      <div className="mt-2 grid gap-1.5 text-xs text-secondary-text">
+        <p>{t('settings.dataSourceValidationKeyMasked')}: {validationResult.keyMasked || t('settings.dataSourceValidationPublicProvider')}</p>
+        <p>{language === 'zh' ? '校验时间' : 'Checked at'}: {formatDateTime(validationResult.checkedAt)}</p>
+        <p>{t('settings.dataSourceValidationDuration')}: {formatDurationMs(validationResult.durationMs)}</p>
+        {visibleChecks.map((check) => (
+          <p key={`${validationResult.provider}-${check.name}`}>
+            {formatDataSourceCheckLine(check)} · {sanitizeValidationMessage(check.message)}
+          </p>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-muted-text">{validationResult.suggestion}</p>
+    </div>
+  );
+}
 
 type ManagedBuiltinDraft = {
   credential: string;
@@ -108,25 +189,7 @@ const DataSourceLibraryDrawer: React.FC<DataSourceLibraryDrawerProps> = ({
             </p>
             <p className="mt-1 text-xs text-muted-text">{entry.description}</p>
           </div>
-          {validationResult ? (
-            <div className={DRAWER_PANEL_CLASS} data-testid="builtin-data-source-validation-result">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-foreground">{validationResult.summary}</p>
-                <span className={GHOST_TAG_CLASS}>{validationResult.status}</span>
-              </div>
-              <div className="mt-2 grid gap-1.5 text-xs text-secondary-text">
-                <p>{t('settings.dataSourceValidationKeyMasked')}: {validationResult.keyMasked || t('settings.dataSourceValidationPublicProvider')}</p>
-                <p>{language === 'zh' ? '校验时间' : 'Checked at'}: {formatDateTime(validationResult.checkedAt)}</p>
-                <p>{t('settings.dataSourceValidationDuration')}: {formatDurationMs(validationResult.durationMs)}</p>
-                {validationResult.checks.map((check) => (
-                  <p key={`${validationResult.provider}-${check.name}`}>
-                    {formatDataSourceCheckLine(check)} · {check.message}
-                  </p>
-                ))}
-              </div>
-              <p className="mt-2 text-xs text-muted-text">{validationResult.suggestion}</p>
-            </div>
-          ) : null}
+          {validationResult ? renderValidationPanel(validationResult, language, t) : null}
           <div className="flex justify-end">
             <Button
               type="button"
@@ -235,25 +298,7 @@ const DataSourceLibraryDrawer: React.FC<DataSourceLibraryDrawerProps> = ({
               </Button>
             </div>
           </div>
-          {validationResult ? (
-            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3" data-testid="builtin-data-source-validation-result">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-foreground">{validationResult.summary}</p>
-                <span className={GHOST_TAG_CLASS}>{validationResult.status}</span>
-              </div>
-              <div className="mt-2 grid gap-1.5 text-xs text-secondary-text">
-                <p>{t('settings.dataSourceValidationKeyMasked')}: {validationResult.keyMasked || t('settings.dataSourceValidationPublicProvider')}</p>
-                <p>{language === 'zh' ? '校验时间' : 'Checked at'}: {formatDateTime(validationResult.checkedAt)}</p>
-                <p>{t('settings.dataSourceValidationDuration')}: {formatDurationMs(validationResult.durationMs)}</p>
-                {validationResult.checks.map((check) => (
-                  <p key={`${validationResult.provider}-${check.name}`}>
-                    {formatDataSourceCheckLine(check)} · {check.message}
-                  </p>
-                ))}
-              </div>
-              <p className="mt-2 text-xs text-muted-text">{validationResult.suggestion}</p>
-            </div>
-          ) : null}
+          {validationResult ? renderValidationPanel(validationResult, language, t) : null}
         </div>
       ) : (
         <div className="space-y-3">
