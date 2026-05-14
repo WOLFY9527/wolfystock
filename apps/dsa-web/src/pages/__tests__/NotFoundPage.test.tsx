@@ -14,12 +14,6 @@ vi.mock('../../contexts/UiLanguageContext', () => ({
   }),
 }));
 
-vi.mock('../../components/common', () => ({
-  Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { children: React.ReactNode }) => (
-    <button {...props}>{children}</button>
-  ),
-}));
-
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return {
@@ -36,12 +30,18 @@ describe('NotFoundPage', () => {
   it('renders localized Chinese copy on /zh paths', () => {
     window.history.replaceState(window.history.state, '', '/zh/missing-route');
 
-    render(
+    const { container } = render(
       <MemoryRouter initialEntries={['/zh/missing-route']}>
         <NotFoundPage />
       </MemoryRouter>,
     );
 
+    const pageShell = container.querySelector('[data-terminal-primitive="page-shell"]');
+    const panel = container.querySelector('[data-terminal-primitive="panel"]');
+
+    expect(pageShell).toBeTruthy();
+    expect(pageShell).not.toHaveClass('min-h-screen');
+    expect(panel).toBeTruthy();
     expect(screen.getByRole('heading', { name: translate('zh', 'notFound.title') })).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'notFound.body'))).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('zh', 'notFound.cta') })).toBeInTheDocument();
