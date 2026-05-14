@@ -985,6 +985,55 @@ describe('ChatPage', () => {
     expect(screen.queryByTestId('chat-typewriter-assistant-latest')).not.toBeInTheDocument();
   });
 
+  it('shows a compact fallback before lazy assistant markdown rendering completes', async () => {
+    const deferredModule = createDeferred<{
+      default: (props: { content: string; className?: string }) => React.JSX.Element;
+    }>();
+
+    vi.resetModules();
+    vi.doMock('../../components/chat/AssistantMarkdownContent', () => deferredModule.promise);
+
+    mockStoreState.messages = [
+      {
+        id: 'assistant-lazy',
+        role: 'assistant',
+        content: '## 已完成回答\n\n- 第一条\n- 第二条',
+        skillName: canonicalBullTrendLabel('zh'),
+      },
+    ];
+
+    const { default: LazyChatPage } = await import('../ChatPage');
+
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <LazyChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    const fallback = screen.getByTestId('chat-assistant-markdown-fallback-assistant-lazy');
+    expect(fallback).toHaveAttribute('aria-busy', 'true');
+    expect(fallback).toHaveClass('text-[15px]', 'leading-[1.6]', 'text-white/90', 'break-words');
+    expect(fallback.className).not.toContain('bg-black');
+
+    await act(async () => {
+      deferredModule.resolve({
+        default: ({ content, className }: { content: string; className?: string }) => (
+          <div data-testid="chat-assistant-markdown-loaded" className={className}>
+            {content}
+          </div>
+        ),
+      });
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByTestId('chat-assistant-markdown-loaded')).toHaveTextContent('已完成回答');
+
+    vi.doUnmock('../../components/chat/AssistantMarkdownContent');
+    vi.resetModules();
+  });
+
   it('renders full-width bubbles and removes quote rails from assistant content surfaces', async () => {
     mockStoreState.messages = [
       {
