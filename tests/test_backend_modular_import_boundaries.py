@@ -260,7 +260,7 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
     "src/services/us_history_helper.py": {"data_provider.base"},
 }
 EXPECTED_DIRECT_PROVIDER_CLIENT_IMPORTS = {
-    "src/services/market_overview_service.py": {"yfinance"},
+    "src/services/market_overview_yfinance_transport.py": {"yfinance"},
     "src/services/stock_service.py": {"yfinance"},
 }
 EXPECTED_PROVIDER_HEAVY_SERVICE_FILES = frozenset(
@@ -272,7 +272,7 @@ EXPECTED_PROVIDER_HEAVY_SERVICE_FILES = frozenset(
 KNOWN_PROVIDER_RUNTIME_HOTSPOTS = {
     "src/services/market_overview_service.py": {
         "provider_runtime": {"src.services.market_cache"},
-        "direct_provider_clients": {"yfinance"},
+        "direct_provider_clients": set(),
     },
     "src/services/market_scanner_service.py": {
         "provider_runtime": {"data_provider.base"},
@@ -286,6 +286,7 @@ MARKET_OVERVIEW_RUNTIME_FILES = (
     "src/services/market_overview_binance_transport.py",
     "src/services/market_overview_sentiment_transport.py",
     "src/services/market_overview_sina_transport.py",
+    "src/services/market_overview_yfinance_transport.py",
     "src/services/market_overview_service.py",
     "src/services/market_rotation_radar_service.py",
 )
@@ -296,7 +297,8 @@ EXPECTED_MARKET_OVERVIEW_RUNTIME_DIRECT_IMPORTS = {
     "src/services/market_overview_binance_transport.py": {"requests"},
     "src/services/market_overview_sentiment_transport.py": {"requests"},
     "src/services/market_overview_sina_transport.py": {"requests"},
-    "src/services/market_overview_service.py": {"yfinance"},
+    "src/services/market_overview_yfinance_transport.py": {"yfinance"},
+    "src/services/market_overview_service.py": set(),
     "src/services/market_rotation_radar_service.py": set(),
 }
 STOCK_SERVICE_TRANSITIONAL_PROVIDER_BOUNDARY = {

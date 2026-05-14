@@ -22,6 +22,10 @@ from src.services.market_overview_sentiment_transport import (
     fetch_cnn_fear_greed_payload,
 )
 from src.services.market_overview_sina_transport import fetch_sina_cn_index_rows
+from src.services.market_overview_yfinance_transport import (
+    fetch_yfinance_quote_history_frame,
+    fetch_yfinance_spy_atr_history_frame,
+)
 from src.services.market_cache import MARKET_CACHE_TTLS, REFRESH_WARNING, market_cache
 from src.storage import DatabaseManager
 
@@ -2387,9 +2391,7 @@ class MarketOverviewService:
         return items
 
     def _latest_quote(self, ticker: str) -> Dict[str, Any]:
-        import yfinance as yf
-
-        frame = yf.Ticker(ticker).history(period="5d", interval="1d", auto_adjust=False)
+        frame = fetch_yfinance_quote_history_frame(ticker)
         if frame is None or frame.empty:
             raise RuntimeError(f"No market data returned for {ticker}")
         closes = [self._clean_number(value) for value in frame["Close"].tolist()]
@@ -2408,9 +2410,7 @@ class MarketOverviewService:
         }
 
     def _atr_item(self) -> Optional[Dict[str, Any]]:
-        import yfinance as yf
-
-        frame = yf.Ticker("SPY").history(period="1mo", interval="1d", auto_adjust=False)
+        frame = fetch_yfinance_spy_atr_history_frame()
         if frame is None or frame.empty or len(frame) < 2:
             return None
         trs = []

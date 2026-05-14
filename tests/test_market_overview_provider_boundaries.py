@@ -13,6 +13,7 @@ MARKET_OVERVIEW_SERVICE_FILE = REPO_ROOT / "src" / "services" / "market_overview
 MARKET_OVERVIEW_BINANCE_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_binance_transport.py"
 MARKET_OVERVIEW_SENTIMENT_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_sentiment_transport.py"
 MARKET_OVERVIEW_SINA_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_sina_transport.py"
+MARKET_OVERVIEW_YFINANCE_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_yfinance_transport.py"
 
 
 def _market_endpoint_tree() -> ast.AST:
@@ -84,6 +85,35 @@ def _requests_get_urls(path: Path) -> set[str]:
     return urls
 
 
+def _yfinance_history_call_shapes(path: Path) -> list[dict[str, object]]:
+    call_shapes: list[dict[str, object]] = []
+    for node in ast.walk(_python_tree(path)):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr != "history":
+            continue
+        ticker_call = node.func.value
+        if not isinstance(ticker_call, ast.Call) or not isinstance(ticker_call.func, ast.Attribute):
+            continue
+        if ticker_call.func.attr != "Ticker":
+            continue
+        keyword_map = {
+            keyword.arg: keyword.value.value
+            for keyword in node.keywords
+            if keyword.arg and isinstance(keyword.value, ast.Constant)
+        }
+        ticker_arg = ticker_call.args[0].value if ticker_call.args and isinstance(ticker_call.args[0], ast.Constant) else None
+        call_shapes.append(
+            {
+                "ticker": ticker_arg,
+                "period": keyword_map.get("period"),
+                "interval": keyword_map.get("interval"),
+                "auto_adjust": keyword_map.get("auto_adjust"),
+            }
+        )
+    return call_shapes
+
+
 def test_market_endpoints_delegate_to_market_overview_service() -> None:
     expected_calls = {
         "get_crypto": "get_crypto",
@@ -133,6 +163,12 @@ def test_market_overview_service_extracts_raw_transport_boundaries() -> None:
     assert "src.services.market_overview_binance_transport" in service_imports
     assert "src.services.market_overview_sentiment_transport" in service_imports
     assert "src.services.market_overview_sina_transport" in service_imports
+    assert "src.services.market_overview_yfinance_transport" in service_imports
+    assert not {
+        module
+        for module in service_imports
+        if module == "yfinance" or module.startswith("yfinance.")
+    }
     assert not {
         url
         for url in service_urls
@@ -168,3 +204,24 @@ def test_market_overview_sentiment_transport_limits_raw_http_calls_to_sentiment_
         "https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
         "https://api.alternative.me/fng/",
     }
+
+
+def test_market_overview_yfinance_transport_owns_yfinance_history_call_shapes() -> None:
+    transport_imports = _module_imports_for_file(MARKET_OVERVIEW_YFINANCE_TRANSPORT_FILE)
+
+    assert "yfinance" in transport_imports
+    assert _requests_get_urls(MARKET_OVERVIEW_YFINANCE_TRANSPORT_FILE) == set()
+    assert _yfinance_history_call_shapes(MARKET_OVERVIEW_YFINANCE_TRANSPORT_FILE) == [
+        {
+            "ticker": None,
+            "period": "5d",
+            "interval": "1d",
+            "auto_adjust": False,
+        },
+        {
+            "ticker": "SPY",
+            "period": "1mo",
+            "interval": "1d",
+            "auto_adjust": False,
+        },
+    ]
