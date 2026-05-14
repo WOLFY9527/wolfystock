@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Theme-level market rotation radar.
 
-The MVP intentionally does not fetch live provider data. It can score normalized
-quote snapshots injected by a caller, and otherwise returns clearly degraded
-static basket evidence for UI shape and public safety.
+The service only uses caller-supplied quote snapshots. Without an injected quote
+provider it returns clearly degraded static basket evidence for UI shape and
+public safety.
 """
 
 from __future__ import annotations
@@ -65,6 +65,16 @@ class ThemeBasket:
     operatorNote: str = ""
 
 
+@dataclass(frozen=True)
+class QuoteLoadResult:
+    quotes: Dict[str, Dict[str, Any]]
+    warning: Optional[str]
+    provider_present: bool
+    provider_status: str
+    requested_symbols: Sequence[str]
+    provider_metadata: Mapping[str, Any]
+
+
 def _theme_basket_from_taxonomy(entry: RotationTaxonomyEntry) -> ThemeBasket:
     proxy_symbols = tuple(entry.proxySymbols)
     benchmark = "IWM" if entry.id.endswith("small_cap_growth") else "QQQ"
@@ -105,7 +115,7 @@ FALLBACK_PRESETS: Dict[str, Dict[str, Any]] = {
     "robotics": {"score": 23, "leaders": ("ISRG", "TER", "SYM")},
 }
 
-QuoteProvider = Callable[[Iterable[str]], Mapping[str, Mapping[str, Any]]]
+QuoteProvider = Callable[[Iterable[str]], Mapping[str, Any]]
 NowProvider = Callable[[], datetime]
 
 
@@ -126,10 +136,11 @@ class MarketRotationRadarService:
         if normalized_market != "US":
             return self._taxonomy_rotation_radar(normalized_market)
         generated_at = self._now_iso()
-        quotes, quote_warning = self._load_quotes()
-        benchmarks = self._build_benchmarks(quotes, generated_at)
+        quote_result = self._load_quotes()
+        quote_provider_metadata = self._quote_provider_metadata(quote_result)
+        benchmarks = self._build_benchmarks(quote_result.quotes, generated_at)
         themes = [
-            self._analyze_theme(theme, quotes, benchmarks, generated_at)
+            self._analyze_theme(theme, quote_result.quotes, benchmarks, generated_at)
             for theme in THEME_BASKETS
         ]
         themes.sort(key=lambda item: (item["rotationScore"], item["confidence"]), reverse=True)
@@ -140,7 +151,7 @@ class MarketRotationRadarService:
         freshness = "fallback" if payload_fallback else "stale" if stale_theme_count else "delayed"
         warnings = [
             warning for warning in (
-                quote_warning,
+                quote_result.warning,
                 "未接入实时主题资金流数据，当前不输出精确资金流入金额。",
                 "Fallback/静态篮子仅用于结构展示，不代表当前行情。",
             ) if warning
@@ -164,7 +175,7 @@ class MarketRotationRadarService:
             "themes": themes,
             "metadata": {
                 "schemaVersion": "market_rotation_radar_phase4_v1",
-                "noExternalCalls": True,
+                "noExternalCalls": bool(quote_provider_metadata["noExternalCalls"]),
                 "alertsAreReadOnlyEvidence": True,
                 "notificationDeliveryEnabled": False,
                 "basketSource": "manual_static_baskets",
@@ -178,6 +189,7 @@ class MarketRotationRadarService:
                 "timeWindows": list(TIME_WINDOW_KEYS),
                 "requiredPersistenceWindows": list(TIME_WINDOW_KEYS),
                 "proxyQualityRequired": True,
+                "quoteProvider": quote_provider_metadata,
                 "benchmarkProxies": {
                     "market": list(MARKET_BENCHMARK_SYMBOLS),
                     "sector": list(SECTOR_BENCHMARK_SYMBOLS),
@@ -349,19 +361,36 @@ class MarketRotationRadarService:
         payload["rotationStateEvidence"] = self._rotation_state_evidence(payload, generated_at)
         return payload
 
-    def _load_quotes(self) -> tuple[Dict[str, Dict[str, Any]], Optional[str]]:
-        if self.quote_provider is None:
-            return {}, "未配置实时 quote provider，返回降级主题篮子。"
-        symbols = sorted(
-            {symbol for theme in THEME_BASKETS for symbol in theme.members}
-            | {theme.benchmark for theme in THEME_BASKETS}
-            | {theme.sectorBenchmark for theme in THEME_BASKETS}
-            | set(MARKET_BENCHMARK_SYMBOLS)
+    def _load_quotes(self) -> QuoteLoadResult:
+        symbols = tuple(
+            sorted(
+                {symbol for theme in THEME_BASKETS for symbol in theme.members}
+                | {theme.benchmark for theme in THEME_BASKETS}
+                | {theme.sectorBenchmark for theme in THEME_BASKETS}
+                | set(MARKET_BENCHMARK_SYMBOLS)
+            )
         )
+        if self.quote_provider is None:
+            return QuoteLoadResult(
+                quotes={},
+                warning="未配置实时 quote provider，返回降级主题篮子。",
+                provider_present=False,
+                provider_status="absent",
+                requested_symbols=symbols,
+                provider_metadata={"noExternalCalls": True},
+            )
         try:
-            raw_quotes = self.quote_provider(symbols) or {}
+            raw_result = self.quote_provider(symbols) or {}
         except Exception:
-            return {}, "quote provider 暂不可用，已降级为静态篮子。"
+            return QuoteLoadResult(
+                quotes={},
+                warning="quote provider 暂不可用，已降级为静态篮子。",
+                provider_present=True,
+                provider_status="failed",
+                requested_symbols=symbols,
+                provider_metadata={"noExternalCalls": False},
+            )
+        raw_quotes, provider_metadata = self._unpack_quote_provider_result(raw_result)
         normalized: Dict[str, Dict[str, Any]] = {}
         for symbol in symbols:
             raw_quote = raw_quotes.get(symbol) if isinstance(raw_quotes, Mapping) else None
@@ -370,8 +399,85 @@ class MarketRotationRadarService:
                 if quote:
                     normalized[symbol] = quote
         if not normalized:
-            return {}, "quote provider 未返回可用行情，已降级为静态篮子。"
-        return normalized, None
+            return QuoteLoadResult(
+                quotes={},
+                warning="quote provider 未返回可用行情，已降级为静态篮子。",
+                provider_present=True,
+                provider_status="empty",
+                requested_symbols=symbols,
+                provider_metadata={"noExternalCalls": False, **provider_metadata},
+            )
+        provider_status = "success" if len(normalized) == len(symbols) else "partial"
+        return QuoteLoadResult(
+            quotes=normalized,
+            warning=None,
+            provider_present=True,
+            provider_status=provider_status,
+            requested_symbols=symbols,
+            provider_metadata={"noExternalCalls": False, **provider_metadata},
+        )
+
+    def _unpack_quote_provider_result(
+        self,
+        raw_result: Mapping[str, Any],
+    ) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+        if not isinstance(raw_result, Mapping):
+            return {}, {}
+        quotes = raw_result.get("quotes")
+        metadata = raw_result.get("metadata")
+        if isinstance(quotes, Mapping):
+            return quotes, metadata if isinstance(metadata, Mapping) else {}
+        return raw_result, {}
+
+    def _quote_provider_metadata(self, quote_result: QuoteLoadResult) -> Dict[str, Any]:
+        provider_metadata = dict(quote_result.provider_metadata)
+        quotes = quote_result.quotes
+        freshness_counts: Dict[str, int] = {}
+        source_counts: Dict[str, int] = {}
+        source_label_counts: Dict[str, int] = {}
+        as_of_candidates: List[str] = []
+        fallback_count = 0
+        stale_count = 0
+        for quote in quotes.values():
+            freshness = str(quote.get("freshness") or "unknown")
+            freshness_counts[freshness] = freshness_counts.get(freshness, 0) + 1
+            source = str(quote.get("source") or "unknown")
+            source_counts[source] = source_counts.get(source, 0) + 1
+            source_label = str(quote.get("sourceLabel") or source)
+            source_label_counts[source_label] = source_label_counts.get(source_label, 0) + 1
+            as_of = quote.get("asOf")
+            if as_of:
+                as_of_candidates.append(str(as_of))
+            if quote.get("isFallback"):
+                fallback_count += 1
+            if quote.get("isStale"):
+                stale_count += 1
+        requested_symbol_count = len(quote_result.requested_symbols)
+        usable_symbol_count = len(quotes)
+        coverage_percent = round((usable_symbol_count / requested_symbol_count) * 100, 1) if requested_symbol_count else 0.0
+        return {
+            "present": quote_result.provider_present,
+            "status": quote_result.provider_status,
+            "requestedSymbolCount": requested_symbol_count,
+            "usableSymbolCount": usable_symbol_count,
+            "coveragePercent": coverage_percent,
+            "quoteMode": str(provider_metadata.get("quoteMode") or "proxy"),
+            "sourceType": str(
+                provider_metadata.get("sourceType")
+                or ("public_or_live" if usable_symbol_count else "absent")
+            ),
+            "freshness": str(
+                provider_metadata.get("freshness")
+                or self._dominant_label(freshness_counts, default="fallback")
+            ),
+            "asOf": str(provider_metadata.get("asOf") or max(as_of_candidates)) if as_of_candidates or provider_metadata.get("asOf") else None,
+            "fallbackQuoteCount": fallback_count,
+            "staleQuoteCount": stale_count,
+            "sourceCounts": source_counts,
+            "sourceLabelCounts": source_label_counts,
+            "freshnessCounts": freshness_counts,
+            "noExternalCalls": bool(provider_metadata.get("noExternalCalls", not quote_result.provider_present)),
+        }
 
     def _build_benchmarks(self, quotes: Mapping[str, Dict[str, Any]], generated_at: str) -> Dict[str, Dict[str, Any]]:
         benchmarks: Dict[str, Dict[str, Any]] = {}
@@ -1721,6 +1827,12 @@ class MarketRotationRadarService:
     def _avg(values: Sequence[float], default: float = 0.0) -> float:
         finite = [float(value) for value in values if math.isfinite(float(value))]
         return mean(finite) if finite else default
+
+    @staticmethod
+    def _dominant_label(counts: Mapping[str, int], default: str) -> str:
+        if not counts:
+            return default
+        return max(counts.items(), key=lambda item: (item[1], item[0]))[0]
 
     @staticmethod
     def _number(value: Any) -> Optional[float]:

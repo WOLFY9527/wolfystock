@@ -61,6 +61,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
 
         payload = service.get_rotation_radar()
         theme = payload["themes"][0]
+        provider_meta = payload["metadata"]["quoteProvider"]
 
         self.assertEqual(theme["id"], "ai_applications")
         self.assertGreaterEqual(theme["rotationScore"], 70)
@@ -93,6 +94,12 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertIn("非买卖建议", theme["alertCandidates"][0]["sortExplanation"])
         self.assertEqual(theme["rotationScore"], 89)
         self.assertEqual(theme["stage"], "early_watch")
+        self.assertTrue(provider_meta["present"])
+        self.assertEqual(provider_meta["status"], "partial")
+        self.assertEqual(provider_meta["quoteMode"], "proxy")
+        self.assertEqual(provider_meta["sourceType"], "public_or_live")
+        self.assertEqual(provider_meta["usableSymbolCount"], len(quotes))
+        self.assertFalse(payload["metadata"]["noExternalCalls"])
         self.assertIn("rotationStateEvidence", theme)
         self.assertEqual(theme["rotationStateEvidence"]["flowEvidenceType"], "proxy_only")
         self.assertFalse(theme["rotationStateEvidence"]["flowLanguageAllowed"])
@@ -148,6 +155,8 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(payload["freshness"], "fallback")
         self.assertNotEqual(payload["freshness"], "live")
         self.assertEqual(payload["metadata"]["noExternalCalls"], True)
+        self.assertEqual(payload["metadata"]["quoteProvider"]["present"], False)
+        self.assertEqual(payload["metadata"]["quoteProvider"]["status"], "absent")
         self.assertGreaterEqual(len(payload["themes"]), 18)
         self.assertEqual(
             [(theme["id"], theme["rotationScore"], theme["stage"]) for theme in payload["themes"][:5]],
@@ -174,6 +183,63 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             self.assertTrue(theme["themeDetail"]["watchlistSafe"])
             self.assertEqual(theme["proxyQuality"]["coveragePercent"], 0)
             self.assertTrue(all(proxy["quality"]["missingReason"] for proxy in theme["benchmarkProxies"].values()))
+
+    def test_quote_provider_success_metadata_can_mark_local_proxy_snapshot_without_external_calls(self) -> None:
+        def provider(symbols):
+            quotes = {}
+            for index, symbol in enumerate(symbols):
+                is_benchmark = symbol in {"QQQ", "SPY", "IWM", "IGV", "SMH", "CIBR", "CLOU", "PAVE", "BOTZ"}
+                quotes[symbol] = _quote(
+                    symbol,
+                    0.4 if is_benchmark else 1.2 + (index % 4) * 0.15,
+                    volume_ratio=1.0 if is_benchmark else 1.35,
+                    freshness="cached",
+                )
+            return {
+                "quotes": quotes,
+                "metadata": {
+                    "quoteMode": "proxy",
+                    "sourceType": "public",
+                    "freshness": "cached",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "noExternalCalls": True,
+                },
+            }
+
+        service = MarketRotationRadarService(
+            quote_provider=provider,
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        provider_meta = payload["metadata"]["quoteProvider"]
+
+        self.assertFalse(payload["isFallback"])
+        self.assertTrue(provider_meta["present"])
+        self.assertEqual(provider_meta["status"], "success")
+        self.assertEqual(provider_meta["quoteMode"], "proxy")
+        self.assertEqual(provider_meta["sourceType"], "public")
+        self.assertEqual(provider_meta["freshness"], "cached")
+        self.assertEqual(provider_meta["usableSymbolCount"], provider_meta["requestedSymbolCount"])
+        self.assertEqual(provider_meta["asOf"], "2026-05-07T09:45:00+00:00")
+        self.assertTrue(payload["metadata"]["noExternalCalls"])
+
+    def test_quote_provider_failure_falls_back_and_marks_external_call_boundary_honestly(self) -> None:
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: (_ for _ in ()).throw(RuntimeError("provider down")),
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        provider_meta = payload["metadata"]["quoteProvider"]
+
+        self.assertTrue(payload["isFallback"])
+        self.assertEqual(payload["freshness"], "fallback")
+        self.assertIn("quote provider 暂不可用", payload["warning"])
+        self.assertTrue(provider_meta["present"])
+        self.assertEqual(provider_meta["status"], "failed")
+        self.assertEqual(provider_meta["usableSymbolCount"], 0)
+        self.assertFalse(payload["metadata"]["noExternalCalls"])
 
     def test_non_us_market_returns_taxonomy_only_entries_without_quote_provider_calls(self) -> None:
         provider_calls: list[list[str]] = []

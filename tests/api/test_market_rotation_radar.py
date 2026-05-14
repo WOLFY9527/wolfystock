@@ -39,6 +39,8 @@ def test_market_rotation_radar_response_is_safe_and_read_only() -> None:
         payload = response.json()
         assert payload["endpoint"] == "/api/v1/market/rotation-radar"
         assert payload["metadata"]["noExternalCalls"] is True
+        assert payload["metadata"]["quoteProvider"]["present"] is False
+        assert payload["metadata"]["quoteProvider"]["status"] == "absent"
         assert payload["metadata"]["schemaVersion"] == "market_rotation_radar_phase4_v1"
         assert payload["metadata"]["timeWindows"] == ["5m", "15m", "60m", "1d"]
         assert payload["metadata"]["proxyQualityRequired"] is True
