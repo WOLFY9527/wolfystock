@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
 from unittest.mock import patch
 
@@ -480,3 +481,112 @@ def test_persisted_snapshot_metadata_is_used_without_provider_fetch() -> None:
     assert indices["provider"] == "yahoo"
     assert indices["isFromSnapshot"] is True
     assert cache_state["persistentSnapshotAvailable"] is True
+
+
+def test_tickflow_projection_reports_configured_key_before_runtime_entitlement_observation() -> None:
+    with patch(
+        "src.services.market_provider_operations_service.get_config",
+        return_value=SimpleNamespace(tickflow_api_key="tf-secret"),
+    ):
+        payload = _service([]).get_operations(window="24h")
+
+    projection = payload["metadata"]["providerDiagnostics"]["tickflowCnBreadth"]
+
+    assert projection["status"] == "key_configured"
+    assert projection["credentialState"] == "configured"
+    assert projection["credentialConfigured"] is True
+    assert projection["reachabilityState"] == "unknown"
+    assert projection["tickflowReachable"] is None
+    assert projection["breadthEntitlementState"] == "unknown"
+    assert projection["breadthEntitlementUsable"] is None
+    assert projection["reasonCode"] is None
+
+
+def test_tickflow_projection_reports_reachable_and_breadth_entitlement_usable_from_cached_snapshot() -> None:
+    market_cache.set(
+        "cn_breadth",
+        {
+            "source": "tickflow",
+            "sourceLabel": "TickFlow",
+            "sourceType": "public_api",
+            "freshness": "cached",
+            "updatedAt": "2026-05-14T09:30:00+08:00",
+            "asOf": "2026-05-14T09:30:00+08:00",
+            "items": [{"symbol": "ADV_RATIO", "value": 66.6}],
+        },
+        ttl_seconds=60,
+    )
+
+    with patch(
+        "src.services.market_provider_operations_service.get_config",
+        return_value=SimpleNamespace(tickflow_api_key="tf-secret"),
+    ):
+        payload = _service([]).get_operations(window="24h")
+
+    cn_breadth = next(item for item in payload["items"] if item["cacheKey"] == "cn_breadth")
+    projection = payload["metadata"]["providerDiagnostics"]["tickflowCnBreadth"]
+
+    assert cn_breadth["status"] == "cache"
+    assert projection["status"] == "breadth_entitlement_usable"
+    assert projection["credentialState"] == "configured"
+    assert projection["reachabilityState"] == "reachable"
+    assert projection["tickflowReachable"] is True
+    assert projection["breadthEntitlementState"] == "usable"
+    assert projection["breadthEntitlementUsable"] is True
+    assert projection["reasonCode"] is None
+    assert projection["observedSource"] == "tickflow"
+
+
+@pytest.mark.parametrize(
+    ("reason_code", "status", "reachability_state", "tickflow_reachable", "entitlement_state", "entitlement_usable"),
+    [
+        ("tickflow_not_configured", "key_missing", "unknown", None, "unknown", None),
+        ("tickflow_permission_unavailable", "permission_denied", "reachable", True, "permission_denied", False),
+        ("tickflow_timeout", "timeout", "timeout", False, "unknown", None),
+        ("tickflow_market_stats_empty", "empty", "reachable", True, "empty", False),
+        ("tickflow_market_stats_malformed", "malformed", "reachable", True, "malformed", False),
+    ],
+)
+def test_tickflow_projection_distinguishes_entitlement_and_health_reason_codes(
+    reason_code: str,
+    status: str,
+    reachability_state: str,
+    tickflow_reachable: Optional[bool],
+    entitlement_state: str,
+    entitlement_usable: Optional[bool],
+) -> None:
+    market_cache.set(
+        "cn_breadth",
+        {
+            "source": "fallback",
+            "sourceLabel": "Fallback",
+            "freshness": "fallback",
+            "fallbackUsed": True,
+            "fallbackReason": reason_code,
+            "lastError": f"{reason_code} token=SECRET url=https://api.tickflow.test/raw",
+            "items": [{"symbol": "ADV_RATIO", "value": 51.0}],
+        },
+        ttl_seconds=60,
+    )
+
+    configured_key = None if reason_code == "tickflow_not_configured" else "tf-secret"
+    with patch(
+        "src.services.market_provider_operations_service.get_config",
+        return_value=SimpleNamespace(tickflow_api_key=configured_key),
+    ):
+        payload = _service([]).get_operations(window="24h")
+
+    cn_breadth = next(item for item in payload["items"] if item["cacheKey"] == "cn_breadth")
+    projection = payload["metadata"]["providerDiagnostics"]["tickflowCnBreadth"]
+
+    assert cn_breadth["status"] == "error"
+    assert cn_breadth["fallbackUsed"] is True
+    assert projection["status"] == status
+    assert projection["credentialState"] == ("missing" if reason_code == "tickflow_not_configured" else "configured")
+    assert projection["reachabilityState"] == reachability_state
+    assert projection["tickflowReachable"] is tickflow_reachable
+    assert projection["breadthEntitlementState"] == entitlement_state
+    assert projection["breadthEntitlementUsable"] is entitlement_usable
+    assert projection["reasonCode"] == reason_code
+    assert "SECRET" not in str(projection)
+    assert "https://api.tickflow.test/raw" not in str(projection)

@@ -117,3 +117,121 @@ def provider_validation_suggestion(provider: str, status: str) -> str:
     if provider == "yahoo":
         return "Yahoo/YFinance 是 public/unofficial 数据源；如失败，请稍后重试或配置带 key 的备用 provider。"
     return "请检查 provider 凭据、网络连通性和套餐权限后重试。"
+
+
+_TICKFLOW_REASON_CODES = (
+    "tickflow_not_configured",
+    "tickflow_permission_unavailable",
+    "tickflow_timeout",
+    "tickflow_market_stats_empty",
+    "tickflow_market_stats_malformed",
+    "tickflow_unavailable",
+)
+
+
+def _normalize_tickflow_reason_code(*values: Any) -> Optional[str]:
+    for value in values:
+        text = str(value or "").strip().lower()
+        if not text:
+            continue
+        for reason_code in _TICKFLOW_REASON_CODES:
+            if reason_code in text:
+                return reason_code
+    return None
+
+
+def project_tickflow_entitlement_health(
+    *,
+    api_key: Any,
+    source: Any = None,
+    source_type: Any = None,
+    fallback_reason: Any = None,
+    warning: Any = None,
+    error_summary: Any = None,
+) -> Dict[str, Any]:
+    """Project read-only TickFlow entitlement and health diagnostics.
+
+    This helper is metadata only. It must not call TickFlow, mutate config, or
+    alter provider/runtime behavior.
+    """
+
+    normalized_source = str(source or "").strip().lower()
+    normalized_source_type = str(source_type or "").strip() or None
+    reason_code = _normalize_tickflow_reason_code(fallback_reason, warning, error_summary)
+
+    credential_configured = bool(str(api_key or "").strip())
+    if normalized_source == "tickflow" or (reason_code and reason_code != "tickflow_not_configured"):
+        credential_configured = True
+
+    credential_state = "configured" if credential_configured else "missing"
+    reachability_state = "unknown"
+    tickflow_reachable: Optional[bool] = None
+    entitlement_state = "unknown"
+    entitlement_usable: Optional[bool] = None
+    status = "key_configured" if credential_configured else "key_missing"
+
+    if normalized_source == "tickflow":
+        reachability_state = "reachable"
+        tickflow_reachable = True
+        entitlement_state = "usable"
+        entitlement_usable = True
+        status = "breadth_entitlement_usable"
+        reason_code = None
+    elif reason_code == "tickflow_not_configured":
+        credential_state = "missing"
+        credential_configured = False
+        status = "key_missing"
+    elif reason_code == "tickflow_permission_unavailable":
+        reachability_state = "reachable"
+        tickflow_reachable = True
+        entitlement_state = "permission_denied"
+        entitlement_usable = False
+        status = "permission_denied"
+    elif reason_code == "tickflow_timeout":
+        reachability_state = "timeout"
+        tickflow_reachable = False
+        status = "timeout"
+    elif reason_code == "tickflow_market_stats_empty":
+        reachability_state = "reachable"
+        tickflow_reachable = True
+        entitlement_state = "empty"
+        entitlement_usable = False
+        status = "empty"
+    elif reason_code == "tickflow_market_stats_malformed":
+        reachability_state = "reachable"
+        tickflow_reachable = True
+        entitlement_state = "malformed"
+        entitlement_usable = False
+        status = "malformed"
+    elif reason_code == "tickflow_unavailable":
+        reachability_state = "unreachable"
+        tickflow_reachable = False
+        status = "unreachable"
+
+    summary = {
+        "key_missing": "TickFlow key 未配置，无法评估 CN_Equity_A breadth entitlement。",
+        "key_configured": "TickFlow key 已配置，但尚未观测到 CN_Equity_A breadth entitlement 结果。",
+        "breadth_entitlement_usable": "TickFlow 可达，CN_Equity_A breadth entitlement 可用。",
+        "permission_denied": "TickFlow key 已配置，但 CN_Equity_A breadth entitlement 当前无权限。",
+        "timeout": "TickFlow key 已配置，但最近一次 CN_Equity_A breadth 检查超时。",
+        "empty": "TickFlow 可达，但 CN_Equity_A breadth 返回空结果。",
+        "malformed": "TickFlow 可达，但 CN_Equity_A breadth 返回格式异常。",
+        "unreachable": "TickFlow key 已配置，但 TickFlow 当前不可达。",
+    }[status]
+
+    return {
+        "provider": "tickflow",
+        "market": "CN_Equity_A",
+        "diagnosticTarget": "cn_breadth",
+        "status": status,
+        "credentialState": credential_state,
+        "credentialConfigured": credential_configured,
+        "reachabilityState": reachability_state,
+        "tickflowReachable": tickflow_reachable,
+        "breadthEntitlementState": entitlement_state,
+        "breadthEntitlementUsable": entitlement_usable,
+        "reasonCode": reason_code,
+        "observedSource": normalized_source or None,
+        "sourceType": normalized_source_type,
+        "summary": summary,
+    }

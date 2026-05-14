@@ -378,6 +378,24 @@ def _build_provider_health_examples() -> _ProviderHealthExamples:
                     "readOnly": True,
                     "externalProviderCalls": False,
                     "cacheMutation": False,
+                    "providerDiagnostics": {
+                        "tickflowCnBreadth": {
+                            "provider": "tickflow",
+                            "market": "CN_Equity_A",
+                            "diagnosticTarget": "cn_breadth",
+                            "status": "permission_denied",
+                            "credentialState": "configured",
+                            "credentialConfigured": True,
+                            "reachabilityState": "reachable",
+                            "tickflowReachable": True,
+                            "breadthEntitlementState": "permission_denied",
+                            "breadthEntitlementUsable": False,
+                            "reasonCode": "tickflow_permission_unavailable",
+                            "observedSource": "fallback",
+                            "sourceType": "cache",
+                            "summary": "TickFlow key 已配置，但 CN_Equity_A breadth entitlement 当前不可用。",
+                        }
+                    },
                     "summaryCache": {
                         "enabled": True,
                         "ttlSeconds": 10,
@@ -514,6 +532,18 @@ def test_provider_health_public_models_distinguish_required_operator_classes() -
         "fallback",
         "stale cache",
     }
+
+
+def test_market_provider_operations_contract_can_carry_tickflow_entitlement_projection() -> None:
+    response = _build_provider_health_examples()
+
+    projection = response.operations.metadata["providerDiagnostics"]["tickflowCnBreadth"]
+
+    assert projection["credentialState"] == "configured"
+    assert projection["status"] == "permission_denied"
+    assert projection["reachabilityState"] == "reachable"
+    assert projection["breadthEntitlementState"] == "permission_denied"
+    assert projection["breadthEntitlementUsable"] is False
 
 
 def test_provider_health_public_models_remain_read_only_sanitized_and_query_only() -> None:

@@ -12,9 +12,11 @@ import threading
 import time
 from typing import Any, ClassVar, Dict, Iterable, List, Optional, Tuple
 
+from src.config import get_config
 from src.services.execution_log_service import ExecutionLogService
 from src.services.market_cache import MARKET_CACHE_TTLS, MarketCache, market_cache
 from src.services.market_overview_service import SOURCE_LABELS
+from src.services.system_config_provider_projection import project_tickflow_entitlement_health
 from src.storage import DatabaseManager
 from src.utils.security import sanitize_message
 
@@ -93,7 +95,7 @@ class MarketProviderOperationsService:
             return cached_payload
 
         generated_at = self._now()
-        cache_states, items, cache_limitations = self._read_cache_and_snapshots(generated_at)
+        cache_states, items, cache_limitations, provider_diagnostics = self._read_cache_and_snapshots(generated_at)
         events = self._read_market_events(normalized_window)
         event_rollups = self._rollup_events(events, normalized_window)
         summary = self._summary(items, event_rollups)
@@ -117,6 +119,7 @@ class MarketProviderOperationsService:
                 "readOnly": True,
                 "externalProviderCalls": False,
                 "cacheMutation": False,
+                "providerDiagnostics": provider_diagnostics,
                 "summaryCache": self._summary_cache_metadata(
                     key=summary_cache_key,
                     stored_at_monotonic=time.monotonic(),
@@ -195,20 +198,51 @@ class MarketProviderOperationsService:
             "cacheAgeMs": max(0, int((now_monotonic - stored_at_monotonic) * 1000)),
         }
 
-    def _read_cache_and_snapshots(self, now: datetime) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str]]:
+    def _read_cache_and_snapshots(self, now: datetime) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str], Dict[str, Any]]:
         cache_states: List[Dict[str, Any]] = []
         items: List[Dict[str, Any]] = []
         limitations: List[str] = []
+        tickflow_api_key = getattr(get_config(), "tickflow_api_key", None)
+        provider_diagnostics: Dict[str, Any] = {}
         for panel in PANELS:
             entry = self.cache.get(panel.cache_key)
             snapshot = self.db.get_market_overview_snapshot(f"market_overview:{panel.cache_key}")
             snapshot_payload = snapshot.get("payload") if isinstance(snapshot, dict) and isinstance(snapshot.get("payload"), dict) else {}
             payload = copy.deepcopy(entry.data) if entry is not None and isinstance(entry.data, dict) else copy.deepcopy(snapshot_payload)
+            provider_health = payload.get("providerHealth") if isinstance(payload.get("providerHealth"), dict) else {}
             if entry is None and not snapshot_payload:
                 limitations.append(f"cache_metadata_unavailable:{panel.cache_key}")
             cache_states.append(self._cache_state(panel, entry, snapshot, now))
             items.append(self._item(panel, entry, snapshot, payload, now))
-        return cache_states, items, limitations
+            if panel.cache_key == "cn_breadth":
+                provider_diagnostics["tickflowCnBreadth"] = project_tickflow_entitlement_health(
+                    api_key=tickflow_api_key,
+                    source=self._safe_public_text(
+                        payload.get("source")
+                        or payload.get("provider")
+                        or provider_health.get("provider")
+                        or (snapshot.get("source") if isinstance(snapshot, dict) else None)
+                    ),
+                    source_type=self._safe_public_text(
+                        payload.get("sourceType")
+                        or provider_health.get("sourceType")
+                        or (snapshot.get("source_type") if isinstance(snapshot, dict) else None)
+                    ),
+                    fallback_reason=self._safe_public_text(
+                        payload.get("fallbackReason")
+                        or payload.get("fallback_reason")
+                        or payload.get("reasonCode")
+                        or provider_health.get("reasonCode")
+                    ),
+                    warning=self._safe_error(payload.get("warning")),
+                    error_summary=self._safe_error(
+                        provider_health.get("errorSummary")
+                        or payload.get("lastError")
+                        or payload.get("refreshError")
+                        or (snapshot.get("last_error") if isinstance(snapshot, dict) else None)
+                    ),
+                )
+        return cache_states, items, limitations, provider_diagnostics
 
     def _cache_state(
         self,
