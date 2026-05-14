@@ -51,14 +51,14 @@ class LiquidityMonitorService:
         self._external_provider_calls_used = False
         panels = {
             key: self._read_panel(key)
-            for key in ("crypto", "volatility", "rates", "fx_commodities", "funds_flow", "us_breadth", "cn_indices", "cn_breadth", "cn_flows", "futures")
+            for key in ("crypto", "volatility", "rates", "macro", "fx_commodities", "funds_flow", "us_breadth", "cn_indices", "cn_breadth", "cn_flows", "futures")
         }
         indicators = [
             self._crypto_spot_indicator(panels["crypto"]),
             self._crypto_funding_indicator(panels["crypto"]),
-            self._vix_indicator(panels["volatility"]),
+            self._vix_indicator(panels["volatility"], panels["macro"]),
             self._usd_pressure_indicator(panels["fx_commodities"], panels["rates"]),
-            self._us_rates_indicator(panels["rates"]),
+            self._us_rates_indicator(panels["rates"], panels["macro"]),
             self._us_etf_flow_indicator(panels["funds_flow"]),
             self._us_breadth_indicator(panels["us_breadth"]),
             self._cn_hk_index_indicator(panels["cn_indices"]),
@@ -211,8 +211,12 @@ class LiquidityMonitorService:
             freshness=freshness,
         )
 
-    def _vix_indicator(self, panel: PanelState) -> Dict[str, Any]:
-        item = self._first_reliable_item(panel, {"VIX"})
+    def _vix_indicator(self, panel: PanelState, macro_panel: PanelState) -> Dict[str, Any]:
+        selected = self._preferred_symbol_item((panel, macro_panel), {"VIX", "VIXCLS"})
+        if selected is not None:
+            panel, item = selected
+        else:
+            item = None
         if item is None:
             proxy_panel = self._fetch_macro_proxy_panel(
                 "volatility_proxy",
@@ -250,7 +254,14 @@ class LiquidityMonitorService:
         elif value is not None and value >= 25:
             contribution = -8
         freshness = self._item_freshness(item, panel)
-        status = "live" if freshness in {"live", "cached"} and str(item.get("source") or panel.source) != "yfinance_proxy" else "partial"
+        source_type = self._item_source_type(item, panel)
+        status = (
+            "live"
+            if freshness in {"live", "cached"}
+            and str(item.get("source") or panel.source) != "yfinance_proxy"
+            and source_type != "official_public"
+            else "partial"
+        )
         return self._indicator(
             "vix_pressure",
             "VIX / 波动率压力",
@@ -309,8 +320,8 @@ class LiquidityMonitorService:
             freshness=freshness,
         )
 
-    def _us_rates_indicator(self, panel: PanelState) -> Dict[str, Any]:
-        components = self._extract_us_rates_components(panel)
+    def _us_rates_indicator(self, panel: PanelState, macro_panel: PanelState) -> Dict[str, Any]:
+        components = self._extract_us_rates_components((panel, macro_panel))
         if not components:
             proxy_panel = self._fetch_macro_proxy_panel(
                 "rates_proxy",
@@ -321,7 +332,7 @@ class LiquidityMonitorService:
             )
             if proxy_panel is not None:
                 panel = proxy_panel
-                components = self._extract_us_rates_components(panel)
+                components = self._extract_us_rates_components((panel,))
         if not components:
             return self._indicator(
                 "us_rates_pressure",
@@ -339,8 +350,8 @@ class LiquidityMonitorService:
                     reason=self._panel_unavailable_reason(panel, "US rates 代理不可用"),
                 ),
             )
-        positive = sum(1 for component in components if float(component["signal"]) > 0)
-        negative = sum(1 for component in components if float(component["signal"]) < 0)
+        positive = sum(1 for component in components if component["kind"] == "yield" and float(component["signal"]) > 0)
+        negative = sum(1 for component in components if component["kind"] == "yield" and float(component["signal"]) < 0)
         direction = self._direction_from_counts(positive, negative)
         summary = " | ".join(
             f"{component['symbol']} {self._signed_percent_text(float(component['change']))}"
@@ -352,10 +363,25 @@ class LiquidityMonitorService:
             for component in components
             if component["kind"] == "curve"
         ]
+        observation_parts = [
+            f"{component['symbol']} {self._signed_number_text(float(component['value']))}{component['unit']}"
+            for component in components
+            if component["kind"] == "observation"
+        ]
         if curve_parts:
             summary = f"{summary} | {' | '.join(curve_parts)}" if summary else " | ".join(curve_parts)
+        if observation_parts:
+            summary = f"{summary} | {' | '.join(observation_parts)}" if summary else " | ".join(observation_parts)
         freshness = self._weakest_freshness([str(component["freshness"]) for component in components])
-        status = "live" if sum(1 for component in components if component["kind"] == "yield") >= 2 and freshness in {"live", "cached"} else "partial"
+        yield_components = [component for component in components if component["kind"] == "yield"]
+        status = (
+            "live"
+            if len(yield_components) >= 2
+            and freshness in {"live", "cached"}
+            and all(str(component.get("source") or "") != "yfinance_proxy" for component in yield_components)
+            and all(str(component.get("sourceType") or "") != "official_public" for component in yield_components)
+            else "partial"
+        )
         return self._indicator(
             "us_rates_pressure",
             "US Rates / 利率压力",
@@ -483,6 +509,34 @@ class LiquidityMonitorService:
         items = self._reliable_items(panel, symbols)
         return items[0] if items else None
 
+    def _preferred_symbol_item(
+        self,
+        panels: Iterable[PanelState],
+        symbols: set[str],
+    ) -> Optional[tuple[PanelState, Dict[str, Any]]]:
+        candidates: List[tuple[tuple[int, int, int], PanelState, Dict[str, Any]]] = []
+        for panel_index, panel in enumerate(panels):
+            for item in self._reliable_items(panel, symbols):
+                source_type = self._item_source_type(item, panel)
+                source = str(item.get("source") or panel.source or "").lower()
+                freshness = self._item_freshness(item, panel)
+                candidates.append(
+                    (
+                        (
+                            0 if source_type == "official_public" else 1,
+                            FRESHNESS_ORDER.get(freshness, 99),
+                            panel_index if source not in {"yahoo", "yfinance", "yfinance_proxy"} else panel_index + 1,
+                        ),
+                        panel,
+                        item,
+                    )
+                )
+        if not candidates:
+            return None
+        candidates.sort(key=lambda entry: entry[0])
+        _, panel, item = candidates[0]
+        return panel, item
+
     def _reliable_symbol_map(self, panel: PanelState, symbols: Optional[set[str]] = None) -> Dict[str, Dict[str, Any]]:
         return {
             str(item.get("symbol") or ""): item
@@ -551,13 +605,14 @@ class LiquidityMonitorService:
             )
         return items
 
-    def _extract_us_rates_components(self, panel: PanelState) -> List[Dict[str, Any]]:
-        symbol_map = self._reliable_symbol_map(panel, {"US2Y", "US10Y", "US30Y", "US10Y2Y", "US10Y3M"})
+    def _extract_us_rates_components(self, panels: Iterable[PanelState]) -> List[Dict[str, Any]]:
+        panels = tuple(panels)
         items: List[Dict[str, Any]] = []
         for symbol in ("US2Y", "US10Y", "US30Y"):
-            item = symbol_map.get(symbol)
-            if item is None:
+            selected = self._preferred_symbol_item(panels, {symbol})
+            if selected is None:
                 continue
+            panel, item = selected
             change = self._change_value(item)
             if change is None:
                 continue
@@ -574,10 +629,32 @@ class LiquidityMonitorService:
                     "asOf": item.get("asOf") or item.get("updatedAt") or panel.as_of or panel.updated_at,
                 }
             )
-        for symbol in ("US10Y2Y", "US10Y3M"):
-            item = symbol_map.get(symbol)
-            if item is None:
+        for symbol in ("SOFR",):
+            selected = self._preferred_symbol_item(panels, {symbol})
+            if selected is None:
                 continue
+            panel, item = selected
+            value = self._numeric(item.get("value"))
+            if value is None:
+                continue
+            items.append(
+                {
+                    "symbol": symbol,
+                    "kind": "observation",
+                    "value": value,
+                    "unit": str(item.get("unit") or ""),
+                    "freshness": self._item_freshness(item, panel),
+                    "source": item.get("source") or panel.source,
+                    "sourceLabel": item.get("sourceLabel") or panel.payload.get("sourceLabel"),
+                    "sourceType": item.get("sourceType") or panel.payload.get("sourceType"),
+                    "asOf": item.get("asOf") or item.get("updatedAt") or panel.as_of or panel.updated_at,
+                }
+            )
+        for symbol in ("US10Y2Y", "US10Y3M"):
+            selected = self._preferred_symbol_item(panels, {symbol})
+            if selected is None:
+                continue
+            panel, item = selected
             value = self._numeric(item.get("value"))
             if value is None:
                 continue
@@ -876,6 +953,10 @@ class LiquidityMonitorService:
                 continue
             reliable.append(raw)
         return reliable
+
+    @staticmethod
+    def _item_source_type(item: Dict[str, Any], panel: PanelState) -> str:
+        return str(item.get("sourceType") or panel.payload.get("sourceType") or "").lower()
 
     def _item_freshness(self, item: Dict[str, Any], panel: PanelState) -> str:
         explicit = str(item.get("freshness") or "").lower()

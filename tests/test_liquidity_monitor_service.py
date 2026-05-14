@@ -668,6 +668,45 @@ def test_vix_indicator_uses_yfinance_proxy_when_volatility_panel_is_unavailable(
     assert "unofficial_proxy" in str(indicators["vix_pressure"]["summary"])
 
 
+def test_vix_indicator_prefers_official_macro_cache_over_yfinance_proxy(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    official_as_of = "2026-05-12T16:15:00+08:00"
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 18.22,
+                    "changePercent": -4.66,
+                    "source": "fred",
+                    "sourceId": "fred:VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                    "asOf": official_as_of,
+                    "updatedAt": official_as_of,
+                }
+            ],
+            updated_at=official_as_of,
+            as_of=official_as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = {item["key"]: item for item in payload["indicators"]}["vix_pressure"]
+
+    assert indicator["includedInScore"] is True
+    assert indicator["status"] == "partial"
+    assert indicator["freshness"] == "cached"
+    assert "FRED VIXCLS" in str(indicator["summary"])
+    assert "official_public" in str(indicator["summary"])
+    assert "Yahoo Finance" not in str(indicator["summary"])
+
+
 def test_yfinance_proxy_panels_remain_delayed_and_not_live_provider_labels(isolated_db: DatabaseManager) -> None:
     service = _make_service()
     quote_index = [
@@ -747,3 +786,154 @@ def test_us_rates_indicator_uses_yfinance_treasury_proxies_when_rates_panel_is_u
     assert "US10Y" in str(indicators["us_rates_pressure"]["summary"])
     assert "US30Y" in str(indicators["us_rates_pressure"]["summary"])
     assert "Yahoo Finance" in str(indicators["us_rates_pressure"]["summary"])
+
+
+def test_us_rates_indicator_prefers_official_macro_cache_and_keeps_sofr_observation_only(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    official_as_of = "2026-05-12T16:15:00+08:00"
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="yahoo",
+            freshness="live",
+            items=[
+                {"symbol": "US2Y", "label": "2Y yield", "changePercent": 0.15, "value": 4.82, "source": "yahoo"},
+                {"symbol": "US10Y", "label": "10Y yield", "changePercent": 0.28, "value": 4.51, "source": "yahoo"},
+                {"symbol": "US30Y", "label": "30Y yield", "changePercent": 0.12, "value": 4.72, "source": "yahoo"},
+            ],
+            updated_at=official_as_of,
+            as_of=official_as_of,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "US2Y",
+                    "label": "US 2Y",
+                    "value": 4.62,
+                    "changePercent": -0.22,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS2",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "asOf": official_as_of,
+                    "updatedAt": official_as_of,
+                },
+                {
+                    "symbol": "US10Y",
+                    "label": "US 10Y",
+                    "value": 4.31,
+                    "changePercent": -0.31,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS10",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "asOf": official_as_of,
+                    "updatedAt": official_as_of,
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "US 30Y",
+                    "value": 4.58,
+                    "changePercent": -0.18,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS30",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "asOf": official_as_of,
+                    "updatedAt": official_as_of,
+                },
+                {
+                    "symbol": "SOFR",
+                    "label": "SOFR",
+                    "value": 5.31,
+                    "source": "fred",
+                    "sourceId": "fred:SOFR",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED SOFR",
+                    "unit": "%",
+                    "asOf": official_as_of,
+                    "updatedAt": official_as_of,
+                },
+            ],
+            updated_at=official_as_of,
+            as_of=official_as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = {item["key"]: item for item in payload["indicators"]}["us_rates_pressure"]
+
+    assert indicator["includedInScore"] is True
+    assert indicator["status"] == "partial"
+    assert indicator["freshness"] == "cached"
+    assert indicator["scoreContribution"] == 6
+    assert "US2Y -0.22%" in str(indicator["summary"])
+    assert "US10Y -0.31%" in str(indicator["summary"])
+    assert "US30Y -0.18%" in str(indicator["summary"])
+    assert "SOFR +5.31" in str(indicator["summary"])
+    assert "Yahoo Finance" not in str(indicator["summary"])
+
+
+def test_us_rates_indicator_uses_official_macro_cache_when_rates_panel_is_unavailable(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    official_as_of = "2026-05-12T16:15:00+08:00"
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "US10Y",
+                    "label": "US 10Y",
+                    "value": 4.31,
+                    "changePercent": -0.31,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS10",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "asOf": official_as_of,
+                    "updatedAt": official_as_of,
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "US 30Y",
+                    "value": 4.58,
+                    "changePercent": -0.18,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS30",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "asOf": official_as_of,
+                    "updatedAt": official_as_of,
+                },
+            ],
+            updated_at=official_as_of,
+            as_of=official_as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = {item["key"]: item for item in payload["indicators"]}["us_rates_pressure"]
+
+    assert indicator["includedInScore"] is True
+    assert indicator["status"] == "partial"
+    assert indicator["freshness"] == "cached"
+    assert indicator["scoreContribution"] == 6
+    assert "US10Y" in str(indicator["summary"])
+    assert "US30Y" in str(indicator["summary"])
+    assert "US Treasury" in str(indicator["summary"])
+    assert "Yahoo Finance" not in str(indicator["summary"])
