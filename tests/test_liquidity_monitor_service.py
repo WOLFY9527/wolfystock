@@ -939,3 +939,127 @@ def test_us_rates_indicator_uses_official_macro_cache_when_rates_panel_is_unavai
     assert "US30Y" in str(indicator["summary"])
     assert "US Treasury" in str(indicator["summary"])
     assert "Yahoo Finance" not in str(indicator["summary"])
+
+
+def test_official_credit_stress_observation_is_summary_only_and_does_not_change_score(isolated_db: DatabaseManager) -> None:
+    base_as_of = "2026-05-12T16:15:00+08:00"
+
+    def _build_payload(*, include_credit: bool) -> Dict[str, Any]:
+        service = _make_service()
+        service.cache.set(
+            "volatility",
+            _cache_entry(
+                source="yfinance_proxy",
+                freshness="live",
+                items=[{"symbol": "VIX", "label": "VIX", "changePercent": -3.0, "value": 14.6}],
+                updated_at=base_as_of,
+                as_of=base_as_of,
+            ),
+            ttl_seconds=30,
+        )
+        service.cache.set(
+            "funds_flow",
+            _cache_entry(
+                source="yfinance_proxy",
+                freshness="live",
+                items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+                updated_at=base_as_of,
+                as_of=base_as_of,
+            ),
+            ttl_seconds=30,
+        )
+        macro_items = [
+            {
+                "symbol": "US2Y",
+                "label": "US 2Y",
+                "value": 4.92,
+                "changePercent": -0.22,
+                "source": "treasury",
+                "sourceId": "treasury:DGS2",
+                "sourceType": "official_public",
+                "sourceLabel": "US Treasury",
+                "unit": "%",
+                "asOf": base_as_of,
+                "updatedAt": base_as_of,
+            },
+            {
+                "symbol": "US10Y",
+                "label": "US 10Y",
+                "value": 4.31,
+                "changePercent": -0.31,
+                "source": "treasury",
+                "sourceId": "treasury:DGS10",
+                "sourceType": "official_public",
+                "sourceLabel": "US Treasury",
+                "unit": "%",
+                "asOf": base_as_of,
+                "updatedAt": base_as_of,
+            },
+            {
+                "symbol": "US30Y",
+                "label": "US 30Y",
+                "value": 4.58,
+                "changePercent": -0.18,
+                "source": "treasury",
+                "sourceId": "treasury:DGS30",
+                "sourceType": "official_public",
+                "sourceLabel": "US Treasury",
+                "unit": "%",
+                "asOf": base_as_of,
+                "updatedAt": base_as_of,
+            },
+        ]
+        if include_credit:
+            macro_items.append(
+                {
+                    "symbol": "CREDIT",
+                    "label": "Credit spreads",
+                    "value": 341.0,
+                    "change": 12.0,
+                    "changePercent": 3.65,
+                    "source": "fred",
+                    "sourceId": "fred:BAMLH0A0HYM2",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED ICE BofA US High Yield Index Option-Adjusted Spread",
+                    "unit": "bps",
+                    "asOf": base_as_of,
+                    "updatedAt": base_as_of,
+                    "observationOnly": True,
+                    "includedInScore": False,
+                }
+            )
+        service.cache.set(
+            "macro",
+            _cache_entry(
+                source="mixed",
+                freshness="cached",
+                items=macro_items,
+                updated_at=base_as_of,
+                as_of=base_as_of,
+            ),
+            ttl_seconds=30,
+        )
+        return service.get_liquidity_monitor()
+
+    baseline = _build_payload(include_credit=False)
+    with_credit = _build_payload(include_credit=True)
+
+    baseline_indicator = {item["key"]: item for item in baseline["indicators"]}["us_rates_pressure"]
+    with_credit_indicator = {item["key"]: item for item in with_credit["indicators"]}["us_rates_pressure"]
+
+    assert baseline["score"] == with_credit["score"] == {
+        "value": 69,
+        "regime": "supportive",
+        "confidence": 0.44,
+        "includedIndicatorCount": 3,
+        "possibleIndicatorWeight": 43,
+        "includedIndicatorWeight": 19,
+    }
+    assert baseline_indicator["includedInScore"] is True
+    assert baseline_indicator["scoreWeight"] == 6
+    assert baseline_indicator["scoreContribution"] == 6
+    assert "CREDIT" not in str(baseline_indicator["summary"])
+    assert with_credit_indicator["includedInScore"] is True
+    assert with_credit_indicator["scoreWeight"] == 6
+    assert with_credit_indicator["scoreContribution"] == 6
+    assert "CREDIT +341.00bps" in str(with_credit_indicator["summary"])

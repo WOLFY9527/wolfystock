@@ -322,6 +322,7 @@ class LiquidityMonitorService:
 
     def _us_rates_indicator(self, panel: PanelState, macro_panel: PanelState) -> Dict[str, Any]:
         components = self._extract_us_rates_components((panel, macro_panel))
+        credit_observation = self._extract_credit_stress_observation(macro_panel)
         if not components:
             proxy_panel = self._fetch_macro_proxy_panel(
                 "rates_proxy",
@@ -372,6 +373,9 @@ class LiquidityMonitorService:
             summary = f"{summary} | {' | '.join(curve_parts)}" if summary else " | ".join(curve_parts)
         if observation_parts:
             summary = f"{summary} | {' | '.join(observation_parts)}" if summary else " | ".join(observation_parts)
+        if credit_observation is not None:
+            credit_summary = f"CREDIT {self._signed_number_text(float(credit_observation['value']))}{credit_observation['unit']}"
+            summary = f"{summary} | {credit_summary}" if summary else credit_summary
         freshness = self._weakest_freshness([str(component["freshness"]) for component in components])
         yield_components = [component for component in components if component["kind"] == "yield"]
         status = (
@@ -672,6 +676,23 @@ class LiquidityMonitorService:
                 }
             )
         return items
+
+    def _extract_credit_stress_observation(self, panel: PanelState) -> Optional[Dict[str, Any]]:
+        item = self._first_reliable_item(panel, {"CREDIT"})
+        if item is None:
+            return None
+        if self._item_source_type(item, panel) != "official_public":
+            return None
+        source_id = str(item.get("sourceId") or "").upper()
+        if source_id and "BAMLH0A0HYM2" not in source_id:
+            return None
+        value = self._numeric(item.get("value"))
+        if value is None:
+            return None
+        return {
+            "value": value,
+            "unit": str(item.get("unit") or ""),
+        }
 
     def _extract_us_breadth_components(self, panel: PanelState) -> Optional[Dict[str, Any]]:
         symbol_map = self._reliable_symbol_map(panel, {"SECTORS_UP", "SECTORS_DOWN", "RSP_SPY", "IWM_SPY", "QQQ_SPY"})
