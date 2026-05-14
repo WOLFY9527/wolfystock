@@ -1,0 +1,20 @@
+{
+  "observations": [
+    {
+      "symbol": "MSFT",
+      "seriesId": "close",
+      "value": 401.25,
+      "asOf": "2026-05-14T09:30:00+08:00",
+      "label": "Close",
+      "unit": "USD"
+    },
+    {
+      "symbol": "AAPL",
+      "seriesId": "close",
+      "value": 210.10,
+      "asOf": "2026-05-14T09:30:00+08:00",
+      "label": "Close",
+      "unit": "USD"
+    }
+  ]
+}
