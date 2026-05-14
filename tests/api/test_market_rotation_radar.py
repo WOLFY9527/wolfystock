@@ -6,17 +6,23 @@ from __future__ import annotations
 import json
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 from api.v1.endpoints import market
 
 
-def _client() -> TestClient:
+def _client(monkeypatch: pytest.MonkeyPatch, provider_factory=None) -> TestClient:
+    monkeypatch.setattr(
+        market,
+        "get_rotation_radar_quote_provider",
+        provider_factory or (lambda: None),
+    )
     app = FastAPI()
     app.include_router(market.router, prefix="/api/v1/market")
     return TestClient(app)
 
 
-def test_market_rotation_radar_route_is_exposed() -> None:
+def test_market_rotation_radar_route_is_exposed(monkeypatch: pytest.MonkeyPatch) -> None:
     app = FastAPI()
     app.include_router(market.router, prefix="/api/v1/market")
     routes = {
@@ -30,8 +36,8 @@ def test_market_rotation_radar_route_is_exposed() -> None:
     assert ("GET", "/api/v1/market/rotation-radar") in routes
 
 
-def test_market_rotation_radar_response_is_safe_and_read_only() -> None:
-    client = _client()
+def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
     try:
         response = client.get("/api/v1/market/rotation-radar")
 
@@ -84,8 +90,8 @@ def test_market_rotation_radar_response_is_safe_and_read_only() -> None:
         client.close()
 
 
-def test_market_rotation_radar_market_query_switches_theme_universe() -> None:
-    client = _client()
+def test_market_rotation_radar_market_query_switches_theme_universe(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
     try:
         cn_response = client.get("/api/v1/market/rotation-radar?market=CN")
         hk_response = client.get("/api/v1/market/rotation-radar?market=HK")
@@ -119,8 +125,8 @@ def test_market_rotation_radar_market_query_switches_theme_universe() -> None:
         client.close()
 
 
-def test_market_rotation_radar_crypto_market_is_available_when_tab_exists() -> None:
-    client = _client()
+def test_market_rotation_radar_crypto_market_is_available_when_tab_exists(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
     try:
         response = client.get("/api/v1/market/rotation-radar?market=CRYPTO")
 
@@ -131,5 +137,172 @@ def test_market_rotation_radar_crypto_market_is_available_when_tab_exists() -> N
         assert any(theme["name"] == "Layer 1" for theme in payload["themes"])
         assert all(theme["staticThemeOnly"] is True for theme in payload["themes"])
         assert all(theme["source"] == "local_taxonomy" for theme in payload["themes"])
+    finally:
+        client.close()
+
+
+def test_market_rotation_radar_default_us_route_uses_injected_quote_provider_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    quotes = {
+        "QQQ": {
+            "price": 500.0,
+            "changePercent": 0.8,
+            "volumeRatio": 1.2,
+            "vwap": 495.0,
+            "freshness": "cached",
+            "source": "unit_fixture",
+            "sourceLabel": "Unit Fixture",
+            "asOf": "2026-05-13T09:30:00+00:00",
+            "timeWindows": {
+                "1d": {
+                    "changePercent": 0.8,
+                    "relativeVolume": 1.2,
+                    "freshness": "cached",
+                    "asOf": "2026-05-13T09:30:00+00:00",
+                }
+            },
+        },
+        "SPY": {
+            "price": 450.0,
+            "changePercent": 0.4,
+            "volumeRatio": 1.0,
+            "vwap": 448.0,
+            "freshness": "cached",
+            "source": "unit_fixture",
+            "sourceLabel": "Unit Fixture",
+            "asOf": "2026-05-13T09:30:00+00:00",
+            "timeWindows": {
+                "1d": {
+                    "changePercent": 0.4,
+                    "relativeVolume": 1.0,
+                    "freshness": "cached",
+                    "asOf": "2026-05-13T09:30:00+00:00",
+                }
+            },
+        },
+        "IWM": {
+            "price": 200.0,
+            "changePercent": 0.2,
+            "volumeRatio": 0.9,
+            "vwap": 199.0,
+            "freshness": "cached",
+            "source": "unit_fixture",
+            "sourceLabel": "Unit Fixture",
+            "asOf": "2026-05-13T09:30:00+00:00",
+            "timeWindows": {
+                "1d": {
+                    "changePercent": 0.2,
+                    "relativeVolume": 0.9,
+                    "freshness": "cached",
+                    "asOf": "2026-05-13T09:30:00+00:00",
+                }
+            },
+        },
+        "IGV": {
+            "price": 100.0,
+            "changePercent": 1.0,
+            "volumeRatio": 1.4,
+            "vwap": 99.0,
+            "freshness": "cached",
+            "source": "unit_fixture",
+            "sourceLabel": "Unit Fixture",
+            "asOf": "2026-05-13T09:30:00+00:00",
+            "timeWindows": {
+                "1d": {
+                    "changePercent": 1.0,
+                    "relativeVolume": 1.4,
+                    "freshness": "cached",
+                    "asOf": "2026-05-13T09:30:00+00:00",
+                }
+            },
+        },
+        "APP": {
+            "price": 300.0,
+            "changePercent": 5.0,
+            "volumeRatio": 2.0,
+            "vwap": 295.0,
+            "freshness": "cached",
+            "source": "unit_fixture",
+            "sourceLabel": "Unit Fixture",
+            "asOf": "2026-05-13T09:30:00+00:00",
+            "timeWindows": {
+                "1d": {
+                    "changePercent": 5.0,
+                    "relativeVolume": 2.0,
+                    "freshness": "cached",
+                    "asOf": "2026-05-13T09:30:00+00:00",
+                }
+            },
+        },
+        "PLTR": {
+            "price": 130.0,
+            "changePercent": 4.5,
+            "volumeRatio": 1.8,
+            "vwap": 127.0,
+            "freshness": "cached",
+            "source": "unit_fixture",
+            "sourceLabel": "Unit Fixture",
+            "asOf": "2026-05-13T09:30:00+00:00",
+            "timeWindows": {
+                "1d": {
+                    "changePercent": 4.5,
+                    "relativeVolume": 1.8,
+                    "freshness": "cached",
+                    "asOf": "2026-05-13T09:30:00+00:00",
+                }
+            },
+        },
+        "CRM": {
+            "price": 280.0,
+            "changePercent": 2.5,
+            "volumeRatio": 1.3,
+            "vwap": 278.0,
+            "freshness": "cached",
+            "source": "unit_fixture",
+            "sourceLabel": "Unit Fixture",
+            "asOf": "2026-05-13T09:30:00+00:00",
+            "timeWindows": {
+                "1d": {
+                    "changePercent": 2.5,
+                    "relativeVolume": 1.3,
+                    "freshness": "cached",
+                    "asOf": "2026-05-13T09:30:00+00:00",
+                }
+            },
+        },
+    }
+
+    def provider_factory():
+        def provider(symbols):
+            return {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "proxy",
+                    "sourceType": "public",
+                    "freshness": "cached",
+                    "asOf": "2026-05-13T09:30:00+00:00",
+                    "noExternalCalls": True,
+                },
+            }
+
+        return provider
+
+    client = _client(monkeypatch, provider_factory=provider_factory)
+    try:
+        response = client.get("/api/v1/market/rotation-radar")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["market"] == "US"
+        assert payload["isFallback"] is False
+        assert payload["metadata"]["quoteProvider"]["present"] is True
+        assert payload["metadata"]["quoteProvider"]["status"] in {"partial", "success"}
+        assert payload["metadata"]["quoteProvider"]["quoteMode"] == "proxy"
+        assert payload["metadata"]["quoteProvider"]["sourceType"] == "public"
+        assert payload["metadata"]["quoteProvider"]["noExternalCalls"] is True
+        assert payload["metadata"]["quoteProvider"]["coverage"]["usableSymbolCount"] > 0
+        assert payload["source"] == "computed"
+        assert any(theme["id"] == "ai_applications" and theme["source"] != "fallback" for theme in payload["themes"])
     finally:
         client.close()

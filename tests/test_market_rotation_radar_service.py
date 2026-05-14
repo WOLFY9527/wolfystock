@@ -6,8 +6,12 @@ from __future__ import annotations
 import json
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import patch
+
+import pandas as pd
 
 from src.services.market_rotation_radar_service import MarketRotationRadarService
+from src.services.rotation_radar_quote_provider import load_rotation_radar_quotes
 
 
 def _quote(
@@ -220,6 +224,14 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(provider_meta["quoteMode"], "proxy")
         self.assertEqual(provider_meta["sourceType"], "public")
         self.assertEqual(provider_meta["freshness"], "cached")
+        self.assertEqual(
+            provider_meta["coverage"],
+            {
+                "requestedSymbolCount": provider_meta["requestedSymbolCount"],
+                "usableSymbolCount": provider_meta["usableSymbolCount"],
+                "coveragePercent": provider_meta["coveragePercent"],
+            },
+        )
         self.assertEqual(provider_meta["usableSymbolCount"], provider_meta["requestedSymbolCount"])
         self.assertEqual(provider_meta["asOf"], "2026-05-07T09:45:00+00:00")
         self.assertTrue(payload["metadata"]["noExternalCalls"])
@@ -240,6 +252,41 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(provider_meta["status"], "failed")
         self.assertEqual(provider_meta["usableSymbolCount"], 0)
         self.assertFalse(payload["metadata"]["noExternalCalls"])
+
+    def test_rotation_radar_yfinance_quote_provider_reuses_history_transport(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "Open": [100.0, 101.0, 103.0],
+                "High": [101.0, 104.0, 106.0],
+                "Low": [99.0, 100.0, 102.0],
+                "Close": [100.0, 103.0, 105.0],
+                "Volume": [1_000_000.0, 1_200_000.0, 1_500_000.0],
+            },
+            index=pd.DatetimeIndex(["2026-05-09", "2026-05-12", "2026-05-13"]),
+        )
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=frame,
+        ) as mock_fetch:
+            payload = load_rotation_radar_quotes(["APP"])
+
+        quote = payload["quotes"]["APP"]
+        metadata = payload["metadata"]
+
+        mock_fetch.assert_called_once_with("APP")
+        self.assertEqual(metadata["quoteMode"], "proxy")
+        self.assertEqual(metadata["sourceType"], "unofficial_public_api")
+        self.assertFalse(metadata["noExternalCalls"])
+        self.assertEqual(metadata["freshness"], "delayed")
+        self.assertEqual(metadata["asOf"], "2026-05-13T00:00:00+00:00")
+        self.assertEqual(quote["source"], "yfinance_proxy")
+        self.assertEqual(quote["sourceLabel"], "Yahoo Finance")
+        self.assertEqual(quote["freshness"], "delayed")
+        self.assertAlmostEqual(quote["changePercent"], 1.942, places=3)
+        self.assertAlmostEqual(quote["volumeRatio"], 1.364, places=3)
+        self.assertEqual(quote["timeWindows"]["1d"]["changePercent"], quote["changePercent"])
+        self.assertEqual(quote["timeWindows"]["1d"]["freshness"], "delayed")
 
     def test_non_us_market_returns_taxonomy_only_entries_without_quote_provider_calls(self) -> None:
         provider_calls: list[list[str]] = []

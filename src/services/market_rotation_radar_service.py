@@ -461,6 +461,11 @@ class MarketRotationRadarService:
             "requestedSymbolCount": requested_symbol_count,
             "usableSymbolCount": usable_symbol_count,
             "coveragePercent": coverage_percent,
+            "coverage": {
+                "requestedSymbolCount": requested_symbol_count,
+                "usableSymbolCount": usable_symbol_count,
+                "coveragePercent": coverage_percent,
+            },
             "quoteMode": str(provider_metadata.get("quoteMode") or "proxy"),
             "sourceType": str(
                 provider_metadata.get("sourceType")

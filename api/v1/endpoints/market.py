@@ -15,6 +15,7 @@ from api.v1.schemas.market_rotation import MarketRotationRadarResponse
 from src.services.crypto_realtime_service import get_crypto_realtime_service
 from src.services.market_overview_service import MarketOverviewService
 from src.services.market_rotation_radar_service import MarketRotationRadarService
+from src.services.rotation_radar_quote_provider import get_rotation_radar_quote_provider
 
 router = APIRouter()
 
@@ -112,7 +113,9 @@ def get_rotation_radar(
     market: str = Query("US", description="Rotation taxonomy market: US, CN, HK, or CRYPTO"),
     current_user: Optional[CurrentUser] = Depends(get_optional_current_user),
 ):
-    return MarketRotationRadarService().get_rotation_radar(market=market)
+    return MarketRotationRadarService(
+        quote_provider=get_rotation_radar_quote_provider(),
+    ).get_rotation_radar(market=market)
 
 
 @router.get("/us-breadth", summary="Get US sector ETF breadth proxy snapshot")
