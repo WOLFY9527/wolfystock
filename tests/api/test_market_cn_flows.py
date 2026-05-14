@@ -48,7 +48,10 @@ class MarketCnFlowsApiTestCase(unittest.TestCase):
         self.assertEqual(payload["source"], "fallback")
         self.assertEqual(payload["sourceLabel"], "备用数据")
         self.assertTrue(payload["fallbackUsed"])
+        self.assertEqual(payload["freshness"], "fallback")
         self.assertTrue(all(item["source"] == "fallback" for item in payload["items"]))
+        self.assertTrue(all(item["isFallback"] for item in payload["items"]))
+        self.assertTrue(all(item["freshness"] == "fallback" for item in payload["items"]))
         self.assertNotIn("tickflow", str(payload).lower())
         self.assertNotIn("TickFlow", str(payload))
 

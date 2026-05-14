@@ -1,0 +1,13 @@
+{
+  "source": "tickflow",
+  "sourceLabel": "TickFlow",
+  "sourceType": "public_api",
+  "updatedAt": "2026-05-14T09:30:00+08:00",
+  "asOf": "2026-05-14T09:30:00+08:00",
+  "advancers": 3210,
+  "decliners": 1490,
+  "limitUp": 88,
+  "limitDown": 14,
+  "advRatio": 66.6,
+  "effect": 67
+}

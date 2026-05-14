@@ -1,0 +1,31 @@
+{
+  "source_class": "synthetic_fixture",
+  "as_of": "2026-05-14T09:30:00+08:00",
+  "observations": [
+    {
+      "symbol": "NORTHBOUND",
+      "value": 42.6,
+      "unit": "亿 CNY"
+    },
+    {
+      "symbol": "SOUTHBOUND",
+      "value": 28.4,
+      "unit": "亿 HKD"
+    },
+    {
+      "symbol": "MAINLAND_MAIN",
+      "value": -63.5,
+      "unit": "亿 CNY"
+    },
+    {
+      "symbol": "CN_ETF",
+      "value": 15.8,
+      "unit": "亿 CNY"
+    },
+    {
+      "symbol": "MARGIN_BALANCE",
+      "value": 31.2,
+      "unit": "亿 CNY"
+    }
+  ]
+}
