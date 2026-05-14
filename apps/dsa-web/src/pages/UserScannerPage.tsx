@@ -2716,7 +2716,10 @@ const UserScannerPage: React.FC = () => {
                   decisionSortedDiagnosticCandidates.length ? (
                     <div data-testid="scanner-candidate-diagnostics-table" className="space-y-1.5">
                       {decisionSortedDiagnosticCandidates.map((candidate) => {
-                        const activeRunDetail = runDetail as ScannerRunDetail;
+                        const activeRunDetail = runDetail;
+                        if (!activeRunDetail) {
+                          return null;
+                        }
                         const diagnosticCandidate = diagnosticToCandidate(candidate);
                         const candidateMarket = normalizeScannerMarket(activeRunDetail.market || market);
                         const candidateIdentity = getWatchlistIdentity(candidateMarket, candidate.symbol);
@@ -2783,8 +2786,8 @@ const UserScannerPage: React.FC = () => {
                             onCopy={() => void handleCopyText(candidate.symbol, `candidate:${candidate.symbol}`)}
                             onExport={() => {
                               handleExportRows(
-                                [buildScannerExportRow(diagnosticCandidate, runDetail, language)],
-                                buildScannerExportFilename(runDetail, `candidate-${candidate.symbol}`),
+                                [buildScannerExportRow(diagnosticCandidate, activeRunDetail, language)],
+                                buildScannerExportFilename(activeRunDetail, `candidate-${candidate.symbol}`),
                               );
                             }}
                           />
