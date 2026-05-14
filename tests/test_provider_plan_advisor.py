@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib
 import json
+from pathlib import Path
 import subprocess
 import sys
 
@@ -14,6 +15,10 @@ from src.services.provider_plan_advisor import (
     plan_cache_first_candidates,
     plan_provider_candidates,
 )
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+OFFICIAL_MACRO_TRANSPORT_TEXT = (REPO_ROOT / "src/services/official_macro_transport.py").read_text(encoding="utf-8")
 
 
 def _ids(candidates):
@@ -127,3 +132,33 @@ def test_provider_plan_advisor_import_has_no_runtime_planner_side_effect() -> No
     after = planner.build_analysis_provider_plan("AAPL", market="us").categories
 
     assert before == after
+
+
+def test_provider_plan_advisor_does_not_advertise_runtime_only_or_public_transport_sources() -> None:
+    blocked = {"tickflow", "tushare", "akshare", "efinance", "binance", "fred", "treasury", "ny_fed"}
+
+    assert 'source_id=f"fred:{normalized_series}"' in OFFICIAL_MACRO_TRANSPORT_TEXT
+    assert 'source_id="treasury:daily_treasury_yield_curve"' in OFFICIAL_MACRO_TRANSPORT_TEXT
+
+    for domain in (
+        ProviderDomain.QUOTE,
+        ProviderDomain.OHLCV,
+        ProviderDomain.FUNDAMENTALS,
+        ProviderDomain.MACRO,
+        ProviderDomain.CRYPTO,
+        ProviderDomain.FOREX,
+    ):
+        for mode in ("quick", "standard", "deep", "scanner", "backtest"):
+            candidate_ids = set(_ids(plan_provider_candidates(domain, market="US", mode=mode)))
+            assert blocked.isdisjoint(candidate_ids)
+
+
+def test_provider_plan_description_stays_presence_free_and_advisory_only() -> None:
+    description = describe_provider_plan(ProviderDomain.MACRO, market="US", mode="standard")
+    serialized = json.dumps(description, ensure_ascii=False, sort_keys=True).lower()
+
+    assert description["advisoryOnly"] is True
+    assert description["runtimeBehaviorChanged"] is False
+    assert description["networkCallsEnabled"] is False
+    for forbidden in ("api_key", "token", "secret", "credential", "masked"):
+        assert forbidden not in serialized

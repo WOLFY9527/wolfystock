@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib
 import json
+from pathlib import Path
 import subprocess
 import sys
 
@@ -25,6 +26,9 @@ from src.services.provider_capability_matrix import (
     recommended_ttl,
 )
 
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SRC_CONFIG_TEXT = (REPO_ROOT / "src/config.py").read_text(encoding="utf-8")
 
 EXPECTED_PROVIDER_IDS = {
     "local_cache",
@@ -182,7 +186,7 @@ def test_provider_capability_import_has_no_runtime_planner_side_effect() -> None
 
 
 def test_cn_hk_runtime_providers_are_not_accidentally_advertised_in_capability_matrix() -> None:
-    for provider_id in ("tickflow", "akshare", "efinance", "tushare"):
+    for provider_id in ("tickflow", "akshare", "efinance", "tushare", "binance", "fred", "treasury", "ny_fed"):
         assert get_provider_capability(provider_id) is None
 
 
@@ -214,3 +218,41 @@ def test_hk_quote_and_ohlcv_provider_matrix_remains_bounded_to_current_metadata(
     assert twelve_data is not None
     assert twelve_data.scanner_usage is ScannerUsage.TOP_N_ONLY
     assert twelve_data.freshness_class is FreshnessClass.DELAYED
+
+
+def test_provider_capability_matrix_preserves_category_boundaries_for_local_no_key_and_registry_only_sources() -> None:
+    fallback_static_only = {
+        "local_cache": FreshnessClass.CACHED,
+        "local_ohlcv": FreshnessClass.CACHED,
+        "local_news_cache": FreshnessClass.CACHED,
+        "local_inference": FreshnessClass.INFERRED,
+    }
+    configured_and_wired = {"alpaca", "twelve_data", "fmp", "finnhub"}
+
+    for provider_id, freshness_class in fallback_static_only.items():
+        capability = get_provider_capability(provider_id)
+        assert capability is not None
+        assert capability.quota_class is ProviderQuotaClass.LOCAL
+        assert capability.freshness_class is freshness_class
+        assert capability.backtest_usage is BacktestUsage.LOCAL_ONLY
+
+    yahoo = get_provider_capability("yahoo_yfinance")
+    assert yahoo is not None
+    assert yahoo.quota_class is ProviderQuotaClass.CHEAP
+    assert yahoo.freshness_class is FreshnessClass.DELAYED
+    assert yahoo.scanner_usage is ScannerUsage.TOP_N_ONLY
+
+    for provider_id in configured_and_wired:
+        capability = get_provider_capability(provider_id)
+        assert capability is not None
+        assert capability.quota_class is not ProviderQuotaClass.LOCAL
+        assert capability.quick_analysis_allowed or capability.standard_analysis_allowed
+
+    alpha_vantage = get_provider_capability("alpha_vantage")
+    assert alpha_vantage is not None
+    assert alpha_vantage.quick_analysis_allowed is False
+    assert alpha_vantage.standard_analysis_allowed is False
+    assert alpha_vantage.deep_research_allowed is True
+    assert alpha_vantage.freshness_class is FreshnessClass.MANUAL_REVIEW
+    assert "alpha_vantage_api_key" not in SRC_CONFIG_TEXT
+    assert "alpha_vantage_api_keys" not in SRC_CONFIG_TEXT

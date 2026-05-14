@@ -590,3 +590,34 @@ def test_tickflow_projection_distinguishes_entitlement_and_health_reason_codes(
     assert projection["reasonCode"] == reason_code
     assert "SECRET" not in str(projection)
     assert "https://api.tickflow.test/raw" not in str(projection)
+
+
+def test_tickflow_projection_stays_presence_only_without_secret_or_env_fields() -> None:
+    with patch(
+        "src.services.market_provider_operations_service.get_config",
+        return_value=SimpleNamespace(tickflow_api_key="tf-secret"),
+    ):
+        payload = _service([]).get_operations(window="24h")
+
+    projection = payload["metadata"]["providerDiagnostics"]["tickflowCnBreadth"]
+
+    assert set(projection) == {
+        "provider",
+        "market",
+        "diagnosticTarget",
+        "status",
+        "credentialState",
+        "credentialConfigured",
+        "reachabilityState",
+        "tickflowReachable",
+        "breadthEntitlementState",
+        "breadthEntitlementUsable",
+        "reasonCode",
+        "observedSource",
+        "sourceType",
+        "summary",
+    }
+    assert projection["credentialConfigured"] is True
+    serialized = str(projection).lower()
+    for forbidden in ("api_key", "token", "secret", "masked", "env", "value", "tf-secret"):
+        assert forbidden not in serialized

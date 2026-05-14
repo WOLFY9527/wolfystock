@@ -59,6 +59,14 @@ FORBIDDEN_OWNERSHIP_TERMS = (
     "auth enforcement owner",
     "ai routing owner",
 )
+ALLOWED_CREDENTIAL_CONTRACT_KEYS = {
+    "state",
+    "source",
+    "requiredCredentialKinds",
+    "requiredCredentialCount",
+    "configuredCredentialCount",
+}
+FORBIDDEN_CREDENTIAL_DETAIL_TERMS = ("apiKey", "token", "secret", "value", "env", "raw")
 
 
 @dataclass(frozen=True)
@@ -532,6 +540,26 @@ def test_provider_health_public_models_distinguish_required_operator_classes() -
         "fallback",
         "stale cache",
     }
+
+
+def test_provider_health_public_models_expose_presence_and_count_only_for_credentials() -> None:
+    response = _build_provider_health_examples()
+
+    for item in response.readiness.items:
+        contract = item.credential_contract
+        assert set(contract).issubset(ALLOWED_CREDENTIAL_CONTRACT_KEYS)
+        for forbidden in FORBIDDEN_CREDENTIAL_DETAIL_TERMS:
+            assert forbidden not in contract
+        if "requiredCredentialCount" in contract:
+            assert isinstance(contract["requiredCredentialCount"], int)
+        if "configuredCredentialCount" in contract:
+            assert isinstance(contract["configuredCredentialCount"], int)
+        if "requiredCredentialKinds" in contract:
+            assert isinstance(contract["requiredCredentialKinds"], list)
+        assert isinstance(item.credentials_present, bool)
+
+    fixture_contract = _load_fixture("provider_read_models.json")["provider_sla_readiness"]["items"][0]["credentialContract"]
+    assert set(fixture_contract).issubset(ALLOWED_CREDENTIAL_CONTRACT_KEYS)
 
 
 def test_market_provider_operations_contract_can_carry_tickflow_entitlement_projection() -> None:
