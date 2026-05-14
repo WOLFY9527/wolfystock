@@ -1,0 +1,21 @@
+{
+  "source": "yfinance_proxy",
+  "sourceLabel": "Yahoo Finance",
+  "sourceType": "unofficial_public_api",
+  "updatedAt": "2026-05-14T09:30:00-04:00",
+  "asOf": "2026-05-14T09:30:00-04:00",
+  "items": [
+    {
+      "symbol": "SECTORS_UP",
+      "label": "Sectors Up",
+      "value": 8,
+      "unit": "sectors"
+    },
+    {
+      "symbol": "RSP_SPY",
+      "label": "RSP vs SPY",
+      "value": -0.4,
+      "unit": "%"
+    }
+  ]
+}

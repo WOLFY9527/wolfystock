@@ -98,6 +98,35 @@ def test_non_live_and_proxy_provenance_never_projects_as_official_or_live() -> N
     assert all(payload["freshnessLabel"] != "实时" for payload in cases.values())
 
 
+def test_us_breadth_future_stub_proxy_and_fallback_never_project_as_official_or_live() -> None:
+    cases = {
+        "future_stub": project_source_provenance(
+            source="disabled_live_stub",
+            source_type="disabled_live_stub",
+            freshness="fallback",
+        ),
+        "yfinance_proxy": project_source_provenance(
+            source="yfinance_proxy",
+            source_type="proxy_public",
+            freshness="delayed",
+        ),
+        "fallback_static": project_source_provenance(
+            source="fallback",
+            freshness="fallback",
+            is_fallback=True,
+        ),
+    }
+
+    assert cases["future_stub"]["sourceType"] == "fallback_static"
+    assert cases["yfinance_proxy"]["sourceType"] == "unofficial_proxy"
+    assert cases["fallback_static"]["sourceType"] == "fallback_static"
+    assert all(
+        payload["sourceType"] not in {"official_public", "exchange_public"}
+        for payload in cases.values()
+    )
+    assert all(payload["freshnessLabel"] != "实时" for payload in cases.values())
+
+
 def test_market_reliability_classifier_excludes_fallback_static_synthetic_missing_and_stale_inputs() -> None:
     cases = [
         (

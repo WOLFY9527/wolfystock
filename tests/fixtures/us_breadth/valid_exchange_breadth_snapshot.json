@@ -1,0 +1,36 @@
+{
+  "source_class": "synthetic_fixture",
+  "as_of": "2026-05-14T09:30:00-04:00",
+  "observations": [
+    {
+      "symbol": "ADVANCERS",
+      "value": 3210,
+      "unit": "stocks"
+    },
+    {
+      "symbol": "DECLINERS",
+      "value": 1490,
+      "unit": "stocks"
+    },
+    {
+      "symbol": "ADVANCE_DECLINE_RATIO",
+      "value": 2.154,
+      "unit": "ratio"
+    },
+    {
+      "symbol": "NEW_HIGHS",
+      "value": 245,
+      "unit": "stocks"
+    },
+    {
+      "symbol": "NEW_LOWS",
+      "value": 38,
+      "unit": "stocks"
+    },
+    {
+      "symbol": "HIGH_LOW_RATIO",
+      "value": 6.447,
+      "unit": "ratio"
+    }
+  ]
+}

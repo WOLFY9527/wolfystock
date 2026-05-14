@@ -1,0 +1,82 @@
+# -*- coding: utf-8 -*-
+"""Contracts that freeze current /market/us-breadth proxy and fallback behavior."""
+
+from __future__ import annotations
+
+import json
+from unittest.mock import Mock, patch
+
+from api.v1.endpoints import market
+from src.services.market_cache import market_cache
+from src.services.market_overview_service import MarketOverviewService
+
+
+def setup_function() -> None:
+    market_cache.clear()
+    MarketOverviewService._market_data_cache.clear()
+
+
+def teardown_function() -> None:
+    market_cache.clear()
+    MarketOverviewService._market_data_cache.clear()
+
+
+def test_market_us_breadth_endpoint_delegates_to_market_overview_service() -> None:
+    service = Mock()
+    service.get_us_breadth.return_value = {"source": "yfinance_proxy", "items": [{"symbol": "SECTORS_UP"}]}
+
+    with patch("api.v1.endpoints.market.MarketOverviewService", return_value=service):
+        payload = market.get_us_breadth()
+
+    assert payload["items"][0]["symbol"] == "SECTORS_UP"
+    service.get_us_breadth.assert_called_once()
+
+
+def test_market_us_breadth_current_proxy_snapshot_stays_proxy_not_exchange_breadth() -> None:
+    service = MarketOverviewService()
+    quotes = {
+        "XLK": {"value": 220.0, "change_pct": 1.8, "trend": [216.0, 220.0], "volume": 10_000_000},
+        "XLF": {"value": 44.0, "change_pct": -0.4, "trend": [44.2, 44.0], "volume": 8_000_000},
+        "XLV": {"value": 146.0, "change_pct": 0.7, "trend": [144.8, 146.0], "volume": 7_000_000},
+        "SPY": {"value": 520.0, "change_pct": 0.6, "trend": [516.0, 520.0], "volume": 60_000_000},
+        "RSP": {"value": 168.0, "change_pct": 0.2, "trend": [167.0, 168.0], "volume": 4_000_000},
+        "QQQ": {"value": 460.0, "change_pct": 1.1, "trend": [454.0, 460.0], "volume": 45_000_000},
+        "IWM": {"value": 210.0, "change_pct": -0.3, "trend": [211.0, 210.0], "volume": 22_000_000},
+    }
+
+    with patch.object(service, "_latest_quote", side_effect=lambda ticker: quotes[ticker]):
+        payload = service.get_us_breadth()
+
+    symbols = {item["symbol"] for item in payload["items"]}
+    assert payload["source"] == "yfinance_proxy"
+    assert payload["isFallback"] is False
+    assert payload["freshness"] in {"live", "delayed", "cached", "stale"}
+    assert "SECTORS_UP" in symbols
+    assert "RSP_SPY" in symbols
+    assert "ADVANCERS" not in symbols
+    assert "NEW_HIGHS" not in symbols
+    assert payload["items"][0]["sourceType"] == "unofficial_public_api"
+
+
+def test_market_us_breadth_fallback_stays_non_live_and_sanitized() -> None:
+    service = MarketOverviewService()
+
+    with patch.object(
+        service,
+        "_latest_quote",
+        side_effect=RuntimeError(
+            "403 forbidden token=SECRET url=https://api.exchange.test/raw providerPayload=ExchangeStatsCo"
+        ),
+    ):
+        payload = service.get_us_breadth()
+
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    assert payload["source"] == "unavailable"
+    assert payload["freshness"] == "fallback"
+    assert payload["isFallback"] is True
+    assert payload["providerHealth"]["status"] == "unavailable"
+    assert payload["providerHealth"]["status"] != "live"
+    assert "SECRET" not in serialized
+    assert "https://api.exchange.test/raw" not in serialized
+    assert "providerPayload" not in serialized
+    assert "ExchangeStatsCo" not in serialized
