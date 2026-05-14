@@ -11,6 +11,7 @@ import requests
 
 from src.config import Config
 from src.core.config_manager import ConfigManager
+from src.services.system_config_provider_projection import mask_provider_secret
 from src.services.system_config_service import SystemConfigService
 
 
@@ -52,6 +53,8 @@ class DataSourceValidationTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "success")
         self.assertTrue(all(check["ok"] for check in payload["checks"]))
         self.assertEqual(payload["key_masked"], "full...-key")
+        self.assertEqual(payload["summary"], "FMP 连接成功：quote 和 historical endpoint 均可用。")
+        self.assertEqual(payload["suggestion"], "请检查 FMP key 是否有效、套餐是否支持 quote/historical endpoint、额度是否用尽。")
 
     def test_fmp_quote_200_historical_403_returns_partial(self) -> None:
         responses = [
@@ -65,6 +68,8 @@ class DataSourceValidationTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "partial")
         self.assertEqual(payload["checks"][1]["http_status"], 403)
         self.assertEqual(payload["checks"][1]["error_type"], "Forbidden")
+        self.assertEqual(payload["summary"], "FMP 部分可用：部分 endpoint 失败。 失败 endpoint：historical。")
+        self.assertEqual(payload["suggestion"], "请检查 FMP key 是否有效、套餐是否支持 quote/historical endpoint、额度是否用尽。")
 
     def test_fmp_quote_403_historical_403_returns_failed(self) -> None:
         responses = [
@@ -115,6 +120,11 @@ class DataSourceValidationTestCase(unittest.TestCase):
         self.assertIn("token=***", sanitized)
         self.assertNotIn("full-secret", sanitized)
         self.assertNotIn("another-secret", sanitized)
+
+    def test_mask_provider_secret_keeps_first_key_and_count_for_multiple_values(self) -> None:
+        masked = mask_provider_secret("first-secret-key, second-secret-key, third-secret-key")
+
+        self.assertEqual(masked, "firs...-key (+2)")
 
     def test_unsupported_provider_returns_unsupported(self) -> None:
         payload = self.service.test_builtin_data_source(provider="unknown_provider", symbol="MSFT")
