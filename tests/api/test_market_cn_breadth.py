@@ -32,6 +32,70 @@ class MarketCnBreadthApiTestCase(unittest.TestCase):
         self.assertTrue(payload["fallbackUsed"])
         self.assertTrue(payload["items"])
 
+    def test_cn_breadth_prefers_tickflow_market_stats_when_available(self) -> None:
+        service = MarketOverviewService()
+        service._market_cache.clear()
+        MarketOverviewService._market_data_cache.clear()
+        tickflow_snapshot = {
+            "source": "tickflow",
+            "sourceLabel": "TickFlow",
+            "sourceType": "public_api",
+            "updatedAt": "2026-05-14T09:30:00+08:00",
+            "asOf": "2026-05-14T09:30:00+08:00",
+            "advancers": 3210,
+            "decliners": 1490,
+            "limitUp": 88,
+            "limitDown": 14,
+            "advRatio": 66.6,
+            "effect": 67,
+        }
+
+        with patch(
+            "src.services.market_overview_service.fetch_tickflow_cn_breadth_snapshot",
+            return_value=tickflow_snapshot,
+        ):
+            payload = service.get_cn_breadth()
+
+        metrics = {item["symbol"]: item for item in payload["items"]}
+
+        self.assertEqual(payload["source"], "tickflow")
+        self.assertEqual(payload["sourceLabel"], "TickFlow")
+        self.assertEqual(payload["sourceType"], "public_api")
+        self.assertEqual(payload["asOf"], "2026-05-14T09:30:00+08:00")
+        self.assertFalse(payload["fallbackUsed"])
+        self.assertEqual(
+            set(metrics),
+            {"EFFECT", "ADVANCERS", "DECLINERS", "LIMIT_UP", "LIMIT_DOWN", "ADV_RATIO"},
+        )
+        self.assertEqual(metrics["ADVANCERS"]["value"], 3210)
+        self.assertEqual(metrics["DECLINERS"]["value"], 1490)
+        self.assertEqual(metrics["LIMIT_UP"]["value"], 88)
+        self.assertEqual(metrics["LIMIT_DOWN"]["value"], 14)
+        self.assertEqual(metrics["ADV_RATIO"]["value"], 66.6)
+        self.assertEqual(metrics["EFFECT"]["value"], 67)
+        self.assertFalse(any(item["isFallback"] for item in payload["items"]))
+        self.assertTrue(payload["explanation"])
+
+    def test_cn_breadth_sanitizes_tickflow_failure_reason(self) -> None:
+        service = MarketOverviewService()
+        service._market_cache.clear()
+        MarketOverviewService._market_data_cache.clear()
+
+        with patch(
+            "src.services.market_overview_service.fetch_tickflow_cn_breadth_snapshot",
+            side_effect=RuntimeError(
+                "tickflow_permission_unavailable token=SECRET url=https://api.tickflow.test/raw"
+            ),
+        ):
+            payload = service.get_cn_breadth()
+
+        self.assertTrue(payload["fallbackUsed"])
+        self.assertEqual(payload["freshness"], "fallback")
+        self.assertEqual(payload["lastError"], "数据源暂不可用")
+        self.assertEqual(payload["fallbackReason"], "tickflow_permission_unavailable")
+        self.assertNotIn("SECRET", str(payload))
+        self.assertNotIn("https://api.tickflow.test/raw", str(payload))
+
 
 if __name__ == "__main__":
     unittest.main()

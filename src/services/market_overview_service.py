@@ -29,6 +29,9 @@ from src.services.market_overview_sentiment_transport import (
     fetch_cnn_fear_greed_payload,
 )
 from src.services.market_overview_sina_transport import fetch_sina_cn_index_rows
+from src.services.market_overview_tickflow_breadth_provider import (
+    fetch_tickflow_cn_breadth_snapshot,
+)
 from src.services.market_overview_yfinance_transport import (
     fetch_yfinance_quote_history_frame,
     fetch_yfinance_spy_atr_history_frame,
@@ -71,6 +74,7 @@ SOURCE_TYPE_BY_SOURCE = {
     "yfinance_proxy": "unofficial_public_api",
     "eastmoney": "public_api",
     "fred": "official_public",
+    "tickflow": "public_api",
     "alternative": "public_api",
     "alternative_me": "public_api",
     "cnn": "public_api",
@@ -82,6 +86,7 @@ SOURCE_LABELS = {
     "eastmoney": resolve_source_label("eastmoney"),
     "fred": "FRED",
     "sina": resolve_source_label("sina"),
+    "tickflow": "TickFlow",
     "treasury": "US Treasury",
     "yahoo": resolve_source_label("yahoo"),
     "yfinance": resolve_source_label("yfinance"),
@@ -197,11 +202,45 @@ def _compact_error_summary(error: Any) -> Optional[str]:
     lowered = text.lower()
     if "timeout" in lowered or "timed out" in lowered or "超时" in lowered:
         return "数据源请求超时"
+    if (
+        "permission" in lowered
+        or "forbidden" in lowered
+        or "denied" in lowered
+        or "tickflow_not_configured" in lowered
+        or "tickflow_permission_unavailable" in lowered
+    ):
+        return "数据源暂不可用"
     if "unavailable" in lowered or "provider_down" in lowered or "down" in lowered or "不可用" in lowered:
         return "数据源暂不可用"
     if "rate" in lowered and "limit" in lowered:
         return "数据源限流"
     return "数据源刷新失败"
+
+
+def _fallback_reason_code(error: Any) -> Optional[str]:
+    text = str(error or "").strip()
+    if not text:
+        return None
+    lowered = text.lower()
+    if "tickflow_not_configured" in lowered:
+        return "tickflow_not_configured"
+    if "tickflow_permission_unavailable" in lowered:
+        return "tickflow_permission_unavailable"
+    if "tickflow_market_stats_empty" in lowered:
+        return "tickflow_market_stats_empty"
+    if "tickflow_market_stats_malformed" in lowered:
+        return "tickflow_market_stats_malformed"
+    if "tickflow_timeout" in lowered:
+        return "tickflow_timeout"
+    if "tickflow_unavailable" in lowered:
+        return "tickflow_unavailable"
+    if "timeout" in lowered or "timed out" in lowered or "超时" in lowered:
+        return "provider_timeout"
+    if "permission" in lowered or "forbidden" in lowered or "denied" in lowered:
+        return "provider_permission_unavailable"
+    if "unavailable" in lowered or "provider_down" in lowered or "down" in lowered or "不可用" in lowered:
+        return "provider_unavailable"
+    return "provider_refresh_failed"
 
 
 def _parse_market_time(value: Any) -> Optional[datetime]:
@@ -1080,6 +1119,7 @@ class MarketOverviewService:
         updated_at = payload.get("updatedAt") or payload.get("last_update") or payload.get("last_refresh_at") or _now_iso()
         as_of = payload.get("asOf") or payload.get("last_update") or payload.get("last_refresh_at") or updated_at
         freshness = get_freshness_status(as_of, category, source, is_fallback, source_type=payload.get("sourceType") or "")
+        raw_error = payload.get("refreshError") or payload.get("lastError") or payload.get("error")
         if payload.get("isFromSnapshot"):
             snapshot_freshness = str(payload.get("freshness") or "").lower()
             if snapshot_freshness in {"stale", "fallback", "mock", "error"}:
@@ -1091,6 +1131,7 @@ class MarketOverviewService:
                     "warning": payload.get("warning") or "数据源刷新失败，当前显示最近成功快照",
                 }
         reliability = classify_market_payload_reliability({**payload, "source": source, "freshness": freshness["freshness"], "isFallback": freshness["isFallback"]}, category)
+        fallback_reason = payload.get("fallbackReason") or _fallback_reason_code(raw_error)
         return {
             **payload,
             "source": source,
@@ -1104,6 +1145,7 @@ class MarketOverviewService:
             "delayMinutes": freshness["delayMinutes"],
             "warning": payload.get("warning") or (REFRESH_WARNING if payload.get("lastError") else None) or freshness["warning"],
             "fallbackUsed": bool(payload.get("fallbackUsed") or freshness["isFallback"]),
+            "fallbackReason": fallback_reason if (bool(payload.get("fallbackUsed") or freshness["isFallback"]) or bool(raw_error) or bool(payload.get("isStale"))) else None,
             "isRefreshing": bool(payload.get("isRefreshing")),
             "lastError": _compact_error_summary(payload.get("lastError")),
             "refreshError": _compact_error_summary(payload.get("refreshError") or payload.get("lastError")),
@@ -1602,7 +1644,35 @@ class MarketOverviewService:
             return _now_iso()
 
     def _fetch_cn_breadth_snapshot(self) -> Dict[str, Any]:
-        return self._fallback_cn_breadth_snapshot()
+        snapshot = fetch_tickflow_cn_breadth_snapshot()
+        source = str(snapshot.get("source") or "tickflow")
+        source_label = snapshot.get("sourceLabel") or self._source_label(source)
+        source_type = snapshot.get("sourceType") or _infer_source_type(source)
+        updated_at = str(snapshot.get("updatedAt") or _now_iso())
+        as_of = str(snapshot.get("asOf") or updated_at)
+        adv_ratio = float(snapshot["advRatio"])
+        explanation = self._cn_breadth_explanation(adv_ratio)
+        detail = "TickFlow A-share market stats snapshot"
+
+        return {
+            "source": source,
+            "sourceLabel": source_label,
+            "sourceType": source_type,
+            "updatedAt": updated_at,
+            "asOf": as_of,
+            "fallbackUsed": False,
+            "isFallback": False,
+            "warning": None,
+            "explanation": explanation,
+            "items": [
+                self._breadth_metric_item("赚钱效应", "EFFECT", float(snapshot["effect"]), "score", as_of, updated_at, source, source_label, source_type, detail=detail, explanation=explanation),
+                self._breadth_metric_item("上涨家数", "ADVANCERS", float(snapshot["advancers"]), "stocks", as_of, updated_at, source, source_label, source_type, detail=detail),
+                self._breadth_metric_item("下跌家数", "DECLINERS", float(snapshot["decliners"]), "stocks", as_of, updated_at, source, source_label, source_type, detail=detail),
+                self._breadth_metric_item("涨停家数", "LIMIT_UP", float(snapshot["limitUp"]), "stocks", as_of, updated_at, source, source_label, source_type, detail=detail),
+                self._breadth_metric_item("跌停家数", "LIMIT_DOWN", float(snapshot["limitDown"]), "stocks", as_of, updated_at, source, source_label, source_type, detail=detail),
+                self._breadth_metric_item("上涨比例", "ADV_RATIO", adv_ratio, "%", as_of, updated_at, source, source_label, source_type, detail=detail),
+            ],
+        }
 
     def _fetch_us_breadth_snapshot(self) -> Dict[str, Any]:
         quote_items: List[Dict[str, Any]] = []
@@ -2526,6 +2596,66 @@ class MarketOverviewService:
         if explanation:
             item["explanation"] = explanation
         return item
+
+    def _breadth_metric_item(
+        self,
+        name: str,
+        symbol: str,
+        value: float,
+        unit: str,
+        as_of: str,
+        updated_at: str,
+        source: str,
+        source_label: str,
+        source_type: str,
+        *,
+        detail: Optional[str] = None,
+        explanation: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        numeric_value = round(float(value), 3)
+        item: Dict[str, Any] = {
+            "name": name,
+            "label": name,
+            "symbol": symbol,
+            "value": numeric_value,
+            "price": numeric_value,
+            "change": 0.0,
+            "changePercent": 0.0,
+            "change_text": self._signed_percent_text(numeric_value) if unit == "%" else f"{numeric_value:.0f}",
+            "sparkline": [numeric_value],
+            "trend": [numeric_value],
+            "unit": unit,
+            "source": source,
+            "sourceLabel": source_label,
+            "sourceType": source_type,
+            "updatedAt": updated_at,
+            "asOf": as_of,
+            "isFallback": False,
+            "warning": None,
+            "risk_direction": self._breadth_risk_direction(symbol, numeric_value),
+            "hover_details": [text for text in (detail, explanation) if text],
+        }
+        if explanation:
+            item["explanation"] = explanation
+        return item
+
+    def _breadth_risk_direction(self, symbol: str, value: float) -> str:
+        if symbol in {"ADVANCERS", "LIMIT_UP"}:
+            return "increasing"
+        if symbol in {"DECLINERS", "LIMIT_DOWN"}:
+            return "decreasing"
+        if value > 50:
+            return "increasing"
+        if value < 50:
+            return "decreasing"
+        return "neutral"
+
+    def _cn_breadth_explanation(self, adv_ratio: float) -> str:
+        if adv_ratio >= 60:
+            return "上涨家数明显占优，TickFlow 市场广度偏强。"
+        if adv_ratio >= 50:
+            return "上涨家数略占优，TickFlow 市场广度中性偏强。"
+        return "下跌家数占优，TickFlow 市场广度偏弱。"
 
     def _quote_panel(self, panel_name: str, symbols: Dict[str, tuple]) -> PanelPayload:
         return self._success_panel(panel_name, self._quote_items(symbols))

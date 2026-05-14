@@ -14,6 +14,7 @@ OFFICIAL_MACRO_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "official_macro
 MARKET_OVERVIEW_BINANCE_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_binance_transport.py"
 MARKET_OVERVIEW_SENTIMENT_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_sentiment_transport.py"
 MARKET_OVERVIEW_SINA_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_sina_transport.py"
+MARKET_OVERVIEW_TICKFLOW_BREADTH_PROVIDER_FILE = REPO_ROOT / "src" / "services" / "market_overview_tickflow_breadth_provider.py"
 MARKET_OVERVIEW_YFINANCE_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_yfinance_transport.py"
 MARKET_OVERVIEW_TRANSPORT_FILES = (
     OFFICIAL_MACRO_TRANSPORT_FILE,
@@ -29,6 +30,14 @@ FORBIDDEN_TRANSPORT_IMPORT_PREFIXES = (
     "data_provider",
     "src.providers",
     "src.services.analysis_provider_planner",
+    "src.services.market_cache",
+    "src.services.market_overview_service",
+    "src.services.market_provider_operations_service",
+)
+FORBIDDEN_TICKFLOW_PROVIDER_IMPORT_PREFIXES = (
+    "api",
+    "fastapi",
+    "apps",
     "src.services.market_cache",
     "src.services.market_overview_service",
     "src.services.market_provider_operations_service",
@@ -193,7 +202,9 @@ def test_market_overview_service_extracts_raw_transport_boundaries() -> None:
     assert "src.services.market_overview_binance_transport" in service_imports
     assert "src.services.market_overview_sentiment_transport" in service_imports
     assert "src.services.market_overview_sina_transport" in service_imports
+    assert "src.services.market_overview_tickflow_breadth_provider" in service_imports
     assert "src.services.market_overview_yfinance_transport" in service_imports
+    assert "data_provider.tickflow_fetcher" not in service_imports
     assert not {
         module
         for module in service_imports
@@ -209,6 +220,25 @@ def test_market_overview_service_extracts_raw_transport_boundaries() -> None:
         or "sinajs.cn" in url
         or "dataviz.cnn.io" in url
         or "alternative.me" in url
+    }
+
+
+def test_market_overview_tickflow_breadth_provider_keeps_runtime_boundary_narrow() -> None:
+    provider_imports = _module_imports_for_file(MARKET_OVERVIEW_TICKFLOW_BREADTH_PROVIDER_FILE)
+
+    assert "data_provider.tickflow_fetcher" in provider_imports
+    assert "src.config" in provider_imports
+    assert not _module_imports_matching_prefixes(
+        MARKET_OVERVIEW_TICKFLOW_BREADTH_PROVIDER_FILE,
+        FORBIDDEN_TICKFLOW_PROVIDER_IMPORT_PREFIXES,
+    )
+    assert not {
+        module
+        for module in provider_imports
+        if module == "requests"
+        or module.startswith("requests.")
+        or module == "yfinance"
+        or module.startswith("yfinance.")
     }
 
 
