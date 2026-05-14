@@ -151,6 +151,48 @@ def _limiter_snapshot() -> dict[str, object]:
     return get_public_api_abuse_limiter_snapshot()
 
 
+def _prime_hot_public_bucket(client: TestClient, ip_address: str, *, auth_enabled: bool = False) -> None:
+    with patch.object(auth, "_is_auth_enabled_from_env", return_value=auth_enabled):
+        response = client.post(
+            "/api/v1/options/decision/evaluate",
+            content='{"symbol":"TEM"',
+            headers={
+                "content-type": "application/json",
+                "X-Forwarded-For": ip_address,
+            },
+        )
+
+    assert response.status_code == 422
+    assert _limiter_snapshot()["limitedBucketCount"] == 1
+
+
+def _liquidity_monitor_fallback_payload() -> dict[str, object]:
+    return {
+        "endpoint": "/api/v1/market/liquidity-monitor",
+        "generatedAt": "2026-05-15T10:00:00+08:00",
+        "score": {
+            "value": 50,
+            "regime": "unavailable",
+            "confidence": 0.0,
+            "includedIndicatorCount": 0,
+            "possibleIndicatorWeight": 43,
+            "includedIndicatorWeight": 0,
+        },
+        "freshness": {
+            "status": "fallback",
+            "weakestIndicatorFreshness": "fallback",
+            "latestAsOf": "2026-05-15T10:00:00+08:00",
+        },
+        "indicators": [],
+        "advisoryDisclosure": "仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。",
+        "sourceMetadata": {
+            "externalProviderCalls": False,
+            "providerRuntimeChanged": False,
+            "marketCacheMutation": False,
+        },
+    }
+
+
 def _format_warning_messages(caught: list[warnings.WarningMessage]) -> list[str]:
     return [
         f"{warning.category.__name__}: {warning.message}"
@@ -308,6 +350,142 @@ def test_api_abuse_rate_limit_readiness_has_global_public_limiter() -> None:
         "runtimeBehaviorChanged": True,
     }
     _assert_public_surface_safe(evidence)
+
+
+def test_public_api_abuse_limiter_safe_market_read_allowlist_is_narrow() -> None:
+    from api.middlewares import public_abuse_limiter as limiter
+
+    expected = frozenset(
+        {
+            ("GET", "/api/v1/market/rates"),
+            ("GET", "/api/v1/market/temperature"),
+            ("GET", "/api/v1/market/liquidity-monitor"),
+            ("GET", "/api/v1/market/fx-commodities"),
+            ("GET", "/api/v1/market/crypto"),
+            ("GET", "/api/v1/market/cn-indices"),
+            ("GET", "/api/v1/market/cn-breadth"),
+            ("GET", "/api/v1/market/cn-flows"),
+            ("GET", "/api/v1/market/us-breadth"),
+            ("GET", "/api/v1/market/futures"),
+            ("GET", "/api/v1/market/sector-rotation"),
+            ("GET", "/api/v1/market-overview/macro"),
+        }
+    )
+
+    assert limiter._SAFE_READ_BYPASS_ROUTES == expected
+    for method, path in expected:
+        assert limiter._is_safe_read_bypass(method, path)
+
+    assert not limiter._is_safe_read_bypass("POST", "/api/v1/market/rates")
+    assert not limiter._is_safe_read_bypass("GET", "/api/v1/market/sentiment")
+    assert not limiter._is_safe_read_bypass("GET", "/api/v1/admin/users")
+    assert not limiter._is_safe_read_bypass("GET", "/api/v1/options/underlyings/TEM/summary")
+
+
+def test_hot_public_bucket_allows_safe_market_get_routes_to_serve_fallback_payloads(monkeypatch) -> None:
+    from src.services.market_overview_service import MarketOverviewService
+
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setenv("TRUST_X_FORWARDED_FOR", "true")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    client = _auth_guarded_client()
+    ip_address = "203.0.113.214"
+    market_service = MarketOverviewService()
+    try:
+        _prime_hot_public_bucket(client, ip_address)
+
+        with patch.object(
+            market_service,
+            "_cached_payload",
+            side_effect=lambda _key, _fetcher, fallback_factory: fallback_factory(),
+        ), patch.object(
+            market_service,
+            "_fetch_rates_snapshot",
+            side_effect=AssertionError("rates fetcher should not run for fallback payloads"),
+        ), patch.object(
+            market_service,
+            "_fetch_macro",
+            side_effect=AssertionError("macro fetcher should not run for fallback payloads"),
+        ), patch.object(
+            market_service,
+            "_build_market_temperature_inputs",
+            side_effect=AssertionError("temperature inputs should not build for fallback payloads"),
+        ), patch(
+            "api.v1.endpoints.market.MarketOverviewService",
+            return_value=market_service,
+        ), patch(
+            "api.v1.endpoints.market_overview.MarketOverviewService",
+            return_value=market_service,
+        ), patch(
+            "api.v1.endpoints.liquidity_monitor.LiquidityMonitorService",
+        ) as mock_liquidity_service, patch.object(
+            auth,
+            "_is_auth_enabled_from_env",
+            return_value=False,
+        ):
+            mock_liquidity_service.return_value.get_liquidity_monitor.return_value = _liquidity_monitor_fallback_payload()
+            responses = {
+                "/api/v1/market/rates": client.get("/api/v1/market/rates", headers={"X-Forwarded-For": ip_address}),
+                "/api/v1/market/temperature": client.get("/api/v1/market/temperature", headers={"X-Forwarded-For": ip_address}),
+                "/api/v1/market-overview/macro": client.get("/api/v1/market-overview/macro", headers={"X-Forwarded-For": ip_address}),
+                "/api/v1/market/liquidity-monitor": client.get("/api/v1/market/liquidity-monitor", headers={"X-Forwarded-For": ip_address}),
+            }
+
+        assert {path: response.status_code for path, response in responses.items()} == {
+            "/api/v1/market/rates": 200,
+            "/api/v1/market/temperature": 200,
+            "/api/v1/market-overview/macro": 200,
+            "/api/v1/market/liquidity-monitor": 200,
+        }
+        assert responses["/api/v1/market/rates"].json()["source"] == "fallback"
+        assert responses["/api/v1/market/temperature"].json()["isFallback"] is True
+        assert responses["/api/v1/market-overview/macro"].json()["fallbackUsed"] is True
+        assert responses["/api/v1/market/liquidity-monitor"].json()["freshness"]["status"] == "fallback"
+        assert _limiter_snapshot()["limitedBucketCount"] == 1
+        mock_liquidity_service.return_value.get_liquidity_monitor.assert_called_once_with()
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
+
+
+def test_hot_public_bucket_still_limits_non_exempt_routes(monkeypatch) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setenv("TRUST_X_FORWARDED_FOR", "true")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    client = _auth_guarded_client()
+    ip_address = "203.0.113.215"
+    try:
+        _prime_hot_public_bucket(client, ip_address)
+
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
+            admin_response = client.get(
+                "/api/v1/admin/users",
+                headers={"X-Forwarded-For": ip_address},
+            )
+
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
+            public_response = client.get(
+                "/api/v1/options/underlyings/TEM/summary",
+                headers={"X-Forwarded-For": ip_address},
+            )
+
+        assert admin_response.status_code == 429
+        assert public_response.status_code == 429
+        for response in (admin_response, public_response):
+            assert response.json() == {
+                "error": "rate_limited",
+                "message": "Too many public API errors; retry later.",
+            }
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
 
 
 def test_public_malformed_json_bursts_eventually_receive_sanitized_rate_limit(monkeypatch) -> None:
@@ -901,7 +1079,7 @@ def test_public_api_abuse_limiter_excludes_auth_login_failures_from_buckets(monk
                 for _ in range(3)
             ]
 
-        assert all(response.status_code in {401, 429} for response in responses)
+        assert all(response.status_code != 429 for response in responses)
         assert _limiter_snapshot()["bucketCount"] == 0
         for response in responses:
             _assert_public_surface_safe(response.json())

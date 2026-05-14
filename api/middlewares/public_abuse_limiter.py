@@ -34,6 +34,22 @@ _EXEMPT_PREFIXES = (
     "/redoc",
     "/openapi.json",
 )
+_SAFE_READ_BYPASS_ROUTES = frozenset(
+    {
+        ("GET", "/api/v1/market/rates"),
+        ("GET", "/api/v1/market/temperature"),
+        ("GET", "/api/v1/market/liquidity-monitor"),
+        ("GET", "/api/v1/market/fx-commodities"),
+        ("GET", "/api/v1/market/crypto"),
+        ("GET", "/api/v1/market/cn-indices"),
+        ("GET", "/api/v1/market/cn-breadth"),
+        ("GET", "/api/v1/market/cn-flows"),
+        ("GET", "/api/v1/market/us-breadth"),
+        ("GET", "/api/v1/market/futures"),
+        ("GET", "/api/v1/market/sector-rotation"),
+        ("GET", "/api/v1/market-overview/macro"),
+    }
+)
 _PUBLIC_API_ABUSE_BUCKETS: dict[str, tuple[int, float]] = {}
 _PUBLIC_API_ABUSE_LOCK = threading.Lock()
 
@@ -108,9 +124,17 @@ def _is_api_surface(path: str) -> bool:
     return path.startswith("/api/v1/")
 
 
+def _normalize_path(path: str) -> str:
+    return path.rstrip("/") or "/"
+
+
 def _is_exempt(path: str) -> bool:
-    normalized = path.rstrip("/") or "/"
+    normalized = _normalize_path(path)
     return any(normalized == prefix.rstrip("/") or normalized.startswith(prefix) for prefix in _EXEMPT_PREFIXES)
+
+
+def _is_safe_read_bypass(method: str, path: str) -> bool:
+    return (method.upper(), _normalize_path(path)) in _SAFE_READ_BYPASS_ROUTES
 
 
 def _has_valid_session_cookie(request: Request) -> bool:
@@ -201,7 +225,7 @@ class PublicApiAbuseLimiterMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         key = _bucket_key(request)
-        if _bucket_limited(key):
+        if _bucket_limited(key) and not _is_safe_read_bypass(method, path):
             return _rate_limited_response(request)
 
         response = await call_next(request)
