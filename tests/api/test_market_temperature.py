@@ -278,10 +278,6 @@ if __name__ == "__main__":
     unittest.main()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="T-145 sentinel: legacy sentiment panel items still count as reliable temperature inputs under the shared sentiment cache seam.",
-)
 def test_temperature_confidence_excludes_legacy_sentiment_panel_family() -> None:
     service = MarketOverviewService()
     legacy_sentiment_panel = {

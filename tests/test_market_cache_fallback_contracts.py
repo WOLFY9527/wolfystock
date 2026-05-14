@@ -178,7 +178,7 @@ def test_market_briefing_degrades_instead_of_emitting_strong_narrative_from_lega
     with patch.object(service, "_build_market_temperature_inputs", return_value=inputs):
         payload = service.get_market_briefing()
 
-    assert payload["source"] == "mixed"
+    assert payload["source"] == "fallback"
     assert payload["warning"] == "当前真实数据不足，暂不生成强市场判断。"
     assert [item["title"] for item in payload["items"]] == [
         "当前真实数据不足",

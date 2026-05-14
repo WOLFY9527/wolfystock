@@ -180,6 +180,8 @@ def classify_market_payload_reliability(payload: Dict[str, Any], category: str =
         return {"kind": "fallback", "isReliable": False, "excluded": True, "excludeReason": "fallback", "confidenceWeight": 0.0, "sourceType": source_type}
     if not has_value:
         return {"kind": "error", "isReliable": False, "excluded": True, "excludeReason": "no_value", "confidenceWeight": 0.0, "sourceType": source_type}
+    if category == "sentiment" and payload.get("change_pct") is not None and payload.get("change") is None:
+        return {"kind": "error", "isReliable": False, "excluded": True, "excludeReason": "legacy_sentiment_panel_family", "confidenceWeight": 0.0, "sourceType": source_type}
     if freshness in {"live", "cached", "delayed"} and source_type in SOURCE_TYPE_CONFIDENCE:
         return {
             "kind": "real",
@@ -343,6 +345,9 @@ class MarketOverviewService:
     CACHE_TTL_SECONDS = 300
     MARKET_COLD_START_TIMEOUT_SECONDS = 2.0
     CRYPTO_FANOUT_WORKERS = 4
+    LEGACY_SHARED_SENTIMENT_CACHE_KEY = "sentiment"
+    OVERVIEW_SENTIMENT_CACHE_KEY = "overview_sentiment"
+    MARKET_SENTIMENT_CACHE_KEY = "market_sentiment"
     _cache: Dict[str, tuple[float, PanelPayload]] = {}
     _market_data_cache: Dict[str, Dict[str, Any]] = {}
     _market_cache = market_cache
@@ -417,7 +422,13 @@ class MarketOverviewService:
         return self._panel("volatility", "VolatilityCard", "/api/v1/market-overview/volatility", self._fetch_volatility, actor)
 
     def get_sentiment(self, actor: Optional[Dict[str, Any]] = None) -> PanelPayload:
-        return self._panel("sentiment", "MarketSentimentCard", "/api/v1/market-overview/sentiment", self._fetch_sentiment, actor)
+        return self._panel(
+            self.OVERVIEW_SENTIMENT_CACHE_KEY,
+            "MarketSentimentCard",
+            "/api/v1/market-overview/sentiment",
+            self._fetch_sentiment,
+            actor,
+        )
 
     def get_funds_flow(self, actor: Optional[Dict[str, Any]] = None) -> PanelPayload:
         return self._panel("funds_flow", "FundsFlowCard", "/api/v1/market-overview/funds-flow", self._fetch_funds_flow, actor)
@@ -437,11 +448,11 @@ class MarketOverviewService:
 
     def get_market_sentiment(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         return self._market_snapshot(
-            cache_key="sentiment",
+            cache_key=self.MARKET_SENTIMENT_CACHE_KEY,
             panel_name="MarketSentimentCard",
             endpoint_url="/api/v1/market/sentiment",
             fetcher=self._fetch_market_sentiment_snapshot,
-            fallback_factory=lambda: self._fallback_market_snapshot("sentiment", "unavailable"),
+            fallback_factory=lambda: self._fallback_market_snapshot(self.MARKET_SENTIMENT_CACHE_KEY, "unavailable"),
             actor=actor,
         )
 
@@ -820,6 +831,102 @@ class MarketOverviewService:
     def _snapshot_key(self, cache_key: str) -> str:
         return f"market_overview:{cache_key}"
 
+    def _persistent_snapshot_lookup_keys(self, cache_key: str) -> List[str]:
+        if cache_key in {self.OVERVIEW_SENTIMENT_CACHE_KEY, self.MARKET_SENTIMENT_CACHE_KEY}:
+            return [cache_key, self.LEGACY_SHARED_SENTIMENT_CACHE_KEY]
+        return [cache_key]
+
+    @staticmethod
+    def _is_market_sentiment_item(item: Dict[str, Any]) -> bool:
+        return any(item.get(key) is not None for key in ("price", "change", "change_text"))
+
+    @staticmethod
+    def _is_overview_sentiment_item(item: Dict[str, Any]) -> bool:
+        return any(item.get(key) is not None for key in ("value", "change_pct"))
+
+    def _normalize_sentiment_snapshot_payload(self, cache_key: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if cache_key == self.MARKET_SENTIMENT_CACHE_KEY:
+            return self._normalize_market_sentiment_snapshot_payload(payload)
+        if cache_key == self.OVERVIEW_SENTIMENT_CACHE_KEY:
+            return self._normalize_overview_sentiment_panel_payload(payload)
+        return payload
+
+    def _normalize_market_sentiment_snapshot_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        items = [item for item in payload.get("items", []) if isinstance(item, dict)]
+        if items and all(self._is_market_sentiment_item(item) for item in items):
+            return payload
+        updated_at = payload.get("last_update") or payload.get("updatedAt") or payload.get("last_refresh_at") or _now_iso()
+        if items and all(self._is_overview_sentiment_item(item) for item in items):
+            return {
+                "items": [
+                    {
+                        "symbol": item.get("symbol"),
+                        "label": item.get("label") or item.get("symbol"),
+                        "price": self._clean_number(item.get("value")),
+                        "change": self._clean_number(item.get("change_pct")),
+                        "change_text": item.get("change_text"),
+                        "trend": item.get("trend") or [],
+                        "hover_details": item.get("hover_details") or [],
+                        "risk_direction": item.get("risk_direction"),
+                        "unit": item.get("unit"),
+                        "source": item.get("source"),
+                        "last_update": item.get("last_update") or item.get("updatedAt") or updated_at,
+                        "error": item.get("error"),
+                    }
+                    for item in items
+                ],
+                "last_update": updated_at,
+                "updatedAt": payload.get("updatedAt") or updated_at,
+                "error": payload.get("error") or payload.get("error_message"),
+                "fallback_used": bool(payload.get("fallback_used") or payload.get("fallbackUsed") or payload.get("isFallback")),
+                "source": payload.get("source") or "cached",
+            }
+        return {
+            "items": [],
+            "last_update": updated_at,
+            "updatedAt": payload.get("updatedAt") or updated_at,
+            "error": payload.get("error") or payload.get("error_message"),
+            "scores": payload.get("scores"),
+            "metrics": payload.get("metrics"),
+            "fallback_used": bool(payload.get("fallback_used") or payload.get("fallbackUsed") or payload.get("isFallback")),
+            "source": payload.get("source") or "cached",
+        }
+
+    def _normalize_overview_sentiment_panel_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        items = [item for item in payload.get("items", []) if isinstance(item, dict)]
+        if items and all(self._is_overview_sentiment_item(item) for item in items):
+            return payload
+        updated_at = payload.get("last_refresh_at") or payload.get("updatedAt") or payload.get("last_update") or _now_iso()
+        if items and all(self._is_market_sentiment_item(item) for item in items):
+            return {
+                "items": [
+                    {
+                        "symbol": item.get("symbol"),
+                        "label": item.get("label") or item.get("symbol"),
+                        "value": self._clean_number(item.get("price")),
+                        "unit": item.get("unit"),
+                        "change_pct": self._clean_number(item.get("change")),
+                        "change_text": item.get("change_text"),
+                        "risk_direction": item.get("risk_direction"),
+                        "trend": item.get("trend") or [],
+                        "hover_details": item.get("hover_details") or [],
+                        "source": item.get("source"),
+                    }
+                    for item in items
+                ],
+                "last_refresh_at": updated_at,
+                "updatedAt": payload.get("updatedAt") or updated_at,
+                "error_message": payload.get("error"),
+                "source": payload.get("source") or "cached",
+            }
+        return {
+            "items": [],
+            "last_refresh_at": updated_at,
+            "updatedAt": payload.get("updatedAt") or updated_at,
+            "error_message": payload.get("error") or payload.get("error_message"),
+            "source": payload.get("source") or "cached",
+        }
+
     def _is_storable_market_snapshot(self, payload: Dict[str, Any]) -> bool:
         if not isinstance(payload, dict):
             return False
@@ -865,12 +972,17 @@ class MarketOverviewService:
         try:
             if os.environ.get("PYTEST_CURRENT_TEST") and os.environ.get("MARKET_OVERVIEW_SNAPSHOT_TEST_DB") != "1":
                 return None
-            row = DatabaseManager.get_instance().get_market_overview_snapshot(self._snapshot_key(cache_key))
+            row = None
+            for snapshot_cache_key in self._persistent_snapshot_lookup_keys(cache_key):
+                row = DatabaseManager.get_instance().get_market_overview_snapshot(self._snapshot_key(snapshot_cache_key))
+                if row and isinstance(row.get("payload"), dict):
+                    break
         except Exception:
             return None
         if not row or not isinstance(row.get("payload"), dict):
             return None
         payload = copy.deepcopy(row["payload"])
+        payload = self._normalize_sentiment_snapshot_payload(cache_key, payload)
         if not self._is_storable_market_snapshot(payload):
             return None
         last_successful_at = (
@@ -995,6 +1107,8 @@ class MarketOverviewService:
             "cn_flows": "flows",
             "fx_commodities": "fx_commodity",
             "cn_short_sentiment": "sentiment",
+            self.OVERVIEW_SENTIMENT_CACHE_KEY: "sentiment",
+            self.MARKET_SENTIMENT_CACHE_KEY: "sentiment",
         }.get(cache_key, cache_key)
         return MARKET_CACHE_TTLS.get(ttl_key, self.CACHE_TTL_SECONDS)
 
@@ -1004,6 +1118,8 @@ class MarketOverviewService:
             "volatility": "futures",
             "crypto": "crypto",
             "sentiment": "sentiment",
+            self.OVERVIEW_SENTIMENT_CACHE_KEY: "sentiment",
+            self.MARKET_SENTIMENT_CACHE_KEY: "sentiment",
             "funds_flow": "flows",
             "macro": "macro_rate",
             "cn_indices": "equity_index",
@@ -2173,8 +2289,8 @@ class MarketOverviewService:
         futures = self._temperature_panel("futures", self.get_futures, self._fallback_futures_snapshot)
         sentiment = self._temperature_panel(
             "sentiment",
-            self.get_sentiment,
-            lambda: self._fallback_overview_panel("sentiment", "MarketSentimentCard", FALLBACK_WARNING),
+            self.get_market_sentiment,
+            lambda: self._fallback_market_snapshot(self.MARKET_SENTIMENT_CACHE_KEY, "unavailable"),
         )
         crypto = self._temperature_panel("crypto", self.get_crypto, self._fallback_crypto_market_snapshot)
         return {
