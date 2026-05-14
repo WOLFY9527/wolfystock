@@ -11,13 +11,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
-import requests
-
 from src.services.execution_log_service import ExecutionLogService
 from src.services.market_overview_binance_transport import (
     fetch_binance_funding_row,
     fetch_binance_kline_history_rows,
     fetch_binance_ticker_snapshot,
+)
+from src.services.market_overview_sentiment_transport import (
+    fetch_alternative_fear_greed_payload,
+    fetch_cnn_fear_greed_payload,
 )
 from src.services.market_overview_sina_transport import fetch_sina_cn_index_rows
 from src.services.market_cache import MARKET_CACHE_TTLS, REFRESH_WARNING, market_cache
@@ -1375,9 +1377,7 @@ class MarketOverviewService:
         }
 
     def _fetch_cnn_fear_greed_snapshot(self) -> Dict[str, Any]:
-        response = requests.get("https://production.dataviz.cnn.io/index/fearandgreed/graphdata", timeout=8)
-        response.raise_for_status()
-        payload = response.json()
+        payload = fetch_cnn_fear_greed_payload()
         history_rows = payload.get("fear_and_greed_historical") or payload.get("fear_and_greed")
         if not isinstance(history_rows, list) or not history_rows:
             raise RuntimeError("CNN Fear & Greed payload unavailable")
@@ -1391,9 +1391,7 @@ class MarketOverviewService:
         return {"history": history, "source": "cnn"}
 
     def _fetch_alternative_fear_greed_snapshot(self) -> Dict[str, Any]:
-        response = requests.get("https://api.alternative.me/fng/", params={"limit": 8, "format": "json"}, timeout=8)
-        response.raise_for_status()
-        payload = response.json()
+        payload = fetch_alternative_fear_greed_payload()
         rows = payload.get("data") or []
         history = []
         for row in reversed(rows):

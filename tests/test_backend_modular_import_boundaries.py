@@ -284,6 +284,7 @@ MARKET_OVERVIEW_RUNTIME_FILES = (
     "api/v1/endpoints/market_overview.py",
     "src/services/crypto_realtime_service.py",
     "src/services/market_overview_binance_transport.py",
+    "src/services/market_overview_sentiment_transport.py",
     "src/services/market_overview_sina_transport.py",
     "src/services/market_overview_service.py",
     "src/services/market_rotation_radar_service.py",
@@ -293,8 +294,9 @@ EXPECTED_MARKET_OVERVIEW_RUNTIME_DIRECT_IMPORTS = {
     "api/v1/endpoints/market_overview.py": set(),
     "src/services/crypto_realtime_service.py": set(),
     "src/services/market_overview_binance_transport.py": {"requests"},
+    "src/services/market_overview_sentiment_transport.py": {"requests"},
     "src/services/market_overview_sina_transport.py": {"requests"},
-    "src/services/market_overview_service.py": {"requests", "yfinance"},
+    "src/services/market_overview_service.py": {"yfinance"},
     "src/services/market_rotation_radar_service.py": set(),
 }
 STOCK_SERVICE_TRANSITIONAL_PROVIDER_BOUNDARY = {

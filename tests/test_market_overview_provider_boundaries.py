@@ -11,6 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MARKET_ENDPOINT_FILE = REPO_ROOT / "api" / "v1" / "endpoints" / "market.py"
 MARKET_OVERVIEW_SERVICE_FILE = REPO_ROOT / "src" / "services" / "market_overview_service.py"
 MARKET_OVERVIEW_BINANCE_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_binance_transport.py"
+MARKET_OVERVIEW_SENTIMENT_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_sentiment_transport.py"
 MARKET_OVERVIEW_SINA_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_sina_transport.py"
 
 
@@ -125,13 +126,21 @@ def test_market_endpoint_module_avoids_direct_provider_client_imports() -> None:
     assert forbidden_imports == set()
 
 
-def test_market_overview_service_extracts_binance_raw_transport_boundary() -> None:
+def test_market_overview_service_extracts_raw_transport_boundaries() -> None:
     service_imports = _module_imports_for_file(MARKET_OVERVIEW_SERVICE_FILE)
     service_urls = _requests_get_urls(MARKET_OVERVIEW_SERVICE_FILE)
 
     assert "src.services.market_overview_binance_transport" in service_imports
+    assert "src.services.market_overview_sentiment_transport" in service_imports
     assert "src.services.market_overview_sina_transport" in service_imports
-    assert not {url for url in service_urls if "binance.com" in url or "sinajs.cn" in url}
+    assert not {
+        url
+        for url in service_urls
+        if "binance.com" in url
+        or "sinajs.cn" in url
+        or "dataviz.cnn.io" in url
+        or "alternative.me" in url
+    }
 
 
 def test_market_overview_binance_transport_limits_raw_http_calls_to_binance() -> None:
@@ -149,4 +158,13 @@ def test_market_overview_sina_transport_limits_raw_http_calls_to_sina() -> None:
 
     assert transport_urls == {
         "https://hq.sinajs.cn/list=",
+    }
+
+
+def test_market_overview_sentiment_transport_limits_raw_http_calls_to_sentiment_urls() -> None:
+    transport_urls = _requests_get_urls(MARKET_OVERVIEW_SENTIMENT_TRANSPORT_FILE)
+
+    assert transport_urls == {
+        "https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
+        "https://api.alternative.me/fng/",
     }
