@@ -53,7 +53,7 @@
 | 類型 | 支援 |
 |------|------|
 | AI 模型 | Gemini（免費）、OpenAI 兼容、DeepSeek、通義千問、Claude、Ollama |
-| 行情數據 | AkShare、Tushare、Pytdx、Baostock、YFinance |
+| 行情數據 | AkShare、Tushare、Pytdx、Baostock、Yahoo Finance（代理/延遲補充）、Alpaca、Twelve Data |
 | 新聞搜索 | Tavily、SerpAPI、Bocha、Brave、MiniMax |
 
 ### 內建交易紀律
@@ -284,7 +284,9 @@ daily_stock_analysis/
 - [x] AkShare（免費）
 - [x] Tushare Pro
 - [x] Baostock
-- [x] YFinance
+- [x] Yahoo Finance（代理/延遲補充）
+- [x] Alpaca
+- [x] Twelve Data
 
 ### 🎯 功能增強
 - [x] 決策儀表盤

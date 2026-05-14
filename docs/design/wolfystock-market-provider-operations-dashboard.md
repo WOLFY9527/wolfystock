@@ -19,7 +19,7 @@ Recommended route: `/zh/admin/market-providers`, not a subsection inside `/zh/se
 
 | Provider/source | Endpoint/service | Data type | Freshness/fallback metadata today | Cache/SWR behavior today | Current UI exposure | Gaps |
 | --- | --- | --- | --- | --- | --- | --- |
-| Yahoo / yfinance | `MarketOverviewService._latest_quote()`, `/api/v1/market-overview/indices`, `/volatility`, `/funds-flow`, `/macro`, `/api/v1/market/us-breadth` | US/global indices, volatility, ETF breadth, macro proxies, funds-flow proxies | `source`, `sourceLabel`, `sourceType`, `freshness`, `isFallback`, `isStale`, `delayMinutes`, item metadata, `providerHealth` | `MarketCache.get_or_refresh()` with TTL by cache key, stale return, background refresh, cold-start fallback after 2s, persistent snapshot fallback | Market Overview freshness badges and footer; Admin Logs entries when stale/fallback/failure/slow | No aggregated provider-level success rate, last-known-good age histogram, per-endpoint p50/p95 latency, or request volume view |
+| Yahoo Finance proxy / yfinance | `MarketOverviewService._latest_quote()`, `/api/v1/market-overview/indices`, `/volatility`, `/funds-flow`, `/macro`, `/api/v1/market/us-breadth` | US/global indices, volatility, ETF breadth, macro proxies, funds-flow proxy snapshots | `source`, `sourceLabel`, `sourceType`, `freshness`, `isFallback`, `isStale`, `delayMinutes`, item metadata, `providerHealth` | `MarketCache.get_or_refresh()` with TTL by cache key, stale return, background refresh, cold-start fallback after 2s, persistent snapshot fallback | Market Overview freshness badges and footer; Admin Logs entries when stale/fallback/failure/slow | No aggregated provider-level success rate, last-known-good age histogram, per-endpoint p50/p95 latency, or request volume view |
 | Sina | `/api/v1/market/cn-indices`, `_fetch_sina_cn_index_quotes()` | CN/HK index snapshot | Item-level `asOf`, `source=sina`, `sourceLabel=新浪财经`, mixed/fallback card state when some fallback fillers remain | Same MarketCache/SWR path through `_classified_snapshot()` | Market Overview CN/HK cards show source/freshness; mixed state may appear as partial/fallback | No Sina-specific availability history or count of mixed cards by missing symbol |
 | Binance spot/futures public APIs | `/api/v1/market/crypto`, `/crypto/stream`, `_fetch_crypto_market_snapshot()`, `_fetch_binance_kline_history()`, `_fetch_binance_funding_items()` | Crypto prices, trend, funding items | `source=binance`, `providerHealth`, item metadata, fallback static crypto snapshot with `isRefreshing` on cold fallback | Short crypto TTL, SWR, SSE stream seeded from realtime service or snapshot | Crypto Market Overview panel and stream status | No stream uptime metric, funding endpoint failure count, or separation between spot ticker, kline, and funding latency |
 | CNN Fear & Greed | `/api/v1/market/sentiment`, `_fetch_cnn_fear_greed_snapshot()` | Fear & Greed history | `source=cnn`; if it fails, service attempts Alternative.me and keeps provider error in payload | MarketCache/SWR under sentiment TTL | Sentiment card shows provider/freshness | CNN failure is not separately charted from Alternative.me fallback success |
@@ -126,7 +126,7 @@ Read-only, current-state response derived from current cache and market panel me
     {
       "provider": "sina",
       "sourceLabel": "新浪财经",
-      "sourceType": "public_api",
+      "sourceType": "public_proxy",
       "domain": "cn_indices",
       "endpoint": "/api/v1/market/cn-indices",
       "card": "ChinaIndicesCard",
@@ -147,6 +147,8 @@ Read-only, current-state response derived from current cache and market panel me
   ]
 }
 ```
+
+Historical note: older service-local payloads or logs may still emit legacy `sourceType` values such as `public_api`; new design examples in this document use the registry vocabulary (`public_proxy`, `unofficial_proxy`, `official_public`, etc.).
 
 ### Provider event rollup
 

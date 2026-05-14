@@ -1,7 +1,7 @@
 {
   "source": "yfinance_proxy",
   "sourceLabel": "Yahoo Finance",
-  "sourceType": "unofficial_public_api",
+  "sourceType": "unofficial_proxy",
   "updatedAt": "2026-05-14T09:30:00-04:00",
   "asOf": "2026-05-14T09:30:00-04:00",
   "items": [

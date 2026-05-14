@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import unittest
 from unittest.mock import patch
 
@@ -131,6 +132,13 @@ class MarketCnBreadthApiTestCase(unittest.TestCase):
         service = MarketOverviewService()
         service._market_cache.clear()
         MarketOverviewService._market_data_cache.clear()
+        previous_session = (datetime.now(timezone(timedelta(hours=8))) - timedelta(days=1)).replace(
+            hour=9,
+            minute=30,
+            second=0,
+            microsecond=0,
+        )
+        previous_session_iso = previous_session.isoformat()
 
         with patch(
             "src.services.market_overview_service.fetch_tickflow_cn_breadth_snapshot",
@@ -138,8 +146,8 @@ class MarketCnBreadthApiTestCase(unittest.TestCase):
                 "source": "tickflow",
                 "sourceLabel": "TickFlow",
                 "sourceType": "public_api",
-                "updatedAt": "2026-05-13T09:30:00+08:00",
-                "asOf": "2026-05-13T09:30:00+08:00",
+                "updatedAt": previous_session_iso,
+                "asOf": previous_session_iso,
                 "advancers": 2800,
                 "decliners": 1700,
                 "limitUp": 72,

@@ -18,7 +18,7 @@ This document compiles common issues encountered by users and their solutions.
    ```bash
    YFINANCE_PRIORITY=0
    ```
-   This prioritizes Yahoo Finance data source for US stock data
+   This prioritizes the Yahoo Finance proxy path for US stock quotes; it is an unofficial delayed/fallback source, not a trusted live official feed
 
 > Related Issue: [#153](https://github.com/ZhuLinsen/daily_stock_analysis/issues/153)
 

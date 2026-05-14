@@ -1,7 +1,7 @@
 {
   "source": "tickflow",
   "sourceLabel": "TickFlow",
-  "sourceType": "public_api",
+  "sourceType": "public_proxy",
   "updatedAt": "2026-05-14T09:30:00+08:00",
   "asOf": "2026-05-14T09:30:00+08:00",
   "advancers": 3210,

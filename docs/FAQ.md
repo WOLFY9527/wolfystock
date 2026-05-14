@@ -18,7 +18,7 @@
    ```bash
    YFINANCE_PRIORITY=0
    ```
-   这将优先使用 Yahoo Finance 数据源获取美股数据
+   这会优先尝试 Yahoo Finance 代理数据获取美股行情；该来源属于非官方延迟/回退来源，不应视为可信实时官方行情
 
 > 📌 相关 Issue: [#153](https://github.com/ZhuLinsen/daily_stock_analysis/issues/153)
 
