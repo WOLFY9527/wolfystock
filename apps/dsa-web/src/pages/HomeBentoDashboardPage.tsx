@@ -764,7 +764,7 @@ function AnalysisDiagnosticsDisclosure({
       >
         <div className="min-w-0">
           <p className="text-[11px] font-semibold tracking-[0] text-white/50">
-            {isEnglish ? 'Diagnostics' : '数据诊断'}
+            {isEnglish ? 'Data status' : '数据状态'}
           </p>
           <p className="mt-1 text-lg font-semibold tracking-[0] text-white">
             {preview}
@@ -791,21 +791,21 @@ function AnalysisDiagnosticsDisclosure({
         <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2" data-testid="home-bento-analysis-diagnostics-panel">
           <div className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
             <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
-              {isEnglish ? 'Critical Gaps' : '缺失关键数据'}
+              {isEnglish ? 'Critical gaps' : '关键缺失'}
             </p>
             <p className="mt-1 text-xs font-semibold text-emerald-200/80">{quickDecisionText}</p>
             <p className="mt-1 break-words text-sm text-white/72">{missingCritical}</p>
           </div>
           <div className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
             <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
-              {isEnglish ? 'Enrichment' : '增强数据'}
+              {isEnglish ? 'Enrichment' : '增强状态'}
             </p>
             <p className="mt-1 break-words text-sm text-white/72">{optionalText}</p>
           </div>
           {sourceSummary ? (
             <div className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2 sm:col-span-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
-                {isEnglish ? 'Decision Basis' : '决策依据'}
+                {isEnglish ? 'Source' : '来源'}
               </p>
               <p className="mt-1 break-words text-sm text-white/72">{sourceSummary}</p>
             </div>

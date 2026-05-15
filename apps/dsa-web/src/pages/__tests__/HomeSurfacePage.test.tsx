@@ -439,7 +439,7 @@ describe('HomeSurfacePage', () => {
 
     const panel = screen.getByTestId('home-bento-analysis-diagnostics');
     const toggle = screen.getByTestId('home-bento-analysis-diagnostics-toggle');
-    expect(panel).toHaveTextContent('数据诊断');
+    expect(panel).toHaveTextContent('数据状态');
     expect(panel).toHaveTextContent('关键缺口：基本面数据缺失');
     expect(panel).toHaveTextContent('分析级');
     expect(panel).toHaveTextContent('上限 70');
@@ -552,9 +552,9 @@ describe('HomeSurfacePage', () => {
       '基本面摘要',
       '观察计划',
       '检查清单',
-      '数据说明',
+      '来源',
     ].forEach((sectionTitle) => {
-      expect(within(report).getByText(sectionTitle)).toBeInTheDocument();
+      expect(within(report).getAllByText(sectionTitle).length).toBeGreaterThan(0);
     });
     expect(within(report).getByText('WOLFY AI EQUITY RESEARCH')).toBeInTheDocument();
     expect(within(report).getByText('AI 洞察仅供参考，不构成投资建议。')).toBeInTheDocument();
@@ -733,7 +733,7 @@ describe('HomeSurfacePage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '完整报告' }));
     const report = await screen.findByTestId('home-bento-full-report-drawer');
-    expect(within(report).getByText('投资结论')).toBeInTheDocument();
+    expect(within(report).getAllByText('投资结论').length).toBeGreaterThan(0);
     expect(within(report).getByText('AMD 完整报告正文仍然保留专业章节。')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /关闭|Close/i }));
@@ -862,7 +862,7 @@ describe('HomeSurfacePage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '完整报告' }));
     const report = await screen.findByTestId('home-bento-full-report-drawer');
-    expect(within(report).getByText('投资结论')).toBeInTheDocument();
+    expect(within(report).getAllByText('投资结论').length).toBeGreaterThan(0);
     expect(within(report).getByText('短线技术偏弱，但基本面仍有支撑，综合建议以观望为主。')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /关闭|Close/i }));
@@ -1048,7 +1048,7 @@ describe('HomeSurfacePage', () => {
 
     const report = await screen.findByTestId('home-bento-full-report-drawer');
     expect(screen.getByRole('dialog')).toHaveTextContent('完整报告');
-    expect(within(report).getByText('投资结论')).toBeInTheDocument();
+    expect(within(report).getAllByText('投资结论').length).toBeGreaterThan(0);
     expect(within(report).getByText('Tempus AI (TEM)')).toBeInTheDocument();
     expect(within(report).getByText('AI 洞察仅供参考，不构成投资建议。')).toBeInTheDocument();
   });
@@ -1265,7 +1265,7 @@ describe('HomeSurfacePage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '完整报告' }));
     const report = await screen.findByTestId('home-bento-full-report-drawer');
-    expect(within(report).getByText('投资结论')).toBeInTheDocument();
+    expect(within(report).getAllByText('投资结论').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: /关闭|Close/i }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());

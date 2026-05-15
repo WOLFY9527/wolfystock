@@ -984,13 +984,13 @@ describe('UserScannerPage', () => {
     const candidates = screen.getByTestId('scanner-candidate-scroll-region');
     expect(summary).toHaveTextContent(/证据置信|Evidence confidence/);
     expect(summary).toHaveTextContent(/数据就绪|Data readiness/);
-    expect(summary).toHaveTextContent(/下一步观察|Next observation/);
+    expect(summary).toHaveTextContent(/下一步|Next step/);
     expect(screen.queryByTestId('scanner-diagnostics-panel')).not.toBeInTheDocument();
     expect(summary.compareDocumentPosition(candidates) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     const diagnostics = screen.getByTestId('scanner-diagnostics-disclosure');
     expect(diagnostics).not.toHaveAttribute('open');
-    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*数据说明|Expand.*Data notes/i }));
+    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*数据状态|Expand.*Data status/i }));
     expect(await screen.findByTestId('scanner-diagnostics-panel')).toBeInTheDocument();
   });
 
@@ -1015,9 +1015,9 @@ describe('UserScannerPage', () => {
     expect(screen.queryByTestId('scanner-rejection-aggregate')).not.toBeInTheDocument();
 
     const diagnostics = await screen.findByTestId('scanner-diagnostics-disclosure');
-    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*数据说明|Expand.*Data notes/i }));
+    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*数据状态|Expand.*Data status/i }));
     const summary = await screen.findByTestId('scanner-diagnostics-summary');
-    fireEvent.click(within(summary).getByRole('button', { name: /查看淘汰原因|View rejection reasons/i }));
+    fireEvent.click(within(summary).getByRole('button', { name: /淘汰分布|Rejection mix/i }));
     expect(await screen.findByTestId('scanner-rejection-aggregate')).toBeInTheDocument();
   });
 
@@ -1371,8 +1371,8 @@ describe('UserScannerPage', () => {
     expect(screen.queryByTestId('scanner-diagnostic-summary')).not.toBeInTheDocument();
     expect(screen.getByTestId('scanner-launch-evidence-summary')).toHaveTextContent(/本次扫描：1 个入选 \/ 9 个评估|Scan: 1 selected \/ 9 evaluated/);
     expect(screen.getByTestId('scanner-launch-evidence-summary')).toHaveTextContent(/最佳候选：WULF · 60\/100|Best candidate: WULF · 60\/100/);
-    expect(screen.getByTestId('scanner-launch-evidence-summary')).toHaveTextContent(/主要淘汰原因：流动性不足|Main rejection: Liquidity weak/);
-    expect(screen.getByTestId('scanner-launch-evidence-summary')).toHaveTextContent(/数据状态：部分数据缺失|Data status: partial data missing/);
+    expect(screen.getByTestId('scanner-launch-evidence-summary')).toHaveTextContent(/主要淘汰：流动性不足|Main rejection: Liquidity weak/);
+    expect(screen.getByTestId('scanner-launch-evidence-summary')).toHaveTextContent(/部分数据缺失|Partial data missing/);
     expect(screen.getByTestId('scanner-launch-evidence-summary')).not.toHaveTextContent(/2 个数据失败|2 data failed/);
     expect(screen.getByTestId('scanner-result-row-WULF')).toBeInTheDocument();
     expect(screen.queryByTestId('scanner-candidate-preview')).not.toBeInTheDocument();
@@ -1420,12 +1420,12 @@ describe('UserScannerPage', () => {
 
     const experiment = await screen.findByTestId('scanner-strategy-experiment');
     expect(experiment).not.toHaveAttribute('open');
-    expect(within(experiment).getByRole('button', { name: /展开.*策略实验区|Expand.*Strategy experiment/i })).toHaveTextContent(/展开|Expand/i);
+    expect(within(experiment).getByRole('button', { name: /展开.*回测实验|Expand.*Backtest lab/i })).toHaveTextContent(/展开|Expand/i);
     expect(screen.queryByTestId('scanner-backtest-lab')).not.toBeInTheDocument();
     expect(screen.queryByTestId('scanner-strategy-simulation')).not.toBeInTheDocument();
 
-    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*策略实验区|Expand.*Strategy experiment/i }));
-    expect(within(experiment).getByRole('button', { name: /收起.*策略实验区|Collapse.*Strategy experiment/i })).toHaveTextContent(/收起|Collapse/i);
+    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*回测实验|Expand.*Backtest lab/i }));
+    expect(within(experiment).getByRole('button', { name: /收起.*回测实验|Collapse.*Backtest lab/i })).toHaveTextContent(/收起|Collapse/i);
     const lab = await screen.findByTestId('scanner-backtest-lab');
 
     expect(lab).toHaveTextContent(/候选单标的回测|Candidate single-symbol backtest/i);
@@ -1439,7 +1439,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const experiment = await screen.findByTestId('scanner-strategy-experiment');
-    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*策略实验区|Expand.*Strategy experiment/i }));
+    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*回测实验|Expand.*Backtest lab/i }));
     const panel = await screen.findByTestId('scanner-strategy-simulation');
 
     expect(within(panel).getByRole('button', { name: '30D' })).toBeInTheDocument();
@@ -1456,7 +1456,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const experiment = await screen.findByTestId('scanner-strategy-experiment');
-    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*策略实验区|Expand.*Strategy experiment/i }));
+    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*回测实验|Expand.*Backtest lab/i }));
     const panel = await screen.findByTestId('scanner-strategy-simulation');
     fireEvent.click(within(panel).getByRole('button', { name: '30D' }));
     fireEvent.click(within(panel).getByRole('button', { name: '10D' }));
@@ -1480,7 +1480,7 @@ describe('UserScannerPage', () => {
     const loadingRender = renderUserScannerPage();
 
     const loadingExperiment = await screen.findByTestId('scanner-strategy-experiment');
-    fireEvent.click(within(loadingExperiment).getByRole('button', { name: /展开.*策略实验区|Expand.*Strategy experiment/i }));
+    fireEvent.click(within(loadingExperiment).getByRole('button', { name: /展开.*回测实验|Expand.*Backtest lab/i }));
     const loadingPanel = await screen.findByTestId('scanner-strategy-simulation');
     fireEvent.click(within(loadingPanel).getByRole('button', { name: /运行模拟|Run sim/i }));
     expect(await within(loadingPanel).findByRole('button', { name: /运行中|Running/i })).toBeDisabled();
@@ -1513,7 +1513,7 @@ describe('UserScannerPage', () => {
     getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
     const insufficientRender = renderUserScannerPage();
     const insufficientExperiment = await screen.findByTestId('scanner-strategy-experiment');
-    fireEvent.click(within(insufficientExperiment).getByRole('button', { name: /展开.*策略实验区|Expand.*Strategy experiment/i }));
+    fireEvent.click(within(insufficientExperiment).getByRole('button', { name: /展开.*回测实验|Expand.*Backtest lab/i }));
     const insufficientPanel = await screen.findByTestId('scanner-strategy-simulation');
     fireEvent.click(within(insufficientPanel).getByRole('button', { name: /运行模拟|Run sim/i }));
     expect(await within(insufficientPanel).findByTestId('scanner-strategy-simulation-compact-message')).toHaveTextContent(/历史扫描不足/);
@@ -1523,7 +1523,7 @@ describe('UserScannerPage', () => {
     getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
     renderUserScannerPage();
     const readyExperiment = await screen.findByTestId('scanner-strategy-experiment');
-    fireEvent.click(within(readyExperiment).getByRole('button', { name: /展开.*策略实验区|Expand.*Strategy experiment/i }));
+    fireEvent.click(within(readyExperiment).getByRole('button', { name: /展开.*回测实验|Expand.*Backtest lab/i }));
     const readyPanel = await screen.findByTestId('scanner-strategy-simulation');
     fireEvent.click(within(readyPanel).getByRole('button', { name: /运行模拟|Run sim/i }));
 
@@ -1538,7 +1538,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const experiment = await screen.findByTestId('scanner-strategy-experiment');
-    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*策略实验区|Expand.*Strategy experiment/i }));
+    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*回测实验|Expand.*Backtest lab/i }));
     const panel = await screen.findByTestId('scanner-strategy-simulation');
     fireEvent.click(within(panel).getByRole('button', { name: /运行模拟|Run sim/i }));
 
@@ -1578,7 +1578,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const experiment = await screen.findByTestId('scanner-strategy-experiment');
-    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*策略实验区|Expand.*Strategy experiment/i }));
+    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*回测实验|Expand.*Backtest lab/i }));
     const lab = await screen.findByTestId('scanner-backtest-lab');
     const officialButton = within(lab).getByRole('button', { name: /回测官方入选|Official selected/i });
     fireEvent.click(officialButton);
@@ -1597,7 +1597,7 @@ describe('UserScannerPage', () => {
     const previewRender = renderUserScannerPage();
 
     const experiment = await screen.findByTestId('scanner-strategy-experiment');
-    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*策略实验区|Expand.*Strategy experiment/i }));
+    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*回测实验|Expand.*Backtest lab/i }));
     const lab = await screen.findByTestId('scanner-backtest-lab');
     fireEvent.click(within(lab).getByRole('button', { name: /回测预览入选|Preview selected/i }));
     await waitFor(() => {
@@ -1609,7 +1609,7 @@ describe('UserScannerPage', () => {
     getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
     const topRender = renderUserScannerPage();
     const topExperiment = await screen.findByTestId('scanner-strategy-experiment');
-    fireEvent.click(within(topExperiment).getByRole('button', { name: /展开.*策略实验区|Expand.*Strategy experiment/i }));
+    fireEvent.click(within(topExperiment).getByRole('button', { name: /展开.*回测实验|Expand.*Backtest lab/i }));
     const topLab = await screen.findByTestId('scanner-backtest-lab');
     fireEvent.click(within(topLab).getByRole('button', { name: /回测前 5 名|Top 5/i }));
     await waitFor(() => {
@@ -1621,7 +1621,7 @@ describe('UserScannerPage', () => {
     getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
     renderUserScannerPage();
     const filteredExperiment = await screen.findByTestId('scanner-strategy-experiment');
-    fireEvent.click(within(filteredExperiment).getByRole('button', { name: /展开.*策略实验区|Expand.*Strategy experiment/i }));
+    fireEvent.click(within(filteredExperiment).getByRole('button', { name: /展开.*回测实验|Expand.*Backtest lab/i }));
     const filteredLab = await screen.findByTestId('scanner-backtest-lab');
     fireEvent.click(screen.getByRole('button', { name: /候选池|Candidate pool/i }));
     fireEvent.click(within(filteredLab).getByRole('button', { name: /回测当前筛选|Filtered/i }));
@@ -1640,7 +1640,7 @@ describe('UserScannerPage', () => {
     getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
     renderUserScannerPage();
     const experiment = await screen.findByTestId('scanner-strategy-experiment');
-    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*策略实验区|Expand.*Strategy experiment/i }));
+    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*回测实验|Expand.*Backtest lab/i }));
     const lab = await screen.findByTestId('scanner-backtest-lab');
     fireEvent.click(within(lab).getByRole('button', { name: /回测官方入选|Official selected/i }));
 
@@ -1654,7 +1654,7 @@ describe('UserScannerPage', () => {
 
     const experiment = await screen.findByTestId('scanner-strategy-experiment');
     expect(screen.queryByTestId('scanner-strategy-preview')).not.toBeInTheDocument();
-    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*策略实验区|Expand.*Strategy experiment/i }));
+    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*回测实验|Expand.*Backtest lab/i }));
     const strategyPreview = await screen.findByTestId('scanner-strategy-preview');
     expect(strategyPreview).toHaveTextContent(/Official|官方/);
     expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/Preview|预览/);
@@ -1737,7 +1737,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const comparison = await screen.findByTestId('scanner-run-comparison-strip');
-    fireEvent.click(within(comparison).getByRole('button', { name: /展开.*历史对比|Expand.*History comparison/i }));
+    fireEvent.click(within(comparison).getByRole('button', { name: /展开.*上次对比|Expand.*Previous run/i }));
     const historySummary = await screen.findByTestId('scanner-result-history-summary');
     await waitFor(() => {
       expect(historySummary).toHaveTextContent(/本次扫描|Current scan/);
@@ -1771,7 +1771,7 @@ describe('UserScannerPage', () => {
 
     const comparison = await screen.findByTestId('scanner-run-comparison-strip');
     expect(comparison).not.toHaveAttribute('open');
-    fireEvent.click(within(comparison).getByRole('button', { name: /展开.*历史对比|Expand.*History comparison/i }));
+    fireEvent.click(within(comparison).getByRole('button', { name: /展开.*上次对比|Expand.*Previous run/i }));
     expect(comparison).toHaveTextContent(/暂无上次扫描对比|No previous comparable run/);
     expect(screen.getByTestId('scanner-previous-empty-state')).toHaveTextContent(/暂无历史扫描|No previous scan/);
   });
@@ -1930,7 +1930,7 @@ describe('UserScannerPage', () => {
     expect(selectedInspector).toHaveTextContent(/主要风险|Main risks/);
     expect(selectedInspector).toHaveTextContent(/评分不算强信号|Score is not a strong signal/);
     expect(selectedInspector).toHaveTextContent(/本次只有 1 个候选，样本偏窄|Only one selected candidate/);
-    expect(selectedInspector).toHaveTextContent(/下一步观察|Next observation/);
+    expect(selectedInspector).toHaveTextContent(/下一步|Next step/);
 
     fireEvent.click(screen.getByRole('button', { name: /候选池|Candidate pool/i }));
     fireEvent.click(await screen.findByTestId('scanner-candidate-row-MARA'));
@@ -2014,7 +2014,7 @@ describe('UserScannerPage', () => {
 
     expect(await screen.findByTestId('scanner-result-row-NVDA')).toBeInTheDocument();
     expect(screen.queryByTestId('scanner-candidate-filters')).not.toBeInTheDocument();
-    expect(screen.getByTestId('scanner-launch-evidence-summary')).toHaveTextContent(/扫描完成|Scan completed/);
+    expect(screen.getByTestId('scanner-launch-evidence-summary')).toHaveTextContent(/扫描完成|Scan complete/);
     expect(screen.queryByTestId('scanner-candidate-inspector')).not.toBeInTheDocument();
     expect(screen.getByTestId('scanner-result-table')).toBeInTheDocument();
   });

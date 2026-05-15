@@ -491,7 +491,7 @@ describe('OptionsLabPage', () => {
 
     const assumptions = screen.getByTestId('options-lab-assumptions-panel');
     expect(decision).toContainElement(summary);
-    expect(summary).toHaveTextContent('一线结论');
+    expect(summary).toHaveTextContent('结论');
     expect(summary).toHaveTextContent('数据不足，禁止判断');
     expect(summary).toHaveTextContent('暂无可执行策略');
     expect(Boolean(decision.compareDocumentPosition(assumptions) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
@@ -792,7 +792,7 @@ describe('OptionsLabPage', () => {
     expect(screen.queryByTestId('options-lab-strategy-developer-details')).not.toBeInTheDocument();
     expect(screen.queryByTestId('options-lab-decision-developer-details')).not.toBeInTheDocument();
     expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('风险边界');
-    expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('数据说明');
+    expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('数据状态');
     expect(document.body.textContent || '').not.toMatch(/开发者|Developer|provider_validation_required|mocked_frontend_shell|fixture_frontend_phase4/i);
   });
 

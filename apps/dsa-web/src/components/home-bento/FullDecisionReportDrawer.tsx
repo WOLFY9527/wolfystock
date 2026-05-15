@@ -350,10 +350,10 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
     },
     {
       id: 'data-notes',
-      title: '数据说明',
+      title: '来源',
       bullets: [
         ...listOrMissing(coverageNotes?.dataSources, '数据源未完整标注'),
-        ...listOrMissing(coverageNotes?.coverageGaps || coverageNotes?.missingFieldNotes, '缺失字段会以 -- 展示'),
+        ...listOrMissing(coverageNotes?.coverageGaps || coverageNotes?.missingFieldNotes, '缺失字段显示为 --'),
         ...listOrMissing(coverageNotes?.conflictNotes, '暂无额外冲突说明'),
         ...listOrMissing(coverageNotes?.methodNotes, '本报告为 AI 辅助分析，不构成投资建议'),
       ],
@@ -505,7 +505,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
           <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3 text-xs text-white/56 md:grid-cols-4">
             <span>市场：{identity.market}</span>
             <span>币种：{identity.currency}</span>
-            <span className="min-w-0 truncate">数据说明：{identity.dataStatus}</span>
+            <span className="min-w-0 truncate">数据状态：{identity.dataStatus}</span>
             <span>周期：{identity.horizon}</span>
           </div>
           <p className="mt-4 rounded-xl border border-amber-300/18 bg-amber-300/8 px-3 py-2 text-sm text-amber-50/82">
@@ -518,7 +518,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
           data-testid="home-bento-report-executive-summary"
         >
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">EXECUTIVE SUMMARY</p>
-          <h3 className="mt-2 text-xl font-semibold tracking-[0] text-white">投资结论 · 先看结论，再看证据</h3>
+          <h3 className="mt-2 text-xl font-semibold tracking-[0] text-white">投资结论</h3>
           <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold tracking-[0.08em] text-white/42">
             {['投资结论'].map((label) => (
               <span key={label} className="rounded-full border border-white/[0.06] bg-black/20 px-2 py-1">{label}</span>
@@ -527,7 +527,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
           <p className="mt-3 break-words text-sm leading-6 text-white/72">{summaryLine}</p>
           <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 md:grid-cols-3">
             {[
-              { label: '观察结论', value: observationLine },
+              { label: '结论', value: observationLine },
               { label: '置信度', value: confidenceLine },
               { label: '关键风险', value: riskLine },
             ].map((item) => (
@@ -569,9 +569,8 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
           data-testid="home-bento-full-report-technical-details"
         >
           <summary className="cursor-pointer list-none text-sm font-semibold tracking-[0] text-white">
-            技术指标、基本面与数据说明
+            技术细节
           </summary>
-          <p className="mt-2 text-sm leading-6 text-white/52">详细表格默认折叠，避免淹没结论与风险边界。</p>
           <div className="mt-4 grid min-w-0 grid-cols-1 gap-4">
             {technicalSections.map((section) => (
               <section key={section.id} className="min-w-0 rounded-2xl border border-white/[0.07] bg-black/16 p-4" data-testid={`home-bento-full-report-section-${section.id}`}>

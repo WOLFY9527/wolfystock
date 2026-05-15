@@ -30,8 +30,8 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
   const contextualNote = allowDiagnostics
     ? text.traceabilityNote
     : (reportLanguage === 'en'
-      ? 'Data notes are summarized for this page; detailed operational diagnostics remain in admin surfaces.'
-      : '本页仅展示数据说明摘要；详细运维诊断保留在管理页面。');
+      ? 'Summary only. Detailed diagnostics stay in admin.'
+      : '仅保留摘要，详细诊断见管理页。');
   const [showRaw, setShowRaw] = useState(false);
   const [showSnapshot, setShowSnapshot] = useState(false);
   const [copiedPanels, setCopiedPanels] = useState<CopiedPanelState>({

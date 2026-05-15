@@ -139,7 +139,7 @@ function ScannerDiagnosticsPanelComponentImpl({ runDetail, language }: ScannerDi
   return (
     <section data-testid="scanner-diagnostics-panel" className="mt-3 rounded-xl border border-white/5 bg-white/[0.015] p-3">
       <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-        {language === 'en' ? 'Data notes and replay summary' : '数据说明与复盘摘要'}
+        {language === 'en' ? 'Data status' : '数据状态'}
       </h3>
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         {coverage ? (
@@ -160,22 +160,22 @@ function ScannerDiagnosticsPanelComponentImpl({ runDetail, language }: ScannerDi
           </DiagnosticsSection>
         ) : null}
         {provider ? (
-          <DiagnosticsSection title={language === 'en' ? 'External data notes' : '外部数据说明'}>
+          <DiagnosticsSection title={language === 'en' ? 'Source' : '来源'}>
             <p className="text-xs leading-relaxed text-white/64">{formatProviderDiagnostics(provider, language)}</p>
           </DiagnosticsSection>
         ) : null}
         {runDetail.universeNotes.length ? (
-          <DiagnosticsSection title={language === 'en' ? 'Universe notes' : '候选范围说明'}>
+          <DiagnosticsSection title={language === 'en' ? 'Universe' : '范围'}>
             <DiagnosticsNotes notes={runDetail.universeNotes} />
           </DiagnosticsSection>
         ) : null}
         {runDetail.scoringNotes.length ? (
-          <DiagnosticsSection title={language === 'en' ? 'Scoring notes' : '评分说明'}>
+          <DiagnosticsSection title={language === 'en' ? 'Scoring' : '评分'}>
             <DiagnosticsNotes notes={runDetail.scoringNotes} />
           </DiagnosticsSection>
         ) : null}
         {hasReviewSummary(runDetail.reviewSummary) ? (
-          <DiagnosticsSection title={language === 'en' ? 'Review summary' : '复盘摘要'}>
+          <DiagnosticsSection title={language === 'en' ? 'Review' : '复盘'}>
             <div className="flex flex-wrap gap-2">
               <DiagnosticsFieldChip label={language === 'en' ? 'Status' : '状态'} value={runDetail.reviewSummary.reviewStatus} />
               <DiagnosticsFieldChip
@@ -195,7 +195,7 @@ function ScannerDiagnosticsPanelComponentImpl({ runDetail, language }: ScannerDi
           </DiagnosticsSection>
         ) : null}
         {hasComparison(runDetail.comparisonToPrevious) ? (
-          <DiagnosticsSection title={language === 'en' ? 'Comparison to previous' : '相对上次变化'}>
+          <DiagnosticsSection title={language === 'en' ? 'Previous run' : '相对上次'}>
             <div className="flex flex-wrap gap-2">
               <DiagnosticsFieldChip label={language === 'en' ? 'New' : '新增'} value={String(runDetail.comparisonToPrevious.newCount)} />
               <DiagnosticsFieldChip label={language === 'en' ? 'Retained' : '保留'} value={String(runDetail.comparisonToPrevious.retainedCount)} />
@@ -204,7 +204,7 @@ function ScannerDiagnosticsPanelComponentImpl({ runDetail, language }: ScannerDi
           </DiagnosticsSection>
         ) : null}
         {aiDiagnostics ? (
-          <DiagnosticsSection title={language === 'en' ? 'AI status' : 'AI 状态'}>
+          <DiagnosticsSection title={language === 'en' ? 'AI' : 'AI'}>
             <div className="flex flex-wrap gap-2">
               {Object.entries(aiDiagnostics)
                 .map(([key, value]) => [key, toDisplayText(value)] as const)

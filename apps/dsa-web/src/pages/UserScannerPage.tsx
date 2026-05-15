@@ -735,10 +735,10 @@ function buildDecisionSummary(
   const summary = runDetail.summary;
   if (!summary) {
     return {
-      headline: language === 'en' ? 'Scan completed · inspect candidate diagnostics' : '扫描完成 · 查看候选诊断',
+      headline: language === 'en' ? 'Scan complete' : '扫描完成',
       best: language === 'en' ? 'Best candidate: --' : '最佳候选：--',
-      reason: language === 'en' ? 'Main rejection: diagnostics limited' : '主要淘汰原因：诊断有限',
-      data: language === 'en' ? 'Data status: diagnostics limited' : '数据状态：诊断有限',
+      reason: language === 'en' ? 'Main rejection: diagnostics limited' : '主要淘汰：诊断有限',
+      data: language === 'en' ? 'Diagnostics limited' : '诊断受限',
     };
   }
   const selectedCount = summary.selectedCount ?? shortlist.length;
@@ -759,10 +759,10 @@ function buildDecisionSummary(
       : (language === 'en' ? 'Best candidate: --' : '最佳候选：--'),
     reason: language === 'en'
       ? `Main rejection: ${rejectionBuckets[0]?.label || 'n/a'}`
-      : `主要淘汰原因：${rejectionBuckets[0]?.label || '暂无'}`,
+      : `主要淘汰：${rejectionBuckets[0]?.label || '暂无'}`,
     data: dataFailedCount
-      ? (language === 'en' ? 'Data status: partial data missing' : '数据状态：部分数据缺失')
-      : (language === 'en' ? 'Data status: enough for observation' : '数据状态：可用于观察'),
+      ? (language === 'en' ? 'Partial data missing' : '部分数据缺失')
+      : (language === 'en' ? 'Ready for observation' : '可用于观察'),
   };
 }
 
@@ -1314,10 +1314,10 @@ function ScannerLaunchEvidenceSummary({
         : readinessLabel;
   const stateLabel = runDetail ? compactScannerStateLabel(runDetail.status, language) : (language === 'en' ? 'No scan loaded' : '暂无扫描');
   const nextStep = !runDetail
-    ? (language === 'en' ? 'Run or open a recent scan to inspect candidates.' : '运行扫描或打开近期扫描后查看候选。')
+    ? (language === 'en' ? 'Run or open a recent scan.' : '运行或打开近期扫描。')
     : shortlistCount > 0
-      ? (language === 'en' ? 'Open the leading candidate evidence, then add only validated names to watchlist.' : '先查看头部候选证据，再把确认需要跟踪的标的加入观察。')
-      : (language === 'en' ? 'No shortlist yet. Inspect data readiness before changing scope.' : '本次暂无候选，先检查数据可用性，再调整范围。');
+      ? (language === 'en' ? 'Review the lead candidate, then track it.' : '先核对头部候选，再加入观察。')
+      : (language === 'en' ? 'Check data readiness before widening scope.' : '先检查数据可用性，再调整范围。');
 
   return (
     <section data-testid="scanner-launch-evidence-summary" className="order-2 border-b border-white/5 px-3 py-1.5">
@@ -1349,7 +1349,7 @@ function ScannerLaunchEvidenceSummary({
           <span className="block truncate text-[11px] text-white/42">{readinessPlainText}</span>
         </div>
         <div className="hidden min-w-0 sm:block">
-          <span className="block text-[10px] font-bold uppercase tracking-widest text-white/38">{language === 'en' ? 'Next observation' : '下一步观察'}</span>
+          <span className="block text-[10px] font-bold uppercase tracking-widest text-white/38">{language === 'en' ? 'Next step' : '下一步'}</span>
           <span className="mt-0.5 block truncate text-xs text-white/62" title={nextStep}>{nextStep}</span>
         </div>
       </div>
@@ -3006,10 +3006,10 @@ const UserScannerPage: React.FC = () => {
                     {rejectionBuckets.length || hasRunDiagnosticsContent(runDetail) ? (
                       <AdvancedDisclosure
                         testId="scanner-diagnostics-disclosure"
-                        title={language === 'en' ? 'Data notes' : '数据说明'}
+                        title={language === 'en' ? 'Data status' : '数据状态'}
                         summary={language === 'en'
-                          ? `Evaluated ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize}, selected ${runDetail.summary?.selectedCount ?? shortlistCount}, main rejection: ${rejectionBuckets[0]?.label || 'n/a'}`
-                          : `本次共评估 ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize}，只入选 ${runDetail.summary?.selectedCount ?? shortlistCount}，主要淘汰原因：${rejectionBuckets[0]?.label || '暂无'}`}
+                          ? `Evaluated ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · selected ${runDetail.summary?.selectedCount ?? shortlistCount} · main rejection ${rejectionBuckets[0]?.label || 'n/a'}`
+                          : `评估 ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · 入选 ${runDetail.summary?.selectedCount ?? shortlistCount} · 主要淘汰 ${rejectionBuckets[0]?.label || '暂无'}`}
                         icon="info"
                         open={isDataNotesOpen}
                         onToggle={setIsDataNotesOpen}
@@ -3018,11 +3018,11 @@ const UserScannerPage: React.FC = () => {
                           <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                             <p className="min-w-0 text-white/64">
                               {language === 'en'
-                                ? `Evaluated ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize}, selected ${runDetail.summary?.selectedCount ?? shortlistCount}, main rejection ${rejectionBuckets[0]?.label || 'n/a'}`
-                                : `本次评估 ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize}，入选 ${runDetail.summary?.selectedCount ?? shortlistCount}，主要淘汰原因：${rejectionBuckets[0]?.label || '暂无'}`}
+                                ? `Evaluated ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · selected ${runDetail.summary?.selectedCount ?? shortlistCount} · main rejection ${rejectionBuckets[0]?.label || 'n/a'}`
+                                : `评估 ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · 入选 ${runDetail.summary?.selectedCount ?? shortlistCount} · 主要淘汰 ${rejectionBuckets[0]?.label || '暂无'}`}
                             </p>
                             <ActionButton
-                              label={language === 'en' ? 'View rejection reasons' : '查看淘汰原因'}
+                              label={language === 'en' ? 'Rejection mix' : '淘汰分布'}
                               onClick={() => setIsRejectionSummaryOpen((current) => !current)}
                             />
                           </div>
@@ -3047,7 +3047,7 @@ const UserScannerPage: React.FC = () => {
                     ) : null}
                     <AdvancedDisclosure
                       testId="scanner-run-comparison-strip"
-                      title={language === 'en' ? 'History comparison' : '历史对比'}
+                      title={language === 'en' ? 'Previous run' : '上次对比'}
                       summary={comparisonState.previousRun && comparisonState.chips.length
                         ? `${language === 'en' ? 'Compared with previous run' : '上次对比'}：${comparisonState.chips[0]}`
                         : (language === 'en' ? 'No previous comparable run' : '暂无上次扫描对比')}
@@ -3080,8 +3080,8 @@ const UserScannerPage: React.FC = () => {
                     </AdvancedDisclosure>
                     <AdvancedDisclosure
                       testId="scanner-strategy-experiment"
-                      title={language === 'en' ? 'Strategy experiment' : '策略实验区'}
-                      summary={language === 'en' ? 'History simulation · batch backtest · recent results' : '历史模拟 · 批量回测 · 最近结果'}
+                      title={language === 'en' ? 'Backtest lab' : '回测实验'}
+                      summary={language === 'en' ? 'Simulation · batch backtest · recent results' : '模拟 · 批量回测 · 最近结果'}
                       icon="backtest"
                     >
                       <div className="grid gap-3">

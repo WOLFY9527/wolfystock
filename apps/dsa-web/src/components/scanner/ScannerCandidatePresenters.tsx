@@ -153,7 +153,7 @@ export function ScannerCandidateDetailPanel({
       <DetailSection title={language === 'en' ? 'Feature signals' : '特征信号'}>
         <LabeledValueGrid items={featureSignalItems} empty={language === 'en' ? 'No feature signals provided' : '未提供特征信号'} />
       </DetailSection>
-      <DetailSection title={language === 'en' ? 'Risk notes' : '风险说明'}>
+      <DetailSection title={language === 'en' ? 'Risk' : '风险'}>
         <NotesList notes={riskNotes} empty={language === 'en' ? 'No risk notes provided' : '未提供风险说明'} />
       </DetailSection>
       <DetailSection title={language === 'en' ? 'Observation fields' : '观察字段'}>
@@ -188,7 +188,7 @@ export function ScannerCandidateDetailPanel({
         </DetailSection>
       ) : null}
       {providerNotes ? (
-        <DetailSection title={language === 'en' ? 'Data notes' : '数据说明'}>
+        <DetailSection title={language === 'en' ? 'Source' : '来源'}>
           <p className="text-xs leading-relaxed text-white/64">{providerNotes}</p>
         </DetailSection>
       ) : null}
@@ -301,7 +301,7 @@ export function ScannerCandidateInspector({
           </DetailSection>
         ) : null}
 
-        <DetailSection title={language === 'en' ? 'Next observation' : '下一步观察'}>
+        <DetailSection title={language === 'en' ? 'Next step' : '下一步'}>
           <div className="grid grid-cols-2 gap-1.5">
             <ActionButton
               label={isCopied ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy symbol' : '复制代码')}
@@ -497,7 +497,7 @@ export function ScannerCandidateDiagnosticRow({
           <DetailSection title={language === 'en' ? 'Missing fields' : '缺失字段'}>
             <NotesList notes={missingFieldNotes} empty={language === 'en' ? 'No missing data notes' : '暂无缺失数据说明'} />
           </DetailSection>
-          <DetailSection title={language === 'en' ? 'Data notes' : '数据说明'}>
+          <DetailSection title={language === 'en' ? 'Data status' : '数据状态'}>
             <div className="flex flex-wrap gap-1.5">
               <FieldChip label={language === 'en' ? 'Quality' : '质量'} value={dataQualityLabel} />
               <FieldChip label={language === 'en' ? 'Status' : '状态'} value={statusLabel} />

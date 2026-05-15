@@ -92,7 +92,7 @@ describe('LiquidityMonitorPage', () => {
     const pageShell = screen.getByRole('heading', { name: '流动性监测' }).closest('[data-terminal-primitive="page-shell"]');
     expect(pageShell).toHaveAttribute('data-workspace-width', 'near-full');
     expect(pageShell).toHaveClass('max-w-[1840px]');
-    expect(screen.getByText('支撑')).toBeInTheDocument();
+    expect(screen.getAllByText('支撑').length).toBeGreaterThan(0);
     expect(screen.getByText('69')).toBeInTheDocument();
     expect(screen.getByText('44%')).toBeInTheDocument();
     expect(screen.getAllByText('延迟').length).toBeGreaterThan(0);
@@ -121,7 +121,7 @@ describe('LiquidityMonitorPage', () => {
     expect(screen.getAllByText('均值 -2.50%').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '展开 数据源细节' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '展开 数据源细节' }));
-    expect(screen.getByText('外部行情调用')).toBeInTheDocument();
+    expect(screen.getByText('外部调用')).toBeInTheDocument();
     expect(screen.getAllByText('未发生').length).toBeGreaterThan(0);
   });
 });

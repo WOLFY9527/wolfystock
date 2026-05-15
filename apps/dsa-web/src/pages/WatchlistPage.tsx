@@ -391,7 +391,7 @@ function getCopy(language: 'zh' | 'en') {
   }
   return {
     title: '观察列表',
-    subtitle: '扫描候选的紧凑证据队列',
+    subtitle: '紧凑观察队列',
     totalTracked: '追踪总数',
     marketsRepresented: '覆盖市场',
     scannerSourced: '扫描来源',
@@ -461,7 +461,7 @@ function getCopy(language: 'zh' | 'en') {
     copySymbol: '复制代码',
     copied: '已复制',
     emptyTitle: '暂无追踪候选。',
-    emptyBody: '当前没有观察标的。可以先从扫描器加入候选，或调整筛选条件查看已有证据。',
+    emptyBody: '暂无观察标的，可先从扫描器加入候选。',
     openScanner: '打开扫描器',
     tableTitle: '追踪候选',
     tableDescription: '扫描、历史模拟和回测证据保持显式标记。',
@@ -941,7 +941,6 @@ const WatchlistPage: React.FC = () => {
               </TerminalButton>
             )}
           />
-          <p className="max-w-[32rem] text-xs leading-5 text-white/45 md:pt-1">{copy.subtitle}</p>
         </TerminalPanel>
 
         <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6" aria-label="watchlist summary">

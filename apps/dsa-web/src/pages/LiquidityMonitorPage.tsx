@@ -148,7 +148,7 @@ const LiquidityMonitorPage: React.FC = () => {
   return (
     <WideWorkspacePageShell className="flex min-h-0 flex-1 py-5 md:py-6">
       <TerminalPageHeading
-        eyebrow="市场流动性观察"
+        eyebrow="流动性"
         title="流动性监测"
         action={
           <TerminalChip variant={data ? chipVariantForFreshness(data.freshness.status) : 'neutral'}>
@@ -165,8 +165,7 @@ const LiquidityMonitorPage: React.FC = () => {
 
       {loading && !data ? (
         <TerminalPanel>
-          <TerminalSectionHeader eyebrow="只读监测" title="正在读取缓存 / 快照" />
-          <p className="mt-3 text-sm text-white/55">当前页面只读取已有市场缓存与持久快照，不会触发额外行情调用。</p>
+          <TerminalSectionHeader eyebrow="快照" title="读取中" />
         </TerminalPanel>
       ) : null}
 
@@ -185,7 +184,7 @@ const LiquidityMonitorPage: React.FC = () => {
                     <div>
                       <p className="text-[10px] uppercase tracking-widest text-white/35">分数</p>
                       <p className={cn('mt-2 font-mono text-5xl tracking-tight', REGIME_TONE[data.score.regime])}>{scoreLabel(data.score.value)}</p>
-                      <p className="mt-2 text-sm text-white/48">{REGIME_LABELS[data.score.regime]} · 仅观察</p>
+                      <p className="mt-2 text-sm text-white/48">{REGIME_LABELS[data.score.regime]}</p>
                     </div>
                     <Gauge className="h-8 w-8 text-white/28" aria-hidden="true" />
                   </div>
@@ -264,7 +263,7 @@ const LiquidityMonitorPage: React.FC = () => {
                   <TerminalMetric label="状态" value={statusLabel(selectedIndicator.status)} valueClassName="text-lg font-sans" />
                   <TerminalMetric label="评分贡献" value={contributionLabel(selectedIndicator)} valueClassName="text-lg font-sans" />
                   <TerminalMetric label="更新时间" value={formatDateTime(selectedIndicator.updatedAt) || '待确认'} valueClassName="text-sm font-sans" />
-                  <TerminalMetric label="观测备注" value={detailReason(selectedIndicator)} valueClassName="text-sm font-sans leading-6" />
+                  <TerminalMetric label="备注" value={detailReason(selectedIndicator)} valueClassName="text-sm font-sans leading-6" />
                 </div>
               ) : (
                 <p className="mt-4 text-sm text-white/45">当前没有可展示的指标。</p>
@@ -275,8 +274,8 @@ const LiquidityMonitorPage: React.FC = () => {
               data-testid="liquidity-monitor-source-disclosure"
             >
               <TerminalSectionHeader
-                eyebrow="数据源细节"
-                title="缓存 / 快照说明"
+                eyebrow="来源"
+                title="数据状态"
                 action={(
                   <TerminalButton
                     variant="compact"
@@ -289,20 +288,20 @@ const LiquidityMonitorPage: React.FC = () => {
               />
               {sourceDetailsOpen ? (
                 <div className="mt-4 grid grid-cols-1 gap-3">
-                  <TerminalMetric label="外部行情调用" value={data.sourceMetadata.externalProviderCalls ? '已发生' : '未发生'} valueClassName="text-sm font-sans" />
-                  <TerminalMetric label="运行顺序变更" value={data.sourceMetadata.providerRuntimeChanged ? '已发生' : '未发生'} valueClassName="text-sm font-sans" />
+                  <TerminalMetric label="外部调用" value={data.sourceMetadata.externalProviderCalls ? '已发生' : '未发生'} valueClassName="text-sm font-sans" />
+                  <TerminalMetric label="运行顺序" value={data.sourceMetadata.providerRuntimeChanged ? '已变更' : '未变更'} valueClassName="text-sm font-sans" />
                   <TerminalMetric label="缓存写入" value={data.sourceMetadata.marketCacheMutation ? '已发生' : '未发生'} valueClassName="text-sm font-sans" />
                   <TerminalMetric label="最弱时效" value={FRESHNESS_LABELS[data.freshness.weakestIndicatorFreshness]} valueClassName="text-sm font-sans" />
                   <TerminalMetric label="最新时间" value={formatDateTime(data.freshness.latestAsOf) || '待确认'} valueClassName="text-sm font-sans" />
-                  <TerminalMetric label="当前判断" value={data.score.regime === 'unavailable' ? '数据不足，禁止扩展解释' : '仅观察市场流动性环境'} valueClassName="text-sm font-sans leading-6" />
+                  <TerminalMetric label="当前判断" value={data.score.regime === 'unavailable' ? '数据不足' : '仅观察'} valueClassName="text-sm font-sans leading-6" />
                 </div>
               ) : null}
             </TerminalPanel>
 
             <TerminalPanel>
-              <TerminalSectionHeader eyebrow="边界确认" title="模块约束" action={<Activity className="h-4 w-4 text-white/28" aria-hidden="true" />} />
+              <TerminalSectionHeader eyebrow="边界" title="约束" action={<Activity className="h-4 w-4 text-white/28" aria-hidden="true" />} />
               <p className="mt-3 text-sm leading-6 text-white/52">
-                当前模块只读取已有缓存 / 快照，不触发扫描、回测或组合动作，也不会把 fallback 数据包装成实时结论。
+                只读快照，不触发扫描、回测或组合动作，也不把 fallback 包装成实时结论。
               </p>
             </TerminalPanel>
           </div>

@@ -500,7 +500,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-risk-card')).toHaveTextContent('暂无持仓');
     expect(await screen.findByText(translate('zh', 'portfolio.fxStale'))).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '手工记账台' })).toBeInTheDocument();
-    expect(screen.getAllByText('仅用于手工记账，不连接券商执行，也不发起外部委托。').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('手工记账入口').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '持仓流水' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /交易工作台|Trade Station/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '股票买卖' })).not.toBeInTheDocument();
@@ -1695,7 +1695,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     expect(container).toHaveTextContent('手工记账台');
-    expect(container).toHaveTextContent('仅用于手工记账，不连接券商执行，也不发起外部委托。');
+    expect(container).toHaveTextContent('手工记账入口');
     expect(container).toHaveTextContent('持仓流水');
     expect(container).toHaveTextContent('保存记录');
     expect(container).toHaveTextContent('记录日期');

@@ -82,7 +82,7 @@ describe('GuestHomePage', () => {
     expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
     expect(screen.getByTestId('guest-home-clean-search')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-grid')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'WolfyStock 决策面板' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'WolfyStock 分析面板' })).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-omnibar')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '分析' })).toBeEnabled();
     expect(screen.queryByTestId('guest-home-frosted-lock')).not.toBeInTheDocument();
@@ -115,8 +115,8 @@ describe('GuestHomePage', () => {
 
     renderGuest(['/en/guest']);
 
-    expect(screen.getByRole('heading', { name: 'WolfyStock Command Center' })).toBeInTheDocument();
-    expect(screen.getByText('Enter a ticker to wake the AI decision dashboard.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'WolfyStock Analysis Center' })).toBeInTheDocument();
+    expect(screen.getByText('Enter a ticker to generate an analysis view.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Analyze' })).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-grid')).not.toBeInTheDocument();
   });

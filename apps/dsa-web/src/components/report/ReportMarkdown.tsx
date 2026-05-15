@@ -214,9 +214,6 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
           titleClassName="mt-0 text-base font-semibold"
           bodyClassName="text-sm"
         >
-          <p className="text-xs leading-5 text-muted-text">
-            {text.markdownRawHint}
-          </p>
         </SupportPanel>
 
         {isLoading ? (
@@ -263,7 +260,7 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
               >
                 <div className="grid gap-2 text-xs text-secondary-text sm:grid-cols-3">
                   {[
-                    { label: normalizedLanguage === 'en' ? 'Observation' : '观察结论', value: executiveSummary.observation },
+                    { label: normalizedLanguage === 'en' ? 'Decision' : '结论', value: executiveSummary.observation },
                     { label: normalizedLanguage === 'en' ? 'Confidence' : '置信度', value: executiveSummary.confidence },
                     { label: normalizedLanguage === 'en' ? 'Key risk' : '关键风险', value: executiveSummary.keyRisk },
                   ].map((item) => (
@@ -316,13 +313,8 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
               className="theme-panel-subtle rounded-[var(--cohere-radius-medium)] px-5 py-4 md:px-6"
             >
               <summary className="cursor-pointer list-none text-sm font-semibold tracking-[0.06em] text-foreground">
-                {normalizedLanguage === 'en' ? 'Technical evidence and full markdown' : '技术证据与完整 Markdown'}
+                {normalizedLanguage === 'en' ? 'Technical details' : '技术细节'}
               </summary>
-              <p className="mt-2 text-sm leading-6 text-muted-text">
-                {normalizedLanguage === 'en'
-                  ? 'Raw tables, source notes, diagnostics, and full report text are kept secondary.'
-                  : '原始表格、来源说明、诊断信息与完整正文默认放在次级区域。'}
-              </p>
               <div className="mt-4 mx-auto w-full max-w-[86ch]">
                 <div
                   className="home-markdown-prose prose prose-invert max-w-none

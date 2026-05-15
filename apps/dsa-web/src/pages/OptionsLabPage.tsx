@@ -663,7 +663,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
           >
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
-                <p className={labelClass}>一线结论</p>
+                <p className={labelClass}>结论</p>
                 <p className={cn('mt-2 text-xl font-semibold', labelTone)}>{decisionStatusLabel(decision)}</p>
                 <p className="mt-2 text-sm leading-6 text-white/62">
                   {primaryStrategy
@@ -704,7 +704,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
               {ivRankStatus === 'available' ? (
                 <>
                   <p className="mt-2 font-mono text-base font-semibold tracking-tight text-cyan-300">{number(ivRank, 1)} / {number(ivPercentile, 1)}</p>
-                  <p className="mt-1 text-sm text-white/52">来源已清理为用户可读状态</p>
+                  <p className="mt-1 text-sm text-white/52">用户态来源</p>
                 </>
               ) : (
                 <>
@@ -780,7 +780,7 @@ const RiskBoundaryPanel: React.FC<{
       </SectionHeader>
       <div className="mt-5 grid gap-3 text-sm">
         <div className="rounded-xl border border-rose-400/20 bg-rose-500/5 p-3">
-          <p className={labelClass}>禁止判断</p>
+          <p className={labelClass}>结论</p>
           <p className="mt-2 text-sm font-semibold text-rose-200">{topState}</p>
           <p className="mt-1 text-xs leading-5 text-white/45">仅供观察，不可作为交易信号。</p>
         </div>
@@ -818,12 +818,9 @@ const RiskBoundaryPanel: React.FC<{
               <span>更多限制</span>
               <ChevronDown className="h-3.5 w-3.5 text-white/30" aria-hidden="true" />
             </summary>
-            <p className="mt-2">暂无更多可见限制，仍需人工复核。</p>
+            <p className="mt-2">暂无额外限制，仍需人工复核。</p>
           </details>
         )}
-        <p className="text-xs leading-5 text-white/35">
-          仅供观察，不可作为交易信号。本页不接入交易执行、组合变更或通知路由。
-        </p>
       </div>
     </section>
   );
@@ -839,24 +836,24 @@ const MethodologyDisclosure: React.FC<{
     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/75">
       <span className="inline-flex items-center gap-2 text-sm font-semibold">
         <BarChart3 className="h-4 w-4 text-cyan-200" aria-hidden="true" />
-        计算假设 / 数据说明 / 限制说明
+        假设 / 数据 / 限制
       </span>
       <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
     </summary>
     <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
       <div className={cn(innerBlockClass, 'p-4 text-sm leading-6 text-white/58')}>
-        <p className={labelClass}>计算假设</p>
-        <p className="mt-2">目标价 {targetPrice || '--'}，目标日 {targetDate || '--'}，风险预算 {riskBudget || '--'}。收益结构只表达显式假设下的情景结果。</p>
+        <p className={labelClass}>假设</p>
+        <p className="mt-2">目标价 {targetPrice || '--'}，目标日 {targetDate || '--'}，风险预算 {riskBudget || '--'}。</p>
       </div>
       <div className={cn(innerBlockClass, 'p-4 text-sm leading-6 text-white/58')}>
-        <p className={labelClass}>数据说明</p>
+        <p className={labelClass}>数据状态</p>
         <p className="mt-2">
           {[...asArray(state.chain?.limitations), ...asArray(state.chain?.metadata?.limitations)].map(limitationLabel).join(' · ') || '当前数据可用于情景观察'}
         </p>
       </div>
       <div className={cn(innerBlockClass, 'p-4 text-sm leading-6 text-white/58')}>
-        <p className={labelClass}>限制说明</p>
-        <p className="mt-2">期权可能归零，IV、Theta、流动性与价差会改变到期前估值。本模块只做只读情景分析，不提供收益承诺。</p>
+        <p className={labelClass}>限制</p>
+        <p className="mt-2">期权可能归零，IV、Theta、流动性与价差会改变到期前估值。本模块仅做只读情景分析。</p>
       </div>
     </div>
   </details>
@@ -894,11 +891,11 @@ export class OptionsLabErrorBoundary extends React.Component<{ children: React.R
               <div className="min-w-0">
                 <p className={labelClass}>期权实验室</p>
                 <h1 className="mt-2 text-xl font-semibold text-white">{OPTIONS_LAB_CRASH_FALLBACK}</h1>
-                <p className="mt-3 text-sm leading-6 text-white/58">基础工作区仍保持只读。此处仅显示已清理的错误类别，不展示堆栈或供应商载荷。</p>
+                <p className="mt-3 text-sm leading-6 text-white/58">仅显示用户态错误分类。</p>
               </div>
             </div>
             <div className="rounded-2xl border border-white/5 bg-black/20 p-4 text-sm text-white/55">
-              数据说明：暂时无法完成渲染，页面已隐藏内部错误详情。
+              暂时无法完成渲染，内部错误详情已隐藏。
             </div>
           </section>
         </TerminalPageShell>

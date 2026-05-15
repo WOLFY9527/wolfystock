@@ -674,8 +674,8 @@ const PortfolioPage: React.FC = () => {
   const deleteTradeActionLabel = language === 'zh' ? '作废' : 'Void';
   const moreTradeActionsLabel = language === 'zh' ? '更多' : 'More';
   const manualLedgerDisclosure = language === 'zh'
-    ? '仅用于手工记账，不连接券商执行，也不发起外部委托。'
-    : 'Manual ledger only. No broker execution and no external instruction is sent.';
+    ? '手工记账入口'
+    : 'Manual ledger';
   const inferredEditTradeCurrency = useMemo(
     () => inferSettlementCurrency(editingTrade?.symbol || '', editingAccount?.baseCurrency),
     [editingAccount?.baseCurrency, editingTrade?.symbol],
@@ -2323,9 +2323,7 @@ const PortfolioPage: React.FC = () => {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm text-muted-text uppercase tracking-widest">{language === 'zh' ? '手工记账台' : 'Manual Ledger'}</h2>
-                  <p className="mt-1 text-xs leading-5 text-white/45">
-                    {manualLedgerDisclosure}
-                  </p>
+                  <p className="mt-1 text-xs leading-5 text-white/45">{manualLedgerDisclosure}</p>
                 </div>
               </div>
               <details
@@ -2337,7 +2335,6 @@ const PortfolioPage: React.FC = () => {
                 <summary className="flex min-h-[56px] cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 [&::-webkit-details-marker]:hidden">
                   <span className="min-w-0">
                     <span className="block text-sm font-medium text-white">{language === 'zh' ? '手工记账' : 'Manual ledger'}</span>
-                    <span className="mt-1 block text-xs leading-5 text-white/45">{language === 'zh' ? '展开后选择流水类型并保存记录' : 'Expand to choose a ledger type and save a record'}</span>
                   </span>
                   <span className="shrink-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-1 text-[11px] font-semibold text-white/50 group-open:text-cyan-100">
                     {copy.submitTrade}

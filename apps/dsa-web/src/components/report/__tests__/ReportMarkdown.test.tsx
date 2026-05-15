@@ -45,7 +45,7 @@ describe('ReportMarkdown', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('覆盖与缺失字段审计')).toBeInTheDocument();
+      expect(screen.getByText('缺失字段')).toBeInTheDocument();
     });
 
     expect(screen.getByText(/缺失字段总数[:：]\s*5/)).toBeInTheDocument();
@@ -72,7 +72,7 @@ describe('ReportMarkdown', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('当前未识别到缺失字段。')).toBeInTheDocument();
+      expect(screen.getByText('未识别缺失字段。')).toBeInTheDocument();
     });
   });
 
@@ -119,7 +119,7 @@ describe('ReportMarkdown', () => {
 
     expect(executiveSummary).toHaveTextContent('执行摘要');
     expect(executiveSummary).toHaveTextContent('只读证据显示仍处观察状态。');
-    expect(executiveSummary).toHaveTextContent('观察结论');
+    expect(executiveSummary).toHaveTextContent('结论');
     expect(executiveSummary).toHaveTextContent('置信度');
     expect(executiveSummary).toHaveTextContent('关键风险');
     expect(evidenceDetails).not.toHaveAttribute('open');
