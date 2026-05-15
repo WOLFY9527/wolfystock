@@ -967,6 +967,76 @@ def test_persistent_raw_volatility_snapshot_prefers_official_vix_without_proxy_f
     assert "Yahoo Finance" not in indicator["summary"]
 
 
+def test_expired_proxy_volatility_cache_yields_to_newer_official_snapshot_without_proxy_refetch(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    stale_cache_as_of = "2026-05-15T12:00:00+08:00"
+    fresh_snapshot_as_of = "2026-05-15T14:15:00+08:00"
+    service.cache.set(
+        "volatility",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 21.0,
+                    "changePercent": 1.5,
+                    "source": "yfinance_proxy",
+                    "sourceType": "proxy_public",
+                    "sourceLabel": "Yahoo Finance",
+                    "freshness": "delayed",
+                    "updatedAt": stale_cache_as_of,
+                    "asOf": stale_cache_as_of,
+                }
+            ],
+            updated_at=stale_cache_as_of,
+            as_of=stale_cache_as_of,
+        ),
+        ttl_seconds=-1,
+    )
+    _save_market_overview_snapshot(
+        isolated_db,
+        key="volatility",
+        payload=_raw_snapshot_payload(
+            source="mixed",
+            updated_at=fresh_snapshot_as_of,
+            as_of=fresh_snapshot_as_of,
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 16.8,
+                    "changePercent": -3.2,
+                    "source": "fred",
+                    "sourceId": "fred:VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                    "updatedAt": fresh_snapshot_as_of,
+                    "asOf": fresh_snapshot_as_of,
+                }
+            ],
+        ),
+    )
+
+    with (
+        patch.object(LiquidityMonitorService, "_now", return_value=datetime(2026, 5, 15, 14, 20, tzinfo=CN_TZ)),
+        patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", create=True) as mock_fetch,
+    ):
+        panel = service._read_panel("volatility")
+        indicator = service._vix_indicator(panel, service._read_panel("macro"))
+
+    mock_fetch.assert_not_called()
+    assert panel.source == "mixed"
+    assert panel.freshness == "delayed"
+    assert panel.as_of == fresh_snapshot_as_of
+    assert indicator["freshness"] == "delayed"
+    assert "FRED VIXCLS" in indicator["summary"]
+    assert "Yahoo Finance" not in indicator["summary"]
+
+
 def test_mixed_raw_rates_snapshot_with_fallback_used_still_accepts_official_yields(isolated_db: DatabaseManager) -> None:
     service = _make_service()
     _save_market_overview_snapshot(
@@ -1045,6 +1115,130 @@ def test_mixed_raw_rates_snapshot_with_fallback_used_still_accepts_official_yiel
     assert indicator["freshness"] == "delayed"
     assert "US Treasury" in indicator["summary"]
     assert "official_public" in indicator["summary"]
+
+
+def test_expired_proxy_rates_cache_yields_to_newer_official_snapshot_without_proxy_refetch(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    stale_cache_as_of = "2026-05-15T12:00:00+08:00"
+    fresh_snapshot_as_of = "2026-05-15T14:14:00+08:00"
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {
+                    "symbol": "US2Y",
+                    "label": "US 2Y",
+                    "value": 4.82,
+                    "changePercent": 0.24,
+                    "source": "yfinance_proxy",
+                    "sourceType": "proxy_public",
+                    "sourceLabel": "Yahoo Finance",
+                    "freshness": "delayed",
+                    "updatedAt": stale_cache_as_of,
+                    "asOf": stale_cache_as_of,
+                },
+                {
+                    "symbol": "US10Y",
+                    "label": "US 10Y",
+                    "value": 4.42,
+                    "changePercent": 0.41,
+                    "source": "yfinance_proxy",
+                    "sourceType": "proxy_public",
+                    "sourceLabel": "Yahoo Finance",
+                    "freshness": "delayed",
+                    "updatedAt": stale_cache_as_of,
+                    "asOf": stale_cache_as_of,
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "US 30Y",
+                    "value": 4.69,
+                    "changePercent": 0.33,
+                    "source": "yfinance_proxy",
+                    "sourceType": "proxy_public",
+                    "sourceLabel": "Yahoo Finance",
+                    "freshness": "delayed",
+                    "updatedAt": stale_cache_as_of,
+                    "asOf": stale_cache_as_of,
+                },
+            ],
+            updated_at=stale_cache_as_of,
+            as_of=stale_cache_as_of,
+        ),
+        ttl_seconds=-1,
+    )
+    _save_market_overview_snapshot(
+        isolated_db,
+        key="rates",
+        payload=_raw_snapshot_payload(
+            source="mixed",
+            updated_at=fresh_snapshot_as_of,
+            as_of=fresh_snapshot_as_of,
+            items=[
+                {
+                    "symbol": "US2Y",
+                    "label": "US 2Y",
+                    "value": 4.62,
+                    "changePercent": -0.22,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS2",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "updatedAt": fresh_snapshot_as_of,
+                    "asOf": fresh_snapshot_as_of,
+                },
+                {
+                    "symbol": "US10Y",
+                    "label": "US 10Y",
+                    "value": 4.31,
+                    "changePercent": -0.31,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS10",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "updatedAt": fresh_snapshot_as_of,
+                    "asOf": fresh_snapshot_as_of,
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "US 30Y",
+                    "value": 4.58,
+                    "changePercent": -0.18,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS30",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "updatedAt": fresh_snapshot_as_of,
+                    "asOf": fresh_snapshot_as_of,
+                },
+            ],
+        ),
+    )
+
+    with (
+        patch.object(LiquidityMonitorService, "_now", return_value=datetime(2026, 5, 15, 14, 20, tzinfo=CN_TZ)),
+        patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", create=True) as mock_fetch,
+    ):
+        panel = service._read_panel("rates")
+        indicator = service._us_rates_indicator(panel, service._read_panel("macro"))
+
+    mock_fetch.assert_not_called()
+    assert panel.source == "mixed"
+    assert panel.freshness == "delayed"
+    assert panel.as_of == fresh_snapshot_as_of
+    assert indicator["freshness"] == "delayed"
+    assert "US2Y -0.22%" in indicator["summary"]
+    assert "US10Y -0.31%" in indicator["summary"]
+    assert "US30Y -0.18%" in indicator["summary"]
+    assert "US Treasury" in indicator["summary"]
+    assert "Yahoo Finance" not in indicator["summary"]
 
 
 def test_raw_rates_snapshot_with_sofr_only_official_data_uses_proxy_yields_for_scoring(isolated_db: DatabaseManager) -> None:
@@ -1139,6 +1333,45 @@ def test_stale_raw_official_observation_is_marked_stale_and_excluded(isolated_db
     assert service._reliable_items(panel, {"VIX"}) == []
 
 
+def test_raw_official_snapshot_without_item_freshness_normalizes_to_delayed_without_fallback(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    snapshot_as_of = "2026-05-14T14:15:00+08:00"
+    _save_market_overview_snapshot(
+        isolated_db,
+        key="volatility",
+        payload=_raw_snapshot_payload(
+            source="mixed",
+            updated_at=snapshot_as_of,
+            as_of=snapshot_as_of,
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 18.4,
+                    "changePercent": -2.4,
+                    "source": "fred",
+                    "sourceId": "fred:VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                    "updatedAt": snapshot_as_of,
+                    "asOf": snapshot_as_of,
+                }
+            ],
+        ),
+    )
+
+    with patch.object(LiquidityMonitorService, "_now", return_value=datetime(2026, 5, 15, 9, 0, tzinfo=CN_TZ)):
+        panel = service._read_panel("volatility")
+
+    assert panel.freshness == "delayed"
+    assert panel.is_fallback is False
+    assert panel.payload["items"][0]["freshness"] == "delayed"
+    assert panel.payload["items"][0]["isStale"] is False
+    assert service._reliable_items(panel, {"VIX"})[0]["symbol"] == "VIX"
+
+
 def test_malformed_raw_official_observation_is_skipped_and_proxy_fallback_remains_available(isolated_db: DatabaseManager) -> None:
     service = _make_service()
     _save_market_overview_snapshot(
@@ -1186,6 +1419,160 @@ def test_malformed_raw_official_observation_is_skipped_and_proxy_fallback_remain
     assert indicator["freshness"] == "delayed"
     assert "Yahoo Finance" in indicator["summary"]
     assert "official_public" not in indicator["summary"]
+
+
+def test_older_snapshot_does_not_override_fresher_cache_candidate(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    cache_as_of = "2026-05-15T14:20:00+08:00"
+    older_snapshot_as_of = "2026-05-15T14:14:00+08:00"
+    service.cache.set(
+        "volatility",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 15.6,
+                    "changePercent": -4.4,
+                    "source": "fred",
+                    "sourceId": "fred:VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                    "freshness": "cached",
+                    "updatedAt": cache_as_of,
+                    "asOf": cache_as_of,
+                }
+            ],
+            updated_at=cache_as_of,
+            as_of=cache_as_of,
+        ),
+        ttl_seconds=300,
+    )
+    _save_market_overview_snapshot(
+        isolated_db,
+        key="volatility",
+        payload=_raw_snapshot_payload(
+            source="mixed",
+            updated_at=older_snapshot_as_of,
+            as_of=older_snapshot_as_of,
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 19.8,
+                    "changePercent": 1.6,
+                    "source": "fred",
+                    "sourceId": "fred:VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                    "updatedAt": older_snapshot_as_of,
+                    "asOf": older_snapshot_as_of,
+                }
+            ],
+        ),
+    )
+
+    with patch.object(LiquidityMonitorService, "_now", return_value=datetime(2026, 5, 15, 14, 20, tzinfo=CN_TZ)):
+        panel = service._read_panel("volatility")
+
+    assert panel.as_of == cache_as_of
+    assert panel.freshness == "cached"
+    assert panel.payload["items"][0]["value"] == 15.6
+    assert panel.payload["items"][0]["changePercent"] == -4.4
+
+
+@pytest.mark.parametrize(
+    ("db_payload", "expected_source"),
+    [
+        (
+            _raw_snapshot_payload(
+                source="mixed",
+                updated_at="2026-05-15T14:15:00+08:00",
+                as_of="2026-05-15T14:15:00+08:00",
+                items=[
+                    {
+                        "symbol": "VIX",
+                        "label": "VIX",
+                        "value": "n/a",
+                        "changePercent": "oops",
+                        "source": "fred",
+                        "sourceId": "fred:VIXCLS",
+                        "sourceType": "official_public",
+                        "sourceLabel": "FRED VIXCLS",
+                        "updatedAt": "2026-05-15T14:15:00+08:00",
+                        "asOf": "2026-05-15T14:15:00+08:00",
+                    }
+                ],
+            ),
+            "mixed",
+        ),
+        (
+            _raw_snapshot_payload(
+                source="fallback",
+                freshness="fallback",
+                updated_at="2026-05-15T14:15:00+08:00",
+                as_of="2026-05-15T14:15:00+08:00",
+                fallback_used=True,
+                items=[
+                    {
+                        "symbol": "VIX",
+                        "label": "VIX",
+                        "value": 22.1,
+                        "changePercent": 2.2,
+                        "source": "fallback",
+                        "sourceType": "fallback_static",
+                        "sourceLabel": "备用数据",
+                        "isFallback": True,
+                    }
+                ],
+            ),
+            "mixed",
+        ),
+    ],
+)
+def test_malformed_or_fallback_only_snapshot_does_not_override_cache_candidate(
+    isolated_db: DatabaseManager,
+    db_payload: Dict[str, Any],
+    expected_source: str,
+) -> None:
+    service = _make_service()
+    cache_as_of = "2026-05-15T14:20:00+08:00"
+    service.cache.set(
+        "volatility",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 15.6,
+                    "changePercent": -4.4,
+                    "source": "fred",
+                    "sourceId": "fred:VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                    "freshness": "cached",
+                    "updatedAt": cache_as_of,
+                    "asOf": cache_as_of,
+                }
+            ],
+            updated_at=cache_as_of,
+            as_of=cache_as_of,
+        ),
+        ttl_seconds=300,
+    )
+    _save_market_overview_snapshot(isolated_db, key="volatility", payload=db_payload)
+
+    with patch.object(LiquidityMonitorService, "_now", return_value=datetime(2026, 5, 15, 14, 20, tzinfo=CN_TZ)):
+        panel = service._read_panel("volatility")
+
+    assert panel.source == expected_source
+    assert panel.as_of == cache_as_of
+    assert panel.freshness == "cached"
+    assert panel.payload["items"][0]["value"] == 15.6
 
 
 def test_liquidity_monitor_metadata_declares_read_only_runtime_boundary(isolated_db: DatabaseManager) -> None:
@@ -2133,6 +2520,123 @@ def test_us_rates_indicator_falls_back_to_proxy_yields_when_official_yields_are_
     assert "Yahoo Finance" in str(indicator["summary"])
     assert "FRED SOFR" in str(indicator["summary"])
     assert "unofficial_proxy / official_public" in str(indicator["summary"])
+
+
+def test_freshness_latest_as_of_uses_selected_official_snapshot_when_snapshot_wins(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    stale_cache_as_of = "2026-05-15T12:00:00+08:00"
+    fresh_snapshot_as_of = "2026-05-15T14:15:00+08:00"
+    service.cache.set(
+        "volatility",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 21.0,
+                    "changePercent": 1.5,
+                    "source": "yfinance_proxy",
+                    "sourceType": "proxy_public",
+                    "sourceLabel": "Yahoo Finance",
+                    "freshness": "delayed",
+                    "updatedAt": stale_cache_as_of,
+                    "asOf": stale_cache_as_of,
+                }
+            ],
+            updated_at=stale_cache_as_of,
+            as_of=stale_cache_as_of,
+        ),
+        ttl_seconds=-1,
+    )
+    _save_market_overview_snapshot(
+        isolated_db,
+        key="volatility",
+        payload=_raw_snapshot_payload(
+            source="mixed",
+            updated_at=fresh_snapshot_as_of,
+            as_of=fresh_snapshot_as_of,
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 16.8,
+                    "changePercent": -3.2,
+                    "source": "fred",
+                    "sourceId": "fred:VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                    "updatedAt": fresh_snapshot_as_of,
+                    "asOf": fresh_snapshot_as_of,
+                }
+            ],
+        ),
+    )
+    earlier_official_as_of = "2026-05-15T14:10:00+08:00"
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "US10Y",
+                    "label": "US 10Y",
+                    "value": 4.31,
+                    "changePercent": -0.31,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS10",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "freshness": "cached",
+                    "updatedAt": earlier_official_as_of,
+                    "asOf": earlier_official_as_of,
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "US 30Y",
+                    "value": 4.58,
+                    "changePercent": -0.18,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS30",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "freshness": "cached",
+                    "updatedAt": earlier_official_as_of,
+                    "asOf": earlier_official_as_of,
+                },
+            ],
+            updated_at=earlier_official_as_of,
+            as_of=earlier_official_as_of,
+        ),
+        ttl_seconds=300,
+    )
+    service.cache.set(
+        "funds_flow",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2, "updatedAt": earlier_official_as_of, "asOf": earlier_official_as_of}],
+            updated_at=earlier_official_as_of,
+            as_of=earlier_official_as_of,
+        ),
+        ttl_seconds=300,
+    )
+
+    with (
+        patch.object(LiquidityMonitorService, "_now", return_value=datetime(2026, 5, 15, 14, 20, tzinfo=CN_TZ)),
+        patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", return_value=_FakeHistoryFrame([]), create=True),
+        patch("src.services.liquidity_monitor_service.fetch_binance_funding_row", side_effect=RuntimeError("network disabled")),
+    ):
+        payload = service.get_liquidity_monitor()
+
+    assert payload["freshness"]["latestAsOf"] == fresh_snapshot_as_of
+    indicator = {item["key"]: item for item in payload["indicators"]}["vix_pressure"]
+    assert indicator["updatedAt"] == fresh_snapshot_as_of
+    assert "FRED VIXCLS" in str(indicator["summary"])
 
 
 def test_official_credit_stress_observation_is_summary_only_and_does_not_change_score(isolated_db: DatabaseManager) -> None:

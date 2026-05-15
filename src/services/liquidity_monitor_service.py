@@ -20,6 +20,11 @@ ADVISORY_DISCLOSURE = "仅用于观察市场流动性环境，非买卖建议，
 FRESHNESS_ORDER = {"live": 0, "cached": 1, "delayed": 2, "stale": 3, "fallback": 4, "mock": 5, "error": 6, "unavailable": 7}
 RELIABLE_FRESHNESS = {"live", "cached", "delayed"}
 POSSIBLE_WEIGHT = 43
+OFFICIAL_PANEL_REQUIRED_SYMBOL_GROUPS = {
+    "volatility": ({"VIX", "VIXCLS"},),
+    "rates": ({"US2Y"}, {"US10Y"}, {"US30Y"}),
+    "macro": ({"VIX", "VIXCLS"}, {"US2Y"}, {"US10Y"}, {"US30Y"}),
+}
 
 
 @dataclass(frozen=True)
@@ -108,16 +113,42 @@ class LiquidityMonitorService:
         }
 
     def _read_panel(self, key: str) -> PanelState:
+        cache_candidate = self._read_market_cache_candidate(key)
+        snapshot_candidate = self._read_market_overview_snapshot_candidate(key)
+        if key in OFFICIAL_PANEL_REQUIRED_SYMBOL_GROUPS and cache_candidate is not None and snapshot_candidate is not None:
+            return self._select_preferred_official_panel_candidate(key, cache_candidate, snapshot_candidate)
+        if cache_candidate is not None:
+            return cache_candidate
+        if snapshot_candidate is not None:
+            return snapshot_candidate
+        return self._build_panel_state(key, {}, expired=False, from_snapshot=False)
+
+    def _read_market_cache_candidate(self, key: str) -> Optional[PanelState]:
         entry = self.cache.get(key)
-        from_snapshot = False
-        expired = bool(entry and entry.expires_at <= self._now())
-        if entry and isinstance(entry.data, dict):
-            payload = copy.deepcopy(entry.data)
-        else:
-            snapshot = self.db.get_market_overview_snapshot(f"market_overview:{key}")
-            payload = copy.deepcopy(snapshot.get("payload") or {}) if isinstance(snapshot, dict) else {}
-            from_snapshot = bool(payload)
-        payload = payload if isinstance(payload, dict) else {}
+        if not entry or not isinstance(entry.data, dict):
+            return None
+        return self._build_panel_state(
+            key,
+            copy.deepcopy(entry.data),
+            expired=entry.expires_at <= self._now(),
+            from_snapshot=False,
+        )
+
+    def _read_market_overview_snapshot_candidate(self, key: str) -> Optional[PanelState]:
+        snapshot = self.db.get_market_overview_snapshot(f"market_overview:{key}")
+        payload = copy.deepcopy(snapshot.get("payload") or {}) if isinstance(snapshot, dict) else {}
+        if not isinstance(payload, dict) or not payload:
+            return None
+        return self._build_panel_state(key, payload, expired=False, from_snapshot=True)
+
+    def _build_panel_state(
+        self,
+        key: str,
+        payload: Dict[str, Any],
+        *,
+        expired: bool,
+        from_snapshot: bool,
+    ) -> PanelState:
         if from_snapshot:
             payload = self._normalize_market_overview_snapshot_payload(key, payload)
         source = str(payload.get("source") or "unavailable")
@@ -144,6 +175,67 @@ class LiquidityMonitorService:
             is_fallback=is_fallback,
             is_stale=is_stale,
         )
+
+    def _select_preferred_official_panel_candidate(
+        self,
+        key: str,
+        cache_candidate: PanelState,
+        snapshot_candidate: PanelState,
+    ) -> PanelState:
+        if not self._panel_candidate_is_newer(snapshot_candidate, cache_candidate):
+            return cache_candidate
+        if not self._panel_has_usable_official_rows(key, snapshot_candidate):
+            return cache_candidate
+        if not cache_candidate.is_stale and self._panel_has_usable_official_rows(key, cache_candidate):
+            return cache_candidate
+        return snapshot_candidate
+
+    def _panel_candidate_is_newer(self, candidate: PanelState, baseline: PanelState) -> bool:
+        candidate_time = self._panel_candidate_time(candidate)
+        baseline_time = self._panel_candidate_time(baseline)
+        if candidate_time is None:
+            return False
+        if baseline_time is None:
+            return True
+        return candidate_time > baseline_time
+
+    def _panel_candidate_time(self, panel: PanelState) -> Optional[datetime]:
+        return self._parse_time(panel.as_of or panel.updated_at)
+
+    def _panel_has_usable_official_rows(self, key: str, panel: PanelState) -> bool:
+        items = panel.payload.get("items")
+        groups = OFFICIAL_PANEL_REQUIRED_SYMBOL_GROUPS.get(key)
+        if not isinstance(items, list) or not groups:
+            return False
+        return all(self._panel_has_usable_official_symbol_group(panel, items, group) for group in groups)
+
+    def _panel_has_usable_official_symbol_group(
+        self,
+        panel: PanelState,
+        items: List[Any],
+        group: set[str],
+    ) -> bool:
+        for raw in items:
+            if not isinstance(raw, dict):
+                continue
+            symbol = str(raw.get("symbol") or "")
+            if symbol not in group:
+                continue
+            if self._item_source_type(raw, panel) != "official_public":
+                continue
+            if self._item_freshness(raw, panel) not in RELIABLE_FRESHNESS:
+                continue
+            if not self._is_non_fallback_official_row(raw, panel.payload):
+                continue
+            if not self._is_required_official_symbol_usable(symbol, raw, panel):
+                continue
+            return True
+        return False
+
+    def _is_required_official_symbol_usable(self, symbol: str, item: Dict[str, Any], panel: PanelState) -> bool:
+        if symbol in {"US2Y", "US10Y", "US30Y"}:
+            return self._is_yield_item_usable(item, panel)
+        return self._is_vix_item_usable(item, panel)
 
     def _normalize_market_overview_snapshot_payload(self, key: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         if key not in {"rates", "macro", "volatility"}:
