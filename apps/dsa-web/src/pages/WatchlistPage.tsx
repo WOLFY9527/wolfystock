@@ -18,12 +18,16 @@ import { watchlistApi } from '../api/watchlist';
 import { AuthGuardOverlay } from '../components/auth/AuthGuardOverlay';
 import { ApiErrorAlert, Input, Select } from '../components/common';
 import {
+  CompactEmptyRow,
+  DenseCommandBar,
+  DensePageHeader,
+  DenseSecondaryDisclosure,
+  DenseStatusStrip,
+  DenseTableFrame,
+  DenseTableShell,
   TerminalButton,
   TerminalChip,
-  TerminalDisclosure,
-  TerminalEmptyState,
   TerminalNotice,
-  TerminalPageHeading,
   TerminalPageShell,
   TerminalPanel,
 } from '../components/terminal';
@@ -933,36 +937,27 @@ const WatchlistPage: React.FC = () => {
 
   return (
     <TerminalPageShell data-testid="watchlist-page" className="flex-1 min-w-0 py-5 md:py-6">
-        <header className="flex min-w-0 flex-col gap-3 border-b border-white/10 pb-3 md:flex-row md:items-start md:justify-between">
-          <TerminalPageHeading
-            eyebrow={language === 'zh' ? '扫描候选' : 'Scanner candidates'}
-            title={copy.title}
-            action={(
-              <TerminalButton
-                type="button"
-                variant="secondary"
-                className="h-10 px-4 text-sm"
-                onClick={() => navigate(scannerPath)}
-              >
-                <ExternalLink className="h-4 w-4" />
-                {copy.openScanner}
-              </TerminalButton>
-            )}
-          />
-        </header>
+        <DensePageHeader
+          eyebrow={language === 'zh' ? '扫描候选' : 'Scanner candidates'}
+          title={copy.title}
+          action={(
+            <TerminalButton
+              type="button"
+              variant="secondary"
+              className="h-10 px-4 text-sm"
+              onClick={() => navigate(scannerPath)}
+            >
+              <ExternalLink className="h-4 w-4" />
+              {copy.openScanner}
+            </TerminalButton>
+          )}
+        />
 
-        <section
+        <DenseStatusStrip
           data-testid="watchlist-status-strip"
-          className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-y border-white/10 bg-white/[0.015] px-3 py-2 text-xs"
-          aria-label="watchlist summary"
-        >
-          {statusItems.map((item) => (
-            <div key={item.label} className="flex min-w-0 items-baseline gap-1.5 border-r border-white/10 pr-4 last:border-r-0">
-              <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-white/35">{item.label}</span>
-              <span className="truncate font-mono text-sm font-semibold text-white">{item.value}</span>
-            </div>
-          ))}
-        </section>
+          ariaLabel="watchlist summary"
+          items={statusItems}
+        />
 
         {notice ? (
           <TerminalNotice className={noticeClassName} role="status">
@@ -976,9 +971,8 @@ const WatchlistPage: React.FC = () => {
           </TerminalPanel>
         ) : null}
 
-        <section
+        <DenseTableShell
           data-testid="watchlist-table-workbench"
-          className="flex min-w-0 flex-col overflow-hidden rounded-[14px] border border-white/10 bg-black/10 shadow-[0_20px_80px_rgba(0,0,0,0.22)]"
         >
           <div
             data-testid="watchlist-filter-grid"
@@ -1026,23 +1020,24 @@ const WatchlistPage: React.FC = () => {
             />
           </div>
 
-          <div data-testid="watchlist-command-bar" className="order-1 flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-black/20 px-3 py-2.5 md:order-2">
-            <div className="min-w-0 space-y-1">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.batchBacktestLabel}</p>
-              <p data-testid="watchlist-action-scope" className="truncate text-xs text-white/45">{actionScopeLabel} · {language === 'zh' ? '并发 2' : 'concurrency 2'}</p>
-              {actionItems.length === 0 ? <TerminalChip variant="caution">{copy.noMatchedSymbols}</TerminalChip> : null}
-              {batchProgress ? (
-                <p data-testid="watchlist-batch-progress" className="text-xs text-white/55">
-                  {batchProgress.completed} / {batchProgress.total}
-                  {batchProgress.currentSymbol ? ` · ${batchProgress.currentSymbol}` : ''}
-                  {' · '}
-                  {language === 'zh' ? '成功' : 'Success'} {batchProgress.succeeded}
-                  {' · '}
-                  {language === 'zh' ? '失败' : 'Failed'} {batchProgress.failed}
-                </p>
-              ) : null}
-            </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <DenseCommandBar
+            data-testid="watchlist-command-bar"
+            className="order-1 md:order-2"
+            heading={copy.batchBacktestLabel}
+            summary={<span data-testid="watchlist-action-scope">{actionScopeLabel} · {language === 'zh' ? '并发 2' : 'concurrency 2'}</span>}
+            notice={actionItems.length === 0 ? <TerminalChip variant="caution">{copy.noMatchedSymbols}</TerminalChip> : null}
+            progress={batchProgress ? (
+              <p data-testid="watchlist-batch-progress" className="text-xs text-white/55">
+                {batchProgress.completed} / {batchProgress.total}
+                {batchProgress.currentSymbol ? ` · ${batchProgress.currentSymbol}` : ''}
+                {' · '}
+                {language === 'zh' ? '成功' : 'Success'} {batchProgress.succeeded}
+                {' · '}
+                {language === 'zh' ? '失败' : 'Failed'} {batchProgress.failed}
+              </p>
+            ) : null}
+            actions={(
+              <>
               <TerminalButton
                 type="button"
                 variant="compact"
@@ -1096,12 +1091,12 @@ const WatchlistPage: React.FC = () => {
                 <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingScores ? 'animate-spin' : ''}`} />
                 {isRefreshingScores ? copy.refreshingScores : copy.refreshScores}
               </TerminalButton>
-            </div>
-          </div>
+              </>
+            )}
+          />
 
           {filteredItems.length > 0 ? (
-            <div data-testid="watchlist-candidate-list" className="order-2 overflow-hidden md:order-3">
-            <div className="overflow-x-auto no-scrollbar">
+            <DenseTableFrame data-testid="watchlist-candidate-list" className="order-2 md:order-3">
               <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
                 <thead className="bg-white/[0.03] text-[11px] uppercase tracking-[0.16em] text-white/35">
                   <tr>
@@ -1342,16 +1337,14 @@ const WatchlistPage: React.FC = () => {
                   })}
                 </tbody>
               </table>
-            </div>
-            </div>
+            </DenseTableFrame>
           ) : null}
-        </section>
+        </DenseTableShell>
 
-        <TerminalDisclosure
+        <DenseSecondaryDisclosure
           data-testid="watchlist-diagnostics-disclosure"
           title={language === 'zh' ? '二级状态：自动刷新' : 'Secondary status: auto refresh'}
           summary={language === 'zh' ? '默认折叠' : 'Collapsed by default'}
-          className="border-white/10 bg-white/[0.015]"
         >
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.autoRefresh}</span>
@@ -1362,7 +1355,7 @@ const WatchlistPage: React.FC = () => {
               US {refreshStatus?.usTime || '08:45'} / CN {refreshStatus?.cnTime || '09:00'} / HK {refreshStatus?.hkTime || '09:00'}
             </span>
           </div>
-        </TerminalDisclosure>
+        </DenseSecondaryDisclosure>
 
         {isLoading ? (
           <TerminalPanel as="section" dense className="py-8 text-center text-sm text-white/45" role="status">
@@ -1371,10 +1364,9 @@ const WatchlistPage: React.FC = () => {
         ) : null}
 
         {!isLoading && filteredItems.length === 0 ? (
-          <TerminalEmptyState
+          <CompactEmptyRow
             data-testid="watchlist-compact-empty-state"
             title={copy.emptyTitle}
-            className="min-h-[72px] items-start text-left sm:items-center"
             action={(
               <TerminalButton
                 type="button"
@@ -1388,7 +1380,7 @@ const WatchlistPage: React.FC = () => {
             )}
           >
             {copy.emptyBody}
-          </TerminalEmptyState>
+          </CompactEmptyRow>
         ) : null}
       </TerminalPageShell>
     );

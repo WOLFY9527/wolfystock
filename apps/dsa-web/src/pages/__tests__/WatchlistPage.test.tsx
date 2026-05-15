@@ -307,6 +307,11 @@ describe('WatchlistPage', () => {
 
     const row = await screen.findByTestId('watchlist-row-NVDA');
     expect(screen.getByTestId('watchlist-page')).toHaveAttribute('data-terminal-primitive', 'page-shell');
+    expect(document.querySelector('[data-terminal-primitive="dense-page-header"]')).toBeInTheDocument();
+    expect(screen.getByTestId('watchlist-status-strip')).toHaveAttribute('data-terminal-primitive', 'dense-status-strip');
+    expect(screen.getByTestId('watchlist-table-workbench')).toHaveAttribute('data-terminal-primitive', 'dense-table-shell');
+    expect(screen.getByTestId('watchlist-command-bar')).toHaveAttribute('data-terminal-primitive', 'dense-command-bar');
+    expect(screen.getByTestId('watchlist-candidate-list')).toHaveAttribute('data-terminal-primitive', 'dense-table-frame');
     expect(screen.getByTestId('watchlist-command-bar').querySelectorAll('[data-terminal-primitive="button"]')).toHaveLength(6);
     expect(row.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThan(0);
   });
