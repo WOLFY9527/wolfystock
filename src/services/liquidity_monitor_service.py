@@ -109,16 +109,22 @@ class LiquidityMonitorService:
 
     def _read_panel(self, key: str) -> PanelState:
         entry = self.cache.get(key)
+        from_snapshot = False
         expired = bool(entry and entry.expires_at <= self._now())
         if entry and isinstance(entry.data, dict):
             payload = copy.deepcopy(entry.data)
         else:
             snapshot = self.db.get_market_overview_snapshot(f"market_overview:{key}")
             payload = copy.deepcopy(snapshot.get("payload") or {}) if isinstance(snapshot, dict) else {}
+            from_snapshot = bool(payload)
         payload = payload if isinstance(payload, dict) else {}
+        if from_snapshot:
+            payload = self._normalize_market_overview_snapshot_payload(key, payload)
         source = str(payload.get("source") or "unavailable")
         freshness = str(payload.get("freshness") or ("fallback" if payload.get("isFallback") or payload.get("fallbackUsed") else "unavailable"))
         is_fallback = bool(payload.get("isFallback") or payload.get("fallbackUsed") or source in {"fallback", "mock", "unavailable"})
+        if from_snapshot and source == "mixed" and self._snapshot_has_non_fallback_official_rows(payload):
+            is_fallback = False
         if source == "mock":
             freshness = "mock"
         elif freshness == "mock":
@@ -138,6 +144,66 @@ class LiquidityMonitorService:
             is_fallback=is_fallback,
             is_stale=is_stale,
         )
+
+    def _normalize_market_overview_snapshot_payload(self, key: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if key not in {"rates", "macro", "volatility"}:
+            return payload
+        raw_items = payload.get("items")
+        if not isinstance(raw_items, list):
+            return payload
+
+        official_freshness_values: List[str] = []
+        normalized_items: List[Any] = []
+        for raw in raw_items:
+            if not isinstance(raw, dict):
+                normalized_items.append(raw)
+                continue
+            item = raw
+            if self._is_non_fallback_official_row(item, payload):
+                freshness = str(item.get("freshness") or "").lower()
+                if freshness not in FRESHNESS_ORDER:
+                    derived = self._derive_official_macro_freshness(item, payload)
+                    if derived:
+                        item["freshness"] = derived
+                        item["isStale"] = derived == "stale"
+                        freshness = derived
+                if freshness in RELIABLE_FRESHNESS or freshness == "stale":
+                    official_freshness_values.append(freshness)
+            normalized_items.append(item)
+
+        payload["items"] = normalized_items
+        if not official_freshness_values:
+            return payload
+
+        panel_freshness = str(payload.get("freshness") or "").lower()
+        normalized_freshness = self._weakest_freshness(official_freshness_values)
+        if panel_freshness not in RELIABLE_FRESHNESS | {"stale"} or (
+            normalized_freshness == "stale" and panel_freshness != "stale"
+        ):
+            payload["freshness"] = normalized_freshness
+        if str(payload.get("source") or "").lower() == "mixed" and payload.get("fallbackUsed"):
+            payload["isFallback"] = False
+        return payload
+
+    def _snapshot_has_non_fallback_official_rows(self, payload: Dict[str, Any]) -> bool:
+        items = payload.get("items")
+        if not isinstance(items, list):
+            return False
+        return any(isinstance(item, dict) and self._is_non_fallback_official_row(item, payload) for item in items)
+
+    def _is_non_fallback_official_row(self, item: Dict[str, Any], payload: Dict[str, Any]) -> bool:
+        source_type = str(item.get("sourceType") or payload.get("sourceType") or "").lower()
+        source = str(item.get("source") or payload.get("source") or "").lower()
+        is_fallback = bool(item.get("isFallback") or item.get("fallbackUsed") or source in {"fallback", "mock", "unavailable"})
+        return source_type == "official_public" and source in {"fred", "treasury"} and not is_fallback
+
+    def _derive_official_macro_freshness(self, item: Dict[str, Any], payload: Dict[str, Any]) -> Optional[str]:
+        as_of = self._parse_time(item.get("asOf") or item.get("updatedAt") or payload.get("asOf") or payload.get("updatedAt"))
+        if as_of is None:
+            return None
+        current = self._now().astimezone(CN_TZ)
+        days_old = max(0, (current.date() - as_of.date()).days)
+        return "delayed" if days_old <= 3 else "stale"
 
     def _crypto_spot_indicator(self, panel: PanelState) -> Dict[str, Any]:
         breadth = self._extract_crypto_breadth(panel)
@@ -980,6 +1046,9 @@ class LiquidityMonitorService:
                 continue
             if self._item_freshness(raw, panel) not in RELIABLE_FRESHNESS:
                 continue
+            if self._item_source_type(raw, panel) == "official_public":
+                if self._change_value(raw) is None and self._numeric(raw.get("value") or raw.get("price")) is None:
+                    continue
             reliable.append(raw)
         return reliable
 

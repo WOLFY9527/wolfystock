@@ -162,6 +162,39 @@ def _make_service() -> LiquidityMonitorService:
     return LiquidityMonitorService(cache=MarketCache(max_workers=1), db=DatabaseManager.get_instance())
 
 
+def _save_market_overview_snapshot(
+    db: DatabaseManager,
+    *,
+    key: str,
+    payload: Dict[str, Any],
+) -> None:
+    db.save_market_overview_snapshot(key=f"market_overview:{key}", payload=payload)
+
+
+def _raw_snapshot_payload(
+    *,
+    source: str,
+    items: list[Dict[str, Any]],
+    updated_at: str,
+    as_of: str,
+    freshness: str | None = None,
+    fallback_used: bool = False,
+    warning: str | None = None,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "source": source,
+        "items": items,
+        "updatedAt": updated_at,
+        "asOf": as_of,
+        "fallbackUsed": fallback_used,
+    }
+    if freshness is not None:
+        payload["freshness"] = freshness
+    if warning is not None:
+        payload["warning"] = warning
+    return payload
+
+
 def _liquidity_monitor_imports() -> set[str]:
     tree = ast.parse(LIQUIDITY_MONITOR_SERVICE_PATH.read_text(encoding="utf-8"))
     imported_modules: set[str] = set()
@@ -806,6 +839,353 @@ def test_liquidity_monitor_runtime_source_stays_cache_only() -> None:
             "Preserve its existing cache-only/metadata semantics and keep "
             f"`{pattern}` out of liquidity_monitor_service.py"
         )
+
+
+def test_persistent_raw_macro_snapshot_prefers_official_vix_without_proxy_fetch(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    _save_market_overview_snapshot(
+        isolated_db,
+        key="macro",
+        payload=_raw_snapshot_payload(
+            source="mixed",
+            freshness="cached",
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+            items=[
+                {
+                    "symbol": "VIXCLS",
+                    "label": "VIX",
+                    "value": 18.22,
+                    "changePercent": -4.66,
+                    "source": "fred",
+                    "sourceId": "fred:VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                }
+            ],
+        ),
+    )
+    _save_market_overview_snapshot(
+        isolated_db,
+        key="volatility",
+        payload=_raw_snapshot_payload(
+            source="yfinance_proxy",
+            freshness="delayed",
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 21.0,
+                    "changePercent": 1.5,
+                    "source": "yfinance_proxy",
+                    "sourceType": "proxy_public",
+                    "sourceLabel": "Yahoo Finance",
+                    "freshness": "delayed",
+                }
+            ],
+        ),
+    )
+
+    with (
+        patch.object(LiquidityMonitorService, "_now", return_value=FROZEN_GOLDEN_NOW),
+        patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", create=True) as mock_fetch,
+    ):
+        indicator = service._vix_indicator(service._read_panel("volatility"), service._read_panel("macro"))
+
+    mock_fetch.assert_not_called()
+    assert indicator["includedInScore"] is True
+    assert indicator["freshness"] == "delayed"
+    assert indicator["status"] == "partial"
+    assert "FRED VIXCLS" in indicator["summary"]
+    assert "official_public" in indicator["summary"]
+    assert "Yahoo Finance" not in indicator["summary"]
+
+
+def test_persistent_raw_volatility_snapshot_prefers_official_vix_without_proxy_fetch(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    _save_market_overview_snapshot(
+        isolated_db,
+        key="volatility",
+        payload=_raw_snapshot_payload(
+            source="mixed",
+            freshness="cached",
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 16.8,
+                    "changePercent": -3.2,
+                    "source": "fred",
+                    "sourceId": "fred:VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                }
+            ],
+        ),
+    )
+    _save_market_overview_snapshot(
+        isolated_db,
+        key="macro",
+        payload=_raw_snapshot_payload(
+            source="yfinance_proxy",
+            freshness="delayed",
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 21.0,
+                    "changePercent": 1.5,
+                    "source": "yfinance_proxy",
+                    "sourceType": "proxy_public",
+                    "sourceLabel": "Yahoo Finance",
+                    "freshness": "delayed",
+                }
+            ],
+        ),
+    )
+
+    with (
+        patch.object(LiquidityMonitorService, "_now", return_value=FROZEN_GOLDEN_NOW),
+        patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", create=True) as mock_fetch,
+    ):
+        indicator = service._vix_indicator(service._read_panel("volatility"), service._read_panel("macro"))
+
+    mock_fetch.assert_not_called()
+    assert indicator["includedInScore"] is True
+    assert indicator["freshness"] == "delayed"
+    assert "FRED VIXCLS" in indicator["summary"]
+    assert "Yahoo Finance" not in indicator["summary"]
+
+
+def test_mixed_raw_rates_snapshot_with_fallback_used_still_accepts_official_yields(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    _save_market_overview_snapshot(
+        isolated_db,
+        key="rates",
+        payload=_raw_snapshot_payload(
+            source="mixed",
+            freshness="delayed",
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+            fallback_used=True,
+            items=[
+                {
+                    "symbol": "US2Y",
+                    "label": "US 2Y",
+                    "value": 4.62,
+                    "changePercent": -0.22,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS2",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                },
+                {
+                    "symbol": "US10Y",
+                    "label": "US 10Y",
+                    "value": 4.31,
+                    "changePercent": -0.31,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS10",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "US 30Y",
+                    "value": 4.58,
+                    "changePercent": -0.18,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS30",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                },
+                {
+                    "symbol": "LEGACY_FILLER",
+                    "label": "legacy",
+                    "value": 0.0,
+                    "source": "fallback",
+                    "sourceType": "fallback_static",
+                    "isFallback": True,
+                },
+            ],
+        ),
+    )
+
+    with (
+        patch.object(LiquidityMonitorService, "_now", return_value=FROZEN_GOLDEN_NOW),
+        patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", create=True) as mock_fetch,
+    ):
+        rates_panel = service._read_panel("rates")
+        reliable_symbols = {item["symbol"] for item in service._reliable_items(rates_panel, {"US2Y", "US10Y", "US30Y"})}
+        indicator = service._us_rates_indicator(rates_panel, service._read_panel("macro"))
+
+    mock_fetch.assert_not_called()
+    assert rates_panel.is_fallback is False
+    assert reliable_symbols == {"US2Y", "US10Y", "US30Y"}
+    assert indicator["includedInScore"] is True
+    assert indicator["freshness"] == "delayed"
+    assert "US Treasury" in indicator["summary"]
+    assert "official_public" in indicator["summary"]
+
+
+def test_raw_rates_snapshot_with_sofr_only_official_data_uses_proxy_yields_for_scoring(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    _save_market_overview_snapshot(
+        isolated_db,
+        key="rates",
+        payload=_raw_snapshot_payload(
+            source="mixed",
+            freshness="delayed",
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+            items=[
+                {
+                    "symbol": "SOFR",
+                    "label": "SOFR",
+                    "value": 5.31,
+                    "source": "fred",
+                    "sourceId": "fred:SOFR",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED SOFR",
+                    "unit": "%",
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                }
+            ],
+        ),
+    )
+    quote_index = [
+        datetime(2026, 5, 6, 16, 0, tzinfo=timezone.utc),
+        datetime(2026, 5, 7, 16, 0, tzinfo=timezone.utc),
+    ]
+    quote_map = {
+        "^TNX": _FakeHistoryFrame([45.8, 44.9], index=quote_index),
+        "^TYX": _FakeHistoryFrame([47.5, 46.9], index=quote_index),
+    }
+
+    with (
+        patch.object(LiquidityMonitorService, "_now", return_value=FROZEN_GOLDEN_NOW),
+        patch(
+            "src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame",
+            side_effect=lambda ticker: quote_map.get(ticker, _FakeHistoryFrame([])),
+            create=True,
+        ),
+    ):
+        indicator = service._us_rates_indicator(service._read_panel("rates"), service._read_panel("macro"))
+
+    assert service._external_provider_calls_used is True
+    assert indicator["includedInScore"] is True
+    assert indicator["scoreContribution"] == 6
+    assert indicator["freshness"] == "delayed"
+    assert "US10Y -1.97%" in indicator["summary"]
+    assert "US30Y -1.26%" in indicator["summary"]
+    assert "SOFR +5.31%" in indicator["summary"]
+    assert "Yahoo Finance" in indicator["summary"]
+    assert "FRED SOFR" in indicator["summary"]
+
+
+def test_stale_raw_official_observation_is_marked_stale_and_excluded(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    stale_as_of = (FROZEN_GOLDEN_NOW - timedelta(days=4)).isoformat(timespec="seconds")
+    _save_market_overview_snapshot(
+        isolated_db,
+        key="volatility",
+        payload=_raw_snapshot_payload(
+            source="mixed",
+            freshness="cached",
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 24.0,
+                    "changePercent": 2.1,
+                    "source": "fred",
+                    "sourceId": "fred:VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                    "updatedAt": stale_as_of,
+                    "asOf": stale_as_of,
+                }
+            ],
+        ),
+    )
+
+    with patch.object(LiquidityMonitorService, "_now", return_value=FROZEN_GOLDEN_NOW):
+        panel = service._read_panel("volatility")
+
+    assert panel.payload["items"][0]["freshness"] == "stale"
+    assert service._item_freshness(panel.payload["items"][0], panel) == "stale"
+    assert service._reliable_items(panel, {"VIX"}) == []
+
+
+def test_malformed_raw_official_observation_is_skipped_and_proxy_fallback_remains_available(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    _save_market_overview_snapshot(
+        isolated_db,
+        key="volatility",
+        payload=_raw_snapshot_payload(
+            source="mixed",
+            freshness="cached",
+            updated_at=FROZEN_GOLDEN_NOW_ISO,
+            as_of=FROZEN_GOLDEN_NOW_ISO,
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": "n/a",
+                    "changePercent": "oops",
+                    "source": "fred",
+                    "sourceId": "fred:VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                }
+            ],
+        ),
+    )
+    quote_index = [
+        datetime(2026, 5, 6, 16, 0, tzinfo=timezone.utc),
+        datetime(2026, 5, 7, 16, 0, tzinfo=timezone.utc),
+    ]
+
+    with (
+        patch.object(LiquidityMonitorService, "_now", return_value=FROZEN_GOLDEN_NOW),
+        patch(
+            "src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame",
+            return_value=_FakeHistoryFrame([18.0, 15.0], index=quote_index),
+            create=True,
+        ),
+    ):
+        panel = service._read_panel("volatility")
+        indicator = service._vix_indicator(panel, service._read_panel("macro"))
+
+    assert service._reliable_items(panel, {"VIX"}) == []
+    assert indicator["includedInScore"] is True
+    assert indicator["freshness"] == "delayed"
+    assert "Yahoo Finance" in indicator["summary"]
+    assert "official_public" not in indicator["summary"]
 
 
 def test_liquidity_monitor_metadata_declares_read_only_runtime_boundary(isolated_db: DatabaseManager) -> None:
