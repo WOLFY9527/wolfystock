@@ -32,30 +32,33 @@ async function assertScannerLaunchViewport(page: Page, viewport: { width: number
   await page.goto('/zh/scanner');
   await page.waitForLoadState('domcontentloaded');
 
-  const launchSummary = page.getByTestId('scanner-launch-evidence-summary');
+  const launchSummary = page.getByTestId('scanner-status-strip');
   const candidateRegion = page.getByTestId('scanner-candidate-scroll-region');
   const firstCandidate = page.getByTestId('scanner-result-row-NVDA');
-  const launchBar = page.getByTestId('scanner-launch-bar');
-  const resultStage = page.getByTestId('scanner-results-stage');
+  const denseShell = page.getByTestId('scanner-launch-bar');
+  const commandBar = page.getByTestId('scanner-command-bar');
+  const resultTable = page.getByTestId('scanner-result-table');
 
   await expect(page.getByTestId('user-scanner-bento-page')).toBeVisible({ timeout: 15_000 });
-  await expect(launchBar).toBeVisible();
-  await expect(resultStage).toBeVisible();
+  await expect(denseShell).toBeVisible();
+  await expect(commandBar).toBeVisible();
   await expect(launchSummary).toBeVisible();
-  await expect(launchSummary).toContainText(/证据置信/);
-  await expect(launchSummary).toContainText(/数据就绪/);
-  await expect(launchSummary).toContainText(/下一步观察/);
+  await expect(launchSummary).toContainText(/扫描/);
+  await expect(launchSummary).toContainText(/入选/);
+  await expect(launchSummary).toContainText(/数据/);
   await expect(candidateRegion).toBeVisible();
-  await expect(page.getByTestId('scanner-result-table')).toBeVisible();
+  await expect(resultTable).toBeVisible();
   await expect(firstCandidate).toBeVisible();
   await expect(firstCandidate).toContainText('NVDA');
   await expect(page.getByTestId('scanner-control-rail')).toHaveCount(0);
   await expect(page.getByTestId('scanner-sidebar')).toHaveCount(0);
+  await expect(page.getByTestId('scanner-candidate-inspector')).toHaveCount(0);
+  await expect(page.getByTestId('scanner-mobile-candidate-inspector')).toHaveCount(0);
 
-  const launchBox = await launchBar.boundingBox();
+  const launchBox = await commandBar.boundingBox();
   const summaryBox = await launchSummary.boundingBox();
   const candidateBox = await firstCandidate.boundingBox();
-  const resultBox = await resultStage.boundingBox();
+  const resultBox = await denseShell.boundingBox();
   const viewportWidth = viewport.width;
   expect(launchBox).not.toBeNull();
   expect(summaryBox).not.toBeNull();
@@ -63,12 +66,26 @@ async function assertScannerLaunchViewport(page: Page, viewport: { width: number
   expect(resultBox).not.toBeNull();
   expect(resultBox?.width ?? 0).toBeGreaterThan(viewportWidth * 0.72);
   expect(candidateBox?.y ?? 0).toBeGreaterThan(summaryBox?.y ?? 0);
+  expect(candidateBox?.y ?? 0).toBeGreaterThan((launchBox?.y ?? 0) - 1);
   const firstRowLimit = viewportWidth >= 1024 ? 0.78 : viewportWidth >= 768 ? 0.92 : 1.1;
   expect(candidateBox?.y ?? 0).toBeLessThan(viewport.height * firstRowLimit);
   if (viewportWidth >= 1024) {
     expect(launchBox?.width ?? 0).toBeGreaterThan(viewportWidth * 0.72);
   }
 
+  const secondaryDisclosures = [
+    page.getByTestId('scanner-diagnostics-disclosure'),
+    page.getByTestId('scanner-run-comparison-strip'),
+    page.getByTestId('scanner-strategy-experiment'),
+  ];
+  for (const disclosure of secondaryDisclosures) {
+    if (await disclosure.count()) {
+      await expect(disclosure).toBeVisible();
+      await expect(disclosure).not.toHaveAttribute('open');
+      const disclosureBox = await disclosure.boundingBox();
+      expect(disclosureBox?.y ?? Number.POSITIVE_INFINITY).toBeGreaterThan(candidateBox?.y ?? 0);
+    }
+  }
   await expect(page.getByTestId('scanner-diagnostics-panel')).toHaveCount(0);
   await expect(page.getByTestId('scanner-result-history-summary')).toHaveCount(0);
   await expect(page.getByTestId('scanner-strategy-preview')).toHaveCount(0);
