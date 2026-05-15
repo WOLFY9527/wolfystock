@@ -13,6 +13,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from src.services.execution_log_service import ExecutionLogService
 from src.services.fx_commodities_contracts import FX_COMMODITY_DELAYED_PROXY_SYMBOLS
+from src.services.futures_contracts import list_futures_contracts
 from src.services.market_data_source_registry import resolve_source_label
 from src.services.market_rotation_radar_service import MarketRotationRadarService
 from src.services.official_macro_source_registry import get_official_macro_source_for_transport_source
@@ -325,6 +326,8 @@ def get_freshness_status(
     elif category_key == "macro_rate" and str(source_type or "").lower() == "official_public":
         days_old = (current.date() - parsed_as_of.date()).days
         freshness = "delayed" if days_old <= 3 else "stale"
+    elif category_key == "futures" and str(source_type or "").lower() in {"unofficial_proxy", "public_proxy", "disabled_live_stub"}:
+        freshness = "stale" if delay_minutes > stale_minutes["futures"] else "delayed"
     elif category_key == "macro_rate" and delay_minutes > stale_minutes["macro_rate"]:
         freshness = "cached" if parsed_as_of.date() == current.date() else "stale"
     else:
@@ -384,6 +387,12 @@ class MarketOverviewService:
         "WTI": "CL=F",
         "BRENT": "BZ=F",
         "COPPER": "HG=F",
+    }
+    FUTURES_DELAYED_PROXY_TICKERS = {
+        "NQ": "NQ=F",
+        "ES": "ES=F",
+        "YM": "YM=F",
+        "RTY": "RTY=F",
     }
     OFFICIAL_RATE_SERIES = {
         "US2Y": ("DGS2", "US 2Y", "%", "US"),
@@ -2236,7 +2245,79 @@ class MarketOverviewService:
         }
 
     def _fetch_futures_snapshot(self) -> Dict[str, Any]:
-        return self._fallback_futures_snapshot()
+        fallback = self._fallback_futures_snapshot()
+        fallback_items = [
+            item for item in fallback.get("items", [])
+            if isinstance(item, dict)
+        ]
+        delayed_proxy_symbols = {
+            contract.symbol
+            for contract in list_futures_contracts()
+            if contract.delayed_proxy_eligible
+            and contract.symbol in self.FUTURES_DELAYED_PROXY_TICKERS
+        }
+        updated_at = _now_iso()
+        merged_items: List[Dict[str, Any]] = []
+        proxy_as_of_values: List[str] = []
+        proxy_count = 0
+
+        for fallback_item in fallback_items:
+            symbol = str(fallback_item.get("symbol") or "")
+            ticker = self.FUTURES_DELAYED_PROXY_TICKERS.get(symbol)
+            if symbol not in delayed_proxy_symbols or not ticker:
+                merged_items.append(fallback_item)
+                continue
+            try:
+                frame = fetch_yfinance_quote_history_frame(ticker)
+                closes, as_of = self._history_frame_closes_and_as_of(frame, ticker)
+            except Exception:
+                merged_items.append(fallback_item)
+                continue
+
+            latest = closes[-1]
+            previous = closes[-2] if len(closes) > 1 else latest
+            change = latest - previous
+            change_percent = ((latest - previous) / previous * 100) if previous else 0.0
+            trend = [round(value, 3) for value in closes[-8:]]
+            merged_items.append({
+                **fallback_item,
+                "value": round(latest, 3),
+                "price": round(latest, 3),
+                "change": round(change, 3),
+                "changePercent": round(change_percent, 3),
+                "change_text": f"{change:+.2f}",
+                "sparkline": trend,
+                "trend": trend,
+                "source": "yfinance_proxy",
+                "sourceLabel": self._source_label("yfinance_proxy"),
+                "sourceType": "unofficial_proxy",
+                "updatedAt": updated_at,
+                "asOf": as_of or updated_at,
+                "isFallback": False,
+                "warning": None,
+            })
+            proxy_count += 1
+            if as_of:
+                proxy_as_of_values.append(as_of)
+
+        if proxy_count == 0:
+            return fallback
+
+        partial = any(bool(item.get("isFallback")) for item in merged_items)
+        warning = "代理延迟数据，不代表实时/官方行情"
+        if partial:
+            warning = f"{warning}；部分品种仍为备用数据"
+        return {
+            "source": "mixed" if partial else "yfinance_proxy",
+            "sourceLabel": self._source_label("mixed" if partial else "yfinance_proxy"),
+            "sourceType": "unofficial_proxy",
+            "updatedAt": updated_at,
+            "asOf": min(proxy_as_of_values) if proxy_as_of_values else updated_at,
+            "items": merged_items,
+            "fallbackUsed": False,
+            "isFallback": False,
+            "warning": warning,
+        }
 
     def _fetch_cn_short_sentiment_snapshot(self) -> Dict[str, Any]:
         return self._fallback_cn_short_sentiment_snapshot()

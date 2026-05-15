@@ -313,6 +313,17 @@ def test_market_overview_service_fx_commodities_fetcher_uses_yfinance_proxy_tran
     assert "_fallback_fx_commodities_snapshot" in fx_calls
 
 
+def test_market_overview_service_futures_fetcher_uses_yfinance_proxy_transport_with_item_fallback() -> None:
+    futures_calls = _method_call_names(
+        MARKET_OVERVIEW_SERVICE_FILE,
+        "MarketOverviewService",
+        "_fetch_futures_snapshot",
+    )
+
+    assert "fetch_yfinance_quote_history_frame" in futures_calls
+    assert "_fallback_futures_snapshot" in futures_calls
+
+
 def test_market_overview_tickflow_source_contract_stays_explicit_public_provider_not_snapshot() -> None:
     source_text = MARKET_OVERVIEW_TICKFLOW_BREADTH_PROVIDER_FILE.read_text(encoding="utf-8")
     provenance = project_source_provenance(

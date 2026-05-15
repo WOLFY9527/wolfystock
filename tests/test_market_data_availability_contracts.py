@@ -472,6 +472,38 @@ def test_market_overview_fx_commodities_proxy_payload_projects_to_unofficial_pro
     assert dxy_provenance["freshnessLabel"] != "实时"
 
 
+def test_market_overview_futures_proxy_payload_projects_to_unofficial_proxy_and_delayed_not_live() -> None:
+    service = MarketOverviewService()
+    as_of = datetime.now(CN_TZ) - timedelta(minutes=20)
+    frames = {
+        "NQ=F": _HistoryFrame([18380.0, 18420.5], as_of=as_of),
+        "ES=F": _HistoryFrame([5220.0, 5238.25], as_of=as_of),
+        "YM=F": _HistoryFrame([38908.0, 38980.0], as_of=as_of),
+        "RTY=F": _HistoryFrame([2098.4, 2094.6], as_of=as_of),
+    }
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(
+            "src.services.market_overview_service.fetch_yfinance_quote_history_frame",
+            lambda ticker: frames[ticker],
+        )
+        payload = service.get_futures()
+
+    payload_provenance = _payload_provenance(payload)
+    nq_provenance = _payload_provenance(next(item for item in payload["items"] if item["symbol"] == "NQ"))
+    fallback_provenance = _payload_provenance(next(item for item in payload["items"] if item["symbol"] == "HSI_F"))
+
+    assert payload["source"] == "mixed"
+    assert payload["sourceType"] == "unofficial_proxy"
+    assert payload["freshness"] == "delayed"
+    assert payload_provenance["sourceType"] == "unofficial_proxy"
+    assert payload_provenance["freshnessLabel"] == "延迟"
+    assert nq_provenance["sourceType"] == "unofficial_proxy"
+    assert nq_provenance["freshnessLabel"] == "延迟"
+    assert fallback_provenance["sourceType"] == "fallback_static"
+    assert fallback_provenance["freshnessLabel"] != "实时"
+
+
 def test_liquidity_monitor_only_scores_reliable_non_fallback_signals(
     isolated_db: DatabaseManager,
 ) -> None:
