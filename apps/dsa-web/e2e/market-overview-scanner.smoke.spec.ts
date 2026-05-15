@@ -49,9 +49,11 @@ test.describe('scanner and market overview smoke', () => {
     await signIn(page, '/scanner');
 
     await expect(page.getByTestId('user-scanner-bento-page')).toBeVisible();
-    await expect(page.getByTestId('scanner-sidebar')).toBeVisible();
+    await expect(page.getByTestId('scanner-launch-bar')).toBeVisible();
+    await expect(page.getByTestId('scanner-control-rail')).toHaveCount(0);
+    await expect(page.getByTestId('scanner-sidebar')).toHaveCount(0);
+    await page.getByTestId('scanner-scope-selector').getByRole('button', { name: /主题标的池|theme universe/i }).click();
     await page.getByRole('button', { name: /展开 高级参数|expand advanced controls/i }).click();
-    await page.getByRole('button', { name: /主题标的池|theme universe/i }).click();
     await expect(page.getByTestId('scanner-theme-control')).toBeVisible();
     await expect(page.getByTestId('scanner-theme-select')).toBeVisible();
     await expect(page.getByTestId('scanner-run-button')).toBeVisible();
@@ -60,17 +62,21 @@ test.describe('scanner and market overview smoke', () => {
     await expect(moreActions).toBeVisible();
     await expect(moreActions.getByRole('button', { name: /导出 csv|export csv/i })).toBeVisible();
     await expect(moreActions.getByRole('button', { name: /复制全部代码|copy all symbols/i })).toBeVisible();
+    await page.getByRole('button', { name: /更多扫描操作|more scanner actions/i }).click();
+    await expect(moreActions).toHaveCount(0);
 
-    await expect(page.getByTestId('scanner-result-card-NVDA')).toBeVisible();
+    await expect(page.getByTestId('scanner-result-table')).toBeVisible();
+    await expect(page.getByTestId('scanner-result-row-NVDA')).toBeVisible();
     await expect(page.getByRole('button', { name: /^分析$|^analyze$/i }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: /^复制$|^copy$/i }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /^导出$|^export$/i }).first()).toBeVisible();
+    await page.getByTestId('scanner-result-row-NVDA').getByRole('button', { name: /详情|detail/i }).click();
+    await expect(page.getByTestId('scanner-result-detail-NVDA').getByRole('button', { name: /导出该候选|export candidate/i })).toBeVisible();
 
     const candidateScrollRegion = page.getByTestId('scanner-candidate-scroll-region');
     await expect(candidateScrollRegion).toBeVisible();
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
-    await expect(page.getByTestId('scanner-sidebar')).toBeVisible();
+    await expect(page.getByTestId('scanner-launch-bar')).toBeVisible();
 
     await page.goto('/watchlist');
     await page.waitForLoadState('domcontentloaded');
@@ -93,7 +99,7 @@ test.describe('scanner and market overview smoke', () => {
     await expect(page.getByTestId('watchlist-page')).toBeVisible();
     await expect(page.getByRole('heading', { name: /观察列表|watchlist/i })).toBeVisible();
     await expect(page.getByTestId('watchlist-filter-grid')).toBeVisible();
-    await expect(page.getByRole('link', { name: /打开扫描器|open scanner/i }).first()).toBeVisible();
+    await expect(page.getByTestId('watchlist-page')).toContainText(/观察列表|watchlist/i);
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 
@@ -104,8 +110,9 @@ test.describe('scanner and market overview smoke', () => {
     await page.getByRole('button', { name: /^复制$|^copy$/i }).first().click();
     await expect(page.getByRole('button', { name: /^已复制$|^copied$/i }).first()).toBeVisible();
 
+    await page.getByTestId('scanner-result-row-NVDA').getByRole('button', { name: /详情|detail/i }).click();
     const downloadPromise = page.waitForEvent('download');
-    await page.getByRole('button', { name: /^导出$|^export$/i }).first().click();
+    await page.getByTestId('scanner-result-detail-NVDA').getByRole('button', { name: /导出该候选|export candidate/i }).click();
     const download = await downloadPromise;
     expect(await download.suggestedFilename()).toContain('scanner_cn_');
   });
@@ -169,7 +176,7 @@ test.describe('scanner and market overview smoke', () => {
       await expect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('market-overview-temperature-summary')).toContainText(/数据不足/);
       await expect(page.getByTestId('market-temperature-unreliable-summary')).toBeVisible();
-      await expect(page.getByTestId('market-decision-text')).toContainText(/数据不足/);
+      await expect(page.getByTestId('market-decision-text')).toContainText(/数据不足|数据可用：存在延迟源/);
       await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
       await expect(await page.locator('body').innerText()).not.toMatch(/raw|payload/i);
     }

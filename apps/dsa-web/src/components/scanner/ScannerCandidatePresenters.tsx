@@ -733,22 +733,35 @@ export function ScannerCandidateTableRow({
         className="cursor-pointer border-b border-white/5 text-white/72 hover:bg-white/[0.035]"
         onClick={() => onSelect()}
       >
-        <td className="px-2.5 py-2 text-white/45">#{candidate.rank}</td>
-        <td className="px-2.5 py-2 font-semibold text-white">{candidate.symbol}</td>
-        <td className="px-2.5 py-2 text-white/55">{candidate.companyName || candidate.name}</td>
-        <td className="px-2.5 py-2">
-          <span className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-bold ${scoreBadgeClassName}`}>
+        <td className="w-[64px] px-3 py-2 text-white/45">#{candidate.rank}</td>
+        <td className="min-w-[180px] px-3 py-2">
+          <p className="font-mono text-sm font-semibold text-white">{candidate.symbol}</p>
+          <p className="mt-0.5 max-w-[260px] truncate text-[11px] text-white/45">{candidate.companyName || candidate.name}</p>
+        </td>
+        <td className="w-[118px] px-3 py-2">
+          <span className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${scoreBadgeClassName}`}>
             {candidate.score}/100
           </span>
         </td>
-        <td className="px-2.5 py-2">{entryRange || '--'}</td>
-        <td className="px-2.5 py-2">{targetPrice || '--'}</td>
-        <td className="px-2.5 py-2">{stopLoss || '--'}</td>
-        <td className="max-w-[220px] px-2.5 py-2 text-white/62">{keyReason}</td>
-        <td className="max-w-[180px] px-2.5 py-2 text-white/52">{riskSummary}</td>
-        <td className="max-w-[180px] px-2.5 py-2 text-white/42">{sourceBadge}</td>
-        <td className="px-2.5 py-2">
-          <div className="flex flex-wrap gap-1.5">
+        <td className="w-[118px] px-3 py-2">
+          <span className="inline-flex rounded border border-emerald-400/20 bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-emerald-100">
+            {language === 'en' ? 'Official' : '官方'}
+          </span>
+        </td>
+        <td className="min-w-[260px] px-3 py-2">
+          <p className="line-clamp-2 text-xs leading-relaxed text-white/68">{keyReason}</p>
+          <p className="mt-0.5 truncate text-[11px] text-white/38">{riskSummary}</p>
+        </td>
+        <td className="min-w-[150px] px-3 py-2 text-white/50">{sourceBadge}</td>
+        <td className="min-w-[180px] px-3 py-2">
+          <div className="grid grid-cols-3 gap-1 text-[11px] text-white/52">
+            <span className="truncate" title={entryRange || '--'}>{entryRange || '--'}</span>
+            <span className="truncate" title={targetPrice || '--'}>{targetPrice || '--'}</span>
+            <span className="truncate text-rose-200/70" title={stopLoss || '--'}>{stopLoss || '--'}</span>
+          </div>
+        </td>
+        <td className="min-w-[280px] px-3 py-2">
+          <div className="flex flex-wrap justify-end gap-1.5">
             <ActionButton
               label={language === 'en' ? 'Analyze' : '分析'}
               onClick={() => onAnalyze()}
@@ -776,7 +789,7 @@ export function ScannerCandidateTableRow({
       </tr>
       {isExpanded ? (
         <tr>
-          <td colSpan={11} className="border-b border-white/5 px-3 pb-4">
+          <td colSpan={8} className="border-b border-white/5 px-3 pb-4">
             {detailPanel}
           </td>
         </tr>

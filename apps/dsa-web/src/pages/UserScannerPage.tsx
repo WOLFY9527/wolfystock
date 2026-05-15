@@ -47,7 +47,6 @@ import {
   useScannerBacktestLab,
   type ScannerBacktestItem,
 } from '../components/scanner/useScannerBacktestLab';
-import { SectionShell } from '../components/common';
 import {
   TerminalButton,
   TerminalChip,
@@ -1165,6 +1164,7 @@ function PillTagGroup({
   onChange,
   variant = 'default',
   testId,
+  compact = false,
 }: {
   label: string;
   value: string;
@@ -1172,16 +1172,17 @@ function PillTagGroup({
   onChange: (next: string) => void;
   variant?: 'default' | 'market';
   testId?: string;
+  compact?: boolean;
 }) {
   const isMarketGroup = variant === 'market';
 
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">{label}</span>
+    <div className={compact ? 'flex min-w-0 flex-col gap-1 md:flex-row md:items-center md:gap-2' : 'flex min-w-0 flex-col gap-1.5'}>
+      <span className={compact ? 'shrink-0 text-[10px] uppercase tracking-[0.16em] text-white/40' : 'text-[10px] uppercase tracking-[0.16em] text-white/40'}>{label}</span>
       <div
         className={isMarketGroup
           ? 'ui-scroll-x-quiet flex min-w-0 max-w-full rounded-xl border border-white/5 bg-black/40 p-1'
-          : 'flex min-w-0 flex-wrap gap-2'}
+          : 'flex min-w-0 flex-wrap gap-1.5'}
         role="group"
         aria-label={label}
         data-testid={testId}
@@ -1195,11 +1196,11 @@ function PillTagGroup({
               aria-pressed={isActive}
               className={isActive
                 ? isMarketGroup
-                  ? 'min-w-0 shrink-0 rounded-lg bg-white/10 px-4 py-1 text-sm font-bold text-white shadow-[0_2px_10px_rgba(0,0,0,0.5)] transition-all'
-                  : 'min-w-0 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs text-white transition-colors'
+                  ? 'min-w-0 shrink-0 rounded-lg bg-white/10 px-3 py-1 text-xs font-bold text-white shadow-[0_2px_10px_rgba(0,0,0,0.5)] transition-all'
+                  : 'min-w-0 rounded-full border border-white/10 bg-white/10 px-2.5 py-1 text-xs text-white transition-colors'
                 : isMarketGroup
-                  ? 'min-w-0 shrink-0 rounded-lg bg-transparent px-4 py-1 text-sm font-medium text-white/40 transition-all hover:text-white/70'
-                  : 'min-w-0 rounded-full border border-white/5 bg-transparent px-3 py-1 text-xs text-white/50 transition-colors hover:bg-white/[0.05]'}
+                  ? 'min-w-0 shrink-0 rounded-lg bg-transparent px-3 py-1 text-xs font-medium text-white/40 transition-all hover:text-white/70'
+                  : 'min-w-0 rounded-full border border-white/5 bg-transparent px-2.5 py-1 text-xs text-white/50 transition-colors hover:bg-white/[0.05]'}
               onClick={() => onChange(option.value)}
             >
               <span className="ui-truncate block max-w-full">{option.label}</span>
@@ -1318,38 +1319,38 @@ function ScannerLaunchEvidenceSummary({
       : (language === 'en' ? 'No shortlist yet. Inspect data readiness before changing scope.' : '本次暂无候选，先检查数据可用性，再调整范围。');
 
   return (
-    <section data-testid="scanner-launch-evidence-summary" className="grid gap-2 border-b border-white/5 px-3 py-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(220px,0.8fr)]">
-      <TerminalPanel dense className="p-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <TerminalChip variant="success" className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-emerald-100/85">
-            {stateLabel}
-          </TerminalChip>
-          <TerminalChip variant="neutral" className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white/50">
-            {language === 'en' ? `${shortlistCount} candidates` : `${shortlistCount} 个候选`}
-          </TerminalChip>
-          {generatedAt ? <span className="font-mono text-[11px] text-white/42">{formatTimestamp(generatedAt, language)}</span> : null}
+    <section data-testid="scanner-launch-evidence-summary" className="order-2 border-b border-white/5 px-3 py-1.5">
+      <div className="grid gap-1.5 rounded-xl border border-white/5 bg-black/25 px-2.5 py-1.5 lg:grid-cols-[minmax(0,1.5fr)_minmax(160px,0.45fr)_minmax(180px,0.55fr)_minmax(220px,0.75fr)] lg:items-center">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <TerminalChip variant="success" className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-emerald-100/85">
+              {stateLabel}
+            </TerminalChip>
+            <TerminalChip variant="neutral" className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white/50">
+              {language === 'en' ? `${shortlistCount} candidates` : `${shortlistCount} 个候选`}
+            </TerminalChip>
+            {generatedAt ? <span className="font-mono text-[11px] text-white/42">{formatTimestamp(generatedAt, language)}</span> : null}
+          </div>
+          <p className="mt-1 truncate text-sm font-semibold text-white" title={decisionSummary?.headline || undefined}>
+            {decisionSummary?.headline || (language === 'en' ? 'Candidate evidence is waiting for a scan' : '候选证据等待扫描')}
+          </p>
+          <p className="mt-0.5 truncate text-xs text-white/52" title={decisionSummary ? [decisionSummary.reason, decisionSummary.data].filter(Boolean).join(' · ') : nextStep}>
+            {decisionSummary ? [decisionSummary.reason, decisionSummary.data].filter(Boolean).join(language === 'en' ? ' · ' : ' · ') : nextStep}
+          </p>
         </div>
-        <h2 className="mt-2 text-base font-semibold tracking-tight text-white">
-          {decisionSummary?.headline || (language === 'en' ? 'Candidate evidence is waiting for a scan' : '候选证据等待扫描')}
-        </h2>
-        <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-white/62">
-          {decisionSummary ? [decisionSummary.reason, decisionSummary.data].filter(Boolean).join(language === 'en' ? ' · ' : ' · ') : nextStep}
-        </p>
-      </TerminalPanel>
-      <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
-        <TerminalNestedBlock>
+        <div className="min-w-0">
           <span className="block text-[10px] font-bold uppercase tracking-widest text-white/38">{language === 'en' ? 'Evidence confidence' : '证据置信'}</span>
-          <span className="mt-1 block font-mono text-lg font-semibold text-emerald-100">{decisionSummary?.best || '--'}</span>
-        </TerminalNestedBlock>
-        <TerminalNestedBlock>
+          <span className="mt-0.5 block truncate font-mono text-sm font-semibold text-emerald-100">{decisionSummary?.best || '--'}</span>
+        </div>
+        <div className="min-w-0">
           <span className="block text-[10px] font-bold uppercase tracking-widest text-white/38">{language === 'en' ? 'Data readiness' : '数据就绪'}</span>
-          <span className="mt-1 block text-sm font-medium text-white/78">{readinessLabel}</span>
-          <span className="mt-0.5 block text-[11px] text-white/42">{readinessPlainText}</span>
-        </TerminalNestedBlock>
-        <TerminalNestedBlock>
+          <span className="mt-0.5 block truncate text-sm font-medium text-white/78">{readinessLabel}</span>
+          <span className="block truncate text-[11px] text-white/42">{readinessPlainText}</span>
+        </div>
+        <div className="hidden min-w-0 sm:block">
           <span className="block text-[10px] font-bold uppercase tracking-widest text-white/38">{language === 'en' ? 'Next observation' : '下一步观察'}</span>
-          <span className="mt-1 block text-xs leading-relaxed text-white/62">{nextStep}</span>
-        </TerminalNestedBlock>
+          <span className="mt-0.5 block truncate text-xs text-white/62" title={nextStep}>{nextStep}</span>
+        </div>
       </div>
     </section>
   );
@@ -1396,7 +1397,7 @@ const UserScannerPage: React.FC = () => {
   const [isDataNotesOpen, setIsDataNotesOpen] = useState(false);
   const [previousRunDetail, setPreviousRunDetail] = useState<ScannerRunDetail | null>(null);
   const [previewThreshold, setPreviewThreshold] = useState(50);
-  const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
@@ -2232,48 +2233,53 @@ const UserScannerPage: React.FC = () => {
           ) : null}
 
 		          <TerminalGrid data-testid="scanner-workspace-grid" className="w-full flex-1 min-w-0">
-		            <TerminalPanel
+                <TerminalPanel
                   as="section"
-		              data-testid="scanner-control-rail"
-		              className="order-1 flex w-full shrink-0 flex-col xl:sticky xl:top-4 xl:col-span-3"
-		            >
-	              <SectionShell
-	                className="flex flex-col rounded-[24px] p-0 bg-transparent shadow-none"
-	                contentClassName="flex flex-col space-y-0"
-	              >
-	                <div
-	                  data-testid="scanner-sidebar-scroll-region"
-	                  className="flex flex-col gap-2.5"
-	                >
-                    <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-1">
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">
-                        {language === 'en' ? 'Basic scan' : '基础扫描'}
-                      </span>
+                  data-testid="scanner-launch-bar"
+                  className="order-1 col-span-full flex w-full min-w-0 flex-col gap-1.5 p-2.5"
+                >
+                  <div className="grid min-w-0 grid-cols-2 gap-1.5 xl:grid-cols-[minmax(150px,0.75fr)_minmax(190px,0.95fr)_minmax(150px,0.7fr)_minmax(210px,1fr)_minmax(170px,0.8fr)_minmax(170px,0.8fr)_auto] xl:items-end">
+                    <PillTagGroup compact label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} variant="market" testId="scanner-market-toggle" />
+                    <PillTagGroup compact label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
+                    <PillTagGroup compact label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
+                    <div data-testid="scanner-launch-controls" className="contents">
+                      <PillTagGroup
+                        compact
+                        label={language === 'en' ? 'Universe' : '标的池'}
+                        value={scanScope}
+                        onChange={(next) => setScanScope(next as ScanScope)}
+                        options={[
+                          { value: 'default', label: language === 'en' ? 'Default market universe' : '默认市场池' },
+                          { value: 'theme', label: language === 'en' ? 'Theme universe' : '主题标的池' },
+                          { value: 'symbols', label: language === 'en' ? 'Custom symbols' : '自定义标的' },
+                        ]}
+                        testId="scanner-scope-selector"
+                      />
+                      <PillTagGroup compact label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
+                      <PillTagGroup compact label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
                     </div>
-	                  <PillTagGroup label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} variant="market" testId="scanner-market-toggle" />
-	                  <PillTagGroup label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
-	                  <PillTagGroup label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
-	                  <AdvancedDisclosure
-	                    testId="scanner-advanced-controls"
-	                    title={language === 'en' ? 'Advanced controls' : '高级参数'}
-	                    summary={language === 'en' ? 'Candidate size · evaluation depth · scan scope' : '候选上限 · 评估深度 · 扫描范围'}
-	                    icon="more"
-	                  >
-	                  <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-1">
-	                    <PillTagGroup label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
-	                    <PillTagGroup label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
-	                  </div>
-                  <PillTagGroup
-                    label={language === 'en' ? 'Scan scope' : '扫描范围'}
-                    value={scanScope}
-                    onChange={(next) => setScanScope(next as ScanScope)}
-                    options={[
-                      { value: 'default', label: language === 'en' ? 'Default market universe' : '默认市场池' },
-                      { value: 'theme', label: language === 'en' ? 'Theme universe' : '主题标的池' },
-                      { value: 'symbols', label: language === 'en' ? 'Custom symbols' : '自定义标的' },
-                    ]}
-                    testId="scanner-scope-selector"
-                  />
+                    <TerminalButton
+                      ref={runScannerButton.ref}
+                      type="button"
+                      onClick={runScannerButton.onClick}
+                      onPointerUp={runScannerButton.onPointerUp}
+                      disabled={runDisabled}
+                      aria-busy={isRunning}
+                      data-testid="scanner-run-button"
+                      className="group col-span-2 h-9 w-full px-4 text-sm font-bold active:scale-95 disabled:pointer-events-none xl:col-span-1 xl:min-w-[142px]"
+                      variant="primary"
+                    >
+                      <Play className="h-4 w-4 group-hover:animate-pulse" />
+                      <span>{isRunning ? t('scanner.running') : (language === 'zh' ? '启动扫描' : t('scanner.run'))}</span>
+                    </TerminalButton>
+                  </div>
+                  {scanScope !== 'default' ? (
+                  <AdvancedDisclosure
+                    testId="scanner-advanced-controls"
+                    title={language === 'en' ? 'Advanced controls' : '高级参数'}
+                    summary={language === 'en' ? 'Theme or custom-symbol inputs only' : '仅主题或自定义标的输入'}
+                    icon="more"
+                  >
                   {scanScope === 'theme' ? (
                     <div className="flex min-w-0 flex-col gap-1.5" data-testid="scanner-theme-control">
                       <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">{language === 'en' ? 'Theme' : '主题'}</span>
@@ -2433,40 +2439,23 @@ const UserScannerPage: React.FC = () => {
                       ) : null}
 	                    </div>
 	                  ) : null}
-	                  </AdvancedDisclosure>
+                  </AdvancedDisclosure>
+                  ) : null}
                   {validationErrors.run ? (
                     <p role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
                       {validationErrors.run}
                     </p>
                   ) : null}
-                  <div className="mt-auto flex shrink-0 flex-col gap-2 pt-4 pb-4">
-	                    <TerminalButton
-	                      ref={runScannerButton.ref}
-	                      type="button"
-	                      onClick={runScannerButton.onClick}
-                      onPointerUp={runScannerButton.onPointerUp}
-	                      disabled={runDisabled}
-	                      aria-busy={isRunning}
-	                      data-testid="scanner-run-button"
-	                      className="group flex w-full px-5 py-3 text-sm font-bold active:scale-95 disabled:pointer-events-none xl:sticky xl:bottom-0"
-                        variant="primary"
-	                    >
-	                      <Play className="h-4 w-4 group-hover:animate-pulse" />
-	                      <span>{isRunning ? t('scanner.running') : (language === 'zh' ? '启动扫描' : t('scanner.run'))}</span>
-	                    </TerminalButton>
-                  </div>
-                </div>
-              </SectionShell>
-	            </TerminalPanel>
+                </TerminalPanel>
 
 		            <TerminalPanel
                   as="section"
 		              data-testid="scanner-results-stage"
-		              className="order-2 flex min-h-[520px] flex-1 min-w-0 flex-col xl:col-span-9"
+		              className="order-2 col-span-full flex min-h-[520px] flex-1 min-w-0 flex-col"
 		            >
-              <div data-testid="scanner-results-pane" className="flex min-h-0 flex-1 min-w-0 flex-col">
-              <div data-testid="user-scanner-bento-hero" className="flex shrink-0 flex-col gap-2 border-b border-white/5 px-3 py-2.5">
-                <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
+              <div data-testid="scanner-results-pane" className="relative flex min-h-0 flex-1 min-w-0 flex-col">
+              <div data-testid="user-scanner-bento-hero" className="order-1 flex shrink-0 flex-col gap-1 border-b border-white/5 px-3 py-1.5 lg:absolute lg:right-3 lg:top-2 lg:z-20 lg:max-w-[520px] lg:border-b-0 lg:bg-black/55 lg:px-2 lg:py-1 lg:backdrop-blur-md">
+                <div className="flex flex-col justify-between gap-2 lg:flex-row lg:items-center">
                   <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-white/45">
                     <span className="font-semibold text-white/78">{language === 'en' ? 'Results' : '扫描结果'}</span>
                     <span className="rounded-full border border-white/8 bg-white/[0.04] px-2 py-0.5 text-white/60">
@@ -2480,7 +2469,7 @@ const UserScannerPage: React.FC = () => {
 	                      <div className="grid w-full min-w-0 grid-cols-1 gap-1.5 sm:w-auto sm:grid-cols-[minmax(0,1fr)_auto]">
 		                        <div
 		                          data-testid="scanner-primary-actions"
-		                          className="grid min-w-0 grid-cols-1 gap-1.5 sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_auto]"
+		                          className="grid min-w-0 grid-cols-2 gap-1.5 sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_auto]"
 		                        >
 		                          <ActionButton
 		                            label={singleSelectedSymbol
@@ -2601,52 +2590,8 @@ const UserScannerPage: React.FC = () => {
 	                language={language}
 	              />
 
-              {runDetail ? (
-                <div className="shrink-0 border-b border-white/5 px-3 py-2" data-testid="scanner-diagnostic-summary">
-                  <div data-testid="scanner-summary-counters" className="flex flex-wrap items-center gap-1.5 rounded-xl border border-white/5 bg-white/[0.02] px-2.5 py-2 backdrop-blur-md">
-                    {[
-                      [language === 'en' ? 'Universe' : '候选范围', runDetail.summary?.universeCount ?? runDetail.acceptedSymbolsCount ?? runDetail.universeSize],
-                      [language === 'en' ? 'Evaluated' : '已评估', runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize],
-                      [language === 'en' ? 'Selected' : '入选', runDetail.summary?.selectedCount ?? shortlistCount],
-                      [language === 'en' ? 'Not selected' : '未入选', runDetail.summary?.rejectedCount ?? 0],
-                      [language === 'en' ? 'Data thin' : '数据不足', runDetail.summary?.dataFailedCount ?? 0],
-                      [language === 'en' ? 'Not processed' : '暂未处理', runDetail.summary?.skippedCount ?? 0],
-                    ].map(([label, value]) => (
-                      <span key={label} className="inline-flex items-baseline gap-1 rounded-lg border border-white/5 bg-black/20 px-2 py-1">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{label}</span>
-                        <span className="font-mono text-xs text-white/78">{value}</span>
-                      </span>
-                    ))}
-                  </div>
-                  {decisionSummary ? (
-                    <div
-                      data-testid="scanner-decision-summary"
-                      className="mt-2 rounded-xl border border-white/5 bg-white/[0.02] px-2.5 py-2 text-xs backdrop-blur-md"
-                    >
-                      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-white/78">
-                        <span className="font-medium">{decisionSummary.headline}</span>
-                        <span className="font-mono text-white/72">{decisionSummary.best}</span>
-                      </div>
-                      <p className="mt-1 min-w-0 truncate text-[11px] text-white/46" title={`${decisionSummary.reason} · ${decisionSummary.data}`}>
-                        {[decisionSummary.reason, decisionSummary.data].join(' · ')}
-                      </p>
-                      <p className="mt-1 min-w-0 truncate text-[11px] text-white/34">
-                        {[
-                          comparisonState.previousRun && comparisonState.chips.length
-                            ? (language === 'en' ? 'candidate pool changed this run' : '本次发生候选池交换')
-                            : null,
-                          runDetail.summary?.limitedByResultCap
-                            ? (language === 'en' ? 'result cap active' : '结果上限生效')
-                            : null,
-                        ].filter(Boolean).join(' · ')}
-                      </p>
-                    </div>
-                  ) : null}
-	                </div>
-	              ) : null}
-
               {runDetail && hasCandidateDiagnostics ? (
-                <div className="shrink-0 border-b border-white/5 px-3 py-2" data-testid="scanner-candidate-filters">
+                <div className="order-4 shrink-0 border-b border-white/5 px-3 py-1.5" data-testid="scanner-candidate-filters">
                   <div className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1 rounded-lg border border-white/5 bg-black/30 p-0.5" role="group" aria-label={language === 'en' ? 'Candidate diagnostics filter' : '候选诊断过滤'}>
                     {([
                       ['selected', language === 'en' ? 'Selected' : '入选'],
@@ -2668,7 +2613,7 @@ const UserScannerPage: React.FC = () => {
                 </div>
               ) : null}
 
-              <div className="flex shrink-0 flex-col gap-2 border-b border-white/5 px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
+              <div className="order-5 flex shrink-0 flex-col gap-1.5 border-b border-white/5 px-3 py-1.5 lg:flex-row lg:items-center lg:justify-between">
                 <div className="ui-scroll-x-quiet flex min-w-0 max-w-full rounded-lg border border-white/5 bg-black/30 p-0.5" role="group" aria-label={language === 'en' ? 'Result view mode' : '结果视图'}>
                   <button
                     type="button"
@@ -2709,7 +2654,7 @@ const UserScannerPage: React.FC = () => {
                 </div>
               </div>
 
-		              <div data-testid="scanner-candidate-scroll-region" className="px-3 py-3">
+		              <div data-testid="scanner-candidate-scroll-region" className="order-3 px-3 py-2">
 		                <div className="grid gap-3">
                   <div className="min-w-0">
                 {!selectedOnlyView ? (
@@ -2926,20 +2871,17 @@ const UserScannerPage: React.FC = () => {
                     </>
                 ) : (
                   <div data-testid="scanner-result-table" className="overflow-x-auto no-scrollbar rounded-xl border border-white/5 bg-white/[0.02]">
-                    <table className="min-w-[980px] w-full border-collapse text-left text-xs">
+                    <table className="w-full min-w-[980px] border-collapse text-left text-xs xl:min-w-full">
                       <thead className="border-b border-white/5 bg-black/25 text-[10px] uppercase tracking-[0.16em] text-white/38">
                         <tr>
-                          <th className="px-2.5 py-2">{language === 'en' ? 'Rank' : '排名'}</th>
-                          <th className="px-2.5 py-2">{language === 'en' ? 'Symbol' : '代码'}</th>
-                          <th className="px-2.5 py-2">{language === 'en' ? 'Name' : '名称'}</th>
-                          <th className="px-2.5 py-2">{language === 'en' ? 'Scanner score' : '扫描评分'}</th>
-                          <th className="px-2.5 py-2">{language === 'en' ? 'Watch range' : '观察区间'}</th>
-                          <th className="px-2.5 py-2">{language === 'en' ? 'Upper watch' : '上方观察'}</th>
-                          <th className="px-2.5 py-2">{language === 'en' ? 'Risk boundary' : '风险边界'}</th>
-                          <th className="px-2.5 py-2">{language === 'en' ? 'Key reason' : '关键原因'}</th>
-                          <th className="px-2.5 py-2">{language === 'en' ? 'Risk summary' : '风险摘要'}</th>
-                          <th className="px-2.5 py-2">{language === 'en' ? 'Data/source' : '数据/来源'}</th>
-                          <th className="px-2.5 py-2">{language === 'en' ? 'Actions' : '操作'}</th>
+                          <th className="px-3 py-2">{language === 'en' ? 'Rank' : '排名'}</th>
+                          <th className="px-3 py-2">{language === 'en' ? 'Symbol / name' : '代码 / 名称'}</th>
+                          <th className="px-3 py-2">{language === 'en' ? 'Score' : '评分'}</th>
+                          <th className="px-3 py-2">{language === 'en' ? 'Status' : '状态'}</th>
+                          <th className="px-3 py-2">{language === 'en' ? 'Key reason' : '关键原因'}</th>
+                          <th className="px-3 py-2">{language === 'en' ? 'Data/source' : '数据/来源'}</th>
+                          <th className="px-3 py-2">{language === 'en' ? 'Watch' : '观察'}</th>
+                          <th className="px-3 py-2 text-right">{language === 'en' ? 'Actions' : '操作'}</th>
                         </tr>
                       </thead>
                       <tbody>
