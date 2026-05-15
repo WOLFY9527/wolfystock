@@ -2,6 +2,7 @@ import apiClient from './index';
 import type { MarketDataMeta, MarketOverviewPanel, MarketOverviewItem, MarketProviderHealth } from './marketOverview';
 import { toCamelCase } from './utils';
 import { API_BASE_URL } from '../utils/constants';
+import { buildAbsoluteApiUrl, joinApiPath } from './path';
 
 type MarketSnapshotItem = {
   symbol?: string;
@@ -131,39 +132,42 @@ async function getPanel(path: string, panelName: string): Promise<MarketOverview
   return normalizeMarketSnapshotPayload(response.data, panelName);
 }
 
-function buildEventSourceUrl(path: string): string {
-  if (!API_BASE_URL) {
-    return path;
-  }
-  return `${API_BASE_URL.replace(/\/$/, '')}${path}`;
+const MARKET_API_BASE_PATH = '/api/v1/market';
+
+export function buildMarketApiPath(path: string): string {
+  return joinApiPath(MARKET_API_BASE_PATH, path);
+}
+
+export function buildMarketApiUrl(baseUrl: string, path: string): string {
+  return buildAbsoluteApiUrl(baseUrl, path);
 }
 
 export const marketApi = {
-  getCrypto: () => getPanel('/api/v1/market/crypto', 'CryptoCard'),
-  cryptoStreamUrl: () => buildEventSourceUrl('/api/v1/market/crypto/stream'),
+  getCrypto: () => getPanel(buildMarketApiPath('crypto'), 'CryptoCard'),
+  cryptoStreamUrl: () => buildMarketApiUrl(API_BASE_URL, buildMarketApiPath('crypto/stream')),
   normalizeCryptoStreamPayload: (payload: Record<string, unknown>) => normalizeMarketSnapshotPayload(payload, 'CryptoCard'),
-  getSentiment: () => getPanel('/api/v1/market/sentiment', 'MarketSentimentCard'),
-  getCnIndices: () => getPanel('/api/v1/market/cn-indices', 'ChinaIndicesCard'),
-  getCnBreadth: () => getPanel('/api/v1/market/cn-breadth', 'ChinaBreadthCard'),
-  getCnFlows: () => getPanel('/api/v1/market/cn-flows', 'ChinaFlowsCard'),
-  getSectorRotation: () => getPanel('/api/v1/market/sector-rotation', 'SectorRotationCard'),
-  getUsBreadth: () => getPanel('/api/v1/market/us-breadth', 'UsBreadthCard'),
-  getRates: () => getPanel('/api/v1/market/rates', 'RatesCard'),
-  getFxCommodities: () => getPanel('/api/v1/market/fx-commodities', 'FxCommoditiesCard'),
+  getSentiment: () => getPanel(buildMarketApiPath('sentiment'), 'MarketSentimentCard'),
+  getCnIndices: () => getPanel(buildMarketApiPath('cn-indices'), 'ChinaIndicesCard'),
+  getCnBreadth: () => getPanel(buildMarketApiPath('cn-breadth'), 'ChinaBreadthCard'),
+  getCnFlows: () => getPanel(buildMarketApiPath('cn-flows'), 'ChinaFlowsCard'),
+  getSectorRotation: () => getPanel(buildMarketApiPath('sector-rotation'), 'SectorRotationCard'),
+  getUsBreadth: () => getPanel(buildMarketApiPath('us-breadth'), 'UsBreadthCard'),
+  getRates: () => getPanel(buildMarketApiPath('rates'), 'RatesCard'),
+  getFxCommodities: () => getPanel(buildMarketApiPath('fx-commodities'), 'FxCommoditiesCard'),
   getTemperature: async (): Promise<MarketTemperatureResponse> => {
-    const response = await apiClient.get<Record<string, unknown>>('/api/v1/market/temperature');
+    const response = await apiClient.get<Record<string, unknown>>(buildMarketApiPath('temperature'));
     return normalizeMarketTemperatureResponse(toCamelCase<MarketTemperatureResponse>(response.data));
   },
   getMarketBriefing: async (): Promise<MarketBriefingResponse> => {
-    const response = await apiClient.get<Record<string, unknown>>('/api/v1/market/market-briefing');
+    const response = await apiClient.get<Record<string, unknown>>(buildMarketApiPath('market-briefing'));
     return toCamelCase<MarketBriefingResponse>(response.data);
   },
   getFutures: async (): Promise<MarketFuturesResponse> => {
-    const response = await apiClient.get<Record<string, unknown>>('/api/v1/market/futures');
+    const response = await apiClient.get<Record<string, unknown>>(buildMarketApiPath('futures'));
     return toCamelCase<MarketFuturesResponse>(response.data);
   },
   getCnShortSentiment: async (): Promise<CnShortSentimentResponse> => {
-    const response = await apiClient.get<Record<string, unknown>>('/api/v1/market/cn-short-sentiment');
+    const response = await apiClient.get<Record<string, unknown>>(buildMarketApiPath('cn-short-sentiment'));
     return toCamelCase<CnShortSentimentResponse>(response.data);
   },
 };
