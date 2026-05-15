@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { MarketOverviewPanel } from '../api/marketOverview';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { MarketDataMeta, MarketOverviewPanel } from '../api/marketOverview';
 import { marketOverviewApi } from '../api/marketOverview';
 import type {
   CnShortSentimentResponse,
@@ -28,6 +28,9 @@ const AUTO_REFRESH_MS = 60_000;
 const PANEL_REQUEST_TIMEOUT_MS = 3_000;
 const FIRST_STAGE_PANEL_DELAY_MS = 250;
 const SECOND_STAGE_PANEL_DELAY_MS = 650;
+const AUTO_REVALIDATE_INITIAL_DELAY_MS = 1_500;
+const AUTO_REVALIDATE_RETRY_DELAY_MS = 2_500;
+const AUTO_REVALIDATE_MAX_ATTEMPTS = 3;
 
 type PanelRequest = readonly [PanelKey, () => Promise<PanelState[PanelKey]>];
 type StagedPanelRequestGroup = {
@@ -66,6 +69,26 @@ const MARKET_OVERVIEW_STAGED_REQUEST_GROUPS: StagedPanelRequestGroup[] = [
       ['cnShortSentiment', marketApi.getCnShortSentiment],
     ],
   },
+];
+
+const AUTO_REVALIDATE_PANEL_KEYS: PanelKey[] = [
+  'indices',
+  'volatility',
+  'crypto',
+  'sentiment',
+  'fundsFlow',
+  'macro',
+  'cnIndices',
+  'cnBreadth',
+  'cnFlows',
+  'sectorRotation',
+  'usBreadth',
+  'rates',
+  'fxCommodities',
+  'temperature',
+  'briefing',
+  'futures',
+  'cnShortSentiment',
 ];
 
 const FALLBACK_TEMPERATURE: MarketTemperatureResponse = {
@@ -414,6 +437,70 @@ function debugMarketPanel(panelKey: PanelKey, status: 'loading' | 'success' | 'f
   }
 }
 
+type AutoRevalidateMeta = Partial<MarketDataMeta> & {
+  source?: string;
+  sourceType?: string | null;
+};
+
+function shouldAutoRevalidatePanelValue(value: PanelState[PanelKey] | undefined): boolean {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const meta = value as AutoRevalidateMeta;
+  const providerStatus = meta.providerHealth?.status;
+  if (meta.isRefreshing || meta.providerHealth?.isRefreshing) {
+    return true;
+  }
+  if (providerStatus === 'refreshing' || providerStatus === 'partial' || providerStatus === 'fallback') {
+    return true;
+  }
+  if (meta.freshness === 'fallback' || meta.freshness === 'stale') {
+    return true;
+  }
+  return false;
+}
+
+function getPanelLoader(panelKey: PanelKey): (() => Promise<PanelState[PanelKey]>) | null {
+  switch (panelKey) {
+    case 'indices':
+      return marketOverviewApi.getIndices;
+    case 'volatility':
+      return marketOverviewApi.getVolatility;
+    case 'crypto':
+      return marketApi.getCrypto;
+    case 'sentiment':
+      return marketApi.getSentiment;
+    case 'fundsFlow':
+      return marketOverviewApi.getFundsFlow;
+    case 'macro':
+      return marketOverviewApi.getMacro;
+    case 'cnIndices':
+      return marketApi.getCnIndices;
+    case 'cnBreadth':
+      return marketApi.getCnBreadth;
+    case 'cnFlows':
+      return marketApi.getCnFlows;
+    case 'sectorRotation':
+      return marketApi.getSectorRotation;
+    case 'usBreadth':
+      return marketApi.getUsBreadth;
+    case 'rates':
+      return marketApi.getRates;
+    case 'fxCommodities':
+      return marketApi.getFxCommodities;
+    case 'temperature':
+      return marketApi.getTemperature;
+    case 'briefing':
+      return marketApi.getMarketBriefing;
+    case 'futures':
+      return marketApi.getFutures;
+    case 'cnShortSentiment':
+      return marketApi.getCnShortSentiment;
+    default:
+      return null;
+  }
+}
+
 const routeEntryPanelRequestCache = new Map<string, Promise<PanelState[PanelKey]>>();
 
 function loadPanelWithRouteEntryDedupe(
@@ -507,6 +594,26 @@ const MarketOverviewPage = () => {
   const [refreshErrors, setRefreshErrors] = useState<Record<string, string>>({});
   const [refreshingPanel, setRefreshingPanel] = useState<PanelKey | null>(null);
   const [cryptoRealtimeStatus, setCryptoRealtimeStatus] = useState<CryptoRealtimeStatus>('snapshot');
+  const [autoRevalidateTick, setAutoRevalidateTick] = useState(0);
+  const autoRevalidateTimersRef = useRef<Partial<Record<PanelKey, number>>>({});
+  const autoRevalidateAttemptsRef = useRef<Partial<Record<PanelKey, number>>>({});
+  const autoRevalidateInFlightRef = useRef<Partial<Record<PanelKey, true>>>({});
+  const latestPanelsRef = useRef(panels);
+  const latestRefreshingPanelRef = useRef<PanelKey | null>(null);
+
+  const clearAutoRevalidateTimer = useCallback((panelKey: PanelKey) => {
+    const timer = autoRevalidateTimersRef.current[panelKey];
+    if (timer != null) {
+      window.clearTimeout(timer);
+      delete autoRevalidateTimersRef.current[panelKey];
+    }
+  }, []);
+
+  const resetAutoRevalidatePanel = useCallback((panelKey: PanelKey) => {
+    clearAutoRevalidateTimer(panelKey);
+    delete autoRevalidateAttemptsRef.current[panelKey];
+    delete autoRevalidateInFlightRef.current[panelKey];
+  }, [clearAutoRevalidateTimer]);
 
   const loadPanels = useCallback(async (cancelledRef?: { current: boolean }) => {
     setLoading(true);
@@ -576,8 +683,11 @@ const MarketOverviewPage = () => {
   const refreshPanel = useCallback(async (
     panelKey: PanelKey,
     loadPanel: () => Promise<PanelState[PanelKey]>,
+    options?: { silent?: boolean },
   ) => {
-    setRefreshingPanel(panelKey);
+    if (!options?.silent) {
+      setRefreshingPanel(panelKey);
+    }
     debugMarketPanel(panelKey, 'loading');
     try {
       const panel = await withPanelTimeout(loadPanel(), panelKey);
@@ -607,9 +717,50 @@ const MarketOverviewPage = () => {
       });
       debugMarketPanel(panelKey, 'fallback');
     } finally {
-      setRefreshingPanel((currentPanel) => (currentPanel === panelKey ? null : currentPanel));
+      if (!options?.silent) {
+        setRefreshingPanel((currentPanel) => (currentPanel === panelKey ? null : currentPanel));
+      }
     }
   }, []);
+
+  const scheduleAutoRevalidate = useCallback((panelKey: PanelKey) => {
+    const panelValue = latestPanelsRef.current[panelKey];
+    if (!shouldAutoRevalidatePanelValue(panelValue)) {
+      resetAutoRevalidatePanel(panelKey);
+      return;
+    }
+    if (latestRefreshingPanelRef.current === panelKey || autoRevalidateInFlightRef.current[panelKey]) {
+      return;
+    }
+    if (autoRevalidateTimersRef.current[panelKey] != null) {
+      return;
+    }
+    const attempts = autoRevalidateAttemptsRef.current[panelKey] ?? 0;
+    if (attempts >= AUTO_REVALIDATE_MAX_ATTEMPTS) {
+      return;
+    }
+    const loadPanel = getPanelLoader(panelKey);
+    if (!loadPanel) {
+      return;
+    }
+    const delayMs = attempts === 0 ? AUTO_REVALIDATE_INITIAL_DELAY_MS : AUTO_REVALIDATE_RETRY_DELAY_MS;
+    autoRevalidateTimersRef.current[panelKey] = window.setTimeout(() => {
+      delete autoRevalidateTimersRef.current[panelKey];
+      if (latestRefreshingPanelRef.current === panelKey || autoRevalidateInFlightRef.current[panelKey]) {
+        return;
+      }
+      if (!shouldAutoRevalidatePanelValue(latestPanelsRef.current[panelKey])) {
+        delete autoRevalidateAttemptsRef.current[panelKey];
+        return;
+      }
+      autoRevalidateAttemptsRef.current[panelKey] = attempts + 1;
+      autoRevalidateInFlightRef.current[panelKey] = true;
+      void refreshPanel(panelKey, loadPanel, { silent: true }).finally(() => {
+        delete autoRevalidateInFlightRef.current[panelKey];
+        setAutoRevalidateTick((currentTick) => currentTick + 1);
+      });
+    }, delayMs);
+  }, [refreshPanel, resetAutoRevalidatePanel]);
 
   useEffect(() => {
     const cancelledRef = { current: false };
@@ -631,6 +782,24 @@ const MarketOverviewPage = () => {
   }, [panels]);
 
   useEffect(() => {
+    latestPanelsRef.current = panels;
+  }, [panels]);
+
+  useEffect(() => {
+    latestRefreshingPanelRef.current = refreshingPanel;
+  }, [refreshingPanel]);
+
+  useEffect(() => {
+    AUTO_REVALIDATE_PANEL_KEYS.forEach(scheduleAutoRevalidate);
+  }, [panels, refreshingPanel, autoRevalidateTick, scheduleAutoRevalidate]);
+
+  useEffect(() => () => {
+    AUTO_REVALIDATE_PANEL_KEYS.forEach((panelKey) => {
+      clearAutoRevalidateTimer(panelKey);
+    });
+  }, [clearAutoRevalidateTimer]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => {
       const cancelledRef = { current: false };
       void loadPanels(cancelledRef);
@@ -643,6 +812,7 @@ const MarketOverviewPage = () => {
   useEffect(() => {
     return subscribeToCryptoStream(({ panel, status }) => {
       if (panel) {
+        resetAutoRevalidatePanel('crypto');
         setPanels((currentPanels) => ({
           ...currentPanels,
           crypto: panel,
@@ -650,53 +820,16 @@ const MarketOverviewPage = () => {
       }
       setCryptoRealtimeStatus(status);
     });
-  }, []);
+  }, [resetAutoRevalidatePanel]);
 
   const handleWorkbenchRefresh = useCallback((panelKey: PanelKey) => {
-    switch (panelKey) {
-      case 'indices':
-        void refreshPanel('indices', marketOverviewApi.getIndices);
-        break;
-      case 'volatility':
-        void refreshPanel('volatility', marketOverviewApi.getVolatility);
-        break;
-      case 'crypto':
-        void refreshPanel('crypto', marketApi.getCrypto);
-        break;
-      case 'sentiment':
-        void refreshPanel('sentiment', marketApi.getSentiment);
-        break;
-      case 'fundsFlow':
-        void refreshPanel('fundsFlow', marketOverviewApi.getFundsFlow);
-        break;
-      case 'cnIndices':
-        void refreshPanel('cnIndices', marketApi.getCnIndices);
-        break;
-      case 'cnBreadth':
-        void refreshPanel('cnBreadth', marketApi.getCnBreadth);
-        break;
-      case 'cnFlows':
-        void refreshPanel('cnFlows', marketApi.getCnFlows);
-        break;
-      case 'sectorRotation':
-        void refreshPanel('sectorRotation', marketApi.getSectorRotation);
-        break;
-      case 'usBreadth':
-        void refreshPanel('usBreadth', marketApi.getUsBreadth);
-        break;
-      case 'rates':
-        void refreshPanel('rates', marketApi.getRates);
-        break;
-      case 'fxCommodities':
-        void refreshPanel('fxCommodities', marketApi.getFxCommodities);
-        break;
-      case 'cnShortSentiment':
-        void refreshPanel('cnShortSentiment', marketApi.getCnShortSentiment);
-        break;
-      default:
-        break;
+    const loadPanel = getPanelLoader(panelKey);
+    if (!loadPanel) {
+      return;
     }
-  }, [refreshPanel]);
+    resetAutoRevalidatePanel(panelKey);
+    void refreshPanel(panelKey, loadPanel);
+  }, [refreshPanel, resetAutoRevalidatePanel]);
 
   return (
     <MarketOverviewWorkbench

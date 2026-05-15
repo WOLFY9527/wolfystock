@@ -333,6 +333,61 @@ const cryptoFallbackPanel = () => ({
   ],
 });
 
+const cryptoPartialRefreshingPanel = () => ({
+  ...cryptoFallbackPanel(),
+  status: 'success' as const,
+  source: 'mixed',
+  sourceLabel: 'Binance + Cache',
+  sourceType: 'mixed',
+  freshness: 'stale' as const,
+  isFallback: false,
+  isStale: true,
+  isRefreshing: true,
+  providerHealth: {
+    provider: 'binance',
+    status: 'partial' as const,
+    asOf: '2026-04-29T10:00:00',
+    updatedAt: '2026-04-29T10:00:00',
+    latencyMs: 480,
+    errorSummary: 'background refresh in progress',
+    isFallback: false,
+    isStale: true,
+    isRefreshing: true,
+    sourceLabel: 'Binance partial snapshot',
+    card: 'CryptoCard',
+  },
+  warning: '后台刷新进行中，当前显示部分可用快照',
+  items: [
+    {
+      ...cryptoFallbackPanel().items[0],
+      source: 'binance',
+      sourceLabel: 'Binance',
+      freshness: 'stale' as const,
+      isFallback: false,
+      isStale: true,
+      isRefreshing: true,
+    },
+    {
+      ...cryptoFallbackPanel().items[1],
+      source: 'cache',
+      sourceLabel: 'Recent Cache',
+      freshness: 'stale' as const,
+      isFallback: false,
+      isStale: true,
+      isRefreshing: true,
+    },
+    {
+      ...cryptoFallbackPanel().items[2],
+      source: 'cache',
+      sourceLabel: 'Recent Cache',
+      freshness: 'stale' as const,
+      isFallback: false,
+      isStale: true,
+      isRefreshing: true,
+    },
+  ],
+});
+
 const sentimentPanel = () => ({
   panelName: 'MarketSentimentCard',
   lastRefreshAt: '2026-04-29T10:00:00',
@@ -657,6 +712,8 @@ const allMarketPanelRequests = [
   ...firstStagedMarketPanelRequests,
   ...secondStagedMarketPanelRequests,
 ] as const;
+
+const AUTO_REVALIDATE_OBSERVATION_WINDOW_MS = 5_000;
 
 type MarketPanelRequestMock = (typeof allMarketPanelRequests)[number];
 
@@ -2188,6 +2245,74 @@ describe('MarketOverviewPage', () => {
     expect(screen.getAllByTestId('data-freshness-badge-fallback').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('data-freshness-badge-fallback').length).toBeGreaterThan(0);
     expect(screen.queryByTestId('data-freshness-badge-live')).not.toBeInTheDocument();
+  });
+
+  it('auto revalidates partial refreshing cards and replaces them without manual refresh', async () => {
+    vi.useFakeTimers();
+    vi.mocked(marketApi.getCrypto)
+      .mockResolvedValueOnce(cryptoPartialRefreshingPanel())
+      .mockResolvedValueOnce(cryptoFullPanel());
+
+    render(<MarketOverviewPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByRole('heading', { name: /加密核心/i })).toBeInTheDocument();
+    expect(screen.getAllByTestId('data-freshness-badge-refreshing').length).toBeGreaterThan(0);
+    expect(marketApi.getCrypto).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_REVALIDATE_OBSERVATION_WINDOW_MS);
+    });
+
+    expect(marketApi.getCrypto).toHaveBeenCalledTimes(2);
+    expect(screen.getAllByText('76,837.04').length).toBeGreaterThan(0);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_REVALIDATE_OBSERVATION_WINDOW_MS);
+    });
+
+    expect(marketApi.getCrypto).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops auto revalidation after bounded attempts when a card remains partial', async () => {
+    vi.useFakeTimers();
+    vi.mocked(marketApi.getCrypto).mockResolvedValue(cryptoPartialRefreshingPanel());
+
+    render(<MarketOverviewPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByRole('heading', { name: /加密核心/i })).toBeInTheDocument();
+    expect(screen.getAllByTestId('data-freshness-badge-refreshing').length).toBeGreaterThan(0);
+    expect(marketApi.getCrypto).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_REVALIDATE_OBSERVATION_WINDOW_MS);
+    });
+    expect(marketApi.getCrypto).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_REVALIDATE_OBSERVATION_WINDOW_MS);
+    });
+    expect(marketApi.getCrypto).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_REVALIDATE_OBSERVATION_WINDOW_MS);
+    });
+    expect(marketApi.getCrypto).toHaveBeenCalledTimes(4);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_REVALIDATE_OBSERVATION_WINDOW_MS);
+    });
+
+    expect(marketApi.getCrypto).toHaveBeenCalledTimes(4);
   });
 
   it('uses the same crypto write path for initial load and manual refresh', async () => {
