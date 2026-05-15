@@ -33,6 +33,8 @@ type DecisionCardProps = {
   locale: 'zh' | 'en';
   reason: DecisionReason;
   reportActions?: React.ReactNode;
+  qualityChip?: React.ReactNode;
+  riskBoundaryValue?: string;
   scoreLabel: string;
   scoreValue: string;
   signalLabel: string;
@@ -41,6 +43,7 @@ type DecisionCardProps = {
   sector?: string;
   summary: string;
   ticker: string;
+  triggerLevelsValue?: string;
   isGuest?: boolean;
   guestPaywall?: React.ReactNode;
 };
@@ -287,8 +290,10 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   heroValue,
   confidenceValue,
   locale,
+  qualityChip,
   reason,
   reportActions,
+  riskBoundaryValue,
   scoreValue,
   signalLabel,
   signalTone,
@@ -296,6 +301,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   sector,
   summary,
   ticker,
+  triggerLevelsValue,
   isGuest = false,
   guestPaywall,
 }) => {
@@ -311,22 +317,24 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   const activeConvictionSegments = confidencePresentation.activeSegments;
   const researchStateTiles = [
     {
-      label: isEnglish ? 'Opportunity' : '机会',
+      label: isEnglish ? 'Conclusion' : '结论',
       value: signalCommand.command,
       tone: actionTone,
-      detail: isEnglish ? 'Read-only thesis' : '只读观察结论',
     },
     {
-      label: isEnglish ? 'Risk' : '风险',
-      value: isEnglish ? 'Risk boundary' : '风险边界',
-      tone: 'neutral' as SignalTone,
-      detail: isEnglish ? 'What can break the thesis' : '什么会破坏当前观察假设',
+      label: isEnglish ? 'Risk Boundary' : '风险边界',
+      value: riskBoundaryValue || '-',
+      tone: 'bearish' as SignalTone,
     },
     {
-      label: isEnglish ? 'Context' : '上下文',
-      value: isEnglish ? 'Read-only data state' : '只读数据状态',
+      label: isEnglish ? 'Trigger Levels' : '触发位',
+      value: triggerLevelsValue || '-',
       tone: 'neutral' as SignalTone,
-      detail: isEnglish ? 'Data and source state' : '数据与来源状态',
+    },
+    {
+      label: isEnglish ? 'Conviction' : '置信度',
+      value: convictionDisplay,
+      tone: signalTone,
     },
   ];
 
@@ -368,7 +376,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
         ) : null}
 
         <div
-          className="grid gap-3 rounded-[24px] border border-white/[0.05] bg-white/[0.02] p-3 md:grid-cols-3"
+          className="grid gap-3 rounded-[24px] border border-white/[0.05] bg-white/[0.02] p-3 sm:grid-cols-2 xl:grid-cols-4"
           data-testid="home-bento-research-state-row"
         >
           {researchStateTiles.map((tile) => (
@@ -377,7 +385,6 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
               <p className={`mt-2 break-words text-sm font-medium leading-relaxed ${getActionToneClass(tile.tone, marketColorConvention)}`} style={getActionToneStyle(tile.tone, marketColorConvention)}>
                 {tile.value}
               </p>
-              <p className="mt-1 break-words text-[11px] leading-5 text-white/34">{tile.detail}</p>
             </div>
           ))}
         </div>
@@ -419,11 +426,11 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
 
             <div className="col-span-2 min-w-0 w-full xl:col-span-1" data-testid="home-bento-decision-conviction">
               <div className="flex items-end justify-between gap-4">
-                <Label micro className="text-white/40">{isEnglish ? 'AI CONVICTION' : '确信度'}</Label>
-                <span
-                  className="font-mono text-2xl font-semibold leading-none text-white md:text-3xl"
-                  data-testid="home-bento-decision-conviction-value"
-                >
+                <div className="flex min-w-0 items-center gap-2">
+                  <Label micro className="text-white/40">{isEnglish ? 'AI CONVICTION' : '置信度'}</Label>
+                  {qualityChip}
+                </div>
+                <span className="font-mono text-2xl font-semibold leading-none text-white md:text-3xl" data-testid="home-bento-decision-conviction-value">
                   {convictionDisplay}
                 </span>
               </div>

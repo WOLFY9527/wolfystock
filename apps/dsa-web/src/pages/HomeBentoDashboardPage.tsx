@@ -667,18 +667,80 @@ function summarizeEnrichmentReasons(report: DataQualityReport): string[] {
   return Array.from(new Set(reasons)).slice(0, 5);
 }
 
-function DataQualityCompactPanel({ report, locale }: { report: DataQualityReport | undefined; locale: DashboardLocale }) {
+function hasDataQualityGaps(report: DataQualityReport): boolean {
+  return report.requiredAvailable === false
+    || Boolean(report.importantMissing?.length)
+    || Boolean(report.optionalMissing?.length)
+    || Boolean(report.providerTimeouts?.length)
+    || Boolean(report.providerCooldowns?.length)
+    || report.dataQualityTier === 'partial'
+    || report.dataQualityTier === 'analysis_grade';
+}
+
+function dataQualityChipTone(report: DataQualityReport): 'used' | 'warning' | 'missing' {
+  if (report.requiredAvailable === false || report.dataQualityTier === 'insufficient') {
+    return 'missing';
+  }
+  return hasDataQualityGaps(report) ? 'warning' : 'used';
+}
+
+function buildDataQualityChipLabel(report: DataQualityReport | undefined, locale: DashboardLocale, confidenceValue?: string): string | null {
   if (!report) return null;
   const isEnglish = locale === 'en';
-  const quickDecisionText = report.requiredAvailable === false
+  const qualityText = report.requiredAvailable === false || report.dataQualityTier === 'insufficient'
+    ? (isEnglish ? 'Limited data' : '数据不足')
+    : hasDataQualityGaps(report)
+      ? (isEnglish ? 'Partial data' : '部分数据')
+      : (isEnglish ? 'Ready data' : '数据充分');
+  const confidenceText = String(confidenceValue || '').trim();
+  if (!confidenceText || confidenceText === '-') {
+    return qualityText;
+  }
+  return `${qualityText} / ${isEnglish ? 'conviction' : '置信度'}${confidenceText}`;
+}
+
+function buildDataQualityPreview(report: DataQualityReport, locale: DashboardLocale): string {
+  const isEnglish = locale === 'en';
+  if (report.requiredAvailable === false) {
+    return isEnglish ? 'Critical market data is missing. Read the report as observation only.' : '关键行情数据缺失，当前结论仅供观察。';
+  }
+  if (report.importantMissing?.length) {
+    return `${isEnglish ? 'Critical gap' : '关键缺口'}：${report.importantMissing.slice(0, 2).map((item) => dataQualityFieldLabel(item, locale)).join('、')}`;
+  }
+  if (report.providerTimeouts?.length || report.providerCooldowns?.length) {
+    return isEnglish ? 'Some external feeds are temporarily degraded.' : '部分外部数据源暂时降级。';
+  }
+  if (report.optionalMissing?.length || report.pendingSources?.length || report.failedSources?.length || report.skippedSources?.length) {
+    return isEnglish ? 'Optional enrichment is still incomplete.' : '可选增强数据仍未完全补齐。';
+  }
+  return isEnglish ? 'Data coverage looks stable.' : '当前数据覆盖稳定。';
+}
+
+function AnalysisDiagnosticsDisclosure({
+  report,
+  locale,
+  sourceSummary,
+}: {
+  report: DataQualityReport | undefined;
+  locale: DashboardLocale;
+  sourceSummary?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  if (!report && !sourceSummary) return null;
+
+  const isEnglish = locale === 'en';
+  const preview = report ? buildDataQualityPreview(report, locale) : sourceSummary || '';
+  const quickDecisionText = report?.requiredAvailable === false
     ? (isEnglish ? 'Fast decision is limited' : '快速判断受限')
     : (isEnglish ? 'Fast decision complete' : '快速判断已完成');
-  const missingCritical = report.requiredAvailable === false
-    ? (isEnglish ? 'Required quote/candle data missing' : '缺失关键行情或 K 线数据')
-    : report.importantMissing?.slice(0, 3).map((item) => dataQualityFieldLabel(item, locale)).join('、') || (isEnglish ? 'No required gaps' : '关键数据已满足');
-  const enrichmentGaps = summarizeEnrichmentGaps(report);
-  const enrichmentReasons = summarizeEnrichmentReasons(report).map((item) => dataQualityReasonLabel(item, locale));
-  const optionalText = [
+  const missingCritical = !report
+    ? (isEnglish ? 'No structured quality report' : '暂无结构化质量报告')
+    : report.requiredAvailable === false
+      ? (isEnglish ? 'Required quote/candle data missing' : '缺失关键行情或 K 线数据')
+      : report.importantMissing?.slice(0, 3).map((item) => dataQualityFieldLabel(item, locale)).join('、') || (isEnglish ? 'No required gaps' : '关键数据已满足');
+  const enrichmentGaps = report ? summarizeEnrichmentGaps(report) : [];
+  const enrichmentReasons = report ? summarizeEnrichmentReasons(report).map((item) => dataQualityReasonLabel(item, locale)) : [];
+  const optionalText = !report ? (sourceSummary || (isEnglish ? 'No enrichment notes' : '暂无增强说明')) : [
     enrichmentStatusLabel(report.enrichmentStatus, locale),
     enrichmentGaps.length
       ? `${isEnglish ? 'Missing' : '缺失项'}：${enrichmentGaps.map((item) => dataQualityFieldLabel(item, locale)).join('、')}`
@@ -692,40 +754,92 @@ function DataQualityCompactPanel({ report, locale }: { report: DataQualityReport
   ].filter(Boolean).join(' · ');
 
   return (
-    <section
-      className="rounded-[24px] border border-white/8 bg-white/[0.025] p-4"
-      data-testid="home-bento-data-quality-panel"
-    >
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+    <section className="rounded-[24px] border border-white/8 bg-white/[0.025] p-4" data-testid="home-bento-analysis-diagnostics">
+      <button
+        type="button"
+        className="flex w-full min-w-0 items-start justify-between gap-3 text-left"
+        aria-expanded={isOpen}
+        data-testid="home-bento-analysis-diagnostics-toggle"
+        onClick={() => setIsOpen((current) => !current)}
+      >
         <div className="min-w-0">
           <p className="text-[11px] font-semibold tracking-[0] text-white/50">
-            {isEnglish ? 'Data Quality' : '数据质量'}
+            {isEnglish ? 'Diagnostics' : '数据诊断'}
           </p>
           <p className="mt-1 text-lg font-semibold tracking-[0] text-white">
-            {isEnglish ? 'Grade' : '数据等级'}: {dataQualityTierLabel(report.dataQualityTier, locale)}
+            {preview}
           </p>
         </div>
-        <TraceBadge tone={report.dataQualityTier === 'insufficient' ? 'missing' : report.dataQualityTier === 'decision_grade' ? 'used' : 'warning'}>
-          {isEnglish ? 'Cap' : '置信度上限'} {report.confidenceCap ?? '--'}
-        </TraceBadge>
-      </div>
-      <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-        <div className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
-            {isEnglish ? 'Critical Gaps' : '缺失关键数据'}
-          </p>
-          <p className="mt-1 text-xs font-semibold text-emerald-200/80">{quickDecisionText}</p>
-          <p className="mt-1 break-words text-sm text-white/72">{missingCritical}</p>
+        <div className="flex shrink-0 items-center gap-2">
+          {report ? (
+            <>
+              <TraceBadge tone={dataQualityChipTone(report)}>
+                {dataQualityTierLabel(report.dataQualityTier, locale)}
+              </TraceBadge>
+              <TraceBadge tone={report.confidenceCap !== undefined && report.confidenceCap < 75 ? 'warning' : 'neutral'}>
+                {isEnglish ? 'Cap' : '上限'} {report.confidenceCap ?? '--'}
+              </TraceBadge>
+            </>
+          ) : null}
+          <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/34">
+            {isOpen ? (isEnglish ? 'Hide' : '收起') : (isEnglish ? 'Open' : '展开')}
+          </span>
         </div>
-        <div className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
-            {isEnglish ? 'Enrichment' : '增强数据'}
-          </p>
-          <p className="mt-1 break-words text-sm text-white/72">{optionalText}</p>
+      </button>
+
+      {isOpen ? (
+        <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2" data-testid="home-bento-analysis-diagnostics-panel">
+          <div className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
+              {isEnglish ? 'Critical Gaps' : '缺失关键数据'}
+            </p>
+            <p className="mt-1 text-xs font-semibold text-emerald-200/80">{quickDecisionText}</p>
+            <p className="mt-1 break-words text-sm text-white/72">{missingCritical}</p>
+          </div>
+          <div className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
+              {isEnglish ? 'Enrichment' : '增强数据'}
+            </p>
+            <p className="mt-1 break-words text-sm text-white/72">{optionalText}</p>
+          </div>
+          {sourceSummary ? (
+            <div className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2 sm:col-span-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
+                {isEnglish ? 'Decision Basis' : '决策依据'}
+              </p>
+              <p className="mt-1 break-words text-sm text-white/72">{sourceSummary}</p>
+            </div>
+          ) : null}
         </div>
-      </div>
+      ) : null}
     </section>
   );
+}
+
+function findMetricValue(metrics: DashboardField[], aliases: string[]): string | undefined {
+  const normalizedAliases = aliases.map((alias) => alias.trim().toLowerCase());
+  return metrics.find((metric) => normalizedAliases.includes(metric.label.trim().toLowerCase()))?.value;
+}
+
+function buildTriggerLevelsValue(metrics: DashboardField[], locale: DashboardLocale): string {
+  const entry = findMetricValue(metrics, locale === 'en' ? ['watch zone', 'entry zone'] : ['观察区间', '建仓区间']);
+  const target = findMetricValue(metrics, locale === 'en' ? ['upper watch zone'] : ['上方观察区']);
+  const visibleEntry = String(entry || '').trim();
+  const visibleTarget = String(target || '').trim();
+  if (visibleEntry && visibleEntry !== EMPTY_FIELD_VALUE && visibleTarget && visibleTarget !== EMPTY_FIELD_VALUE) {
+    return `${visibleEntry} -> ${visibleTarget}`;
+  }
+  if (visibleEntry && visibleEntry !== EMPTY_FIELD_VALUE) {
+    return visibleEntry;
+  }
+  if (visibleTarget && visibleTarget !== EMPTY_FIELD_VALUE) {
+    return visibleTarget;
+  }
+  return EMPTY_FIELD_VALUE;
+}
+
+function buildRiskBoundaryValue(metrics: DashboardField[], locale: DashboardLocale): string {
+  return findMetricValue(metrics, locale === 'en' ? ['invalidation line'] : ['风险失效线']) || EMPTY_FIELD_VALUE;
 }
 
 type DashboardField = {
@@ -2503,6 +2617,133 @@ function SkeletonLine({ className = '' }: { className?: string }) {
   return <div className={`${SKELETON_LINE_CLASS} ${className}`} />;
 }
 
+type AnalysisTimelineStage = {
+  key: string;
+  label: string;
+  aliases: string[];
+};
+
+function getAnalysisTimelineStages(locale: DashboardLocale): AnalysisTimelineStage[] {
+  return locale === 'en'
+    ? [
+        { key: 'market', label: 'Market ID', aliases: ['market', 'detect', 'symbol'] },
+        { key: 'quote-tech', label: 'Quote / Technicals', aliases: ['quote', 'price', 'technical', 'candle', 'indicator', '行情', '技术'] },
+        { key: 'fundamentals', label: 'Fundamentals', aliases: ['fundamental', 'earnings', '财报', 'basic'] },
+        { key: 'news-risk', label: 'News / Risk', aliases: ['news', 'risk', 'sentiment', 'headline'] },
+        { key: 'ai', label: 'AI Synthesis', aliases: ['ai', 'llm', 'reason', 'decision', 'analysis'] },
+        { key: 'report', label: 'Report Build', aliases: ['report', 'summary', 'output', 'final'] },
+      ]
+    : [
+        { key: 'market', label: '市场识别', aliases: ['market', 'detect', 'symbol', '市场'] },
+        { key: 'quote-tech', label: '行情/技术面', aliases: ['quote', 'price', 'technical', 'candle', 'indicator', '行情', '技术', 'k线'] },
+        { key: 'fundamentals', label: '基本面', aliases: ['fundamental', 'earnings', '财报', '基本面'] },
+        { key: 'news-risk', label: '新闻/风险', aliases: ['news', 'risk', 'sentiment', '新闻', '风险'] },
+        { key: 'ai', label: 'AI 综合', aliases: ['ai', 'llm', 'reason', 'decision', 'analysis', '综合'] },
+        { key: 'report', label: '报告生成', aliases: ['report', 'summary', 'output', 'final', '报告'] },
+      ];
+}
+
+function resolveTimelineStageIndex(module: TaskProgressModule, stages: AnalysisTimelineStage[]): number {
+  const haystack = `${module.key || ''} ${module.name || ''} ${module.detail || ''}`.toLowerCase();
+  const matchedIndex = stages.findIndex((stage) => stage.aliases.some((alias) => haystack.includes(alias.toLowerCase())));
+  return matchedIndex >= 0 ? matchedIndex : -1;
+}
+
+function buildTimelineProgressState(
+  locale: DashboardLocale,
+  progressModules: TaskProgressModule[] | undefined,
+  message: string | undefined,
+  progress: number | undefined,
+  phaseTick: number,
+): Array<{ key: string; label: string; status: 'pending' | 'running' | 'completed' | 'failed'; detail?: string }> {
+  const stages = getAnalysisTimelineStages(locale);
+  const timeline: Array<{ key: string; label: string; status: 'pending' | 'running' | 'completed' | 'failed'; detail?: string }> = stages.map((stage) => ({
+    key: stage.key,
+    label: stage.label,
+    status: 'pending',
+    detail: undefined as string | undefined,
+  }));
+  const visibleModules = Array.isArray(progressModules) ? progressModules.filter(Boolean) : [];
+
+  visibleModules.forEach((module) => {
+    const stageIndex = resolveTimelineStageIndex(module, stages);
+    if (stageIndex < 0) {
+      return;
+    }
+    const normalizedStatus = module.status === 'failed'
+      ? 'failed'
+      : module.status === 'completed'
+        ? 'completed'
+        : module.status === 'running'
+          ? 'running'
+          : 'pending';
+    const current = timeline[stageIndex];
+    if (current.status !== 'failed') {
+      if (normalizedStatus === 'failed' || normalizedStatus === 'running' || (normalizedStatus === 'completed' && current.status === 'pending')) {
+        current.status = normalizedStatus;
+      }
+    }
+    if (module.detail && !current.detail) {
+      current.detail = module.detail;
+    }
+  });
+
+  const hasExplicitModuleState = timeline.some((stage) => stage.status !== 'pending');
+  if (!hasExplicitModuleState) {
+    const coarseIndex = typeof progress === 'number' && progress > 0
+      ? Math.max(0, Math.min(stages.length - 1, Math.floor((Math.min(progress, 99) / 100) * stages.length)))
+      : phaseTick % stages.length;
+    timeline.forEach((stage, index) => {
+      stage.status = index < coarseIndex ? 'completed' : index === coarseIndex ? 'running' : 'pending';
+    });
+  } else if (!timeline.some((stage) => stage.status === 'running')) {
+    const lastCompletedIndex = Math.max(...timeline.map((stage, index) => (stage.status === 'completed' ? index : -1)));
+    const nextIndex = Math.min(stages.length - 1, Math.max(0, lastCompletedIndex + 1));
+    if (timeline[nextIndex].status === 'pending') {
+      timeline[nextIndex].status = 'running';
+    }
+  }
+
+  const activeIndex = timeline.findIndex((stage) => stage.status === 'running');
+  if (message && activeIndex >= 0 && !timeline[activeIndex].detail) {
+    timeline[activeIndex].detail = message;
+  }
+  return timeline;
+}
+
+function timelineStatusLabel(status: 'pending' | 'running' | 'completed' | 'failed', locale: DashboardLocale): string {
+  if (locale === 'en') {
+    if (status === 'completed') return 'done';
+    if (status === 'running') return 'live';
+    if (status === 'failed') return 'risk';
+    return 'queued';
+  }
+  if (status === 'completed') return '完成';
+  if (status === 'running') return '进行中';
+  if (status === 'failed') return '异常';
+  return '待执行';
+}
+
+function timelineStageTone(status: 'pending' | 'running' | 'completed' | 'failed'): string {
+  if (status === 'completed') return 'border-emerald-300/16 bg-emerald-300/8 text-emerald-100/84';
+  if (status === 'running') return 'border-indigo-200/30 bg-indigo-300/10 text-indigo-50';
+  if (status === 'failed') return 'border-rose-300/20 bg-rose-300/10 text-rose-100/84';
+  return 'border-white/[0.07] bg-white/[0.02] text-white/48';
+}
+
+function timelineDotTone(status: 'pending' | 'running' | 'completed' | 'failed'): string {
+  if (status === 'completed') return 'bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.45)]';
+  if (status === 'running') return 'bg-indigo-200 shadow-[0_0_18px_rgba(165,180,252,0.55)] animate-pulse';
+  if (status === 'failed') return 'bg-rose-300 shadow-[0_0_14px_rgba(251,113,133,0.45)]';
+  return 'bg-white/18';
+}
+
+function buildTimelineLeadCopy(locale: DashboardLocale, activeDetail?: string, message?: string): string {
+  if (activeDetail) return activeDetail;
+  if (message) return message;
+  return locale === 'en' ? 'Wolfy AI is advancing through staged checks.' : 'Wolfy AI 正在按阶段推进分析。';
+}
+
 function InPlaceDecisionSkeleton({
   locale,
   ticker,
@@ -2516,9 +2757,21 @@ function InPlaceDecisionSkeleton({
   message?: string;
   progress?: number;
 }) {
-  const visibleModules = Array.isArray(progressModules) ? progressModules.slice(0, 5) : [];
-  const activeModule = visibleModules.find((module) => module.status === 'running') || visibleModules[0];
-  const progressValue = typeof progress === 'number' ? Math.max(0, Math.min(progress, 99)) : 12;
+  const [phaseTick, setPhaseTick] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setPhaseTick((current) => current + 1);
+    }, 1200);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const timelineStages = useMemo(
+    () => buildTimelineProgressState(locale, progressModules, message, progress, phaseTick),
+    [locale, progressModules, message, progress, phaseTick],
+  );
+  const activeStage = timelineStages.find((stage) => stage.status === 'running') || timelineStages[0];
+  const leadCopy = buildTimelineLeadCopy(locale, activeStage?.detail, message);
+
   return (
     <BentoCard
       eyebrow={locale === 'en' ? 'WOLFY AI ANALYSIS' : 'WOLFY AI 分析'}
@@ -2534,53 +2787,52 @@ function InPlaceDecisionSkeleton({
           <span className="font-mono text-xs uppercase tracking-[0.22em] text-indigo-100/52">{ticker}</span>
         </div>
 
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-[28px] border border-indigo-400/10 bg-black/10 px-5 py-10">
-          <img
-            src="/wolfystock-logo-mark.png"
-            alt="WolfyStock analyzing"
-            className="h-9 w-9 rounded-full object-contain bg-white/[0.03] p-1 shadow-[0_0_22px_rgba(99,102,241,0.22)] [animation:spin_2.8s_linear_infinite]"
-          />
-          <p className="text-center text-xs font-semibold uppercase tracking-[0.22em] text-indigo-100/70">
-            {activeModule?.detail || message || (locale === 'en' ? 'Wolfy AI reasoning...' : 'Wolfy AI 引擎推理中...')}
-          </p>
-          <div className="h-1 w-full max-w-[220px] overflow-hidden rounded-full bg-white/[0.07]">
-            <div
-              className="h-full rounded-full bg-indigo-200/80 shadow-[0_0_18px_rgba(165,180,252,0.38)] transition-all duration-500"
-              style={{ width: `${progressValue}%` }}
-            />
-          </div>
-        </div>
-
-        <div className="grid gap-3 rounded-[28px] border border-white/[0.06] bg-black/10 p-4">
-          {visibleModules.length > 0 ? (
-            <div className="grid gap-2" data-testid="home-bento-progress-stages">
-              {visibleModules.map((module) => {
-                const tone = module.status === 'completed'
-                  ? 'border-emerald-300/20 text-emerald-100/75'
-                  : module.status === 'failed'
-                    ? 'border-rose-300/25 text-rose-100/80'
-                    : module.status === 'running'
-                      ? 'border-indigo-200/35 text-indigo-100'
-                      : 'border-white/[0.07] text-white/38';
-                return (
-                  <div
-                    key={module.key}
-                    className={`flex min-w-0 items-center justify-between gap-3 rounded-full border bg-white/[0.025] px-3 py-2 text-[11px] ${tone}`}
-                  >
-                    <span className="min-w-0 truncate font-semibold">{module.name}</span>
-                    <span className="shrink-0 font-mono uppercase tracking-[0.16em]">{module.status}</span>
-                  </div>
-                );
-              })}
+        <div className="flex flex-1 flex-col gap-4 rounded-[28px] border border-indigo-400/10 bg-black/10 px-5 py-5">
+          <div className="flex min-w-0 items-center gap-4 rounded-[22px] border border-white/[0.06] bg-white/[0.02] px-4 py-3">
+            <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-indigo-200/18 bg-white/[0.03]">
+              <div className="absolute inset-1 rounded-full border border-indigo-200/18 animate-pulse" />
+              <img
+                src="/wolfystock-logo-mark.png"
+                alt="WolfyStock analyzing"
+                className="relative h-7 w-7 rounded-full object-contain"
+              />
             </div>
-          ) : (
-            <>
-              <SkeletonLine className="h-3 w-24" />
-              <SkeletonLine className="h-3 w-full" />
-              <SkeletonLine className="h-3 w-5/6" />
-              <SkeletonLine className="h-3 w-2/3" />
-            </>
-          )}
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-indigo-100/55">
+                {locale === 'en' ? 'Staged analysis' : '分阶段分析'}
+              </p>
+              <p className="mt-1 text-sm font-medium leading-6 text-white/78">
+                {leadCopy}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-2" data-testid="home-bento-progress-timeline">
+            {timelineStages.map((stage, index) => {
+              const isRunning = stage.status === 'running';
+              return (
+                <div
+                  key={stage.key}
+                  className={`relative overflow-hidden rounded-[20px] border px-4 py-3 ${timelineStageTone(stage.status)}`}
+                  data-testid={`home-bento-progress-stage-${stage.key}`}
+                >
+                  {isRunning ? <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-indigo-200/18 via-indigo-100/6 to-transparent animate-pulse" /> : null}
+                  <div className="relative flex min-w-0 items-start justify-between gap-4">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${timelineDotTone(stage.status)}`} />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-current">{stage.label}</p>
+                        {stage.detail ? <p className="mt-1 text-xs leading-5 text-white/54">{stage.detail}</p> : null}
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/42">
+                      {String(index + 1).padStart(2, '0')} {timelineStatusLabel(stage.status, locale)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </BentoCard>
@@ -3342,6 +3594,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           </section>
         ) : (() => {
           const readyCopy = dashboardData;
+          const qualityChipLabel = !isGuest
+            ? buildDataQualityChipLabel(activeDataQualityReport, locale, readyCopy.decision.confidenceValue)
+            : null;
+          const riskBoundaryValue = buildRiskBoundaryValue(readyCopy.strategy.metrics, locale);
+          const triggerLevelsValue = buildTriggerLevelsValue(readyCopy.strategy.metrics, locale);
           return (
             <div
               data-testid="home-bento-grid"
@@ -3382,11 +3639,13 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         badge={readyCopy.decision.badge}
                         summary={readyCopy.decision.summary}
                         locale={locale}
+                        qualityChip={qualityChipLabel ? <TraceBadge tone={activeDataQualityReport ? dataQualityChipTone(activeDataQualityReport) : 'neutral'}>{qualityChipLabel}</TraceBadge> : undefined}
                         reason={{ title: readyCopy.decision.reasonTitle, body: readyCopy.decision.reasonBody }}
-                        sourceSummary={!isGuest ? sourceSummary : undefined}
+                        riskBoundaryValue={riskBoundaryValue}
                         reportActions={reportActionButtons}
                         isGuest={isGuest}
                         guestPaywall={guestPaywall}
+                        triggerLevelsValue={triggerLevelsValue}
                       />
                     </div>
                   )}
@@ -3422,11 +3681,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           researchCard="opportunity"
                           onOpenDetails={() => setActiveDrawer('strategy')}
                         />
-                        {activeDataQualityReport ? (
-                          <div className="mt-6">
-                            <DataQualityCompactPanel report={activeDataQualityReport} locale={locale} />
-                          </div>
-                        ) : null}
                         <div
                           className="mt-6 grid w-full grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:flex-1"
                           data-testid="home-bento-secondary-grid"
@@ -3452,6 +3706,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   </>
                 )}
               </div>
+              {!isHomeAnalyzing && !isGuest && (activeDataQualityReport || sourceSummary) ? (
+                <div className="col-span-1 xl:col-span-12">
+                  <AnalysisDiagnosticsDisclosure report={activeDataQualityReport} locale={locale} sourceSummary={sourceSummary} />
+                </div>
+              ) : null}
             </div>
           );
         })()}

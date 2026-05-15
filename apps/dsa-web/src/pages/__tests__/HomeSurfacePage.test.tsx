@@ -318,6 +318,16 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByRole('link', { name: /持仓/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /回测/i })).not.toBeInTheDocument();
     expect(screen.getByText('WOLFY AI 分析')).toBeInTheDocument();
+    const decisionCard = screen.getByTestId('home-bento-card-decision');
+    expect(within(decisionCard).getByText('结论')).toBeInTheDocument();
+    expect(within(decisionCard).getByText('风险边界')).toBeInTheDocument();
+    expect(within(decisionCard).getByText('触发位')).toBeInTheDocument();
+    expect(within(decisionCard).getAllByText('置信度').length).toBeGreaterThan(0);
+    expect(within(decisionCard).queryByText('机会')).not.toBeInTheDocument();
+    expect(within(decisionCard).queryByText('风险')).not.toBeInTheDocument();
+    expect(within(decisionCard).queryByText('上下文')).not.toBeInTheDocument();
+    expect(within(decisionCard).queryByText('只读数据状态')).not.toBeInTheDocument();
+    expect(within(decisionCard).queryByText('数据与来源状态')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-header-actions')).toHaveTextContent('完整报告');
     expect(screen.getByTestId('home-bento-drawer-trigger-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-tech')).toBeInTheDocument();
@@ -386,9 +396,9 @@ describe('HomeSurfacePage', () => {
     const macdSignal = screen.getByTestId('home-bento-tech-signal-MACD');
     const macdSignalValue = macdSignal.querySelectorAll('span')[1];
     expect(screen.getByText('观察条件区')).toHaveClass('text-[10px]', 'tracking-widest', 'text-white/40', 'truncate');
-    expect(screen.getByText('121.80 - 124.60')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed');
-    expect(screen.getByText('133.50')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed', 'text-emerald-400');
-    expect(screen.getByText('117.40')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed', 'text-rose-400');
+    expect(within(entryMetric).getByText('121.80 - 124.60')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed');
+    expect(within(targetMetric).getByText('133.50')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed', 'text-emerald-400');
+    expect(within(stopLossMetric).getByText('117.40')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed', 'text-rose-400');
     expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-white');
     expect(macdSignalValue).not.toBeUndefined();
     expect(macdSignal).toHaveClass('flex', 'flex-col', 'gap-1', 'py-2', 'border-b', 'border-white/5');
@@ -422,27 +432,36 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('最近没有基本面特征')).not.toBeInTheDocument();
   });
 
-  it('renders data quality compact panel without developer diagnostics', async () => {
+  it('keeps data quality diagnostics collapsed by default and expandable without developer diagnostics', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
     await screen.findByText('Oracle Corporation');
 
-    const panel = screen.getByTestId('home-bento-data-quality-panel');
-    expect(panel).toHaveTextContent('数据等级: 分析级');
-    expect(panel).toHaveTextContent('置信度上限 70');
-    expect(panel).toHaveTextContent('快速判断已完成');
-    expect(panel).toHaveTextContent('基本面数据缺失');
-    expect(panel).toHaveTextContent('增强数据补充中');
-    expect(panel).toHaveTextContent('缺失项：新闻数据暂缺、基本面数据缺失');
-    expect(panel).toHaveTextContent('新闻数据暂缺');
-    expect(panel).toHaveTextContent('部分外部数据暂不可用');
+    const panel = screen.getByTestId('home-bento-analysis-diagnostics');
+    const toggle = screen.getByTestId('home-bento-analysis-diagnostics-toggle');
+    expect(panel).toHaveTextContent('数据诊断');
+    expect(panel).toHaveTextContent('关键缺口：基本面数据缺失');
+    expect(panel).toHaveTextContent('分析级');
+    expect(panel).toHaveTextContent('上限 70');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('home-bento-analysis-diagnostics-panel')).not.toBeInTheDocument();
     expect(panel).not.toHaveTextContent('fundamentals.eps');
     expect(panel).not.toHaveTextContent('optional_news_timeout');
     expect(panel).not.toHaveTextContent('gnews:news');
     expect(panel).not.toHaveTextContent('fmp:fundamentals');
-    expect(screen.queryByTestId('home-bento-data-quality-developer')).not.toBeInTheDocument();
-    expect(panel).not.toHaveTextContent(/开发者|Developer|reason codes|原因码/i);
-    expect(panel).not.toHaveTextContent(/api[_-]?key|token|secret|stack trace|sk-/i);
+
+    fireEvent.click(toggle);
+
+    const expanded = await screen.findByTestId('home-bento-analysis-diagnostics-panel');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(expanded).toHaveTextContent('快速判断已完成');
+    expect(expanded).toHaveTextContent('基本面数据缺失');
+    expect(expanded).toHaveTextContent('增强数据补充中');
+    expect(expanded).toHaveTextContent('缺失项：新闻数据暂缺、基本面数据缺失');
+    expect(expanded).toHaveTextContent('新闻数据暂缺');
+    expect(expanded).toHaveTextContent('部分外部数据暂不可用');
+    expect(expanded).not.toHaveTextContent(/开发者|Developer|reason codes|原因码/i);
+    expect(expanded).not.toHaveTextContent(/api[_-]?key|token|secret|stack trace|sk-/i);
   });
 
   it('switches decision and strategy tones when the user prefers CN market colors', async () => {
@@ -453,8 +472,8 @@ describe('HomeSurfacePage', () => {
 
     await screen.findByText('Oracle Corporation');
     expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-white');
-    expect(screen.getByText('133.50')).toHaveClass('text-rose-400');
-    expect(screen.getByText('117.40')).toHaveClass('text-emerald-400');
+    expect(within(screen.getByTestId('home-bento-strategy-metric-上方观察区')).getByText('133.50')).toHaveClass('text-rose-400');
+    expect(within(screen.getByTestId('home-bento-strategy-metric-风险失效线')).getByText('117.40')).toHaveClass('text-emerald-400');
   });
 
   it('lazy-loads the full decision report drawer only after the trigger is opened', async () => {
@@ -851,7 +870,7 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '决策来源' }));
     const panel = await screen.findByTestId('home-bento-decision-trace-panel');
     expect(within(panel).queryByTestId('home-bento-decision-trace-developer')).not.toBeInTheDocument();
-    const sourceSummary = screen.getByTestId('home-bento-decision-source-summary');
+    const sourceSummary = screen.getByTestId('home-bento-analysis-diagnostics');
     expect(sourceSummary).toHaveTextContent('依据需复核');
     expect(sourceSummary).not.toHaveTextContent('结构未确认');
     expect(sourceSummary).not.toHaveTextContent('来源：');
@@ -962,8 +981,8 @@ describe('HomeSurfacePage', () => {
     renderSurface();
     await screen.findByText('Oracle Corporation');
 
-    expect(screen.getByTestId('home-bento-decision-source-summary')).not.toHaveTextContent('未包含决策溯源');
-    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('依据需复核');
+    expect(screen.getByTestId('home-bento-analysis-diagnostics')).not.toHaveTextContent('未包含决策溯源');
+    expect(screen.getByTestId('home-bento-analysis-diagnostics')).toHaveTextContent('依据需复核');
     expect(screen.getByTestId('home-bento-decision-conviction-value')).not.toHaveTextContent('0%');
 
     fireEvent.click(screen.getByRole('button', { name: '决策来源' }));
@@ -1069,7 +1088,8 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '决策来源' }));
 
     expect(await screen.findByTestId('home-bento-decision-trace-panel')).toHaveTextContent('当前分析未包含决策溯源');
-    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('缺少决策依据');
+    fireEvent.click(screen.getByTestId('home-bento-analysis-diagnostics-toggle'));
+    expect(await screen.findByTestId('home-bento-analysis-diagnostics-panel')).toHaveTextContent('缺少决策依据');
     expect(screen.queryByTestId('home-bento-decision-trace-developer')).not.toBeInTheDocument();
   });
 
@@ -1233,10 +1253,12 @@ describe('HomeSurfacePage', () => {
     renderSurface();
 
     await screen.findByText('Oracle Corporation');
-    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('可用');
-    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('缺少决策依据');
-    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('依据需复核');
-    expect(screen.getByTestId('home-bento-decision-source-summary')).not.toHaveTextContent('结构未确认');
+    fireEvent.click(screen.getByTestId('home-bento-analysis-diagnostics-toggle'));
+    const diagnosticsPanel = await screen.findByTestId('home-bento-analysis-diagnostics-panel');
+    expect(diagnosticsPanel).toHaveTextContent('可用');
+    expect(diagnosticsPanel).toHaveTextContent('缺少决策依据');
+    expect(diagnosticsPanel).toHaveTextContent('依据需复核');
+    expect(diagnosticsPanel).not.toHaveTextContent('结构未确认');
     expect(screen.getByTestId('home-bento-decision-conviction-value')).toHaveTextContent('-');
     expect(screen.queryByText('0%')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '重新分析' })).toBeEnabled();
@@ -1342,10 +1364,17 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('animate-pulse', 'bg-white/[0.05]', 'border-indigo-500/20');
     expect(screen.getByTestId('home-bento-card-strategy')).toHaveClass('animate-pulse', 'bg-white/[0.05]', 'border-indigo-500/20');
     expect(screen.getByRole('img', { name: 'WolfyStock analyzing' })).toHaveAttribute('src', '/wolfystock-logo-mark.png');
-    expect(screen.getByRole('img', { name: 'WolfyStock analyzing' })).toHaveClass('[animation:spin_2.8s_linear_infinite]', 'shadow-[0_0_22px_rgba(99,102,241,0.22)]');
+    expect(screen.getByRole('img', { name: 'WolfyStock analyzing' })).not.toHaveClass('[animation:spin_2.8s_linear_infinite]');
     expect(screen.getByTestId('home-bento-inplace-loading-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-inplace-loading-fundamentals')).toBeInTheDocument();
-    expect(screen.getByText('Wolfy AI 引擎推理中...')).toBeInTheDocument();
+    expect(screen.getByText('分阶段分析')).toBeInTheDocument();
+    const timeline = screen.getByTestId('home-bento-progress-timeline');
+    expect(timeline).toHaveTextContent('市场识别');
+    expect(timeline).toHaveTextContent('行情/技术面');
+    expect(timeline).toHaveTextContent('基本面');
+    expect(timeline).toHaveTextContent('新闻/风险');
+    expect(timeline).toHaveTextContent('AI 综合');
+    expect(timeline).toHaveTextContent('报告生成');
     expect(screen.queryByTestId('home-bento-progress-summary')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-runtime-panel')).not.toBeInTheDocument();
     expect(screen.queryByText('LLM')).not.toBeInTheDocument();
@@ -2691,8 +2720,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('WolfyStock 已接受该股票代码，首份完整报告生成期间会继续保留当前卡片骨架。')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-bento-inplace-loading-decision')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-inplace-loading-strategy')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByTestId('home-bento-progress-stages')).toHaveTextContent('行情'));
-    expect(screen.getByTestId('home-bento-progress-stages')).toHaveTextContent('基本面');
+    await waitFor(() => expect(screen.getByTestId('home-bento-progress-timeline')).toHaveTextContent('行情/技术面'));
+    expect(screen.getByTestId('home-bento-progress-timeline')).toHaveTextContent('基本面');
     expect(screen.queryByTestId('home-bento-progress-summary')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();
@@ -2741,7 +2770,7 @@ describe('HomeSurfacePage', () => {
     renderSurface('/?symbol=WULF&task_id=task-wulf&source=watchlist&market=US');
 
     expect(await screen.findByTestId('home-bento-inplace-loading-decision')).toHaveTextContent('WULF');
-    await waitFor(() => expect(screen.getByTestId('home-bento-progress-stages')).toHaveTextContent('Running AI analysis'));
+    await waitFor(() => expect(screen.getByTestId('home-bento-progress-timeline')).toHaveTextContent('Running AI analysis'));
     expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();
   });
 
