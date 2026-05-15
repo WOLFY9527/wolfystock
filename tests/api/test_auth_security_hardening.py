@@ -46,11 +46,12 @@ class AuthSecurityHardeningTestCase(unittest.TestCase):
         self.db_path = self.root / "security.db"
         self.db = DatabaseManager(db_url=f"sqlite:///{self.db_path}")
 
-        from api.v1.endpoints import admin_security, auth as auth_endpoint
+        from api.v1.endpoints import admin_security, analysis as analysis_endpoint, auth as auth_endpoint
 
         self.app = FastAPI()
         self.app.include_router(auth_endpoint.router, prefix="/api/v1/auth")
         self.app.include_router(admin_security.router, prefix="/api/v1/admin")
+        self.app.include_router(analysis_endpoint.router, prefix="/api/v1/analysis")
         add_auth_middleware(self.app)
         self.client = TestClient(self.app)
 
@@ -104,25 +105,30 @@ class AuthSecurityHardeningTestCase(unittest.TestCase):
                 .all()
             )
 
-    def _login(self, username: str, password: str, *, origin: str | None = None):
+    def _login(self, username: str, password: str, *, origin: str | None = None, client: TestClient | None = None):
+        active_client = client or self.client
         headers = {"X-Forwarded-For": "198.51.100.10"}
         if origin:
             headers["Origin"] = origin
-        return self.client.post(
+        return active_client.post(
             "/api/v1/auth/login",
             json={"username": username, "password": password},
             headers=headers,
         )
 
-    def _reauth_admin(self, *, origin: str | None = None):
+    def _reauth_admin(self, *, origin: str | None = None, client: TestClient | None = None):
+        active_client = client or self.client
         headers = {"X-Forwarded-For": "198.51.100.10"}
         if origin:
             headers["Origin"] = origin
-        return self.client.post(
+        return active_client.post(
             "/api/v1/auth/reauth",
             json={"password": "adminpass123"},
             headers=headers,
         )
+
+    def _new_client(self, base_url: str) -> TestClient:
+        return TestClient(self.app, base_url=base_url)
 
     def test_rate_limit_tracks_ip_and_account_buckets_durably(self) -> None:
         self.assertTrue(auth.check_rate_limit("198.51.100.1", "alice", admin=False))
@@ -237,6 +243,86 @@ class AuthSecurityHardeningTestCase(unittest.TestCase):
         self.assertEqual(rejected.json()["error"], "csrf_origin_forbidden")
         self.assertEqual(missing.status_code, 403)
         self.assertEqual(allowed.status_code, 200)
+
+    def test_analysis_post_same_origin_127001_reaches_validation_error_not_csrf(self) -> None:
+        with self._new_client("http://127.0.0.1:8000") as client:
+            login = self._login("alice", "userpass123", origin="http://127.0.0.1:8000", client=client)
+            self.assertEqual(login.status_code, 200)
+
+            response = client.post(
+                "/api/v1/analysis/analyze",
+                json={},
+                headers={"Origin": "http://127.0.0.1:8000"},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"]["error"], "validation_error")
+
+    def test_analysis_post_same_origin_localhost_reaches_validation_error_not_csrf(self) -> None:
+        with self._new_client("http://localhost:8000") as client:
+            login = self._login("alice", "userpass123", origin="http://localhost:8000", client=client)
+            self.assertEqual(login.status_code, 200)
+
+            response = client.post(
+                "/api/v1/analysis/analyze",
+                json={},
+                headers={"Origin": "http://localhost:8000"},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"]["error"], "validation_error")
+
+    def test_analysis_post_same_origin_uses_request_host_dynamically(self) -> None:
+        with self._new_client("http://127.0.0.1:8899") as client:
+            login = self._login("alice", "userpass123", origin="http://127.0.0.1:8899", client=client)
+            self.assertEqual(login.status_code, 200)
+
+            response = client.post(
+                "/api/v1/analysis/analyze",
+                json={},
+                headers={"Origin": "http://127.0.0.1:8899"},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"]["error"], "validation_error")
+
+    def test_analysis_post_rejects_evil_origin_for_authenticated_cookie(self) -> None:
+        with self._new_client("http://127.0.0.1:8000") as client:
+            login = self._login("alice", "userpass123", origin="http://127.0.0.1:8000", client=client)
+            self.assertEqual(login.status_code, 200)
+
+            response = client.post(
+                "/api/v1/analysis/analyze",
+                json={},
+                headers={"Origin": "https://evil.example.test"},
+            )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"], "csrf_origin_forbidden")
+
+    def test_analysis_post_keeps_trusted_dev_origin_for_regular_user(self) -> None:
+        with self._new_client("http://127.0.0.1:8000") as client:
+            login = self._login("alice", "userpass123", origin="http://localhost:5173", client=client)
+            self.assertEqual(login.status_code, 200)
+
+            response = client.post(
+                "/api/v1/analysis/analyze",
+                json={},
+                headers={"Origin": "http://localhost:5173"},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"]["error"], "validation_error")
+
+    def test_analysis_post_without_auth_stays_401(self) -> None:
+        response = self.client.post(
+            "/api/v1/analysis/analyze",
+            json={},
+            headers={"Origin": "http://localhost:5173"},
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "unauthorized")
 
     def test_local_dev_allows_missing_origin_for_cookie_write(self) -> None:
         login = self._login("admin", "adminpass123", origin="http://localhost:5173")

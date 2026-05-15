@@ -74,11 +74,16 @@ def _request_origin(request: Request) -> str | None:
     return _origin_from_value(request.headers.get("Referer"))
 
 
+def _same_origin_for_request(request: Request) -> str | None:
+    return _origin_from_value(str(request.url))
+
+
 def _csrf_origin_allowed(request: Request) -> bool:
     origin = _request_origin(request)
     if origin is None:
         return not is_production_mode()
-    return origin in _trusted_origins()
+    request_origin = _same_origin_for_request(request)
+    return origin == request_origin or origin in _trusted_origins()
 
 
 def _error_response(request: Request, *, status_code: int, error: str, message: str) -> JSONResponse:
