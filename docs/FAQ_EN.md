@@ -124,6 +124,24 @@ PROXY_PORT=10809
 
 ---
 
+### Q7b: What should I do if FRED / Treasury official macro requests fail with `CERTIFICATE_VERIFY_FAILED`?
+
+**Symptom**: Local FRED / Treasury official macro requests fail with `CERTIFICATE_VERIFY_FAILED`.
+
+**Cause**: The official macro transport uses Python stdlib `urllib.request.urlopen`. On some local Python / OpenSSL installs, the CA root bundle is stale, so the failure comes from the local TLS trust chain.
+
+**Solution**:
+1. Treat this as a local trust-store problem first; it is usually not a FRED API key failure
+2. Point `SSL_CERT_FILE` at the `certifi` CA bundle in your local dev shell:
+   ```bash
+   export SSL_CERT_FILE="$(python -c 'import certifi; print(certifi.where())')"
+   ```
+3. Re-run the affected command or service process
+
+> Note: Do not work around this by disabling certificate verification.
+
+---
+
 ### LLM Configuration
 
 > Full details: [LLM Config Guide](LLM_CONFIG_GUIDE_EN.md).

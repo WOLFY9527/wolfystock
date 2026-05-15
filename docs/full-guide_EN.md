@@ -302,6 +302,18 @@ Default schedule: Every weekday at **18:00 (Beijing Time)** automatic execution.
 > - `FUNDAMENTAL_STAGE_TIMEOUT_SECONDS=1.5` indicates the target budget for the newly added fundamental stage, not a strict hard SLA.
 > - For a hard SLA, please upgrade to isolated child process execution in future versions to forcefully terminate timeout tasks.
 
+#### Official Macro TLS Troubleshooting
+
+The official macro transport for FRED / Treasury uses Python stdlib `urllib.request.urlopen`, so TLS verification follows the local Python / OpenSSL trust store rather than the default `requests/certifi` path.
+
+On some local Python 3.11 framework installs, stale CA roots can cause FRED / Treasury requests to fail with `CERTIFICATE_VERIFY_FAILED`. This is a local trust-store issue, not an API key failure.
+
+The safe local-dev workaround is to point `SSL_CERT_FILE` at the `certifi` CA bundle explicitly:
+
+```bash
+export SSL_CERT_FILE="$(python -c 'import certifi; print(certifi.where())')"
+```
+
 ### Other Configuration
 
 | Variable | Description | Default |

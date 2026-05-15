@@ -326,6 +326,18 @@ python3 scripts/smoke_backtest_rule.py
 > - `FUNDAMENTAL_STAGE_TIMEOUT_SECONDS=1.5` 表示新增基本面阶段的目标预算，不是严格硬 SLA。
 > - 若要硬 SLA，请在后续版本升级为子进程隔离执行并在超时后强制终止。
 
+#### 官方宏观 TLS 排障
+
+官方宏观 transport（FRED / Treasury）走的是 Python 标准库 `urllib.request.urlopen`，因此 TLS 校验依赖本地 Python / OpenSSL 的系统信任根，不是 `requests/certifi` 的默认链路。
+
+如果本地 Python 3.11 framework 安装的 CA 根过旧，FRED / Treasury 可能报 `CERTIFICATE_VERIFY_FAILED`。这通常是本地信任库问题，不是 API key 问题。
+
+安全的本地开发绕过方式是显式指向 `certifi` CA bundle：
+
+```bash
+export SSL_CERT_FILE="$(python -c 'import certifi; print(certifi.where())')"
+```
+
 ### 其他配置
 
 | 变量名 | 说明 | 默认值 |

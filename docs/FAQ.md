@@ -126,6 +126,24 @@ PROXY_PORT=10809
 
 ---
 
+### Q7b: FRED / Treasury 官方宏观数据报 `CERTIFICATE_VERIFY_FAILED` 怎么办？
+
+**现象**：本地拉取 FRED / Treasury 官方宏观数据时报 `CERTIFICATE_VERIFY_FAILED`。
+
+**原因**：官方宏观 transport 走的是 Python 标准库 `urllib.request.urlopen`。部分本地 Python / OpenSSL 安装的 CA 根证书可能过旧，因此会命中本地 TLS 信任链问题。
+
+**解决方案**：
+1. 先确认这不是 FRED API key 失败；该报错通常是本地证书信任库问题
+2. 在本地开发环境显式指定 `certifi` CA bundle：
+   ```bash
+   export SSL_CERT_FILE="$(python -c 'import certifi; print(certifi.where())')"
+   ```
+3. 重新运行对应命令或服务进程
+
+> ⚠️ 注意：不要通过关闭证书校验来绕过该问题。
+
+---
+
 ### LLM 配置常见问题
 
 > 完整说明见 [LLM 配置指南](LLM_CONFIG_GUIDE.md)。
