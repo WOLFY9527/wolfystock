@@ -179,6 +179,8 @@ describe('Shell', () => {
     expect(liquidityLink).toHaveClass('is-active');
     expect(overviewLink).toHaveAttribute('href', '/zh/market-overview');
     expect(overviewLink).not.toHaveClass('is-active');
+    expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
   });
 
   it('highlights the localized rotation radar nav item independently from market overview', async () => {
@@ -200,6 +202,8 @@ describe('Shell', () => {
     expect(rotationLink).toHaveClass('is-active');
     expect(overviewLink).toHaveAttribute('href', '/zh/market-overview');
     expect(overviewLink).not.toHaveClass('is-active');
+    expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
   });
 
   it('shows the guest navigation routes without member-only account controls', () => {

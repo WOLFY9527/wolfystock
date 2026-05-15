@@ -13,10 +13,10 @@ import {
   TerminalNestedBlock,
   TerminalNotice,
   TerminalPageHeading,
-  TerminalPageShell,
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal/TerminalPrimitives';
+import { WideWorkspacePageShell } from '../components/layout/WideWorkspaceShell';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { marketRotationApi, type MarketRotationRadarResponse, type MarketRotationRiskLabel, type MarketRotationStage, type MarketRotationSummaryItem, type MarketRotationTheme, type MarketRotationTimeWindow } from '../api/marketRotation';
 import { cn } from '../utils/cn';
@@ -697,7 +697,7 @@ const MarketRotationRadarPage: React.FC = () => {
       data-bento-surface="true"
       className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden no-scrollbar text-white"
     >
-      <TerminalPageShell className="flex min-h-0 flex-1 py-5 md:py-6">
+      <WideWorkspacePageShell className="flex min-h-0 flex-1 py-5 md:py-6">
         <TerminalPanel as="section" dense className="relative shrink-0 overflow-hidden">
           <TerminalPageHeading
             eyebrow="资金轮动 / Rotation Radar"
@@ -847,7 +847,7 @@ const MarketRotationRadarPage: React.FC = () => {
             </TerminalDisclosure>
           </>
         ) : null}
-      </TerminalPageShell>
+      </WideWorkspacePageShell>
     </div>
   );
 };

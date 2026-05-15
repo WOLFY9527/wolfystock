@@ -89,6 +89,9 @@ describe('LiquidityMonitorPage', () => {
     render(<LiquidityMonitorPage />);
 
     expect(await screen.findByRole('heading', { name: '流动性监测' })).toBeInTheDocument();
+    const pageShell = screen.getByRole('heading', { name: '流动性监测' }).closest('[data-terminal-primitive="page-shell"]');
+    expect(pageShell).toHaveAttribute('data-workspace-width', 'near-full');
+    expect(pageShell).toHaveClass('max-w-[1840px]');
     expect(screen.getByText('支撑')).toBeInTheDocument();
     expect(screen.getByText('69')).toBeInTheDocument();
     expect(screen.getByText('44%')).toBeInTheDocument();

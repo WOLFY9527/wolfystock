@@ -1097,6 +1097,7 @@ describe('MarketOverviewPage', () => {
     expect(shell.className).not.toContain('max-w-[1280px]');
     expect(shell.className).not.toContain('max-w-[1600px]');
     expect(shell.className).not.toContain('max-w-[1800px]');
+    expect(shell.parentElement).toHaveAttribute('data-workspace-width', 'near-full');
     expect(workbench).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(workbench).toHaveClass(
       'flex',

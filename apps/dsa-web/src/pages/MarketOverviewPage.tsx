@@ -14,6 +14,7 @@ import {
   type PanelKey,
   type PanelState,
 } from '../components/market-overview/MarketOverviewWorkbench';
+import { WideWorkspaceShellScope } from '../components/layout/WideWorkspaceShell';
 import { TerminalPageHeading } from '../components/terminal';
 import { useI18n } from '../contexts/UiLanguageContext';
 
@@ -832,22 +833,24 @@ const MarketOverviewPage = () => {
   }, [refreshPanel, resetAutoRevalidatePanel]);
 
   return (
-    <MarketOverviewWorkbench
-      heading={(
-        <TerminalPageHeading
-          data-testid="market-overview-page-heading"
-          title={language === 'en' ? 'Market Overview' : '市场总览'}
-        />
-      )}
-      panels={panels}
-      loading={loading}
-      localSnapshotSavedAt={localSnapshotSavedAt}
-      refreshErrorCount={Object.keys(refreshErrors).length}
-      refreshingPanel={refreshingPanel}
-      cryptoRealtimeStatus={cryptoRealtimeStatus}
-      isCnShortSentimentBootstrapping={loading && panels.cnShortSentiment === FALLBACK_CN_SHORT_SENTIMENT}
-      onRefreshPanel={handleWorkbenchRefresh}
-    />
+    <WideWorkspaceShellScope className="min-h-0 flex-1">
+      <MarketOverviewWorkbench
+        heading={(
+          <TerminalPageHeading
+            data-testid="market-overview-page-heading"
+            title={language === 'en' ? 'Market Overview' : '市场总览'}
+          />
+        )}
+        panels={panels}
+        loading={loading}
+        localSnapshotSavedAt={localSnapshotSavedAt}
+        refreshErrorCount={Object.keys(refreshErrors).length}
+        refreshingPanel={refreshingPanel}
+        cryptoRealtimeStatus={cryptoRealtimeStatus}
+        isCnShortSentimentBootstrapping={loading && panels.cnShortSentiment === FALLBACK_CN_SHORT_SENTIMENT}
+        onRefreshPanel={handleWorkbenchRefresh}
+      />
+    </WideWorkspaceShellScope>
   );
 };
 

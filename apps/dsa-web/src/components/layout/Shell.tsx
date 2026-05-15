@@ -115,6 +115,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const isBacktestRoute = surfacePathname.startsWith('/backtest');
   const isChatRoute = surfacePathname.startsWith('/chat');
   const isMarketOverviewRoute = surfacePathname.startsWith('/market-overview');
+  const isLiquidityMonitorRoute = surfacePathname.startsWith('/market/liquidity-monitor');
+  const isRotationRadarRoute = surfacePathname.startsWith('/market/rotation-radar');
   const isScannerRoute = surfacePathname.startsWith('/scanner');
   const isSystemControlRoute = surfacePathname.startsWith('/settings/system')
     || surfacePathname.startsWith('/admin/logs')
@@ -131,6 +133,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     || isChatRoute
     || surfacePathname.startsWith('/portfolio')
     || isMarketOverviewRoute
+    || isLiquidityMonitorRoute
+    || isRotationRadarRoute
     || surfacePathname.startsWith('/options-lab')
     || isSystemControlRoute;
   const isDesktop = useIsDesktopViewport();

@@ -18,10 +18,10 @@ import {
   TerminalMetric,
   TerminalNotice,
   TerminalPageHeading,
-  TerminalPageShell,
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal';
+import { WideWorkspacePageShell } from '../components/layout/WideWorkspaceShell';
 import { formatDateTime } from '../utils/format';
 import { cn } from '../utils/cn';
 
@@ -146,7 +146,7 @@ const LiquidityMonitorPage: React.FC = () => {
   const selectedIndicator = indicators.find((item) => item.key === selectedKey) || indicators[0] || null;
 
   return (
-    <TerminalPageShell>
+    <WideWorkspacePageShell className="flex min-h-0 flex-1 py-5 md:py-6">
       <TerminalPageHeading
         eyebrow="市场流动性观察"
         title="流动性监测"
@@ -308,7 +308,7 @@ const LiquidityMonitorPage: React.FC = () => {
           </div>
         </TerminalGrid>
       ) : null}
-    </TerminalPageShell>
+    </WideWorkspacePageShell>
   );
 };
 
