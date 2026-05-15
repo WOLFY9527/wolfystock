@@ -10,7 +10,9 @@ PORT="8000"
 PYTHON_BIN=""
 LOCAL_US_PARQUET_OVERRIDE=""
 RESTART_PORT="false"
+PRINT_COMMAND="false"
 EXTRA_ARGS=()
+COMMAND=()
 
 usage() {
   cat <<'EOF'
@@ -24,6 +26,7 @@ Options:
   --python PATH                Override Python interpreter
   --local-us-parquet-dir PATH  Export LOCAL_US_PARQUET_DIR for this process only
   --restart-port               Kill listeners on the selected port before start
+  --print-command              Print the backend command and exit
   --help                       Show this help message
 
 Notes:
@@ -115,6 +118,13 @@ ensure_port_is_available() {
   [[ -z "${pids}" ]] || fail "Port ${PORT} is still busy after --restart-port."
 }
 
+build_command() {
+  COMMAND=("${PYTHON_BIN}" "${ROOT_DIR}/main.py" --serve-only --host "${HOST}" --port "${PORT}")
+  if ((${#EXTRA_ARGS[@]} > 0)); then
+    COMMAND+=("${EXTRA_ARGS[@]}")
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --host)
@@ -141,6 +151,10 @@ while [[ $# -gt 0 ]]; do
       RESTART_PORT="true"
       shift
       ;;
+    --print-command)
+      PRINT_COMMAND="true"
+      shift
+      ;;
     --help|-h)
       usage
       exit 0
@@ -160,6 +174,14 @@ done
 resolve_python
 maybe_export_local_us_parquet_dir
 maybe_export_ssl_cert_file
+build_command
+
+if [[ "${PRINT_COMMAND}" == "true" ]]; then
+  printf '%q ' "${COMMAND[@]}"
+  printf '\n'
+  exit 0
+fi
+
 ensure_port_is_available
 
 log "Using Python: ${PYTHON_BIN}"
@@ -172,4 +194,4 @@ if [[ -n "${HTTP_PROXY:-}${HTTPS_PROXY:-}${ALL_PROXY:-}${NO_PROXY:-}" ]]; then
 fi
 
 cd "${ROOT_DIR}"
-exec "${PYTHON_BIN}" "${ROOT_DIR}/main.py" --serve-only --host "${HOST}" --port "${PORT}" "${EXTRA_ARGS[@]}"
+exec "${COMMAND[@]}"
