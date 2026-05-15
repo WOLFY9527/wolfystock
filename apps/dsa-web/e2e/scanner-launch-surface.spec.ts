@@ -34,8 +34,9 @@ async function assertScannerLaunchViewport(page: Page, viewport: { width: number
 
   const launchSummary = page.getByTestId('scanner-launch-evidence-summary');
   const candidateRegion = page.getByTestId('scanner-candidate-scroll-region');
-  const firstCandidate = page.getByTestId('scanner-result-card-NVDA');
-  const configPanel = page.getByTestId('scanner-sidebar');
+  const firstCandidate = page.getByTestId('scanner-result-row-NVDA');
+  const detailRail = page.getByTestId('scanner-detail-rail');
+  const configPanel = page.getByTestId('scanner-control-rail');
 
   await expect(page.getByTestId('user-scanner-bento-page')).toBeVisible({ timeout: 15_000 });
   await expect(launchSummary).toBeVisible();
@@ -45,6 +46,8 @@ async function assertScannerLaunchViewport(page: Page, viewport: { width: number
   await expect(candidateRegion).toBeVisible();
   await expect(firstCandidate).toBeVisible();
   await expect(firstCandidate).toContainText('NVDA');
+  await expect(detailRail).toBeVisible();
+  await expect(detailRail).toContainText('NVDA');
 
   const summaryBox = await launchSummary.boundingBox();
   const candidateBox = await firstCandidate.boundingBox();
