@@ -15,7 +15,7 @@ import logging
 import math
 import time
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Callable
 
 from src.services.litellm_runtime import configure_litellm_cost_map_for_runtime
 
@@ -60,6 +60,22 @@ from src.services.llm_instrumentation import (
 logger = logging.getLogger(__name__)
 
 _TEXT_CONTENT_BLOCK_TYPES = {"text", "output_text", "input_text"}
+_HOME_ANALYSIS_STAGE_STATUSES = {
+    "started",
+    "ok",
+    "partial",
+    "failed",
+    "timeout",
+    "skipped",
+    "continued",
+    "pending",
+    "unknown",
+}
+
+
+def _sanitize_home_analysis_stage_status(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    return normalized if normalized in _HOME_ANALYSIS_STAGE_STATUSES else "unknown"
 
 
 def check_content_integrity(result: "AnalysisResult") -> Tuple[bool, List[str]]:
@@ -1131,6 +1147,7 @@ class GeminiAnalyzer:
         owner_user_id: Optional[str] = None,
         guest_bucket_hash: Optional[str] = None,
         route_family: str = "analysis",
+        progress_callback: Optional[Callable[[str, int, str], None]] = None,
     ) -> AnalysisResult:
         """
         分析单只股票
@@ -1188,7 +1205,14 @@ class GeminiAnalyzer:
         
         try:
             # 格式化输入（包含技术面数据和新闻）
+            prompt_started_at = time.perf_counter()
             prompt = self._format_prompt(context, name, news_context, report_language=report_language)
+            self._log_home_analysis_stage(
+                symbol=code,
+                stage_name="prompt_build",
+                started_at=prompt_started_at,
+                status="ok",
+            )
             
             config = get_config()
             model_name = get_effective_litellm_model(
@@ -1200,18 +1224,15 @@ class GeminiAnalyzer:
             logger.info(f"[LLM配置] Prompt 长度: {len(prompt)} 字符")
             logger.info(f"[LLM配置] 是否包含新闻: {'是' if news_context else '否'}")
 
-            # 记录完整 prompt 到日志（INFO级别记录摘要，DEBUG记录完整）
-            prompt_preview = prompt[:500] + "..." if len(prompt) > 500 else prompt
-            logger.info(f"[LLM Prompt 预览]\n{prompt_preview}")
-            logger.debug(f"=== 完整 Prompt ({len(prompt)}字符) ===\n{prompt}\n=== End Prompt ===")
+            if getattr(config, "debug", False) and getattr(config, "home_analysis_log_full_prompt", False):
+                logger.debug(f"=== 完整 Prompt ({len(prompt)}字符) ===\n{prompt}\n=== End Prompt ===")
 
             # 设置生成配置
-            generation_config = {
-                "temperature": config.llm_temperature,
-                "max_output_tokens": 8192,
-            }
+            generation_config = self._build_home_generation_config(config)
 
             logger.info(f"[LLM调用] 开始调用 {model_name}...")
+            if progress_callback:
+                progress_callback("llm_generation_started", 52, "正在生成快速分析结论...")
 
             # 使用 litellm 调用（支持完整性校验重试）
             current_prompt = prompt
@@ -1219,17 +1240,25 @@ class GeminiAnalyzer:
             max_retries = config.report_integrity_retry if config.report_integrity_enabled else 0
 
             while True:
-                start_time = time.time()
+                llm_started_at = time.perf_counter()
                 response_text, model_used, llm_usage, llm_attempt_trace = self._call_litellm(
                     current_prompt,
                     generation_config,
                     system_prompt=system_prompt,
                 )
-                elapsed = time.time() - start_time
+                llm_elapsed = time.perf_counter() - llm_started_at
+                self._log_home_analysis_stage(
+                    symbol=code,
+                    stage_name="llm_call",
+                    started_at=llm_started_at,
+                    status="ok",
+                )
+                if progress_callback:
+                    progress_callback("llm_generation_completed", 66, "快速分析生成完成，正在解析结论...")
 
                 # 记录响应信息
                 logger.info(
-                    f"[LLM返回] {model_name} 响应成功, 耗时 {elapsed:.2f}s, 响应长度 {len(response_text)} 字符"
+                    f"[LLM返回] {model_name} 响应成功, 耗时 {llm_elapsed:.2f}s, 响应长度 {len(response_text)} 字符"
                 )
                 response_preview = response_text[:300] + "..." if len(response_text) > 300 else response_text
                 logger.info(f"[LLM返回 预览]\n{response_preview}")
@@ -1321,6 +1350,99 @@ class GeminiAnalyzer:
                 model_used=None,
                 report_language=report_language,
             )
+
+    @staticmethod
+    def _build_home_generation_config(config: Config) -> Dict[str, Any]:
+        if getattr(config, "home_quick_analysis_enabled", True):
+            return {
+                "temperature": getattr(config, "home_quick_analysis_temperature", getattr(config, "llm_temperature", 0.7)),
+                "max_output_tokens": getattr(config, "home_quick_analysis_max_output_tokens", 4096),
+            }
+        return {
+            "temperature": getattr(config, "llm_temperature", 0.7),
+            "max_output_tokens": 8192,
+        }
+
+    @staticmethod
+    def _log_home_analysis_stage(
+        *,
+        symbol: str,
+        stage_name: str,
+        started_at: float,
+        status: Any,
+    ) -> None:
+        elapsed_ms = max(0, int((time.perf_counter() - started_at) * 1000))
+        logger.info(
+            "HomeAnalysisStage stage=%s elapsed_ms=%s symbol=%s status=%s",
+            stage_name,
+            elapsed_ms,
+            symbol,
+            _sanitize_home_analysis_stage_status(status),
+        )
+
+    @staticmethod
+    def _build_prompt_data_quality_summary(context: Dict[str, Any]) -> Dict[str, Any]:
+        summary: Dict[str, Any] = {}
+        data_quality_report = context.get("data_quality_report")
+        if isinstance(data_quality_report, dict):
+            for key in (
+                "dataQualityTier",
+                "requiredAvailable",
+                "importantMissing",
+                "optionalMissing",
+                "staleSources",
+                "providerTimeouts",
+                "providerCooldowns",
+                "confidenceCap",
+                "reasonCodes",
+                "freshness",
+                "enrichmentStatus",
+                "pendingSources",
+                "failedSources",
+            ):
+                value = data_quality_report.get(key)
+                if value not in (None, "", [], {}):
+                    summary[key] = value
+
+        data_quality = context.get("data_quality")
+        if isinstance(data_quality, dict):
+            for key in (
+                "price_history_status",
+                "technicals_status",
+                "fundamentals_status",
+                "earnings_status",
+                "sentiment_status",
+                "missing_fields",
+            ):
+                value = data_quality.get(key)
+                if value not in (None, "", [], {}):
+                    summary[key] = value
+
+            warnings = []
+            for item in data_quality.get("warnings", []) or []:
+                text = str(item or "").strip()
+                if not text:
+                    continue
+                lower = text.lower()
+                if any(
+                    marker in lower
+                    for marker in ("missing", "stale", "fallback", "timeout", "partial", "cooldown", "unavailable")
+                ):
+                    warnings.append(text[:120])
+            if warnings:
+                summary["warnings"] = warnings[:12]
+
+            provider_notes = data_quality.get("provider_notes")
+            if isinstance(provider_notes, dict):
+                fallback_flags = []
+                for key in ("market_data", "technicals", "fundamentals", "sentiment"):
+                    value = str(provider_notes.get(key) or "").strip()
+                    if value and any(marker in value.lower() for marker in ("fallback", "stale", "partial", "delayed")):
+                        fallback_flags.append(f"{key}:{value[:80]}")
+                if fallback_flags:
+                    summary["fallbackFlags"] = fallback_flags
+
+        return summary
     
     def _format_prompt(
         self, 
@@ -1482,7 +1604,7 @@ class GeminiAnalyzer:
         fundamentals_block = context.get("fundamentals", {})
         earnings_analysis = context.get("earnings_analysis", {})
         sentiment_analysis = context.get("sentiment_analysis", {})
-        data_quality = context.get("data_quality", {})
+        prompt_data_quality = self._build_prompt_data_quality_summary(context)
         time_contract = {
             "market_timestamp": context.get("market_timestamp"),
             "market_session_date": context.get("market_session_date"),
@@ -1513,9 +1635,9 @@ class GeminiAnalyzer:
                 f"- relevance_type: {sentiment_analysis.get('relevance_type', 'low_relevance')}\n"
                 f"- relevance_score: {sentiment_analysis.get('relevance_score', 0.0)}\n"
             )
-        if data_quality:
+        if prompt_data_quality:
             prompt += "\n### Data Quality（最终结论必须引用）\n"
-            prompt += json.dumps(jsonable_encoder(data_quality), ensure_ascii=False, indent=2) + "\n"
+            prompt += json.dumps(jsonable_encoder(prompt_data_quality), ensure_ascii=False, indent=2) + "\n"
             prompt += (
                 "\n> 规则：industry_general 或 low_relevance 新闻不得直接写入个股核心利好/利空结论；"
                 "仅 company_specific 与高相关 regulatory 可进入核心结论。\n"

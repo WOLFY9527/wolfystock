@@ -71,6 +71,35 @@ class TaskQueueExecutionChainTestCase(unittest.TestCase):
             overall_status="completed",
         )
 
+    def test_merge_execution_stage_tracks_new_home_analysis_progress_states(self) -> None:
+        execution = AnalysisTaskQueue._merge_execution_stage(
+            None,
+            stage_key="provider_enrichment_continuing",
+            detail="部分补充数据超时，继续快速分析...",
+        )
+        step_map = {step["key"]: step for step in execution["steps"]}
+        self.assertEqual(step_map["data_fetch"]["status"], "partial")
+        self.assertEqual(step_map["ai_analysis"]["status"], "waiting")
+        self.assertEqual(step_map["data_fetch"]["detail"], "部分补充数据超时，继续快速分析...")
+
+        execution = AnalysisTaskQueue._merge_execution_stage(
+            execution,
+            stage_key="llm_generation_started",
+            detail="正在生成快速分析结论...",
+        )
+        step_map = {step["key"]: step for step in execution["steps"]}
+        self.assertEqual(step_map["ai_analysis"]["status"], "partial")
+        self.assertEqual(step_map["ai_analysis"]["detail"], "正在生成快速分析结论...")
+
+        execution = AnalysisTaskQueue._merge_execution_stage(
+            execution,
+            stage_key="parsing_storing_report",
+            detail="正在解析并保存研究结果...",
+        )
+        step_map = {step["key"]: step for step in execution["steps"]}
+        self.assertEqual(step_map["ai_analysis"]["status"], "partial")
+        self.assertEqual(step_map["ai_analysis"]["detail"], "正在解析并保存研究结果...")
+
 
 if __name__ == "__main__":
     unittest.main()

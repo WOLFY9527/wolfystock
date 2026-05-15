@@ -360,6 +360,26 @@ class StockAnalysisPipeline:
         if market_timestamp.tzinfo is None:
             market_timestamp = market_timestamp.replace(tzinfo=market_tz)
         return market_timestamp.astimezone(market_tz).date().isoformat()
+
+    @staticmethod
+    def _log_home_analysis_stage(
+        *,
+        symbol: str,
+        stage_name: str,
+        started_at: float,
+        status: Any,
+    ) -> None:
+        normalized_status = str(status or "").strip().lower()
+        if normalized_status not in {"started", "ok", "partial", "failed", "timeout", "skipped", "continued", "pending", "unknown"}:
+            normalized_status = "unknown"
+        elapsed_ms = max(0, int((time.perf_counter() - started_at) * 1000))
+        logger.info(
+            "HomeAnalysisStage stage=%s elapsed_ms=%s symbol=%s status=%s",
+            stage_name,
+            elapsed_ms,
+            symbol,
+            normalized_status,
+        )
     
     def analyze_stock(
         self,
@@ -439,6 +459,7 @@ class StockAnalysisPipeline:
 
             # Step 1: 获取实时行情（量比、换手率等）- 使用统一入口，自动故障切换
             realtime_quote = None
+            quote_stage_started_at = time.perf_counter()
             try:
                 self._emit_progress(
                     progress_callback,
@@ -474,6 +495,12 @@ class StockAnalysisPipeline:
             except Exception as e:
                 diagnostics["failure_reasons"].append(f"realtime_quote_error: {e}")
                 logger.warning(f"{stock_name}({code}) 获取实时行情失败: {e}")
+            self._log_home_analysis_stage(
+                symbol=code,
+                stage_name="quote_base_market_data",
+                started_at=quote_stage_started_at,
+                status="ok" if realtime_quote else "partial",
+            )
 
             # 如果还是没有名称，使用代码作为名称
             if not stock_name:
@@ -512,6 +539,7 @@ class StockAnalysisPipeline:
             # - 失败时返回 partial/failed，不影响既有技术面/新闻链路
             # - 关闭开关时仍返回 not_supported 结构
             fundamental_context = None
+            fundamentals_stage_started_at = time.perf_counter()
             try:
                 fundamental_context = self.fetcher_manager.get_fundamental_context(
                     code,
@@ -521,6 +549,12 @@ class StockAnalysisPipeline:
                 logger.warning(f"{stock_name}({code}) 基本面聚合失败: {e}")
                 fundamental_context = self.fetcher_manager.build_failed_fundamental_context(code, str(e))
                 diagnostics["failure_reasons"].append(f"fundamental_context_error: {e}")
+            self._log_home_analysis_stage(
+                symbol=code,
+                stage_name="fundamental_context",
+                started_at=fundamentals_stage_started_at,
+                status=((fundamental_context or {}).get("status") if isinstance(fundamental_context, dict) else "partial"),
+            )
 
             # P0: write-only snapshot, fail-open, no read dependency on this table.
             try:
@@ -569,6 +603,7 @@ class StockAnalysisPipeline:
             news_items: List[Dict[str, Any]] = []
             social_context = None
             optional_enrichment_pending = False
+            enrichment_stage_started_at = time.perf_counter()
             if (
                 self.search_service.is_available
                 and not (budget_profile is not None and budget_profile.max_news_calls <= 0)
@@ -595,6 +630,12 @@ class StockAnalysisPipeline:
                     optional_enrichment_pending = True
                     diagnostics["news_status"] = "skipped"
                     diagnostics["failure_reasons"].append("optional_news_timeout")
+                    self._emit_progress(
+                        progress_callback,
+                        "provider_enrichment_continuing",
+                        42,
+                        "部分补充数据超时，继续快速分析...",
+                    )
                     logger.warning(
                         "OptionalNewsTimedOut symbol=%s timeout_seconds=%s",
                         code,
@@ -687,6 +728,12 @@ class StockAnalysisPipeline:
                         diagnostics["sentiment_status"] = "failed"
                         diagnostics["sentiment_reason"] = "optional_sentiment_timeout"
                         diagnostics["failure_reasons"].append("optional_sentiment_timeout")
+                        self._emit_progress(
+                            progress_callback,
+                            "provider_enrichment_continuing",
+                            42,
+                            "部分补充数据超时，继续快速分析...",
+                        )
                         logger.warning(
                             "OptionalSentimentTimedOut symbol=%s timeout_seconds=%s",
                             code,
@@ -711,6 +758,12 @@ class StockAnalysisPipeline:
                 diagnostics["failure_reasons"].append("optional_sentiment_skipped_by_budget")
             if not diagnostics.get("sentiment_provider"):
                 diagnostics["sentiment_provider"] = diagnostics.get("news_provider")
+            self._log_home_analysis_stage(
+                symbol=code,
+                stage_name="optional_news_search_enrichment",
+                started_at=enrichment_stage_started_at,
+                status="pending" if optional_enrichment_pending else (diagnostics.get("news_status") or "skipped"),
+            )
 
             # Step 5: 获取分析上下文（技术面数据）
             context = self.db.get_analysis_context(code)
@@ -757,6 +810,7 @@ class StockAnalysisPipeline:
                     34,
                     "正在并行加载行情、基本面、技术与财报数据...",
                 )
+                supplemental_stage_started_at = time.perf_counter()
                 supplemental = self._fetch_us_supplemental_categories(
                     code=code,
                     market="us",
@@ -772,11 +826,23 @@ class StockAnalysisPipeline:
                 for reason in supplemental.get("failure_reasons", []):
                     diagnostics["failure_reasons"].append(reason)
                 if supplemental.get("partial"):
+                    self._emit_progress(
+                        progress_callback,
+                        "provider_enrichment_continuing",
+                        42,
+                        "部分补充数据超时，继续快速分析...",
+                    )
                     logger.warning(
                         "AnalysisCompletedWithPartialData symbol=%s market=us categories=%s",
                         code,
                         ",".join(supplemental.get("partial_categories", [])),
                     )
+                self._log_home_analysis_stage(
+                    symbol=code,
+                    stage_name="supplemental_planner_wait",
+                    started_at=supplemental_stage_started_at,
+                    status="partial" if supplemental.get("partial") else "ok",
+                )
 
                 quote_result = supplemental.get("quote")
                 if isinstance(quote_result, dict):
@@ -924,6 +990,7 @@ class StockAnalysisPipeline:
                 owner_user_id=self.owner_id,
                 guest_bucket_hash=self.guest_bucket_hash,
                 route_family="guest_preview" if self.guest_bucket_hash else "analysis",
+                progress_callback=progress_callback,
             )
             if result:
                 ai_attempt_chain = getattr(result, "ai_attempt_chain", [])
@@ -958,12 +1025,13 @@ class StockAnalysisPipeline:
 
             # Step 8: 保存分析历史记录
             if result and self.persist_history:
+                parse_store_stage_started_at = time.perf_counter()
                 try:
                     self._emit_progress(
                         progress_callback,
-                        "assembling_report",
+                        "parsing_storing_report",
                         72,
-                        "正在组装研究报告结构与结论层...",
+                        "正在解析并保存研究结果...",
                     )
                     context_snapshot = self._build_context_snapshot(
                         enhanced_context=enhanced_context,
@@ -982,6 +1050,12 @@ class StockAnalysisPipeline:
                     )
                 except Exception as e:
                     logger.warning(f"{stock_name}({code}) 保存分析历史失败: {e}")
+                self._log_home_analysis_stage(
+                    symbol=code,
+                    stage_name="parse_store",
+                    started_at=parse_store_stage_started_at,
+                    status="ok",
+                )
 
             return result
 

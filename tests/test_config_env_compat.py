@@ -220,6 +220,42 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         self.assertEqual(config.max_workers, 3)
         self.assertEqual(config.webui_port, 8000)
 
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_home_quick_analysis_generation_overrides_are_loaded(
+        self,
+        _mock_parse_yaml,
+        _mock_setup_env,
+    ) -> None:
+        env = {
+            "HOME_QUICK_ANALYSIS_MAX_OUTPUT_TOKENS": "3072",
+            "HOME_QUICK_ANALYSIS_TEMPERATURE": "0.15",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.home_quick_analysis_max_output_tokens, 3072)
+        self.assertEqual(config.home_quick_analysis_temperature, 0.15)
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_invalid_home_quick_analysis_generation_overrides_fall_back_to_defaults(
+        self,
+        _mock_parse_yaml,
+        _mock_setup_env,
+    ) -> None:
+        env = {
+            "HOME_QUICK_ANALYSIS_MAX_OUTPUT_TOKENS": "bad",
+            "HOME_QUICK_ANALYSIS_TEMPERATURE": "oops",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.home_quick_analysis_max_output_tokens, 4096)
+        self.assertEqual(config.home_quick_analysis_temperature, 0.2)
+
     def test_setup_env_maps_legacy_local_proxy_to_standard_proxy_variables(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             env_path = Path(temp_dir) / ".env"

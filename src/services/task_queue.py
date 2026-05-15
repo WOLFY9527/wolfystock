@@ -35,6 +35,32 @@ from src.utils.symbol_normalization import canonical_stock_code, normalize_stock
 
 logger = logging.getLogger(__name__)
 _WORKER_HINT_ENV_VARS = ("WEB_CONCURRENCY", "UVICORN_WORKERS", "GUNICORN_WORKERS")
+_HOME_ANALYSIS_STAGE_STATUSES = {
+    "started",
+    "ok",
+    "partial",
+    "failed",
+    "timeout",
+    "skipped",
+    "continued",
+    "pending",
+    "unknown",
+}
+
+
+def _sanitize_home_analysis_stage_status(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    return normalized if normalized in _HOME_ANALYSIS_STAGE_STATUSES else "unknown"
+
+
+def _log_home_analysis_stage(*, symbol: str, stage_name: str, elapsed_ms: int, status: Any) -> None:
+    logger.info(
+        "HomeAnalysisStage stage=%s elapsed_ms=%s symbol=%s status=%s",
+        stage_name,
+        max(0, int(elapsed_ms)),
+        symbol,
+        _sanitize_home_analysis_stage_status(status),
+    )
 
 
 def _split_csv(value: Any) -> List[str]:
@@ -985,6 +1011,12 @@ class AnalysisTaskQueue:
         start_payload = self._mark_task_processing(task_id=task_id, stock_code=stock_code)
         if start_payload is None:
             return None
+        _log_home_analysis_stage(
+            symbol=stock_code,
+            stage_name="task_execution_entry",
+            elapsed_ms=0,
+            status="started",
+        )
 
         self._broadcast_event("task_started", start_payload)
 
@@ -1091,12 +1123,12 @@ class AnalysisTaskQueue:
                 "data_fetch": "partial",
                 "ai_analysis": "waiting",
             })
-        elif stage_key in {"loading_fundamentals", "loading_technicals", "loading_news"}:
+        elif stage_key in {"loading_fundamentals", "loading_technicals", "loading_news", "provider_enrichment_continuing"}:
             stage_statuses.update({
                 "data_fetch": "partial",
                 "ai_analysis": "waiting",
             })
-        elif stage_key == "analyzing_signals":
+        elif stage_key in {"analyzing_signals", "llm_generation_started", "llm_generation_completed", "parsing_storing_report"}:
             stage_statuses.update({
                 "data_fetch": "ok",
                 "ai_analysis": "partial",
@@ -1137,8 +1169,15 @@ class AnalysisTaskQueue:
                 "loading_fundamentals",
                 "loading_technicals",
                 "loading_news",
+                "provider_enrichment_continuing",
             } else existing_step_map.get("data_fetch", {}).get("detail"),
-            "ai_analysis": detail if stage_key in {"analyzing_signals", "assembling_report"} else existing_step_map.get("ai_analysis", {}).get("detail"),
+            "ai_analysis": detail if stage_key in {
+                "analyzing_signals",
+                "assembling_report",
+                "llm_generation_started",
+                "llm_generation_completed",
+                "parsing_storing_report",
+            } else existing_step_map.get("ai_analysis", {}).get("detail"),
             "notification": detail if stage_key == "finalizing" else existing_step_map.get("notification", {}).get("detail"),
         }
 

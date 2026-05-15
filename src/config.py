@@ -742,6 +742,10 @@ class Config:
 
     # Unified temperature for all LLM calls (LLM_TEMPERATURE); legacy per-provider temps are fallback only
     llm_temperature: float = 0.7
+    home_quick_analysis_enabled: bool = True
+    home_quick_analysis_temperature: float = 0.2
+    home_quick_analysis_max_output_tokens: int = 4096
+    home_analysis_log_full_prompt: bool = False
 
     # --- Multi-channel LLM config (new) ---
     # LITELLM_CONFIG: path to a standard litellm_config.yaml file (most powerful)
@@ -1481,6 +1485,28 @@ class Config:
             litellm_model=litellm_model,
             litellm_fallback_models=litellm_fallback_models,
             llm_temperature=resolve_unified_llm_temperature(litellm_model),
+            home_quick_analysis_enabled=parse_env_bool(
+                os.getenv("HOME_QUICK_ANALYSIS_ENABLED"),
+                default=True,
+            ),
+            home_quick_analysis_temperature=parse_env_float(
+                os.getenv("HOME_QUICK_ANALYSIS_TEMPERATURE"),
+                0.2,
+                field_name="HOME_QUICK_ANALYSIS_TEMPERATURE",
+                minimum=0.0,
+                maximum=1.0,
+            ),
+            home_quick_analysis_max_output_tokens=parse_env_int(
+                os.getenv("HOME_QUICK_ANALYSIS_MAX_OUTPUT_TOKENS"),
+                4096,
+                field_name="HOME_QUICK_ANALYSIS_MAX_OUTPUT_TOKENS",
+                minimum=256,
+                maximum=8192,
+            ),
+            home_analysis_log_full_prompt=parse_env_bool(
+                os.getenv("HOME_ANALYSIS_LOG_FULL_PROMPT"),
+                default=False,
+            ),
             litellm_config_path=litellm_config_path,
             llm_models_source=llm_models_source,
             llm_channels=llm_channels,
