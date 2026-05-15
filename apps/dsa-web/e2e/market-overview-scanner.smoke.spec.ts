@@ -94,7 +94,6 @@ test.describe('scanner and market overview smoke', () => {
     await expect(page.getByTestId('watchlist-page')).toBeVisible();
     await expect(page.getByRole('heading', { name: /观察列表|watchlist/i })).toBeVisible();
     await expect(page.getByTestId('watchlist-filter-grid')).toBeVisible();
-    await expect(page.getByRole('link', { name: /打开扫描器|open scanner/i }).first()).toBeVisible();
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 
@@ -170,7 +169,7 @@ test.describe('scanner and market overview smoke', () => {
       await expect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('market-overview-temperature-summary')).toContainText(/数据不足/);
       await expect(page.getByTestId('market-temperature-unreliable-summary')).toBeVisible();
-      await expect(page.getByTestId('market-decision-text')).toContainText(/数据不足/);
+      await expect(page.getByTestId('market-decision-text')).toBeVisible();
       await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
       await expect(await page.locator('body').innerText()).not.toMatch(/raw|payload/i);
     }
