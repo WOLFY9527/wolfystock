@@ -899,6 +899,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     expect(await screen.findByTestId('user-scanner-workspace')).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-wide-workspace-scope')).toHaveAttribute('data-workspace-width', 'near-full');
     expect(screen.getByTestId('user-scanner-workspace')).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(screen.getByTestId('scanner-workspace-grid')).toHaveAttribute('data-terminal-primitive', 'grid');
     expect(screen.queryByTestId('scanner-control-rail')).not.toBeInTheDocument();
@@ -906,6 +907,7 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-launch-bar')).toContainElement(screen.getByTestId('scanner-run-button'));
     expect(screen.getByTestId('scanner-launch-bar')).toHaveClass('col-span-full');
     expect(screen.getByTestId('scanner-results-stage')).toHaveClass('col-span-full');
+    expect(screen.getByTestId('user-scanner-bento-hero')).not.toHaveClass('lg:absolute', 'lg:max-w-[520px]');
     expect(screen.getByTestId('scanner-candidate-scroll-region')).toBeInTheDocument();
     expect(screen.getByTestId('scanner-run-button')).toHaveTextContent('启动扫描');
     expect(screen.queryByText('TACTICAL ROUTER')).not.toBeInTheDocument();

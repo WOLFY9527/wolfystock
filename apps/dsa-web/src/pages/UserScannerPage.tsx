@@ -57,6 +57,7 @@ import {
   TerminalPageShell,
   TerminalPanel,
 } from '../components/terminal';
+import { WideWorkspaceShellScope } from '../components/layout/WideWorkspaceShell';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
   getSafariReadySurfaceClassName,
@@ -2198,6 +2199,7 @@ const UserScannerPage: React.FC = () => {
 	          'bento-surface-root flex w-full flex-1 flex-col min-w-0 bg-transparent text-foreground',
 	        )}
 	      >
+          <WideWorkspaceShellScope data-testid="scanner-wide-workspace-scope" className="flex-1">
 	        <TerminalPageShell
 	          data-testid="user-scanner-workspace"
 	          className="flex-1 min-w-0"
@@ -2453,9 +2455,9 @@ const UserScannerPage: React.FC = () => {
 		              data-testid="scanner-results-stage"
 		              className="order-2 col-span-full flex min-h-[520px] flex-1 min-w-0 flex-col"
 		            >
-              <div data-testid="scanner-results-pane" className="relative flex min-h-0 flex-1 min-w-0 flex-col">
-              <div data-testid="user-scanner-bento-hero" className="order-1 flex shrink-0 flex-col gap-1 border-b border-white/5 px-3 py-1.5 lg:absolute lg:right-3 lg:top-2 lg:z-20 lg:max-w-[520px] lg:border-b-0 lg:bg-black/55 lg:px-2 lg:py-1 lg:backdrop-blur-md">
-                <div className="flex flex-col justify-between gap-2 lg:flex-row lg:items-center">
+              <div data-testid="scanner-results-pane" className="flex min-h-0 flex-1 min-w-0 flex-col">
+              <div data-testid="user-scanner-bento-hero" className="flex shrink-0 flex-col gap-2 border-b border-white/5 px-3 py-2">
+                <div className="flex flex-col justify-between gap-2 xl:flex-row xl:items-start xl:gap-3">
                   <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-white/45">
                     <span className="font-semibold text-white/78">{language === 'en' ? 'Results' : '扫描结果'}</span>
                     <span className="rounded-full border border-white/8 bg-white/[0.04] px-2 py-0.5 text-white/60">
@@ -2464,12 +2466,12 @@ const UserScannerPage: React.FC = () => {
                     {generatedAt ? <span>{formatTimestamp(generatedAt, language)}</span> : null}
                     {runDetail ? <span className="truncate">{`${runDetail.market.toUpperCase()} · ${runDetail.profileLabel || runDetail.profile}`}</span> : null}
 	              </div>
-                  <div className="flex min-w-0 flex-col gap-2 sm:items-end">
+                  <div className="flex min-w-0 flex-col gap-2 xl:items-end">
                     {runDetail && primarySelectedCandidate ? (
-	                      <div className="grid w-full min-w-0 grid-cols-1 gap-1.5 sm:w-auto sm:grid-cols-[minmax(0,1fr)_auto]">
+	                      <div className="grid w-full min-w-0 grid-cols-1 gap-1.5 xl:w-auto xl:grid-cols-[minmax(0,1fr)_auto]">
 		                        <div
 		                          data-testid="scanner-primary-actions"
-		                          className="grid min-w-0 grid-cols-2 gap-1.5 sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_auto]"
+		                          className="grid min-w-0 grid-cols-1 gap-1.5 xl:col-span-2 xl:grid-cols-[minmax(0,1fr)_auto]"
 		                        >
 		                          <ActionButton
 		                            label={singleSelectedSymbol
@@ -2576,7 +2578,7 @@ const UserScannerPage: React.FC = () => {
 	                      >
 		                        <History className="h-4 w-4" aria-hidden="true" />
 	                        <span>{language === 'en' ? 'Historical replay' : '历史扫描回放'}</span>
-	                      </TerminalButton>
+                      </TerminalButton>
                     )}
                   </div>
                 </div>
@@ -3138,6 +3140,7 @@ const UserScannerPage: React.FC = () => {
 	            </TerminalPanel>
 		          </TerminalGrid>
 		        </TerminalPageShell>
+          </WideWorkspaceShellScope>
       </div>
 
       <ScannerHistoryDrawer
