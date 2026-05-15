@@ -307,15 +307,16 @@ describe('WatchlistPage', () => {
 
     const row = await screen.findByTestId('watchlist-row-NVDA');
     expect(screen.getByTestId('watchlist-page')).toHaveAttribute('data-terminal-primitive', 'page-shell');
-    expect(screen.getByRole('heading', { name: '观察列表' }).closest('[data-terminal-primitive="panel"]')).not.toBeNull();
-    expect(screen.getByTestId('watchlist-command-bar').querySelectorAll('[data-terminal-primitive="button"]')).toHaveLength(5);
+    expect(screen.getByTestId('watchlist-command-bar').querySelectorAll('[data-terminal-primitive="button"]')).toHaveLength(6);
     expect(row.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThan(0);
   });
 
-  it('shows intelligence coverage summary totals', async () => {
+  it('shows intelligence coverage in a compact status strip instead of metric cards', async () => {
     renderWatchlist();
 
     await screen.findByTestId('watchlist-row-NVDA');
+    const statusStrip = screen.getByTestId('watchlist-status-strip');
+    expect(statusStrip.querySelectorAll('[data-terminal-primitive="metric"]')).toHaveLength(0);
     expect(screen.getByText('观察标的数').nextElementSibling).toHaveTextContent('3');
     expect(screen.getByText('已有扫描结果').nextElementSibling).toHaveTextContent('3');
     expect(screen.getByText('已有回测结果').nextElementSibling).toHaveTextContent('3');
@@ -352,15 +353,19 @@ describe('WatchlistPage', () => {
     renderWatchlist();
     const rows = await screen.findByTestId('watchlist-candidate-list');
     const shell = screen.getByTestId('watchlist-page');
-    const secondaryControls = screen.getByTestId('watchlist-secondary-controls');
+    const workbench = screen.getByTestId('watchlist-table-workbench');
+    const filterGrid = screen.getByTestId('watchlist-filter-grid');
+    const commandBar = screen.getByTestId('watchlist-command-bar');
 
     expect(rows).toContainElement(screen.getByTestId('watchlist-row-NVDA'));
-    expect(secondaryControls).toHaveTextContent('扫描当前筛选');
-    expect(rows).toHaveClass('order-1');
-    expect(secondaryControls).toHaveClass('order-2');
+    expect(commandBar).toHaveTextContent('扫描当前筛选');
+    expect(workbench).toContainElement(filterGrid);
+    expect(workbench).toContainElement(commandBar);
+    expect(workbench).toContainElement(rows);
+    expect(filterGrid.compareDocumentPosition(rows) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(commandBar.compareDocumentPosition(rows) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(shell).toHaveClass('flex', 'flex-col', 'gap-6', 'px-4', 'xl:px-8');
-    expect(rows.parentElement).toBe(shell);
-    expect(secondaryControls.parentElement).toBe(shell);
+    expect(workbench.parentElement).toBe(shell);
   });
 
   it('disables intelligence actions for an empty filtered set with a compact reason', async () => {
@@ -635,7 +640,10 @@ describe('WatchlistPage', () => {
     renderWatchlist();
     await screen.findByTestId('watchlist-row-NVDA');
 
-    expect(screen.getByText('开盘前自动更新')).toBeInTheDocument();
+    const diagnostics = screen.getByTestId('watchlist-diagnostics-disclosure');
+    expect(diagnostics).not.toHaveAttribute('open');
+    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开/ }));
+    expect(within(diagnostics).getByText('开盘前自动更新')).toBeInTheDocument();
     expect(screen.getAllByText('最新').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: /刷新评分/ }));
