@@ -107,6 +107,19 @@ type DataQualitySummary = {
   counts: Record<FreshnessCountKey, number>;
   hasConcern: boolean;
 };
+type TopLevelDataStatusKind =
+  | 'refreshing'
+  | 'delayedAvailable'
+  | 'proxyPartialAvailable'
+  | 'mixedDataAvailable'
+  | 'fallbackOnlyUnavailable';
+type TopLevelDataStatus = {
+  kind: TopLevelDataStatusKind;
+  headline: string;
+  detail?: string;
+  hasUsableData: boolean;
+  hasMissingPanels: boolean;
+};
 
 const MODULE_COVERAGE_CARDS: Record<MarketOverviewModuleId, CardKey[]> = {
   globalIndices: ['indices'],
@@ -752,6 +765,74 @@ function summarizeDataQuality(panels: PanelState): DataQualitySummary {
   };
 }
 
+function summarizeTopLevelDataStatus(params: {
+  activeCategory: MarketOverviewTab;
+  panels: PanelState;
+  coverageSummary: Record<CardCoverageKind, number>;
+  loading: boolean;
+  refreshingPanel: PanelKey | null;
+}): TopLevelDataStatus {
+  const {
+    activeCategory,
+    panels,
+    coverageSummary,
+    loading,
+    refreshingPanel,
+  } = params;
+  const categoryStatuses = CATEGORY_CARDS[activeCategory].map((cardKey) => resolveProviderStatus(getCardMeta(panels, cardKey) as Partial<MarketDataMeta>));
+  const usableCount = coverageSummary.real + coverageSummary.mixed;
+  const hasRefreshing = loading || refreshingPanel !== null || categoryStatuses.some((status) => status === 'refreshing');
+  const hasMissingPanels = coverageSummary.fallback > 0 || categoryStatuses.some((status) => ['partial', 'unavailable', 'error'].includes(status));
+
+  if (usableCount === 0) {
+    return hasRefreshing
+      ? {
+        kind: 'refreshing',
+        headline: '等待实时源',
+        hasUsableData: false,
+        hasMissingPanels: true,
+      }
+      : {
+        kind: 'fallbackOnlyUnavailable',
+        headline: '部分数据暂不可用',
+        hasUsableData: false,
+        hasMissingPanels: true,
+      };
+  }
+
+  if (coverageSummary.real > 0 && coverageSummary.mixed > 0) {
+    return {
+      kind: 'mixedDataAvailable',
+      headline: '数据可用：存在延迟/代理源',
+      detail: hasMissingPanels ? '部分数据暂不可用' : undefined,
+      hasUsableData: true,
+      hasMissingPanels,
+    };
+  }
+
+  if (coverageSummary.mixed > 0) {
+    return {
+      kind: 'proxyPartialAvailable',
+      headline: '数据可用：存在代理源',
+      detail: hasMissingPanels ? '部分数据暂不可用' : undefined,
+      hasUsableData: true,
+      hasMissingPanels,
+    };
+  }
+
+  return {
+    kind: 'delayedAvailable',
+    headline: '数据可用：存在延迟源',
+    detail: hasMissingPanels ? '部分数据暂不可用' : undefined,
+    hasUsableData: true,
+    hasMissingPanels,
+  };
+}
+
+function formatTopLevelDataStatus(status: TopLevelDataStatus): string {
+  return status.detail ? `${status.headline} · ${status.detail}` : status.headline;
+}
+
 function describeDirectionalItem(item?: MarketOverviewItem, fallbackLabel = 'N/A'): string {
   if (!item) {
     return fallbackLabel;
@@ -787,26 +868,11 @@ function buildMarketDecision(params: {
   activeCategory: MarketOverviewTab;
   panels: PanelState;
   dataQuality: DataQualitySummary;
+  topLevelDataStatus: TopLevelDataStatus;
 }): { text: string; chips: MarketOverviewDecisionChipView[] } {
-  const { activeCategory, panels, dataQuality } = params;
+  const { activeCategory, panels, dataQuality, topLevelDataStatus } = params;
   const temperature = panels.temperature;
   const reliable = isTemperatureReliable(temperature);
-  const hasLoadedSignals = CATEGORY_CARDS[activeCategory].some((cardKey) => {
-    const meta = getCardMeta(panels, cardKey);
-    return Boolean(meta.source || meta.freshness || (meta.items?.length || 0) > 0);
-  });
-  if (!reliable && !hasLoadedSignals) {
-    const watchSignals = MARKET_OVERVIEW_SIGNAL_WATCH[activeCategory].slice(0, 3).join(' / ');
-    return {
-      text: '数据不足 · 等待更多实时源',
-      chips: [
-        { label: '风险', value: '数据不足', variant: 'caution' },
-        { label: '流动性', value: 'N/A', variant: 'neutral' },
-        { label: '宽度', value: 'N/A', variant: 'neutral' },
-        { label: '观察', value: watchSignals, variant: 'neutral' },
-      ],
-    };
-  }
 
   const vix = findPanelItem(panels.volatility, ['VIX']);
   const btc = findPanelItem(panels.crypto, ['BTC']);
@@ -816,9 +882,14 @@ function buildMarketDecision(params: {
   const dxy = findPanelItem(panels.fxCommodities, ['DXY']) || findPanelItem(panels.macro, ['DXY']);
   const hsi = findPanelItem(panels.cnIndices, ['HSI']);
 
-  const riskLabel = reliable ? scoreStateLabel(temperature.scores.overall) : '数据不足';
-  const liquidityLabel = reliable ? scoreStateLabel(temperature.scores.liquidity) : 'N/A';
-  const breadthLabel = reliable ? scoreStateLabel(temperature.scores.cnMoneyEffect) : 'N/A';
+  const fallbackRiskLabel = topLevelDataStatus.kind === 'refreshing'
+    ? '刷新中'
+    : topLevelDataStatus.hasUsableData
+      ? '观察中'
+      : '数据不足';
+  const riskLabel = reliable ? scoreStateLabel(temperature.scores.overall) : fallbackRiskLabel;
+  const liquidityLabel = reliable ? scoreStateLabel(temperature.scores.liquidity) : topLevelDataStatus.hasUsableData ? '部分可用' : 'N/A';
+  const breadthLabel = reliable ? scoreStateLabel(temperature.scores.cnMoneyEffect) : topLevelDataStatus.hasUsableData ? '部分可用' : 'N/A';
   const watchSignals = MARKET_OVERVIEW_SIGNAL_WATCH[activeCategory]
     .map((metricId) => findMetricItem(panels, metricId)?.symbol || metricId)
     .slice(0, 3)
@@ -832,7 +903,7 @@ function buildMarketDecision(params: {
 
   if (!reliable) {
     return {
-      text: '数据不足 · 等待更多实时源',
+      text: formatTopLevelDataStatus(topLevelDataStatus),
       chips,
     };
   }
@@ -1550,7 +1621,14 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     setExportSummaryFeedback(language === 'en' ? 'Summary copied' : '已复制摘要');
   }, [exportSummaryText, language]);
 
-  const marketDecision = buildMarketDecision({ activeCategory, panels, dataQuality });
+  const topLevelDataStatus = useMemo(() => summarizeTopLevelDataStatus({
+    activeCategory,
+    panels,
+    coverageSummary,
+    loading,
+    refreshingPanel,
+  }), [activeCategory, coverageSummary, loading, panels, refreshingPanel]);
+  const marketDecision = buildMarketDecision({ activeCategory, panels, dataQuality, topLevelDataStatus });
   const decisionReliable = isTemperatureReliable(panels.temperature);
   const dataStateStatuses = collectDataStateMeta(panels).map(resolveProviderStatus);
   const fallbackCount = dataQuality.counts.fallback + dataQuality.counts.mock;
@@ -1624,8 +1702,14 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     };
   });
   const actionHint: MarketOverviewActionHintView = {
-    title: decisionReliable ? '同步观察' : '安全状态',
-    line: decisionReliable ? '优先观察风险、流动性、宽度是否同向变化' : '等待实时源补齐后再生成强判断',
+    title: decisionReliable ? '同步观察' : topLevelDataStatus.hasUsableData ? '可用快照' : topLevelDataStatus.kind === 'refreshing' ? '刷新中' : '缺口提示',
+    line: decisionReliable
+      ? '优先观察风险、流动性、宽度是否同向变化'
+      : topLevelDataStatus.kind === 'refreshing'
+        ? '等待刷新完成后再生成强判断'
+        : topLevelDataStatus.hasUsableData
+          ? '优先观察已验证信号，暂不生成强判断'
+          : '部分关键面板暂不可用，暂不生成强判断',
   };
   const executiveGroups: MarketOverviewExecutiveGroupView[] = [
     { id: 'us', label: 'US', focus: 'SPX / VIX', cardKey: 'indices', item: findPanelItem(panels.indices, ['SPX']) },

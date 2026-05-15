@@ -681,6 +681,26 @@ function renderMarketOverviewWorkbench() {
   );
 }
 
+function renderMarketOverviewWorkbenchWithProps(overrides: Partial<Parameters<typeof MarketOverviewWorkbench>[0]> = {}) {
+  const basePanels = localSnapshotPayload().payload;
+  return render(
+    <UiLanguageProvider>
+      <MarketOverviewWorkbench
+        heading={<TerminalPageHeading data-testid="market-overview-page-heading" title="市场总览" />}
+        panels={basePanels}
+        loading={false}
+        localSnapshotSavedAt="2026-04-29T10:00:00"
+        refreshErrorCount={0}
+        refreshingPanel={null}
+        cryptoRealtimeStatus="snapshot"
+        isCnShortSentimentBootstrapping={false}
+        onRefreshPanel={() => {}}
+        {...overrides}
+      />
+    </UiLanguageProvider>,
+  );
+}
+
 const primaryMarketPanelRequests = [
   marketOverviewApi.getIndices,
   marketOverviewApi.getVolatility,
@@ -1541,9 +1561,9 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByText(/真实输入不足，暂不生成综合判断/i)).toBeInTheDocument();
     expect(screen.getByText(/信号可信：数据不足/i)).toBeInTheDocument();
     expect(screen.queryByText(/综合市场温度/i)).not.toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-rail-action-hint')).toHaveTextContent(/等待实时源补齐后再生成强判断/i);
+    expect(screen.getByTestId('market-overview-rail-action-hint')).toHaveTextContent(/优先观察已验证信号，暂不生成强判断|等待刷新完成后再生成强判断|部分关键面板暂不可用，暂不生成强判断/i);
     expect(screen.getByTestId('market-briefing-warning')).toHaveTextContent('当前真实数据不足，暂不生成强市场判断');
-    expect(screen.getByTestId('market-decision-text')).toHaveTextContent(/数据不足/);
+    expect(screen.getByTestId('market-decision-text')).toHaveTextContent(/等待实时源|部分数据暂不可用/);
     expect(screen.getByTestId('market-command-safe-state')).toHaveTextContent(/当前不生成强判断/);
   });
 
@@ -1570,7 +1590,7 @@ describe('MarketOverviewPage', () => {
     expect(await screen.findByTestId('market-overview-shell')).toBeInTheDocument();
     expect(screen.getByTestId('market-temperature-unreliable-summary')).toHaveTextContent('真实输入不足，暂不生成综合判断');
     expect(screen.getByTestId('market-overview-temperature-summary')).toHaveTextContent(/数据不足/);
-    expect(screen.getByTestId('market-decision-text')).toHaveTextContent(/数据不足/);
+    expect(screen.getByTestId('market-decision-text')).toHaveTextContent(/数据可用：存在延迟源|数据可用：存在延迟\/代理源/);
     expect(screen.queryByText(/raw|payload/i)).not.toBeInTheDocument();
   });
 
@@ -1586,6 +1606,115 @@ describe('MarketOverviewPage', () => {
       expect(screen.getByTestId('market-temperature-strip')).toHaveTextContent(/真实 2.*备用 10.*排除 10/i);
     });
     expect(screen.queryByText(/R 0/i)).not.toBeInTheDocument();
+  });
+
+  it('does not overstate top status when delayed and proxy panels are mostly usable', async () => {
+    vi.mocked(marketOverviewApi.getIndices).mockResolvedValueOnce(denseQuotePanel('IndexTrendsCard', [
+      quoteItem('SPX', 'S&P 500', 5120.25, 0.42),
+      quoteItem('NDX', 'Nasdaq 100', 18220.42, 0.68),
+      quoteItem('DJI', 'Dow Jones', 38920.18, -0.12),
+    ]));
+    vi.mocked(marketOverviewApi.getVolatility).mockResolvedValueOnce(denseQuotePanel('VolatilityCard', [
+      quoteItem('VIX', 'VIX', 14.8, -2.4),
+      quoteItem('VVIX', 'VVIX', 88.2, -1.1),
+    ]));
+    vi.mocked(marketOverviewApi.getFundsFlow).mockResolvedValueOnce(denseQuotePanel('FundsFlowCard', [
+      quoteItem('SPY_FLOW', 'SPY Flow', 2.1, 2.1),
+      quoteItem('QQQ_FLOW', 'QQQ Flow', 1.7, 1.7),
+    ], 'yahoo'));
+    vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
+    vi.mocked(marketApi.getCnIndices).mockResolvedValueOnce(denseQuotePanel('ChinaIndicesCard', [
+      quoteItem('000300.SH', 'CSI 300', 3588.12, 0.44, 'sina'),
+      quoteItem('HSI', 'Hang Seng Index', 17712.5, 0.73, 'sina'),
+      {
+        ...quoteItem('HSTECH', 'Hang Seng TECH', 3650.1, 0.62, 'fallback'),
+        source: 'fallback',
+        sourceLabel: '备用数据',
+        freshness: 'fallback' as const,
+        isFallback: true,
+      },
+    ], 'mixed'));
+    vi.mocked(marketApi.getRates).mockResolvedValueOnce(denseQuotePanel('RatesCard', [
+      quoteItem('US10Y', 'US 10Y', 4.62, -0.14, 'fred'),
+      quoteItem('US2Y', 'US 2Y', 4.91, 0.04, 'fred'),
+      quoteItem('US30Y', 'US 30Y', 4.74, -0.08, 'treasury'),
+    ], 'fred'));
+    vi.mocked(marketApi.getFxCommodities).mockResolvedValueOnce(denseQuotePanel('FxCommoditiesCard', [
+      quoteItem('DXY', 'US Dollar Index', 106.2, 0.2, 'yfinance_proxy'),
+      quoteItem('USDJPY', 'USD/JPY', 155.9, 0.1, 'yfinance_proxy'),
+      {
+        ...quoteItem('USDCNH', 'USD/CNH', 7.24, 0.2, 'fallback'),
+        source: 'fallback',
+        sourceLabel: '备用数据',
+        freshness: 'fallback' as const,
+        isFallback: true,
+      },
+    ], 'mixed'));
+    vi.mocked(marketApi.getUsBreadth).mockResolvedValueOnce(usBreadthPanel());
+    vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(limitedRealTemperaturePayload());
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
+
+    render(<MarketOverviewPage />);
+
+    expect(await screen.findByTestId('market-decision-text')).toHaveTextContent('数据可用：存在延迟/代理源');
+    expect(screen.getByTestId('market-decision-text')).not.toHaveTextContent(/数据不足 · 等待更多实时源/);
+    expect(screen.getByTestId('market-overview-rail-action-hint')).not.toHaveTextContent(/等待实时源补齐后再生成强判断/);
+  });
+
+  it('keeps a warning top status when visible panels are fallback-heavy', async () => {
+    renderMarketOverviewWorkbenchWithProps({
+      panels: {
+        indices: snapshotPanel('IndexTrendsCard', 'SPX', 'S&P 500'),
+        volatility: snapshotPanel('VolatilityCard', 'VIX', 'VIX'),
+        crypto: snapshotPanel('CryptoCard', 'BTC', 'Bitcoin'),
+        sentiment: snapshotPanel('MarketSentimentCard', 'FGI', 'Fear & Greed'),
+        fundsFlow: snapshotPanel('FundsFlowCard', 'ETF', 'ETF'),
+        macro: snapshotPanel('MacroIndicatorsCard', 'US10Y', 'US 10Y'),
+        cnIndices: snapshotPanel('ChinaIndicesCard', 'CSI300', '沪深300'),
+        cnBreadth: snapshotPanel('ChinaBreadthCard', 'BREADTH', '赚钱效应'),
+        cnFlows: snapshotPanel('ChinaFlowsCard', 'NORTHBOUND', '北向资金'),
+        sectorRotation: snapshotPanel('SectorRotationCard', 'AI', 'AI / 算力'),
+        usBreadth: usBreadthUnavailablePanel(),
+        rates: snapshotPanel('RatesCard', 'US10Y', 'US 10Y'),
+        fxCommodities: snapshotPanel('FxCommoditiesCard', 'DXY', 'DXY'),
+        temperature: unreliableTemperaturePayload(),
+        briefing: unreliableBriefingPayload(),
+        futures: futuresPayload(),
+        cnShortSentiment: cnShortSentimentPayload(),
+      },
+    });
+
+    expect(screen.getByTestId('market-decision-text')).toHaveTextContent('部分数据暂不可用');
+    expect(screen.getByTestId('market-command-safe-state')).toHaveTextContent(/当前不生成强判断/);
+  });
+
+  it('uses a refresh-state top status only while the overview is truly refreshing', async () => {
+    renderMarketOverviewWorkbenchWithProps({
+      loading: true,
+      panels: {
+        ...localSnapshotPayload({
+          indices: snapshotPanel('IndexTrendsCard', 'SPX', 'S&P 500'),
+          volatility: snapshotPanel('VolatilityCard', 'VIX', 'VIX'),
+          crypto: snapshotPanel('CryptoCard', 'BTC', 'Bitcoin'),
+          fundsFlow: snapshotPanel('FundsFlowCard', 'ETF', 'ETF'),
+          macro: snapshotPanel('MacroIndicatorsCard', 'US10Y', 'US 10Y'),
+          cnIndices: snapshotPanel('ChinaIndicesCard', 'CSI300', '沪深300'),
+          cnBreadth: snapshotPanel('ChinaBreadthCard', 'BREADTH', '赚钱效应'),
+          cnFlows: snapshotPanel('ChinaFlowsCard', 'NORTHBOUND', '北向资金'),
+          sectorRotation: snapshotPanel('SectorRotationCard', 'AI', 'AI / 算力'),
+          usBreadth: usBreadthUnavailablePanel(),
+          rates: snapshotPanel('RatesCard', 'US10Y', 'US 10Y'),
+          fxCommodities: snapshotPanel('FxCommoditiesCard', 'DXY', 'DXY'),
+          temperature: unreliableTemperaturePayload(),
+          briefing: unreliableBriefingPayload(),
+          futures: futuresPayload(),
+          cnShortSentiment: cnShortSentimentPayload(),
+        }).payload,
+      },
+    });
+
+    expect(screen.getByTestId('market-decision-text')).toHaveTextContent('等待实时源');
+    expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/刷新中/i);
   });
 
   it('does not force indices and fundsFlow into the side rail globally', async () => {
@@ -1936,11 +2065,14 @@ describe('MarketOverviewPage', () => {
   });
 
   it('keeps US breadth unavailable state compact and honest', async () => {
-    vi.mocked(marketApi.getUsBreadth).mockResolvedValueOnce(usBreadthUnavailablePanel());
+    renderMarketOverviewWorkbenchWithProps({
+      panels: {
+        ...localSnapshotPayload().payload,
+        usBreadth: usBreadthUnavailablePanel(),
+      },
+    });
 
-    render(<MarketOverviewPage />);
-
-    fireEvent.click(await screen.findByRole('button', { name: '美股' }));
+    fireEvent.click(screen.getByRole('button', { name: '美股' }));
     const breadthCard = await screen.findByTestId('market-overview-card-usBreadth');
 
     await waitFor(() => expect(breadthCard).toHaveTextContent(/数据暂不可用|未接入/));
