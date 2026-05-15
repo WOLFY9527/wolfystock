@@ -143,11 +143,13 @@ class CryptoRealtimeService:
         throttle_seconds: float = 1.0,
         stale_after_seconds: int = 30,
         reconnect_delay_seconds: float = 5.0,
+        max_reconnect_delay_seconds: float = 60.0,
     ) -> None:
         self.provider = provider or BinanceWsProvider()
         self.throttle_seconds = throttle_seconds
         self.stale_after_seconds = stale_after_seconds
         self.reconnect_delay_seconds = reconnect_delay_seconds
+        self.max_reconnect_delay_seconds = max(max_reconnect_delay_seconds, reconnect_delay_seconds)
         self._lock = threading.RLock()
         self._ticks: Dict[str, Dict[str, Any]] = {}
         self._last_snapshot: Optional[Dict[str, Any]] = None
@@ -156,6 +158,11 @@ class CryptoRealtimeService:
         self._thread: Optional[threading.Thread] = None
         self._started = False
         self._condition = threading.Condition(self._lock)
+        self._stream_state = "idle"
+        self._stream_reason: Optional[str] = None
+        self._stream_warning: Optional[str] = None
+        self._failure_count = 0
+        self._next_retry_at: Optional[datetime] = None
         if auto_start:
             self.start()
 
@@ -199,6 +206,7 @@ class CryptoRealtimeService:
             "last_update": as_of.isoformat(timespec="seconds"),
         }
         with self._condition:
+            self._mark_stream_live_locked()
             self._ticks[symbol] = item
             snapshot = self._build_snapshot_locked()
             self._last_snapshot = snapshot
@@ -212,6 +220,10 @@ class CryptoRealtimeService:
                 return None
             return self._snapshot_with_freshness_locked(dict(self._last_snapshot))
 
+    def get_stream_status(self) -> Dict[str, Any]:
+        with self._lock:
+            return self._build_stream_status_locked()
+
     async def wait_for_snapshot(self, timeout_seconds: float = 1.0) -> Optional[Dict[str, Any]]:
         return await asyncio.to_thread(self._wait_for_snapshot_sync, timeout_seconds)
 
@@ -221,7 +233,12 @@ class CryptoRealtimeService:
                 self.handle_tick(tick)
                 break
         except Exception as exc:
-            logger.debug("[CryptoRealtimeService] provider failed: %s", exc)
+            reason, delay = self._record_connection_failure(exc)
+            logger.debug(
+                "[CryptoRealtimeService] websocket degraded (%s), retry in %.1fs",
+                reason,
+                delay,
+            )
 
     async def _run_forever(self) -> None:
         while not self._stop_event.is_set():
@@ -231,8 +248,15 @@ class CryptoRealtimeService:
                         break
                     self.handle_tick(tick)
             except Exception as exc:
-                logger.warning("[CryptoRealtimeService] websocket error, reconnecting: %s", exc)
-                await asyncio.sleep(self.reconnect_delay_seconds)
+                reason, delay = self._record_connection_failure(exc)
+                log_level = logging.WARNING if self._failure_count == 1 else logging.DEBUG
+                logger.log(
+                    log_level,
+                    "[CryptoRealtimeService] websocket degraded (%s), retry in %.1fs",
+                    reason,
+                    delay,
+                )
+                await asyncio.sleep(delay)
 
     def _run_background_loop(self) -> None:
         try:
@@ -292,6 +316,66 @@ class CryptoRealtimeService:
             for item in snapshot.get("items", [])
         ]
         return snapshot
+
+    def _build_stream_status_locked(self) -> Dict[str, Any]:
+        return {
+            "state": self._stream_state,
+            "reason": self._stream_reason,
+            "warning": self._stream_warning,
+            "failureCount": self._failure_count,
+            "nextRetryAt": self._next_retry_at.isoformat(timespec="seconds") if self._next_retry_at else None,
+        }
+
+    def _mark_stream_live_locked(self) -> None:
+        self._stream_state = "live"
+        self._stream_reason = None
+        self._stream_warning = None
+        self._failure_count = 0
+        self._next_retry_at = None
+
+    def _record_connection_failure(self, exc: Exception) -> tuple[str, float]:
+        reason = self._classify_connection_failure(exc)
+        warning = self._warning_for_reason(reason)
+        with self._condition:
+            self._failure_count += 1
+            delay = self._next_reconnect_delay(self._failure_count)
+            self._stream_state = "degraded"
+            self._stream_reason = reason
+            self._stream_warning = warning
+            self._next_retry_at = _now() + timedelta(seconds=delay)
+            self._condition.notify_all()
+        return reason, delay
+
+    def _next_reconnect_delay(self, failure_count: int) -> float:
+        if failure_count <= 1:
+            return self.reconnect_delay_seconds
+        delay = self.reconnect_delay_seconds
+        for _ in range(failure_count - 1):
+            delay = min(self.max_reconnect_delay_seconds, delay * 2)
+            if delay >= self.max_reconnect_delay_seconds:
+                return self.max_reconnect_delay_seconds
+        return delay
+
+    def _classify_connection_failure(self, exc: Exception) -> str:
+        message = " ".join(str(part) for part in getattr(exc, "args", ()) if part) or str(exc)
+        lowered = message.lower()
+        if "http 451" in lowered or "http status 451" in lowered:
+            return "http_451_blocked"
+        if (
+            "connect call failed" in lowered
+            or "connection refused" in lowered
+            or "proxy" in lowered
+            or "127.0.0.1" in lowered
+        ):
+            return "proxy_connect_failed"
+        return "connection_failed"
+
+    def _warning_for_reason(self, reason: str) -> str:
+        if reason == "http_451_blocked":
+            return "实时连接受限，已进入退避重试"
+        if reason == "proxy_connect_failed":
+            return "实时连接不可用，正在退避重试"
+        return "实时连接暂不可用，正在退避重试"
 
 
 _service: Optional[CryptoRealtimeService] = None

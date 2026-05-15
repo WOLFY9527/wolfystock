@@ -102,6 +102,121 @@ class CryptoRealtimeServiceTestCase(unittest.TestCase):
         asyncio.run(run_once())
         self.assertIsNone(service.get_snapshot())
 
+    def test_http_451_failure_enters_degraded_backoff_with_sanitized_log(self) -> None:
+        from src.services.crypto_realtime_service import CryptoRealtimeProvider, CryptoRealtimeService
+
+        class FailingProvider(CryptoRealtimeProvider):
+            async def connect(self):
+                if False:
+                    yield {}
+                raise RuntimeError("server rejected WebSocket connection: HTTP 451")
+
+        service = CryptoRealtimeService(provider=FailingProvider(), auto_start=False, reconnect_delay_seconds=0.01)
+        sleep_delays: list[float] = []
+
+        async def fake_sleep(delay: float) -> None:
+            sleep_delays.append(delay)
+            service.stop()
+
+        with patch("src.services.crypto_realtime_service.asyncio.sleep", side_effect=fake_sleep):
+            with self.assertLogs("src.services.crypto_realtime_service", level="DEBUG") as captured:
+                asyncio.run(service._run_forever())
+
+        status = service.get_stream_status()
+        self.assertEqual(status["state"], "degraded")
+        self.assertEqual(status["reason"], "http_451_blocked")
+        self.assertEqual(status["failureCount"], 1)
+        self.assertEqual(sleep_delays, [0.01])
+        joined_logs = "\n".join(captured.output)
+        self.assertIn("http_451_blocked", joined_logs)
+        self.assertNotIn("HTTP 451", joined_logs)
+
+    def test_proxy_connect_failure_enters_degraded_backoff_with_sanitized_log(self) -> None:
+        from src.services.crypto_realtime_service import CryptoRealtimeProvider, CryptoRealtimeService
+
+        class FailingProvider(CryptoRealtimeProvider):
+            async def connect(self):
+                if False:
+                    yield {}
+                raise OSError("Connect call failed ('127.0.0.1', 7890)")
+
+        service = CryptoRealtimeService(provider=FailingProvider(), auto_start=False, reconnect_delay_seconds=0.01)
+
+        async def fake_sleep(_delay: float) -> None:
+            service.stop()
+
+        with patch("src.services.crypto_realtime_service.asyncio.sleep", side_effect=fake_sleep):
+            with self.assertLogs("src.services.crypto_realtime_service", level="DEBUG") as captured:
+                asyncio.run(service._run_forever())
+
+        status = service.get_stream_status()
+        self.assertEqual(status["state"], "degraded")
+        self.assertEqual(status["reason"], "proxy_connect_failed")
+        joined_logs = "\n".join(captured.output)
+        self.assertIn("proxy_connect_failed", joined_logs)
+        self.assertNotIn("127.0.0.1", joined_logs)
+
+    def test_repeated_failures_back_off_without_tight_loop(self) -> None:
+        from src.services.crypto_realtime_service import CryptoRealtimeProvider, CryptoRealtimeService
+
+        class FailingProvider(CryptoRealtimeProvider):
+            async def connect(self):
+                if False:
+                    yield {}
+                raise RuntimeError("server rejected WebSocket connection: HTTP 451")
+
+        service = CryptoRealtimeService(
+            provider=FailingProvider(),
+            auto_start=False,
+            reconnect_delay_seconds=0.01,
+            max_reconnect_delay_seconds=0.04,
+        )
+        sleep_delays: list[float] = []
+
+        async def fake_sleep(delay: float) -> None:
+            sleep_delays.append(delay)
+            if len(sleep_delays) >= 3:
+                service.stop()
+
+        with patch("src.services.crypto_realtime_service.asyncio.sleep", side_effect=fake_sleep):
+            asyncio.run(service._run_forever())
+
+        status = service.get_stream_status()
+        self.assertEqual(status["failureCount"], 3)
+        self.assertEqual(status["reason"], "http_451_blocked")
+        self.assertEqual(sleep_delays, [0.01, 0.02, 0.04])
+
+    def test_successful_mock_connection_updates_snapshot_and_live_status(self) -> None:
+        from src.services.crypto_realtime_service import CryptoRealtimeProvider, CryptoRealtimeService
+
+        class OneTickProvider(CryptoRealtimeProvider):
+            def __init__(self) -> None:
+                self.service: CryptoRealtimeService | None = None
+
+            async def connect(self):
+                yield {
+                    "symbol": "BTC",
+                    "price": 80123.45,
+                    "change": 25.0,
+                    "changePercent": 0.42,
+                    "asOf": datetime.now(CN_TZ).isoformat(timespec="seconds"),
+                }
+                if self.service is not None:
+                    self.service.stop()
+
+        provider = OneTickProvider()
+        service = CryptoRealtimeService(provider=provider, auto_start=False)
+        provider.service = service
+
+        asyncio.run(service._run_forever())
+
+        snapshot = service.get_snapshot()
+        status = service.get_stream_status()
+        self.assertIsNotNone(snapshot)
+        self.assertEqual(snapshot["items"][0]["symbol"], "BTC")
+        self.assertEqual(status["state"], "live")
+        self.assertEqual(status["failureCount"], 0)
+
     def test_sse_endpoint_sends_realtime_payload(self) -> None:
         from src.services.crypto_realtime_service import CryptoRealtimeService
 
