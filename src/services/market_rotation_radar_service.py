@@ -8,6 +8,7 @@ public safety.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -48,6 +49,7 @@ STAGE_LABELS = {
     "weak_or_no_signal",
 }
 FAILED_SYMBOL_LIST_LIMIT = 8
+_QUOTE_PROVIDER_TIMEOUT_SECONDS = 3.0
 
 
 @dataclass(frozen=True)
@@ -396,7 +398,21 @@ class MarketRotationRadarService:
                 provider_metadata={"noExternalCalls": True},
             )
         try:
-            raw_result = self.quote_provider(symbols) or {}
+            raw_result = self._call_quote_provider(symbols) or {}
+        except TimeoutError:
+            return QuoteLoadResult(
+                quotes={},
+                warning="quote provider 响应超时，已降级为静态篮子。",
+                provider_present=True,
+                provider_status="fallback",
+                requested_symbols=symbols,
+                provider_metadata={
+                    "noExternalCalls": False,
+                    "failedSymbols": self._sanitize_symbol_list(symbols),
+                    "failedSymbolCount": len(symbols),
+                    "unavailableReason": "quote_fetch_failed",
+                },
+            )
         except Exception:
             return QuoteLoadResult(
                 quotes={},
@@ -446,6 +462,21 @@ class MarketRotationRadarService:
             requested_symbols=symbols,
             provider_metadata={"noExternalCalls": False, **provider_metadata},
         )
+
+    def _call_quote_provider(self, symbols: Sequence[str]) -> Mapping[str, Any]:
+        if self.quote_provider is None:
+            return {}
+        timeout_seconds = max(float(_QUOTE_PROVIDER_TIMEOUT_SECONDS), 0.001)
+        executor = ThreadPoolExecutor(max_workers=1)
+        future = executor.submit(self.quote_provider, symbols)
+        try:
+            result = future.result(timeout=timeout_seconds)
+        except FuturesTimeoutError as exc:
+            future.cancel()
+            raise TimeoutError("rotation radar quote provider timed out") from exc
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
+        return result if isinstance(result, Mapping) else {}
 
     def _load_observed_evidence(self, symbols: Sequence[str]) -> Optional[QuoteLoadResult]:
         if not isinstance(self.observed_evidence, Mapping):

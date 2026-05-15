@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from datetime import datetime, timezone
 from time import monotonic
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence
@@ -18,6 +19,8 @@ _QUOTE_SOURCE_LABEL = "Yahoo Finance"
 _QUOTE_MODE = "proxy"
 _QUOTE_SOURCE_TYPE = "unofficial_public_api"
 _FAILED_SYMBOL_LIST_LIMIT = 8
+_QUOTE_PROVIDER_MAX_WORKERS = 6
+_QUOTE_PROVIDER_REQUEST_TIMEOUT_SECONDS = 2.5
 _UNAVAILABLE_SYMBOL_COOLDOWN_SECONDS = 1800.0
 _UNAVAILABLE_SYMBOL_STATE: Dict[str, Dict[str, Any]] = {}
 
@@ -41,37 +44,83 @@ def load_rotation_radar_quotes(symbols: Iterable[str]) -> Dict[str, Any]:
     for symbol in requested_symbols:
         cooldown_reason = _cooldown_reason(symbol, now_monotonic)
         if cooldown_reason:
-            failed_symbols.append(symbol)
-            failed_symbol_count += 1
-            unavailable_reason_counts[cooldown_reason] = unavailable_reason_counts.get(cooldown_reason, 0) + 1
+            failed_symbol_count = _record_failed_symbol(
+                symbol=symbol,
+                reason=cooldown_reason,
+                failed_symbols=failed_symbols,
+                failed_symbol_count=failed_symbol_count,
+                unavailable_reason_counts=unavailable_reason_counts,
+            )
             continue
-        try:
-            frame = fetch_yfinance_quote_history_frame(symbol)
-        except Exception as exc:
-            reason = _sanitize_unavailable_reason(str(exc))
-            if reason in {"symbol_unavailable", "quote_unavailable"}:
+
+    fetch_symbols = [symbol for symbol in requested_symbols if symbol not in failed_symbols]
+    timeout_seconds = max(float(_QUOTE_PROVIDER_REQUEST_TIMEOUT_SECONDS), 0.001)
+    max_workers = max(1, min(int(_QUOTE_PROVIDER_MAX_WORKERS), len(fetch_symbols) or 1))
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    future_to_symbol = {
+        executor.submit(fetch_yfinance_quote_history_frame, symbol): symbol
+        for symbol in fetch_symbols
+    }
+    try:
+        for future in as_completed(future_to_symbol, timeout=timeout_seconds):
+            symbol = future_to_symbol[future]
+            try:
+                frame = future.result()
+            except Exception as exc:
+                reason = _sanitize_unavailable_reason(str(exc))
+                if reason in {"symbol_unavailable", "quote_unavailable"}:
+                    _mark_symbol_unavailable(symbol, reason, now_monotonic)
+                failed_symbol_count = _record_failed_symbol(
+                    symbol=symbol,
+                    reason=reason,
+                    failed_symbols=failed_symbols,
+                    failed_symbol_count=failed_symbol_count,
+                    unavailable_reason_counts=unavailable_reason_counts,
+                )
+                continue
+            quote = _quote_from_history_frame(symbol, frame)
+            if quote is None:
+                reason = "symbol_unavailable"
                 _mark_symbol_unavailable(symbol, reason, now_monotonic)
-            failed_symbols.append(symbol)
-            failed_symbol_count += 1
-            unavailable_reason_counts[reason] = unavailable_reason_counts.get(reason, 0) + 1
-            continue
-        quote = _quote_from_history_frame(symbol, frame)
-        if quote is None:
-            reason = "symbol_unavailable"
-            _mark_symbol_unavailable(symbol, reason, now_monotonic)
-            failed_symbols.append(symbol)
-            failed_symbol_count += 1
-            unavailable_reason_counts[reason] = unavailable_reason_counts.get(reason, 0) + 1
-            continue
-        quotes[symbol] = quote
-        freshness = str(quote.get("freshness") or "unknown")
-        freshness_counts[freshness] = freshness_counts.get(freshness, 0) + 1
-        source = str(quote.get("source") or "unknown")
-        source_counts[source] = source_counts.get(source, 0) + 1
-        source_label = str(quote.get("sourceLabel") or source)
-        source_label_counts[source_label] = source_label_counts.get(source_label, 0) + 1
-        if quote.get("asOf"):
-            as_of_candidates.append(str(quote["asOf"]))
+                failed_symbol_count = _record_failed_symbol(
+                    symbol=symbol,
+                    reason=reason,
+                    failed_symbols=failed_symbols,
+                    failed_symbol_count=failed_symbol_count,
+                    unavailable_reason_counts=unavailable_reason_counts,
+                )
+                continue
+            quotes[symbol] = quote
+            freshness = str(quote.get("freshness") or "unknown")
+            freshness_counts[freshness] = freshness_counts.get(freshness, 0) + 1
+            source = str(quote.get("source") or "unknown")
+            source_counts[source] = source_counts.get(source, 0) + 1
+            source_label = str(quote.get("sourceLabel") or source)
+            source_label_counts[source_label] = source_label_counts.get(source_label, 0) + 1
+            if quote.get("asOf"):
+                as_of_candidates.append(str(quote["asOf"]))
+    except FuturesTimeoutError:
+        pending_symbols = [
+            future_to_symbol[future]
+            for future in future_to_symbol
+            if not future.done()
+        ]
+        for symbol in pending_symbols:
+            failed_symbol_count = _record_failed_symbol(
+                symbol=symbol,
+                reason="quote_fetch_failed",
+                failed_symbols=failed_symbols,
+                failed_symbol_count=failed_symbol_count,
+                unavailable_reason_counts=unavailable_reason_counts,
+            )
+            future = next(
+                (candidate for candidate, candidate_symbol in future_to_symbol.items() if candidate_symbol == symbol),
+                None,
+            )
+            if future is not None:
+                future.cancel()
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
     usable_symbol_count = len(quotes)
     requested_symbol_count = len(requested_symbols)
@@ -103,6 +152,19 @@ def load_rotation_radar_quotes(symbols: Iterable[str]) -> Dict[str, Any]:
             "freshnessCounts": freshness_counts,
         },
     }
+
+
+def _record_failed_symbol(
+    *,
+    symbol: str,
+    reason: str,
+    failed_symbols: list[str],
+    failed_symbol_count: int,
+    unavailable_reason_counts: Dict[str, int],
+) -> int:
+    failed_symbols.append(symbol)
+    unavailable_reason_counts[reason] = unavailable_reason_counts.get(reason, 0) + 1
+    return failed_symbol_count + 1
 
 
 def _quote_from_history_frame(symbol: str, frame: Any) -> Optional[Dict[str, Any]]:

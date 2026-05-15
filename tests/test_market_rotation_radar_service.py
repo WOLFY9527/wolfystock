@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import time
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
@@ -416,6 +417,81 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(second_payload["metadata"]["failedSymbols"], ["SQ"])
         self.assertEqual(second_payload["metadata"]["failedSymbolCount"], 1)
         self.assertEqual(second_payload["metadata"]["coverage"]["usableSymbolCount"], 1)
+
+    def test_rotation_radar_yfinance_quote_provider_bounds_slow_symbols_and_keeps_partial_quotes(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "Open": [100.0, 101.0, 103.0],
+                "High": [101.0, 104.0, 106.0],
+                "Low": [99.0, 100.0, 102.0],
+                "Close": [100.0, 103.0, 105.0],
+                "Volume": [1_000_000.0, 1_200_000.0, 1_500_000.0],
+            },
+            index=pd.DatetimeIndex(["2026-05-09", "2026-05-12", "2026-05-13"]),
+        )
+
+        def fetch(symbol: str):
+            if symbol == "SQ":
+                time.sleep(0.05)
+                raise RuntimeError("request timeout")
+            return frame
+
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}):
+            with patch(
+                "src.services.rotation_radar_quote_provider._QUOTE_PROVIDER_REQUEST_TIMEOUT_SECONDS",
+                0.01,
+                create=True,
+            ):
+                with patch(
+                    "src.services.rotation_radar_quote_provider._QUOTE_PROVIDER_MAX_WORKERS",
+                    2,
+                    create=True,
+                ):
+                    with patch(
+                        "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+                        side_effect=fetch,
+                    ):
+                        started = time.monotonic()
+                        payload = load_rotation_radar_quotes(["SQ", "APP"])
+                        elapsed = time.monotonic() - started
+
+        self.assertLess(elapsed, 0.04)
+        self.assertEqual(payload["metadata"]["status"], "partial")
+        self.assertEqual(sorted(payload["quotes"]), ["APP"])
+        self.assertEqual(payload["metadata"]["failedSymbols"], ["SQ"])
+        self.assertEqual(payload["metadata"]["failedSymbolCount"], 1)
+        self.assertEqual(payload["metadata"]["unavailableReason"], "quote_fetch_failed")
+
+    def test_slow_quote_provider_is_bounded_and_degrades_to_fallback_payload(self) -> None:
+        def provider(symbols):
+            time.sleep(0.05)
+            return {}
+
+        service = MarketRotationRadarService(
+            quote_provider=provider,
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        with patch(
+            "src.services.market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS",
+            0.01,
+            create=True,
+        ):
+            started = time.monotonic()
+            payload = service.get_rotation_radar()
+            elapsed = time.monotonic() - started
+
+        provider_meta = payload["metadata"]["quoteProvider"]
+
+        self.assertLess(elapsed, 0.04)
+        self.assertTrue(payload["isFallback"])
+        self.assertEqual(payload["source"], "fallback")
+        self.assertTrue(provider_meta["present"])
+        self.assertEqual(provider_meta["status"], "fallback")
+        self.assertEqual(provider_meta["unavailableReason"], "quote_fetch_failed")
+        self.assertGreaterEqual(provider_meta["failedSymbolCount"], 1)
+        self.assertTrue(provider_meta["failedSymbols"])
+        self.assertNotIn("timeout", json.dumps(payload, ensure_ascii=False).lower())
 
     def test_non_us_market_returns_taxonomy_only_entries_without_quote_provider_calls(self) -> None:
         provider_calls: list[list[str]] = []

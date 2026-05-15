@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import time
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
@@ -444,5 +445,42 @@ def test_market_rotation_radar_partial_quote_failures_are_sanitized_in_api_paylo
         assert payload["metadata"]["quoteProvider"]["unavailableReason"] == "symbol_unavailable"
         assert "部分主题行情暂不可用" in payload["warning"]
         assert "possibly delisted" not in json.dumps(payload, ensure_ascii=False).lower()
+    finally:
+        client.close()
+
+
+def test_market_rotation_radar_timeout_degrades_to_fallback_payload_in_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def provider_factory():
+        def provider(symbols):
+            time.sleep(0.2)
+            return {}
+
+        return provider
+
+    monkeypatch.setattr(
+        "src.services.market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS",
+        0.01,
+        raising=False,
+    )
+    client = _client(monkeypatch, provider_factory=provider_factory)
+    try:
+        started = time.monotonic()
+        response = client.get("/api/v1/market/rotation-radar?market=US")
+        elapsed = time.monotonic() - started
+
+        assert elapsed < 0.15
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["market"] == "US"
+        assert payload["isFallback"] is True
+        assert payload["source"] == "fallback"
+        assert payload["metadata"]["quoteProvider"]["present"] is True
+        assert payload["metadata"]["quoteProvider"]["status"] == "fallback"
+        assert payload["metadata"]["quoteProvider"]["unavailableReason"] == "quote_fetch_failed"
+        assert payload["metadata"]["quoteProvider"]["failedSymbolCount"] >= 1
+        assert payload["metadata"]["quoteProvider"]["failedSymbols"]
+        assert "timeout" not in json.dumps(payload, ensure_ascii=False).lower()
     finally:
         client.close()
