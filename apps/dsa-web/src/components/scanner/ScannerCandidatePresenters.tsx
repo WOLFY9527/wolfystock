@@ -215,7 +215,6 @@ export function ScannerCandidateInspector({
   onCopy,
   onExport,
   onTrack,
-  onBacktest,
   isCopied,
   isTracked,
   isTrackPending,
@@ -223,8 +222,6 @@ export function ScannerCandidateInspector({
   watchlistActionLabel,
   watchlistActionTitle,
   backtestItem,
-  backtestLabel,
-  backtestTitle,
   testId = 'scanner-candidate-inspector',
 }: {
   candidate: ScannerCandidateDiagnostic;
@@ -245,7 +242,6 @@ export function ScannerCandidateInspector({
   onCopy: () => void;
   onExport: () => void;
   onTrack: () => void;
-  onBacktest: () => void;
   isCopied: boolean;
   isTracked: boolean;
   isTrackPending: boolean;
@@ -253,8 +249,6 @@ export function ScannerCandidateInspector({
   watchlistActionLabel: string;
   watchlistActionTitle?: string;
   backtestItem?: ScannerBacktestItem;
-  backtestLabel: string;
-  backtestTitle?: string;
   testId?: string;
 }) {
   return (
@@ -325,13 +319,6 @@ export function ScannerCandidateInspector({
               onClick={() => onTrack()}
               disabled={isTracked || isTrackPending || isWatchlistAuthBlocked}
               title={watchlistActionTitle}
-            />
-            <ActionButton
-              label={backtestLabel}
-              icon={<TestTubeDiagonal className="h-3.5 w-3.5" />}
-              onClick={() => onBacktest()}
-              disabled={!candidate.symbol || backtestItem?.status === 'running' || backtestItem?.status === 'queued'}
-              title={backtestTitle}
             />
           </div>
           <ScannerBacktestResultStrip item={backtestItem} language={language} />
@@ -684,9 +671,9 @@ export function ScannerCandidateCard({
 
 export function ScannerCandidateTableRow({
   candidate,
+  candidateIdentity,
   language,
-  isSelected,
-  isMoreOpen,
+  isExpanded,
   entryRange,
   targetPrice,
   stopLoss,
@@ -694,7 +681,6 @@ export function ScannerCandidateTableRow({
   riskSummary,
   sourceBadge,
   scoreBadgeClassName,
-  comparisonLabel,
   watchlistActionLabel,
   watchlistActionTitle,
   copyLabel,
@@ -704,18 +690,18 @@ export function ScannerCandidateTableRow({
   isTrackPending,
   isAnalyzing,
   isBacktestDisabled,
+  detailPanel,
   onSelect,
   onAnalyze,
   onTrack,
   onCopy,
-  onToggleMore,
-  onExport,
+  onToggleDetail,
   onBacktest,
 }: {
   candidate: ScannerCandidate;
+  candidateIdentity: string;
   language: 'zh' | 'en';
-  isSelected: boolean;
-  isMoreOpen: boolean;
+  isExpanded: boolean;
   entryRange: string | null;
   targetPrice: string | null;
   stopLoss: string | null;
@@ -723,7 +709,6 @@ export function ScannerCandidateTableRow({
   riskSummary: string;
   sourceBadge: string;
   scoreBadgeClassName: string;
-  comparisonLabel?: string | null;
   watchlistActionLabel: string;
   watchlistActionTitle?: string;
   copyLabel: string;
@@ -733,113 +718,69 @@ export function ScannerCandidateTableRow({
   isTrackPending: boolean;
   isAnalyzing: boolean;
   isBacktestDisabled: boolean;
+  detailPanel?: ReactNode;
   onSelect: () => void;
   onAnalyze: () => void;
   onTrack: () => void;
   onCopy: () => void;
-  onToggleMore: () => void;
-  onExport: () => void;
+  onToggleDetail: () => void;
   onBacktest: () => void;
 }) {
   return (
-    <article
-      data-testid={`scanner-result-row-${candidate.symbol || 'unknown'}`}
-      data-selected={isSelected ? 'true' : undefined}
-      onClick={() => onSelect()}
-      className={`rounded-xl border px-3 py-2.5 text-sm backdrop-blur-md transition-all ${
-        isSelected
-          ? 'border-cyan-400/22 bg-cyan-400/[0.055] shadow-[inset_2px_0_0_rgba(34,211,238,0.35)]'
-          : 'border-white/7 bg-white/[0.018] hover:border-white/14 hover:bg-white/[0.03]'
-      }`}
-    >
-      <div className="grid gap-2 xl:grid-cols-[56px_minmax(130px,1.1fr)_92px_minmax(120px,0.95fr)_minmax(0,2fr)_minmax(180px,1.35fr)_132px] xl:items-center">
-        <div className="flex items-baseline gap-2 xl:block">
-          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/34 xl:hidden">
-            {language === 'en' ? 'Rank' : '排名'}
-          </span>
-          <span className="font-mono text-xs text-white/48">{candidate.rank ? `#${candidate.rank}` : '--'}</span>
-        </div>
-        <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-2">
-            <p className={`truncate font-mono text-sm font-semibold ${isSelected ? 'text-cyan-50' : 'text-white/88'}`}>{candidate.symbol || '--'}</p>
-            {comparisonLabel ? (
-              <span className="shrink-0 rounded border border-cyan-300/15 bg-cyan-300/[0.08] px-1 py-0.5 text-[10px] font-medium text-cyan-100/78">
-                {comparisonLabel}
-              </span>
-            ) : null}
-          </div>
-          <p className="truncate text-[11px] text-white/34">{candidate.companyName || candidate.name || candidate.symbol || '--'}</p>
-        </div>
-        <div className="min-w-0">
+    <>
+      <tr
+        data-testid={`scanner-result-row-${candidateIdentity}`}
+        className="cursor-pointer border-b border-white/5 text-white/72 hover:bg-white/[0.035]"
+        onClick={() => onSelect()}
+      >
+        <td className="px-2.5 py-2 text-white/45">#{candidate.rank}</td>
+        <td className="px-2.5 py-2 font-semibold text-white">{candidate.symbol}</td>
+        <td className="px-2.5 py-2 text-white/55">{candidate.companyName || candidate.name}</td>
+        <td className="px-2.5 py-2">
           <span className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-bold ${scoreBadgeClassName}`}>
             {candidate.score}/100
           </span>
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-[11px] text-white/62" title={sourceBadge}>{sourceBadge}</p>
-          <p className="truncate text-[10px] text-white/30" title={riskSummary}>{riskSummary}</p>
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-xs text-white/70" title={keyReason}>{keyReason}</p>
-          <div className="mt-1.5 flex min-w-0 flex-wrap gap-1.5">
-            {entryRange ? <FieldChip label={language === 'en' ? 'Entry' : '建仓'} value={entryRange} /> : null}
-            {targetPrice ? <FieldChip label={language === 'en' ? 'Target' : '目标'} value={targetPrice} /> : null}
-            {stopLoss ? <FieldChip label={language === 'en' ? 'Stop' : '止损'} value={stopLoss} /> : null}
+        </td>
+        <td className="px-2.5 py-2">{entryRange || '--'}</td>
+        <td className="px-2.5 py-2">{targetPrice || '--'}</td>
+        <td className="px-2.5 py-2">{stopLoss || '--'}</td>
+        <td className="max-w-[220px] px-2.5 py-2 text-white/62">{keyReason}</td>
+        <td className="max-w-[180px] px-2.5 py-2 text-white/52">{riskSummary}</td>
+        <td className="max-w-[180px] px-2.5 py-2 text-white/42">{sourceBadge}</td>
+        <td className="px-2.5 py-2">
+          <div className="flex flex-wrap gap-1.5">
+            <ActionButton
+              label={language === 'en' ? 'Analyze' : '分析'}
+              onClick={() => onAnalyze()}
+              disabled={isAnalyzing}
+              variant="compact"
+            />
+            <ActionButton
+              label={watchlistActionLabel}
+              icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
+              onClick={() => onTrack()}
+              disabled={isTracked || isTrackPending}
+              variant="compact"
+              title={watchlistActionTitle}
+            />
+            <ActionButton label={copyLabel} onClick={() => onCopy()} />
+            <ActionButton label={language === 'en' ? 'Detail' : '详情'} onClick={() => onToggleDetail()} />
+            <ActionButton
+              label={backtestLabel}
+              onClick={() => onBacktest()}
+              disabled={isBacktestDisabled}
+              title={backtestTitle}
+            />
           </div>
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-white/30">
-            {language === 'en' ? 'Compact metrics' : '核心指标'}
-          </p>
-          <div className="mt-1 flex min-w-0 flex-wrap gap-1.5">
-            <FieldChip label={language === 'en' ? 'Risk' : '风险'} value={riskSummary} />
-            <FieldChip label={language === 'en' ? 'Data' : '数据'} value={sourceBadge} />
-          </div>
-        </div>
-        <div
-          className="flex flex-wrap items-center justify-start gap-1.5 xl:justify-end"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <ActionButton
-            label={isAnalyzing ? (language === 'en' ? 'Running' : '进行中') : (language === 'en' ? 'Analyze' : '分析')}
-            onClick={() => onAnalyze()}
-            disabled={isAnalyzing}
-            variant="compact"
-          />
-          <ActionButton
-            label={language === 'en' ? 'More' : '更多'}
-            onClick={() => onToggleMore()}
-            variant="compact"
-          />
-        </div>
-      </div>
-      {isMoreOpen ? (
-        <div
-          data-testid={`scanner-result-row-more-${candidate.symbol || 'unknown'}`}
-          className="mt-2 grid gap-1.5 rounded-xl border border-white/5 bg-black/20 p-2 sm:grid-cols-2 xl:grid-cols-4"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <ActionButton
-            label={watchlistActionLabel}
-            icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
-            onClick={() => onTrack()}
-            disabled={isTracked || isTrackPending}
-            variant="compact"
-            title={watchlistActionTitle}
-          />
-          <ActionButton label={copyLabel} onClick={() => onCopy()} />
-          <ActionButton
-            label={backtestLabel}
-            onClick={() => onBacktest()}
-            disabled={isBacktestDisabled}
-            title={backtestTitle}
-          />
-          <ActionButton
-            label={language === 'en' ? 'Export' : '导出'}
-            onClick={() => onExport()}
-          />
-        </div>
+        </td>
+      </tr>
+      {isExpanded ? (
+        <tr>
+          <td colSpan={11} className="border-b border-white/5 px-3 pb-4">
+            {detailPanel}
+          </td>
+        </tr>
       ) : null}
-    </article>
+    </>
   );
 }
