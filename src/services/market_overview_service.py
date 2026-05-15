@@ -14,6 +14,7 @@ from typing import Any, Callable, Dict, List, Optional
 from src.services.execution_log_service import ExecutionLogService
 from src.services.fx_commodities_contracts import FX_COMMODITY_DELAYED_PROXY_SYMBOLS
 from src.services.market_data_source_registry import resolve_source_label
+from src.services.market_rotation_radar_service import MarketRotationRadarService
 from src.services.official_macro_source_registry import get_official_macro_source_for_transport_source
 from src.services.official_macro_transport import (
     MacroObservation,
@@ -38,6 +39,7 @@ from src.services.market_overview_yfinance_transport import (
     fetch_yfinance_spy_atr_history_frame,
 )
 from src.services.market_cache import MARKET_CACHE_TTLS, REFRESH_WARNING, market_cache
+from src.services.rotation_radar_quote_provider import get_rotation_radar_quote_provider
 from src.storage import DatabaseManager
 
 PanelPayload = Dict[str, Any]
@@ -1126,7 +1128,7 @@ class MarketOverviewService:
             "cn_breadth": "breadth",
             "us_breadth": "breadth",
             "cn_flows": "flows",
-            "sector_rotation": "sentiment",
+            "sector_rotation": "sector_rotation",
             "rates": "macro_rate",
             "fx_commodities": "fx_commodity",
             "temperature": "sentiment",
@@ -1904,7 +1906,10 @@ class MarketOverviewService:
         return self._fallback_cn_flows_snapshot()
 
     def _fetch_sector_rotation_snapshot(self) -> Dict[str, Any]:
-        return self._fallback_sector_rotation_snapshot()
+        radar_payload = MarketRotationRadarService(
+            quote_provider=get_rotation_radar_quote_provider()
+        ).get_rotation_radar()
+        return self._project_sector_rotation_snapshot(radar_payload)
 
     def _fetch_rates_snapshot(self) -> Dict[str, Any]:
         fallback = self._fallback_rates_snapshot()
@@ -1946,6 +1951,78 @@ class MarketOverviewService:
             "fallbackUsed": any(bool(item.get("isFallback")) for item in items),
             "isFallback": False,
             "warning": FALLBACK_WARNING if any(bool(item.get("isFallback")) for item in items) else None,
+        }
+
+    def _project_sector_rotation_snapshot(self, radar_payload: Dict[str, Any]) -> Dict[str, Any]:
+        themes = [
+            theme for theme in radar_payload.get("themes", [])
+            if isinstance(theme, dict)
+        ]
+        if not themes:
+            return self._fallback_sector_rotation_snapshot()
+
+        updated_at = radar_payload.get("updatedAt") or _now_iso()
+        as_of = radar_payload.get("asOf") or updated_at
+        payload_source = str(radar_payload.get("source") or "computed")
+        payload_source_label = radar_payload.get("sourceLabel") or self._source_label(payload_source)
+        payload_freshness = radar_payload.get("freshness")
+        payload_is_fallback = bool(radar_payload.get("isFallback"))
+        payload_is_stale = bool(radar_payload.get("isStale"))
+        items: List[Dict[str, Any]] = []
+
+        for index, theme in enumerate(themes):
+            rotation_score = self._clean_number(theme.get("rotationScore"))
+            if rotation_score is None:
+                continue
+            name = str(theme.get("name") or theme.get("label") or theme.get("id") or "")
+            symbol = str(theme.get("id") or theme.get("symbol") or name)
+            relative_strength_pct = self._clean_number(theme.get("relativeStrength"))
+            explanation = self._sector_rotation_theme_explanation(theme)
+            trend = self._sector_rotation_theme_trend(theme, rotation_score, relative_strength_pct)
+            item: Dict[str, Any] = {
+                "name": name,
+                "label": name,
+                "symbol": symbol,
+                "value": round(rotation_score, 3),
+                "price": round(rotation_score, 3),
+                "change": round(relative_strength_pct, 3) if relative_strength_pct is not None else None,
+                "changePercent": round(relative_strength_pct, 3) if relative_strength_pct is not None else None,
+                "change_text": self._signed_percent_text(relative_strength_pct) if relative_strength_pct is not None else "待确认",
+                "sparkline": trend,
+                "trend": trend,
+                "unit": "score",
+                "market": theme.get("market") or "US",
+                "source": theme.get("source") or payload_source,
+                "sourceLabel": theme.get("sourceLabel") or payload_source_label,
+                "updatedAt": theme.get("updatedAt") or updated_at,
+                "asOf": theme.get("asOf") or as_of,
+                "freshness": theme.get("freshness") or payload_freshness,
+                "isFallback": bool(theme.get("isFallback") or payload_is_fallback),
+                "isStale": bool(theme.get("isStale") or payload_is_stale),
+                "relativeStrength": round(rotation_score, 3),
+                "rank": index + 1,
+                "risk_direction": self._risk_direction(relative_strength_pct if relative_strength_pct is not None else 0.0),
+                "hover_details": self._sector_rotation_theme_hover_details(theme, explanation),
+            }
+            if explanation:
+                item["explanation"] = explanation
+            items.append(item)
+
+        if not items:
+            return self._fallback_sector_rotation_snapshot()
+
+        return {
+            "source": payload_source,
+            "sourceLabel": payload_source_label,
+            "updatedAt": updated_at,
+            "asOf": as_of,
+            "freshness": payload_freshness,
+            "isFallback": payload_is_fallback,
+            "isStale": payload_is_stale,
+            "fallbackUsed": bool(radar_payload.get("fallbackUsed") or payload_is_fallback),
+            "warning": radar_payload.get("warning"),
+            "explanation": "Rotation Radar 主题轮动证据投影，分数用于观察相对强弱与覆盖状态。",
+            "items": items,
         }
 
     def _official_macro_points(self, *, include_credit_stress: bool = False) -> Dict[str, List[MacroObservation]]:
@@ -2017,6 +2094,69 @@ class MarketOverviewService:
         if market:
             item["market"] = market
         return item
+
+    def _sector_rotation_theme_trend(
+        self,
+        theme: Dict[str, Any],
+        rotation_score: float,
+        relative_strength_pct: Optional[float],
+    ) -> List[float]:
+        time_windows = theme.get("timeWindows") if isinstance(theme.get("timeWindows"), dict) else {}
+        trend = [
+            round(float(window.get("averageChangePercent")), 3)
+            for key in ("5m", "15m", "60m", "1d")
+            for window in [time_windows.get(key)]
+            if isinstance(window, dict)
+            and window.get("available")
+            and isinstance(window.get("averageChangePercent"), (int, float))
+            and math.isfinite(float(window.get("averageChangePercent")))
+        ]
+        if trend:
+            return trend
+        if relative_strength_pct is not None:
+            return [round(relative_strength_pct, 3)]
+        return [round(rotation_score, 3)]
+
+    def _sector_rotation_theme_explanation(self, theme: Dict[str, Any]) -> Optional[str]:
+        stage_explanation = str(theme.get("stageExplanation") or "").strip()
+        if stage_explanation:
+            return stage_explanation
+        data_state_label = ""
+        theme_detail = theme.get("themeDetail")
+        if isinstance(theme_detail, dict):
+            data_state_label = str(theme_detail.get("dataStateLabel") or "").strip()
+        if data_state_label:
+            return data_state_label
+        evidence = theme.get("evidence")
+        if isinstance(evidence, list):
+            for entry in evidence:
+                text = str(entry or "").strip()
+                if text:
+                    return text
+        return None
+
+    def _sector_rotation_theme_hover_details(
+        self,
+        theme: Dict[str, Any],
+        explanation: Optional[str],
+    ) -> List[str]:
+        details: List[str] = []
+        if explanation:
+            details.append(explanation)
+        proxy_quality = theme.get("proxyQuality")
+        if isinstance(proxy_quality, dict):
+            coverage_percent = self._clean_number(proxy_quality.get("coveragePercent"))
+            if coverage_percent is not None:
+                details.append(f"代理覆盖 {coverage_percent:.0f}%")
+            proxy_explanation = str(proxy_quality.get("explanation") or "").strip()
+            if proxy_explanation:
+                details.append(proxy_explanation)
+        theme_detail = theme.get("themeDetail")
+        if isinstance(theme_detail, dict):
+            data_state_label = str(theme_detail.get("dataStateLabel") or "").strip()
+            if data_state_label:
+                details.append(data_state_label)
+        return details
 
     def _official_source_label(self, source_id: str) -> str:
         contract = get_official_macro_source_for_transport_source(source_id)

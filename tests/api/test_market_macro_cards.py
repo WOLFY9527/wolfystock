@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import unittest
 from unittest.mock import patch
 
@@ -27,6 +28,123 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
         self.assertIn("relativeStrength", first_item)
         self.assertIn("rank", first_item)
         self.assertIn(first_item["market"], {"CN", "HK", "US"})
+
+    def test_sector_rotation_endpoint_projects_rotation_radar_theme_order_and_scores(self) -> None:
+        service = MarketOverviewService()
+        as_of = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat(timespec="seconds")
+        updated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        radar_payload = {
+            "source": "computed",
+            "sourceLabel": "主题篮子计算",
+            "updatedAt": updated_at,
+            "asOf": as_of,
+            "freshness": "delayed",
+            "isFallback": False,
+            "warning": "部分主题行情暂不可用",
+            "themes": [
+                {
+                    "id": "ai_applications",
+                    "name": "AI 应用",
+                    "market": "US",
+                    "rotationScore": 73,
+                    "relativeStrength": 4.0,
+                    "source": "computed",
+                    "sourceLabel": "主题篮子计算",
+                    "freshness": "delayed",
+                    "isFallback": False,
+                    "isStale": False,
+                    "updatedAt": updated_at,
+                    "asOf": as_of,
+                    "stageExplanation": "已有相对强势，但仍需更多广度确认。",
+                    "proxyQuality": {
+                        "coveragePercent": 100,
+                        "explanation": "代理覆盖完整。",
+                    },
+                    "themeDetail": {
+                        "dataStateLabel": "行情证据已接入",
+                    },
+                    "timeWindows": {
+                        "1d": {
+                            "available": True,
+                            "averageChangePercent": 4.0,
+                        },
+                    },
+                    "evidence": ["相对强弱领先"],
+                },
+                {
+                    "id": "semiconductors",
+                    "name": "半导体",
+                    "market": "US",
+                    "rotationScore": 68,
+                    "relativeStrength": 2.1,
+                    "source": "computed",
+                    "sourceLabel": "主题篮子计算",
+                    "freshness": "delayed",
+                    "isFallback": False,
+                    "isStale": False,
+                    "updatedAt": updated_at,
+                    "asOf": as_of,
+                    "stageExplanation": "扩散仍需持续观察。",
+                    "proxyQuality": {
+                        "coveragePercent": 80,
+                        "explanation": "代理覆盖部分缺口。",
+                    },
+                    "themeDetail": {
+                        "dataStateLabel": "部分代理缺口",
+                    },
+                    "timeWindows": {
+                        "1d": {
+                            "available": True,
+                            "averageChangePercent": 2.1,
+                        },
+                    },
+                    "evidence": ["量能扩张"],
+                },
+            ],
+        }
+        provider = object()
+
+        with patch.object(service, "_cached_payload", side_effect=lambda _key, fetcher, _fallback: fetcher()):
+            with patch(
+                "src.services.market_overview_service.get_rotation_radar_quote_provider",
+                return_value=provider,
+                create=True,
+            ), patch(
+                "src.services.market_overview_service.MarketRotationRadarService",
+                create=True,
+            ) as radar_service_cls:
+                radar_service_cls.return_value.get_rotation_radar.return_value = radar_payload
+
+                payload = service.get_sector_rotation()
+
+        radar_service_cls.assert_called_once_with(quote_provider=provider)
+        radar_service_cls.return_value.get_rotation_radar.assert_called_once_with()
+        self.assertEqual(payload["source"], "computed")
+        self.assertEqual(payload["sourceLabel"], "主题篮子计算")
+        self.assertEqual(payload["freshness"], "delayed")
+        self.assertFalse(payload["fallbackUsed"])
+        self.assertFalse(payload["isFallback"])
+        self.assertEqual(payload["warning"], "部分主题行情暂不可用")
+        self.assertIn("Rotation Radar", payload["explanation"])
+        self.assertEqual(
+            [(item["symbol"], item["value"], item["rank"]) for item in payload["items"][:2]],
+            [
+                ("ai_applications", 73, 1),
+                ("semiconductors", 68, 2),
+            ],
+        )
+        first_item = payload["items"][0]
+        self.assertEqual(first_item["name"], "AI 应用")
+        self.assertEqual(first_item["label"], "AI 应用")
+        self.assertEqual(first_item["unit"], "score")
+        self.assertEqual(first_item["relativeStrength"], 73)
+        self.assertEqual(first_item["changePercent"], 4.0)
+        self.assertEqual(first_item["source"], "computed")
+        self.assertEqual(first_item["freshness"], "delayed")
+        self.assertFalse(first_item["isFallback"])
+        self.assertIn("广度确认", first_item["explanation"])
+        self.assertTrue(first_item["hover_details"])
+        self.assertNotIn("买卖", " ".join(first_item["hover_details"]))
 
     def test_rates_endpoint_returns_us_and_cn_groups(self) -> None:
         payload = market.get_rates()

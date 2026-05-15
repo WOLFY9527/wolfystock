@@ -313,6 +313,126 @@ def test_market_overview_fallback_only_panels_project_to_fallback_static_not_liv
         assert provenance["freshnessLabel"] != "实时"
 
 
+def test_sector_rotation_projection_stays_proxy_computed_not_official_or_live() -> None:
+    service = MarketOverviewService()
+    as_of = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat(timespec="seconds")
+    updated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    radar_payload = {
+        "source": "computed",
+        "sourceLabel": "主题篮子计算",
+        "updatedAt": updated_at,
+        "asOf": as_of,
+        "freshness": "delayed",
+        "isFallback": False,
+        "themes": [
+            {
+                "id": "ai_applications",
+                "name": "AI 应用",
+                "market": "US",
+                "rotationScore": 73,
+                "relativeStrength": 4.0,
+                "source": "computed",
+                "sourceLabel": "主题篮子计算",
+                "freshness": "delayed",
+                "isFallback": False,
+                "isStale": False,
+                "updatedAt": updated_at,
+                "asOf": as_of,
+                "stageExplanation": "已有相对强势，但仍需更多广度确认。",
+                "proxyQuality": {"coveragePercent": 100, "explanation": "代理覆盖完整。"},
+                "themeDetail": {"dataStateLabel": "行情证据已接入"},
+                "timeWindows": {"1d": {"available": True, "averageChangePercent": 4.0}},
+                "evidence": ["相对强弱领先"],
+            }
+        ],
+    }
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(service, "_cached_payload", lambda _key, fetcher, _fallback: fetcher())
+        mp.setattr("src.services.market_overview_service.get_rotation_radar_quote_provider", lambda: None, raising=False)
+
+        class _RadarService:
+            def __init__(self, quote_provider=None) -> None:
+                self.quote_provider = quote_provider
+
+            def get_rotation_radar(self) -> dict[str, Any]:
+                return radar_payload
+
+        mp.setattr("src.services.market_overview_service.MarketRotationRadarService", _RadarService, raising=False)
+        payload = service.get_sector_rotation()
+
+    payload_provenance = _payload_provenance(payload)
+    item_provenance = _payload_provenance(payload["items"][0])
+
+    assert payload["source"] == "computed"
+    assert payload["freshness"] == "delayed"
+    assert payload_provenance["sourceType"] not in {"official_public", "exchange_public"}
+    assert payload_provenance["freshnessLabel"] != "实时"
+    assert item_provenance["sourceType"] not in {"official_public", "exchange_public"}
+    assert item_provenance["freshnessLabel"] != "实时"
+
+
+def test_sector_rotation_taxonomy_only_projection_stays_fallback_local_taxonomy_non_live() -> None:
+    service = MarketOverviewService()
+    radar_payload = {
+        "source": "local_taxonomy",
+        "sourceLabel": "静态主题库",
+        "updatedAt": "2026-05-13T10:00:00+00:00",
+        "asOf": "2026-05-13T09:30:00+00:00",
+        "freshness": "fallback",
+        "isFallback": True,
+        "warning": "当前为静态主题库。",
+        "themes": [
+            {
+                "id": "cn_ai_compute",
+                "name": "AI算力",
+                "market": "CN",
+                "rotationScore": 24,
+                "relativeStrength": None,
+                "source": "local_taxonomy",
+                "sourceLabel": "静态主题库",
+                "freshness": "fallback",
+                "isFallback": True,
+                "isStale": False,
+                "updatedAt": "2026-05-13T10:00:00+00:00",
+                "asOf": "2026-05-13T09:30:00+00:00",
+                "stageExplanation": "静态主题待行情确认。",
+                "proxyQuality": {"coveragePercent": 0, "explanation": "仅静态主题。"},
+                "themeDetail": {"dataStateLabel": "静态主题"},
+                "timeWindows": {},
+                "evidence": ["静态主题库"],
+            }
+        ],
+    }
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(service, "_cached_payload", lambda _key, fetcher, _fallback: fetcher())
+        mp.setattr("src.services.market_overview_service.get_rotation_radar_quote_provider", lambda: None, raising=False)
+
+        class _RadarService:
+            def __init__(self, quote_provider=None) -> None:
+                self.quote_provider = quote_provider
+
+            def get_rotation_radar(self) -> dict[str, Any]:
+                return radar_payload
+
+        mp.setattr("src.services.market_overview_service.MarketRotationRadarService", _RadarService, raising=False)
+        payload = service.get_sector_rotation()
+
+    payload_provenance = _payload_provenance(payload)
+    item_provenance = _payload_provenance(payload["items"][0])
+
+    assert payload["source"] == "local_taxonomy"
+    assert payload["freshness"] == "fallback"
+    assert payload["isFallback"] is True
+    assert payload_provenance["sourceType"] == "fallback_static"
+    assert payload_provenance["freshnessLabel"] != "实时"
+    assert payload["items"][0]["source"] == "local_taxonomy"
+    assert payload["items"][0]["freshness"] == "fallback"
+    assert item_provenance["sourceType"] == "fallback_static"
+    assert item_provenance["freshnessLabel"] != "实时"
+
+
 def test_market_overview_fx_commodities_proxy_payload_projects_to_unofficial_proxy_not_live() -> None:
     service = MarketOverviewService()
     as_of = datetime.now(CN_TZ) - timedelta(minutes=30)

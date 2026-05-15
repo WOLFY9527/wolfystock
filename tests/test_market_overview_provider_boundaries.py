@@ -219,6 +219,7 @@ def test_market_overview_service_extracts_raw_transport_boundaries() -> None:
     service_urls = _requests_get_urls(MARKET_OVERVIEW_SERVICE_FILE)
 
     assert "src.services.market_data_source_registry" in service_imports
+    assert "src.services.market_rotation_radar_service" in service_imports
     assert "src.services.official_macro_source_registry" in service_imports
     assert "src.services.official_macro_transport" in service_imports
     assert "src.services.market_overview_binance_transport" in service_imports
@@ -226,6 +227,7 @@ def test_market_overview_service_extracts_raw_transport_boundaries() -> None:
     assert "src.services.market_overview_sina_transport" in service_imports
     assert "src.services.market_overview_tickflow_breadth_provider" in service_imports
     assert "src.services.market_overview_yfinance_transport" in service_imports
+    assert "src.services.rotation_radar_quote_provider" in service_imports
     assert "data_provider.tickflow_fetcher" not in service_imports
     assert not {
         module
@@ -281,7 +283,7 @@ def test_market_overview_service_keeps_cn_flows_and_tickflow_breadth_separate() 
     assert "_fallback_cn_flows_snapshot" in cn_flows_calls
 
 
-def test_market_overview_service_keeps_cn_flows_and_sector_rotation_fetchers_fallback_only() -> None:
+def test_market_overview_service_keeps_cn_flows_fallback_only_and_projects_sector_rotation_from_radar() -> None:
     cn_flows_calls = _method_call_names(
         MARKET_OVERVIEW_SERVICE_FILE,
         "MarketOverviewService",
@@ -294,7 +296,10 @@ def test_market_overview_service_keeps_cn_flows_and_sector_rotation_fetchers_fal
     )
 
     assert cn_flows_calls == {"_fallback_cn_flows_snapshot"}
-    assert sector_rotation_calls == {"_fallback_sector_rotation_snapshot"}
+    assert "MarketRotationRadarService" in sector_rotation_calls
+    assert "get_rotation_radar_quote_provider" in sector_rotation_calls
+    assert "get_rotation_radar" in sector_rotation_calls
+    assert "_project_sector_rotation_snapshot" in sector_rotation_calls
 
 
 def test_market_overview_service_fx_commodities_fetcher_uses_yfinance_proxy_transport_with_item_fallback() -> None:
