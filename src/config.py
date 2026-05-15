@@ -2346,7 +2346,21 @@ class Config:
         # Explicit AGENT_MODE takes full precedence
         if self._agent_mode_explicit:
             return self.agent_mode
-        # Auto-detect: Agent inherits global model when AGENT_LITELLM_MODEL is empty.
+        configured_router_models = set(get_configured_llm_models(self.llm_model_list))
+        configured_agent_model = normalize_agent_litellm_model(
+            getattr(self, "agent_litellm_model", ""),
+            configured_models=configured_router_models,
+        )
+        if configured_agent_model:
+            if _resolve_router_runtime_model(configured_agent_model, configured_router_models):
+                return True
+            # Keep backward compatibility for direct env style Agent model config:
+            # expose Agent surfaces when an explicit Agent model is set, even if
+            # runtime readiness is still invalid and will be surfaced separately
+            # by config validation/provider health.
+            if not configured_router_models:
+                return True
+        # Auto-detect inherited primary only when runtime-safe resolution exists.
         return bool(get_effective_agent_primary_model(self))
 
     def refresh_stock_list(self) -> None:
