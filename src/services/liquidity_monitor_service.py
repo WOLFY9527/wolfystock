@@ -6,7 +6,7 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from src.services.market_cache import MarketCache, market_cache
 from src.services.market_data_source_registry import project_source_provenance
@@ -212,7 +212,7 @@ class LiquidityMonitorService:
         )
 
     def _vix_indicator(self, panel: PanelState, macro_panel: PanelState) -> Dict[str, Any]:
-        selected = self._preferred_symbol_item((panel, macro_panel), {"VIX", "VIXCLS"})
+        selected = self._preferred_symbol_item((panel, macro_panel), {"VIX", "VIXCLS"}, validator=self._is_vix_item_usable)
         if selected is not None:
             panel, item = selected
         else:
@@ -321,9 +321,12 @@ class LiquidityMonitorService:
         )
 
     def _us_rates_indicator(self, panel: PanelState, macro_panel: PanelState) -> Dict[str, Any]:
-        components = self._extract_us_rates_components((panel, macro_panel))
+        primary_panel = panel
+        panels: tuple[PanelState, ...] = (primary_panel, macro_panel)
+        components = self._extract_us_rates_components(panels)
         credit_observation = self._extract_credit_stress_observation(macro_panel)
-        if not components:
+        yield_components = [component for component in components if component["kind"] == "yield"]
+        if len(yield_components) < 2:
             proxy_panel = self._fetch_macro_proxy_panel(
                 "rates_proxy",
                 [
@@ -333,7 +336,9 @@ class LiquidityMonitorService:
             )
             if proxy_panel is not None:
                 panel = proxy_panel
-                components = self._extract_us_rates_components((panel,))
+                panels = (primary_panel, proxy_panel, macro_panel)
+                components = self._extract_us_rates_components(panels)
+                yield_components = [component for component in components if component["kind"] == "yield"]
         if not components:
             return self._indicator(
                 "us_rates_pressure",
@@ -377,7 +382,6 @@ class LiquidityMonitorService:
             credit_summary = f"CREDIT {self._signed_number_text(float(credit_observation['value']))}{credit_observation['unit']}"
             summary = f"{summary} | {credit_summary}" if summary else credit_summary
         freshness = self._weakest_freshness([str(component["freshness"]) for component in components])
-        yield_components = [component for component in components if component["kind"] == "yield"]
         status = (
             "live"
             if len(yield_components) >= 2
@@ -394,7 +398,7 @@ class LiquidityMonitorService:
             6 if direction > 0 else -6 if direction < 0 else 0,
             6,
             True,
-            self._summary_with_metadata(summary, item=components[0], freshness=freshness),
+            self._summary_with_component_metadata(summary, components, freshness=freshness),
             freshness=freshness,
         )
 
@@ -517,10 +521,14 @@ class LiquidityMonitorService:
         self,
         panels: Iterable[PanelState],
         symbols: set[str],
+        *,
+        validator: Optional[Callable[[Dict[str, Any], PanelState], bool]] = None,
     ) -> Optional[tuple[PanelState, Dict[str, Any]]]:
         candidates: List[tuple[tuple[int, int, int], PanelState, Dict[str, Any]]] = []
         for panel_index, panel in enumerate(panels):
             for item in self._reliable_items(panel, symbols):
+                if validator is not None and not validator(item, panel):
+                    continue
                 source_type = self._item_source_type(item, panel)
                 source = str(item.get("source") or panel.source or "").lower()
                 freshness = self._item_freshness(item, panel)
@@ -613,7 +621,7 @@ class LiquidityMonitorService:
         panels = tuple(panels)
         items: List[Dict[str, Any]] = []
         for symbol in ("US2Y", "US10Y", "US30Y"):
-            selected = self._preferred_symbol_item(panels, {symbol})
+            selected = self._preferred_symbol_item(panels, {symbol}, validator=self._is_yield_item_usable)
             if selected is None:
                 continue
             panel, item = selected
@@ -634,7 +642,7 @@ class LiquidityMonitorService:
                 }
             )
         for symbol in ("SOFR",):
-            selected = self._preferred_symbol_item(panels, {symbol})
+            selected = self._preferred_symbol_item(panels, {symbol}, validator=self._is_observation_item_usable)
             if selected is None:
                 continue
             panel, item = selected
@@ -655,7 +663,7 @@ class LiquidityMonitorService:
                 }
             )
         for symbol in ("US10Y2Y", "US10Y3M"):
-            selected = self._preferred_symbol_item(panels, {symbol})
+            selected = self._preferred_symbol_item(panels, {symbol}, validator=self._is_observation_item_usable)
             if selected is None:
                 continue
             panel, item = selected
@@ -1110,6 +1118,46 @@ class LiquidityMonitorService:
             parts.append(f"原因 {reason}")
         return " | ".join(part for part in parts if part)
 
+    def _summary_with_component_metadata(
+        self,
+        summary: str,
+        items: Iterable[Dict[str, Any]],
+        *,
+        freshness: Optional[str] = None,
+    ) -> str:
+        materialized = [item for item in items if isinstance(item, dict)]
+        if not materialized:
+            return self._summary_with_metadata(summary, freshness=freshness)
+
+        source_types = [
+            self._text(item.get("sourceType"))
+            for item in materialized
+            if self._text(item.get("sourceType"))
+        ]
+        if len(set(source_types)) <= 1:
+            return self._summary_with_metadata(summary, item=materialized[0], freshness=freshness)
+
+        source_labels: List[str] = []
+        as_of_values: List[str] = []
+        for item in materialized:
+            source = self._text(item.get("source"))
+            source_label = self._text(item.get("sourceLabel")) or source
+            if source_label:
+                display = source_label if not source or source == source_label else f"{source_label} ({source})"
+                if display not in source_labels:
+                    source_labels.append(display)
+            as_of = self._text(item.get("asOf") or item.get("updatedAt"))
+            if as_of and as_of not in as_of_values:
+                as_of_values.append(as_of)
+
+        return self._summary_with_metadata(
+            summary,
+            source_label=" / ".join(source_labels) if source_labels else None,
+            source_type=" / ".join(dict.fromkeys(source_types)),
+            as_of=max(as_of_values) if as_of_values else None,
+            freshness=freshness,
+        )
+
     def _panel_unavailable_reason(self, panel: PanelState, default: str) -> str:
         return self._text(panel.payload.get("warning")) or self._text(panel.payload.get("error")) or default
 
@@ -1144,6 +1192,17 @@ class LiquidityMonitorService:
         if value is None:
             return "待确认"
         return f"{value:+.2f}%"
+
+    def _is_vix_item_usable(self, item: Dict[str, Any], _: PanelState) -> bool:
+        if str(item.get("sourceType") or "").lower() != "official_public":
+            return True
+        return self._change_value(item) is not None or self._numeric(item.get("value") or item.get("price")) is not None
+
+    def _is_yield_item_usable(self, item: Dict[str, Any], _: PanelState) -> bool:
+        return self._change_value(item) is not None
+
+    def _is_observation_item_usable(self, item: Dict[str, Any], _: PanelState) -> bool:
+        return self._numeric(item.get("value")) is not None
 
     @staticmethod
     def _signed_number_text(value: Optional[float]) -> str:

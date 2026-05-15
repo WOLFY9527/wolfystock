@@ -1373,6 +1373,71 @@ def test_vix_indicator_prefers_official_macro_cache_over_yfinance_proxy(isolated
     assert "Yahoo Finance" not in str(indicator["summary"])
 
 
+def test_vix_indicator_ignores_malformed_official_macro_cache_and_keeps_cached_proxy_truthful(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    as_of = "2026-05-12T16:15:00+08:00"
+    service.cache.set(
+        "volatility",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 15.2,
+                    "changePercent": -2.5,
+                    "source": "yfinance_proxy",
+                    "sourceType": "proxy_public",
+                    "sourceLabel": "Yahoo Finance",
+                    "freshness": "delayed",
+                    "asOf": as_of,
+                    "updatedAt": as_of,
+                }
+            ],
+            updated_at=as_of,
+            as_of=as_of,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": None,
+                    "changePercent": "oops",
+                    "source": "fred",
+                    "sourceId": "fred:VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                    "asOf": as_of,
+                    "updatedAt": as_of,
+                }
+            ],
+            updated_at=as_of,
+            as_of=as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = {item["key"]: item for item in payload["indicators"]}["vix_pressure"]
+
+    assert indicator["includedInScore"] is True
+    assert indicator["freshness"] == "delayed"
+    assert "Yahoo Finance" in str(indicator["summary"])
+    assert "类型 official_public" not in str(indicator["summary"])
+    assert "类型 proxy_public" in str(indicator["summary"])
+    assert "FRED VIXCLS" not in str(indicator["summary"])
+
+
 def test_yfinance_proxy_panels_remain_delayed_and_not_live_provider_labels(isolated_db: DatabaseManager) -> None:
     service = _make_service()
     quote_index = [
@@ -1604,6 +1669,90 @@ def test_us_rates_indicator_uses_official_macro_cache_when_rates_panel_is_unavai
     assert "US30Y" in str(indicator["summary"])
     assert "US Treasury" in str(indicator["summary"])
     assert "Yahoo Finance" not in str(indicator["summary"])
+
+
+def test_us_rates_indicator_falls_back_to_proxy_yields_when_official_yields_are_malformed(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    official_as_of = "2026-05-12T16:15:00+08:00"
+    quote_index = [
+        datetime(2026, 5, 12, 16, 0, tzinfo=timezone.utc),
+        datetime(2026, 5, 13, 16, 0, tzinfo=timezone.utc),
+    ]
+    quote_map = {
+        "^TNX": _FakeHistoryFrame([45.8, 44.9], index=quote_index),
+        "^TYX": _FakeHistoryFrame([47.5, 46.9], index=quote_index),
+    }
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "US10Y",
+                    "label": "US 10Y",
+                    "value": 4.31,
+                    "changePercent": "oops",
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS10",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "asOf": official_as_of,
+                    "updatedAt": official_as_of,
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "US 30Y",
+                    "value": None,
+                    "changePercent": None,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS30",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                    "asOf": official_as_of,
+                    "updatedAt": official_as_of,
+                },
+                {
+                    "symbol": "SOFR",
+                    "label": "SOFR",
+                    "value": 5.31,
+                    "source": "fred",
+                    "sourceId": "fred:SOFR",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED SOFR",
+                    "unit": "%",
+                    "asOf": official_as_of,
+                    "updatedAt": official_as_of,
+                },
+            ],
+            updated_at=official_as_of,
+            as_of=official_as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    def _fake_quote_history(ticker: str) -> _FakeHistoryFrame:
+        return quote_map.get(ticker, _FakeHistoryFrame([]))
+
+    with patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", side_effect=_fake_quote_history, create=True):
+        payload = service.get_liquidity_monitor()
+
+    indicator = {item["key"]: item for item in payload["indicators"]}["us_rates_pressure"]
+
+    assert payload["sourceMetadata"]["externalProviderCalls"] is True
+    assert indicator["includedInScore"] is True
+    assert indicator["freshness"] == "delayed"
+    assert indicator["scoreContribution"] == 6
+    assert "US10Y -1.97%" in str(indicator["summary"])
+    assert "US30Y -1.26%" in str(indicator["summary"])
+    assert "SOFR +5.31%" in str(indicator["summary"])
+    assert "Yahoo Finance" in str(indicator["summary"])
+    assert "FRED SOFR" in str(indicator["summary"])
+    assert "unofficial_proxy / official_public" in str(indicator["summary"])
 
 
 def test_official_credit_stress_observation_is_summary_only_and_does_not_change_score(isolated_db: DatabaseManager) -> None:
