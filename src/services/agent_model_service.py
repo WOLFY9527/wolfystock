@@ -5,7 +5,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from src.config import get_effective_agent_models_to_try, get_effective_agent_primary_model
+from src.config import (
+    get_effective_agent_models_to_try,
+    get_effective_agent_primary_model,
+    get_llm_model_identity_forms,
+)
 
 
 _PLACEHOLDER_TO_PROVIDER = {
@@ -53,18 +57,88 @@ def _has_configured_key(config, provider: str) -> bool:
     return False
 
 
+def _get_entry_identity_forms(entry: Dict[str, Any]) -> set[str]:
+    forms: set[str] = set()
+    deployment_name = str(entry.get("model_name") or "").strip()
+    if deployment_name:
+        forms.update(get_llm_model_identity_forms(deployment_name))
+    params = entry.get("litellm_params", {}) or {}
+    runtime_model = str(params.get("model") or "").strip()
+    if runtime_model:
+        forms.update(get_llm_model_identity_forms(runtime_model))
+    return forms
+
+
+def _append_unique_model(ordered_models: List[str], seen_forms: set[str], model: str) -> None:
+    candidate = str(model or "").strip()
+    candidate_forms = get_llm_model_identity_forms(candidate)
+    if not candidate_forms or candidate_forms & seen_forms:
+        return
+    seen_forms.update(candidate_forms)
+    ordered_models.append(candidate)
+
+
+def _get_configured_primary_model(config) -> str:
+    return (
+        str(getattr(config, "agent_litellm_model", "") or "").strip()
+        or str(getattr(config, "litellm_model", "") or "").strip()
+    )
+
+
+def _get_display_models(primary_model: str, fallback_models: List[str]) -> List[str]:
+    ordered_models: List[str] = []
+    seen_forms: set[str] = set()
+    _append_unique_model(ordered_models, seen_forms, primary_model)
+    for fallback_model in fallback_models or []:
+        _append_unique_model(ordered_models, seen_forms, str(fallback_model or "").strip())
+    return ordered_models
+
+
+def _find_matching_entry_indexes(entries: List[Dict[str, Any]], model: str) -> List[int]:
+    candidate_forms = get_llm_model_identity_forms(model)
+    if not candidate_forms:
+        return []
+    matches: List[int] = []
+    for index, entry in enumerate(entries):
+        if _get_entry_identity_forms(entry) & candidate_forms:
+            matches.append(index)
+    return matches
+
+
+def _get_non_legacy_role_indexes(config, entries: List[Dict[str, Any]]) -> tuple[set[int], set[int]]:
+    primary_indexes: set[int] = set()
+    for candidate in (
+        _get_configured_primary_model(config),
+        get_effective_agent_primary_model(config),
+    ):
+        matched_indexes = _find_matching_entry_indexes(entries, candidate)
+        if matched_indexes:
+            primary_indexes.update(matched_indexes)
+            break
+
+    fallback_indexes: set[int] = set()
+    for candidate in _get_display_models("", getattr(config, "litellm_fallback_models", []) or []):
+        for matched_index in _find_matching_entry_indexes(entries, candidate):
+            if matched_index not in primary_indexes:
+                fallback_indexes.add(matched_index)
+
+    return primary_indexes, fallback_indexes
+
+
 def _build_non_legacy_deployments(config) -> List[Dict[str, Any]]:
     source = _get_models_source(config)
-    primary_model = get_effective_agent_primary_model(config)
-    fallback_models = set(get_effective_agent_models_to_try(config)[1:])
+    entries = [
+        entry
+        for entry in (getattr(config, "llm_model_list", []) or [])
+        if str((entry.get("litellm_params", {}) or {}).get("model") or "").strip()
+        and not str((entry.get("litellm_params", {}) or {}).get("model") or "").strip().startswith("__legacy_")
+    ]
+    primary_indexes, fallback_indexes = _get_non_legacy_role_indexes(config, entries)
     deployments: List[Dict[str, Any]] = []
 
-    for index, entry in enumerate(getattr(config, "llm_model_list", []) or []):
+    for index, entry in enumerate(entries):
         params = entry.get("litellm_params", {}) or {}
         model_name = str(params.get("model") or "").strip()
-        if not model_name or model_name.startswith("__legacy_"):
-            continue
-
         api_base = params.get("api_base")
         deployment_name = entry.get("model_name")
         deployments.append(
@@ -75,8 +149,8 @@ def _build_non_legacy_deployments(config) -> List[Dict[str, Any]]:
                 "source": source,
                 "api_base": str(api_base).strip() if api_base else None,
                 "deployment_name": str(deployment_name).strip() if deployment_name else None,
-                "is_primary": model_name == primary_model,
-                "is_fallback": model_name in fallback_models,
+                "is_primary": index in primary_indexes,
+                "is_fallback": index in fallback_indexes,
             }
         )
 
@@ -84,16 +158,29 @@ def _build_non_legacy_deployments(config) -> List[Dict[str, Any]]:
 
 
 def _build_legacy_deployments(config) -> List[Dict[str, Any]]:
-    primary_model = get_effective_agent_primary_model(config)
-    ordered_models = get_effective_agent_models_to_try(config)
-    if not ordered_models:
-        return []
-
     placeholder_counts = {provider: 0 for provider in _PLACEHOLDER_TO_PROVIDER.values()}
     for entry in getattr(config, "llm_model_list", []) or []:
         provider = _PLACEHOLDER_TO_PROVIDER.get(entry.get("model_name"))
         if provider:
             placeholder_counts[provider] += 1
+
+    configured_primary_model = _get_configured_primary_model(config)
+    effective_primary_model = get_effective_agent_primary_model(config)
+    primary_model = configured_primary_model
+    if primary_model:
+        provider = _get_model_provider(primary_model)
+        if provider in _MANAGED_LEGACY_PROVIDERS and placeholder_counts.get(provider, 0) <= 0:
+            primary_model = effective_primary_model or primary_model
+    else:
+        primary_model = effective_primary_model
+
+    ordered_models = _get_display_models(
+        primary_model,
+        getattr(config, "litellm_fallback_models", []) or [],
+    ) or get_effective_agent_models_to_try(config)
+    if not ordered_models:
+        return []
+    primary_model = ordered_models[0]
 
     deployments: List[Dict[str, Any]] = []
     seen_models = set()
@@ -145,18 +232,20 @@ def list_agent_model_deployments(config) -> List[Dict[str, Any]]:
     if not deployments:
         deployments = _build_legacy_deployments(config)
 
-    return sorted(
-        deployments,
-        key=lambda item: (
-            not item["is_primary"],
-            not item["is_fallback"],
-            item["source"],
-            item["model"],
-            item["api_base"] or "",
-            item["deployment_name"] or "",
-            item["deployment_id"],
-        ),
-    )
+    return [
+        item
+        for _, item in sorted(
+            enumerate(deployments),
+            key=lambda pair: (
+                0
+                if pair[1]["is_primary"]
+                else 1
+                if pair[1]["is_fallback"]
+                else 2,
+                pair[0],
+            ),
+        )
+    ]
 
 
 def list_agent_provider_health(config) -> Dict[str, Any]:

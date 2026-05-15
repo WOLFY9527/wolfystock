@@ -51,6 +51,37 @@ class AgentModelsApiTestCase(unittest.TestCase):
         self.assertTrue(deployments[0]["is_primary"])
         self.assertFalse("api_key" in str(deployments))
 
+    def test_models_endpoint_orders_alias_backed_primary_then_fallback_then_extra(self) -> None:
+        config = _build_config(
+            litellm_config_path="config/litellm.yaml",
+            llm_models_source="litellm_config",
+            llm_model_list=[
+                {
+                    "model_name": "extra-anthropic",
+                    "litellm_params": {"model": "anthropic/claude-3-5-haiku", "api_key": "secret-a"},
+                },
+                {
+                    "model_name": "gemini-primary",
+                    "litellm_params": {"model": "gemini/gemini-2.5-flash", "api_key": "secret-g"},
+                },
+                {
+                    "model_name": "openai-fallback",
+                    "litellm_params": {"model": "openai/gpt-4o-mini", "api_key": "secret-o"},
+                },
+            ],
+        )
+
+        deployments = list_agent_model_deployments(config)
+
+        self.assertEqual(
+            [item["deployment_name"] for item in deployments],
+            ["gemini-primary", "openai-fallback", "extra-anthropic"],
+        )
+        self.assertTrue(deployments[0]["is_primary"])
+        self.assertTrue(deployments[1]["is_fallback"])
+        self.assertFalse(deployments[2]["is_primary"])
+        self.assertFalse(deployments[2]["is_fallback"])
+
     def test_models_endpoint_returns_channel_deployments_with_api_base(self) -> None:
         config = _build_config(
             llm_channels=[{"name": "openai"}],
