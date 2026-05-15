@@ -8,10 +8,12 @@ import {
   Download,
   History,
   Info,
+  LayoutGrid,
   LineChart,
   MoreHorizontal,
   Play,
   Sparkles,
+  Table2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { analysisApi, DuplicateTaskError } from '../api/analysis';
@@ -23,8 +25,11 @@ import {
 } from '../components/scanner/ScannerBacktestLab';
 import { ScannerActionButton as ActionButton } from '../components/scanner/ScannerActionButton';
 import {
+  ScannerCandidateCard,
   ScannerCandidateDetailPanel,
   ScannerCandidateDiagnosticRow,
+  ScannerCandidateInspector,
+  ScannerCandidateTableRow,
 } from '../components/scanner/ScannerCandidatePresenters';
 import {
   AdvancedDisclosure,
@@ -101,6 +106,7 @@ const {
 const HISTORY_PAGE_SIZE = 8;
 
 type PillOption = { value: string; label: string };
+type ViewMode = 'cards' | 'table';
 type CandidateFilter = 'selected' | 'pool' | 'rejected' | 'data_failed' | 'all';
 type SortKey = 'score' | 'symbol' | 'target' | 'risk';
 type SortDirection = 'asc' | 'desc';
@@ -317,6 +323,12 @@ function formatDateOnly(value?: string | null, language: 'zh' | 'en' = 'zh'): st
   }).format(date);
 }
 
+function scoreBadgeClass(score: number): string {
+  if (score >= 90) return 'bg-white/[0.08] text-white border-white/12';
+  if (score >= 80) return 'bg-indigo-500/12 text-indigo-200 border-indigo-500/20';
+  return 'bg-white/[0.04] text-white/72 border-white/10';
+}
+
 function findCandidateValue(
   candidate: ScannerCandidate,
   keywords: string[],
@@ -397,6 +409,17 @@ function getKeyReason(candidate: ScannerCandidate, runDetail: ScannerRunDetail |
     language,
     language === 'en' ? 'No selection note provided' : '未提供入选说明',
   );
+}
+
+function getSourceBadge(candidate: ScannerCandidate, runDetail: ScannerRunDetail | null, language: 'zh' | 'en'): string | null {
+  const candidateProvider = getProviderDiagnostics(candidate.diagnostics)?.quoteSourceUsed
+    || getProviderDiagnostics(candidate.diagnostics)?.snapshotSourceUsed
+    || getProviderDiagnostics(candidate.diagnostics)?.historySourceUsed;
+  const runProvider = runDetail ? getRunProviderDiagnostics(runDetail)?.quoteSourceUsed
+    || getRunProviderDiagnostics(runDetail)?.snapshotSourceUsed
+    || getRunProviderDiagnostics(runDetail)?.historySourceUsed : null;
+  const friendly = formatFriendlyProvider(candidateProvider || runProvider || runDetail?.sourceSummary || null, language);
+  return friendly === '--' ? (language === 'en' ? 'Data ready for observation' : '数据可用于观察') : friendly;
 }
 
 function getRunSummaryCount(runDetail: ScannerRunDetail, key: keyof NonNullable<ScannerRunDetail['summary']>, fallback = 0): number {
@@ -562,6 +585,14 @@ function diagnosticStatusLabel(status: ScannerCandidateDiagnostic['status'], lan
   return labels[normalizedStatus]?.[language] || normalizedStatus;
 }
 
+function diagnosticStatusClass(status: ScannerCandidateDiagnostic['status']): string {
+  const normalizedStatus = normalizeDiagnosticStatus(status);
+  if (normalizedStatus === 'selected') return 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100 shadow-[0_0_18px_rgba(16,185,129,0.12)]';
+  if (normalizedStatus === 'rejected') return 'border-white/10 bg-white/[0.035] text-white/58';
+  if (normalizedStatus === 'data_failed' || normalizedStatus === 'error') return 'border-rose-400/25 bg-rose-400/10 text-rose-100 shadow-[0_0_18px_rgba(244,63,94,0.10)]';
+  return 'border-amber-400/20 bg-amber-400/10 text-amber-100';
+}
+
 function diagnosticScoreValue(candidate: ScannerCandidateDiagnostic): string {
   return candidate.score == null ? 'DATA' : `${candidate.score}/100`;
 }
@@ -590,6 +621,24 @@ function inferPreviewThreshold(runDetail: ScannerRunDetail | null, diagnostics: 
   }
   const summarySelected = runDetail?.summary?.selectedCount ?? runDetail?.shortlist?.length ?? 0;
   return summarySelected > 0 ? 50 : 60;
+}
+
+function previewDecisionLabel(
+  candidate: ScannerCandidateDiagnostic,
+  threshold: number,
+  language: 'zh' | 'en',
+): string {
+  if (isOfficialSelected(candidate)) return language === 'en' ? 'Official' : '官方';
+  if (isDataUnavailable(candidate)) return language === 'en' ? 'Data failed' : '数据失败';
+  if (isPreviewSelected(candidate, threshold)) return language === 'en' ? 'Preview' : '预览';
+  return language === 'en' ? 'Rejected' : '淘汰';
+}
+
+function previewDecisionClass(candidate: ScannerCandidateDiagnostic, threshold: number): string {
+  if (isOfficialSelected(candidate)) return 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100';
+  if (isDataUnavailable(candidate)) return 'border-rose-400/25 bg-rose-400/10 text-rose-100';
+  if (isPreviewSelected(candidate, threshold)) return 'border-blue-400/25 bg-blue-400/10 text-blue-100 shadow-[0_0_14px_rgba(59,130,246,0.12)]';
+  return 'border-white/10 bg-white/[0.035] text-white/58';
 }
 
 function sortDiagnosticsForDecision(
@@ -718,8 +767,6 @@ function buildDecisionSummary(
 }
 
 function diagnosticToCandidate(candidate: ScannerCandidateDiagnostic): ScannerCandidate {
-  const failedRuleNotes = (candidate.failedRules || []).map((item) => sanitizeUserFacingDataIssue(item, 'en'));
-  const missingFieldNotes = (candidate.missingFields || []).map((item) => sanitizeUserFacingDataIssue(item, 'en'));
   return {
     symbol: candidate.symbol,
     name: candidate.name || candidate.symbol,
@@ -731,8 +778,8 @@ function diagnosticToCandidate(candidate: ScannerCandidateDiagnostic): ScannerCa
     reasons: [candidate.reason, ...(candidate.failedRules || [])].filter((item): item is string => Boolean(item)),
     keyMetrics: Object.entries(candidate.metrics || {}).slice(0, 6).map(([label, value]) => ({ label, value: String(value ?? '--') })),
     featureSignals: [],
-    riskNotes: Array.from(new Set([...failedRuleNotes, ...missingFieldNotes])).slice(0, 4),
-    watchContext: candidate.score != null ? [{ label: 'Watch score', value: `${candidate.score}/100` }] : [],
+    riskNotes: [],
+    watchContext: [],
     boards: [],
     appearedInRecentRuns: 0,
     lastTradeDate: null,
@@ -760,50 +807,42 @@ function diagnosticToCandidate(candidate: ScannerCandidateDiagnostic): ScannerCa
   };
 }
 
-function fallbackDiagnosticFromCandidate(candidate: ScannerCandidate): ScannerCandidateDiagnostic {
-  return {
-    symbol: candidate.symbol,
-    name: candidate.companyName || candidate.name,
-    rank: candidate.rank,
-    status: 'selected',
-    score: candidate.score,
-    provider: null,
-    reason: candidate.reasonSummary,
-    failedRules: [],
-    missingFields: [],
-    metrics: Object.fromEntries((candidate.keyMetrics || []).map((item) => [item.label, item.value])),
-    metadata: {},
-  };
+function buildInspectorWhySelected(candidate: ScannerCandidateDiagnostic, language: 'zh' | 'en'): string[] {
+  const status = normalizeDiagnosticStatus(candidate.status);
+  const friendlyReason = formatFriendlyDiagnosticReason(candidate, language);
+  const notes = status === 'selected'
+    ? [
+      language === 'en' ? 'Passed current screening' : '通过当前筛选条件',
+      candidate.score != null ? (language === 'en' ? 'Score reached the active threshold' : '评分达到当前阈值') : null,
+      candidate.missingFields?.length ? null : (language === 'en' ? 'No required fields missing' : '关键数据未缺失'),
+    ]
+    : [
+      friendlyReason,
+      language === 'en' ? 'Did not meet the active scanner threshold' : '未满足当前扫描阈值',
+    ];
+  return notes.filter((item, index, array): item is string => Boolean(item) && array.indexOf(item) === index).slice(0, 4);
 }
 
-function formatWorkbenchWatchSummary(
-  candidate: ScannerCandidate,
+function buildInspectorRiskNotes(
+  candidate: ScannerCandidateDiagnostic,
+  runDetail: ScannerRunDetail | null | undefined,
   language: 'zh' | 'en',
-): string {
-  const entryRange = getEntryRange(candidate);
-  const targetPrice = getTargetPrice(candidate);
-  if (!entryRange && !targetPrice) {
-    return language === 'en' ? 'No explicit watch band' : '未提供明确观察区间';
-  }
-  return [
-    entryRange ? `${language === 'en' ? 'Watch' : '观察'} ${entryRange}` : null,
-    targetPrice ? `${language === 'en' ? 'Target' : '目标'} ${targetPrice}` : null,
-  ].filter(Boolean).join(' · ');
-}
-
-function formatWorkbenchRangeSummary(
-  candidate: ScannerCandidate,
-  language: 'zh' | 'en',
-): string {
-  const stopLoss = getStopLoss(candidate);
-  const riskSummary = getRiskSummary(candidate, language);
-  if (!stopLoss && !riskSummary) {
-    return language === 'en' ? 'No explicit risk boundary' : '未提供明确风险边界';
-  }
-  return [
-    stopLoss ? `${language === 'en' ? 'Stop' : '止损'} ${stopLoss}` : null,
-    riskSummary || null,
-  ].filter(Boolean).join(' · ');
+): string[] {
+  const source = formatFriendlyProvider(candidate.provider, language);
+  const notes = [
+    candidate.score != null && candidate.score <= 65
+      ? (language === 'en' ? `Score is not a strong signal (${candidate.score}/100)` : `评分不算强信号（${candidate.score}/100）`)
+      : null,
+    ...((candidate.failedRules || []).map((rule) => formatFriendlyDiagnosticReason({ ...candidate, reason: rule, failedRules: [rule] }, language))),
+    candidate.missingFields?.length
+      ? (language === 'en' ? `${candidate.missingFields.length} missing data fields` : `${candidate.missingFields.length} 个缺失字段`)
+      : null,
+    runDetail?.summary?.selectedCount === 1
+      ? (language === 'en' ? 'Only one selected candidate; sample is narrow' : '本次只有 1 个候选，样本偏窄')
+      : null,
+    source !== '--' ? (language === 'en' ? `${source}; verify freshness` : `${source}，需确认实时性`) : null,
+  ].filter((item, index, array): item is string => Boolean(item) && array.indexOf(item) === index);
+  return notes.slice(0, 4);
 }
 
 function buildRunComparison(
@@ -1290,14 +1329,12 @@ function ScannerLaunchEvidenceSummary({
           </TerminalChip>
           {generatedAt ? <span className="font-mono text-[11px] text-white/42">{formatTimestamp(generatedAt, language)}</span> : null}
         </div>
-        <div data-testid="scanner-decision-summary">
-          <h2 className="mt-2 text-base font-semibold tracking-tight text-white">
-            {decisionSummary?.headline || (language === 'en' ? 'Candidate evidence is waiting for a scan' : '候选证据等待扫描')}
-          </h2>
-          <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-white/62">
-            {decisionSummary ? [decisionSummary.reason, decisionSummary.data].filter(Boolean).join(language === 'en' ? ' · ' : ' · ') : nextStep}
-          </p>
-        </div>
+        <h2 className="mt-2 text-base font-semibold tracking-tight text-white">
+          {decisionSummary?.headline || (language === 'en' ? 'Candidate evidence is waiting for a scan' : '候选证据等待扫描')}
+        </h2>
+        <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-white/62">
+          {decisionSummary ? [decisionSummary.reason, decisionSummary.data].filter(Boolean).join(language === 'en' ? ' · ' : ' · ') : nextStep}
+        </p>
       </TerminalPanel>
       <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
         <TerminalNestedBlock>
@@ -1354,13 +1391,15 @@ const UserScannerPage: React.FC = () => {
   const [pendingWatchlistIdentity, setPendingWatchlistIdentity] = useState<string | null>(null);
   const [pendingBatchWatchlistAction, setPendingBatchWatchlistAction] = useState<string | null>(null);
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false);
+  const [rowMoreSymbol, setRowMoreSymbol] = useState<string | null>(null);
   const [isRejectionSummaryOpen, setIsRejectionSummaryOpen] = useState(false);
   const [isDataNotesOpen, setIsDataNotesOpen] = useState(false);
   const [previousRunDetail, setPreviousRunDetail] = useState<ScannerRunDetail | null>(null);
   const [previewThreshold, setPreviewThreshold] = useState(50);
+  const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [, setExpandedSymbol] = useState<string | null>(null);
+  const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
   const [inspectorSymbol, setInspectorSymbol] = useState<string | null>(null);
   const [pendingAnalyzeSymbol, setPendingAnalyzeSymbol] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -1370,19 +1409,11 @@ const UserScannerPage: React.FC = () => {
   const [strategySimulation, setStrategySimulation] = useState<ScannerStrategySimulationResult | null>(null);
   const [isStrategySimulationLoading, setIsStrategySimulationLoading] = useState(false);
   const [strategySimulationError, setStrategySimulationError] = useState<string | null>(null);
-  const [viewportWidth, setViewportWidth] = useState(() => (typeof window === 'undefined' ? 1440 : window.innerWidth));
   const selectedRunIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     document.title = t('scanner.documentTitle');
   }, [t]);
-
-  useEffect(() => {
-    const handleResize = () => setViewportWidth(window.innerWidth);
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   const profileOptions = useMemo(() => getScannerProfileOptions(market, t), [market, t]);
   const universeOptions = useMemo(() => getScannerUniverseOptions(market, language), [language, market]);
@@ -1699,6 +1730,10 @@ const UserScannerPage: React.FC = () => {
     () => diagnosticCandidates.filter((candidate) => isPreviewSelected(candidate, previewThreshold)),
     [diagnosticCandidates, previewThreshold],
   );
+  const previewAddedDiagnostics = useMemo(
+    () => previewSelectedDiagnostics.filter((candidate) => !isOfficialSelected(candidate)),
+    [previewSelectedDiagnostics],
+  );
   const officialSelectedDiagnostics = useMemo(
     () => diagnosticCandidates.filter(isOfficialSelected),
     [diagnosticCandidates],
@@ -1710,6 +1745,10 @@ const UserScannerPage: React.FC = () => {
   const rejectionBuckets = useMemo(
     () => buildRejectionBuckets(diagnosticCandidates, language),
     [diagnosticCandidates, language],
+  );
+  const previewCandidates = useMemo(
+    () => diagnosticCandidates.filter((candidate) => candidate.status !== 'selected').slice(0, 5),
+    [diagnosticCandidates],
   );
   const comparisonState = useMemo(
     () => buildRunComparison(runDetail, previousRunDetail, previewThreshold, language),
@@ -1754,7 +1793,7 @@ const UserScannerPage: React.FC = () => {
     () => sortDiagnosticsForDecision(filteredDiagnosticCandidates, previewThreshold),
     [filteredDiagnosticCandidates, previewThreshold],
   );
-  const showDetailRail = viewportWidth >= 1600;
+  const selectedOnlyView = !hasCandidateDiagnostics || candidateFilter === 'selected';
   const topFiveDiagnostics = useMemo(
     () => sortDiagnosticsForDecision(diagnosticCandidates, previewThreshold).slice(0, 5),
     [diagnosticCandidates, previewThreshold],
@@ -1808,29 +1847,15 @@ const UserScannerPage: React.FC = () => {
   }, [candidateFilter, hasCandidateDiagnostics]);
 
   useEffect(() => {
-    const rankedDiagnostics = hasCandidateDiagnostics
-      ? sortDiagnosticsForDecision(filteredDiagnosticCandidates, previewThreshold)
-      : sortedCandidates.map(fallbackDiagnosticFromCandidate);
-    if (!rankedDiagnostics.length) {
+    if (!hasCandidateDiagnostics) {
       setInspectorSymbol(null);
       return;
     }
-    const normalizedInspector = normalizeCandidateSymbol(inspectorSymbol);
-    if (normalizedInspector) {
-      const matched = rankedDiagnostics.find((candidate) => normalizeCandidateSymbol(candidate.symbol) === normalizedInspector);
-      if (matched) {
-        return;
-      }
+    const current = getSelectedDiagnosticCandidate(diagnosticCandidates, sortedCandidates, inspectorSymbol);
+    if (current && (!inspectorSymbol || normalizeCandidateSymbol(current.symbol) !== normalizeCandidateSymbol(inspectorSymbol))) {
+      setInspectorSymbol(current.symbol);
     }
-    setInspectorSymbol(rankedDiagnostics[0].symbol);
-  }, [
-    fallbackDiagnosticFromCandidate,
-    filteredDiagnosticCandidates,
-    hasCandidateDiagnostics,
-    inspectorSymbol,
-    previewThreshold,
-    sortedCandidates,
-  ]);
+  }, [diagnosticCandidates, hasCandidateDiagnostics, inspectorSymbol, sortedCandidates]);
 
   useEffect(() => {
     let isMounted = true;
@@ -2159,48 +2184,6 @@ const UserScannerPage: React.FC = () => {
     watchlistAuthBlocked,
   ]);
 
-  const shortlistCandidateBySymbol = useMemo(
-    () => new Map(sortedCandidates.map((candidate) => [normalizeCandidateSymbol(candidate.symbol), candidate] as const)),
-    [sortedCandidates],
-  );
-  const workbenchDiagnostics = useMemo(
-    () => (hasCandidateDiagnostics ? decisionSortedDiagnosticCandidates : sortedCandidates.map(fallbackDiagnosticFromCandidate)),
-    [decisionSortedDiagnosticCandidates, hasCandidateDiagnostics, sortedCandidates],
-  );
-  const activeDetailDiagnostic = useMemo(() => {
-    if (!workbenchDiagnostics.length) {
-      return null;
-    }
-    const normalizedInspector = normalizeCandidateSymbol(inspectorSymbol);
-    if (normalizedInspector) {
-      const matched = workbenchDiagnostics.find((candidate) => normalizeCandidateSymbol(candidate.symbol) === normalizedInspector);
-      if (matched) {
-        return matched;
-      }
-    }
-    return workbenchDiagnostics[0] || null;
-  }, [inspectorSymbol, workbenchDiagnostics]);
-  const activeDetailCandidate = useMemo(() => {
-    if (!activeDetailDiagnostic) {
-      return null;
-    }
-    return shortlistCandidateBySymbol.get(normalizeCandidateSymbol(activeDetailDiagnostic.symbol)) || diagnosticToCandidate(activeDetailDiagnostic);
-  }, [activeDetailDiagnostic, shortlistCandidateBySymbol]);
-  const activeDetailBacktestItem = getBacktestItem(activeDetailDiagnostic?.symbol);
-  const activeDetailWatchlistIdentity = activeDetailDiagnostic
-    ? getWatchlistIdentity(runDetail?.market || market, activeDetailDiagnostic.symbol)
-    : '';
-  const activeDetailTracked = Boolean(activeDetailWatchlistIdentity && trackedWatchlistIdentitySet.has(activeDetailWatchlistIdentity));
-  const activeDetailTrackPending = pendingWatchlistIdentity === activeDetailWatchlistIdentity;
-  const activeDetailPanel = activeDetailCandidate
-    ? renderCandidateDetailPanel(
-      activeDetailCandidate,
-      activeDetailTracked,
-      activeDetailTrackPending,
-      activeDetailBacktestItem,
-    )
-    : null;
-
   return (
     <>
       <div
@@ -2248,11 +2231,11 @@ const UserScannerPage: React.FC = () => {
             </div>
           ) : null}
 
-		          <TerminalGrid data-testid="scanner-workspace-grid" className="w-full flex-1 min-w-0 xl:grid-cols-[minmax(280px,300px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(300px,320px)_minmax(0,1fr)]">
+		          <TerminalGrid data-testid="scanner-workspace-grid" className="w-full flex-1 min-w-0">
 		            <TerminalPanel
                   as="section"
 		              data-testid="scanner-control-rail"
-		              className="order-1 flex w-full shrink-0 flex-col xl:sticky xl:top-4"
+		              className="order-1 flex w-full shrink-0 flex-col xl:sticky xl:top-4 xl:col-span-3"
 		            >
 	              <SectionShell
 	                className="flex flex-col rounded-[24px] p-0 bg-transparent shadow-none"
@@ -2479,7 +2462,7 @@ const UserScannerPage: React.FC = () => {
 		            <TerminalPanel
                   as="section"
 		              data-testid="scanner-results-stage"
-		              className="order-2 flex min-h-[520px] flex-1 min-w-0 flex-col"
+		              className="order-2 flex min-h-[520px] flex-1 min-w-0 flex-col xl:col-span-9"
 		            >
               <div data-testid="scanner-results-pane" className="flex min-h-0 flex-1 min-w-0 flex-col">
               <div data-testid="user-scanner-bento-hero" className="flex shrink-0 flex-col gap-2 border-b border-white/5 px-3 py-2.5">
@@ -2618,189 +2601,458 @@ const UserScannerPage: React.FC = () => {
 	                language={language}
 	              />
 
-              <div data-testid="scanner-ranked-workbench" className="px-3 py-3">
-                <div className={`grid gap-3 ${showDetailRail ? 'xl:grid-cols-[minmax(820px,1fr)_minmax(320px,340px)]' : 'grid-cols-1'}`}>
-                  <div className="grid min-w-0 gap-2">
-                    {runDetail && hasCandidateDiagnostics ? (
-                      <div className="rounded-xl border border-white/5 bg-black/20 p-1" data-testid="scanner-candidate-filters">
-                        <div className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1" role="group" aria-label={language === 'en' ? 'Candidate diagnostics filter' : '候选诊断过滤'}>
-                          {([
-                            ['selected', language === 'en' ? 'Selected' : '入选'],
-                            ['pool', language === 'en' ? 'Candidate pool' : '候选池'],
-                            ['rejected', language === 'en' ? 'Rejected' : '淘汰'],
-                            ['data_failed', language === 'en' ? 'Data failed' : '数据失败'],
-                            ['all', language === 'en' ? 'All' : '全部'],
-                          ] as const).map(([key, label]) => (
-                            <button
-                              key={key}
-                              type="button"
-                              className={`inline-flex shrink-0 items-center rounded-md px-2.5 py-1 text-xs ${candidateFilter === key ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'}`}
-                              onClick={() => setCandidateFilter(key)}
-                            >
-                              <span className="ui-truncate block">{label}</span>
-                            </button>
+              {runDetail ? (
+                <div className="shrink-0 border-b border-white/5 px-3 py-2" data-testid="scanner-diagnostic-summary">
+                  <div data-testid="scanner-summary-counters" className="flex flex-wrap items-center gap-1.5 rounded-xl border border-white/5 bg-white/[0.02] px-2.5 py-2 backdrop-blur-md">
+                    {[
+                      [language === 'en' ? 'Universe' : '候选范围', runDetail.summary?.universeCount ?? runDetail.acceptedSymbolsCount ?? runDetail.universeSize],
+                      [language === 'en' ? 'Evaluated' : '已评估', runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize],
+                      [language === 'en' ? 'Selected' : '入选', runDetail.summary?.selectedCount ?? shortlistCount],
+                      [language === 'en' ? 'Not selected' : '未入选', runDetail.summary?.rejectedCount ?? 0],
+                      [language === 'en' ? 'Data thin' : '数据不足', runDetail.summary?.dataFailedCount ?? 0],
+                      [language === 'en' ? 'Not processed' : '暂未处理', runDetail.summary?.skippedCount ?? 0],
+                    ].map(([label, value]) => (
+                      <span key={label} className="inline-flex items-baseline gap-1 rounded-lg border border-white/5 bg-black/20 px-2 py-1">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{label}</span>
+                        <span className="font-mono text-xs text-white/78">{value}</span>
+                      </span>
+                    ))}
+                  </div>
+                  {decisionSummary ? (
+                    <div
+                      data-testid="scanner-decision-summary"
+                      className="mt-2 rounded-xl border border-white/5 bg-white/[0.02] px-2.5 py-2 text-xs backdrop-blur-md"
+                    >
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-white/78">
+                        <span className="font-medium">{decisionSummary.headline}</span>
+                        <span className="font-mono text-white/72">{decisionSummary.best}</span>
+                      </div>
+                      <p className="mt-1 min-w-0 truncate text-[11px] text-white/46" title={`${decisionSummary.reason} · ${decisionSummary.data}`}>
+                        {[decisionSummary.reason, decisionSummary.data].join(' · ')}
+                      </p>
+                      <p className="mt-1 min-w-0 truncate text-[11px] text-white/34">
+                        {[
+                          comparisonState.previousRun && comparisonState.chips.length
+                            ? (language === 'en' ? 'candidate pool changed this run' : '本次发生候选池交换')
+                            : null,
+                          runDetail.summary?.limitedByResultCap
+                            ? (language === 'en' ? 'result cap active' : '结果上限生效')
+                            : null,
+                        ].filter(Boolean).join(' · ')}
+                      </p>
+                    </div>
+                  ) : null}
+	                </div>
+	              ) : null}
+
+              {runDetail && hasCandidateDiagnostics ? (
+                <div className="shrink-0 border-b border-white/5 px-3 py-2" data-testid="scanner-candidate-filters">
+                  <div className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1 rounded-lg border border-white/5 bg-black/30 p-0.5" role="group" aria-label={language === 'en' ? 'Candidate diagnostics filter' : '候选诊断过滤'}>
+                    {([
+                      ['selected', language === 'en' ? 'Selected' : '入选'],
+                      ['pool', language === 'en' ? 'Candidate pool' : '候选池'],
+                      ['rejected', language === 'en' ? 'Rejected' : '淘汰'],
+                      ['data_failed', language === 'en' ? 'Data failed' : '数据失败'],
+                      ['all', language === 'en' ? 'All' : '全部'],
+                    ] as const).map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`inline-flex shrink-0 items-center rounded-md px-2.5 py-1 text-xs ${candidateFilter === key ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'}`}
+                        onClick={() => setCandidateFilter(key)}
+                      >
+                        <span className="ui-truncate block">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex shrink-0 flex-col gap-2 border-b border-white/5 px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
+                <div className="ui-scroll-x-quiet flex min-w-0 max-w-full rounded-lg border border-white/5 bg-black/30 p-0.5" role="group" aria-label={language === 'en' ? 'Result view mode' : '结果视图'}>
+                  <button
+                    type="button"
+                    disabled={!selectedOnlyView}
+                    className={`inline-flex min-w-0 shrink-0 items-center gap-2 rounded-md px-2.5 py-1 text-xs ${viewMode === 'cards' && selectedOnlyView ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'} disabled:cursor-not-allowed disabled:opacity-35`}
+                    onClick={() => setViewMode('cards')}
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    <span className="ui-truncate">{language === 'en' ? 'Card view' : '卡片视图'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`inline-flex min-w-0 shrink-0 items-center gap-2 rounded-md px-2.5 py-1 text-xs ${viewMode === 'table' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'}`}
+                    onClick={() => setViewMode('table')}
+                  >
+                    <Table2 className="h-3.5 w-3.5" />
+                    <span className="ui-truncate">{language === 'en' ? 'Table view' : '表格视图'}</span>
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-white/42">
+                  <span>{language === 'en' ? 'Sort by' : '排序'}</span>
+                  {([
+                    ['score', language === 'en' ? 'scanner score' : '扫描评分'],
+                    ['symbol', language === 'en' ? 'symbol' : '代码'],
+                    ['target', language === 'en' ? 'upper watch' : '上方观察'],
+                    ['risk', language === 'en' ? 'risk/score' : '风险/评分'],
+                  ] as const).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 ${sortKey === key ? 'border-white/16 bg-white/[0.08] text-white' : 'border-white/5 bg-white/[0.02] text-white/48 hover:text-white/75'}`}
+                      onClick={() => handleSortChange(key)}
+                    >
+                      {label}
+                      {sortKey === key ? <ArrowDownUp className="h-3 w-3" /> : null}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+		              <div data-testid="scanner-candidate-scroll-region" className="px-3 py-3">
+		                <div className="grid gap-3">
+                  <div className="min-w-0">
+                {!selectedOnlyView ? (
+                  decisionSortedDiagnosticCandidates.length ? (
+                    <div data-testid="scanner-candidate-diagnostics-table" className="space-y-1.5">
+                      {decisionSortedDiagnosticCandidates.map((candidate) => {
+                        const activeRunDetail = runDetail;
+                        if (!activeRunDetail) {
+                          return null;
+                        }
+                        const diagnosticCandidate = diagnosticToCandidate(candidate);
+                        const candidateMarket = normalizeScannerMarket(activeRunDetail.market || market);
+                        const candidateIdentity = getWatchlistIdentity(candidateMarket, candidate.symbol);
+                        const isTracked = Boolean(candidateIdentity && trackedWatchlistIdentitySet.has(candidateIdentity));
+                        const isTrackPending = pendingWatchlistIdentity === candidateIdentity;
+                        const backtestItem = getBacktestItem(candidate.symbol);
+                        const isExpanded = expandedSymbol === candidate.symbol;
+                        const comparison = comparisonState.bySymbol.get(normalizeCandidateSymbol(candidate.symbol) || '');
+                        const scoreDelta = formatScoreDelta(comparison?.scoreDelta ?? null);
+                        const isInspectorActive = normalizeCandidateSymbol(inspectorCandidate?.symbol) === normalizeCandidateSymbol(candidate.symbol);
+                        const isMoreOpen = rowMoreSymbol === candidate.symbol;
+                        const friendlyReason = formatFriendlyDiagnosticReason(candidate, language);
+                        const dataQualityLabel = formatCandidateDataQuality(candidate, language);
+                        const evidenceSummary = getScannerEvidenceSummary(candidate);
+                        const isSelectedCandidate = isOfficialSelected(candidate);
+                        const statusLabel = diagnosticStatusLabel(candidate.status, language);
+                        const missingCount = candidate.missingFields?.length || 0;
+                        const failedRuleNotes = Array.from(new Set([
+                          friendlyReason,
+                          ...(candidate.failedRules || []).map((item) => sanitizeUserFacingDataIssue(item, language)),
+                        ]));
+                        const missingFieldNotes = Array.from(new Set((candidate.missingFields || []).map((item) => sanitizeUserFacingDataIssue(item, language))));
+                        return (
+                          <ScannerCandidateDiagnosticRow
+                            key={`diagnostic-${candidate.symbol}`}
+                            candidate={candidate}
+                            language={language}
+                            isSelectedCandidate={isSelectedCandidate}
+                            isInspectorActive={isInspectorActive}
+                            isExpanded={isExpanded}
+                            isMoreOpen={isMoreOpen}
+                            previewLabel={previewDecisionLabel(candidate, previewThreshold, language)}
+                            previewBadgeClassName={previewDecisionClass(candidate, previewThreshold)}
+                            friendlyReason={friendlyReason}
+                            dataQualityLabel={dataQualityLabel}
+                            evidenceSummary={evidenceSummary}
+                            scoreLabel={candidate.score == null ? '--' : `${candidate.score}/100`}
+                            scoreDelta={scoreDelta}
+                            comparisonLabel={comparison?.label || null}
+                            statusLabel={statusLabel}
+                            missingCount={missingCount}
+                            failedRuleNotes={failedRuleNotes}
+                            missingFieldNotes={missingFieldNotes}
+                            watchlistActionLabel={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
+                            watchlistActionTitle={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
+                            isTracked={isTracked}
+                            isTrackPending={isTrackPending}
+                            isWatchlistAuthBlocked={watchlistAuthBlocked}
+                            backtestLabel={getBacktestActionLabel(backtestItem)}
+                            backtestTitle={!normalizeCandidateSymbol(candidate.symbol) ? backtestUnavailableLabel : undefined}
+                            backtestItem={backtestItem}
+                            copyLabel={copiedKey === `candidate:${candidate.symbol}` ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制')}
+                            onSelect={() => {
+                              setInspectorSymbol(candidate.symbol);
+                              setExpandedSymbol(candidate.symbol);
+                            }}
+                            onViewEvidence={() => {
+                              setInspectorSymbol(candidate.symbol);
+                              setExpandedSymbol(candidate.symbol);
+                            }}
+                            onToggleMore={() => setRowMoreSymbol((current) => current === candidate.symbol ? null : candidate.symbol)}
+                            onBacktest={() => void handleBacktestCandidate(diagnosticCandidate)}
+                            onTrack={() => void handleTrackCandidate(diagnosticCandidate)}
+                            onCopy={() => void handleCopyText(candidate.symbol, `candidate:${candidate.symbol}`)}
+                            onExport={() => {
+                              handleExportRows(
+                                [buildScannerExportRow(diagnosticCandidate, activeRunDetail, language)],
+                                buildScannerExportFilename(activeRunDetail, `candidate-${candidate.symbol}`),
+                              );
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <TerminalEmptyState
+                      title={language === 'en' ? 'No candidates in this filter' : '当前过滤无候选'}
+                      className="w-full"
+                    >
+                      {language === 'en' ? 'Switch to Candidate pool or All to inspect the full submitted universe.' : '切换到候选池或全部查看完整提交范围。'}
+                    </TerminalEmptyState>
+                  )
+                ) : sortedCandidates.length ? (
+                  viewMode === 'cards' ? (
+                    <>
+                    <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
+                    {sortedCandidates.map((candidate) => {
+                      const isExpanded = expandedSymbol === candidate.symbol;
+                      const candidateIdentity = getCandidateIdentity(candidate);
+                      const candidateWatchlistIdentity = getWatchlistIdentity(runDetail?.market || market, candidate.symbol);
+                      const isTracked = trackedWatchlistIdentitySet.has(candidateWatchlistIdentity);
+                      const isTrackPending = pendingWatchlistIdentity === candidateWatchlistIdentity;
+                      const backtestItem = getBacktestItem(candidate.symbol);
+                      const entryRange = getEntryRange(candidate);
+	                      const targetPrice = getTargetPrice(candidate);
+	                      const stopLoss = getStopLoss(candidate);
+	                      const comparison = comparisonState.bySymbol.get(normalizeCandidateSymbol(candidate.symbol) || '');
+                        const evidenceSummary = getScannerEvidenceSummary(candidate);
+                      return (
+                        <ScannerCandidateCard
+                          key={`watchlist-${candidateIdentity}`}
+                          candidate={candidate}
+                          candidateIdentity={candidateIdentity}
+                          language={language}
+                          isExpanded={isExpanded}
+                          isTracked={isTracked}
+                          isTrackPending={isTrackPending}
+                          comparisonLabel={comparison?.label || null}
+                          scoreBadgeClassName={scoreBadgeClass(candidate.score)}
+                          keyReason={getKeyReason(candidate, runDetail, language)}
+                          entryRange={entryRange}
+                          targetPrice={targetPrice}
+                          stopLoss={stopLoss}
+                          evidenceSummary={evidenceSummary}
+                          featureSignalItems={sanitizeScannerLabeledValues(candidate.featureSignals, language)}
+                          keyMetricItems={sanitizeScannerLabeledValues(candidate.keyMetrics, language)}
+                          watchlistActionLabel={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
+                          watchlistActionTitle={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
+                          onSelect={() => setInspectorSymbol(candidate.symbol)}
+                          onToggleDetail={() => {
+                            setInspectorSymbol(candidate.symbol);
+                            setExpandedSymbol(isExpanded ? null : candidate.symbol);
+                          }}
+                          onViewEvidence={() => setExpandedSymbol(isExpanded ? null : candidate.symbol)}
+                          onTrack={() => void handleTrackCandidate(candidate)}
+                          detailPanel={renderCandidateDetailPanel(candidate, isTracked, isTrackPending, backtestItem)}
+                          backtestItem={backtestItem}
+                        />
+                      );
+                    })}
+                    </div>
+                    {previewCandidates.length ? (
+                      <div
+                        data-testid="scanner-candidate-preview"
+                        className="mt-3 rounded-xl border border-white/5 bg-white/[0.02] p-3 text-sm backdrop-blur-md transition-all hover:border-white/10"
+                      >
+                        <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/45">
+                          <span className="rounded-md border border-blue-400/20 bg-blue-400/10 px-2 py-0.5 text-blue-100/80">
+                            {language === 'en'
+                              ? `Threshold ${previewThreshold} preview can select ${previewSelectedDiagnostics.length}`
+                              : `阈值 ${previewThreshold} 预览可入选 ${previewSelectedDiagnostics.length} 个`}
+                          </span>
+                        </div>
+                        <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
+                          <span className="min-w-0 truncate text-xs text-white/58">
+                            {language === 'en'
+                              ? `${runDetail?.summary?.universeCount ? Math.max(0, runDetail.summary.universeCount - sortedCandidates.length) : previewCandidates.length} other candidates were not selected`
+                              : `其余 ${runDetail?.summary?.universeCount ? Math.max(0, runDetail.summary.universeCount - sortedCandidates.length) : previewCandidates.length} 个候选未入选`}
+                          </span>
+		                          <TerminalButton
+		                            type="button"
+                              variant="compact"
+		                            className="shrink-0 px-2 py-1 text-xs"
+		                            onClick={() => setCandidateFilter('pool')}
+		                          >
+	                            {language === 'en' ? 'View all candidates' : '查看全部候选'}
+	                          </TerminalButton>
+                        </div>
+                        {previewAddedDiagnostics.length ? (
+                          <div data-testid="scanner-preview-added-list" className="mb-2 grid gap-1.5">
+                            {previewAddedDiagnostics.slice(0, 4).map((candidate) => (
+		                              <TerminalButton
+		                                key={`preview-added-${candidate.symbol}`}
+		                                type="button"
+                                variant="compact"
+		                                data-testid={`scanner-preview-added-${candidate.symbol}`}
+		                                className="grid w-full min-w-0 grid-cols-[minmax(54px,0.45fr)_minmax(72px,0.55fr)_minmax(0,1fr)] items-center justify-start gap-2 px-2 py-1.5 text-left text-xs"
+		                                onClick={() => {
+		                                  setInspectorSymbol(candidate.symbol);
+		                                  setCandidateFilter('pool');
+		                                }}
+		                              >
+                                <span className="truncate font-mono font-semibold text-blue-100">{candidate.symbol}</span>
+                                <span className="truncate font-mono text-blue-100/58">{diagnosticScoreValue(candidate)}</span>
+                                <span className="truncate text-white/50" title={formatFriendlyDiagnosticReason(candidate, language)}>
+                                  {formatFriendlyDiagnosticReason(candidate, language)}
+                                </span>
+		                              </TerminalButton>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="grid gap-1.5">
+                          {previewCandidates.map((candidate) => (
+		                            <TerminalButton
+		                              key={`preview-${candidate.symbol}`}
+		                              type="button"
+                              variant="compact"
+		                              className="grid w-full min-w-0 grid-cols-[minmax(54px,0.45fr)_minmax(72px,0.55fr)_minmax(0,1fr)] items-center justify-start gap-2 px-2 py-1.5 text-left text-xs"
+		                              onClick={() => {
+		                                setInspectorSymbol(candidate.symbol);
+		                                setCandidateFilter('pool');
+		                              }}
+		                            >
+                              <span className="truncate font-mono font-semibold text-white/78">{candidate.symbol}</span>
+                              <span className="truncate font-mono text-white/42">{diagnosticScoreValue(candidate)}</span>
+                              <span className="truncate text-white/50" title={formatFriendlyDiagnosticReason(candidate, language)}>
+                                {formatFriendlyDiagnosticReason(candidate, language)}
+                              </span>
+		                            </TerminalButton>
                           ))}
                         </div>
                       </div>
                     ) : null}
-
-                    <div data-testid="scanner-ranked-sortbar" className="flex flex-col gap-2 rounded-xl border border-white/5 bg-black/20 px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-white/42">
-                        <span>{language === 'en' ? 'Sort by' : '排序'}</span>
-                        {([
-                          ['score', language === 'en' ? 'scanner score' : '扫描评分'],
-                          ['symbol', language === 'en' ? 'symbol' : '代码'],
-                          ['target', language === 'en' ? 'upper watch' : '上方观察'],
-                          ['risk', language === 'en' ? 'risk/score' : '风险/评分'],
-                        ] as const).map(([key, label]) => (
-                          <button
-                            key={key}
-                            type="button"
-                            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 ${sortKey === key ? 'border-white/16 bg-white/[0.08] text-white' : 'border-white/5 bg-white/[0.02] text-white/48 hover:text-white/75'}`}
-                            onClick={() => handleSortChange(key)}
-                          >
-                            {label}
-                            {sortKey === key ? <ArrowDownUp className="h-3 w-3" /> : null}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-white/42" data-testid="scanner-summary-counters">
-                        {runDetail ? [
-                          [language === 'en' ? 'Universe' : '候选范围', runDetail.summary?.universeCount ?? runDetail.acceptedSymbolsCount ?? runDetail.universeSize],
-                          [language === 'en' ? 'Evaluated' : '已评估', runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize],
-                          [language === 'en' ? 'Selected' : '入选', runDetail.summary?.selectedCount ?? shortlistCount],
-                          [language === 'en' ? 'Data thin' : '数据不足', runDetail.summary?.dataFailedCount ?? 0],
-                        ].map(([label, value]) => (
-                          <span key={String(label)} className="inline-flex items-baseline gap-1 rounded-md border border-white/8 bg-white/[0.03] px-2 py-0.5">
-                            <span className="text-white/36">{label}</span>
-                            <span className="font-mono text-white/78">{value}</span>
-                          </span>
-                        )) : null}
-                      </div>
-                    </div>
-
-                    <div data-testid="scanner-candidate-scroll-region" className="min-w-0">
-                      {workbenchDiagnostics.length ? (
-                        <div data-testid="scanner-ranked-list" className="overflow-hidden rounded-xl border border-white/5 bg-white/[0.02]">
-                          <div data-testid="scanner-result-table" className="contents">
-                          <div className="hidden items-center gap-3 border-b border-white/5 bg-black/25 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-white/38 md:grid md:grid-cols-[64px_minmax(190px,1.1fr)_92px_110px_minmax(220px,1.45fr)_minmax(150px,0.95fr)_minmax(170px,1fr)_minmax(250px,1.2fr)]">
-                            <span>{language === 'en' ? 'Rank' : '排名'}</span>
-                            <span>{language === 'en' ? 'Symbol / name' : '代码 / 名称'}</span>
-                            <span>{language === 'en' ? 'Score' : '评分'}</span>
-                            <span>{language === 'en' ? 'Status' : '状态'}</span>
-                            <span>{language === 'en' ? 'Key reason' : '关键原因'}</span>
-                            <span>{language === 'en' ? 'Data quality' : '数据质量'}</span>
-                            <span>{language === 'en' ? 'Watch / risk' : '观察 / 风险'}</span>
-                            <span className="text-right">{language === 'en' ? 'Actions' : '操作'}</span>
-                          </div>
-                          {workbenchDiagnostics.map((candidate) => {
-                            const sourceCandidate = shortlistCandidateBySymbol.get(normalizeCandidateSymbol(candidate.symbol)) || diagnosticToCandidate(candidate);
-                            const candidateWatchlistIdentity = getWatchlistIdentity(runDetail?.market || market, candidate.symbol);
-                            const isTracked = trackedWatchlistIdentitySet.has(candidateWatchlistIdentity);
-                            const isTrackPending = pendingWatchlistIdentity === candidateWatchlistIdentity;
-                            const backtestItem = getBacktestItem(sourceCandidate.symbol);
-                            const comparison = comparisonState.bySymbol.get(normalizeCandidateSymbol(candidate.symbol) || '');
-                            const isActiveCandidate = normalizeCandidateSymbol(activeDetailDiagnostic?.symbol) === normalizeCandidateSymbol(candidate.symbol);
-                            return (
-                              <ScannerCandidateDiagnosticRow
-                                key={`ranked-${candidate.symbol}`}
-                                candidate={candidate}
-                                language={language}
-                                isSelectedCandidate={isActiveCandidate}
-                                isExpanded={isActiveCandidate && !showDetailRail}
-                                displayName={sourceCandidate.companyName || sourceCandidate.name || candidate.name || candidate.symbol || '--'}
-                                keyReason={isOfficialSelected(candidate) ? getKeyReason(sourceCandidate, runDetail, language) : formatFriendlyDiagnosticReason(candidate, language)}
-                                dataQualityLabel={formatCandidateDataQuality(candidate, language)}
-                                watchSummary={formatWorkbenchWatchSummary(sourceCandidate, language)}
-                                rangeSummary={formatWorkbenchRangeSummary(sourceCandidate, language)}
-                                evidenceSummary={getScannerEvidenceSummary(candidate)}
-                                scoreLabel={diagnosticScoreValue(candidate)}
-                                scoreDelta={formatScoreDelta(comparison?.scoreDelta ?? null)}
-                                comparisonLabel={comparison?.label || null}
-                                statusLabel={diagnosticStatusLabel(candidate.status, language)}
-                                watchlistActionLabel={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
-                                watchlistActionTitle={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
-                                copyLabel={copiedKey === `candidate:${candidate.symbol}` ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制')}
-                                exportLabel={language === 'en' ? 'Export' : '导出'}
-                                isTracked={isTracked}
-                                isTrackPending={isTrackPending}
-                                isWatchlistAuthBlocked={watchlistAuthBlocked}
-                                isAnalyzing={pendingAnalyzeSymbol === sourceCandidate.symbol}
-                                backtestLabel={getBacktestActionLabel(backtestItem)}
-                                backtestTitle={!normalizeCandidateSymbol(sourceCandidate.symbol) ? backtestUnavailableLabel : undefined}
-                                backtestItem={backtestItem}
-                                detailPanel={showDetailRail ? undefined : renderCandidateDetailPanel(sourceCandidate, isTracked, isTrackPending, backtestItem)}
-                                onSelect={() => {
-                                  setInspectorSymbol(sourceCandidate.symbol);
-                                  setExpandedSymbol(sourceCandidate.symbol);
-                                }}
-                                onAnalyze={() => void handleAnalyzeCandidate(sourceCandidate)}
-                                onBacktest={() => void handleBacktestCandidate(sourceCandidate)}
-                                onTrack={() => void handleTrackCandidate(sourceCandidate)}
-                                onCopy={() => void handleCopyText(sourceCandidate.symbol, `candidate:${candidate.symbol}`)}
-                                onExport={() => runDetail ? handleExportRows(
-                                  [buildScannerExportRow(sourceCandidate, runDetail, language)],
-                                  buildScannerExportFilename(runDetail, `candidate-${candidate.symbol}`),
-                                ) : undefined}
-                              />
-                            );
-                          })}
-                          </div>
+                    </>
+                ) : (
+                  <div data-testid="scanner-result-table" className="overflow-x-auto no-scrollbar rounded-xl border border-white/5 bg-white/[0.02]">
+                    <table className="min-w-[980px] w-full border-collapse text-left text-xs">
+                      <thead className="border-b border-white/5 bg-black/25 text-[10px] uppercase tracking-[0.16em] text-white/38">
+                        <tr>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Rank' : '排名'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Symbol' : '代码'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Name' : '名称'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Scanner score' : '扫描评分'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Watch range' : '观察区间'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Upper watch' : '上方观察'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Risk boundary' : '风险边界'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Key reason' : '关键原因'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Risk summary' : '风险摘要'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Data/source' : '数据/来源'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Actions' : '操作'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedCandidates.map((candidate) => {
+                          const isExpanded = expandedSymbol === candidate.symbol;
+                          const candidateIdentity = getCandidateIdentity(candidate);
+                          const candidateWatchlistIdentity = getWatchlistIdentity(runDetail?.market || market, candidate.symbol);
+                          const isTracked = trackedWatchlistIdentitySet.has(candidateWatchlistIdentity);
+                          const isTrackPending = pendingWatchlistIdentity === candidateWatchlistIdentity;
+                          const backtestItem = getBacktestItem(candidate.symbol);
+                          return (
+                            <ScannerCandidateTableRow
+                              key={`table-${candidateIdentity}`}
+                              candidate={candidate}
+                              candidateIdentity={candidateIdentity}
+                              language={language}
+                              isExpanded={isExpanded}
+                              entryRange={getEntryRange(candidate)}
+                              targetPrice={getTargetPrice(candidate)}
+                              stopLoss={getStopLoss(candidate)}
+                              keyReason={getKeyReason(candidate, runDetail, language)}
+                              riskSummary={getRiskSummary(candidate, language)}
+                              sourceBadge={getSourceBadge(candidate, runDetail, language) || '--'}
+                              scoreBadgeClassName={scoreBadgeClass(candidate.score)}
+                              watchlistActionLabel={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
+                              watchlistActionTitle={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
+                              copyLabel={copiedKey === `candidate:${candidate.symbol}` ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制')}
+                              backtestLabel={getBacktestActionLabel(backtestItem)}
+                              backtestTitle={!normalizeCandidateSymbol(candidate.symbol) ? backtestUnavailableLabel : undefined}
+                              isTracked={isTracked}
+                              isTrackPending={isTrackPending}
+                              isAnalyzing={pendingAnalyzeSymbol === candidate.symbol}
+                              isBacktestDisabled={!normalizeCandidateSymbol(candidate.symbol) || backtestItem?.status === 'running' || backtestItem?.status === 'queued'}
+                              detailPanel={renderCandidateDetailPanel(candidate, isTracked, isTrackPending, backtestItem)}
+                              onSelect={() => {
+                                setInspectorSymbol(candidate.symbol);
+                                setExpandedSymbol(isExpanded ? null : candidate.symbol);
+                              }}
+                              onAnalyze={() => void handleAnalyzeCandidate(candidate)}
+                              onTrack={() => void handleTrackCandidate(candidate)}
+                              onCopy={() => void handleCopyText(candidate.symbol, `candidate:${candidate.symbol}`)}
+                              onToggleDetail={() => setExpandedSymbol(isExpanded ? null : candidate.symbol)}
+                              onBacktest={() => void handleBacktestCandidate(candidate)}
+                            />
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              ) : (
+                <TerminalEmptyState
+                  title={runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length ? (language === 'en' ? 'No selected candidates' : '本次无入选候选') : emptyStateTitle}
+                  className="w-full"
+                >
+                  {runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length
+                    ? (language === 'en' ? 'Open Candidate pool or All to inspect rejected and data-failed candidates.' : '切换到候选池或全部查看淘汰与数据失败原因。')
+	                    : pageErrorSummary || emptyStateBody}
+                </TerminalEmptyState>
+              )}
+                    {runDetail && inspectorCandidate ? (() => {
+                      const mobileMarket = normalizeScannerMarket(runDetail.market || market);
+                      const mobileWatchlistIdentity = getWatchlistIdentity(mobileMarket, inspectorCandidate.symbol);
+                      const mobileTracked = Boolean(mobileWatchlistIdentity && trackedWatchlistIdentitySet.has(mobileWatchlistIdentity));
+                      const mobileTrackPending = pendingWatchlistIdentity === mobileWatchlistIdentity;
+                      const mobileBacktestItem = getBacktestItem(inspectorCandidate.symbol);
+                      const mobileInspectorCandidate = diagnosticToCandidate(inspectorCandidate);
+                      const mobileComparison = comparisonState.bySymbol.get(normalizeCandidateSymbol(inspectorCandidate.symbol) || '');
+                      const mobileStatus = normalizeDiagnosticStatus(inspectorCandidate.status);
+                      const mobileEvidenceSummary = getScannerEvidenceSummary(inspectorCandidate);
+                      const mobileDataQualityLabel = formatCandidateDataQuality(inspectorCandidate, language);
+                      return (
+                        <div className="mt-3" data-testid="scanner-mobile-candidate-inspector">
+                          <ScannerCandidateInspector
+                            candidate={inspectorCandidate}
+                            language={language}
+                            evidenceSummary={mobileEvidenceSummary}
+                            statusLabel={diagnosticStatusLabel(mobileStatus, language)}
+                            statusClassName={diagnosticStatusClass(mobileStatus)}
+                            officialStatusCopy={isOfficialSelected(inspectorCandidate)
+                              ? (language === 'en' ? 'Official selected' : '官方入选')
+                              : (language === 'en' ? 'Official rejected' : '官方淘汰')}
+                            previewStatusCopy={isPreviewSelected(inspectorCandidate, previewThreshold)
+                              ? (language === 'en' ? `Threshold ${previewThreshold} preview selected` : `阈值 ${previewThreshold} 预览入选`)
+                              : (language === 'en' ? `Threshold ${previewThreshold} preview rejected` : `阈值 ${previewThreshold} 预览淘汰`)}
+                            dataQualityLabel={mobileDataQualityLabel}
+                            comparisonLabel={mobileComparison?.label || null}
+                            comparisonDelta={formatScoreDelta(mobileComparison?.scoreDelta ?? null)}
+                            whySelectedNotes={buildInspectorWhySelected(inspectorCandidate, language)}
+                            riskNotes={buildInspectorRiskNotes(inspectorCandidate, runDetail, language)}
+                            failedRuleNotes={Array.from(new Set((inspectorCandidate.failedRules || []).map((item) => sanitizeUserFacingDataIssue(item, language))))}
+                            missingFieldNotes={Array.from(new Set((inspectorCandidate.missingFields || []).map((item) => sanitizeUserFacingDataIssue(item, language))))}
+                            missingCount={inspectorCandidate.missingFields?.length || 0}
+                            onCopy={() => void handleCopyText(inspectorCandidate.symbol, `candidate:${inspectorCandidate.symbol}`)}
+                            onExport={() => handleExportRows(
+                              [buildScannerExportRow(mobileInspectorCandidate, runDetail, language)],
+                              buildScannerExportFilename(runDetail, `candidate-${inspectorCandidate.symbol}`),
+                            )}
+                            onTrack={() => void handleTrackCandidate(mobileInspectorCandidate)}
+                            isCopied={copiedKey === `candidate:${inspectorCandidate.symbol}`}
+                            isTracked={mobileTracked}
+                            isTrackPending={mobileTrackPending}
+                            isWatchlistAuthBlocked={watchlistAuthBlocked}
+                            watchlistActionLabel={getWatchlistActionLabel(mobileTracked, mobileTrackPending, watchlistAuthBlocked, language)}
+                            watchlistActionTitle={getWatchlistActionTitle(mobileTracked, watchlistAuthBlocked, language)}
+                            backtestItem={mobileBacktestItem}
+                            testId="scanner-candidate-inspector"
+                          />
                         </div>
-                      ) : (
-                        <TerminalEmptyState
-                          title={runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length ? (language === 'en' ? 'No selected candidates' : '本次无入选候选') : emptyStateTitle}
-                          className="w-full"
-                        >
-                          {runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length
-                            ? (language === 'en' ? 'Open Candidate pool or All to inspect rejected and data-failed candidates.' : '切换到候选池或全部查看淘汰与数据失败原因。')
-		                    : pageErrorSummary || emptyStateBody}
-                        </TerminalEmptyState>
-                      )}
-                    </div>
-
-                    {!showDetailRail && activeDetailPanel ? (
-                      <div data-testid="scanner-inline-detail-panel" className="rounded-xl border border-white/5 bg-black/20 p-3">
-                        <div data-testid="scanner-candidate-inspector" className="contents">
-                        <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/48">
-                          <span className="font-semibold text-white/72">{language === 'en' ? 'Selected detail' : '当前详情'}</span>
-                          {activeDetailCandidate?.symbol ? (
-                            <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 font-mono text-white/72">
-                              {activeDetailCandidate.symbol}
-                            </span>
-                          ) : null}
-                          {activeDetailDiagnostic ? (
-                            <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5">
-                              {diagnosticStatusLabel(activeDetailDiagnostic.status, language)}
-                            </span>
-                          ) : null}
-                        </div>
-                        {activeDetailPanel}
-                        </div>
-                      </div>
-                    ) : null}
+                      );
+                    })() : null}
                   </div>
 
-                  {showDetailRail && activeDetailPanel ? (
-                    <aside data-testid="scanner-detail-rail" className="sticky top-4 self-start rounded-xl border border-white/5 bg-black/20 p-3">
-                      <div data-testid="scanner-candidate-inspector" className="contents">
-                      <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/48">
-                        <span className="font-semibold text-white/72">{language === 'en' ? 'Candidate detail' : '候选详情'}</span>
-                        {activeDetailCandidate?.symbol ? (
-                          <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 font-mono text-white/72">
-                            {activeDetailCandidate.symbol}
-                          </span>
-                        ) : null}
-                        {activeDetailDiagnostic ? (
-                          <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5">
-                            {diagnosticStatusLabel(activeDetailDiagnostic.status, language)}
-                          </span>
-                        ) : null}
-                      </div>
-                      {activeDetailPanel}
-                      </div>
-                    </aside>
-                  ) : null}
                 </div>
               </div>
 

@@ -49,7 +49,7 @@ test.describe('scanner and market overview smoke', () => {
     await signIn(page, '/scanner');
 
     await expect(page.getByTestId('user-scanner-bento-page')).toBeVisible();
-    await expect(page.getByTestId('scanner-control-rail')).toBeVisible();
+    await expect(page.getByTestId('scanner-sidebar')).toBeVisible();
     await page.getByRole('button', { name: /展开 高级参数|expand advanced controls/i }).click();
     await page.getByRole('button', { name: /主题标的池|theme universe/i }).click();
     await expect(page.getByTestId('scanner-theme-control')).toBeVisible();
@@ -61,17 +61,16 @@ test.describe('scanner and market overview smoke', () => {
     await expect(moreActions.getByRole('button', { name: /导出 csv|export csv/i })).toBeVisible();
     await expect(moreActions.getByRole('button', { name: /复制全部代码|copy all symbols/i })).toBeVisible();
 
-    await expect(page.getByTestId('scanner-ranked-row-NVDA')).toBeVisible();
+    await expect(page.getByTestId('scanner-result-card-NVDA')).toBeVisible();
     await expect(page.getByRole('button', { name: /^分析$|^analyze$/i }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: /^复制$|^copy$/i }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: /^导出$|^export$/i }).first()).toBeVisible();
-    await expect(page.getByTestId('scanner-detail-rail')).toHaveCount(0);
 
     const candidateScrollRegion = page.getByTestId('scanner-candidate-scroll-region');
     await expect(candidateScrollRegion).toBeVisible();
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
-    await expect(page.getByTestId('scanner-control-rail')).toBeVisible();
+    await expect(page.getByTestId('scanner-sidebar')).toBeVisible();
 
     await page.goto('/watchlist');
     await page.waitForLoadState('domcontentloaded');
