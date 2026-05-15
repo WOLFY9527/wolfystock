@@ -94,12 +94,25 @@
 
 **解决方案**：
 1. 确保 `.env` 文件位于项目根目录
-2. **Docker 部署**：修改后需重启容器
+2. 本地启动优先使用 `bash scripts/dev_start_backend.sh`，让应用按现有 Config 流程读取 `.env`
+3. 不要直接 `source .env`；`.env` 里的值不保证符合 shell 语法，可能包含空格或特殊字符
+4. **Docker 部署**：修改后需重启容器
    ```bash
    docker-compose down && docker-compose up -d
    ```
-3. **GitHub Actions**：`.env` 文件不生效，必须在 Secrets/Variables 中配置
-4. 检查是否有多个 `.env` 文件（如 `.env.local`）导致覆盖
+5. **GitHub Actions**：`.env` 文件不生效，必须在 Secrets/Variables 中配置
+6. 检查是否有多个 `.env` 文件（如 `.env.local`）导致覆盖
+
+如果你确实需要把某些变量导入当前 shell，请分开执行虚拟环境激活和自动 export，并且只对 shell-safe 片段文件这样做：
+
+```bash
+source .venv/bin/activate
+set -a
+source ./local.dev.env.shell
+set +a
+```
+
+不要把 `source .env` 当成默认用法。
 
 ---
 
@@ -134,11 +147,12 @@ PROXY_PORT=10809
 
 **解决方案**：
 1. 先确认这不是 FRED API key 失败；该报错通常是本地证书信任库问题
-2. 在本地开发环境显式指定 `certifi` CA bundle：
+2. 优先使用 `bash scripts/dev_start_backend.sh` 启动本地后端；helper 会在可用时自动设置 `SSL_CERT_FILE`
+3. 在本地开发环境显式指定 `certifi` CA bundle：
    ```bash
-   export SSL_CERT_FILE="$(python -c 'import certifi; print(certifi.where())')"
+   export SSL_CERT_FILE="$(python3 -c 'import certifi; print(certifi.where())')"
    ```
-3. 重新运行对应命令或服务进程
+4. 重新运行对应命令或服务进程
 
 > ⚠️ 注意：不要通过关闭证书校验来绕过该问题。
 

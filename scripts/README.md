@@ -102,6 +102,10 @@ review flow.
 - `database_doctor.py`: CLI entrypoint for the database doctor bundle.
 - `database_doctor_smoke.py`: smoke entrypoint for the split database doctor
   harness.
+- `dev_start_backend.sh`: local backend startup helper that prefers the
+  repo-local `.venv/bin/python`, does not source `.env`, can set
+  `SSL_CERT_FILE` from `certifi`, and restarts a busy port only when
+  `--restart-port` is passed explicitly.
 - `verify_runtime_writes.py`: local write-through verification against a
   running backend and local database; generates report artifacts.
 - `check_ai_assets.py`: validates AI-governance asset relationships required by

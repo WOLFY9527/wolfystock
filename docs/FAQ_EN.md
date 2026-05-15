@@ -92,12 +92,25 @@ This document compiles common issues encountered by users and their solutions.
 
 **Solution**:
 1. Ensure `.env` file is in project root directory
-2. **Docker deployment**: Restart container after modification
+2. For local startup, prefer `bash scripts/dev_start_backend.sh` so the app reads `.env` through the existing Config flow
+3. Do not directly `source .env`; values in `.env` are not guaranteed to be shell-safe and may contain spaces or special characters
+4. **Docker deployment**: Restart container after modification
    ```bash
    docker-compose down && docker-compose up -d
    ```
-3. **GitHub Actions**: `.env` file doesn't work, must configure in Secrets/Variables
-4. Check if there are multiple `.env` files (e.g., `.env.local`) causing override
+5. **GitHub Actions**: `.env` file doesn't work, must configure in Secrets/Variables
+6. Check if there are multiple `.env` files (e.g., `.env.local`) causing override
+
+If you truly need to export variables into the current shell, keep virtualenv activation and auto-export as separate commands, and only do this with a shell-safe fragment:
+
+```bash
+source .venv/bin/activate
+set -a
+source ./local.dev.env.shell
+set +a
+```
+
+Do not treat `source .env` as the default workflow.
 
 ---
 
@@ -132,11 +145,12 @@ PROXY_PORT=10809
 
 **Solution**:
 1. Treat this as a local trust-store problem first; it is usually not a FRED API key failure
-2. Point `SSL_CERT_FILE` at the `certifi` CA bundle in your local dev shell:
+2. Prefer starting the local backend with `bash scripts/dev_start_backend.sh`; when possible, the helper sets `SSL_CERT_FILE` automatically
+3. Point `SSL_CERT_FILE` at the `certifi` CA bundle in your local dev shell:
    ```bash
-   export SSL_CERT_FILE="$(python -c 'import certifi; print(certifi.where())')"
+   export SSL_CERT_FILE="$(python3 -c 'import certifi; print(certifi.where())')"
    ```
-3. Re-run the affected command or service process
+4. Re-run the affected command or service process
 
 > Note: Do not work around this by disabling certificate verification.
 

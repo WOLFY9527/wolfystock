@@ -913,6 +913,55 @@ FastAPI provides RESTful API service for configuration management and triggering
 |------|------|
 | `python main.py --serve` | Start API service + run full analysis once |
 | `python main.py --serve-only` | Start API service only, manually trigger analysis |
+| `bash scripts/dev_start_backend.sh` | Recommended local dev helper: prefers repo `.venv/bin/python` and does not `source .env` |
+
+### Recommended local dev startup path
+
+Prefer the repo helper instead of sourcing `.env` in your shell:
+
+```bash
+bash scripts/dev_start_backend.sh
+```
+
+Common local variants:
+
+```bash
+# Use a different port
+bash scripts/dev_start_backend.sh --port 8001
+
+# Restart the selected port only when you opt in explicitly
+bash scripts/dev_start_backend.sh --restart-port
+
+# Override LOCAL_US_PARQUET_DIR for this process only
+bash scripts/dev_start_backend.sh --local-us-parquet-dir /path/to/us/parquet
+```
+
+The helper preserves any proxy variables already present in your shell and never hardcodes a proxy. If the chosen Python can import `certifi` and `SSL_CERT_FILE` is not already set, it also points the process at the local CA bundle automatically.
+
+### `.env` vs shell sourcing
+
+- The app's existing Config/bootstrap flow loads `.env` at startup, so local dev usually does not need `source .env`
+- Do not blindly `source .env`: values may contain spaces, URL query strings, parentheses, or other shell-special characters and may not be shell-safe
+- If you truly need shell exports, keep virtualenv activation and auto-export as separate commands, and only use them with a shell-safe fragment that you maintain intentionally
+
+```bash
+source .venv/bin/activate
+set -a
+source ./local.dev.env.shell
+set +a
+```
+
+That pattern is for a shell-safe fragment you control. Do not treat `./.env` itself as a script by default.
+
+### Local TLS / CA troubleshooting
+
+If local HTTPS requests to official data providers fail with `CERTIFICATE_VERIFY_FAILED`, fix the local CA trust chain instead of disabling verification. The helper sets `SSL_CERT_FILE` automatically when possible; you can also do it manually:
+
+```bash
+export SSL_CERT_FILE="$(python3 -c 'import certifi; print(certifi.where())')"
+```
+
+Do not work around this by disabling TLS certificate verification.
 
 ### Features
 

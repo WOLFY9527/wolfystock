@@ -1068,8 +1068,57 @@ FastAPI 提供 RESTful API 服务，支持配置管理和触发分析。
 
 | 命令 | 说明 |
 |------|------|
+| `bash scripts/dev_start_backend.sh` | 推荐的本地开发启动 helper：优先使用仓库 `.venv/bin/python`，不 `source .env` |
 | `python main.py --serve` | 启动 API 服务 + 执行一次完整分析 |
 | `python main.py --serve-only` | 仅启动 API 服务，手动触发分析 |
+
+### 推荐的本地开发启动方式
+
+优先使用仓库自带 helper，而不是直接在 shell 里 `source .env`：
+
+```bash
+bash scripts/dev_start_backend.sh
+```
+
+常见本地用法：
+
+```bash
+# 改端口
+bash scripts/dev_start_backend.sh --port 8001
+
+# 端口已被旧进程占用时，显式允许重启该端口
+bash scripts/dev_start_backend.sh --restart-port
+
+# 临时覆盖本次进程的本地 US parquet 路径
+bash scripts/dev_start_backend.sh --local-us-parquet-dir /path/to/us/parquet
+```
+
+这个 helper 会保持当前 shell 中已有的代理变量，不会写死代理；如果当前 Python 能导入 `certifi` 且你没有手工设置 `SSL_CERT_FILE`，它也会为本次进程自动指向本地 CA bundle。
+
+### `.env` 与 shell 的边界
+
+- 应用启动时会通过现有 Config 流程加载 `.env`，本地开发通常不需要手工 `source .env`
+- 不要盲目 `source .env`：其中的值可能包含空格、URL query、括号或其他 shell 特殊字符，未必是 shell-safe 语法
+- 如果你确实需要给当前 shell 做显式导出，请把虚拟环境激活和自动 export 分开写，并且只对你自己维护的 shell-safe 片段文件这样做
+
+```bash
+source .venv/bin/activate
+set -a
+source ./local.dev.env.shell
+set +a
+```
+
+上面的做法适用于你明确知道内容可被 shell 解释的片段文件；`./.env` 本身不应被默认当成可直接 `source` 的脚本。
+
+### 本地 TLS / CA 排障
+
+如果本地开发环境拉取官方 HTTPS 数据时遇到 `CERTIFICATE_VERIFY_FAILED`，优先修正本地 CA 信任链，而不是关闭校验。helper 会在可用时自动设置 `SSL_CERT_FILE`；你也可以手工执行：
+
+```bash
+export SSL_CERT_FILE="$(python3 -c 'import certifi; print(certifi.where())')"
+```
+
+不要通过禁用 TLS 证书校验来绕过该问题。
 
 ### 功能特性
 
