@@ -7,8 +7,10 @@ from unittest.mock import patch
 
 from src.config import (
     Config,
+    get_effective_litellm_model,
     get_effective_agent_models_to_try,
     get_effective_agent_primary_model,
+    resolve_litellm_model_selection,
 )
 
 
@@ -293,6 +295,84 @@ class LLMChannelConfigTestCase(unittest.TestCase):
             get_effective_agent_models_to_try(config),
             ["gpt4o", "openai/gpt-4o-mini"],
         )
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_primary_model_without_provider_prefix_normalizes_to_unique_router_model(
+        self,
+        _mock_parse_yaml,
+        _mock_setup_env,
+    ) -> None:
+        env = {
+            "LLM_CHANNELS": "primary",
+            "LLM_PRIMARY_PROTOCOL": "openai",
+            "LLM_PRIMARY_API_KEY": "sk-test-value",
+            "LLM_PRIMARY_MODELS": "gpt-4o-free",
+            "LITELLM_MODEL": "gpt-4o-free",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config = Config._load_from_env()
+
+        self.assertEqual(
+            get_effective_litellm_model(config, allow_default_fallback=True),
+            "openai/gpt-4o-free",
+        )
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_invalid_primary_model_can_fall_back_to_first_available_router_model(
+        self,
+        _mock_parse_yaml,
+        _mock_setup_env,
+    ) -> None:
+        env = {
+            "LLM_CHANNELS": "primary,backup",
+            "LLM_PRIMARY_PROTOCOL": "openai",
+            "LLM_PRIMARY_API_KEY": "sk-test-value",
+            "LLM_PRIMARY_MODELS": "gpt-4.1-free",
+            "LLM_BACKUP_PROTOCOL": "openai",
+            "LLM_BACKUP_API_KEY": "sk-test-value",
+            "LLM_BACKUP_MODELS": "gpt-4o-free",
+            "LITELLM_MODEL": "gpt-5-ghost",
+            "LITELLM_FALLBACK_MODELS": "openai/gpt-4.1-free",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config = Config._load_from_env()
+
+        selection = resolve_litellm_model_selection(config, allow_default_fallback=True)
+        self.assertEqual(selection.resolution, "fallback")
+        self.assertEqual(selection.resolved_model, "openai/gpt-4.1-free")
+        self.assertEqual(
+            get_effective_litellm_model(config, allow_default_fallback=True),
+            "openai/gpt-4.1-free",
+        )
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_agent_model_inherits_primary_fallback_selection_when_unset(
+        self,
+        _mock_parse_yaml,
+        _mock_setup_env,
+    ) -> None:
+        env = {
+            "LLM_CHANNELS": "primary,backup",
+            "LLM_PRIMARY_PROTOCOL": "openai",
+            "LLM_PRIMARY_API_KEY": "sk-test-value",
+            "LLM_PRIMARY_MODELS": "gpt-4.1-free",
+            "LLM_BACKUP_PROTOCOL": "deepseek",
+            "LLM_BACKUP_API_KEY": "sk-deepseek-value",
+            "LLM_BACKUP_MODELS": "deepseek-v4-pro",
+            "LITELLM_MODEL": "not-a-real-model",
+            "LITELLM_FALLBACK_MODELS": "openai/gpt-4.1-free",
+            "AGENT_LITELLM_MODEL": "",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config = Config._load_from_env()
+
+        self.assertEqual(get_effective_agent_primary_model(config), "openai/gpt-4.1-free")
 
 
 if __name__ == "__main__":

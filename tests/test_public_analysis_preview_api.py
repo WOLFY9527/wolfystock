@@ -225,6 +225,28 @@ class PublicAnalysisPreviewApiTestCase(unittest.TestCase):
         finally:
             other_client.close()
 
+    def test_guest_preview_returns_actionable_model_unavailable_error_without_calling_analysis(self) -> None:
+        with patch(
+            "api.v1.endpoints.analysis._build_llm_model_unavailable_detail",
+            return_value={
+                "error": "llm_model_unavailable",
+                "message": "配置的模型不可用。当前可用模型：openai/gpt-4.1-free, openai/gpt-4o-free",
+                "configured_model": "openai/gpt-5-ghost",
+                "available_models": ["openai/gpt-4.1-free", "openai/gpt-4o-free"],
+            },
+        ), patch("src.services.analysis_service.AnalysisService.analyze_stock") as analyze_stock:
+            response = self.client.post(
+                "/api/v1/analysis/preview",
+                json={"stock_code": "AAPL", "stock_name": "Apple"},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        analyze_stock.assert_not_called()
+        payload = response.json()
+        detail = payload.get("detail", payload)
+        self.assertEqual(detail["error"], "llm_model_unavailable")
+        self.assertIn("配置的模型不可用", detail["message"])
+
 
 if __name__ == "__main__":
     unittest.main()

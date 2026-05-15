@@ -47,6 +47,20 @@ class ConfigIssue:
         return self.message
 
 
+@dataclass
+class LLMModelSelection:
+    """Safe runtime resolution for a configured LLM model."""
+
+    requested_model: str
+    resolved_model: str
+    available_models: List[str] = field(default_factory=list)
+    resolution: Literal["empty", "direct", "configured", "normalized", "fallback", "unavailable"] = "empty"
+
+    @property
+    def is_usable(self) -> bool:
+        return bool(self.resolved_model)
+
+
 _MANAGED_LITELLM_KEY_PROVIDERS = {"gemini", "vertex_ai", "anthropic", "openai", "deepseek"}
 SUPPORTED_LLM_CHANNEL_PROTOCOLS = ("openai", "anthropic", "gemini", "vertex_ai", "deepseek", "ollama")
 _FALSEY_ENV_VALUES = {"0", "false", "no", "off"}
@@ -332,6 +346,18 @@ def get_llm_model_identity_forms(model: str) -> set[str]:
     return forms
 
 
+def _dedupe_declared_models(models: Optional[List[str]]) -> List[str]:
+    seen: set[str] = set()
+    ordered: List[str] = []
+    for model in models or []:
+        candidate = str(model or "").strip()
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        ordered.append(candidate)
+    return ordered
+
+
 def resolve_configured_llm_model_alias(
     model: str,
     configured_models: Optional[set[str]] = None,
@@ -354,6 +380,173 @@ def resolve_configured_llm_model_alias(
     if normalized_model in configured_models:
         return normalized_model
     return normalized_model
+
+
+def _resolve_router_runtime_model(
+    model: str,
+    configured_models: set[str],
+) -> str:
+    candidate = str(model or "").strip()
+    if not candidate or not configured_models:
+        return ""
+    resolved = resolve_configured_llm_model_alias(
+        candidate,
+        configured_models=configured_models,
+    )
+    if resolved in configured_models:
+        return resolved
+    return ""
+
+
+def _has_runtime_source_for_model(config: "Config", model: str) -> bool:
+    """Return True when the runtime can directly execute the model."""
+    if not model or _uses_direct_env_provider(model):
+        return True
+    provider = _get_litellm_provider(model)
+    if provider in {"gemini", "vertex_ai"}:
+        return any(k and len(k) >= 8 for k in (getattr(config, "gemini_api_keys", []) or []))
+    if provider == "anthropic":
+        return any(k and len(k) >= 8 for k in (getattr(config, "anthropic_api_keys", []) or []))
+    if provider == "deepseek":
+        return any(k and len(k) >= 8 for k in (getattr(config, "deepseek_api_keys", []) or []))
+    if provider == "openai":
+        return any(k and len(k) >= 8 for k in (getattr(config, "openai_api_keys", []) or []))
+    return False
+
+
+def resolve_litellm_model_selection(
+    config: "Config",
+    *,
+    requested_model: Optional[str] = None,
+    fallback_models: Optional[List[str]] = None,
+    allow_default_fallback: bool = False,
+) -> LLMModelSelection:
+    """Resolve the safest usable runtime model without mutating configured values."""
+    available_models = _dedupe_declared_models(
+        get_configured_llm_models(getattr(config, "llm_model_list", []) or [])
+    )
+    available_model_set = set(available_models)
+    requested = str(
+        getattr(config, "litellm_model", "")
+        if requested_model is None
+        else requested_model
+    ).strip()
+
+    if requested and _uses_direct_env_provider(requested):
+        return LLMModelSelection(
+            requested_model=requested,
+            resolved_model=requested,
+            available_models=available_models,
+            resolution="direct",
+        )
+
+    resolved_requested = _resolve_router_runtime_model(requested, available_model_set)
+    if resolved_requested:
+        return LLMModelSelection(
+            requested_model=requested,
+            resolved_model=resolved_requested,
+            available_models=available_models,
+            resolution="configured" if resolved_requested == requested else "normalized",
+        )
+    if requested and not available_models and _has_runtime_source_for_model(config, requested):
+        return LLMModelSelection(
+            requested_model=requested,
+            resolved_model=requested,
+            available_models=available_models,
+            resolution="configured",
+        )
+
+    fallback_candidates = fallback_models
+    if fallback_candidates is None:
+        fallback_candidates = list(getattr(config, "litellm_fallback_models", []) or [])
+
+    for fallback_model in fallback_candidates:
+        candidate = str(fallback_model or "").strip()
+        if not candidate:
+            continue
+        if _uses_direct_env_provider(candidate):
+            return LLMModelSelection(
+                requested_model=requested,
+                resolved_model=candidate,
+                available_models=available_models,
+                resolution="fallback",
+            )
+        resolved_fallback = _resolve_router_runtime_model(candidate, available_model_set)
+        if resolved_fallback:
+            return LLMModelSelection(
+                requested_model=requested,
+                resolved_model=resolved_fallback,
+                available_models=available_models,
+                resolution="fallback",
+            )
+        if not available_models and _has_runtime_source_for_model(config, candidate):
+            return LLMModelSelection(
+                requested_model=requested,
+                resolved_model=candidate,
+                available_models=available_models,
+                resolution="fallback",
+            )
+
+    if allow_default_fallback and not requested and available_models:
+        return LLMModelSelection(
+            requested_model=requested,
+            resolved_model=available_models[0],
+            available_models=available_models,
+            resolution="fallback",
+        )
+
+    return LLMModelSelection(
+        requested_model=requested,
+        resolved_model="",
+        available_models=available_models,
+        resolution="empty" if not requested else "unavailable",
+    )
+
+
+def get_effective_litellm_model(
+    config: "Config",
+    *,
+    allow_default_fallback: bool = False,
+) -> str:
+    """Return the runtime-safe primary LiteLLM model."""
+    return resolve_litellm_model_selection(
+        config,
+        allow_default_fallback=allow_default_fallback,
+    ).resolved_model
+
+
+def get_effective_litellm_models_to_try(
+    config: "Config",
+    *,
+    allow_default_fallback: bool = False,
+) -> List[str]:
+    """Return primary + configured fallbacks in runtime try-order."""
+    selection = resolve_litellm_model_selection(
+        config,
+        allow_default_fallback=allow_default_fallback,
+    )
+    if not selection.resolved_model:
+        return []
+
+    configured_model_set = set(selection.available_models)
+    raw_models = [selection.resolved_model] + list(getattr(config, "litellm_fallback_models", []) or [])
+    seen: set[str] = set()
+    ordered: List[str] = []
+    for raw_model in raw_models:
+        candidate = str(raw_model or "").strip()
+        if not candidate:
+            continue
+        runtime_model = candidate
+        if not _uses_direct_env_provider(candidate):
+            resolved = _resolve_router_runtime_model(candidate, configured_model_set)
+            if resolved:
+                runtime_model = resolved
+        dedupe_key = runtime_model
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        ordered.append(runtime_model)
+    return ordered
 
 
 def resolve_unified_llm_temperature(model: str) -> float:
@@ -427,13 +620,18 @@ def get_effective_agent_primary_model(config: "Config") -> str:
     configured_router_models = set(
         get_configured_llm_models(getattr(config, "llm_model_list", []) or [])
     )
-    configured_agent_model = normalize_agent_litellm_model(
-        getattr(config, "agent_litellm_model", ""),
-        configured_models=configured_router_models,
-    )
+    configured_agent_model = str(getattr(config, "agent_litellm_model", "") or "").strip()
     if configured_agent_model:
-        return configured_agent_model
-    return (getattr(config, "litellm_model", "") or "").strip()
+        normalized_agent_model = normalize_agent_litellm_model(
+            configured_agent_model,
+            configured_models=configured_router_models,
+        )
+        return resolve_litellm_model_selection(
+            config,
+            requested_model=normalized_agent_model,
+            allow_default_fallback=True,
+        ).resolved_model
+    return get_effective_litellm_model(config, allow_default_fallback=True)
 
 
 def get_effective_agent_models_to_try(config: "Config") -> List[str]:
@@ -450,9 +648,16 @@ def get_effective_agent_models_to_try(config: "Config") -> List[str]:
         normalized_model = (model or "").strip()
         if not normalized_model:
             continue
-        dedupe_key = normalize_agent_litellm_model(
+        resolved_model = _resolve_router_runtime_model(
             normalized_model,
-            configured_models=configured_router_models,
+            configured_router_models,
+        )
+        dedupe_key = (
+            resolved_model
+            or normalize_agent_litellm_model(
+                normalized_model,
+                configured_models=configured_router_models,
+            )
         )
         if dedupe_key in seen:
             continue
@@ -2220,7 +2425,7 @@ class Config:
                 in available_router_model_set
             )
 
-        def _has_runtime_source_for_model(model: str) -> bool:
+        def _has_local_runtime_source_for_model(model: str) -> bool:
             if not model or _uses_direct_env_provider(model):
                 return True
             provider = _get_litellm_provider(model)
@@ -2236,36 +2441,69 @@ class Config:
 
         configured_agent_primary_model = bool((self.agent_litellm_model or "").strip())
         effective_agent_primary_model = get_effective_agent_primary_model(self)
+        requested_agent_model = normalize_agent_litellm_model(
+            getattr(self, "agent_litellm_model", ""),
+            configured_models=available_router_model_set,
+        ) if configured_agent_primary_model else ""
+        primary_model_selection = resolve_litellm_model_selection(
+            self,
+            allow_default_fallback=True,
+        )
+        agent_model_selection = resolve_litellm_model_selection(
+            self,
+            requested_model=requested_agent_model if configured_agent_primary_model else effective_agent_primary_model,
+            allow_default_fallback=True,
+        )
 
         if available_router_model_set:
             if (
                 self.litellm_model
                 and not _uses_direct_env_provider(self.litellm_model)
-                and not _is_configured_router_model(self.litellm_model)
             ):
-                issues.append(ConfigIssue(
-                    severity="error",
-                    message=(
-                        "LITELLM_MODEL 已配置，但当前渠道/配置文件中不存在该模型。"
-                        f" 当前可用模型：{', '.join(available_router_models[:6])}"
-                    ),
-                    field="LITELLM_MODEL",
-                ))
+                if primary_model_selection.resolution == "fallback" and primary_model_selection.resolved_model:
+                    issues.append(ConfigIssue(
+                        severity="warning",
+                        message=(
+                            f"LITELLM_MODEL 已配置为 {self.litellm_model}，"
+                            f"当前渠道不可用，运行时将回退到 {primary_model_selection.resolved_model}。"
+                            f" 当前可用模型：{', '.join(available_router_models[:6])}"
+                        ),
+                        field="LITELLM_MODEL",
+                    ))
+                elif not primary_model_selection.is_usable and not _is_configured_router_model(self.litellm_model):
+                    issues.append(ConfigIssue(
+                        severity="error",
+                        message=(
+                            f"LITELLM_MODEL 已配置为 {self.litellm_model}，"
+                            "但当前渠道/配置文件中不存在该模型。"
+                            f" 当前可用模型：{', '.join(available_router_models[:6])}"
+                        ),
+                        field="LITELLM_MODEL",
+                    ))
 
             if (
                 configured_agent_primary_model
-                and effective_agent_primary_model
-                and not _uses_direct_env_provider(effective_agent_primary_model)
-                and not _is_configured_router_model(effective_agent_primary_model)
             ):
-                issues.append(ConfigIssue(
-                    severity="error",
-                    message=(
-                        "AGENT_LITELLM_MODEL 已配置，但当前渠道/配置文件中不存在该模型。"
-                        f" 当前可用模型：{', '.join(available_router_models[:6])}"
-                    ),
-                    field="AGENT_LITELLM_MODEL",
-                ))
+                if agent_model_selection.resolution == "fallback" and agent_model_selection.resolved_model:
+                    issues.append(ConfigIssue(
+                        severity="warning",
+                        message=(
+                            f"AGENT_LITELLM_MODEL 已配置为 {self.agent_litellm_model}，"
+                            f"当前渠道不可用，运行时将回退到 {agent_model_selection.resolved_model}。"
+                            f" 当前可用模型：{', '.join(available_router_models[:6])}"
+                        ),
+                        field="AGENT_LITELLM_MODEL",
+                    ))
+                elif not agent_model_selection.is_usable and not _is_configured_router_model(requested_agent_model):
+                    issues.append(ConfigIssue(
+                        severity="error",
+                        message=(
+                            f"AGENT_LITELLM_MODEL 已配置为 {self.agent_litellm_model}，"
+                            "但当前渠道/配置文件中不存在该模型。"
+                            f" 当前可用模型：{', '.join(available_router_models[:6])}"
+                        ),
+                        field="AGENT_LITELLM_MODEL",
+                    ))
 
             invalid_fallbacks = [
                 model for model in (self.litellm_fallback_models or [])
@@ -2297,8 +2535,9 @@ class Config:
                 ))
         elif (
             configured_agent_primary_model
-            and effective_agent_primary_model
-            and not _has_runtime_source_for_model(effective_agent_primary_model)
+            and requested_agent_model
+            and not agent_model_selection.is_usable
+            and not _has_local_runtime_source_for_model(requested_agent_model)
         ):
             issues.append(ConfigIssue(
                 severity="error",

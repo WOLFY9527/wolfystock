@@ -31,9 +31,12 @@ from src.agent.skills.defaults import CORE_TRADING_SKILL_POLICY_ZH
 from src.config import (
     Config,
     extra_litellm_params,
+    get_effective_litellm_model,
+    get_effective_litellm_models_to_try,
     get_api_keys_for_model,
     get_config,
     get_configured_llm_models,
+    resolve_litellm_model_selection,
     resolve_news_window_days,
 )
 from src.storage import persist_llm_usage
@@ -716,10 +719,27 @@ class GeminiAnalyzer:
     def _init_litellm(self) -> None:
         """Initialize litellm Router from channels / YAML / legacy keys."""
         config = get_config()
-        litellm_model = config.litellm_model
+        model_selection = resolve_litellm_model_selection(
+            config,
+            allow_default_fallback=True,
+        )
+        litellm_model = model_selection.resolved_model
         if not litellm_model:
-            logger.warning("Analyzer LLM: LITELLM_MODEL not configured")
+            if model_selection.requested_model and model_selection.available_models:
+                logger.warning(
+                    "Analyzer LLM: configured model %s is unavailable. Available models: %s",
+                    model_selection.requested_model,
+                    ", ".join(model_selection.available_models[:6]),
+                )
+            else:
+                logger.warning("Analyzer LLM: LITELLM_MODEL not configured")
             return
+        if model_selection.resolution == "fallback" and model_selection.requested_model:
+            logger.warning(
+                "Analyzer LLM: configured model %s is unavailable; falling back to %s",
+                model_selection.requested_model,
+                litellm_model,
+            )
 
         self._litellm_available = True
 
@@ -844,8 +864,12 @@ class GeminiAnalyzer:
         )
         temperature = generation_config.get('temperature', 0.7)
 
-        models_to_try = [config.litellm_model] + (config.litellm_fallback_models or [])
-        models_to_try = [m for m in models_to_try if m]
+        models_to_try = get_effective_litellm_models_to_try(
+            config,
+            allow_default_fallback=True,
+        )
+        if not models_to_try:
+            raise ValueError("No usable LiteLLM model is available for analysis")
 
         use_channel_router = self._has_channel_config(config)
 
@@ -1167,7 +1191,10 @@ class GeminiAnalyzer:
             prompt = self._format_prompt(context, name, news_context, report_language=report_language)
             
             config = get_config()
-            model_name = config.litellm_model or "unknown"
+            model_name = get_effective_litellm_model(
+                config,
+                allow_default_fallback=True,
+            ) or config.litellm_model or "unknown"
             logger.info(f"========== AI 分析 {name}({code}) ==========")
             logger.info(f"[LLM配置] 模型: {model_name}")
             logger.info(f"[LLM配置] Prompt 长度: {len(prompt)} 字符")

@@ -3124,13 +3124,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
 
       setPendingAnalysisTicker(null);
       setStatusToast({
-        message: locale === 'en' ? 'LLM analysis failed. Please try again later.' : 'LLM 分析失败，请稍后重试',
+        message: result.error?.message || (locale === 'en' ? 'LLM analysis failed. Please try again later.' : 'LLM 分析失败，请稍后重试'),
         tone: 'error',
       });
-    } catch {
+    } catch (error) {
+      const parsedError = getParsedApiError(error);
       setPendingAnalysisTicker(null);
       setStatusToast({
-        message: locale === 'en' ? 'LLM analysis failed. Please try again later.' : 'LLM 分析失败，请稍后重试',
+        message: parsedError.message || (locale === 'en' ? 'LLM analysis failed. Please try again later.' : 'LLM 分析失败，请稍后重试'),
         tone: 'error',
       });
     } finally {

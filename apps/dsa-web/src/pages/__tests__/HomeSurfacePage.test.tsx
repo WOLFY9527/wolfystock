@@ -2630,7 +2630,7 @@ describe('HomeSurfacePage', () => {
       })));
 
     await waitFor(() => expect(screen.getByTestId('home-bento-omnibar-input')).toHaveValue(''));
-    expect(await screen.findByText('LLM 分析失败，请稍后重试')).toBeInTheDocument();
+    expect(await screen.findByText('请求过于频繁，请稍后再试。')).toBeInTheDocument();
     expect(screen.queryByText('AI 引擎调用过载，已加载本地快照数据')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle')).not.toBeInTheDocument();
@@ -2696,6 +2696,31 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByTestId('home-bento-progress-summary')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();
+  });
+
+  it('shows sanitized actionable model diagnostics when Home analysis rejects an unusable model config', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(analysisApi.analyzeAsync).mockRejectedValueOnce(createApiError(createParsedApiError({
+      title: '配置的模型不可用',
+      message: '配置的模型不可用。当前可用模型：openai/gpt-4.1-free, openai/gpt-4o-free',
+      status: 500,
+      category: 'llm_not_configured',
+      rawMessage: '配置的模型不可用。当前可用模型：openai/gpt-4.1-free, openai/gpt-4o-free',
+      details: {
+        configuredModel: 'openai/gpt-5-ghost',
+        availableModels: ['openai/gpt-4.1-free', 'openai/gpt-4o-free'],
+        stackTrace: 'Traceback: should not be shown',
+        apiKey: 'sk-secret-123',
+      },
+    })));
+
+    renderSurface();
+    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'AAPL' } });
+    fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
+
+    expect(await screen.findByText('配置的模型不可用。当前可用模型：openai/gpt-4.1-free, openai/gpt-4o-free')).toBeInTheDocument();
+    expect(screen.queryByText(/Traceback/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/sk-secret-123/i)).not.toBeInTheDocument();
   });
 
   it('uses watchlist task query params as the active analysis instead of stale history', async () => {

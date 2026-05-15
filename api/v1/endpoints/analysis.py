@@ -55,6 +55,7 @@ from api.v1.schemas.history import (
     ReportDetails,
 )
 from src.config import Config
+from src.config import resolve_litellm_model_selection
 from src.repositories.analysis_repo import AnalysisRepository
 from src.report_language import get_localized_stock_name, normalize_report_language
 from src.services.name_to_code_resolver import resolve_name_to_code
@@ -90,6 +91,37 @@ def _invalid_analysis_input_error() -> HTTPException:
             "message": "请输入有效的股票代码或股票名称",
         },
     )
+
+
+def _build_llm_model_unavailable_detail(config: Config) -> Optional[Dict[str, Any]]:
+    if not hasattr(config, "llm_model_list") and not hasattr(config, "litellm_model"):
+        return None
+    selection = resolve_litellm_model_selection(
+        config,
+        allow_default_fallback=True,
+    )
+    if selection.is_usable:
+        return None
+
+    available_models = selection.available_models[:6]
+    configured_model = selection.requested_model or None
+    configured_segment = f"：{configured_model}" if configured_model else ""
+    if available_models:
+        available_segment = f"当前可用模型：{', '.join(available_models)}"
+    else:
+        available_segment = "当前未发现可用模型，请检查 LITELLM_MODEL、LLM_CHANNELS 或 LITELLM_CONFIG。"
+    return {
+        "error": "llm_model_unavailable",
+        "message": f"配置的模型不可用{configured_segment}。{available_segment}",
+        "configured_model": configured_model,
+        "available_models": available_models,
+    }
+
+
+def _raise_if_llm_model_unavailable(config: Config) -> None:
+    detail = _build_llm_model_unavailable_detail(config)
+    if detail:
+        raise HTTPException(status_code=500, detail=detail)
 
 
 def _is_obviously_invalid_analysis_input(text: str) -> bool:
@@ -188,7 +220,7 @@ def preview_analysis(
         http_request: Request,
         config: Config = Depends(get_config_dep),
 ) -> AnalysisPreviewResponse:
-    del config
+    _raise_if_llm_model_unavailable(config)
     stock_code = _resolve_and_normalize_input(request.stock_code)
     guest_session_id, is_new_guest_session = _resolve_guest_session_id(http_request)
     query_id = f"guest:{guest_session_id}:{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
@@ -415,6 +447,8 @@ def trigger_analysis(
                 "message": "股票代码不能为空或仅包含空白字符"
             }
         )
+
+    _raise_if_llm_model_unavailable(config)
 
     # Sync mode only supports single-stock analysis.
     if not request.async_mode:

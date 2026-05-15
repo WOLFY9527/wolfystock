@@ -223,6 +223,19 @@ class TestValidateStructuredLLM:
         issues = cfg.validate_structured()
         assert any(i.severity == "error" and i.field == "LITELLM_MODEL" for i in issues)
 
+    def test_configured_primary_model_missing_from_channels_warns_when_runtime_can_fallback(self):
+        cfg = _make_config(
+            llm_model_list=[
+                {"model_name": "openai/gpt-4.1-free", "litellm_params": {"model": "openai/gpt-4.1-free", "api_key": "sk-test"}},
+                {"model_name": "openai/gpt-4o-free", "litellm_params": {"model": "openai/gpt-4o-free", "api_key": "sk-test"}},
+            ],
+            litellm_model="openai/gpt-5-ghost",
+            litellm_fallback_models=["openai/gpt-4.1-free"],
+        )
+        issues = cfg.validate_structured()
+        assert any(i.severity == "warning" and i.field == "LITELLM_MODEL" for i in issues)
+        assert not any(i.severity == "error" and i.field == "LITELLM_MODEL" for i in issues)
+
     def test_configured_primary_model_can_match_channel_alias_by_suffix(self):
         cfg = _make_config(
             llm_model_list=[

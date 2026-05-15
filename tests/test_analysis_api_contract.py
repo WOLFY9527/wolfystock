@@ -16,23 +16,28 @@ ensure_litellm_stub()
 
 try:
     from api.app import create_app
+    from api.v1.schemas.analysis import AnalyzeRequest
     from api.v1.endpoints.analysis import (
         get_task_progress,
         trigger_analysis,
         _handle_sync_analysis,
+        _build_llm_model_unavailable_detail,
         _build_analysis_report,
         _load_sync_fundamental_sources,
         _format_sse_event,
     )
 except Exception:  # pragma: no cover - optional dependency environments
     create_app = None
+    AnalyzeRequest = None
     get_task_progress = None
     trigger_analysis = None
     _handle_sync_analysis = None
+    _build_llm_model_unavailable_detail = None
     _build_analysis_report = None
     _load_sync_fundamental_sources = None
     _format_sse_event = None
 
+from src.config import Config
 from src.enums import ReportType
 from src.services.analysis_service import AnalysisService
 from src.services.image_stock_extractor import _call_litellm_vision
@@ -119,6 +124,69 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             pipeline_instance.process_single_stock.call_args.kwargs["research_mode"],
             "quick",
         )
+
+    def test_trigger_analysis_rejects_unusable_llm_model_with_actionable_detail(self) -> None:
+        if trigger_analysis is None or AnalyzeRequest is None:
+            self.skipTest("analysis endpoint import unavailable")
+
+        config = Config(
+            stock_list=["AAPL"],
+            llm_model_list=[
+                {
+                    "model_name": "openai/gpt-4.1-free",
+                    "litellm_params": {"model": "openai/gpt-4.1-free", "api_key": "sk-test"},
+                },
+                {
+                    "model_name": "openai/gpt-4o-free",
+                    "litellm_params": {"model": "openai/gpt-4o-free", "api_key": "sk-test"},
+                },
+            ],
+            litellm_model="openai/gpt-5-ghost",
+            wechat_webhook_url="https://example.com/webhook",
+            bocha_api_keys=["test"],
+        )
+
+        with self.assertRaises(Exception) as ctx:
+            trigger_analysis(
+                AnalyzeRequest(stock_code="AAPL", async_mode=True),
+                config=config,
+                current_user=SimpleNamespace(user_id="user-1"),
+            )
+
+        exc = ctx.exception
+        self.assertEqual(getattr(exc, "status_code", None), 500)
+        self.assertEqual(exc.detail["error"], "llm_model_unavailable")
+        self.assertIn("配置的模型不可用", exc.detail["message"])
+        self.assertEqual(exc.detail["available_models"], ["openai/gpt-4.1-free", "openai/gpt-4o-free"])
+
+    def test_model_unavailable_detail_is_sanitized_and_actionable(self) -> None:
+        if _build_llm_model_unavailable_detail is None:
+            self.skipTest("analysis endpoint import unavailable")
+
+        config = Config(
+            stock_list=["AAPL"],
+            llm_model_list=[
+                {
+                    "model_name": "openai/gpt-4o-free",
+                    "litellm_params": {
+                        "model": "openai/gpt-4o-free",
+                        "api_key": "sk-secret-123",
+                        "api_base": "https://example.com/v1?api_key=sk-secret-123",
+                    },
+                },
+            ],
+            litellm_model="openai/gpt-5-ghost",
+            wechat_webhook_url="https://example.com/webhook",
+            bocha_api_keys=["test"],
+        )
+
+        detail = _build_llm_model_unavailable_detail(config)
+
+        self.assertEqual(detail["error"], "llm_model_unavailable")
+        self.assertIn("配置的模型不可用", detail["message"])
+        self.assertIn("openai/gpt-4o-free", detail["message"])
+        self.assertNotIn("api_key", detail["message"].lower())
+        self.assertNotIn("sk-secret-123", detail["message"])
 
     def test_get_task_progress_returns_module_payload(self) -> None:
         if get_task_progress is None:
