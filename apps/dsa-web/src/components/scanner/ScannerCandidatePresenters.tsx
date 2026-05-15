@@ -357,33 +357,31 @@ export function ScannerCandidateDiagnosticRow({
   candidate,
   language,
   isSelectedCandidate,
-  isInspectorActive,
   isExpanded,
-  isMoreOpen,
-  previewLabel,
-  previewBadgeClassName,
-  friendlyReason,
+  displayName,
+  keyReason,
   dataQualityLabel,
+  watchSummary,
+  rangeSummary,
   evidenceSummary,
   scoreLabel,
   scoreDelta,
   comparisonLabel,
   statusLabel,
-  missingCount,
-  failedRuleNotes,
-  missingFieldNotes,
   watchlistActionLabel,
   watchlistActionTitle,
   copyLabel,
+  exportLabel,
   isTracked,
   isTrackPending,
   isWatchlistAuthBlocked,
+  isAnalyzing,
   backtestLabel,
   backtestTitle,
   backtestItem,
+  detailPanel,
   onSelect,
-  onViewEvidence,
-  onToggleMore,
+  onAnalyze,
   onBacktest,
   onTrack,
   onCopy,
@@ -392,33 +390,31 @@ export function ScannerCandidateDiagnosticRow({
   candidate: ScannerCandidateDiagnostic;
   language: 'zh' | 'en';
   isSelectedCandidate: boolean;
-  isInspectorActive: boolean;
   isExpanded: boolean;
-  isMoreOpen: boolean;
-  previewLabel: string;
-  previewBadgeClassName: string;
-  friendlyReason: string;
+  displayName: string;
+  keyReason: string;
   dataQualityLabel: string;
+  watchSummary: string;
+  rangeSummary: string;
   evidenceSummary: NormalizedEvidenceSummary | null;
   scoreLabel: string;
   scoreDelta?: string | null;
   comparisonLabel?: string | null;
   statusLabel: string;
-  missingCount: number;
-  failedRuleNotes: string[];
-  missingFieldNotes: string[];
   watchlistActionLabel: string;
   watchlistActionTitle?: string;
   copyLabel: string;
+  exportLabel: string;
   isTracked: boolean;
   isTrackPending: boolean;
   isWatchlistAuthBlocked: boolean;
+  isAnalyzing: boolean;
   backtestLabel: string;
   backtestTitle?: string;
   backtestItem?: ScannerBacktestItem;
+  detailPanel?: ReactNode;
   onSelect: () => void;
-  onViewEvidence: () => void;
-  onToggleMore: () => void;
+  onAnalyze: () => void;
   onBacktest: () => void;
   onTrack: () => void;
   onCopy: () => void;
@@ -426,86 +422,170 @@ export function ScannerCandidateDiagnosticRow({
 }) {
   return (
     <article
-      data-testid={`scanner-candidate-row-${candidate.symbol}`}
+      data-testid={`scanner-ranked-row-${candidate.symbol}`}
       data-selected={isSelectedCandidate ? 'true' : undefined}
       onClick={() => onSelect()}
-      className={`rounded-xl border px-3 py-2 text-sm backdrop-blur-md transition-all ${isSelectedCandidate ? 'border-emerald-400/20 bg-emerald-400/[0.045] shadow-[inset_2px_0_0_rgba(52,211,153,0.32)]' : isInspectorActive ? 'border-cyan-400/16 bg-cyan-400/[0.035]' : 'border-white/7 bg-white/[0.018] hover:border-white/12 hover:bg-white/[0.028]'}`}
+      className={`cursor-pointer border-b border-white/5 px-3 py-3 text-sm transition-colors ${isSelectedCandidate ? 'bg-emerald-400/[0.045] shadow-[inset_2px_0_0_rgba(52,211,153,0.32)]' : 'bg-transparent hover:bg-white/[0.028]'}`}
     >
-      <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(74px,0.55fr)_minmax(56px,0.4fr)_minmax(92px,0.7fr)_minmax(92px,0.6fr)_minmax(0,1.5fr)_minmax(108px,0.75fr)_auto_auto] md:items-center">
-        <div className="min-w-0">
-          <p className={`inline-flex shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${previewBadgeClassName}`}>
-            {previewLabel}
+      <div data-testid={`scanner-result-card-${candidate.symbol}`} className="contents">
+        <div data-testid={`scanner-candidate-row-${candidate.symbol}`} className="contents">
+      <div className="hidden min-w-0 items-center gap-3 md:grid md:grid-cols-[64px_minmax(190px,1.1fr)_92px_110px_minmax(220px,1.45fr)_minmax(150px,0.95fr)_minmax(170px,1fr)_minmax(250px,1.2fr)]">
+        <div className="min-w-0" onClick={() => onSelect()}>
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Rank' : '排名'}</p>
+          <p className={`mt-1 font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-50' : 'text-white/72'}`}>
+            {candidate.rank ? `#${candidate.rank}` : '--'}
           </p>
         </div>
-        <div className="font-mono text-[11px] text-white/42">{candidate.rank ? `#${candidate.rank}` : '--'}</div>
-        <div className="min-w-0">
-          <p className={`truncate font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-50' : 'text-white/86'}`}>{candidate.symbol || '--'}</p>
-          <p className="truncate text-[11px] text-white/32">{candidate.name || candidate.symbol || '--'}</p>
+        <div className="min-w-0" onClick={() => onSelect()}>
+          <p className={`truncate font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-50' : 'text-white'}`}>
+            {candidate.symbol || '--'}
+          </p>
+          <p className="truncate text-[11px] text-white/38">{displayName}</p>
+          {comparisonLabel ? (
+            <p className="mt-1 truncate text-[10px] text-cyan-100/70">{comparisonLabel}</p>
+          ) : null}
         </div>
-        <div className={`font-mono text-xs font-semibold ${isSelectedCandidate ? 'text-emerald-100' : 'text-white/78'}`}>
-          {scoreLabel}
-          {scoreDelta ? <span className="ml-1 text-[10px] text-white/42">{scoreDelta}</span> : null}
-          {comparisonLabel ? <span className="ml-1 rounded border border-white/8 bg-white/[0.035] px-1 py-0.5 font-sans text-[10px] font-medium text-white/58">{comparisonLabel}</span> : null}
+        <div className="min-w-0" onClick={() => onSelect()}>
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Score' : '评分'}</p>
+          <p className={`mt-1 font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-100' : 'text-white/78'}`}>
+            {scoreLabel}
+          </p>
+          {scoreDelta ? <p className="text-[10px] text-white/36">{scoreDelta}</p> : null}
         </div>
-        <div className="min-w-0">
-          <p className="truncate text-xs text-white/68" title={friendlyReason}>{friendlyReason}</p>
+        <div className="min-w-0" onClick={() => onSelect()}>
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Status' : '状态'}</p>
+          <p className="mt-1">
+            <span className="inline-flex rounded border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white/78">
+              {statusLabel}
+            </span>
+          </p>
         </div>
-        <div className="min-w-0">
-          <p className="truncate text-[11px] text-white/58" title={dataQualityLabel}>{dataQualityLabel}</p>
-          <p className="truncate text-[10px] text-white/32">{language === 'en' ? 'Evidence summary' : '证据摘要'}</p>
+        <div className="min-w-0" onClick={() => onSelect()}>
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Key reason' : '关键原因'}</p>
+          <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-white/68" title={keyReason}>
+            {keyReason}
+          </p>
+        </div>
+        <div className="min-w-0" onClick={() => onSelect()}>
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Data quality' : '数据质量'}</p>
+          <p className="mt-1 truncate text-xs text-white/62" title={dataQualityLabel}>{dataQualityLabel}</p>
           {evidenceSummary ? <EvidenceChips summary={evidenceSummary} maxLabels={1} className="mt-1" /> : null}
         </div>
-        <ActionButton label={language === 'en' ? 'View evidence' : '查看证据'} onClick={() => onViewEvidence()} />
-        <div className="relative">
-          <ActionButton label={language === 'en' ? 'More' : '更多'} onClick={() => onToggleMore()} />
+        <div className="min-w-0" onClick={() => onSelect()}>
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Watch / risk' : '观察 / 风险'}</p>
+          <p className="mt-1 truncate text-xs text-white/72" title={watchSummary}>{watchSummary}</p>
+          <p className="truncate text-[11px] text-white/38" title={rangeSummary}>{rangeSummary}</p>
         </div>
-      </div>
-      {isMoreOpen ? (
-        <div data-testid={`scanner-candidate-row-more-${candidate.symbol}`} className="mt-2 grid gap-1.5 rounded-xl border border-white/5 bg-black/20 p-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
           <ActionButton
-            label={backtestLabel}
-            onClick={() => onBacktest()}
-            disabled={!candidate.symbol || backtestItem?.status === 'running' || backtestItem?.status === 'queued'}
-            title={backtestTitle}
+            label={isAnalyzing ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
+            icon={<Play className="h-3.5 w-3.5" />}
+            onClick={() => onAnalyze()}
+            disabled={isAnalyzing}
+            variant="compact"
           />
           <ActionButton
             label={watchlistActionLabel}
+            icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
             onClick={() => onTrack()}
             disabled={isTracked || isTrackPending || isWatchlistAuthBlocked}
+            variant="compact"
             title={watchlistActionTitle}
           />
           <ActionButton
-            label={copyLabel}
-            onClick={() => onCopy()}
+            label={backtestLabel}
+            icon={<TestTubeDiagonal className="h-3.5 w-3.5" />}
+            onClick={() => onBacktest()}
+            disabled={!candidate.symbol || backtestItem?.status === 'running' || backtestItem?.status === 'queued'}
+            title={backtestTitle}
+            variant="compact"
           />
           <ActionButton
-            label={language === 'en' ? 'Export' : '导出'}
+            label={copyLabel}
+            icon={<Copy className="h-3.5 w-3.5" />}
+            onClick={() => onCopy()}
+            variant="compact"
+          />
+          <ActionButton
+            label={exportLabel}
+            icon={<Download className="h-3.5 w-3.5" />}
             onClick={() => onExport()}
+            variant="compact"
           />
         </div>
-      ) : null}
-      {isExpanded ? (
-        <div data-testid={`scanner-candidate-detail-${candidate.symbol}`} className="mt-2 grid gap-2 border-t border-white/5 pt-2 text-xs text-white/58 md:grid-cols-3">
-          {evidenceSummary ? (
-            <DetailSection title={language === 'en' ? 'Evidence status' : '证据状态'}>
-              <EvidenceChips summary={evidenceSummary} maxLabels={2} />
-            </DetailSection>
-          ) : null}
-          <DetailSection title={language === 'en' ? 'Rule result' : '规则结果'}>
-            <NotesList notes={failedRuleNotes} empty={language === 'en' ? 'No additional notes' : '暂无额外说明'} />
-          </DetailSection>
-          <DetailSection title={language === 'en' ? 'Missing fields' : '缺失字段'}>
-            <NotesList notes={missingFieldNotes} empty={language === 'en' ? 'No missing data notes' : '暂无缺失数据说明'} />
-          </DetailSection>
-          <DetailSection title={language === 'en' ? 'Data notes' : '数据说明'}>
-            <div className="flex flex-wrap gap-1.5">
-              <FieldChip label={language === 'en' ? 'Quality' : '质量'} value={dataQualityLabel} />
-              <FieldChip label={language === 'en' ? 'Status' : '状态'} value={statusLabel} />
-              <FieldChip label={language === 'en' ? 'Missing' : '缺失'} value={String(missingCount)} />
+      </div>
+
+      <div className="grid gap-2 md:hidden">
+        <div className="flex min-w-0 items-start justify-between gap-3" onClick={() => onSelect()}>
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className={`font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-50' : 'text-white'}`}>
+                {candidate.symbol || '--'}
+              </span>
+              <span className="rounded border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white/78">
+                {statusLabel}
+              </span>
             </div>
-          </DetailSection>
+            <p className="mt-1 truncate text-[11px] text-white/38">{displayName}</p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="font-mono text-sm font-semibold text-white/78">{scoreLabel}</p>
+            <p className="text-[10px] text-white/36">{candidate.rank ? `#${candidate.rank}` : '--'}</p>
+          </div>
+        </div>
+        <div className="grid gap-1.5 text-xs text-white/66" onClick={() => onSelect()}>
+          <p title={keyReason}>{keyReason}</p>
+          <p title={dataQualityLabel}>{dataQualityLabel}</p>
+          <p title={watchSummary}>{watchSummary}</p>
+          <p className="text-[11px] text-white/38" title={rangeSummary}>{rangeSummary}</p>
+          {evidenceSummary ? <EvidenceChips summary={evidenceSummary} maxLabels={2} /> : null}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <ActionButton
+            label={isAnalyzing ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
+            icon={<Play className="h-3.5 w-3.5" />}
+            onClick={() => onAnalyze()}
+            disabled={isAnalyzing}
+            variant="compact"
+          />
+          <ActionButton
+            label={backtestLabel}
+            icon={<TestTubeDiagonal className="h-3.5 w-3.5" />}
+            onClick={() => onBacktest()}
+            disabled={!candidate.symbol || backtestItem?.status === 'running' || backtestItem?.status === 'queued'}
+            title={backtestTitle}
+            variant="compact"
+          />
+          <ActionButton
+            label={watchlistActionLabel}
+            icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
+            onClick={() => onTrack()}
+            disabled={isTracked || isTrackPending || isWatchlistAuthBlocked}
+            title={watchlistActionTitle}
+            variant="compact"
+          />
+          <ActionButton
+            label={copyLabel}
+            icon={<Copy className="h-3.5 w-3.5" />}
+            onClick={() => onCopy()}
+            variant="compact"
+          />
+          <ActionButton
+            label={exportLabel}
+            icon={<Download className="h-3.5 w-3.5" />}
+            onClick={() => onExport()}
+            variant="compact"
+          />
+        </div>
+      </div>
+
+      {isExpanded && detailPanel ? (
+        <div data-testid={`scanner-ranked-detail-${candidate.symbol}`} className="mt-3 border-t border-white/5 pt-3">
+          {detailPanel}
         </div>
       ) : null}
+        </div>
+      </div>
     </article>
   );
 }
