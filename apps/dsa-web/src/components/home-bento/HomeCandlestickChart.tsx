@@ -219,7 +219,25 @@ const normalizeCandles = (items: StockHistoryPoint[]): CandlePoint[] => {
   }));
 };
 
-const buildTooltip = (point: CandlePoint, locale: string): string => {
+const buildTooltip = (point: CandlePoint, locale: string, reportReferencePrice?: number): string => {
+  const isChinese = locale.startsWith('zh');
+  const labels = isChinese
+    ? {
+        open: '开盘',
+        high: '最高',
+        low: '最低',
+        close: '收盘',
+        volume: '成交量',
+        reportReferencePrice: '报告参考价',
+      }
+    : {
+        open: 'Open',
+        high: 'High',
+        low: 'Low',
+        close: 'Close',
+        volume: 'Volume',
+        reportReferencePrice: 'Report ref',
+      };
   const maRows = [
     ['MA5', point.ma5],
     ['MA10', point.ma10],
@@ -229,14 +247,19 @@ const buildTooltip = (point: CandlePoint, locale: string): string => {
     .map(([label, value]) => `<div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">${label}</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatPrice(value as number)}</strong></div>`)
     .join('');
 
+  const reportReferenceRow = isFiniteNumber(reportReferencePrice)
+    ? `<div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">${labels.reportReferencePrice}</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatPrice(reportReferencePrice)}</strong></div>`
+    : '';
+
   return `
-    <div style="min-width:176px;max-width:220px;padding:8px 10px;font-size:11px;line-height:1.65;">
+    <div style="min-width:188px;max-width:232px;padding:8px 10px;font-size:11px;line-height:1.65;">
       <p style="margin:0 0 5px;color:rgba(248,250,252,.92);font-weight:600;">${escapeHtml(formatDate(point.date, locale))}</p>
-      <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">Open</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatPrice(point.open)}</strong></div>
-      <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">High</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatPrice(point.high)}</strong></div>
-      <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">Low</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatPrice(point.low)}</strong></div>
-      <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">Close</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatPrice(point.close)}</strong></div>
-      <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">Volume</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatVolume(point.volume)}</strong></div>
+      <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">${labels.open}</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatPrice(point.open)}</strong></div>
+      <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">${labels.high}</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatPrice(point.high)}</strong></div>
+      <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">${labels.low}</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatPrice(point.low)}</strong></div>
+      <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">${labels.close}</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatPrice(point.close)}</strong></div>
+      <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">${labels.volume}</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatVolume(point.volume)}</strong></div>
+      ${reportReferenceRow}
       ${maRows}
     </div>
   `;
@@ -337,7 +360,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
         shadowColor: 'rgba(0,0,0,0.34)',
         shadowOffsetX: 0,
         shadowOffsetY: 10,
-        extraCssText: 'pointer-events:none;white-space:normal;max-width:min(220px,calc(100vw - 20px));backdrop-filter:blur(10px);',
+        extraCssText: 'pointer-events:none;white-space:normal;max-width:min(232px,calc(100vw - 20px));backdrop-filter:blur(10px);',
         textStyle: {
           color: 'rgba(248,250,252,0.86)',
           fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
@@ -352,7 +375,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
         formatter: (params: unknown) => {
           const first = Array.isArray(params) ? params[0] as { dataIndex?: number } | undefined : undefined;
           const point = first?.dataIndex != null ? candles[first.dataIndex] : undefined;
-          return point ? buildTooltip(point, locale) : '';
+          return point ? buildTooltip(point, locale, safeCurrentPrice) : '';
         },
       },
       axisPointer: {
@@ -547,8 +570,15 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
               aria-live="polite"
             >
               <p className="font-medium text-white/88">{formatDate(hoveredCandle.date, locale)}</p>
-              <p>Open {formatPrice(hoveredCandle.open)} · High {formatPrice(hoveredCandle.high)} · Low {formatPrice(hoveredCandle.low)} · Close {formatPrice(hoveredCandle.close)}</p>
-              <p>Volume {formatVolume(hoveredCandle.volume)}</p>
+              <p>
+                {language === 'en'
+                  ? `Open ${formatPrice(hoveredCandle.open)} · High ${formatPrice(hoveredCandle.high)} · Low ${formatPrice(hoveredCandle.low)} · Close ${formatPrice(hoveredCandle.close)}`
+                  : `开盘 ${formatPrice(hoveredCandle.open)} · 最高 ${formatPrice(hoveredCandle.high)} · 最低 ${formatPrice(hoveredCandle.low)} · 收盘 ${formatPrice(hoveredCandle.close)}`}
+              </p>
+              <p>{language === 'en' ? 'Volume' : '成交量'} {formatVolume(hoveredCandle.volume)}</p>
+              {isFiniteNumber(currentPrice) ? (
+                <p>{language === 'en' ? 'Report ref' : '报告参考价'} {formatPrice(currentPrice)}</p>
+              ) : null}
               <p className="text-white/48">
                 {[
                   hoveredCandle.ma5 ? `MA5 ${formatPrice(hoveredCandle.ma5)}` : null,

@@ -441,40 +441,78 @@ function getReportQuality(report: AnalysisReport | null | undefined): ReportQual
   return report.reportQuality || normalizeReportQuality(report);
 }
 
-function traceQualityLabel(status: ReportQuality['traceStatus']): string {
-  if (status === 'present') return '决策依据可查看';
-  if (status === 'partial') return '依据部分可用';
-  if (status === 'missing') return '缺少决策依据';
-  return '依据未确认';
+function reportQualityUserLabel(label: string | undefined, locale: DashboardLocale = 'zh'): string {
+  const normalized = String(label || '').trim();
+  if (locale === 'en') {
+    if (normalized === '完整') return 'Data: complete';
+    if (normalized === '可用') return 'Data: usable';
+    if (normalized === '旧版记录') return 'Data: legacy';
+    if (normalized === '分析失败') return 'Data: failed';
+    return 'Data: pending';
+  }
+  if (normalized === '完整') return '数据：完整';
+  if (normalized === '可用') return '数据：可用';
+  if (normalized === '旧版记录') return '数据：旧版';
+  if (normalized === '分析失败') return '数据：失败';
+  return '数据：待确认';
 }
 
-function schemaQualityLabel(status: ReportQuality['schemaStatus']): string {
-  if (status === 'ok') return '结果已整理';
-  if (status === 'unconfirmed') return '依据需复核';
-  if (status === 'missing') return '结果待整理';
-  return '依据需复核';
+function traceQualityLabel(status: ReportQuality['traceStatus'], locale: DashboardLocale = 'zh'): string {
+  if (locale === 'en') {
+    if (status === 'present') return 'Source: attached';
+    if (status === 'partial') return 'Source: partial';
+    if (status === 'missing') return 'Source: missing';
+    return 'Source: pending';
+  }
+  if (status === 'present') return '来源：已附';
+  if (status === 'partial') return '来源：部分';
+  if (status === 'missing') return '来源：缺失';
+  return '来源：待确认';
 }
 
-function summaryQualityLabel(status: ReportQuality['summaryStatus']): string {
-  if (status === 'complete') return '摘要可读';
-  if (status === 'partial') return '摘要部分可用';
-  return '摘要缺失';
+function schemaQualityLabel(status: ReportQuality['schemaStatus'], locale: DashboardLocale = 'zh'): string {
+  if (locale === 'en') {
+    if (status === 'ok') return 'Structure: ready';
+    if (status === 'unconfirmed') return 'Structure: review';
+    if (status === 'missing') return 'Structure: missing';
+    return 'Structure: review';
+  }
+  if (status === 'ok') return '结构：完整';
+  if (status === 'unconfirmed') return '结构：待复核';
+  if (status === 'missing') return '结构：缺失';
+  return '结构：待复核';
 }
 
-function reportQualityLabel(status: ReportQuality['reportStatus']): string {
-  if (status === 'complete') return '报告可读';
-  if (status === 'partial') return '报告部分可用';
-  return '报告缺失';
+function summaryQualityLabel(status: ReportQuality['summaryStatus'], locale: DashboardLocale = 'zh'): string {
+  if (locale === 'en') {
+    if (status === 'complete') return 'Summary: ready';
+    if (status === 'partial') return 'Summary: partial';
+    return 'Summary: missing';
+  }
+  if (status === 'complete') return '摘要：完整';
+  if (status === 'partial') return '摘要：部分';
+  return '摘要：缺失';
+}
+
+function reportQualityLabel(status: ReportQuality['reportStatus'], locale: DashboardLocale = 'zh'): string {
+  if (locale === 'en') {
+    if (status === 'complete') return 'Report: ready';
+    if (status === 'partial') return 'Report: partial';
+    return 'Report: missing';
+  }
+  if (status === 'complete') return '报告：完整';
+  if (status === 'partial') return '报告：部分';
+  return '报告：缺失';
 }
 
 function qualityChipTone(label: string): 'neutral' | 'used' | 'warning' | 'missing' {
-  if (/可信度较高|可查看|可读|已整理|可用/.test(label) && !/部分|未确认|复核/.test(label)) {
+  if (/(完整|充分|稳定|无冲突|complete|ready|stable|clear|attached)/.test(label) && !/(部分|待确认|待复核|partial|review|pending)/.test(label)) {
     return 'used';
   }
-  if (/缺失|失败|缺少/.test(label)) {
+  if (/(缺失|失败|不足|missing|failed|limited)/.test(label)) {
     return 'missing';
   }
-  if (/部分|旧版|未确认|未知|复核|待整理/.test(label)) {
+  if (/(部分|旧版|未确认|未知|复核|待整理|partial|legacy|unknown|review|pending)/.test(label)) {
     return 'warning';
   }
   return 'neutral';
@@ -484,34 +522,46 @@ function ReportQualityChip({ label }: { label: string }) {
   return <TraceBadge tone={qualityChipTone(label)}>{label}</TraceBadge>;
 }
 
-function buildQualityStatusSummary(quality: ReportQuality): string {
+function buildQualityStatusSummary(quality: ReportQuality, locale: DashboardLocale): string {
   return [
-    quality.userLabel === '完整' ? '可信度较高' : quality.userLabel,
-    traceQualityLabel(quality.traceStatus),
-    schemaQualityLabel(quality.schemaStatus),
-    summaryQualityLabel(quality.summaryStatus),
+    reportQualityUserLabel(quality.userLabel, locale),
+    traceQualityLabel(quality.traceStatus, locale),
+    schemaQualityLabel(quality.schemaStatus, locale),
+    summaryQualityLabel(quality.summaryStatus, locale),
   ].join(' · ');
 }
 
-function buildTraceSummary(trace?: DecisionTrace, quality?: ReportQuality): string {
-  const qualitySummary = quality ? buildQualityStatusSummary(quality) : '';
+function buildTraceSummary(trace: DecisionTrace | undefined, quality: ReportQuality | undefined, locale: DashboardLocale): string {
+  const isEnglish = locale === 'en';
+  const qualitySummary = quality ? buildQualityStatusSummary(quality, locale) : '';
   if (!trace) {
-    return qualitySummary || '未包含决策溯源';
+    return qualitySummary || (isEnglish ? 'Source: unavailable' : '来源：未附');
   }
+  const provenance = Array.from(new Set(
+    (trace.dataSources || [])
+      .filter((source) => !['missing', 'unknown'].includes(String(source.status || '').trim().toLowerCase()))
+      .map((source) => traceDataSourceLabel(source.name, locale))
+      .filter(Boolean),
+  )).slice(0, 4);
   const sourceCount = trace.dataSources?.length || 0;
   const usedCount = (trace.dataSources || []).filter((source) => String(source.status || '').toLowerCase() === 'used').length;
   const conflictCount = trace.conflicts?.length || 0;
+  const sourceLabel = provenance.length
+    ? `${isEnglish ? 'Source' : '来源'}：${provenance.join(' / ')}`
+    : traceQualityLabel(quality?.traceStatus || 'unknown', locale);
   const dataLabel = sourceCount === 0
-    ? '数据覆盖未确认'
+    ? (isEnglish ? 'Data: pending' : '数据：待确认')
     : usedCount === 0
-      ? '数据不足，结论仅供观察'
+      ? (isEnglish ? 'Data: limited' : '数据：不足')
       : usedCount < sourceCount
-        ? '部分数据可用'
-        : '数据覆盖较充分';
-  const conflictLabel = conflictCount > 0 ? '存在需复核的证据冲突' : '未发现主要证据冲突';
-  const schemaLabel = trace.llm?.schemaValidated ? null : '依据需复核';
+        ? (isEnglish ? 'Data: partial' : '数据：部分')
+        : (isEnglish ? 'Data: complete' : '数据：完整');
+  const conflictLabel = conflictCount > 0
+    ? (isEnglish ? 'Evidence: review' : '证据：待复核')
+    : (isEnglish ? 'Evidence: clear' : '证据：无冲突');
+  const schemaLabel = trace.llm?.schemaValidated ? null : schemaQualityLabel('unconfirmed', locale);
   return [
-    qualitySummary,
+    sourceLabel,
     dataLabel,
     conflictLabel,
     schemaLabel,
@@ -532,7 +582,7 @@ function DecisionTracePanel({ trace, locale, quality }: { trace?: DecisionTrace;
           >
             {quality.missingFields.length
               ? quality.missingFields.map((item) => sanitizeUserFacingDataIssue(item, locale)).join('、')
-              : '数据不足，结论仅供观察'}
+              : '数据：不足'}
           </div>
         ) : null}
       </div>
@@ -620,25 +670,6 @@ function dataQualityTierLabel(tier: string | undefined, locale: DashboardLocale)
   return (locale === 'en' ? en : zh)[normalized] || (locale === 'en' ? 'Unknown' : '未确认');
 }
 
-function enrichmentStatusLabel(status: string | undefined, locale: DashboardLocale): string {
-  const normalized = String(status || '').trim().toLowerCase();
-  const zh: Record<string, string> = {
-    pending: '增强数据补充中',
-    partial: '部分缺失',
-    complete: '已完成',
-    skipped: '已跳过',
-    failed: '部分缺失',
-  };
-  const en: Record<string, string> = {
-    pending: 'Enrichment in progress',
-    partial: 'Partially missing',
-    complete: 'Complete',
-    skipped: 'Skipped',
-    failed: 'Partially missing',
-  };
-  return (locale === 'en' ? en : zh)[normalized] || (locale === 'en' ? 'Unknown' : '未确认');
-}
-
 function summarizeEnrichmentGaps(report: DataQualityReport): string[] {
   const sources = [
     ...(report.pendingSources || []),
@@ -648,16 +679,25 @@ function summarizeEnrichmentGaps(report: DataQualityReport): string[] {
   return Array.from(new Set(sources)).slice(0, 5);
 }
 
+function compactDataIssueLabel(label: string, locale: DashboardLocale): string {
+  if (locale === 'en') {
+    if (label === 'Data insufficient, observe only') return 'Data: limited';
+    return label;
+  }
+  if (label === '数据不足，结论仅供观察') return '数据：不足';
+  return label;
+}
+
 function dataQualityFieldLabel(value: string, locale: DashboardLocale): string {
   const normalized = String(value || '').trim().toLowerCase();
   if (!normalized) return locale === 'en' ? 'Unconfirmed data gap' : '数据缺口未确认';
-  return sanitizeUserFacingDataIssue(normalized, locale);
+  return compactDataIssueLabel(sanitizeUserFacingDataIssue(normalized, locale), locale);
 }
 
 function dataQualityReasonLabel(value: string, locale: DashboardLocale): string {
   const normalized = String(value || '').trim().toLowerCase();
   if (!normalized) return locale === 'en' ? 'Reason unconfirmed' : '原因未确认';
-  return sanitizeUserFacingDataIssue(normalized, locale);
+  return compactDataIssueLabel(sanitizeUserFacingDataIssue(normalized, locale), locale);
 }
 
 function summarizeEnrichmentReasons(report: DataQualityReport): string[] {
@@ -701,87 +741,106 @@ function buildDataQualityChipLabel(report: DataQualityReport | undefined, locale
 function buildDataQualityPreview(report: DataQualityReport, locale: DashboardLocale): string {
   const isEnglish = locale === 'en';
   if (report.requiredAvailable === false) {
-    return isEnglish ? 'Critical market data is missing. Read the report as observation only.' : '关键行情数据缺失，当前结论仅供观察。';
+    return isEnglish ? 'Critical market data missing' : '关键行情数据缺失';
   }
   if (report.importantMissing?.length) {
     return `${isEnglish ? 'Critical gap' : '关键缺口'}：${report.importantMissing.slice(0, 2).map((item) => dataQualityFieldLabel(item, locale)).join('、')}`;
   }
   if (report.providerTimeouts?.length || report.providerCooldowns?.length) {
-    return isEnglish ? 'Some external feeds are temporarily degraded.' : '部分外部数据源暂时降级。';
+    return isEnglish ? 'External feeds temporarily degraded' : '外部数据源暂时降级';
   }
   if (report.optionalMissing?.length || report.pendingSources?.length || report.failedSources?.length || report.skippedSources?.length) {
-    return isEnglish ? 'Optional enrichment is still incomplete.' : '可选增强数据仍未完全补齐。';
+    return isEnglish ? 'Optional enrichment still incomplete' : '可选增强仍未补齐';
   }
-  return isEnglish ? 'Data coverage looks stable.' : '当前数据覆盖稳定。';
+  return isEnglish ? 'Coverage stable' : '覆盖稳定';
 }
 
 function AnalysisDiagnosticsDisclosure({
   report,
   locale,
+  trace,
   sourceSummary,
 }: {
   report: DataQualityReport | undefined;
   locale: DashboardLocale;
+  trace?: DecisionTrace;
   sourceSummary?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  if (!report && !sourceSummary) return null;
+  if (!report && !sourceSummary && !trace) return null;
 
   const isEnglish = locale === 'en';
-  const preview = report ? buildDataQualityPreview(report, locale) : sourceSummary || '';
+  const preview = report ? buildDataQualityPreview(report, locale) : sourceSummary || (isEnglish ? 'Source details available' : '可展开查看来源');
   const quickDecisionText = report?.requiredAvailable === false
-    ? (isEnglish ? 'Fast decision is limited' : '快速判断受限')
-    : (isEnglish ? 'Fast decision complete' : '快速判断已完成');
+    ? (isEnglish ? 'Decision basis limited' : '决策依据受限')
+    : (isEnglish ? 'Decision basis available' : '决策依据可用');
+  const sourceEntries = Array.from(new Set(
+    (trace?.dataSources || [])
+      .filter((item) => !['missing', 'unknown'].includes(String(item.status || '').trim().toLowerCase()))
+      .map((item) => traceDataSourceLabel(item.name, locale))
+      .filter(Boolean),
+  )).slice(0, 4);
   const missingCritical = !report
     ? (isEnglish ? 'No structured quality report' : '暂无结构化质量报告')
     : report.requiredAvailable === false
-      ? (isEnglish ? 'Required quote/candle data missing' : '缺失关键行情或 K 线数据')
-      : report.importantMissing?.slice(0, 3).map((item) => dataQualityFieldLabel(item, locale)).join('、') || (isEnglish ? 'No required gaps' : '关键数据已满足');
+      ? (isEnglish ? 'Required quote or candle data missing' : '缺失关键行情或 K 线数据')
+      : report.importantMissing?.slice(0, 3).map((item) => dataQualityFieldLabel(item, locale)).join('、') || (isEnglish ? 'No critical gaps' : '暂无关键缺口');
+  const missingFields = report ? Array.from(new Set([
+    ...(report.importantMissing || []),
+    ...(report.optionalMissing || []),
+  ])).map((item) => dataQualityFieldLabel(item, locale)).slice(0, 6) : [];
   const enrichmentGaps = report ? summarizeEnrichmentGaps(report) : [];
   const enrichmentReasons = report ? summarizeEnrichmentReasons(report).map((item) => dataQualityReasonLabel(item, locale)) : [];
-  const optionalText = !report ? (sourceSummary || (isEnglish ? 'No enrichment notes' : '暂无增强说明')) : [
-    enrichmentStatusLabel(report.enrichmentStatus, locale),
-    enrichmentGaps.length
-      ? `${isEnglish ? 'Missing' : '缺失项'}：${enrichmentGaps.map((item) => dataQualityFieldLabel(item, locale)).join('、')}`
-      : (isEnglish ? 'No visible enrichment gaps' : '暂无可见增强缺口'),
-    enrichmentReasons.length
-      ? `${isEnglish ? 'Reasons' : '原因'}：${enrichmentReasons.join('、')}`
+  const degradedSources = Array.from(new Set(
+    (trace?.dataSources || [])
+      .filter((item) => ['fallback', 'stale'].includes(String(item.status || '').trim().toLowerCase()))
+      .map((item) => traceDataSourceLabel(item.name, locale))
+      .filter(Boolean),
+  )).slice(0, 4);
+  const conflictNotes = (trace?.conflicts || []).map((item) => localizeTraceMessage(item.message, item.type, locale)).slice(0, 2);
+  const sourceText = sourceEntries.length
+    ? sourceEntries.join(' / ')
+    : sourceSummary || (isEnglish ? 'No source summary yet' : '暂无来源摘要');
+  const degradationNotes = [
+    degradedSources.length
+      ? `${isEnglish ? 'Fallback / stale' : '备用 / 陈旧'}：${degradedSources.join(' / ')}`
       : null,
-    report.providerTimeouts?.length || report.providerCooldowns?.length
-      ? (isEnglish ? 'Some external data is temporarily unavailable' : '部分外部数据暂不可用')
+    report?.providerTimeouts?.length || report?.providerCooldowns?.length
+      ? (isEnglish ? 'External feed temporarily degraded' : '外部数据源暂时降级')
+      : null,
+    enrichmentGaps.length
+      ? `${isEnglish ? 'Pending gaps' : '待补缺口'}：${enrichmentGaps.map((item) => dataQualityFieldLabel(item, locale)).join('、')}`
+      : null,
+    enrichmentReasons.length
+      ? `${isEnglish ? 'Notes' : '说明'}：${enrichmentReasons.join('、')}`
       : null,
   ].filter(Boolean).join(' · ');
 
   return (
-    <section className="rounded-lg border border-white/[0.055] bg-white/[0.012] px-3 py-2.5" data-testid="home-bento-analysis-diagnostics">
+    <section className="border-t border-white/[0.055] pt-3" data-testid="home-bento-analysis-diagnostics">
       <button
         type="button"
-        className="flex w-full min-w-0 flex-col gap-2 text-left sm:flex-row sm:items-center sm:justify-between"
+        className="flex w-full min-w-0 items-start justify-between gap-3 text-left"
         aria-expanded={isOpen}
         data-testid="home-bento-analysis-diagnostics-toggle"
         onClick={() => setIsOpen((current) => !current)}
       >
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
-            {isEnglish ? 'Data status' : '数据状态'}
+          <p className="text-[11px] font-semibold tracking-[0] text-white/62">
+            {isEnglish ? 'Source details' : '来源与缺口'}
           </p>
-          <p className="mt-0.5 line-clamp-2 text-xs font-medium leading-5 tracking-[0] text-white/68">
+          <p className="mt-1 line-clamp-1 text-xs leading-5 tracking-[0] text-white/50">
             {preview}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {report ? (
-            <>
-              <TraceBadge tone={dataQualityChipTone(report)}>
-                {dataQualityTierLabel(report.dataQualityTier, locale)}
-              </TraceBadge>
-              <TraceBadge tone={report.confidenceCap !== undefined && report.confidenceCap < 75 ? 'warning' : 'neutral'}>
-                {isEnglish ? 'Cap' : '上限'} {report.confidenceCap ?? '--'}
-              </TraceBadge>
-            </>
+        <div className="flex shrink-0 items-center gap-2">
+          {report?.requiredAvailable === false || report?.importantMissing?.length ? (
+            <TraceBadge tone={report?.requiredAvailable === false ? 'missing' : 'warning'}>
+              {isEnglish ? 'Key gap' : '关键缺口'}
+            </TraceBadge>
           ) : null}
-          <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/34">
-            {isOpen ? (isEnglish ? 'Hide' : '收起') : (isEnglish ? 'Open' : '展开')}
+          <span className="text-[10px] font-semibold tracking-[0.14em] text-white/34">
+            {isOpen ? (isEnglish ? 'Collapse' : '收起') : (isEnglish ? 'Open sources' : '展开数据来源')}
           </span>
         </div>
       </button>
@@ -790,25 +849,35 @@ function AnalysisDiagnosticsDisclosure({
         <div className="mt-3 min-w-0 divide-y divide-white/[0.055] border-t border-white/[0.055]" data-testid="home-bento-analysis-diagnostics-panel">
           <div className="grid min-w-0 gap-1 py-2.5 sm:grid-cols-[9rem_minmax(0,1fr)]">
             <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
-              {isEnglish ? 'Critical gaps' : '关键缺失'}
+              {isEnglish ? 'Sources' : '来源'}
             </p>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-emerald-200/80">{quickDecisionText}</p>
-              <p className="mt-1 break-words text-xs leading-5 text-white/68">{missingCritical}</p>
-            </div>
+            <p className="min-w-0 break-words text-xs leading-5 text-white/68">{sourceText}</p>
           </div>
           <div className="grid min-w-0 gap-1 py-2.5 sm:grid-cols-[9rem_minmax(0,1fr)]">
             <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
-              {isEnglish ? 'Enrichment' : '增强状态'}
+              {isEnglish ? 'Missing' : '缺口'}
             </p>
-            <p className="min-w-0 break-words text-xs leading-5 text-white/68">{optionalText}</p>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-emerald-200/80">{quickDecisionText}</p>
+              <p className="mt-1 break-words text-xs leading-5 text-white/68">
+                {missingFields.length ? missingFields.join('、') : missingCritical}
+              </p>
+            </div>
           </div>
-          {sourceSummary ? (
+          {degradationNotes ? (
             <div className="grid min-w-0 gap-1 py-2.5 sm:grid-cols-[9rem_minmax(0,1fr)]">
               <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
-                {isEnglish ? 'Source' : '来源'}
+                {isEnglish ? 'Stale / fallback' : '降级 / 陈旧'}
               </p>
-              <p className="min-w-0 break-words text-xs leading-5 text-white/68">{sourceSummary}</p>
+              <p className="min-w-0 break-words text-xs leading-5 text-white/68">{degradationNotes}</p>
+            </div>
+          ) : null}
+          {conflictNotes.length ? (
+            <div className="grid min-w-0 gap-1 py-2.5 sm:grid-cols-[9rem_minmax(0,1fr)]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
+                {isEnglish ? 'Mismatch note' : '对照提示'}
+              </p>
+              <p className="min-w-0 break-words text-xs leading-5 text-white/68">{conflictNotes.join(' · ')}</p>
             </div>
           ) : null}
         </div>
@@ -1100,6 +1169,24 @@ function LinearObservationPanel({
   const qualityPreview = dataQualityReport
     ? buildDataQualityPreview(dataQualityReport, locale)
     : sourceSummary || (isEnglish ? 'Data quality not yet confirmed.' : '数据质量仍待确认。');
+  const qualityRows = [
+    {
+      label: isEnglish ? 'Completeness' : '完整度',
+      level: dataQualityReport?.requiredAvailable === false ? 'low' : 'high',
+    },
+    {
+      label: isEnglish ? 'Reliability' : '可靠性',
+      level: !dataQualityReport || !hasDataQualityGaps(dataQualityReport) ? 'high' : 'medium',
+    },
+    {
+      label: isEnglish ? 'Actionable' : '可执行性',
+      level: dataQualityReport?.requiredAvailable === false
+        ? 'low'
+        : dataQualityReport?.importantMissing?.length
+          ? 'medium'
+          : 'high',
+    },
+  ] as const;
 
   return (
     <aside
@@ -1107,12 +1194,12 @@ function LinearObservationPanel({
       data-testid="home-bento-secondary-stack"
     >
       <section className="min-w-0" data-testid="home-bento-card-strategy" data-research-card="opportunity">
-        <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
+        <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
           <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Observation Framework' : '观察框架'}</h2>
           <button
             ref={openStrategyButtonRef}
             type="button"
-            className="text-xs font-medium text-white/42 transition-colors hover:text-white"
+            className="text-[11px] font-medium text-white/38 transition-colors hover:text-white/72"
             data-testid="home-bento-drawer-trigger-strategy"
             onClick={handleOpenStrategyClick}
             onPointerUp={handleOpenStrategyPointerUp}
@@ -1120,10 +1207,10 @@ function LinearObservationPanel({
             {dashboard.strategy.detailLabel}
           </button>
         </div>
-        <div className="divide-y divide-white/[0.07]">
+        <div className="divide-y divide-white/[0.055]">
           {dashboard.strategy.metrics.map((metric) => (
-            <div key={metric.label} className="flex min-w-0 items-center justify-between gap-4 py-3">
-              <span className="truncate text-xs text-white/44">{getMetricLabelForStrip(locale, metric.label)}</span>
+            <div key={metric.label} className="flex min-w-0 items-center justify-between gap-4 py-2.5">
+              <span className="truncate text-[11px] text-white/40">{getMetricLabelForStrip(locale, metric.label)}</span>
               <span
                 className={cn('min-w-0 truncate text-right font-mono text-xs font-semibold', metricValueClass(metric, marketColorConvention))}
                 style={toneTextStyle(metric.tone || 'neutral', marketColorConvention)}
@@ -1132,9 +1219,9 @@ function LinearObservationPanel({
               </span>
             </div>
           ))}
-          <div className="py-3">
-            <p className="text-xs text-white/44">{dashboard.strategy.positionLabel}</p>
-            <p className="mt-1 text-xs leading-5 text-white/62">{dashboard.strategy.positionBody}</p>
+          <div className="py-2.5">
+            <p className="text-[11px] text-white/40">{dashboard.strategy.positionLabel}</p>
+            <p className="mt-1 text-xs leading-5 text-white/58">{dashboard.strategy.positionBody}</p>
           </div>
         </div>
       </section>
@@ -1144,12 +1231,12 @@ function LinearObservationPanel({
         data-testid="home-bento-card-fundamentals"
         data-research-card="data-context"
       >
-        <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
+        <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
           <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Data Quality' : '数据质量与说明'}</h2>
           <button
             ref={openFundamentalsButtonRef}
             type="button"
-            className="text-xs font-medium text-white/42 transition-colors hover:text-white"
+            className="text-[11px] font-medium text-white/38 transition-colors hover:text-white/72"
             data-testid="home-bento-drawer-trigger-fundamentals"
             onClick={handleOpenFundamentalsClick}
             onPointerUp={handleOpenFundamentalsPointerUp}
@@ -1157,21 +1244,34 @@ function LinearObservationPanel({
             {dashboard.fundamentals.detailLabel}
           </button>
         </div>
-        <div className="divide-y divide-white/[0.055] border-y border-white/[0.055]" data-testid="home-linear-quality-summary">
-          <p className="py-2.5 text-xs leading-5 text-white/62">{qualityPreview}</p>
-          {[
-            { label: isEnglish ? 'Completeness' : '数据完整度', active: dataQualityReport?.requiredAvailable !== false },
-            { label: isEnglish ? 'Reliability' : '覆盖可靠性', active: !dataQualityReport || !hasDataQualityGaps(dataQualityReport) },
-            { label: isEnglish ? 'Actionable' : '财报有效性', active: Boolean(!dataQualityReport?.importantMissing?.length) },
-          ].map((item) => (
-            <div key={item.label} className="grid grid-cols-[6.5rem_minmax(0,1fr)_2.5rem] items-center gap-3 py-2.5 text-[11px]">
-              <span className="truncate text-white/40">{item.label}</span>
-              <span className="h-1 overflow-hidden rounded-full bg-white/[0.055]">
-                <span className={cn('block h-full rounded-full', item.active ? 'w-4/5 bg-white/50' : 'w-2/5 bg-amber-300/58')} />
-              </span>
-              <span className="text-right text-white/54">{item.active ? (isEnglish ? 'High' : '高') : (isEnglish ? 'Mid' : '中')}</span>
-            </div>
-          ))}
+        <div className="border-t border-white/[0.055] pt-2" data-testid="home-linear-quality-summary">
+          <p className="pb-3 text-xs leading-5 text-white/58">{qualityPreview}</p>
+          <div className="divide-y divide-white/[0.055]">
+            {qualityRows.map((item) => (
+              <div key={item.label} className="grid grid-cols-[5.5rem_minmax(0,1fr)_2.5rem] items-center gap-3 py-2 text-[11px]">
+                <span className="truncate text-white/40">{item.label}</span>
+                <span className="h-1 overflow-hidden rounded-full bg-white/[0.055]">
+                  <span
+                    className={cn(
+                      'block h-full rounded-full',
+                      item.level === 'high'
+                        ? 'w-[86%] bg-white/52'
+                        : item.level === 'medium'
+                          ? 'w-[58%] bg-amber-300/60'
+                          : 'w-[36%] bg-rose-300/66',
+                    )}
+                  />
+                </span>
+                <span className="text-right text-white/52">
+                  {item.level === 'high'
+                    ? (isEnglish ? 'High' : '高')
+                    : item.level === 'medium'
+                      ? (isEnglish ? 'Mid' : '中')
+                      : (isEnglish ? 'Low' : '低')}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
           {dashboard.fundamentals.metrics.map((metric) => (
@@ -1190,62 +1290,65 @@ function LinearObservationPanel({
 function LinearEventsStrip({
   locale,
   dashboard,
-  dataQualityReport,
-  sourceSummary,
 }: {
   locale: DashboardLocale;
   dashboard: DashboardPayload;
-  dataQualityReport?: DataQualityReport;
-  sourceSummary?: string;
 }) {
   const isEnglish = locale === 'en';
-  const qualityText = dataQualityReport ? buildDataQualityPreview(dataQualityReport, locale) : sourceSummary;
+  const firstFundamental = dashboard.fundamentals.metrics.find((metric) => !isEmptyDashboardValue(metric.value));
+  const firstTechSignal = dashboard.tech.signals[0];
   const events = [
     {
-      label: isEnglish ? 'Report thesis' : '报告主线',
+      label: isEnglish ? 'Thesis' : '报告主线',
       title: dashboard.decision.badge,
       detail: dashboard.decision.summary,
-      importance: isEnglish ? 'High' : '高',
+      importance: 'high',
       time: isEnglish ? 'Current' : '当前',
     },
     {
-      label: isEnglish ? 'Technical check' : '技术验证',
-      title: dashboard.tech.signals[0]?.label || dashboard.tech.title,
-      detail: dashboard.tech.signals[0]?.details || dashboard.tech.signals[0]?.value || EMPTY_FIELD_VALUE,
-      importance: isEnglish ? 'Medium' : '中',
+      label: isEnglish ? 'Trigger' : '技术触发',
+      title: dashboard.decision.chartLabel || firstTechSignal?.label || dashboard.tech.title,
+      detail: firstTechSignal?.details || firstTechSignal?.value || EMPTY_FIELD_VALUE,
+      importance: 'medium',
       time: isEnglish ? 'Watching' : '跟踪',
     },
     {
-      label: isEnglish ? 'Data status' : '数据状态',
-      title: dataQualityReport ? dataQualityTierLabel(dataQualityReport.dataQualityTier, locale) : (isEnglish ? 'Unconfirmed' : '未确认'),
-      detail: qualityText || (isEnglish ? 'No structured quality notes yet.' : '暂无结构化质量说明。'),
-      importance: isEnglish ? 'Medium' : '中',
-      time: isEnglish ? 'Continuous' : '持续跟踪',
+      label: isEnglish ? 'Fundamental' : '基本面线索',
+      title: firstFundamental?.label || (isEnglish ? 'Financial follow-up' : '财报跟踪'),
+      detail: firstFundamental?.value || EMPTY_FIELD_VALUE,
+      importance: 'medium',
+      time: isEnglish ? 'Latest' : '最新',
     },
   ];
 
   return (
-    <section className="min-w-0 rounded-lg border border-white/[0.055] bg-white/[0.012] px-4 py-3" data-testid="home-linear-events">
-      <div className="grid min-w-0 gap-1 border-b border-white/[0.055] pb-2 md:grid-cols-[minmax(0,1fr)_8rem_8rem]">
+    <section className="min-w-0 border-t border-white/[0.055] pt-4" data-testid="home-linear-events">
+      <div className="flex min-w-0 items-center justify-between gap-3 pb-2">
         <h2 className="text-sm font-semibold text-white">{isEnglish ? 'Events & Catalysts' : '关键事件与催化剂'}</h2>
-        <span className="hidden text-xs text-white/40 md:block">{isEnglish ? 'Importance' : '重要性'}</span>
-        <span className="hidden text-xs text-white/40 md:block">{isEnglish ? 'Time' : '时间'}</span>
+        <span className="text-[11px] text-white/34">{events.length}{isEnglish ? ' rows' : ' 条'}</span>
       </div>
       <div className="divide-y divide-white/[0.055]">
         {events.map((event, index) => (
-          <div key={`${event.label}-${index}`} className="grid min-w-0 gap-2 py-3 md:grid-cols-[minmax(0,1fr)_8rem_8rem]">
-            <div className="min-w-0">
-              <p className="text-[11px] text-white/36">{event.label}</p>
-              <p className="mt-1 truncate text-sm font-medium text-white/78">{isEmptyDashboardValue(event.title) ? EMPTY_FIELD_VALUE : event.title}</p>
-              <p className="mt-1 line-clamp-1 text-xs text-white/44">{event.detail}</p>
+          <div key={`${event.label}-${index}`} className="grid min-w-0 gap-3 py-3 md:grid-cols-[minmax(0,1fr)_7rem_5rem] md:items-center">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className={cn(
+                'mt-1.5 h-2 w-2 shrink-0 rounded-full',
+                event.importance === 'high' ? 'bg-[#3B82F6]' : 'bg-white/28',
+              )}
+              />
+              <div className="min-w-0">
+                <p className="text-[11px] text-white/36">{event.label}</p>
+                <p className="mt-1 truncate text-sm font-medium text-white/78">{isEmptyDashboardValue(event.title) ? EMPTY_FIELD_VALUE : event.title}</p>
+                <p className="mt-1 line-clamp-1 text-xs text-white/44">{event.detail}</p>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-white/58">
+            <div className="flex items-center gap-1.5 text-[11px] text-white/54">
               <span className="h-1.5 w-1.5 rounded-full bg-[#3B82F6]" />
-              <span className="h-1.5 w-1.5 rounded-full bg-[#3B82F6]" />
-              <span className={cn('h-1.5 w-1.5 rounded-full', index === 0 ? 'bg-[#3B82F6]' : 'bg-white/24')} />
-              <span className="ml-3">{event.importance}</span>
+              <span className={cn('h-1.5 w-1.5 rounded-full', event.importance === 'high' ? 'bg-[#3B82F6]' : 'bg-white/24')} />
+              <span className="h-1.5 w-1.5 rounded-full bg-white/18" />
+              <span className="ml-2">{event.importance === 'high' ? (isEnglish ? 'High' : '高') : (isEnglish ? 'Mid' : '中')}</span>
             </div>
-            <p className="text-xs text-white/44">{event.time}</p>
+            <p className="text-[11px] text-white/42">{event.time}</p>
           </div>
         ))}
       </div>
@@ -3526,7 +3629,10 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const activeDecisionTrace = useMemo(() => (activeTraceReport ? getDecisionTrace(activeTraceReport) : undefined), [activeTraceReport]);
   const activeReportQuality = useMemo(() => getReportQuality(activeTraceReport), [activeTraceReport]);
   const activeDataQualityReport = useMemo(() => getDataQualityReport(activeTraceReport), [activeTraceReport]);
-  const sourceSummary = useMemo(() => buildTraceSummary(activeDecisionTrace, activeReportQuality), [activeDecisionTrace, activeReportQuality]);
+  const sourceSummary = useMemo(
+    () => buildTraceSummary(activeDecisionTrace, activeReportQuality, locale),
+    [activeDecisionTrace, activeReportQuality, locale],
+  );
   const reanalysisTicker = useMemo(() => {
     const candidate = normalizeTickerQuery(activeTraceReport?.meta.stockCode) || normalizeTickerQuery(dashboardData.ticker);
     return TICKER_FORMAT_RE.test(candidate) ? candidate : '';
@@ -4180,13 +4286,16 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                 <LinearEventsStrip
                   locale={locale}
                   dashboard={readyCopy}
-                  dataQualityReport={activeDataQualityReport}
-                  sourceSummary={sourceSummary}
                 />
               ) : null}
               {!isHomeAnalyzing && !isGuest && (activeDataQualityReport || sourceSummary) ? (
                 <div>
-                  <AnalysisDiagnosticsDisclosure report={activeDataQualityReport} locale={locale} sourceSummary={sourceSummary} />
+                  <AnalysisDiagnosticsDisclosure
+                    report={activeDataQualityReport}
+                    locale={locale}
+                    trace={activeDecisionTrace}
+                    sourceSummary={sourceSummary}
+                  />
                 </div>
               ) : null}
               <p className="px-2 text-center text-[11px] leading-5 text-white/32" data-testid="home-linear-footer-disclaimer">
@@ -4270,11 +4379,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             const shouldShowTickerMeta = ticker && companyLabel.toUpperCase() !== ticker;
             const itemQuality = item.reportQuality || reportQualityFallback();
             const historyQualityLabels = [
-              itemQuality.userLabel === '完整' ? '可信度较高' : itemQuality.userLabel,
-              traceQualityLabel(itemQuality.traceStatus),
-              reportQualityLabel(itemQuality.reportStatus),
+              reportQualityUserLabel(itemQuality.userLabel, locale),
+              traceQualityLabel(itemQuality.traceStatus, locale),
+              reportQualityLabel(itemQuality.reportStatus, locale),
               itemQuality.schemaStatus === 'ok' || itemQuality.schemaStatus === 'unconfirmed'
-                ? schemaQualityLabel(itemQuality.schemaStatus)
+                ? schemaQualityLabel(itemQuality.schemaStatus, locale)
                 : null,
             ].filter(Boolean) as string[];
             return (
