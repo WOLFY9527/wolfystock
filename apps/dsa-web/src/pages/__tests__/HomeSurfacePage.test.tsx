@@ -297,10 +297,11 @@ describe('HomeSurfacePage', () => {
     expect(grid).toHaveClass('flex', 'w-full', 'min-w-0', 'flex-col', 'gap-3');
     expect(grid).not.toHaveClass('xl:grid-cols-12');
     expect(grid.firstElementChild).toBe(omnibarShell);
-    expect(linearShell).toHaveClass('grid', 'min-w-0', 'overflow-hidden', 'rounded-xl', 'border', 'border-white/[0.08]');
-    expect(linearShell.className).toContain('lg:grid-cols-[minmax(0,1fr)_minmax(300px,380px)]');
-    expect(primaryStack).toHaveClass('min-w-0', 'px-4', 'py-5');
-    expect(secondaryStack).toHaveClass('relative', 'min-w-0', 'border-t', 'border-white/[0.08]');
+    expect(linearShell).toHaveClass('grid', 'min-w-0', 'rounded-[14px]', 'border', 'border-white/[0.045]', 'shadow-none');
+    expect(linearShell).not.toHaveClass('overflow-hidden');
+    expect(linearShell.className).toContain('lg:grid-cols-[minmax(0,1fr)_minmax(300px,390px)]');
+    expect(primaryStack).toHaveClass('min-w-0', 'px-4', 'py-6', 'md:px-8', 'md:py-8');
+    expect(secondaryStack).toHaveClass('relative', 'min-w-0', 'border-t', 'border-white/[0.055]', 'py-5');
     expect(homeSearch).toHaveAttribute('placeholder', '输入代码唤醒 AI (如 ORCL)...');
     expect(homeSearch).toHaveValue('');
     expect(screen.getByTestId('home-bento-omnibar-input-shell')).toHaveClass('overflow-hidden', 'rounded-lg', 'border', 'border-white/[0.08]', 'bg-[#0b1118]/80');
@@ -337,7 +338,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-decision-support-grid')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('min-w-0');
     expect(screen.queryByTestId('home-bento-decision-scroll-body')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-decision-hero-row')).toHaveClass('grid', 'gap-6');
+    expect(screen.getByTestId('home-bento-decision-hero-row')).toHaveClass('grid', 'gap-7');
     expect(screen.getByTestId('home-bento-decision-action')).toHaveClass('min-w-0');
     expect(screen.getByTestId('home-bento-decision-score')).toHaveClass('min-w-0');
     expect(screen.getByTestId('home-bento-decision-conviction')).toHaveClass('min-w-0');
@@ -408,6 +409,8 @@ describe('HomeSurfacePage', () => {
 
     const panel = screen.getByTestId('home-bento-analysis-diagnostics');
     const toggle = screen.getByTestId('home-bento-analysis-diagnostics-toggle');
+    expect(panel).toHaveClass('rounded-lg', 'border-white/[0.055]', 'bg-white/[0.012]', 'py-2.5');
+    expect(toggle).toHaveClass('sm:flex-row', 'sm:items-center');
     expect(panel).toHaveTextContent('数据状态');
     expect(panel).toHaveTextContent('关键缺口：基本面数据缺失');
     expect(panel).toHaveTextContent('分析级');
@@ -1296,9 +1299,10 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
     expect(grid).toHaveClass('flex', 'w-full', 'min-w-0', 'flex-col', 'gap-3');
     expect(grid).toHaveAttribute('data-bento-grid', 'true');
-    expect(linearShell).toHaveClass('grid', 'min-w-0', 'overflow-hidden', 'rounded-xl', 'border');
-    expect(primaryStack).toHaveClass('min-w-0', 'px-4', 'py-5');
-    expect(secondaryStack).toHaveClass('relative', 'min-w-0', 'border-t');
+    expect(linearShell).toHaveClass('grid', 'min-w-0', 'rounded-[14px]', 'border', 'shadow-none');
+    expect(linearShell).not.toHaveClass('overflow-hidden');
+    expect(primaryStack).toHaveClass('min-w-0', 'px-4', 'py-6');
+    expect(secondaryStack).toHaveClass('relative', 'min-w-0', 'border-t', 'py-5');
     expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-tech')).toBeInTheDocument();
