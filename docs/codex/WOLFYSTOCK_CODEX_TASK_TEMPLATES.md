@@ -1,25 +1,30 @@
 # WolfyStock Codex Task Templates
 
-Purpose: keep user prompts short while preserving the WolfyStock guardrails.
+Purpose: keep Codex prompts short while preserving guardrails.
 
-Task labels should stay outside the code block.
+Task labels should stay outside the code block when possible.
 
-## Minimum task metadata
+---
 
-Every execution prompt should include this compact metadata block before the task body:
+## 1. Minimum Task Metadata
+
+Every execution prompt should include:
 
 ```text
 Task ID: T-###
 Task title:
 Branch:
 Workspace:
+Mode:
 ```
 
-Use the same Task ID in the final report so the task can be reconciled against the ledger without guesswork.
+Use the same Task ID in the final report.
 
-## Universal header
+---
 
-Use this header unless the user explicitly requests same-main/manual-worktree mode:
+## 2. Universal Header
+
+Use unless the user explicitly requests same-main/manual-worktree mode:
 
 ```text
 Use the Codex App isolated task workspace.
@@ -34,67 +39,13 @@ Report actual cwd, branch, and base commit in the final response.
 
 Read and obey:
 - docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md
+- docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md
 - docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md
 ```
 
-## Validation profile shortcuts
+---
 
-Use the smallest validation profile that matches the task. Escalate only when the task or landing boundary requires it.
-
-| Task class | Worker default | Landing / pre-push escalation |
-| --- | --- | --- |
-| frontend shell | focused tests + build + design guard + focused route Playwright | `bash scripts/release_secret_scan.sh`; add `tsc --noEmit` only if routes/types/shared interfaces changed or build is not enough; full `./scripts/ci_gate.sh` only for landing/high-risk/shared runtime changes |
-| backend tests-only guard | focused `pytest` guard coverage + `git diff --check` | `bash scripts/release_secret_scan.sh`; full `./scripts/ci_gate.sh` only if the task stopped being tests-only or landing policy requires it |
-| backend endpoint mapping | `python3 -m py_compile` + focused `pytest -q` + `git diff --check` | `bash scripts/release_secret_scan.sh` + full `./scripts/ci_gate.sh` |
-| provider/runtime audit | read-only inspection only | if re-scoped into a write task, treat as high-risk and require `bash scripts/release_secret_scan.sh` + full `./scripts/ci_gate.sh` |
-| scanner/backtest protected domains | stay seam-scoped; only focused tests/browser checks for the touched route/domain | `bash scripts/release_secret_scan.sh`; full `./scripts/ci_gate.sh` for landing code-bearing changes |
-| docs-only | command/file-name consistency + `git diff --check` | `bash scripts/release_secret_scan.sh` before commit/push or landing; skip secret scan for read-only audits |
-
-`./scripts/ci_gate_fast.sh` is optional worker-iteration evidence. It does not replace task-scoped checks and it is not landing proof.
-
-## Read-only decision task
-
-```text
-<universal header>
-
-Task: Read-only <topic> triage / inventory.
-
-Goal:
-- <what decision to make>
-- <what future execution target to evaluate>
-
-Hard rules:
-- Read-only.
-- Do not edit files.
-- Do not create artifacts.
-- Do not stage, commit, or push.
-- Final output in Codex chat only.
-
-Read first:
-- <task-specific docs/files>
-
-Investigation:
-- <commands>
-
-Evaluate:
-- <candidates>
-
-Decision policy:
-- <what counts as safe>
-- <what is not allowed>
-
-Final response:
-1. Preflight status
-2. Current map
-3. Candidate table
-4. Recommendation
-5. Safe future scope if any
-6. Tasks not recommended
-7. No-write confirmation
-8. Actual cwd, branch, base commit, whether main was touched
-```
-
-## Frontend execution task
+## 3. Frontend Execution Task
 
 ```text
 <universal header>
@@ -102,10 +53,10 @@ Final response:
 Task: <frontend implementation task>.
 
 Read and obey:
-- docs/codex/WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md
+- docs/codex/CODEX_FRONTEND_DESIGN_CONSTITUTION.md
+- docs/codex/WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md
 - docs/codex/WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md
 - docs/codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md
-- CODEX_FRONTEND_DESIGN_CONSTITUTION.md
 
 Goal:
 - <3-6 line goal>
@@ -124,14 +75,21 @@ Implementation:
 2. <step>
 3. <step>
 
+Copy/design discipline:
+- Follow Linear-inspired low-noise direction.
+- No card-first dashboard regression.
+- No meta-explanatory UI copy.
+- No raw debug/provider/schema leakage.
+- Keep critical warnings honest but compact.
+
 Validation:
-- npm --prefix apps/dsa-web run test -- <focused tests>
+- npm --prefix apps/dsa-web run test -- <focused tests> --run
 - npm --prefix apps/dsa-web run build
 - npm --prefix apps/dsa-web run check:design
-- `npx --prefix apps/dsa-web tsc --noEmit --pretty false --project apps/dsa-web/tsconfig.app.json` only if routes/types/shared interfaces changed or build is not enough
-- `./scripts/ci_gate_fast.sh` only as optional worker-iteration feedback
-- ./scripts/release_secret_scan.sh before commit/push
-- browser verification routes/viewports: <routes>, 1440x1000 and 390x844
+- python3 scripts/check_frontend_design_constitution.py
+- git diff --check
+- bash scripts/release_secret_scan.sh
+- browser verification routes/viewports: <routes>, 1440x1000, 1920x1080 if wide, 390x844
 
 Commit:
 - Stage only task-related files.
@@ -139,11 +97,12 @@ Commit:
 - Push if safe.
 
 Final report:
-- use WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md
-- include task-specific chunk/route/visual observations
+- Use WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md.
 ```
 
-## Backend execution task
+---
+
+## 4. Backend Execution Task
 
 ```text
 <universal header>
@@ -152,94 +111,100 @@ Task: <backend implementation or guard task>.
 
 Read and obey:
 - docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md
-- <domain-specific doc if any>
+- docs/codex/WOLFYSTOCK_PROVIDER_BUDGET_AND_ROUTING_RULES.md if provider/data-source near scope
 
 Goal:
-- <3-6 line goal>
+- <goal>
 
-Scope:
-Change:
-- <allowed files/modules>
+Allowed files:
+- <files>
 
-Do not change:
-- <task-specific protected semantics>
-- provider runtime / AI routing / auth / storage unless explicitly scoped
+Forbidden files/domains:
+- <domains>
 
 Implementation:
 1. <step>
 2. <step>
-3. <step>
 
 Validation:
-- python3 -m py_compile <changed python files, if source touched>
-- python3 -m pytest -q <focused tests>
+- python3 -m py_compile <changed files>
+- python3 -m pytest <focused tests> -q
 - git diff --check
-- ./scripts/release_secret_scan.sh before commit/push
-- ./scripts/ci_gate.sh when landing or when the task is high-risk/code-bearing beyond a narrow guard
+- bash scripts/release_secret_scan.sh
 
-Commit:
-- Stage only task-related files.
-- Commit message: <message>
-- Push if safe.
-
-Final report:
-- use WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md
-- include protected-domain confirmations
+Commit/push if safe.
 ```
 
-## Docs-only / tests-only task
+---
+
+## 5. Read-Only Decision/Audit Task
 
 ```text
 <universal header>
 
-Task: <docs-only or tests-only guard task>.
+Task: Read-only <topic> audit.
 
-Task metadata:
-- Task ID: T-###
-- Task title: <title>
-- Branch: <branch>
-- Workspace: <absolute path>
+Goal:
+- <what decision to make>
 
-Scope:
-Change:
-- <allowed docs/tests>
+Hard rules:
+- Read-only.
+- Do not edit files.
+- Do not create artifacts.
+- Do not stage, commit, or push.
 
-Do not change:
-- runtime source
-- frontend source
-- backend services
+Read first:
+- <task-specific docs/files>
+
+Investigate:
+- <commands/files>
+
+Final response:
+1. Preflight status
+2. Findings
+3. Risks
+4. Recommendation
+5. Safe future scope if any
+6. No-write confirmation
+7. Actual cwd, branch, base commit
+```
+
+---
+
+## 6. Docs-Only Task
+
+```text
+<universal header>
+
+Task: Docs-only <topic>.
+
+Goal:
+- <doc update goal>
+
+Allowed files:
+- <docs>
+
+Forbidden:
+- frontend implementation code
+- backend implementation code
 - package/lock files
 
 Validation:
-- <focused docs/test commands>
 - git diff --check
-- ./scripts/release_secret_scan.sh before commit/push or landing for write tasks
-- skip secret scan in pure read-only audits
+- bash scripts/release_secret_scan.sh
 
-Commit:
-- Stage only task files.
-- Commit message: <message>
-- Push if safe.
-
-Final report:
-- use WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md
-- include Task ID, ledger status, branch/workspace, commit, push status, files changed, validation, risks, rollback
-- state no runtime behavior changed
+Commit message:
+- docs(...): <message>
 ```
 
-## Report-only audit task
+---
 
-```text
-<universal header>
+## 7. Validation Profile Shortcuts
 
-Task: Report-only audit for <topic>.
-
-Rules:
-- Prefer chat-only output when possible.
-- If an artifact is explicitly required, write under an ignored artifacts path and state kept/deleted rationale.
-- Do not edit source/tests/docs unless explicitly scoped.
-- Do not commit report-only artifacts unless explicitly requested.
-
-Final report:
-- use report-only section in WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md
-```
+| Task class | Worker default | Pre-push escalation |
+|---|---|---|
+| frontend UI | focused tests + build + design guard + focused route Playwright | release secret scan; tsc only if shared types/routes changed |
+| backend tests-only | focused pytest + diff check | release secret scan |
+| backend endpoint mapping | py_compile + focused pytest + diff check | release secret scan + full ci gate if high-risk |
+| provider/runtime audit | read-only inspection | if write-scoped, high-risk validation |
+| docs-only | diff check | release secret scan |

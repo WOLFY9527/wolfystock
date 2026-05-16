@@ -1,30 +1,35 @@
 # WolfyStock Frontend Validation Playbook
 
-Purpose: standard validation for frontend execution tasks.
+Purpose: standard validation for frontend implementation tasks.
 
 Use with:
 
 - `WOLFYSTOCK_CODEX_STANDARD_GUARD.md`
-- `WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md`
+- `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
+- `WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md`
 - `WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md`
 
 Default environment:
 
-- Codex App isolated task workspace.
+- Codex App isolated task workspace unless the prompt explicitly uses shared main.
 - Local environment: `WolfyStock Fast`.
-- Do not run `npm ci`, `npm install`, or `npm audit fix` unless dependency/lock files changed or the task explicitly requires dependency refresh.
+- Do not run `npm ci`, `npm install`, or `npm audit fix` unless dependency/lock files changed and the task explicitly requires it.
 
-## Standard focused validation
+---
+
+## 1. Focused Validation
 
 Run focused tests for touched pages/components.
 
 Examples:
 
 ```bash
-npm --prefix apps/dsa-web run test -- src/pages/__tests__/UserScannerPage.test.tsx
-npm --prefix apps/dsa-web run test -- src/pages/__tests__/PortfolioPage.test.tsx
-npm --prefix apps/dsa-web run test -- src/pages/__tests__/MarketOverviewPage.test.tsx
-npm --prefix apps/dsa-web run test -- src/components/terminal/__tests__/TerminalPrimitives.test.tsx
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/HomeSurfacePage.test.tsx --run
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/UserScannerPage.test.tsx --run
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/WatchlistPage.test.tsx --run
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/PortfolioPage.test.tsx --run
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/MarketOverviewPage.test.tsx --run
+npm --prefix apps/dsa-web run test -- src/components/backtest/__tests__/BacktestResultReport.test.tsx --run
 ```
 
 If test names differ:
@@ -33,7 +38,9 @@ If test names differ:
 find apps/dsa-web/src -iname "*Scanner*.test.*" -o -iname "*Portfolio*.test.*" -o -iname "*MarketOverview*.test.*"
 ```
 
-## Type, build, and design checks
+---
+
+## 2. Build and Design Checks
 
 For frontend source changes, normally run:
 
@@ -41,66 +48,41 @@ For frontend source changes, normally run:
 npm --prefix apps/dsa-web run build
 npm --prefix apps/dsa-web run check:design
 python3 scripts/check_frontend_design_constitution.py
+git diff --check
+bash scripts/release_secret_scan.sh
 ```
 
-Worker default:
-
-```text
-- focused tests
-- build
-- design guard
-- focused Playwright on the touched route(s)
-```
-
-Run TypeScript check when the task changes types/routes/shared interfaces or build is not sufficient:
+Run TypeScript check when the task changes types/routes/shared interfaces or build is not enough:
 
 ```bash
 npx --prefix apps/dsa-web tsc --noEmit --pretty false --project apps/dsa-web/tsconfig.app.json
 ```
 
-Avoid duplicate `tsc --noEmit` + build unless that extra signal is actually needed.
+Avoid duplicate `tsc --noEmit` + build unless the extra signal is needed.
 
-Run file-scoped lint when available and useful. Do not treat unrelated global lint failures as task failures if the touched files lint cleanly; report the unrelated blocker.
+`./scripts/ci_gate_fast.sh` is optional worker-iteration evidence. It does not replace task-scoped checks and is not landing proof.
 
-`./scripts/ci_gate_fast.sh` is optional worker-iteration feedback. It does not replace the focused frontend checks above, and it is not landing proof.
+---
 
-Reserve full `./scripts/ci_gate.sh` for landing, release, or frontend changes that also widened into shared/high-risk runtime territory.
+## 3. Design Guard Expectations
 
-## Design guard expectations
+The guard should prevent:
 
-The guard should catch:
-
-- page-level solid slabs;
-- local gray/zinc/slate/neutral backgrounds;
-- loud warning slabs;
-- user-facing internal terms;
+- card-first dashboard regressions;
+- excessive ghost-glass / bento drift;
+- broad gray/zinc/slate slabs;
+- raw provider/schema/debug/internal copy;
+- meta-explanatory UI copy;
 - unstyled native controls;
-- migrated pages not using Terminal primitives.
+- user-visible internal enum labels;
+- excessive side gutters on workbench pages;
+- route templates that bury the primary task below secondary diagnostics.
 
-## Diff and secret checks
+---
 
-In a clean isolated workspace:
+## 4. Browser Verification
 
-```bash
-git diff --name-status
-git diff --check
-```
-
-Before commit:
-
-```bash
-git diff --cached --name-only
-git diff --cached --check
-bash scripts/release_secret_scan.sh
-```
-
-For write tasks, run `bash scripts/release_secret_scan.sh` before commit/push or landing. Skip it for docs-only/tests-only read-only audits.
-
-When working in shared main with foreign dirty files, use `WOLFYSTOCK_SHARED_MAIN_WORKTREE_PROTOCOL.md`.
-
-## Browser verification
-
-Required for frontend UI changes unless scope is docs-only/tests-only.
+Required for frontend UI changes unless docs-only/tests-only.
 
 Preferred order:
 
@@ -115,119 +97,70 @@ Inspect common ports first:
 
 Leave shared `5173` untouched unless the task owns it. Use a task-owned preview port where possible.
 
-For worker tasks, keep Playwright focused on the touched routes and assertions. Do not substitute a broad route sweep for the scoped browser proof the task actually needs.
-
-## Playwright invocation rule
-
-When relying on `apps/dsa-web/playwright.config.ts`, prefer running Playwright from `apps/dsa-web`:
+Preferred Playwright invocation from app directory:
 
 ```bash
-cd apps/dsa-web && DSA_WEB_PLAYWRIGHT_PORT=4177 npx playwright test e2e/critical-route-launch-smoke.spec.ts --grep "launch smoke"
+cd apps/dsa-web && DSA_WEB_PLAYWRIGHT_PORT=4177 npx playwright test e2e/<focused-spec>.spec.ts
 ```
 
 Repo-root is allowed only with explicit config:
 
 ```bash
-DSA_WEB_PLAYWRIGHT_PORT=4177 npx playwright test --config apps/dsa-web/playwright.config.ts apps/dsa-web/e2e/critical-route-launch-smoke.spec.ts --grep "launch smoke"
+DSA_WEB_PLAYWRIGHT_PORT=4177 npx playwright test --config apps/dsa-web/playwright.config.ts apps/dsa-web/e2e/<focused-spec>.spec.ts
 ```
 
-Avoid repo-root `npx --prefix apps/dsa-web playwright test ...` when relying on app config. It may skip `apps/dsa-web/playwright.config.ts` and miss `baseURL` / preview-server settings.
+Avoid repo-root `npx --prefix apps/dsa-web playwright test ...` when relying on app config.
 
-## Standard viewports
+---
+
+## 5. Standard Viewports
 
 Use:
 
 - desktop: `1440x1000`
+- wide desktop: `1920x1080` for wide workspaces
 - mobile/narrow: `390x844`
 
-## Browser checks
+---
+
+## 6. Browser Checks
 
 For each changed route:
 
 - no horizontal overflow;
 - no console/page errors;
 - semantic page heading exists if expected;
-- first viewport hierarchy is usable;
+- primary task visible above fold;
 - main action visible;
 - route follows `WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md`;
-- page uses global width rhythm and Terminal primitives where applicable;
-- no local black/gray slab;
-- no forbidden internal terms on user pages;
-- mobile order makes sense;
-- sticky/fixed controls do not cover content.
+- no raw/debug/provider/schema leakage;
+- no meta-explanatory UI copy;
+- critical warnings remain visible but compact;
+- mobile is usable.
 
-## Auth and mocks
+For visual redesigns:
 
-If auth is required:
+- screenshots are required;
+- tests alone are not enough;
+- final report must include route(s), viewports, and whether screenshots match the intended visual direction.
 
-- use `WOLFYSTOCK_TEST_USERNAME` and `WOLFYSTOCK_TEST_PASSWORD`;
-- never print or write passwords.
+---
 
-If using mocked API:
+## 7. Diff and Secret Checks
 
-- state it clearly in final report;
-- ensure mock payloads do not create misleading production claims;
-- do not alter backend behavior to satisfy visual harness.
+In a clean workspace:
 
-## Route-specific examples
+```bash
+git diff --name-status
+git diff --check
+```
 
-Scanner:
+Before commit:
 
-- `/zh/scanner`
-- left control rail visible on desktop;
-- `启动扫描` visible in first viewport;
-- right result stage exists;
-- selected inspector not repeated everywhere.
+```bash
+git diff --cached --name-only
+git diff --cached --check
+bash scripts/release_secret_scan.sh
+```
 
-Portfolio:
-
-- `/zh/portfolio`
-- command strip, holdings, risk, activity, manual ledger align;
-- empty states compact;
-- manual ledger not dominant by default.
-
-Market Overview:
-
-- `/zh/market-overview`
-- first fold reads as overview, not warning wall;
-- data status consolidated;
-- fallback/stale/mock not marked live.
-
-Rotation Radar:
-
-- `/zh/market/rotation-radar`
-- market tabs/top-N board/detail panel usable;
-- data diagnostics layered;
-- no trading instruction copy.
-
-Backtest:
-
-- `/zh/backtest`
-- scanner handoff route if touched;
-- calculations/results semantics unchanged;
-- loading fallbacks compact if lazy boundaries changed.
-
-Options:
-
-- `/zh/options-lab`
-- compact status strip;
-- strategy/assumptions/risk balance;
-- dense strategy matrix and Call/Put chains.
-
-Admin provider:
-
-- `/zh/admin/market-providers` or route under task;
-- diagnostics preserved and layered;
-- no secrets rendered.
-
-## Final report verification section
-
-Include:
-
-- exact commands and pass/fail counts;
-- browser routes/viewports;
-- port used and stopped/left running status;
-- mocked auth/API limitations;
-- final `git status --short --branch`.
-
-For the full report contract, use `WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`.
+If working in shared main with foreign dirty files, follow `WOLFYSTOCK_SHARED_MAIN_WORKTREE_PROTOCOL.md` and stage only task files.

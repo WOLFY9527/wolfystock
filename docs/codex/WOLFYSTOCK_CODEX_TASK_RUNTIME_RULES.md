@@ -1,33 +1,27 @@
 # WolfyStock Codex Task Runtime Rules
 
-Suggested project path:
-
-```text
-docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md
-```
-
-Purpose: keep Codex prompts compact without losing operational constraints. Every Codex task prompt may reference this file instead of repeating the same SOP.
+Purpose: keep Codex prompts compact without losing operational constraints. Task prompts may reference this file instead of repeating SOP.
 
 ---
 
-## 1. Core operating rules
+## 1. Core Operating Rules
 
-1. Treat every task as bounded by its prompt, this file, and the referenced project guard/design docs.
-2. Do not expand scope. If the prompt says audit, do not edit. If the prompt says shell/layout only, do not change behavior.
+1. Treat every task as bounded by its prompt, this file, and referenced guard/design docs.
+2. Do not expand scope. If the prompt says audit, do not edit. If it says shell/layout only, do not change behavior.
 3. Prefer small, reviewable changes over broad refactors.
 4. Stage only task-related files.
 5. Never use `git add .`.
-6. Push only the task branch named in the prompt.
+6. Push only the task branch or `main` when the prompt explicitly uses same-main mode.
 7. Do not commit unrelated formatting, lockfile, config, generated, or cache changes.
-8. If the workspace, branch, or git root does not match the prompt, stop and report the mismatch.
+8. If workspace, branch, or git root does not match the prompt, stop and report.
 9. If a protected domain appears necessary, stop and report the risk instead of modifying it.
-10. If validation cannot run, report exactly why, with the command attempted and the blocking output.
+10. If validation cannot run, report the exact command attempted and blocker output.
 
 ---
 
-## 2. Model / reasoning selection
+## 2. Model / Reasoning Selection
 
-The caller selects model and reasoning in the Codex UI or surrounding task title. The prompt body should not need model/reasoning lines.
+The caller selects model and reasoning in Codex UI or the task title.
 
 Default policy:
 
@@ -36,13 +30,13 @@ Execution tasks: 5.4 + high
 Decision / architecture / high-risk audit tasks: 5.5 + xhigh
 ```
 
-Task prompts should remain model-agnostic and focus only on task scope.
+Prompts should be model-agnostic and focus on scope.
 
 ---
 
-## 3. Required prompt fields
+## 3. Required Prompt Fields
 
-Each task prompt should still include these task-specific fields:
+Execution prompts should include:
 
 ```text
 Task ID:
@@ -61,32 +55,30 @@ Browser:
 Final report:
 ```
 
-The prompt may omit sections only when clearly not applicable, such as Browser for backend-only tasks.
-
-Task ID should be a stable numeric ledger identifier, for example `T-059`. Every execution prompt must include, at minimum, `Task ID`, `Task title`, `Branch`, and `Workspace` so the worker and final report map back to the same ledger row.
+Omit sections only when not applicable.
 
 ---
 
-## 4. Task ledger statuses
+## 4. Task Ledger Statuses
 
-Use one exact status in prompt/final report closeout:
+Use one exact status:
 
 ```text
-RUNNING       active worker task, not ready to land yet
-READY TO LAND validated/committed/pushed task awaiting review or merge
-LANDED        merged or otherwise landed into the target branch
-NO-OP         no code/doc change was required after verification
-BLOCKED       cannot continue because of a concrete blocker
-PLANNED       scoped only; implementation has not started
+RUNNING
+READY TO LAND
+LANDED
+NO-OP
+BLOCKED
+PLANNED
 ```
 
 ---
 
-## 5. Execution modes
+## 5. Execution Modes
 
 ### SERIAL-MAIN
 
-Use when the task is a single safe task on `main` and there is no true parallelism need.
+Use when the task is a single safe task on `main`.
 
 Rules:
 
@@ -105,8 +97,21 @@ Rules:
 ```text
 - Work only in the workspace path given by the prompt
 - Branch must match the branch given by the prompt
-- Stop if the branch/path mismatch
+- Stop if branch/path mismatch
 - Push only this branch
+```
+
+### CODEX-APP-ISOLATED
+
+Default for Codex App tasks.
+
+Rules:
+
+```text
+- Use isolated task workspace
+- Base from latest origin/main
+- Do not create manual worktrees
+- Report actual cwd/branch/base commit
 ```
 
 ### READ-ONLY-AUDIT
@@ -125,541 +130,132 @@ Rules:
 
 ---
 
-## 6. Parallelization rules
+## 6. Parallelization Rules
 
 Parallelize only when workers do not write overlapping files or semantically coupled domains.
 
-Safe parallelism examples:
+Safe examples:
 
 ```text
-- One UI shell page + one backend read-only audit
-- Two UI pages if they do not share files/components
-- Scanner read-only audit + Options endpoint audit
+one UI page + one backend read-only audit
+two UI pages with no shared files/components
+a read-only audit beside one write task
 ```
 
-Unsafe parallelism examples:
+Unsafe examples:
 
 ```text
-- Multiple workers editing UserScannerPage.tsx
-- Multiple workers editing the same Admin provider page family
-- Multiple workers editing OptionsLabService and the Options endpoint at the same time
-- Multiple workers editing PortfolioPage
-- Any worker touching shared primitives/global CSS while another UI worker runs
+multiple workers editing the same page
+multiple workers editing shared primitives/global CSS
+one worker changing provider runtime while another changes analysis semantics
+multiple workers in portfolio accounting or options ranking
 ```
 
 If not clearly safe, serialize.
 
 ---
 
-## 7. Protected domains
+## 7. Protected Domains
 
-Unless the prompt explicitly scopes the domain and names the allowed files, do not modify these.
+Unless the prompt explicitly scopes the domain and names allowed files, do not modify:
 
-### Scanner
+- scanner scoring/ranking/sorting/selection/result order/API semantics;
+- portfolio accounting/cash/holdings/P&L/FX/cost basis/broker sync;
+- provider runtime order/live-call semantics/fallback/MarketCache TTL/SWR;
+- options ranking/gates/scoring/payoff/no-trade policy;
+- backtest calculations/fills/costs/metrics/stored result semantics;
+- auth/RBAC/security;
+- API response shapes/stored contract versions;
+- AI prompts/model routing/decision semantics.
 
-Do not change:
+Presentation-only tasks may change UI rendering when allowed, but must preserve underlying semantics.
 
-```text
-- scoring
-- ranking
-- sorting
-- selection
-- result order
-- scanner-to-backtest payload
-- watchlist behavior
-- export behavior
-- copy behavior
-- API fetch/run/theme/simulation semantics
-```
+---
 
-Allowed in small frontend extraction tasks only when scoped:
+## 8. Frontend Runtime Rules
 
-```text
-- presentational components
-- Suspense fallback
-- static display helpers
-- diagnostics view rendering
-```
+Read:
 
-### Portfolio
+- `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
+- `WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md`
+- `WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md`
+- `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
 
-Do not change:
+Current direction:
 
 ```text
-- accounting
-- cash
-- holdings
-- P&L
-- FX
-- cost basis
-- broker sync
-- import logic
-- manual ledger logic
-- API behavior
-```
-
-UI shell work may change layout/background/grid only.
-
-### Provider runtime / MarketCache
-
-Do not change:
-
-```text
-- provider order
-- live-call semantics
-- fallback semantics
-- MarketCache TTL
-- SWR behavior
-- cold-start behavior
-- provider runtime files
-```
-
-Provider runtime changes require a dedicated audit first.
-
-### Options
-
-Do not change:
-
-```text
-- ranking
-- gates
-- scoring
-- payoff math
-- optimizer behavior
-- no-trade policy
-- provider/runtime behavior
-- public API response shape
-- aliases
-```
-
-Endpoint mapping work must preserve public contracts.
-
-Do not remove or reshape these unless explicitly scoped after audit:
-
-```text
-- OptionContract
-- OptionGreeks
-```
-
-### Backtest
-
-Backtest credibility lane is closure-ready. Do not expand features unless explicitly requested.
-
-Do not change:
-
-```text
-- primary calculations
-- fills
-- costs
-- metrics
-- rule_backtest_engine.py
-- stored readback authority
-```
-
-Do not add by default:
-
-```text
-- true parameter sweep job
-- portfolio/multi-asset rebalance
-- expanded robustness knobs
-- expanded regime attribution
-```
-
-### Auth / RBAC / Security
-
-Do not change:
-
-```text
-- auth flow
-- RBAC gates
-- permission checks
-- secret redaction
-- security middleware
-```
-
-### Frontend design system
-
-Do not change unless explicitly scoped:
-
-```text
-- Terminal primitive implementation
-- global CSS
-- index.css
-- app-wide layout primitives
+Linear-inspired professional stock research OS
+low-noise product software
+board/list/table/report surfaces before cards
+progressive disclosure
 ```
 
 Avoid:
 
-```text
-- native gray blocks
-- page-local pure-black slabs
-- raw debug copy
-- raw schema/provider/internal terms
-- unexplained noisy helper text
-```
+- card-first dashboards;
+- ghost-glass/card-heavy regressions;
+- raw debug/provider/schema text in user UI;
+- meta-explanatory copy;
+- excessive side gutters;
+- native-looking controls;
+- unbounded chip/action clutter;
+- horizontal overflow.
+
+Frontend shell/global primitive changes require explicit scope. Page work should not silently rewrite global CSS or app shell.
 
 ---
 
-## 7. WolfyStock frontend shell rules
-
-WolfyStock visual direction:
-
-```text
-Deep Space / Ghost UI
-shared terminal background
-high-density professional trading terminal
-cards float on the shared page background
-no page-local pure-black inner slab
-no native gray container look
-no raw provider/schema/debug leakage
-```
-
-For shell/background alignment tasks:
-
-Do:
-
-```text
-- let shared app shell / TerminalPageShell own the page background
-- keep TerminalGrid as the 12-column layout owner
-- preserve TerminalPanel / terminal card language
-- ensure full-width rows use col-span-12 and min-w-0 where needed
-- keep existing test ids, filters, controls, and permission gates
-```
-
-Do not:
-
-```text
-- rewrite Terminal primitives
-- rewrite global CSS
-- change API behavior
-- change data fetching behavior
-- change auth/RBAC behavior
-- introduce new feature copy
-- add large saturated blocks
-- add native gray wrappers
-```
-
-Common drift patterns to remove when task-scoped:
-
-```text
-bg-black
-bg-[#030303]
-bg-[#050505]
-bg-neutral-*
-min-h-screen route roots
-page-local fixed backgrounds
-duplicated route-level padding around TerminalPageShell
-```
-
----
-
-## 8. Backend boundary rules
+## 9. Backend Boundary Rules
 
 Backend refactors must preserve public API behavior unless the prompt explicitly states a contract change.
 
-For endpoint mapping tasks:
+Endpoint mapping:
 
-```text
-- service layer should return internal models or domain data
-- endpoint layer owns API response schemas
-- public response shape and aliases must remain stable
-- add/adjust focused contract tests where possible
-```
+- service layer returns internal models/domain data;
+- endpoint layer owns API response schemas;
+- public response shapes and aliases remain stable;
+- add/adjust focused contract tests when possible.
 
-For tests-only guards:
+Tests-only guards:
 
-```text
-- do not alter runtime code
-- freeze the current boundary/import inventory
-- make failure messages actionable
-```
+- do not alter runtime code;
+- freeze current boundary/import inventory;
+- make failure messages actionable.
 
 ---
 
-## 9. Validation commands
+## 10. Validation Matrix
 
-Run focused validation first. Run broader validation when the task touches shared frontend/backend infrastructure or when the prompt requires it.
+Run focused validation first.
 
-### Worker vs landing validation matrix
+| Task class | Worker default | Pre-push / landing |
+|---|---|---|
+| frontend UI | focused tests, build, design guard, focused Playwright | release secret scan; add tsc if shared types/routes changed |
+| docs-only | doc consistency, file names, `git diff --check` | release secret scan before push |
+| backend tests-only | focused pytest, `git diff --check` | release secret scan |
+| backend endpoint | py_compile, focused pytest, contract tests | release secret scan + full ci gate if high-risk |
+| provider/runtime audit | read-only inspection | if write-scoped, treat high-risk |
 
-`scripts/ci_gate_fast.sh` is worker-iteration evidence only. It is useful for quick local feedback, but it does not replace task-scoped checks or landing proof.
-
-`./scripts/ci_gate.sh` is for landing, release, or high-risk code-bearing backend changes. Do not treat it as the default gate for docs-only, tests-only, or narrow frontend worker tasks.
-
-| Task class | Worker default | Landing / pre-push escalation |
-| --- | --- | --- |
-| frontend shell | focused page/component tests; `npm --prefix apps/dsa-web run build`; `npm --prefix apps/dsa-web run check:design`; focused Playwright on touched route(s); `git diff --check`; optional `./scripts/ci_gate_fast.sh` for iteration | run `bash scripts/release_secret_scan.sh` before commit/push; add `tsc --noEmit` only if routes/types/shared interfaces changed or build is not enough; use full `./scripts/ci_gate.sh` only if the slice also touched shared/high-risk runtime or landing policy explicitly requires it |
-| backend tests-only guard | focused `pytest` on touched tests/fixtures/guards; `git diff --check`; optional `./scripts/ci_gate_fast.sh` for quick iteration | run `bash scripts/release_secret_scan.sh` before commit/push; do not jump to full `./scripts/ci_gate.sh` unless the task stopped being tests-only or landing policy requires it |
-| backend endpoint mapping | `python3 -m py_compile <changed python files>`; focused `pytest -q` contract/boundary coverage; `git diff --check`; optional `./scripts/ci_gate_fast.sh` while iterating | run `bash scripts/release_secret_scan.sh` before commit/push; run full `./scripts/ci_gate.sh` before claiming the backend change is ready to land |
-| provider/runtime audit | read-only commands only; inspect current code/tests/docs; no secret scan for pure read-only audit; no `ci_gate_fast.sh` / `ci_gate.sh` by default | if the audit becomes a write task, re-scope it first; provider/runtime landing work is high-risk and should use `bash scripts/release_secret_scan.sh` plus full `./scripts/ci_gate.sh` |
-| scanner/backtest protected domains | stay route- or file-scoped; run only the focused tests/browser checks needed for the touched seam; avoid unrelated broad suites; use focused Playwright when a worker changed UI on a touched route | run `bash scripts/release_secret_scan.sh` before commit/push; use full `./scripts/ci_gate.sh` when landing code-bearing scanner/backtest changes or when protected-domain risk widened beyond a narrow seam |
-| docs-only | verify command/file-name consistency; `git diff --check` | for docs write tasks, run `bash scripts/release_secret_scan.sh` before commit/push or landing; for read-only audits, skip secret scan and do not run `ci_gate_fast.sh` / `ci_gate.sh` |
-
-### Frontend validation
-
-```bash
-npm --prefix apps/dsa-web run lint
-npm --prefix apps/dsa-web run test -- <focused-test> --run
-npx --prefix apps/dsa-web tsc --noEmit --pretty false --project apps/dsa-web/tsconfig.app.json
-npm --prefix apps/dsa-web run build
-npm --prefix apps/dsa-web run check:design
-/Users/yehengli/daily_stock_analysis/.venv/bin/python scripts/check_frontend_design_constitution.py
-git diff --check
-bash scripts/release_secret_scan.sh
-```
-
-Notes:
-
-```text
-- Route-focused Playwright is the worker default for frontend browser proof.
-- Avoid duplicate `tsc --noEmit` + build unless the task changed routes, shared types/interfaces, or build output is not enough to prove safety.
-- Use `bash scripts/release_secret_scan.sh` before commit/push or landing for write tasks, not for pure read-only audits.
-```
-
-### Backend validation
-
-```bash
-/Users/yehengli/daily_stock_analysis/.venv/bin/python -B -m py_compile <files>
-/Users/yehengli/daily_stock_analysis/.venv/bin/python -B -m pytest -q <focused-tests>
-git diff --check
-bash scripts/release_secret_scan.sh
-```
-
-### Read-only audit validation
-
-Allowed:
-
-```bash
-git status --short --branch
-rg <pattern>
-npm --prefix apps/dsa-web run check:design
-pytest --collect-only <focused-path>
-```
-
-Do not run destructive commands in read-only audits.
+`ci_gate_fast.sh` is optional iteration evidence, not landing proof.
 
 ---
 
-## 10. Browser verification
+## 11. Browser Verification
 
-Frontend route/UI tasks require browser verification unless impossible.
+Frontend visual changes require browser proof unless docs/tests-only.
 
-Use isolated preview port where possible.
+Viewports:
 
-Required viewports:
+- `1440x1000`
+- `1920x1080` for wide workspaces
+- `390x844`
 
-```text
-1440x1000
-390x844
-```
+Checks:
 
-Check:
-
-```text
-- no horizontal overflow
-- no console/page errors
-- no pure-black inner page slab
-- mobile stacks cleanly
-- route sections remain visible
-- no raw/debug/provider/schema leakage
-- no behavior regression in the scoped feature
-```
-
-If real credentials are unavailable, auth/API mocks are acceptable only when reported clearly in the final report.
-
----
-
-## 11. Git and commit rules
-
-Before work:
-
-```bash
-git status --short --branch
-git fetch origin
-```
-
-For write tasks:
-
-```text
-- keep diff focused
-- stage only task-related files
-- never use git add .
-- commit with a scoped conventional message
-- push only the named task branch
-```
-
-Recommended commit styles:
-
-```text
-refactor(ui): align <page> shell background
-refactor(scanner): extract <presenter>
-refactor(options): move <mapping> to endpoint
-test(provider): guard <boundary>
-fix(portfolio): harden <layout contract>
-```
-
-Do not delete remote branches or remove worktrees unless the prompt explicitly asks for integration cleanup.
-
----
-
-## 12. Final report format
-
-Every worker final report must include:
-
-```text
-Summary:
-- What changed or what was found
-
-Files changed:
-- path + purpose
-
-Protected semantics:
-- Explicitly state protected domains were not changed
-
-Validation:
-- command: PASS/FAIL/SKIPPED
-- include blocker reason for skipped/failed commands
-
-Browser:
-- route(s)
-- viewport(s)
-- result
-- auth/mock notes if any
-
-Commit:
-- branch
-- commit hash
-- push status
-
-Risks / follow-ups:
-- remaining risks
-- recommended next slice if applicable
-```
-
-For read-only audits, replace Files changed with Files inspected and Commit with `No commit; read-only`.
-
----
-
-## 13. Compact prompt template: execution
-
-Use this shape for small write tasks.
-
-```text
-Task title:
-...
-
-Branch:
-...
-
-Workspace:
-...
-
-Mode:
-WORKTREE-WORKER / SERIAL-MAIN
-
-Read:
-- docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md
-- docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md
-- docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md
-- task-relevant docs
-
-Goal:
-...
-
-Allowed files:
-...
-
-Forbidden files:
-...
-
-Implementation:
-...
-
-Protected semantics:
-...
-
-Validation:
-...
-
-Browser:
-...
-
-Final report:
-Use the project final report template and include commit hash, validation, browser notes, and risks.
-```
-
----
-
-## 14. Compact prompt template: read-only audit
-
-```text
-Task title:
-...
-
-Branch:
-main
-
-Workspace:
-/Users/yehengli/daily_stock_analysis
-
-Mode:
-READ-ONLY-AUDIT
-
-Read:
-- docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md
-- docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md
-- task-relevant docs
-
-Rules:
-Read-only. Do not edit files. Do not create artifacts. Do not commit or push.
-
-Goal:
-...
-
-Allowed files to inspect:
-...
-
-Forbidden files:
-No edits anywhere. Do not modify runtime behavior.
-
-Audit method:
-...
-
-Validation:
-Read-only commands only.
-
-Final report:
-Include summary, files inspected, findings, recommended next slices, risks, and no-commit confirmation.
-```
-
----
-
-## 15. Current strategic defaults
-
-Unless a newer task prompt overrides these:
-
-```text
-- Primary focus: unified frontend shell/background/grid cleanup
-- Admin/control-plane black inner slab drift should be closed in small route slices
-- Scanner work should remain small presenter extraction
-- Options work should remain endpoint mapping / boundary cleanup
-- Backtest feature expansion is paused
-- Provider runtime refactor is paused; audits and tests-only guards are preferred
-```
-
----
-
-## 16. Stop conditions
-
-Stop and report instead of improvising if:
-
-```text
-- git root / branch / workspace mismatch
-- untracked or unrelated changes would be overwritten
-- task requires protected domain changes not explicitly allowed
-- tests reveal behavior regression outside scope
-- browser check reveals layout break outside the scoped page
-- public API shape would change
-- provider/runtime fallback semantics would change
-- auth/RBAC/security behavior would change
-```
+- primary task visible above fold;
+- no horizontal overflow;
+- no console/page errors;
+- no raw debug/provider/schema leakage;
+- no meta-explanatory UI copy;
+- route matches template;
+- screenshots or observations included in final report.

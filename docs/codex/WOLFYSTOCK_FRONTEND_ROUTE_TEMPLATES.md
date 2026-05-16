@@ -1,104 +1,199 @@
 # WolfyStock Frontend Route Templates
 
-Purpose: keep all WolfyStock pages feeling like one product by using a small set of route templates.
+Purpose: keep WolfyStock pages feeling like one product by classifying every route into a small set of Linear-inspired product surfaces.
 
-All frontend implementation tasks should classify the target route before editing.
+Read with:
 
-## Template A: AI / Research
+- `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
+- `WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md`
+- `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
+
+Before editing a route, classify it below. Do not invent a new page architecture unless the task explicitly scopes a prototype.
+
+---
+
+## Template A: Research Console
 
 Routes:
+
 - 首页 / Home
 - 决策台 / AI decision station
-- Chat / AI 研究台
-- research reports
+- Chat / AI research
+- generated reports
 
 Structure:
-1. Compact semantic h1 or page header.
-2. Main research input/composer or result stream.
-3. Context/evidence side rail only when useful.
-4. Compact suggested prompts/chips.
-5. Data disclaimer as one small line.
+
+1. Compact semantic header or command/search bar.
+2. Primary object identity.
+3. Main decision/state.
+4. Main chart/report/evidence surface.
+5. Compact context rail when useful.
+6. Data/source details collapsed.
 
 Rules:
-- input/result is the hero, not onboarding copy.
-- no tutorial wall in the first viewport.
-- evidence/debug details are hidden or admin-only.
-- page should feel like an AI research terminal, not a form.
 
-## Template B: Market / Scanner / Watchlist
+- Result/input is the hero, not onboarding copy.
+- No bento card grid as the first-fold architecture.
+- No tutorial wall in the first viewport.
+- Evidence/debug details hidden or drawer-based.
+- Financial charts must not be fake if presented as market charts.
+
+---
+
+## Template B: Ranking Board
 
 Routes:
+
 - 扫描器
-- 市场总览
-- 轮动雷达
-- 观察列表
 - scanner results
+- ranked candidates
 
 Structure:
-1. Compact semantic h1/status strip.
-2. Control/filter rail or compact filter row.
-3. Top-N/table/list of entities.
-4. Selected detail panel or inspector.
-5. Collapsed data-state/details.
 
-Recommended desktop layout:
-- scanner: left `xl:col-span-3` sticky control rail, right `xl:col-span-9` result stage
-- market overview: summary/status strip + card grid with quiet per-card data badges
-- rotation radar: market tabs + top-N board + selected detail + compact universe
-- watchlist: compact add/filter + dense list/table
+1. Compact command/filter bar.
+2. Status strip.
+3. Ranked table/list.
+4. Selected detail panel or inline drawer.
+5. Collapsed diagnostics/history/strategy.
 
 Rules:
-- controls should not be buried below results.
-- candidate cards should not become full mini-reports.
-- use one selected detail panel instead of repeating full details in every card.
-- data-state warnings should be consolidated, not repeated as amber walls.
 
-## Template C: Portfolio / Backtest / Options
+- Candidate list/table is the anchor.
+- No persistent left/right rail by default.
+- Controls above results, not isolated in a wasted column.
+- Candidate rows use one primary action plus `更多`.
+- Candidate cards must not become full mini-reports.
+- Diagnostics are below/collapsed.
+
+---
+
+## Template C: Dense List / Table
 
 Routes:
+
+- 观察列表
+- logs
+- compact records
+- entity lists
+
+Structure:
+
+1. Compact title/status.
+2. Command/filter row.
+3. Dense list/table.
+4. Row actions.
+5. Collapsed secondary detail.
+
+Rules:
+
+- Table/list first.
+- Empty state compact.
+- Batch actions do not dominate.
+- No card slab around every row.
+
+---
+
+## Template D: Market Monitor
+
+Routes:
+
+- 市场总览
+- 流动性监测
+- 轮动雷达
+- macro/liquidity/rotation views
+
+Structure:
+
+1. Regime/status strip.
+2. Main market board/chart modules.
+3. Ranked or comparative lists.
+4. Selected detail if useful.
+5. Collapsed source/runtime details.
+
+Rules:
+
+- Regime and primary market state first.
+- Missing data compact and honest.
+- Source/runtime diagnostic details collapsed.
+- Crypto tab must not promote unrelated US/CN/HK indices as primary data.
+
+---
+
+## Template E: Ledger / Exposure Board
+
+Routes:
+
 - 持仓
+- transactions
+- cash ledger
+
+Structure:
+
+1. Account/exposure/P&L status.
+2. Holdings/exposure board.
+3. Risk and allocation.
+4. Activity/ledger details.
+5. Secondary manual tooling collapsed or visually secondary.
+
+Rules:
+
+- Portfolio accounting semantics must not change in UI work.
+- Native currency remains visible when FX conversion fails.
+- Display currency belongs in Settings or compact controls, not a large hero block.
+
+---
+
+## Template F: Backtest Report Workspace
+
+Routes:
+
 - 回测
 - 回测结果
-- 期权实验室
-- strategy report surfaces
+- strategy reports
 
 Structure:
-1. Compact result/account/symbol summary strip.
-2. Main chart/table/list.
-3. Risk/assumption side rail.
-4. Dense detail table or ranked matrix.
-5. Parameters/diagnostics/details collapsed by default.
 
-Portfolio:
-- Row 1: account command strip
-- Row 2: holdings + risk
-- Row 3: activity/cash + manual ledger
-- manual ledger secondary/collapsed by default
-- empty states compact
-
-Backtest:
-- Row 1: key metrics strip
-- Row 2: chart + risk summary
-- Row 3: tabs for trades/risk/parameters/diagnostics
-- calculations must never change in UI refactors
-
-Options:
-- Row 1: compact symbol/status strip
-- Row 2: strategy decision + assumptions + risk boundary
-- Row 3: strategy matrix
-- Row 4: Call/Put chains
-- Row 5: collapsed assumptions/data/limitations
-- risk warnings consolidated
+1. Strategy identity/status.
+2. Equity curve + drawdown.
+3. Core metrics strip.
+4. Tabs for trades/monthly/risk/parameters/logs.
+5. Raw execution/data quality collapsed.
 
 Rules:
-- summary first, details second.
-- do not make every metric its own big card.
-- no data-dump first viewport.
-- preserve calculation/accounting semantics.
 
-## Template D: Admin / Operator
+- Summary first, details second.
+- Do not stack dozens of metric cards.
+- UI refactors must not change calculations/fills/costs/metrics.
+
+---
+
+## Template G: Hypothesis Lab
 
 Routes:
+
+- 期权实验室
+- strategy labs
+
+Structure:
+
+1. Symbol/hypothesis command area.
+2. Risk boundary and assumptions.
+3. Option chain / strategy matrix.
+4. Payoff/risk view.
+5. Data limitations collapsed.
+
+Rules:
+
+- Do not add trading CTAs unless explicitly scoped.
+- Risk warnings compact but visible.
+- No large warning walls.
+
+---
+
+## Template H: Ops Console
+
+Routes:
+
 - 控制台
 - 日志中心
 - 成本观测
@@ -110,24 +205,27 @@ Routes:
 - 系统设置
 
 Structure:
+
 1. Operator status strip.
 2. Main queue/table/list.
-3. Selected detail panel.
+3. Selected detail drawer.
 4. Collapsed diagnostics/runbook/schema/artifacts.
-5. Danger zone for destructive actions.
+5. Isolated danger zone.
 
 Rules:
-- diagnostics are allowed, but layered.
-- Chinese-first headings.
-- technical identifiers may stay as secondary metadata.
-- raw JSON/schema/runbook/payload details collapsed by default.
-- no secrets/tokens/Authorization/cookies.
-- dangerous actions isolated and confirmation preserved.
-- mobile must avoid endless card walls.
 
-## Template E: Empty / Setup
+- Diagnostics are allowed but layered.
+- Chinese-first headings.
+- Technical identifiers may stay as secondary metadata.
+- Raw JSON/schema/runbook/payload collapsed by default.
+- No secrets/tokens/Authorization/cookies.
+
+---
+
+## Template I: Empty / Setup
 
 Routes/conditions:
+
 - no holdings
 - no watchlist items
 - no backtest results
@@ -136,60 +234,26 @@ Routes/conditions:
 - no configured data source
 
 Structure:
+
 1. One concise state line.
 2. Optional one primary action.
 3. Optional short secondary action.
 4. No giant warning card for harmless emptiness.
 
 Examples:
-- `暂无持仓。添加持仓或导入交易后显示组合状态。`
-- `暂无候选。调整左侧条件后启动扫描。`
-- `暂无现金流水。`
-- `等待扫描。`
 
-## Semantic page heading
+```text
+暂无持仓。添加持仓或导入交易后显示组合状态。
+暂无候选。调整条件后启动扫描。
+暂无现金流水。
+```
 
-Every routable user/admin page should expose one semantic page heading (`h1` or accessible equivalent) while keeping visual header compact.
+---
 
-Do not add giant hero banners just to satisfy h1.
+## Global Rules
 
-Recommended titles:
-- 首页
-- 扫描器
-- 决策台
-- 持仓
-- 市场总览
-- 轮动雷达
-- 观察列表
-- 回测
-- 期权实验室
-- 设置
-- 控制台
-- 日志中心
-- 成本观测
-- 证据审核
-- 数据源运维
-- 通知
-- 系统设置
-
-## Width rhythm
-
-All major routes should use the same workspace rhythm:
-- `TerminalPageShell`
-- `max-w-[1600px]`
-- `px-4 xl:px-8`
-- no page-local black slab
-- no nested main-page `max-w-6xl/7xl` islands
-
-## Page review checklist
-
-For any route edit, verify:
-- Which template does it belong to?
-- Does it use Terminal primitives?
-- Is semantic h1 present and compact?
-- Is the first viewport useful?
-- Is main action visible?
-- Are warnings consolidated?
-- Are empty states compact?
-- Are diagnostics hidden/layered correctly?
-- Does mobile stack cleanly?
+- Do not show meta-explanatory UI copy.
+- Do not show raw provider/debug/schema terms in normal user flow.
+- Do not make every route a card dashboard.
+- The primary task must be visible above fold at 1440px.
+- Mobile 390px must not horizontally overflow.

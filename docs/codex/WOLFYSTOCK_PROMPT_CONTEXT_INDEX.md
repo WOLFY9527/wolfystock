@@ -4,19 +4,24 @@ Purpose: keep Codex prompts short without losing safety or quality.
 
 Task prompts should reference these stable docs instead of repeating long boilerplate.
 
-## Always read for implementation tasks
+---
+
+## Always Read for Implementation Tasks
 
 ```text
 Read and obey:
 - docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md
+- docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md
 - docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md
 ```
 
-## Prompt templates
+---
+
+## Prompt Templates
 
 Use:
 
-- `WOLFYSTOCK_CODEX_TASK_TEMPLATES.md`
+- `docs/codex/WOLFYSTOCK_CODEX_TASK_TEMPLATES.md`
 
 Task labels stay outside the code block:
 
@@ -30,13 +35,16 @@ or:
 任务类型：决策类（建议 Codex 5.5）
 ```
 
-## Task type index
+---
+
+## Task Type Index
 
 ### Read-only architecture / triage
 
 Read:
 
 - `WOLFYSTOCK_CODEX_STANDARD_GUARD.md`
+- `WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`
 - `WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`
 - task-specific docs/files
 
@@ -52,11 +60,12 @@ Rules:
 Read:
 
 - `WOLFYSTOCK_CODEX_STANDARD_GUARD.md`
-- `WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md`
+- `WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`
+- `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
+- `WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md`
 - `WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md`
 - `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
 - `WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`
-- `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
 
 ### Admin / operator UI implementation
 
@@ -70,6 +79,7 @@ Read:
 Read:
 
 - `WOLFYSTOCK_CODEX_STANDARD_GUARD.md`
+- `WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`
 - `WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md`
 - `WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`
 - relevant tests and service files.
@@ -95,10 +105,13 @@ Read:
 Read:
 
 - `WOLFYSTOCK_CODEX_STANDARD_GUARD.md`
+- `WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`
 - `WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`
 - relevant target docs/tests.
 
-## What should stay in each task prompt
+---
+
+## What Should Stay in Each Prompt
 
 Do not rely only on docs for task-specific facts. Each prompt must still include:
 
@@ -108,31 +121,34 @@ Do not rely only on docs for task-specific facts. Each prompt must still include
 - exact implementation scope;
 - exact validation commands;
 - browser routes/viewports if frontend;
-- commit message or no-commit policy;
+- commit/no-commit policy;
 - special stop conditions.
 
-## What should not be repeated in prompts
+---
+
+## What Should Not Be Repeated
 
 Do not repeat long lists from these docs unless the task is high-risk:
 
 - general git safety;
-- full protected-domain list;
-- frontend visual constitution;
-- Playwright invocation rule;
+- protected-domain list;
+- frontend design constitution;
+- Playwright invocation rules;
 - final report template;
 - artifact hygiene;
 - wrapper/deletion rules;
 - ci_gate policy.
 
-## Codex App local environment
+---
 
-Default prompts should say:
+## Codex App Local Environment
+
+Default prompts should assume:
 
 ```text
 Use the Codex App isolated task workspace.
 Use local environment: WolfyStock Fast.
 Base from latest origin/main.
-Do not run pip install, npm install, npm ci, or npm audit fix unless dependency/lock files changed and you explicitly report why.
 ```
 
-Do not instruct Codex to checkout `codex/frontend-lane` or `codex/backend-lane`.
+Use shared main only when the user explicitly requests it.
