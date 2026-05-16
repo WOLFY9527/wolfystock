@@ -382,10 +382,11 @@ export const AppContent: React.FC = () => {
             <Route path="/user/scanner" element={<Navigate to="/scanner" replace />} />
             <Route path="/:locale/guest/scanner" element={<Navigate to="../scanner" replace />} />
             <Route path="/:locale/user/scanner" element={<Navigate to="../scanner" replace />} />
+            <Route path="/prototype/scanner-board" element={<ScannerBoardPrototypePage />} />
+            <Route path="/:locale/prototype/scanner-board" element={<ScannerBoardPrototypePage />} />
             <Route element={<Shell />}>
               <Route path="/" element={<HomeSurfacePage />} />
               <Route path="/guest" element={guestHomeElement} />
-              <Route path="/prototype/scanner-board" element={<ScannerBoardPrototypePage />} />
               <Route path="/scanner" element={<ScannerSurfacePage />} />
               <Route path="/chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
               <Route path="/portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
@@ -413,7 +414,6 @@ export const AppContent: React.FC = () => {
             <Route path="/:locale" element={<Shell />}>
               <Route index element={<HomeSurfacePage />} />
               <Route path="guest" element={guestHomeElement} />
-              <Route path="prototype/scanner-board" element={<ScannerBoardPrototypePage />} />
               <Route path="scanner" element={<ScannerSurfacePage />} />
               <Route path="chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
               <Route path="portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
