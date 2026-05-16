@@ -14,8 +14,24 @@ import {
   type OptionsStrategyType,
   type OptionsUnderlyingSummaryResponse,
 } from '../api/optionsLab';
+import {
+  ConsoleDisclosure,
+  ConsoleStatusStrip,
+  DataWorkbenchFrame,
+  DenseRows,
+  WolfyCommandBar,
+  WolfyShellSurface,
+} from '../components/linear';
 import { EvidenceChips } from '../components/evidence/EvidenceChips';
-import { TerminalPageHeading, TerminalPageShell } from '../components/terminal';
+import {
+  TerminalButton,
+  TerminalChip,
+  TerminalEmptyState,
+  TerminalNotice,
+  TerminalPageHeading,
+  TerminalPageShell,
+  TerminalSectionHeader,
+} from '../components/terminal';
 import { cn } from '../utils/cn';
 import { normalizeOptionsEvidence } from '../utils/evidenceDisplay';
 import { formatNumber, formatPercent } from '../utils/format';
@@ -59,11 +75,10 @@ const COMPARISON_LOADING_TIMEOUT_MS = 12000;
 const COMPARISON_EMPTY_MESSAGE = '先选择可用到期日并加载合约后，再进入策略对比。';
 const OPTIONS_LAB_CRASH_FALLBACK = '期权实验室暂时无法加载，请刷新或稍后重试。';
 
-const fieldClass = 'h-10 w-full rounded-lg border border-white/10 bg-white/[0.02] px-3 font-mono text-sm text-white outline-none transition-all placeholder:text-white/20 focus:border-emerald-400/50 focus:bg-white/[0.05]';
-const labelClass = 'text-[10px] font-bold uppercase tracking-widest text-white/40';
-const panelClass = 'min-w-0 rounded-[16px] border border-white/5 bg-white/[0.02] p-5 backdrop-blur-md';
-const innerBlockClass = 'rounded-xl border border-white/[0.02] bg-black/20';
-const primaryButtonClass = 'rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-2.5 text-sm font-medium text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all duration-300 hover:from-blue-500 hover:to-purple-500 disabled:cursor-not-allowed disabled:opacity-50';
+const fieldClass = 'h-10 w-full rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-3 font-mono text-sm text-[color:var(--wolfy-text-primary)] outline-none transition-colors placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)]';
+const labelClass = 'text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]';
+const panelClass = 'min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-4 md:p-5';
+const innerBlockClass = 'rounded-md border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)]';
 
 function money(value?: number | null): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
@@ -183,21 +198,25 @@ function noTradeReasonLabel(value?: string | null): string {
 }
 
 function metricTone(value?: number | null): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 'text-white/75';
-  if (value > 0) return 'text-emerald-300';
-  if (value < 0) return 'text-rose-300';
-  return 'text-white/75';
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'text-[color:var(--wolfy-text-secondary)]';
+  if (value > 0) return 'text-[color:var(--wolfy-market-up)]';
+  if (value < 0) return 'text-[color:var(--wolfy-market-down)]';
+  return 'text-[color:var(--wolfy-text-secondary)]';
 }
 
 const Pill: React.FC<{ children: React.ReactNode; tone?: 'neutral' | 'info' | 'warn' | 'risk' | 'good' }> = ({ children, tone = 'neutral' }) => {
-  const toneClass = {
-    neutral: 'border-white/10 bg-white/5 text-white/50',
-    info: 'border-cyan-300/20 bg-cyan-400/5 text-cyan-300',
-    warn: 'border-amber-300/20 bg-amber-400/5 text-amber-300',
-    risk: 'border-rose-400/20 bg-rose-500/5 text-rose-300',
-    good: 'border-emerald-300/20 bg-emerald-400/5 text-emerald-300',
-  }[tone];
-  return <span className={cn('inline-flex rounded-md border px-2.5 py-1 font-mono text-xs tracking-tight', toneClass)}>{children}</span>;
+  const variant = {
+    neutral: 'neutral',
+    info: 'info',
+    warn: 'caution',
+    risk: 'danger',
+    good: 'success',
+  }[tone] as React.ComponentProps<typeof TerminalChip>['variant'];
+  return (
+    <TerminalChip variant={variant} className="font-mono tracking-tight">
+      {children}
+    </TerminalChip>
+  );
 };
 
 const SectionHeader: React.FC<{
@@ -206,16 +225,16 @@ const SectionHeader: React.FC<{
   icon: React.ComponentType<{ className?: string }>;
   children?: React.ReactNode;
 }> = ({ eyebrow, title, icon: Icon, children }) => (
-  <div className="flex min-w-0 items-start justify-between gap-4">
-    <div className="min-w-0">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-cyan-200" aria-hidden="true" />
-        <p className={labelClass}>{eyebrow}</p>
-      </div>
-      <h2 className="mt-1 text-lg font-semibold text-white">{title}</h2>
-    </div>
-    {children}
-  </div>
+  <TerminalSectionHeader
+    eyebrow={(
+      <span className="inline-flex items-center gap-2">
+        <Icon className="h-4 w-4 text-[color:var(--wolfy-accent)]" aria-hidden="true" />
+        <span>{eyebrow}</span>
+      </span>
+    )}
+    title={title}
+    action={children}
+  />
 );
 
 const SegmentedButtons = <T extends string>({
@@ -229,15 +248,15 @@ const SegmentedButtons = <T extends string>({
   onChange: (value: T) => void;
   ariaLabel: string;
 }) => (
-  <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/[0.02] bg-black/20 p-1 sm:grid-cols-4" aria-label={ariaLabel}>
+  <div className="mt-1 grid grid-cols-2 gap-2 rounded-md border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-1 sm:grid-cols-4" aria-label={ariaLabel}>
     {options.map((option) => (
       <button
         key={option.value}
         className={cn(
-          'h-9 rounded-lg px-3 text-sm font-medium transition-all',
+          'h-9 rounded-md px-3 text-sm font-medium transition-colors',
           option.value === value
-            ? 'border border-white/10 bg-white/10 text-white shadow-[0_0_18px_rgba(34,211,238,0.12)]'
-            : 'border border-transparent bg-transparent text-white/45 hover:bg-white/[0.04] hover:text-white/75',
+            ? 'border border-[color:var(--wolfy-accent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_12%,transparent)] text-[color:var(--wolfy-text-primary)]'
+            : 'border border-transparent bg-transparent text-[color:var(--wolfy-text-muted)] hover:bg-[var(--wolfy-surface-console)] hover:text-[color:var(--wolfy-text-secondary)]',
         )}
         type="button"
         onClick={() => onChange(option.value)}
@@ -283,71 +302,90 @@ const AssumptionPanel: React.FC<{
   onRiskBudgetChange,
   onExpirationSelect,
 }) => (
-  <section className={cn(panelClass, 'order-3 xl:order-none xl:col-span-4')} data-testid="options-lab-assumptions-panel">
-    <SectionHeader eyebrow="假设输入" title="期权假设" icon={Search} />
-    <div className="mt-6 grid grid-cols-1 gap-x-4 gap-y-6">
-      <label className="flex flex-col gap-1.5">
-        <span className={labelClass}>标的代码</span>
-        <div className="flex gap-2">
-          <input
-            aria-label="标的代码"
-            className={fieldClass}
-            value={symbol}
-            onChange={(event) => onSymbolChange(event.target.value.toUpperCase())}
-            placeholder="TEM"
-          />
-          <button
-            type="button"
-            onClick={onSubmit}
-            className={cn(primaryButtonClass, 'h-10 shrink-0 px-5 py-0')}
-          >
-            执行
-          </button>
+  <section className="xl:col-span-12" data-testid="options-lab-assumptions-panel">
+    <WolfyShellSurface variant="console" padding="sm" className="overflow-hidden">
+      <div className="border-b border-[color:var(--wolfy-divider)] px-1 pb-3">
+        <SectionHeader eyebrow="实验命令区" title="期权假设" icon={Search}>
+          <div className="flex flex-wrap gap-2">
+            <Pill tone="info">ExperimentConsole</Pill>
+            <Pill tone="neutral">只读情景分析</Pill>
+          </div>
+        </SectionHeader>
+        <p className="mt-2 text-sm text-[color:var(--wolfy-text-secondary)]">
+          在同一假设下同步观察策略矩阵、风险边界与期权链，不新增交易动作。
+        </p>
+      </div>
+
+      <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+        <WolfyCommandBar
+          className="min-h-0 items-stretch gap-3 p-3"
+          trailing={(
+            <TerminalButton type="button" variant="primary" className="min-h-10 px-5" onClick={onSubmit}>
+              执行
+            </TerminalButton>
+          )}
+        >
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,0.95fr)_repeat(2,minmax(0,0.7fr))]">
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className={labelClass}>标的代码</span>
+              <input
+                aria-label="标的代码"
+                className={fieldClass}
+                value={symbol}
+                onChange={(event) => onSymbolChange(event.target.value.toUpperCase())}
+                placeholder="TEM"
+              />
+            </label>
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className={labelClass}>目标价格</span>
+              <input aria-label="目标价格" value={targetPrice} onChange={(event) => onTargetPriceChange(event.target.value)} className={fieldClass} inputMode="decimal" />
+            </label>
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className={labelClass}>目标日期</span>
+              <input aria-label="目标日期" value={targetDate} onChange={(event) => onTargetDateChange(event.target.value)} className={fieldClass} placeholder="2026-08-21" />
+            </label>
+          </div>
+        </WolfyCommandBar>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className={labelClass}>到期日</span>
+            <div className="relative">
+              <select
+                aria-label="到期日"
+                className={cn(fieldClass, 'appearance-none pr-10')}
+                value={selectedExpiration}
+                onChange={(event) => onExpirationSelect(event.target.value)}
+              >
+                {expirations.length === 0 ? (
+                  <option value={selectedExpiration}>暂无可用到期日</option>
+                ) : expirations.map((expiration) => (
+                  <option key={expiration.date} value={expiration.date}>
+                    {expiration.date} · {expiration.dte} DTE
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--wolfy-text-muted)]" aria-hidden="true" />
+            </div>
+          </label>
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className={labelClass}>风险预算</span>
+            <input aria-label="风险预算" value={riskBudget} onChange={(event) => onRiskBudgetChange(event.target.value)} className={fieldClass} inputMode="decimal" />
+          </label>
         </div>
-      </label>
-      <div className="flex flex-col gap-1.5">
-        <span className={labelClass}>方向</span>
-        <SegmentedButtons options={DIRECTION_OPTIONS} value={direction} onChange={onDirectionChange} ariaLabel="方向假设" />
       </div>
-      <label className="flex flex-col gap-1.5">
-        <span className={labelClass}>到期日</span>
-        <div className="relative">
-          <select
-            aria-label="到期日"
-            className="h-10 w-full truncate appearance-none rounded-lg border border-white/10 bg-white/[0.02] px-3 pr-10 font-mono text-sm text-white outline-none transition-all focus:border-emerald-400/50 focus:bg-white/[0.05]"
-            value={selectedExpiration}
-            onChange={(event) => onExpirationSelect(event.target.value)}
-          >
-            {expirations.length === 0 ? (
-              <option value={selectedExpiration}>暂无可用到期日</option>
-            ) : expirations.map((expiration) => (
-              <option key={expiration.date} value={expiration.date}>
-                {expiration.date} · {expiration.dte} DTE
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" aria-hidden="true" />
+
+      <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.92fr)]">
+        <div className="min-w-0">
+          <span className={labelClass}>方向</span>
+          <SegmentedButtons options={DIRECTION_OPTIONS} value={direction} onChange={onDirectionChange} ariaLabel="方向假设" />
         </div>
-      </label>
-      <div className="grid grid-cols-1 gap-x-4 gap-y-6 md:grid-cols-2">
-        <label className="flex flex-col gap-1.5">
-          <span className={labelClass}>目标价格</span>
-          <input aria-label="目标价格" value={targetPrice} onChange={(event) => onTargetPriceChange(event.target.value)} className={fieldClass} inputMode="decimal" />
-        </label>
-        <label className="flex flex-col gap-1.5">
-          <span className={labelClass}>目标日期</span>
-          <input aria-label="目标日期" value={targetDate} onChange={(event) => onTargetDateChange(event.target.value)} className={fieldClass} placeholder="2026-08-21" />
-        </label>
-        <label className="flex flex-col gap-1.5 md:col-span-2">
-          <span className={labelClass}>风险预算</span>
-          <input aria-label="风险预算" value={riskBudget} onChange={(event) => onRiskBudgetChange(event.target.value)} className={fieldClass} inputMode="decimal" />
-        </label>
+        <div className="min-w-0">
+          <span className={labelClass}>风险偏好</span>
+          <SegmentedButtons options={RISK_PROFILE_OPTIONS} value={riskProfile} onChange={onRiskProfileChange} ariaLabel="风险偏好" />
+        </div>
       </div>
-      <div className="flex flex-col gap-1.5">
-        <span className={labelClass}>风险偏好</span>
-        <SegmentedButtons options={RISK_PROFILE_OPTIONS} value={riskProfile} onChange={onRiskProfileChange} ariaLabel="风险偏好" />
-      </div>
-    </div>
+    </WolfyShellSurface>
   </section>
 );
 
@@ -370,44 +408,52 @@ const SnapshotPanel: React.FC<{
   const expectedMove = decision?.expectedMove;
   const ivRank = decision?.ivRank ?? decision?.ivGreeks?.ivRank;
   const ivPercentile = decision?.ivPercentile ?? decision?.ivGreeks?.ivPercentile;
+  const statusItems = [
+    { label: '标的', value: summary?.symbol || chain?.symbol || '--' },
+    { label: '最新价', value: money(underlying?.price) },
+    { label: '结论', value: decisionStatusLabel(decision) },
+    { label: '数据状态', value: freshnessLabel(decision?.freshness?.freshness || underlying?.freshness) },
+    { label: '到期', value: chain?.expiration || '--' },
+  ];
   return (
-    <section className={cn(panelClass, 'order-1 xl:order-none xl:col-span-12')} data-testid="options-lab-snapshot-panel">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)] xl:items-center">
-        <SectionHeader eyebrow="标的快照" title="标的快照" icon={LineChart}>
+    <section className={cn(panelClass, 'overflow-hidden')} data-testid="options-lab-snapshot-panel">
+      <div className="px-1 pb-3">
+        <SectionHeader eyebrow="状态总览" title="标的快照" icon={LineChart}>
           <Pill tone="info">只读观察</Pill>
         </SectionHeader>
-        <div className={cn(innerBlockClass, 'px-3 py-2 text-sm leading-6 text-white/75 xl:text-right')}>
-          <span className="text-cyan-100">{decisionStatusLabel(decision)}</span>
-          <span className="mx-2 text-white/25">·</span>
+        <div className={cn(innerBlockClass, 'mt-3 px-3 py-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)] xl:text-right')}>
+          <span className="text-[color:var(--wolfy-accent-soft)]">{decisionStatusLabel(decision)}</span>
+          <span className="mx-2 text-[color:var(--wolfy-text-muted)]">·</span>
           <span>不可作为交易信号</span>
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" data-testid="options-lab-snapshot-metric-grid">
+      <ConsoleStatusStrip items={statusItems} className="mb-3" />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" data-testid="options-lab-snapshot-metric-grid">
         <div className={cn(innerBlockClass, 'p-3')}>
           <p className={labelClass}>标的</p>
-          <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-white">{summary?.symbol || chain?.symbol || '--'}</p>
+          <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-[color:var(--wolfy-text-primary)]">{summary?.symbol || chain?.symbol || '--'}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
           <p className={labelClass}>最新价</p>
-          <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-white">{money(underlying?.price)}</p>
+          <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-[color:var(--wolfy-text-primary)]">{money(underlying?.price)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
           <p className={labelClass}>涨跌幅</p>
-          <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-emerald-300">{ratio(underlying?.changePct)}</p>
+          <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-[color:var(--wolfy-market-up)]">{ratio(underlying?.changePct)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
           <p className={labelClass}>IV 分位</p>
-          <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-cyan-300">{ivRank == null ? '--' : number(ivRank, 1)} / {ivPercentile == null ? '--' : number(ivPercentile, 1)}</p>
+          <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-[color:var(--wolfy-accent-soft)]">{ivRank == null ? '--' : number(ivRank, 1)} / {ivPercentile == null ? '--' : number(ivPercentile, 1)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
           <p className={labelClass}>预期波动</p>
-          <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-white">{money(expectedMove?.expectedMoveAbs)}</p>
-          <p className="mt-1 text-xs text-white/40">{ratio(expectedMove?.expectedMovePct)}</p>
+          <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-[color:var(--wolfy-text-primary)]">{money(expectedMove?.expectedMoveAbs)}</p>
+          <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">{ratio(expectedMove?.expectedMovePct)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
           <p className={labelClass}>数据状态</p>
-          <p className="mt-2 font-mono text-sm font-semibold tracking-tight text-cyan-300">{freshnessLabel(decision?.freshness?.freshness || underlying?.freshness)}</p>
-          <p className="mt-1 truncate text-xs text-white/35">{underlying?.asOf || '--'}</p>
+          <p className="mt-2 font-mono text-sm font-semibold tracking-tight text-[color:var(--wolfy-accent-soft)]">{freshnessLabel(decision?.freshness?.freshness || underlying?.freshness)}</p>
+          <p className="mt-1 truncate text-xs text-[color:var(--wolfy-text-muted)]">{underlying?.asOf || '--'}</p>
         </div>
       </div>
     </section>
@@ -415,14 +461,18 @@ const SnapshotPanel: React.FC<{
 };
 
 const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId: string; className?: string }> = ({ title, contracts, testId, className }) => (
-  <section className={cn(panelClass, 'min-h-[280px]', className)} data-testid="options-lab-chain-panel">
-    <SectionHeader eyebrow="期权链" title={title} icon={BarChart3} />
+  <section className={cn('min-h-[280px] min-w-0', className)} data-testid="options-lab-chain-panel">
+    <div className="mb-3">
+      <SectionHeader eyebrow="期权链" title={title} icon={BarChart3} />
+    </div>
     {contracts.length === 0 ? (
-      <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 text-sm text-white/45')}>暂无数据，保留假设面板与风险提示。</p>
+      <TerminalEmptyState title="暂无合约数据" className="min-h-[160px]">
+        保留假设命令区与风险边界，等待下一次链路加载。
+      </TerminalEmptyState>
     ) : (
-      <div className="mt-4 overflow-x-auto no-scrollbar" data-testid={testId}>
+      <DataWorkbenchFrame data-testid={testId}>
         <table className="w-full min-w-[720px] border-separate border-spacing-y-1 text-left">
-          <thead className="text-[10px] uppercase tracking-[0.16em] text-white/35">
+          <thead className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
             <tr>
               <th className="px-3 py-2">合约</th>
               <th className="px-3 py-2">行权价</th>
@@ -437,8 +487,8 @@ const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId:
           </thead>
           <tbody>
             {contracts.map((contract) => (
-              <tr key={contract.contractSymbol} className="rounded-xl border border-white/[0.03] bg-white/[0.015] text-xs text-white/72">
-                <td className="rounded-l-xl px-3 py-2 font-mono text-xs text-white">{contract.contractSymbol}</td>
+              <tr key={contract.contractSymbol} className="rounded-md border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-xs text-[color:var(--wolfy-text-secondary)]">
+                <td className="rounded-l-md px-3 py-2 font-mono text-xs text-[color:var(--wolfy-text-primary)]">{contract.contractSymbol}</td>
                 <td className="px-3 py-2 font-mono">{money(contract.strike)}</td>
                 <td className="px-3 py-2 font-mono">{money(contract.mid)}</td>
                 <td className="px-3 py-2 font-mono">{money(contract.bid)} / {money(contract.ask)}</td>
@@ -446,7 +496,7 @@ const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId:
                 <td className="px-3 py-2 font-mono">{number(contract.delta, 2)}</td>
                 <td className="px-3 py-2 font-mono text-amber-200">{number(contract.theta, 2)}</td>
                 <td className="px-3 py-2 font-mono">{number(contract.openInterest)} / {number(contract.volume)}</td>
-                <td className="rounded-r-xl px-3 py-2">
+                <td className="rounded-r-md px-3 py-2">
                   <Pill tone={(contract.liquidityScore || 0) >= 75 ? 'good' : 'warn'}>
                     {number(contract.liquidityScore)}
                   </Pill>
@@ -455,7 +505,7 @@ const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId:
             ))}
           </tbody>
         </table>
-      </div>
+      </DataWorkbenchFrame>
     )}
   </section>
 );
@@ -487,35 +537,35 @@ const StrategyRow: React.FC<{
   <article
     data-testid={highlighted ? 'options-lab-primary-strategy-row' : undefined}
     className={cn(
-      'grid min-w-0 gap-3 rounded-xl border px-3 py-2 text-sm transition-all xl:grid-cols-[minmax(0,1.4fr)_0.7fr_repeat(4,minmax(0,0.8fr))_minmax(0,1.5fr)] xl:items-center',
+      'grid min-w-0 gap-3 rounded-md border px-3 py-2 text-sm transition-colors xl:grid-cols-[minmax(0,1.4fr)_0.7fr_repeat(4,minmax(0,0.8fr))_minmax(0,1.5fr)] xl:items-center',
       highlighted
-        ? 'border-cyan-300/25 bg-cyan-400/[0.06] shadow-[0_0_20px_rgba(34,211,238,0.08)]'
-        : 'border-white/[0.03] bg-white/[0.015] hover:border-white/10 hover:bg-white/[0.03]',
+        ? 'border-[color:color-mix(in_srgb,var(--wolfy-accent)_42%,transparent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_10%,transparent)]'
+        : 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] hover:border-[color:var(--wolfy-border-subtle)]',
     )}
   >
     <div className="min-w-0">
       <div className="flex items-center gap-2">
-        <span className="font-mono text-xs text-white/35">#{rank}</span>
+        <span className="font-mono text-xs text-[color:var(--wolfy-text-muted)]">#{rank}</span>
         {highlighted ? <Pill tone="info">首选观察</Pill> : null}
       </div>
-      <h3 className="mt-1 truncate text-sm font-semibold text-white">{strategyChineseLabel(strategy.strategyType)}</h3>
-      <p className="mt-0.5 truncate font-mono text-[11px] text-white/35">{strategyLabel(strategy.strategyType)}</p>
+      <h3 className="mt-1 truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{strategyChineseLabel(strategy.strategyType)}</h3>
+      <p className="mt-0.5 truncate font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{strategyLabel(strategy.strategyType)}</p>
     </div>
     <div>
       <p className={labelClass}>状态</p>
-      <p className="mt-1 text-xs font-semibold text-cyan-100">{strategyStatusLabel(strategy, alternative)}</p>
+      <p className="mt-1 text-xs font-semibold text-[color:var(--wolfy-accent-soft)]">{strategyStatusLabel(strategy, alternative)}</p>
     </div>
     <div>
       <p className={labelClass}>最大亏损</p>
-      <p className="mt-1 font-mono text-xs text-rose-300">{money(alternative?.maxLoss ?? strategy.maxLoss)}</p>
+      <p className="mt-1 font-mono text-xs text-[color:var(--wolfy-market-down)]">{money(alternative?.maxLoss ?? strategy.maxLoss)}</p>
     </div>
     <div>
       <p className={labelClass}>最大收益</p>
-      <p className="mt-1 font-mono text-xs text-emerald-300">{(alternative?.maxGain ?? strategy.maxGain) == null ? '不封顶' : money(alternative?.maxGain ?? strategy.maxGain)}</p>
+      <p className="mt-1 font-mono text-xs text-[color:var(--wolfy-market-up)]">{(alternative?.maxGain ?? strategy.maxGain) == null ? '不封顶' : money(alternative?.maxGain ?? strategy.maxGain)}</p>
     </div>
     <div>
       <p className={labelClass}>盈亏平衡</p>
-      <p className="mt-1 font-mono text-xs text-white/80">{money(strategy.breakeven)}</p>
+      <p className="mt-1 font-mono text-xs text-[color:var(--wolfy-text-primary)]">{money(strategy.breakeven)}</p>
     </div>
     <div>
       <p className={labelClass}>情景收益</p>
@@ -523,7 +573,7 @@ const StrategyRow: React.FC<{
     </div>
     <div className="min-w-0">
       <p className={labelClass}>核心原因</p>
-      <p className="mt-1 truncate text-xs text-white/62">{strategyPrimaryReason(strategy, alternative)}</p>
+      <p className="mt-1 truncate text-xs text-[color:var(--wolfy-text-secondary)]">{strategyPrimaryReason(strategy, alternative)}</p>
     </div>
   </article>
 );
@@ -560,22 +610,24 @@ const StrategyComparisonPanel: React.FC<{
         </div>
       </SectionHeader>
       {emptyMessage ? (
-        <div className={cn(innerBlockClass, 'mt-5 border-dashed border-white/10 px-4 py-4 text-sm leading-6 text-white/55')}>
-          <p className="text-sm font-semibold text-white/78">等待策略对比前提</p>
+        <div className={cn(innerBlockClass, 'mt-5 border-dashed px-4 py-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
+          <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">等待策略对比前提</p>
           <p className="mt-2">{emptyMessage}</p>
         </div>
       ) : null}
       {!emptyMessage && loading ? (
-        <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 font-mono text-sm text-cyan-100')}>正在计算策略对比...</p>
+        <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 font-mono text-sm text-[color:var(--wolfy-accent-soft)]')}>正在计算策略对比...</p>
       ) : null}
       {!emptyMessage && !loading && comparisonState.error ? (
-        <p className="mt-5 rounded-xl border border-rose-400/20 bg-rose-500/5 px-4 py-4 text-sm text-rose-300">{comparisonState.error}</p>
+        <TerminalNotice variant="danger" className="mt-5">{comparisonState.error}</TerminalNotice>
       ) : null}
       {!emptyMessage && !loading && !comparisonState.error && strategies.length === 0 ? (
-        <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 text-sm text-white/45')}>当前假设下暂无可比较策略。</p>
+        <TerminalEmptyState title="暂无可比较策略" className="mt-5">
+          当前假设下暂无可比较策略。
+        </TerminalEmptyState>
       ) : null}
       {!emptyMessage && !loading && !comparisonState.error && strategies.length > 0 ? (
-        <div className="mt-5 grid gap-2">
+        <DenseRows className="mt-5 divide-y-0 space-y-2">
           {rankedStrategies.map((strategy, index) => (
             <StrategyRow
               key={strategy.strategyType}
@@ -585,9 +637,9 @@ const StrategyComparisonPanel: React.FC<{
               alternative={rankMap.get(strategy.strategyType)?.alternative}
             />
           ))}
-        </div>
+        </DenseRows>
       ) : null}
-      <div className={cn(innerBlockClass, 'mt-5 p-4 text-sm leading-6 text-white/58')}>
+      <div className={cn(innerBlockClass, 'mt-5 p-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
         <span className={labelClass}>数据说明</span>
         <p className="mt-2">
           {limitations.length ? limitations.map(limitationLabel).join(' · ') : '当前数据可用于情景比较'}
@@ -597,7 +649,7 @@ const StrategyComparisonPanel: React.FC<{
   );
 };
 
-const DecisionMetric: React.FC<{ label: string; value: string; tone?: string }> = ({ label, value, tone = 'text-white' }) => (
+const DecisionMetric: React.FC<{ label: string; value: string; tone?: string }> = ({ label, value, tone = 'text-[color:var(--wolfy-text-primary)]' }) => (
   <div className={cn(innerBlockClass, 'min-w-0 p-3')}>
     <p className={labelClass}>{label}</p>
     <p className={cn('mt-2 truncate font-mono text-base font-semibold tracking-tight', tone)}>{value}</p>
@@ -623,9 +675,9 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
     || evidenceSummary.freshnessLabel
   ));
   const labelTone = label === '数据不足，禁止判断' || label === '不建议'
-    ? 'text-rose-200'
+    ? 'text-[color:var(--wolfy-market-down)]'
     : label === '仅观察'
-      ? 'text-cyan-100'
+      ? 'text-[color:var(--wolfy-accent-soft)]'
       : 'text-amber-100';
   const primaryStrategy = optimizer?.preferredStrategyKey || null;
   const observationCandidate = primaryStrategy || rankedAlternatives[0]?.strategyKey || decision?.betterAlternative?.strategyType || null;
@@ -644,28 +696,30 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
         </div>
       </SectionHeader>
       {emptyMessage ? (
-        <p className={cn(innerBlockClass, 'mt-5 border-dashed border-white/10 px-4 py-4 text-sm text-white/55')}>{emptyMessage}</p>
+        <p className={cn(innerBlockClass, 'mt-5 border-dashed px-4 py-4 text-sm text-[color:var(--wolfy-text-secondary)]')}>{emptyMessage}</p>
       ) : null}
       {!emptyMessage && decisionState.loading ? (
-        <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 font-mono text-sm text-cyan-100')}>正在计算策略决策...</p>
+        <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 font-mono text-sm text-[color:var(--wolfy-accent-soft)]')}>正在计算策略决策...</p>
       ) : null}
       {!emptyMessage && !decisionState.loading && decisionState.error ? (
-        <p className="mt-5 rounded-xl border border-rose-400/20 bg-rose-500/5 px-4 py-4 text-sm text-rose-300">{decisionState.error}</p>
+        <TerminalNotice variant="danger" className="mt-5">{decisionState.error}</TerminalNotice>
       ) : null}
       {!emptyMessage && !decisionState.loading && !decisionState.error && !decision ? (
-        <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 text-sm text-white/45')}>等待策略决策。</p>
+        <TerminalEmptyState title="等待策略决策" className="mt-5">
+          先完成合约链加载，再进入 payoff / risk workspace。
+        </TerminalEmptyState>
       ) : null}
       {!emptyMessage && !decisionState.loading && !decisionState.error && decision ? (
         <div className="mt-5 grid gap-4">
           <div
             data-testid="options-lab-decision-summary"
-            className="rounded-xl border border-cyan-300/10 bg-white/[0.02] p-4"
+            className="rounded-md border border-[color:color-mix(in_srgb,var(--wolfy-accent)_34%,transparent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_8%,transparent)] p-4"
           >
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
                 <p className={labelClass}>结论</p>
                 <p className={cn('mt-2 text-xl font-semibold', labelTone)}>{decisionStatusLabel(decision)}</p>
-                <p className="mt-2 text-sm leading-6 text-white/62">
+                <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                   {primaryStrategy
                     ? `主要策略：${strategyChineseLabel(primaryStrategy)}`
                     : '暂无可执行策略'}
@@ -678,15 +732,15 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
               </div>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <DecisionMetric label="情景质量" value={number(decision?.tradeQualityScore)} />
-              <DecisionMetric label="最大亏损" value={money(decision?.riskReward?.maxLoss)} tone="text-rose-300" />
-              <DecisionMetric label="预期波动" value={money(expectedMove?.expectedMoveAbs)} />
-              <DecisionMetric label="IV / 敏感度" value={number(decision?.ivGreeks?.ivReadiness)} tone="text-cyan-100" />
+              <DecisionMetric label="情景质量" value={number(decision?.tradeQualityScore)} tone="text-[color:var(--wolfy-text-primary)]" />
+              <DecisionMetric label="最大亏损" value={money(decision?.riskReward?.maxLoss)} tone="text-[color:var(--wolfy-market-down)]" />
+              <DecisionMetric label="预期波动" value={money(expectedMove?.expectedMoveAbs)} tone="text-[color:var(--wolfy-text-primary)]" />
+              <DecisionMetric label="IV / 敏感度" value={number(decision?.ivGreeks?.ivReadiness)} tone="text-[color:var(--wolfy-accent-soft)]" />
             </div>
             <div className={cn(innerBlockClass, 'mt-4 p-3')}>
               <p className={labelClass}>主要策略</p>
-              <p className="mt-2 text-base font-semibold text-white">{observationCandidate ? strategyChineseLabel(observationCandidate) : '暂无可执行策略'}</p>
-              <p className="mt-2 text-sm leading-6 text-cyan-100/70">
+              <p className="mt-2 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{observationCandidate ? strategyChineseLabel(observationCandidate) : '暂无可执行策略'}</p>
+              <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-accent-soft)]/80">
                 {primaryStrategy
                   ? `可观察结构：${strategyChineseLabel(primaryStrategy)}`
                   : `不交易：${noTradeReasonLabel(optimizer?.noTradeReason)}`}
@@ -696,27 +750,27 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
           <div className="grid gap-3 lg:grid-cols-3">
             <div className={cn(innerBlockClass, 'p-4')}>
               <p className={labelClass}>盈亏平衡</p>
-              <p className="mt-2 font-mono text-base font-semibold text-white">{money(decision?.breakeven?.breakeven)}</p>
-              <p className="mt-1 text-sm text-white/52">所需波动：{ratio(decision?.breakeven?.requiredMovePct)}</p>
+              <p className="mt-2 font-mono text-base font-semibold text-[color:var(--wolfy-text-primary)]">{money(decision?.breakeven?.breakeven)}</p>
+              <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">所需波动：{ratio(decision?.breakeven?.requiredMovePct)}</p>
             </div>
             <div className={cn(innerBlockClass, 'p-4')}>
               <p className={labelClass}>IV 分位</p>
               {ivRankStatus === 'available' ? (
                 <>
-                  <p className="mt-2 font-mono text-base font-semibold tracking-tight text-cyan-300">{number(ivRank, 1)} / {number(ivPercentile, 1)}</p>
-                  <p className="mt-1 text-sm text-white/52">用户态来源</p>
+                  <p className="mt-2 font-mono text-base font-semibold tracking-tight text-[color:var(--wolfy-accent-soft)]">{number(ivRank, 1)} / {number(ivPercentile, 1)}</p>
+                  <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">用户态来源</p>
                 </>
               ) : (
                 <>
-                  <p className="mt-2 font-mono text-base font-semibold tracking-tight text-white/62">IV 分位不可用</p>
-                  <p className="mt-1 text-sm text-white/52">缺少历史 IV 或代理序列，置信度降低。</p>
+                  <p className="mt-2 font-mono text-base font-semibold tracking-tight text-[color:var(--wolfy-text-secondary)]">IV 分位不可用</p>
+                  <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">缺少历史 IV 或代理序列，置信度降低。</p>
                 </>
               )}
             </div>
             <div className={cn(innerBlockClass, 'p-4')}>
               <p className={labelClass}>预期波动</p>
-              <p className="mt-2 font-mono text-base font-semibold tracking-tight text-white">{money(expectedMove?.expectedMoveAbs)}</p>
-              <p className="mt-1 text-sm text-white/52">{ratio(expectedMove?.expectedMovePct)} · {expectedMoveSourceLabel(expectedMove?.expectedMoveSource)}</p>
+              <p className="mt-2 font-mono text-base font-semibold tracking-tight text-[color:var(--wolfy-text-primary)]">{money(expectedMove?.expectedMoveAbs)}</p>
+              <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">{ratio(expectedMove?.expectedMovePct)} · {expectedMoveSourceLabel(expectedMove?.expectedMoveSource)}</p>
             </div>
           </div>
         </div>
@@ -770,7 +824,7 @@ const RiskBoundaryPanel: React.FC<{
       : dataTierLabel(decision?.dataQuality?.dataQualityTier);
   const topState = decisionStatusLabel(decision);
   return (
-    <section className={cn(panelClass, 'order-4 xl:order-none', className)} data-testid="options-lab-risk-boundary-panel">
+    <section className={cn(panelClass, className)} data-testid="options-lab-risk-boundary-panel">
       <SectionHeader eyebrow="风险控制" title="风险边界" icon={AlertTriangle}>
         {showEvidenceSummary ? <EvidenceChips summary={evidenceSummary} maxLabels={1} /> : (
           <Pill tone={topState.includes('禁止') ? 'risk' : 'info'}>
@@ -779,10 +833,10 @@ const RiskBoundaryPanel: React.FC<{
         )}
       </SectionHeader>
       <div className="mt-5 grid gap-3 text-sm">
-        <div className="rounded-xl border border-rose-400/20 bg-rose-500/5 p-3">
+        <div className="rounded-md border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_10%,transparent)] p-3">
           <p className={labelClass}>结论</p>
-          <p className="mt-2 text-sm font-semibold text-rose-200">{topState}</p>
-          <p className="mt-1 text-xs leading-5 text-white/45">仅供观察，不可作为交易信号。</p>
+          <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-market-down)]">{topState}</p>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">仅供观察，不可作为交易信号。</p>
         </div>
         <div className={cn(innerBlockClass, 'flex items-center justify-between gap-3 p-3')}>
           <span className={labelClass}>数据状态</span>
@@ -793,34 +847,24 @@ const RiskBoundaryPanel: React.FC<{
             <li
               key={warning}
               data-testid="options-lab-visible-risk-warning"
-              className="flex gap-2 rounded-xl border border-amber-300/20 bg-amber-400/5 px-3 py-2 text-xs leading-5 text-amber-300"
+              className="flex gap-2 rounded-md border border-amber-300/20 bg-amber-300/5 px-3 py-2 text-xs leading-5 text-amber-200"
             >
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden="true" />
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-200" aria-hidden="true" />
               <span>{warningLabel(warning)}</span>
             </li>
           ))}
         </ul>
-        {hiddenWarnings.length ? (
-          <details className="rounded-xl border border-white/[0.03] bg-white/[0.015] px-3 py-2 text-xs text-white/48">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/55">
-              <span>更多限制</span>
-              <ChevronDown className="h-3.5 w-3.5 text-white/30" aria-hidden="true" />
-            </summary>
-            <div className="mt-2 flex flex-wrap gap-2">
+        <ConsoleDisclosure title="更多限制" summary="默认折叠，避免打断主工作区">
+          {hiddenWarnings.length ? (
+            <div className="flex flex-wrap gap-2">
               {hiddenWarnings.map((warning) => (
                 <Pill key={warning} tone="neutral">{warningLabel(warning)}</Pill>
               ))}
             </div>
-          </details>
-        ) : (
-          <details className="rounded-xl border border-white/[0.03] bg-white/[0.015] px-3 py-2 text-xs text-white/48">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/55">
-              <span>更多限制</span>
-              <ChevronDown className="h-3.5 w-3.5 text-white/30" aria-hidden="true" />
-            </summary>
-            <p className="mt-2">暂无额外限制，仍需人工复核。</p>
-          </details>
-        )}
+          ) : (
+            <p className="text-[color:var(--wolfy-text-secondary)]">暂无额外限制，仍需人工复核。</p>
+          )}
+        </ConsoleDisclosure>
       </div>
     </section>
   );
@@ -832,31 +876,29 @@ const MethodologyDisclosure: React.FC<{
   targetDate: string;
   riskBudget: string;
 }> = ({ state, targetPrice, targetDate, riskBudget }) => (
-  <details data-testid="options-lab-analysis-details" className={cn(panelClass, 'xl:col-span-12')}>
-    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/75">
-      <span className="inline-flex items-center gap-2 text-sm font-semibold">
-        <BarChart3 className="h-4 w-4 text-cyan-200" aria-hidden="true" />
-        假设 / 数据 / 限制
-      </span>
-      <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
-    </summary>
-    <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
-      <div className={cn(innerBlockClass, 'p-4 text-sm leading-6 text-white/58')}>
+  <ConsoleDisclosure
+    data-testid="options-lab-analysis-details"
+    title="数据限制"
+    summary="保持折叠，避免把 provider/runtime 限制抬到主工作台。"
+    className="border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]"
+  >
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className={cn(innerBlockClass, 'p-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
         <p className={labelClass}>假设</p>
         <p className="mt-2">目标价 {targetPrice || '--'}，目标日 {targetDate || '--'}，风险预算 {riskBudget || '--'}。</p>
       </div>
-      <div className={cn(innerBlockClass, 'p-4 text-sm leading-6 text-white/58')}>
+      <div className={cn(innerBlockClass, 'p-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
         <p className={labelClass}>数据状态</p>
         <p className="mt-2">
           {[...asArray(state.chain?.limitations), ...asArray(state.chain?.metadata?.limitations)].map(limitationLabel).join(' · ') || '当前数据可用于情景观察'}
         </p>
       </div>
-      <div className={cn(innerBlockClass, 'p-4 text-sm leading-6 text-white/58')}>
+      <div className={cn(innerBlockClass, 'p-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
         <p className={labelClass}>限制</p>
         <p className="mt-2">期权可能归零，IV、Theta、流动性与价差会改变到期前估值。本模块仅做只读情景分析。</p>
       </div>
     </div>
-  </details>
+  </ConsoleDisclosure>
 );
 
 type OptionsLabErrorBoundaryState = {
@@ -885,16 +927,16 @@ export class OptionsLabErrorBoundary extends React.Component<{ children: React.R
     return (
       <main className="w-full overflow-x-hidden text-white">
         <TerminalPageShell>
-          <section className="mx-auto flex w-full max-w-[920px] flex-col gap-4 rounded-[24px] border border-rose-300/20 bg-white/[0.02] p-5 backdrop-blur-md md:p-6">
+          <section className="mx-auto flex w-full max-w-[920px] flex-col gap-4 rounded-lg border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-[var(--wolfy-surface-console)] p-5 md:p-6">
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-1 h-5 w-5 shrink-0 text-amber-200" aria-hidden="true" />
               <div className="min-w-0">
                 <p className={labelClass}>期权实验室</p>
-                <h1 className="mt-2 text-xl font-semibold text-white">{OPTIONS_LAB_CRASH_FALLBACK}</h1>
-                <p className="mt-3 text-sm leading-6 text-white/58">仅显示用户态错误分类。</p>
+                <h1 className="mt-2 text-xl font-semibold text-[color:var(--wolfy-text-primary)]">{OPTIONS_LAB_CRASH_FALLBACK}</h1>
+                <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">仅显示用户态错误分类。</p>
               </div>
             </div>
-            <div className="rounded-2xl border border-white/5 bg-black/20 p-4 text-sm text-white/55">
+            <div className="rounded-md border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-4 text-sm text-[color:var(--wolfy-text-secondary)]">
               暂时无法完成渲染，内部错误详情已隐藏。
             </div>
           </section>
@@ -1166,9 +1208,7 @@ const OptionsLabPageContent: React.FC = () => {
           data-testid="options-lab-page-heading"
           title="期权实验室"
         />
-        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-12" data-testid="options-lab-bento-grid">
-          <SnapshotPanel summary={state.summary} chain={state.chain} decision={decisionState.decision} />
-          <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} className="order-2 xl:order-none xl:col-span-5" />
+        <div className="mt-5 grid gap-6" data-testid="options-lab-bento-grid">
           <AssumptionPanel
             symbol={symbolInput}
             direction={direction}
@@ -1187,47 +1227,53 @@ const OptionsLabPageContent: React.FC = () => {
             onRiskBudgetChange={setRiskBudget}
             onExpirationSelect={handleExpirationSelect}
           />
-          <RiskBoundaryPanel
-            decision={decisionState.decision}
-            chain={state.chain}
-            loading={state.loading || decisionState.loading}
-            error={state.error || decisionState.error}
-            className="xl:col-span-3"
-          />
-          <StrategyComparisonPanel
-            comparisonState={comparisonState}
-            decision={decisionState.decision}
-            loading={comparisonState.loading}
-            emptyMessage={comparisonEmptyMessage}
-            chain={state.chain}
-            className="order-5 xl:order-none xl:col-span-12"
-          />
 
-          {state.loading ? (
-          <section className={cn(panelClass, 'order-6 xl:order-none xl:col-span-12')}>
-            <p className="font-mono text-sm text-cyan-100">正在加载期权链快照...</p>
-          </section>
-          ) : null}
-          {state.error ? (
-          <section className="order-6 rounded-xl border border-rose-400/20 bg-rose-500/5 p-4 text-sm text-rose-300 xl:order-none xl:col-span-12">
-            {state.error}
-          </section>
-          ) : null}
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,0.85fr)]">
+            <div className="grid min-w-0 gap-6">
+              <SnapshotPanel summary={state.summary} chain={state.chain} decision={decisionState.decision} />
+              <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} />
+              <StrategyComparisonPanel
+                comparisonState={comparisonState}
+                decision={decisionState.decision}
+                loading={comparisonState.loading}
+                emptyMessage={comparisonEmptyMessage}
+                chain={state.chain}
+              />
 
-          {!state.loading && !state.error ? (
-            <>
-              <ChainTable title="Call 链" contracts={calls} testId="options-lab-calls-table" className="order-6 xl:order-none xl:col-span-6" />
-              <ChainTable title="Put 链" contracts={puts} testId="options-lab-puts-table" className="order-7 xl:order-none xl:col-span-6" />
-            </>
-          ) : null}
+              <WolfyShellSurface variant="console" padding="sm" className="overflow-hidden">
+                <SectionHeader eyebrow="期权链矩阵" title="Call / Put 工作区" icon={BarChart3} />
+                {state.loading ? (
+                  <TerminalNotice variant="info" className="mt-4">正在加载期权链快照...</TerminalNotice>
+                ) : null}
+                {state.error ? (
+                  <TerminalNotice variant="danger" className="mt-4">{state.error}</TerminalNotice>
+                ) : null}
+                {!state.loading && !state.error && hasChainRows ? (
+                  <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                    <ChainTable title="Call 链" contracts={calls} testId="options-lab-calls-table" />
+                    <ChainTable title="Put 链" contracts={puts} testId="options-lab-puts-table" />
+                  </div>
+                ) : null}
+                {!state.loading && !state.error && !hasChainRows ? (
+                  <div className="mt-4">
+                    <TerminalEmptyState title="暂无数据">
+                      保留假设命令区与风险提示，等待下一次链路加载。
+                    </TerminalEmptyState>
+                  </div>
+                ) : null}
+              </WolfyShellSurface>
+            </div>
 
-          {!state.loading && !state.error && !hasChainRows ? (
-            <section className={cn(panelClass, 'order-8 xl:order-none xl:col-span-12')}>
-              <p className="text-sm text-white/50">暂无数据，保留假设面板与风险提示。</p>
-            </section>
-          ) : null}
-
-          <MethodologyDisclosure state={state} targetPrice={targetPrice} targetDate={targetDate} riskBudget={riskBudget} />
+            <div className="grid min-w-0 gap-6 self-start">
+              <RiskBoundaryPanel
+                decision={decisionState.decision}
+                chain={state.chain}
+                loading={state.loading || decisionState.loading}
+                error={state.error || decisionState.error}
+              />
+              <MethodologyDisclosure state={state} targetPrice={targetPrice} targetDate={targetDate} riskBudget={riskBudget} />
+            </div>
+          </div>
         </div>
       </TerminalPageShell>
     </main>
