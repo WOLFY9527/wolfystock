@@ -335,6 +335,59 @@ multiple empty metric cards
 long explanatory paragraphs
 ```
 
+### 2.9 No Meta-Explanatory UI Copy
+
+Do not add UI copy that explains that the interface is useful, readable, trustworthy, organized, inspectable, or “ready.”
+
+These phrases usually sound like product/debug narration rather than decision information. They reduce product maturity and violate the Linear-inspired low-noise direction.
+
+Forbidden examples:
+
+```text
+可信度较高
+决策依据可查看
+结果已整理
+摘要可读
+部分数据可用
+未发现主要证据冲突
+数据已整理
+结果可查看
+分析已完成
+可用于观察
+当前结论仅供参考
+信息已汇总
+摘要已生成
+分析结果可查看
+关键证据已整理
+已完成整理
+可用于决策
+值得关注
+```
+
+Do not replace these with similar self-explanatory phrases.
+
+Bad:
+
+```text
+可信度较高 · 决策依据可查看 · 结果已整理
+```
+
+Good only when backed by concrete data:
+
+```text
+置信度：中
+数据：部分
+证据：无冲突
+来源：报告 / K线 / 财报
+状态：已完成
+```
+
+Even the “good” forms should appear only when they affect a user decision.
+
+If the phrase does not change what the user should do, remove it.
+
+Show concrete data, state, source, risk, or action instead of explaining that the UI is useful.
+
 ---
 
 ## 3. Color and Material System
@@ -581,6 +634,8 @@ Avoid:
 什么会破坏当前观察假设
 当前数据质量存在以下待补充字段
 ```
+
+Avoid UI self-explanation. The interface should not tell the user that it is readable, trustworthy, organized, inspectable, or useful. Show concrete data, state, source, risk, or action instead.
 
 ---
 
@@ -1122,4 +1177,5 @@ Are data warnings still honest and visible?
 Are actions near the relevant data?
 Is mobile usable without horizontal overflow?
 Did browser verification match the intended visual direction?
+Does the page avoid meta-explanatory phrases such as “可信度较高 / 决策依据可查看 / 结果已整理 / 摘要可读”?
 ```
