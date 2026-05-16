@@ -160,23 +160,27 @@ Wrapper rule:
 Frontend implementation tasks must also read:
 
 - `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
+- `WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`
 - `WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md`
 - `WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md`
+- `WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md`
 - `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
 
 Current visual direction:
 
 ```text
-Linear-inspired professional stock research OS
-calm, precise, low-noise product software
-board/list/table/report surfaces before cards
-progressive disclosure by default
+WolfyStock Linear OS
+charcoal canvas, slim product shell, quiet command bar
+one dominant console or board surface per route
+rows, tables, strips, rails, and drawers before cards
+Terminal* names are compatibility only, rendered with Linear OS material
 ```
 
 Rules:
 
-- no card-first dashboards unless explicitly editorial/report-like;
-- no ghost-glass or bento-heavy regressions;
+- no terminal cosplay, OLED glow, ghost-glass, or bento/card-first regressions;
+- no pure-black root gutters, stretched slabs, or admin/Web1 chrome in user-facing routes;
+- new user-facing surfaces should prefer `apps/dsa-web/src/components/linear` primitives;
 - no Web3/dApp visual language unless task-scoped;
 - no raw provider/schema/debug leakage in default user UI;
 - no meta-explanatory UI copy such as `可信度较高`, `决策依据可查看`, `结果已整理`, `摘要可读`;

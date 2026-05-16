@@ -561,7 +561,7 @@ describe('Shell', () => {
     expect(screen.queryByRole('button', { name: /管理员模式/ })).not.toBeInTheDocument();
   });
 
-  it('groups header utilities inside a shared glass action island', async () => {
+  it('groups header utilities inside a compact Linear OS action island', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
@@ -584,13 +584,12 @@ describe('Shell', () => {
       'flex',
       'items-center',
       'gap-0.5',
-      'rounded-[14px]',
-      'bg-white/[0.012]',
+      'rounded-lg',
+      'bg-[var(--wolfy-surface-rail)]',
       'border',
-      'border-white/[0.04]',
+      'border-[color:var(--wolfy-border-subtle)]',
       'px-1.5',
       'py-1',
-      'backdrop-blur-sm',
     );
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'language.toggle') })).toHaveTextContent('EN');
     expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.settings') })).toBeInTheDocument();

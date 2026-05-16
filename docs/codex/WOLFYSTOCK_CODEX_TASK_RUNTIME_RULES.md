@@ -177,23 +177,28 @@ Presentation-only tasks may change UI rendering when allowed, but must preserve 
 Read:
 
 - `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
+- `WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`
 - `WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md`
 - `WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md`
+- `WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md`
 - `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
 
 Current direction:
 
 ```text
-Linear-inspired professional stock research OS
-low-noise product software
-board/list/table/report surfaces before cards
-progressive disclosure
+WolfyStock Linear OS
+charcoal product canvas
+slim shell and quiet command bar
+one dominant ResearchConsole/board/workbench per route
+rows/tables/strips/rails/drawers before cards
 ```
 
 Avoid:
 
-- card-first dashboards;
-- ghost-glass/card-heavy regressions;
+- terminal cosplay/OLED/glass/cyber chrome;
+- pure-black root gutters or black card stacks;
+- stretched slabs and admin/Web1 layouts on product routes;
+- bento/card-first page architecture;
 - raw debug/provider/schema text in user UI;
 - meta-explanatory copy;
 - excessive side gutters;

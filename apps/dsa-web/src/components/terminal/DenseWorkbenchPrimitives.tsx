@@ -34,7 +34,7 @@ export function DensePageHeader({
     <header
       data-testid={dataTestId}
       data-terminal-primitive="dense-page-header"
-      className={cn('flex min-w-0 flex-col gap-3 border-b border-white/10 pb-3 md:flex-row md:items-start md:justify-between', className)}
+      className={cn('flex min-w-0 flex-col gap-3 border-b border-[color:var(--wolfy-divider)] pb-3 md:flex-row md:items-start md:justify-between', className)}
     >
       <TerminalPageHeading eyebrow={eyebrow} title={title} action={action} />
     </header>
@@ -55,14 +55,14 @@ export function DenseStatusStrip({
     <section
       data-testid={dataTestId}
       data-terminal-primitive="dense-status-strip"
-      className={cn('flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-y border-white/10 bg-white/[0.015] px-3 py-2 text-xs', className)}
+      className={cn('flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-y border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs', className)}
       aria-label={ariaLabel}
       {...props}
     >
       {items.map((item, index) => (
-        <div key={item.key ?? index} className="flex min-w-0 items-baseline gap-1.5 border-r border-white/10 pr-4 last:border-r-0">
-          <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-white/35">{item.label}</span>
-          <span className="truncate font-mono text-sm font-semibold text-white">{item.value}</span>
+        <div key={item.key ?? index} className="flex min-w-0 items-baseline gap-1.5 border-r border-[color:var(--wolfy-divider)] pr-4 last:border-r-0">
+          <span className="shrink-0 text-[11px] text-[color:var(--wolfy-text-muted)]">{item.label}</span>
+          <span className="truncate font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.value}</span>
         </div>
       ))}
     </section>
@@ -83,8 +83,8 @@ export function DenseTableShell({
       className={cn(
         'flex min-w-0 flex-col overflow-hidden',
         variant === 'board'
-          ? 'border-y border-white/10 bg-black/[0.08]'
-          : 'rounded-[14px] border border-white/10 bg-black/10 shadow-[0_20px_80px_rgba(0,0,0,0.22)]',
+          ? 'border-y border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-console)]'
+          : 'rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] shadow-none',
         className,
       )}
       {...props}
@@ -113,12 +113,12 @@ export function DenseCommandBar({
   return (
     <div
       data-terminal-primitive="dense-command-bar"
-      className={cn('flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-black/20 px-3 py-2.5', className)}
+      className={cn('flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2.5', className)}
       {...props}
     >
       <div className="min-w-0 flex-1 space-y-1">
-        {heading ? <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{heading}</p> : null}
-        {summary ? <p className="truncate text-xs text-white/45">{summary}</p> : null}
+        {heading ? <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{heading}</p> : null}
+        {summary ? <p className="truncate text-xs text-[color:var(--wolfy-text-secondary)]">{summary}</p> : null}
         {notice}
         {progress}
         {children}
@@ -165,8 +165,8 @@ export function DenseSecondaryDisclosure({
     <TerminalDisclosure
       className={cn(
         variant === 'row'
-          ? 'rounded-none border-x-0 border-b-0 border-t border-white/10 bg-transparent px-0 py-2.5 backdrop-blur-0 hover:border-white/10'
-          : 'border-white/10 bg-white/[0.015]',
+          ? 'rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent px-0 py-2.5 hover:border-[color:var(--wolfy-divider)]'
+          : 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]',
         className,
       )}
       {...props}

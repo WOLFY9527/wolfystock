@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import { WolfyShellSurface } from '../linear';
 
 type PrimitiveProps<T extends HTMLElement = HTMLElement> = React.HTMLAttributes<T> & {
   children?: React.ReactNode;
@@ -12,11 +13,12 @@ type PanelProps = PrimitiveProps & {
   dense?: boolean;
 };
 
+// Legacy-compatible names; new user-facing work should prefer components/linear.
 export function TerminalPageShell({ className, children, ...props }: PrimitiveProps<HTMLDivElement>) {
   return (
     <div
       data-terminal-primitive="page-shell"
-      className={cn('w-full max-w-[1600px] mx-auto px-4 xl:px-8 flex flex-col gap-6', className)}
+      className={cn('w-full max-w-[1600px] mx-auto px-4 xl:px-8 flex flex-col gap-5 text-[color:var(--wolfy-text-primary)]', className)}
       {...props}
     >
       {children}
@@ -37,31 +39,32 @@ export function TerminalGrid({ className, children, ...props }: PrimitiveProps<H
 }
 
 export function TerminalPanel({ as = 'div', dense = false, className, children, ...props }: PanelProps) {
-  const Component = as;
   return (
-    <Component
+    <WolfyShellSurface
+      as={as}
       data-terminal-primitive="panel"
-      className={cn(
-        'bg-white/[0.02] border border-white/5 backdrop-blur-md rounded-[16px] transition-all hover:border-white/10',
-        dense ? 'p-4' : 'p-5',
-        className,
-      )}
+      variant="console"
+      padding={dense ? 'sm' : 'md'}
+      className={cn('transition-colors hover:border-[color:var(--wolfy-divider)]', className)}
       {...props}
     >
       {children}
-    </Component>
+    </WolfyShellSurface>
   );
 }
 
 export function TerminalNestedBlock({ className, children, ...props }: PrimitiveProps<HTMLDivElement>) {
   return (
-    <div
+    <WolfyShellSurface
+      as="div"
       data-terminal-primitive="nested-block"
-      className={cn('bg-black/20 border border-white/[0.02] rounded-xl p-3', className)}
+      variant="input"
+      padding="sm"
+      className={cn('rounded-md', className)}
       {...props}
     >
       {children}
-    </div>
+    </WolfyShellSurface>
   );
 }
 
@@ -79,8 +82,8 @@ export function TerminalSectionHeader({
   return (
     <div data-terminal-primitive="section-header" className={cn('flex min-w-0 items-start justify-between gap-3', className)}>
       <div className="min-w-0">
-        {eyebrow ? <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{eyebrow}</p> : null}
-        <h2 className="mt-1 truncate text-sm font-medium text-white/90">{title}</h2>
+        {eyebrow ? <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{eyebrow}</p> : null}
+        <h2 className="mt-1 truncate text-sm font-medium text-[color:var(--wolfy-text-primary)]">{title}</h2>
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </div>
@@ -107,8 +110,8 @@ export function TerminalPageHeading({
       className={cn('flex min-w-0 items-start justify-between gap-3', className)}
     >
       <div className="min-w-0">
-        {eyebrow ? <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{eyebrow}</p> : null}
-        <h1 className="mt-1 truncate text-xl font-semibold tracking-tight text-white md:text-2xl">{title}</h1>
+        {eyebrow ? <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{eyebrow}</p> : null}
+        <h1 className="mt-1 truncate text-xl font-semibold text-[color:var(--wolfy-text-primary)] md:text-2xl">{title}</h1>
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </div>
@@ -131,9 +134,9 @@ export function TerminalMetric({
 }) {
   return (
     <TerminalNestedBlock data-testid={dataTestId} className={className} {...props}>
-      <div className="text-[10px] uppercase tracking-widest text-white/35">{label}</div>
-      <div className={cn('mt-1 font-mono tracking-tight text-white', valueClassName)}>{value}</div>
-      {subvalue ? <div className="mt-1 text-xs text-white/35">{subvalue}</div> : null}
+      <div className="text-[11px] text-[color:var(--wolfy-text-muted)]">{label}</div>
+      <div className={cn('mt-1 font-mono tracking-tight text-[color:var(--wolfy-text-primary)]', valueClassName)}>{value}</div>
+      {subvalue ? <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">{subvalue}</div> : null}
     </TerminalNestedBlock>
   );
 }
@@ -141,10 +144,10 @@ export function TerminalMetric({
 type TerminalButtonVariant = 'primary' | 'secondary' | 'compact' | 'danger';
 
 const TERMINAL_BUTTON_CLASSES: Record<TerminalButtonVariant, string> = {
-  primary: 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium shadow-[0_0_15px_rgba(139,92,246,0.3)] px-6 py-2.5 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed',
-  secondary: 'bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white hover:border-white/20 px-5 py-2.5 rounded-lg transition-all duration-300',
-  compact: 'bg-white/[0.03] border border-white/10 text-white/60 hover:bg-white/[0.07] hover:text-white px-3 py-1.5 rounded-lg text-xs transition-all',
-  danger: 'bg-rose-500/5 border border-rose-400/20 text-rose-300 hover:bg-rose-500/10 hover:border-rose-400/30 px-3 py-1.5 rounded-lg text-xs transition-all',
+  primary: 'border border-[color:var(--wolfy-accent)] bg-[var(--wolfy-accent)] text-[#f7f8ff] font-medium px-5 py-2.5 rounded-md transition-colors hover:bg-[#6f79dc] disabled:opacity-50 disabled:cursor-not-allowed',
+  secondary: 'border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-divider)] px-4 py-2.5 rounded-md transition-colors',
+  compact: 'border border-[color:var(--wolfy-border-subtle)] bg-transparent text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)] px-3 py-1.5 rounded-md text-xs transition-colors',
+  danger: 'border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-transparent text-[color:var(--wolfy-market-down)] hover:bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_10%,transparent)] px-3 py-1.5 rounded-md text-xs transition-colors',
 };
 
 export const TerminalButton = /* @__PURE__ */ React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -165,11 +168,11 @@ TerminalButton.displayName = 'TerminalButton';
 type TerminalChipVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info';
 
 const TERMINAL_CHIP_CLASSES: Record<TerminalChipVariant, string> = {
-  neutral: 'bg-white/5 border border-white/10 text-white/50 text-xs font-mono px-2.5 py-1 rounded-md',
-  success: 'bg-emerald-400/5 border border-emerald-400/20 text-emerald-300 text-xs px-2.5 py-1 rounded-md',
-  caution: 'bg-amber-300/5 border border-amber-300/20 text-amber-300 text-xs px-2.5 py-1 rounded-md',
-  danger: 'bg-rose-500/5 border border-rose-400/20 text-rose-300 text-xs px-2.5 py-1 rounded-md',
-  info: 'bg-cyan-400/5 border border-cyan-300/20 text-cyan-300 text-xs px-2.5 py-1 rounded-md',
+  neutral: 'bg-[var(--wolfy-surface-input)] border border-[color:var(--wolfy-border-subtle)] text-[color:var(--wolfy-text-muted)] text-xs font-mono px-2.5 py-1 rounded-md',
+  success: 'bg-transparent border border-[color:color-mix(in_srgb,var(--wolfy-market-up)_32%,transparent)] text-[color:var(--wolfy-market-up)] text-xs px-2.5 py-1 rounded-md',
+  caution: 'bg-transparent border border-amber-300/25 text-amber-200 text-xs px-2.5 py-1 rounded-md',
+  danger: 'bg-transparent border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_32%,transparent)] text-[color:var(--wolfy-market-down)] text-xs px-2.5 py-1 rounded-md',
+  info: 'bg-transparent border border-[color:color-mix(in_srgb,var(--wolfy-accent)_36%,transparent)] text-[color:var(--wolfy-accent)] text-xs px-2.5 py-1 rounded-md',
 };
 
 export function TerminalChip({
@@ -200,12 +203,12 @@ export function TerminalEmptyState({
     <div
       data-testid={dataTestId || 'terminal-empty-state'}
       data-terminal-primitive="empty-state"
-      className={cn('flex min-h-[88px] items-center justify-between gap-3 rounded-xl border border-white/[0.03] bg-black/10 px-4 py-3 text-xs text-white/30', className)}
+      className={cn('flex min-h-[72px] items-center justify-between gap-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-3 text-xs text-[color:var(--wolfy-text-muted)]', className)}
       {...props}
     >
       <div className="min-w-0">
-        {title ? <p className="text-xs text-white/45">{title}</p> : null}
-        {children ? <div className="mt-1 text-xs leading-5 text-white/30">{children}</div> : null}
+        {title ? <p className="text-xs text-[color:var(--wolfy-text-secondary)]">{title}</p> : null}
+        {children ? <div className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{children}</div> : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </div>
@@ -215,10 +218,10 @@ export function TerminalEmptyState({
 type NoticeVariant = 'neutral' | 'info' | 'caution' | 'danger';
 
 const NOTICE_CLASSES: Record<NoticeVariant, string> = {
-  neutral: 'border-white/[0.05] bg-white/[0.02] text-white/55',
-  info: 'border-cyan-300/20 bg-cyan-400/5 text-cyan-100/80',
+  neutral: 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)]',
+  info: 'border-[color:color-mix(in_srgb,var(--wolfy-accent)_34%,transparent)] bg-transparent text-[color:var(--wolfy-accent)]',
   caution: 'border-amber-300/20 bg-amber-300/5 text-amber-100/80',
-  danger: 'border-rose-400/20 bg-rose-500/5 text-rose-100/80',
+  danger: 'border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-transparent text-[color:var(--wolfy-market-down)]',
 };
 
 export function TerminalNotice({
@@ -244,7 +247,7 @@ export function TerminalDenseList({ className, children, ...props }: PrimitivePr
 
 export function TerminalDenseTable({ className, children, ...props }: PrimitiveProps<HTMLDivElement>) {
   return (
-    <div data-terminal-primitive="dense-table" className={cn('overflow-x-auto no-scrollbar rounded-xl border border-white/5 bg-white/[0.02] text-xs', className)} {...props}>
+    <div data-terminal-primitive="dense-table" className={cn('overflow-x-auto no-scrollbar rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] text-xs', className)} {...props}>
       {children}
     </div>
   );
@@ -271,19 +274,19 @@ export function TerminalDisclosure({
       data-testid={dataTestId || 'terminal-disclosure'}
       data-terminal-primitive="disclosure"
       open={open}
-      className={cn('rounded-xl border border-white/5 bg-white/[0.02] px-2.5 py-2 text-xs backdrop-blur-md transition-all hover:border-white/10', className)}
+      className={cn('rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-2 text-xs transition-colors hover:border-[color:var(--wolfy-divider)]', className)}
       {...props}
     >
       <div className="flex min-w-0 items-center justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{title}</h3>
-          {summary ? <p className="mt-0.5 truncate text-[11px] text-white/38">{summary}</p> : null}
+          <h3 className="truncate text-xs font-medium text-[color:var(--wolfy-text-secondary)]">{title}</h3>
+          {summary ? <p className="mt-0.5 truncate text-[11px] text-[color:var(--wolfy-text-muted)]">{summary}</p> : null}
         </div>
         <button
           type="button"
           aria-expanded={open}
           aria-label={actionLabel}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/8 bg-white/[0.035] px-2 py-1 text-[11px] text-white/58 hover:bg-white/[0.07] hover:text-white"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-transparent px-2 py-1 text-[11px] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)]"
           onClick={() => setOpen((current) => !current)}
         >
           {open ? <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" /> : <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />}

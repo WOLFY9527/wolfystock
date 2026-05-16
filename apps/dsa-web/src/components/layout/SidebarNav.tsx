@@ -1,7 +1,7 @@
 /**
  * WolfyStock shell phase 1 preserves routing, archive access, language
  * toggling, completion badge, and logout confirmation while aligning nav
- * controls to the shared glass tokens.
+ * controls to the shared Linear OS tokens.
  */
 import React, { useState } from 'react';
 import {
@@ -518,16 +518,16 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
             {archiveAction}
             <div
               data-testid="shell-header-utility-island"
-              className="flex items-center gap-0.5 rounded-[14px] border border-white/[0.04] bg-white/[0.012] px-1.5 py-1 backdrop-blur-sm"
+              className="flex items-center gap-0.5 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-1.5 py-1"
             >
               {languageAction}
               {(settingsAction || systemAction || signInAction || logoutAction) ? (
-                <div className="h-3 w-px bg-white/[0.07]" data-testid="shell-header-utility-divider" />
+                <div className="h-3 w-px bg-[var(--wolfy-divider)]" data-testid="shell-header-utility-divider" />
               ) : null}
               {settingsAction}
               {signInAction}
               {logoutAction && (settingsAction || signInAction) ? (
-                <div className="h-3 w-px bg-white/[0.07]" data-testid="shell-header-utility-divider" />
+                <div className="h-3 w-px bg-[var(--wolfy-divider)]" data-testid="shell-header-utility-divider" />
               ) : null}
               {logoutAction}
             </div>

@@ -1,7 +1,6 @@
 /**
- * WolfyStock shell phase 1 keeps routing, drawer orchestration, and rail
- * injection unchanged while moving the shared workspace frame to edge-to-edge
- * layout tokens and calmer glass navigation controls.
+ * WolfyStock shell keeps routing, drawer orchestration, and rail injection
+ * unchanged while the shared frame owns the Linear OS canvas and rhythm.
  */
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';

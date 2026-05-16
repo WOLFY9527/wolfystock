@@ -9,15 +9,21 @@ import {
 } from '../TerminalPrimitives';
 
 describe('TerminalPrimitives', () => {
-  it('renders the standard ghost panel material', () => {
+  it('renders legacy panels with Linear OS material', () => {
     render(<TerminalPanel data-testid="panel">Panel</TerminalPanel>);
 
     const panel = screen.getByTestId('panel');
     expect(panel).toHaveAttribute('data-terminal-primitive', 'panel');
-    expect(panel).toHaveClass('bg-white/[0.02]', 'border', 'border-white/5', 'backdrop-blur-md', 'rounded-[16px]', 'p-5');
+    expect(panel).toHaveClass(
+      'bg-[var(--wolfy-surface-console)]',
+      'border-[color:var(--wolfy-border-subtle)]',
+      'text-[color:var(--wolfy-text-primary)]',
+      'shadow-none',
+    );
+    expect(panel).not.toHaveClass('backdrop-blur-md', 'bg-white/[0.02]', 'rounded-[16px]');
   });
 
-  it('renders button variants with terminal tokens', () => {
+  it('renders button variants with Linear OS tokens', () => {
     render(
       <>
         <TerminalButton variant="primary">Run</TerminalButton>
@@ -27,13 +33,14 @@ describe('TerminalPrimitives', () => {
       </>,
     );
 
-    expect(screen.getByRole('button', { name: 'Run' })).toHaveClass('from-blue-600', 'to-purple-600');
-    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('bg-white/5', 'border-white/10');
-    expect(screen.getByRole('button', { name: 'More' })).toHaveClass('bg-white/[0.03]', 'text-xs');
-    expect(screen.getByRole('button', { name: 'Delete' })).toHaveClass('bg-rose-500/5', 'border-rose-400/20');
+    expect(screen.getByRole('button', { name: 'Run' })).toHaveClass('bg-[var(--wolfy-accent)]', 'rounded-md');
+    expect(screen.getByRole('button', { name: 'Run' }).className).not.toContain('gradient');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('bg-[var(--wolfy-surface-input)]', 'border-[color:var(--wolfy-border-subtle)]');
+    expect(screen.getByRole('button', { name: 'More' })).toHaveClass('bg-transparent', 'text-xs');
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveClass('text-[color:var(--wolfy-market-down)]');
   });
 
-  it('renders chip variants with quiet terminal materials', () => {
+  it('renders chip variants with quiet Linear OS materials', () => {
     render(
       <>
         <TerminalChip variant="neutral">Neutral</TerminalChip>
@@ -44,18 +51,18 @@ describe('TerminalPrimitives', () => {
       </>,
     );
 
-    expect(screen.getByText('Neutral')).toHaveClass('bg-white/5', 'text-white/50');
-    expect(screen.getByText('Success')).toHaveClass('bg-emerald-400/5', 'text-emerald-300');
-    expect(screen.getByText('Caution')).toHaveClass('bg-amber-300/5', 'text-amber-300');
-    expect(screen.getByText('Danger')).toHaveClass('bg-rose-500/5', 'text-rose-300');
-    expect(screen.getByText('Info')).toHaveClass('bg-cyan-400/5', 'text-cyan-300');
+    expect(screen.getByText('Neutral')).toHaveClass('bg-[var(--wolfy-surface-input)]', 'text-[color:var(--wolfy-text-muted)]');
+    expect(screen.getByText('Success')).toHaveClass('text-[color:var(--wolfy-market-up)]');
+    expect(screen.getByText('Caution')).toHaveClass('bg-transparent', 'text-amber-200');
+    expect(screen.getByText('Danger')).toHaveClass('text-[color:var(--wolfy-market-down)]');
+    expect(screen.getByText('Info')).toHaveClass('text-[color:var(--wolfy-accent)]');
   });
 
   it('renders compact empty states', () => {
     render(<TerminalEmptyState title="暂无数据" />);
 
     const empty = screen.getByTestId('terminal-empty-state');
-    expect(empty).toHaveClass('min-h-[88px]', 'border-white/[0.03]', 'text-xs', 'text-white/30');
+    expect(empty).toHaveClass('min-h-[72px]', 'border-[color:var(--wolfy-border-subtle)]', 'text-xs', 'text-[color:var(--wolfy-text-muted)]');
     expect(empty).toHaveTextContent('暂无数据');
   });
 

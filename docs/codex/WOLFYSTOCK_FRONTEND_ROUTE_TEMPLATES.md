@@ -1,259 +1,202 @@
 # WolfyStock Frontend Route Templates
 
-Purpose: keep WolfyStock pages feeling like one product by classifying every route into a small set of Linear-inspired product surfaces.
+Purpose: keep WolfyStock pages on the Linear OS route taxonomy.
+
+All frontend implementation tasks must classify the target route before editing. Do not add a new template unless the task explicitly scopes a new route family.
 
 Read with:
 
 - `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
+- `WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`
 - `WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md`
-- `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
 
-Before editing a route, classify it below. Do not invent a new page architecture unless the task explicitly scopes a prototype.
-
----
-
-## Template A: Research Console
+## Template A: ResearchConsole
 
 Routes:
 
-- 首页 / Home
-- 决策台 / AI decision station
-- Chat / AI research
-- generated reports
+- Home
+- AI decision station
+- Chat and generated research surfaces when focused on one symbol or one report
 
 Structure:
 
-1. Compact semantic header or command/search bar.
-2. Primary object identity.
-3. Main decision/state.
-4. Main chart/report/evidence surface.
+1. Wide command/search bar.
+2. Identity and decision state.
+3. Key level strip.
+4. Main chart/report/evidence workspace.
 5. Compact context rail when useful.
-6. Data/source details collapsed.
+6. Data/source detail in drawer or disclosure.
 
 Rules:
 
-- Result/input is the hero, not onboarding copy.
-- No bento card grid as the first-fold architecture.
-- No tutorial wall in the first viewport.
-- Evidence/debug details hidden or drawer-based.
-- Financial charts must not be fake if presented as market charts.
+- result/input is the hero, not onboarding copy;
+- chart data must be real when presented as market data;
+- no bento/card-first first fold;
+- no fake LLM or market content;
+- no raw provider/debug detail in the primary flow.
 
----
-
-## Template B: Ranking Board
+## Template B: RankingBoard
 
 Routes:
 
-- 扫描器
-- scanner results
+- Scanner
 - ranked candidates
+- scanner results
 
 Structure:
 
-1. Compact command/filter bar.
+1. Command/filter strip.
 2. Status strip.
-3. Ranked table/list.
-4. Selected detail panel or inline drawer.
+3. Ranked rows or table.
+4. Selected detail rail/drawer.
 5. Collapsed diagnostics/history/strategy.
 
 Rules:
 
-- Candidate list/table is the anchor.
-- No persistent left/right rail by default.
-- Controls above results, not isolated in a wasted column.
-- Candidate rows use one primary action plus `更多`.
-- Candidate cards must not become full mini-reports.
-- Diagnostics are below/collapsed.
+- candidates are the anchor;
+- candidate rows get one primary action plus secondary detail;
+- do not turn each candidate into a mini-report card;
+- controls remain close to results;
+- diagnostics stay lower priority.
 
----
-
-## Template C: Dense List / Table
+## Template C: WatchBoard / DenseList
 
 Routes:
 
-- 观察列表
-- logs
-- compact records
-- entity lists
+- Watchlist
+- compact entity lists
+- logs when not operator-only
 
 Structure:
 
 1. Compact title/status.
-2. Command/filter row.
-3. Dense list/table.
+2. Add/filter row.
+3. Dense list or table.
 4. Row actions.
-5. Collapsed secondary detail.
+5. Selected detail or collapsed secondary detail.
 
 Rules:
 
-- Table/list first.
-- Empty state compact.
-- Batch actions do not dominate.
-- No card slab around every row.
+- list/table first;
+- empty state is compact;
+- batch actions do not dominate;
+- no card slab around every row.
 
----
-
-## Template D: Market Monitor
+## Template D: MarketMonitor
 
 Routes:
 
-- 市场总览
-- 流动性监测
-- 轮动雷达
+- Market Overview
+- Liquidity Monitor
+- Rotation Radar
 - macro/liquidity/rotation views
 
 Structure:
 
 1. Regime/status strip.
-2. Main market board/chart modules.
-3. Ranked or comparative lists.
-4. Selected detail if useful.
+2. Main market board or chart workspace.
+3. Ranked/comparative rows.
+4. Selected detail when useful.
 5. Collapsed source/runtime details.
 
 Rules:
 
-- Regime and primary market state first.
-- Missing data compact and honest.
-- Source/runtime diagnostic details collapsed.
-- Crypto tab must not promote unrelated US/CN/HK indices as primary data.
+- regime and primary market state first;
+- missing data compact and honest;
+- source/runtime diagnostics collapsed;
+- no unrelated indices promoted as primary data.
 
----
-
-## Template E: Ledger / Exposure Board
+## Template E: RiskConsole / LedgerBoard
 
 Routes:
 
-- 持仓
+- Portfolio
 - transactions
 - cash ledger
+- exposure and risk views
 
 Structure:
 
 1. Account/exposure/P&L status.
-2. Holdings/exposure board.
-3. Risk and allocation.
-4. Activity/ledger details.
-5. Secondary manual tooling collapsed or visually secondary.
+2. Holdings and exposure board.
+3. Risk and allocation surface.
+4. Activity/ledger rows.
+5. Secondary manual tooling.
 
 Rules:
 
-- Portfolio accounting semantics must not change in UI work.
-- Native currency remains visible when FX conversion fails.
-- Display currency belongs in Settings or compact controls, not a large hero block.
+- portfolio accounting semantics must not change in UI work;
+- native currency remains visible when FX conversion fails;
+- display currency belongs in compact controls or settings, not a hero block.
 
----
-
-## Template F: Backtest Report Workspace
+## Template F: ExperimentConsole
 
 Routes:
 
-- 回测
-- 回测结果
-- strategy reports
-
-Structure:
-
-1. Strategy identity/status.
-2. Equity curve + drawdown.
-3. Core metrics strip.
-4. Tabs for trades/monthly/risk/parameters/logs.
-5. Raw execution/data quality collapsed.
-
-Rules:
-
-- Summary first, details second.
-- Do not stack dozens of metric cards.
-- UI refactors must not change calculations/fills/costs/metrics.
-
----
-
-## Template G: Hypothesis Lab
-
-Routes:
-
-- 期权实验室
+- Options Lab
 - strategy labs
+- hypothesis workspaces
 
 Structure:
 
 1. Symbol/hypothesis command area.
-2. Risk boundary and assumptions.
-3. Option chain / strategy matrix.
-4. Payoff/risk view.
+2. Assumptions and risk boundary.
+3. Option chain or strategy matrix.
+4. Payoff/risk workspace.
 5. Data limitations collapsed.
 
 Rules:
 
-- Do not add trading CTAs unless explicitly scoped.
-- Risk warnings compact but visible.
-- No large warning walls.
+- one hypothesis at a time;
+- no trading/order CTA unless explicitly scoped;
+- preserve options ranking, gates, recommendation, payoff, and no-trade semantics.
 
----
-
-## Template H: Ops Console
+## Template G: OpsConsole
 
 Routes:
 
-- 控制台
-- 日志中心
-- 成本观测
-- 证据审核
+- Admin console
+- Logs
+- Cost observability
+- Evidence review
 - Provider operations
-- 熔断诊断
-- 通知
-- 用户管理
-- 系统设置
+- Notifications
+- Users
+- System settings
 
 Structure:
 
 1. Operator status strip.
 2. Main queue/table/list.
-3. Selected detail drawer.
+3. Selected detail panel or drawer.
 4. Collapsed diagnostics/runbook/schema/artifacts.
 5. Isolated danger zone.
 
 Rules:
 
-- Diagnostics are allowed but layered.
-- Chinese-first headings.
-- Technical identifiers may stay as secondary metadata.
-- Raw JSON/schema/runbook/payload collapsed by default.
-- No secrets/tokens/Authorization/cookies.
+- technical detail is allowed but layered;
+- raw JSON/schema/runbook details collapsed by default;
+- no secrets/tokens/cookies/Authorization headers;
+- admin visual density must not leak into user-facing routes.
 
----
+## Width Rhythm
 
-## Template I: Empty / Setup
+All major product routes use near-full workspace rhythm:
 
-Routes/conditions:
+- app shell owns root canvas;
+- route shell owns content max width;
+- no page-local black slab;
+- no nested main-page `max-w-6xl` islands for workbenches;
+- mobile stacks to one column without horizontal overflow.
 
-- no holdings
-- no watchlist items
-- no backtest results
-- no cash ledger
-- no scan candidates
-- no configured data source
+## Page Review Checklist
 
-Structure:
-
-1. One concise state line.
-2. Optional one primary action.
-3. Optional short secondary action.
-4. No giant warning card for harmless emptiness.
-
-Examples:
-
-```text
-暂无持仓。添加持仓或导入交易后显示组合状态。
-暂无候选。调整条件后启动扫描。
-暂无现金流水。
-```
-
----
-
-## Global Rules
-
-- Do not show meta-explanatory UI copy.
-- Do not show raw provider/debug/schema terms in normal user flow.
-- Do not make every route a card dashboard.
-- The primary task must be visible above fold at 1440px.
-- Mobile 390px must not horizontally overflow.
+- Which template owns the route?
+- Is there one dominant surface?
+- Is the command/search/filter row in the same charcoal system?
+- Are rows/tables/strips/rails used before cards?
+- Are warnings consolidated?
+- Are empty states compact?
+- Are diagnostics hidden or layered?
+- Does mobile stack cleanly?
+- Is behavior unchanged?
