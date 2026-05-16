@@ -42,6 +42,11 @@ describe('LinearPrimitives', () => {
       </ResearchConsoleShell>,
     );
 
+    expect(screen.getByText('Search').closest('[data-linear-primitive="research-console-shell"]')).toHaveClass(
+      'bg-[var(--wolfy-surface-console)]',
+      'border-[color:var(--wolfy-border-subtle)]',
+      'rounded-lg',
+    );
     expect(screen.getByText('Search').closest('[data-linear-primitive="command-bar"]')).toHaveClass(
       'bg-[var(--wolfy-surface-input)]',
       'rounded-lg',

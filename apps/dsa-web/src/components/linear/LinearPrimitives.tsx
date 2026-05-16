@@ -94,13 +94,16 @@ export function ResearchConsoleShell({
   return (
     <div
       data-linear-primitive="research-console-shell"
-      className={cn('flex w-full min-w-0 flex-col gap-4', className)}
+      className={cn(
+        'flex w-full min-w-0 flex-col gap-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-2 shadow-none md:p-3',
+        className,
+      )}
       {...props}
     >
       {command}
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid min-w-0 overflow-hidden rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-console)] lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0">{children}</div>
-        {rail ? <div className="min-w-0">{rail}</div> : null}
+        {rail ? <div className="min-w-0 border-t border-[color:var(--wolfy-divider)] lg:border-l lg:border-t-0">{rail}</div> : null}
       </div>
     </div>
   );
@@ -206,7 +209,16 @@ export function KeyLevelStrip({
   className,
   ...props
 }: Omit<LinearPrimitiveProps<HTMLDivElement>, 'children'> & {
-  levels: Array<{ label: React.ReactNode; value: React.ReactNode; tone?: 'neutral' | 'up' | 'down'; key?: React.Key }>;
+  levels: Array<{
+    label: React.ReactNode;
+    value: React.ReactNode;
+    tone?: 'neutral' | 'up' | 'down';
+    key?: React.Key;
+    testId?: string;
+    className?: string;
+    valueClassName?: string;
+    valueStyle?: React.CSSProperties;
+  }>;
 }) {
   return (
     <div
@@ -215,15 +227,20 @@ export function KeyLevelStrip({
       {...props}
     >
       {levels.map((level, index) => (
-        <div key={level.key ?? index} className="min-w-0 px-2 py-1">
+        <div key={level.key ?? index} className={cn('min-w-0 px-2 py-1', level.className)} data-testid={level.testId}>
           <div className="text-[11px] text-[color:var(--wolfy-text-muted)]">{level.label}</div>
           <div
             className={cn(
               'mt-0.5 truncate font-mono text-sm font-semibold',
-              level.tone === 'up' && 'text-[color:var(--wolfy-market-up)]',
-              level.tone === 'down' && 'text-[color:var(--wolfy-market-down)]',
-              (!level.tone || level.tone === 'neutral') && 'text-[color:var(--wolfy-text-primary)]',
+              level.valueClassName
+                ? level.valueClassName
+                : [
+                  level.tone === 'up' && 'text-[color:var(--wolfy-market-up)]',
+                  level.tone === 'down' && 'text-[color:var(--wolfy-market-down)]',
+                  (!level.tone || level.tone === 'neutral') && 'text-[color:var(--wolfy-text-primary)]',
+                ],
             )}
+            style={level.valueStyle}
           >
             {level.value}
           </div>
@@ -236,11 +253,13 @@ export function KeyLevelStrip({
 export function CatalystRows({
   items,
   emptyText = '暂无已验证催化剂',
+  emptyTestId,
   className,
   ...props
 }: Omit<LinearPrimitiveProps<HTMLDivElement>, 'children'> & {
-  items: Array<{ title: React.ReactNode; meta?: React.ReactNode; status?: React.ReactNode; key?: React.Key }>;
+  items: Array<{ title: React.ReactNode; meta?: React.ReactNode; status?: React.ReactNode; key?: React.Key; testId?: string }>;
   emptyText?: React.ReactNode;
+  emptyTestId?: string;
 }) {
   return (
     <div
@@ -249,7 +268,7 @@ export function CatalystRows({
       {...props}
     >
       {items.length ? items.map((item, index) => (
-        <div key={item.key ?? index} className="grid min-w-0 gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div key={item.key ?? index} className="grid min-w-0 gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center" data-testid={item.testId}>
           <div className="min-w-0">
             <p className="truncate text-[color:var(--wolfy-text-primary)]">{item.title}</p>
             {item.meta ? <p className="mt-0.5 truncate text-[color:var(--wolfy-text-muted)]">{item.meta}</p> : null}
@@ -257,7 +276,7 @@ export function CatalystRows({
           {item.status ? <div className="text-[color:var(--wolfy-text-secondary)]">{item.status}</div> : null}
         </div>
       )) : (
-        <div className="py-2 text-[color:var(--wolfy-text-muted)]">{emptyText}</div>
+        <div className="py-2 text-[color:var(--wolfy-text-muted)]" data-testid={emptyTestId}>{emptyText}</div>
       )}
     </div>
   );

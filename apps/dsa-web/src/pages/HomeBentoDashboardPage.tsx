@@ -7,11 +7,18 @@ import { publicAnalysisApi } from '../api/publicAnalysis';
 import { normalizeReportQuality } from '../api/reportNormalizer';
 import { withFallback } from '../api/withFallback';
 import {
-  BENTO_SURFACE_ROOT_CLASS,
   DeepReportDrawer,
   type SignalTone,
 } from '../components/home-bento';
 import { HomeCandlestickChart, type HomeCandlestickChartContext } from '../components/home-bento/HomeCandlestickChart';
+import {
+  CatalystRows,
+  ConsoleBoard,
+  ConsoleContextRail,
+  KeyLevelStrip,
+  ResearchConsoleShell,
+  WolfyCommandBar,
+} from '../components/linear';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useUiPreferences } from '../contexts/UiPreferencesContext';
@@ -982,29 +989,22 @@ function LinearKeyLevelsStrip({
   const { marketColorConvention } = useUiPreferences();
   const levels = buildLinearLevelMetrics(metrics, locale);
   return (
-    <div
-      className="grid min-w-0 grid-cols-1 border-y border-white/[0.06] sm:grid-cols-3"
-      data-testid="home-linear-key-levels"
-    >
-      {levels.map((metric, index) => (
-        <div
-          key={metric.label}
-          className={cn(
-            'min-w-0 px-0 py-3 sm:px-4',
-            index > 0 ? 'border-t border-white/[0.06] sm:border-l sm:border-t-0' : '',
-          )}
-          data-testid={`home-bento-strategy-metric-${metric.label}`}
-        >
-          <p className="truncate text-[11px] font-medium tracking-[0] text-white/38">{getMetricLabelForStrip(locale, metric.label)}</p>
-          <p
-            className={cn('mt-1 truncate font-mono text-[15px] font-semibold', metricValueClass(metric, marketColorConvention))}
-            style={toneTextStyle(metric.tone || 'neutral', marketColorConvention)}
-          >
-            {metric.value}
-          </p>
-        </div>
-      ))}
-    </div>
+    <KeyLevelStrip
+      data-testid="home-research-key-levels"
+      className="gap-0 border-y border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-0"
+      levels={levels.map((metric, index) => ({
+        key: metric.label,
+        label: getMetricLabelForStrip(locale, metric.label),
+        value: metric.value,
+        testId: `home-bento-strategy-metric-${metric.label}`,
+        className: cn(
+          'px-0 py-3 sm:px-4',
+          index > 0 ? 'border-t border-[color:var(--wolfy-divider)] sm:border-l sm:border-t-0' : '',
+        ),
+        valueClassName: cn('mt-1 text-sm font-semibold', metricValueClass(metric, marketColorConvention)),
+        valueStyle: toneTextStyle(metric.tone || 'neutral', marketColorConvention),
+      }))}
+    />
   );
 }
 
@@ -1062,6 +1062,7 @@ function LinearTechnicalStructure({
           'grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_232px]',
           isGuest ? 'pointer-events-none opacity-80' : '',
         )}
+        data-testid="home-research-chart-workspace"
       >
         <HomeCandlestickChart
           ticker={ticker}
@@ -1182,11 +1183,11 @@ function LinearObservationPanel({
   ] as const;
 
   return (
-    <aside
-      className="relative min-w-0 border-t border-white/[0.055] bg-white/[0.012] px-4 py-5 lg:border-l lg:border-t-0 lg:px-5 lg:py-6"
-      data-testid="home-bento-secondary-stack"
+    <ConsoleContextRail
+      className="relative min-w-0 rounded-none border-0 bg-[var(--wolfy-surface-rail)] px-4 py-5 lg:px-5 lg:py-6"
+      data-testid="home-research-context-rail"
     >
-      <section className="min-w-0" data-testid="home-bento-card-strategy" data-research-card="opportunity">
+      <section className="min-w-0 pb-4" data-testid="home-bento-card-strategy" data-research-card="opportunity">
         <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
           <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Observation Framework' : '观察框架'}</h2>
           <button
@@ -1223,7 +1224,7 @@ function LinearObservationPanel({
       </section>
 
       <section
-        className="mt-4 min-w-0 border-t border-white/[0.055] pt-4"
+        className="min-w-0 pt-4"
         data-testid="home-bento-card-fundamentals"
         data-research-card="data-context"
       >
@@ -1253,7 +1254,7 @@ function LinearObservationPanel({
         </div>
       </section>
       {isGuest ? guestPaywall : null}
-    </aside>
+    </ConsoleContextRail>
   );
 }
 
@@ -1361,24 +1362,17 @@ function LinearEventsStrip({
           <span className="text-[11px] text-white/34">{events.length}{isEnglish ? ' rows' : ' 条'}</span>
         ) : null}
       </div>
-      {events.length ? (
-        <div className="divide-y divide-white/[0.055]">
-          {events.map((event, index) => (
-            <div key={`${event.label}-${index}`} className="grid min-w-0 gap-2 py-2.5 md:grid-cols-[5.5rem_minmax(0,1fr)_4.5rem] md:items-start">
-              <p className="text-[11px] text-white/34">{event.label}</p>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-white/78">{isEmptyDashboardValue(event.title) ? EMPTY_FIELD_VALUE : event.title}</p>
-                <p className="mt-0.5 line-clamp-1 text-xs text-white/42">{event.detail}</p>
-              </div>
-              <p className="text-[11px] text-white/42 md:text-right">{event.time}</p>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="py-1.5 text-xs leading-5 text-white/34" data-testid="home-linear-events-empty">
-          {isEnglish ? 'No verified catalysts' : '暂无已验证催化剂'}
-        </p>
-      )}
+      <CatalystRows
+        className="border-t border-[color:var(--wolfy-divider)]"
+        emptyText={isEnglish ? 'No verified catalysts' : '暂无已验证催化剂'}
+        emptyTestId="home-linear-events-empty"
+        items={events.map((event, index) => ({
+          key: `${event.label}-${index}`,
+          title: isEmptyDashboardValue(event.title) ? EMPTY_FIELD_VALUE : event.title,
+          meta: `${event.label} · ${event.detail}`,
+          status: event.time,
+        }))}
+      />
     </section>
   );
 }
@@ -4029,57 +4023,66 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const omnibarModule = (
     <div className="w-full shrink-0" data-testid="home-bento-omnibar-shell">
       <form
-        className="flex min-h-11 w-full min-w-0 flex-col gap-2 sm:h-11 sm:flex-row"
+        className="w-full min-w-0"
         data-testid="home-bento-omnibar"
         onSubmit={(event) => {
           event.preventDefault();
           void handleAnalyze();
         }}
       >
-        <div
-          className="group relative flex min-h-11 min-w-0 flex-1 items-center overflow-hidden rounded-lg border border-white/[0.07] bg-[#0d1015] transition-colors focus-within:border-[#5e6ad2]/55 focus-within:bg-[#10141b]"
-          data-testid="home-bento-omnibar-input-shell"
+        <WolfyCommandBar
+          data-testid="home-research-command-bar"
+          className="min-h-12 items-stretch gap-2 rounded-lg bg-[var(--wolfy-surface-input)] px-2 py-2 sm:flex-nowrap"
+          trailing={(
+            <>
+              <button
+                type="submit"
+                disabled={isBusy}
+                className="min-h-10 shrink-0 rounded-md border border-[#7f89ea]/35 bg-[var(--wolfy-accent)] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#6d77d9] disabled:cursor-wait disabled:bg-white/[0.05] disabled:text-white/42"
+                data-testid="home-bento-analyze-button"
+              >
+                {isHomeAnalyzing ? (locale === 'en' ? 'Analyzing...' : '分析中...') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
+              </button>
+              {!isGuest ? (
+                <button
+                  ref={openHistoryDrawerButton.ref}
+                  type="button"
+                  aria-label={locale === 'en' ? 'History' : '历史记录'}
+                  onClick={openHistoryDrawerButton.onClick}
+                  onPointerUp={openHistoryDrawerButton.onPointerUp}
+                  disabled={isBusy}
+                  className="flex min-h-10 shrink-0 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-4 text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-white/[0.055] hover:text-[color:var(--wolfy-text-primary)] disabled:cursor-wait disabled:text-white/34"
+                  data-testid="home-bento-history-drawer-trigger"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 1 1-3.2-6.9M21 4v5h-5" />
+                  </svg>
+                </button>
+              ) : null}
+            </>
+          )}
         >
-          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-            <Search className="h-4 w-4 text-white/40" />
-          </div>
-          <input
-            data-testid="home-bento-omnibar-input"
-            type="text"
-            className="h-full min-h-11 min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-white caret-[#93C5FD] outline-none [appearance:textfield] placeholder:text-white/30"
-            value={searchQuery}
-            onChange={(event) => {
-              setSearchQuery(event.target.value);
-            }}
-            autoComplete="off"
-            disabled={isBusy}
-            placeholder={copy?.omnibarPlaceholder || standbyCopy.omnibarPlaceholder}
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={isBusy}
-          className="min-h-11 shrink-0 rounded-lg border border-white/[0.08] bg-white/[0.035] px-5 text-sm font-semibold text-white/78 transition-colors hover:border-white/16 hover:bg-white/[0.065] hover:text-white disabled:cursor-wait disabled:text-white/42"
-          data-testid="home-bento-analyze-button"
-        >
-          {isHomeAnalyzing ? (locale === 'en' ? 'Analyzing...' : '分析中...') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
-        </button>
-        {!isGuest ? (
-          <button
-            ref={openHistoryDrawerButton.ref}
-            type="button"
-            aria-label={locale === 'en' ? 'History' : '历史记录'}
-            onClick={openHistoryDrawerButton.onClick}
-            onPointerUp={openHistoryDrawerButton.onPointerUp}
-            disabled={isBusy}
-            className="flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-white/[0.07] bg-[#0d1015] px-4 text-white/58 transition-colors hover:bg-white/[0.055] hover:text-white disabled:cursor-wait disabled:text-white/34"
-            data-testid="home-bento-history-drawer-trigger"
+          <div
+            className="group relative flex min-h-10 min-w-0 flex-1 items-center overflow-hidden rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] transition-colors focus-within:border-[#5e6ad2]/55 focus-within:bg-[#10141b]"
+            data-testid="home-bento-omnibar-input-shell"
           >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 1 1-3.2-6.9M21 4v5h-5" />
-            </svg>
-          </button>
-        ) : null}
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+              <Search className="h-4 w-4 text-white/40" />
+            </div>
+            <input
+              data-testid="home-bento-omnibar-input"
+              type="text"
+              className="h-full min-h-10 min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-white caret-[#93C5FD] outline-none [appearance:textfield] placeholder:text-white/30"
+              value={searchQuery}
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+              }}
+              autoComplete="off"
+              disabled={isBusy}
+              placeholder={copy?.omnibarPlaceholder || standbyCopy.omnibarPlaceholder}
+            />
+          </div>
+        </WolfyCommandBar>
       </form>
       {guestFallbackNotice ? (
         <p className="mt-3 text-xs text-white/50">{guestFallbackNotice}</p>
@@ -4094,11 +4097,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     <div
       ref={surfaceRef}
       data-testid="home-bento-dashboard"
-      data-bento-surface="true"
+      data-route-surface="ResearchConsole"
       aria-live={shouldGuardA11y ? 'polite' : undefined}
       className={getSafariReadySurfaceClassName(
         true,
-        `${BENTO_SURFACE_ROOT_CLASS} w-full flex-1 flex flex-col gap-5 min-h-0 min-w-0 bg-[#080a0d]`,
+        'w-full flex-1 flex flex-col gap-5 min-h-0 min-w-0 bg-[var(--wolfy-canvas)]',
       )}
     >
       {statusToast ? (
@@ -4153,19 +4156,41 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           const thesisCopy = readyCopy.decision.reasonBody || readyCopy.decision.summary || EMPTY_FIELD_VALUE;
           const stanceLabel = resolveLinearStanceLabel(locale, readyCopy.decision.signalLabel, readyCopy.decision.signalTone);
           return (
-            <div
-              data-testid="home-bento-grid"
-              data-bento-grid="true"
-              className="flex w-full min-w-0 flex-col gap-4"
+            <ResearchConsoleShell
+              data-testid="home-research-console"
+              command={omnibarModule}
+              className="gap-3"
+              rail={isHomeAnalyzing ? (
+                <ConsoleContextRail
+                  className="relative min-w-0 rounded-none border-0 bg-[var(--wolfy-surface-rail)] px-4 py-5 lg:px-5 lg:py-6"
+                  data-testid="home-research-context-rail"
+                >
+                  <InPlaceStrategySkeleton locale={locale} />
+                  <div className="grid gap-4 pt-4" data-testid="home-bento-secondary-grid">
+                    <InPlaceListSkeleton locale={locale} kind="tech" />
+                    <InPlaceListSkeleton locale={locale} kind="fundamentals" />
+                  </div>
+                </ConsoleContextRail>
+              ) : (
+                <LinearObservationPanel
+                  locale={locale}
+                  dashboard={readyCopy}
+                  dataQualityReport={activeDataQualityReport}
+                  sourceSummary={sourceSummary}
+                  isGuest={Boolean(isGuest)}
+                  guestPaywall={guestPaywall}
+                  onOpenStrategy={() => setActiveDrawer('strategy')}
+                  onOpenFundamentals={() => setActiveDrawer('fundamentals')}
+                />
+              )}
             >
-              {omnibarModule}
-              <div
-                className="grid min-w-0 rounded-[16px] border border-white/[0.055] bg-[#0d0f13] shadow-none lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_336px]"
-                data-testid="home-linear-shell"
+              <ConsoleBoard
+                className="rounded-none border-0 bg-transparent"
+                data-testid="home-research-board"
               >
                 <div
                   className="min-w-0 px-4 py-5 md:px-7 md:py-6"
-                  data-testid="home-bento-primary-stack"
+                  data-testid="home-research-primary-workspace"
                 >
                   {isHomeAnalyzing ? (
                     <InPlaceDecisionSkeleton
@@ -4287,39 +4312,19 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     </div>
                   )}
                 </div>
-                {isHomeAnalyzing ? (
-                  <aside
-                    className="min-w-0 border-t border-white/[0.055] bg-white/[0.012] px-4 py-5 lg:border-l lg:border-t-0 lg:px-5 lg:py-6"
-                    data-testid="home-bento-secondary-stack"
-                  >
-                    <InPlaceStrategySkeleton locale={locale} />
-                    <div className="mt-5 grid gap-4" data-testid="home-bento-secondary-grid">
-                      <InPlaceListSkeleton locale={locale} kind="tech" />
-                      <InPlaceListSkeleton locale={locale} kind="fundamentals" />
-                    </div>
-                  </aside>
-                ) : (
-                  <LinearObservationPanel
-                    locale={locale}
-                    dashboard={readyCopy}
-                    dataQualityReport={activeDataQualityReport}
-                    sourceSummary={sourceSummary}
-                    isGuest={Boolean(isGuest)}
-                    guestPaywall={guestPaywall}
-                    onOpenStrategy={() => setActiveDrawer('strategy')}
-                    onOpenFundamentals={() => setActiveDrawer('fundamentals')}
-                  />
-                )}
                 {!isHomeAnalyzing ? (
-                  <div className="min-w-0 border-t border-white/[0.055] px-4 py-3 md:px-7 lg:col-span-2">
+                  <div
+                    className="min-w-0 border-t border-[color:var(--wolfy-divider)] px-4 py-3 md:px-7"
+                    data-testid="home-research-catalysts"
+                  >
                     <LinearEventsStrip
                       locale={locale}
                       report={activeTraceReport}
                     />
                   </div>
                 ) : null}
-              </div>
-            </div>
+              </ConsoleBoard>
+            </ResearchConsoleShell>
           );
         })()}
       </main>
