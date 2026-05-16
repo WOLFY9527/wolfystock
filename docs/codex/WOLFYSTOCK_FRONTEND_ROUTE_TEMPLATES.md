@@ -2,7 +2,7 @@
 
 Purpose: keep WolfyStock pages on the Linear OS route taxonomy.
 
-All frontend implementation tasks must classify the target route before editing. Do not add a new template unless the task explicitly scopes a new route family.
+All frontend implementation tasks must classify the target route before editing. Do not add a new route template unless the task explicitly scopes a new route family.
 
 Read with:
 
@@ -16,13 +16,14 @@ Routes:
 
 - Home
 - AI decision station
-- Chat and generated research surfaces when focused on one symbol or one report
+- focused single-symbol research
+- generated research surfaces focused on one symbol or report
 
 Structure:
 
 1. Wide command/search bar.
 2. Identity and decision state.
-3. Key level strip.
+3. Key-level strip.
 4. Main chart/report/evidence workspace.
 5. Compact context rail when useful.
 6. Data/source detail in drawer or disclosure.
@@ -31,7 +32,7 @@ Rules:
 
 - result/input is the hero, not onboarding copy;
 - chart data must be real when presented as market data;
-- no bento/card-first first fold;
+- no card/bento-first first fold;
 - no fake LLM or market content;
 - no raw provider/debug detail in the primary flow.
 
@@ -55,7 +56,7 @@ Rules:
 
 - candidates are the anchor;
 - candidate rows get one primary action plus secondary detail;
-- do not turn each candidate into a mini-report card;
+- do not turn each candidate into a mini report card;
 - controls remain close to results;
 - diagnostics stay lower priority.
 
@@ -65,7 +66,7 @@ Routes:
 
 - Watchlist
 - compact entity lists
-- logs when not operator-only
+- non-operator logs
 
 Structure:
 
@@ -80,7 +81,7 @@ Rules:
 - list/table first;
 - empty state is compact;
 - batch actions do not dominate;
-- no card slab around every row.
+- no slab around every row.
 
 ## Template D: MarketMonitor
 
@@ -175,28 +176,6 @@ Structure:
 Rules:
 
 - technical detail is allowed but layered;
-- raw JSON/schema/runbook details collapsed by default;
+- raw JSON/schema/runbook details are collapsed by default;
 - no secrets/tokens/cookies/Authorization headers;
-- admin visual density must not leak into user-facing routes.
-
-## Width Rhythm
-
-All major product routes use near-full workspace rhythm:
-
-- app shell owns root canvas;
-- route shell owns content max width;
-- no page-local black slab;
-- no nested main-page `max-w-6xl` islands for workbenches;
-- mobile stacks to one column without horizontal overflow.
-
-## Page Review Checklist
-
-- Which template owns the route?
-- Is there one dominant surface?
-- Is the command/search/filter row in the same charcoal system?
-- Are rows/tables/strips/rails used before cards?
-- Are warnings consolidated?
-- Are empty states compact?
-- Are diagnostics hidden or layered?
-- Does mobile stack cleanly?
-- Is behavior unchanged?
+- admin visual density must not define user-facing product routes.

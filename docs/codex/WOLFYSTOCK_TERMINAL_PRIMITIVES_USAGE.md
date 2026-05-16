@@ -2,7 +2,7 @@
 
 This file name is kept for compatibility with older prompts and existing `Terminal*` exports.
 
-The old terminal, ghost-glass, cyber, OLED, and card-first guidance is retired. `Terminal*` primitives are legacy-compatible names only. They must render WolfyStock Linear OS material.
+`Terminal*` primitives are legacy-compatible component names only. They must render WolfyStock Linear OS material. They are not the preferred architecture for new user-facing work.
 
 New user-facing work should prefer:
 
@@ -12,31 +12,7 @@ apps/dsa-web/src/components/linear/
 
 ## Current Rule
 
-Existing pages may keep importing `TerminalPageShell`, `TerminalPanel`, `TerminalNestedBlock`, `TerminalButton`, `TerminalChip`, `TerminalDisclosure`, and dense workbench helpers.
-
-Those names must now map to:
-
-- charcoal surface ladder;
-- thin separators;
-- compact row density;
-- restrained blue active/focus state;
-- market green/red only for market semantics;
-- no glow, no glass, no OLED, no terminal cosplay.
-
-## Retired Defaults
-
-Do not use these as normal primitive material:
-
-- `backdrop-blur-*` on scrolling panels;
-- `bg-black`, `bg-black/20`, or pure black nested block defaults;
-- gradient CTA as the default primary action;
-- outer glow, neon shadow, or spotlight border;
-- `TerminalPageShell` or `TerminalPanel` as the preferred future architecture;
-- many nested panels to simulate hierarchy.
-
-## Compatibility Exports
-
-Expected legacy exports still exist:
+Existing pages may keep importing these names during migration:
 
 - `TerminalPageShell`
 - `TerminalGrid`
@@ -52,8 +28,27 @@ Expected legacy exports still exist:
 - `TerminalDenseList`
 - `TerminalDenseTable`
 - `TerminalDisclosure`
+- dense workbench helpers
 
-They should be treated as adapters while route migrations move toward `components/linear`.
+These names must map to:
+
+- charcoal surface ladder;
+- thin separators;
+- compact row density;
+- restrained blue active/focus state;
+- market green/red only for market semantics;
+- rows/tables/strips/rails before cards.
+
+## What This File No Longer Allows
+
+Do not use this file to justify:
+
+- treating `TerminalPageShell` or `TerminalPanel` as the future route architecture;
+- local page material systems;
+- nested panel hierarchies as default layout;
+- decorative material effects as ordinary hierarchy;
+- widened old cards as a new design system;
+- user-facing admin/backend density on product routes.
 
 ## Future-Facing Linear Primitives
 

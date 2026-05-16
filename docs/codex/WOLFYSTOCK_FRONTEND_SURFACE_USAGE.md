@@ -16,7 +16,7 @@ Read with:
 | Home | `ResearchConsole` | command bar, decision console, chart workspace, context rail |
 | Scanner | `RankingBoard` | filter/command strip, status strip, ranked rows/table, selected detail |
 | Watchlist | `WatchBoard` / `DenseList` | compact add/filter, dense rows, status strips, row detail |
-| Market Overview | `MarketMonitor` | regime strip, chart/workbench panels, ranked modules, source disclosure |
+| Market Overview | `MarketMonitor` | regime strip, chart/workbench surface, ranked/comparative modules, source disclosure |
 | Portfolio | `RiskConsole` / `LedgerBoard` | exposure/risk surface, holdings board, ledger rows, compact controls |
 | Options Lab | `ExperimentConsole` | symbol command, assumptions, payoff/risk surface, option matrix |
 | Admin/Ops | `OpsConsole` | operator status strip, queue/table, detail drawer, collapsed runbook |
@@ -25,44 +25,38 @@ Read with:
 
 - Page files own product hierarchy.
 - `components/linear` owns new Linear OS material and layout primitives.
-- `Terminal*` names are compatibility only and must render Linear OS material.
+- `Terminal*` names are compatibility adapters only.
 - Use one dominant surface per route.
 - Prefer rows, dividers, dense lists, tables, strips, drawers, and rails before cards.
 - Keep diagnostics and provider/runtime detail collapsed unless the route is explicitly admin/operator.
 
 ## Home: ResearchConsole
 
-Use for signed-in single-stock research.
-
 Required anatomy:
 
 - wide command/search bar;
 - stock identity and decision state;
-- key level strip;
+- key-level strip;
 - real chart workspace;
 - catalyst/event rows;
 - compact context rail;
 - report and source drawers.
 
-Do not do a card/bento-first Home migration unless the task explicitly names it and the approved target requires it.
+Do not perform a card/bento-first Home migration.
 
 ## Scanner: RankingBoard
 
-Use for ranked candidates.
-
 Required anatomy:
 
-- command/filter row or rail;
+- command/filter row;
 - status strip;
 - ranked rows or table;
 - selected candidate detail;
 - collapsed diagnostics/history/strategy.
 
-Candidate rows get one primary action plus secondary disclosure. Do not turn each candidate into a full report card.
+Candidate rows get one primary action plus secondary disclosure. Do not turn each candidate into a mini report card.
 
 ## Watchlist: WatchBoard / DenseList
-
-Use for saved symbols and evidence monitoring.
 
 Required anatomy:
 
@@ -74,8 +68,6 @@ Required anatomy:
 
 ## Market Overview: MarketMonitor
 
-Use for market regime, liquidity, and rotation views.
-
 Required anatomy:
 
 - regime/status strip;
@@ -86,8 +78,6 @@ Required anatomy:
 Missing data must be compact and truthful.
 
 ## Portfolio: RiskConsole / LedgerBoard
-
-Use for exposure, P&L, risk, holdings, activity, and cash ledger.
 
 Required anatomy:
 
@@ -101,8 +91,6 @@ UI work must not change accounting, FX, broker sync, or cost-basis semantics.
 
 ## Options Lab: ExperimentConsole
 
-Use for one options hypothesis at a time.
-
 Required anatomy:
 
 - symbol and status command strip;
@@ -111,18 +99,18 @@ Required anatomy:
 - option chain or strategy matrix;
 - collapsed data limitations.
 
-No buy/order language unless the task explicitly scopes trading actions and safety review.
+No buy/order language unless explicitly scoped and safety-reviewed.
 
 ## Admin/Ops: OpsConsole
 
-Admin and operator routes are allowed to be denser and more technical, but they must stay visually isolated from normal product routes.
+Admin/operator routes may be denser and more technical, but they must remain visually isolated from normal product routes.
 
 Required anatomy:
 
 - operator status strip;
 - main queue/table/list;
 - selected detail panel or drawer;
-- raw JSON/schema/runbook collapsed;
+- technical details collapsed;
 - danger zone isolated and confirmed.
 
 Admin/Ops must not leak into normal user-facing route language or masthead priority.
@@ -131,10 +119,9 @@ Admin/Ops must not leak into normal user-facing route language or masthead prior
 
 For visual changes, verify:
 
-- primary task visible above fold;
-- no horizontal overflow at 1440 and mobile widths;
-- 1920 uses workspace width efficiently;
+- primary task visible above the fold;
+- no horizontal overflow at desktop and mobile widths;
+- 1920px workspace uses width efficiently;
 - no pure-black gutters;
 - no card-dashboard feel unless intentionally report/editorial;
-- no terminal/glass/OLED chrome;
 - no raw provider/debug/schema leakage on user routes.

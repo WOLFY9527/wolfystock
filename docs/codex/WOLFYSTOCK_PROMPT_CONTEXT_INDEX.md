@@ -4,24 +4,19 @@ Purpose: keep Codex prompts short without losing safety or quality.
 
 Task prompts should reference these stable docs instead of repeating long boilerplate.
 
----
-
-## Always Read for Implementation Tasks
+## Always Read For Implementation Tasks
 
 ```text
 Read and obey:
 - docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md
-- docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md
 - docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md
 ```
-
----
 
 ## Prompt Templates
 
 Use:
 
-- `docs/codex/WOLFYSTOCK_CODEX_TASK_TEMPLATES.md`
+- `WOLFYSTOCK_CODEX_TASK_TEMPLATES.md`
 
 Task labels stay outside the code block:
 
@@ -35,8 +30,6 @@ or:
 任务类型：决策类（建议 Codex 5.5）
 ```
 
----
-
 ## Task Type Index
 
 ### Read-only architecture / triage
@@ -44,7 +37,6 @@ or:
 Read:
 
 - `WOLFYSTOCK_CODEX_STANDARD_GUARD.md`
-- `WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`
 - `WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`
 - task-specific docs/files
 
@@ -60,20 +52,18 @@ Rules:
 Read:
 
 - `WOLFYSTOCK_CODEX_STANDARD_GUARD.md`
-- `WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`
-- `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
 - `WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`
 - `WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md`
 - `WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md`
-- `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
 - `WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md`
+- `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
 - `WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`
+- `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
 
 ### Admin / operator UI implementation
 
-Read:
+Read frontend UI docs above plus:
 
-- frontend UI implementation docs above;
 - `WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md` if API/auth/provider/admin capabilities are near scope.
 
 ### Backend boundary / service implementation
@@ -81,7 +71,6 @@ Read:
 Read:
 
 - `WOLFYSTOCK_CODEX_STANDARD_GUARD.md`
-- `WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`
 - `WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md`
 - `WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`
 - relevant tests and service files.
@@ -107,13 +96,10 @@ Read:
 Read:
 
 - `WOLFYSTOCK_CODEX_STANDARD_GUARD.md`
-- `WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`
 - `WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`
 - relevant target docs/tests.
 
----
-
-## What Should Stay in Each Prompt
+## What Should Stay In Each Task Prompt
 
 Do not rely only on docs for task-specific facts. Each prompt must still include:
 
@@ -123,34 +109,28 @@ Do not rely only on docs for task-specific facts. Each prompt must still include
 - exact implementation scope;
 - exact validation commands;
 - browser routes/viewports if frontend;
-- commit/no-commit policy;
+- commit message or no-commit policy;
 - special stop conditions.
 
----
-
-## What Should Not Be Repeated
+## What Should Not Be Repeated In Prompts
 
 Do not repeat long lists from these docs unless the task is high-risk:
 
 - general git safety;
-- protected-domain list;
-- frontend design constitution;
-- Playwright invocation rules;
+- full protected-domain list;
+- frontend visual constitution;
+- Playwright invocation rule;
 - final report template;
 - artifact hygiene;
 - wrapper/deletion rules;
 - ci_gate policy.
 
----
+## Frontend Visual Authority Order
 
-## Codex App Local Environment
+For UI work:
 
-Default prompts should assume:
-
-```text
-Use the Codex App isolated task workspace.
-Use local environment: WolfyStock Fast.
-Base from latest origin/main.
-```
-
-Use shared main only when the user explicitly requests it.
+1. approved WolfyStock Linear mockup;
+2. `WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`;
+3. frontend surface/route docs;
+4. `DESIGN.md` as reference only;
+5. installed design skills as execution aids.

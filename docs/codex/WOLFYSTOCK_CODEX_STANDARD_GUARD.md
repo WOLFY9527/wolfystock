@@ -2,8 +2,6 @@
 
 Purpose: baseline operating contract for Codex tasks in the WolfyStock repository. Task prompts should reference this file instead of repeating fixed rules. Task prompts may add stricter task-specific rules.
 
----
-
 ## 0. Default Execution Model
 
 Default workflow:
@@ -19,12 +17,10 @@ Default workflow:
 Default dependency policy:
 
 - Do not run `pip install`, `npm install`, `npm ci`, or `npm audit fix` unless dependency/lock files changed or the task explicitly requires dependency refresh.
-- Reuse existing `.venv` and `node_modules` when provided by the environment.
-- Never run `npm audit fix` as setup.
+- Reuse the shared `.venv` and existing `node_modules` provided by `WolfyStock Fast`.
+- Never run `npm audit fix` as a setup step.
 
 Use same-main shared worktree rules only when the user explicitly asks to work directly in `/Users/yehengli/daily_stock_analysis`. See `WOLFYSTOCK_SHARED_MAIN_WORKTREE_PROTOCOL.md`.
-
----
 
 ## 1. Preflight
 
@@ -43,16 +39,14 @@ git diff --cached --name-only
 Stop and report if:
 
 - staged files exist before the task starts;
-- tracked dirty files exist before the task starts unless explicitly allowed;
+- tracked dirty files exist before the task starts unless the prompt explicitly allows them;
 - local branch is ahead of `origin/main` unexpectedly;
 - target files are already dirty;
-- the task would require checkout of forbidden long-lived branches;
+- the task would require checkout of forbidden long-lived lane branches;
 - the task would require manual worktree creation;
 - the task would require dependency installation outside scope.
 
-Untracked `.codex/` may exist. Do not stage it unless the task explicitly changes Codex config.
-
----
+Untracked `.codex/` may exist from local environment configuration. Do not stage it unless the task explicitly changes Codex config.
 
 ## 2. Git Safety
 
@@ -71,13 +65,11 @@ Rules:
 - Stage only task-related files explicitly.
 - Do not broad-format unrelated files.
 - Do not restore, clean, reset, revert, stash, move, or overwrite unrelated work.
-- If a changelog has unrelated hunks, stage only the task hunk or skip it and report why.
+- If a changelog has unrelated hunks, stage only the task hunk or skip changelog and report why.
 - Execution-class tasks should commit and push after validation unless blocked by tests, branch permissions, or explicit prompt scope.
 - Read-only tasks must not stage, commit, or push.
 
----
-
-## 3. Secrets and Sensitive Data
+## 3. Secrets And Sensitive Data
 
 Do not print, inspect, copy, commit, or log real values for:
 
@@ -87,7 +79,7 @@ Do not print, inspect, copy, commit, or log real values for:
 - provider or broker credentials;
 - webhook URLs;
 - private keys;
-- raw prompts, raw provider payloads, or raw LLM responses containing private content;
+- raw prompts, raw provider payloads, or raw LLM responses that may contain private content;
 - production DB contents;
 - stack traces containing secrets or internal payloads.
 
@@ -95,9 +87,7 @@ Env var names may be mentioned. Env var values must not be printed.
 
 Use sanitized reason codes, bounded labels, hashes, and redacted metadata.
 
----
-
-## 4. Dev Server and Port Safety
+## 4. Dev Server And Port Safety
 
 Do not casually kill or restart shared servers.
 
@@ -113,8 +103,6 @@ If a frontend/dev server is needed:
 - leave shared `5173` untouched unless the task owns it;
 - stop only task-owned temporary servers;
 - report inspected and used ports.
-
----
 
 ## 5. Protected Runtime Domains
 
@@ -134,13 +122,11 @@ Protected domains include:
 - Options Lab ranking/gates/recommendation policy;
 - API response shapes and stored contract versions.
 
-Task prompts should list only task-specific protected domains when near a protected area.
+Task prompts should list only task-specific protected domains when near a protected area; otherwise reference this guard and `WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md`.
 
----
+## 6. Engineering Cleanliness And Reuse
 
-## 6. Engineering Cleanliness and Reuse
-
-Before adding helpers, components, services, docs, wrappers, or namespaces:
+Before adding new helpers, components, services, docs, wrappers, or namespaces:
 
 - search for existing utilities, services, types, components, tests, and docs;
 - prefer deletion, consolidation, or direct reuse over adding a layer;
@@ -152,12 +138,11 @@ Wrapper rule:
 
 - New wrappers are forbidden unless they create a real boundary, have focused tests, and include a future deletion/migration path.
 - Compatibility layers are temporary; document owner, scope, and exit path.
-
----
+- Do not create generated markdown artifacts unless explicitly requested or genuinely needed. If created, report kept/deleted and why.
 
 ## 7. Frontend Design Rules
 
-Frontend implementation tasks must also read:
+Frontend implementation tasks should also read:
 
 - `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
 - `WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`
@@ -166,31 +151,22 @@ Frontend implementation tasks must also read:
 - `WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md`
 - `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
 
-Current visual direction:
-
-```text
-WolfyStock Linear OS
-charcoal canvas, slim product shell, quiet command bar
-one dominant console or board surface per route
-rows, tables, strips, rails, and drawers before cards
-Terminal* names are compatibility only, rendered with Linear OS material
-```
-
 Rules:
 
-- no terminal cosplay, OLED glow, ghost-glass, or bento/card-first regressions;
-- no pure-black root gutters, stretched slabs, or admin/Web1 chrome in user-facing routes;
-- new user-facing surfaces should prefer `apps/dsa-web/src/components/linear` primitives;
-- no Web3/dApp visual language unless task-scoped;
-- no raw provider/schema/debug leakage in default user UI;
-- no meta-explanatory UI copy such as `可信度较高`, `决策依据可查看`, `结果已整理`, `摘要可读`;
+- preserve WolfyStock Linear OS visual language;
+- use `components/linear` for new user-facing surfaces;
+- keep existing `Terminal*` imports compatibility-safe by rendering Linear OS material;
+- do not invent page-local card/chip/button/disclosure/status/empty-state material without justification;
+- visual unification should come from the shell, route surface taxonomy, charcoal token ladder, spacing rhythm, typography scale, and approved primitives;
+- no card-first regression, pure-black gutters, stretched slabs, generic admin layout, or ornamental visual effects on product routes;
+- no solid gray/zinc/slate/neutral slabs;
+- no native-looking controls;
+- no default scrollbars;
 - Chinese UI labels by default;
-- desktop and mobile layouts must both be usable;
+- raw/debug/provider/schema/developer details collapsed by default;
+- desktop and mobile/narrow layouts must both be usable;
 - no horizontal overflow;
-- primary task must be visible above fold;
-- critical warnings remain honest but compact.
-
----
+- no user-visible raw provider/schema/fixture/mock/debug leakage.
 
 ## 8. Financial/Product Safety
 
@@ -198,73 +174,82 @@ Do not add buy/sell/order CTAs unless explicitly requested and safety-reviewed.
 
 Forbidden wording for trading/Options surfaces:
 
-```text
-买入按钮
-下单
-立即交易
-必买
-稳赚
-保证收益
-guaranteed
-best contract
-AI recommends you buy
-```
+- `买入按钮`
+- `下单`
+- `立即交易`
+- `必买`
+- `稳赚`
+- `保证收益`
+- `guaranteed`
+- `best contract`
+- `AI recommends you buy`
 
 Use analytical labels such as:
 
-```text
-数据不足，禁止判断
-不建议
-仅观察
-有条件可交易
-高风险，仅小仓验证
-```
+- `数据不足，禁止判断`
+- `不建议`
+- `仅观察`
+- `有条件可交易`
+- `高风险，仅小仓验证`
 
-Do not present outputs as personalized financial advice. Preserve disclaimers and risk boundaries.
+Do not present outputs as personalized financial advice. Preserve no-advice disclosure where relevant.
 
----
+## 9. Validation Policy
 
-## 9. Validation
+Always run task-focused validation.
 
-Run focused validation first. Escalate only when the task touches shared/high-risk runtime or the prompt requires it.
+### Read-only tasks
 
-Common frontend validation:
+- No tests required unless needed for evidence.
+- Must confirm no files modified, staged, committed, or pushed.
+
+### Docs-only tasks
+
+Run:
 
 ```bash
-npm --prefix apps/dsa-web run test -- <focused tests> --run
+git diff --check -- <changed-doc-files>
+git status --short --branch
+./scripts/release_secret_scan.sh
+```
+
+No full `ci_gate` is required.
+
+### Tests-only tasks
+
+Run focused tests for touched test/guard files plus nearby guard suites. No browser verification unless frontend source/e2e behavior changed.
+
+### Frontend UI tasks
+
+Run focused tests, build, design guard, and browser verification unless docs-only/tests-only.
+
+Minimum:
+
+```bash
+npm --prefix apps/dsa-web run test -- <focused-tests>
 npm --prefix apps/dsa-web run build
 npm --prefix apps/dsa-web run check:design
-python3 scripts/check_frontend_design_constitution.py
-git diff --check
-bash scripts/release_secret_scan.sh
+./scripts/release_secret_scan.sh
 ```
 
-Common backend validation:
+Browser verification should use `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`.
 
-```bash
-python3 -m py_compile <changed python files>
-python3 -m pytest <focused tests> -q
-git diff --check
-bash scripts/release_secret_scan.sh
-```
+### Backend/source tasks
 
-Full `./scripts/ci_gate.sh` is for landing/release/high-risk backend changes, not default docs-only or narrow frontend tasks.
+Run focused compile/test checks for touched files. Escalate to full landing gates only for broad/high-risk runtime changes.
 
----
-
-## 10. Final Report Requirements
+## 10. Final Reports
 
 Use `WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`.
 
-Final reports must include:
+Always include:
 
 - task ID and title;
-- actual cwd/branch/base commit;
+- branch and workspace;
+- commit and push status when applicable;
 - files changed;
-- what changed;
-- protected domains touched or explicitly untouched;
 - validation commands and results;
-- browser verification for frontend UI;
-- commit hash and push status;
+- boundary impact;
+- unrelated dirty files left untouched;
 - rollback command;
-- final git status.
+- final `git status --short --branch`.

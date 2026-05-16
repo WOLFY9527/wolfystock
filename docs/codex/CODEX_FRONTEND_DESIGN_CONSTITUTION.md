@@ -10,7 +10,7 @@ Read this file before every frontend edit, then use the canonical implementation
 - `docs/codex/WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md`
 - `docs/codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
 
-This constitution is the short rule set. The detailed visual contract lives in `WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`.
+This file is the short rule set. The detailed visual contract lives in `WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`.
 
 ## Non-Negotiable Direction
 
@@ -19,28 +19,26 @@ WolfyStock is a dark professional financial research OS:
 - charcoal canvas, not pure-black gutters;
 - slim product-first top navigation;
 - wide quiet command/search bar;
-- one dominant console, board, table, or workbench surface per page;
+- one dominant console, board, table, ledger, chart, or workbench surface per route;
 - compact context rail only when the workflow needs it;
-- thin separators over heavy cards;
+- thin separators over heavy containers;
 - restrained blue active/focus state;
-- green and red reserved for market semantics;
-- low-noise typography and concise copy;
+- green/red reserved for market semantics;
+- low-noise typography and concise evidence-based copy;
 - rows, tables, strips, rails, and drawers before cards.
 
 ## Forbidden Defaults
 
-Do not use these as normal WolfyStock UI architecture:
+Do not use these as normal user-facing UI architecture:
 
 - generic SaaS dashboard shells;
-- Web1/admin dashboard layout for user-facing routes;
-- terminal cosplay, cyberpunk chrome, OLED glow, or old DOS language;
-- ghost glass as the default panel material;
-- backdrop blur on normal scrolling panels;
-- pure `bg-black` or `#000000` as the root canvas;
-- colorful gradients or accent decoration;
-- bento/card-first layouts;
-- stretched slabs and nested card stacks;
-- helper/meta copy that explains the UI instead of presenting evidence.
+- admin/backend layout for product routes;
+- card-first or bento-first page structures;
+- widened old cards presented as a new design system;
+- pure-black page islands or gutters;
+- decorative material effects as routine hierarchy;
+- colorful gradients as normal action language;
+- helper/meta copy that says the UI is summarized, readable, trustworthy, ready, or useful.
 
 ## Surface Choice
 
@@ -58,9 +56,13 @@ If the route does not fit one of these, stop and document the reason before addi
 
 ## Implementation Rule
 
-New user-facing work should prefer `apps/dsa-web/src/components/linear/`.
+New user-facing work should prefer:
 
-Existing `Terminal*` names are compatibility exports only. They must render Linear OS material and must not reintroduce old terminal/glass/cyber/card chrome.
+```text
+apps/dsa-web/src/components/linear/
+```
+
+Existing `Terminal*` names are compatibility exports only. They must render Linear OS material and must not define future product UI direction.
 
 ## Acceptance Gate
 
@@ -69,7 +71,8 @@ Frontend UI work is not done until browser verification confirms:
 - no horizontal overflow at desktop and mobile widths;
 - no pure-black root gutters or page gaps;
 - navigation is slim and product-first;
-- the command/search bar belongs to the same charcoal system;
-- the primary route surface is not a stretched card slab;
-- the page does not look like a generic admin dashboard;
-- charts and market data surfaces remain real and behaviorally unchanged.
+- command/search belongs to the same charcoal system;
+- the primary route surface is not a stretched old card;
+- the page does not read as an admin/backend interface;
+- charts and market data surfaces remain real and behaviorally unchanged;
+- no raw provider/debug/schema/fixture/mock text appears on normal user routes.

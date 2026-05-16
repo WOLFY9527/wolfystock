@@ -1,198 +1,201 @@
 # WolfyStock Linear OS Design Language
 
-This is the canonical WolfyStock UI design language extracted from the approved Linear OS mockup.
+This is the canonical WolfyStock UI design language extracted from the approved WolfyStock Linear mockup.
 
-Use it for frontend implementation, review, and acceptance. `DESIGN.md` remains an implementation reference, but this document is the project-specific contract for WolfyStock.
+`DESIGN.md` may be used as a historical/implementation reference, but this file is the project-specific authority for WolfyStock frontend work. If `DESIGN.md`, an installed design skill, or an older prompt conflicts with the approved mockup and this file, the mockup and this file win.
 
-## Principles
+## 1. Product Principles
 
-WolfyStock should feel like a calm financial research operating system:
+WolfyStock is a professional financial research operating system.
 
-- product software first, not marketing chrome;
-- one primary workflow per route;
-- dense only where density helps comparison or decision quality;
-- charcoal hierarchy instead of pure-black voids;
-- restrained blue for focus and active state;
-- green and red only for market direction or risk semantics;
-- source, provider, and debug detail available through disclosure, drawer, or admin routes;
-- no filler copy, decorative gradients, glow, or glass panels.
+The interface should feel:
 
-## App Shell Anatomy
+- calm, precise, and product-grade;
+- data-first and decision-oriented;
+- compact without becoming a backend table dump;
+- broad and workspace-like, not a centered landing page;
+- consistent across Home, Scanner, Watchlist, Market Overview, Portfolio, and Options Lab.
 
-The shell has five parts:
+Every route has one primary workflow. Secondary data belongs in compact rails, disclosures, drawers, tabs, or lower bands.
 
-1. Slim top nav: brand, primary product routes, compact utilities.
-2. Command row: route search, symbol input, filters, or primary action.
-3. Main workspace: one dominant console, board, chart, table, or workbench.
-4. Context rail: compact evidence, data quality, selected detail, or run state.
-5. Secondary layer: drawers, disclosures, tabs, and admin-only diagnostics.
+## 2. App Shell Anatomy
 
-Normal product routes must feel product-first. Admin/operator controls are secondary utilities, not the app identity.
+The app shell has five layers:
 
-## Surface Ladder And Token Intent
+1. **Slim product nav**: brand, primary product routes, compact utility actions.
+2. **Command row**: symbol input, route search, filters, or the primary action for the route.
+3. **Main workspace**: one dominant console, board, table, chart, ledger, or workbench surface.
+4. **Context layer**: compact rail, selected detail, data-quality summary, run state, or assumptions.
+5. **Secondary layer**: drawers, disclosures, diagnostics, source detail, and admin-only internals.
 
-Use the shared CSS token ladder:
+Normal product routes must not visually inherit admin/operator priority. Admin/Ops pages can be denser and more technical, but that density must not define the product UI.
+
+## 3. Surface Ladder And Token Intent
+
+Use the shared WolfyStock tokens:
 
 | Token | Intent |
 | --- | --- |
 | `--wolfy-canvas` | app root canvas, charcoal and never pure black |
 | `--wolfy-surface-console` | dominant console/board/workbench surface |
-| `--wolfy-surface-input` | command bars, inputs, row hover, selected cells |
-| `--wolfy-surface-rail` | compact context rail, drawers, secondary side surfaces |
-| `--wolfy-border-subtle` | outer hairlines and low-emphasis controls |
-| `--wolfy-divider` | row separators and table rules |
-| `--wolfy-text-primary` | headings and decision-critical text |
-| `--wolfy-text-secondary` | labels, secondary values, route metadata |
-| `--wolfy-text-muted` | timestamps, disabled labels, quiet hints |
-| `--wolfy-accent` | active nav, focus ring, selected state |
+| `--wolfy-surface-input` | command bars, inputs, selected rows, hover states |
+| `--wolfy-surface-rail` | compact rail, drawer, or secondary side surface |
+| `--wolfy-border-subtle` | outer hairline borders |
+| `--wolfy-divider` | row/table/section separators |
+| `--wolfy-text-primary` | headings and decision-critical values |
+| `--wolfy-text-secondary` | labels and secondary values |
+| `--wolfy-text-muted` | timestamps, quiet hints, disabled states |
+| `--wolfy-accent` | active route, focus ring, selected state |
 | `--wolfy-market-up` | positive market semantics only |
 | `--wolfy-market-down` | negative market semantics only |
 
-Surfaces should move one step at a time. Avoid jumping from canvas into bright, detached cards.
+Surfaces should step gradually from canvas to console to input/rail. Avoid detached bright panels, isolated black islands, or page-local material systems.
 
-## Typography Hierarchy
+## 4. Typography Hierarchy
 
-Use low-noise product typography:
+Use typography to make the decision path obvious.
 
-- route title: compact, semibold, no hero scale;
-- section label: 11 to 12 px, muted, normal letter spacing unless it is taxonomy;
-- table/list values: 13 to 15 px, tabular numbers when possible;
-- dense metrics: mono is allowed for numbers, not for every label;
-- body copy: short and decision-relevant;
-- no oversized H1s inside workbenches;
-- no negative tracking on compact controls.
+- Route title: compact, semibold, not hero-sized.
+- Primary object name: clear and restrained.
+- Dominant decision/value: one per console; numeric values may use tabular/mono treatment.
+- Section labels: 11-12 px, muted, short.
+- Body copy: short, evidence-based, and decision-relevant.
+- Chinese UI labels should avoid excessive uppercase tracking.
 
-## Spacing And Rhythm
+Do not add prose that says the UI is useful, readable, summarized, complete, trustworthy, or ready. Show concrete state, evidence, source, risk, or action.
 
-Default rhythm:
+## 5. Spacing And Rhythm
 
-- shell safe-x: near-full width with responsive padding;
-- top nav: slim, roughly one row;
-- command bar: 44 to 56 px tall;
-- console padding: 16 to 24 px depending on density;
-- rows: 36 to 52 px depending on data density;
-- rails: compact, divided by rows and strips;
-- mobile: single column with no horizontal overflow.
+- Use near-full workspace width with responsive horizontal padding.
+- Top nav stays slim.
+- Command row is wide and quiet.
+- Console padding is compact: roughly 16-24 px depending on density.
+- Rows use 36-52 px height depending on data density.
+- Rails use divided rows and compact groups.
+- Mobile stacks into a single column without horizontal overflow.
 
-Do not create visual rhythm through large vertical card gaps. Use dividers, strips, and row grouping.
+Do not create hierarchy by adding large gaps between cards. Use dividers, rows, strips, and rails.
 
-## Top Nav And Command Bar Rules
+## 6. Top Nav And Command Bar Rules
 
 Top nav:
 
-- product route links are primary;
-- active route uses a low-chrome blue underline or equivalent;
+- product routes are primary;
+- active route uses restrained blue focus/underline treatment;
 - utilities are compact and secondary;
-- admin/operator links do not dominate the masthead;
-- no chip cloud, glass button cluster, neon hover, or pill parade.
+- admin/operator controls do not dominate the masthead;
+- no chip parade, large pill groups, or decorative nav chrome.
 
-Command bar:
+Command row:
 
-- belongs visually to the charcoal system;
-- is wide and quiet;
-- primary input/action is obvious;
-- filters and secondary controls are aligned into the same row when space allows;
-- on mobile, controls stack without clipping.
+- visually belongs to the same charcoal system as the page;
+- input/action priority is obvious;
+- filters align into the same row where space allows;
+- mobile stacking must stay usable and unclipped.
 
-## ResearchConsole Anatomy
+## 7. ResearchConsole Anatomy
 
-Use for Home and single-stock research.
+Use for Home and any focused single-stock research surface.
 
-Structure:
+Required structure:
 
 1. Command/search bar.
-2. Identity and decision state.
-3. Key level strip.
-4. Chart workspace.
-5. Evidence and catalyst rows.
-6. Context rail with compact quality/source state.
-7. Full report and source detail in drawers/disclosures.
+2. Symbol identity and decision state.
+3. Score/confidence only when evidence-backed.
+4. Key-level strip.
+5. Real chart workspace.
+6. Evidence/catalyst rows.
+7. Compact context rail.
+8. Full report, source detail, history, and diagnostics in drawers/disclosures.
 
 Rules:
 
-- chart data must be real if shown as market data;
-- LLM/report gaps render neutral values, never fake insight;
+- chart data must be real if presented as market data;
+- report gaps render neutral or empty states, never fabricated insight;
 - primary decision stays visible without card sprawl;
-- source details remain available but not noisy.
+- source detail remains available but not noisy.
 
-## ContextRail Anatomy
+## 8. ContextRail Anatomy
 
-Use a context rail for:
-
-- selected entity details;
-- data quality and freshness;
-- risk boundaries;
-- compact assumptions;
-- related history;
-- collapsed diagnostics.
+Use a context rail for selected entity detail, data quality, risk boundaries, assumptions, history, or collapsed diagnostics.
 
 Rules:
 
-- rail is narrower than the main workspace;
-- it uses row separators, not stacked cards;
-- it never becomes a second dashboard;
-- on mobile it moves below the primary surface.
+- narrower than the main workspace;
+- row-based with thin separators;
+- inside the route’s dominant surface when paired with a main console;
+- never becomes a second dashboard;
+- moves below the primary workspace on mobile.
 
-## ChartWorkspace Rules
+## 9. ChartWorkspace Rules
 
-Chart workspaces are dominant surfaces:
+- Real market charts must remain real.
+- Toolbar belongs to the chart surface.
+- Tooltip stays within viewport bounds.
+- Grid, axis, and crosshair colors follow the charcoal ladder.
+- Green/red are reserved for market movement.
+- No placeholder chart may replace a real chart under the same label.
 
-- stable aspect ratio or min-height;
-- no fake placeholder chart when real data is required;
-- toolbar belongs to the surface, not a separate card;
-- tooltip must stay within viewport bounds;
-- grid, axis, and crosshair colors use the charcoal ladder;
-- green/red only for market movement.
+## 10. Catalyst And Event Rows
 
-## Catalyst And Event Row Rules
+Catalyst/event rows are evidence-backed and compact.
 
-Event rows should be compact and evidence-backed:
+Allowed examples:
 
-- title, date/source when available, and concise status;
-- no fabricated catalysts;
-- no generic event filler such as "report mainline" or "technical trigger";
-- empty state is a quiet row, not a warning card.
+- earnings;
+- regulatory events;
+- rating changes;
+- contracts;
+- acquisitions;
+- product launches;
+- macro events;
+- verified news.
 
-## Board And Table Page Rules
+Rules:
 
-Ranking boards, watch boards, market monitors, ledgers, and ops consoles should prefer:
+- no fabricated events;
+- no technical/data-quality/report-summary filler in catalyst rows;
+- empty state is one quiet row, for example `暂无已验证催化剂`;
+- do not turn events into separate cards or decorative timelines.
 
-- command/filter strip;
-- status strip;
-- dense rows or table;
-- selected detail rail/drawer;
-- collapsed diagnostics.
+## 11. Board And Table Route Rules
 
-Avoid metric card grids for every minor value. A board page should scan like product software, not a landing page.
+Use rows, tables, strips, inspectors, rails, and drawers before cards.
 
-## Forbidden Visual Patterns
+- Scanner: RankingBoard with command/filter strip, ranked rows/table, selected detail, collapsed diagnostics.
+- Watchlist: WatchBoard/DenseList with compact add/filter, dense rows, status strips, row detail.
+- Market Overview: MarketMonitor with regime strip, chart/workbench surface, ranked/comparative rows, source disclosure.
+- Portfolio: RiskConsole/LedgerBoard with account strip, exposure/P&L/risk, holdings board, ledger rows.
+- Options Lab: ExperimentConsole with symbol/hypothesis input, assumptions, strategy matrix, chain table, risk boundary.
+- Admin/Ops: OpsConsole with status strip, queue/table/list, detail drawer, collapsed technical detail.
 
-These fail acceptance unless explicitly scoped as a prototype:
+## 12. Forbidden Visual Patterns
 
-- pure black app root, gutters, or page gaps;
-- old terminal/cyber/OLED/DOS chrome;
-- backdrop blur as routine panel material;
-- glow or outer shadow as routine hierarchy;
-- gradient CTA as default primary action;
-- stretched black slabs;
-- nested card stacks;
-- bento as default architecture;
-- admin/Web1 layout for user-facing routes;
-- colorful gradient decoration;
-- visible raw provider/debug/schema text on normal user routes.
+These fail acceptance unless a task explicitly scopes a temporary prototype:
 
-## UI PR Acceptance Checklist
+- pure-black root gutters or page-local black islands;
+- generic SaaS dashboard template;
+- user-facing admin/backend layout;
+- card-first dashboards and nested card stacks;
+- stretched slabs created by widening old cards;
+- decorative gradients, glow, heavy blur, or ornamental effects;
+- fake charts or decorative market placeholders;
+- raw provider/debug/schema/fixture/mock strings on normal user routes;
+- helper/meta copy that explains the UI rather than presenting evidence.
+
+## 13. UI PR Acceptance Checklist
 
 Before landing frontend UI work:
 
 - route surface is classified in `WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md`;
-- implementation uses `components/linear` or compatibility primitives rendered with Linear material;
+- new user-facing surfaces prefer `components/linear`;
+- compatibility primitives render Linear OS material;
 - root canvas is charcoal, not pure black;
-- top nav is slim and product-first;
-- command/search bar belongs to the same surface ladder;
-- one dominant primary workspace is visible;
+- nav is slim and product-first;
+- command row belongs to the same surface ladder;
+- one dominant workspace is visible above the fold;
 - rows/tables/strips/rails are used before cards;
-- no glass/glow/OLED/terminal regression;
-- no horizontal overflow at desktop and mobile widths;
-- browser screenshots exist for required viewports;
-- existing behavior, API contracts, auth, charts, and data semantics are unchanged unless explicitly scoped.
+- chart/data behavior is preserved;
+- no horizontal overflow at desktop or mobile widths;
+- screenshots/browser verification exist for required viewports;
+- no raw internal strings or meta explanatory copy appear in normal user UI.
