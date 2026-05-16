@@ -27,6 +27,7 @@ const AccessGatePage = lazy(() => import('./components/access/AccessGatePage').t
 const HomeSurfacePage = lazy(() => import('./pages/HomeSurfacePage'));
 const GuestHomePage = lazy(() => import('./pages/GuestHomePage'));
 const ScannerSurfacePage = lazy(() => import('./pages/ScannerSurfacePage'));
+const ScannerBoardPrototypePage = lazy(() => import('./pages/ScannerBoardPrototypePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
@@ -384,6 +385,7 @@ export const AppContent: React.FC = () => {
             <Route element={<Shell />}>
               <Route path="/" element={<HomeSurfacePage />} />
               <Route path="/guest" element={guestHomeElement} />
+              <Route path="/prototype/scanner-board" element={<ScannerBoardPrototypePage />} />
               <Route path="/scanner" element={<ScannerSurfacePage />} />
               <Route path="/chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
               <Route path="/portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
@@ -411,6 +413,7 @@ export const AppContent: React.FC = () => {
             <Route path="/:locale" element={<Shell />}>
               <Route index element={<HomeSurfacePage />} />
               <Route path="guest" element={guestHomeElement} />
+              <Route path="prototype/scanner-board" element={<ScannerBoardPrototypePage />} />
               <Route path="scanner" element={<ScannerSurfacePage />} />
               <Route path="chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
               <Route path="portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
