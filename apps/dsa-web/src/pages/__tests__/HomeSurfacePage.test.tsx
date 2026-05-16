@@ -33,6 +33,7 @@ vi.mock('../../api/history', () => ({
 vi.mock('../../api/stocks', () => ({
   stocksApi: {
     verifyTickerExists: vi.fn(),
+    getHistory: vi.fn(),
   },
 }));
 
@@ -204,6 +205,20 @@ const defaultHistoryReport = {
   },
 };
 
+const homeDailyCandles = Array.from({ length: 24 }, (_, index) => {
+  const day = String(index + 1).padStart(2, '0');
+  const open = 120 + index * 0.45;
+  const close = open + (index % 3 === 0 ? -0.35 : 0.72);
+  return {
+    date: `2026-04-${day}`,
+    open: Number(open.toFixed(2)),
+    high: Number((Math.max(open, close) + 1.1).toFixed(2)),
+    low: Number((Math.min(open, close) - 0.9).toFixed(2)),
+    close: Number(close.toFixed(2)),
+    volume: 8_000_000 + index * 120_000,
+  };
+});
+
 describe('HomeSurfacePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -224,6 +239,12 @@ describe('HomeSurfacePage', () => {
       stockCode: 'TSLA',
       exists: true,
       stockName: 'Tesla',
+    });
+    vi.mocked(stocksApi.getHistory).mockResolvedValue({
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      period: 'daily',
+      data: homeDailyCandles,
     });
     vi.mocked(analysisApi.analyzeAsync).mockResolvedValue({
       taskId: 'task-1',
@@ -347,6 +368,10 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-decision-core-metrics').className).not.toContain('bg-');
     expect(screen.queryByText('量化佐证指标')).not.toBeInTheDocument();
     expect(screen.getByText('技术结构')).toBeInTheDocument();
+    expect(await screen.findByTestId('home-candlestick-chart-frame')).toBeInTheDocument();
+    expect(screen.getByTestId('home-linear-technical-chart')).toHaveAttribute('data-chart-engine', 'echarts');
+    expect(screen.getByTestId('home-linear-technical-chart')).toHaveAttribute('data-chart-source', 'stocks-history-daily');
+    expect(screen.queryByLabelText('技术结构示意')).not.toBeInTheDocument();
     expect(screen.getByText('观察框架')).toBeInTheDocument();
     expect(screen.getByText('数据质量与说明')).toBeInTheDocument();
     expect(screen.getByText('关键事件与催化剂')).toBeInTheDocument();
@@ -2345,6 +2370,41 @@ describe('HomeSurfacePage', () => {
     expect(screen.getAllByText('104.80').length).toBeGreaterThan(0);
     expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
     expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
+  });
+
+  it('renders real Home candlesticks from daily OHLC history and exposes hover OHLC values', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    renderSurface();
+
+    const chartFrame = await screen.findByTestId('home-candlestick-chart-frame');
+    expect(stocksApi.getHistory).toHaveBeenCalledWith('ORCL', { period: 'daily', days: 180 });
+    expect(screen.getByTestId('home-linear-technical-chart')).toHaveAttribute('data-chart-engine', 'echarts');
+
+    fireEvent.mouseMove(chartFrame, { clientX: 0 });
+
+    const tooltip = await screen.findByTestId('home-candlestick-hover-tooltip');
+    expect(tooltip).toHaveTextContent('Open 120.00');
+    expect(tooltip).toHaveTextContent('High 121.10');
+    expect(tooltip).toHaveTextContent('Low 118.75');
+    expect(tooltip).toHaveTextContent('Close 119.65');
+    expect(tooltip).toHaveTextContent('Volume 8.00M');
+  });
+
+  it('shows the Home K-line unavailable state when daily OHLC history is missing', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stocksApi.getHistory).mockResolvedValue({
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      period: 'daily',
+      data: [],
+    });
+
+    renderSurface();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('K线数据暂不可用');
+    });
+    expect(screen.queryByTestId('home-candlestick-chart-frame')).not.toBeInTheDocument();
   });
 
   it('updates pending analysis cards in place when completed task payload only exposes snake_case standard_report', async () => {

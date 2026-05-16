@@ -11,6 +11,7 @@ import {
   DeepReportDrawer,
   type SignalTone,
 } from '../components/home-bento';
+import { HomeCandlestickChart } from '../components/home-bento/HomeCandlestickChart';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useUiPreferences } from '../contexts/UiPreferencesContext';
@@ -971,6 +972,8 @@ function LinearKeyLevelsStrip({
 
 function LinearTechnicalStructure({
   locale,
+  ticker,
+  currentPrice,
   signals,
   isGuest,
   guestPaywall,
@@ -978,6 +981,8 @@ function LinearTechnicalStructure({
   detailLabel,
 }: {
   locale: DashboardLocale;
+  ticker: string;
+  currentPrice?: number | null;
   signals: DashboardSignal[];
   isGuest: boolean;
   guestPaywall?: React.ReactNode;
@@ -990,43 +995,6 @@ function LinearTechnicalStructure({
     onClick: handleOpenDetailsClick,
     onPointerUp: handleOpenDetailsPointerUp,
   } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
-  const chartTone = signals.find((signal) => signal.tone !== 'neutral')?.tone || 'neutral';
-  const accentColor = chartTone === 'bearish' ? '#FB7185' : '#34D399';
-  const chartTop = 28;
-  const chartBottom = 176;
-  const priceMin = 170;
-  const priceMax = 210;
-  const priceToY = (price: number) => chartBottom - ((price - priceMin) / (priceMax - priceMin)) * (chartBottom - chartTop);
-  const chartTimeLabels = locale === 'en'
-    ? ['Dec', '2024', 'Feb', 'Mar', 'Apr', 'May']
-    : ['12月', '2024', '2月', '3月', '4月', '5月'];
-  const candleSeries = [
-    { x: 34, open: 179, close: 181, high: 183, low: 176 },
-    { x: 58, open: 181, close: 178, high: 184, low: 176 },
-    { x: 82, open: 178, close: 182, high: 184, low: 177 },
-    { x: 106, open: 182, close: 186, high: 188, low: 180 },
-    { x: 130, open: 186, close: 184, high: 189, low: 182 },
-    { x: 154, open: 184, close: 188, high: 190, low: 183 },
-    { x: 178, open: 188, close: 191, high: 194, low: 186 },
-    { x: 202, open: 191, close: 193, high: 196, low: 190 },
-    { x: 226, open: 193, close: 192, high: 197, low: 190 },
-    { x: 250, open: 192, close: 196, high: 198, low: 190 },
-    { x: 274, open: 196, close: 199, high: 202, low: 195 },
-    { x: 298, open: 199, close: 201, high: 204, low: 197 },
-    { x: 322, open: 201, close: 198, high: 203, low: 196 },
-    { x: 346, open: 198, close: 200, high: 203, low: 195 },
-    { x: 370, open: 200, close: 202, high: 205, low: 198 },
-    { x: 394, open: 202, close: 198, high: 204, low: 196 },
-    { x: 418, open: 198, close: 194, high: 199, low: 190 },
-    { x: 442, open: 194, close: 190, high: 195, low: 187 },
-    { x: 466, open: 190, close: 188, high: 192, low: 184 },
-    { x: 490, open: 188, close: 192, high: 194, low: 186 },
-    { x: 514, open: 192, close: 195, high: 197, low: 190 },
-    { x: 538, open: 195, close: 193, high: 197, low: 191 },
-    { x: 562, open: 193, close: 194, high: 196, low: 191 },
-    { x: 586, open: 194, close: 196, high: 198, low: 193 },
-  ];
-  const currentPriceY = priceToY(196);
 
   return (
     <section
@@ -1056,65 +1024,7 @@ function LinearTechnicalStructure({
           isGuest ? 'pointer-events-none opacity-80' : '',
         )}
       >
-        <div className="min-w-0 rounded-md border border-white/[0.055] bg-[#070b10]/82 px-3 py-3" data-testid="home-linear-technical-chart">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-[10px] font-medium text-white/46">
-              {['1D', '1W', '1M', '3M', '1Y'].map((range, index) => (
-                <span key={range} className={cn('rounded px-2 py-1', index === 0 ? 'bg-white/[0.08] text-white/82' : '')}>{range}</span>
-              ))}
-            </div>
-            <div className="hidden items-center gap-3 text-[10px] text-white/38 sm:flex">
-              <span><span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-[#38BDF8]" />MA5</span>
-              <span><span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-[#F59E0B]" />MA20</span>
-              <span><span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-[#8B5CF6]" />MA60</span>
-            </div>
-          </div>
-          <svg viewBox="0 0 640 218" role="img" aria-label={locale === 'en' ? 'Technical structure map' : '技术结构示意'} className="h-[190px] w-full overflow-visible">
-            <defs>
-              <linearGradient id="home-linear-chart-fill" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor={accentColor} stopOpacity="0.18" />
-                <stop offset="100%" stopColor={accentColor} stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            <rect x="0" y="18" width="600" height="166" rx="8" fill="rgba(255,255,255,.012)" />
-            {[chartTop, 65, 102, 139, chartBottom].map((y) => (
-              <line key={y} x1="16" x2="600" y1={y} y2={y} stroke="rgba(255,255,255,.055)" strokeWidth="1" />
-            ))}
-            {[210, 200, 190, 180].map((price) => (
-              <text key={price} x="608" y={priceToY(price) + 3} fill="rgba(255,255,255,.42)" fontSize="10" fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace">
-                {price.toFixed(0)}
-              </text>
-            ))}
-            {chartTimeLabels.map((label, index) => (
-              <text key={label} x={34 + index * 104} y="207" fill="rgba(255,255,255,.36)" fontSize="10">
-                {label}
-              </text>
-            ))}
-            <line x1="16" x2="600" y1={currentPriceY} y2={currentPriceY} stroke={accentColor} strokeOpacity="0.48" strokeDasharray="3 5" />
-            <rect x="558" y={currentPriceY - 10} width="42" height="17" rx="3" fill={accentColor} opacity="0.86" />
-            <text x="564" y={currentPriceY + 2} fill="#061018" fontSize="10" fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace" fontWeight="700">
-              196.0
-            </text>
-            {candleSeries.map((candle) => {
-              const up = candle.close >= candle.open;
-              const highY = priceToY(candle.high);
-              const lowY = priceToY(candle.low);
-              const openY = priceToY(candle.open);
-              const closeY = priceToY(candle.close);
-              const bodyY = Math.min(openY, closeY);
-              const bodyHeight = Math.max(3, Math.abs(openY - closeY));
-              return (
-                <g key={candle.x}>
-                  <line x1={candle.x} x2={candle.x} y1={highY} y2={lowY} stroke={up ? '#34D399' : '#FB7185'} strokeOpacity="0.82" strokeWidth="1" />
-                  <rect x={candle.x - 4} y={bodyY} width="8" height={bodyHeight} rx="1.5" fill={up ? '#34D399' : '#FB7185'} opacity="0.88" />
-                </g>
-              );
-            })}
-            <path d="M20 150 C86 146 132 136 188 129 C254 120 318 100 374 104 C442 110 512 129 600 118" fill="none" stroke="#38BDF8" strokeOpacity="0.86" strokeWidth="1.7" />
-            <path d="M20 158 C96 150 166 143 236 132 C312 121 378 116 444 119 C512 122 560 124 600 116" fill="none" stroke="#F59E0B" strokeOpacity="0.78" strokeWidth="1.45" />
-            <path d="M20 166 C96 160 170 154 246 145 C328 136 396 129 468 128 C530 127 570 124 600 120" fill="none" stroke="#8B5CF6" strokeOpacity="0.46" strokeWidth="1.25" />
-          </svg>
-        </div>
+        <HomeCandlestickChart ticker={ticker} currentPrice={currentPrice} isLocked={isGuest} />
         <div
           className="min-w-0 divide-y divide-white/[0.055] rounded-md border border-white/[0.055] bg-white/[0.01] px-3 py-2"
           data-testid="home-bento-decision-support-grid"
@@ -2224,6 +2134,17 @@ function normalizeTickerQuery(rawValue?: string): string {
   }
 
   return TICKER_ALIASES[trimmed.toUpperCase()] || TICKER_ALIASES[trimmed] || trimmed.toUpperCase();
+}
+
+function parseHomeChartPrice(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(/[%,$\s]/g, ''));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function formatHistoryTimestamp(value?: string, locale: DashboardLocale = 'zh'): string {
@@ -4218,6 +4139,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         <div className="mt-5" data-testid="home-bento-secondary-grid">
                           <LinearTechnicalStructure
                             locale={locale}
+                            ticker={readyCopy.ticker}
+                            currentPrice={parseHomeChartPrice(activeTraceReport?.meta.currentPrice ?? activeTraceReport?.details?.standardReport?.summaryPanel?.currentPrice)}
                             signals={readyCopy.tech.signals}
                             isGuest={Boolean(isGuest)}
                             guestPaywall={guestPaywall}
