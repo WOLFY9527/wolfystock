@@ -85,8 +85,8 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'options-lab', labelKey: 'nav.optionsLab', to: '/options-lab', icon: FlaskConical },
 ];
 
-const HEADER_UTILITY_TEXT_CLASS = 'px-3 py-1 text-xs font-medium text-white/50 transition-colors hover:text-white';
-const HEADER_UTILITY_DANGER_TEXT_CLASS = 'px-3 py-1 text-xs font-medium text-white/50 transition-colors hover:text-red-400';
+const HEADER_UTILITY_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-white/42 transition-colors hover:text-white/78';
+const HEADER_UTILITY_DANGER_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-white/38 transition-colors hover:text-red-300/90';
 
 function NavLabel({
   label,
@@ -518,11 +518,11 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
             {archiveAction}
             <div
               data-testid="shell-header-utility-island"
-              className="flex items-center gap-1 rounded-full border border-white/5 bg-white/[0.02] px-2 py-1.5 backdrop-blur-md"
+              className="flex items-center gap-0.5 rounded-[14px] border border-white/[0.04] bg-white/[0.012] px-1.5 py-1 backdrop-blur-sm"
             >
               {languageAction}
               {(settingsAction || systemAction || signInAction || logoutAction) ? (
-                <div className="h-3 w-px bg-white/10" data-testid="shell-header-utility-divider" />
+                <div className="h-3 w-px bg-white/[0.07]" data-testid="shell-header-utility-divider" />
               ) : null}
               {settingsAction}
               {systemAction}
@@ -534,7 +534,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
               {providerCircuitAction}
               {signInAction}
               {logoutAction && (settingsAction || systemAction || signInAction) ? (
-                <div className="h-3 w-px bg-white/10" data-testid="shell-header-utility-divider" />
+                <div className="h-3 w-px bg-white/[0.07]" data-testid="shell-header-utility-divider" />
               ) : null}
               {logoutAction}
             </div>

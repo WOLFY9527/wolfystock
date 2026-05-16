@@ -319,11 +319,11 @@ describe('HomeSurfacePage', () => {
     expect(grid).toHaveClass('flex', 'w-full', 'min-w-0', 'flex-col', 'gap-3');
     expect(grid).not.toHaveClass('xl:grid-cols-12');
     expect(grid.firstElementChild).toBe(omnibarShell);
-    expect(linearShell).toHaveClass('grid', 'min-w-0', 'rounded-[14px]', 'border', 'border-white/[0.045]', 'shadow-none');
+    expect(linearShell).toHaveClass('grid', 'min-w-0', 'rounded-[14px]', 'border', 'border-white/[0.04]', 'bg-white/[0.012]', 'shadow-none');
     expect(linearShell).not.toHaveClass('overflow-hidden');
-    expect(linearShell.className).toContain('lg:grid-cols-[minmax(0,1fr)_minmax(300px,390px)]');
-    expect(primaryStack).toHaveClass('min-w-0', 'px-4', 'py-6', 'md:px-8', 'md:py-8');
-    expect(secondaryStack).toHaveClass('relative', 'min-w-0', 'border-t', 'border-white/[0.055]', 'py-5');
+    expect(linearShell.className).toContain('lg:grid-cols-[minmax(0,1fr)_minmax(300px,372px)]');
+    expect(primaryStack).toHaveClass('min-w-0', 'px-4', 'py-5', 'md:px-7', 'md:py-7');
+    expect(secondaryStack).toHaveClass('relative', 'min-w-0', 'border-t', 'border-white/[0.045]', 'bg-white/[0.01]', 'py-5');
     expect(homeSearch).toHaveAttribute('placeholder', '输入代码唤醒 AI (如 ORCL)...');
     expect(homeSearch).toHaveValue('');
     expect(screen.getByTestId('home-bento-omnibar-input-shell')).toHaveClass('overflow-hidden', 'rounded-lg', 'border', 'border-white/[0.08]', 'bg-[#0b1118]/80');
@@ -379,6 +379,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('财报有效性')).toBeInTheDocument();
     expect(screen.getByText('关键事件与催化剂')).toBeInTheDocument();
     expect(screen.getByTestId('home-linear-events-empty')).toHaveTextContent('暂无已验证催化剂');
+    expect(screen.getByTestId('home-linear-events-empty')).toHaveClass('py-1.5', 'text-xs', 'leading-5', 'text-white/34');
     expect(screen.getByTestId('home-linear-events')).not.toHaveTextContent('报告主线');
     expect(screen.getByTestId('home-linear-events')).not.toHaveTextContent('技术触发');
     expect(screen.getByTestId('home-linear-events')).not.toHaveTextContent('财报跟踪');
@@ -1367,7 +1368,7 @@ describe('HomeSurfacePage', () => {
     expect(grid).toHaveAttribute('data-bento-grid', 'true');
     expect(linearShell).toHaveClass('grid', 'min-w-0', 'rounded-[14px]', 'border', 'shadow-none');
     expect(linearShell).not.toHaveClass('overflow-hidden');
-    expect(primaryStack).toHaveClass('min-w-0', 'px-4', 'py-6');
+    expect(primaryStack).toHaveClass('min-w-0', 'px-4', 'py-5');
     expect(secondaryStack).toHaveClass('relative', 'min-w-0', 'border-t', 'py-5');
     expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
@@ -2427,6 +2428,7 @@ describe('HomeSurfacePage', () => {
     expect(chartRoot).toHaveAttribute('data-x-axis-density', 'sampled');
     expect(chartRoot).toHaveAttribute('data-chart-timeframe', '1D');
     expect(chartRoot).toHaveAttribute('data-chart-source', 'stocks-history-daily');
+    expect(chartRoot).toHaveClass('rounded-[12px]', 'border-white/[0.045]', 'bg-white/[0.012]');
 
     fireEvent.mouseMove(chartFrame, { clientX: 0 });
 
@@ -2459,6 +2461,8 @@ describe('HomeSurfacePage', () => {
     expect(timeframe1D).toHaveAttribute('aria-pressed', 'true');
     expect(timeframe1W).toHaveAttribute('aria-pressed', 'false');
     expect(timeframe1M).toHaveAttribute('aria-pressed', 'false');
+    expect(timeframe1D).toHaveClass('rounded-full', 'bg-white/[0.09]', 'text-white/86');
+    expect(timeframe1W).toHaveClass('rounded-full', 'text-white/42');
     expect(screen.queryByRole('button', { name: '1m' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '5m' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '15m' })).not.toBeInTheDocument();
@@ -2498,6 +2502,8 @@ describe('HomeSurfacePage', () => {
     expect(chartRoot).toHaveAttribute('data-enabled-indicators', 'MA5,MA10,MA20');
     expect(ma20Toggle).toHaveAttribute('aria-pressed', 'true');
     expect(ma60Toggle).toBeDisabled();
+    expect(ma20Toggle).toHaveClass('rounded-full', 'bg-white/[0.075]', 'text-white/84');
+    expect(ma60Toggle).toHaveClass('rounded-full', 'opacity-40');
 
     fireEvent.click(ma20Toggle);
 

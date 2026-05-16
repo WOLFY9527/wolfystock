@@ -573,14 +573,14 @@ describe('Shell', () => {
     expect(actionIsland).toHaveClass(
       'flex',
       'items-center',
-      'gap-1',
-      'rounded-full',
-      'bg-white/[0.02]',
+      'gap-0.5',
+      'rounded-[14px]',
+      'bg-white/[0.012]',
       'border',
-      'border-white/5',
-      'px-2',
-      'py-1.5',
-      'backdrop-blur-md',
+      'border-white/[0.04]',
+      'px-1.5',
+      'py-1',
+      'backdrop-blur-sm',
     );
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'language.toggle') })).toHaveTextContent('EN');
     expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.settings') })).toBeInTheDocument();

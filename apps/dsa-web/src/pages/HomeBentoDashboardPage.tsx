@@ -1166,7 +1166,7 @@ function LinearObservationPanel({
 
   return (
     <aside
-      className="relative min-w-0 border-t border-white/[0.055] px-4 py-5 lg:border-l lg:border-t-0 lg:px-7 lg:py-7"
+      className="relative min-w-0 border-t border-white/[0.045] bg-white/[0.01] px-4 py-5 lg:border-l lg:border-t-0 lg:px-6 lg:py-6"
       data-testid="home-bento-secondary-stack"
     >
       <section className="min-w-0" data-testid="home-bento-card-strategy" data-research-card="opportunity">
@@ -1203,7 +1203,7 @@ function LinearObservationPanel({
       </section>
 
       <section
-        className="mt-5 min-w-0 border-t border-white/[0.055] pt-5"
+        className="mt-4 min-w-0 border-t border-white/[0.045] pt-4"
         data-testid="home-bento-card-fundamentals"
         data-research-card="data-context"
       >
@@ -1352,9 +1352,9 @@ function LinearEventsStrip({
   const events = buildHomeCatalystEvents(report, locale);
 
   return (
-    <section className="min-w-0 border-t border-white/[0.055] pt-4" data-testid="home-linear-events">
-      <div className="flex min-w-0 items-center justify-between gap-3 pb-2">
-        <h2 className="text-sm font-semibold text-white">{isEnglish ? 'Events & Catalysts' : '关键事件与催化剂'}</h2>
+    <section className="min-w-0 border-t border-white/[0.04] pt-3" data-testid="home-linear-events">
+      <div className="flex min-w-0 items-center justify-between gap-3 pb-1.5">
+        <h2 className="text-sm font-semibold text-white/88">{isEnglish ? 'Events & Catalysts' : '关键事件与催化剂'}</h2>
         {events.length ? (
           <span className="text-[11px] text-white/34">{events.length}{isEnglish ? ' rows' : ' 条'}</span>
         ) : null}
@@ -1386,7 +1386,7 @@ function LinearEventsStrip({
           ))}
         </div>
       ) : (
-        <p className="py-3 text-sm text-white/44" data-testid="home-linear-events-empty">
+        <p className="py-1.5 text-xs leading-5 text-white/34" data-testid="home-linear-events-empty">
           {isEnglish ? 'No verified catalysts' : '暂无已验证催化剂'}
         </p>
       )}
@@ -4171,11 +4171,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             >
               {omnibarModule}
               <div
-                className="grid min-w-0 rounded-[14px] border border-white/[0.045] bg-[#080c12]/58 shadow-none lg:grid-cols-[minmax(0,1fr)_minmax(300px,390px)]"
+                className="grid min-w-0 rounded-[14px] border border-white/[0.04] bg-white/[0.012] shadow-none lg:grid-cols-[minmax(0,1fr)_minmax(300px,372px)]"
                 data-testid="home-linear-shell"
               >
                 <div
-                  className="min-w-0 px-4 py-6 md:px-8 md:py-8"
+                  className="min-w-0 px-4 py-5 md:px-7 md:py-7"
                   data-testid="home-bento-primary-stack"
                 >
                   {isHomeAnalyzing ? (

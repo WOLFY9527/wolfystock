@@ -181,6 +181,7 @@ const viewportSize = () => ({
     : 0,
 });
 
+// eslint-disable-next-line react-refresh/only-export-components -- tested geometry helper for viewport-constrained tooltips
 export const resolveHomeCandlestickTooltipPosition = (
   point: [number, number],
   size: TooltipPositionSize,
@@ -490,6 +491,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
   }, [isLocked, ticker]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- ticker changes reset local chart controls to their defaults
     setActiveTimeframe('1D');
     setHoveredIndex(null);
     setIndicatorVisibility(DEFAULT_INDICATORS);
@@ -793,7 +795,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
   return (
     <div
       ref={sizeRef}
-      className="min-w-0 rounded-md border border-white/[0.055] bg-[#070b10]/82 px-3 py-3"
+      className="min-w-0 rounded-[12px] border border-white/[0.045] bg-white/[0.012] px-3 py-3"
       data-testid="home-linear-technical-chart"
       data-chart-engine="echarts"
       data-chart-source={activeTimeframe === '1D' ? 'stocks-history-daily' : 'stocks-history-daily-aggregated'}
@@ -806,20 +808,20 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       data-tooltip-container="body"
       data-tooltip-bounds="viewport"
     >
-      <div className="mb-3 flex min-w-0 flex-col gap-2">
+      <div className="mb-3 flex min-w-0 flex-col gap-2.5">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.03] p-1">
+            <div className="flex items-center gap-0.5 rounded-full border border-white/[0.055] bg-white/[0.018] p-0.5">
               {TIMEFRAME_OPTIONS.map((optionItem) => (
                 <button
                   key={optionItem.key}
                   type="button"
                   aria-pressed={activeTimeframe === optionItem.key}
                   className={cn(
-                    'rounded px-2 py-1 text-[10px] font-medium transition-colors',
+                    'rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors',
                     activeTimeframe === optionItem.key
-                      ? 'bg-white/[0.12] text-white'
-                      : 'text-white/46 hover:bg-white/[0.05] hover:text-white/78',
+                      ? 'bg-white/[0.09] text-white/86'
+                      : 'text-white/42 hover:bg-white/[0.045] hover:text-white/72',
                   )}
                   onClick={() => handleTimeframeChange(optionItem.key)}
                   disabled={status !== 'ready'}
@@ -829,17 +831,17 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
                 </button>
               ))}
             </div>
-            <span className="hidden text-[10px] text-white/34 sm:inline">{ticker}</span>
+            <span className="hidden text-[10px] text-white/30 sm:inline">{ticker}</span>
             {sourceHint ? (
-              <span className="text-[10px] text-white/34">{sourceHint}</span>
+              <span className="text-[10px] text-white/30">{sourceHint}</span>
             ) : null}
           </div>
           {maStructure ? (
-            <span className="text-[10px] text-white/34">{maStructure}</span>
+            <span className="text-[10px] text-white/30">{maStructure}</span>
           ) : null}
         </div>
 
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {INDICATOR_CONFIGS.map(({ key, label, color }) => {
             const available = indicatorEnabledState[key];
             const pressed = indicatorVisibility[key] && available;
@@ -855,11 +857,11 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
                 aria-pressed={pressed}
                 disabled={!available}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-medium transition-colors',
+                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors',
                   pressed
-                    ? 'border-white/[0.16] bg-white/[0.10] text-white'
-                    : 'border-white/[0.06] bg-white/[0.02] text-white/52 hover:border-white/[0.12] hover:text-white/78',
-                  !available ? 'cursor-not-allowed opacity-45 hover:border-white/[0.06] hover:text-white/52' : '',
+                    ? 'border-white/[0.12] bg-white/[0.075] text-white/84'
+                    : 'border-white/[0.045] bg-white/[0.012] text-white/46 hover:border-white/[0.09] hover:bg-white/[0.035] hover:text-white/70',
+                  !available ? 'cursor-not-allowed opacity-40 hover:border-white/[0.045] hover:bg-white/[0.012] hover:text-white/46' : '',
                 )}
                 onClick={() => handleIndicatorToggle(key)}
                 title={title}
