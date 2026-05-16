@@ -85,8 +85,8 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'options-lab', labelKey: 'nav.optionsLab', to: '/options-lab', icon: FlaskConical },
 ];
 
-const HEADER_UTILITY_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-white/42 transition-colors hover:text-white/78';
-const HEADER_UTILITY_DANGER_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-white/38 transition-colors hover:text-red-300/90';
+const HEADER_UTILITY_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-[#8a8f98] transition-colors hover:text-[#f7f8f8]';
+const HEADER_UTILITY_DANGER_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-[#62666d] transition-colors hover:text-rose-300/90';
 
 function NavLabel({
   label,
@@ -178,8 +178,8 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
             ? 'shell-drawer-link'
             : 'shell-header-link text-sm transition-colors',
           !isDrawer && (isActive
-            ? 'font-bold text-white'
-            : 'font-medium text-white/50 hover:text-white'),
+            ? 'font-semibold text-[#f7f8f8]'
+            : 'font-medium text-[#8a8f98] hover:text-[#d0d6e0]'),
           isActive ? 'is-active' : '',
         )}
       >
@@ -518,11 +518,11 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
             {archiveAction}
             <div
               data-testid="shell-header-utility-island"
-              className="flex items-center gap-0.5 rounded-[14px] border border-white/[0.04] bg-white/[0.012] px-1.5 py-1 backdrop-blur-sm"
+              className="flex items-center gap-0.5 rounded-lg border border-[#23252a] bg-[#0f1011] px-1 py-0.5 shadow-none"
             >
               {languageAction}
               {(settingsAction || systemAction || signInAction || logoutAction) ? (
-                <div className="h-3 w-px bg-white/[0.07]" data-testid="shell-header-utility-divider" />
+                <div className="h-3 w-px bg-[#23252a]" data-testid="shell-header-utility-divider" />
               ) : null}
               {settingsAction}
               {systemAction}
@@ -534,7 +534,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
               {providerCircuitAction}
               {signInAction}
               {logoutAction && (settingsAction || systemAction || signInAction) ? (
-                <div className="h-3 w-px bg-white/[0.07]" data-testid="shell-header-utility-divider" />
+                <div className="h-3 w-px bg-[#23252a]" data-testid="shell-header-utility-divider" />
               ) : null}
               {logoutAction}
             </div>
