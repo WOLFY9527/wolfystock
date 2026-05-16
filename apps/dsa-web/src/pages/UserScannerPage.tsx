@@ -411,14 +411,8 @@ function getKeyReason(candidate: ScannerCandidate, runDetail: ScannerRunDetail |
 }
 
 function getSourceBadge(candidate: ScannerCandidate, runDetail: ScannerRunDetail | null, language: 'zh' | 'en'): string | null {
-  const candidateProvider = getProviderDiagnostics(candidate.diagnostics)?.quoteSourceUsed
-    || getProviderDiagnostics(candidate.diagnostics)?.snapshotSourceUsed
-    || getProviderDiagnostics(candidate.diagnostics)?.historySourceUsed;
-  const runProvider = runDetail ? getRunProviderDiagnostics(runDetail)?.quoteSourceUsed
-    || getRunProviderDiagnostics(runDetail)?.snapshotSourceUsed
-    || getRunProviderDiagnostics(runDetail)?.historySourceUsed : null;
-  const friendly = formatFriendlyProvider(candidateProvider || runProvider || runDetail?.sourceSummary || null, language);
-  return friendly === '--' ? (language === 'en' ? 'Data ready for observation' : '数据可用于观察') : friendly;
+  if (runDetail) return getRunDataStatusLabel(runDetail, language);
+  return candidate.score != null ? (language === 'en' ? 'Verified' : '已验证') : null;
 }
 
 function getRunSummaryCount(runDetail: ScannerRunDetail, key: keyof NonNullable<ScannerRunDetail['summary']>, fallback = 0): number {
@@ -730,7 +724,7 @@ function buildDecisionSummary(
   }
   const selectedCount = summary.selectedCount ?? shortlist.length;
   const dataFailedCount = summary.dataFailedCount ?? diagnostics.filter((candidate) => candidate.status === 'data_failed' || candidate.status === 'error').length;
-  const evaluatedCount = summary.evaluatedCount ?? runDetail.evaluatedSize ?? diagnostics.length;
+  const rejectedCount = summary.rejectedCount ?? Math.max(0, (runDetail.evaluatedSize ?? diagnostics.length) - selectedCount - dataFailedCount);
   const bestDiagnostic = diagnostics.find((candidate) => candidate.status === 'selected')
     || diagnostics.find((candidate) => candidate.score != null)
     || null;
@@ -739,8 +733,8 @@ function buildDecisionSummary(
   const rejectionBuckets = buildRejectionBuckets(diagnostics, language);
   return {
     headline: selectedCount
-      ? (language === 'en' ? `Scan: ${selectedCount} selected / ${evaluatedCount} evaluated` : `本次扫描：${selectedCount} 个入选 / ${evaluatedCount} 个评估`)
-      : (language === 'en' ? `Scan: no selected / ${evaluatedCount} evaluated` : `本次扫描：暂无入选 / ${evaluatedCount} 个评估`),
+      ? (language === 'en' ? `Scan: ${selectedCount} selected · ${rejectedCount} rejected · ${dataFailedCount} failed` : `本次扫描：${selectedCount} 入选 · ${rejectedCount} 淘汰 · ${dataFailedCount} 失败`)
+      : (language === 'en' ? `Scan: no selected · ${rejectedCount} rejected · ${dataFailedCount} failed` : `本次扫描：暂无入选 · ${rejectedCount} 淘汰 · ${dataFailedCount} 失败`),
     best: bestSymbol
       ? `${language === 'en' ? 'Best candidate' : '最佳候选'}: ${bestSymbol} · ${bestScore == null ? '--' : `${bestScore}/100`}`.replace('最佳候选:', '最佳候选：')
       : (language === 'en' ? 'Best candidate: --' : '最佳候选：--'),
@@ -1789,8 +1783,6 @@ const UserScannerPage: React.FC = () => {
   const emptyStateTitle = language === 'en' ? 'No matching scanner results' : '当前无匹配的扫描结果';
   const emptyStateBody = language === 'en' ? 'Adjust the filters on the left or try again later' : '请调整左侧参数或稍后再试';
   const pageErrorSummary = pageError ? sanitizeScannerErrorSummary(pageError.message, language) || compactScannerStateLabel('failed', language) : null;
-  const primarySelectedCandidate = sortedCandidates[0] || (inspectorCandidate ? diagnosticToCandidate(inspectorCandidate) : null);
-  const singleSelectedSymbol = sortedCandidates.length === 1 ? normalizeCandidateSymbol(sortedCandidates[0]?.symbol) : null;
   const handleAnalyzeCandidate = useCallback(async (candidate: ScannerCandidate) => {
     setPendingAnalyzeSymbol(candidate.symbol);
     setActionNotice(null);
@@ -2054,13 +2046,19 @@ const UserScannerPage: React.FC = () => {
     watchlistAuthBlocked,
   ]);
 
+  const scannerScopeLabel = runDetail
+    ? `${runDetail.market.toUpperCase()} · ${runDetail.universeType === 'theme' ? (language === 'en' ? 'Theme universe' : '主题标的池') : runDetail.universeType === 'custom' || runDetail.universeType === 'symbols' ? (language === 'en' ? 'Custom symbols' : '自定义标的') : (language === 'en' ? 'Default universe' : '默认市场池')}`
+    : `${market.toUpperCase()} · ${scanScope === 'theme' ? (language === 'en' ? 'Theme universe' : '主题标的池') : scanScope === 'symbols' ? (language === 'en' ? 'Custom symbols' : '自定义标的') : (language === 'en' ? 'Default universe' : '默认市场池')}`;
+  const scannerThemeLabel = runDetail?.themeLabel || runDetail?.themeId || (selectedTheme ? getThemeLabel(selectedTheme, language) : (language === 'en' ? 'No theme' : '无主题'));
+  const scannerDataStateLabel = runDetail
+    ? `${normalizeRunState(runDetail.status) === 'failed' || normalizeRunState(runDetail.status) === 'error' ? `${currentRunSummary?.statusLabel || compactScannerStateLabel(runDetail.status, language)} · ` : ''}${getRunDataStatusLabel(runDetail, language)}`
+    : (language === 'en' ? 'Waiting' : '等待');
   const scannerStatusItems = [
-    { label: language === 'en' ? 'Run' : '扫描', value: currentRunSummary?.statusLabel || (language === 'en' ? 'No scan loaded' : '暂无扫描') },
-    { label: language === 'en' ? 'Selected' : '入选', value: shortlistCount },
-    { label: language === 'en' ? 'Rejected' : '淘汰', value: runDetail?.summary?.rejectedCount ?? 0 },
-    { label: language === 'en' ? 'Data failed' : '数据失败', value: runDetail?.summary?.dataFailedCount ?? 0 },
-    { label: language === 'en' ? 'Data' : '数据', value: runDetail ? getRunDataStatusLabel(runDetail, language) : (language === 'en' ? 'Waiting' : '等待') },
+    { label: language === 'en' ? 'Universe' : '范围', value: scannerScopeLabel },
+    { label: language === 'en' ? 'Theme' : '主题', value: scannerThemeLabel },
+    { label: language === 'en' ? 'Selected / rejected / data failed' : '入选 / 淘汰 / 数据失败', value: `${shortlistCount} / ${runDetail?.summary?.rejectedCount ?? 0} / ${runDetail?.summary?.dataFailedCount ?? 0}` },
     { label: language === 'en' ? 'Latest' : '最近', value: generatedAt ? formatTimestamp(generatedAt, language) : '--' },
+    { label: language === 'en' ? 'Data' : '数据', value: scannerDataStateLabel },
   ];
 
   return (
@@ -2131,6 +2129,7 @@ const UserScannerPage: React.FC = () => {
             data-testid="scanner-status-strip"
             ariaLabel={language === 'en' ? 'Scanner run summary' : '扫描运行摘要'}
             items={scannerStatusItems}
+            className="ui-scroll-x-quiet flex-nowrap overflow-x-auto py-1.5"
           />
 
 		          <div data-testid="scanner-workspace-grid" className="w-full flex-1 min-w-0">
@@ -2354,8 +2353,8 @@ const UserScannerPage: React.FC = () => {
                   </DenseCommandBar>
 
               <div data-testid="scanner-results-pane" className="flex min-h-0 flex-1 min-w-0 flex-col">
-              <div data-testid="scanner-primary-actions" className="order-2 flex shrink-0 flex-col gap-2 border-b border-white/10 bg-white/[0.01] px-3 py-2 lg:flex-row lg:items-start lg:justify-between">
-                <div className="flex min-w-0 flex-col gap-2">
+              <div data-testid="scanner-primary-actions" className="flex shrink-0 flex-row flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-white/[0.01] px-3 py-1.5">
+                <div className="flex min-w-0 flex-row flex-wrap items-center gap-2">
                   {runDetail && hasCandidateDiagnostics ? (
                     <div data-testid="scanner-candidate-filters" className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1 rounded-lg border border-white/5 bg-black/30 p-0.5" role="group" aria-label={language === 'en' ? 'Candidate diagnostics filter' : '候选诊断过滤'}>
                       {([
@@ -2376,13 +2375,12 @@ const UserScannerPage: React.FC = () => {
                       ))}
                     </div>
                   ) : null}
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-white/42">
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-white/42">
                   <span>{language === 'en' ? 'Sort by' : '排序'}</span>
                   {([
                     ['score', language === 'en' ? 'scanner score' : '扫描评分'],
                     ['symbol', language === 'en' ? 'symbol' : '代码'],
-                    ['target', language === 'en' ? 'upper watch' : '上方观察'],
-                    ['risk', language === 'en' ? 'risk/score' : '风险/评分'],
+                    ['risk', language === 'en' ? 'risk' : '风险'],
                   ] as const).map(([key, label]) => (
                     <button
                       key={key}
@@ -2396,19 +2394,7 @@ const UserScannerPage: React.FC = () => {
                   ))}
                 </div>
                 </div>
-                <div className="flex min-w-0 flex-col gap-2 lg:items-end">
-                  {runDetail && primarySelectedCandidate ? (
-                    <ActionButton
-                      label={singleSelectedSymbol
-                        ? (language === 'en' ? `View ${singleSelectedSymbol}` : `查看 ${singleSelectedSymbol}`)
-                        : (language === 'en' ? 'View leading evidence' : '查看头号证据')}
-                      onClick={() => {
-                        setInspectorSymbol(primarySelectedCandidate.symbol);
-                        setExpandedSymbol(primarySelectedCandidate.symbol);
-                      }}
-                      variant="secondary"
-                    />
-                  ) : null}
+                <div className="flex min-w-0 flex-row flex-wrap items-center gap-2">
                   <div data-testid="scanner-more-actions" className="min-w-0">
                     <TerminalButton
                       type="button"
@@ -2422,7 +2408,7 @@ const UserScannerPage: React.FC = () => {
                       <span>{language === 'en' ? 'More' : '更多'}</span>
                     </TerminalButton>
                     {isMoreActionsOpen ? (
-                      <div data-testid="scanner-more-actions-panel" className="mt-2 grid min-w-[220px] gap-1.5 rounded-lg border border-white/5 bg-black/80 p-2">
+                      <div data-testid="scanner-more-actions-panel" className="absolute right-3 z-20 mt-2 grid min-w-[220px] gap-1.5 rounded-lg border border-white/5 bg-black/90 p-2 shadow-xl">
                         <ActionButton
                           label={language === 'en' ? 'Export CSV' : '导出 CSV'}
                           icon={<Download className="h-3.5 w-3.5" />}
@@ -2480,7 +2466,7 @@ const UserScannerPage: React.FC = () => {
                 </div>
               </div>
 
-			              <div data-testid="scanner-candidate-scroll-region" className="order-1 px-0 py-0">
+			              <div data-testid="scanner-candidate-scroll-region" className="px-0 py-0">
 	                {showDiagnosticRows ? (
 	                  decisionSortedDiagnosticCandidates.length ? (
 	                    <DenseTableFrame data-testid="scanner-candidate-diagnostics-table" className="px-3 py-2">
@@ -2575,7 +2561,7 @@ const UserScannerPage: React.FC = () => {
 	                  )
 	                ) : sortedCandidates.length ? (
 	                  <DenseTableFrame data-testid="scanner-result-table">
-	                    <table className="w-full min-w-[980px] border-collapse text-left text-xs xl:min-w-full">
+	                    <table className="w-full min-w-[820px] border-collapse text-left text-xs xl:min-w-full">
                       <thead className="border-b border-white/5 bg-black/25 text-[10px] uppercase tracking-[0.16em] text-white/38">
                         <tr>
                           <th className="px-3 py-2">{language === 'en' ? 'Rank' : '排名'}</th>
@@ -2583,8 +2569,7 @@ const UserScannerPage: React.FC = () => {
                           <th className="px-3 py-2">{language === 'en' ? 'Score' : '评分'}</th>
                           <th className="px-3 py-2">{language === 'en' ? 'Status' : '状态'}</th>
                           <th className="px-3 py-2">{language === 'en' ? 'Key reason' : '关键原因'}</th>
-                          <th className="px-3 py-2">{language === 'en' ? 'Data/source' : '数据/来源'}</th>
-                          <th className="px-3 py-2">{language === 'en' ? 'Watch' : '观察'}</th>
+                          <th className="px-3 py-2">{language === 'en' ? 'Data state' : '数据状态'}</th>
                           <th className="px-3 py-2 text-right">{language === 'en' ? 'Actions' : '操作'}</th>
                         </tr>
                       </thead>
@@ -2596,6 +2581,7 @@ const UserScannerPage: React.FC = () => {
                           const isTracked = trackedWatchlistIdentitySet.has(candidateWatchlistIdentity);
                           const isTrackPending = pendingWatchlistIdentity === candidateWatchlistIdentity;
                           const backtestItem = getBacktestItem(candidate.symbol);
+                          const isMoreOpen = rowMoreSymbol === candidate.symbol;
                           return (
                             <ScannerCandidateTableRow
                               key={`table-${candidateIdentity}`}
@@ -2603,12 +2589,9 @@ const UserScannerPage: React.FC = () => {
                               candidateIdentity={candidateIdentity}
                               language={language}
                               isExpanded={isExpanded}
-                              entryRange={getEntryRange(candidate)}
-                              targetPrice={getTargetPrice(candidate)}
-                              stopLoss={getStopLoss(candidate)}
                               keyReason={getKeyReason(candidate, runDetail, language)}
                               riskSummary={getRiskSummary(candidate, language)}
-                              sourceBadge={getSourceBadge(candidate, runDetail, language) || '--'}
+                              sourceBadge={getSourceBadge(candidate, runDetail, language) || (language === 'en' ? 'Verified' : '已验证')}
                               scoreBadgeClassName={scoreBadgeClass(candidate.score)}
                               watchlistActionLabel={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
                               watchlistActionTitle={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
@@ -2619,6 +2602,7 @@ const UserScannerPage: React.FC = () => {
                               isTrackPending={isTrackPending}
                               isAnalyzing={pendingAnalyzeSymbol === candidate.symbol}
                               isBacktestDisabled={!normalizeCandidateSymbol(candidate.symbol) || backtestItem?.status === 'running' || backtestItem?.status === 'queued'}
+                              isMoreOpen={isMoreOpen}
                               detailPanel={renderCandidateDetailPanel(candidate, isTracked, isTrackPending, backtestItem)}
                               onSelect={() => {
                                 setInspectorSymbol(candidate.symbol);
@@ -2628,6 +2612,7 @@ const UserScannerPage: React.FC = () => {
                               onTrack={() => void handleTrackCandidate(candidate)}
                               onCopy={() => void handleCopyText(candidate.symbol, `candidate:${candidate.symbol}`)}
                               onToggleDetail={() => setExpandedSymbol(isExpanded ? null : candidate.symbol)}
+                              onToggleMore={() => setRowMoreSymbol((current) => current === candidate.symbol ? null : candidate.symbol)}
                               onBacktest={() => void handleBacktestCandidate(candidate)}
                             />
                           );

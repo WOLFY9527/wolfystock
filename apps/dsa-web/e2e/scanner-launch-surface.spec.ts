@@ -43,7 +43,8 @@ async function assertScannerLaunchViewport(page: Page, viewport: { width: number
   await expect(denseShell).toBeVisible();
   await expect(commandBar).toBeVisible();
   await expect(launchSummary).toBeVisible();
-  await expect(launchSummary).toContainText(/扫描/);
+  await expect(launchSummary).toContainText(/范围/);
+  await expect(launchSummary).toContainText(/主题/);
   await expect(launchSummary).toContainText(/入选/);
   await expect(launchSummary).toContainText(/数据/);
   await expect(candidateRegion).toBeVisible();

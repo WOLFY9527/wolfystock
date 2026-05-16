@@ -66,10 +66,12 @@ test.describe('scanner and market overview smoke', () => {
     await expect(moreActions).toHaveCount(0);
 
     await expect(page.getByTestId('scanner-result-table')).toBeVisible();
-    await expect(page.getByTestId('scanner-result-row-NVDA')).toBeVisible();
+    const firstRow = page.getByTestId('scanner-result-row-NVDA');
+    await expect(firstRow).toBeVisible();
     await expect(page.getByRole('button', { name: /^分析$|^analyze$/i }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /^复制$|^copy$/i }).first()).toBeVisible();
-    await page.getByTestId('scanner-result-row-NVDA').getByRole('button', { name: /详情|detail/i }).click();
+    await firstRow.getByRole('button', { name: /更多|more/i }).click();
+    await expect(firstRow.getByRole('button', { name: /^复制$|^copy$/i })).toBeVisible();
+    await firstRow.getByRole('button', { name: /详情|detail/i }).click();
     await expect(page.getByTestId('scanner-result-detail-NVDA').getByRole('button', { name: /导出该候选|export candidate/i })).toBeVisible();
 
     const candidateScrollRegion = page.getByTestId('scanner-candidate-scroll-region');
@@ -107,10 +109,12 @@ test.describe('scanner and market overview smoke', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await signIn(page, '/scanner');
 
-    await page.getByRole('button', { name: /^复制$|^copy$/i }).first().click();
-    await expect(page.getByRole('button', { name: /^已复制$|^copied$/i }).first()).toBeVisible();
+    const firstRow = page.getByTestId('scanner-result-row-NVDA');
+    await firstRow.getByRole('button', { name: /更多|more/i }).click();
+    await firstRow.getByRole('button', { name: /^复制$|^copy$/i }).click();
+    await expect(firstRow.getByRole('button', { name: /^已复制$|^copied$/i })).toBeVisible();
 
-    await page.getByTestId('scanner-result-row-NVDA').getByRole('button', { name: /详情|detail/i }).click();
+    await firstRow.getByRole('button', { name: /详情|detail/i }).click();
     const downloadPromise = page.waitForEvent('download');
     await page.getByTestId('scanner-result-detail-NVDA').getByRole('button', { name: /导出该候选|export candidate/i }).click();
     const download = await downloadPromise;

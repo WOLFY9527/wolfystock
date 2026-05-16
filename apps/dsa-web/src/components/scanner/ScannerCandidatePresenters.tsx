@@ -103,80 +103,29 @@ export function ScannerCandidateDetailPanel({
   return (
     <div
       data-testid={`scanner-result-detail-${candidateIdentity}`}
-      className="mt-3 grid gap-2.5 rounded-2xl border border-white/8 bg-black/25 p-3 md:grid-cols-2"
+      className="mt-2 grid gap-2 rounded-xl border border-white/8 bg-black/24 p-3 md:grid-cols-4"
     >
-      <div className="md:col-span-2 flex flex-wrap gap-2">
-        <ActionButton
-          label={isAnalyzing ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
-          icon={<Play className="h-3.5 w-3.5" />}
-          onClick={() => onAnalyze()}
-          disabled={isAnalyzing}
-          variant="compact"
-        />
-        <ActionButton
-          label={isCopied ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy symbol' : '复制代码')}
-          icon={<Copy className="h-3.5 w-3.5" />}
-          onClick={() => onCopy()}
-        />
-        <ActionButton
-          label={watchlistActionLabel}
-          icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
-          onClick={() => onTrack()}
-          disabled={isTrackPending || isTracked || isWatchlistAuthBlocked}
-          variant="compact"
-          title={watchlistActionTitle}
-        />
-        <ActionButton
-          label={language === 'en' ? 'Export candidate' : '导出该候选'}
-          icon={<Download className="h-3.5 w-3.5" />}
-          onClick={() => onExport()}
-        />
-        <ActionButton
-          label={backtestLabel}
-          icon={<TestTubeDiagonal className="h-3.5 w-3.5" />}
-          onClick={() => onBacktest()}
-          disabled={!candidate.symbol || backtestItem?.status === 'running' || backtestItem?.status === 'queued'}
-          title={backtestTitle}
-        />
-      </div>
-      <div className="md:col-span-2">
-        <ScannerBacktestResultStrip item={backtestItem} language={language} />
-      </div>
-      {evidenceSummary ? (
-        <DetailSection title={language === 'en' ? 'Evidence status' : '证据状态'}>
-          <EvidenceChips summary={evidenceSummary} maxLabels={2} />
-        </DetailSection>
-      ) : null}
-      <DetailSection title={language === 'en' ? 'Key metrics' : '关键指标'}>
-        <LabeledValueGrid items={keyMetricItems} empty={language === 'en' ? 'No key metrics provided' : '未提供关键指标'} />
+      <DetailSection title={language === 'en' ? 'Conclusion' : '结论'}>
+        <p className="text-xs leading-relaxed text-white/68">{selectionNotes[0] || candidate.reasonSummary || keyMetricItems[0]?.value || aiUnavailableText}</p>
       </DetailSection>
-      <DetailSection title={language === 'en' ? 'Feature signals' : '特征信号'}>
-        <LabeledValueGrid items={featureSignalItems} empty={language === 'en' ? 'No feature signals provided' : '未提供特征信号'} />
+      <DetailSection title={language === 'en' ? 'Reason' : '理由'}>
+        <NotesList notes={selectionNotes.slice(0, 2)} empty={language === 'en' ? 'No selection notes provided' : '未提供入选说明'} />
       </DetailSection>
       <DetailSection title={language === 'en' ? 'Risk' : '风险'}>
-        <NotesList notes={riskNotes} empty={language === 'en' ? 'No risk notes provided' : '未提供风险说明'} />
+        <NotesList notes={riskNotes.slice(0, 2)} empty={language === 'en' ? 'No risk notes provided' : '未提供风险说明'} />
       </DetailSection>
-      <DetailSection title={language === 'en' ? 'Observation fields' : '观察字段'}>
-        <div className="flex flex-wrap gap-2">
+      <DetailSection title={language === 'en' ? 'Next step' : '下一步'}>
+        <div className="flex flex-wrap gap-1.5">
           {entryRange ? <FieldChip label={language === 'en' ? 'Entry' : '建仓'} value={entryRange} /> : null}
           {targetPrice ? <FieldChip label={language === 'en' ? 'Target' : '目标'} value={targetPrice} /> : null}
           {stopLoss ? <FieldChip label={language === 'en' ? 'Stop' : '止损'} value={stopLoss} /> : null}
           {!entryRange && !targetPrice && !stopLoss ? (
-            <p className="text-xs text-white/32">{language === 'en' ? 'No explicit entry, target, or stop fields were provided.' : '未提供明确建仓、目标或止损字段。'}</p>
+            <p className="text-xs text-white/36">{language === 'en' ? 'Analyze or backtest before acting.' : '先分析或回测，再执行操作。'}</p>
           ) : null}
         </div>
       </DetailSection>
-      <DetailSection title={language === 'en' ? 'Why selected' : '入选依据'}>
-        <NotesList notes={selectionNotes} empty={language === 'en' ? 'No selection notes provided' : '未提供入选说明'} />
-      </DetailSection>
-      <DetailSection title={language === 'en' ? 'AI interpretation' : 'AI 解读'}>
-        {aiAvailable ? (
-          <div className="space-y-2 text-xs leading-relaxed text-white/64">
-            {aiLines.length ? aiLines.map((line) => <p key={line}>{line}</p>) : <p>{candidate.aiInterpretation?.status}</p>}
-          </div>
-        ) : (
-          <p className="text-xs text-white/32">{aiUnavailableText}</p>
-        )}
+      <DetailSection title={language === 'en' ? 'Key metrics' : '关键指标'}>
+        <LabeledValueGrid items={keyMetricItems.slice(0, 5)} empty={language === 'en' ? 'No key metrics provided' : '未提供关键指标'} />
       </DetailSection>
       {outcomeItems.length ? (
         <DetailSection title={language === 'en' ? 'Realized outcome' : '实际表现'}>
@@ -187,11 +136,76 @@ export function ScannerCandidateDetailPanel({
           </div>
         </DetailSection>
       ) : null}
-      {providerNotes ? (
-        <DetailSection title={language === 'en' ? 'Source' : '来源'}>
-          <p className="text-xs leading-relaxed text-white/64">{providerNotes}</p>
-        </DetailSection>
+      <div className="md:col-span-4 flex flex-wrap items-center gap-1.5 border-t border-white/5 pt-2">
+        <ActionButton
+          label={isAnalyzing ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
+          icon={<Play className="h-3.5 w-3.5" />}
+          onClick={() => onAnalyze()}
+          disabled={isAnalyzing}
+          variant="compact"
+        />
+        <ActionButton
+          label={watchlistActionLabel}
+          icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
+          onClick={() => onTrack()}
+          disabled={isTrackPending || isTracked || isWatchlistAuthBlocked}
+          variant="compact"
+          title={watchlistActionTitle}
+        />
+        <ActionButton
+          label={backtestLabel}
+          icon={<TestTubeDiagonal className="h-3.5 w-3.5" />}
+          onClick={() => onBacktest()}
+          disabled={!candidate.symbol || backtestItem?.status === 'running' || backtestItem?.status === 'queued'}
+          title={backtestTitle}
+        />
+        <ActionButton
+          label={isCopied ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy symbol' : '复制代码')}
+          icon={<Copy className="h-3.5 w-3.5" />}
+          onClick={() => onCopy()}
+        />
+        <ActionButton
+          label={language === 'en' ? 'Export candidate' : '导出该候选'}
+          icon={<Download className="h-3.5 w-3.5" />}
+          onClick={() => onExport()}
+        />
+      </div>
+      {evidenceSummary || featureSignalItems.length || aiAvailable || providerNotes ? (
+        <AdvancedDisclosure
+          testId={`scanner-result-detail-secondary-${candidateIdentity}`}
+          title={language === 'en' ? 'Secondary notes' : '次要说明'}
+          summary={language === 'en' ? 'Evidence, signals, source notes' : '证据、信号、来源说明'}
+          icon="more"
+        >
+          <div className="grid gap-2 md:grid-cols-2">
+            {evidenceSummary ? (
+              <DetailSection title={language === 'en' ? 'Evidence status' : '证据状态'}>
+                <EvidenceChips summary={evidenceSummary} maxLabels={2} />
+              </DetailSection>
+            ) : null}
+            {featureSignalItems.length ? (
+              <DetailSection title={language === 'en' ? 'Feature signals' : '特征信号'}>
+                <LabeledValueGrid items={featureSignalItems.slice(0, 4)} empty={language === 'en' ? 'No feature signals provided' : '未提供特征信号'} />
+              </DetailSection>
+            ) : null}
+            {aiAvailable ? (
+              <DetailSection title={language === 'en' ? 'AI interpretation' : 'AI 解读'}>
+                <div className="space-y-2 text-xs leading-relaxed text-white/64">
+                  {aiLines.length ? aiLines.slice(0, 3).map((line) => <p key={line}>{line}</p>) : <p>{candidate.aiInterpretation?.status}</p>}
+                </div>
+              </DetailSection>
+            ) : null}
+            {providerNotes ? (
+              <DetailSection title={language === 'en' ? 'Source' : '来源'}>
+                <p className="text-xs leading-relaxed text-white/64">{providerNotes}</p>
+              </DetailSection>
+            ) : null}
+          </div>
+        </AdvancedDisclosure>
       ) : null}
+      <div className="md:col-span-4">
+        <ScannerBacktestResultStrip item={backtestItem} language={language} />
+      </div>
     </div>
   );
 }
@@ -429,14 +443,9 @@ export function ScannerCandidateDiagnosticRow({
       data-testid={`scanner-candidate-row-${candidate.symbol}`}
       data-selected={isSelectedCandidate ? 'true' : undefined}
       onClick={() => onSelect()}
-      className={`rounded-xl border px-3 py-2 text-sm backdrop-blur-md transition-all ${isSelectedCandidate ? 'border-emerald-400/20 bg-emerald-400/[0.045] shadow-[inset_2px_0_0_rgba(52,211,153,0.32)]' : isInspectorActive ? 'border-cyan-400/16 bg-cyan-400/[0.035]' : 'border-white/7 bg-white/[0.018] hover:border-white/12 hover:bg-white/[0.028]'}`}
+      className={`rounded-lg border px-3 py-2 text-sm transition-all ${isSelectedCandidate ? 'border-emerald-400/20 bg-emerald-400/[0.04] shadow-[inset_2px_0_0_rgba(52,211,153,0.28)]' : isInspectorActive ? 'border-cyan-400/16 bg-cyan-400/[0.03]' : 'border-white/7 bg-white/[0.014] hover:border-white/12 hover:bg-white/[0.024]'}`}
     >
-      <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(74px,0.55fr)_minmax(56px,0.4fr)_minmax(92px,0.7fr)_minmax(92px,0.6fr)_minmax(0,1.5fr)_minmax(108px,0.75fr)_auto_auto] md:items-center">
-        <div className="min-w-0">
-          <p className={`inline-flex shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${previewBadgeClassName}`}>
-            {previewLabel}
-          </p>
-        </div>
+      <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(52px,0.35fr)_minmax(92px,0.7fr)_minmax(76px,0.5fr)_minmax(80px,0.55fr)_minmax(0,1.7fr)_minmax(120px,0.8fr)_auto] md:items-center">
         <div className="font-mono text-[11px] text-white/42">{candidate.rank ? `#${candidate.rank}` : '--'}</div>
         <div className="min-w-0">
           <p className={`truncate font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-50' : 'text-white/86'}`}>{candidate.symbol || '--'}</p>
@@ -448,14 +457,17 @@ export function ScannerCandidateDiagnosticRow({
           {comparisonLabel ? <span className="ml-1 rounded border border-white/8 bg-white/[0.035] px-1 py-0.5 font-sans text-[10px] font-medium text-white/58">{comparisonLabel}</span> : null}
         </div>
         <div className="min-w-0">
+          <p className={`inline-flex max-w-full rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] ${previewBadgeClassName}`}>
+            <span className="truncate">{previewLabel}</span>
+          </p>
+        </div>
+        <div className="min-w-0">
           <p className="truncate text-xs text-white/68" title={friendlyReason}>{friendlyReason}</p>
         </div>
         <div className="min-w-0">
           <p className="truncate text-[11px] text-white/58" title={dataQualityLabel}>{dataQualityLabel}</p>
-          <p className="truncate text-[10px] text-white/32">{language === 'en' ? 'Evidence summary' : '证据摘要'}</p>
-          {evidenceSummary ? <EvidenceChips summary={evidenceSummary} maxLabels={1} className="mt-1" /> : null}
         </div>
-        <ActionButton label={language === 'en' ? 'View evidence' : '查看证据'} onClick={() => onViewEvidence()} />
+        <ActionButton label={language === 'en' ? 'Detail' : '详情'} onClick={() => onViewEvidence()} />
         <div className="relative">
           <ActionButton label={language === 'en' ? 'More' : '更多'} onClick={() => onToggleMore()} />
         </div>
@@ -674,9 +686,6 @@ export function ScannerCandidateTableRow({
   candidateIdentity,
   language,
   isExpanded,
-  entryRange,
-  targetPrice,
-  stopLoss,
   keyReason,
   riskSummary,
   sourceBadge,
@@ -690,21 +699,20 @@ export function ScannerCandidateTableRow({
   isTrackPending,
   isAnalyzing,
   isBacktestDisabled,
+  isMoreOpen,
   detailPanel,
   onSelect,
   onAnalyze,
   onTrack,
   onCopy,
   onToggleDetail,
+  onToggleMore,
   onBacktest,
 }: {
   candidate: ScannerCandidate;
   candidateIdentity: string;
   language: 'zh' | 'en';
   isExpanded: boolean;
-  entryRange: string | null;
-  targetPrice: string | null;
-  stopLoss: string | null;
   keyReason: string;
   riskSummary: string;
   sourceBadge: string;
@@ -718,12 +726,14 @@ export function ScannerCandidateTableRow({
   isTrackPending: boolean;
   isAnalyzing: boolean;
   isBacktestDisabled: boolean;
+  isMoreOpen: boolean;
   detailPanel?: ReactNode;
   onSelect: () => void;
   onAnalyze: () => void;
   onTrack: () => void;
   onCopy: () => void;
   onToggleDetail: () => void;
+  onToggleMore: () => void;
   onBacktest: () => void;
 }) {
   return (
@@ -753,14 +763,7 @@ export function ScannerCandidateTableRow({
           <p className="mt-0.5 truncate text-[11px] text-white/38">{riskSummary}</p>
         </td>
         <td className="min-w-[150px] px-3 py-2 text-white/50">{sourceBadge}</td>
-        <td className="min-w-[180px] px-3 py-2">
-          <div className="grid grid-cols-3 gap-1 text-[11px] text-white/52">
-            <span className="truncate" title={entryRange || '--'}>{entryRange || '--'}</span>
-            <span className="truncate" title={targetPrice || '--'}>{targetPrice || '--'}</span>
-            <span className="truncate text-rose-200/70" title={stopLoss || '--'}>{stopLoss || '--'}</span>
-          </div>
-        </td>
-        <td className="min-w-[280px] px-3 py-2">
+        <td className="min-w-[190px] px-3 py-2">
           <div className="flex flex-wrap justify-end gap-1.5">
             <ActionButton
               label={language === 'en' ? 'Analyze' : '分析'}
@@ -768,28 +771,33 @@ export function ScannerCandidateTableRow({
               disabled={isAnalyzing}
               variant="compact"
             />
-            <ActionButton
-              label={watchlistActionLabel}
-              icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
-              onClick={() => onTrack()}
-              disabled={isTracked || isTrackPending}
-              variant="compact"
-              title={watchlistActionTitle}
-            />
-            <ActionButton label={copyLabel} onClick={() => onCopy()} />
             <ActionButton label={language === 'en' ? 'Detail' : '详情'} onClick={() => onToggleDetail()} />
-            <ActionButton
-              label={backtestLabel}
-              onClick={() => onBacktest()}
-              disabled={isBacktestDisabled}
-              title={backtestTitle}
-            />
+            <ActionButton label={language === 'en' ? 'More' : '更多'} onClick={() => onToggleMore()} />
           </div>
+          {isMoreOpen ? (
+            <div data-testid={`scanner-result-row-more-${candidateIdentity}`} className="mt-2 grid gap-1.5 rounded-lg border border-white/5 bg-black/35 p-2 sm:grid-cols-2">
+              <ActionButton
+                label={watchlistActionLabel}
+                icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
+                onClick={() => onTrack()}
+                disabled={isTracked || isTrackPending}
+                variant="compact"
+                title={watchlistActionTitle}
+              />
+              <ActionButton label={copyLabel} onClick={() => onCopy()} />
+              <ActionButton
+                label={backtestLabel}
+                onClick={() => onBacktest()}
+                disabled={isBacktestDisabled}
+                title={backtestTitle}
+              />
+            </div>
+          ) : null}
         </td>
       </tr>
       {isExpanded ? (
         <tr>
-          <td colSpan={8} className="border-b border-white/5 px-3 pb-4">
+          <td colSpan={7} className="border-b border-white/5 px-3 pb-4">
             {detailPanel}
           </td>
         </tr>

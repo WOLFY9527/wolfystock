@@ -673,6 +673,10 @@ function orderedSymbolsFromRows(): string[] {
     .map((row) => row.getAttribute('data-testid')?.replace('scanner-result-row-', '') || '');
 }
 
+function expectElementBefore(first: HTMLElement, second: HTMLElement) {
+  expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+}
+
 async function openMoreActions() {
   const more = await screen.findByTestId('scanner-more-actions');
   const trigger = within(more).getByRole('button', { name: /更多|More/i });
@@ -680,6 +684,12 @@ async function openMoreActions() {
     fireEvent.click(trigger);
   }
   return more;
+}
+
+async function openRowMore(rowTestId: string) {
+  const row = await screen.findByTestId(rowTestId);
+  fireEvent.click(within(row).getByRole('button', { name: /更多|More/i }));
+  return row;
 }
 
 async function openAdvancedControls() {
@@ -936,8 +946,9 @@ describe('UserScannerPage', () => {
     expect(runButton).toHaveAttribute('data-terminal-primitive', 'button');
     expect(moreTrigger).toHaveAttribute('data-terminal-primitive', 'button');
     expect(within(row).getByRole('button', { name: /分析|Analyze/i })).toHaveAttribute('data-terminal-primitive', 'button');
-    expect(within(row).getByRole('button', { name: /追踪|Track/i })).toHaveAttribute('data-terminal-primitive', 'button');
     expect(within(row).getByRole('button', { name: /详情|Detail/i })).toHaveAttribute('data-terminal-primitive', 'button');
+    fireEvent.click(within(row).getByRole('button', { name: /更多|More/i }));
+    expect(within(row).getByRole('button', { name: /追踪|Track/i })).toHaveAttribute('data-terminal-primitive', 'button');
 
     fireEvent.click(moreTrigger);
 
@@ -975,6 +986,7 @@ describe('UserScannerPage', () => {
     expect(screen.queryByTestId('scanner-control-rail')).not.toBeInTheDocument();
     expect(screen.getByTestId('scanner-launch-bar')).not.toHaveClass('overflow-hidden', 'max-h-[calc(100vh-120px)]', 'xl:h-full', 'xl:max-h-[calc(100vh-120px)]', 'xl:sticky');
     expect(screen.getByTestId('scanner-candidate-scroll-region')).not.toHaveClass('overflow-y-auto', 'flex-1');
+    expect(screen.getByTestId('scanner-candidate-scroll-region')).not.toHaveClass('order-1');
     expect(screen.getByTestId('scanner-result-table')).toHaveAttribute('data-terminal-primitive', 'dense-table-frame');
   });
 
@@ -984,16 +996,54 @@ describe('UserScannerPage', () => {
 
     const status = await screen.findByTestId('scanner-status-strip');
     const candidates = screen.getByTestId('scanner-candidate-scroll-region');
+    const table = screen.getByTestId('scanner-result-table');
     expect(status).toHaveTextContent(/Selected|入选/);
     expect(status).toHaveTextContent(/Data failed|数据失败/);
     expect(screen.queryByTestId('scanner-diagnostics-panel')).not.toBeInTheDocument();
-    expect(status.compareDocumentPosition(candidates) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(candidates.compareDocumentPosition(screen.getByTestId('scanner-secondary-sections')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expectElementBefore(status, candidates);
+    expectElementBefore(table, screen.getByTestId('scanner-diagnostics-disclosure'));
+    expectElementBefore(table, screen.getByTestId('scanner-run-comparison-strip'));
+    expectElementBefore(table, screen.getByTestId('scanner-strategy-experiment'));
+    expectElementBefore(candidates, screen.getByTestId('scanner-secondary-sections'));
 
     const diagnostics = screen.getByTestId('scanner-diagnostics-disclosure');
     expect(diagnostics).not.toHaveAttribute('open');
+    expect(screen.getByTestId('scanner-run-comparison-strip')).not.toHaveAttribute('open');
+    expect(screen.getByTestId('scanner-strategy-experiment')).not.toHaveAttribute('open');
     fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*数据状态|Expand.*Data status/i }));
     expect(await screen.findByTestId('scanner-diagnostics-panel')).toBeInTheDocument();
+  });
+
+  it('keeps first-fold scanner chrome compact and hides low-value counters from the primary flow', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+
+    const status = await screen.findByTestId('scanner-status-strip');
+    const command = screen.getByTestId('scanner-command-bar');
+    const actions = screen.getByTestId('scanner-primary-actions');
+    const table = screen.getByTestId('scanner-result-table');
+
+    expect(command).not.toHaveTextContent(/个评估|evaluated/i);
+    expect(command).not.toHaveTextContent(/generated|attempted|failed candidate|AI-generated/i);
+    expect(actions).not.toHaveClass('flex-col');
+    expect(actions).toHaveClass('flex-row');
+    expectElementBefore(actions, table);
+    expect(status).not.toHaveTextContent(/provider_down|provider_error|unknown|parquet_history/i);
+    expect(screen.getByTestId('scanner-candidate-scroll-region')).not.toHaveTextContent(/provider_down|provider_error|parquet_history|Evidence summary|证据摘要/i);
+  });
+
+  it('renders selected detail only after the ranked table and before secondary disclosures', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+
+    const table = await screen.findByTestId('scanner-result-table');
+    expect(screen.queryByTestId('scanner-result-detail-WULF')).not.toBeInTheDocument();
+
+    fireEvent.click(within(screen.getByTestId('scanner-result-row-WULF')).getByRole('button', { name: /详情|Detail/i }));
+    const detail = await screen.findByTestId('scanner-result-detail-WULF');
+
+    expectElementBefore(table, detail);
+    expectElementBefore(detail, screen.getByTestId('scanner-secondary-sections'));
   });
 
   it('renders compact scanner evidence chips without raw admin reason codes', async () => {
@@ -1006,6 +1056,8 @@ describe('UserScannerPage', () => {
 
     fireEvent.click(within(row).getByRole('button', { name: /详情|Detail/i }));
     const detail = await screen.findByTestId('scanner-result-detail-WULF');
+    expect(within(detail).queryByText('仅供观察')).not.toBeInTheDocument();
+    fireEvent.click(within(detail).getByRole('button', { name: /次要说明|Secondary notes/i }));
     expect(within(detail).getByText('仅供观察')).toBeInTheDocument();
     expect(within(detail).queryByText(/provider_timeout/i)).not.toBeInTheDocument();
   });
@@ -1042,11 +1094,12 @@ describe('UserScannerPage', () => {
     expect(within(table).getByText('评分')).toBeInTheDocument();
     expect(within(table).getByText('状态')).toBeInTheDocument();
     expect(within(table).getByText('关键原因')).toBeInTheDocument();
-    expect(within(table).getByText('数据/来源')).toBeInTheDocument();
-    expect(within(table).getByText('观察')).toBeInTheDocument();
+    expect(within(table).getByText('数据状态')).toBeInTheDocument();
+    expect(within(table).queryByText('数据/来源')).not.toBeInTheDocument();
+    expect(within(table).queryByText('观察')).not.toBeInTheDocument();
     expect(within(table).getByText('操作')).toBeInTheDocument();
     expect(within(table).getByText('Backend Broadcom Label')).toBeInTheDocument();
-    expect(within(table).getByText('1420')).toBeInTheDocument();
+    expect(within(table).queryByText('1420')).not.toBeInTheDocument();
   });
 
   it('keeps row actions close to table rows without card chrome', async () => {
@@ -1054,8 +1107,9 @@ describe('UserScannerPage', () => {
 
     const row = await screen.findByTestId('scanner-result-row-NVDA');
     expect(within(row).getByRole('button', { name: /详情|Detail/i })).toBeInTheDocument();
-    expect(within(row).getByRole('button', { name: /追踪|Track/i })).toBeInTheDocument();
     expect(within(row).getByRole('button', { name: /分析|Analyze/i })).toBeInTheDocument();
+    fireEvent.click(within(row).getByRole('button', { name: /更多|More/i }));
+    expect(within(row).getByRole('button', { name: /追踪|Track/i })).toBeInTheDocument();
     expect(screen.queryByTestId('scanner-result-card-NVDA')).not.toBeInTheDocument();
   });
 
@@ -1148,7 +1202,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const card = await screen.findByTestId('scanner-result-row-NVDA');
-    expect(within(card).getAllByText(/Tracked|已追踪/).length).toBeGreaterThan(0);
+    fireEvent.click(within(card).getByRole('button', { name: /更多|More/i }));
     expect(within(card).getByRole('button', { name: /Tracked|已追踪/ })).toBeDisabled();
     expect(within(card).getByRole('button', { name: /回测|Backtest/i })).toBeInTheDocument();
   });
@@ -1166,7 +1220,7 @@ describe('UserScannerPage', () => {
 
     renderUserScannerPage();
 
-    const card = await screen.findByTestId('scanner-result-row-AVGO');
+    const card = await openRowMore('scanner-result-row-AVGO');
     fireEvent.click(within(card).getByRole('button', { name: /Track|追踪/i }));
 
     await waitFor(() => {
@@ -1203,7 +1257,7 @@ describe('UserScannerPage', () => {
 
     renderUserScannerPage();
 
-    const card = await screen.findByTestId('scanner-result-row-NVDA');
+    const card = await openRowMore('scanner-result-row-NVDA');
     fireEvent.click(within(card).getByRole('button', { name: /Track|追踪/i }));
 
     expect(await screen.findByText(/Sign in to save candidates to your watchlist|请登录后再保存候选到你的观察名单/)).toBeInTheDocument();
@@ -1240,12 +1294,14 @@ describe('UserScannerPage', () => {
     expect(within(detail).getByRole('button', { name: /导出该候选|Export candidate/i })).toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: /回测|Backtest/i })).toBeEnabled();
     expect(within(detail).getByText('Turnover')).toBeInTheDocument();
-    expect(within(detail).getByText('Momentum expansion')).toBeInTheDocument();
     expect(within(detail).getByText('Backend risk: gap fade below support.')).toBeInTheDocument();
-    expect(within(detail).getByText(/Backend scoring note/)).toBeInTheDocument();
+    expect(within(detail).queryByText(/Backend scoring note/)).not.toBeInTheDocument();
+    fireEvent.click(within(detail).getByRole('button', { name: /次要说明|Secondary notes/i }));
+    expect(within(detail).getByText('Momentum expansion')).toBeInTheDocument();
 
     fireEvent.click(within(screen.getByTestId('scanner-result-row-AVGO')).getByRole('button', { name: /详情|Detail/i }));
     const avgoDetail = await screen.findByTestId('scanner-result-detail-AVGO');
+    fireEvent.click(within(avgoDetail).getByRole('button', { name: /次要说明|Secondary notes/i }));
     expect(within(avgoDetail).getByText('Backend AI interpretation summary.')).toBeInTheDocument();
     expect(within(avgoDetail).getByText('strong')).toBeInTheDocument();
     expect(within(avgoDetail).getByText('SPY')).toBeInTheDocument();
@@ -1363,7 +1419,7 @@ describe('UserScannerPage', () => {
     expect(screen.queryByTestId('scanner-diagnostic-summary')).not.toBeInTheDocument();
     expect(screen.getByTestId('scanner-status-strip')).toHaveTextContent(/1/);
     expect(screen.getByTestId('scanner-status-strip')).toHaveTextContent(/2/);
-    expect(screen.getByTestId('scanner-command-bar')).toHaveTextContent(/本次扫描：1 个入选 \/ 9 个评估|Scan: 1 selected \/ 9 evaluated/);
+    expect(screen.getByTestId('scanner-command-bar')).toHaveTextContent(/本次扫描：1 入选 · 8 淘汰 · 2 失败|Scan: 1 selected · 8 rejected · 2 failed/);
     expect(screen.getByTestId('scanner-result-row-WULF')).toBeInTheDocument();
     expect(screen.queryByTestId('scanner-candidate-preview')).not.toBeInTheDocument();
 
@@ -1382,8 +1438,8 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const actions = await screen.findByTestId('scanner-primary-actions');
-    expect(within(actions).getByRole('button', { name: /查看 WULF|View WULF/i })).toBeInTheDocument();
     expect(within(actions).getByRole('button', { name: /更多|More/i })).toBeInTheDocument();
+    expect(within(actions).queryByRole('button', { name: /查看 WULF|View WULF/i })).not.toBeInTheDocument();
     expect(within(actions).queryByRole('button', { name: /分析 WULF|Analyze WULF/i })).not.toBeInTheDocument();
     expect(within(actions).queryByRole('button', { name: /回测 WULF|Backtest WULF/i })).not.toBeInTheDocument();
     expect(within(actions).queryByRole('button', { name: /加入观察|Save to watchlist/i })).not.toBeInTheDocument();
@@ -1863,7 +1919,7 @@ describe('UserScannerPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: /候选池|Candidate pool/i }));
     const maraRow = await screen.findByTestId('scanner-candidate-row-MARA');
     expect(within(maraRow).getAllByRole('button').map((button) => button.textContent)).toEqual(
-      expect.arrayContaining([expect.stringMatching(/分析|Analyze|查看|View/), expect.stringMatching(/更多|More/)]),
+      expect.arrayContaining([expect.stringMatching(/详情|Detail/), expect.stringMatching(/更多|More/)]),
     );
     expect(within(maraRow).queryByRole('button', { name: /回测|Backtest/i })).not.toBeInTheDocument();
 
@@ -1878,6 +1934,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     expect(await screen.findByTestId('scanner-primary-actions')).toHaveClass('flex');
+    await screen.findByTestId('scanner-candidate-filters');
     expect(screen.queryByTestId('scanner-strategy-preview')).not.toBeInTheDocument();
     expect(screen.queryByTestId('scanner-batch-actions')).not.toBeInTheDocument();
     expect(screen.getByTestId('scanner-strategy-experiment')).not.toHaveAttribute('open');
@@ -1985,7 +2042,7 @@ describe('UserScannerPage', () => {
 
     expect(await screen.findByTestId('scanner-result-row-NVDA')).toBeInTheDocument();
     expect(screen.queryByTestId('scanner-candidate-filters')).not.toBeInTheDocument();
-    expect(screen.getByTestId('scanner-status-strip')).toHaveTextContent(/完成|Completed/);
+    expect(screen.getByTestId('scanner-status-strip')).toHaveTextContent(/Local data|本地数据/);
     expect(screen.queryByTestId('scanner-candidate-inspector')).not.toBeInTheDocument();
     expect(screen.getByTestId('scanner-result-table')).toBeInTheDocument();
   });
