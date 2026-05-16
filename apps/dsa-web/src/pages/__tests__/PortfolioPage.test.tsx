@@ -470,7 +470,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const workspace = screen.getByTestId('portfolio-workspace-grid');
-    expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6', 'flex-1', 'min-w-0', 'min-h-0');
+    expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-5', 'flex-1', 'min-w-0', 'min-h-0');
     expect(workspace).toHaveAttribute('data-terminal-primitive', 'grid');
     expect(workspace).toHaveClass('grid', 'grid-cols-1', 'xl:grid-cols-12', 'gap-6', 'items-start');
     expect(screen.getByTestId('portfolio-bento-page')).toHaveAttribute('data-bento-surface', 'true');
@@ -478,8 +478,8 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('gap-5', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('max-w-[1920px]', 'mx-auto', 'px-4', 'py-2');
     expect(screen.queryByTestId('portfolio-bento-hero')).not.toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-row-status')).toHaveClass('col-span-12', 'xl:col-span-12', 'min-w-0');
-    expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('xl:col-span-12');
+    expect(screen.getByTestId('portfolio-row-status')).toHaveClass('col-span-12', 'min-w-0');
+    expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('grid', 'xl:grid-cols-[minmax(0,1.85fr)_minmax(0,1.15fr)]');
     expect(screen.getByTestId('portfolio-account-status-strip')).toHaveAttribute('data-terminal-primitive', 'panel');
     expect(screen.getByTestId('portfolio-total-assets-card')).toHaveClass('min-w-0');
     expect(screen.getByTestId('portfolio-account-status-strip')).toHaveTextContent('暂无持仓。添加持仓或导入交易后显示组合状态。');
@@ -488,7 +488,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByRole('button', { name: '手工记账' })).toHaveAttribute('data-terminal-primitive', 'button');
     expect(screen.getByRole('heading', { name: /总资产|Total Assets/ })).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveClass('text-white');
-    expect(within(screen.getByTestId('portfolio-total-assets-card')).queryByLabelText('DISPLAY CURRENCY')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-command-strip')).toContainElement(screen.getByTestId('portfolio-display-currency-select'));
     expect(screen.queryByTestId('portfolio-row-macro')).not.toBeInTheDocument();
     expect(within(screen.getByTestId('portfolio-account-status-strip')).getByText(translate('zh', 'portfolio.totalCash'))).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-account-status-strip')).toHaveTextContent('持仓数');
@@ -511,12 +511,12 @@ describe('PortfolioPage FX refresh', () => {
     expect(submitTradeButton).toHaveAttribute('type', 'submit');
     expect(submitTradeButton).toHaveAttribute('data-variant', 'primary');
     expect(submitTradeButton).toHaveAttribute('data-size', 'md');
-    expect(submitTradeButton.className).toContain('from-blue-600');
-    expect(submitTradeButton.className).toContain('to-purple-600');
-    expect(submitTradeButton.className).toContain('text-white');
+    expect(submitTradeButton.className).toContain('border-[color:var(--wolfy-accent)]');
+    expect(submitTradeButton.className).toContain('bg-[var(--wolfy-accent)]');
+    expect(submitTradeButton.className).toContain('text-[#f7f8ff]');
     expect(submitTradeButton.className).toContain('font-medium');
     expect(submitTradeButton.className).toContain('py-2.5');
-    expect(submitTradeButton.className).toContain('shadow-[0_0_15px_rgba(139,92,246,0.3)]');
+    expect(submitTradeButton.className).toContain('rounded-md');
     expect(screen.queryByText(translate('zh', 'portfolio.scopeHint'))).not.toBeInTheDocument();
     expect(getLeftTabButton('记账')).toBeInTheDocument();
     expect(getLeftTabButton('账户')).toBeInTheDocument();
@@ -568,26 +568,36 @@ describe('PortfolioPage FX refresh', () => {
     const tradeStationSection = screen.getByRole('heading', { name: /手工记账台|Trade Station/ }).closest('section') as HTMLElement;
     const recentActivity = screen.getByTestId('portfolio-recent-activity');
 
-    expect(Boolean(totalAssetsCard.compareDocumentPosition(pnlSummary) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(totalAssetsCard.compareDocumentPosition(startCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(startCard.compareDocumentPosition(pnlSummary) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(pnlSummary.compareDocumentPosition(exposureCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(exposureCard.compareDocumentPosition(startCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(startCard.compareDocumentPosition(riskCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(exposureCard.compareDocumentPosition(riskCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(riskCard.compareDocumentPosition(recentActivity) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(recentActivity.compareDocumentPosition(tradeStationSection) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
   });
 
-  it('spans the routing row across the full desktop grid', async () => {
+  it('renders the main RiskConsole as a two-column holdings and risk workspace on desktop', async () => {
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
 
     expect(screen.getByTestId('portfolio-row-routing')).toHaveClass(
-      'col-span-12',
-      'xl:col-span-12',
-      'min-w-0',
       'grid',
-      'xl:grid-cols-12',
+      'grid-cols-1',
+      'xl:grid-cols-[minmax(0,7fr)_minmax(360px,5fr)]',
+    );
+    expect(screen.getByTestId('portfolio-primary-lane')).toHaveClass(
+      'min-w-0',
+      'flex',
+      'flex-col',
+      'gap-4',
+    );
+    expect(screen.getByTestId('portfolio-secondary-lane')).toHaveClass(
+      'min-w-0',
+      'flex',
+      'flex-col',
+      'gap-4',
     );
   });
 
@@ -652,14 +662,15 @@ describe('PortfolioPage FX refresh', () => {
     expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex-1', 'min-w-0', 'min-h-0');
     expect(workspace).toHaveClass('grid', 'grid-cols-1', 'xl:grid-cols-12', 'gap-6', 'items-start');
     expect(screen.getByTestId('portfolio-bento-page').className).not.toMatch(/\bbg-(black|\[#050505\]|gray-|zinc-|slate-|neutral-)/);
-    expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('xl:col-span-12');
+    expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('grid', 'xl:grid-cols-[minmax(0,1.85fr)_minmax(0,1.15fr)]');
     expect(screen.getByRole('button', { name: '添加持仓' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '导入交易' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '手工记账' })).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-command-strip')).toContainElement(screen.getByTestId('portfolio-display-currency-select'));
 
     const startCard = screen.getByTestId('portfolio-start-card');
     expect(startCard).toHaveAttribute('data-terminal-primitive', 'empty-state');
-    expect(startCard).toHaveClass('min-h-[88px]');
+    expect(startCard).toHaveClass('min-h-[72px]');
     expect(startCard).toHaveTextContent('暂无持仓。添加持仓或导入交易后显示组合状态。');
     expect(startCard).not.toHaveClass('min-h-[300px]', 'min-h-[520px]', 'xl:min-h-[300px]');
     expect(within(startCard).queryByText('活跃账户')).not.toBeInTheDocument();
@@ -674,12 +685,13 @@ describe('PortfolioPage FX refresh', () => {
     const secondaryLane = screen.getByTestId('portfolio-secondary-lane');
     const activityLane = screen.getByTestId('portfolio-activity-lane');
     const manualLane = screen.getByTestId('portfolio-manual-lane');
-    expect(screen.getByTestId('portfolio-row-status')).toHaveClass('col-span-12', 'xl:col-span-12', 'min-w-0');
-    expect(workspaceLanes).toHaveClass('order-4', 'col-span-12', 'xl:col-span-12', 'grid', 'grid-cols-1', 'gap-4', 'xl:grid-cols-12', 'items-start');
-    expect(primaryLane).toHaveClass('xl:col-span-8', 'min-w-0', 'flex', 'flex-col', 'gap-4');
-    expect(secondaryLane).toHaveClass('xl:col-span-4', 'min-w-0', 'flex', 'flex-col', 'gap-4');
-    expect(activityLane).toHaveClass('xl:col-span-8', 'min-w-0', 'flex', 'flex-col', 'gap-4');
-    expect(manualLane).toHaveClass('xl:col-span-4', 'min-w-0', 'flex', 'flex-col', 'gap-4');
+    expect(screen.getByTestId('portfolio-row-status')).toHaveClass('col-span-12', 'min-w-0');
+    expect(screen.getByTestId('portfolio-row-routing')).toHaveClass('order-2', 'col-span-12', 'grid', 'grid-cols-1', 'xl:grid-cols-[minmax(0,7fr)_minmax(360px,5fr)]', 'items-start');
+    expect(workspaceLanes).toHaveClass('order-3', 'col-span-12', 'grid', 'grid-cols-1', 'xl:grid-cols-[minmax(0,7fr)_minmax(320px,5fr)]', 'items-start');
+    expect(primaryLane).toHaveClass('min-w-0', 'flex', 'flex-col', 'gap-4');
+    expect(secondaryLane).toHaveClass('min-w-0', 'flex', 'flex-col', 'gap-4');
+    expect(activityLane).toHaveClass('min-w-0', 'flex', 'flex-col', 'gap-4');
+    expect(manualLane).toHaveClass('min-w-0', 'flex', 'flex-col', 'gap-4');
     expect(primaryLane).toContainElement(screen.getByTestId('portfolio-current-holdings-panel'));
     expect(secondaryLane).toContainElement(screen.getByTestId('portfolio-risk-card'));
     expect(activityLane).toContainElement(screen.getByTestId('portfolio-recent-activity'));
@@ -958,7 +970,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    expect(screen.queryByLabelText('DISPLAY CURRENCY')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-command-strip')).toContainElement(screen.getByTestId('portfolio-display-currency-select'));
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveTextContent('USD 414.08');
     expect(screen.getAllByText('USD 1,600.00').length).toBeGreaterThan(0);
     expect(screen.getAllByText('+USD 100.00').length).toBeGreaterThan(0);
@@ -1127,8 +1139,8 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-fx-rate-value')).toHaveTextContent('1 USD = 7.2450 CNY');
     const refreshFxButton = openFxPanel();
     expect(refreshFxButton).toHaveAttribute('data-variant', 'primary');
-    expect(refreshFxButton.className).toContain('from-blue-600');
-    expect(refreshFxButton.className).toContain('to-purple-600');
+    expect(refreshFxButton.className).toContain('border-[color:var(--wolfy-accent)]');
+    expect(refreshFxButton.className).toContain('bg-[var(--wolfy-accent)]');
     expect(refreshFxButton).toHaveTextContent(translate('zh', 'portfolio.refreshFx'));
     expect(screen.getByText('manual')).toBeInTheDocument();
   });
@@ -1731,8 +1743,8 @@ describe('PortfolioPage FX refresh', () => {
 
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
     expect(totalAssetsCard.className).toContain('min-w-0');
-    expect(screen.getByTestId('portfolio-account-status-strip').className).toContain('rounded-[16px]');
-    expect(screen.getByTestId('portfolio-account-status-strip').className).toContain('border-white/5');
+    expect(screen.getByTestId('portfolio-account-status-strip').className).toContain('rounded-lg');
+    expect(screen.getByTestId('portfolio-account-status-strip').className).toContain('bg-[var(--wolfy-surface-console)]');
 
     const summaryBlock = screen.getByTestId('portfolio-trade-station-summary');
     expect(summaryBlock.className).toContain('flex');
