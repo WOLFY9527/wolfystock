@@ -102,7 +102,7 @@ describe('GuestHomePage', () => {
     expect(screen.queryByTestId('guest-home-clean-search')).not.toBeInTheDocument();
     expect(screen.getByText('Apple Inc.')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-score-value')).toHaveTextContent('7.2');
-    expect(screen.getByText('趋势延续但需要等待更好的介入点。')).toBeInTheDocument();
+    expect(screen.getAllByText('趋势延续但需要等待更好的介入点。').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('guest-home-frosted-lock')).toHaveLength(2);
     expect(screen.getAllByText('解锁完整 AI 量化策略与深度技术形态解析')).toHaveLength(2);
     expect(screen.getAllByRole('link', { name: '免费创建账户 (Create Free Account)' })).toHaveLength(2);
@@ -133,7 +133,7 @@ describe('GuestHomePage', () => {
 
     expect(await screen.findByText('Live preview is temporarily unavailable. Loaded a local snapshot instead.')).toBeInTheDocument();
     expect(await screen.findByText('NVIDIA Corporation')).toBeInTheDocument();
-    expect(screen.getByText('The local snapshot keeps the leadership trend intact, with momentum still driving the short-term structure.')).toBeInTheDocument();
+    expect(screen.getAllByText('The local snapshot keeps the leadership trend intact, with momentum still driving the short-term structure.').length).toBeGreaterThan(0);
     expect(screen.getByTestId('home-bento-decision-score-value')).toHaveTextContent('8.4');
     expect(within(screen.getByTestId('home-bento-secondary-stack')).getByTestId('guest-home-frosted-lock')).toBeInTheDocument();
   });

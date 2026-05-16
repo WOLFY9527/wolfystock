@@ -7,17 +7,13 @@ import { publicAnalysisApi } from '../api/publicAnalysis';
 import { normalizeReportQuality } from '../api/reportNormalizer';
 import { withFallback } from '../api/withFallback';
 import {
-  BentoCard,
   BENTO_SURFACE_ROOT_CLASS,
-  DecisionCard,
   DeepReportDrawer,
-  FundamentalsCard,
-  StrategyCard,
-  TechCard,
   type SignalTone,
 } from '../components/home-bento';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { useUiPreferences } from '../contexts/UiPreferencesContext';
 import {
   getSafariReadySurfaceClassName,
   shouldApplySafariA11yGuard,
@@ -35,6 +31,8 @@ import {
   normalizeCompanyNameCandidate,
   readObjectField,
 } from '../utils/homeReportIdentity';
+import { cn } from '../utils/cn';
+import { getToneColor } from '../utils/marketColors';
 import { createPublicAnalysisFallbackPreview } from '../utils/publicAnalysisFallback';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 
@@ -754,7 +752,7 @@ function AnalysisDiagnosticsDisclosure({
   ].filter(Boolean).join(' · ');
 
   return (
-    <section className="rounded-[24px] border border-white/8 bg-white/[0.025] p-4" data-testid="home-bento-analysis-diagnostics">
+    <section className="rounded-xl border border-white/8 bg-white/[0.025] p-4" data-testid="home-bento-analysis-diagnostics">
       <button
         type="button"
         className="flex w-full min-w-0 items-start justify-between gap-3 text-left"
@@ -816,30 +814,465 @@ function AnalysisDiagnosticsDisclosure({
   );
 }
 
-function findMetricValue(metrics: DashboardField[], aliases: string[]): string | undefined {
-  const normalizedAliases = aliases.map((alias) => alias.trim().toLowerCase());
-  return metrics.find((metric) => normalizedAliases.includes(metric.label.trim().toLowerCase()))?.value;
+function isEmptyDashboardValue(value?: string | null): boolean {
+  const text = String(value || '').trim();
+  return !text || text === EMPTY_FIELD_VALUE || /^n\/?a$/i.test(text);
 }
 
-function buildTriggerLevelsValue(metrics: DashboardField[], locale: DashboardLocale): string {
-  const entry = findMetricValue(metrics, locale === 'en' ? ['watch zone', 'entry zone'] : ['观察区间', '建仓区间']);
-  const target = findMetricValue(metrics, locale === 'en' ? ['upper watch zone'] : ['上方观察区']);
-  const visibleEntry = String(entry || '').trim();
-  const visibleTarget = String(target || '').trim();
-  if (visibleEntry && visibleEntry !== EMPTY_FIELD_VALUE && visibleTarget && visibleTarget !== EMPTY_FIELD_VALUE) {
-    return `${visibleEntry} -> ${visibleTarget}`;
+function resolveLinearSectorTrail(locale: DashboardLocale, sector?: string): string {
+  const normalized = String(sector || '').trim();
+  const lower = normalized.toLowerCase();
+  if (locale === 'en') {
+    if (!normalized || lower === 'unclassified') {
+      return 'Single-name analysis / unclassified';
+    }
+    if (lower === 'technology') {
+      return 'Single-name analysis / technology / software / application software';
+    }
+    return `Single-name analysis / ${normalized}`;
   }
-  if (visibleEntry && visibleEntry !== EMPTY_FIELD_VALUE) {
-    return visibleEntry;
+  if (!normalized || lower === 'unclassified') {
+    return '单标的分析 / 未分类';
   }
-  if (visibleTarget && visibleTarget !== EMPTY_FIELD_VALUE) {
-    return visibleTarget;
+  if (lower === 'technology') {
+    return '单标的分析 / 科技 / 软件 / 应用软件';
   }
-  return EMPTY_FIELD_VALUE;
+  const zhLabels: Record<string, string> = {
+    'communication services': '通信服务',
+    'consumer cyclical': '可选消费',
+    'consumer defensive': '必需消费',
+    energy: '能源',
+    financials: '金融',
+    healthcare: '医疗保健',
+    industrials: '工业',
+    'real estate': '房地产',
+    utilities: '公用事业',
+  };
+  return `单标的分析 / ${zhLabels[lower] || normalized}`;
 }
 
-function buildRiskBoundaryValue(metrics: DashboardField[], locale: DashboardLocale): string {
-  return findMetricValue(metrics, locale === 'en' ? ['invalidation line'] : ['风险失效线']) || EMPTY_FIELD_VALUE;
+function normalizeLinearScore(value?: string): number {
+  const numeric = Number.parseFloat(String(value || '').replace(/[^\d.-]/g, ''));
+  if (!Number.isFinite(numeric)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, numeric));
+}
+
+function resolveLinearStanceLabel(locale: DashboardLocale, signalLabel: string, tone: SignalTone): string {
+  const text = String(signalLabel || '').trim();
+  if (isEmptyDashboardValue(text)) {
+    return EMPTY_FIELD_VALUE;
+  }
+  if (/hold|neutral|wait|observe|持有|中性|观望|观察|等待|仅观察/i.test(text)) {
+    return locale === 'en' ? 'Observe' : '仅观察';
+  }
+  if (/sell|short|bear|reduce|trim|卖|空|看空|减仓|风险|不建议/i.test(text) || tone === 'bearish') {
+    return locale === 'en' ? 'Not ready' : '不建议判断';
+  }
+  if (/buy|long|bull|watchlist|constructive|买|多|看多|乐观|偏多|有条件/i.test(text) || tone === 'bullish') {
+    return locale === 'en' ? 'Watchlist' : '有条件观察';
+  }
+  return text;
+}
+
+function toneTextClass(tone: SignalTone | undefined, convention: ReturnType<typeof useUiPreferences>['marketColorConvention']): string {
+  if (!tone || tone === 'neutral') {
+    return 'text-white/76';
+  }
+  return getToneColor(tone, convention).textClass;
+}
+
+function toneTextStyle(tone: SignalTone | undefined, convention: ReturnType<typeof useUiPreferences>['marketColorConvention']): React.CSSProperties {
+  if (!tone || tone === 'neutral') {
+    return {};
+  }
+  return { textShadow: getToneColor(tone, convention).glowShadow };
+}
+
+function metricValueClass(metric: DashboardField, convention: ReturnType<typeof useUiPreferences>['marketColorConvention']): string {
+  if (isEmptyDashboardValue(metric.value)) {
+    return 'text-white/28';
+  }
+  return toneTextClass(metric.tone || 'neutral', convention);
+}
+
+function getMetricLabelForStrip(locale: DashboardLocale, label: string): string {
+  if (label === '观察区间' || label === '建仓区间') {
+    return '价格触发';
+  }
+  if (label === '上方观察区' || label === '目标位') {
+    return '下一关注区间';
+  }
+  if (label === '风险失效线' || label === '止损位') {
+    return '失效位';
+  }
+  if (label === 'Watch Zone' || label === 'Entry Zone') {
+    return 'Trigger';
+  }
+  if (label === 'Upper Watch Zone' || label === 'Target') {
+    return 'Next Zone';
+  }
+  if (label === 'Invalidation Line' || label === 'Stop') {
+    return 'Invalidation';
+  }
+  return locale === 'en' ? label : label;
+}
+
+function buildLinearLevelMetrics(metrics: DashboardField[], locale: DashboardLocale): DashboardField[] {
+  const entryAliases = locale === 'en' ? ['watch zone', 'entry zone'] : ['观察区间', '建仓区间'];
+  const targetAliases = locale === 'en' ? ['upper watch zone', 'target'] : ['上方观察区', '目标位'];
+  const stopAliases = locale === 'en' ? ['invalidation line', 'stop'] : ['风险失效线', '止损位'];
+  const findByAliases = (aliases: string[]) => metrics.find((metric) => aliases.includes(metric.label.trim().toLowerCase()) || aliases.includes(metric.label.trim()));
+  return [
+    findByAliases(entryAliases),
+    findByAliases(stopAliases),
+    findByAliases(targetAliases),
+  ].filter(Boolean) as DashboardField[];
+}
+
+function LinearKeyLevelsStrip({
+  metrics,
+  locale,
+}: {
+  metrics: DashboardField[];
+  locale: DashboardLocale;
+}) {
+  const { marketColorConvention } = useUiPreferences();
+  const levels = buildLinearLevelMetrics(metrics, locale);
+  return (
+    <div
+      className="grid min-w-0 grid-cols-1 overflow-hidden rounded-lg border border-white/[0.08] bg-white/[0.025] sm:grid-cols-3"
+      data-testid="home-linear-key-levels"
+    >
+      {levels.map((metric, index) => (
+        <div
+          key={metric.label}
+          className={cn(
+            'min-w-0 px-4 py-3',
+            index > 0 ? 'border-t border-white/[0.07] sm:border-l sm:border-t-0' : '',
+          )}
+          data-testid={`home-bento-strategy-metric-${metric.label}`}
+        >
+          <p className="truncate text-[11px] font-medium tracking-[0] text-white/42">{getMetricLabelForStrip(locale, metric.label)}</p>
+          <p
+            className={cn('mt-1 truncate font-mono text-sm font-semibold', metricValueClass(metric, marketColorConvention))}
+            style={toneTextStyle(metric.tone || 'neutral', marketColorConvention)}
+          >
+            {metric.value}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LinearTechnicalStructure({
+  locale,
+  signals,
+  isGuest,
+  guestPaywall,
+  onOpenDetails,
+  detailLabel,
+}: {
+  locale: DashboardLocale;
+  signals: DashboardSignal[];
+  isGuest: boolean;
+  guestPaywall?: React.ReactNode;
+  onOpenDetails: () => void;
+  detailLabel: string;
+}) {
+  const { marketColorConvention } = useUiPreferences();
+  const {
+    ref: openDetailsButtonRef,
+    onClick: handleOpenDetailsClick,
+    onPointerUp: handleOpenDetailsPointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
+  const chartTone = signals.find((signal) => signal.tone !== 'neutral')?.tone || 'neutral';
+  const accentColor = chartTone === 'bearish' ? '#FB7185' : '#34D399';
+
+  return (
+    <section
+      className="relative min-w-0 border-t border-white/[0.07] pt-4"
+      data-testid="home-bento-card-tech"
+      data-research-card="risk-context"
+    >
+      <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold tracking-[0] text-white">{locale === 'en' ? 'Technical Structure' : '技术结构'}</p>
+          <p className="mt-1 text-xs text-white/40">{locale === 'en' ? 'Structure view, not a live tick chart.' : '结构视图，不替代实时分时图。'}</p>
+        </div>
+        <button
+          ref={openDetailsButtonRef}
+          type="button"
+          className="text-xs font-medium text-white/42 transition-colors hover:text-white"
+          data-testid="home-bento-drawer-trigger-tech"
+          onClick={handleOpenDetailsClick}
+          onPointerUp={handleOpenDetailsPointerUp}
+        >
+          {detailLabel}
+        </button>
+      </div>
+      <div
+        className={cn(
+          'grid min-w-0 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(210px,260px)]',
+          isGuest ? 'pointer-events-none opacity-80' : '',
+        )}
+      >
+        <div className="min-w-0 rounded-lg border border-white/[0.07] bg-[#080d13] px-3 py-3" data-testid="home-linear-technical-chart">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-[10px] font-medium text-white/46">
+              {['1D', '1W', '1M', '3M', '1Y'].map((range, index) => (
+                <span key={range} className={cn('rounded px-2 py-1', index === 0 ? 'bg-white/[0.08] text-white/82' : '')}>{range}</span>
+              ))}
+            </div>
+            <span className="text-[10px] text-white/34">MA / RSI / MACD</span>
+          </div>
+          <svg viewBox="0 0 640 210" role="img" aria-label={locale === 'en' ? 'Technical structure map' : '技术结构示意'} className="h-[170px] w-full overflow-visible">
+            <defs>
+              <linearGradient id="home-linear-chart-fill" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor={accentColor} stopOpacity="0.18" />
+                <stop offset="100%" stopColor={accentColor} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            {[44, 84, 124, 164].map((y) => (
+              <line key={y} x1="0" x2="640" y1={y} y2={y} stroke="rgba(255,255,255,.055)" strokeWidth="1" />
+            ))}
+            <path d="M0 148 C52 142 76 130 112 134 C154 139 180 116 216 108 C264 96 304 78 348 86 C392 94 420 104 462 98 C506 91 530 118 572 110 C600 104 622 98 640 96 L640 210 L0 210 Z" fill="url(#home-linear-chart-fill)" />
+            <path d="M0 148 C52 142 76 130 112 134 C154 139 180 116 216 108 C264 96 304 78 348 86 C392 94 420 104 462 98 C506 91 530 118 572 110 C600 104 622 98 640 96" fill="none" stroke={accentColor} strokeWidth="2.2" />
+            <path d="M0 158 C60 150 116 141 174 132 C252 120 312 105 380 106 C472 108 544 112 640 101" fill="none" stroke="#3B82F6" strokeOpacity="0.72" strokeWidth="1.6" />
+            <path d="M0 166 C80 160 142 154 208 145 C286 135 356 122 424 121 C512 120 574 118 640 110" fill="none" stroke="#8B5CF6" strokeOpacity="0.38" strokeWidth="1.2" />
+            <line x1="0" x2="640" y1="102" y2="102" stroke="#34D399" strokeOpacity="0.42" strokeDasharray="3 5" />
+          </svg>
+        </div>
+        <div
+          className="min-w-0 divide-y divide-white/[0.07] rounded-lg border border-white/[0.07] bg-white/[0.018] px-3 py-2"
+          data-testid="home-bento-decision-support-grid"
+        >
+          {signals.map((signal) => {
+            const muted = isEmptyDashboardValue(signal.value);
+            const valueClass = muted ? 'text-white/28' : toneTextClass(signal.tone, marketColorConvention);
+            return (
+              <div
+                key={signal.label}
+                className="flex min-w-0 flex-col gap-1 py-2 first:pt-0 last:pb-0"
+                data-testid={`home-bento-tech-signal-${signal.label}`}
+              >
+                <div className="flex min-w-0 items-center justify-between gap-3">
+                  <span className="truncate text-[11px] font-medium tracking-[0] text-white/44">{signal.label}</span>
+                  <span
+                    className={cn('min-w-0 truncate text-right text-xs font-semibold', valueClass)}
+                    style={toneTextStyle(signal.tone, marketColorConvention)}
+                  >
+                    {signal.value}
+                  </span>
+                </div>
+                {signal.details && !isEmptyDashboardValue(signal.details) ? (
+                  <p
+                    className="block w-full overflow-hidden text-ellipsis whitespace-nowrap text-xs text-white/38"
+                    data-testid={`home-bento-tech-signal-detail-${signal.label}`}
+                    title={signal.details}
+                  >
+                    {signal.details}
+                  </p>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {isGuest ? guestPaywall : null}
+    </section>
+  );
+}
+
+function LinearObservationPanel({
+  locale,
+  dashboard,
+  dataQualityReport,
+  sourceSummary,
+  isGuest,
+  guestPaywall,
+  onOpenStrategy,
+  onOpenFundamentals,
+}: {
+  locale: DashboardLocale;
+  dashboard: DashboardPayload;
+  dataQualityReport?: DataQualityReport;
+  sourceSummary?: string;
+  isGuest: boolean;
+  guestPaywall?: React.ReactNode;
+  onOpenStrategy: () => void;
+  onOpenFundamentals: () => void;
+}) {
+  const { marketColorConvention } = useUiPreferences();
+  const {
+    ref: openStrategyButtonRef,
+    onClick: handleOpenStrategyClick,
+    onPointerUp: handleOpenStrategyPointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(onOpenStrategy);
+  const {
+    ref: openFundamentalsButtonRef,
+    onClick: handleOpenFundamentalsClick,
+    onPointerUp: handleOpenFundamentalsPointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(onOpenFundamentals);
+  const isEnglish = locale === 'en';
+  const qualityPreview = dataQualityReport
+    ? buildDataQualityPreview(dataQualityReport, locale)
+    : sourceSummary || (isEnglish ? 'Data quality not yet confirmed.' : '数据质量仍待确认。');
+
+  return (
+    <aside
+      className="relative min-w-0 border-t border-white/[0.08] px-4 py-4 lg:border-l lg:border-t-0 lg:px-6"
+      data-testid="home-bento-secondary-stack"
+    >
+      <section className="min-w-0" data-testid="home-bento-card-strategy" data-research-card="opportunity">
+        <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Observation Framework' : '观察框架'}</h2>
+          <button
+            ref={openStrategyButtonRef}
+            type="button"
+            className="text-xs font-medium text-white/42 transition-colors hover:text-white"
+            data-testid="home-bento-drawer-trigger-strategy"
+            onClick={handleOpenStrategyClick}
+            onPointerUp={handleOpenStrategyPointerUp}
+          >
+            {dashboard.strategy.detailLabel}
+          </button>
+        </div>
+        <div className="divide-y divide-white/[0.07]">
+          {dashboard.strategy.metrics.map((metric) => (
+            <div key={metric.label} className="flex min-w-0 items-center justify-between gap-4 py-3">
+              <span className="truncate text-xs text-white/44">{getMetricLabelForStrip(locale, metric.label)}</span>
+              <span
+                className={cn('min-w-0 truncate text-right font-mono text-xs font-semibold', metricValueClass(metric, marketColorConvention))}
+                style={toneTextStyle(metric.tone || 'neutral', marketColorConvention)}
+              >
+                {metric.value}
+              </span>
+            </div>
+          ))}
+          <div className="py-3">
+            <p className="text-xs text-white/44">{dashboard.strategy.positionLabel}</p>
+            <p className="mt-1 text-xs leading-5 text-white/62">{dashboard.strategy.positionBody}</p>
+          </div>
+        </div>
+      </section>
+
+      <section
+        className="mt-5 min-w-0 border-t border-white/[0.08] pt-5"
+        data-testid="home-bento-card-fundamentals"
+        data-research-card="data-context"
+      >
+        <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Data Quality' : '数据质量与说明'}</h2>
+          <button
+            ref={openFundamentalsButtonRef}
+            type="button"
+            className="text-xs font-medium text-white/42 transition-colors hover:text-white"
+            data-testid="home-bento-drawer-trigger-fundamentals"
+            onClick={handleOpenFundamentalsClick}
+            onPointerUp={handleOpenFundamentalsPointerUp}
+          >
+            {dashboard.fundamentals.detailLabel}
+          </button>
+        </div>
+        <div className="rounded-lg border border-white/[0.07] bg-white/[0.018] px-3 py-3" data-testid="home-linear-quality-summary">
+          <p className="text-xs leading-5 text-white/66">{qualityPreview}</p>
+          <div className="mt-3 grid gap-2">
+            {[
+              { label: isEnglish ? 'Completeness' : '数据完整度', active: dataQualityReport?.requiredAvailable !== false },
+              { label: isEnglish ? 'Reliability' : '覆盖可靠性', active: !dataQualityReport || !hasDataQualityGaps(dataQualityReport) },
+              { label: isEnglish ? 'Actionable' : '财报有效性', active: Boolean(!dataQualityReport?.importantMissing?.length) },
+            ].map((item) => (
+              <div key={item.label} className="grid grid-cols-[6.5rem_minmax(0,1fr)_2.5rem] items-center gap-3 text-[11px]">
+                <span className="truncate text-white/40">{item.label}</span>
+                <span className="h-1 overflow-hidden rounded-full bg-white/[0.07]">
+                  <span className={cn('block h-full rounded-full', item.active ? 'w-4/5 bg-white/54' : 'w-2/5 bg-amber-300/58')} />
+                </span>
+                <span className="text-right text-white/56">{item.active ? (isEnglish ? 'High' : '高') : (isEnglish ? 'Mid' : '中')}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
+          {dashboard.fundamentals.metrics.map((metric) => (
+            <div key={metric.label} className="min-w-0" data-testid={`home-bento-fundamental-metric-${metric.label}`}>
+              <p className="truncate text-[11px] text-white/38">{metric.label}</p>
+              <p className={cn('mt-1 truncate font-mono text-sm font-semibold', isEmptyDashboardValue(metric.value) ? 'text-white/28' : 'text-white/78')}>{metric.value}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+      {isGuest ? guestPaywall : null}
+    </aside>
+  );
+}
+
+function LinearEventsStrip({
+  locale,
+  dashboard,
+  dataQualityReport,
+  sourceSummary,
+}: {
+  locale: DashboardLocale;
+  dashboard: DashboardPayload;
+  dataQualityReport?: DataQualityReport;
+  sourceSummary?: string;
+}) {
+  const isEnglish = locale === 'en';
+  const qualityText = dataQualityReport ? buildDataQualityPreview(dataQualityReport, locale) : sourceSummary;
+  const events = [
+    {
+      label: isEnglish ? 'Report thesis' : '报告主线',
+      title: dashboard.decision.badge,
+      detail: dashboard.decision.summary,
+      importance: isEnglish ? 'High' : '高',
+      time: isEnglish ? 'Current' : '当前',
+    },
+    {
+      label: isEnglish ? 'Technical check' : '技术验证',
+      title: dashboard.tech.signals[0]?.label || dashboard.tech.title,
+      detail: dashboard.tech.signals[0]?.details || dashboard.tech.signals[0]?.value || EMPTY_FIELD_VALUE,
+      importance: isEnglish ? 'Medium' : '中',
+      time: isEnglish ? 'Watching' : '跟踪',
+    },
+    {
+      label: isEnglish ? 'Data status' : '数据状态',
+      title: dataQualityReport ? dataQualityTierLabel(dataQualityReport.dataQualityTier, locale) : (isEnglish ? 'Unconfirmed' : '未确认'),
+      detail: qualityText || (isEnglish ? 'No structured quality notes yet.' : '暂无结构化质量说明。'),
+      importance: isEnglish ? 'Medium' : '中',
+      time: isEnglish ? 'Continuous' : '持续跟踪',
+    },
+  ];
+
+  return (
+    <section className="min-w-0 rounded-lg border border-white/[0.08] bg-[#080c12]/78 px-4 py-3" data-testid="home-linear-events">
+      <div className="grid min-w-0 gap-1 border-b border-white/[0.07] pb-2 md:grid-cols-[minmax(0,1fr)_8rem_8rem]">
+        <h2 className="text-sm font-semibold text-white">{isEnglish ? 'Events & Catalysts' : '关键事件与催化剂'}</h2>
+        <span className="hidden text-xs text-white/40 md:block">{isEnglish ? 'Importance' : '重要性'}</span>
+        <span className="hidden text-xs text-white/40 md:block">{isEnglish ? 'Time' : '时间'}</span>
+      </div>
+      <div className="divide-y divide-white/[0.06]">
+        {events.map((event, index) => (
+          <div key={`${event.label}-${index}`} className="grid min-w-0 gap-2 py-3 md:grid-cols-[minmax(0,1fr)_8rem_8rem]">
+            <div className="min-w-0">
+              <p className="text-[11px] text-white/36">{event.label}</p>
+              <p className="mt-1 truncate text-sm font-medium text-white/78">{isEmptyDashboardValue(event.title) ? EMPTY_FIELD_VALUE : event.title}</p>
+              <p className="mt-1 line-clamp-1 text-xs text-white/44">{event.detail}</p>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-white/58">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#3B82F6]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-[#3B82F6]" />
+              <span className={cn('h-1.5 w-1.5 rounded-full', index === 0 ? 'bg-[#3B82F6]' : 'bg-white/24')} />
+              <span className="ml-3">{event.importance}</span>
+            </div>
+            <p className="text-xs text-white/44">{event.time}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 type DashboardField = {
@@ -2610,8 +3043,7 @@ function buildGuestDashboardFromPreview(
   });
 }
 
-const SKELETON_CARD_CLASS = 'animate-pulse border-indigo-500/20 bg-white/[0.05] shadow-[0_0_42px_rgba(79,70,229,0.10)]';
-const SKELETON_LINE_CLASS = 'rounded-full bg-white/[0.08] shadow-[0_0_24px_rgba(99,102,241,0.12)]';
+const SKELETON_LINE_CLASS = 'rounded-full bg-white/[0.08]';
 
 function SkeletonLine({ className = '' }: { className?: string }) {
   return <div className={`${SKELETON_LINE_CLASS} ${className}`} />;
@@ -2724,13 +3156,6 @@ function timelineStatusLabel(status: 'pending' | 'running' | 'completed' | 'fail
   return '待执行';
 }
 
-function timelineStageTone(status: 'pending' | 'running' | 'completed' | 'failed'): string {
-  if (status === 'completed') return 'border-emerald-300/16 bg-emerald-300/8 text-emerald-100/84';
-  if (status === 'running') return 'border-indigo-200/30 bg-indigo-300/10 text-indigo-50';
-  if (status === 'failed') return 'border-rose-300/20 bg-rose-300/10 text-rose-100/84';
-  return 'border-white/[0.07] bg-white/[0.02] text-white/48';
-}
-
 function timelineDotTone(status: 'pending' | 'running' | 'completed' | 'failed'): string {
   if (status === 'completed') return 'bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.45)]';
   if (status === 'running') return 'bg-indigo-200 shadow-[0_0_18px_rgba(165,180,252,0.55)] animate-pulse';
@@ -2773,97 +3198,92 @@ function InPlaceDecisionSkeleton({
   const leadCopy = buildTimelineLeadCopy(locale, activeStage?.detail, message);
 
   return (
-    <BentoCard
-      eyebrow={locale === 'en' ? 'WOLFY AI ANALYSIS' : 'WOLFY AI 分析'}
-      className={`h-full w-full rounded-[24px] ${SKELETON_CARD_CLASS}`}
-      testId="home-bento-card-decision"
+    <section
+      className="min-w-0"
+      data-testid="home-bento-card-decision"
     >
-      <div className="flex h-full min-h-[420px] flex-col gap-5" data-testid="home-bento-inplace-loading-decision">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex min-h-[520px] flex-col gap-5" data-testid="home-bento-inplace-loading-decision">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <SkeletonLine className="h-5 w-36" />
-            <SkeletonLine className="mt-3 h-3 w-20" />
+            <p className="text-xs text-white/42">{locale === 'en' ? 'Single-name analysis' : '单标的分析'}</p>
+            <div className="mt-4 flex items-center gap-3">
+              <SkeletonLine className="h-7 w-40" />
+              <span className="font-mono text-sm text-white/35">{ticker}</span>
+            </div>
           </div>
-          <span className="font-mono text-xs uppercase tracking-[0.22em] text-indigo-100/52">{ticker}</span>
+          <span className="rounded-md border border-[#3B82F6]/24 bg-[#3B82F6]/10 px-2 py-1 text-[11px] font-medium text-[#93C5FD]">
+            {locale === 'en' ? 'Running' : '分析中'}
+          </span>
         </div>
 
-        <div className="flex flex-1 flex-col gap-4 rounded-[28px] border border-indigo-400/10 bg-black/10 px-5 py-5">
-          <div className="flex min-w-0 items-center gap-4 rounded-[22px] border border-white/[0.06] bg-white/[0.02] px-4 py-3">
-            <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-indigo-200/18 bg-white/[0.03]">
-              <div className="absolute inset-1 rounded-full border border-indigo-200/18 animate-pulse" />
-              <img
-                src="/wolfystock-logo-mark.png"
-                alt="WolfyStock analyzing"
-                className="relative h-7 w-7 rounded-full object-contain"
-              />
+        <div className="grid gap-6 md:grid-cols-[12rem_minmax(0,1fr)]">
+          <div>
+            <p className="text-[11px] text-white/42">{locale === 'en' ? 'Stance' : '投资立场'}</p>
+            <SkeletonLine className="mt-3 h-10 w-28" />
+          </div>
+          <div>
+            <p className="text-[11px] text-white/42">{locale === 'en' ? 'Score' : '综合评分'}</p>
+            <div className="mt-3 flex items-end gap-2">
+              <SkeletonLine className="h-10 w-16" />
+              <span className="pb-1 text-xs text-white/34">/100</span>
             </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-indigo-100/55">
-                {locale === 'en' ? 'Staged analysis' : '分阶段分析'}
-              </p>
-              <p className="mt-1 text-sm font-medium leading-6 text-white/78">
-                {leadCopy}
-              </p>
+            <div className="mt-4 h-1 overflow-hidden rounded-full bg-white/[0.08]">
+              <div className="h-full w-1/2 rounded-full bg-[#3B82F6]" />
             </div>
           </div>
+        </div>
 
+        <div className="max-w-3xl">
+          <p className="text-[11px] text-white/42">{locale === 'en' ? 'Thesis' : '核心观点'}</p>
+          <p className="mt-2 text-sm leading-6 text-white/62">{leadCopy}</p>
+        </div>
+
+        <div className="rounded-lg border border-white/[0.07] bg-white/[0.02] px-4 py-3">
           <div className="grid gap-2" data-testid="home-bento-progress-timeline">
             {timelineStages.map((stage, index) => {
               const isRunning = stage.status === 'running';
               return (
                 <div
                   key={stage.key}
-                  className={`relative overflow-hidden rounded-[20px] border px-4 py-3 ${timelineStageTone(stage.status)}`}
+                  className="relative grid grid-cols-[1.5rem_minmax(0,1fr)_4.5rem] items-start gap-3 border-b border-white/[0.06] py-2 last:border-b-0"
                   data-testid={`home-bento-progress-stage-${stage.key}`}
                 >
-                  {isRunning ? <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-indigo-200/18 via-indigo-100/6 to-transparent animate-pulse" /> : null}
-                  <div className="relative flex min-w-0 items-start justify-between gap-4">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${timelineDotTone(stage.status)}`} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-current">{stage.label}</p>
-                        {stage.detail ? <p className="mt-1 text-xs leading-5 text-white/54">{stage.detail}</p> : null}
-                      </div>
-                    </div>
-                    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/42">
-                      {String(index + 1).padStart(2, '0')} {timelineStatusLabel(stage.status, locale)}
-                    </span>
+                  <span className={`mt-1.5 h-2 w-2 rounded-full ${timelineDotTone(stage.status)}`} />
+                  <div className="min-w-0">
+                    <p className={cn('truncate text-sm font-medium', isRunning ? 'text-white' : 'text-white/58')}>{stage.label}</p>
+                    {stage.detail ? <p className="mt-1 truncate text-xs text-white/40">{stage.detail}</p> : null}
                   </div>
+                  <span className="text-right text-[10px] font-medium text-white/38">
+                    {String(index + 1).padStart(2, '0')} {timelineStatusLabel(stage.status, locale)}
+                  </span>
                 </div>
               );
             })}
           </div>
         </div>
       </div>
-    </BentoCard>
+    </section>
   );
 }
 
 function InPlaceStrategySkeleton({ locale }: { locale: DashboardLocale }) {
   return (
-    <BentoCard
-      eyebrow={locale === 'en' ? 'Observation Framework' : '观察框架'}
-      className={`w-full rounded-[24px] ${SKELETON_CARD_CLASS}`}
-      testId="home-bento-card-strategy"
-    >
-      <div className="grid h-full gap-6 md:grid-cols-2" data-testid="home-bento-inplace-loading-strategy">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-          <SkeletonLine className="col-span-2 h-12" />
-          <SkeletonLine className="h-12" />
-          <SkeletonLine className="h-12" />
-          <SkeletonLine className="h-12" />
-          <SkeletonLine className="h-12" />
+    <section className="min-w-0" data-testid="home-bento-card-strategy">
+      <div className="min-w-0" data-testid="home-bento-inplace-loading-strategy">
+        <div className="mb-4 flex items-center justify-between">
+          <p className="text-sm font-semibold text-white">{locale === 'en' ? 'Observation Framework' : '观察框架'}</p>
+          <SkeletonLine className="h-3 w-16" />
         </div>
-        <div className="border-t border-white/[0.08] pt-5 md:border-l md:border-t-0 md:pl-6 md:pt-0">
-          <SkeletonLine className="h-3 w-24" />
-          <div className="mt-4 space-y-3">
-            <SkeletonLine className="h-3 w-full" />
-            <SkeletonLine className="h-3 w-11/12" />
-            <SkeletonLine className="h-3 w-4/5" />
-          </div>
+        <div className="divide-y divide-white/[0.07]">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={`strategy-line-${index}`} className="flex items-center justify-between gap-4 py-3">
+              <SkeletonLine className="h-3 w-24" />
+              <SkeletonLine className="h-3 w-20" />
+            </div>
+          ))}
         </div>
       </div>
-    </BentoCard>
+    </section>
   );
 }
 
@@ -2879,26 +3299,26 @@ function InPlaceListSkeleton({
     : (locale === 'en' ? 'Fundamental Profile' : '基本面画像');
 
   return (
-    <BentoCard
-      eyebrow={title}
-      className={`h-full w-full rounded-[24px] ${SKELETON_CARD_CLASS}`}
-      testId={kind === 'tech' ? 'home-bento-card-tech' : 'home-bento-card-fundamentals'}
+    <section
+      className="min-w-0 rounded-lg border border-white/[0.07] bg-white/[0.018] px-3 py-3"
+      data-testid={kind === 'tech' ? 'home-bento-card-tech' : 'home-bento-card-fundamentals'}
     >
+      <p className="text-sm font-semibold text-white">{title}</p>
       <div
-        className={kind === 'tech' ? 'space-y-5' : 'grid grid-cols-2 gap-x-6 gap-y-5'}
+        className={kind === 'tech' ? 'mt-3 space-y-3' : 'mt-3 grid grid-cols-2 gap-x-5 gap-y-4'}
         data-testid={`home-bento-inplace-loading-${kind}`}
       >
         {Array.from({ length: kind === 'tech' ? 4 : 6 }).map((_, index) => (
           <div
             key={`${kind}-skeleton-${index}`}
-            className={kind === 'tech' ? 'grid gap-3 border-b border-white/[0.07] pb-5 last:border-b-0 last:pb-0' : 'min-w-0'}
+            className={kind === 'tech' ? 'grid gap-2 border-b border-white/[0.07] pb-3 last:border-b-0 last:pb-0' : 'min-w-0'}
           >
             <SkeletonLine className="h-3 w-20" />
             <SkeletonLine className="mt-2 h-5 w-full" />
           </div>
         ))}
       </div>
-    </BentoCard>
+    </section>
   );
 }
 
@@ -3448,14 +3868,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     <>
       <button
         type="button"
-        className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/12 bg-white px-3 py-2 text-xs font-semibold text-black transition-colors hover:bg-white/88"
+        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-white/78 transition-colors hover:border-white/18 hover:bg-white/[0.1] hover:text-white"
         onClick={() => setFullReportDrawerOpen(true)}
       >
         <span className="truncate">{locale === 'en' ? 'Full Report' : '完整报告'}</span>
       </button>
       <button
         type="button"
-        className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition-colors hover:border-white/16 hover:bg-white/[0.07] hover:text-white"
+        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-white/8 bg-transparent px-3 py-1.5 text-xs font-medium text-white/52 transition-colors hover:border-white/16 hover:bg-white/[0.05] hover:text-white"
         onClick={() => setTraceDrawerOpen(true)}
         data-testid="home-bento-decision-trace-trigger"
       >
@@ -3464,7 +3884,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       </button>
       <button
         type="button"
-        className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/8 bg-transparent px-3 py-2 text-xs font-semibold text-white/52 transition-colors hover:border-white/12 hover:bg-white/[0.04] hover:text-white"
+        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-white/8 bg-transparent px-3 py-1.5 text-xs font-medium text-white/52 transition-colors hover:border-white/12 hover:bg-white/[0.04] hover:text-white"
         onClick={() => { void handleCopyActiveReport(); }}
       >
         <Copy className="h-3.5 w-3.5 shrink-0" />
@@ -3472,7 +3892,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       </button>
       <button
         type="button"
-        className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/8 bg-transparent px-3 py-2 text-xs font-semibold text-white/52 transition-colors hover:border-white/12 hover:bg-white/[0.04] hover:text-white disabled:cursor-wait disabled:text-white/35"
+        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-white/8 bg-transparent px-3 py-1.5 text-xs font-medium text-white/52 transition-colors hover:border-white/12 hover:bg-white/[0.04] hover:text-white disabled:cursor-wait disabled:text-white/35"
         disabled={isBusy || !reanalysisTicker}
         title={!reanalysisTicker ? '缺少股票代码' : undefined}
         onClick={() => { void handleAnalyze(reanalysisTicker); }}
@@ -3484,9 +3904,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   ) : null;
 
   const omnibarModule = (
-    <div className="order-first w-full shrink-0 xl:order-none" data-testid="home-bento-omnibar-shell">
+    <div className="w-full shrink-0" data-testid="home-bento-omnibar-shell">
       <form
-        className="flex h-12 w-full min-w-0 gap-3"
+        className="flex min-h-11 w-full min-w-0 flex-col gap-2 sm:h-11 sm:flex-row"
         data-testid="home-bento-omnibar"
         onSubmit={(event) => {
           event.preventDefault();
@@ -3494,7 +3914,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         }}
       >
         <div
-          className="group relative flex min-w-0 flex-1 items-center overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02] shadow-lg transition-all focus-within:border-white/20 focus-within:bg-white/[0.04]"
+          className="group relative flex min-h-11 min-w-0 flex-1 items-center overflow-hidden rounded-lg border border-white/[0.08] bg-[#0b1118]/80 transition-all focus-within:border-[#3B82F6]/45 focus-within:bg-[#0f1620]"
           data-testid="home-bento-omnibar-input-shell"
         >
           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
@@ -3503,7 +3923,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           <input
             data-testid="home-bento-omnibar-input"
             type="text"
-            className="h-full min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-white caret-white outline-none [appearance:textfield] placeholder:text-white/30"
+            className="h-full min-h-11 min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-white caret-[#93C5FD] outline-none [appearance:textfield] placeholder:text-white/30"
             value={searchQuery}
             onChange={(event) => {
               setSearchQuery(event.target.value);
@@ -3516,7 +3936,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         <button
           type="submit"
           disabled={isBusy}
-          className="h-full shrink-0 rounded-2xl border border-white/10 bg-white/[0.05] px-6 text-sm font-bold text-white backdrop-blur-md transition-all hover:border-white/20 hover:bg-white/[0.1] disabled:cursor-wait disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-white/60"
+          className="min-h-11 shrink-0 rounded-lg border border-white/[0.09] bg-white/[0.045] px-5 text-sm font-semibold text-white/82 transition-colors hover:border-white/18 hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:text-white/48"
           data-testid="home-bento-analyze-button"
         >
           {isHomeAnalyzing ? (locale === 'en' ? 'Analyzing...' : '分析中...') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
@@ -3529,7 +3949,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             onClick={openHistoryDrawerButton.onClick}
             onPointerUp={openHistoryDrawerButton.onPointerUp}
             disabled={isBusy}
-            className="flex h-full shrink-0 items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-4 text-white/70 transition-all hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:text-white/40"
+            className="flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-[#0b1118]/70 px-4 text-white/62 transition-colors hover:bg-white/[0.06] hover:text-white disabled:cursor-wait disabled:text-white/36"
             data-testid="home-bento-history-drawer-trigger"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -3597,19 +4017,25 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           const qualityChipLabel = !isGuest
             ? buildDataQualityChipLabel(activeDataQualityReport, locale, readyCopy.decision.confidenceValue)
             : null;
-          const riskBoundaryValue = buildRiskBoundaryValue(readyCopy.strategy.metrics, locale);
-          const triggerLevelsValue = buildTriggerLevelsValue(readyCopy.strategy.metrics, locale);
+          const scorePercent = normalizeLinearScore(readyCopy.decision.heroValue);
+          const thesisCopy = readyCopy.decision.reasonBody || readyCopy.decision.summary || EMPTY_FIELD_VALUE;
+          const sourceLabel = sourceSummary || qualityChipLabel || '';
+          const stanceLabel = resolveLinearStanceLabel(locale, readyCopy.decision.signalLabel, readyCopy.decision.signalTone);
           return (
             <div
               data-testid="home-bento-grid"
               data-bento-grid="true"
-              className="grid w-full grid-cols-1 items-start gap-6 xl:grid-cols-12"
+              className="flex w-full min-w-0 flex-col gap-3"
             >
+              {omnibarModule}
               <div
-                className="col-span-1 flex h-auto min-h-0 w-full flex-col xl:col-span-6 xl:h-full"
-                data-testid="home-bento-primary-stack"
+                className="grid min-w-0 overflow-hidden rounded-xl border border-white/[0.08] bg-[#080c12]/88 shadow-[0_22px_70px_rgba(0,0,0,0.22)] lg:grid-cols-[minmax(0,1fr)_minmax(300px,380px)]"
+                data-testid="home-linear-shell"
               >
-                <div className="min-h-0 flex-1 xl:h-full">
+                <div
+                  className="min-w-0 px-4 py-5 md:px-7 md:py-6"
+                  data-testid="home-bento-primary-stack"
+                >
                   {isHomeAnalyzing ? (
                     <InPlaceDecisionSkeleton
                       locale={locale}
@@ -3620,97 +4046,163 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     />
                   ) : (
                     <div
-                      className="h-auto xl:h-full"
-                      data-testid={completedTaskReport ? 'home-bento-analysis-result-card' : undefined}
+                      className="min-w-0"
+                      data-testid="home-bento-card-decision"
+                      data-research-card="decision"
                     >
-                      <DecisionCard
-                        eyebrow={readyCopy.decision.eyebrow}
-                        company={readyCopy.decision.company}
-                        ticker={readyCopy.ticker}
-                        heroValue={readyCopy.decision.heroValue}
-                        heroUnit={readyCopy.decision.heroUnit}
-                        heroLabel={readyCopy.decision.heroLabel}
-                        confidenceValue={readyCopy.decision.confidenceValue}
-                        signalLabel={readyCopy.decision.signalLabel}
-                        signalTone={readyCopy.decision.signalTone}
-                        sector={readyCopy.decision.sector}
-                        scoreLabel={readyCopy.decision.scoreLabel}
-                        scoreValue={readyCopy.decision.scoreValue}
-                        badge={readyCopy.decision.badge}
-                        summary={readyCopy.decision.summary}
-                        locale={locale}
-                        qualityChip={qualityChipLabel ? <TraceBadge tone={activeDataQualityReport ? dataQualityChipTone(activeDataQualityReport) : 'neutral'}>{qualityChipLabel}</TraceBadge> : undefined}
-                        reason={{ title: readyCopy.decision.reasonTitle, body: readyCopy.decision.reasonBody }}
-                        riskBoundaryValue={riskBoundaryValue}
-                        reportActions={reportActionButtons}
-                        isGuest={isGuest}
-                        guestPaywall={guestPaywall}
-                        triggerLevelsValue={triggerLevelsValue}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div
-                className="col-span-1 flex min-h-0 w-full min-w-0 flex-col gap-6 xl:col-span-6"
-                data-testid="home-bento-secondary-stack"
-              >
-                {omnibarModule}
-                {isHomeAnalyzing ? (
-                  <>
-                    <InPlaceStrategySkeleton locale={locale} />
-                    <div
-                      className="grid w-full grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:flex-1"
-                      data-testid="home-bento-secondary-grid"
-                    >
-                      <InPlaceListSkeleton locale={locale} kind="tech" />
-                      <InPlaceListSkeleton locale={locale} kind="fundamentals" />
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className={isGuest ? 'relative overflow-hidden rounded-[24px]' : undefined}>
-                      <div className={isGuest ? 'pointer-events-none opacity-85' : undefined}>
-                        <StrategyCard
-                          title={readyCopy.strategy.title}
-                          subtitle={readyCopy.strategy.subtitle}
-                          metrics={readyCopy.strategy.metrics}
-                          positionLabel={readyCopy.strategy.positionLabel}
-                          positionBody={readyCopy.strategy.positionBody}
-                          detailLabel={readyCopy.strategy.detailLabel}
-                          researchCard="opportunity"
-                          onOpenDetails={() => setActiveDrawer('strategy')}
-                        />
+                      <div data-testid={completedTaskReport ? 'home-bento-analysis-result-card' : undefined}>
                         <div
-                          className="mt-6 grid w-full grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:flex-1"
-                          data-testid="home-bento-secondary-grid"
+                          className="flex min-w-0 flex-wrap items-start justify-between gap-4"
+                          data-testid="home-bento-decision-company-header"
                         >
-                          <TechCard
-                            title={readyCopy.tech.title}
+                        <div className="min-w-0">
+                          <p
+                            className="text-xs leading-5 text-white/44"
+                            data-testid="home-bento-decision-sector"
+                          >
+                            {resolveLinearSectorTrail(locale, readyCopy.decision.sector)}
+                          </p>
+                          <div className="mt-3 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                            <h1 className="min-w-0 truncate text-2xl font-semibold tracking-[0] text-white md:text-3xl">
+                              {readyCopy.decision.company}
+                            </h1>
+                            <span className="font-mono text-sm text-white/40">({readyCopy.ticker})</span>
+                          </div>
+                        </div>
+                        {reportActionButtons ? (
+                          <div
+                            className="flex min-w-0 flex-wrap justify-start gap-2 lg:max-w-[28rem] lg:justify-end"
+                            data-testid="home-bento-decision-header-actions"
+                          >
+                            {reportActionButtons}
+                          </div>
+                        ) : null}
+                      </div>
+
+                        {sourceLabel ? (
+                          <p className="mt-3 line-clamp-2 text-xs leading-5 text-white/42" data-testid="home-bento-decision-source-summary">
+                            {sourceLabel}
+                          </p>
+                        ) : null}
+
+                        <div
+                          className="mt-7 grid gap-6 md:grid-cols-[11rem_1fr_minmax(12rem,16rem)]"
+                          data-testid="home-bento-decision-hero-row"
+                        >
+                        <div className="min-w-0" data-testid="home-bento-decision-action">
+                          <p className="text-xs font-medium tracking-[0] text-white/42">{locale === 'en' ? 'Stance' : '投资立场'}</p>
+                          <p
+                            className="mt-3 text-4xl font-semibold tracking-[0] text-white md:text-5xl"
+                            data-testid="home-bento-decision-signal-hero"
+                          >
+                            {stanceLabel}
+                          </p>
+                        </div>
+
+                        <div className="min-w-0" data-testid="home-bento-decision-score">
+                          <p className="text-xs font-medium tracking-[0] text-white/42">{locale === 'en' ? 'Score' : '综合评分'}</p>
+                          <div className="mt-3 flex items-end gap-2" data-testid="home-bento-decision-core-metrics">
+                            <p
+                              className="font-mono text-4xl font-semibold leading-none text-white md:text-5xl"
+                              data-testid="home-bento-decision-score-value"
+                            >
+                              {readyCopy.decision.heroValue}
+                            </p>
+                            <span className="pb-1 text-sm text-white/42">{readyCopy.decision.heroUnit}</span>
+                          </div>
+                          <div className="mt-4 flex max-w-[220px] items-center gap-2">
+                            <span className="h-1 w-full overflow-hidden rounded-full bg-white/[0.08]">
+                              <span className="block h-full rounded-full bg-[#3B82F6]" style={{ width: `${scorePercent}%` }} />
+                            </span>
+                            <span className="h-1 w-10 rounded-full bg-white/[0.08]" />
+                            <span className="h-1 w-8 rounded-full bg-white/[0.06]" />
+                          </div>
+                        </div>
+
+                        <div className="min-w-0" data-testid="home-bento-decision-conviction">
+                          <div className="flex min-w-0 items-center justify-between gap-3">
+                            <p className="text-xs font-medium tracking-[0] text-white/42">{locale === 'en' ? 'Conviction' : '置信度'}</p>
+                            {activeDataQualityReport ? (
+                              <TraceBadge tone={dataQualityChipTone(activeDataQualityReport)}>
+                                {dataQualityTierLabel(activeDataQualityReport.dataQualityTier, locale)}
+                              </TraceBadge>
+                            ) : null}
+                          </div>
+                          <p className="mt-3 font-mono text-2xl font-semibold text-white/82" data-testid="home-bento-decision-conviction-value">
+                            {readyCopy.decision.confidenceValue || EMPTY_FIELD_VALUE}
+                          </p>
+                        </div>
+                        </div>
+
+                        <div className="mt-6 max-w-4xl text-sm leading-6 text-white/68">
+                          <div data-testid="home-bento-decision-insight">
+                            <p className="text-xs font-medium tracking-[0] text-white/42">{locale === 'en' ? 'Thesis' : '核心观点'}</p>
+                            <p className="mt-2" data-testid="home-bento-decision-insight-copy">
+                              {thesisCopy}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-5" data-testid="home-bento-research-state-row">
+                          <LinearKeyLevelsStrip metrics={readyCopy.strategy.metrics} locale={locale} />
+                        </div>
+
+                        <div className="mt-5" data-testid="home-bento-secondary-grid">
+                          <LinearTechnicalStructure
+                            locale={locale}
                             signals={readyCopy.tech.signals}
-                            detailLabel={readyCopy.tech.detailLabel}
-                            researchCard="risk-context"
+                            isGuest={Boolean(isGuest)}
+                            guestPaywall={guestPaywall}
                             onOpenDetails={() => setActiveDrawer('tech')}
-                          />
-                          <FundamentalsCard
-                            title={readyCopy.fundamentals.title}
-                            metrics={readyCopy.fundamentals.metrics}
-                            detailLabel={readyCopy.fundamentals.detailLabel}
-                            researchCard="data-context"
-                            onOpenDetails={() => setActiveDrawer('fundamentals')}
+                            detailLabel={readyCopy.tech.detailLabel}
                           />
                         </div>
                       </div>
-                      {guestPaywall}
                     </div>
-                  </>
+                  )}
+                </div>
+                {isHomeAnalyzing ? (
+                  <aside
+                    className="min-w-0 border-t border-white/[0.08] px-4 py-4 lg:border-l lg:border-t-0 lg:px-6"
+                    data-testid="home-bento-secondary-stack"
+                  >
+                    <InPlaceStrategySkeleton locale={locale} />
+                    <div className="mt-5 grid gap-4" data-testid="home-bento-secondary-grid">
+                      <InPlaceListSkeleton locale={locale} kind="tech" />
+                      <InPlaceListSkeleton locale={locale} kind="fundamentals" />
+                    </div>
+                  </aside>
+                ) : (
+                  <LinearObservationPanel
+                    locale={locale}
+                    dashboard={readyCopy}
+                    dataQualityReport={activeDataQualityReport}
+                    sourceSummary={sourceSummary}
+                    isGuest={Boolean(isGuest)}
+                    guestPaywall={guestPaywall}
+                    onOpenStrategy={() => setActiveDrawer('strategy')}
+                    onOpenFundamentals={() => setActiveDrawer('fundamentals')}
+                  />
                 )}
               </div>
+              {!isHomeAnalyzing ? (
+                <LinearEventsStrip
+                  locale={locale}
+                  dashboard={readyCopy}
+                  dataQualityReport={activeDataQualityReport}
+                  sourceSummary={sourceSummary}
+                />
+              ) : null}
               {!isHomeAnalyzing && !isGuest && (activeDataQualityReport || sourceSummary) ? (
-                <div className="col-span-1 xl:col-span-12">
+                <div>
                   <AnalysisDiagnosticsDisclosure report={activeDataQualityReport} locale={locale} sourceSummary={sourceSummary} />
                 </div>
               ) : null}
+              <p className="px-2 text-center text-[11px] leading-5 text-white/32" data-testid="home-linear-footer-disclaimer">
+                {locale === 'en'
+                  ? 'For research reference only. Not investment advice. Data may be delayed, partial, or fallback-backed.'
+                  : '本平台内容仅供研究参考，不构成投资建议。数据可能存在延迟、缺失或降级。'}
+              </p>
             </div>
           );
         })()}
