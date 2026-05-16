@@ -587,7 +587,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
         extraCssText: 'pointer-events:none;white-space:normal;max-width:min(248px,calc(100vw - 20px));backdrop-filter:blur(10px);',
         textStyle: {
           color: 'rgba(248,250,252,0.86)',
-          fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+          fontFamily: '"SF Pro Text", "Segoe UI", ui-sans-serif, system-ui, sans-serif',
           fontSize: 11,
           lineHeight: 16,
         },
@@ -795,7 +795,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
   return (
     <div
       ref={sizeRef}
-      className="min-w-0 rounded-[12px] border border-white/[0.045] bg-white/[0.012] px-3 py-3"
+      className="min-w-0 rounded-[12px] border border-white/[0.05] bg-[#0b0d11] px-3 py-3"
       data-testid="home-linear-technical-chart"
       data-chart-engine="echarts"
       data-chart-source={activeTimeframe === '1D' ? 'stocks-history-daily' : 'stocks-history-daily-aggregated'}
@@ -811,7 +811,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       <div className="mb-3 flex min-w-0 flex-col gap-2.5">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <div className="flex items-center gap-0.5 rounded-full border border-white/[0.055] bg-white/[0.018] p-0.5">
+            <div className="flex items-center gap-0.5 rounded-full border border-white/[0.06] bg-white/[0.02] p-0.5">
               {TIMEFRAME_OPTIONS.map((optionItem) => (
                 <button
                   key={optionItem.key}
@@ -820,8 +820,8 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
                   className={cn(
                     'rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors',
                     activeTimeframe === optionItem.key
-                      ? 'bg-white/[0.09] text-white/86'
-                      : 'text-white/42 hover:bg-white/[0.045] hover:text-white/72',
+                      ? 'bg-white/[0.08] text-white/86'
+                      : 'text-white/42 hover:bg-white/[0.04] hover:text-white/72',
                   )}
                   onClick={() => handleTimeframeChange(optionItem.key)}
                   disabled={status !== 'ready'}
@@ -859,9 +859,9 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
                 className={cn(
                   'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors',
                   pressed
-                    ? 'border-white/[0.12] bg-white/[0.075] text-white/84'
-                    : 'border-white/[0.045] bg-white/[0.012] text-white/46 hover:border-white/[0.09] hover:bg-white/[0.035] hover:text-white/70',
-                  !available ? 'cursor-not-allowed opacity-40 hover:border-white/[0.045] hover:bg-white/[0.012] hover:text-white/46' : '',
+                    ? 'border-white/[0.12] bg-white/[0.07] text-white/84'
+                    : 'border-white/[0.05] bg-white/[0.012] text-white/46 hover:border-white/[0.09] hover:bg-white/[0.03] hover:text-white/70',
+                  !available ? 'cursor-not-allowed opacity-40 hover:border-white/[0.05] hover:bg-white/[0.012] hover:text-white/46' : '',
                 )}
                 onClick={() => handleIndicatorToggle(key)}
                 title={title}
@@ -879,7 +879,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
 
       {status === 'ready' && candles.length ? (
         <div
-          className="relative h-[228px] min-w-[280px] overflow-visible sm:h-[238px] lg:h-[246px]"
+          className="relative h-[260px] min-w-[280px] overflow-visible sm:h-[300px] xl:h-[336px]"
           data-testid="home-candlestick-chart-frame"
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoveredIndex(null)}
@@ -924,7 +924,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       ) : (
         <div
           className={cn(
-            'flex h-[228px] min-w-[280px] flex-col items-center justify-center rounded border border-white/[0.045] bg-white/[0.012] px-4 text-center sm:h-[238px] lg:h-[246px]',
+            'flex h-[260px] min-w-[280px] flex-col items-center justify-center rounded border border-white/[0.045] bg-white/[0.012] px-4 text-center sm:h-[300px] xl:h-[336px]',
             status === 'loading' ? 'text-white/46' : 'text-white/42',
           )}
           data-testid="home-candlestick-unavailable"
