@@ -69,6 +69,11 @@ type HomeCandlestickChartProps = {
   isLocked?: boolean;
 };
 
+type TooltipPositionSize = {
+  contentSize: [number, number];
+  viewSize: [number, number];
+};
+
 const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 
 const toFiniteNumber = (value: unknown): number | undefined => {
@@ -113,6 +118,57 @@ const escapeHtml = (value: string): string => value
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
+
+const viewportSize = () => ({
+  width: typeof window !== 'undefined'
+    ? window.innerWidth || document.documentElement.clientWidth || 0
+    : 0,
+  height: typeof window !== 'undefined'
+    ? window.innerHeight || document.documentElement.clientHeight || 0
+    : 0,
+});
+
+export const resolveHomeCandlestickTooltipPosition = (
+  point: [number, number],
+  size: TooltipPositionSize,
+  chartRect?: Pick<DOMRect, 'left' | 'top'> | null,
+  viewport = viewportSize(),
+): [number, number] => {
+  const margin = 10;
+  const cursorGap = 14;
+  const [contentWidth = 180, contentHeight = 96] = size.contentSize;
+  const [viewWidth, viewHeight] = size.viewSize;
+  const [mouseX, mouseY] = point;
+
+  if (chartRect && viewport.width > 0 && viewport.height > 0) {
+    let viewportX = chartRect.left + mouseX + cursorGap;
+    if (viewportX + contentWidth + margin > viewport.width) {
+      viewportX = chartRect.left + mouseX - contentWidth - cursorGap;
+    }
+    viewportX = Math.max(margin, Math.min(viewportX, viewport.width - contentWidth - margin));
+
+    let viewportY = chartRect.top + mouseY - contentHeight - cursorGap;
+    if (viewportY < margin) {
+      viewportY = chartRect.top + mouseY + cursorGap;
+    }
+    viewportY = Math.max(margin, Math.min(viewportY, viewport.height - contentHeight - margin));
+
+    return [viewportX - chartRect.left, viewportY - chartRect.top];
+  }
+
+  let x = mouseX + cursorGap;
+  if (x + contentWidth + margin > viewWidth) {
+    x = mouseX - contentWidth - cursorGap;
+  }
+  x = Math.max(margin, Math.min(x, viewWidth - contentWidth - margin));
+
+  let y = mouseY - contentHeight - cursorGap;
+  if (y < margin) {
+    y = mouseY + cursorGap;
+  }
+  y = Math.max(margin, Math.min(y, viewHeight - contentHeight - margin));
+  return [x, y];
+};
 
 const movingAverage = (values: number[], index: number, length: number): number | undefined => {
   if (index < length - 1) {
@@ -174,8 +230,8 @@ const buildTooltip = (point: CandlePoint, locale: string): string => {
     .join('');
 
   return `
-    <div style="min-width:168px;padding:8px 10px;font-size:11px;line-height:1.65;">
-      <p style="margin:0 0 4px;color:rgba(248,250,252,.92);font-weight:600;">${escapeHtml(formatDate(point.date, locale))}</p>
+    <div style="min-width:176px;max-width:220px;padding:8px 10px;font-size:11px;line-height:1.65;">
+      <p style="margin:0 0 5px;color:rgba(248,250,252,.92);font-weight:600;">${escapeHtml(formatDate(point.date, locale))}</p>
       <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">Open</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatPrice(point.open)}</strong></div>
       <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">High</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatPrice(point.high)}</strong></div>
       <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">Low</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatPrice(point.low)}</strong></div>
@@ -250,11 +306,19 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       animation: false,
       backgroundColor: 'transparent',
       grid: [
-        { left: 8, right: 58, top: 10, height: '67%', containLabel: false },
-        { left: 8, right: 58, top: '79%', height: '13%', containLabel: false },
+        { left: 6, right: 46, top: 12, height: '66%', containLabel: false },
+        { left: 6, right: 46, top: '78%', height: '15%', containLabel: false },
       ],
       tooltip: {
         trigger: 'axis',
+        renderMode: 'html',
+        appendToBody: true,
+        appendTo: 'body',
+        confine: false,
+        className: 'home-candlestick-echarts-tooltip',
+        showDelay: 0,
+        hideDelay: 60,
+        transitionDuration: 0.08,
         axisPointer: {
           type: 'cross',
           crossStyle: { color: 'rgba(226,232,240,0.52)' },
@@ -267,11 +331,24 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.10)',
         backgroundColor: 'rgba(6,10,16,0.96)',
+        borderRadius: 6,
         padding: 0,
+        shadowBlur: 18,
+        shadowColor: 'rgba(0,0,0,0.34)',
+        shadowOffsetX: 0,
+        shadowOffsetY: 10,
+        extraCssText: 'pointer-events:none;white-space:normal;max-width:min(220px,calc(100vw - 20px));backdrop-filter:blur(10px);',
         textStyle: {
           color: 'rgba(248,250,252,0.86)',
           fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+          fontSize: 11,
+          lineHeight: 16,
         },
+        position: (point, _params, _dom, _rect, size) => resolveHomeCandlestickTooltipPosition(
+          point as [number, number],
+          size,
+          chartNodeRef.current?.getBoundingClientRect(),
+        ),
         formatter: (params: unknown) => {
           const first = Array.isArray(params) ? params[0] as { dataIndex?: number } | undefined : undefined;
           const point = first?.dataIndex != null ? candles[first.dataIndex] : undefined;
@@ -434,13 +511,15 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       data-testid="home-linear-technical-chart"
       data-chart-engine="echarts"
       data-chart-source="stocks-history-daily"
+      data-tooltip-container="body"
+      data-tooltip-bounds="viewport"
     >
       <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-[10px] font-medium text-white/46">
           <span className="rounded bg-white/[0.08] px-2 py-1 text-white/82">{language === 'en' ? 'Daily' : '日K'}</span>
           <span className="hidden text-white/34 sm:inline">{ticker}</span>
         </div>
-        <div className="hidden min-w-0 items-center gap-3 text-[10px] text-white/38 sm:flex">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 text-[10px] text-white/38">
           {hasMa5 ? <span><span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-[#38BDF8]" />MA5</span> : null}
           {hasMa10 ? <span><span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-[#F59E0B]" />MA10</span> : null}
           {hasMa20 ? <span><span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-[#8B5CF6]" />MA20</span> : null}
@@ -448,7 +527,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       </div>
       {status === 'ready' ? (
         <div
-          className="relative h-[214px] min-w-[280px] overflow-hidden"
+          className="relative h-[228px] min-w-[280px] overflow-visible sm:h-[238px] lg:h-[246px]"
           data-testid="home-candlestick-chart-frame"
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoveredIndex(null)}
@@ -462,7 +541,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           />
           {hoveredCandle ? (
             <div
-              className="pointer-events-none absolute left-2 top-2 z-10 max-w-[min(18rem,calc(100%-1rem))] rounded-md border border-white/10 bg-[#050912]/94 px-3 py-2 text-[11px] leading-5 text-white/72 shadow-xl"
+              className="sr-only"
               data-testid="home-candlestick-hover-tooltip"
               role="status"
               aria-live="polite"
@@ -483,7 +562,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       ) : (
         <div
           className={cn(
-            'flex h-[214px] min-w-[280px] flex-col items-center justify-center rounded border border-white/[0.045] bg-white/[0.012] px-4 text-center',
+            'flex h-[228px] min-w-[280px] flex-col items-center justify-center rounded border border-white/[0.045] bg-white/[0.012] px-4 text-center sm:h-[238px] lg:h-[246px]',
             status === 'loading' ? 'text-white/46' : 'text-white/42',
           )}
           data-testid="home-candlestick-unavailable"

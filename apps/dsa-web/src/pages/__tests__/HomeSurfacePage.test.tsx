@@ -9,6 +9,7 @@ import { UiPreferencesProvider } from '../../contexts/UiPreferencesContext';
 import { stocksApi } from '../../api/stocks';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { useStockPoolStore } from '../../stores';
+import { resolveHomeCandlestickTooltipPosition } from '../../components/home-bento/HomeCandlestickChart';
 import { buildInstitutionalReportMarkdown, getCompanyWithTicker } from '../../utils/homeReportIdentity';
 import HomeSurfacePage from '../HomeSurfacePage';
 
@@ -2378,7 +2379,10 @@ describe('HomeSurfacePage', () => {
 
     const chartFrame = await screen.findByTestId('home-candlestick-chart-frame');
     expect(stocksApi.getHistory).toHaveBeenCalledWith('ORCL', { period: 'daily', days: 180 });
-    expect(screen.getByTestId('home-linear-technical-chart')).toHaveAttribute('data-chart-engine', 'echarts');
+    const chartRoot = screen.getByTestId('home-linear-technical-chart');
+    expect(chartRoot).toHaveAttribute('data-chart-engine', 'echarts');
+    expect(chartRoot).toHaveAttribute('data-tooltip-container', 'body');
+    expect(chartRoot).toHaveAttribute('data-tooltip-bounds', 'viewport');
 
     fireEvent.mouseMove(chartFrame, { clientX: 0 });
 
@@ -2388,6 +2392,30 @@ describe('HomeSurfacePage', () => {
     expect(tooltip).toHaveTextContent('Low 118.75');
     expect(tooltip).toHaveTextContent('Close 119.65');
     expect(tooltip).toHaveTextContent('Volume 8.00M');
+
+    fireEvent.mouseMove(chartFrame, { clientX: 280 });
+    await waitFor(() => {
+      expect(tooltip).toHaveTextContent('MA5');
+      expect(tooltip).toHaveTextContent('MA10');
+      expect(tooltip).toHaveTextContent('MA20');
+    });
+  });
+
+  it('keeps the Home candlestick tooltip inside viewport bounds near chart edges', () => {
+    const size = {
+      contentSize: [210, 118] as [number, number],
+      viewSize: [320, 246] as [number, number],
+    };
+    const chartRect = { left: 58, top: 140 };
+    const viewport = { width: 390, height: 844 };
+
+    const leftEdge = resolveHomeCandlestickTooltipPosition([0, 24], size, chartRect, viewport);
+    expect(leftEdge[0] + chartRect.left).toBeGreaterThanOrEqual(10);
+    expect(leftEdge[1] + chartRect.top).toBeGreaterThanOrEqual(10);
+
+    const rightEdge = resolveHomeCandlestickTooltipPosition([318, 156], size, chartRect, viewport);
+    expect(rightEdge[0] + chartRect.left + size.contentSize[0]).toBeLessThanOrEqual(viewport.width - 10);
+    expect(rightEdge[1] + chartRect.top + size.contentSize[1]).toBeLessThanOrEqual(viewport.height - 10);
   });
 
   it('shows the Home K-line unavailable state when daily OHLC history is missing', async () => {
