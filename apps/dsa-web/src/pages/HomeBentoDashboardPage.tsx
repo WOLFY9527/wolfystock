@@ -11,7 +11,7 @@ import {
   DeepReportDrawer,
   type SignalTone,
 } from '../components/home-bento';
-import { HomeCandlestickChart } from '../components/home-bento/HomeCandlestickChart';
+import { HomeCandlestickChart, type HomeCandlestickChartContext } from '../components/home-bento/HomeCandlestickChart';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useUiPreferences } from '../contexts/UiPreferencesContext';
@@ -1017,6 +1017,7 @@ function LinearTechnicalStructure({
   guestPaywall,
   onOpenDetails,
   detailLabel,
+  onChartContextChange,
 }: {
   locale: DashboardLocale;
   ticker: string;
@@ -1026,6 +1027,7 @@ function LinearTechnicalStructure({
   guestPaywall?: React.ReactNode;
   onOpenDetails: () => void;
   detailLabel: string;
+  onChartContextChange?: (context: HomeCandlestickChartContext | null) => void;
 }) {
   const { marketColorConvention } = useUiPreferences();
   const {
@@ -1062,7 +1064,12 @@ function LinearTechnicalStructure({
           isGuest ? 'pointer-events-none opacity-80' : '',
         )}
       >
-        <HomeCandlestickChart ticker={ticker} currentPrice={currentPrice} isLocked={isGuest} />
+        <HomeCandlestickChart
+          ticker={ticker}
+          currentPrice={currentPrice}
+          isLocked={isGuest}
+          onContextChange={onChartContextChange}
+        />
         <div
           className="min-w-0 divide-y divide-white/[0.055] rounded-md border border-white/[0.055] bg-white/[0.01] px-3 py-2"
           data-testid="home-bento-decision-support-grid"
@@ -3518,6 +3525,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [isTraceDrawerOpen, setTraceDrawerOpen] = useState(false);
   const [isFullReportDrawerOpen, setFullReportDrawerOpen] = useState(false);
   const [mainCopyState, setMainCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [homeChartContext, setHomeChartContext] = useState<HomeCandlestickChartContext | null>(null);
   const routeTaskId = searchParams.get('task_id') || searchParams.get('taskId') || null;
   const routeSymbol = normalizeTickerQuery(searchParams.get('symbol') || undefined);
   const routeSource = searchParams.get('source') || null;
@@ -4140,6 +4148,18 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           </section>
         ) : (() => {
           const readyCopy = dashboardData;
+          const technicalSignals = homeChartContext
+            ? [
+                {
+                  label: locale === 'en' ? 'TIMEFRAME' : '当前周期',
+                  value: homeChartContext.timeframe,
+                  rawValue: homeChartContext.timeframe,
+                  tone: 'neutral' as const,
+                  details: homeChartContext.sourceHint,
+                },
+                ...readyCopy.tech.signals,
+              ]
+            : readyCopy.tech.signals;
           const scorePercent = normalizeLinearScore(readyCopy.decision.heroValue);
           const thesisCopy = readyCopy.decision.reasonBody || readyCopy.decision.summary || EMPTY_FIELD_VALUE;
           const stanceLabel = resolveLinearStanceLabel(locale, readyCopy.decision.signalLabel, readyCopy.decision.signalTone);
@@ -4268,11 +4288,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                             locale={locale}
                             ticker={readyCopy.ticker}
                             currentPrice={parseHomeChartPrice(activeTraceReport?.meta.currentPrice ?? activeTraceReport?.details?.standardReport?.summaryPanel?.currentPrice)}
-                            signals={readyCopy.tech.signals}
+                            signals={technicalSignals}
                             isGuest={Boolean(isGuest)}
                             guestPaywall={guestPaywall}
                             onOpenDetails={() => setActiveDrawer('tech')}
                             detailLabel={readyCopy.tech.detailLabel}
+                            onChartContextChange={setHomeChartContext}
                           />
                         </div>
                       </div>

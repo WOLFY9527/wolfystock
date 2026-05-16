@@ -2418,17 +2418,20 @@ describe('HomeSurfacePage', () => {
     renderSurface();
 
     const chartFrame = await screen.findByTestId('home-candlestick-chart-frame');
-    expect(stocksApi.getHistory).toHaveBeenCalledWith('ORCL', { period: 'daily', days: 180 });
+    expect(stocksApi.getHistory).toHaveBeenLastCalledWith('ORCL', { period: 'daily', days: 365 });
     const chartRoot = screen.getByTestId('home-linear-technical-chart');
     expect(chartRoot).toHaveAttribute('data-chart-engine', 'echarts');
     expect(chartRoot).toHaveAttribute('data-tooltip-container', 'body');
     expect(chartRoot).toHaveAttribute('data-tooltip-bounds', 'viewport');
     expect(chartRoot).toHaveAttribute('data-axis-layout', 'split-price-volume');
     expect(chartRoot).toHaveAttribute('data-x-axis-density', 'sampled');
+    expect(chartRoot).toHaveAttribute('data-chart-timeframe', '1D');
+    expect(chartRoot).toHaveAttribute('data-chart-source', 'stocks-history-daily');
 
     fireEvent.mouseMove(chartFrame, { clientX: 0 });
 
     const tooltip = await screen.findByTestId('home-candlestick-hover-tooltip');
+    expect(tooltip).toHaveTextContent('日期');
     expect(tooltip).toHaveTextContent('开盘 120.00');
     expect(tooltip).toHaveTextContent('最高 121.10');
     expect(tooltip).toHaveTextContent('最低 118.75');
@@ -2441,6 +2444,74 @@ describe('HomeSurfacePage', () => {
       expect(tooltip).toHaveTextContent('MA5');
       expect(tooltip).toHaveTextContent('MA10');
       expect(tooltip).toHaveTextContent('MA20');
+    });
+  });
+
+  it('renders timeframe controls, hides intraday controls, and aggregates 1W/1M from daily candles', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    renderSurface();
+
+    const chartRoot = await screen.findByTestId('home-linear-technical-chart');
+    const timeframe1D = screen.getByRole('button', { name: '1D' });
+    const timeframe1W = screen.getByRole('button', { name: '1W' });
+    const timeframe1M = screen.getByRole('button', { name: '1M' });
+
+    expect(timeframe1D).toHaveAttribute('aria-pressed', 'true');
+    expect(timeframe1W).toHaveAttribute('aria-pressed', 'false');
+    expect(timeframe1M).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByRole('button', { name: '1m' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '5m' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '15m' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '1H' })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(chartRoot).toHaveAttribute('data-chart-timeframe', '1D');
+      expect(chartRoot).toHaveAttribute('data-chart-source', 'stocks-history-daily');
+      expect(chartRoot).toHaveAttribute('data-chart-points', String(homeDailyCandles.length));
+    });
+
+    fireEvent.click(timeframe1W);
+    await waitFor(() => {
+      expect(chartRoot).toHaveAttribute('data-chart-timeframe', '1W');
+      expect(chartRoot).toHaveAttribute('data-chart-source', 'stocks-history-daily-aggregated');
+      expect(chartRoot).toHaveAttribute('data-chart-points', '4');
+      expect(screen.getByTestId('home-bento-tech-signal-当前周期')).toHaveTextContent('1W');
+    });
+
+    fireEvent.click(timeframe1M);
+    await waitFor(() => {
+      expect(chartRoot).toHaveAttribute('data-chart-timeframe', '1M');
+      expect(chartRoot).toHaveAttribute('data-chart-source', 'stocks-history-daily-aggregated');
+      expect(chartRoot).toHaveAttribute('data-chart-points', '1');
+      expect(screen.getByTestId('home-bento-tech-signal-当前周期')).toHaveTextContent('1M');
+    });
+  });
+
+  it('toggles moving-average indicators without leaving the Home page', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    renderSurface();
+
+    const chartRoot = await screen.findByTestId('home-linear-technical-chart');
+    const chartFrame = await screen.findByTestId('home-candlestick-chart-frame');
+    const ma20Toggle = screen.getByRole('button', { name: 'MA20' });
+    const ma60Toggle = screen.getByRole('button', { name: 'MA60' });
+
+    expect(chartRoot).toHaveAttribute('data-enabled-indicators', 'MA5,MA10,MA20');
+    expect(ma20Toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(ma60Toggle).toBeDisabled();
+
+    fireEvent.click(ma20Toggle);
+
+    await waitFor(() => {
+      expect(ma20Toggle).toHaveAttribute('aria-pressed', 'false');
+      expect(chartRoot).toHaveAttribute('data-enabled-indicators', 'MA5,MA10');
+    });
+
+    fireEvent.mouseMove(chartFrame, { clientX: 280 });
+    const tooltip = await screen.findByTestId('home-candlestick-hover-tooltip');
+    await waitFor(() => {
+      expect(tooltip).toHaveTextContent('MA5');
+      expect(tooltip).toHaveTextContent('MA10');
+      expect(tooltip).not.toHaveTextContent('MA20');
     });
   });
 
@@ -2473,9 +2544,28 @@ describe('HomeSurfacePage', () => {
     renderSurface();
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('K线数据暂不可用');
+      expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('该周期行情暂不可用');
     });
     expect(screen.queryByTestId('home-candlestick-chart-frame')).not.toBeInTheDocument();
+  });
+
+  it('disables VWAP when volume support is unavailable', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stocksApi.getHistory).mockResolvedValue({
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      period: 'daily',
+      data: homeDailyCandles.map((item) => ({ ...item, volume: 0 })),
+    });
+
+    renderSurface();
+
+    const chartRoot = await screen.findByTestId('home-linear-technical-chart');
+    const vwapToggle = screen.getByRole('button', { name: 'VWAP' });
+
+    expect(vwapToggle).toBeDisabled();
+    expect(chartRoot).toHaveAttribute('data-vwap-available', 'false');
+    expect(screen.getByText('VWAP 暂不可用')).toBeInTheDocument();
   });
 
   it('updates pending analysis cards in place when completed task payload only exposes snake_case standard_report', async () => {
