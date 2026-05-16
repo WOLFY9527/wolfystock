@@ -1,522 +1,370 @@
-# WolfyStock Canonical UI Primitive Specification
+# WolfyStock Canonical UI Primitives
 
-Date: 2026-05-05 Asia/Shanghai  
+Status: Linear OS aligned replacement for the older primitive-governance note.  
 Repository: `/Users/yehengli/daily_stock_analysis`  
-Branch: `main`  
-Mode: docs-only design governance; no product code, tests, CSS, backend/API, package, config, runtime, generated artifact, or changelog changes
+Intended path: `docs/design/wolfystock-canonical-ui-primitives.md`
 
-## 1. Executive Summary
+## 1. Purpose
 
-`npm run check:design` at 0 warnings is necessary, but it is not enough. The design guard blocks repeatable source anti-patterns such as solid gray backgrounds, visible raw/debug copy, localized-copy fallback risks, and native-control risks. It does not prove route composition, card hierarchy, mobile touch target comfort, preview-shell alignment, or primitive ownership.
+This document is useful and should be kept after replacement.
 
-The completed frontend design conformance audit found that WolfyStock is visually aligned with the deep-space quant-terminal constitution, but still has high design debt in route-local cards, command bars, status chips, icon buttons, dense tabs, chart toggles, and developer-detail disclosures. Future work must stop adding new local variants before migration starts.
+Its job is to explain which UI primitives should own WolfyStock product surfaces after the Linear OS foundation. It is not a competing visual system. It must defer to:
 
-This document defines canonical primitive categories, first-source owners, domain adapter rules, and migration sequencing. It is a practical governance spec, not a new design system. The first migration path should be one low-blast-radius surface, preferably **Admin Notifications** or **Watchlist**, using current common primitives and route tests before extracting broader shared helpers.
+```text
+docs/codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md
+docs/codex/WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md
+docs/codex/WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md
+docs/codex/CODEX_FRONTEND_DESIGN_CONSTITUTION.md
+```
 
-Future Codex tasks must search existing helpers/components before adding new ones, reuse established Button/Input/Select/status/developer-detail patterns, avoid route-local duplicate status/chip/button/card patterns, justify any new helper/component in final reports, and preserve `CODEX_FRONTEND_DESIGN_CONSTITUTION.md` plus `docs/checks/design-guard.md`.
+Primary rule:
 
-## 2. Source Evidence
+```text
+New user-facing surfaces should prefer apps/dsa-web/src/components/linear/.
+```
 
-Audit documents used:
+Older common or compatibility components may remain while routes migrate, but they must not define the future product UI direction.
 
-- `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
-- `docs/audits/wolfystock-frontend-design-conformance-audit.md`
-- `docs/qa/wolfystock-workflow-qa-pass.md`
-- `docs/qa/wolfystock-portfolio-populated-holdings-qa.md`
-- `docs/checks/design-guard.md`
-- `docs/audits/wolfystock-css-ownership-inventory.md`
-- `docs/audits/wolfystock-css-selector-usage-verification.md`
-- `docs/audits/wolfystock-global-codebase-audit.md`
-- `docs/audits/wolfystock-phase0-bundle-design-inventory.md`
-- `docs/operations/parallel-codex-playbook.md`
+## 2. Linear OS Primitive Principles
 
-Existing components and patterns inspected:
+WolfyStock primitives should encode:
 
-- Common primitives: `apps/dsa-web/src/components/common/Button.tsx`, `GlassCard.tsx`, `SectionShell.tsx`, `Input.tsx`, `Select.tsx`, `Checkbox.tsx`, `Disclosure.tsx`, `MetricCard.tsx`, `PillBadge.tsx`, `ScrollArea.tsx`, `SegmentedControl.tsx`, `WorkspacePageHeader.tsx`
-- Status helpers: `apps/dsa-web/src/components/ui/StatusBadge.tsx`, `apps/dsa-web/src/utils/displayStatus.ts`
-- Shell owners: `apps/dsa-web/src/components/layout/Shell.tsx`, `PreviewShell.tsx`, `SidebarNav.tsx`
-- Market adapters: `apps/dsa-web/src/components/market-overview/marketOverviewPrimitives.tsx`, `MarketOverviewCard.tsx`, `marketOverviewLabels.ts`
-- Report/backtest adapters: `apps/dsa-web/src/components/report/*`, `apps/dsa-web/src/components/backtest/*`
-- Route-local current usage: `AdminNotificationsPage.tsx`, `AdminLogsPage.tsx`, `WatchlistPage.tsx`, `PortfolioPage.tsx`, `UserScannerPage.tsx`, `BacktestPage.tsx`, `DeterministicBacktestResultPage.tsx`, `PreviewReportPage.tsx`, `ChatPage.tsx`, `HomeBentoDashboardPage.tsx`
+- charcoal surface ladder;
+- one dominant console/board/workbench per route;
+- thin separators and row grouping;
+- compact command/filter rhythm;
+- compact context rail when useful;
+- evidence-first copy;
+- real chart/table/data behavior;
+- mobile without horizontal overflow;
+- raw diagnostics collapsed by default.
 
-Limitations:
+They should not encode:
 
-- This is a governance document based on source inspection and existing audit reports.
-- No rendered DOM, Safari, Playwright, or browser verification was run because no UI changed.
-- No migration is approved by this document alone. Each migration still needs targeted tests and visual checks.
-- CSS deletion or splitting is explicitly out of scope until visual-regression and DOM-verification checklists exist.
+- card-first page architecture;
+- route-local material styling;
+- decorative material effects as hierarchy;
+- widened old cards presented as a new design system;
+- product-route admin/backend layout;
+- helper copy that says the UI is summarized, readable, trustworthy, ready, or useful.
 
-## 3. Primitive Taxonomy
+## 3. Canonical Surface Taxonomy
 
-| Primitive | Purpose | Existing owner/pattern | First migration target | Risk | Parallelization note |
-| --- | --- | --- | --- | --- | --- |
-| PageShell / route shell | Own route frame, width, scroll, masthead, rail, and route modifiers. | `components/layout/Shell.tsx`, `PreviewShell.tsx`, shell route classes such as `theme-shell--scanner`, `shell-content-frame--*`, `workspace-page--*`. | Document Preview Report shell alignment before changing code. | High | Serialize shell changes; audit-only docs can run in parallel. |
-| SurfaceCard | Primary ghost-glass route card. | `GlassCard`, `SectionShell`, constitution ghost surface classes. | Admin Notifications rule/list cards or Watchlist command/result cards. | Medium | One route at a time if shared card files change. |
-| NestedCard | Quiet inner block inside a surface. | `MetricCard`, `theme-panel-subtle`, `bg-black/20`, `bg-white/[0.025]`. | Portfolio risk/exposure nested blocks after tests. | Medium | Parallel by route only if no shared primitive edit. |
-| CommandBar | Dense action/filter strip for route-level commands. | Watchlist command area, Scanner action strip, Backtest tabs, Market refresh rail. | Watchlist command bar. | Medium | Shared extraction serialized; route-local audits parallel-safe. |
-| Button | Text action with loading/disabled behavior. | `components/common/Button.tsx`. | Preview chart toggles or Backtest segmented actions after tests. | Medium | Shared Button edits must be serialized. |
-| IconButton | Icon-only action with label/title and fixed target. | Current route-local icon buttons plus Button sizing rules. | Market refresh icons or Settings password visibility after target audit. | Medium | Needs shared owner before broad adoption. |
-| Input | Text/number/date/password entry. | `components/common/Input.tsx`, `StockAutocomplete` input surface. | Portfolio form label/localization pass after tests. | Medium | Shared Input edits serialized. |
-| Select | Native select with ghost overlay and custom arrow. | `components/common/Select.tsx`. | Portfolio and Backtest selects that already use common Select. | Medium | Shared Select edits serialized. |
-| Checkbox / row selection | Boolean and row-selection control with large touch wrapper. | `components/common/Checkbox.tsx`, row-local selection controls. | Admin Notifications checkbox, then Watchlist row selection. | Medium | Route-local wrappers parallel-safe; shared Checkbox edit serialized. |
-| StatusChip | Generic display status chip, not domain ontology. | `components/ui/StatusBadge.tsx`, `utils/displayStatus.ts`. | Admin Logs generic levels/statuses. | Medium | Status utility changes serialized. |
-| FreshnessBadge / provider state badge | Provider freshness, fallback, cache, stale state. | Market-owned `marketOverviewPrimitives.tsx` and freshness labels. | Market Overview documentation first; no generic replacement first. | Medium | Keep market-owned adapter changes serialized with market QA. |
-| DeveloperDetails / raw diagnostics disclosure | Collapsed raw/debug/diagnostic area. | `components/common/Disclosure.tsx`, System Control Plane disclosures, report details. | Admin Notifications or System Settings diagnostics. | Medium | Shared Disclosure changes serialized. |
-| EmptyState | Quiet no-data, loading, failure-safe content. | Route-local empty cards; common card primitives. | Watchlist empty/filter states or Portfolio empty accounts. | Low/Medium | Parallel by route if no shared component edit. |
-| MetricCard | Compact label/value/detail tile. | `components/common/MetricCard.tsx`, Portfolio/Backtest/Market route tiles. | Backtest result metric tiles or Admin Notifications summary tiles. | Medium | Shared extraction serialized. |
-| Mobile action rail / touch-target pattern | Mobile-safe dense actions with stable min target. | Recent Button size rules, route-local compact tabs/chips. | Mobile Touch Target Phase 2. | Medium | Parallel by route; shared sizing serialized. |
-| Dense tabs / segmented controls | Mode switching without page reflow. | `components/common/SegmentedControl.tsx`, route-local tabs. | Backtest tabs, Portfolio tabs, Admin Logs categories. | Medium | Shared SegmentedControl edits serialized. |
-| Chart toggle controls | Chart mode/series/timeframe toggles. | Preview report chart toggles, report/backtest chart toolbar classes. | Preview Report chart toggles. | Medium | Serialize with report/preview shell work. |
-| Data table / row action controls | Dense row actions, status, selection, and inline commands. | Watchlist rows, Admin Logs rows, Portfolio holdings/trades. | Watchlist row selection/action controls. | Medium | Parallel by domain only if no shared row primitive edit. |
+| Route family | Surface | Primary shape |
+| --- | --- | --- |
+| Home | `ResearchConsole` | command bar, decision console, chart workspace, compact context rail |
+| Scanner | `RankingBoard` | filter strip, status strip, ranked rows/table, selected detail |
+| Watchlist | `WatchBoard` / `DenseList` | compact add/filter row, dense rows, row detail |
+| Market Overview | `MarketMonitor` | regime strip, chart/workbench panels, comparative rows, source disclosure |
+| Portfolio | `RiskConsole` / `LedgerBoard` | exposure/risk surface, holdings board, ledger rows |
+| Options Lab | `ExperimentConsole` | symbol command, assumptions, payoff/risk surface, option matrix |
+| Admin/Ops | `OpsConsole` | operator status strip, queue/table, detail drawer, collapsed diagnostics |
 
-## 4. Primitive Specifications
+## 4. Primitive Ownership
 
-### 4.1 PageShell / Route Shell
+### 4.1 App and route shell
 
-Usage: own the top-level route frame, route width, shell rail, scroll ownership, and route modifiers. Use `Shell.tsx` route classes and `PreviewShell.tsx` only when the route is truly preview/report-specific.
+Use the application shell for root canvas, route width, scroll ownership, masthead rhythm, and app-level navigation.
 
-Visual rules: preserve deep-space background, wide operational workspace, `min-w-0`, `min-h-0`, hidden scrollbars, and route-specific shell modifiers already tested in `Shell.test.tsx`.
+Rules:
 
-Behavior/accessibility rules: route shells must not hide focus rings, trap scroll unexpectedly, or rely on viewport-lock hacks for ordinary pages.
+- root canvas uses the shared charcoal ladder;
+- product navigation is slim and product-first;
+- admin/operator controls are secondary;
+- no route-local full-page black island;
+- no narrow centered island for workbench pages.
 
-Mobile/touch target rules: shell header controls may be compact on desktop, but mobile route controls must remain reachable without horizontal overflow.
+Tests:
 
-Copy/localization rules: shell chrome is Chinese-first on Chinese routes except accepted terms such as `EN`, tickers, providers, metrics, and currencies.
+- `Shell.test.tsx`;
+- route-specific browser proof at desktop and mobile widths.
 
-Do: reuse `Shell.tsx` route modifiers and add route tests when shell classes change. Do not create route-local full-page wrappers that narrow the workspace or bypass shell scroll ownership.
+### 4.2 `WolfyCommandBar`
 
-Recommended checks: `Shell.test.tsx`, affected route tests, `npm run check:design`, lint/build, desktop and 390px visual verification for code changes.
+Purpose:
 
-First safe migration target: Preview Report shell alignment documentation and checklist before code.
+- symbol input;
+- global route command;
+- compact filters;
+- primary workflow action.
 
-Migration risk: high, because shell changes affect all protected routes.
+Rules:
 
-### 4.2 SurfaceCard
+- visually belongs to the same charcoal system as the route surface;
+- does not become a chip cloud;
+- one primary action is visible; secondary controls are compact;
+- mobile stacks without clipping.
 
-Usage: primary route sections such as summary panels, forms, rule lists, and operational modules.
+### 4.3 `ResearchConsoleShell`
 
-Visual rules: use ghost-glass material from `GlassCard` or `SectionShell`: transparent white/black surfaces, thin white borders, restrained blur, no solid gray backgrounds, no loud saturated panels.
+Purpose:
 
-Behavior/accessibility rules: cards are structural regions only when they contain a section heading or meaningful group. Do not make every small datum a card.
+- Home and one-symbol research;
+- one dominant decision surface;
+- left research workspace plus compact right rail.
 
-Mobile/touch target rules: card padding may compress on mobile, but controls inside still need comfortable targets.
+Required anatomy:
 
-Copy/localization rules: headings and action copy should be Chinese-first on Chinese routes.
+1. identity and ticker;
+2. stance/score/confidence;
+3. short thesis;
+4. key-level strip;
+5. chart workspace;
+6. context rail;
+7. event/catalyst rows;
+8. report/source drawers.
 
-Do: use `GlassCard` for simple surfaces and `SectionShell` when a title/description/actions header is needed. Do not add route-local `rounded/border/bg-white` combinations unless the final report explains why no current primitive fits.
+Rules:
 
-Recommended checks: route tests, `check:design`, desktop/mobile visual pass for visible changes.
+- real market chart if market chart is shown;
+- no bento-first first fold;
+- no fake catalysts;
+- no repeated data-quality paragraphs.
 
-First safe migration target: Admin Notifications rule/list cards or Watchlist cards.
+### 4.4 `ConsoleBoard`
 
-Migration risk: medium; card hierarchy can easily over-fragment pages.
+Purpose:
 
-### 4.3 NestedCard
+- primary route work surface for boards, tables, charts, and reports.
 
-Usage: subordinate blocks inside a SurfaceCard, such as diagnostics groups, metric details, exposure buckets, or risk drilldowns.
+Rules:
 
-Visual rules: nested cards must be quieter than parent cards: lower contrast, less blur, smaller radius, less padding. Prefer `MetricCard`, `theme-panel-subtle`, `bg-black/20`, or existing nested route pattern.
+- one board per route first fold;
+- use row sections, dividers, and strips;
+- do not nest many independent containers;
+- secondary details move to drawers, disclosures, rails, or below-fold sections.
 
-Behavior/accessibility rules: nested blocks should not become independent landmarks unless they are independently navigable.
+### 4.5 `ConsoleContextRail`
 
-Mobile/touch target rules: avoid dense nested grids that create one-card-per-line vertical noise.
+Purpose:
 
-Copy/localization rules: labels should stay compact; use Chinese labels except domain terms.
+- selected entity detail;
+- observation framework;
+- data quality/source state;
+- risk boundaries;
+- current assumptions;
+- compact follow-up state.
 
-Do: keep nested diagnostics visually secondary. Do not stack card-inside-card-inside-card without a data hierarchy reason.
+Rules:
 
-Recommended checks: affected route tests and 390px visual review.
+- rail is narrower than the workspace;
+- desktop uses an internal separator;
+- mobile stacks below primary board;
+- rows and thin dividers before stacked containers.
 
-First safe migration target: Portfolio risk/exposure blocks after Portfolio populated route coverage.
+### 4.6 `ConsoleStatusStrip`
 
-Migration risk: medium.
+Purpose:
 
-### 4.4 CommandBar
+- compact status/count/freshness row;
+- not a hero metrics wall.
 
-Usage: route-level actions, filters, refresh, batch operations, and mode switches.
+Rules:
 
-Visual rules: one command bar per major workflow zone. It should be dense, aligned, and scan-friendly, not a pile of chips.
+- 3 to 6 concise cells;
+- label/value/detail pattern;
+- market green/red only when it means market movement or risk;
+- no filler labels.
 
-Behavior/accessibility rules: commands need explicit disabled/loading states, labels for icon-only actions, and no duplicate-click paths for batch work.
+### 4.7 `KeyLevelStrip`
 
-Mobile/touch target rules: wrap to rows with stable heights; avoid 22-29 px chip controls on narrow screens.
+Purpose:
 
-Copy/localization rules: action copy must be operator-grade Chinese on Chinese routes.
+- trading/research levels such as trigger, invalidation, next focus.
 
-Do: consolidate Watchlist/Scanner/Backtest command strips around shared Button/SegmentedControl primitives. Do not create route-local button chips with unrelated heights, borders, and tones.
+Rules:
 
-Recommended checks: route page tests, batch-action tests where applicable, `check:design`, desktop/mobile visual pass.
+- horizontal strip on desktop;
+- stacked compact rows on mobile;
+- exactly data/evidence labels;
+- no generic confidence prose.
 
-First safe migration target: Watchlist command bar.
+### 4.8 `ChartWorkspace`
 
-Migration risk: medium.
+Purpose:
 
-### 4.5 Button
+- candlestick, market chart, backtest equity curve, regime chart, or payoff chart.
 
-Usage: text actions, primary CTAs, secondary actions, destructive actions, and loading buttons.
+Rules:
 
-Visual rules: `components/common/Button.tsx` is the first source. Use existing variants and sizes before adding a class-only local button. Desktop dense controls may use `sm`, but mobile should not go below the project touch target policy.
+- chart is real when the UI claims market data;
+- controls are part of the chart surface;
+- tooltip stays in viewport;
+- no placeholder SVG pretending to be market data;
+- axis/grid colors use the charcoal ladder.
 
-Behavior/accessibility rules: preserve native button semantics, `type`, disabled state, loading `aria-busy`, keyboard activation, and visible focus.
+### 4.9 `CatalystRows`
 
-Mobile/touch target rules: mobile action buttons should prefer at least the common `sm` min height and may need larger wrappers in dense rails.
+Purpose:
 
-Copy/localization rules: Chinese route labels should be Chinese; English may remain for compact domain abbreviations.
+- verified event/catalyst rows.
 
-Do: use `Button` and override only spacing when needed. Do not add local `button` class bundles that reimplement loading, disabled, or focus.
+Rules:
 
-Recommended checks: `Button.test.tsx`, affected route tests, design guard.
+- compact row grid;
+- max visible rows unless route explicitly needs more;
+- empty state is one quiet row;
+- exclude technical filler and report-summary filler.
 
-First safe migration target: Preview chart toggles or Backtest tab-like buttons after route tests.
+### 4.10 `DataWorkbenchFrame`
 
-Migration risk: medium because Button is shared.
+Purpose:
 
-### 4.6 IconButton
+- Scanner, Watchlist, MarketMonitor, Portfolio, Admin/Ops tables.
 
-Usage: refresh, close, copy, expand, password visibility, chart mode, and row quick actions where text would be too noisy.
+Rules:
 
-Visual rules: icon buttons should use the Button sizing model or a future shared IconButton owner. They need fixed square dimensions, no text overflow, and restrained ghost material.
+- table/list/rows first;
+- one primary row action plus secondary detail;
+- dense but readable;
+- selected detail via rail/drawer/disclosure;
+- no horizontal overflow on mobile.
 
-Behavior/accessibility rules: every icon-only button needs an `aria-label` and preferably `title`. Icons should be decorative if the label carries meaning.
+### 4.11 `DenseRows`
 
-Mobile/touch target rules: actual clickable area should not collapse to 18-25 px. Use padding or wrapper target size.
+Purpose:
 
-Copy/localization rules: aria labels and titles should localize.
+- dense list and table row primitives.
 
-Do: use lucide icons already in the app where possible. Do not manually create unlabeled icon spans or 20 px click targets.
+Rules:
 
-Recommended checks: route tests that query labels, 390px visual/touch scan.
+- stable row height;
+- clear selected/hover states;
+- compact status cells;
+- row actions near context;
+- mobile row conversion must preserve labels.
 
-First safe migration target: Market refresh icons or Settings password visibility buttons.
+### 4.12 `ConsoleDisclosure`
 
-Migration risk: medium.
+Purpose:
 
-### 4.7 Input
+- secondary details, raw diagnostics, source traces, provider notes, and admin runbooks.
 
-Usage: text, password, date, numeric, and token fields.
+Rules:
 
-Visual rules: `components/common/Input.tsx` is canonical. Preserve ghost input surface, focus glow, label, hint, error, leading icon, trailing action, and password toggle behavior.
+- collapsed by default for normal product routes;
+- sanitized content;
+- no secrets;
+- raw provider/schema/debug details never in primary user UI.
 
-Behavior/accessibility rules: every input needs label association or accessible name, error text with `role="alert"` when appropriate, and correct `aria-invalid`.
+## 5. Inputs And Actions
 
-Mobile/touch target rules: use the common `h-10` base or larger; avoid route-local dense inputs.
+Use existing shared input/action components only if they already follow the Linear OS material and accessibility requirements.
 
-Copy/localization rules: labels on Chinese routes should be Chinese unless the term is a ticker, currency, provider, field code, or accepted market abbreviation. Portfolio labels such as `TRADE DATE`, `QUANTITY`, `PRICE`, `FEE`, and `NOTE` should be reviewed in a future copy pass.
+Requirements:
 
-Do: use common `Input`. Do not style raw `<input>` directly unless the final report explains why the common component cannot support the case.
+- visible focus state;
+- accessible labels for icon-only controls;
+- native semantics preserved where useful;
+- compact but not unusable on mobile;
+- Chinese-first UI labels on Chinese routes.
 
-Recommended checks: `Input.test.tsx`, route form tests, design guard.
+Avoid introducing page-local variants for:
 
-First safe migration target: Portfolio form label/localization review after tests.
+- buttons;
+- chips;
+- inputs;
+- selects;
+- checkboxes;
+- toggles;
+- empty states;
+- notices;
+- disclosures;
+- table rows.
 
-Migration risk: medium.
+If a route needs a new primitive, add it to `components/linear` with focused tests and explain why existing primitives were insufficient.
 
-### 4.8 Select
+## 6. Domain Adapter Rules
 
-Usage: market/profile/account/provider/mode selection where native select semantics are acceptable.
+Shared primitives own visual shape. Domain adapters own meaning.
 
-Visual rules: `components/common/Select.tsx` is canonical. It uses a native select for semantics plus a ghost overlay for visual consistency.
+Examples:
 
-Behavior/accessibility rules: keep label association, keyboard support, disabled state, selected value truncation, and custom arrow pointer behavior.
+| Domain | Adapter owns |
+| --- | --- |
+| Market provider/freshness | freshness, fallback, stale, provider health, cache state |
+| Scanner | candidate state, ranking context, run lifecycle |
+| Watchlist | saved-symbol intelligence, batch state |
+| Backtest | verdicts, data quality, execution assumptions |
+| Portfolio | accounting, FX transparency, broker state, risk |
+| Options Lab | hypothesis, gates, no-trade conditions, payoff/risk |
+| Admin/Ops | severity, operator run state, diagnostics |
 
-Mobile/touch target rules: preserve `h-10` overlay and avoid clipped values.
+Do not create one giant cross-domain enum. It erases meaning and creates unsafe coupling.
 
-Copy/localization rules: option labels should localize unless they are provider names, market codes, tickers, currencies, or domain terms.
+## 7. Migration Strategy
 
-Do: use common `Select`. Do not create a local invisible select plus overlay variant.
+Stage 0: foundation and docs are already established.
 
-Recommended checks: `Select.test.tsx`, route tests for selected labels, design guard.
+Stage 1: Home golden route.
 
-First safe migration target: Portfolio and Backtest selects already near the common pattern.
+- use `ResearchConsoleShell`;
+- remove bento-first first fold;
+- preserve real chart and analysis behavior;
+- make Home the visual acceptance reference.
 
-Migration risk: medium.
+Stage 2: low-risk board/list pages.
 
-### 4.9 Checkbox / Row Selection
+- Scanner -> `RankingBoard`;
+- Watchlist -> `WatchBoard` / `DenseList`;
+- run in parallel only if they do not edit shared primitives.
 
-Usage: boolean settings, notification channel toggles, row selection, and batch selection.
+Stage 3: Market Overview.
 
-Visual rules: `components/common/Checkbox.tsx` is the starting owner, but row selection may need a domain wrapper around it. The visual checkbox can remain compact if the label/wrapper provides a larger target.
+- migrate to `MarketMonitor`;
+- keep provider/freshness semantics honest;
+- collapse runtime details.
 
-Behavior/accessibility rules: preserve input semantics, label association, keyboard operation, indeterminate handling if added later, and clear selected state.
+Stage 4: high-coupling pages.
 
-Mobile/touch target rules: raw `14x14` or `16x16` checkbox-only targets are not enough for mobile rows. Wrap row selection in a larger hit area.
+- Portfolio -> `RiskConsole` / `LedgerBoard`;
+- Options Lab -> `ExperimentConsole`;
+- handle serially due to behavior/test coupling.
 
-Copy/localization rules: labels should localize.
+Stage 5: Admin/Ops containment.
 
-Do: use common Checkbox or a row-selection adapter. Do not leave isolated native checkboxes as the only target.
+- use `OpsConsole`;
+- allow technical density, but isolate it from normal product routes.
 
-Recommended checks: route selection tests and 390px touch-target scan.
+## 8. First Recommended Tasks
 
-First safe migration target: Admin Notifications checkbox, then Watchlist row selection.
+| Task | Scope | Parallel safety |
+| --- | --- | --- |
+| Home ResearchConsole golden route | Home first fold and report/source drawers | serial |
+| Scanner board migration | ranking rows and selected detail | parallel after Home acceptance |
+| Watchlist board migration | dense saved-symbol rows and batch actions | parallel after Home acceptance |
+| MarketMonitor pass | regime/chart/row workbench | after board primitives stabilize |
+| Portfolio RiskConsole pass | exposure/holdings/ledger/risk | serial |
+| Options ExperimentConsole pass | hypothesis/strategy/chain/payoff | serial |
+| Admin/Ops visual containment | admin routes only | later |
 
-Migration risk: medium.
+## 9. Prompt Snippet
 
-### 4.10 StatusChip
+Use this in future frontend prompts:
 
-Usage: generic display status such as success, failed, running, pending, warning, disabled, info, and unknown.
+```text
+Read:
+- docs/codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md
+- docs/codex/WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md
+- docs/codex/WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md
+- docs/design/wolfystock-canonical-ui-primitives.md
 
-Visual rules: `StatusBadge.tsx` and `displayStatus.ts` are current first sources. Use thin borders, subtle backgrounds, and compact text; do not use large saturated backgrounds.
+Use components/linear for new user-facing surfaces. Do not create page-local visual material. Shared primitives own surface, density, border, radius, disclosure, and row rhythm. Domain adapters own semantics. If existing common or compatibility components are used, they must render Linear OS material and must not define future product UI direction.
+```
 
-Behavior/accessibility rules: status text must be visible text, not color-only. Use `data-status`/tone only as supplemental metadata.
+## 10. Acceptance Checklist
 
-Mobile/touch target rules: status chips are not normally interactive; if interactive, they must follow Button/IconButton target rules.
+Before a frontend task is complete:
 
-Copy/localization rules: default labels should be Chinese on Chinese routes. English labels may appear on English routes only.
-
-Developer/raw diagnostics rule: raw provider/internal status strings belong in DeveloperDetails, not primary chips, unless converted through a domain adapter.
-
-Do: adapt domain statuses into a shared display primitive. Do not treat `displayStatus` as a universal domain ontology.
-
-Recommended checks: `StatusBadge.test.tsx`, `displayStatus.test.ts`, route status tests.
-
-First safe migration target: Admin Logs generic level/status chips.
-
-Migration risk: medium.
-
-### 4.11 FreshnessBadge / Provider State Badge
-
-Usage: provider freshness, fallback-only, cache hit, stale data, provider down, and partial availability states.
-
-Visual rules: keep Market Overview freshness/provider adapters as the first source. These states carry market-data meaning and should not be flattened into generic success/failure only.
-
-Behavior/accessibility rules: distinguish freshness, runtime health, config validation, and external connectivity. Do not collapse them into one label.
-
-Mobile/touch target rules: noninteractive badges may be compact; refresh or retry controls beside them must meet action target rules.
-
-Copy/localization rules: use honest Chinese labels for stale/fallback/partial states; provider names may stay English.
-
-Developer/raw diagnostics rule: provider raw codes such as `provider_down` or `provider_error` should be adapted for primary UI and kept raw only inside collapsed details.
-
-Do: keep Market-owned adapters around shared chip styling. Do not replace provider freshness with a generic enum.
-
-Recommended checks: Market Overview freshness tests and browser review for market route changes.
-
-First safe migration target: documentation and adapter contract only.
-
-Migration risk: medium.
-
-### 4.12 DeveloperDetails / Raw Diagnostics Disclosure
-
-Usage: raw metadata, request/response snippets, execution assumptions, data quality, provider internals, and debug-only diagnostics.
-
-Visual rules: `Disclosure.tsx` is the common starting point. Developer details must be visually secondary and collapsed by default unless a task explicitly asks otherwise.
-
-Behavior/accessibility rules: summary must be keyboard accessible, descriptive, and stable. Raw content must not expose secrets.
-
-Mobile/touch target rules: summary row must not be an 18 px click target on mobile.
-
-Copy/localization rules: Chinese labels should use terms such as `开发者细节`, `原始诊断`, `数据质量`, or `执行假设`.
-
-Developer/raw diagnostics rule: never expose raw API keys, tokens, webhook URLs, schema internals, system prompts, or provider raw errors in primary UI.
-
-Do: convert route-local `<details>` into a common DeveloperDetails wrapper after one route proves the pattern. Do not dump JSON in visible primary cards.
-
-Recommended checks: route leakage tests, design guard, browser text scan for raw/debug terms.
-
-First safe migration target: Admin Notifications or System Settings.
-
-Migration risk: medium.
-
-### 4.13 EmptyState
-
-Usage: no data, no selected item, filtered-empty, unavailable provider, and safe failure states.
-
-Visual rules: quiet, useful, and proportional. EmptyState should use SurfaceCard or NestedCard material depending on context.
-
-Behavior/accessibility rules: do not fake successful data. If an action is available, use Button and explain the next step.
-
-Mobile/touch target rules: empty-state actions follow Button rules and should not overflow.
-
-Copy/localization rules: Chinese-first and domain-specific. Avoid generic SaaS copy.
-
-Developer/raw diagnostics rule: primary empty states should explain user-facing cause; raw cause belongs in DeveloperDetails.
-
-Do: reuse empty-state structure by route family. Do not create new decorative empty cards for every page.
-
-Recommended checks: route tests for empty/error states and design guard.
-
-First safe migration target: Watchlist or Portfolio empty states.
-
-Migration risk: low/medium.
-
-### 4.14 MetricCard
-
-Usage: KPI tiles, exposure buckets, risk stats, backtest metrics, market temperature, and admin summary counts.
-
-Visual rules: `MetricCard.tsx` is the first source for simple label/value/detail. Domain metric adapters may wrap it for formatting and tone.
-
-Behavior/accessibility rules: do not encode meaning with color alone. Include label, value, unit/context, and unavailable state.
-
-Mobile/touch target rules: metrics are usually static; if clickable, use a Button-like action area.
-
-Copy/localization rules: labels should localize except finance-standard abbreviations such as P/E, EPS, ROE, RSI, MACD.
-
-Do: use MetricCard for simple repeated metric tiles. Do not force complex domain panels into a generic metric component if they need formulas or drilldowns.
-
-Recommended checks: route snapshot/assertion tests and visual review.
-
-First safe migration target: Backtest result metric tiles or Admin Notifications summary tiles.
-
-Migration risk: medium.
-
-### 4.15 Mobile Action Rail / Touch-Target Pattern
-
-Usage: compact mobile rows of actions, tabs, toggles, refresh controls, and row operations.
-
-Visual rules: use consistent heights, gaps, wrapping, and icon/text alignment. Avoid controls below 32 px high unless they are noninteractive badges.
-
-Behavior/accessibility rules: disabled/loading states must remain clear; duplicate-click blocking remains domain-owned for batch workflows.
-
-Mobile/touch target rules: mobile target size is the primary reason this primitive exists. Prefer larger wrappers over tiny visual boxes when density matters.
-
-Copy/localization rules: keep action labels short and Chinese-first.
-
-Do: create a shared pattern only after one route proves it. Do not patch every route with unrelated height tweaks.
-
-Recommended checks: 390px visual/touch scan, route tests, design guard.
-
-First safe migration target: Mobile Touch Target Phase 2.
-
-Migration risk: medium.
-
-### 4.16 Dense Tabs / Segmented Controls
-
-Usage: workflow mode, category, timeframe, and route section switching.
-
-Visual rules: `SegmentedControl.tsx` is the first common owner. Tabs should feel like part of the command surface, not a second navigation system.
-
-Behavior/accessibility rules: use button or tab semantics consistently, preserve focus, selected state, and keyboard operation.
-
-Mobile/touch target rules: avoid sub-32 px tab heights on narrow screens; wrap or scroll quietly when needed.
-
-Copy/localization rules: labels should localize and remain short.
-
-Do: use common SegmentedControl or a domain adapter. Do not add route-local pill strips with unique dimensions and tones.
-
-Recommended checks: component tests, affected route tests, mobile scan.
-
-First safe migration target: Backtest tabs, Portfolio tabs, or Admin Logs categories.
-
-Migration risk: medium.
-
-### 4.17 Chart Toggle Controls
-
-Usage: chart series, timeframe, mode, chart/table, and report/backtest visualization toggles.
-
-Visual rules: chart toggles should reuse Button/SegmentedControl sizing and chart toolbar material. Preview report toggles are a known weak point.
-
-Behavior/accessibility rules: selected state must be clear to screen readers and visible users. Toggles should not resize chart containers.
-
-Mobile/touch target rules: avoid 22-27 px chart toggles; wrap or use a horizontal rail with quiet scroll.
-
-Copy/localization rules: chart UI chrome should be Chinese on Chinese routes except domain terms such as TTM, FY, EPS, RSI, MACD.
-
-Do: align Preview Report and Backtest chart toggles to the same primitive. Do not add chart-specific tiny chips.
-
-Recommended checks: Preview report tests, chart route tests, desktop/mobile visual review.
-
-First safe migration target: Preview Report chart toggles.
-
-Migration risk: medium.
-
-### 4.18 Data Table / Row Action Controls
-
-Usage: tables/lists for watchlist symbols, admin logs, portfolio holdings/trades, notification events, scanner candidates, and backtest rows.
-
-Visual rules: row actions should be compact but stable. Use shared Button/IconButton/StatusChip/Checkbox wrappers, not local mini controls.
-
-Behavior/accessibility rules: rows need visible selected state, keyboard-compatible actions, clear disabled state, and no color-only status meaning.
-
-Mobile/touch target rules: row controls should wrap into action rails or expose one clear primary action plus disclosure/details.
-
-Copy/localization rules: row action labels should localize; symbol/provider/domain fields may remain English.
-
-Developer/raw diagnostics rule: raw row metadata belongs in collapsed DeveloperDetails or row details, not default table cells.
-
-Do: migrate one table/list surface first. Do not invent separate table action controls in every route.
-
-Recommended checks: route table tests, row action tests, mobile scan.
-
-First safe migration target: Watchlist row selection/action controls.
-
-Migration risk: medium.
-
-## 5. Domain Adapter Rules
-
-`displayStatus`: treat `utils/displayStatus.ts` as a display-label utility. It can normalize common display states and localize labels, but it is not a universal domain ontology. Do not add every backend enum, provider code, scanner state, portfolio accounting state, or backtest verdict directly into one giant shared enum.
-
-Admin Logs/Notifications: use `describeAdminLogLevel`, `describeAdminNotificationStatus`, `StatusBadge`, and shared chip styling for generic display. Keep raw metadata collapsed under developer details.
-
-Market freshness/provider: keep market-owned adapters in `marketOverviewPrimitives.tsx` and related market overview files. Freshness, fallback, cache, provider health, and stale data are domain semantics, not generic success/failure.
-
-Scanner statuses: scanner scoring, run state, candidate evaluation, AI additive interpretation, and provider fallback should use scanner adapters around shared display primitives. Scanner AI remains a second-pass interpretation layer, not primary selection.
-
-Watchlist intelligence statuses: keep watchlist-owned semantics for saved scanner intelligence, selected rows, and batch action state, while reusing shared Button, Checkbox, StatusChip, and CommandBar surfaces.
-
-Backtest verdicts: backtest verdicts, execution assumptions, data quality, and deterministic result density should use backtest adapters around shared display primitives. Do not collapse backtest verdicts into admin notification status labels.
-
-Portfolio risk statuses: risk, accounting, FX transparency, broker connection, cash ledger, and valuation states must remain portfolio-owned adapters. Preserve accounting formulas and portfolio semantics.
-
-Why not one giant enum: these domains answer different questions. Provider freshness is about data recency and fallback. Admin logs are about operational severity. Scanner statuses describe candidate evaluation and run lifecycle. Backtest verdicts describe simulation outcome and data assumptions. Portfolio statuses describe accounting, exposure, and broker/FX state. A single enum would erase meaning, grow without ownership, and make future migrations riskier.
-
-## 6. Migration Strategy
-
-Stage 0: docs/checklists only.
-
-- Keep this spec and the audit documents as the source of primitive governance.
-- Add CSS visual-regression and DOM-verification checklists before CSS deletion.
-- Do not change product code, CSS, tests, backend, package files, or config in Stage 0 docs tasks.
-
-Stage 1: one-surface migration.
-
-- Pick Admin Notifications or Watchlist.
-- Reuse current `Button`, `Input`, `Select`, `Checkbox`, `GlassCard`, `SectionShell`, `Disclosure`, `StatusBadge`, and `displayStatus` patterns.
-- Add or update route tests first.
-- Verify `check:design`, lint, build, and desktop/mobile browser for visible UI changes.
-
-Stage 2: shared primitive extraction only after proven route.
-
-- Extract a shared primitive only when one route proves the desired behavior and another route has the same real need.
-- Keep adapter boundaries domain-owned.
-- Avoid broad all-route rewrites.
-
-Stage 3: route-by-route adoption.
-
-- Migrate one route or one component family at a time.
-- Use the route's existing tests and visual contract.
-- Preserve route DOM skeletons unless the task explicitly targets shell/layout.
-
-Stage 4: CSS cleanup only after DOM/visual verification.
-
-- CSS deletion/splitting must wait for a visual regression checklist and rendered DOM verification.
-- Source `rg` evidence alone is not enough for deletion because route classes can be dynamically composed.
-- Do not delete shell route modifiers or active product/report/backtest selectors without route proof.
-
-## 7. First Recommended Implementation Tasks
-
-| Title | Scope | Likely files | Expected benefit | Risk | Tests/checks | Parallel-safe? |
-| --- | --- | --- | --- | --- | --- | --- |
-| One-surface primitive migration: Admin Notifications | Convert rule/list cards, status chips, checkbox/touch wrappers, and developer details to current canonical primitives. | `apps/dsa-web/src/pages/AdminNotificationsPage.tsx`, maybe `components/common/*`, `utils/displayStatus.ts` only if tests justify. | Proves primitive reuse on a small admin surface. | Medium | Admin Notifications tests, `displayStatus.test.ts` if touched, `check:design`, lint, build, desktop/mobile browser. | No if shared files change; yes as isolated route work after ownership lock. |
-| One-surface primitive migration: Watchlist | Align command bar, row selection, row actions, and status chips. | `WatchlistPage.tsx`, common Button/Checkbox/Status primitives if needed. | Proves dense workflow surface without touching scanner/backtest contracts. | Medium | Watchlist tests, mobile 390px visual scan, `check:design`, lint, build. | No if shared primitives change. |
-| Mobile Touch Target Phase 2 | Fix repeat sub-32 px controls route-by-route. | Home, Scanner, Watchlist, Backtest, Portfolio, Settings, Admin Logs, Chat, Preview route files; common Button/IconButton/Checkbox only after plan. | Resolves most visible post-guard conformance gap. | Medium | Route tests, 390px browser scan, `check:design`, lint, build. | Parallel by route; shared sizing serialized. |
-| Status Utility Phase 3 | Expand adapter discipline around shared display primitives without creating a giant enum. | `utils/displayStatus.ts`, `components/ui/StatusBadge.tsx`, Admin Logs/Notifications adapters, domain route adapters. | Reduces route-local chip/tone duplication. | Medium | StatusBadge and displayStatus tests, affected route tests. | Shared utility work serialized. |
-| Preview Report Shell Alignment | Bring preview report shell/card/toggle behavior closer to main shell while preserving report semantics. | `PreviewReportPage.tsx`, `PreviewShell.tsx`, report components, route tests. | Reduces preview/main shell drift. | Medium | Preview route tests, desktop/mobile visual checks, `check:design`, lint, build. | Not parallel with report CSS cleanup. |
-| CSS Visual Regression Checklist | Define routes, viewports, states, and screenshot/DOM expectations before CSS cleanup. | New docs/checklist under `docs/checks` or `docs/design`. | Makes future CSS deletion safer. | Low | Markdown inspection, `git diff --check`. | Yes as docs-only. |
-| CSS DOM Verification before deletion | Render/DOM-check dead-selector candidates before any CSS removal. | New audit doc first; later `apps/dsa-web/src/index.css` only after approval. | Prevents deleting dynamically used selectors. | Low as audit, high if deletion follows. | `rg`, rendered DOM checks, build/design guard if code later changes. | Yes as read-only audit; deletion serialized. |
-| Data table row action primitive trial | Align row action buttons, status chips, and selection wrappers on one list/table route. | Watchlist or Admin Logs page first. | Establishes reusable row-control shape. | Medium | Route table tests, mobile scan, design guard. | No if shared row primitive is extracted. |
-
-## 8. Prompt Insertion Snippet
-
-Before editing WolfyStock frontend UI, read `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`, `docs/checks/design-guard.md`, and `docs/design/wolfystock-canonical-ui-primitives.md`. Search existing components and helpers before adding new UI primitives. Reuse the established `Button`, `Input`, `Select`, `Checkbox`, `GlassCard`, `SectionShell`, `Disclosure`, `StatusBadge`, `displayStatus`, shell route, developer-detail, and domain adapter patterns wherever possible. Do not add route-local duplicate card/button/chip/input/status/developer-detail variants unless the final report explicitly justifies why no existing primitive fits. Keep domain semantics in adapters, avoid a giant cross-domain enum, preserve Chinese-first UI copy, keep raw diagnostics collapsed, run the design guard for UI code changes, and avoid CSS deletion until DOM and visual verification are complete.
-
-## 9. Non-goals
-
-- No product code changed.
-- No CSS changed.
-- No tests changed.
-- No backend/API code changed.
-- No package files or config changed.
-- No `docs/CHANGELOG.md` changed.
-- No generated artifacts committed.
-- No dev servers started, killed, or restarted.
-- No issues fixed in this task.
+- route surface is classified;
+- primary route surface is clear in the first viewport;
+- command/filter area belongs to the same charcoal system;
+- no page-local pure-black islands;
+- no widened old cards as a new design system;
+- chart/data surfaces remain real;
+- row/table/list surfaces remain scannable;
+- context rail is compact when present;
+- raw diagnostics are collapsed;
+- no forbidden meta copy appears;
+- mobile has no horizontal overflow;
+- browser screenshots are fresh captures from current HEAD, not old reference files.
