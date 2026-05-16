@@ -437,7 +437,12 @@ describe('Shell', () => {
     );
 
     expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
+    expect(document.querySelector('.theme-shell--home')).not.toBeNull();
+    expect(document.querySelector('.theme-shell--page-scroll')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--home')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--page-scroll')).not.toBeNull();
+    expect(document.querySelector('.shell-main-column--home')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--backtest')).toBeNull();
   });
 
@@ -525,11 +530,15 @@ describe('Shell', () => {
 
     expect(document.querySelector('.shell-masthead')).toHaveClass('w-full');
     expect(document.querySelector('.shell-masthead__inner')).toHaveClass('w-full');
-    expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'min-h-0', 'min-w-0');
-    expect(document.querySelector('.theme-page-transition')).toHaveClass('w-full', 'min-w-0');
+    expect(document.querySelector('.theme-shell')).toHaveClass('min-h-screen');
+    expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'px-4', 'md:px-6', 'xl:px-8', 'pt-3', 'pb-8', 'min-h-0', 'min-w-0', 'shell-main-column--home', 'shell-main-column--page-scroll');
+    expect(document.querySelector('.theme-page-transition')).toHaveClass('w-full', 'min-w-0', 'theme-page-transition--page-scroll');
+    expect(document.querySelector('.theme-page-transition')).not.toHaveClass('h-full');
+    expect(document.documentElement).toHaveAttribute('data-page-scroll-shell', 'true');
+    expect(document.body).toHaveAttribute('data-page-scroll-shell', 'true');
   });
 
-  it('shows the console entry for admin accounts without an admin-mode switch', async () => {
+  it('keeps admin console links out of the desktop masthead', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
@@ -547,7 +556,8 @@ describe('Shell', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole('link', { name: translate('zh', 'nav.independentConsole') })).toHaveAttribute('href', '/settings/system');
+    const actionIsland = await screen.findByTestId('shell-header-utility-island');
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /管理员模式/ })).not.toBeInTheDocument();
   });
 
@@ -584,8 +594,9 @@ describe('Shell', () => {
     );
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'language.toggle') })).toHaveTextContent('EN');
     expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.settings') })).toBeInTheDocument();
-    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
-    expect(within(actionIsland).getByRole('link', { name: '证据复核' })).toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.marketProviders') })).not.toBeInTheDocument();
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.logout') })).toBeInTheDocument();
     expect(actionIsland.querySelectorAll('[data-testid="shell-header-utility-divider"]')).toHaveLength(2);
   });
@@ -617,8 +628,8 @@ describe('Shell', () => {
     );
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
-    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.userGovernance') })).toBeInTheDocument();
-    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.costObservability') })).toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.userGovernance') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.costObservability') })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.notifications') })).not.toBeInTheDocument();
@@ -653,8 +664,7 @@ describe('Shell', () => {
     );
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
-    const evidenceLink = within(actionIsland).getByRole('link', { name: '证据复核' });
-    expect(evidenceLink).toHaveAttribute('href', '/zh/admin/evidence-workflow');
+    expect(within(actionIsland).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: 'Evidence Review' })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.userGovernance') })).not.toBeInTheDocument();
@@ -692,12 +702,12 @@ describe('Shell', () => {
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
     expect(within(actionIsland).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
-    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
-    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.userGovernance') })).toBeInTheDocument();
-    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.costObservability') })).toBeInTheDocument();
-    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.notifications') })).toBeInTheDocument();
-    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.marketProviders') })).toBeInTheDocument();
-    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.providerCircuits') })).toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.userGovernance') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.costObservability') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.notifications') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.marketProviders') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.providerCircuits') })).not.toBeInTheDocument();
   });
 
   it('fails closed for sensitive admin nav when capability fields are absent', async () => {

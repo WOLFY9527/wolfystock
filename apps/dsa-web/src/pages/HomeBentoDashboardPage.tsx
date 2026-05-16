@@ -1183,7 +1183,7 @@ function LinearObservationPanel({
 
   return (
     <aside
-      className="relative min-w-0 border-t border-white/[0.055] bg-[#101216] px-4 py-5 lg:border-l lg:border-t-0 lg:px-5 lg:py-6"
+      className="relative min-w-0 border-t border-white/[0.055] bg-white/[0.012] px-4 py-5 lg:border-l lg:border-t-0 lg:px-5 lg:py-6"
       data-testid="home-bento-secondary-stack"
     >
       <section className="min-w-0" data-testid="home-bento-card-strategy" data-research-card="opportunity">
@@ -1354,7 +1354,7 @@ function LinearEventsStrip({
   const events = buildHomeCatalystEvents(report, locale);
 
   return (
-    <section className="min-w-0 border-t border-white/[0.05] pt-3" data-testid="home-linear-events">
+    <section className="min-w-0" data-testid="home-linear-events">
       <div className="flex min-w-0 items-center justify-between gap-3 pb-1.5">
         <h2 className="text-sm font-semibold text-white/88">{isEnglish ? 'Events & Catalysts' : '关键事件与催化剂'}</h2>
         {events.length ? (
@@ -4037,7 +4037,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         }}
       >
         <div
-          className="group relative flex min-h-11 min-w-0 flex-1 items-center overflow-hidden rounded-lg border border-white/[0.08] bg-[#0b1118]/80 transition-all focus-within:border-[#3B82F6]/45 focus-within:bg-[#0f1620]"
+          className="group relative flex min-h-11 min-w-0 flex-1 items-center overflow-hidden rounded-lg border border-white/[0.07] bg-[#0d1015] transition-colors focus-within:border-[#5e6ad2]/55 focus-within:bg-[#10141b]"
           data-testid="home-bento-omnibar-input-shell"
         >
           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
@@ -4059,7 +4059,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         <button
           type="submit"
           disabled={isBusy}
-          className="min-h-11 shrink-0 rounded-lg border border-white/[0.09] bg-white/[0.045] px-5 text-sm font-semibold text-white/82 transition-colors hover:border-white/18 hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:text-white/48"
+          className="min-h-11 shrink-0 rounded-lg border border-white/[0.08] bg-white/[0.035] px-5 text-sm font-semibold text-white/78 transition-colors hover:border-white/16 hover:bg-white/[0.065] hover:text-white disabled:cursor-wait disabled:text-white/42"
           data-testid="home-bento-analyze-button"
         >
           {isHomeAnalyzing ? (locale === 'en' ? 'Analyzing...' : '分析中...') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
@@ -4072,7 +4072,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             onClick={openHistoryDrawerButton.onClick}
             onPointerUp={openHistoryDrawerButton.onPointerUp}
             disabled={isBusy}
-            className="flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-[#0b1118]/70 px-4 text-white/62 transition-colors hover:bg-white/[0.06] hover:text-white disabled:cursor-wait disabled:text-white/36"
+            className="flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-white/[0.07] bg-[#0d1015] px-4 text-white/58 transition-colors hover:bg-white/[0.055] hover:text-white disabled:cursor-wait disabled:text-white/34"
             data-testid="home-bento-history-drawer-trigger"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -4098,7 +4098,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       aria-live={shouldGuardA11y ? 'polite' : undefined}
       className={getSafariReadySurfaceClassName(
         true,
-        `${BENTO_SURFACE_ROOT_CLASS} w-full flex-1 flex flex-col gap-5 min-h-0 min-w-0 bg-[#060709]`,
+        `${BENTO_SURFACE_ROOT_CLASS} w-full flex-1 flex flex-col gap-5 min-h-0 min-w-0 bg-[#080a0d]`,
       )}
     >
       {statusToast ? (
@@ -4160,7 +4160,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             >
               {omnibarModule}
               <div
-                className="grid min-w-0 rounded-[16px] border border-white/[0.05] bg-[#0d0f13] shadow-none lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_336px]"
+                className="grid min-w-0 rounded-[16px] border border-white/[0.055] bg-[#0d0f13] shadow-none lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_336px]"
                 data-testid="home-linear-shell"
               >
                 <div
@@ -4289,7 +4289,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                 </div>
                 {isHomeAnalyzing ? (
                   <aside
-                    className="min-w-0 border-t border-white/[0.055] bg-[#101216] px-4 py-5 lg:border-l lg:border-t-0 lg:px-5 lg:py-6"
+                    className="min-w-0 border-t border-white/[0.055] bg-white/[0.012] px-4 py-5 lg:border-l lg:border-t-0 lg:px-5 lg:py-6"
                     data-testid="home-bento-secondary-stack"
                   >
                     <InPlaceStrategySkeleton locale={locale} />
@@ -4310,13 +4310,15 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     onOpenFundamentals={() => setActiveDrawer('fundamentals')}
                   />
                 )}
+                {!isHomeAnalyzing ? (
+                  <div className="min-w-0 border-t border-white/[0.055] px-4 py-3 md:px-7 lg:col-span-2">
+                    <LinearEventsStrip
+                      locale={locale}
+                      report={activeTraceReport}
+                    />
+                  </div>
+                ) : null}
               </div>
-              {!isHomeAnalyzing ? (
-                <LinearEventsStrip
-                  locale={locale}
-                  report={activeTraceReport}
-                />
-              ) : null}
             </div>
           );
         })()}

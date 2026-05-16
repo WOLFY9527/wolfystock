@@ -112,6 +112,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const { t, language } = useI18n();
   const location = useLocation();
   const surfacePathname = stripLocalePrefix(location.pathname);
+  const isHomeRoute = surfacePathname === '/' || surfacePathname === '';
   const isBacktestRoute = surfacePathname.startsWith('/backtest');
   const isChatRoute = surfacePathname.startsWith('/chat');
   const isMarketOverviewRoute = surfacePathname.startsWith('/market-overview');
@@ -126,7 +127,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     || surfacePathname.startsWith('/admin/provider-circuits')
     || surfacePathname.startsWith('/admin/users')
     || surfacePathname.startsWith('/admin/cost-observability');
-  const shellViewportClass = isScannerRoute ? 'min-h-screen' : 'h-full min-h-0';
+  const isPageScrollRoute = isHomeRoute;
+  const shellViewportClass = isScannerRoute || isHomeRoute ? 'min-h-screen' : 'h-full min-h-0';
   const shellFrameOverflowClass = '';
   const isWideRoute = surfacePathname === '/'
     || surfacePathname.startsWith('/scanner')
@@ -226,6 +228,23 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     const body = document.body;
     const appRoot = document.getElementById('root');
 
+    if (isPageScrollRoute) {
+      root.dataset.pageScrollShell = 'true';
+      body.dataset.pageScrollShell = 'true';
+      appRoot?.setAttribute('data-page-scroll-shell', 'true');
+    }
+    return () => {
+      delete root.dataset.pageScrollShell;
+      delete body.dataset.pageScrollShell;
+      appRoot?.removeAttribute('data-page-scroll-shell');
+    };
+  }, [isPageScrollRoute]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    const appRoot = document.getElementById('root');
+
     if (isMarketOverviewRoute) {
       root.dataset.marketOverviewShell = 'true';
       body.dataset.marketOverviewShell = 'true';
@@ -241,7 +260,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   return (
     <ShellRailContext.Provider value={railContextValue}>
       <div
-        className={`theme-shell ${shellViewportClass} flex flex-col text-foreground${isScannerRoute ? ' theme-shell--scanner' : ''}${isWideRoute ? ' theme-shell--wide' : ''}${isMarketOverviewRoute ? ' theme-shell--market-overview' : ''}`}
+        className={`theme-shell ${shellViewportClass} flex flex-col text-foreground${isPageScrollRoute ? ' theme-shell--page-scroll' : ''}${isHomeRoute ? ' theme-shell--home' : ''}${isScannerRoute ? ' theme-shell--scanner' : ''}${isWideRoute ? ' theme-shell--wide' : ''}${isMarketOverviewRoute ? ' theme-shell--market-overview' : ''}`}
         data-layout={isDesktop ? 'desktop' : 'mobile'}
       >
         <header className="shell-masthead shrink-0 w-full">
@@ -279,10 +298,10 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         </header>
 
         <div
-          className={`shell-content-frame flex flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isChatRoute ? ' shell-content-frame--chat' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}${isSystemControlRoute ? ' shell-content-frame--system-control' : ''}`}
+          className={`shell-content-frame flex flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isPageScrollRoute ? ' shell-content-frame--page-scroll' : ''}${isHomeRoute ? ' shell-content-frame--home' : ''}${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isChatRoute ? ' shell-content-frame--chat' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}${isSystemControlRoute ? ' shell-content-frame--system-control' : ''}`}
         >
-          <main className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full${isChatRoute ? ' p-0 shell-main-column--chat' : isSystemControlRoute ? ' p-0 shell-main-column--system-control' : ' px-6 pt-6 pb-12 md:px-8 xl:px-12'}${shellFrameOverflowClass}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
-            <div key={location.pathname} className={`theme-page-transition flex min-h-0 min-w-0 w-full flex-col${isScannerRoute ? '' : ' h-full'}${isChatRoute ? ' theme-page-transition--chat' : ''}${isSystemControlRoute ? ' theme-page-transition--system-control' : ''}`}>
+          <main className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full${isChatRoute ? ' p-0 shell-main-column--chat' : isSystemControlRoute ? ' p-0 shell-main-column--system-control' : isHomeRoute ? ' px-4 pt-3 pb-8 md:px-6 lg:pt-4 xl:px-8 shell-main-column--home' : ' px-6 pt-6 pb-12 md:px-8 xl:px-12'}${shellFrameOverflowClass}${isPageScrollRoute ? ' shell-main-column--page-scroll' : ''}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
+            <div key={location.pathname} className={`theme-page-transition flex min-h-0 min-w-0 w-full flex-col${isScannerRoute || isHomeRoute ? '' : ' h-full'}${isPageScrollRoute ? ' theme-page-transition--page-scroll' : ''}${isChatRoute ? ' theme-page-transition--chat' : ''}${isSystemControlRoute ? ' theme-page-transition--system-control' : ''}`}>
               {children ?? <Outlet />}
             </div>
           </main>

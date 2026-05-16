@@ -15849,23 +15849,21 @@ html[data-theme='spacex'] {
 
 html[data-theme='spacex'] .theme-shell {
   background:
-    radial-gradient(circle at 14% 0%, rgba(129, 140, 248, 0.1), transparent 24%),
-    radial-gradient(circle at 86% 6%, rgba(255, 255, 255, 0.05), transparent 18%),
-    linear-gradient(180deg, #050505 0%, #030303 100%);
+    radial-gradient(circle at 14% 0%, rgba(94, 106, 210, 0.055), transparent 22%),
+    linear-gradient(180deg, #080a0d 0%, #07090c 100%);
 }
 
 html[data-theme='spacex'] .theme-shell::after {
   background:
-    radial-gradient(circle at 18% 0%, rgba(129, 140, 248, 0.08), transparent 24%),
-    radial-gradient(circle at 100% 18%, rgba(255, 255, 255, 0.03), transparent 18%);
-  opacity: 1;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 22%);
+  opacity: 0.72;
 }
 
 html[data-theme='spacex'] .shell-masthead {
-  border-bottom: 1px solid var(--wolfy-shell-panel-border);
-  background: linear-gradient(180deg, rgba(5, 5, 7, 0.92) 0%, rgba(5, 5, 7, 0.74) 76%, rgba(5, 5, 7, 0.22) 100%);
-  backdrop-filter: blur(22px);
-  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.34);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  background: rgba(8, 10, 13, 0.94);
+  backdrop-filter: blur(18px);
+  box-shadow: none;
 }
 
 html[data-theme='spacex'] .shell-masthead__inner,
@@ -15877,7 +15875,7 @@ html[data-theme='spacex'] .shell-content-frame {
 }
 
 html[data-theme='spacex'] .shell-masthead__inner {
-  padding-block: max(0.35rem, env(safe-area-inset-top)) 0.48rem;
+  padding-block: max(0.22rem, env(safe-area-inset-top)) 0.32rem;
 }
 
 html[data-theme='spacex'] .theme-shell--wide .shell-masthead__inner,
@@ -15886,7 +15884,22 @@ html[data-theme='spacex'] .shell-content-frame--wide {
 }
 
 html[data-theme='spacex'] .shell-content-frame {
-  padding-top: 0.2rem;
+  padding-top: 0;
+}
+
+html[data-theme='spacex'] .theme-shell--home,
+html[data-theme='spacex'] .theme-shell--home::after,
+html[data-theme='spacex'] .theme-shell--home .shell-content-frame,
+html[data-theme='spacex'] .theme-shell--home .shell-main-column {
+  background-color: #080a0d;
+}
+
+html[data-theme='spacex'] .shell-content-frame--home {
+  padding-top: 0;
+}
+
+html[data-theme='spacex'] .shell-main-column--home {
+  padding-top: 0.75rem;
 }
 
 html[data-theme='spacex'] .theme-shell--page-scroll .shell-content-frame--page-scroll {
@@ -15929,7 +15942,7 @@ html[data-theme='spacex'] .shell-nav-strip {
   grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
   align-items: center;
   gap: clamp(1rem, 1.6vw, 1.6rem);
-  min-height: 3.65rem;
+  min-height: 3.15rem;
   width: 100%;
 }
 
@@ -16055,7 +16068,21 @@ html[data-theme='spacex'] .shell-header-link {
 
 html[data-theme='spacex'] .shell-header-link::after,
 html[data-theme='spacex'] .shell-header-action::after {
-  display: none;
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -0.45rem;
+  left: 0;
+  display: block;
+  height: 1px;
+  border-radius: 999px;
+  background: transparent;
+  transform: scaleX(0.42);
+  opacity: 0;
+  transition:
+    background-color var(--motion-duration-fast) ease,
+    opacity var(--motion-duration-fast) ease,
+    transform var(--motion-duration-fast) ease;
 }
 
 html[data-theme='spacex'] .shell-header-link:hover,
@@ -16088,6 +16115,12 @@ html[data-theme='spacex'] .shell-header-link.is-active {
   background: transparent !important;
   box-shadow: none;
   font-weight: 700;
+}
+
+html[data-theme='spacex'] .shell-header-link.is-active::after {
+  background: rgba(94, 106, 210, 0.86);
+  opacity: 1;
+  transform: scaleX(1);
 }
 
 html[data-theme='spacex'] .shell-header-link__label {

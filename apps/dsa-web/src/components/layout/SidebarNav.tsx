@@ -525,15 +525,8 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
                 <div className="h-3 w-px bg-white/[0.07]" data-testid="shell-header-utility-divider" />
               ) : null}
               {settingsAction}
-              {systemAction}
-              {userGovernanceAction}
-              {costObservabilityAction}
-              {evidenceWorkflowAction}
-              {notificationAction}
-              {marketProviderAction}
-              {providerCircuitAction}
               {signInAction}
-              {logoutAction && (settingsAction || systemAction || signInAction) ? (
+              {logoutAction && (settingsAction || signInAction) ? (
                 <div className="h-3 w-px bg-white/[0.07]" data-testid="shell-header-utility-divider" />
               ) : null}
               {logoutAction}
