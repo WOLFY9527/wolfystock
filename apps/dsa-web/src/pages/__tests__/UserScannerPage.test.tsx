@@ -915,6 +915,8 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-status-strip')).toHaveAttribute('data-terminal-primitive', 'dense-status-strip');
     expect(screen.getByTestId('scanner-launch-bar')).toHaveAttribute('data-terminal-primitive', 'dense-table-shell');
     expect(screen.getByTestId('scanner-command-bar')).toHaveAttribute('data-terminal-primitive', 'dense-command-bar');
+    expect(screen.getByTestId('scanner-launch-bar')).toHaveClass('border-y', 'bg-black/[0.08]');
+    expect(screen.getByTestId('scanner-launch-bar')).not.toHaveClass('rounded-[14px]', 'shadow-[0_20px_80px_rgba(0,0,0,0.22)]');
     expect(screen.queryByTestId('scanner-control-rail')).not.toBeInTheDocument();
     expect(screen.queryByTestId('scanner-sidebar')).not.toBeInTheDocument();
     expect(screen.getByTestId('scanner-launch-bar')).toContainElement(screen.getByTestId('scanner-run-button'));
@@ -1415,11 +1417,9 @@ describe('UserScannerPage', () => {
         themeId: 'crypto_miners',
       }));
     });
-    expect(screen.getAllByText(/入选 1|1 selected/).length).toBeGreaterThan(0);
     expect(screen.queryByTestId('scanner-diagnostic-summary')).not.toBeInTheDocument();
-    expect(screen.getByTestId('scanner-status-strip')).toHaveTextContent(/1/);
-    expect(screen.getByTestId('scanner-status-strip')).toHaveTextContent(/2/);
-    expect(screen.getByTestId('scanner-command-bar')).toHaveTextContent(/本次扫描：1 入选 · 8 淘汰 · 2 失败|Scan: 1 selected · 8 rejected · 2 failed/);
+    expect(screen.getByTestId('scanner-status-strip')).toHaveTextContent(/1 \/ 8 \/ 2/);
+    expect(screen.getByTestId('scanner-command-bar')).not.toHaveTextContent(/本次扫描：|Scan:/);
     expect(screen.getByTestId('scanner-result-row-WULF')).toBeInTheDocument();
     expect(screen.queryByTestId('scanner-candidate-preview')).not.toBeInTheDocument();
 

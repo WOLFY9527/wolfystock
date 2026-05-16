@@ -69,11 +69,24 @@ export function DenseStatusStrip({
   );
 }
 
-export function DenseTableShell({ className, children, ...props }: DensePrimitiveProps<HTMLElement>) {
+export function DenseTableShell({
+  className,
+  children,
+  variant = 'panel',
+  ...props
+}: DensePrimitiveProps<HTMLElement> & {
+  variant?: 'panel' | 'board';
+}) {
   return (
     <section
       data-terminal-primitive="dense-table-shell"
-      className={cn('flex min-w-0 flex-col overflow-hidden rounded-[14px] border border-white/10 bg-black/10 shadow-[0_20px_80px_rgba(0,0,0,0.22)]', className)}
+      className={cn(
+        'flex min-w-0 flex-col overflow-hidden',
+        variant === 'board'
+          ? 'border-y border-white/10 bg-black/[0.08]'
+          : 'rounded-[14px] border border-white/10 bg-black/10 shadow-[0_20px_80px_rgba(0,0,0,0.22)]',
+        className,
+      )}
       {...props}
     >
       {children}
@@ -103,7 +116,7 @@ export function DenseCommandBar({
       className={cn('flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-black/20 px-3 py-2.5', className)}
       {...props}
     >
-      <div className="min-w-0 space-y-1">
+      <div className="min-w-0 flex-1 space-y-1">
         {heading ? <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{heading}</p> : null}
         {summary ? <p className="truncate text-xs text-white/45">{summary}</p> : null}
         {notice}
@@ -143,11 +156,19 @@ export function CompactEmptyRow({
 export function DenseSecondaryDisclosure({
   className,
   children,
+  variant = 'panel',
   ...props
-}: React.ComponentProps<typeof TerminalDisclosure>) {
+}: React.ComponentProps<typeof TerminalDisclosure> & {
+  variant?: 'panel' | 'row';
+}) {
   return (
     <TerminalDisclosure
-      className={cn('border-white/10 bg-white/[0.015]', className)}
+      className={cn(
+        variant === 'row'
+          ? 'rounded-none border-x-0 border-b-0 border-t border-white/10 bg-transparent px-0 py-2.5 backdrop-blur-0 hover:border-white/10'
+          : 'border-white/10 bg-white/[0.015]',
+        className,
+      )}
       {...props}
     >
       {children}

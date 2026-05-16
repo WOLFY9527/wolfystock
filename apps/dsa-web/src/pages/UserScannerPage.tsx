@@ -707,46 +707,6 @@ function getSelectedDiagnosticCandidate(
     || null;
 }
 
-function buildDecisionSummary(
-  runDetail: ScannerRunDetail,
-  shortlist: ScannerCandidate[],
-  diagnostics: ScannerCandidateDiagnostic[],
-  language: 'zh' | 'en',
-): { headline: string; best: string; reason: string; data: string } {
-  const summary = runDetail.summary;
-  if (!summary) {
-    return {
-      headline: language === 'en' ? 'Scan complete' : '扫描完成',
-      best: language === 'en' ? 'Best candidate: --' : '最佳候选：--',
-      reason: language === 'en' ? 'Main rejection: diagnostics limited' : '主要淘汰：诊断有限',
-      data: language === 'en' ? 'Diagnostics limited' : '诊断受限',
-    };
-  }
-  const selectedCount = summary.selectedCount ?? shortlist.length;
-  const dataFailedCount = summary.dataFailedCount ?? diagnostics.filter((candidate) => candidate.status === 'data_failed' || candidate.status === 'error').length;
-  const rejectedCount = summary.rejectedCount ?? Math.max(0, (runDetail.evaluatedSize ?? diagnostics.length) - selectedCount - dataFailedCount);
-  const bestDiagnostic = diagnostics.find((candidate) => candidate.status === 'selected')
-    || diagnostics.find((candidate) => candidate.score != null)
-    || null;
-  const bestSymbol = normalizeCandidateSymbol(shortlist[0]?.symbol || bestDiagnostic?.symbol);
-  const bestScore = shortlist[0]?.score ?? bestDiagnostic?.score ?? null;
-  const rejectionBuckets = buildRejectionBuckets(diagnostics, language);
-  return {
-    headline: selectedCount
-      ? (language === 'en' ? `Scan: ${selectedCount} selected · ${rejectedCount} rejected · ${dataFailedCount} failed` : `本次扫描：${selectedCount} 入选 · ${rejectedCount} 淘汰 · ${dataFailedCount} 失败`)
-      : (language === 'en' ? `Scan: no selected · ${rejectedCount} rejected · ${dataFailedCount} failed` : `本次扫描：暂无入选 · ${rejectedCount} 淘汰 · ${dataFailedCount} 失败`),
-    best: bestSymbol
-      ? `${language === 'en' ? 'Best candidate' : '最佳候选'}: ${bestSymbol} · ${bestScore == null ? '--' : `${bestScore}/100`}`.replace('最佳候选:', '最佳候选：')
-      : (language === 'en' ? 'Best candidate: --' : '最佳候选：--'),
-    reason: language === 'en'
-      ? `Main rejection: ${rejectionBuckets[0]?.label || 'n/a'}`
-      : `主要淘汰：${rejectionBuckets[0]?.label || '暂无'}`,
-    data: dataFailedCount
-      ? (language === 'en' ? 'Partial data missing' : '部分数据缺失')
-      : (language === 'en' ? 'Ready for observation' : '可用于观察'),
-  };
-}
-
 function diagnosticToCandidate(candidate: ScannerCandidateDiagnostic): ScannerCandidate {
   return {
     symbol: candidate.symbol,
@@ -1606,10 +1566,6 @@ const UserScannerPage: React.FC = () => {
     () => diagnosticCandidates.filter(isOfficialSelected),
     [diagnosticCandidates],
   );
-  const decisionSummary = useMemo(
-    () => runDetail ? buildDecisionSummary(runDetail, sortedCandidates, diagnosticCandidates, language) : null,
-    [diagnosticCandidates, language, runDetail, sortedCandidates],
-  );
   const rejectionBuckets = useMemo(
     () => buildRejectionBuckets(diagnosticCandidates, language),
     [diagnosticCandidates, language],
@@ -2077,7 +2033,7 @@ const UserScannerPage: React.FC = () => {
           <WideWorkspaceShellScope data-testid="scanner-wide-workspace-scope" className="flex-1">
 	        <TerminalPageShell
 	          data-testid="user-scanner-workspace"
-	          className="flex-1 min-w-0"
+	          className="flex-1 min-w-0 max-w-none gap-3 -mx-4 px-2 sm:-mx-2 sm:px-2 md:mx-0 md:px-3 xl:px-4"
 	        >
             {/* <TerminalPageHeading /> marker: DensePageHeader emits the page-level h1. */}
             <DensePageHeader
@@ -2113,7 +2069,7 @@ const UserScannerPage: React.FC = () => {
           {actionNotice ? (
             <div
               role={actionNotice.tone === 'danger' ? 'alert' : 'status'}
-              className={`rounded-2xl border px-4 py-3 text-sm ${
+              className={`border-y px-3 py-2 text-sm ${
                 actionNotice.tone === 'danger'
                   ? 'border-red-400/20 bg-red-400/10 text-red-100'
                   : actionNotice.tone === 'warning'
@@ -2129,20 +2085,20 @@ const UserScannerPage: React.FC = () => {
             data-testid="scanner-status-strip"
             ariaLabel={language === 'en' ? 'Scanner run summary' : '扫描运行摘要'}
             items={scannerStatusItems}
-            className="ui-scroll-x-quiet flex-nowrap overflow-x-auto py-1.5"
+            className="ui-scroll-x-quiet flex-nowrap overflow-x-auto border-y border-white/10 bg-transparent px-2 py-1"
           />
 
 		          <div data-testid="scanner-workspace-grid" className="w-full flex-1 min-w-0">
                 <DenseTableShell
                   data-testid="scanner-launch-bar"
+                  variant="board"
                   className="flex min-h-[520px] flex-1"
                 >
                   <DenseCommandBar
                     data-testid="scanner-command-bar"
-                    heading={language === 'en' ? 'Run controls' : '扫描控制'}
-                    summary={decisionSummary?.headline || currentRunSummary?.bestCandidate || (language === 'en' ? 'Choose market scope and run a compact candidate scan.' : '选择市场范围并启动紧凑候选扫描。')}
+                    className="bg-transparent px-2 py-2"
                   >
-                  <div className="grid min-w-0 grid-cols-2 gap-1.5 xl:grid-cols-[minmax(120px,0.6fr)_minmax(160px,0.8fr)_minmax(120px,0.55fr)_minmax(170px,0.8fr)_minmax(130px,0.58fr)_minmax(130px,0.58fr)_auto] xl:items-end">
+                  <div className="grid min-w-0 grid-cols-2 gap-1 xl:grid-cols-[minmax(112px,0.55fr)_minmax(150px,0.72fr)_minmax(106px,0.45fr)_minmax(156px,0.72fr)_minmax(118px,0.5fr)_minmax(118px,0.5fr)_auto] xl:items-end">
                     <PillTagGroup compact label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} variant="market" testId="scanner-market-toggle" />
                     <PillTagGroup compact label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
                     <PillTagGroup compact label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
@@ -2170,7 +2126,7 @@ const UserScannerPage: React.FC = () => {
                       disabled={runDisabled}
                       aria-busy={isRunning}
                       data-testid="scanner-run-button"
-                      className="group col-span-2 h-9 w-full px-4 text-sm font-bold active:scale-95 disabled:pointer-events-none xl:col-span-1 xl:min-w-[142px]"
+                      className="group col-span-2 h-8 w-full px-3 text-sm font-bold active:scale-95 disabled:pointer-events-none xl:col-span-1 xl:min-w-[132px]"
                       variant="primary"
                     >
                       <Play className="h-4 w-4 group-hover:animate-pulse" />
@@ -2242,7 +2198,7 @@ const UserScannerPage: React.FC = () => {
                           {validationErrors.theme}
                         </p>
                       ) : null}
-                      <div className="mt-2 flex flex-col gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-2.5" data-testid="scanner-ai-theme-builder">
+                      <div className="mt-2 flex flex-col gap-2 border-t border-white/8 pt-2" data-testid="scanner-ai-theme-builder">
                         <div className="flex items-center gap-2 text-[11px] font-medium text-white/70">
                           <Sparkles className="h-3.5 w-3.5 text-indigo-200/80" aria-hidden="true" />
                           <span>{language === 'en' ? 'AI custom theme' : 'AI 自定义主题'}</span>
@@ -2307,7 +2263,7 @@ const UserScannerPage: React.FC = () => {
                         {themeSuggestions.length ? (
                           <div className="flex flex-col gap-1.5" data-testid="scanner-ai-theme-suggestions">
                             {themeSuggestions.slice(0, 6).map((suggestion) => (
-                              <div key={suggestion.symbol} className="shrink-0 rounded-lg border border-white/5 bg-black/20 px-2.5 py-1.5">
+                              <div key={suggestion.symbol} className="shrink-0 border-t border-white/8 px-0 py-1.5">
                                 <div className="flex items-center justify-between gap-2 text-[11px] text-white/75">
                                   <span className="font-semibold text-white">{suggestion.symbol}</span>
                                   <span>{Math.round(suggestion.confidence * 100)}%</span>
@@ -2353,10 +2309,10 @@ const UserScannerPage: React.FC = () => {
                   </DenseCommandBar>
 
               <div data-testid="scanner-results-pane" className="flex min-h-0 flex-1 min-w-0 flex-col">
-              <div data-testid="scanner-primary-actions" className="flex shrink-0 flex-row flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-white/[0.01] px-3 py-1.5">
+              <div data-testid="scanner-primary-actions" className="flex shrink-0 flex-row flex-wrap items-center justify-between gap-1.5 border-b border-white/10 bg-transparent px-2 py-1">
                 <div className="flex min-w-0 flex-row flex-wrap items-center gap-2">
                   {runDetail && hasCandidateDiagnostics ? (
-                    <div data-testid="scanner-candidate-filters" className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1 rounded-lg border border-white/5 bg-black/30 p-0.5" role="group" aria-label={language === 'en' ? 'Candidate diagnostics filter' : '候选诊断过滤'}>
+                    <div data-testid="scanner-candidate-filters" className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1 border-r border-white/10 pr-2" role="group" aria-label={language === 'en' ? 'Candidate diagnostics filter' : '候选诊断过滤'}>
                       {([
                         ['selected', language === 'en' ? 'Selected' : '入选'],
                         ['pool', language === 'en' ? 'Candidate pool' : '候选池'],
@@ -2367,7 +2323,7 @@ const UserScannerPage: React.FC = () => {
                         <button
                           key={key}
                           type="button"
-                          className={`inline-flex shrink-0 items-center rounded-md px-2.5 py-1 text-xs ${candidateFilter === key ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'}`}
+                          className={`inline-flex shrink-0 items-center border-b px-1.5 py-0.5 text-xs ${candidateFilter === key ? 'border-white/40 text-white' : 'border-transparent text-white/45 hover:text-white/75'}`}
                           onClick={() => setCandidateFilter(key)}
                         >
                           <span className="ui-truncate block">{label}</span>
@@ -2385,7 +2341,7 @@ const UserScannerPage: React.FC = () => {
                     <button
                       key={key}
                       type="button"
-                      className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 ${sortKey === key ? 'border-white/16 bg-white/[0.08] text-white' : 'border-white/5 bg-white/[0.02] text-white/48 hover:text-white/75'}`}
+                      className={`inline-flex items-center gap-1 border-b px-1.5 py-0.5 ${sortKey === key ? 'border-white/40 text-white' : 'border-transparent text-white/48 hover:text-white/75'}`}
                       onClick={() => handleSortChange(key)}
                     >
                       {label}
@@ -2408,7 +2364,7 @@ const UserScannerPage: React.FC = () => {
                       <span>{language === 'en' ? 'More' : '更多'}</span>
                     </TerminalButton>
                     {isMoreActionsOpen ? (
-                      <div data-testid="scanner-more-actions-panel" className="absolute right-3 z-20 mt-2 grid min-w-[220px] gap-1.5 rounded-lg border border-white/5 bg-black/90 p-2 shadow-xl">
+	                      <div data-testid="scanner-more-actions-panel" className="absolute right-3 z-20 mt-2 grid min-w-[220px] gap-1.5 border border-white/10 bg-black/90 p-2 shadow-xl">
                         <ActionButton
                           label={language === 'en' ? 'Export CSV' : '导出 CSV'}
                           icon={<Download className="h-3.5 w-3.5" />}
@@ -2469,8 +2425,8 @@ const UserScannerPage: React.FC = () => {
 			              <div data-testid="scanner-candidate-scroll-region" className="px-0 py-0">
 	                {showDiagnosticRows ? (
 	                  decisionSortedDiagnosticCandidates.length ? (
-	                    <DenseTableFrame data-testid="scanner-candidate-diagnostics-table" className="px-3 py-2">
-	                      <div className="space-y-1.5">
+		                    <DenseTableFrame data-testid="scanner-candidate-diagnostics-table" className="px-0 py-0">
+		                      <div>
 	                        {decisionSortedDiagnosticCandidates.map((candidate) => {
 	                          const activeRunDetail = runDetail;
 	                          if (!activeRunDetail) {
@@ -2561,16 +2517,16 @@ const UserScannerPage: React.FC = () => {
 	                  )
 	                ) : sortedCandidates.length ? (
 	                  <DenseTableFrame data-testid="scanner-result-table">
-	                    <table className="w-full min-w-[820px] border-collapse text-left text-xs xl:min-w-full">
-                      <thead className="border-b border-white/5 bg-black/25 text-[10px] uppercase tracking-[0.16em] text-white/38">
+	                    <table className="w-full min-w-[760px] border-collapse text-left text-xs xl:min-w-full">
+                      <thead className="border-b border-white/10 bg-black/[0.18] text-[10px] uppercase tracking-[0.14em] text-white/38">
                         <tr>
-                          <th className="px-3 py-2">{language === 'en' ? 'Rank' : '排名'}</th>
-                          <th className="px-3 py-2">{language === 'en' ? 'Symbol / name' : '代码 / 名称'}</th>
-                          <th className="px-3 py-2">{language === 'en' ? 'Score' : '评分'}</th>
-                          <th className="px-3 py-2">{language === 'en' ? 'Status' : '状态'}</th>
-                          <th className="px-3 py-2">{language === 'en' ? 'Key reason' : '关键原因'}</th>
-                          <th className="px-3 py-2">{language === 'en' ? 'Data state' : '数据状态'}</th>
-                          <th className="px-3 py-2 text-right">{language === 'en' ? 'Actions' : '操作'}</th>
+                          <th className="px-2.5 py-1.5">{language === 'en' ? 'Rank' : '排名'}</th>
+                          <th className="px-2.5 py-1.5">{language === 'en' ? 'Symbol / name' : '代码 / 名称'}</th>
+                          <th className="px-2.5 py-1.5">{language === 'en' ? 'Score' : '评分'}</th>
+                          <th className="px-2.5 py-1.5">{language === 'en' ? 'Status' : '状态'}</th>
+                          <th className="px-2.5 py-1.5">{language === 'en' ? 'Key reason' : '关键原因'}</th>
+                          <th className="px-2.5 py-1.5">{language === 'en' ? 'Data state' : '数据状态'}</th>
+                          <th className="px-2.5 py-1.5 text-right">{language === 'en' ? 'Actions' : '操作'}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2633,17 +2589,18 @@ const UserScannerPage: React.FC = () => {
 	              </div>
 
 	              {runDetail && hasCandidateDiagnostics ? (
-	                <div data-testid="scanner-secondary-sections" className="grid gap-2.5 border-t border-white/10 px-3 py-3">
-	                  <div className="grid gap-2.5">
+		                <div data-testid="scanner-secondary-sections" className="border-t border-white/10 px-2 py-0">
+		                  <div>
 	                    {rejectionBuckets.length || hasRunDiagnosticsContent(runDetail) ? (
-	                      <DenseSecondaryDisclosure
-	                        data-testid="scanner-diagnostics-disclosure"
+		                      <DenseSecondaryDisclosure
+		                        data-testid="scanner-diagnostics-disclosure"
+		                        variant="row"
 	                        title={language === 'en' ? 'Data status' : '数据状态'}
 	                        summary={language === 'en'
 	                          ? `Evaluated ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · selected ${runDetail.summary?.selectedCount ?? shortlistCount} · main rejection ${rejectionBuckets[0]?.label || 'n/a'}`
 	                          : `评估 ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · 入选 ${runDetail.summary?.selectedCount ?? shortlistCount} · 主要淘汰 ${rejectionBuckets[0]?.label || '暂无'}`}
 	                      >
-                        <div data-testid="scanner-diagnostics-summary" className="mb-3 rounded-xl border border-white/5 bg-black/20 px-3 py-2 text-xs">
+                        <div data-testid="scanner-diagnostics-summary" className="mb-2 border-t border-white/8 py-2 text-xs">
                           <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                             <p className="min-w-0 text-white/64">
                               {language === 'en'
@@ -2661,7 +2618,7 @@ const UserScannerPage: React.FC = () => {
                                 <button
                                   key={bucket.label}
                                   type="button"
-                                  className="inline-flex max-w-full items-baseline gap-1 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/62 hover:bg-white/10"
+                                  className="inline-flex max-w-full items-baseline gap-1 border-b border-white/15 px-1.5 py-0.5 text-[10px] text-white/62 hover:text-white"
                                   onClick={() => setCandidateFilter(bucket.label === rejectionBucketLabel('data', language) ? 'data_failed' : 'rejected')}
                                 >
                                   <span className="truncate">{bucket.label}</span>
@@ -2676,6 +2633,7 @@ const UserScannerPage: React.FC = () => {
 	                    ) : null}
 	                    <DenseSecondaryDisclosure
 	                      data-testid="scanner-run-comparison-strip"
+	                      variant="row"
 	                      title={language === 'en' ? 'Previous run' : '上次对比'}
                       summary={comparisonState.previousRun && comparisonState.chips.length
                         ? `${language === 'en' ? 'Compared with previous run' : '上次对比'}：${comparisonState.chips[0]}`
@@ -2695,12 +2653,12 @@ const UserScannerPage: React.FC = () => {
                         </span>
                         {comparisonState.previousRun && comparisonState.chips.length ? (
                           comparisonState.chips.map((chip) => (
-                            <span key={chip} className="shrink-0 rounded-md border border-white/8 bg-black/20 px-2 py-0.5 text-white/62">
+                            <span key={chip} className="shrink-0 border-b border-white/15 px-1.5 py-0.5 text-white/62">
                               {chip}
                             </span>
                           ))
                         ) : (
-                          <span className="shrink-0 rounded-md border border-white/8 bg-black/20 px-2 py-0.5 text-white/42">
+                          <span className="shrink-0 border-b border-white/15 px-1.5 py-0.5 text-white/42">
                             {language === 'en' ? 'No previous comparable run' : '暂无上次扫描对比'}
 	                          </span>
 	                        )}
@@ -2708,13 +2666,14 @@ const UserScannerPage: React.FC = () => {
 	                    </DenseSecondaryDisclosure>
 	                    <DenseSecondaryDisclosure
 	                      data-testid="scanner-strategy-experiment"
+	                      variant="row"
 	                      title={language === 'en' ? 'Backtest lab' : '回测实验'}
 	                      summary={language === 'en' ? 'Simulation · batch backtest · recent results' : '模拟 · 批量回测 · 最近结果'}
 	                    >
                       <div className="grid gap-3">
                         <div
                           data-testid="scanner-strategy-preview"
-                          className="rounded-xl border border-white/5 bg-black/20 px-3 py-2 text-xs"
+                          className="border-t border-white/8 py-2 text-xs"
                         >
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-white/40">

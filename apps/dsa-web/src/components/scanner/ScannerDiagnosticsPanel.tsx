@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
-import { TerminalChip, TerminalPanel } from '../terminal';
+import { TerminalChip } from '../terminal';
 import type {
   ScannerCandidate,
   ScannerCoverageSummary,
@@ -36,10 +36,10 @@ function DiagnosticsFieldChip({ label, value }: { label: string; value: string }
 
 function DiagnosticsSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <TerminalPanel as="section" dense className="p-2.5">
-      <h5 className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{title}</h5>
+    <section className="min-w-0 border-t border-white/8 py-2">
+      <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">{title}</h5>
       {children}
-    </TerminalPanel>
+    </section>
   );
 }
 
@@ -137,11 +137,11 @@ function ScannerDiagnosticsPanelComponentImpl({ runDetail, language }: ScannerDi
   if (!hasAnyDiagnostics) return null;
 
   return (
-    <section data-testid="scanner-diagnostics-panel" className="mt-3 rounded-xl border border-white/5 bg-white/[0.015] p-3">
+    <section data-testid="scanner-diagnostics-panel" className="mt-2 border-t border-white/10 pt-1">
       <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40">
         {language === 'en' ? 'Data status' : '数据状态'}
       </h3>
-      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+      <div className="mt-1 grid gap-x-4 gap-y-0 lg:grid-cols-2">
         {coverage ? (
           <DiagnosticsSection title={language === 'en' ? 'Coverage summary' : '覆盖摘要'}>
             <div className="flex flex-wrap gap-2">
