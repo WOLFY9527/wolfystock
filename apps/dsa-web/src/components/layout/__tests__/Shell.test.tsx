@@ -127,8 +127,8 @@ describe('Shell', () => {
     expect(logo).not.toHaveClass('invert');
     expect(screen.getByRole('link', { name: translate('zh', 'nav.chat') })).toBeInTheDocument();
     const scannerLink = screen.getByRole('link', { name: '扫描器' });
-    expect(scannerLink).toHaveClass('text-sm', 'font-medium', 'text-[#8a8f98]');
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.chat') })).toHaveClass('text-sm', 'font-semibold', 'text-[#f7f8f8]');
+    expect(scannerLink).toHaveClass('text-sm', 'font-medium', 'text-white/50');
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.chat') })).toHaveClass('text-sm', 'font-bold', 'text-white');
     expect(screen.getByTestId('chat-completion-badge')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
     expect(document.querySelector('.shell-content-frame')).toHaveClass('shell-content-frame--chat', 'shell-content-frame--wide');
@@ -574,13 +574,13 @@ describe('Shell', () => {
       'flex',
       'items-center',
       'gap-0.5',
-      'rounded-lg',
-      'bg-[#0f1011]',
+      'rounded-[14px]',
+      'bg-white/[0.012]',
       'border',
-      'border-[#23252a]',
-      'px-1',
-      'py-0.5',
-      'shadow-none',
+      'border-white/[0.04]',
+      'px-1.5',
+      'py-1',
+      'backdrop-blur-sm',
     );
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'language.toggle') })).toHaveTextContent('EN');
     expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.settings') })).toBeInTheDocument();

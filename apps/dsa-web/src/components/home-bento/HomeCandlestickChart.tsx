@@ -105,11 +105,11 @@ const TIMEFRAME_OPTIONS: TimeframeOption[] = [
 ];
 
 const INDICATOR_CONFIGS: IndicatorConfig[] = [
-  { key: 'ma5', label: 'MA5', color: '#8FA3D8' },
-  { key: 'ma10', label: 'MA10', color: '#C4A46A' },
-  { key: 'ma20', label: 'MA20', color: '#9B91D9' },
-  { key: 'ma60', label: 'MA60', color: '#C88499' },
-  { key: 'vwap', label: 'VWAP', color: '#7BAE88' },
+  { key: 'ma5', label: 'MA5', color: '#38BDF8' },
+  { key: 'ma10', label: 'MA10', color: '#F59E0B' },
+  { key: 'ma20', label: 'MA20', color: '#8B5CF6' },
+  { key: 'ma60', label: 'MA60', color: '#EC4899' },
+  { key: 'vwap', label: 'VWAP', color: '#22C55E' },
 ];
 
 const DEFAULT_INDICATORS: Record<HomeIndicatorKey, boolean> = {
@@ -568,25 +568,25 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
         transitionDuration: 0.08,
         axisPointer: {
           type: 'cross',
-          crossStyle: { color: 'rgba(208,214,224,0.34)' },
+          crossStyle: { color: 'rgba(226,232,240,0.52)' },
           label: {
-            backgroundColor: 'rgba(15,16,17,0.98)',
-            color: 'rgba(247,248,248,0.82)',
+            backgroundColor: 'rgba(8,12,18,0.95)',
+            color: 'rgba(248,250,252,0.82)',
             fontSize: 10,
           },
         },
         borderWidth: 1,
-        borderColor: '#34343a',
-        backgroundColor: 'rgba(15,16,17,0.98)',
+        borderColor: 'rgba(255,255,255,0.10)',
+        backgroundColor: 'rgba(6,10,16,0.96)',
         borderRadius: 6,
         padding: 0,
-        shadowBlur: 0,
-        shadowColor: 'transparent',
+        shadowBlur: 18,
+        shadowColor: 'rgba(0,0,0,0.34)',
         shadowOffsetX: 0,
-        shadowOffsetY: 0,
-        extraCssText: 'pointer-events:none;white-space:normal;max-width:min(248px,calc(100vw - 20px));',
+        shadowOffsetY: 10,
+        extraCssText: 'pointer-events:none;white-space:normal;max-width:min(248px,calc(100vw - 20px));backdrop-filter:blur(10px);',
         textStyle: {
-          color: 'rgba(247,248,248,0.86)',
+          color: 'rgba(248,250,252,0.86)',
           fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
           fontSize: 11,
           lineHeight: 16,
@@ -610,7 +610,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           type: 'category',
           data: dates,
           boundaryGap: true,
-          axisLine: { lineStyle: { color: '#23252a' } },
+          axisLine: { lineStyle: { color: 'rgba(255,255,255,0.10)' } },
           axisTick: { show: false },
           axisLabel: { show: false },
           splitLine: { show: false },
@@ -620,14 +620,14 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           gridIndex: 1,
           data: dates,
           boundaryGap: true,
-          axisLine: { lineStyle: { color: '#23252a' } },
+          axisLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
           axisTick: { show: false },
           axisLabel: {
             show: true,
             interval: xLabelInterval,
             hideOverlap: true,
             margin: 8,
-            color: '#62666d',
+            color: 'rgba(255,255,255,0.36)',
             fontSize: isCompactChart ? 9 : 10,
             formatter: (value: string) => formatDate(value, locale),
           },
@@ -643,11 +643,11 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           axisLabel: {
             hideOverlap: true,
             margin: 8,
-            color: '#8a8f98',
+            color: 'rgba(255,255,255,0.46)',
             fontSize: 10,
             formatter: (value: number) => formatPrice(value),
           },
-          splitLine: { lineStyle: { color: 'rgba(35,37,42,0.86)', width: 1 } },
+          splitLine: { lineStyle: { color: 'rgba(255,255,255,0.055)' } },
         },
         {
           scale: true,
@@ -661,11 +661,11 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
             showMaxLabel: false,
             hideOverlap: true,
             margin: 6,
-            color: '#62666d',
+            color: 'rgba(255,255,255,0.28)',
             fontSize: 9,
             formatter: (value: number) => formatVolume(value),
           },
-          splitLine: { lineStyle: { color: 'rgba(35,37,42,0.68)', width: 1 } },
+          splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
         },
       ],
       dataZoom: [
@@ -684,19 +684,19 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           type: 'candlestick',
           data: candles.map((item) => [item.open, item.close, item.low, item.high]),
           itemStyle: {
-            color: '#7DBB8B',
-            color0: '#D16D7C',
-            borderColor: '#7DBB8B',
-            borderColor0: '#D16D7C',
+            color: '#34D399',
+            color0: '#FB7185',
+            borderColor: '#34D399',
+            borderColor0: '#FB7185',
           },
           markLine: safeCurrentPrice
             ? {
                 symbol: ['none', 'none'],
                 silent: true,
-                lineStyle: { color: '#5e6ad2', type: 'dashed', width: 1 },
+                lineStyle: { color: 'rgba(52,211,153,0.58)', type: 'dashed', width: 1 },
                 label: {
-                  color: '#ffffff',
-                  backgroundColor: '#5e6ad2',
+                  color: '#051016',
+                  backgroundColor: 'rgba(52,211,153,0.92)',
                   borderRadius: 3,
                   padding: [2, 5],
                   formatter: () => formatPrice(safeCurrentPrice),
@@ -728,7 +728,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           data: candles.map((item) => ({
             value: item.volume,
             itemStyle: {
-              color: item.close >= item.open ? 'rgba(125,187,139,0.28)' : 'rgba(209,109,124,0.28)',
+              color: item.close >= item.open ? 'rgba(52,211,153,0.34)' : 'rgba(251,113,133,0.34)',
             },
           })),
           barWidth: '58%',
@@ -795,7 +795,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
   return (
     <div
       ref={sizeRef}
-      className="min-w-0 rounded-[12px] border border-[#23252a] bg-[#141516] px-3 py-3"
+      className="min-w-0 rounded-[12px] border border-white/[0.045] bg-white/[0.012] px-3 py-3"
       data-testid="home-linear-technical-chart"
       data-chart-engine="echarts"
       data-chart-source={activeTimeframe === '1D' ? 'stocks-history-daily' : 'stocks-history-daily-aggregated'}
@@ -811,17 +811,17 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       <div className="mb-3 flex min-w-0 flex-col gap-2.5">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <div className="flex items-center gap-0.5 rounded-md border border-[#23252a] bg-[#0f1011] p-0.5">
+            <div className="flex items-center gap-0.5 rounded-full border border-white/[0.055] bg-white/[0.018] p-0.5">
               {TIMEFRAME_OPTIONS.map((optionItem) => (
                 <button
                   key={optionItem.key}
                   type="button"
                   aria-pressed={activeTimeframe === optionItem.key}
                   className={cn(
-                    'rounded px-2.5 py-1 text-[10px] font-medium transition-colors',
+                    'rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors',
                     activeTimeframe === optionItem.key
-                      ? 'bg-[#5e6ad2]/18 text-[#f7f8f8]'
-                      : 'text-[#8a8f98] hover:bg-[#18191a] hover:text-[#d0d6e0]',
+                      ? 'bg-white/[0.09] text-white/86'
+                      : 'text-white/42 hover:bg-white/[0.045] hover:text-white/72',
                   )}
                   onClick={() => handleTimeframeChange(optionItem.key)}
                   disabled={status !== 'ready'}
@@ -831,13 +831,13 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
                 </button>
               ))}
             </div>
-            <span className="hidden text-[10px] text-[#62666d] sm:inline">{ticker}</span>
+            <span className="hidden text-[10px] text-white/30 sm:inline">{ticker}</span>
             {sourceHint ? (
-              <span className="text-[10px] text-[#62666d]">{sourceHint}</span>
+              <span className="text-[10px] text-white/30">{sourceHint}</span>
             ) : null}
           </div>
           {maStructure ? (
-            <span className="text-[10px] text-[#62666d]">{maStructure}</span>
+            <span className="text-[10px] text-white/30">{maStructure}</span>
           ) : null}
         </div>
 
@@ -857,11 +857,11 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
                 aria-pressed={pressed}
                 disabled={!available}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-[10px] font-medium transition-colors',
+                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors',
                   pressed
-                    ? 'border-[#34343a] bg-[#18191a] text-[#d0d6e0]'
-                    : 'border-[#23252a] bg-[#0f1011] text-[#8a8f98] hover:border-[#34343a] hover:bg-[#18191a] hover:text-[#d0d6e0]',
-                  !available ? 'cursor-not-allowed opacity-40 hover:border-[#23252a] hover:bg-[#0f1011] hover:text-[#8a8f98]' : '',
+                    ? 'border-white/[0.12] bg-white/[0.075] text-white/84'
+                    : 'border-white/[0.045] bg-white/[0.012] text-white/46 hover:border-white/[0.09] hover:bg-white/[0.035] hover:text-white/70',
+                  !available ? 'cursor-not-allowed opacity-40 hover:border-white/[0.045] hover:bg-white/[0.012] hover:text-white/46' : '',
                 )}
                 onClick={() => handleIndicatorToggle(key)}
                 title={title}
@@ -872,7 +872,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
             );
           })}
           {!indicatorEnabledState.vwap && vwapStatus.zeroHeavy ? (
-            <span className="text-[10px] text-[#62666d]">{language === 'en' ? 'VWAP unavailable' : 'VWAP 暂不可用'}</span>
+            <span className="text-[10px] text-white/30">{language === 'en' ? 'VWAP unavailable' : 'VWAP 暂不可用'}</span>
           ) : null}
         </div>
       </div>
@@ -898,7 +898,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
               role="status"
               aria-live="polite"
             >
-              <p className="font-medium text-[#f7f8f8]">
+              <p className="font-medium text-white/88">
                 {language === 'en' ? 'Date' : '日期'} {candleDateLabel(hoveredCandle, locale)}
               </p>
               <p>
@@ -911,7 +911,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
                 <p>{language === 'en' ? 'Report ref' : '报告参考价'} {formatPrice(currentPrice)}</p>
               ) : null}
               {enabledIndicators.length ? (
-                <p className="text-[#8a8f98]">
+                <p className="text-white/48">
                   {enabledIndicators
                     .map(({ key, label }) => (isFiniteNumber(hoveredCandle[key]) ? `${label} ${formatPrice(hoveredCandle[key])}` : null))
                     .filter(Boolean)
@@ -924,14 +924,14 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       ) : (
         <div
           className={cn(
-            'flex h-[228px] min-w-[280px] flex-col items-center justify-center rounded border border-[#23252a] bg-[#0f1011] px-4 text-center sm:h-[238px] lg:h-[246px]',
-            status === 'loading' ? 'text-[#8a8f98]' : 'text-[#62666d]',
+            'flex h-[228px] min-w-[280px] flex-col items-center justify-center rounded border border-white/[0.045] bg-white/[0.012] px-4 text-center sm:h-[238px] lg:h-[246px]',
+            status === 'loading' ? 'text-white/46' : 'text-white/42',
           )}
           data-testid="home-candlestick-unavailable"
         >
           <p className="text-sm font-medium">{chartUnavailableTitle}</p>
           {chartUnavailableBody ? (
-            <p className="mt-2 max-w-xs text-xs leading-5 text-[#62666d]">
+            <p className="mt-2 max-w-xs text-xs leading-5 text-white/34">
               {chartUnavailableBody}
             </p>
           ) : null}

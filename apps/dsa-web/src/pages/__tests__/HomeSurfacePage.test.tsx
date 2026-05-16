@@ -319,17 +319,17 @@ describe('HomeSurfacePage', () => {
     expect(grid).toHaveClass('flex', 'w-full', 'min-w-0', 'flex-col', 'gap-3');
     expect(grid).not.toHaveClass('xl:grid-cols-12');
     expect(grid.firstElementChild).toBe(omnibarShell);
-    expect(linearShell).toHaveClass('grid', 'min-w-0', 'rounded-[14px]', 'border', 'border-[#23252a]', 'bg-[#0f1011]', 'shadow-none');
+    expect(linearShell).toHaveClass('grid', 'min-w-0', 'rounded-[14px]', 'border', 'border-white/[0.04]', 'bg-white/[0.012]', 'shadow-none');
     expect(linearShell).not.toHaveClass('overflow-hidden');
     expect(linearShell.className).toContain('lg:grid-cols-[minmax(0,1fr)_minmax(300px,372px)]');
     expect(primaryStack).toHaveClass('min-w-0', 'px-4', 'py-5', 'md:px-7', 'md:py-7');
-    expect(secondaryStack).toHaveClass('relative', 'min-w-0', 'border-t', 'border-[#23252a]', 'bg-[#141516]', 'py-5');
+    expect(secondaryStack).toHaveClass('relative', 'min-w-0', 'border-t', 'border-white/[0.045]', 'bg-white/[0.01]', 'py-5');
     expect(homeSearch).toHaveAttribute('placeholder', '输入代码唤醒 AI (如 ORCL)...');
     expect(homeSearch).toHaveValue('');
-    expect(screen.getByTestId('home-bento-omnibar-input-shell')).toHaveClass('overflow-hidden', 'rounded-lg', 'border', 'border-[#23252a]', 'bg-[#0f1011]');
-    expect(homeSearch).toHaveClass('bg-transparent', 'text-sm', 'leading-none', 'pl-11', 'caret-[#5e6ad2]');
+    expect(screen.getByTestId('home-bento-omnibar-input-shell')).toHaveClass('overflow-hidden', 'rounded-lg', 'border', 'border-white/[0.08]', 'bg-[#0b1118]/80');
+    expect(homeSearch).toHaveClass('bg-transparent', 'text-sm', 'leading-none', 'pl-11', 'caret-[#93C5FD]');
     expect(screen.getByTestId('home-bento-analyze-button')).toHaveTextContent('分析');
-    expect(screen.getByTestId('home-bento-analyze-button')).toHaveClass('rounded-lg', 'bg-[#5e6ad2]', 'border', 'border-[#5e6ad2]/50');
+    expect(screen.getByTestId('home-bento-analyze-button')).toHaveClass('rounded-lg', 'bg-white/[0.045]', 'border', 'border-white/[0.09]');
     expect(within(omnibar).getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
     expect(within(omnibar).getByRole('button', { name: '历史记录' })).toBeInTheDocument();
     expect(screen.queryByText('SYSTEM VIEW')).not.toBeInTheDocument();
@@ -379,7 +379,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('财报有效性')).toBeInTheDocument();
     expect(screen.getByText('关键事件与催化剂')).toBeInTheDocument();
     expect(screen.getByTestId('home-linear-events-empty')).toHaveTextContent('暂无已验证催化剂');
-    expect(screen.getByTestId('home-linear-events-empty')).toHaveClass('py-1.5', 'text-xs', 'leading-5', 'text-[#62666d]');
+    expect(screen.getByTestId('home-linear-events-empty')).toHaveClass('py-1.5', 'text-xs', 'leading-5', 'text-white/34');
     expect(screen.getByTestId('home-linear-events')).not.toHaveTextContent('报告主线');
     expect(screen.getByTestId('home-linear-events')).not.toHaveTextContent('技术触发');
     expect(screen.getByTestId('home-linear-events')).not.toHaveTextContent('财报跟踪');
@@ -407,13 +407,12 @@ describe('HomeSurfacePage', () => {
     expect(within(entryMetric).getByText('121.80 - 124.60')).toHaveClass('text-sm', 'font-semibold');
     expect(within(targetMetric).getByText('133.50')).toHaveClass('text-sm', 'font-semibold', 'text-emerald-400');
     expect(within(stopLossMetric).getByText('117.40')).toHaveClass('text-sm', 'font-semibold', 'text-rose-400');
-    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-[#f7f8f8]');
+    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-white');
     expect(macdSignal).toHaveClass('flex', 'min-w-0', 'flex-col', 'gap-1');
     expect(macdSignalValue).toHaveClass('text-xs', 'font-semibold');
     expect(within(entryMetric).getByText('121.80 - 124.60').className).not.toContain('text-2xl');
-    expect(macdSignalValue).toHaveClass('text-emerald-400');
-    expect(macdSignalValue.className).not.toContain('drop-shadow');
-    expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveClass('block', 'w-full', 'overflow-hidden', 'text-ellipsis', 'whitespace-nowrap', 'text-xs', 'text-[#62666d]');
+    expect(macdSignalValue).toHaveClass('text-emerald-400', 'drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]');
+    expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveClass('block', 'w-full', 'overflow-hidden', 'text-ellipsis', 'whitespace-nowrap', 'text-xs', 'text-white/38');
     expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveAttribute('title', '零轴上方，动能再扩张。');
     expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveTextContent('零轴上方，动能再扩张。');
     expect(screen.queryByText('Second expansion above zero')).not.toBeInTheDocument();
@@ -509,7 +508,7 @@ describe('HomeSurfacePage', () => {
     renderSurface();
 
     await screen.findByText('Oracle Corporation');
-    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-[#f7f8f8]');
+    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-white');
     expect(within(screen.getByTestId('home-bento-strategy-metric-上方观察区')).getByText('133.50')).toHaveClass('text-rose-400');
     expect(within(screen.getByTestId('home-bento-strategy-metric-风险失效线')).getByText('117.40')).toHaveClass('text-emerald-400');
   });
@@ -2429,7 +2428,7 @@ describe('HomeSurfacePage', () => {
     expect(chartRoot).toHaveAttribute('data-x-axis-density', 'sampled');
     expect(chartRoot).toHaveAttribute('data-chart-timeframe', '1D');
     expect(chartRoot).toHaveAttribute('data-chart-source', 'stocks-history-daily');
-    expect(chartRoot).toHaveClass('rounded-[12px]', 'border-[#23252a]', 'bg-[#141516]');
+    expect(chartRoot).toHaveClass('rounded-[12px]', 'border-white/[0.045]', 'bg-white/[0.012]');
 
     fireEvent.mouseMove(chartFrame, { clientX: 0 });
 
@@ -2462,8 +2461,8 @@ describe('HomeSurfacePage', () => {
     expect(timeframe1D).toHaveAttribute('aria-pressed', 'true');
     expect(timeframe1W).toHaveAttribute('aria-pressed', 'false');
     expect(timeframe1M).toHaveAttribute('aria-pressed', 'false');
-    expect(timeframe1D).toHaveClass('rounded', 'bg-[#5e6ad2]/18', 'text-[#f7f8f8]');
-    expect(timeframe1W).toHaveClass('rounded', 'text-[#8a8f98]');
+    expect(timeframe1D).toHaveClass('rounded-full', 'bg-white/[0.09]', 'text-white/86');
+    expect(timeframe1W).toHaveClass('rounded-full', 'text-white/42');
     expect(screen.queryByRole('button', { name: '1m' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '5m' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '15m' })).not.toBeInTheDocument();
@@ -2503,8 +2502,8 @@ describe('HomeSurfacePage', () => {
     expect(chartRoot).toHaveAttribute('data-enabled-indicators', 'MA5,MA10,MA20');
     expect(ma20Toggle).toHaveAttribute('aria-pressed', 'true');
     expect(ma60Toggle).toBeDisabled();
-    expect(ma20Toggle).toHaveClass('rounded', 'bg-[#18191a]', 'text-[#d0d6e0]');
-    expect(ma60Toggle).toHaveClass('rounded', 'opacity-40');
+    expect(ma20Toggle).toHaveClass('rounded-full', 'bg-white/[0.075]', 'text-white/84');
+    expect(ma60Toggle).toHaveClass('rounded-full', 'opacity-40');
 
     fireEvent.click(ma20Toggle);
 

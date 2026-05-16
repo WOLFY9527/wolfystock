@@ -919,16 +919,16 @@ function resolveLinearStanceLabel(locale: DashboardLocale, signalLabel: string, 
 
 function toneTextClass(tone: SignalTone | undefined, convention: ReturnType<typeof useUiPreferences>['marketColorConvention']): string {
   if (!tone || tone === 'neutral') {
-    return 'text-[#d0d6e0]';
+    return 'text-white/76';
   }
-  return getToneColor(tone, convention).textClass.replace(/\s*drop-shadow-\[[^\]]+\]/g, '');
+  return getToneColor(tone, convention).textClass;
 }
 
 function toneTextStyle(tone: SignalTone | undefined, convention: ReturnType<typeof useUiPreferences>['marketColorConvention']): React.CSSProperties {
   if (!tone || tone === 'neutral') {
     return {};
   }
-  return { color: getToneColor(tone, convention).colorHex, textShadow: 'none' };
+  return { textShadow: getToneColor(tone, convention).glowShadow };
 }
 
 function metricValueClass(metric: DashboardField, convention: ReturnType<typeof useUiPreferences>['marketColorConvention']): string {
@@ -983,7 +983,7 @@ function LinearKeyLevelsStrip({
   const levels = buildLinearLevelMetrics(metrics, locale);
   return (
     <div
-      className="grid min-w-0 grid-cols-1 overflow-hidden rounded-md border border-[#23252a] bg-[#141516] sm:grid-cols-3"
+      className="grid min-w-0 grid-cols-1 overflow-hidden rounded-md border border-white/[0.055] bg-white/[0.012] sm:grid-cols-3"
       data-testid="home-linear-key-levels"
     >
       {levels.map((metric, index) => (
@@ -991,11 +991,11 @@ function LinearKeyLevelsStrip({
           key={metric.label}
           className={cn(
             'min-w-0 px-4 py-3',
-            index > 0 ? 'border-t border-[#23252a] sm:border-l sm:border-t-0' : '',
+            index > 0 ? 'border-t border-white/[0.055] sm:border-l sm:border-t-0' : '',
           )}
           data-testid={`home-bento-strategy-metric-${metric.label}`}
         >
-          <p className="truncate text-[11px] font-medium tracking-[0] text-[#8a8f98]">{getMetricLabelForStrip(locale, metric.label)}</p>
+          <p className="truncate text-[11px] font-medium tracking-[0] text-white/42">{getMetricLabelForStrip(locale, metric.label)}</p>
           <p
             className={cn('mt-1 truncate font-mono text-sm font-semibold', metricValueClass(metric, marketColorConvention))}
             style={toneTextStyle(metric.tone || 'neutral', marketColorConvention)}
@@ -1038,18 +1038,19 @@ function LinearTechnicalStructure({
 
   return (
     <section
-      className="relative min-w-0 border-t border-[#23252a] pt-5"
+      className="relative min-w-0 border-t border-white/[0.055] pt-5"
       data-testid="home-bento-card-tech"
       data-research-card="risk-context"
     >
       <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold tracking-[0] text-[#f7f8f8]">{locale === 'en' ? 'Technical Structure' : '技术结构'}</p>
+          <p className="text-sm font-semibold tracking-[0] text-white">{locale === 'en' ? 'Technical Structure' : '技术结构'}</p>
+          <p className="mt-1 text-xs text-white/40">{locale === 'en' ? 'Structure view, not a live tick chart.' : '结构视图，不替代实时分时图。'}</p>
         </div>
         <button
           ref={openDetailsButtonRef}
           type="button"
-          className="text-xs font-medium text-[#8a8f98] transition-colors hover:text-[#f7f8f8]"
+          className="text-xs font-medium text-white/42 transition-colors hover:text-white"
           data-testid="home-bento-drawer-trigger-tech"
           onClick={handleOpenDetailsClick}
           onPointerUp={handleOpenDetailsPointerUp}
@@ -1070,12 +1071,12 @@ function LinearTechnicalStructure({
           onContextChange={onChartContextChange}
         />
         <div
-          className="min-w-0 divide-y divide-[#23252a] rounded-md border border-[#23252a] bg-[#0f1011] px-3 py-2"
+          className="min-w-0 divide-y divide-white/[0.055] rounded-md border border-white/[0.055] bg-white/[0.01] px-3 py-2"
           data-testid="home-bento-decision-support-grid"
         >
           {signals.map((signal) => {
             const muted = isEmptyDashboardValue(signal.value);
-            const valueClass = muted ? 'text-[#62666d]' : toneTextClass(signal.tone, marketColorConvention);
+            const valueClass = muted ? 'text-white/28' : toneTextClass(signal.tone, marketColorConvention);
             return (
               <div
                 key={signal.label}
@@ -1083,7 +1084,7 @@ function LinearTechnicalStructure({
                 data-testid={`home-bento-tech-signal-${signal.label}`}
               >
                 <div className="flex min-w-0 items-center justify-between gap-3">
-                  <span className="truncate text-[11px] font-medium tracking-[0] text-[#8a8f98]">{signal.label}</span>
+                  <span className="truncate text-[11px] font-medium tracking-[0] text-white/44">{signal.label}</span>
                   <span
                     className={cn('min-w-0 truncate text-right text-xs font-semibold', valueClass)}
                     style={toneTextStyle(signal.tone, marketColorConvention)}
@@ -1093,7 +1094,7 @@ function LinearTechnicalStructure({
                 </div>
                 {signal.details && !isEmptyDashboardValue(signal.details) ? (
                   <p
-                    className="block w-full overflow-hidden text-ellipsis whitespace-nowrap text-xs text-[#62666d]"
+                    className="block w-full overflow-hidden text-ellipsis whitespace-nowrap text-xs text-white/38"
                     data-testid={`home-bento-tech-signal-detail-${signal.label}`}
                     title={signal.details}
                   >
@@ -1165,16 +1166,16 @@ function LinearObservationPanel({
 
   return (
     <aside
-      className="relative min-w-0 border-t border-[#23252a] bg-[#141516] px-4 py-5 lg:border-l lg:border-t-0 lg:px-6 lg:py-6"
+      className="relative min-w-0 border-t border-white/[0.045] bg-white/[0.01] px-4 py-5 lg:border-l lg:border-t-0 lg:px-6 lg:py-6"
       data-testid="home-bento-secondary-stack"
     >
       <section className="min-w-0" data-testid="home-bento-card-strategy" data-research-card="opportunity">
         <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold tracking-[0] text-[#f7f8f8]">{isEnglish ? 'Observation Framework' : '观察框架'}</h2>
+          <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Observation Framework' : '观察框架'}</h2>
           <button
             ref={openStrategyButtonRef}
             type="button"
-            className="text-[11px] font-medium text-[#8a8f98] transition-colors hover:text-[#f7f8f8]"
+            className="text-[11px] font-medium text-white/38 transition-colors hover:text-white/72"
             data-testid="home-bento-drawer-trigger-strategy"
             onClick={handleOpenStrategyClick}
             onPointerUp={handleOpenStrategyPointerUp}
@@ -1182,10 +1183,10 @@ function LinearObservationPanel({
             {dashboard.strategy.detailLabel}
           </button>
         </div>
-        <div className="divide-y divide-[#23252a]">
+        <div className="divide-y divide-white/[0.055]">
           {dashboard.strategy.metrics.map((metric) => (
             <div key={metric.label} className="flex min-w-0 items-center justify-between gap-4 py-2.5">
-              <span className="truncate text-[11px] text-[#8a8f98]">{getMetricLabelForStrip(locale, metric.label)}</span>
+              <span className="truncate text-[11px] text-white/40">{getMetricLabelForStrip(locale, metric.label)}</span>
               <span
                 className={cn('min-w-0 truncate text-right font-mono text-xs font-semibold', metricValueClass(metric, marketColorConvention))}
                 style={toneTextStyle(metric.tone || 'neutral', marketColorConvention)}
@@ -1195,23 +1196,23 @@ function LinearObservationPanel({
             </div>
           ))}
           <div className="py-2.5">
-            <p className="text-[11px] text-[#8a8f98]">{dashboard.strategy.positionLabel}</p>
-            <p className="mt-1 text-xs leading-5 text-[#d0d6e0]">{dashboard.strategy.positionBody}</p>
+            <p className="text-[11px] text-white/40">{dashboard.strategy.positionLabel}</p>
+            <p className="mt-1 text-xs leading-5 text-white/58">{dashboard.strategy.positionBody}</p>
           </div>
         </div>
       </section>
 
       <section
-        className="mt-4 min-w-0 border-t border-[#23252a] pt-4"
+        className="mt-4 min-w-0 border-t border-white/[0.045] pt-4"
         data-testid="home-bento-card-fundamentals"
         data-research-card="data-context"
       >
         <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold tracking-[0] text-[#f7f8f8]">{isEnglish ? 'Data Quality' : '数据质量'}</h2>
+          <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Data Quality' : '数据质量'}</h2>
           <button
             ref={openFundamentalsButtonRef}
             type="button"
-            className="text-[11px] font-medium text-[#8a8f98] transition-colors hover:text-[#f7f8f8]"
+            className="text-[11px] font-medium text-white/38 transition-colors hover:text-white/72"
             data-testid="home-bento-drawer-trigger-fundamentals"
             onClick={handleOpenFundamentalsClick}
             onPointerUp={handleOpenFundamentalsPointerUp}
@@ -1219,25 +1220,25 @@ function LinearObservationPanel({
             {dashboard.fundamentals.detailLabel}
           </button>
         </div>
-        <div className="border-t border-[#23252a] pt-2" data-testid="home-linear-quality-summary">
-          <p className="pb-3 text-xs leading-5 text-[#d0d6e0]">{qualityPreview}</p>
-          <div className="divide-y divide-[#23252a]">
+        <div className="border-t border-white/[0.055] pt-2" data-testid="home-linear-quality-summary">
+          <p className="pb-3 text-xs leading-5 text-white/58">{qualityPreview}</p>
+          <div className="divide-y divide-white/[0.055]">
             {qualityRows.map((item) => (
               <div key={item.label} className="grid grid-cols-[5.5rem_minmax(0,1fr)_2.5rem] items-center gap-3 py-2 text-[11px]">
-                <span className="truncate text-[#8a8f98]">{item.label}</span>
-                <span className="h-1 overflow-hidden rounded-full bg-[#23252a]">
+                <span className="truncate text-white/40">{item.label}</span>
+                <span className="h-1 overflow-hidden rounded-full bg-white/[0.055]">
                   <span
                     className={cn(
                       'block h-full rounded-full',
                       item.level === 'high'
-                        ? 'w-[86%] bg-[#8a8f98]'
+                        ? 'w-[86%] bg-white/52'
                         : item.level === 'medium'
-                          ? 'w-[58%] bg-amber-300/55'
-                          : 'w-[36%] bg-rose-300/60',
+                          ? 'w-[58%] bg-amber-300/60'
+                          : 'w-[36%] bg-rose-300/66',
                     )}
                   />
                 </span>
-                <span className="text-right text-[#8a8f98]">
+                <span className="text-right text-white/52">
                   {item.level === 'high'
                     ? (isEnglish ? 'High' : '高')
                     : item.level === 'medium'
@@ -1351,41 +1352,41 @@ function LinearEventsStrip({
   const events = buildHomeCatalystEvents(report, locale);
 
   return (
-    <section className="min-w-0 border-t border-[#23252a] pt-3" data-testid="home-linear-events">
+    <section className="min-w-0 border-t border-white/[0.04] pt-3" data-testid="home-linear-events">
       <div className="flex min-w-0 items-center justify-between gap-3 pb-1.5">
-        <h2 className="text-sm font-semibold text-[#d0d6e0]">{isEnglish ? 'Events & Catalysts' : '关键事件与催化剂'}</h2>
+        <h2 className="text-sm font-semibold text-white/88">{isEnglish ? 'Events & Catalysts' : '关键事件与催化剂'}</h2>
         {events.length ? (
-          <span className="text-[11px] text-[#62666d]">{events.length}{isEnglish ? ' rows' : ' 条'}</span>
+          <span className="text-[11px] text-white/34">{events.length}{isEnglish ? ' rows' : ' 条'}</span>
         ) : null}
       </div>
       {events.length ? (
-        <div className="divide-y divide-[#23252a]">
+        <div className="divide-y divide-white/[0.055]">
           {events.map((event, index) => (
             <div key={`${event.label}-${index}`} className="grid min-w-0 gap-3 py-3 md:grid-cols-[minmax(0,1fr)_7rem_5rem] md:items-center">
             <div className="flex min-w-0 items-start gap-3">
               <span className={cn(
                 'mt-1.5 h-2 w-2 shrink-0 rounded-full',
-                event.importance === 'high' ? 'bg-[#5e6ad2]' : 'bg-[#62666d]',
+                event.importance === 'high' ? 'bg-[#3B82F6]' : 'bg-white/28',
               )}
               />
               <div className="min-w-0">
-                <p className="text-[11px] text-[#62666d]">{event.label}</p>
-                <p className="mt-1 truncate text-sm font-medium text-[#d0d6e0]">{isEmptyDashboardValue(event.title) ? EMPTY_FIELD_VALUE : event.title}</p>
-                <p className="mt-1 line-clamp-1 text-xs text-[#8a8f98]">{event.detail}</p>
+                <p className="text-[11px] text-white/36">{event.label}</p>
+                <p className="mt-1 truncate text-sm font-medium text-white/78">{isEmptyDashboardValue(event.title) ? EMPTY_FIELD_VALUE : event.title}</p>
+                <p className="mt-1 line-clamp-1 text-xs text-white/44">{event.detail}</p>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-[#8a8f98]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#5e6ad2]" />
-              <span className={cn('h-1.5 w-1.5 rounded-full', event.importance === 'high' ? 'bg-[#5e6ad2]' : 'bg-[#62666d]')} />
-              <span className="h-1.5 w-1.5 rounded-full bg-[#34343a]" />
+            <div className="flex items-center gap-1.5 text-[11px] text-white/54">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#3B82F6]" />
+              <span className={cn('h-1.5 w-1.5 rounded-full', event.importance === 'high' ? 'bg-[#3B82F6]' : 'bg-white/24')} />
+              <span className="h-1.5 w-1.5 rounded-full bg-white/18" />
               <span className="ml-2">{event.importance === 'high' ? (isEnglish ? 'High' : '高') : (isEnglish ? 'Mid' : '中')}</span>
             </div>
-            <p className="text-[11px] text-[#8a8f98]">{event.time}</p>
+            <p className="text-[11px] text-white/42">{event.time}</p>
           </div>
           ))}
         </div>
       ) : (
-        <p className="py-1.5 text-xs leading-5 text-[#62666d]" data-testid="home-linear-events-empty">
+        <p className="py-1.5 text-xs leading-5 text-white/34" data-testid="home-linear-events-empty">
           {isEnglish ? 'No verified catalysts' : '暂无已验证催化剂'}
         </p>
       )}
@@ -3172,7 +3173,7 @@ function buildGuestDashboardFromPreview(
   });
 }
 
-const SKELETON_LINE_CLASS = 'rounded-full bg-[#23252a]';
+const SKELETON_LINE_CLASS = 'rounded-full bg-white/[0.08]';
 
 function SkeletonLine({ className = '' }: { className?: string }) {
   return <div className={`${SKELETON_LINE_CLASS} ${className}`} />;
@@ -3286,10 +3287,10 @@ function timelineStatusLabel(status: 'pending' | 'running' | 'completed' | 'fail
 }
 
 function timelineDotTone(status: 'pending' | 'running' | 'completed' | 'failed'): string {
-  if (status === 'completed') return 'bg-emerald-300/80';
-  if (status === 'running') return 'bg-[#5e6ad2] animate-pulse';
-  if (status === 'failed') return 'bg-rose-300/80';
-  return 'bg-[#34343a]';
+  if (status === 'completed') return 'bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.45)]';
+  if (status === 'running') return 'bg-indigo-200 shadow-[0_0_18px_rgba(165,180,252,0.55)] animate-pulse';
+  if (status === 'failed') return 'bg-rose-300 shadow-[0_0_14px_rgba(251,113,133,0.45)]';
+  return 'bg-white/18';
 }
 
 function buildTimelineLeadCopy(locale: DashboardLocale, activeDetail?: string, message?: string): string {
@@ -3340,7 +3341,7 @@ function InPlaceDecisionSkeleton({
               <span className="font-mono text-sm text-white/35">{ticker}</span>
             </div>
           </div>
-          <span className="rounded-md border border-[#5e6ad2]/35 bg-[#5e6ad2]/12 px-2 py-1 text-[11px] font-medium text-[#d0d6e0]">
+          <span className="rounded-md border border-[#3B82F6]/24 bg-[#3B82F6]/10 px-2 py-1 text-[11px] font-medium text-[#93C5FD]">
             {locale === 'en' ? 'Running' : '分析中'}
           </span>
         </div>
@@ -3356,8 +3357,8 @@ function InPlaceDecisionSkeleton({
               <SkeletonLine className="h-10 w-16" />
               <span className="pb-1 text-xs text-white/34">/100</span>
             </div>
-            <div className="mt-4 h-1 overflow-hidden rounded-full bg-[#23252a]">
-              <div className="h-full w-1/2 rounded-full bg-[#5e6ad2]" />
+            <div className="mt-4 h-1 overflow-hidden rounded-full bg-white/[0.08]">
+              <div className="h-full w-1/2 rounded-full bg-[#3B82F6]" />
             </div>
           </div>
         </div>
@@ -3367,22 +3368,22 @@ function InPlaceDecisionSkeleton({
           <p className="mt-2 text-sm leading-6 text-white/62">{leadCopy}</p>
         </div>
 
-        <div className="rounded-lg border border-[#23252a] bg-[#141516] px-4 py-3">
+        <div className="rounded-lg border border-white/[0.07] bg-white/[0.02] px-4 py-3">
           <div className="grid gap-2" data-testid="home-bento-progress-timeline">
             {timelineStages.map((stage, index) => {
               const isRunning = stage.status === 'running';
               return (
                 <div
                   key={stage.key}
-                  className="relative grid grid-cols-[1.5rem_minmax(0,1fr)_4.5rem] items-start gap-3 border-b border-[#23252a] py-2 last:border-b-0"
+                  className="relative grid grid-cols-[1.5rem_minmax(0,1fr)_4.5rem] items-start gap-3 border-b border-white/[0.06] py-2 last:border-b-0"
                   data-testid={`home-bento-progress-stage-${stage.key}`}
                 >
                   <span className={`mt-1.5 h-2 w-2 rounded-full ${timelineDotTone(stage.status)}`} />
                   <div className="min-w-0">
-                    <p className={cn('truncate text-sm font-medium', isRunning ? 'text-[#f7f8f8]' : 'text-[#8a8f98]')}>{stage.label}</p>
-                    {stage.detail ? <p className="mt-1 truncate text-xs text-[#62666d]">{stage.detail}</p> : null}
+                    <p className={cn('truncate text-sm font-medium', isRunning ? 'text-white' : 'text-white/58')}>{stage.label}</p>
+                    {stage.detail ? <p className="mt-1 truncate text-xs text-white/40">{stage.detail}</p> : null}
                   </div>
-                  <span className="text-right text-[10px] font-medium text-[#62666d]">
+                  <span className="text-right text-[10px] font-medium text-white/38">
                     {String(index + 1).padStart(2, '0')} {timelineStatusLabel(stage.status, locale)}
                   </span>
                 </div>
@@ -3403,7 +3404,7 @@ function InPlaceStrategySkeleton({ locale }: { locale: DashboardLocale }) {
           <p className="text-sm font-semibold text-white">{locale === 'en' ? 'Observation Framework' : '观察框架'}</p>
           <SkeletonLine className="h-3 w-16" />
         </div>
-        <div className="divide-y divide-[#23252a]">
+        <div className="divide-y divide-white/[0.07]">
           {Array.from({ length: 5 }).map((_, index) => (
             <div key={`strategy-line-${index}`} className="flex items-center justify-between gap-4 py-3">
               <SkeletonLine className="h-3 w-24" />
@@ -3429,7 +3430,7 @@ function InPlaceListSkeleton({
 
   return (
     <section
-      className="min-w-0 rounded-lg border border-[#23252a] bg-[#0f1011] px-3 py-3"
+      className="min-w-0 rounded-lg border border-white/[0.07] bg-white/[0.018] px-3 py-3"
       data-testid={kind === 'tech' ? 'home-bento-card-tech' : 'home-bento-card-fundamentals'}
     >
       <p className="text-sm font-semibold text-white">{title}</p>
@@ -3440,7 +3441,7 @@ function InPlaceListSkeleton({
         {Array.from({ length: kind === 'tech' ? 4 : 6 }).map((_, index) => (
           <div
             key={`${kind}-skeleton-${index}`}
-            className={kind === 'tech' ? 'grid gap-2 border-b border-[#23252a] pb-3 last:border-b-0 last:pb-0' : 'min-w-0'}
+            className={kind === 'tech' ? 'grid gap-2 border-b border-white/[0.07] pb-3 last:border-b-0 last:pb-0' : 'min-w-0'}
           >
             <SkeletonLine className="h-3 w-20" />
             <SkeletonLine className="mt-2 h-5 w-full" />
@@ -3454,16 +3455,16 @@ function InPlaceListSkeleton({
 function GuestPaywallOverlay({ registrationPath }: { registrationPath: string }) {
   return (
     <div
-      className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-[#0f1011]/88 px-6 text-center"
+      className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-black/40 px-6 text-center backdrop-blur-[8px]"
       data-testid="guest-home-frosted-lock"
     >
-      <Lock className="h-7 w-7 text-[#d0d6e0]" />
+      <Lock className="h-7 w-7 text-white/85 drop-shadow-[0_0_14px_rgba(99,102,241,0.55)]" />
       <p className="mt-4 max-w-xs text-sm font-medium leading-6 text-white/80">
         解锁完整 AI 量化策略与深度技术形态解析
       </p>
       <Link
         to={registrationPath}
-        className="mt-5 inline-flex items-center justify-center rounded-md bg-[#5e6ad2] px-8 py-3 text-sm font-medium text-white transition-colors hover:bg-[#6f78df]"
+        className="mt-5 inline-flex items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-3 text-sm font-medium text-white shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all hover:from-blue-400 hover:to-purple-500"
       >
         免费创建账户 (Create Free Account)
       </Link>
@@ -3482,7 +3483,7 @@ function FullDecisionReportDrawerFallback({ onClose }: { onClose: () => void }) 
       bodyClassName="overflow-x-hidden"
     >
       <section
-        className="min-w-0 rounded-l-[28px] border border-[#23252a] bg-[#0f1011] p-6 text-white shadow-none"
+        className="min-w-0 rounded-l-[28px] border border-white/[0.08] bg-[#080B10]/92 p-6 text-white shadow-2xl"
         data-testid="home-bento-full-report-drawer-fallback"
       >
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/42">WOLFY AI EQUITY RESEARCH</p>
@@ -4001,14 +4002,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     <>
       <button
         type="button"
-        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-[#34343a] bg-[#18191a] px-2.5 py-1.5 text-xs font-medium text-[#d0d6e0] transition-colors hover:border-[#5e6ad2]/45 hover:text-[#f7f8f8]"
+        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-white/[0.07] bg-white/[0.035] px-2.5 py-1.5 text-xs font-medium text-white/74 transition-colors hover:border-white/14 hover:bg-white/[0.07] hover:text-white"
         onClick={() => setFullReportDrawerOpen(true)}
       >
         <span className="truncate">{locale === 'en' ? 'Full Report' : '完整报告'}</span>
       </button>
       <button
         type="button"
-        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-transparent bg-transparent px-2.5 py-1.5 text-xs font-medium text-[#8a8f98] transition-colors hover:border-[#34343a] hover:bg-[#18191a] hover:text-[#f7f8f8]"
+        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-transparent bg-transparent px-2.5 py-1.5 text-xs font-medium text-white/50 transition-colors hover:border-white/10 hover:bg-white/[0.04] hover:text-white"
         onClick={() => setTraceDrawerOpen(true)}
         data-testid="home-bento-decision-trace-trigger"
       >
@@ -4017,7 +4018,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       </button>
       <button
         type="button"
-        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-transparent bg-transparent px-2.5 py-1.5 text-xs font-medium text-[#8a8f98] transition-colors hover:border-[#34343a] hover:bg-[#18191a] hover:text-[#f7f8f8]"
+        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-transparent bg-transparent px-2.5 py-1.5 text-xs font-medium text-white/50 transition-colors hover:border-white/10 hover:bg-white/[0.04] hover:text-white"
         onClick={() => { void handleCopyActiveReport(); }}
       >
         <Copy className="h-3.5 w-3.5 shrink-0" />
@@ -4025,7 +4026,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       </button>
       <button
         type="button"
-        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-transparent bg-transparent px-2.5 py-1.5 text-xs font-medium text-[#8a8f98] transition-colors hover:border-[#34343a] hover:bg-[#18191a] hover:text-[#f7f8f8] disabled:cursor-wait disabled:text-[#62666d]"
+        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-transparent bg-transparent px-2.5 py-1.5 text-xs font-medium text-white/50 transition-colors hover:border-white/10 hover:bg-white/[0.04] hover:text-white disabled:cursor-wait disabled:text-white/35"
         disabled={isBusy || !reanalysisTicker}
         title={!reanalysisTicker ? '缺少股票代码' : undefined}
         onClick={() => { void handleAnalyze(reanalysisTicker); }}
@@ -4047,16 +4048,16 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         }}
       >
         <div
-          className="group relative flex min-h-11 min-w-0 flex-1 items-center overflow-hidden rounded-lg border border-[#23252a] bg-[#0f1011] transition-all focus-within:border-[#5e6ad2]/55 focus-within:bg-[#141516]"
+          className="group relative flex min-h-11 min-w-0 flex-1 items-center overflow-hidden rounded-lg border border-white/[0.08] bg-[#0b1118]/80 transition-all focus-within:border-[#3B82F6]/45 focus-within:bg-[#0f1620]"
           data-testid="home-bento-omnibar-input-shell"
         >
           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-            <Search className="h-4 w-4 text-[#62666d]" />
+            <Search className="h-4 w-4 text-white/40" />
           </div>
           <input
             data-testid="home-bento-omnibar-input"
             type="text"
-            className="h-full min-h-11 min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-[#f7f8f8] caret-[#5e6ad2] outline-none [appearance:textfield] placeholder:text-[#62666d]"
+            className="h-full min-h-11 min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-white caret-[#93C5FD] outline-none [appearance:textfield] placeholder:text-white/30"
             value={searchQuery}
             onChange={(event) => {
               setSearchQuery(event.target.value);
@@ -4069,7 +4070,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         <button
           type="submit"
           disabled={isBusy}
-          className="min-h-11 shrink-0 rounded-lg border border-[#5e6ad2]/50 bg-[#5e6ad2] px-5 text-sm font-semibold text-white transition-colors hover:border-[#828fff]/70 hover:bg-[#6f78df] disabled:cursor-wait disabled:border-[#34343a] disabled:bg-[#18191a] disabled:text-[#62666d]"
+          className="min-h-11 shrink-0 rounded-lg border border-white/[0.09] bg-white/[0.045] px-5 text-sm font-semibold text-white/82 transition-colors hover:border-white/18 hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:text-white/48"
           data-testid="home-bento-analyze-button"
         >
           {isHomeAnalyzing ? (locale === 'en' ? 'Analyzing...' : '分析中...') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
@@ -4082,7 +4083,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             onClick={openHistoryDrawerButton.onClick}
             onPointerUp={openHistoryDrawerButton.onPointerUp}
             disabled={isBusy}
-            className="flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-[#23252a] bg-[#0f1011] px-4 text-[#8a8f98] transition-colors hover:border-[#34343a] hover:bg-[#18191a] hover:text-[#f7f8f8] disabled:cursor-wait disabled:text-[#62666d]"
+            className="flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-[#0b1118]/70 px-4 text-white/62 transition-colors hover:bg-white/[0.06] hover:text-white disabled:cursor-wait disabled:text-white/36"
             data-testid="home-bento-history-drawer-trigger"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -4108,14 +4109,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       aria-live={shouldGuardA11y ? 'polite' : undefined}
       className={getSafariReadySurfaceClassName(
         true,
-        `${BENTO_SURFACE_ROOT_CLASS} w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0 bg-[#010102] text-[#f7f8f8]`,
+        `${BENTO_SURFACE_ROOT_CLASS} w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0 bg-transparent`,
       )}
     >
       {statusToast ? (
         <div className="pointer-events-none fixed right-6 top-24 z-50" data-testid="home-bento-fallback-toast">
           <div className={statusToast.tone === 'warning'
-            ? 'rounded-lg border border-amber-300/30 bg-[#18191a] px-4 py-3 text-sm font-semibold text-amber-100 shadow-none'
-            : 'rounded-lg border border-rose-400/30 bg-[#18191a] px-4 py-3 text-sm font-semibold text-rose-100 shadow-none'}>
+            ? 'rounded-2xl border border-amber-300/35 bg-amber-950/82 px-4 py-3 text-sm font-semibold text-amber-50 shadow-[0_18px_50px_rgba(120,53,15,0.35)] backdrop-blur-xl'
+            : 'rounded-2xl border border-rose-400/35 bg-rose-950/82 px-4 py-3 text-sm font-semibold text-rose-50 shadow-[0_18px_50px_rgba(251,113,133,0.22)] backdrop-blur-xl'}>
             {statusToast.message}
           </div>
         </div>
@@ -4130,13 +4131,13 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               <img
                 src="/wolfystock-logo-mark.png"
                 alt="WolfyStock"
-                className="h-16 w-16 rounded-full border border-[#23252a] bg-[#0f1011] p-2 shadow-none"
+                className="h-16 w-16 rounded-full bg-white/[0.03] p-2 shadow-[0_0_38px_rgba(99,102,241,0.28)]"
               />
               <div>
-                <h1 className="text-3xl font-semibold tracking-[0] text-[#f7f8f8] md:text-5xl">
+                <h1 className="text-3xl font-black tracking-[0] text-white md:text-5xl">
                   {locale === 'en' ? 'WolfyStock Analysis Center' : 'WolfyStock 分析面板'}
                 </h1>
-                <p className="mt-3 text-sm text-[#8a8f98]">
+                <p className="mt-3 text-sm text-white/45">
                   {locale === 'en' ? 'Enter a ticker to generate an analysis view.' : '输入股票代码，搜索后生成 AI 分析面板。'}
                 </p>
               </div>
@@ -4170,7 +4171,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             >
               {omnibarModule}
               <div
-                className="grid min-w-0 rounded-[14px] border border-[#23252a] bg-[#0f1011] shadow-none lg:grid-cols-[minmax(0,1fr)_minmax(300px,372px)]"
+                className="grid min-w-0 rounded-[14px] border border-white/[0.04] bg-white/[0.012] shadow-none lg:grid-cols-[minmax(0,1fr)_minmax(300px,372px)]"
                 data-testid="home-linear-shell"
               >
                 <div
@@ -4198,16 +4199,16 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         >
                         <div className="min-w-0">
                           <p
-                            className="text-xs leading-5 text-[#8a8f98]"
+                            className="text-xs leading-5 text-white/44"
                             data-testid="home-bento-decision-sector"
                           >
                             {resolveLinearSectorTrail(locale, readyCopy.decision.sector)}
                           </p>
                           <div className="mt-3 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-                            <h1 className="min-w-0 truncate text-2xl font-semibold tracking-[0] text-[#f7f8f8] md:text-3xl">
+                            <h1 className="min-w-0 truncate text-2xl font-semibold tracking-[0] text-white md:text-3xl">
                               {readyCopy.decision.company}
                             </h1>
-                            <span className="font-mono text-sm text-[#62666d]">({readyCopy.ticker})</span>
+                            <span className="font-mono text-sm text-white/40">({readyCopy.ticker})</span>
                           </div>
                         </div>
                         {reportActionButtons ? (
@@ -4225,9 +4226,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           data-testid="home-bento-decision-hero-row"
                         >
                         <div className="min-w-0" data-testid="home-bento-decision-action">
-                          <p className="text-xs font-medium tracking-[0] text-[#8a8f98]">{locale === 'en' ? 'Stance' : '投资立场'}</p>
+                          <p className="text-xs font-medium tracking-[0] text-white/42">{locale === 'en' ? 'Stance' : '投资立场'}</p>
                           <p
-                            className="mt-3 text-4xl font-semibold tracking-[0] text-[#f7f8f8] md:text-5xl"
+                            className="mt-3 text-4xl font-semibold tracking-[0] text-white md:text-5xl"
                             data-testid="home-bento-decision-signal-hero"
                           >
                             {stanceLabel}
@@ -4235,43 +4236,43 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         </div>
 
                         <div className="min-w-0" data-testid="home-bento-decision-score">
-                          <p className="text-xs font-medium tracking-[0] text-[#8a8f98]">{locale === 'en' ? 'Score' : '综合评分'}</p>
+                          <p className="text-xs font-medium tracking-[0] text-white/42">{locale === 'en' ? 'Score' : '综合评分'}</p>
                           <div className="mt-3 flex items-end gap-2" data-testid="home-bento-decision-core-metrics">
                             <p
-                              className="font-mono text-4xl font-semibold leading-none text-[#f7f8f8] md:text-5xl"
+                              className="font-mono text-4xl font-semibold leading-none text-white md:text-5xl"
                               data-testid="home-bento-decision-score-value"
                             >
                               {readyCopy.decision.heroValue}
                             </p>
-                            <span className="pb-1 text-sm text-[#8a8f98]">{readyCopy.decision.heroUnit}</span>
+                            <span className="pb-1 text-sm text-white/42">{readyCopy.decision.heroUnit}</span>
                           </div>
                           <div className="mt-4 flex max-w-[220px] items-center gap-2">
-                            <span className="h-1 w-full overflow-hidden rounded-full bg-[#23252a]">
-                              <span className="block h-full rounded-full bg-[#5e6ad2]" style={{ width: `${scorePercent}%` }} />
+                            <span className="h-1 w-full overflow-hidden rounded-full bg-white/[0.08]">
+                              <span className="block h-full rounded-full bg-[#3B82F6]" style={{ width: `${scorePercent}%` }} />
                             </span>
-                            <span className="h-1 w-10 rounded-full bg-[#23252a]" />
-                            <span className="h-1 w-8 rounded-full bg-[#18191a]" />
+                            <span className="h-1 w-10 rounded-full bg-white/[0.08]" />
+                            <span className="h-1 w-8 rounded-full bg-white/[0.06]" />
                           </div>
                         </div>
 
                         <div className="min-w-0" data-testid="home-bento-decision-conviction">
                           <div className="flex min-w-0 items-center justify-between gap-3">
-                            <p className="text-xs font-medium tracking-[0] text-[#8a8f98]">{locale === 'en' ? 'Conviction' : '置信度'}</p>
+                            <p className="text-xs font-medium tracking-[0] text-white/42">{locale === 'en' ? 'Conviction' : '置信度'}</p>
                             {activeDataQualityReport ? (
                               <TraceBadge tone={dataQualityChipTone(activeDataQualityReport)}>
                                 {dataQualityTierLabel(activeDataQualityReport.dataQualityTier, locale)}
                               </TraceBadge>
                             ) : null}
                           </div>
-                          <p className="mt-3 font-mono text-2xl font-semibold text-[#d0d6e0]" data-testid="home-bento-decision-conviction-value">
+                          <p className="mt-3 font-mono text-2xl font-semibold text-white/82" data-testid="home-bento-decision-conviction-value">
                             {readyCopy.decision.confidenceValue || EMPTY_FIELD_VALUE}
                           </p>
                         </div>
                         </div>
 
-                        <div className="mt-6 max-w-4xl text-sm leading-6 text-[#d0d6e0]">
+                        <div className="mt-6 max-w-4xl text-sm leading-6 text-white/68">
                           <div data-testid="home-bento-decision-insight">
-                            <p className="text-xs font-medium tracking-[0] text-[#8a8f98]">{locale === 'en' ? 'Thesis' : '核心观点'}</p>
+                            <p className="text-xs font-medium tracking-[0] text-white/42">{locale === 'en' ? 'Thesis' : '核心观点'}</p>
                             <p className="mt-2" data-testid="home-bento-decision-insight-copy">
                               {thesisCopy}
                             </p>
@@ -4301,7 +4302,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                 </div>
                 {isHomeAnalyzing ? (
                   <aside
-                    className="min-w-0 border-t border-[#23252a] bg-[#141516] px-4 py-5 lg:border-l lg:border-t-0 lg:px-7 lg:py-7"
+                    className="min-w-0 border-t border-white/[0.055] px-4 py-5 lg:border-l lg:border-t-0 lg:px-7 lg:py-7"
                     data-testid="home-bento-secondary-stack"
                   >
                     <InPlaceStrategySkeleton locale={locale} />
