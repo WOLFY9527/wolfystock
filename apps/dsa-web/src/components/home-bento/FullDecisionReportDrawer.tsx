@@ -472,7 +472,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
                 <span>评分：{dashboard.decision.heroValue}{dashboard.decision.heroUnit || ''}</span>
                 <span>置信度：{dashboard.decision.confidenceValue || '--'}</span>
                 <span>生成时间：{identity.generatedAt}</span>
-                <span className="sm:col-span-2">数据状态：{identity.dataStatus}</span>
+                <span className="sm:col-span-2">覆盖状态：{identity.dataStatus}</span>
               </div>
             </div>
             <div className="flex min-w-0 flex-wrap gap-2">
@@ -505,7 +505,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
           <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3 text-xs text-white/56 md:grid-cols-4">
             <span>市场：{identity.market}</span>
             <span>币种：{identity.currency}</span>
-            <span className="min-w-0 truncate">数据状态：{identity.dataStatus}</span>
+            <span className="min-w-0 truncate">覆盖状态：{identity.dataStatus}</span>
             <span>周期：{identity.horizon}</span>
           </div>
           <p className="mt-4 rounded-xl border border-amber-300/18 bg-amber-300/8 px-3 py-2 text-sm text-amber-50/82">

@@ -324,13 +324,16 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
     ].filter(({ key }) => candles.some((item) => isFiniteNumber(item[key])));
     const visibleStart = candles.length > 90 ? Math.round(((candles.length - 90) / candles.length) * 100) : 0;
     const safeCurrentPrice = isFiniteNumber(currentPrice) ? currentPrice : undefined;
+    const isCompactChart = size.width > 0 && size.width < 520;
+    const xLabelInterval = Math.max(0, Math.ceil(candles.length / (isCompactChart ? 4 : 7)) - 1);
+    const rightAxisGutter = isCompactChart ? 44 : 56;
 
     return {
       animation: false,
       backgroundColor: 'transparent',
       grid: [
-        { left: 6, right: 46, top: 12, height: '66%', containLabel: false },
-        { left: 6, right: 46, top: '78%', height: '15%', containLabel: false },
+        { left: 6, right: rightAxisGutter, top: 12, height: '58%', containLabel: true },
+        { left: 6, right: rightAxisGutter, top: '76%', height: '10%', containLabel: true },
       ],
       tooltip: {
         trigger: 'axis',
@@ -389,6 +392,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           axisLine: { lineStyle: { color: 'rgba(255,255,255,0.10)' } },
           axisTick: { show: false },
           axisLabel: {
+            show: false,
             color: 'rgba(255,255,255,0.42)',
             fontSize: 10,
             formatter: (value: string) => {
@@ -406,7 +410,19 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           boundaryGap: true,
           axisLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
           axisTick: { show: false },
-          axisLabel: { show: false },
+          axisLabel: {
+            show: true,
+            interval: xLabelInterval,
+            hideOverlap: true,
+            margin: 8,
+            color: 'rgba(255,255,255,0.36)',
+            fontSize: isCompactChart ? 9 : 10,
+            formatter: (value: string) => {
+              const date = new Date(value);
+              if (Number.isNaN(date.getTime())) return value;
+              return date.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+            },
+          },
           splitLine: { show: false },
         },
       ],
@@ -417,6 +433,8 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           axisLine: { show: false },
           axisTick: { show: false },
           axisLabel: {
+            hideOverlap: true,
+            margin: 8,
             color: 'rgba(255,255,255,0.46)',
             fontSize: 10,
             formatter: (value: number) => formatPrice(value),
@@ -430,6 +448,11 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           axisLine: { show: false },
           axisTick: { show: false },
           axisLabel: {
+            show: !isCompactChart,
+            showMinLabel: false,
+            showMaxLabel: false,
+            hideOverlap: true,
+            margin: 6,
             color: 'rgba(255,255,255,0.28)',
             fontSize: 9,
             formatter: (value: number) => formatVolume(value),
@@ -438,7 +461,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
         },
       ],
       dataZoom: [
-        { type: 'inside', xAxisIndex: [0, 1], start: visibleStart, end: 100, minValueSpan: 20 },
+        { type: 'inside', xAxisIndex: [0, 1], start: visibleStart, end: 100, minValueSpan: 20, filterMode: 'none' },
       ],
       series: [
         {
@@ -492,7 +515,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
         },
       ],
     };
-  }, [candles, currentPrice, locale]);
+  }, [candles, currentPrice, locale, size.width]);
 
   useEffect(() => {
     const host = chartNodeRef.current;
@@ -534,6 +557,8 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       data-testid="home-linear-technical-chart"
       data-chart-engine="echarts"
       data-chart-source="stocks-history-daily"
+      data-axis-layout="split-price-volume"
+      data-x-axis-density="sampled"
       data-tooltip-container="body"
       data-tooltip-bounds="viewport"
     >

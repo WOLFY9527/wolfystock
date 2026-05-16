@@ -550,15 +550,15 @@ function buildTraceSummary(trace: DecisionTrace | undefined, quality: ReportQual
     ? `${isEnglish ? 'Source' : '来源'}：${provenance.join(' / ')}`
     : traceQualityLabel(quality?.traceStatus || 'unknown', locale);
   const dataLabel = sourceCount === 0
-    ? (isEnglish ? 'Data: pending' : '数据：待确认')
+    ? (isEnglish ? 'Coverage: pending' : '覆盖：待确认')
     : usedCount === 0
-      ? (isEnglish ? 'Data: limited' : '数据：不足')
+      ? (isEnglish ? 'Coverage: limited' : '覆盖：不足')
       : usedCount < sourceCount
-        ? (isEnglish ? 'Data: partial' : '数据：部分')
-        : (isEnglish ? 'Data: complete' : '数据：完整');
+        ? (isEnglish ? 'Coverage: partial' : '覆盖：部分')
+        : (isEnglish ? 'Coverage: complete' : '覆盖：完整');
   const conflictLabel = conflictCount > 0
     ? (isEnglish ? 'Evidence: review' : '证据：待复核')
-    : (isEnglish ? 'Evidence: clear' : '证据：无冲突');
+    : null;
   const schemaLabel = trace.llm?.schemaValidated ? null : schemaQualityLabel('unconfirmed', locale);
   return [
     sourceLabel,
@@ -568,13 +568,26 @@ function buildTraceSummary(trace: DecisionTrace | undefined, quality: ReportQual
   ].filter(Boolean).join(' · ');
 }
 
-function DecisionTracePanel({ trace, locale, quality }: { trace?: DecisionTrace; locale: DashboardLocale; quality?: ReportQuality }) {
+function DecisionTracePanel({
+  trace,
+  locale,
+  quality,
+  dataQualityReport,
+  sourceSummary,
+}: {
+  trace?: DecisionTrace;
+  locale: DashboardLocale;
+  quality?: ReportQuality;
+  dataQualityReport?: DataQualityReport;
+  sourceSummary?: string;
+}) {
   if (!trace) {
     return (
       <div className="min-w-0 space-y-3" data-testid="home-bento-decision-trace-panel">
         <div className="min-w-0 rounded-2xl border border-white/8 bg-white/[0.025] p-4 text-sm text-white/56">
           当前分析未包含决策溯源
         </div>
+        <DecisionSourceDetailsPanel report={dataQualityReport} locale={locale} trace={trace} sourceSummary={sourceSummary} />
         {quality ? (
           <div
             className="rounded-2xl border border-amber-300/15 bg-amber-300/8 p-4 text-sm text-amber-50/80"
@@ -598,6 +611,7 @@ function DecisionTracePanel({ trace, locale, quality }: { trace?: DecisionTrace;
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="home-bento-decision-trace-panel">
+      <DecisionSourceDetailsPanel report={dataQualityReport} locale={locale} trace={trace} sourceSummary={sourceSummary} />
       <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
         <p className={sectionTitleClass}>{isEnglish ? 'Decision Fields' : '决策字段'}</p>
         <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
@@ -684,7 +698,7 @@ function compactDataIssueLabel(label: string, locale: DashboardLocale): string {
     if (label === 'Data insufficient, observe only') return 'Data: limited';
     return label;
   }
-  if (label === '数据不足，结论仅供观察') return '数据：不足';
+  if (label === '数据不足，结论仅供观察') return '覆盖不足';
   return label;
 }
 
@@ -723,21 +737,6 @@ function dataQualityChipTone(report: DataQualityReport): 'used' | 'warning' | 'm
   return hasDataQualityGaps(report) ? 'warning' : 'used';
 }
 
-function buildDataQualityChipLabel(report: DataQualityReport | undefined, locale: DashboardLocale, confidenceValue?: string): string | null {
-  if (!report) return null;
-  const isEnglish = locale === 'en';
-  const qualityText = report.requiredAvailable === false || report.dataQualityTier === 'insufficient'
-    ? (isEnglish ? 'Limited data' : '数据不足')
-    : hasDataQualityGaps(report)
-      ? (isEnglish ? 'Partial data' : '部分数据')
-      : (isEnglish ? 'Ready data' : '数据充分');
-  const confidenceText = String(confidenceValue || '').trim();
-  if (!confidenceText || confidenceText === '-') {
-    return qualityText;
-  }
-  return `${qualityText} / ${isEnglish ? 'conviction' : '置信度'}${confidenceText}`;
-}
-
 function buildDataQualityPreview(report: DataQualityReport, locale: DashboardLocale): string {
   const isEnglish = locale === 'en';
   if (report.requiredAvailable === false) {
@@ -755,7 +754,7 @@ function buildDataQualityPreview(report: DataQualityReport, locale: DashboardLoc
   return isEnglish ? 'Coverage stable' : '覆盖稳定';
 }
 
-function AnalysisDiagnosticsDisclosure({
+function DecisionSourceDetailsPanel({
   report,
   locale,
   trace,
@@ -766,14 +765,12 @@ function AnalysisDiagnosticsDisclosure({
   trace?: DecisionTrace;
   sourceSummary?: string;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
   if (!report && !sourceSummary && !trace) return null;
 
   const isEnglish = locale === 'en';
-  const preview = report ? buildDataQualityPreview(report, locale) : sourceSummary || (isEnglish ? 'Source details available' : '可展开查看来源');
   const quickDecisionText = report?.requiredAvailable === false
-    ? (isEnglish ? 'Decision basis limited' : '决策依据受限')
-    : (isEnglish ? 'Decision basis available' : '决策依据可用');
+    ? (isEnglish ? 'Key data: limited' : '关键数据：受限')
+    : (isEnglish ? 'Key data: usable' : '关键数据：可用');
   const sourceEntries = Array.from(new Set(
     (trace?.dataSources || [])
       .filter((item) => !['missing', 'unknown'].includes(String(item.status || '').trim().toLowerCase()))
@@ -797,7 +794,6 @@ function AnalysisDiagnosticsDisclosure({
       .map((item) => traceDataSourceLabel(item.name, locale))
       .filter(Boolean),
   )).slice(0, 4);
-  const conflictNotes = (trace?.conflicts || []).map((item) => localizeTraceMessage(item.message, item.type, locale)).slice(0, 2);
   const sourceText = sourceEntries.length
     ? sourceEntries.join(' / ')
     : sourceSummary || (isEnglish ? 'No source summary yet' : '暂无来源摘要');
@@ -817,36 +813,18 @@ function AnalysisDiagnosticsDisclosure({
   ].filter(Boolean).join(' · ');
 
   return (
-    <section className="border-t border-white/[0.055] pt-3" data-testid="home-bento-analysis-diagnostics">
-      <button
-        type="button"
-        className="flex w-full min-w-0 items-start justify-between gap-3 text-left"
-        aria-expanded={isOpen}
-        data-testid="home-bento-analysis-diagnostics-toggle"
-        onClick={() => setIsOpen((current) => !current)}
-      >
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold tracking-[0] text-white/62">
-            {isEnglish ? 'Source details' : '来源与缺口'}
-          </p>
-          <p className="mt-1 line-clamp-1 text-xs leading-5 tracking-[0] text-white/50">
-            {preview}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {report?.requiredAvailable === false || report?.importantMissing?.length ? (
-            <TraceBadge tone={report?.requiredAvailable === false ? 'missing' : 'warning'}>
-              {isEnglish ? 'Key gap' : '关键缺口'}
-            </TraceBadge>
-          ) : null}
-          <span className="text-[10px] font-semibold tracking-[0.14em] text-white/34">
-            {isOpen ? (isEnglish ? 'Collapse' : '收起') : (isEnglish ? 'Open sources' : '展开数据来源')}
-          </span>
-        </div>
-      </button>
-
-      {isOpen ? (
-        <div className="mt-3 min-w-0 divide-y divide-white/[0.055] border-t border-white/[0.055]" data-testid="home-bento-analysis-diagnostics-panel">
+    <section className="rounded-2xl border border-white/8 bg-white/[0.025] p-4" data-testid="home-bento-decision-source-details">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <p className="text-[11px] font-semibold tracking-[0] text-white/70">
+          {isEnglish ? 'Source and gaps' : '来源与缺口'}
+        </p>
+        {report?.requiredAvailable === false || report?.importantMissing?.length ? (
+          <TraceBadge tone={report?.requiredAvailable === false ? 'missing' : 'warning'}>
+            {isEnglish ? 'Key gap' : '关键缺口'}
+          </TraceBadge>
+        ) : null}
+      </div>
+      <div className="mt-3 min-w-0 divide-y divide-white/[0.055] border-t border-white/[0.055]" data-testid="home-bento-analysis-diagnostics-panel">
           <div className="grid min-w-0 gap-1 py-2.5 sm:grid-cols-[9rem_minmax(0,1fr)]">
             <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
               {isEnglish ? 'Sources' : '来源'}
@@ -872,16 +850,7 @@ function AnalysisDiagnosticsDisclosure({
               <p className="min-w-0 break-words text-xs leading-5 text-white/68">{degradationNotes}</p>
             </div>
           ) : null}
-          {conflictNotes.length ? (
-            <div className="grid min-w-0 gap-1 py-2.5 sm:grid-cols-[9rem_minmax(0,1fr)]">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
-                {isEnglish ? 'Mismatch note' : '对照提示'}
-              </p>
-              <p className="min-w-0 break-words text-xs leading-5 text-white/68">{conflictNotes.join(' · ')}</p>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      </div>
     </section>
   );
 }
@@ -1175,11 +1144,11 @@ function LinearObservationPanel({
       level: dataQualityReport?.requiredAvailable === false ? 'low' : 'high',
     },
     {
-      label: isEnglish ? 'Reliability' : '可靠性',
+      label: isEnglish ? 'Coverage reliability' : '覆盖可靠性',
       level: !dataQualityReport || !hasDataQualityGaps(dataQualityReport) ? 'high' : 'medium',
     },
     {
-      label: isEnglish ? 'Actionable' : '可执行性',
+      label: isEnglish ? 'Financial validity' : '财报有效性',
       level: dataQualityReport?.requiredAvailable === false
         ? 'low'
         : dataQualityReport?.importantMissing?.length
@@ -1232,7 +1201,7 @@ function LinearObservationPanel({
         data-research-card="data-context"
       >
         <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Data Quality' : '数据质量与说明'}</h2>
+          <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Data Quality' : '数据质量'}</h2>
           <button
             ref={openFundamentalsButtonRef}
             type="button"
@@ -1273,63 +1242,120 @@ function LinearObservationPanel({
             ))}
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
-          {dashboard.fundamentals.metrics.map((metric) => (
-            <div key={metric.label} className="min-w-0" data-testid={`home-bento-fundamental-metric-${metric.label}`}>
-              <p className="truncate text-[11px] text-white/38">{metric.label}</p>
-              <p className={cn('mt-1 truncate font-mono text-sm font-semibold', isEmptyDashboardValue(metric.value) ? 'text-white/28' : 'text-white/78')}>{metric.value}</p>
-            </div>
-          ))}
-        </div>
       </section>
       {isGuest ? guestPaywall : null}
     </aside>
   );
 }
 
+type HomeCatalystEvent = {
+  label: string;
+  title: string;
+  detail: string;
+  importance: 'high' | 'medium';
+  time: string;
+};
+
+const CATALYST_EVENT_RE = /财报|业绩会|公告|发布|新品|产品|基础设施|监管|批准|反垄断|诉讼|合作|伙伴|客户|订单|合同|并购|收购|宏观|行业|板块|降息|加息|CPI|PPI|FOMC|非农|评级|目标价|上调|下调|earnings|results?|announcement|announces?|launch|release|product|infrastructure|regulatory|approval|lawsuit|partnership|customer|order|contract|acquisition|macro|sector|rate cut|rate hike|rating|target price|upgrade|downgrade/i;
+const CATALYST_DATE_RE = /\b(?:20\d{2}[-/.年]\d{1,2}(?:[-/.月]\d{1,2}日?)?|\d{1,2}[-/.月]\d{1,2}(?:日)?|Q[1-4]\s*20\d{2}|FY\s*20\d{2})\b/i;
+const CATALYST_FILLER_RE = /均线|MA\d+|moving average|技术结构|technical structure|技术形态|MACD|RSI|K线|支撑|压力|阻力|止损|目标位|数据状态|数据缺失|缺失|fallback|降级|报告主线|综合建议|结论|摘要|继续跟踪|财报跟踪$|financial follow-up|data status|missing data|report conclusion|thesis/i;
+
+function cleanCatalystText(value: unknown): string {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function isVerifiedCatalystText(value: unknown, requireDate = false): boolean {
+  const text = cleanCatalystText(value);
+  if (!text || text === EMPTY_FIELD_VALUE || isPendingMetricValue(text)) {
+    return false;
+  }
+  if (CATALYST_FILLER_RE.test(text)) {
+    return false;
+  }
+  if (requireDate && !CATALYST_DATE_RE.test(text)) {
+    return false;
+  }
+  return CATALYST_EVENT_RE.test(text) || CATALYST_DATE_RE.test(text);
+}
+
+function buildHomeCatalystEvents(report: AnalysisReport | null | undefined, locale: DashboardLocale): HomeCatalystEvent[] {
+  const isEnglish = locale === 'en';
+  const standardReport = report?.details?.standardReport;
+  const highlights = standardReport?.highlights;
+  const reasonLayer = standardReport?.reasonLayer;
+  const earningsFields = [
+    ...(standardReport?.earningsFields || []),
+    ...(standardReport?.tableSections?.earnings?.fields || []),
+  ];
+  const candidates: HomeCatalystEvent[] = [];
+  const pushCandidate = (
+    label: string,
+    title: unknown,
+    detail: unknown,
+    importance: HomeCatalystEvent['importance'] = 'medium',
+    requireDate = false,
+  ) => {
+    const titleText = cleanCatalystText(title);
+    const detailText = cleanCatalystText(detail);
+    const combined = [titleText, detailText].filter(Boolean).join(' ');
+    if (!isVerifiedCatalystText(combined, requireDate)) {
+      return;
+    }
+    candidates.push({
+      label,
+      title: titleText || detailText,
+      detail: detailText && detailText !== titleText ? detailText : (isEnglish ? 'Verified event input' : '已验证事件线索'),
+      importance,
+      time: CATALYST_DATE_RE.test(combined) ? (combined.match(CATALYST_DATE_RE)?.[0] || (isEnglish ? 'Dated' : '有日期')) : (isEnglish ? 'Latest' : '最新'),
+    });
+  };
+
+  (highlights?.latestNews || []).forEach((item) => {
+    pushCandidate(isEnglish ? 'News' : '新闻', item, '', 'high');
+  });
+  (highlights?.positiveCatalysts || []).forEach((item) => {
+    pushCandidate(isEnglish ? 'Catalyst' : '催化', item, '', 'medium');
+  });
+  pushCandidate(isEnglish ? 'Company update' : '公司动态', reasonLayer?.latestKeyUpdate, '', 'medium');
+  pushCandidate(isEnglish ? 'Catalyst' : '催化', reasonLayer?.topCatalyst, '', 'medium');
+  pushCandidate(isEnglish ? 'Earnings' : '财报', highlights?.earningsOutlook, '', 'medium', true);
+  earningsFields.forEach((field) => {
+    pushCandidate(isEnglish ? 'Earnings' : '财报', field.label, field.value, 'medium', true);
+  });
+
+  const seen = new Set<string>();
+  return candidates.filter((event) => {
+    const key = `${event.label}:${event.title}:${event.detail}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  }).slice(0, 4);
+}
+
 function LinearEventsStrip({
   locale,
-  dashboard,
+  report,
 }: {
   locale: DashboardLocale;
-  dashboard: DashboardPayload;
+  report?: AnalysisReport | null;
 }) {
   const isEnglish = locale === 'en';
-  const firstFundamental = dashboard.fundamentals.metrics.find((metric) => !isEmptyDashboardValue(metric.value));
-  const firstTechSignal = dashboard.tech.signals[0];
-  const events = [
-    {
-      label: isEnglish ? 'Thesis' : '报告主线',
-      title: dashboard.decision.badge,
-      detail: dashboard.decision.summary,
-      importance: 'high',
-      time: isEnglish ? 'Current' : '当前',
-    },
-    {
-      label: isEnglish ? 'Trigger' : '技术触发',
-      title: dashboard.decision.chartLabel || firstTechSignal?.label || dashboard.tech.title,
-      detail: firstTechSignal?.details || firstTechSignal?.value || EMPTY_FIELD_VALUE,
-      importance: 'medium',
-      time: isEnglish ? 'Watching' : '跟踪',
-    },
-    {
-      label: isEnglish ? 'Fundamental' : '基本面线索',
-      title: firstFundamental?.label || (isEnglish ? 'Financial follow-up' : '财报跟踪'),
-      detail: firstFundamental?.value || EMPTY_FIELD_VALUE,
-      importance: 'medium',
-      time: isEnglish ? 'Latest' : '最新',
-    },
-  ];
+  const events = buildHomeCatalystEvents(report, locale);
 
   return (
     <section className="min-w-0 border-t border-white/[0.055] pt-4" data-testid="home-linear-events">
       <div className="flex min-w-0 items-center justify-between gap-3 pb-2">
         <h2 className="text-sm font-semibold text-white">{isEnglish ? 'Events & Catalysts' : '关键事件与催化剂'}</h2>
-        <span className="text-[11px] text-white/34">{events.length}{isEnglish ? ' rows' : ' 条'}</span>
+        {events.length ? (
+          <span className="text-[11px] text-white/34">{events.length}{isEnglish ? ' rows' : ' 条'}</span>
+        ) : null}
       </div>
-      <div className="divide-y divide-white/[0.055]">
-        {events.map((event, index) => (
-          <div key={`${event.label}-${index}`} className="grid min-w-0 gap-3 py-3 md:grid-cols-[minmax(0,1fr)_7rem_5rem] md:items-center">
+      {events.length ? (
+        <div className="divide-y divide-white/[0.055]">
+          {events.map((event, index) => (
+            <div key={`${event.label}-${index}`} className="grid min-w-0 gap-3 py-3 md:grid-cols-[minmax(0,1fr)_7rem_5rem] md:items-center">
             <div className="flex min-w-0 items-start gap-3">
               <span className={cn(
                 'mt-1.5 h-2 w-2 shrink-0 rounded-full',
@@ -1350,8 +1376,13 @@ function LinearEventsStrip({
             </div>
             <p className="text-[11px] text-white/42">{event.time}</p>
           </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <p className="py-3 text-sm text-white/44" data-testid="home-linear-events-empty">
+          {isEnglish ? 'No verified catalysts' : '暂无已验证催化剂'}
+        </p>
+      )}
     </section>
   );
 }
@@ -4109,12 +4140,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           </section>
         ) : (() => {
           const readyCopy = dashboardData;
-          const qualityChipLabel = !isGuest
-            ? buildDataQualityChipLabel(activeDataQualityReport, locale, readyCopy.decision.confidenceValue)
-            : null;
           const scorePercent = normalizeLinearScore(readyCopy.decision.heroValue);
           const thesisCopy = readyCopy.decision.reasonBody || readyCopy.decision.summary || EMPTY_FIELD_VALUE;
-          const sourceLabel = sourceSummary || qualityChipLabel || '';
           const stanceLabel = resolveLinearStanceLabel(locale, readyCopy.decision.signalLabel, readyCopy.decision.signalTone);
           return (
             <div
@@ -4173,12 +4200,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           </div>
                         ) : null}
                       </div>
-
-                        {sourceLabel ? (
-                          <p className="mt-3 line-clamp-2 text-xs leading-5 text-white/42" data-testid="home-bento-decision-source-summary">
-                            {sourceLabel}
-                          </p>
-                        ) : null}
 
                         <div
                           className="mt-8 grid gap-7 md:grid-cols-[12rem_16rem_minmax(10rem,13rem)]"
@@ -4285,24 +4306,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               {!isHomeAnalyzing ? (
                 <LinearEventsStrip
                   locale={locale}
-                  dashboard={readyCopy}
+                  report={activeTraceReport}
                 />
               ) : null}
-              {!isHomeAnalyzing && !isGuest && (activeDataQualityReport || sourceSummary) ? (
-                <div>
-                  <AnalysisDiagnosticsDisclosure
-                    report={activeDataQualityReport}
-                    locale={locale}
-                    trace={activeDecisionTrace}
-                    sourceSummary={sourceSummary}
-                  />
-                </div>
-              ) : null}
-              <p className="px-2 text-center text-[11px] leading-5 text-white/32" data-testid="home-linear-footer-disclaimer">
-                {locale === 'en'
-                  ? 'For research reference only. Not investment advice. Data may be delayed, partial, or fallback-backed.'
-                  : '本平台内容仅供研究参考，不构成投资建议。数据可能存在延迟、缺失或降级。'}
-              </p>
             </div>
           );
         })()}
@@ -4335,7 +4341,13 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         zIndex={90}
         bodyClassName="overflow-x-hidden"
       >
-        <DecisionTracePanel trace={activeDecisionTrace} locale={locale} quality={activeReportQuality} />
+        <DecisionTracePanel
+          trace={activeDecisionTrace}
+          locale={locale}
+          quality={activeReportQuality}
+          dataQualityReport={activeDataQualityReport}
+          sourceSummary={sourceSummary}
+        />
       </Drawer>
 
       <Drawer
