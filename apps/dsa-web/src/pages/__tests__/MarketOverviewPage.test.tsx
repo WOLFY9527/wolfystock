@@ -872,17 +872,19 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketApi.getCnShortSentiment).mockResolvedValue(cnShortSentimentPayload());
   });
 
-  it('renders the extracted market overview workbench boundary with stable controls', async () => {
+  it('renders the MarketMonitor boundary with stable controls and collapsed diagnostics', async () => {
     renderMarketOverviewWorkbench();
 
     expect(screen.getByTestId('market-overview-workbench')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-shell')).toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-hero-ribbon')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-market-monitor')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-regime-strip')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-grid-loading')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-grid-loading')).toHaveAttribute('aria-busy', 'true');
     expect(screen.getByTestId('market-overview-grid-loading')).not.toHaveClass('bg-black');
     expect(await screen.findByTestId('market-overview-main-grid')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-side-rail')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '展开 数据来源与运行细节' })).toBeInTheDocument();
 
     const usTab = screen.getByRole('button', { name: '美股' });
     fireEvent.click(usTab);
@@ -1058,7 +1060,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByRole('heading', { name: /大市全景监控/i })).not.toBeInTheDocument();
 
     expect(screen.getByTestId('market-overview-hero-ribbon')).toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-hero-ribbon')).toHaveAttribute('data-terminal-primitive', 'panel');
+    expect(screen.getByTestId('market-overview-hero-ribbon')).toHaveAttribute('data-linear-primitive', 'key-level-strip');
     expect(await screen.findByText(/信号可信：高/i)).toBeInTheDocument();
     expect(screen.getByTestId('market-decision-strip')).toBeInTheDocument();
     expect(screen.getByTestId('market-decision-strip')).toHaveAttribute('data-terminal-primitive', 'panel');
@@ -1105,7 +1107,7 @@ describe('MarketOverviewPage', () => {
       'flex-1',
       'min-h-0',
       'flex-col',
-      'gap-6',
+      'gap-5',
       'mx-auto',
       'max-w-[1600px]',
       'px-4',
@@ -1288,12 +1290,12 @@ describe('MarketOverviewPage', () => {
     expect(MockEventSource.instances).toHaveLength(1);
   });
 
-  it('renders a stable workstation skeleton with grouped deep panels and an always-visible signal rail', async () => {
+  it('renders a stable MarketMonitor skeleton with grouped deep panels and collapsed diagnostics', async () => {
     render(<MarketOverviewPage />);
 
     expect(await screen.findByTestId('market-overview-pulse-header')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-category-tabs')).toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-hero-ribbon')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-market-monitor')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-status-strip')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-summary-band')).toContainElement(screen.getByTestId('market-overview-status-strip'));
 
@@ -1301,38 +1303,28 @@ describe('MarketOverviewPage', () => {
     const primaryRail = screen.getByTestId('market-overview-primary-rail');
     const sideRail = screen.getByTestId('market-overview-side-rail');
 
-    expect(mainGrid).toHaveAttribute('data-workbench-split', '9:3');
+    expect(mainGrid).toHaveAttribute('data-market-monitor-layout', 'board-plus-context');
     expect(primaryRail).toHaveClass('flex', 'flex-col');
     expect(primaryRail).not.toHaveClass('overflow-x-auto', 'stealth-scrollbar');
-    expect(sideRail).toContainElement(screen.getByTestId('market-overview-rail-coverage'));
-    expect(sideRail).toContainElement(screen.getByTestId('market-overview-rail-quality'));
-    expect(sideRail).toContainElement(screen.getByTestId('market-overview-rail-signal-watch'));
-    expect(screen.getByTestId('market-overview-rail-signal-watch').querySelectorAll('[data-terminal-primitive="chip"]')).toHaveLength(4);
-    expect(sideRail).toContainElement(screen.getByTestId('market-overview-rail-action-hint'));
-    expect(sideRail).not.toContainElement(screen.queryByTestId('market-overview-rail-briefing'));
-    expect(screen.queryByTestId('market-overview-signal-disclosure')).not.toBeInTheDocument();
+    expect(sideRail).toContainElement(screen.getByTestId('market-overview-runtime-details'));
+    expect(sideRail).toContainElement(screen.getByTestId('market-overview-signal-disclosure'));
+    expect(sideRail).toContainElement(screen.getByTestId('market-overview-action-disclosure'));
+    expect(screen.getByRole('button', { name: '展开 数据来源与运行细节' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '展开 关键观测' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '展开 观察提示' })).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-deep-panels')).toContainElement(screen.getByTestId('market-overview-executive-secondary-groups'));
     expect(screen.getByTestId('market-decision-strip')).toBeInTheDocument();
   });
 
-  it('renders compact rail cards in the required order without expand-only behavior', async () => {
+  it('renders compact diagnostic disclosures instead of always-open rail cards', async () => {
     render(<MarketOverviewPage />);
 
     const sideRail = await screen.findByTestId('market-overview-side-rail');
-    const railCards = within(sideRail).getAllByTestId('market-overview-compact-rail-card');
-
-    expect(railCards).toHaveLength(4);
-    expect(railCards.map((card) => card.getAttribute('data-rail-card'))).toEqual([
-      'coverage',
-      'quality',
-      'signal-watch',
-      'action-hint',
-    ]);
-    railCards.forEach((card) => {
-      expect(card).toHaveAttribute('data-market-card-size', 'rail');
-      expect(card).toHaveClass('overflow-hidden', 'min-w-0');
-    });
-    expect(sideRail).not.toContainElement(screen.queryByRole('button', { name: /展开/i }));
+    expect(sideRail).toContainElement(screen.getByTestId('market-overview-runtime-details'));
+    expect(sideRail).toContainElement(screen.getByTestId('market-overview-signal-disclosure'));
+    expect(sideRail).toContainElement(screen.getByTestId('market-overview-action-disclosure'));
+    expect(within(sideRail).getAllByRole('button', { name: /展开/i })).toHaveLength(3);
+    expect(screen.queryByTestId('market-overview-compact-rail-card')).not.toBeInTheDocument();
     expect(screen.queryByTestId('market-overview-fallback-section')).not.toBeInTheDocument();
   });
 
@@ -1343,7 +1335,7 @@ describe('MarketOverviewPage', () => {
     const orderedNodes = Array.from(workbench.querySelectorAll('[data-mobile-order]'))
       .map((node) => node.getAttribute('data-mobile-order'));
 
-    expect(orderedNodes).toEqual(['decision', 'cache-status', 'summary', 'controls', 'pulse', 'main', 'rail', 'deep']);
+    expect(orderedNodes).toEqual(['decision', 'controls', 'summary', 'cache-status', 'main', 'deep', 'rail']);
     expect(screen.getByTestId('market-decision-strip')).toHaveAttribute('data-mobile-order', 'decision');
   });
 
@@ -1354,7 +1346,7 @@ describe('MarketOverviewPage', () => {
     const orderedNodes = Array.from(topStack.querySelectorAll('[data-market-research-flow]'))
       .map((node) => node.getAttribute('data-market-research-flow'));
 
-    expect(orderedNodes).toEqual(['state', 'cache', 'trust', 'controls', 'pulse']);
+    expect(orderedNodes).toEqual(['state', 'controls', 'trust', 'pulse', 'cache']);
     expect(topStack.firstElementChild).toBe(screen.getByTestId('market-decision-strip'));
     expect(screen.getByTestId('market-overview-main-grid').compareDocumentPosition(screen.getByTestId('market-decision-strip'))).toBe(Node.DOCUMENT_POSITION_PRECEDING);
   });
@@ -1853,7 +1845,7 @@ describe('MarketOverviewPage', () => {
     expect(sideRail).toContainElement(screen.getByTestId('market-overview-rail-signal-watch'));
     expect(sideRail).toContainElement(screen.getByTestId('market-overview-rail-action-hint'));
     expect(sideRail).not.toContainElement(screen.getByTestId('market-briefing-card'));
-    expect(screen.queryByTestId('market-overview-signal-disclosure')).not.toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-signal-disclosure')).toBeInTheDocument();
     expect(sideRail.className).not.toContain('max-h');
     expect(sideRail.className).not.toContain('overflow-y-auto');
   });
