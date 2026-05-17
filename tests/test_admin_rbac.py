@@ -513,6 +513,81 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
         self.assertEqual(exc.exception.status_code, 403)
         self.assertEqual(exc.exception.detail["error"], "admin_reauth_required")
 
+    def test_admin_unlock_helper_requires_unlock_or_recent_reauth(self) -> None:
+        from api.deps import require_admin_unlock_or_recent_reauth
+
+        auth._auth_enabled = True
+        auth._session_secret = b"4" * 32
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True, admin_capabilities=("ops:system_config:write",))
+
+        with self.assertRaises(HTTPException) as exc:
+            require_admin_unlock_or_recent_reauth(admin)
+
+        self.assertEqual(exc.exception.status_code, 403)
+        self.assertEqual(exc.exception.detail["error"], "admin_unlock_required")
+        self.assertNotIn("raw-session-id", str(exc.exception.detail))
+
+    def test_admin_unlock_helper_accepts_matching_unlock_token(self) -> None:
+        from api.deps import require_admin_unlock_or_recent_reauth
+
+        auth._auth_enabled = True
+        auth._session_secret = b"5" * 32
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True, admin_capabilities=("ops:system_config:write",))
+        token = auth.create_admin_unlock_token(
+            user_id=admin.user_id,
+            username=admin.username,
+            role=admin.role,
+        )
+
+        self.assertIs(
+            require_admin_unlock_or_recent_reauth(admin, admin_unlock_token=token),
+            admin,
+        )
+
+    def test_admin_unlock_helper_rejects_token_for_different_admin(self) -> None:
+        from api.deps import require_admin_unlock_or_recent_reauth
+
+        auth._auth_enabled = True
+        auth._session_secret = b"6" * 32
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True, admin_capabilities=("ops:system_config:write",))
+        other_token = auth.create_admin_unlock_token(
+            user_id="other-admin",
+            username="other-admin",
+            role=ROLE_ADMIN,
+        )
+
+        with self.assertRaises(HTTPException) as exc:
+            require_admin_unlock_or_recent_reauth(admin, admin_unlock_token=other_token)
+
+        self.assertEqual(exc.exception.status_code, 403)
+        self.assertEqual(exc.exception.detail["error"], "admin_unlock_required")
+        self.assertNotIn("other-admin", str(exc.exception.detail))
+
+    def test_admin_unlock_helper_accepts_recent_reauth_without_token(self) -> None:
+        from api.deps import require_admin_unlock_or_recent_reauth
+
+        auth._auth_enabled = True
+        auth._session_secret = b"7" * 32
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True, admin_capabilities=("ops:system_config:write",))
+        session_id = "unlock-helper-session"
+        object.__setattr__(admin, "session_id", session_id)
+        self.db.create_or_update_app_user(
+            user_id=admin.user_id,
+            username=admin.username,
+            display_name=admin.display_name or admin.username,
+            role=ROLE_ADMIN,
+            password_hash=None,
+            is_active=True,
+        )
+        self.db.create_app_user_session(
+            session_id=session_id,
+            user_id=admin.user_id,
+            expires_at=datetime.now() + timedelta(hours=1),
+        )
+        auth.mark_admin_session_reauthenticated(user_id=admin.user_id, session_id=session_id)
+
+        self.assertIs(require_admin_unlock_or_recent_reauth(admin), admin)
+
     def test_capability_output_contains_no_secret_like_fields(self) -> None:
         user = _current_user(role=ROLE_ADMIN, is_admin=True)
 

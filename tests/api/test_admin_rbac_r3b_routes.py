@@ -8,6 +8,7 @@ from typing import Iterable
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import src.auth as auth
 from api.deps import CurrentUser, get_current_user, get_system_config_service
 from api.v1 import api_v1_router
 
@@ -57,6 +58,18 @@ def _client(user: CurrentUser) -> TestClient:
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_system_config_service] = lambda: FakeSystemConfigService()
     return TestClient(app)
+
+
+def _admin_unlock_headers(monkeypatch, user: CurrentUser) -> dict[str, str]:
+    monkeypatch.setattr(auth, "_auth_enabled", True)
+    monkeypatch.setattr(auth, "_session_secret", b"r" * 32)
+    token = auth.create_admin_unlock_token(
+        user_id=user.user_id,
+        username=user.username,
+        role=user.role,
+    )
+    assert token
+    return {"X-Admin-Unlock-Token": token}
 
 
 def _assert_sanitized_denial(response) -> None:
@@ -191,7 +204,7 @@ def test_admin_logs_cleanup_requires_logs_write(monkeypatch) -> None:
     assert allowed.status_code == 200
 
 
-def test_system_config_read_write_and_provider_probe_capabilities() -> None:
+def test_system_config_read_write_and_provider_probe_capabilities(monkeypatch) -> None:
     read_client = _client(_user(capabilities=("ops:system_config:read",)))
     assert read_client.get("/api/v1/system/config").status_code == 200
     assert read_client.post("/api/v1/system/config/validate", json={"items": [{"key": "STOCK_LIST", "value": "AAPL"}]}).status_code == 200
@@ -204,25 +217,66 @@ def test_system_config_read_write_and_provider_probe_capabilities() -> None:
     assert denied_write.json()["detail"]["error"] == "admin_capability_required"
     _assert_sanitized_denial(denied_write)
 
-    write_client = _client(_user(capabilities=("ops:system_config:write",)))
-    allowed_write = write_client.put(
+    write_user = _user(capabilities=("ops:system_config:write",))
+    write_client = _client(write_user)
+    missing_unlock_write = write_client.put(
         "/api/v1/system/config",
         json={"config_version": "v1", "items": [{"key": "STOCK_LIST", "value": "AAPL"}]},
     )
+    assert missing_unlock_write.status_code == 403
+    assert missing_unlock_write.json()["detail"]["error"] == "admin_unlock_required"
+    _assert_sanitized_denial(missing_unlock_write)
+
+    invalid_unlock_write = write_client.put(
+        "/api/v1/system/config",
+        json={"config_version": "v1", "items": [{"key": "STOCK_LIST", "value": "AAPL"}]},
+        headers={"X-Admin-Unlock-Token": "token-value"},
+    )
+    assert invalid_unlock_write.status_code == 403
+    assert invalid_unlock_write.json()["detail"]["error"] == "admin_unlock_required"
+    _assert_sanitized_denial(invalid_unlock_write)
+
+    unlock_headers = _admin_unlock_headers(monkeypatch, write_user)
+    allowed_write = write_client.put(
+        "/api/v1/system/config",
+        json={"config_version": "v1", "items": [{"key": "STOCK_LIST", "value": "AAPL"}]},
+        headers=unlock_headers,
+    )
     assert allowed_write.status_code == 200
-    assert write_client.post("/api/v1/system/actions/runtime-cache/reset").status_code == 200
-    assert write_client.post("/api/v1/system/actions/factory-reset", json={"confirmation_phrase": "FACTORY RESET"}).status_code == 200
+    assert write_client.post("/api/v1/system/actions/runtime-cache/reset", headers=unlock_headers).status_code == 200
+    assert write_client.post(
+        "/api/v1/system/actions/factory-reset",
+        json={"confirmation_phrase": "FACTORY RESET"},
+        headers=unlock_headers,
+    ).status_code == 200
 
     denied_probe = write_client.post("/api/v1/system/config/llm/test-channel", json={"name": "primary"})
     assert denied_probe.status_code == 403
     assert denied_probe.json()["detail"]["error"] == "admin_capability_required"
     _assert_sanitized_denial(denied_probe)
 
-    provider_client = _client(_user(capabilities=("ops:providers:write",)))
-    assert provider_client.post("/api/v1/system/config/llm/test-channel", json={"name": "primary"}).status_code == 200
+    provider_user = _user(capabilities=("ops:providers:write",))
+    provider_client = _client(provider_user)
+    provider_unlock_headers = _admin_unlock_headers(monkeypatch, provider_user)
+    missing_unlock_probe = provider_client.post("/api/v1/system/config/llm/test-channel", json={"name": "primary"})
+    assert missing_unlock_probe.status_code == 403
+    assert missing_unlock_probe.json()["detail"]["error"] == "admin_unlock_required"
+    _assert_sanitized_denial(missing_unlock_probe)
+
+    assert provider_client.post(
+        "/api/v1/system/config/llm/test-channel",
+        json={"name": "primary"},
+        headers=provider_unlock_headers,
+    ).status_code == 200
     assert provider_client.post(
         "/api/v1/system/config/data-source/test",
         json={"name": "custom", "base_url": "https://data.example.test"},
+        headers=provider_unlock_headers,
+    ).status_code == 200
+    assert provider_client.post(
+        "/api/v1/system/config/data-source/test-builtin",
+        json={"provider": "yahoo"},
+        headers=provider_unlock_headers,
     ).status_code == 200
 
 
