@@ -36,6 +36,9 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, l
   if (pathname === '/' || pathname === '') {
     return t('nav.home');
   }
+  if (pathname.startsWith('/settings/system')) {
+    return t('nav.independentConsole');
+  }
   if (pathname.startsWith('/scanner')) {
     return t('nav.scanner');
   }

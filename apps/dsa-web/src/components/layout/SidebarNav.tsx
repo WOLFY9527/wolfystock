@@ -3,7 +3,7 @@
  * toggling, completion badge, and logout confirmation while aligning nav
  * controls to the shared Linear OS tokens.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Archive,
   Activity,
@@ -11,6 +11,7 @@ import {
   BriefcaseBusiness,
   BarChart3,
   CircuitBoard,
+  ChevronDown,
   DatabaseZap,
   FlaskConical,
   FileCheck2,
@@ -52,6 +53,13 @@ type NavItem = {
   to: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: 'completion';
+};
+
+type AdminNavItem = {
+  key: string;
+  label: string;
+  to: string;
+  icon: React.ComponentType<{ className?: string }>;
 };
 
 const BrandWordmark: React.FC<{
@@ -144,6 +152,8 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const { language, t, toggleLanguage } = useI18n();
   const completionBadge = useAgentChatStore((state) => state.completionBadge);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showAdminMenu, setShowAdminMenu] = useState(false);
+  const adminMenuRef = useRef<HTMLDivElement | null>(null);
   const routeLocale = parseLocaleFromPathname(location.pathname);
   const isDrawer = layout === 'drawer';
   const signInLabel = t('nav.signIn');
@@ -156,12 +166,66 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const evidenceWorkflowLabel = language === 'en' ? 'Evidence Review' : '证据复核';
   const signInPath = buildLoginPath(location.pathname + location.search);
   const consolePath = routeLocale ? buildLocalizedPath('/settings/system', routeLocale) : '/settings/system';
+  const adminLogsPath = routeLocale ? buildLocalizedPath('/admin/logs', routeLocale) : '/admin/logs';
   const evidenceWorkflowPath = routeLocale ? buildLocalizedPath('/admin/evidence-workflow', routeLocale) : '/admin/evidence-workflow';
   const notificationsPath = routeLocale ? buildLocalizedPath('/admin/notifications', routeLocale) : '/admin/notifications';
   const marketProvidersPath = routeLocale ? buildLocalizedPath('/admin/market-providers', routeLocale) : '/admin/market-providers';
   const providerCircuitsPath = routeLocale ? buildLocalizedPath('/admin/provider-circuits', routeLocale) : '/admin/provider-circuits';
   const userGovernancePath = routeLocale ? buildLocalizedPath('/admin/users', routeLocale) : '/admin/users';
   const costObservabilityPath = routeLocale ? buildLocalizedPath('/admin/cost-observability', routeLocale) : '/admin/cost-observability';
+  const adminNavItems: AdminNavItem[] = [];
+  if (canReadSystemConfig) {
+    adminNavItems.push({ key: 'system', label: consoleLabel, to: consolePath, icon: ShieldCheck });
+  }
+  if (canReadUsers) {
+    adminNavItems.push({ key: 'users', label: userGovernanceLabel, to: userGovernancePath, icon: UsersRound });
+  }
+  if (canReadCostObservability) {
+    adminNavItems.push({ key: 'cost', label: costObservabilityLabel, to: costObservabilityPath, icon: BarChart3 });
+  }
+  if (canReadNotifications) {
+    adminNavItems.push({ key: 'notifications', label: notificationsLabel, to: notificationsPath, icon: BellRing });
+  }
+  if (canReadProviders) {
+    adminNavItems.push({ key: 'providers', label: marketProvidersLabel, to: marketProvidersPath, icon: DatabaseZap });
+    adminNavItems.push({ key: 'provider-circuits', label: providerCircuitsLabel, to: providerCircuitsPath, icon: CircuitBoard });
+  }
+  if (canReadOpsLogs) {
+    adminNavItems.push({ key: 'evidence', label: evidenceWorkflowLabel, to: evidenceWorkflowPath, icon: FileCheck2 });
+    adminNavItems.push({ key: 'logs', label: t('adminNav.logs'), to: adminLogsPath, icon: Activity });
+  }
+  const hasAdminMenu = adminNavItems.length > 0;
+
+  const handleAdminNavigate = () => {
+    setShowAdminMenu(false);
+    onNavigate?.();
+  };
+
+  useEffect(() => {
+    if (!showAdminMenu) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (adminMenuRef.current?.contains(event.target as Node)) {
+        return;
+      }
+      setShowAdminMenu(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowAdminMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showAdminMenu]);
 
   const navLinks = NAV_ITEMS.map(({ key, labelKey, label: fixedLabel, to, icon: Icon, badge }) => {
     const label = fixedLabel ?? t(labelKey || key);
@@ -268,172 +332,86 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </NavLink>
   ) : null;
 
-  const systemAction = canReadSystemConfig ? (
-    <NavLink
-      to={consolePath}
-      onClick={onNavigate}
-      className={({ isActive }) => cn(
-        isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
-        !isDrawer && isActive ? 'text-white' : '',
-        isDrawer && isActive ? 'is-active' : '',
-      )}
-      aria-label={consoleLabel}
-    >
-      {isDrawer ? (
-        <>
+  const adminMenuAction = hasAdminMenu ? (
+    isDrawer ? (
+      <div className="space-y-2">
+        <button
+          type="button"
+          className="shell-nav-item shell-nav-item--utility w-full"
+          onClick={() => setShowAdminMenu((open) => !open)}
+          aria-expanded={showAdminMenu}
+          aria-controls="shell-admin-utility-menu"
+        >
           <span className="shell-nav-item__icon" aria-hidden="true">
             <ShieldCheck className="h-4 w-4" />
           </span>
           <DrawerUtilityLabel label={consoleLabel} />
-        </>
-      ) : (
-        <span>{consoleLabel}</span>
-      )}
-    </NavLink>
-  ) : null;
-
-  const notificationAction = canReadNotifications ? (
-    <NavLink
-      to={notificationsPath}
-      onClick={onNavigate}
-      className={({ isActive }) => cn(
-        isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
-        !isDrawer && isActive ? 'text-white' : '',
-        isDrawer && isActive ? 'is-active' : '',
-      )}
-      aria-label={notificationsLabel}
-    >
-      {isDrawer ? (
-        <>
-          <span className="shell-nav-item__icon" aria-hidden="true">
-            <BellRing className="h-4 w-4" />
+          <ChevronDown className={cn('ml-auto h-4 w-4 text-white/48 transition-transform', showAdminMenu ? 'rotate-180' : '')} />
+        </button>
+        {showAdminMenu ? (
+          <div
+            id="shell-admin-utility-menu"
+            data-testid="shell-admin-utility-menu"
+            className="space-y-1 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]/60 p-2"
+          >
+            {adminNavItems.map(({ key, label, to, icon: Icon }) => (
+              <NavLink
+                key={key}
+                to={to}
+                onClick={handleAdminNavigate}
+                className={({ isActive }) => cn('shell-drawer-action', isActive ? 'is-active' : '')}
+                aria-label={label}
+              >
+                <span className="shell-nav-item__icon" aria-hidden="true">
+                  <Icon className="h-4 w-4" />
+                </span>
+                <DrawerUtilityLabel label={label} />
+              </NavLink>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    ) : (
+      <div ref={adminMenuRef} className="relative">
+        <button
+          type="button"
+          className={cn(HEADER_UTILITY_TEXT_CLASS, showAdminMenu ? 'text-white' : '')}
+          onClick={() => setShowAdminMenu((open) => !open)}
+          aria-expanded={showAdminMenu}
+          aria-controls="shell-admin-utility-menu"
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            <span>{consoleLabel}</span>
+            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showAdminMenu ? 'rotate-180' : '')} />
           </span>
-          <DrawerUtilityLabel label={notificationsLabel} />
-        </>
-      ) : (
-        <span>{notificationsLabel}</span>
-      )}
-    </NavLink>
-  ) : null;
-
-  const evidenceWorkflowAction = canReadOpsLogs ? (
-    <NavLink
-      to={evidenceWorkflowPath}
-      onClick={onNavigate}
-      className={({ isActive }) => cn(
-        isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
-        !isDrawer && isActive ? 'text-white' : '',
-        isDrawer && isActive ? 'is-active' : '',
-      )}
-      aria-label={evidenceWorkflowLabel}
-    >
-      {isDrawer ? (
-        <>
-          <span className="shell-nav-item__icon" aria-hidden="true">
-            <FileCheck2 className="h-4 w-4" />
-          </span>
-          <DrawerUtilityLabel label={evidenceWorkflowLabel} />
-        </>
-      ) : (
-        <span>{evidenceWorkflowLabel}</span>
-      )}
-    </NavLink>
-  ) : null;
-
-  const marketProviderAction = canReadProviders ? (
-    <NavLink
-      to={marketProvidersPath}
-      onClick={onNavigate}
-      className={({ isActive }) => cn(
-        isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
-        !isDrawer && isActive ? 'text-white' : '',
-        isDrawer && isActive ? 'is-active' : '',
-      )}
-      aria-label={marketProvidersLabel}
-    >
-      {isDrawer ? (
-        <>
-          <span className="shell-nav-item__icon" aria-hidden="true">
-            <DatabaseZap className="h-4 w-4" />
-          </span>
-          <DrawerUtilityLabel label={marketProvidersLabel} />
-        </>
-      ) : (
-        <span>{marketProvidersLabel}</span>
-      )}
-    </NavLink>
-  ) : null;
-
-  const providerCircuitAction = canReadProviders ? (
-    <NavLink
-      to={providerCircuitsPath}
-      onClick={onNavigate}
-      className={({ isActive }) => cn(
-        isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
-        !isDrawer && isActive ? 'text-white' : '',
-        isDrawer && isActive ? 'is-active' : '',
-      )}
-      aria-label={providerCircuitsLabel}
-    >
-      {isDrawer ? (
-        <>
-          <span className="shell-nav-item__icon" aria-hidden="true">
-            <CircuitBoard className="h-4 w-4" />
-          </span>
-          <DrawerUtilityLabel label={providerCircuitsLabel} />
-        </>
-      ) : (
-        <span>{providerCircuitsLabel}</span>
-      )}
-    </NavLink>
-  ) : null;
-
-  const userGovernanceAction = canReadUsers ? (
-    <NavLink
-      to={userGovernancePath}
-      onClick={onNavigate}
-      className={({ isActive }) => cn(
-        isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
-        !isDrawer && isActive ? 'text-white' : '',
-        isDrawer && isActive ? 'is-active' : '',
-      )}
-      aria-label={userGovernanceLabel}
-    >
-      {isDrawer ? (
-        <>
-          <span className="shell-nav-item__icon" aria-hidden="true">
-            <UsersRound className="h-4 w-4" />
-          </span>
-          <DrawerUtilityLabel label={userGovernanceLabel} />
-        </>
-      ) : (
-        <span>{userGovernanceLabel}</span>
-      )}
-    </NavLink>
-  ) : null;
-
-  const costObservabilityAction = canReadCostObservability ? (
-    <NavLink
-      to={costObservabilityPath}
-      onClick={onNavigate}
-      className={({ isActive }) => cn(
-        isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
-        !isDrawer && isActive ? 'text-white' : '',
-        isDrawer && isActive ? 'is-active' : '',
-      )}
-      aria-label={costObservabilityLabel}
-    >
-      {isDrawer ? (
-        <>
-          <span className="shell-nav-item__icon" aria-hidden="true">
-            <BarChart3 className="h-4 w-4" />
-          </span>
-          <DrawerUtilityLabel label={costObservabilityLabel} />
-        </>
-      ) : (
-        <span>{costObservabilityLabel}</span>
-      )}
-    </NavLink>
+        </button>
+        {showAdminMenu ? (
+          <div
+            id="shell-admin-utility-menu"
+            role="menu"
+            data-testid="shell-admin-utility-menu"
+            className="absolute right-0 top-full z-20 mt-2 flex min-w-[15rem] max-w-[min(22rem,calc(100vw-2rem))] flex-col gap-1 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-2 shadow-[0_20px_48px_rgba(0,0,0,0.28)]"
+          >
+            {adminNavItems.map(({ key, label, to, icon: Icon }) => (
+              <NavLink
+                key={key}
+                to={to}
+                onClick={handleAdminNavigate}
+                className={({ isActive }) => cn(
+                  'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-white/72 transition-colors hover:bg-white/[0.04] hover:text-white',
+                  isActive ? 'bg-white/[0.05] text-white' : '',
+                )}
+                aria-label={label}
+              >
+                <Icon className="h-4 w-4 shrink-0 text-white/56" />
+                <span className="truncate">{label}</span>
+              </NavLink>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    )
   ) : null;
 
   const signInAction = authEnabled && isGuest ? (
@@ -495,13 +473,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
             {archiveAction}
             {languageAction}
             {settingsAction}
-            {systemAction}
-            {userGovernanceAction}
-            {costObservabilityAction}
-            {evidenceWorkflowAction}
-            {notificationAction}
-            {marketProviderAction}
-            {providerCircuitAction}
+            {adminMenuAction}
             {signInAction}
             {logoutAction}
           </div>
@@ -521,12 +493,13 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
               className="flex items-center gap-0.5 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-1.5 py-1"
             >
               {languageAction}
-              {(settingsAction || systemAction || signInAction || logoutAction) ? (
+              {(settingsAction || adminMenuAction || signInAction || logoutAction) ? (
                 <div className="h-3 w-px bg-[var(--wolfy-divider)]" data-testid="shell-header-utility-divider" />
               ) : null}
               {settingsAction}
+              {adminMenuAction}
               {signInAction}
-              {logoutAction && (settingsAction || signInAction) ? (
+              {logoutAction && (settingsAction || adminMenuAction || signInAction) ? (
                 <div className="h-3 w-px bg-[var(--wolfy-divider)]" data-testid="shell-header-utility-divider" />
               ) : null}
               {logoutAction}

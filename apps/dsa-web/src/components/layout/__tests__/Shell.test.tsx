@@ -368,7 +368,10 @@ describe('Shell', () => {
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.backtest') })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('zh', 'language.toggle') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.settings') })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'nav.independentConsole') }));
+    expect(await screen.findByTestId('shell-admin-utility-menu')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'adminNav.logs') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '证据复核' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.notifications') })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('zh', 'nav.logout') })).toBeInTheDocument();
@@ -538,7 +541,7 @@ describe('Shell', () => {
     expect(document.body).toHaveAttribute('data-page-scroll-shell', 'true');
   });
 
-  it('keeps admin console links out of the desktop masthead', async () => {
+  it('shows a compact admin utility entry in the desktop masthead for authorized admins', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
@@ -557,7 +560,7 @@ describe('Shell', () => {
     );
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
+    expect(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /管理员模式/ })).not.toBeInTheDocument();
   });
 
@@ -593,14 +596,18 @@ describe('Shell', () => {
     );
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'language.toggle') })).toHaveTextContent('EN');
     expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.settings') })).toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
+    const adminMenuButton = within(actionIsland).getByRole('button', { name: translate('zh', 'nav.independentConsole') });
+    expect(adminMenuButton).toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.marketProviders') })).not.toBeInTheDocument();
+    fireEvent.click(adminMenuButton);
+    expect(await screen.findByTestId('shell-admin-utility-menu')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.marketProviders') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'adminNav.logs') })).toBeInTheDocument();
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.logout') })).toBeInTheDocument();
     expect(actionIsland.querySelectorAll('[data-testid="shell-header-utility-divider"]')).toHaveLength(2);
   });
 
-  it('hides capability-specific admin nav entries when current user lacks them', async () => {
+  it('shows only capability-authorized admin entries inside the compact control menu', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
@@ -627,16 +634,17 @@ describe('Shell', () => {
     );
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.userGovernance') })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.costObservability') })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.notifications') })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.marketProviders') })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.providerCircuits') })).not.toBeInTheDocument();
+    fireEvent.click(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.independentConsole') }));
+    expect(await screen.findByRole('link', { name: translate('zh', 'nav.userGovernance') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.costObservability') })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: translate('zh', 'adminNav.logs') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: translate('zh', 'nav.notifications') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: translate('zh', 'nav.marketProviders') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: translate('zh', 'nav.providerCircuits') })).not.toBeInTheDocument();
   });
 
-  it('shows only the Chinese-first evidence workflow nav entry for ops-log admins', async () => {
+  it('shows only ops-log destinations when the admin account has only log capability', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
@@ -663,14 +671,15 @@ describe('Shell', () => {
     );
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
-    expect(within(actionIsland).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: 'Evidence Review' })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.userGovernance') })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.costObservability') })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.notifications') })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.marketProviders') })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.providerCircuits') })).not.toBeInTheDocument();
+    fireEvent.click(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.independentConsole') }));
+    expect(await screen.findByRole('link', { name: '证据复核' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'adminNav.logs') })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Evidence Review' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: translate('zh', 'nav.userGovernance') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: translate('zh', 'nav.costObservability') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: translate('zh', 'nav.notifications') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: translate('zh', 'nav.marketProviders') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: translate('zh', 'nav.providerCircuits') })).not.toBeInTheDocument();
   });
 
   it('does not show evidence workflow nav for adjacent admin capabilities without ops-log read', async () => {
@@ -700,13 +709,15 @@ describe('Shell', () => {
     );
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
-    expect(within(actionIsland).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.userGovernance') })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.costObservability') })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.notifications') })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.marketProviders') })).not.toBeInTheDocument();
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.providerCircuits') })).not.toBeInTheDocument();
+    fireEvent.click(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.independentConsole') }));
+    expect(await screen.findByRole('link', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.userGovernance') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.costObservability') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.notifications') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.marketProviders') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.providerCircuits') })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: translate('zh', 'adminNav.logs') })).not.toBeInTheDocument();
   });
 
   it('fails closed for sensitive admin nav when capability fields are absent', async () => {
@@ -728,7 +739,7 @@ describe('Shell', () => {
     );
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
-    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('button', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.userGovernance') })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.costObservability') })).not.toBeInTheDocument();
