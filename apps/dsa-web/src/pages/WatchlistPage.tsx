@@ -18,12 +18,17 @@ import { watchlistApi } from '../api/watchlist';
 import { AuthGuardOverlay } from '../components/auth/AuthGuardOverlay';
 import { ApiErrorAlert, Input, Select } from '../components/common';
 import {
+  ConsoleBoard,
+  ConsoleContextRail,
+  DenseRows,
+  WolfyCommandBar,
+} from '../components/linear';
+import {
   CompactEmptyRow,
   DenseCommandBar,
   DensePageHeader,
   DenseSecondaryDisclosure,
   DenseStatusStrip,
-  DenseTableFrame,
   DenseTableShell,
   TerminalButton,
   TerminalChip,
@@ -509,6 +514,7 @@ const WatchlistPage: React.FC = () => {
   const [backtestSessionKeys, setBacktestSessionKeys] = useState<Set<string>>(() => new Set());
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [useSelectedScope, setUseSelectedScope] = useState(false);
+  const [activeItemId, setActiveItemId] = useState<number | null>(null);
 
   useEffect(() => {
     document.title = language === 'en' ? 'Watchlist - WolfyStock' : '观察列表 - WolfyStock';
@@ -650,9 +656,23 @@ const WatchlistPage: React.FC = () => {
     }
   }, [selectedIds.size, useSelectedScope]);
 
+  useEffect(() => {
+    if (filteredItems.length === 0) {
+      if (activeItemId !== null) setActiveItemId(null);
+      return;
+    }
+    if (!filteredItems.some((item) => item.id === activeItemId)) {
+      setActiveItemId(filteredItems[0].id);
+    }
+  }, [activeItemId, filteredItems]);
+
   const selectedItems = useMemo(
     () => filteredItems.filter((item) => selectedIds.has(item.id)),
     [filteredItems, selectedIds],
+  );
+  const activeItem = useMemo(
+    () => filteredItems.find((item) => item.id === activeItemId) ?? filteredItems[0] ?? null,
+    [activeItemId, filteredItems],
   );
   const actionItems = useSelectedScope && selectedItems.length > 0 ? selectedItems : filteredItems;
   const actionScopeLabel = actionItems.length === 0
@@ -934,23 +954,35 @@ const WatchlistPage: React.FC = () => {
     { label: copy.failureCoverage, value: summary.failedOrNoData },
     { label: copy.latestUpdate, value: summary.latestTime ? formatDateTime(summary.latestTime, language) : (language === 'zh' ? '暂无情报' : 'No intelligence') },
   ];
+  const activeScanner = activeItem?.intelligence?.scanner;
+  const activeSimulation = activeItem?.intelligence?.strategySimulation;
+  const activeBacktest = activeItem?.intelligence?.backtest;
+  const activeScore = activeItem ? getScannerScore(activeItem) : null;
+  const activeLatestTime = activeItem ? getLatestIntelligenceTime(activeItem) : null;
+  const activeScannerStatusLabel = activeItem ? formatScannerStatus(activeItem) : '--';
+  const activeBacktestStatusLabel = activeItem ? formatBacktestStatus(activeItem) : '--';
+  const activeScannerReason = activeItem ? formatScannerReason(activeScanner?.reason, language) : null;
+  const activeScannerFailure = activeItem && (activeItem.scoreError || activeScanner?.reason)
+    ? sanitizeFailureReason(activeItem.scoreError || activeScanner?.reason || '', '扫描失败')
+    : null;
+  const activeBacktestSummary = activeItem && hasBacktestMetrics(activeItem)
+    ? `${language === 'zh' ? '收益' : 'Return'} ${formatPct(activeBacktest?.totalReturnPct)} · ${language === 'zh' ? '回撤' : 'DD'} ${formatPct(activeBacktest?.maxDrawdownPct)} · Sharpe ${formatRatio(activeBacktest?.sharpe)} · ${language === 'zh' ? '交易' : 'Trades'} ${activeBacktest?.tradeCount ?? '--'}`
+    : copy.noEvidence;
+  const activeContextTags = activeItem
+    ? [
+        activeItem.themeId ? `${copy.themePrefix}: ${activeItem.themeId}` : null,
+        activeItem.universeType ? `${copy.universePrefix}: ${activeItem.universeType}` : null,
+      ].filter(Boolean) as string[]
+    : [];
+  const activeHasEvidence = activeItem
+    ? hasScannerEvidence(activeItem) || activeSimulation?.status === 'ready' || hasBacktestEvidence(activeItem)
+    : false;
 
   return (
     <TerminalPageShell data-testid="watchlist-page" className="flex-1 min-w-0 py-5 md:py-6">
         <DensePageHeader
           eyebrow={language === 'zh' ? '扫描候选' : 'Scanner candidates'}
           title={copy.title}
-          action={(
-            <TerminalButton
-              type="button"
-              variant="secondary"
-              className="h-10 px-4 text-sm"
-              onClick={() => navigate(scannerPath)}
-            >
-              <ExternalLink className="h-4 w-4" />
-              {copy.openScanner}
-            </TerminalButton>
-          )}
         />
 
         <DenseStatusStrip
@@ -973,56 +1005,495 @@ const WatchlistPage: React.FC = () => {
 
         <DenseTableShell
           data-testid="watchlist-table-workbench"
+          variant="board"
         >
-          <div
-            data-testid="watchlist-filter-grid"
-            className="order-3 grid min-w-0 grid-cols-1 gap-2 border-t border-white/10 bg-white/[0.015] p-3 md:order-1 md:grid-cols-2 md:border-b md:border-t-0 xl:grid-cols-6"
+          <WolfyCommandBar
+            data-testid="watchlist-add-filter-row"
+            className="min-h-0 rounded-none border-x-0 border-t-0 px-3 py-3"
+            trailing={(
+              <TerminalButton
+                type="button"
+                variant="secondary"
+                className="h-10 px-4 text-sm"
+                onClick={() => navigate(scannerPath)}
+              >
+                <ExternalLink className="h-4 w-4" />
+                {copy.openScanner}
+              </TerminalButton>
+            )}
           >
-            <Input
-              label={copy.search}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={copy.searchPlaceholder}
-              containerClassName="min-w-0"
-              trailingAction={<Search className="h-4 w-4 text-white/35" />}
-            />
-            <Select label={copy.market} value={marketFilter} onChange={setMarketFilter} options={marketOptions} className="min-w-0" />
-            <Select label={copy.source} value={sourceFilter} onChange={setSourceFilter} options={sourceOptions} className="min-w-0" />
-            <Select label={copy.context} value={contextFilter} onChange={setContextFilter} options={contextOptions} className="min-w-0" />
-            <Select
-              label={copy.evidence}
-              value={evidenceFilter}
-              onChange={(value) => setEvidenceFilter(value as EvidenceFilter)}
-              className="min-w-0"
-              options={[
-                { value: 'all', label: copy.all },
-                { value: 'hasScanner', label: copy.hasScanner },
-                { value: 'hasBacktest', label: copy.hasBacktest },
-                { value: 'scannerSelected', label: copy.scannerSelected },
-                { value: 'staleIntelligence', label: copy.staleIntelligence },
-              ]}
-            />
-            <Select
-              label={copy.sort}
-              value={sortKey}
-              onChange={(value) => setSortKey(value as SortKey)}
-              className="min-w-0"
-              options={[
-                { value: 'newest', label: copy.newest },
-                { value: 'scannerScore', label: copy.scannerScore },
-                { value: 'backtestReturn', label: copy.backtestReturn },
-                { value: 'historicalHitRate', label: copy.historicalHitRate },
-                { value: 'recentlyScored', label: copy.recentlyScored },
-                { value: 'recentlyBacktested', label: copy.recentlyBacktested },
-                { value: 'symbol', label: copy.symbol },
-                { value: 'market', label: copy.market },
-              ]}
-            />
-          </div>
+            <div
+              data-testid="watchlist-filter-grid"
+              className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-2 xl:grid-cols-6"
+            >
+              <Input
+                label={copy.search}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={copy.searchPlaceholder}
+                containerClassName="col-span-2 min-w-0"
+                trailingAction={<Search className="h-4 w-4 text-white/35" />}
+              />
+              <Select label={copy.market} value={marketFilter} onChange={setMarketFilter} options={marketOptions} className="min-w-0" />
+              <Select
+                label={copy.sort}
+                value={sortKey}
+                onChange={(value) => setSortKey(value as SortKey)}
+                className="min-w-0"
+                options={[
+                  { value: 'newest', label: copy.newest },
+                  { value: 'scannerScore', label: copy.scannerScore },
+                  { value: 'backtestReturn', label: copy.backtestReturn },
+                  { value: 'historicalHitRate', label: copy.historicalHitRate },
+                  { value: 'recentlyScored', label: copy.recentlyScored },
+                  { value: 'recentlyBacktested', label: copy.recentlyBacktested },
+                  { value: 'symbol', label: copy.symbol },
+                  { value: 'market', label: copy.market },
+                ]}
+              />
+              <div className="hidden min-w-0 md:contents">
+                <Select label={copy.source} value={sourceFilter} onChange={setSourceFilter} options={sourceOptions} className="min-w-0" />
+                <Select label={copy.context} value={contextFilter} onChange={setContextFilter} options={contextOptions} className="min-w-0" />
+                <Select
+                  label={copy.evidence}
+                  value={evidenceFilter}
+                  onChange={(value) => setEvidenceFilter(value as EvidenceFilter)}
+                  className="min-w-0"
+                  options={[
+                    { value: 'all', label: copy.all },
+                    { value: 'hasScanner', label: copy.hasScanner },
+                    { value: 'hasBacktest', label: copy.hasBacktest },
+                    { value: 'scannerSelected', label: copy.scannerSelected },
+                    { value: 'staleIntelligence', label: copy.staleIntelligence },
+                  ]}
+                />
+              </div>
+              <div className="col-span-2 md:hidden">
+                <DenseSecondaryDisclosure
+                  title={language === 'zh' ? '更多筛选' : 'More filters'}
+                  summary={`${copy.source} / ${copy.context} / ${copy.evidence}`}
+                  variant="row"
+                  className="border-0 bg-transparent px-0 py-0 hover:border-transparent"
+                >
+                  <div className="grid min-w-0 grid-cols-1 gap-2 pt-1">
+                    <Select label={copy.source} value={sourceFilter} onChange={setSourceFilter} options={sourceOptions} className="min-w-0" />
+                    <Select label={copy.context} value={contextFilter} onChange={setContextFilter} options={contextOptions} className="min-w-0" />
+                    <Select
+                      label={copy.evidence}
+                      value={evidenceFilter}
+                      onChange={(value) => setEvidenceFilter(value as EvidenceFilter)}
+                      className="min-w-0"
+                      options={[
+                        { value: 'all', label: copy.all },
+                        { value: 'hasScanner', label: copy.hasScanner },
+                        { value: 'hasBacktest', label: copy.hasBacktest },
+                        { value: 'scannerSelected', label: copy.scannerSelected },
+                        { value: 'staleIntelligence', label: copy.staleIntelligence },
+                      ]}
+                    />
+                  </div>
+                </DenseSecondaryDisclosure>
+              </div>
+            </div>
+          </WolfyCommandBar>
+
+          {filteredItems.length > 0 ? (
+            <div
+              data-testid="watchlist-board-shell"
+              className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_340px]"
+            >
+              <ConsoleBoard className="rounded-none border-0 bg-transparent">
+                <div className="flex min-w-0 items-center justify-between gap-3 border-b border-[color:var(--wolfy-divider)] px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.tableTitle}</p>
+                    <p className="truncate text-xs text-[color:var(--wolfy-text-secondary)]">{copy.tableDescription}</p>
+                  </div>
+                  <TerminalChip variant="neutral" className="font-mono">
+                    {actionScopeLabel}
+                  </TerminalChip>
+                </div>
+                <DenseRows data-testid="watchlist-candidate-list">
+                  {filteredItems.map((item) => {
+                    const scanner = item.intelligence?.scanner;
+                    const strategySimulation = item.intelligence?.strategySimulation;
+                    const backtest = item.intelligence?.backtest;
+                    const score = getScannerScore(item);
+                    const hitRate = strategySimulation?.hitRate;
+                    const avgForward = strategySimulation?.avgForwardReturnPct;
+                    const returnPct = backtest?.totalReturnPct;
+                    const hasAnyEvidence = hasScannerEvidence(item)
+                      || strategySimulation?.status === 'ready'
+                      || hasBacktestEvidence(item);
+                    const batchStatus = batchStatuses[item.symbol];
+                    const batchFailure = batchFailures[item.symbol];
+                    const scannerFailure = item.scoreError || scanner?.reason
+                      ? sanitizeFailureReason(item.scoreError || scanner?.reason || '', '扫描失败')
+                      : null;
+                    const scannerReasonLabel = formatScannerReason(scanner?.reason, language);
+                    const latestTime = getLatestIntelligenceTime(item);
+                    const scannerStatusLabel = formatScannerStatus(item);
+                    const backtestStatusLabel = formatBacktestStatus(item, batchFailure);
+                    const isActive = activeItem?.id === item.id;
+                    const scoreFreshnessVariant = item.scoreStatus === 'fresh'
+                      ? 'success'
+                      : item.scoreStatus === 'stale'
+                        ? 'caution'
+                        : 'neutral';
+                    const scannerStatusVariant = scannerStatusLabel === '扫描失败'
+                      ? 'danger'
+                      : scannerStatusLabel === '已验证' || scannerStatusLabel === '通过筛选'
+                        ? 'info'
+                        : 'neutral';
+                    const backtestStatusVariant = backtestStatusLabel === '已回测'
+                      ? 'success'
+                      : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(backtestStatusLabel)
+                        ? 'danger'
+                        : ['样本不足', '数据缺失'].includes(backtestStatusLabel)
+                          ? 'caution'
+                          : 'neutral';
+                    const batchDisplayStatus = batchStatus
+                      ? describeDisplayStatus(
+                          batchStatus === 'completed'
+                            ? 'success'
+                            : batchStatus === 'failed'
+                              ? 'failed'
+                              : batchStatus === 'running'
+                                ? 'info'
+                                : batchStatus === 'skipped'
+                                  ? 'disabled'
+                                  : 'pending',
+                          batchStatus === 'running' ? '运行中' : batchStatus === 'completed' ? '完成' : batchStatus === 'failed' ? '失败' : batchStatus === 'skipped' ? '已跳过' : '等待',
+                          { language },
+                        )
+                      : null;
+                    return (
+                      <article
+                        key={item.id}
+                        data-testid={`watchlist-row-${item.symbol}`}
+                        className={`min-w-0 px-3 py-3 transition-colors md:px-4 ${isActive ? 'bg-white/[0.045]' : 'bg-transparent hover:bg-white/[0.02]'}`}
+                      >
+                        <div className="flex min-w-0 flex-col gap-3">
+                          <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                            <div className="flex min-w-0 gap-3">
+                              <button
+                                type="button"
+                                className={`${ROW_SELECTION_BUTTON_CLASS} ${
+                                  selectedIds.has(item.id)
+                                    ? 'border-cyan-300 bg-cyan-300/30 shadow-[0_0_10px_rgba(103,232,249,0.25)]'
+                                    : 'border-white/15 bg-white/[0.03] hover:border-white/30'
+                                }`}
+                                role="checkbox"
+                                aria-checked={selectedIds.has(item.id)}
+                                aria-label={`${language === 'zh' ? '选择' : 'Select'} ${item.symbol}`}
+                                onClick={() => toggleSelected(item)}
+                              >
+                                <span
+                                  aria-hidden="true"
+                                  className={`h-3 w-3 rounded-sm border transition ${
+                                    selectedIds.has(item.id)
+                                      ? 'border-cyan-100 bg-cyan-100 shadow-[0_0_8px_rgba(103,232,249,0.35)]'
+                                      : 'border-white/20 bg-transparent'
+                                  }`}
+                                />
+                              </button>
+                              <button
+                                type="button"
+                                aria-pressed={isActive}
+                                aria-label={`${language === 'zh' ? '查看详情' : 'View details'} ${item.symbol}`}
+                                className={`flex min-w-0 flex-1 flex-col items-start gap-1 rounded-lg border px-3 py-2 text-left transition ${
+                                  isActive
+                                    ? 'border-[color:var(--wolfy-accent)] bg-[var(--wolfy-surface-input)]'
+                                    : 'border-transparent bg-transparent hover:border-[color:var(--wolfy-border-subtle)] hover:bg-white/[0.02]'
+                                }`}
+                                onClick={() => setActiveItemId(item.id)}
+                              >
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                  <Clipboard className="h-4 w-4 text-white/30" />
+                                  <span className="font-semibold text-white">{item.symbol}</span>
+                                  <TerminalChip variant="neutral">{formatMarket(item.market)}</TerminalChip>
+                                  {isRecentlyAdded(item) ? (
+                                    <TerminalChip variant="info">{copy.recentlyAdded}</TerminalChip>
+                                  ) : null}
+                                  {batchDisplayStatus ? (
+                                    <TerminalChip variant={terminalChipVariant(batchDisplayStatus.tone)} className="font-mono">
+                                      {batchDisplayStatus.label}
+                                    </TerminalChip>
+                                  ) : null}
+                                </div>
+                                <p className="truncate text-sm text-white/78">{item.name || '--'}</p>
+                                <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/45">
+                                  <span>{item.source || '--'}</span>
+                                  {item.themeId ? <TerminalChip variant="neutral">{item.themeId}</TerminalChip> : null}
+                                  {item.universeType ? <TerminalChip variant="neutral">{item.universeType}</TerminalChip> : null}
+                                </div>
+                              </button>
+                            </div>
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5 xl:max-w-[22rem] xl:justify-end">
+                              <TerminalChip variant="info" className="min-w-[3.5rem] justify-center font-mono font-semibold text-cyan-100">
+                                {formatScore(score)}
+                              </TerminalChip>
+                              <TerminalChip variant={scoreFreshnessVariant} className="font-mono uppercase tracking-widest">
+                                {formatFreshness(item.lastScoredAt || scanner?.lastScannedAt)}
+                              </TerminalChip>
+                              {(scanner?.lastRank ?? item.scannerRank) ? (
+                                <TerminalChip variant="neutral">
+                                  {language === 'zh' ? '排名' : 'Rank'} #{scanner?.lastRank ?? item.scannerRank}
+                                </TerminalChip>
+                              ) : null}
+                              <TerminalChip variant="neutral" className="font-mono">
+                                {formatDateTime(item.createdAt || item.updatedAt, language)}
+                              </TerminalChip>
+                            </div>
+                          </div>
+
+                          <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px]">
+                            {!hasAnyEvidence ? (
+                              <>
+                                <TerminalChip variant="neutral">{copy.noEvidence}</TerminalChip>
+                                <TerminalNotice variant="caution" className="px-2.5 py-1 text-[11px] leading-5" data-testid={`watchlist-no-evidence-note-${item.symbol}`}>
+                                  {language === 'zh' ? '可刷新情报或返回扫描器补齐证据' : 'Refresh intelligence or return to Scanner for evidence'}
+                                </TerminalNotice>
+                              </>
+                            ) : null}
+                            <TerminalChip variant={scannerStatusVariant}>{scannerStatusLabel}</TerminalChip>
+                            {scannerStatusLabel === '扫描失败' && scannerFailure ? (
+                              <TerminalChip variant="danger">{scannerFailure.label}</TerminalChip>
+                            ) : null}
+                            {score !== null ? (
+                              <TerminalChip variant="info" className="font-mono text-cyan-100">
+                                {language === 'zh' ? '分数' : 'SCORE'} {formatScore(score)}
+                              </TerminalChip>
+                            ) : null}
+                            {scannerReasonLabel ? (
+                              <TerminalChip variant="neutral" className="max-w-[180px] truncate">
+                                {scannerReasonLabel}
+                              </TerminalChip>
+                            ) : null}
+                            <TerminalChip variant="neutral">{formatFreshness(latestTime)}</TerminalChip>
+                            {typeof avgForward === 'number' || typeof hitRate === 'number' ? (
+                              <TerminalChip
+                                variant={(avgForward ?? 0) >= 0 ? 'success' : 'danger'}
+                                className="font-mono"
+                              >
+                                {copy.historyPrefix} {formatPct(avgForward)} · {copy.hitPrefix} {typeof hitRate === 'number' ? `${Math.round(hitRate * 100)}%` : '--'}
+                              </TerminalChip>
+                            ) : null}
+                            <TerminalChip variant={backtestStatusVariant}>{backtestStatusLabel}</TerminalChip>
+                            {hasBacktestMetrics(item) ? (
+                              <>
+                                <TerminalChip
+                                  variant={(returnPct ?? 0) >= 0 ? 'success' : 'danger'}
+                                  className="font-mono"
+                                >
+                                  {language === 'zh' ? '收益' : 'Return'} {formatPct(returnPct)} · {language === 'zh' ? '回撤' : 'DD'} {formatPct(backtest?.maxDrawdownPct)} · Sharpe {formatRatio(backtest?.sharpe)} · {language === 'zh' ? '交易' : 'Trades'} {backtest?.tradeCount ?? '--'}
+                                </TerminalChip>
+                                {backtest?.lastResultId != null ? (
+                                  <TerminalButton
+                                    type="button"
+                                    variant="compact"
+                                    className="min-h-6 px-2 py-0.5 font-mono text-[11px] text-white/55"
+                                    onClick={() => navigate(buildLocalizedPath(`/backtest/results/${backtest.lastResultId}`, language))}
+                                  >
+                                    {copy.resultPrefix} {backtest.lastResultId}
+                                  </TerminalButton>
+                                ) : null}
+                              </>
+                            ) : null}
+                            {batchFailure?.detail ? (
+                              <TerminalChip variant="caution" className="max-w-[180px] truncate">
+                                {language === 'zh' ? '错误详情已隐藏' : 'Error details hidden'}
+                              </TerminalChip>
+                            ) : null}
+                          </div>
+
+                          <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <div className="min-w-0 text-[11px] text-white/45">
+                              <span className="font-mono">{copy.lastScored} {formatDateTime(item.lastScoredAt, language)}</span>
+                            </div>
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                              <TerminalButton
+                                type="button"
+                                variant="compact"
+                                onClick={() => void handleAnalyze(item)}
+                                disabled={pendingAnalyzeId === item.id}
+                              >
+                                <Play className="h-3.5 w-3.5" />
+                                {pendingAnalyzeId === item.id ? copy.analyzing : copy.analyze}
+                              </TerminalButton>
+                              <TerminalButton
+                                type="button"
+                                variant="compact"
+                                onClick={() => navigate(buildBacktestPath(item, language))}
+                              >
+                                <BarChart3 className="h-3.5 w-3.5" />
+                                {copy.backtest}
+                              </TerminalButton>
+                              <TerminalButton
+                                type="button"
+                                aria-label={`${copy.copySymbol} ${item.symbol}`}
+                                title={copiedId === item.id ? copy.copied : copy.copySymbol}
+                                variant="compact"
+                                className="h-[34px] min-h-[34px] w-[34px] px-0 text-white/55"
+                                onClick={() => void handleCopy(item)}
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                              </TerminalButton>
+                              <TerminalButton
+                                type="button"
+                                aria-label={`${copy.remove} ${item.symbol}`}
+                                variant="danger"
+                                className="h-[34px] min-h-[34px] w-[34px] px-0"
+                                onClick={() => void handleRemove(item)}
+                                disabled={pendingRemoveId === item.id}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </TerminalButton>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </DenseRows>
+              </ConsoleBoard>
+
+              <div className="min-w-0 border-t border-[color:var(--wolfy-divider)] lg:border-l lg:border-t-0">
+                <ConsoleContextRail
+                  data-testid="watchlist-detail-rail"
+                  className="rounded-none border-0 bg-[var(--wolfy-surface-rail)] px-4 py-4"
+                >
+                  {activeItem ? (
+                    <>
+                      <section className="min-w-0 pb-4">
+                        <div className="flex min-w-0 items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-[11px] text-white/40">{language === 'zh' ? '已选详情' : 'Selected detail'}</p>
+                            <h2 className="truncate text-base font-semibold text-white">{activeItem.symbol}</h2>
+                            <p className="truncate text-xs text-white/58">{activeItem.name || '--'}</p>
+                          </div>
+                          <TerminalChip variant="neutral">{formatMarket(activeItem.market)}</TerminalChip>
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                          <TerminalChip variant="info" className="font-mono text-cyan-100">
+                            {language === 'zh' ? '分数' : 'SCORE'} {formatScore(activeScore)}
+                          </TerminalChip>
+                          <TerminalChip variant={activeScannerStatusLabel === '扫描失败' ? 'danger' : activeScannerStatusLabel === '已验证' || activeScannerStatusLabel === '通过筛选' ? 'info' : 'neutral'}>
+                            {activeScannerStatusLabel}
+                          </TerminalChip>
+                          <TerminalChip variant={activeBacktestStatusLabel === '已回测' ? 'success' : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(activeBacktestStatusLabel) ? 'danger' : ['样本不足', '数据缺失'].includes(activeBacktestStatusLabel) ? 'caution' : 'neutral'}>
+                            {activeBacktestStatusLabel}
+                          </TerminalChip>
+                          <TerminalChip variant="neutral">{formatFreshness(activeLatestTime)}</TerminalChip>
+                        </div>
+                        {activeContextTags.length ? (
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {activeContextTags.map((tag) => (
+                              <TerminalChip key={tag} variant="neutral">{tag}</TerminalChip>
+                            ))}
+                          </div>
+                        ) : null}
+                      </section>
+
+                      <section className="min-w-0 py-4">
+                        <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+                          <h3 className="text-sm font-semibold text-white">{language === 'zh' ? '观察摘要' : 'Observation summary'}</h3>
+                        </div>
+                        <div className="divide-y divide-[color:var(--wolfy-divider)]">
+                          {[
+                            { label: copy.source, value: activeItem.source || '--' },
+                            { label: copy.lastScored, value: formatDateTime(activeItem.lastScoredAt, language) },
+                            { label: copy.added, value: formatDateTime(activeItem.createdAt || activeItem.updatedAt, language) },
+                            { label: copy.scoreFreshness, value: formatFreshness(activeItem.lastScoredAt || activeScanner?.lastScannedAt) },
+                            { label: copy.latestUpdate, value: activeLatestTime ? formatDateTime(activeLatestTime, language) : '--' },
+                          ].map((row) => (
+                            <div key={String(row.label)} className="flex min-w-0 items-start justify-between gap-4 py-2.5 text-[11px]">
+                              <span className="truncate text-white/38">{row.label}</span>
+                              <span className="min-w-0 text-right text-white/68">{row.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+
+                      <section className="min-w-0 py-4">
+                        <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+                          <h3 className="text-sm font-semibold text-white">{copy.intelligence}</h3>
+                        </div>
+                        <div className="flex min-w-0 flex-wrap gap-1.5">
+                          {!activeHasEvidence ? <TerminalChip variant="neutral">{copy.noEvidence}</TerminalChip> : null}
+                          {activeScannerReason ? <TerminalChip variant="neutral" className="max-w-full truncate">{activeScannerReason}</TerminalChip> : null}
+                          {activeScannerFailure && activeScannerStatusLabel === '扫描失败' ? <TerminalChip variant="danger">{activeScannerFailure.label}</TerminalChip> : null}
+                          {typeof activeSimulation?.avgForwardReturnPct === 'number' || typeof activeSimulation?.hitRate === 'number' ? (
+                            <TerminalChip
+                              variant={(activeSimulation?.avgForwardReturnPct ?? 0) >= 0 ? 'success' : 'danger'}
+                              className="font-mono"
+                            >
+                              {copy.historyPrefix} {formatPct(activeSimulation?.avgForwardReturnPct)} · {copy.hitPrefix} {typeof activeSimulation?.hitRate === 'number' ? `${Math.round(activeSimulation.hitRate * 100)}%` : '--'}
+                            </TerminalChip>
+                          ) : null}
+                        </div>
+                        <div className="mt-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs leading-5 text-white/68">
+                          {activeBacktestSummary}
+                        </div>
+                      </section>
+
+                      <section className="min-w-0 pt-4">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <TerminalButton
+                            type="button"
+                            variant="secondary"
+                            onClick={() => void handleAnalyze(activeItem)}
+                            disabled={pendingAnalyzeId === activeItem.id}
+                          >
+                            <Play className="h-3.5 w-3.5" />
+                            {pendingAnalyzeId === activeItem.id ? copy.analyzing : copy.analyze}
+                          </TerminalButton>
+                          <TerminalButton
+                            type="button"
+                            variant="compact"
+                            onClick={() => navigate(buildBacktestPath(activeItem, language))}
+                          >
+                            <BarChart3 className="h-3.5 w-3.5" />
+                            {copy.backtest}
+                          </TerminalButton>
+                          {activeBacktest?.lastResultId != null ? (
+                            <TerminalButton
+                              type="button"
+                              variant="compact"
+                              onClick={() => navigate(buildLocalizedPath(`/backtest/results/${activeBacktest.lastResultId}`, language))}
+                            >
+                              {copy.resultPrefix} {activeBacktest.lastResultId}
+                            </TerminalButton>
+                          ) : null}
+                          <TerminalButton
+                            type="button"
+                            aria-label={`${copy.copySymbol} ${activeItem.symbol}`}
+                            variant="compact"
+                            onClick={() => void handleCopy(activeItem)}
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                            {copy.copySymbol}
+                          </TerminalButton>
+                          <TerminalButton
+                            type="button"
+                            variant="danger"
+                            onClick={() => void handleRemove(activeItem)}
+                            disabled={pendingRemoveId === activeItem.id}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            {copy.remove}
+                          </TerminalButton>
+                        </div>
+                      </section>
+                    </>
+                  ) : null}
+                </ConsoleContextRail>
+              </div>
+            </div>
+          ) : null}
 
           <DenseCommandBar
             data-testid="watchlist-command-bar"
-            className="order-1 md:order-2"
+            className="border-t border-[color:var(--wolfy-divider)]"
             heading={copy.batchBacktestLabel}
             summary={<span data-testid="watchlist-action-scope">{actionScopeLabel} · {language === 'zh' ? '并发 2' : 'concurrency 2'}</span>}
             notice={actionItems.length === 0 ? <TerminalChip variant="caution">{copy.noMatchedSymbols}</TerminalChip> : null}
@@ -1094,251 +1565,6 @@ const WatchlistPage: React.FC = () => {
               </>
             )}
           />
-
-          {filteredItems.length > 0 ? (
-            <DenseTableFrame data-testid="watchlist-candidate-list" className="order-2 md:order-3">
-              <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
-                <thead className="bg-white/[0.03] text-[11px] uppercase tracking-[0.16em] text-white/35">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">{copy.symbol}</th>
-                    <th className="px-4 py-3 font-semibold">{copy.market}</th>
-                    <th className="px-4 py-3 font-semibold">{copy.name}</th>
-                    <th className="px-4 py-3 font-semibold">{copy.score}</th>
-                    <th className="px-4 py-3 font-semibold">{copy.rank}</th>
-                    <th className="px-4 py-3 font-semibold">{copy.lastScored}</th>
-                    <th className="px-4 py-3 font-semibold">{copy.intelligence}</th>
-                    <th className="px-4 py-3 font-semibold">{copy.source}</th>
-                    <th className="px-4 py-3 font-semibold">{copy.context}</th>
-                    <th className="px-4 py-3 font-semibold">{copy.added}</th>
-                    <th className="px-4 py-3 font-semibold">{copy.actions}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {filteredItems.map((item) => {
-                    const scanner = item.intelligence?.scanner;
-                    const strategySimulation = item.intelligence?.strategySimulation;
-                    const backtest = item.intelligence?.backtest;
-                    const score = getScannerScore(item);
-                    const hitRate = strategySimulation?.hitRate;
-                    const avgForward = strategySimulation?.avgForwardReturnPct;
-                    const returnPct = backtest?.totalReturnPct;
-                    const hasAnyEvidence = hasScannerEvidence(item)
-                      || strategySimulation?.status === 'ready'
-                      || hasBacktestEvidence(item);
-                    const batchStatus = batchStatuses[item.symbol];
-                    const batchFailure = batchFailures[item.symbol];
-                    const scannerFailure = item.scoreError || scanner?.reason
-                      ? sanitizeFailureReason(item.scoreError || scanner?.reason || '', '扫描失败')
-                      : null;
-                    const scannerReasonLabel = formatScannerReason(scanner?.reason, language);
-                    const latestTime = getLatestIntelligenceTime(item);
-                    const scannerStatusLabel = formatScannerStatus(item);
-                    const backtestStatusLabel = formatBacktestStatus(item, batchFailure);
-                    const scoreFreshnessVariant = item.scoreStatus === 'fresh'
-                      ? 'success'
-                      : item.scoreStatus === 'stale'
-                        ? 'caution'
-                        : 'neutral';
-                    const scannerStatusVariant = scannerStatusLabel === '扫描失败'
-                      ? 'danger'
-                      : scannerStatusLabel === '已验证' || scannerStatusLabel === '通过筛选'
-                        ? 'info'
-                        : 'neutral';
-                    const backtestStatusVariant = backtestStatusLabel === '已回测'
-                      ? 'success'
-                      : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(backtestStatusLabel)
-                        ? 'danger'
-                        : ['样本不足', '数据缺失'].includes(backtestStatusLabel)
-                          ? 'caution'
-                          : 'neutral';
-                    const batchDisplayStatus = batchStatus
-                      ? describeDisplayStatus(
-                          batchStatus === 'completed'
-                            ? 'success'
-                            : batchStatus === 'failed'
-                              ? 'failed'
-                              : batchStatus === 'running'
-                                ? 'info'
-                                : batchStatus === 'skipped'
-                                  ? 'disabled'
-                                  : 'pending',
-                          batchStatus === 'running' ? '运行中' : batchStatus === 'completed' ? '完成' : batchStatus === 'failed' ? '失败' : batchStatus === 'skipped' ? '已跳过' : '等待',
-                          { language },
-                        )
-                      : null;
-                    return (
-                      <tr key={item.id} data-testid={`watchlist-row-${item.symbol}`} className="bg-white/[0.01] text-white/70">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              className={`${ROW_SELECTION_BUTTON_CLASS} ${
-                                selectedIds.has(item.id)
-                                  ? 'border-cyan-300 bg-cyan-300/30 shadow-[0_0_10px_rgba(103,232,249,0.25)]'
-                                  : 'border-white/15 bg-white/[0.03] hover:border-white/30'
-                              }`}
-                              role="checkbox"
-                              aria-checked={selectedIds.has(item.id)}
-                              aria-label={`${language === 'zh' ? '选择' : 'Select'} ${item.symbol}`}
-                              onClick={() => toggleSelected(item)}
-                            >
-                              <span
-                                aria-hidden="true"
-                                className={`h-3 w-3 rounded-sm border transition ${
-                                  selectedIds.has(item.id)
-                                    ? 'border-cyan-100 bg-cyan-100 shadow-[0_0_8px_rgba(103,232,249,0.35)]'
-                                    : 'border-white/20 bg-transparent'
-                                }`}
-                              />
-                            </button>
-                            <Clipboard className="h-4 w-4 text-white/30" />
-                            <span className="font-semibold text-white">{item.symbol}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">{formatMarket(item.market)}</td>
-                        <td className="px-4 py-3">{item.name || '--'}</td>
-                        <td className="px-4 py-3">
-                          <TerminalChip variant="info" className="min-w-[3.5rem] justify-center font-mono font-semibold text-cyan-100">
-                            {formatScore(score)}
-                          </TerminalChip>
-                        </td>
-                        <td className="px-4 py-3">{item.scannerRank ? `#${item.scannerRank}` : '--'}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex max-w-[180px] flex-col gap-1">
-                            <span className="truncate font-mono text-xs text-white/60">{formatDateTime(item.lastScoredAt, language)}</span>
-                            <TerminalChip variant={scoreFreshnessVariant} className="w-fit uppercase tracking-widest">
-                              {formatFreshness(item.lastScoredAt || scanner?.lastScannedAt)}
-                            </TerminalChip>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex max-w-[420px] flex-wrap items-center gap-1.5 text-[11px]">
-                            {!hasAnyEvidence ? (
-                              <>
-                                <TerminalChip variant="neutral">{copy.noEvidence}</TerminalChip>
-                                <TerminalNotice variant="caution" className="px-2.5 py-1 text-[11px] leading-5" data-testid={`watchlist-no-evidence-note-${item.symbol}`}>
-                                  {language === 'zh' ? '可刷新情报或返回扫描器补齐证据' : 'Refresh intelligence or return to Scanner for evidence'}
-                                </TerminalNotice>
-                              </>
-                            ) : null}
-                            <TerminalChip variant={scannerStatusVariant}>{scannerStatusLabel}</TerminalChip>
-                            {scannerStatusLabel === '扫描失败' && scannerFailure ? (
-                              <TerminalChip variant="danger">{scannerFailure.label}</TerminalChip>
-                            ) : null}
-                            {score !== null ? (
-                              <TerminalChip variant="info" className="font-mono text-cyan-100">
-                                {language === 'zh' ? '分数' : 'SCORE'} {formatScore(score)}
-                              </TerminalChip>
-                            ) : null}
-                            {(scanner?.lastRank ?? item.scannerRank) ? (
-                              <TerminalChip variant="neutral">
-                                {language === 'zh' ? '排名' : 'Rank'} #{scanner?.lastRank ?? item.scannerRank}
-                              </TerminalChip>
-                            ) : null}
-                            {scannerReasonLabel ? (
-                              <TerminalChip variant="neutral" className="max-w-[180px] truncate">
-                                {scannerReasonLabel}
-                              </TerminalChip>
-                            ) : null}
-                            <TerminalChip variant="neutral">{formatFreshness(latestTime)}</TerminalChip>
-                            {typeof avgForward === 'number' || typeof hitRate === 'number' ? (
-                              <TerminalChip
-                                variant={(avgForward ?? 0) >= 0 ? 'success' : 'danger'}
-                                className="font-mono"
-                              >
-                                {copy.historyPrefix} {formatPct(avgForward)} · {copy.hitPrefix} {typeof hitRate === 'number' ? `${Math.round(hitRate * 100)}%` : '--'}
-                              </TerminalChip>
-                            ) : null}
-                            <TerminalChip variant={backtestStatusVariant}>{backtestStatusLabel}</TerminalChip>
-                            {hasBacktestMetrics(item) ? (
-                              <>
-                                <TerminalChip
-                                  variant={(returnPct ?? 0) >= 0 ? 'success' : 'danger'}
-                                  className="font-mono"
-                                >
-                                  {language === 'zh' ? '收益' : 'Return'} {formatPct(returnPct)} · {language === 'zh' ? '回撤' : 'DD'} {formatPct(backtest?.maxDrawdownPct)} · Sharpe {formatRatio(backtest?.sharpe)} · {language === 'zh' ? '交易' : 'Trades'} {backtest?.tradeCount ?? '--'}
-                                </TerminalChip>
-                                {backtest?.lastResultId != null ? (
-                                  <TerminalButton
-                                    type="button"
-                                    variant="compact"
-                                    className="min-h-6 px-2 py-0.5 font-mono text-[11px] text-white/55"
-                                    onClick={() => navigate(buildLocalizedPath(`/backtest/results/${backtest.lastResultId}`, language))}
-                                  >
-                                    {copy.resultPrefix} {backtest.lastResultId}
-                                  </TerminalButton>
-                                ) : null}
-                              </>
-                            ) : null}
-                            {batchFailure?.detail ? (
-                              <TerminalChip variant="caution" className="max-w-[180px] truncate">
-                                {language === 'zh' ? '错误详情已隐藏' : 'Error details hidden'}
-                              </TerminalChip>
-                            ) : null}
-                            {batchDisplayStatus ? (
-                              <TerminalChip variant={terminalChipVariant(batchDisplayStatus.tone)} className="font-mono">
-                                {batchDisplayStatus.label}
-                              </TerminalChip>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">{item.source || '--'}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex max-w-[220px] flex-wrap gap-1.5">
-                            {item.themeId ? <TerminalChip variant="neutral">{item.themeId}</TerminalChip> : null}
-                            {item.universeType ? <TerminalChip variant="neutral">{item.universeType}</TerminalChip> : null}
-                            {!item.themeId && !item.universeType ? '--' : null}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">{formatDateTime(item.createdAt || item.updatedAt, language)}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <TerminalButton
-                              type="button"
-                              variant="compact"
-                              onClick={() => void handleAnalyze(item)}
-                              disabled={pendingAnalyzeId === item.id}
-                            >
-                              <Play className="h-3.5 w-3.5" />
-                              {pendingAnalyzeId === item.id ? copy.analyzing : copy.analyze}
-                            </TerminalButton>
-                            <TerminalButton
-                              type="button"
-                              variant="compact"
-                              onClick={() => navigate(buildBacktestPath(item, language))}
-                            >
-                              <BarChart3 className="h-3.5 w-3.5" />
-                              {copy.backtest}
-                            </TerminalButton>
-                            <TerminalButton
-                              type="button"
-                              aria-label={`${copy.copySymbol} ${item.symbol}`}
-                              title={copiedId === item.id ? copy.copied : copy.copySymbol}
-                              variant="compact"
-                              className="h-[34px] min-h-[34px] w-[34px] px-0 text-white/55"
-                              onClick={() => void handleCopy(item)}
-                            >
-                              <Copy className="h-3.5 w-3.5" />
-                            </TerminalButton>
-                            <TerminalButton
-                              type="button"
-                              aria-label={`${copy.remove} ${item.symbol}`}
-                              variant="danger"
-                              className="h-[34px] min-h-[34px] w-[34px] px-0"
-                              onClick={() => void handleRemove(item)}
-                              disabled={pendingRemoveId === item.id}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </TerminalButton>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </DenseTableFrame>
-          ) : null}
         </DenseTableShell>
 
         <DenseSecondaryDisclosure
