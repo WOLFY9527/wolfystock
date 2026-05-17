@@ -6,9 +6,16 @@ import { watchlistApi } from '../api/watchlist';
 import { portfolioApi } from '../api/portfolio';
 import { scannerApi } from '../api/scanner';
 import { backtestApi } from '../api/backtest';
+import {
+  ConsoleBoard,
+  ConsoleContextRail,
+  ConsoleDisclosure,
+  ConsoleStatusStrip,
+  WolfyCommandBar,
+  WolfyShellSurface,
+} from '../components/linear';
 import { ApiErrorAlert, ConfirmDialog, Drawer, TypewriterText } from '../components/common';
 import { GuidedDisclosure } from '../components/guidance';
-import { CARD_BUTTON_CLASS } from '../components/home-bento';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import type { SkillInfo } from '../api/agent';
 import {
@@ -407,17 +414,20 @@ function SeamlessSegmentedControl({
   dataTestId?: string;
 }) {
   return (
-    <div data-testid={dataTestId} className="flex w-full rounded-lg bg-white/[0.03] p-1">
+    <div
+      data-testid={dataTestId}
+      className="flex w-full rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-1"
+    >
       {CHAT_CONSOLE_TOGGLE_OPTIONS.map((option) => {
         const active = option.value === value;
         return (
           <button
             key={option.value}
             type="button"
-            className={`appearance-none flex-1 rounded-md border-0 px-3 py-2 text-center text-sm font-medium transition-all duration-200 ${
+            className={`appearance-none flex-1 rounded-md border-0 px-3 py-2 text-center text-sm font-medium transition-colors ${
               active
-                ? 'bg-white/10 text-white shadow-sm'
-                : 'bg-transparent text-white/40 hover:text-white/72'
+                ? 'bg-[var(--wolfy-surface-console)] text-[color:var(--wolfy-text-primary)]'
+                : 'bg-transparent text-[color:var(--wolfy-text-muted)] hover:text-[color:var(--wolfy-text-secondary)]'
             }`}
             aria-pressed={active}
             onClick={() => onChange(option.value)}
@@ -732,7 +742,7 @@ const ChatPage: React.FC = () => {
       window.clearTimeout(timer);
     };
   }, [evidenceSymbolKey, smartRoute.market]);
-  const engineSwitcherLabel = language === 'en' ? 'Research context' : '研究上下文';
+  const contextPaneSummary = language === 'en' ? 'Source, lenses, and evidence' : '来源、视角与证据';
   const composerDisclaimer = language === 'en'
     ? 'For research only. Not investment advice.'
     : '仅供研究参考，不构成投资建议。';
@@ -1154,7 +1164,7 @@ const ChatPage: React.FC = () => {
         onClick={startNewChatDesktopButton.onClick}
         onPointerUp={startNewChatDesktopButton.onPointerUp}
         aria-label={chat('newChatTitle')}
-        className={`flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-sm font-medium text-white transition-colors hover:bg-white/[0.08] ${
+        className={`flex items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-sm font-medium text-[color:var(--wolfy-text-primary)] transition-colors hover:border-[color:var(--wolfy-divider)] ${
           compact ? 'h-10 px-3' : 'px-4 py-2.5'
         }`}
       >
@@ -1165,14 +1175,14 @@ const ChatPage: React.FC = () => {
           <button
             type="button"
             onClick={handleExportSession}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-secondary-text transition-colors hover:bg-white/[0.08] hover:text-foreground"
+            className="flex h-10 w-10 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)]"
             title={chat('exportTitle')}
           >
             <Download className="h-4 w-4" />
           </button>
           <button
             type="button"
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-secondary-text transition-colors hover:bg-white/[0.08] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-10 w-10 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => {
               void handleNotifySession();
             }}
@@ -1180,7 +1190,7 @@ const ChatPage: React.FC = () => {
             title={chat('notifyTitle')}
           >
             {sending ? (
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/25 border-t-white" />
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-[color:var(--wolfy-divider)] border-t-[color:var(--wolfy-text-primary)]" />
             ) : (
               <SendHorizontal className="h-4 w-4" />
             )}
@@ -1208,17 +1218,17 @@ const ChatPage: React.FC = () => {
         className="flex flex-1 min-h-0 flex-col gap-1 overflow-y-auto no-scrollbar"
       >
         {sessionsLoading ? (
-          <div className="rounded-2xl border border-white/6 bg-white/[0.02] px-3 py-4 text-xs text-secondary-text">
+          <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-4 text-xs text-[color:var(--wolfy-text-muted)]">
             {chat('loadingSessions')}
           </div>
         ) : sessions.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-3 py-4 text-xs text-secondary-text">
+          <div className="rounded-lg border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-4 text-xs text-[color:var(--wolfy-text-muted)]">
             {chat('emptySessions')}
           </div>
         ) : (
           groupedSessions.map(([bucketLabel, bucketSessions]) => (
             <section key={bucketLabel} className="flex flex-col gap-1.5 pb-3">
-              <p className="px-2 text-[10px] uppercase tracking-[0.24em] text-white/30">{bucketLabel}</p>
+              <p className="px-2 text-[11px] text-[color:var(--wolfy-text-muted)]">{bucketLabel}</p>
               {bucketSessions.map((s) => (
                 <div
                   key={s.session_id}
@@ -1231,19 +1241,19 @@ const ChatPage: React.FC = () => {
                       handleSwitchSession(s.session_id);
                     }
                   }}
-                  className={`group rounded-2xl border px-3 py-3 transition-all ${
+                  className={`group rounded-lg border px-3 py-3 transition-colors ${
                     s.session_id === sessionId
-                      ? 'border-white/14 bg-white/[0.07]'
-                      : 'border-white/6 bg-white/[0.02] hover:bg-white/[0.05]'
+                      ? 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-console)]'
+                      : 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] hover:border-[color:var(--wolfy-divider)]'
                   }`}
                   aria-label={chat('switchToConversation', { title: s.title })}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-white/88">{s.title}</p>
-                      <div className="mt-2 flex items-center gap-2 text-[11px] text-white/36">
+                      <p className="truncate text-sm font-medium text-[color:var(--wolfy-text-primary)]">{s.title}</p>
+                      <div className="mt-2 flex items-center gap-2 text-[11px] text-[color:var(--wolfy-text-muted)]">
                         <span>{chat('messageCount', { count: s.message_count })}</span>
-                        {s.last_active ? <span className="h-1 w-1 rounded-full bg-white/14" /> : null}
+                        {s.last_active ? <span className="h-1 w-1 rounded-full bg-[color:var(--wolfy-divider)]" /> : null}
                         {s.last_active ? (
                           <span>
                             {new Date(s.last_active).toLocaleDateString(language === 'en' ? 'en-US' : 'zh-CN', {
@@ -1256,7 +1266,7 @@ const ChatPage: React.FC = () => {
                     </div>
                     <button
                       type="button"
-                      className="rounded-lg p-1 text-white/28 opacity-0 transition-all hover:bg-white/10 hover:text-danger group-hover:opacity-100"
+                      className="rounded-md p-1 text-[color:var(--wolfy-text-muted)] opacity-0 transition-colors hover:bg-[var(--wolfy-surface-console)] hover:text-[color:var(--wolfy-market-down)] group-hover:opacity-100"
                       onClick={(e) => {
                         e.stopPropagation();
                         setDeleteConfirmId(s.session_id);
@@ -1288,12 +1298,12 @@ const ChatPage: React.FC = () => {
   );
 
   const renderDataEvidencePanel = (testId = 'chat-evidence-panel') => (
-    <section data-testid={testId} className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
+    <section data-testid={testId} className="flex flex-col gap-0">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+        <p className="text-[11px] text-[color:var(--wolfy-text-secondary)]">
           {language === 'en' ? 'Data Evidence' : '数据证据'}
         </p>
-        <p className="text-[10px] font-mono uppercase text-white/30">
+        <p className="text-[10px] font-mono uppercase text-[color:var(--wolfy-text-muted)]">
           {evidenceLoading
             ? (language === 'en' ? 'checking' : '检查中')
             : smartRoute.symbols.length
@@ -1302,27 +1312,29 @@ const ChatPage: React.FC = () => {
         </p>
       </div>
       {smartRoute.symbols.length === 0 ? (
-        <p className="rounded-lg border border-white/5 bg-black/20 px-2 py-2 text-xs text-white/42">先输入具体标的</p>
+        <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-3 py-2 text-xs text-[color:var(--wolfy-text-muted)]">
+          先输入具体标的
+        </div>
       ) : null}
-      <div className="grid grid-cols-2 gap-1.5">
+      <div className="flex flex-col divide-y divide-[color:var(--wolfy-divider)] rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]">
         {evidenceItems.map((item) => (
-          <div key={item.key} className="min-w-0 rounded-lg border border-white/5 bg-black/20 px-2 py-1.5">
+          <div key={item.key} className="min-w-0 px-3 py-2">
             <div className="flex min-w-0 items-center justify-between gap-2">
-              <span className="truncate text-xs text-white/64">{item.label}</span>
+              <span className="truncate text-xs text-[color:var(--wolfy-text-secondary)]">{item.label}</span>
               <span className={`font-mono text-[10px] uppercase ${
                 item.status === 'available'
                   || item.status === 'used'
-                  ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]'
+                  ? 'text-[color:var(--wolfy-market-up)]'
                   : item.status === 'partial' || item.status === 'stale' || item.status === 'fallback'
-                    ? 'text-amber-300 drop-shadow-[0_0_8px_rgba(252,211,77,0.35)]'
-                  : item.status === 'missing' || item.status === 'error'
-                    ? 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'
-                    : 'text-white/32'
+                    ? 'text-amber-300'
+                    : item.status === 'missing' || item.status === 'error'
+                    ? 'text-[color:var(--wolfy-market-down)]'
+                    : 'text-[color:var(--wolfy-text-muted)]'
               }`}>
                 {formatDataEvidenceStatus(item.status)}
               </span>
             </div>
-            <p className="mt-1 truncate text-[10px] text-white/30">{item.summary || (language === 'en' ? 'Data readiness noted' : '数据状态已标注')}</p>
+            <p className="mt-1 truncate text-[10px] text-[color:var(--wolfy-text-muted)]">{item.summary || (language === 'en' ? 'Data readiness noted' : '数据状态已标注')}</p>
           </div>
         ))}
       </div>
@@ -1341,21 +1353,24 @@ const ChatPage: React.FC = () => {
     const hasPosition = portfolioEvidence?.hasPosition === true;
     const hasBacktest = Boolean(backtestEvidence?.resultId);
     return (
-      <section data-testid="chat-quick-actions" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
-        <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
+      <section
+        data-testid="chat-quick-actions"
+        className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3"
+      >
+        <p className="mb-2 text-[11px] text-[color:var(--wolfy-text-secondary)]">
           {language === 'en' ? 'Quick Actions' : '快捷操作'}
         </p>
-        <div className="flex min-w-0 flex-wrap gap-2">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2">
           <a
             href={`/backtest?symbol=${encodedSymbol}&market=${encodedMarket}&source=chat`}
-            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/10"
+            className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-3 py-2 text-xs text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)]"
             aria-label={`回测 ${primarySymbol}`}
           >
             {hasBacktest ? '查看最近回测' : '运行回测'}
           </a>
           <button
             type="button"
-            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-3 py-2 text-left text-xs text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => {
               if (isInWatchlist) return;
               void handleAddWatchlist(primarySymbol, symbolMarket);
@@ -1367,28 +1382,28 @@ const ChatPage: React.FC = () => {
           </button>
           <a
             href={`/portfolio?symbol=${encodedSymbol}`}
-            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/10"
+            className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-3 py-2 text-xs text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)]"
             aria-label={`查看持仓 ${primarySymbol}`}
           >
             {hasPosition ? '查看持仓' : '未持仓'}
           </a>
           <a
             href={`/scanner?symbol=${encodedSymbol}&market=${encodedMarket}`}
-            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/10"
+            className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-3 py-2 text-xs text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)]"
             aria-label={`查看扫描器证据 ${primarySymbol}`}
           >
             扫描器证据
           </a>
           <a
             href={`/?symbol=${encodedSymbol}`}
-            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/10"
+            className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-3 py-2 text-xs text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)]"
             aria-label={`打开分析报告 ${primarySymbol}`}
           >
             分析报告
           </a>
         </div>
         {watchlistAction?.symbol === primarySymbol ? (
-          <p className={`mt-2 text-xs ${watchlistAction.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
+          <p className={`mt-2 text-xs ${watchlistAction.type === 'success' ? 'text-[color:var(--wolfy-market-up)]' : 'text-[color:var(--wolfy-market-down)]'}`}>
             {watchlistAction.message}
           </p>
         ) : null}
@@ -1409,9 +1424,9 @@ const ChatPage: React.FC = () => {
     return (
       <section
         data-testid={testId}
-        className="rounded-2xl border border-white/8 bg-white/[0.025] p-3 text-left"
+        className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-left"
       >
-        <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+        <p className="text-[11px] text-[color:var(--wolfy-text-secondary)]">
           {language === 'en' ? 'Research context' : '研究上下文'}
         </p>
         <div className="mt-3 grid gap-2">
@@ -1427,9 +1442,9 @@ const ChatPage: React.FC = () => {
                 : (language === 'en' ? 'Checks data during analysis' : '分析时检查数据'),
             },
           ].map((item) => (
-            <div key={item.label} className="rounded-xl border border-white/5 bg-black/20 px-3 py-2">
-              <p className="text-[10px] text-white/34">{item.label}</p>
-              <p className="mt-1 truncate text-sm font-medium text-white/72">{item.value}</p>
+            <div key={item.label} className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-3 py-2">
+              <p className="text-[10px] text-[color:var(--wolfy-text-muted)]">{item.label}</p>
+              <p className="mt-1 truncate text-sm font-medium text-[color:var(--wolfy-text-primary)]">{item.value}</p>
             </div>
           ))}
         </div>
@@ -1439,21 +1454,25 @@ const ChatPage: React.FC = () => {
 
   const quoteEvidence = evidenceItems.find((item) => item.key === 'quote');
   const renderSmartRouteStrip = () => (
-    <div data-testid="chat-smart-route-strip" className="mb-3 rounded-2xl border border-white/8 bg-black/35 px-3 py-2 text-xs text-white/58">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-          {language === 'en' ? 'Smart Route' : '智能路由'}
-        </span>
-        <span className="font-mono text-white/80">{formatRouteLabel(smartRoute)}</span>
-        {quoteEvidence?.price != null ? (
-          <span className="rounded-md border border-emerald-400/20 bg-emerald-400/10 px-1.5 py-0.5 font-mono text-[10px] text-emerald-300">
-            {quoteEvidence.price}{quoteEvidence.changePct != null ? ` · ${quoteEvidence.changePct}%` : ''}
-          </span>
-        ) : null}
-      </div>
-      {smartRoute.symbols.length > 0 ? (
-        <p className="mt-1 truncate text-white/42">推荐视角：{smartRoute.recommendedLenses.join(' / ')}</p>
-      ) : null}
+    <div data-testid="chat-smart-route-strip">
+      <ConsoleStatusStrip
+        items={[
+          {
+            label: language === 'en' ? 'Route' : '智能路由',
+            value: formatRouteLabel(smartRoute),
+          },
+          {
+            label: language === 'en' ? 'Lens' : '推荐视角',
+            value: smartRoute.symbols.length > 0 ? smartRoute.recommendedLenses.join(' / ') : selectedLens.label,
+          },
+          {
+            label: language === 'en' ? 'Price' : '价格',
+            value: quoteEvidence?.price != null
+              ? `${quoteEvidence.price}${quoteEvidence.changePct != null ? ` · ${quoteEvidence.changePct}%` : ''}`
+              : (language === 'en' ? 'Waiting' : '等待标的'),
+          },
+        ]}
+      />
     </div>
   );
 
@@ -1464,10 +1483,10 @@ const ChatPage: React.FC = () => {
       <button
         key={lens.id}
         type="button"
-        className={`min-w-0 rounded-xl border px-3 py-2 text-left transition-all ${
+        className={`min-w-0 rounded-md border px-3 py-2 text-left transition-colors ${
           isActive
-            ? 'border-blue-400/40 bg-blue-500/10 text-white shadow-[0_0_15px_rgba(59,130,246,0.16)]'
-            : 'border-white/8 bg-white/[0.025] text-white/58 hover:bg-white/[0.06] hover:text-white/86'
+            ? 'border-[color:var(--wolfy-accent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_12%,transparent)] text-[color:var(--wolfy-text-primary)]'
+            : 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)]'
         } disabled:cursor-not-allowed disabled:opacity-40`}
         onClick={() => handleSelectLens(lens)}
         disabled={!isAvailable}
@@ -1477,7 +1496,7 @@ const ChatPage: React.FC = () => {
       >
         <span className="block truncate text-xs font-semibold">{lens.label}</span>
         {isActive || showSkillDesc === lens.id ? (
-          <span className="mt-1 block line-clamp-2 text-[10px] leading-relaxed text-white/40">{lens.description}</span>
+          <span className="mt-1 block line-clamp-2 text-[10px] leading-relaxed text-[color:var(--wolfy-text-muted)]">{lens.description}</span>
         ) : null}
       </button>
     );
@@ -1488,10 +1507,13 @@ const ChatPage: React.FC = () => {
     const secondaryLenses = [...PRIMARY_ANALYSIS_LENSES.slice(4), ...ADVANCED_ANALYSIS_LENSES];
     return (
       <div data-testid={testId} className="flex flex-col gap-3">
-        <section data-testid="chat-lens-section" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
+        <section
+          data-testid="chat-lens-section"
+          className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3"
+        >
           <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">分析视角</p>
-            <p className="truncate text-[10px] text-white/30">{selectedLens.label}</p>
+            <p className="text-[11px] text-[color:var(--wolfy-text-secondary)]">分析视角</p>
+            <p className="truncate text-[10px] text-[color:var(--wolfy-text-muted)]">{selectedLens.label}</p>
           </div>
           <div data-testid="chat-strategy-grid" className="grid grid-cols-2 gap-2">
             {primaryVisibleLenses.map(renderLensButton)}
@@ -1511,25 +1533,27 @@ const ChatPage: React.FC = () => {
           />
         </section>
 
-        <section data-testid="chat-data-context-section" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40">数据上下文</p>
+        <section
+          data-testid="chat-data-context-section"
+          className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3"
+        >
+          <p className="mb-2 text-[11px] text-[color:var(--wolfy-text-secondary)]">数据上下文</p>
           <div className="flex flex-wrap gap-1.5">
             {evidenceItems.slice(0, 5).map((item) => (
-              <span key={item.key} className="rounded-full border border-white/8 bg-black/25 px-2 py-1 text-[10px] text-white/52">
-                {item.label} · <span className="text-white/36">{formatDataEvidenceStatus(item.status)}</span>
+              <span key={item.key} className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-2 py-1 text-[10px] text-[color:var(--wolfy-text-secondary)]">
+                {item.label} · <span className="text-[color:var(--wolfy-text-muted)]">{formatDataEvidenceStatus(item.status)}</span>
               </span>
             ))}
           </div>
         </section>
 
-        <GuidedDisclosure
+        <ConsoleDisclosure
           title={language === 'en' ? 'Evidence detail' : '证据明细'}
           summary={language === 'en' ? 'Open only when you need source-by-source readiness.' : '需要逐项查看证据状态时再展开。'}
-          beginner={language === 'en'
-            ? 'Missing data reduces confidence and should be called out in the response.'
-            : '缺失数据会降低可信度，并应在回答中明确说明。'}
-          professional={renderDataEvidencePanel()}
-        />
+          className="bg-[var(--wolfy-surface-input)]"
+        >
+          {renderDataEvidencePanel()}
+        </ConsoleDisclosure>
         <div className="hidden lg:block">
           {renderQuickActions()}
         </div>
@@ -1545,7 +1569,7 @@ const ChatPage: React.FC = () => {
         onClick={startNewChatMobileButton.onClick}
         onPointerUp={startNewChatMobileButton.onPointerUp}
         aria-label={chat('newChatTitle')}
-        className="flex h-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm font-medium text-white transition-colors hover:bg-white/[0.08]"
+        className="flex h-10 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 text-sm font-medium text-[color:var(--wolfy-text-primary)] transition-colors hover:border-[color:var(--wolfy-divider)]"
       >
         + {language === 'en' ? 'New chat' : '新对话'}
       </button>
@@ -1555,8 +1579,8 @@ const ChatPage: React.FC = () => {
         onClick={openConsoleButton.onClick}
         onPointerUp={openConsoleButton.onPointerUp}
         aria-label={language === 'en' ? 'Open research context' : '打开研究上下文'}
-        data-testid="chat-bento-brief-trigger"
-        className={CARD_BUTTON_CLASS}
+        data-testid="chat-mobile-context-trigger"
+        className="inline-flex h-10 items-center gap-2 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)]"
         title={language === 'en' ? 'Open context' : '打开研究上下文'}
       >
         <PanelRightOpen className="h-4 w-4" />
@@ -1588,54 +1612,60 @@ const ChatPage: React.FC = () => {
         />
       ) : null}
 
-      <div className="mx-auto w-full max-w-4xl">
+      <div className="w-full">
         {renderSmartRouteStrip()}
         <div className="mb-3 lg:hidden">
           {renderQuickActions()}
         </div>
         <div
           data-testid="chat-composer-omnibar"
-          className="relative mx-auto w-full max-w-4xl rounded-3xl border border-white/[0.05] bg-white/[0.04] p-2 shadow-2xl backdrop-blur-2xl"
+          className="relative w-full"
         >
-          <textarea
-            ref={composerTextareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={chat('inputPlaceholder')}
-            disabled={loading}
-            rows={1}
-            className="min-h-[56px] max-h-48 w-full resize-none border-none bg-transparent px-4 py-3 pr-16 text-sm text-white outline-none ring-0 placeholder:text-white/30 disabled:cursor-not-allowed disabled:opacity-50"
-            onInput={(e) => {
-              const textarea = e.target as HTMLTextAreaElement;
-              textarea.style.height = 'auto';
-              textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
-            }}
-          />
-          {isGenerating ? (
-            <button
-              type="button"
-              onClick={handleStopGeneration}
-              className="absolute bottom-2.5 right-2.5 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-all active:scale-95 hover:bg-white/20"
-              aria-label={chat('stopGeneration')}
-              title={chat('stopGeneration')}
-            >
-              <div className="h-3 w-3 rounded-sm bg-current transition-colors" />
-            </button>
-          ) : (
-            <button
-              ref={sendMessageButton.ref}
-              type="button"
-              onClick={sendMessageButton.onClick}
-              onPointerUp={sendMessageButton.onPointerUp}
-              disabled={!input.trim() || loading}
-              className="absolute bottom-2.5 right-2.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black transition-all active:scale-95 hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label={chat('notifyAction')}
-              title={chat('notifyAction')}
-            >
-              <ArrowUp className="h-4 w-4" />
-            </button>
-          )}
+          <WolfyCommandBar
+            className="items-end gap-3 rounded-lg px-3 py-3"
+            trailing={isGenerating ? (
+              <button
+                type="button"
+                onClick={handleStopGeneration}
+                className="flex h-10 w-10 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] text-[color:var(--wolfy-text-primary)] transition-colors hover:border-[color:var(--wolfy-divider)]"
+                aria-label={chat('stopGeneration')}
+                title={chat('stopGeneration')}
+              >
+                <div className="h-3 w-3 rounded-sm bg-current transition-colors" />
+              </button>
+            ) : (
+              <button
+                ref={sendMessageButton.ref}
+                type="button"
+                onClick={sendMessageButton.onClick}
+                onPointerUp={sendMessageButton.onPointerUp}
+                disabled={!input.trim() || loading}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[color:var(--wolfy-accent)] bg-[var(--wolfy-accent)] text-[#f7f8ff] transition-colors hover:bg-[#6f79dc] disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label={chat('notifyAction')}
+                title={chat('notifyAction')}
+              >
+                <ArrowUp className="h-4 w-4" />
+              </button>
+            )}
+          >
+            <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]">
+              <textarea
+                ref={composerTextareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={chat('inputPlaceholder')}
+                disabled={loading}
+                rows={1}
+                className="min-h-[56px] max-h-48 w-full resize-none border-none bg-transparent px-4 py-3 text-sm text-[color:var(--wolfy-text-primary)] outline-none ring-0 placeholder:text-[color:var(--wolfy-text-muted)] disabled:cursor-not-allowed disabled:opacity-50"
+                onInput={(e) => {
+                  const textarea = e.target as HTMLTextAreaElement;
+                  textarea.style.height = 'auto';
+                  textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+                }}
+              />
+            </div>
+          </WolfyCommandBar>
         </div>
         <p className="mt-3 text-center text-[10px] text-white/30">
           {composerDisclaimer}
@@ -1646,7 +1676,12 @@ const ChatPage: React.FC = () => {
             className="mt-3 flex flex-wrap justify-center gap-2"
           >
             {quickQuestions.slice(0, 5).map((q) => (
-              <button className="inline-flex max-w-full items-center justify-center rounded-full border border-white/6 bg-white/[0.025] px-3 py-1.5 text-xs text-white/58 transition-all hover:border-white/12 hover:bg-white/[0.05] hover:text-white/78" key={q.id} type="button" onClick={() => handleQuickQuestion(q)}>
+              <button
+                className="inline-flex max-w-full items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)]"
+                key={q.id}
+                type="button"
+                onClick={() => handleQuickQuestion(q)}
+              >
                 <span className="truncate">{chat(`quickQuestions.${q.id}`)}</span>
               </button>
             ))}
@@ -1665,305 +1700,294 @@ const ChatPage: React.FC = () => {
 
   return (
     <div
-      data-testid="chat-bento-page"
-      data-bento-surface="true"
-      className="gemini-bento-page bento-surface-root gemini-bento-page--chat flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
+      data-testid="chat-research-workspace"
+      data-route-surface="ResearchConsole"
+      className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-[var(--wolfy-canvas)] text-[color:var(--wolfy-text-primary)]"
     >
-      <div
-        data-testid="chat-workspace"
-        className="flex h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden bg-transparent"
-      >
-        <ConfirmDialog
-          isOpen={Boolean(deleteConfirmId)}
-          title={chat('deleteConversationTitle')}
-          message={chat('deleteConversationMessage')}
-          confirmText={chat('deleteConversationConfirm')}
-          cancelText={chat('deleteConversationCancel')}
-          isDanger
-          onConfirm={confirmDelete}
-          onCancel={() => setDeleteConfirmId(null)}
-        />
+      <ConfirmDialog
+        isOpen={Boolean(deleteConfirmId)}
+        title={chat('deleteConversationTitle')}
+        message={chat('deleteConversationMessage')}
+        confirmText={chat('deleteConversationConfirm')}
+        cancelText={chat('deleteConversationCancel')}
+        isDanger
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirmId(null)}
+      />
+
+      <div data-testid="chat-workspace" className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col gap-3 overflow-hidden">
+        <WolfyShellSurface
+          as="section"
+          variant="console"
+          padding="sm"
+          data-testid="chat-workspace-command"
+          className="shrink-0"
+        >
+          <WolfyCommandBar trailing={renderConsoleActions(true)} className="min-h-12 rounded-lg bg-[var(--wolfy-surface-input)] px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{chatConsoleTitle}</p>
+              <h1 className="mt-1 truncate text-lg font-semibold text-[color:var(--wolfy-text-primary)]">{chat('title')}</h1>
+            </div>
+          </WolfyCommandBar>
+        </WolfyShellSurface>
 
         <div
-          data-testid="chat-main-shell"
-          className="flex h-full min-h-0 flex-1 min-w-0 overflow-hidden"
+          data-testid="chat-research-shell"
+          className="grid h-full min-h-0 flex-1 min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px]"
         >
-          <section
-            data-testid="chat-main-panel"
-            className="relative flex h-full min-h-0 flex-1 min-w-0 flex-col lg:border-r lg:border-white/5"
-          >
-            {showEmptyState ? (
-              <main
-                id="chat-scroll-container"
-                data-testid="chat-main"
-                className="flex h-full flex-1 flex-col overflow-hidden"
+          <div data-testid="chat-main-shell" className="flex h-full min-h-0 flex-1 min-w-0 overflow-hidden">
+            <section
+              data-testid="chat-main-panel"
+              className="relative flex h-full min-h-0 flex-1 min-w-0 flex-col"
+            >
+              <ConsoleBoard
+                data-testid="chat-conversation-board"
+                className="flex h-full min-h-0 flex-1 min-w-0 flex-col rounded-lg"
               >
-                <div
-                  data-testid="chat-empty-state"
-                  className="flex flex-1 flex-col items-center justify-start overflow-y-auto no-scrollbar"
-                >
-                  <div className="flex min-h-0 w-full max-w-6xl flex-1 flex-col items-stretch gap-4 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 text-left sm:gap-5 md:px-6 xl:px-8">
-                    {skillsLoadError ? (
-                      <ApiErrorAlert
-                        error={skillsLoadError}
-                        actionLabel={chat('retryLoadSkills')}
-                        onAction={() => {
-                          void loadSkills();
-                        }}
-                      />
-                    ) : null}
-
-                    <div className="flex w-full items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">
-                          {language === 'en' ? 'AI research' : 'AI 研究'}
-                        </p>
-                        <h1 className="mt-1 truncate text-lg font-semibold text-white sm:text-xl">{chat('title')}</h1>
-                      </div>
-                      <div className="hidden sm:block">
-                        {renderConsoleActions(true)}
-                      </div>
-                    </div>
-
-                    <div
-                      data-testid="chat-research-entry-grid"
-                      className="flex min-h-0 flex-1 flex-col justify-between gap-4 lg:items-stretch"
-                    >
-                      <div
-                        data-testid="chat-empty-research-stream"
-                        className="flex min-h-[180px] flex-1 flex-col items-center justify-center rounded-2xl border border-white/5 bg-white/[0.015] px-4 py-6 text-center"
-                      >
-                        <p className="text-sm font-medium text-white/70">
-                          {language === 'en' ? 'Waiting for a research question' : '等待问题'}
-                        </p>
-                        <p className="mt-2 text-xs text-white/38">
-                          {language === 'en' ? 'No context yet. Data is checked during analysis.' : '暂无上下文。分析时检查数据。'}
-                        </p>
-                      </div>
-
-                      <div data-testid="chat-input-shell" className="sticky bottom-0 w-full shrink-0 min-w-0 pt-2">
-                        <div data-testid="chat-input-gradient" className="w-full shrink-0">
-                          <div
-                            data-testid="chat-console-inner"
-                            className="w-full"
-                          >
-                            {renderComposerBody(false)}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="lg:hidden">
-                        {renderMobileComposerActions()}
-                      </div>
-
-                      <details
-                        data-testid="chat-secondary-context-disclosure"
-                        className="rounded-[16px] border border-white/5 bg-white/[0.02] text-left backdrop-blur-md lg:hidden"
-                      >
-                        <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-white/80 [&::-webkit-details-marker]:hidden">
-                          {language === 'en' ? 'Research context' : '研究上下文'}
-                          <span className="ml-2 text-xs font-normal text-white/40">
-                            {language === 'en' ? 'collapsed' : '已折叠'}
-                          </span>
-                        </summary>
-                        <div className="border-t border-white/[0.04] p-3">
-                          {renderContextBriefRail('chat-context-brief-rail-mobile')}
-                        </div>
-                      </details>
-
-                    </div>
-                  </div>
-                </div>
-              </main>
-            ) : (
-              <>
-                <main
-                  id="chat-scroll-container"
-                  data-testid="chat-main"
-                  onWheel={() => {
-                    isAutoScroll.current = false;
-                  }}
-                  onTouchMove={() => {
-                    isAutoScroll.current = false;
-                  }}
-                  onScroll={(e) => {
-                    const target = e.target as HTMLElement;
-                    if (target.scrollHeight - target.scrollTop - target.clientHeight < 50) {
-                      isAutoScroll.current = true;
-                    }
-                  }}
-                  className="min-h-0 w-full flex-1 overflow-y-auto no-scrollbar"
-                >
-                  <div
-                    data-testid="chat-message-scroll"
-                    className="w-full min-h-full"
+                {showEmptyState ? (
+                  <main
+                    id="chat-scroll-container"
+                    data-testid="chat-main"
+                    className="flex h-full flex-1 flex-col overflow-hidden"
                   >
                     <div
-                      data-testid="chat-message-stream"
-                      className="flex min-h-full w-full min-w-0 flex-col gap-8 px-6 pb-8 pt-6 md:px-8 xl:px-12"
+                      data-testid="chat-empty-state"
+                      className="flex flex-1 flex-col items-center justify-start overflow-y-auto no-scrollbar"
                     >
-                      {skillsLoadError ? (
-                        <ApiErrorAlert
-                          error={skillsLoadError}
-                          actionLabel={chat('retryLoadSkills')}
-                          onAction={() => {
-                            void loadSkills();
-                          }}
-                        />
-                      ) : null}
+                      <div className="flex min-h-0 w-full flex-1 flex-col gap-4 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 md:px-5">
+                        {skillsLoadError ? (
+                          <ApiErrorAlert
+                            error={skillsLoadError}
+                            actionLabel={chat('retryLoadSkills')}
+                            onAction={() => {
+                              void loadSkills();
+                            }}
+                          />
+                        ) : null}
 
-                      <div className="flex w-full flex-col gap-6">
-                        {messages.map((msg, index) => {
-                        const displayContent = msg.role === 'assistant'
-                          ? normalizeAssistantMessageContent(msg.content)
-                          : msg.content;
-                        const isLast = index === messages.length - 1;
-                        const shouldStream = isGenerating
-                          && msg.role === 'assistant'
-                          && isLast
-                          && msg.id === latestAssistantMessageId
-                          && msg.id === animatedAssistantMessageId;
-
-                        return msg.role === 'user' ? (
-                          <div
-                            key={msg.id}
-                            data-testid={`chat-user-message-${msg.id}`}
-                            className="mb-6 flex w-full justify-end"
+                        <div
+                          data-testid="chat-research-entry-grid"
+                          className="flex min-h-0 flex-1 flex-col justify-between gap-4"
+                        >
+                          <WolfyShellSurface
+                            as="section"
+                            variant="input"
+                            padding="md"
+                            data-testid="chat-empty-research-stream"
+                            className="flex min-h-[180px] flex-1 flex-col items-center justify-center text-center"
                           >
-                            <div className="max-w-[80%] break-words rounded-2xl rounded-tr-[4px] border border-white/10 bg-white/[0.05] px-5 py-3.5 text-[15px] leading-relaxed text-white/90 shadow-lg backdrop-blur-md">
-                              {displayContent.split('\n').map((line, i) => (
-                                <p key={i} className="mb-1 break-words whitespace-pre-wrap leading-relaxed last:mb-0">
-                                  {line || '\u00A0'}
-                                </p>
-                              ))}
-                            </div>
-                          </div>
-                        ) : (
-                          <div
-                            key={msg.id}
-                            data-testid={`chat-assistant-message-${msg.id}`}
-                            className="flex w-full gap-4"
-                          >
-                            <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-semibold text-white/72">
-                              AI
-                            </div>
-                            <div className="flex-1 min-w-0 bg-transparent">
-                              {msg.skillName ? (
-                                <div className="mb-2">
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-2 py-0.5 text-xs text-[hsl(var(--accent-primary-hsl))]">
-                                    <svg
-                                      className="h-3 w-3"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M13 10V3L4 14h7v7l9-11h-7z"
-                                      />
-                                    </svg>
-                                    {getLocalizedSkillLabel(msg.skillName, t)}
-                                  </span>
-                                </div>
-                              ) : null}
-                              {renderThinkingBlock(msg)}
-                              {expandedThinking.has(msg.id) && msg.thinkingSteps ? renderThinkingDetails(msg.thinkingSteps) : null}
-                              {shouldStream ? (
-                                <TypewriterText
-                                  as="div"
-                                  className={STREAMING_ASSISTANT_MESSAGE_SURFACE_CLASS}
-                                  testId={`chat-typewriter-${msg.id}`}
-                                  text={displayContent}
-                                  autoScrollRef={isAutoScroll}
-                                  onComplete={() => {
-                                    setAnimatedAssistantMessageId((currentId) => (currentId === msg.id ? null : currentId));
-                                  }}
-                                />
-                              ) : (
-                                <Suspense fallback={renderAssistantMarkdownFallback(msg.id, language)}>
-                                  <AssistantMarkdownContent
-                                    className={ASSISTANT_MESSAGE_SURFACE_CLASS}
-                                    content={displayContent}
-                                  />
-                                </Suspense>
-                              )}
-                              {renderEvidenceFooter(msg)}
-                            </div>
-                          </div>
-                        );
-                        })}
-                      </div>
+                            <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+                              {language === 'en' ? 'Waiting for a research question' : '等待问题'}
+                            </p>
+                            <p className="mt-2 text-xs text-[color:var(--wolfy-text-muted)]">
+                              {language === 'en' ? 'No context yet. Data is checked during analysis.' : '暂无上下文。分析时检查数据。'}
+                            </p>
+                          </WolfyShellSurface>
 
-                      {loading ? (
-                        <div className="flex w-full gap-4 pt-2">
-                          <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-semibold text-white/72">
-                            AI
-                          </div>
-                          <div className="flex-1 min-w-0 overflow-hidden rounded-2xl bg-white/[0.03] px-5 py-4">
-                            <div className="flex items-center gap-2.5 text-sm text-secondary-text">
-                              <div className="relative h-4 w-4 flex-shrink-0">
-                                <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl)/0.2)]" />
-                                <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl))] border-t-transparent animate-spin" />
+                          <div data-testid="chat-input-shell" className="sticky bottom-0 w-full shrink-0 min-w-0">
+                            <div data-testid="chat-input-gradient" className="w-full shrink-0">
+                              <div data-testid="chat-console-inner" className="w-full">
+                                {renderComposerBody(false)}
                               </div>
-                              <span className="text-secondary-text">
-                                {getCurrentStage(progressSteps)}
-                              </span>
                             </div>
+                          </div>
+
+                          <div className="lg:hidden">
+                            {renderMobileComposerActions()}
                           </div>
                         </div>
-                      ) : null}
+                      </div>
                     </div>
-                  </div>
-                </main>
-
-                <footer data-testid="chat-input-shell" className="shrink-0 w-full">
-                  <div data-testid="chat-input-gradient" className="w-full shrink-0 px-6 pb-6 pt-4 md:px-8 xl:px-12">
-                    <div
-                      data-testid="chat-console-inner"
-                      className="w-full"
+                  </main>
+                ) : (
+                  <>
+                    <main
+                      id="chat-scroll-container"
+                      data-testid="chat-main"
+                      onWheel={() => {
+                        isAutoScroll.current = false;
+                      }}
+                      onTouchMove={() => {
+                        isAutoScroll.current = false;
+                      }}
+                      onScroll={(e) => {
+                        const target = e.target as HTMLElement;
+                        if (target.scrollHeight - target.scrollTop - target.clientHeight < 50) {
+                          isAutoScroll.current = true;
+                        }
+                      }}
+                      className="min-h-0 w-full flex-1 overflow-y-auto no-scrollbar"
                     >
-                      {renderComposerBody()}
-                    </div>
-                  </div>
-                </footer>
-              </>
-            )}
-          </section>
+                      <div data-testid="chat-message-scroll" className="w-full min-h-full">
+                        <div
+                          data-testid="chat-message-stream"
+                          className="flex min-h-full w-full min-w-0 flex-col gap-6 px-4 pb-6 pt-4 md:px-5"
+                        >
+                          {skillsLoadError ? (
+                            <ApiErrorAlert
+                              error={skillsLoadError}
+                              actionLabel={chat('retryLoadSkills')}
+                              onAction={() => {
+                                void loadSkills();
+                              }}
+                            />
+                          ) : null}
+
+                          <div className="flex w-full flex-col gap-5">
+                            {messages.map((msg, index) => {
+                              const displayContent = msg.role === 'assistant'
+                                ? normalizeAssistantMessageContent(msg.content)
+                                : msg.content;
+                              const isLast = index === messages.length - 1;
+                              const shouldStream = isGenerating
+                                && msg.role === 'assistant'
+                                && isLast
+                                && msg.id === latestAssistantMessageId
+                                && msg.id === animatedAssistantMessageId;
+
+                              return msg.role === 'user' ? (
+                                <div
+                                  key={msg.id}
+                                  data-testid={`chat-user-message-${msg.id}`}
+                                  className="flex w-full justify-end"
+                                >
+                                  <div className="max-w-[80%] break-words rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-3 text-[15px] leading-relaxed text-[color:var(--wolfy-text-primary)]">
+                                    {displayContent.split('\n').map((line, i) => (
+                                      <p key={i} className="mb-1 break-words whitespace-pre-wrap leading-relaxed last:mb-0">
+                                        {line || '\u00A0'}
+                                      </p>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div
+                                  key={msg.id}
+                                  data-testid={`chat-assistant-message-${msg.id}`}
+                                  className="flex w-full gap-4"
+                                >
+                                  <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)]">
+                                    AI
+                                  </div>
+                                  <div className="flex-1 min-w-0 bg-transparent">
+                                    {msg.skillName ? (
+                                      <div className="mb-2">
+                                        <span className="inline-flex items-center gap-1 rounded-md border border-[color:color-mix(in_srgb,var(--wolfy-accent)_36%,transparent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_10%,transparent)] px-2 py-0.5 text-xs text-[color:var(--wolfy-accent)]">
+                                          <svg
+                                            className="h-3 w-3"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                          >
+                                            <path
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                              strokeWidth={2}
+                                              d="M13 10V3L4 14h7v7l9-11h-7z"
+                                            />
+                                          </svg>
+                                          {getLocalizedSkillLabel(msg.skillName, t)}
+                                        </span>
+                                      </div>
+                                    ) : null}
+                                    {renderThinkingBlock(msg)}
+                                    {expandedThinking.has(msg.id) && msg.thinkingSteps ? renderThinkingDetails(msg.thinkingSteps) : null}
+                                    {shouldStream ? (
+                                      <TypewriterText
+                                        as="div"
+                                        className={STREAMING_ASSISTANT_MESSAGE_SURFACE_CLASS}
+                                        testId={`chat-typewriter-${msg.id}`}
+                                        text={displayContent}
+                                        autoScrollRef={isAutoScroll}
+                                        onComplete={() => {
+                                          setAnimatedAssistantMessageId((currentId) => (currentId === msg.id ? null : currentId));
+                                        }}
+                                      />
+                                    ) : (
+                                      <Suspense fallback={renderAssistantMarkdownFallback(msg.id, language)}>
+                                        <AssistantMarkdownContent
+                                          className={ASSISTANT_MESSAGE_SURFACE_CLASS}
+                                          content={displayContent}
+                                        />
+                                      </Suspense>
+                                    )}
+                                    {renderEvidenceFooter(msg)}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {loading ? (
+                            <div className="flex w-full gap-4 pt-2">
+                              <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)]">
+                                AI
+                              </div>
+                              <div className="flex-1 min-w-0 overflow-hidden rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-3">
+                                <div className="flex items-center gap-2.5 text-sm text-[color:var(--wolfy-text-secondary)]">
+                                  <div className="relative h-4 w-4 flex-shrink-0">
+                                    <div className="absolute inset-0 rounded-full border-2 border-[color:var(--wolfy-divider)]" />
+                                    <div className="absolute inset-0 rounded-full border-2 border-[color:var(--wolfy-accent)] border-t-transparent animate-spin" />
+                                  </div>
+                                  <span className="text-[color:var(--wolfy-text-secondary)]">
+                                    {getCurrentStage(progressSteps)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </main>
+
+                    <footer data-testid="chat-input-shell" className="shrink-0 w-full border-t border-[color:var(--wolfy-divider)]">
+                      <div data-testid="chat-input-gradient" className="w-full shrink-0 px-4 py-4 md:px-5">
+                        <div data-testid="chat-console-inner" className="w-full">
+                          {renderComposerBody()}
+                        </div>
+                      </div>
+                    </footer>
+                  </>
+                )}
+              </ConsoleBoard>
+            </section>
+          </div>
 
           <aside
-            data-testid="chat-strategy-panel"
-            className="hidden h-full min-h-0 w-full shrink-0 flex-col gap-3 overflow-y-auto border-l border-white/5 bg-gradient-to-b from-white/[0.01] to-transparent p-3 no-scrollbar lg:flex lg:w-[280px] xl:w-[304px]"
+            data-testid="chat-context-rail"
+            className="hidden h-full min-h-0 w-full shrink-0 flex-col lg:flex"
           >
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[10px] uppercase tracking-[0.24em] text-white/30">{chatConsoleTitle}</p>
-                <p className="mt-2 text-sm text-white/58">{consoleMode === 'engines' ? engineSwitcherLabel : chat('historyTitle')}</p>
+            <ConsoleContextRail className="h-full rounded-lg bg-[var(--wolfy-surface-rail)] p-3 no-scrollbar">
+              <div className="flex items-center justify-between gap-3 pb-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{chatConsoleTitle}</p>
+                  <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">{consoleMode === 'engines' ? contextPaneSummary : chat('historyTitle')}</p>
+                </div>
+                {renderConsoleActions()}
               </div>
-              {renderConsoleActions()}
-            </div>
 
-            <SeamlessSegmentedControl
-              dataTestId="chat-console-mode-toggle"
-              value={consoleMode}
-              onChange={setConsoleMode}
-              language={language}
-            />
+              <div className="py-3">
+                <SeamlessSegmentedControl
+                  dataTestId="chat-console-mode-toggle"
+                  value={consoleMode}
+                  onChange={setConsoleMode}
+                  language={language}
+                />
+              </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar pr-1">
-              {consoleMode === 'engines' ? (
-                <div className="flex flex-col gap-4">
-                  {renderContextBriefRail()}
-                  {renderControlPanel('chat-control-panel')}
-                </div>
-              ) : (
-                <div className="flex min-h-full flex-col gap-4">
-                  <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-white/50">{chat('historyTitle')}</h3>
-                  {renderHistoryList('chat-history-list')}
-                </div>
-              )}
-            </div>
+              <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar pt-3">
+                {consoleMode === 'engines' ? (
+                  <div className="flex flex-col gap-4">
+                    {renderContextBriefRail()}
+                    {renderControlPanel('chat-control-panel')}
+                  </div>
+                ) : (
+                  <div className="flex min-h-full flex-col gap-4">
+                    <h3 className="text-xs font-medium text-[color:var(--wolfy-text-secondary)]">{chat('historyTitle')}</h3>
+                    {renderHistoryList('chat-history-list')}
+                  </div>
+                )}
+              </div>
+            </ConsoleContextRail>
           </aside>
         </div>
       </div>
@@ -1974,11 +1998,11 @@ const ChatPage: React.FC = () => {
         title={mobileConsoleTitle}
         width="max-w-[min(92vw,30rem)]"
       >
-        <div data-testid="chat-bento-drawer" className="flex h-full min-h-0 flex-col gap-5 text-white">
+        <div data-testid="chat-mobile-context-drawer" className="flex h-full min-h-0 flex-col gap-4 text-[color:var(--wolfy-text-primary)]">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.24em] text-white/30">{chatConsoleTitle}</p>
-              <p className="mt-2 text-sm text-white/58">{consoleMode === 'engines' ? engineSwitcherLabel : chat('historyTitle')}</p>
+              <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{chatConsoleTitle}</p>
+              <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">{consoleMode === 'engines' ? contextPaneSummary : chat('historyTitle')}</p>
             </div>
             {renderConsoleActions(true)}
           </div>
@@ -1992,10 +2016,13 @@ const ChatPage: React.FC = () => {
 
           <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar">
             {consoleMode === 'engines' ? (
-              renderControlPanel('chat-drawer-control-panel')
+              <div className="flex flex-col gap-4">
+                {renderContextBriefRail('chat-context-brief-rail-mobile')}
+                {renderControlPanel('chat-drawer-control-panel')}
+              </div>
             ) : (
               <div className="flex min-h-full flex-col gap-4">
-                <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-white/50">{chat('historyTitle')}</h3>
+                <h3 className="text-xs font-medium text-[color:var(--wolfy-text-secondary)]">{chat('historyTitle')}</h3>
                 {renderHistoryList('chat-drawer-history-list')}
               </div>
             )}
