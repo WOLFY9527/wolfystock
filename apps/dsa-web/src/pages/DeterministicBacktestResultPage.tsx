@@ -4,7 +4,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Button, Card } from '../components/common';
+import { ApiErrorAlert, Button } from '../components/common';
 import type { BacktestResultReportMode } from '../components/backtest/BacktestResultReport';
 import BacktestChartWorkspace, {
   type CoverageTrackItem,
@@ -19,9 +19,7 @@ import { normalizeDeterministicBacktestResult } from '../components/backtest/nor
 import {
   Banner,
   Disclosure,
-  MetricCard,
   RuleRunStatusBanner,
-  SummaryStrip,
   canCancelRuleRun,
   formatDateTime,
   formatNumber,
@@ -62,6 +60,15 @@ import type {
 } from '../types/backtest';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { translate, type UiLanguage } from '../i18n/core';
+import {
+  ConsoleBoard,
+  ConsoleContextRail,
+  ConsoleDisclosure,
+  ConsoleStatusStrip,
+  KeyLevelStrip,
+  ResearchConsoleShell,
+  WolfyCommandBar,
+} from '../components/linear';
 import { TerminalPageShell } from '../components/terminal';
 import { StatusBadge } from '../components/ui/StatusBadge';
 
@@ -164,6 +171,14 @@ function getRunStatusTone(status?: string | null): 'positive' | 'negative' | 'ac
   if (status === 'failed' || status === 'cancelled') return 'negative';
   if (status === 'running' || status === 'parsing' || status === 'summarizing') return 'accent';
   return 'default';
+}
+
+function getLinearMetricTone(
+  tone: 'positive' | 'negative' | 'accent' | 'default',
+): 'up' | 'down' | 'neutral' {
+  if (tone === 'positive') return 'up';
+  if (tone === 'negative') return 'down';
+  return 'neutral';
 }
 
 function btr(language: UiLanguage, key: string, vars?: Record<string, string | number | undefined>): string {
@@ -992,9 +1007,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
     if (!run && isLoadingRun) {
       return (
         <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-          <Card title={resultPage('statusCard.title')} subtitle={resultPage('statusCard.loadingSubtitle')} className="product-section-card product-section-card--backtest-result">
-            <div className="product-empty-state product-empty-state--compact">{resultPage('statusCard.loadingBody')}</div>
-          </Card>
+          <ConsoleBoard>
+            <div className="flex flex-col gap-3 p-4 md:p-5">
+              <div>
+                <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('statusCard.loadingSubtitle')}</p>
+                <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPage('statusCard.title')}</h2>
+              </div>
+              <div className="text-sm text-[color:var(--wolfy-text-secondary)]">{resultPage('statusCard.loadingBody')}</div>
+            </div>
+          </ConsoleBoard>
         </section>
       );
     }
@@ -1002,20 +1023,39 @@ const DeterministicBacktestResultPage: React.FC = () => {
     if (!run) {
       return (
         <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-          <Card title={resultPage('statusCard.title')} subtitle={resultPage('statusCard.unavailableSubtitle')} className="product-section-card product-section-card--backtest-result">
-            {runError ? <ApiErrorAlert error={runError} /> : <div className="product-empty-state product-empty-state--compact">{resultPage('statusCard.unavailableBody')}</div>}
-          </Card>
+          <ConsoleBoard>
+            <div className="flex flex-col gap-3 p-4 md:p-5">
+              <div>
+                <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('statusCard.unavailableSubtitle')}</p>
+                <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPage('statusCard.title')}</h2>
+              </div>
+              {runError ? <ApiErrorAlert error={runError} /> : (
+                <div className="text-sm text-[color:var(--wolfy-text-secondary)]">{resultPage('statusCard.unavailableBody')}</div>
+              )}
+            </div>
+          </ConsoleBoard>
         </section>
       );
     }
 
     return (
       <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-        <Card title={resultPage('statusCard.title')} subtitle={resultPage('statusCard.controlsSubtitle')} className="product-section-card product-section-card--backtest-result">
+        <ConsoleBoard>
+          <div className="flex flex-col gap-4 p-4 md:p-5">
+            <div>
+              <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('statusCard.controlsSubtitle')}</p>
+              <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPage('statusCard.title')}</h2>
+            </div>
           <RuleRunStatusBanner run={run} />
-          <SummaryStrip items={statusSummaryItems} />
+          <ConsoleStatusStrip
+            items={statusSummaryItems.map((item) => ({
+              key: item.label,
+              label: item.label,
+              value: item.value,
+            }))}
+          />
           {!isRuleRunTerminal(run.status) ? (
-            <div className="mt-4">
+            <div>
               <Banner
                 tone="info"
                 title={resultPage('statusCard.autoTrackingTitle')}
@@ -1024,7 +1064,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
             </div>
           ) : null}
           {run.status === 'completed' ? (
-            <div className="mt-4">
+            <div>
               <Banner
                 tone="success"
                 title={resultPage('statusCard.completedTitle')}
@@ -1033,7 +1073,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
             </div>
           ) : null}
           {run.status === 'cancelled' ? (
-            <div className="mt-4">
+            <div>
               <Banner
                 tone="warning"
                 title={resultPage('statusCard.cancelledTitle')}
@@ -1042,7 +1082,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
             </div>
           ) : null}
           {run.status === 'failed' ? (
-            <div className="mt-4">
+            <div>
               <Banner
                 tone="danger"
                 title={resultPage('statusCard.failedTitle')}
@@ -1050,7 +1090,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
               />
             </div>
           ) : null}
-          <div className="product-action-row mt-4">
+          <div className="product-action-row">
             <Button variant="ghost" onClick={() => void fetchRun()} disabled={isCancellingRun}>
               {isPollingStatus || isLoadingRun ? resultPage('statusCard.refreshing') : resultPage('statusCard.refreshStatus')}
             </Button>
@@ -1089,14 +1129,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
               </div>
             </Disclosure>
           ) : null}
-          {runError ? <ApiErrorAlert error={runError} className="mt-4" /> : null}
-          {cancelError ? <ApiErrorAlert error={cancelError} className="mt-4" /> : null}
+          {runError ? <ApiErrorAlert error={runError} /> : null}
+          {cancelError ? <ApiErrorAlert error={cancelError} /> : null}
           {presetNotice ? (
-            <div className="mt-4">
+            <div>
               <Banner tone="success" title={presetNotice} body={resultPage('statusCard.reusableBanner', { count: availablePresets.length })} />
             </div>
           ) : null}
-        </Card>
+          </div>
+        </ConsoleBoard>
       </section>
     );
   };
@@ -1206,125 +1247,63 @@ const DeterministicBacktestResultPage: React.FC = () => {
     );
   };
 
-  const renderCompletedHero = () => {
+  const renderCompletedConsole = () => {
     if (!run || !normalized) return null;
 
     const strategyLabel = getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language);
     const headline = `${run.code} ${strategyLabel}`;
     const statusAt = run.completedAt || run.runAt || null;
+    const heroStatusItems = [
+      {
+        label: resultPage('overview.selectedBenchmark'),
+        value: selectedBenchmarkLabel,
+      },
+      {
+        label: resultPage('parameters.metricInitialCapital'),
+        value: formatNumber(run.initialCapital),
+      },
+      {
+        label: resultPage('parameters.metricLookback'),
+        value: String(run.lookbackBars),
+      },
+      {
+        label: resultPage('statusSummary.lastRefreshLabel'),
+        value: lastStatusRefreshAt ? formatDateTime(lastStatusRefreshAt) : '--',
+      },
+    ];
+    const parameterSummaryRows = strategySummaryRows.slice(0, 6);
 
     return (
       <section
         className="backtest-display-section"
-        data-testid="deterministic-result-page-bento-hero"
+        data-testid="deterministic-result-page-console-hero"
       >
-        <div className="backtest-result-bento">
-          <div className="backtest-result-bento__intro" data-testid="deterministic-result-page-hero">
-            <div className="space-y-5">
-              <div className="flex flex-wrap items-center gap-3">
-                <StatusBadge
-                  status={run.status}
-                  label={getRuleRunStatusLabel(run.status, language)}
-                  size="md"
-                  variant="soft"
-                />
-                <span className="text-sm text-white/40">{formatDateTime(statusAt)}</span>
-              </div>
-              <div className="space-y-2">
-                <p className="backtest-result-bento__eyebrow">WolfyStock</p>
-                <h1 className="backtest-result-bento__title">{headline}</h1>
-                <p className="backtest-result-bento__meta">
-                  {run.startDate || '--'} {'->'} {run.endDate || '--'}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-sm text-white/72">
-                <div className="backtest-result-bento__fact">
-                  <span>{resultPage('overview.selectedBenchmark')}</span>
-                  <strong>{selectedBenchmarkLabel}</strong>
+        <ResearchConsoleShell
+          data-testid="deterministic-result-page-hero"
+          command={(
+            <WolfyCommandBar
+              leading={(
+                <div className="min-w-0">
+                  <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">WolfyStock</p>
+                  <div className="mt-1 flex min-w-0 flex-wrap items-center gap-3">
+                    <h1 className="truncate text-lg font-semibold text-[color:var(--wolfy-text-primary)] md:text-xl">{headline}</h1>
+                    <StatusBadge
+                      status={run.status}
+                      label={getRuleRunStatusLabel(run.status, language)}
+                      size="md"
+                      variant="soft"
+                    />
+                  </div>
+                  <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">
+                    {run.startDate || '--'} {'->'} {run.endDate || '--'} · {formatDateTime(statusAt)}
+                  </p>
                 </div>
-                <div className="backtest-result-bento__fact">
-                  <span>{resultPage('parameters.metricInitialCapital')}</span>
-                  <strong>{formatNumber(run.initialCapital)}</strong>
-                </div>
-                <div className="backtest-result-bento__fact">
-                  <span>{resultPage('parameters.metricLookback')}</span>
-                  <strong>{String(run.lookbackBars)}</strong>
-                </div>
-                <div className="backtest-result-bento__fact">
-                  <span>{resultPage('statusSummary.lastRefreshLabel')}</span>
-                  <strong>{lastStatusRefreshAt ? formatDateTime(lastStatusRefreshAt) : '--'}</strong>
-                </div>
-              </div>
-            </div>
-            <details
-              className="rounded-2xl border border-white/5 bg-white/[0.02] p-3"
-              data-testid="deterministic-result-secondary-actions"
-            >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-white/70">
-                <span>{resultPage('tabs.history')} / {resultPage('hero.rerunSameParameters')}</span>
-                <span className="text-xs font-normal text-white/40">展开</span>
-              </summary>
-              <div className="backtest-result-bento__actions mt-3">
-                <Button variant="ghost" size={density.buttonSize} onClick={() => navigate('/backtest')}>
-                  {resultPage('hero.backToConfig')}
-                </Button>
-                <Button
-                  variant="secondary"
-                  size={density.buttonSize}
-                  onClick={() => navigate('/backtest', { state: { draftRun: run } })}
-                >
-                  {resultPage('hero.rerunSameParameters')}
-                </Button>
-                <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
-                  {resultPage('hero.savePreset')}
-                </Button>
-                <Button variant="ghost" size={density.buttonSize} onClick={() => void fetchRun()}>
-                  {resultPage('hero.refreshResult')}
-                </Button>
-              </div>
-            </details>
-          </div>
-          <div className="backtest-result-bento__metrics" data-testid="deterministic-result-kpi-bento">
-            {completedHeroMetrics.map((metric) => (
-              <MetricCard
-                key={metric.label}
-                label={metric.label}
-                value={metric.value}
-                tone={metric.tone}
-                note={metric.note}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
-    );
-  };
-
-  return (
-    <main className="w-full overflow-x-hidden text-white">
-      <TerminalPageShell
-        className="min-h-0"
-        data-testid="deterministic-backtest-result-page"
-        data-density={density.mode}
-        style={getDeterministicResultDensityCssVars(density)}
-      >
-        <div className="backtest-result-page flex min-h-0 min-w-0 flex-col">
-          {run?.status === 'completed' && normalized ? renderCompletedHero() : (
-            <section className="backtest-result-page__hero" data-testid="deterministic-result-page-hero">
-              <div className="backtest-result-page__hero-copy">
-                <p className="backtest-result-page__hero-eyebrow">WolfyStock</p>
-                <h1 className="backtest-result-page__hero-title">
-                  {hasValidRunId
-                    ? `${backtestCopy('resultPage.documentTitle')} #${parsedRunId}`
-                    : backtestCopy('resultPage.documentTitle')}
-                </h1>
-                <p className="backtest-result-page__hero-meta">{headerDescription}</p>
-              </div>
-              <div className="backtest-result-page__hero-actions">
-                <Button variant="ghost" size={density.buttonSize} onClick={() => navigate('/backtest')}>
-                  {resultPage('hero.backToConfig')}
-                </Button>
-                {run ? (
+              )}
+              trailing={(
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="ghost" size={density.buttonSize} onClick={() => navigate('/backtest')}>
+                    {resultPage('hero.backToConfig')}
+                  </Button>
                   <Button
                     variant="secondary"
                     size={density.buttonSize}
@@ -1332,31 +1311,121 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   >
                     {resultPage('hero.rerunSameParameters')}
                   </Button>
-                ) : null}
-                {run ? (
                   <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
                     {resultPage('hero.savePreset')}
                   </Button>
-                ) : null}
-                <Button variant="ghost" size={density.buttonSize} onClick={() => void fetchRun()}>
-                  {resultPage('hero.refreshResult')}
-                </Button>
-              </div>
-            </section>
+                  <Button variant="ghost" size={density.buttonSize} onClick={() => void fetchRun()}>
+                    {resultPage('hero.refreshResult')}
+                  </Button>
+                </div>
+              )}
+            >
+              <div className="truncate text-sm text-[color:var(--wolfy-text-secondary)]">{headerDescription}</div>
+            </WolfyCommandBar>
           )}
-
-          {!hasValidRunId ? (
-            <section className="backtest-display-section">
-              <Card title={resultPage('invalidRun.title')} subtitle={resultPage('invalidRun.subtitle')} className="product-section-card product-section-card--backtest-result">
-                <div className="product-empty-state product-empty-state--compact">{resultPage('invalidRun.body')}</div>
-              </Card>
-            </section>
-          ) : null}
-
-          {run?.status === 'completed' && normalized ? null : renderRunStatusSection()}
-
-          {run?.status === 'completed' && normalized ? (
-            <>
+          rail={(
+            <ConsoleContextRail className="gap-0">
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('tabs.parameters')}</p>
+                  <h2 className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">{resultPage('parameters.metricInitialCapital')}</h2>
+                </div>
+                <div className="space-y-2">
+                  {parameterSummaryRows.map((row) => (
+                    <div key={row.key} className="flex items-start justify-between gap-3 text-xs">
+                      <span className="min-w-0 text-[color:var(--wolfy-text-muted)]">{row.label}</span>
+                      <span className="max-w-[60%] truncate text-right font-mono text-[color:var(--wolfy-text-primary)]">{row.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <ConsoleDisclosure
+                title={resultPage('tabs.history')}
+                summary={resultPage('statusCard.viewStatusTimeline', { count: run.statusHistory.length })}
+                defaultOpen
+              >
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2" data-testid="deterministic-result-secondary-actions">
+                    <Button variant="ghost" size={density.buttonSize} onClick={() => navigate('/backtest')}>
+                      {resultPage('hero.backToConfig')}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size={density.buttonSize}
+                      onClick={() => navigate('/backtest', { state: { draftRun: run } })}
+                    >
+                      {resultPage('hero.rerunSameParameters')}
+                    </Button>
+                    <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
+                      {resultPage('hero.savePreset')}
+                    </Button>
+                    <Button variant="ghost" size={density.buttonSize} onClick={() => void fetchRun()}>
+                      {resultPage('hero.refreshResult')}
+                    </Button>
+                  </div>
+                  <div className="space-y-2 text-xs text-[color:var(--wolfy-text-secondary)]">
+                    {run.statusHistory.map((item, index) => (
+                      <div key={`${item.status}-${item.at}-${index}`} className="flex items-center justify-between gap-3">
+                        <span>{getRuleRunStatusLabel(item.status, language)}</span>
+                        <span>{formatDateTime(item.at)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {presetNotice ? (
+                    <Banner tone="success" title={presetNotice} body={resultPage('statusCard.reusableBanner', { count: availablePresets.length })} />
+                  ) : null}
+                </div>
+              </ConsoleDisclosure>
+              {(parsedSummaryEntries.length || strategyWarningEntries.length) ? (
+                <ConsoleDisclosure
+                  title={resultPage('tabs.audit')}
+                  summary={strategyWarningEntries.length
+                    ? `警告 ${strategyWarningEntries.length}`
+                    : '解析摘要'}
+                >
+                  <div className="space-y-3 text-xs text-[color:var(--wolfy-text-secondary)]">
+                    {parsedSummaryEntries.map((entry) => (
+                      <div key={entry.label} className="space-y-1">
+                        <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{entry.label}</p>
+                        <p className="text-[color:var(--wolfy-text-primary)]">{entry.value}</p>
+                      </div>
+                    ))}
+                    {strategyWarningEntries.length ? (
+                      <div className="space-y-2 border-t border-[color:var(--wolfy-divider)] pt-3">
+                        {strategyWarningEntries.map((warning) => (
+                          <p key={warning}>{warning}</p>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </ConsoleDisclosure>
+              ) : null}
+            </ConsoleContextRail>
+          )}
+        >
+          <ConsoleBoard className="min-h-0">
+            <ConsoleStatusStrip
+              items={heroStatusItems.map((item) => ({
+                key: item.label,
+                label: item.label,
+                value: item.value,
+              }))}
+            />
+            <KeyLevelStrip
+              data-testid="deterministic-result-kpi-strip"
+              className="sm:grid-cols-3 xl:grid-cols-6"
+              levels={completedHeroMetrics.map((metric) => ({
+                key: metric.label,
+                label: metric.label,
+                value: metric.value,
+                tone: getLinearMetricTone(metric.tone),
+                className: 'min-h-[72px]',
+                valueClassName: metric.tone === 'accent'
+                  ? 'text-[color:var(--wolfy-accent)]'
+                  : undefined,
+              }))}
+            />
+            <div className="p-3 md:p-4">
               <Suspense
                 fallback={(
                   <section
@@ -1424,7 +1493,76 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   )}
                 />
               </Suspense>
+            </div>
+          </ConsoleBoard>
+        </ResearchConsoleShell>
+      </section>
+    );
+  };
 
+  return (
+    <main className="w-full overflow-x-hidden text-white">
+      <TerminalPageShell
+        className="min-h-0"
+        data-testid="deterministic-backtest-result-page"
+        data-density={density.mode}
+        style={getDeterministicResultDensityCssVars(density)}
+      >
+        <div className="backtest-result-page flex min-h-0 min-w-0 flex-col">
+          {run?.status === 'completed' && normalized ? renderCompletedConsole() : (
+            <section className="backtest-result-page__hero" data-testid="deterministic-result-page-hero">
+              <div className="backtest-result-page__hero-copy">
+                <p className="backtest-result-page__hero-eyebrow">WolfyStock</p>
+                <h1 className="backtest-result-page__hero-title">
+                  {hasValidRunId
+                    ? `${backtestCopy('resultPage.documentTitle')} #${parsedRunId}`
+                    : backtestCopy('resultPage.documentTitle')}
+                </h1>
+                <p className="backtest-result-page__hero-meta">{headerDescription}</p>
+              </div>
+              <div className="backtest-result-page__hero-actions">
+                <Button variant="ghost" size={density.buttonSize} onClick={() => navigate('/backtest')}>
+                  {resultPage('hero.backToConfig')}
+                </Button>
+                {run ? (
+                  <Button
+                    variant="secondary"
+                    size={density.buttonSize}
+                    onClick={() => navigate('/backtest', { state: { draftRun: run } })}
+                  >
+                    {resultPage('hero.rerunSameParameters')}
+                  </Button>
+                ) : null}
+                {run ? (
+                  <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
+                    {resultPage('hero.savePreset')}
+                  </Button>
+                ) : null}
+                <Button variant="ghost" size={density.buttonSize} onClick={() => void fetchRun()}>
+                  {resultPage('hero.refreshResult')}
+                </Button>
+              </div>
+            </section>
+          )}
+
+          {!hasValidRunId ? (
+            <section className="backtest-display-section">
+              <ConsoleBoard>
+                <div className="flex flex-col gap-3 p-4 md:p-5">
+                  <div>
+                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('invalidRun.subtitle')}</p>
+                    <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPage('invalidRun.title')}</h2>
+                  </div>
+                  <div className="text-sm text-[color:var(--wolfy-text-secondary)]">{resultPage('invalidRun.body')}</div>
+                </div>
+              </ConsoleBoard>
+            </section>
+          ) : null}
+
+          {run?.status === 'completed' && normalized ? null : renderRunStatusSection()}
+
+          {run?.status === 'completed' && normalized ? (
+            <>
               <section className="backtest-display-section backtest-result-page__tabs-stage" data-testid="deterministic-result-page-tabs">
                 <div className="backtest-mode-toggle backtest-result-page__tabs" role="tablist" aria-label={backtestCopy('resultPage.tabsAria')}>
                   {tabs.map((tab) => (

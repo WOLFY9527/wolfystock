@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import RuleBacktestComparePage from '../RuleBacktestComparePage';
@@ -410,7 +410,7 @@ describe('RuleBacktestComparePage', () => {
     });
 
     const pageShell = screen.getByTestId('rule-backtest-compare-page');
-    expect(pageShell).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6');
+    expect(pageShell).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-5');
     expect(pageShell).not.toHaveClass('theme-page-transition', 'backtest-v1-page', 'workspace-page--backtest');
     expect(pageShell.querySelector('.workspace-page--backtest')).toBeNull();
     expect(pageShell.closest('main')).not.toHaveClass('py-4');
@@ -425,10 +425,10 @@ describe('RuleBacktestComparePage', () => {
     expect(screen.getByRole('link', { name: '市场与区间' })).toHaveAttribute('href', '#compare-market-period');
     expect(screen.getByRole('link', { name: '参数与指标' })).toHaveAttribute('href', '#compare-parameter-metrics');
     expect(screen.getByRole('link', { name: '参与运行' })).toHaveAttribute('href', '#compare-items');
-    const parameterSummary = screen.getByText('展开 / 参数与指标');
-    const parameterDisclosure = parameterSummary.closest('details');
+    const parameterToggle = screen.getAllByRole('button', { name: '收起 参数与指标' })[0];
+    const parameterDisclosure = parameterToggle.closest('[data-linear-primitive="disclosure"]');
     expect(parameterDisclosure).not.toBeNull();
-    expect(parameterDisclosure).toHaveAttribute('open');
+    expect(parameterDisclosure).toHaveTextContent('参数差异与已校验指标差异放在同一工作台里读');
     expect(screen.getAllByText('同标的不同区间').length).toBeGreaterThan(0);
     expect(screen.getAllByText('部分可比').length).toBeGreaterThan(0);
     expect(screen.getAllByText('有限上下文领先').length).toBeGreaterThan(0);
@@ -467,11 +467,11 @@ describe('RuleBacktestComparePage', () => {
     expect(screen.getByText('#101 基准 · 手续费 0.0bp · 滑点 0.0bp')).toBeInTheDocument();
     expect(screen.getByText('#202 候选 · 手续费 5.0bp · 滑点 10.0bp')).toBeInTheDocument();
 
-    fireEvent.click(parameterSummary.closest('summary') ?? parameterSummary);
-    expect(parameterDisclosure).not.toHaveAttribute('open');
+    fireEvent.click(parameterToggle);
+    expect(within(parameterDisclosure as HTMLElement).getByRole('button', { name: '展开 参数与指标' })).toBeInTheDocument();
 
-    fireEvent.click(parameterSummary.closest('summary') ?? parameterSummary);
-    expect(parameterDisclosure).toHaveAttribute('open');
+    fireEvent.click(within(parameterDisclosure as HTMLElement).getByRole('button', { name: '展开 参数与指标' }));
+    expect(within(parameterDisclosure as HTMLElement).getByRole('button', { name: '收起 参数与指标' })).toBeInTheDocument();
   });
 
   it('shows an explicit empty state when fewer than two run ids are provided', async () => {
