@@ -14,11 +14,18 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Callable, Generator, Sequence
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from src.admin_rbac import expand_admin_capabilities, has_admin_capability
-from src.auth import COOKIE_NAME, get_admin_session_reauthenticated_at, get_session_identity, is_auth_enabled
+from src.auth import (
+    COOKIE_NAME,
+    get_admin_reauth_max_age_seconds,
+    get_admin_session_reauthenticated_at,
+    get_admin_unlock_identity,
+    get_session_identity,
+    is_auth_enabled,
+)
 from src.multi_user import ROLE_ADMIN
 from src.storage import DatabaseManager
 from src.config import get_config, Config
@@ -271,6 +278,84 @@ def require_any_admin_capability(capabilities: Sequence[str]) -> Callable[[Curre
         if not normalized or not any(capability in effective for capability in normalized):
             _raise_admin_capability_required()
         return admin_user
+
+    return dependency
+
+
+def _raise_admin_unlock_required() -> None:
+    raise HTTPException(
+        status_code=403,
+        detail={
+            "error": "admin_unlock_required",
+            "message": "Admin unlock or recent reauthentication required",
+        },
+    )
+
+
+def _admin_unlock_token_matches_current_user(current_user: CurrentUser, unlock_token: str | None) -> bool:
+    normalized = str(unlock_token or "").strip()
+    if not normalized:
+        return False
+
+    identity = get_admin_unlock_identity(normalized)
+    if identity is None or not identity.is_admin:
+        return False
+
+    return str(identity.user_id) == str(getattr(current_user, "user_id", "") or "")
+
+
+def _has_recent_admin_reauth(current_user: CurrentUser) -> bool:
+    try:
+        max_age_minutes = max(1, get_admin_reauth_max_age_seconds() // 60)
+        require_recent_admin_reauth(current_user, max_age_minutes=max_age_minutes)
+        return True
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        if detail.get("error") == "admin_reauth_required":
+            return False
+        raise
+
+
+def require_admin_unlock_or_recent_reauth(
+    current_user: CurrentUser,
+    *,
+    admin_unlock_token: str | None = None,
+) -> CurrentUser:
+    """Require a valid admin unlock token or recent admin reauth for dangerous actions."""
+    admin_user = require_admin_user(current_user)
+    if not bool(getattr(admin_user, "is_authenticated", False)):
+        _raise_admin_unlock_required()
+    if _admin_unlock_token_matches_current_user(admin_user, admin_unlock_token):
+        return admin_user
+    if _has_recent_admin_reauth(admin_user):
+        return admin_user
+    _raise_admin_unlock_required()
+
+
+def _capability_label_from_dependency(dependency: Callable[[CurrentUser], CurrentUser]) -> str | None:
+    closure = getattr(dependency, "__closure__", None) or ()
+    for cell in closure:
+        value = getattr(cell, "cell_contents", None)
+        if isinstance(value, str) and ":" in value:
+            return value
+    return None
+
+
+def require_admin_capability_with_unlock(
+    capability_dependency: Callable[[CurrentUser], CurrentUser],
+) -> Callable[[CurrentUser, str | None], CurrentUser]:
+    """Wrap a capability dependency with unlock/recent-reauth enforcement."""
+    capability_label = _capability_label_from_dependency(capability_dependency)
+
+    def dependency(
+        current_user: CurrentUser = Depends(capability_dependency),
+        admin_unlock_token: str | None = Header(default=None, alias="X-Admin-Unlock-Token"),
+    ) -> CurrentUser:
+        _ = capability_label
+        return require_admin_unlock_or_recent_reauth(
+            current_user,
+            admin_unlock_token=admin_unlock_token,
+        )
 
     return dependency
 

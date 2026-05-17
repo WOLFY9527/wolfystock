@@ -7,7 +7,12 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.deps import CurrentUser, get_system_config_service, require_admin_capability
+from api.deps import (
+    CurrentUser,
+    get_system_config_service,
+    require_admin_capability,
+    require_admin_capability_with_unlock,
+)
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.system_config import (
     FactoryResetSystemRequest,
@@ -85,7 +90,9 @@ def get_system_config(
 def update_system_config(
     request: UpdateSystemConfigRequest,
     service: SystemConfigService = Depends(get_system_config_service),
-    current_user: CurrentUser = Depends(require_admin_capability("ops:system_config:write")),
+    current_user: CurrentUser = Depends(
+        require_admin_capability_with_unlock(require_admin_capability("ops:system_config:write"))
+    ),
 ) -> UpdateSystemConfigResponse:
     """Validate and persist system configuration updates."""
     try:
@@ -171,7 +178,9 @@ def validate_system_config(
 def test_llm_channel(
     request: TestLLMChannelRequest,
     service: SystemConfigService = Depends(get_system_config_service),
-    _: CurrentUser = Depends(require_admin_capability("ops:providers:write")),
+    _: CurrentUser = Depends(
+        require_admin_capability_with_unlock(require_admin_capability("ops:providers:write"))
+    ),
 ) -> TestLLMChannelResponse:
     """Validate and test one channel definition without writing `.env`."""
     try:
@@ -218,7 +227,9 @@ def test_llm_channel(
 def test_custom_data_source(
     request: TestCustomDataSourceRequest,
     service: SystemConfigService = Depends(get_system_config_service),
-    _: CurrentUser = Depends(require_admin_capability("ops:providers:write")),
+    _: CurrentUser = Depends(
+        require_admin_capability_with_unlock(require_admin_capability("ops:providers:write"))
+    ),
 ) -> TestCustomDataSourceResponse:
     """Validate and test one custom data source without writing `.env`."""
     try:
@@ -256,7 +267,9 @@ def test_custom_data_source(
 def test_builtin_data_source(
     request: TestBuiltinDataSourceRequest,
     service: SystemConfigService = Depends(get_system_config_service),
-    _: CurrentUser = Depends(require_admin_capability("ops:providers:write")),
+    _: CurrentUser = Depends(
+        require_admin_capability_with_unlock(require_admin_capability("ops:providers:write"))
+    ),
 ) -> TestBuiltinDataSourceResponse:
     """Validate one built-in provider with real remote endpoint checks."""
     try:
@@ -322,7 +335,9 @@ def get_system_config_schema(
 )
 def reset_runtime_caches(
     service: SystemConfigService = Depends(get_system_config_service),
-    _: CurrentUser = Depends(require_admin_capability("ops:system_config:write")),
+    _: CurrentUser = Depends(
+        require_admin_capability_with_unlock(require_admin_capability("ops:system_config:write"))
+    ),
 ) -> SystemAdminActionResponse:
     """Run a bounded admin maintenance action for runtime cache reset."""
     try:
@@ -355,7 +370,9 @@ def reset_runtime_caches(
 def factory_reset_system(
     request: FactoryResetSystemRequest,
     service: SystemConfigService = Depends(get_system_config_service),
-    current_user: CurrentUser = Depends(require_admin_capability("ops:system_config:write")),
+    current_user: CurrentUser = Depends(
+        require_admin_capability_with_unlock(require_admin_capability("ops:system_config:write"))
+    ),
 ) -> SystemAdminActionResponse:
     """Run the bounded destructive factory reset flow."""
     try:
