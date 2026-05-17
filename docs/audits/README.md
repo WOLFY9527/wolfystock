@@ -57,6 +57,11 @@ notes, fixture examples, or a single product-capability changelog entry.
   is not a launch blocker, not operator launch evidence, and not a substitute
   for provider entitlement/freshness acceptance. Current launch status remains
   governed by the launch-control docs above.
+- `backtest-quant-capability-audit.md`: current docs-only boundary audit for
+  backtest, local-only universe jobs, and optional DuckDB quant diagnostics.
+  It preserves the current conclusion that these surfaces are research
+  prototype / diagnostic capabilities, not professional quant readiness or
+  production signal-routing approval.
 
 ## Evidence packs and operational runbooks
 
