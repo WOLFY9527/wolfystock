@@ -8,6 +8,16 @@ Phase 2 starts cache-first advisory planning in
 helper functions for reviewing cache/local-first candidate order by domain,
 market, and mode. It is not wired into runtime provider execution.
 
+Phase 3 adds an inert source-confidence contract at
+`src/contracts/source_confidence.py`, backed by
+`src/services/source_confidence_contract.py`. The contract provides
+serializable source-confidence and provider-capability DTOs with the fields
+`source`, `sourceLabel`, `asOf`, `freshness`, `isFallback`, `isStale`,
+`isPartial`, `isSynthetic`, `isUnavailable`, `confidenceWeight`, `coverage`,
+`degradationReason`, and `capReason`. Its pure normalization and validation
+helpers cap fallback, stale, partial, synthetic, or unavailable sources so they
+cannot be represented as live/fresh confidence evidence.
+
 The matrix documents provider domains, market coverage, quota class, freshness
 class, recommended TTL hints, scanner/backtest eligibility, analysis-route
 eligibility, and domain priority hints. It is intended for reviews, tests, and

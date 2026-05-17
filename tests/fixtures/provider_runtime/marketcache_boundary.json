@@ -54,6 +54,24 @@
   "operations_metadata": {
     "cacheMutation": false,
     "externalProviderCalls": false,
+    "providerDiagnostics": {
+      "tickflowCnBreadth": {
+        "breadthEntitlementState": "unknown",
+        "breadthEntitlementUsable": null,
+        "credentialConfigured": false,
+        "credentialState": "missing",
+        "diagnosticTarget": "cn_breadth",
+        "market": "CN_Equity_A",
+        "observedSource": null,
+        "provider": "tickflow",
+        "reachabilityState": "unknown",
+        "reasonCode": null,
+        "sourceType": null,
+        "status": "key_missing",
+        "summary": "TickFlow key 未配置，无法评估 CN_Equity_A breadth entitlement。",
+        "tickflowReachable": null
+      }
+    },
     "readOnly": true,
     "source": "market_cache_and_admin_logs",
     "summaryCache": {
