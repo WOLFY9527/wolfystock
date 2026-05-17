@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import logging
 import os
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import and_, delete, func, select, text
 
@@ -15,8 +16,377 @@ from src.config import get_config
 from src.postgres_control_plane_store import PhaseGExecutionEvent, PhaseGExecutionSession
 from src.services.notification_service import NotificationService
 from src.storage import ExecutionLogEvent, ExecutionLogSession, get_db
+from src.utils.security import sanitize_message, sanitize_metadata
 
 logger = logging.getLogger(__name__)
+
+_MISSING_DOMAIN_BY_STEP = {
+    "fetch_quote": "quote",
+    "fetch_history": "history",
+    "fetch_technical": "technical",
+    "fetch_fundamentals": "fundamentals",
+    "fetch_financials": "financials",
+    "fetch_news": "news",
+    "fetch_market_context": "market_context",
+    "load_market_data": "market_data",
+    "load_factor_data": "factor_data",
+}
+_DATA_RELEVANT_PHASE_PREFIXES = ("data_", "market")
+_DATA_RELEVANT_CATEGORIES = {"data_source", "market", "analysis", "scanner"}
+_DEGRADED_STATUSES = {"partial", "partial_success", "failed", "error", "timeout", "timed_out", "timeout_unknown", "switched_to_fallback"}
+_FRESHNESS_SYNONYMS = {
+    "fresh": "fresh",
+    "live": "fresh",
+    "current": "fresh",
+    "stale": "stale",
+    "stale_refreshing": "stale",
+    "stale_or_fallback": "stale",
+    "degraded": "degraded",
+    "partial": "partial",
+    "missing": "missing",
+    "fallback": "fallback",
+    "unknown": "unknown",
+}
+_SURFACE_ALIASES = {
+    "market_overview": "market_overview",
+    "marketoverview": "market_overview",
+    "analysis": "analysis",
+    "scanner": "scanner",
+    "backtest": "backtest",
+    "portfolio": "portfolio",
+    "watchlist": "watchlist",
+    "market": "market",
+    "notification": "notification",
+    "notifications": "notification",
+    "admin_logs": "admin_logs",
+}
+
+
+class AdminDataMissingDrilldownService:
+    """Read-only aggregation for missing or degraded data observability."""
+
+    def __init__(self) -> None:
+        self.db = get_db()
+
+    @staticmethod
+    def _text(value: Any) -> str:
+        return str(value or "").strip()
+
+    @classmethod
+    def _normalize_token(cls, value: Any) -> str:
+        text_value = cls._text(value).lower().replace("-", "_").replace(".", "_").replace(" ", "_")
+        return re.sub(r"[^a-z0-9_:/]+", "_", text_value).strip("_")
+
+    @classmethod
+    def _parse_since(cls, value: Optional[str]) -> Optional[datetime]:
+        text_value = cls._text(value).lower()
+        if not text_value:
+            return None
+        try:
+            if text_value.endswith("m") and text_value[:-1].isdigit():
+                return datetime.now() - timedelta(minutes=int(text_value[:-1]))
+            if text_value.endswith("h") and text_value[:-1].isdigit():
+                return datetime.now() - timedelta(hours=int(text_value[:-1]))
+            if text_value.endswith("d") and text_value[:-1].isdigit():
+                return datetime.now() - timedelta(days=int(text_value[:-1]))
+            return datetime.fromisoformat(text_value.replace("z", "+00:00"))
+        except Exception:
+            return None
+
+    @classmethod
+    def _parse_iso(cls, value: Any) -> Optional[datetime]:
+        text_value = cls._text(value)
+        if not text_value:
+            return None
+        try:
+            return datetime.fromisoformat(text_value.replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    @classmethod
+    def _normalize_surface(cls, value: Any) -> str:
+        token = cls._normalize_token(value)
+        if "market_overview" in token:
+            return "market_overview"
+        for raw, normalized in _SURFACE_ALIASES.items():
+            if token == raw or token.startswith(f"{raw}_"):
+                return normalized
+        return token or "system"
+
+    @classmethod
+    def _affected_surface(cls, *, summary: Dict[str, Any], detail: Dict[str, Any], event_detail: Dict[str, Any]) -> str:
+        business = summary.get("business_event") if isinstance(summary.get("business_event"), dict) else {}
+        meta = summary.get("meta") if isinstance(summary.get("meta"), dict) else {}
+        candidates = (
+            business.get("feature"),
+            business.get("component"),
+            business.get("category"),
+            event_detail.get("surface"),
+            event_detail.get("feature"),
+            event_detail.get("component"),
+            event_detail.get("route_family"),
+            meta.get("subsystem"),
+            detail.get("name"),
+        )
+        for candidate in candidates:
+            surface = cls._normalize_surface(candidate)
+            if surface != "system":
+                return surface
+        return "system"
+
+    @classmethod
+    def _normalize_reason_code(cls, event: Dict[str, Any], detail: Dict[str, Any]) -> str:
+        candidates = (
+            event.get("error_code"),
+            detail.get("reason_code"),
+            detail.get("reason"),
+            detail.get("error_code"),
+            detail.get("event_name"),
+        )
+        for candidate in candidates:
+            token = cls._normalize_token(candidate)
+            if token and re.fullmatch(r"[a-z0-9_:/]{2,64}", token):
+                return token
+        text_blob = " ".join(cls._text(value).lower() for value in candidates if cls._text(value))
+        if "missing api key" in text_blob or "missing_api_key" in text_blob:
+            return "missing_api_key"
+        if "empty result" in text_blob or "empty_result" in text_blob or "no data" in text_blob:
+            return "empty_result"
+        if "insufficient" in text_blob:
+            return "insufficient_fields"
+        if "timeout" in text_blob:
+            return "timeout"
+        if "fallback" in text_blob:
+            return "fallback"
+        if "stale" in text_blob:
+            return "stale"
+        return "unknown"
+
+    @classmethod
+    def _infer_missing_domain(cls, event: Dict[str, Any], detail: Dict[str, Any]) -> Optional[str]:
+        direct_candidates = (
+            detail.get("missing_domain"),
+            detail.get("data_domain"),
+            detail.get("domain"),
+            detail.get("source_domain"),
+        )
+        for candidate in direct_candidates:
+            token = cls._normalize_token(candidate)
+            if token:
+                return token
+        step = cls._normalize_token(event.get("step"))
+        if step in _MISSING_DOMAIN_BY_STEP:
+            return _MISSING_DOMAIN_BY_STEP[step]
+        phase = cls._normalize_token(event.get("phase"))
+        if phase.startswith("data_"):
+            phase_domain = phase[5:]
+            if phase_domain:
+                return phase_domain
+        text_blob = " ".join(
+            cls._text(value).lower()
+            for value in (
+                detail.get("event_name"),
+                event.get("step"),
+                event.get("phase"),
+                event.get("target"),
+                detail.get("reason"),
+            )
+            if cls._text(value)
+        )
+        for keyword, domain in (
+            ("quote", "quote"),
+            ("history", "history"),
+            ("technical", "technical"),
+            ("fundamental", "fundamentals"),
+            ("financial", "financials"),
+            ("news", "news"),
+            ("market context", "market_context"),
+        ):
+            if keyword in text_blob:
+                return domain
+        return None
+
+    @classmethod
+    def _freshness_status(cls, event: Dict[str, Any], detail: Dict[str, Any], reason_code: str) -> str:
+        candidates = (
+            detail.get("freshness_status"),
+            detail.get("freshness_state"),
+            detail.get("freshness"),
+            detail.get("cache_state"),
+        )
+        for candidate in candidates:
+            token = cls._normalize_token(candidate)
+            normalized = _FRESHNESS_SYNONYMS.get(token)
+            if normalized:
+                return normalized
+        if cls._flag_value(detail, "stale", "is_stale"):
+            return "stale"
+        if cls._flag_value(detail, "fallback_used", "fallbackUse", "fallbackUsed", "isFallback", "is_fallback"):
+            return "fallback"
+        if reason_code in {"missing_api_key", "empty_result", "insufficient_fields"}:
+            return "missing"
+        if reason_code in {"stale", "stale_quote_served"}:
+            return "stale"
+        if cls._normalize_token(event.get("status")) in {"partial", "partial_success"}:
+            return "partial"
+        return "unknown"
+
+    @classmethod
+    def _flag_value(cls, payload: Dict[str, Any], *keys: str) -> bool:
+        for key in keys:
+            if key in payload:
+                return bool(payload.get(key))
+        return False
+
+    @classmethod
+    def _is_data_relevant(cls, event: Dict[str, Any], detail: Dict[str, Any], domain: Optional[str], reason_code: str, freshness_status: str) -> bool:
+        phase = cls._normalize_token(event.get("phase"))
+        category = cls._normalize_token(detail.get("category"))
+        step = cls._normalize_token(event.get("step"))
+        event_name = cls._normalize_token(detail.get("event_name"))
+        status = cls._normalize_token(event.get("status"))
+        text_blob = " ".join(part for part in (phase, category, step, event_name, reason_code, freshness_status, domain or "") if part)
+        phase_related = any(phase.startswith(prefix) for prefix in _DATA_RELEVANT_PHASE_PREFIXES)
+        category_related = category in _DATA_RELEVANT_CATEGORIES
+        step_related = step in _MISSING_DOMAIN_BY_STEP
+        keyword_related = any(keyword in text_blob for keyword in ("quote", "history", "technical", "news", "fundamental", "financial", "freshness", "stale", "fallback", "missing"))
+        degraded = status in _DEGRADED_STATUSES or freshness_status not in {"fresh", "unknown"} or reason_code != "unknown"
+        return degraded and (phase_related or category_related or step_related or keyword_related or domain is not None)
+
+    @classmethod
+    def _provider_source(cls, *, summary: Dict[str, Any], detail: Dict[str, Any], event: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+        business = summary.get("business_event") if isinstance(summary.get("business_event"), dict) else {}
+        provider = detail.get("provider") or detail.get("data_provider") or business.get("provider")
+        source = detail.get("source") or detail.get("source_label") or business.get("source")
+        sanitized_provider = sanitize_message(cls._text(provider))[:160] if cls._text(provider) else None
+        sanitized_source = sanitize_message(cls._text(source))[:200] if cls._text(source) else None
+        return sanitized_provider or None, sanitized_source or None
+
+    def list_items(
+        self,
+        *,
+        since: Optional[str] = "24h",
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        limit: int = 200,
+    ) -> Dict[str, Any]:
+        effective_date_from = date_from or self._parse_since(since)
+        session_limit = max(200, min(max(int(limit), 1) * 5, 1000))
+        rows, _ = self.db.list_execution_log_sessions(
+            task_id=None,
+            stock_code=None,
+            status=None,
+            category=None,
+            provider=None,
+            model=None,
+            channel=None,
+            date_from=effective_date_from,
+            date_to=date_to,
+            limit=session_limit,
+            offset=0,
+        )
+        session_ids = [self._text(row.get("session_id")) for row in rows if isinstance(row, dict) and self._text(row.get("session_id"))]
+        if not session_ids:
+            return {"total": 0, "items": []}
+        detail_map = self.db.list_execution_log_session_details(session_ids)
+        aggregates: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
+        for session_id in session_ids:
+            session_detail = sanitize_metadata(detail_map.get(session_id) or {})
+            summary = session_detail.get("summary") if isinstance(session_detail.get("summary"), dict) else {}
+            business = summary.get("business_event") if isinstance(summary.get("business_event"), dict) else {}
+            events = session_detail.get("events") if isinstance(session_detail.get("events"), list) else []
+            for event in events:
+                if not isinstance(event, dict):
+                    continue
+                safe_event = sanitize_metadata(event)
+                event_detail = safe_event.get("detail") if isinstance(safe_event.get("detail"), dict) else {}
+                reason_code = self._normalize_reason_code(safe_event, event_detail)
+                domain = self._infer_missing_domain(safe_event, event_detail)
+                freshness_status = self._freshness_status(safe_event, event_detail, reason_code)
+                if not self._is_data_relevant(safe_event, event_detail, domain, reason_code, freshness_status):
+                    continue
+                affected_surface = self._affected_surface(summary=summary, detail=session_detail, event_detail=event_detail)
+                provider, source = self._provider_source(summary=summary, detail=event_detail, event=safe_event)
+                fallback_used = self._flag_value(event_detail, "fallback_used", "fallbackUsed", "isFallback", "is_fallback") or self._normalize_token(safe_event.get("status")) == "switched_to_fallback"
+                stale = freshness_status == "stale" or self._flag_value(event_detail, "stale", "is_stale")
+                partial = self._normalize_token(safe_event.get("status")) in {"partial", "partial_success", "timeout", "timed_out", "timeout_unknown", "switched_to_fallback"}
+                event_time = self._parse_iso(safe_event.get("event_at"))
+                event_time_text = event_time.isoformat() if event_time else self._text(safe_event.get("event_at")) or None
+                symbol = self._text(business.get("symbol")) or self._text(session_detail.get("code")) or None
+                market = self._text(business.get("market")) or None
+                key = (
+                    affected_surface,
+                    domain or "unknown",
+                    provider,
+                    source,
+                    freshness_status,
+                    fallback_used,
+                    stale,
+                    partial,
+                    reason_code,
+                )
+                bucket = aggregates.setdefault(
+                    key,
+                    {
+                        "affected_surface": affected_surface,
+                        "missing_domain": domain or "unknown",
+                        "provider": provider,
+                        "source": source,
+                        "freshness_status": freshness_status,
+                        "fallback_used": fallback_used,
+                        "stale": stale,
+                        "partial": partial,
+                        "reason_code": reason_code,
+                        "latest_seen_at": event_time_text,
+                        "count": 0,
+                        "sample_events": [],
+                        "symbols": set(),
+                        "markets": set(),
+                    },
+                )
+                bucket["count"] += 1
+                if symbol:
+                    bucket["symbols"].add(symbol)
+                if market:
+                    bucket["markets"].add(market)
+                if event_time_text and (not bucket["latest_seen_at"] or event_time_text > bucket["latest_seen_at"]):
+                    bucket["latest_seen_at"] = event_time_text
+                event_id = self._text(safe_event.get("id"))
+                if event_id:
+                    bucket["sample_events"].append((event_time or datetime.min, event_id))
+
+        items: List[Dict[str, Any]] = []
+        for bucket in aggregates.values():
+            sample_ids = [
+                event_id
+                for _, event_id in sorted(bucket["sample_events"], key=lambda entry: (entry[0], entry[1]))[:5]
+            ]
+            symbols = sorted(bucket["symbols"])
+            markets = sorted(bucket["markets"])
+            items.append(
+                {
+                    "affected_surface": bucket["affected_surface"],
+                    "symbol": symbols[0] if len(symbols) == 1 else None,
+                    "market": markets[0] if len(markets) == 1 else None,
+                    "missing_domain": bucket["missing_domain"],
+                    "provider": bucket["provider"],
+                    "source": bucket["source"],
+                    "freshness_status": bucket["freshness_status"],
+                    "fallback_used": bool(bucket["fallback_used"]),
+                    "stale": bool(bucket["stale"]),
+                    "partial": bool(bucket["partial"]),
+                    "reason_code": bucket["reason_code"],
+                    "latest_seen_at": bucket["latest_seen_at"],
+                    "count": int(bucket["count"]),
+                    "sample_event_ids": sample_ids,
+                }
+            )
+        items.sort(key=lambda item: ((-(int(item.get("count") or 0))), str(item.get("latest_seen_at") or ""), str(item.get("affected_surface") or ""), str(item.get("missing_domain") or "")), reverse=False)
+        trimmed = items[: max(1, min(int(limit), 200))]
+        return {
+            "total": len(items),
+            "items": trimmed,
+        }
 
 
 @dataclass(frozen=True)

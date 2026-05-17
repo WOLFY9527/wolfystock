@@ -56,6 +56,12 @@ def _admin_user() -> CurrentUser:
     )
 
 
+def _admin_user_with_capabilities(*capabilities: str) -> CurrentUser:
+    user = _admin_user()
+    object.__setattr__(user, "admin_capabilities", tuple(capabilities))
+    return user
+
+
 def _regular_user() -> CurrentUser:
     return CurrentUser(
         user_id="user-1",
@@ -1445,6 +1451,27 @@ class AdminLogsApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["detail"]["error"], "admin_required")
+
+    def test_data_missing_drilldown_requires_logs_read_capability(self) -> None:
+        app = FastAPI()
+        app.include_router(admin_logs.router, prefix="/api/v1/admin/logs")
+        app.dependency_overrides[get_current_user] = lambda: _admin_user()
+        client = TestClient(app)
+
+        response = client.get("/api/v1/admin/logs/data-missing-drilldown")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"]["error"], "admin_capability_required")
+
+    def test_data_missing_drilldown_endpoint_returns_empty_payload(self) -> None:
+        with patch("src.services.admin_logs_service.get_db", return_value=self.db):
+            payload = admin_logs.list_data_missing_drilldown(
+                since="",
+                limit=100,
+                _=_admin_user_with_capabilities("ops:logs:read"),
+            )
+
+        self.assertEqual(payload.model_dump(), {"total": 0, "items": []})
 
 
 if __name__ == "__main__":

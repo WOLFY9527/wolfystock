@@ -173,6 +173,28 @@ class BusinessEventListResponse(BaseModel):
     health_summary: Optional[AdminLogHealthSummaryModel] = None
 
 
+class AdminDataMissingDrilldownItemModel(BaseModel):
+    affected_surface: str
+    symbol: Optional[str] = None
+    market: Optional[str] = None
+    missing_domain: str
+    provider: Optional[str] = None
+    source: Optional[str] = None
+    freshness_status: str = "unknown"
+    fallback_used: bool = False
+    stale: bool = False
+    partial: bool = False
+    reason_code: str = "unknown"
+    latest_seen_at: Optional[str] = None
+    count: int = 0
+    sample_event_ids: List[str] = Field(default_factory=list)
+
+
+class AdminDataMissingDrilldownResponse(BaseModel):
+    total: int = 0
+    items: List[AdminDataMissingDrilldownItemModel] = Field(default_factory=list)
+
+
 class AdminLogStorageSummaryModel(BaseModel):
     total_log_count: int = 0
     event_count: int = 0
