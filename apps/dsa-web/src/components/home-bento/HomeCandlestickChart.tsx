@@ -901,7 +901,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
 
       {status === 'ready' && candles.length ? (
         <div
-          className="relative h-[280px] min-w-[280px] overflow-visible sm:h-[310px] xl:h-[340px]"
+          className="relative h-[260px] min-w-[280px] overflow-visible sm:h-[285px] xl:h-[305px]"
           data-testid="home-candlestick-chart-frame"
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoveredIndex(null)}
@@ -946,7 +946,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       ) : (
         <div
           className={cn(
-            'flex h-[280px] min-w-[280px] flex-col items-center justify-center rounded-[12px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-4 text-center sm:h-[310px] xl:h-[340px]',
+            'flex h-[260px] min-w-[280px] flex-col items-center justify-center rounded-[12px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-4 text-center sm:h-[285px] xl:h-[305px]',
             status === 'loading' ? 'text-white/46' : 'text-white/42',
           )}
           data-testid="home-candlestick-unavailable"

@@ -316,7 +316,8 @@ describe('HomeSurfacePage', () => {
     expect(researchConsole).toHaveAttribute('data-layout-zone', 'RouteConsole');
     expect(researchConsole).toHaveAttribute('data-visual-tier', 'dominant');
     expect(researchConsole).toHaveAttribute('data-surface-system', 'reflect-linear-console');
-    expect(researchConsole).toHaveClass('w-full', 'max-w-full', 'rounded-[18px]', 'border', 'border-[color:var(--wolfy-border-subtle)]', 'bg-[var(--wolfy-surface-console)]');
+    expect(researchConsole).toHaveClass('w-full', 'max-w-full', 'rounded-none', 'border', 'border-transparent', 'bg-transparent', 'shadow-none');
+    expect(researchConsole).not.toHaveClass('bg-[var(--wolfy-surface-console)]', 'shadow-[var(--wolfy-shadow-console)]');
     expect(researchConsole.contains(commandBar)).toBe(false);
     expect(researchConsole.contains(board)).toBe(true);
     expect(researchConsole.contains(rail)).toBe(true);
@@ -337,11 +338,11 @@ describe('HomeSurfacePage', () => {
 
     expect(board).toHaveAttribute('data-linear-primitive', 'console-board');
     expect(board).toHaveAttribute('data-surface-system', 'reflect-linear-console');
-    expect(board).toHaveClass('relative', 'z-10', 'overflow-hidden');
+    expect(board).toHaveClass('relative', 'z-10', 'overflow-visible');
     expect(screen.getByTestId('home-research-board').firstElementChild).toHaveClass('home-research-fixed-grid', 'w-full', 'min-w-0');
     expect(rail).toHaveAttribute('data-linear-primitive', 'context-rail');
     expect(rail).toHaveAttribute('data-layout-zone', 'ContextRail');
-    expect(rail).toHaveClass('home-research-context-rail', 'bg-[var(--wolfy-surface-rail)]', 'divide-y', 'divide-[color:var(--wolfy-divider)]');
+    expect(rail).toHaveClass('home-research-context-rail', 'bg-transparent', 'divide-y-0', 'lg:border-l-0');
 
     expect(homeSearch).toHaveAttribute('placeholder', '输入代码唤醒 AI (如 ORCL)...');
     expect(homeSearch).toHaveValue('');
@@ -1425,9 +1426,9 @@ describe('HomeSurfacePage', () => {
     expect(researchConsole.contains(rail)).toBe(true);
     expect(researchConsole).toHaveAttribute('data-visual-tier', 'dominant');
     expect(researchConsole).toHaveAttribute('data-surface-system', 'reflect-linear-console');
-    expect(researchConsole).toHaveClass('rounded-[18px]', 'border-[color:var(--wolfy-border-subtle)]', 'bg-[var(--wolfy-surface-console)]');
-    expect(board).toHaveClass('relative', 'z-10', 'overflow-hidden');
-    expect(rail).toHaveClass('home-research-context-rail', 'bg-[var(--wolfy-surface-rail)]');
+    expect(researchConsole).toHaveClass('rounded-none', 'border-transparent', 'bg-transparent', 'shadow-none');
+    expect(board).toHaveClass('relative', 'z-10', 'overflow-visible');
+    expect(rail).toHaveClass('home-research-context-rail', 'bg-transparent', 'divide-y-0');
     expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
     expect(screen.queryByText('Ghost dashboard 承接中')).not.toBeInTheDocument();
     expect(screen.queryByText('待分析')).not.toBeInTheDocument();
@@ -1594,7 +1595,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-fundamentals')).toBeInTheDocument();
-    expect(screen.getAllByText('Pending').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Pending data').length).toBeGreaterThan(0);
     expect(screen.queryByText('0%')).not.toBeInTheDocument();
     expect(screen.queryByText('N/A')).not.toBeInTheDocument();
     expect(screen.queryByText('Bullish')).not.toBeInTheDocument();
@@ -2355,7 +2356,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-fundamentals')).toBeInTheDocument();
-    expect(screen.getAllByText('-').length).toBeGreaterThan(2);
+    expect(screen.getAllByText('待补充数据').length).toBeGreaterThan(2);
     expect(screen.queryByText('0%')).not.toBeInTheDocument();
     expect(screen.queryByText('N/A')).not.toBeInTheDocument();
     expect(screen.queryByText('反弹验证')).not.toBeInTheDocument();
