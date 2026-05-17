@@ -1,128 +1,101 @@
+<!--
+WolfyStock Reflect-Linear UI replacement document.
+Source of truth image: docs/design/reference/wolfystock-reflect-linear-home-mockup.png
+This document intentionally supersedes older deep-space / terminal / bento / generic Linear UI wording.
+-->
+
 # WolfyStock Frontend Surface Usage
 
-Purpose: prevent visual drift by defining route-to-surface taxonomy for the WolfyStock Linear OS.
+Status: route surface taxonomy for Reflect-Linear Research OS.
 
-Read with:
+## 1. Purpose
 
-- `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
-- `WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`
-- `WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md`
-- `WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md`
+This document tells frontend workers which surface each route should use. It prevents every page from inventing its own card layout.
 
-## Surface Taxonomy
+## 2. Universal page scaffold
 
-| Route family | Canonical surface | Primary shape |
-| --- | --- | --- |
-| Home | `ResearchConsole` | command bar, decision console, chart workspace, context rail |
-| Scanner | `RankingBoard` | filter/command strip, status strip, ranked rows/table, selected detail |
-| Watchlist | `WatchBoard` / `DenseList` | compact add/filter, dense rows, status strips, row detail |
-| Market Overview | `MarketMonitor` | regime strip, chart/workbench surface, ranked/comparative modules, source disclosure |
-| Portfolio | `RiskConsole` / `LedgerBoard` | exposure/risk surface, holdings board, ledger rows, compact controls |
-| Options Lab | `ExperimentConsole` | symbol command, assumptions, payoff/risk surface, option matrix |
-| Admin/Ops | `OpsConsole` | operator status strip, queue/table, detail drawer, collapsed runbook |
+Every major app route should follow this skeleton where applicable:
 
-## Shared Rules
+```text
+TopNavigation
+CommandBar or HeaderStrip
+RouteConsole
+  PrimaryWorkRegion
+  ContextRail or FloatingDetailPanel
+  SecondaryDeck
+```
 
-- Page files own product hierarchy.
-- `components/linear` owns new Linear OS material and layout primitives.
-- `Terminal*` names are compatibility adapters only.
-- Use one dominant surface per route.
-- Prefer rows, dividers, dense lists, tables, strips, drawers, and rails before cards.
-- Cards and panels are allowed only inside named layout regions with fixed sizing, explicit overflow behavior, and a clear hierarchy.
-- Do not allow uncontrolled card sprawl, card walls, or nested panel/card stacks outside the contract zones.
-- Keep diagnostics and provider/runtime detail collapsed unless the route is explicitly admin/operator.
+Routes may omit zones only when the workflow clearly does not need them.
 
-## Home: ResearchConsole
+## 3. Surface primitives and intent
 
-Required anatomy:
+### AppCanvas
 
-- `CommandBar` with the wide command/search row;
-- `HeaderStrip` for identity and decision state;
-- `PrimaryWorkRegion` for the score, thesis, key levels, and chart workspace;
-- `SecondaryDeck` for catalyst/event rows;
-- `ContextRail` for compact data quality, assumptions, and source state;
-- `DetailDrawer` / `FloatingPanel` for report and source detail.
+Full-page dark navy/charcoal background with subtle atmospheric gradient and optional micro-noise.
 
-Do not perform a card/bento-first Home migration. Do not turn the route into uncontrolled card sprawl.
+### ShellBar / TopNavigation
 
-## Scanner: RankingBoard
+Slim persistent nav. It must not become an admin toolbar. Admin/control tools go into compact utility menu.
 
-Required anatomy:
+### CommandBar
 
-- command/filter row;
-- status strip;
-- ranked rows or table;
-- selected candidate detail;
-- collapsed diagnostics/history/strategy.
+Search, query, AI command, or scanner command entry. It should feel like a focused input system, not a large filter card.
 
-Candidate rows get one primary action plus secondary disclosure. Do not turn each candidate into a mini report card.
+### RouteConsole
 
-## Watchlist: WatchBoard / DenseList
+One coherent route-level surface. Use this instead of page-level card walls.
 
-Required anatomy:
+### PrimaryWorkRegion
 
-- compact add/filter row;
-- dense list or table;
-- status/alert strips;
-- selected detail drawer or inline rail;
-- compact empty rows.
+The dominant task: chart, ranking table, watch rows, conversation, portfolio ledger, options decision board, or backtest result.
 
-## Market Overview: MarketMonitor
+### ContextRail
 
-Required anatomy:
+Fixed-width supporting information on desktop. Bounded and internally scrollable when needed. On mobile, collapses below primary content or into drawer.
 
-- regime/status strip;
-- chart/workbench surface;
-- ranked or comparative rows;
-- collapsed source/runtime details.
+### MetricStrip / KeyLevelStrip
 
-Missing data must be compact and truthful.
+Compact summary rows. Avoid standalone metric cards unless each has equal size and a clear grid contract.
 
-## Portfolio: RiskConsole / LedgerBoard
+### DataRows
 
-Required anatomy:
+Default for repeatable data. Prefer rows over card-per-item.
 
-- account command strip;
-- exposure and P&L state;
-- holdings/risk board;
-- ledger/activity rows;
-- secondary manual tooling.
+### SecondaryDeck
 
-UI work must not change accounting, FX, broker sync, or cost-basis semantics.
+Attached secondary material: catalysts, events, diagnostics summary, or related details. It should be compact by default.
 
-## Options Lab: ExperimentConsole
+### FloatingDetailPanel / Drawer
 
-Required anatomy:
+Use for dense details, advanced filters, long diagnostics, source drilldowns, and secondary workflows.
 
-- symbol and status command strip;
-- assumptions and risk boundary;
-- payoff/risk surface;
-- option chain or strategy matrix;
-- collapsed data limitations.
+## 4. Route mapping
 
-No buy/order language unless explicitly scoped and safety-reviewed.
+| Route family | Surface name | Primary region | Secondary / rail |
+|---|---|---|---|
+| Home | ResearchConsole | stock thesis + chart | observation rail + catalysts |
+| Scanner | RankingBoard | candidate rows/table | selected candidate rail + collapsed diagnostics |
+| Watchlist | WatchBoard | watch rows/list | compact filters + bounded detail |
+| Chat | ResearchWorkspace | conversation + composer | evidence/context rail |
+| Market Overview | MarketMonitor | market state + comparative boards | freshness/source rail |
+| Liquidity | LiquidityMonitor | liquidity score + signal table | source/risk rail |
+| Rotation Radar | RotationMonitor | ranked themes/sectors | selected theme detail rail |
+| Portfolio | RiskConsole / LedgerBoard | holdings ledger | risk/activity rail |
+| Options Lab | ExperimentConsole | scenario/strategy decision board | risk boundary rail |
+| Backtest | ResearchRunConsole | result/compare workspace | parameters/details drawer |
+| Admin/Ops | OpsConsole | operations table/queue | status/actions rail |
+| Settings | PreferenceConsole | settings rows | help/details rail |
 
-## Admin/Ops: OpsConsole
+## 5. Containment rules
 
-Admin/operator routes may be denser and more technical, but they must remain visually isolated from normal product routes.
+- Filters: `CompactFilterBar`; advanced filters collapsed.
+- Diagnostics: collapsed by default unless the page is explicitly an Ops route.
+- Details: never use raw `Details` as visible product copy.
+- Tables: fixed row rhythm; actions grouped.
+- Rails: fixed desktop width; bounded height; internal scroll for overflow.
+- Cards: same-size cards only inside an explicit grid track.
+- Empty states: compact and attached to the board, not large standalone slabs.
 
-Required anatomy:
+## 6. Screenshot acceptance
 
-- operator status strip;
-- main queue/table/list;
-- selected detail panel or drawer;
-- technical details collapsed;
-- danger zone isolated and confirmed.
-
-Admin/Ops must not leak into normal user-facing route language or masthead priority.
-
-## Browser Acceptance
-
-For visual changes, verify:
-
-- primary task visible above the fold;
-- no horizontal overflow at desktop and mobile widths;
-- 1920px workspace uses width efficiently;
-- no pure-black gutters;
-- no card-dashboard feel unless intentionally report/editorial;
-- no raw provider/debug/schema leakage on user routes.
+A screenshot should reveal the route’s primary task within the first viewport. If the first viewport is mostly filters, diagnostics, empty panels, or card stacks, the route fails.

@@ -1,191 +1,180 @@
+<!--
+WolfyStock Reflect-Linear UI replacement document.
+Source of truth image: docs/design/reference/wolfystock-reflect-linear-home-mockup.png
+This document intentionally supersedes older deep-space / terminal / bento / generic Linear UI wording.
+-->
+
 # WolfyStock Frontend Route Templates
 
-Purpose: keep WolfyStock pages on the Linear OS route taxonomy.
+Status: implementation templates for Reflect-Linear Research OS.
 
-All frontend implementation tasks must classify the target route before editing. Do not add a new route template unless the task explicitly scopes a new route family.
+## 1. Common template
 
-Read with:
+```tsx
+<RouteConsole>
+  <HeaderStrip />
+  <CommandBar />
+  <FixedRegionGrid>
+    <PrimaryWorkRegion>
+      {/* chart/table/conversation/decision workspace */}
+    </PrimaryWorkRegion>
+    <ContextRail>
+      {/* compact supporting rows */}
+    </ContextRail>
+  </FixedRegionGrid>
+  <SecondaryDeck>
+    {/* compact rows/timeline/diagnostic summary */}
+  </SecondaryDeck>
+</RouteConsole>
+```
 
-- `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
-- `WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`
-- `WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md`
+The exact components may differ, but the zone contract must be visible in DOM/tests.
 
-## Template A: ResearchConsole
+## 2. Home / ResearchConsole
 
-Routes:
+Purpose: single-symbol research cockpit.
 
-- Home
-- AI decision station
-- focused single-symbol research
-- generated research surfaces focused on one symbol or report
+Required:
 
-Structure:
+- Command bar above console.
+- Company identity and current research stance.
+- Score, confidence, and data-quality state.
+- Key level strip.
+- Large chart as primary visual anchor.
+- Fixed context rail with observation framework and quality summary.
+- Bottom catalyst/event deck.
 
-1. Wide command/search bar.
-2. Identity and decision state.
-3. Key-level strip.
-4. Main chart/report/evidence workspace.
-5. Compact context rail when useful.
-6. Data/source detail in drawer or disclosure.
+Forbidden:
 
-Rules:
+- Detached chart card + detached rail + detached event card pile.
+- Large paragraph blocks in rail.
+- Random metrics cards outside region contract.
 
-- result/input is the hero, not onboarding copy;
-- chart data must be real when presented as market data;
-- cards and panels are allowed only inside fixed named regions with explicit sizing and overflow;
-- no uncontrolled card/bento-first first fold;
-- no fake LLM or market content;
-- no raw provider/debug detail in the primary flow.
+## 3. Scanner / RankingBoard
 
-Recommended zone order:
+Purpose: candidate ranking and selection workflow.
 
-1. `CommandBar`
-2. `HeaderStrip`
-3. `PrimaryWorkRegion`
-4. `SecondaryDeck`
-5. `ContextRail`
-6. `DetailDrawer` / `FloatingPanel`
+Required:
 
-## Template B: RankingBoard
+- Compact filter bar.
+- Ranking rows/table as primary work region.
+- Selected candidate detail in bounded rail/floating panel.
+- Diagnostics/backtest/comparison collapsed by default.
 
-Routes:
+Forbidden:
 
-- Scanner
-- ranked candidates
-- scanner results
+- First viewport dominated by filters.
+- Always-expanded diagnostics.
+- Visible raw `Details` label.
 
-Structure:
+## 4. Watchlist / WatchBoard
 
-1. Command/filter strip.
-2. Status strip.
-3. Ranked rows or table.
-4. Selected detail rail/drawer.
-5. Collapsed diagnostics/history/strategy.
+Purpose: monitored symbols and actions.
 
-Rules:
+Required:
 
-- candidates are the anchor;
-- candidate rows get one primary action plus secondary detail;
-- do not turn each candidate into a mini report card;
-- controls remain close to results;
-- diagnostics stay lower priority.
+- Compact filters.
+- Watch rows/list as primary region.
+- Compact empty state attached to board.
+- Batch actions in secondary action row.
+- Advanced filters collapsed.
 
-## Template C: WatchBoard / DenseList
+Forbidden:
 
-Routes:
+- Filter slab owning first viewport.
+- Empty card detached from board.
+- Batch controls as large full-width panel.
 
-- Watchlist
-- compact entity lists
-- non-operator logs
+## 5. Chat / ResearchWorkspace
 
-Structure:
+Purpose: AI research conversation with evidence.
 
-1. Compact title/status.
-2. Add/filter row.
-3. Dense list or table.
-4. Row actions.
-5. Selected detail or collapsed secondary detail.
+Required:
 
-Rules:
+- Bounded conversation `ScrollPanel`.
+- Anchored composer.
+- Evidence/context rail collapsed or bounded.
+- Suggested prompts as compact chips/rows.
 
-- list/table first;
-- empty state is compact;
-- batch actions do not dominate;
-- no slab around every row.
+Forbidden:
 
-## Template D: MarketMonitor
+- Giant blank conversation slab.
+- Right rail taller/noisier than primary workspace.
+- Always-open evidence blocks.
 
-Routes:
+## 6. Market Overview / MarketMonitor
 
-- Market Overview
-- Liquidity Monitor
-- Rotation Radar
-- macro/liquidity/rotation views
+Purpose: broad market state.
 
-Structure:
+Required:
 
-1. Regime/status strip.
-2. Main market board or chart workspace.
-3. Ranked/comparative rows.
-4. Selected detail when useful.
-5. Collapsed source/runtime details.
+- Top market state strip.
+- Dominant market monitor surface.
+- Comparative boards as equal-height regions.
+- Freshness/source detail collapsed or in rail.
 
-Rules:
+Forbidden:
 
-- regime and primary market state first;
-- missing data compact and honest;
-- source/runtime diagnostics collapsed;
-- no unrelated indices promoted as primary data.
+- Old dashboard card mosaic.
+- Many uneven cards of market indicators.
 
-## Template E: RiskConsole / LedgerBoard
+## 7. Portfolio / RiskConsole
 
-Routes:
+Purpose: holdings, exposure, and risk.
 
-- Portfolio
-- transactions
-- cash ledger
-- exposure and risk views
+Required:
 
-Structure:
+- Ledger/table as primary region.
+- Risk summary rail.
+- Activity/reconciliation collapsed into secondary deck.
 
-1. Account/exposure/P&L status.
-2. Holdings and exposure board.
-3. Risk and allocation surface.
-4. Activity/ledger rows.
-5. Secondary manual tooling.
+Forbidden:
 
-Rules:
+- Large empty account cards.
+- Portfolio metrics as random card grid.
 
-- portfolio accounting semantics must not change in UI work;
-- native currency remains visible when FX conversion fails;
-- display currency belongs in compact controls or settings, not a hero block.
+## 8. Options Lab / ExperimentConsole
 
-## Template F: ExperimentConsole
+Purpose: scenario and strategy evaluation.
 
-Routes:
+Required:
 
-- Options Lab
-- strategy labs
-- hypothesis workspaces
+- Compact scenario command strip.
+- Strategy rows/decision matrix.
+- Risk boundary rail.
+- Chain/payoff details contained in scroll/drawer.
 
-Structure:
+Forbidden:
 
-1. Symbol/hypothesis command area.
-2. Assumptions and risk boundary.
-3. Option chain or strategy matrix.
-4. Payoff/risk workspace.
-5. Data limitations collapsed.
+- Stacked warning boxes and oversized forms.
 
-Rules:
+## 9. Backtest / ResearchRunConsole
 
-- one hypothesis at a time;
-- no trading/order CTA unless explicitly scoped;
-- preserve options ranking, gates, recommendation, payoff, and no-trade semantics.
+Purpose: run, compare, and interpret backtests.
 
-## Template G: OpsConsole
+Required:
 
-Routes:
+- Result/compare workspace as primary region.
+- Parameters and historical details in drawer/rail.
+- Metrics in controlled strips.
 
-- Admin console
-- Logs
-- Cost observability
-- Evidence review
-- Provider operations
-- Notifications
-- Users
-- System settings
+Forbidden:
 
-Structure:
+- Card-based form wall.
 
-1. Operator status strip.
-2. Main queue/table/list.
-3. Selected detail panel or drawer.
-4. Collapsed diagnostics/runbook/schema/artifacts.
-5. Isolated danger zone.
+## 10. Admin/Ops / OpsConsole
 
-Rules:
+Purpose: operations and maintenance.
 
-- technical detail is allowed but layered;
-- raw JSON/schema/runbook details are collapsed by default;
-- no secrets/tokens/cookies/Authorization headers;
-- admin visual density must not define user-facing product routes.
+Allowed to be denser and more table-driven, but still uses controlled regions.
+
+Required:
+
+- Operation queue/table as primary region.
+- Status rail.
+- Dangerous actions clearly grouped and low-noise.
+
+Forbidden:
+
+- Admin nav clutter in product nav.
+- Diagnostic card sprawl.

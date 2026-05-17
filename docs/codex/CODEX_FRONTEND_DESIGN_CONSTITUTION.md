@@ -1,78 +1,73 @@
-# WolfyStock Frontend Design Constitution
+<!--
+WolfyStock Reflect-Linear UI replacement document.
+Source of truth image: docs/design/reference/wolfystock-reflect-linear-home-mockup.png
+This document intentionally supersedes older deep-space / terminal / bento / generic Linear UI wording.
+-->
 
-WolfyStock frontend work follows the WolfyStock Linear OS design language.
+# Codex Frontend Design Constitution
 
-Read this file before every frontend edit, then use the canonical implementation guide:
+Status: frontend guardrail for all Codex UI tasks.
 
-- `docs/codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`
-- `docs/codex/WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md`
-- `docs/codex/WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md`
-- `docs/codex/WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md`
-- `docs/codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
+## 1. Source of truth
 
-This file is the short rule set. The detailed visual contract lives in `WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`.
-
-## Non-Negotiable Direction
-
-WolfyStock is a dark professional financial research OS:
-
-- charcoal canvas, not pure-black gutters;
-- slim product-first top navigation;
-- wide quiet command/search bar;
-- one dominant console, board, table, ledger, chart, or workbench surface per route;
-- compact context rail only when the workflow needs it;
-- thin separators over heavy containers;
-- restrained blue active/focus state;
-- green/red reserved for market semantics;
-- low-noise typography and concise evidence-based copy;
-- rows, tables, strips, rails, and drawers before cards.
-
-## Forbidden Defaults
-
-Do not use these as normal user-facing UI architecture:
-
-- generic SaaS dashboard shells;
-- admin/backend layout for product routes;
-- card-first or bento-first page structures;
-- widened old cards presented as a new design system;
-- pure-black page islands or gutters;
-- decorative material effects as routine hierarchy;
-- colorful gradients as normal action language;
-- helper/meta copy that says the UI is summarized, readable, trustworthy, ready, or useful.
-
-## Surface Choice
-
-Classify the route before editing:
-
-- Home: `ResearchConsole`
-- Scanner: `RankingBoard`
-- Watchlist: `WatchBoard` or `DenseList`
-- Market Overview: `MarketMonitor`
-- Portfolio: `RiskConsole` or `LedgerBoard`
-- Options Lab: `ExperimentConsole`
-- Admin/Ops: `OpsConsole`, visually isolated from normal user-facing routes
-
-If the route does not fit one of these, stop and document the reason before adding a new surface.
-
-## Implementation Rule
-
-New user-facing work should prefer:
+The visual source of truth is:
 
 ```text
-apps/dsa-web/src/components/linear/
+docs/design/reference/wolfystock-reflect-linear-home-mockup.png
 ```
 
-Existing `Terminal*` names are compatibility exports only. They must render Linear OS material and must not define future product UI direction.
+Codex must treat this as stronger than older screenshots, old mockups, and generic descriptions.
 
-## Acceptance Gate
+## 2. Required taste standard
 
-Frontend UI work is not done until browser verification confirms:
+The frontend must feel:
 
-- no horizontal overflow at desktop and mobile widths;
-- no pure-black root gutters or page gaps;
-- navigation is slim and product-first;
-- command/search belongs to the same charcoal system;
-- the primary route surface is not a stretched old card;
-- the page does not read as an admin/backend interface;
-- charts and market data surfaces remain real and behaviorally unchanged;
-- no raw provider/debug/schema/fixture/mock text appears on normal user routes.
+```text
+calm / premium / low-saturation / dark / structured / financial / precise / professional
+```
+
+It must not feel:
+
+```text
+cheap / flashy / noisy / crypto-casino / generic dashboard kit / terminal cosplay / dribbble card wall
+```
+
+## 3. Non-negotiable card containment rule
+
+Cards/panels are allowed only inside predefined fixed regions with explicit sizing, overflow, and hierarchy. Do not create uncontrolled card sprawl, auto-height masonry, or variable-height panel stacks. If content exceeds its region, use internal scroll, collapsed disclosure, drawer, popover, or floating detail panel.
+
+## 4. Route task procedure
+
+Every frontend route task must do this before editing:
+
+1. Identify route family.
+2. Declare named zones.
+3. Identify primary work region.
+4. Identify rail/secondary content.
+5. Decide overflow strategy.
+6. Update tests to protect the layout contract.
+7. Capture fresh browser evidence.
+
+## 5. Forbidden default outcomes
+
+- First viewport dominated by filters.
+- Diagnostics expanded by default.
+- Raw `Details` visible in main product surface.
+- Empty state as a giant standalone card.
+- Right rail as a pile of tiny cards/chips.
+- Repeated route-local card styles.
+- Saturated purple/blue glow used as decoration rather than hierarchy.
+
+## 6. Screenshot gate
+
+Do not claim success from tests alone. A route fails if fresh screenshots still show uncontrolled layout, even when all tests pass.
+
+Browser checks should include at least:
+
+- 1440x1000
+- 1920x1080 when route is desktop-heavy
+- 390x844 for mobile behavior
+
+## 7. Protected behavior
+
+UI refactors must preserve route behavior and API semantics. Do not change backend, provider, auth, account, scoring, ranking, strategy, options, backtest, or portfolio semantics unless the task explicitly allows it.
