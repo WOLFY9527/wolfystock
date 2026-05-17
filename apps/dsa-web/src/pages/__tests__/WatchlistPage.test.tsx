@@ -287,14 +287,15 @@ describe('WatchlistPage', () => {
     expect(screen.queryByText(/Track scanner candidates/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-TSM')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-600519')).toBeInTheDocument();
-    expect(screen.getByTestId('watchlist-filter-grid')).toHaveClass('min-w-0', 'grid-cols-2', 'md:grid-cols-2', 'xl:grid-cols-6');
+    expect(screen.getByTestId('watchlist-primary-filters')).toHaveClass('min-w-0', 'grid-cols-1');
     const marketSelect = screen.getByLabelText('市场');
-    const contextSelect = screen.getByLabelText('主题 / 候选范围');
     expect(marketSelect).toHaveClass('select-surface', 'absolute', 'inset-0', 'opacity-0');
     expect(marketSelect.closest('.select-field__control')).toHaveClass('ui-control-shell', 'relative', 'min-w-0', 'w-full');
     expect(marketSelect.closest('.select-field__control')?.querySelector('.select-field__overlay')).toHaveAttribute('aria-hidden', 'true');
     expect(marketSelect.closest('.select-field__control')?.querySelector('.select-field__value')).toHaveTextContent('全部');
     expect(marketSelect.closest('.select-field__control')?.querySelector('.select-field__icon')).toHaveClass('ml-2', 'shrink-0');
+    fireEvent.click(screen.getByRole('button', { name: '展开 更多筛选' }));
+    const contextSelect = screen.getByLabelText('主题 / 候选范围');
     expect(contextSelect).toHaveClass('select-surface', 'absolute', 'inset-0', 'opacity-0');
     expect(contextSelect.closest('.select-field__control')).toHaveClass('ui-control-shell', 'relative', 'min-w-0', 'w-full');
     expect(contextSelect.closest('.select-field__control')?.querySelector('.select-field__overlay')).toHaveAttribute('aria-hidden', 'true');
@@ -307,13 +308,18 @@ describe('WatchlistPage', () => {
 
     const row = await screen.findByTestId('watchlist-row-NVDA');
     expect(screen.getByTestId('watchlist-page')).toHaveAttribute('data-terminal-primitive', 'page-shell');
+    expect(screen.getByTestId('watchlist-header-strip')).toHaveAttribute('data-layout-zone', 'HeaderStrip');
     expect(document.querySelector('[data-terminal-primitive="dense-page-header"]')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-status-strip')).toHaveAttribute('data-terminal-primitive', 'dense-status-strip');
-    expect(screen.getByTestId('watchlist-table-workbench')).toHaveAttribute('data-terminal-primitive', 'dense-table-shell');
-    expect(screen.getByTestId('watchlist-add-filter-row')).toHaveAttribute('data-linear-primitive', 'command-bar');
+    expect(screen.getByTestId('watchlist-watch-board')).toHaveAttribute('data-terminal-primitive', 'dense-table-shell');
+    expect(screen.getByTestId('watchlist-compact-filter-bar')).toHaveAttribute('data-linear-primitive', 'compact-filter-bar');
+    expect(screen.getByTestId('watchlist-compact-filter-bar')).toHaveAttribute('data-layout-zone', 'CommandBar');
     expect(screen.getByTestId('watchlist-command-bar')).toHaveAttribute('data-terminal-primitive', 'dense-command-bar');
     expect(screen.getByTestId('watchlist-candidate-list')).toHaveAttribute('data-linear-primitive', 'dense-rows');
+    expect(screen.getByTestId('watchlist-primary-work-region')).toHaveAttribute('data-layout-zone', 'PrimaryWorkRegion');
     expect(screen.getByTestId('watchlist-detail-rail')).toHaveAttribute('data-linear-primitive', 'context-rail');
+    expect(screen.getByTestId('watchlist-detail-rail')).toHaveAttribute('data-layout-zone', 'ContextRail');
+    expect(screen.getByTestId('watchlist-secondary-deck')).toHaveAttribute('data-layout-zone', 'SecondaryDeck');
     expect(screen.getByTestId('watchlist-command-bar').querySelectorAll('[data-terminal-primitive="button"]')).toHaveLength(6);
     expect(row.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThan(0);
   });
@@ -357,29 +363,44 @@ describe('WatchlistPage', () => {
     expect(screen.getByRole('button', { name: '清除选择' })).not.toBeDisabled();
   });
 
-  it('keeps filters and batch controls above the watch board with a selected detail rail', async () => {
+  it('keeps a compact filter bar above the board and batch actions in a secondary deck', async () => {
     renderWatchlist();
     const rows = await screen.findByTestId('watchlist-candidate-list');
     const shell = screen.getByTestId('watchlist-page');
-    const workbench = screen.getByTestId('watchlist-table-workbench');
-    const addFilterRow = screen.getByTestId('watchlist-add-filter-row');
-    const filterGrid = screen.getByTestId('watchlist-filter-grid');
+    const watchBoard = screen.getByTestId('watchlist-watch-board');
+    const compactFilterBar = screen.getByTestId('watchlist-compact-filter-bar');
+    const primaryWorkRegion = screen.getByTestId('watchlist-primary-work-region');
     const commandBar = screen.getByTestId('watchlist-command-bar');
     const boardShell = screen.getByTestId('watchlist-board-shell');
     const detailRail = screen.getByTestId('watchlist-detail-rail');
+    const secondaryDeck = screen.getByTestId('watchlist-secondary-deck');
 
     expect(rows).toContainElement(screen.getByTestId('watchlist-row-NVDA'));
     expect(commandBar).toHaveTextContent('扫描当前筛选');
-    expect(workbench).toContainElement(addFilterRow);
-    expect(workbench).toContainElement(filterGrid);
-    expect(workbench).toContainElement(commandBar);
-    expect(workbench).toContainElement(boardShell);
-    expect(boardShell).toContainElement(rows);
+    expect(watchBoard).toContainElement(compactFilterBar);
+    expect(watchBoard).toContainElement(boardShell);
+    expect(boardShell).toContainElement(primaryWorkRegion);
+    expect(primaryWorkRegion).toContainElement(rows);
     expect(boardShell).toContainElement(detailRail);
-    expect(addFilterRow.compareDocumentPosition(boardShell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(boardShell.compareDocumentPosition(commandBar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(compactFilterBar.compareDocumentPosition(boardShell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(primaryWorkRegion.compareDocumentPosition(secondaryDeck) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(boardShell.compareDocumentPosition(secondaryDeck) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(shell).toHaveClass('flex', 'flex-col', 'gap-5', 'px-4', 'xl:px-8');
-    expect(workbench.parentElement).toBe(shell);
+    expect(watchBoard.parentElement).toBe(shell);
+  });
+
+  it('keeps advanced filters collapsed until explicitly opened', async () => {
+    renderWatchlist();
+    await screen.findByTestId('watchlist-row-NVDA');
+
+    const disclosure = screen.getByTestId('watchlist-advanced-filters');
+    expect(disclosure).not.toHaveAttribute('open');
+    expect(screen.queryByLabelText('来源')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '展开 更多筛选' }));
+
+    expect(disclosure).toHaveAttribute('open');
+    expect(screen.getByLabelText('来源')).toBeInTheDocument();
   });
 
   it('disables intelligence actions for an empty filtered set with a compact reason', async () => {
@@ -418,6 +439,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
     await screen.findByTestId('watchlist-row-NVDA');
 
+    fireEvent.click(screen.getByRole('button', { name: '展开 更多筛选' }));
     fireEvent.change(screen.getByLabelText('来源'), { target: { value: 'scanner' } });
     fireEvent.change(screen.getByLabelText('主题 / 候选范围'), { target: { value: 'theme:semis' } });
 
@@ -566,6 +588,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
     await screen.findByTestId('watchlist-row-NVDA');
 
+    fireEvent.click(screen.getByRole('button', { name: '展开 更多筛选' }));
     fireEvent.change(screen.getByLabelText('证据筛选'), { target: { value: 'hasBacktest' } });
 
     expect(screen.getByTestId('watchlist-row-NVDA')).toBeInTheDocument();
@@ -630,7 +653,7 @@ describe('WatchlistPage', () => {
 
     const searchInput = screen.getByLabelText('搜索');
     expect(searchInput).toHaveClass('pr-12');
-    expect(screen.getByTestId('watchlist-filter-grid').className).not.toContain('overflow-hidden');
+    expect(screen.getByTestId('watchlist-primary-filters').className).not.toContain('overflow-hidden');
   });
 
   it('starts analysis for a candidate and navigates to the workspace', async () => {
@@ -722,7 +745,12 @@ describe('WatchlistPage', () => {
 
     renderWatchlist();
 
+    const watchBoard = await screen.findByTestId('watchlist-watch-board');
+    const primaryWorkRegion = screen.getByTestId('watchlist-primary-work-region');
     const emptyState = await screen.findByTestId('watchlist-compact-empty-state');
+    expect(watchBoard).toContainElement(primaryWorkRegion);
+    expect(primaryWorkRegion).toContainElement(emptyState);
+    expect(emptyState).toHaveClass('min-h-[72px]');
     expect(within(emptyState).getByText('暂无追踪候选。')).toBeInTheDocument();
     fireEvent.click(within(emptyState).getByRole('button', { name: /打开扫描器/ }));
     expect(screen.getByText('scanner')).toBeInTheDocument();
