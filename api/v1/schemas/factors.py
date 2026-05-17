@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Mapping, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -289,19 +289,116 @@ class FactorPortfolioSignal(_FactorProvenanceModel):
         return _required_text(value, "symbol").upper()
 
 
+class FactorMetricObservation(_FactorModel):
+    observation: FactorObservation
+    forward_returns: dict[str, Optional[float]] = Field(default_factory=dict)
+
+    @field_validator("forward_returns", mode="before")
+    @classmethod
+    def _normalize_forward_returns(cls, value: Any) -> dict[str, Any]:
+        if value is None:
+            return {}
+        if not isinstance(value, Mapping):
+            raise ValueError("forward_returns must be a mapping")
+        result: dict[str, Any] = {}
+        for horizon, metric_value in value.items():
+            normalized_horizon = _required_text(horizon, "forward_return_horizon")
+            result[normalized_horizon] = metric_value
+        return result
+
+
+class FactorMetricWindow(_FactorModel):
+    as_of_start: Optional[str] = None
+    as_of_end: Optional[str] = None
+    as_of_count: int = Field(default=0, ge=0)
+    observation_count: int = Field(default=0, ge=0)
+
+    @field_validator("as_of_start", "as_of_end")
+    @classmethod
+    def _validate_optional_as_of(cls, value: Any, info: Any) -> str | None:
+        if value is None:
+            return None
+        return _validate_iso_like(value, info.field_name)
+
+
+class FactorMetricEstimate(_FactorModel):
+    horizon: Optional[str] = None
+    value: Optional[float] = None
+    sample_size: int = Field(default=0, ge=0)
+    insufficient_reason: Optional[str] = None
+
+    @field_validator("horizon")
+    @classmethod
+    def _validate_optional_horizon(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        return _required_text(value, "horizon")
+
+
+class FactorDecayPoint(_FactorModel):
+    horizon: str
+    ic_value: Optional[float] = None
+    decay_ratio: Optional[float] = None
+    sample_size: int = Field(default=0, ge=0)
+    insufficient_reason: Optional[str] = None
+
+    @field_validator("horizon")
+    @classmethod
+    def _validate_horizon(cls, value: Any) -> str:
+        return _required_text(value, "horizon")
+
+
+class FactorPeerCorrelation(_FactorModel):
+    peer_factor_id: str
+    value: Optional[float] = None
+    sample_size: int = Field(default=0, ge=0)
+    insufficient_reason: Optional[str] = None
+
+    @field_validator("peer_factor_id")
+    @classmethod
+    def _normalize_peer_factor_id(cls, value: Any) -> str:
+        return normalize_factor_id(value)
+
+
+class FactorMetricsResult(_FactorModel):
+    factor_id: str
+    window: FactorMetricWindow
+    ic: list[FactorMetricEstimate] = Field(default_factory=list)
+    rank_ic: list[FactorMetricEstimate] = Field(default_factory=list)
+    decay: list[FactorDecayPoint] = Field(default_factory=list)
+    turnover: FactorMetricEstimate
+    factor_correlation: list[FactorPeerCorrelation] = Field(default_factory=list)
+
+    @field_validator("factor_id")
+    @classmethod
+    def _normalize_factor_id(cls, value: Any) -> str:
+        return normalize_factor_id(value)
+
+
+class FactorMetricsReport(_FactorModel):
+    factors: list[FactorMetricsResult] = Field(default_factory=list)
+
+
 __all__ = [
     "FactorDefinition",
     "FactorDirection",
+    "FactorDecayPoint",
     "FactorDisposition",
     "FactorEvidence",
     "FactorEvaluation",
     "FactorEvidenceType",
     "FactorFamily",
     "FactorFreshnessStatus",
+    "FactorMetricEstimate",
+    "FactorMetricObservation",
+    "FactorMetricsReport",
+    "FactorMetricsResult",
+    "FactorMetricWindow",
     "FactorNeutralizationAxis",
     "FactorNeutralizationMethod",
     "FactorNeutralizationSpec",
     "FactorObservation",
+    "FactorPeerCorrelation",
     "FactorPortfolioSignal",
     "FactorSignalSide",
     "normalize_factor_id",
