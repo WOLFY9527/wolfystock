@@ -2,7 +2,11 @@
 
 Status: Partial
 Owner domain: Frontend visual audit
-Related docs: `docs/audits/wolfystock-global-codebase-audit.md`, `docs/audits/wolfystock-css-cleanup-closure-report.md`
+Related docs: `docs/audits/archive/frontend/wolfystock-global-codebase-audit.md`, `docs/audits/archive/frontend/wolfystock-css-cleanup-closure-report.md`
+
+Current use note: this 2026-05-05 audit is retained as historical route
+evidence. Its older deep-space/ghost-glass vocabulary is superseded by the
+Reflect-Linear source-of-truth docs in `docs/codex/` and `docs/design/`.
 
 Date: 2026-05-05 Asia/Shanghai
 Repository: `/Users/yehengli/daily_stock_analysis`

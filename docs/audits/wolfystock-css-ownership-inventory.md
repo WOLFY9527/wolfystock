@@ -5,6 +5,11 @@ Repository: `/Users/yehengli/daily_stock_analysis`
 Branch audited: `main`
 Mode: read-only audit document; no product-code, CSS, build-config, test, package, runtime, or changelog changes
 
+Current use note: this file is retained as CSS deletion provenance, not current
+visual-source authority. If its older deep-space/ghost-glass wording conflicts
+with `docs/codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`, the Reflect-Linear
+source docs win.
+
 ## 1. Executive Summary
 
 `apps/dsa-web/src/index.css` is currently a single global Tailwind plus WolfyStock theme file with **16,912 lines** and **440,792 bytes**. The production build emits one CSS asset, `static/assets/index-tAvUYm06.css`, at **521.59 kB minified / 74.16 kB gzip**.
@@ -37,9 +42,9 @@ git log --oneline -52
 ./scripts/task_preflight.sh || true
 
 sed -n '1,220p' CODEX_FRONTEND_DESIGN_CONSTITUTION.md
-sed -n '1,240p' docs/audits/wolfystock-global-codebase-audit.md
-sed -n '1,260p' docs/audits/wolfystock-phase0-bundle-design-inventory.md
-sed -n '1,260p' docs/audits/wolfystock-bundle-composition-report.md
+sed -n '1,240p' docs/audits/archive/frontend/wolfystock-global-codebase-audit.md
+sed -n '1,260p' docs/audits/archive/frontend/wolfystock-phase0-bundle-design-inventory.md
+sed -n '1,260p' docs/audits/archive/frontend/wolfystock-bundle-composition-report.md
 sed -n '1,240p' docs/checks/design-guard.md
 sed -n '1,620p' apps/dsa-web/src/index.css
 

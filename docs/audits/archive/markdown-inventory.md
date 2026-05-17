@@ -79,24 +79,24 @@ Mode: docs-only inventory. No markdown files were deleted or moved.
 | `docs/audits/security-mfa-secret-storage-hardening-plan.md` | Keep standalone | Active production MFA storage blocker plan. |
 | `docs/audits/security-password-kdf-upgrade-plan.md` | Stale/needs status header | Phase 3D appears implemented; MFA dependencies remain separate. |
 | `docs/audits/trading-no-advice-product-policy.md` | Keep standalone | Canonical trading/no-advice product policy. |
-| `docs/audits/wolfystock-backtest-dom-verification.md` | Merge candidate | Chronological DOM evidence for CSS cleanup; keep until indexed. |
-| `docs/audits/wolfystock-bundle-composition-report.md` | Stale/needs status header | Older visual/bundle evidence; needs current status. |
-| `docs/audits/wolfystock-chat-dom-verification.md` | Merge candidate | Chronological DOM evidence for CSS cleanup; keep until indexed. |
-| `docs/audits/wolfystock-chinese-form-label-review.md` | Merge candidate | Feed frontend visual/i18n audit index. |
-| `docs/audits/wolfystock-corrected-scroll-proof.md` | Stale/needs status header | Useful evidence but tied to corrected/mock-limited state. |
-| `docs/audits/wolfystock-css-cleanup-closure-report.md` | Keep standalone | Active CSS cleanup governance summary. |
+| `docs/audits/archive/frontend/wolfystock-backtest-dom-verification.md` | Archived frontend evidence | Chronological DOM evidence for CSS cleanup; provenance only after T-213B. |
+| `docs/audits/archive/frontend/wolfystock-bundle-composition-report.md` | Archived frontend evidence | Older visual/bundle evidence; provenance only after T-213B. |
+| `docs/audits/archive/frontend/wolfystock-chat-dom-verification.md` | Archived frontend evidence | Chronological DOM evidence for CSS cleanup; provenance only after T-213B. |
+| `docs/audits/archive/frontend/wolfystock-chinese-form-label-review.md` | Archived frontend evidence | Frontend visual/i18n audit evidence; provenance only after T-213B. |
+| `docs/audits/archive/frontend/wolfystock-corrected-scroll-proof.md` | Archived frontend evidence | Useful evidence but tied to corrected/mock-limited state; provenance only after T-213B. |
+| `docs/audits/archive/frontend/wolfystock-css-cleanup-closure-report.md` | Archived frontend evidence | Historical CSS cleanup closure summary; provenance only after T-213B. |
 | `docs/audits/wolfystock-css-ownership-inventory.md` | Keep standalone | Active CSS selector ownership reference. |
 | `docs/audits/wolfystock-css-selector-usage-verification.md` | Merge candidate | CSS deletion-trial evidence; preserve until indexed. |
-| `docs/audits/wolfystock-echarts-chart-workspace-audit.md` | Stale/needs status header | Older frontend audit; needs current-route status. |
+| `docs/audits/archive/frontend/wolfystock-echarts-chart-workspace-audit.md` | Archived frontend evidence | Older frontend audit; provenance only after T-213B. |
 | `docs/audits/archive/wolfystock-final-admin-security-options-qa.md` | Archive/superseded candidate | Historical QA evidence; cite from launch docs if accepted. |
 | `docs/audits/wolfystock-frontend-design-conformance-audit.md` | Stale/needs status header | Older route/browser evidence; note auth/mock limits before reuse. |
-| `docs/audits/wolfystock-global-codebase-audit.md` | Stale/needs status header | Large global audit; split or status-mark before use. |
-| `docs/audits/wolfystock-phase0-bundle-design-inventory.md` | Archive/superseded candidate | Earlier inventory largely superseded by later bundle/DOM/CSS reports. |
-| `docs/audits/wolfystock-post-batch-integration-qa.md` | Archive/superseded candidate | Historical QA report. |
-| `docs/audits/wolfystock-product-command-card-owner-audit.md` | Merge candidate | CSS/DOM owner evidence; preserve until selector index exists. |
-| `docs/audits/wolfystock-scanner-dom-verification.md` | Merge candidate | Chronological DOM evidence; note prior dirty CSS limitation if reused. |
-| `docs/audits/wolfystock-scrollarea-custom-scrollbar-owner-inventory.md` | Merge candidate | CSS/scrollbar ownership evidence. |
-| `docs/audits/wolfystock-scrollbar-dom-verification.md` | Merge candidate | CSS/scrollbar DOM evidence. |
+| `docs/audits/archive/frontend/wolfystock-global-codebase-audit.md` | Archived frontend evidence | Large global audit; provenance only after T-213B. |
+| `docs/audits/archive/frontend/wolfystock-phase0-bundle-design-inventory.md` | Archived frontend evidence | Earlier inventory largely superseded by later bundle/DOM/CSS reports. |
+| `docs/audits/archive/frontend/wolfystock-post-batch-integration-qa.md` | Archived frontend evidence | Historical QA report. |
+| `docs/audits/archive/frontend/wolfystock-product-command-card-owner-audit.md` | Archived frontend evidence | CSS/DOM owner evidence; provenance only after T-213B. |
+| `docs/audits/archive/frontend/wolfystock-scanner-dom-verification.md` | Archived frontend evidence | Chronological DOM evidence; note prior dirty CSS limitation if reused. |
+| `docs/audits/archive/frontend/wolfystock-scrollarea-custom-scrollbar-owner-inventory.md` | Archived frontend evidence | CSS/scrollbar ownership evidence; provenance only after T-213B. |
+| `docs/audits/archive/frontend/wolfystock-scrollbar-dom-verification.md` | Archived frontend evidence | CSS/scrollbar DOM evidence; provenance only after T-213B. |
 | `docs/audits/ws2-multi-instance-smoke-test-design.md` | Keep standalone | Active public-launch blocker design until executable smoke exists. |
 | `docs/audits/ws2-multi-user-runtime-cost-control-design.md` | Keep standalone | Active WS2/cost/runtime architecture baseline. |
 | `docs/audits/ws2-provider-circuit-data-model-plan.md` | Stale/needs status header | Storage/API/dry-run notes exist; live enforcement remains future. |

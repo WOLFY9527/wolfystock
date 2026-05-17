@@ -31,9 +31,9 @@ Read-first inputs:
 - `docs/operations/parallel-codex-playbook.md`
 - `docs/checks/design-guard.md`
 - `docs/checks/ci-gate-clarity.md`
-- `docs/audits/wolfystock-global-codebase-audit.md`
-- `docs/audits/wolfystock-phase0-bundle-design-inventory.md`
-- `docs/audits/wolfystock-bundle-composition-report.md`
+- `docs/audits/archive/frontend/wolfystock-global-codebase-audit.md`
+- `docs/audits/archive/frontend/wolfystock-phase0-bundle-design-inventory.md`
+- `docs/audits/archive/frontend/wolfystock-bundle-composition-report.md`
 - `docs/audits/wolfystock-css-ownership-inventory.md`
 - `docs/audits/wolfystock-css-selector-usage-verification.md`
 

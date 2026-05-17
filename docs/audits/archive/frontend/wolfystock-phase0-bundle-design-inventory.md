@@ -2,7 +2,7 @@
 
 Status: Superseded
 Owner domain: Frontend bundle and design inventory
-Replacement or related docs: `docs/audits/wolfystock-bundle-composition-report.md`, `docs/audits/wolfystock-echarts-chart-workspace-audit.md`
+Replacement or related docs: `docs/audits/archive/frontend/wolfystock-bundle-composition-report.md`, `docs/audits/archive/frontend/wolfystock-echarts-chart-workspace-audit.md`
 
 Date: 2026-05-05 Asia/Shanghai
 Repository: `/Users/yehengli/daily_stock_analysis`
@@ -56,8 +56,8 @@ git status --branch --short
 git log --oneline -32
 ./scripts/task_preflight.sh || true
 
-sed -n '1,240p' docs/audits/wolfystock-global-codebase-audit.md
-sed -n '240,520p' docs/audits/wolfystock-global-codebase-audit.md
+sed -n '1,240p' docs/audits/archive/frontend/wolfystock-global-codebase-audit.md
+sed -n '240,520p' docs/audits/archive/frontend/wolfystock-global-codebase-audit.md
 sed -n '1,260p' CODEX_FRONTEND_DESIGN_CONSTITUTION.md
 sed -n '1,240p' docs/checks/design-guard.md
 sed -n '1,220p' docs/checks/ci-gate-clarity.md
@@ -266,7 +266,7 @@ Likely low-risk lazy-loading change later:
 
 Latest known audit baseline:
 
-- `docs/audits/wolfystock-global-codebase-audit.md` reported `npm run check:design` passed with 103 warnings across 213 scanned files.
+- `docs/audits/archive/frontend/wolfystock-global-codebase-audit.md` reported `npm run check:design` passed with 103 warnings across 213 scanned files.
 
 Current result:
 

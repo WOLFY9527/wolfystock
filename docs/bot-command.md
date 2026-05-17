@@ -209,7 +209,7 @@ class CommandDispatcher:
 
 ## 配置
 
-在 [config.py](../config.py) 中新增机器人配置：
+在 [src/config.py](../src/config.py) 中新增机器人配置：
 
 ```python
 # === 机器人配置 ===
@@ -255,11 +255,10 @@ telegram_webhook_secret: str           # 新增：Webhook 密钥
 - 支持命令频率限制（防刷）
 - 敏感操作（如批量分析）可设置权限白名单
 
-在 [config.py](../config.py) 中新增机器人安全配置：
+在 [src/config.py](../src/config.py) 中新增机器人安全配置：
 
 ```python
     bot_rate_limit_requests: int = 10     # 频率限制：窗口内最大请求数
     bot_rate_limit_window: int = 60       # 频率限制：窗口时间（秒）
     bot_admin_users: List[str] = field(default_factory=list)  # 管理员用户 ID 列表，限制敏感操作
 ```
-

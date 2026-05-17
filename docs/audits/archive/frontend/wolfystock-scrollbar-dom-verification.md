@@ -44,9 +44,9 @@ Mandatory reading completed:
 
 - `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
 - `docs/checks/css-visual-regression-checklist.md`
-- `docs/audits/wolfystock-css-cleanup-closure-report.md`
-- `docs/audits/wolfystock-chat-dom-verification.md`
-- `docs/audits/wolfystock-scanner-dom-verification.md`
+- `docs/audits/archive/frontend/wolfystock-css-cleanup-closure-report.md`
+- `docs/audits/archive/frontend/wolfystock-chat-dom-verification.md`
+- `docs/audits/archive/frontend/wolfystock-scanner-dom-verification.md`
 - `docs/audits/wolfystock-frontend-design-conformance-audit.md`
 - `docs/design/wolfystock-canonical-ui-primitives.md`
 - `docs/operations/parallel-codex-playbook.md`
@@ -288,8 +288,8 @@ Validation commands required after writing this report:
 
 ```bash
 cd /Users/yehengli/daily_stock_analysis
-sed -n '1,380p' docs/audits/wolfystock-scrollbar-dom-verification.md
-git diff --check -- docs/audits/wolfystock-scrollbar-dom-verification.md
+sed -n '1,380p' docs/audits/archive/frontend/wolfystock-scrollbar-dom-verification.md
+git diff --check -- docs/audits/archive/frontend/wolfystock-scrollbar-dom-verification.md
 ```
 
 Rollback for this report:

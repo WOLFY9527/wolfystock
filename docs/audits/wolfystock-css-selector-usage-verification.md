@@ -61,8 +61,8 @@ Read-first inputs:
 ```bash
 sed -n '1,260p' CODEX_FRONTEND_DESIGN_CONSTITUTION.md
 sed -n '1,320p' docs/audits/wolfystock-css-ownership-inventory.md
-sed -n '1,300p' docs/audits/wolfystock-phase0-bundle-design-inventory.md
-sed -n '1,280p' docs/audits/wolfystock-global-codebase-audit.md
+sed -n '1,300p' docs/audits/archive/frontend/wolfystock-phase0-bundle-design-inventory.md
+sed -n '1,280p' docs/audits/archive/frontend/wolfystock-global-codebase-audit.md
 sed -n '1,120p' docs/checks/design-guard.md
 sed -n '1,220p' apps/dsa-web/src/index.css
 ```

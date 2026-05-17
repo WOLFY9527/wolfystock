@@ -31,6 +31,7 @@
 - 仓库协作 skill 存放在 `.claude/skills/`，分析产物存放在 `.claude/reviews/`；前者可以入库，后者默认视为本地产物。
 - 根目录 `SKILL.md` 与 `docs/openclaw-skill-integration.md` 属于产品或外部集成说明，不是仓库协作规则真源。
 - 若未来新增 `.agents/skills/` 或其他 agent 专用目录，必须先明确单一真源，再通过脚本或镜像同步；禁止手工长期维护多份同义内容。
+- 文件与文档归档、删除、AI 资产镜像边界参考 `docs/architecture/file-governance-taxonomy.md`。
 - 修改 AI 协作治理资产时，执行：
 
 ```bash
@@ -51,7 +52,7 @@ python scripts/check_ai_assets.py
   - `src/core/`：主流程编排
   - `src/services/`：业务服务层
   - `src/repositories/`：数据访问层
-  - `src/reports/`：报告生成
+  - `src/services/report_renderer.py`、`src/schemas/report_schema.py`：报告载荷生成与结构
   - `src/schemas/`：Schema / 数据结构
   - `data_provider/`：多数据源适配与 fallback
   - `api/`：FastAPI API

@@ -56,8 +56,8 @@ Mandatory reading completed:
 
 - `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
 - `docs/checks/css-visual-regression-checklist.md`
-- `docs/audits/wolfystock-css-cleanup-closure-report.md`
-- `docs/audits/wolfystock-product-command-card-owner-audit.md`
+- `docs/audits/archive/frontend/wolfystock-css-cleanup-closure-report.md`
+- `docs/audits/archive/frontend/wolfystock-product-command-card-owner-audit.md`
 - `docs/audits/wolfystock-frontend-design-conformance-audit.md`
 - `docs/design/wolfystock-canonical-ui-primitives.md`
 - `docs/operations/parallel-codex-playbook.md`
@@ -273,8 +273,8 @@ Validation commands required after writing:
 
 ```bash
 cd /Users/yehengli/daily_stock_analysis
-sed -n '1,380p' docs/audits/wolfystock-backtest-dom-verification.md
-git diff --check -- docs/audits/wolfystock-backtest-dom-verification.md
+sed -n '1,380p' docs/audits/archive/frontend/wolfystock-backtest-dom-verification.md
+git diff --check -- docs/audits/archive/frontend/wolfystock-backtest-dom-verification.md
 ```
 
 Rollback for this report commit:

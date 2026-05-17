@@ -42,8 +42,8 @@ Preflight result:
 Mandatory reading completed:
 
 - `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
-- `docs/audits/wolfystock-scrollbar-dom-verification.md`
-- `docs/audits/wolfystock-corrected-scroll-proof.md`
+- `docs/audits/archive/frontend/wolfystock-scrollbar-dom-verification.md`
+- `docs/audits/archive/frontend/wolfystock-corrected-scroll-proof.md`
 - `docs/design/wolfystock-canonical-ui-primitives.md`
 - `docs/checks/css-visual-regression-checklist.md`
 - `docs/operations/parallel-codex-playbook.md`
@@ -149,8 +149,8 @@ Fresh rendered route evidence was not collected in this task.
 
 Supporting prior-report context:
 
-- `docs/audits/wolfystock-scrollbar-dom-verification.md` reported `.custom-scrollbar=0` across its default route matrix.
-- `docs/audits/wolfystock-corrected-scroll-proof.md` reported `.custom-scrollbar=0` for corrected Scanner, Portfolio, and Market Overview states.
+- `docs/audits/archive/frontend/wolfystock-scrollbar-dom-verification.md` reported `.custom-scrollbar=0` across its default route matrix.
+- `docs/audits/archive/frontend/wolfystock-corrected-scroll-proof.md` reported `.custom-scrollbar=0` for corrected Scanner, Portfolio, and Market Overview states.
 - Those reports are useful context, but this inventory does not rely on them as fresh evidence for a new route matrix.
 
 ## 7. Ownership verdict

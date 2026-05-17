@@ -2,7 +2,7 @@
 
 Status: Partial
 Owner domain: Frontend CSS and DOM verification
-Related docs: `docs/audits/wolfystock-css-cleanup-closure-report.md`, `docs/audits/wolfystock-css-ownership-inventory.md`
+Related docs: `docs/audits/archive/frontend/wolfystock-css-cleanup-closure-report.md`, `docs/audits/wolfystock-css-ownership-inventory.md`
 
 Date: 2026-05-05 Asia/Shanghai
 Repository: `/Users/yehengli/daily_stock_analysis`
@@ -50,9 +50,9 @@ Preflight result:
 Mandatory reading completed:
 
 - `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
-- `docs/audits/wolfystock-scrollbar-dom-verification.md`
-- `docs/audits/wolfystock-scanner-dom-verification.md`
-- `docs/qa/wolfystock-portfolio-populated-holdings-qa.md`
+- `docs/audits/archive/frontend/wolfystock-scrollbar-dom-verification.md`
+- `docs/audits/archive/frontend/wolfystock-scanner-dom-verification.md`
+- `docs/qa/archive/wolfystock-portfolio-populated-holdings-qa.md`
 - `docs/audits/wolfystock-frontend-design-conformance-audit.md`
 - `docs/design/wolfystock-canonical-ui-primitives.md`
 - `docs/checks/css-visual-regression-checklist.md`

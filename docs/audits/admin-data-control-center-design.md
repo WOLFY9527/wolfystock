@@ -515,7 +515,7 @@ Suggested routes:
 UI principles:
 
 - Chinese UI labels by default, with i18n entries in `apps/dsa-web/src/i18n/core.ts`.
-- WolfyStock deep-space / ghost-glass style, aligned with existing admin pages such as `AdminLogsPage.tsx` and `MarketProviderOperationsPage.tsx`.
+- WolfyStock Reflect-Linear style, aligned with `docs/codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md` and existing admin pages such as `AdminLogsPage.tsx` and `MarketProviderOperationsPage.tsx`.
 - Dense admin/operator layout: filter rail, result table, detail pane, and compact status/risk badges.
 - No raw secret-like data visible.
 - Developer/raw details collapsed and redacted.

@@ -35,8 +35,8 @@ Mandatory files inspected:
 
 - `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
 - `docs/checks/css-visual-regression-checklist.md`
-- `docs/audits/wolfystock-css-cleanup-closure-report.md`
-- `docs/audits/wolfystock-scanner-dom-verification.md`
+- `docs/audits/archive/frontend/wolfystock-css-cleanup-closure-report.md`
+- `docs/audits/archive/frontend/wolfystock-scanner-dom-verification.md`
 - `docs/audits/wolfystock-css-selector-usage-verification.md`
 - `docs/audits/wolfystock-css-ownership-inventory.md`
 - `docs/audits/wolfystock-frontend-design-conformance-audit.md`
