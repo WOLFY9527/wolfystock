@@ -2,10 +2,17 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BellRing, LockKeyhole, ShieldCheck } from 'lucide-react';
-import { ApiErrorAlert, GlassCard } from '../components/common';
+import { ApiErrorAlert } from '../components/common';
+import {
+  ConsoleBoard,
+  ConsoleContextRail,
+  ConsoleDisclosure,
+  ConsoleStatusStrip,
+  WolfyShellSurface,
+} from '../components/linear';
+import { TerminalButton, TerminalChip, TerminalPageHeading, TerminalPageShell } from '../components/terminal';
 import { authApi } from '../api/auth';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { TerminalPageHeading, TerminalPageShell } from '../components/terminal';
 import { ChangePasswordCard } from '../components/settings/ChangePasswordCard';
 import { FontSizeSettingsCard } from '../components/settings/FontSizeSettingsCard';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -19,16 +26,19 @@ import {
   savePortfolioDisplayCurrency,
   type PortfolioDisplayCurrency,
 } from '../utils/portfolioPreferences';
+import { cn } from '../utils/cn';
 
-const GLASS_INPUT_CLASS = 'w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-white outline-none transition-[border-color,box-shadow] focus:border-white/24 focus:shadow-[0_0_20px_rgba(99,102,241,0.12)]';
-const SETTINGS_PRIMARY_BUTTON_CLASS = 'rounded-lg border border-white/10 bg-white/5 px-6 py-2.5 text-sm font-medium text-white transition-all hover:border-blue-500/40 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] disabled:pointer-events-none disabled:opacity-50';
-const SETTINGS_GHOST_BUTTON_CLASS = 'bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white rounded-lg px-5 py-2.5 text-sm font-medium transition-all';
-const OPTION_GROUP_WRAPPER_CLASS = 'mt-3 grid gap-2 sm:grid-cols-3';
+const SETTINGS_ROW_CLASS = 'grid gap-3 px-4 py-4 md:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)]';
+const SETTINGS_TEXT_INPUT_CLASS = 'h-10 w-full rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 text-sm text-[color:var(--wolfy-text-primary)] outline-none transition-colors placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)] focus:shadow-[0_0_0_1px_var(--wolfy-accent)]';
+const SETTINGS_CHECKBOX_CLASS = 'h-4 w-4 rounded border border-[color:var(--wolfy-border-subtle)] bg-transparent accent-[var(--wolfy-accent)]';
+const SETTINGS_LINK_CLASS = 'inline-flex min-h-9 items-center justify-center rounded-md border px-3 text-xs font-medium transition-colors';
 
-const buildOptionButtonClass = (active: boolean) => (
+const buildChoiceButtonClass = (active: boolean, compact = false) => cn(
+  'rounded-md border px-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]',
+  compact ? 'min-h-9 py-1.5 text-xs font-medium' : 'min-h-10 py-2 text-sm font-medium',
   active
-    ? 'w-full rounded-lg border border-white/10 bg-white/10 px-3 py-3 text-left text-white transition-all'
-    : `w-full text-left ${SETTINGS_GHOST_BUTTON_CLASS}`
+    ? 'border-[color:var(--wolfy-accent)] bg-[var(--wolfy-surface-console)] text-[color:var(--wolfy-text-primary)] shadow-[inset_0_0_0_1px_var(--wolfy-accent)]'
+    : 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)]',
 );
 
 const MARKET_COLOR_OPTIONS: Array<{
@@ -57,6 +67,73 @@ const NUMBER_FORMAT_OPTIONS = [
   { value: 'full', labelKey: 'settings.numberFormatFull' },
 ] as const;
 
+function SettingsConsoleSection({
+  title,
+  description,
+  children,
+  'data-testid': dataTestId,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+  'data-testid'?: string;
+}) {
+  return (
+    <section data-testid={dataTestId} className="min-w-0">
+      <div className="px-4 py-4 md:px-5">
+        <h2 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{title}</h2>
+        <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{description}</p>
+      </div>
+      <div className="divide-y divide-[color:var(--wolfy-divider)] border-t border-[color:var(--wolfy-divider)]">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function SettingsChoiceRow<T extends string>({
+  title,
+  description,
+  options,
+  value,
+  onChange,
+  compact = false,
+}: {
+  title: string;
+  description?: string;
+  options: Array<{ value: T; label: string }>;
+  value: T;
+  onChange: (nextValue: T) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div className={SETTINGS_ROW_CLASS}>
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">{title}</p>
+        {description ? <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{description}</p> : null}
+      </div>
+      <div className="min-w-0">
+        <div className="flex flex-wrap gap-2" role="group" aria-label={title}>
+          {options.map((option) => {
+            const active = option.value === value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={buildChoiceButtonClass(active, compact)}
+                onClick={() => onChange(option.value)}
+                aria-pressed={active}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const PersonalSettingsPage: React.FC = () => {
   const { language, t } = useI18n();
   const {
@@ -69,7 +146,6 @@ const PersonalSettingsPage: React.FC = () => {
   } = useUiPreferences();
   const { authEnabled, passwordChangeable } = useAuth();
   const {
-    isGuest,
     loggedIn,
     currentUser,
   } = useProductSurface();
@@ -85,6 +161,76 @@ const PersonalSettingsPage: React.FC = () => {
   const [portfolioDisplayCurrencySaved, setPortfolioDisplayCurrencySaved] = useState(false);
   const loginPath = buildLoginPath('/settings');
   const registrationPath = buildRegistrationPath('/settings');
+
+  const copy = language === 'en'
+    ? {
+      consoleEyebrow: 'Personal settings',
+      guestTitle: 'Guest session',
+      guestSubtitle: 'Sign in to sync notification targets and manage password changes.',
+      securityTitle: 'Account & security',
+      securityDescription: 'Access state, password rotation, and delivery targets stay scoped to this personal console.',
+      preferencesTitle: 'Display & preferences',
+      preferencesDescription: 'Compact, local display defaults for density, number formatting, fonts, and portfolio currency.',
+      accountLabel: 'Account',
+      authLabel: 'Password',
+      notificationLabel: 'Notifications',
+      scopeLabel: 'Scope',
+      signedInStatus: 'Signed in',
+      guestStatus: 'Guest',
+      authReadyState: 'Change available',
+      guestOnly: 'Guest only',
+      signInRequired: 'Sign in required',
+      savedHere: 'Personal route only',
+      loadingTargets: 'Loading targets',
+      targetsReady: 'Ready',
+      guestNotificationHint: 'Sign in before editing email and Discord delivery targets.',
+      notificationHelper: 'Save both delivery channels together without leaving personal settings.',
+      signedInHint: 'Your password and notification targets remain separate from system settings.',
+      railEyebrow: 'Secondary details',
+      railTitle: 'Personal settings boundary',
+      railBody: 'This route now focuses on your account, UI defaults, and notification targets only.',
+      boundaryTitle: 'Why system settings stay separate',
+      boundarySummary: 'No admin navigation, system control plane, or operator runtime material appears here.',
+      boundaryBody: 'Use system settings and admin routes for global providers, logs, and runtime controls. This page is intentionally limited to account-level controls and local display defaults.',
+      preferenceTitle: 'Preference notes',
+      preferenceSummary: 'Density, number formatting, font size, and portfolio display currency remain local UI preferences.',
+      preferenceBody: 'These controls do not change system settings, auth semantics, or shared admin behavior. They only adjust how this user-facing workspace renders data.',
+      guestAccessTitle: 'Sign in for account controls',
+    }
+    : {
+      consoleEyebrow: '个人设置',
+      guestTitle: '访客会话',
+      guestSubtitle: '登录后可同步通知目标并管理密码修改。',
+      securityTitle: '账户与安全',
+      securityDescription: '访问状态、密码变更和通知目标都只保留在个人设置控制台内。',
+      preferencesTitle: '显示与偏好',
+      preferencesDescription: '用紧凑的本地偏好统一控制密度、数字格式、字体和组合显示货币。',
+      accountLabel: '账户',
+      authLabel: '密码',
+      notificationLabel: '通知',
+      scopeLabel: '范围',
+      signedInStatus: '已登录',
+      guestStatus: '访客',
+      authReadyState: '可修改',
+      guestOnly: '仅访客偏好',
+      signInRequired: '登录后可用',
+      savedHere: '仅个人设置',
+      loadingTargets: '正在加载',
+      targetsReady: '可编辑',
+      guestNotificationHint: '登录后才能编辑邮件和 Discord 通知目标。',
+      notificationHelper: '在个人设置内统一保存邮件与 Discord 目标，不跳转系统设置。',
+      signedInHint: '当前密码与通知目标仍然独立于系统设置页面。',
+      railEyebrow: '辅助说明',
+      railTitle: '个人设置边界',
+      railBody: '这个路由现在只承载你的账户、界面偏好与通知目标。',
+      boundaryTitle: '为什么系统设置保持独立',
+      boundarySummary: '这里不出现管理员导航、系统控制面或运维运行时内容。',
+      boundaryBody: '全局提供商、系统日志和运行时控制仍然在系统设置与管理路由中维护。这里刻意只保留账户级控制和本地显示默认项。',
+      preferenceTitle: '偏好说明',
+      preferenceSummary: '密度、数字格式、字体大小和组合显示货币都还是本地 UI 偏好。',
+      preferenceBody: '这些控件不会修改系统设置、认证语义或管理员行为，只会影响当前用户界面对数据的呈现方式。',
+      guestAccessTitle: '登录后启用账户控制',
+    };
 
   useEffect(() => {
     document.title = language === 'en' ? 'Settings - WolfyStock' : '设置 - WolfyStock';
@@ -165,6 +311,30 @@ const PersonalSettingsPage: React.FC = () => {
     window.setTimeout(() => setPortfolioDisplayCurrencySaved(false), 1800);
   };
 
+  const signedInName = currentUser?.displayName || currentUser?.username || t('settings.personalFallbackUser');
+  const statusItems = [
+    {
+      label: copy.accountLabel,
+      value: loggedIn ? copy.signedInStatus : copy.guestStatus,
+    },
+    {
+      label: copy.authLabel,
+      value: loggedIn
+        ? (passwordChangeable ? copy.authReadyState : copy.guestOnly)
+        : (authEnabled ? copy.signInRequired : copy.guestOnly),
+    },
+    {
+      label: copy.notificationLabel,
+      value: loggedIn
+        ? (notificationLoading ? copy.loadingTargets : copy.targetsReady)
+        : copy.signInRequired,
+    },
+    {
+      label: copy.scopeLabel,
+      value: copy.savedHere,
+    },
+  ];
+
   return (
     <TerminalPageShell
       data-testid="personal-settings-workspace"
@@ -175,252 +345,326 @@ const PersonalSettingsPage: React.FC = () => {
           data-testid="settings-page-heading"
           title={language === 'en' ? 'Settings' : '设置'}
         />
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
-          <GlassCard as="section" className="p-6 md:p-7">
-          <div className="mb-5">
-            <h2 className="text-[1.125rem] font-normal tracking-[-0.02em] text-foreground md:text-[1.25rem]">{t('settings.personalInterfaceTitle')}</h2>
+
+        <WolfyShellSurface
+          as="section"
+          variant="console"
+          padding="md"
+          data-testid="personal-settings-profile-header"
+          className="overflow-hidden"
+        >
+          <div className="flex flex-col gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[11px] uppercase tracking-[0.12em] text-[color:var(--wolfy-text-muted)]">
+                  {copy.consoleEyebrow}
+                </p>
+                <TerminalChip variant={loggedIn ? 'info' : 'neutral'}>
+                  {loggedIn ? copy.signedInStatus : copy.guestStatus}
+                </TerminalChip>
+              </div>
+              <h2 className="mt-2 text-lg font-semibold text-[color:var(--wolfy-text-primary)]">
+                {loggedIn ? signedInName : copy.guestTitle}
+              </h2>
+              <p className="mt-1 max-w-3xl text-sm text-[color:var(--wolfy-text-secondary)]">
+                {loggedIn
+                  ? t('settings.personalSignedInAs', { name: signedInName })
+                  : copy.guestSubtitle}
+              </p>
+            </div>
           </div>
-          <div className="grid gap-4 xl:grid-cols-2">
-            <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4">
-              <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{t('settings.marketColorTitle')}</p>
-              <div className="mt-3 space-y-2">
-                {MARKET_COLOR_OPTIONS.map((option) => {
-                  const active = marketColorConvention === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={buildOptionButtonClass(active)}
-                      onClick={() => setMarketColorConvention(option.value)}
-                      aria-pressed={active}
-                    >
-                      <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
 
-            <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground">{t('settings.dataDensityTitle')}</p>
-              <div className={OPTION_GROUP_WRAPPER_CLASS}>
-                {DATA_DENSITY_OPTIONS.map((option) => {
-                  const active = dataDensity === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={buildOptionButtonClass(active)}
-                      onClick={() => setDataDensity(option.value)}
-                      aria-pressed={active}
-                    >
-                      <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          <ConsoleStatusStrip items={statusItems} className="mt-4" />
+        </WolfyShellSurface>
 
-            <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground">{t('settings.numberFormatTitle')}</p>
-              <div className={OPTION_GROUP_WRAPPER_CLASS}>
-                {NUMBER_FORMAT_OPTIONS.map((option) => {
-                  const active = numberFormat === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={buildOptionButtonClass(active)}
-                      onClick={() => setNumberFormat(option.value)}
-                      aria-pressed={active}
-                    >
-                      <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4 xl:col-span-2">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+        <div
+          data-testid="personal-settings-console"
+          className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]"
+        >
+          <ConsoleBoard data-testid="personal-settings-primary-board">
+            <SettingsConsoleSection
+              data-testid="personal-settings-security-section"
+              title={copy.securityTitle}
+              description={copy.securityDescription}
+            >
+              <div data-testid="personal-settings-account-row" className={SETTINGS_ROW_CLASS}>
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground">
-                    {t('settings.portfolioDisplayTitle')}
+                  <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+                    {loggedIn ? copy.accountLabel : copy.guestAccessTitle}
                   </p>
-                  <p className="mt-2 text-xs leading-5 text-secondary-text">
-                    {t('settings.portfolioDisplayDesc')}
-                  </p>
-                </div>
-                {portfolioDisplayCurrencySaved ? (
-                  <span className="rounded-full border border-[hsl(var(--accent-positive-hsl)/0.28)] bg-[hsl(var(--accent-positive-hsl)/0.12)] px-3 py-1 text-[11px] text-[hsl(var(--accent-positive-hsl))]">
-                    {t('settings.portfolioDisplaySaved')}
-                  </span>
-                ) : null}
-              </div>
-              <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">
-                {t('settings.portfolioDisplayDefaultCurrency')}
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label={t('settings.portfolioDisplayDefaultCurrency')}>
-                {PORTFOLIO_DISPLAY_CURRENCY_OPTIONS.map((currency) => {
-                  const active = portfolioDisplayCurrency === currency;
-                  return (
-                    <button
-                      key={currency}
-                      type="button"
-                      className={active
-                        ? 'rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white transition-all'
-                        : 'rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white/70 transition-all hover:bg-white/10 hover:text-white'}
-                      onClick={() => handlePortfolioDisplayCurrencyChange(currency)}
-                      aria-pressed={active}
-                    >
-                      {currency}
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="mt-3 text-xs leading-5 text-muted-text">
-                {t('settings.portfolioDisplayNativeSettlementHint')}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <FontSizeSettingsCard />
-          </div>
-        </GlassCard>
-
-        <GlassCard as="section" className="p-6 md:p-7">
-          <div className="mb-5">
-            <h2 className="text-[1.125rem] font-normal tracking-[-0.02em] text-foreground md:text-[1.25rem]">{t('settings.personalAccountAccessTitle')}</h2>
-          </div>
-          <div className="space-y-4">
-            {isGuest && authEnabled ? (
-              <div className="rounded-[var(--theme-panel-radius-md)] border border-[hsl(var(--accent-warning-hsl)/0.28)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-4 py-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[hsl(var(--accent-warning-hsl)/0.32)] bg-[hsl(var(--accent-warning-hsl)/0.18)] text-[hsl(var(--accent-warning-hsl))]">
-                    <LockKeyhole className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">
-                      {t('settings.personalGuestPreferencesTitle')}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <Link
-                    to={loginPath}
-                    className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-white/12 bg-white px-4 text-[0.75rem] text-black transition-colors hover:border-white/30 hover:bg-white/92"
-                  >
-                    {t('settings.personalGuestSignInAction')}
-                  </Link>
-                  <Link
-                    to={registrationPath}
-                    className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 text-[0.75rem] text-secondary-text transition-colors hover:border-[var(--border-strong)] hover:text-foreground"
-                  >
-                    {t('settings.personalGuestCreateAccountAction')}
-                  </Link>
-                </div>
-              </div>
-            ) : null}
-
-            {!isGuest ? (
-              <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/6 text-foreground">
-                    <ShieldCheck className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">
-                      {t('settings.personalSignedInAs', {
-                        name: currentUser?.displayName || currentUser?.username || t('settings.personalFallbackUser'),
-                      })}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4">
-                <div className="flex items-center gap-3">
-                  <BellRing className="h-4 w-4 text-foreground" />
-                  <p className="text-sm font-semibold text-foreground">
-                    {t('settings.personalNotificationScopeTitle')}
+                  <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                    {loggedIn ? copy.signedInHint : copy.guestSubtitle}
                   </p>
                 </div>
                 {loggedIn ? (
-                  <div className="mt-3 space-y-3">
-                    <label className="flex items-center gap-3 text-xs text-secondary-text">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border border-[var(--border-muted)] bg-transparent"
-                        checked={notificationEmailEnabled}
-                        onChange={(event) => setNotificationEmailEnabled(event.target.checked)}
-                        disabled={notificationLoading || notificationSaving}
-                      />
-                      <span>{t('settings.personalNotificationEmailToggle')}</span>
-                    </label>
-                    <label className="block">
-                      <span className="theme-field-label">{t('settings.personalNotificationEmailLabel')}</span>
-                      <input
-                        type="email"
-                        className={`mt-2 ${GLASS_INPUT_CLASS}`}
-                        value={notificationEmail}
-                        onChange={(event) => setNotificationEmail(event.target.value)}
-                        placeholder={t('settings.personalNotificationEmailPlaceholder')}
-                        disabled={notificationLoading || notificationSaving}
-                      />
-                    </label>
-                    <label className="flex items-center gap-3 text-xs text-secondary-text">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border border-[var(--border-muted)] bg-transparent"
-                        checked={notificationDiscordEnabled}
-                        onChange={(event) => setNotificationDiscordEnabled(event.target.checked)}
-                        disabled={notificationLoading || notificationSaving}
-                      />
-                      <span>{t('settings.personalNotificationDiscordToggle')}</span>
-                    </label>
-                    <label className="block">
-                      <span className="theme-field-label">{t('settings.personalNotificationDiscordLabel')}</span>
-                      <input
-                        type="url"
-                        className={`mt-2 ${GLASS_INPUT_CLASS}`}
-                        value={notificationDiscordWebhook}
-                        onChange={(event) => setNotificationDiscordWebhook(event.target.value)}
-                        placeholder="https://discord.com/api/webhooks/..."
-                        disabled={notificationLoading || notificationSaving}
-                      />
-                    </label>
+                  <div className="flex min-w-0 flex-col gap-3 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] text-[color:var(--wolfy-text-primary)]">
+                        <ShieldCheck className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
+                          {signedInName}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                          {t('settings.personalSignedInAs', { name: signedInName })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <TerminalChip variant="info">{copy.signedInStatus}</TerminalChip>
+                      <TerminalChip variant={passwordChangeable ? 'success' : 'neutral'}>
+                        {passwordChangeable ? copy.authReadyState : copy.guestOnly}
+                      </TerminalChip>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex min-w-0 flex-col gap-3 rounded-md border border-amber-300/20 bg-amber-300/5 p-3">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-amber-300/25 bg-amber-300/10 text-amber-100">
+                        <LockKeyhole className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
+                          {t('settings.personalGuestPreferencesTitle')}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                          {copy.guestNotificationHint}
+                        </p>
+                      </div>
+                    </div>
+                    {authEnabled ? (
+                      <div className="flex flex-wrap gap-2">
+                        <Link
+                          to={loginPath}
+                          className={cn(
+                            SETTINGS_LINK_CLASS,
+                            'border-[color:var(--wolfy-accent)] bg-[var(--wolfy-accent)] text-[#f7f8ff] hover:bg-[#6f79dc]',
+                          )}
+                        >
+                          {t('settings.personalGuestSignInAction')}
+                        </Link>
+                        <Link
+                          to={registrationPath}
+                          className={cn(
+                            SETTINGS_LINK_CLASS,
+                            'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)]',
+                          )}
+                        >
+                          {t('settings.personalGuestCreateAccountAction')}
+                        </Link>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+
+              <div data-testid="personal-settings-notification-row" className={SETTINGS_ROW_CLASS}>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <BellRing className="h-4 w-4 text-[color:var(--wolfy-text-secondary)]" />
+                    <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+                      {t('settings.personalNotificationScopeTitle')}
+                    </p>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                    {loggedIn ? copy.notificationHelper : copy.guestNotificationHint}
+                  </p>
+                </div>
+
+                {loggedIn ? (
+                  <div className="min-w-0 space-y-3 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-3 text-xs text-[color:var(--wolfy-text-secondary)]">
+                          <input
+                            type="checkbox"
+                            className={SETTINGS_CHECKBOX_CLASS}
+                            checked={notificationEmailEnabled}
+                            onChange={(event) => setNotificationEmailEnabled(event.target.checked)}
+                            disabled={notificationLoading || notificationSaving}
+                          />
+                          <span>{t('settings.personalNotificationEmailToggle')}</span>
+                        </label>
+                        <label className="block">
+                          <span className="block text-[11px] uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
+                            {t('settings.personalNotificationEmailLabel')}
+                          </span>
+                          <input
+                            type="email"
+                            className={cn('mt-2', SETTINGS_TEXT_INPUT_CLASS)}
+                            value={notificationEmail}
+                            onChange={(event) => setNotificationEmail(event.target.value)}
+                            placeholder={t('settings.personalNotificationEmailPlaceholder')}
+                            disabled={notificationLoading || notificationSaving}
+                            aria-label={t('settings.personalNotificationEmailLabel')}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-3 text-xs text-[color:var(--wolfy-text-secondary)]">
+                          <input
+                            type="checkbox"
+                            className={SETTINGS_CHECKBOX_CLASS}
+                            checked={notificationDiscordEnabled}
+                            onChange={(event) => setNotificationDiscordEnabled(event.target.checked)}
+                            disabled={notificationLoading || notificationSaving}
+                          />
+                          <span>{t('settings.personalNotificationDiscordToggle')}</span>
+                        </label>
+                        <label className="block">
+                          <span className="block text-[11px] uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
+                            {t('settings.personalNotificationDiscordLabel')}
+                          </span>
+                          <input
+                            type="url"
+                            className={cn('mt-2', SETTINGS_TEXT_INPUT_CLASS)}
+                            value={notificationDiscordWebhook}
+                            onChange={(event) => setNotificationDiscordWebhook(event.target.value)}
+                            placeholder="https://discord.com/api/webhooks/..."
+                            disabled={notificationLoading || notificationSaving}
+                            aria-label={t('settings.personalNotificationDiscordLabel')}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    {notificationLoading ? (
+                      <p className="text-xs text-[color:var(--wolfy-text-muted)]">{copy.loadingTargets}</p>
+                    ) : null}
                     {notificationNotice ? (
                       <p className="text-xs leading-5 text-[hsl(var(--accent-positive-hsl))]">{notificationNotice}</p>
                     ) : null}
                     {notificationError ? <ApiErrorAlert error={notificationError} /> : null}
-                    <button
-                      type="button"
-                      className={SETTINGS_PRIMARY_BUTTON_CLASS}
-                      onClick={() => void handleSaveNotificationPreferences()}
-                      disabled={notificationLoading || notificationSaving}
-                    >
-                      {notificationSaving ? t('settings.personalNotificationSaving') : t('settings.personalNotificationSaveAction')}
-                    </button>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <TerminalButton
+                        type="button"
+                        variant="primary"
+                        onClick={() => void handleSaveNotificationPreferences()}
+                        disabled={notificationLoading || notificationSaving}
+                      >
+                        {notificationSaving ? t('settings.personalNotificationSaving') : t('settings.personalNotificationSaveAction')}
+                      </TerminalButton>
+                    </div>
                   </div>
-                ) : null}
+                ) : (
+                  <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-sm text-[color:var(--wolfy-text-secondary)]">
+                    {copy.guestNotificationHint}
+                  </div>
+                )}
               </div>
-              <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4">
-                <div className="flex items-center gap-3">
-                  <ShieldCheck className="h-4 w-4 text-foreground" />
-                  <p className="text-sm font-semibold text-foreground">
-                    {language === 'en' ? 'System settings stay separate' : '系统分层保持清晰'}
+
+              {loggedIn && passwordChangeable ? <ChangePasswordCard /> : null}
+            </SettingsConsoleSection>
+
+            <SettingsConsoleSection
+              data-testid="personal-settings-preferences-section"
+              title={copy.preferencesTitle}
+              description={copy.preferencesDescription}
+            >
+              <SettingsChoiceRow
+                title={t('settings.marketColorTitle')}
+                options={MARKET_COLOR_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                value={marketColorConvention}
+                onChange={setMarketColorConvention}
+              />
+              <SettingsChoiceRow
+                title={t('settings.dataDensityTitle')}
+                options={DATA_DENSITY_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                value={dataDensity}
+                onChange={setDataDensity}
+              />
+              <SettingsChoiceRow
+                title={t('settings.numberFormatTitle')}
+                options={NUMBER_FORMAT_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                value={numberFormat}
+                onChange={setNumberFormat}
+              />
+
+              <div className={SETTINGS_ROW_CLASS}>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+                    {t('settings.portfolioDisplayTitle')}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                    {t('settings.portfolioDisplayDesc')}
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                    {t('settings.portfolioDisplayNativeSettlementHint')}
                   </p>
                 </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
+                      {t('settings.portfolioDisplayDefaultCurrency')}
+                    </p>
+                    {portfolioDisplayCurrencySaved ? (
+                      <TerminalChip variant="success">{t('settings.portfolioDisplaySaved')}</TerminalChip>
+                    ) : null}
+                  </div>
+                  <div
+                    className="mt-2 flex flex-wrap gap-2"
+                    role="group"
+                    aria-label={t('settings.portfolioDisplayDefaultCurrency')}
+                  >
+                    {PORTFOLIO_DISPLAY_CURRENCY_OPTIONS.map((currency) => {
+                      const active = portfolioDisplayCurrency === currency;
+                      return (
+                        <button
+                          key={currency}
+                          type="button"
+                          className={buildChoiceButtonClass(active, true)}
+                          onClick={() => handlePortfolioDisplayCurrencyChange(currency)}
+                          aria-pressed={active}
+                        >
+                          {currency}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-          </GlassCard>
-        </div>
 
-        {loggedIn && passwordChangeable ? <ChangePasswordCard /> : null}
+              <FontSizeSettingsCard />
+            </SettingsConsoleSection>
+          </ConsoleBoard>
+
+          <ConsoleContextRail data-testid="personal-settings-help-rail">
+            <div className="px-1 py-1">
+              <p className="text-[11px] uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
+                {copy.railEyebrow}
+              </p>
+              <p className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+                {copy.railTitle}
+              </p>
+              <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                {copy.railBody}
+              </p>
+            </div>
+
+            <ConsoleDisclosure
+              data-testid="personal-settings-boundary-disclosure"
+              title={copy.boundaryTitle}
+              summary={copy.boundarySummary}
+            >
+              <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                {copy.boundaryBody}
+              </p>
+            </ConsoleDisclosure>
+
+            <ConsoleDisclosure
+              data-testid="personal-settings-help-disclosure"
+              title={copy.preferenceTitle}
+              summary={copy.preferenceSummary}
+            >
+              <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                {copy.preferenceBody}
+              </p>
+            </ConsoleDisclosure>
+          </ConsoleContextRail>
+        </div>
       </section>
     </TerminalPageShell>
   );
