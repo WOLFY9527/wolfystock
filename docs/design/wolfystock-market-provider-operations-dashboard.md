@@ -1,7 +1,7 @@
 # WolfyStock Market Provider Operations Dashboard
 
-Status: Linear OS aligned replacement for the older provider-operations design note.  
-Repository: `/Users/yehengli/daily_stock_analysis`  
+Status: Linear OS aligned replacement for the older provider-operations design note.
+Repository: `/Users/yehengli/daily_stock_analysis`
 Intended path: `docs/design/wolfystock-market-provider-operations-dashboard.md`
 
 ## 1. Purpose

@@ -6,7 +6,7 @@ This document intentionally supersedes older deep-space / terminal / bento / gen
 
 # WolfyStock Reflect-Linear Design Language
 
-Status: canonical frontend design language.  
+Status: canonical frontend design language.
 Visual source: `docs/design/reference/wolfystock-reflect-linear-home-mockup.png`.
 
 ## 1. Name

@@ -6,7 +6,7 @@ This document intentionally supersedes older deep-space / terminal / bento / gen
 
 # WolfyStock Reflect-Linear Visual Specification
 
-Status: canonical visual source of truth for WolfyStock frontend UI/UX.  
+Status: canonical visual source of truth for WolfyStock frontend UI/UX.
 Reference image: `docs/design/reference/wolfystock-reflect-linear-home-mockup.png`.
 
 ## 1. Design thesis
