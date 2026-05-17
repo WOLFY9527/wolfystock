@@ -361,17 +361,20 @@ describe('MarketRotationRadarPage', () => {
 
     const page = await screen.findByTestId('market-rotation-radar-page');
     expect(page).toHaveTextContent('资金轮动雷达');
-    expect(page).toHaveAttribute('data-bento-surface', 'true');
     expect(page.className).not.toContain('bg-[#030303]');
     expect(page.querySelector('[data-terminal-primitive="page-shell"]')).not.toBeNull();
-    expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('Top-N');
+    expect(screen.getByTestId('rotation-radar-summary-band')).toHaveAttribute('data-terminal-primitive', 'panel');
+    expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('观察信号');
     expect(screen.getByTestId('rotation-radar-mode-controls')).toHaveTextContent('US');
+    expect(screen.getByTestId('rotation-radar-mode-controls')).toHaveAttribute('data-linear-primitive', 'command-bar');
     expect(screen.getByTestId('rotation-market-tab-US')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '刷新资金轮动雷达' })).toHaveAttribute('data-terminal-primitive', 'button');
     expect(screen.getByTestId('rotation-radar-freshness')).toHaveAttribute('data-terminal-primitive', 'nested-block');
 
     const leaderList = screen.getByTestId('rotation-radar-leader-list');
+    expect(leaderList).toHaveAttribute('data-linear-primitive', 'data-workbench-frame');
     expect(within(leaderList).getAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(10);
+    expect(within(leaderList).getAllByTestId(/rotation-radar-laggard-row-/).length).toBeGreaterThan(0);
     expect(within(leaderList).getByText('AI 应用')).toBeInTheDocument();
     expect(within(leaderList).queryByText('AI算力')).not.toBeInTheDocument();
     expect(within(leaderList).queryByText('Layer 1')).not.toBeInTheDocument();
@@ -379,12 +382,13 @@ describe('MarketRotationRadarPage', () => {
     expect(screen.queryByText('下一观察：')).not.toBeInTheDocument();
 
     const detail = screen.getByTestId('rotation-theme-detail-panel');
+    expect(detail).toHaveAttribute('data-linear-primitive', 'context-rail');
     expect(detail).toHaveTextContent('AI 应用');
     expect(within(detail).getByText('确认轮动')).toHaveAttribute('data-terminal-primitive', 'chip');
     expect(within(detail).getByText(/^置信度 \d+%$/)).toHaveAttribute('data-terminal-primitive', 'chip');
     expect(within(detail).getByText('延迟可用')).toHaveAttribute('data-terminal-primitive', 'chip');
     expect(within(detail).getByText('非交易指令')).toHaveAttribute('data-terminal-primitive', 'chip');
-    expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('完整主题库');
+    expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('主题 / 行业板');
     expect(screen.getByPlaceholderText('搜索主题、英文名或成员')).toBeInTheDocument();
 
     const bodyText = page.textContent?.toLowerCase() || '';
@@ -610,10 +614,10 @@ describe('MarketRotationRadarPage', () => {
 
     const mechanics = screen.getByTestId('rotation-radar-mechanics-details');
     expect(mechanics).toHaveAttribute('data-terminal-primitive', 'disclosure');
-    expect(mechanics).toHaveTextContent('数据说明');
+    expect(mechanics).toHaveTextContent('新鲜度 / 来源说明');
     expect(mechanics).not.toHaveAttribute('open');
     expect(screen.queryByText('不代表实时买卖信号，不触发交易、通知、组合或新的外部数据请求。')).not.toBeInTheDocument();
-    fireEvent.click(within(mechanics).getByRole('button', { name: '展开 数据说明' }));
+    fireEvent.click(within(mechanics).getByRole('button', { name: '展开 新鲜度 / 来源说明' }));
     expect(screen.getByText('不代表实时买卖信号，不触发交易、通知、组合或新的外部数据请求。')).toBeInTheDocument();
     expect(mechanics).not.toHaveTextContent('schemaVersion');
   });
