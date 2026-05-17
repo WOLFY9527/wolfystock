@@ -287,7 +287,7 @@ describe('WatchlistPage', () => {
     expect(screen.queryByText(/Track scanner candidates/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-TSM')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-600519')).toBeInTheDocument();
-    expect(screen.getByTestId('watchlist-filter-grid')).toHaveClass('min-w-0', 'grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-6');
+    expect(screen.getByTestId('watchlist-filter-grid')).toHaveClass('min-w-0', 'grid-cols-2', 'md:grid-cols-2', 'xl:grid-cols-6');
     const marketSelect = screen.getByLabelText('市场');
     const contextSelect = screen.getByLabelText('主题 / 候选范围');
     expect(marketSelect).toHaveClass('select-surface', 'absolute', 'inset-0', 'opacity-0');
@@ -310,8 +310,10 @@ describe('WatchlistPage', () => {
     expect(document.querySelector('[data-terminal-primitive="dense-page-header"]')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-status-strip')).toHaveAttribute('data-terminal-primitive', 'dense-status-strip');
     expect(screen.getByTestId('watchlist-table-workbench')).toHaveAttribute('data-terminal-primitive', 'dense-table-shell');
+    expect(screen.getByTestId('watchlist-add-filter-row')).toHaveAttribute('data-linear-primitive', 'command-bar');
     expect(screen.getByTestId('watchlist-command-bar')).toHaveAttribute('data-terminal-primitive', 'dense-command-bar');
-    expect(screen.getByTestId('watchlist-candidate-list')).toHaveAttribute('data-terminal-primitive', 'dense-table-frame');
+    expect(screen.getByTestId('watchlist-candidate-list')).toHaveAttribute('data-linear-primitive', 'dense-rows');
+    expect(screen.getByTestId('watchlist-detail-rail')).toHaveAttribute('data-linear-primitive', 'context-rail');
     expect(screen.getByTestId('watchlist-command-bar').querySelectorAll('[data-terminal-primitive="button"]')).toHaveLength(6);
     expect(row.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThan(0);
   });
@@ -322,12 +324,12 @@ describe('WatchlistPage', () => {
     await screen.findByTestId('watchlist-row-NVDA');
     const statusStrip = screen.getByTestId('watchlist-status-strip');
     expect(statusStrip.querySelectorAll('[data-terminal-primitive="metric"]')).toHaveLength(0);
-    expect(screen.getByText('观察标的数').nextElementSibling).toHaveTextContent('3');
-    expect(screen.getByText('已有扫描结果').nextElementSibling).toHaveTextContent('3');
-    expect(screen.getByText('已有回测结果').nextElementSibling).toHaveTextContent('3');
-    expect(screen.getByText('情报过期').nextElementSibling).toHaveTextContent('0');
-    expect(screen.getByText('失败 / 无数据').nextElementSibling).toHaveTextContent('0');
-    expect(screen.getByText('最近更新时间').nextElementSibling).toHaveTextContent('05/01');
+    expect(within(statusStrip).getByText('观察标的数').nextElementSibling).toHaveTextContent('3');
+    expect(within(statusStrip).getByText('已有扫描结果').nextElementSibling).toHaveTextContent('3');
+    expect(within(statusStrip).getByText('已有回测结果').nextElementSibling).toHaveTextContent('3');
+    expect(within(statusStrip).getByText('情报过期').nextElementSibling).toHaveTextContent('0');
+    expect(within(statusStrip).getByText('失败 / 无数据').nextElementSibling).toHaveTextContent('0');
+    expect(within(statusStrip).getByText('最近更新时间').nextElementSibling).toHaveTextContent('05/01');
   });
 
   it('renders the intelligence command bar, coverage summary, and selected scope controls', async () => {
@@ -340,12 +342,13 @@ describe('WatchlistPage', () => {
     expect(screen.getByRole('button', { name: '清除选择' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '刷新情报' })).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-action-scope')).toHaveTextContent('当前筛选 3 个标的');
-    expect(screen.getByText('观察标的数').nextElementSibling).toHaveTextContent('3');
-    expect(screen.getByText('已有扫描结果').nextElementSibling).toHaveTextContent('3');
-    expect(screen.getByText('已有回测结果').nextElementSibling).toHaveTextContent('3');
-    expect(screen.getByText('情报过期').nextElementSibling).toHaveTextContent('0');
-    expect(screen.getByText('失败 / 无数据').nextElementSibling).toHaveTextContent('0');
-    expect(screen.getByText('最近更新时间').nextElementSibling).toHaveTextContent('05/01');
+    const statusStrip = screen.getByTestId('watchlist-status-strip');
+    expect(within(statusStrip).getByText('观察标的数').nextElementSibling).toHaveTextContent('3');
+    expect(within(statusStrip).getByText('已有扫描结果').nextElementSibling).toHaveTextContent('3');
+    expect(within(statusStrip).getByText('已有回测结果').nextElementSibling).toHaveTextContent('3');
+    expect(within(statusStrip).getByText('情报过期').nextElementSibling).toHaveTextContent('0');
+    expect(within(statusStrip).getByText('失败 / 无数据').nextElementSibling).toHaveTextContent('0');
+    expect(within(statusStrip).getByText('最近更新时间').nextElementSibling).toHaveTextContent('05/01');
 
     fireEvent.click(within(row).getByRole('checkbox', { name: '选择 NVDA' }));
 
@@ -354,22 +357,28 @@ describe('WatchlistPage', () => {
     expect(screen.getByRole('button', { name: '清除选择' })).not.toBeDisabled();
   });
 
-  it('keeps candidate rows before secondary filters and batch controls', async () => {
+  it('keeps filters and batch controls above the watch board with a selected detail rail', async () => {
     renderWatchlist();
     const rows = await screen.findByTestId('watchlist-candidate-list');
     const shell = screen.getByTestId('watchlist-page');
     const workbench = screen.getByTestId('watchlist-table-workbench');
+    const addFilterRow = screen.getByTestId('watchlist-add-filter-row');
     const filterGrid = screen.getByTestId('watchlist-filter-grid');
     const commandBar = screen.getByTestId('watchlist-command-bar');
+    const boardShell = screen.getByTestId('watchlist-board-shell');
+    const detailRail = screen.getByTestId('watchlist-detail-rail');
 
     expect(rows).toContainElement(screen.getByTestId('watchlist-row-NVDA'));
     expect(commandBar).toHaveTextContent('扫描当前筛选');
+    expect(workbench).toContainElement(addFilterRow);
     expect(workbench).toContainElement(filterGrid);
     expect(workbench).toContainElement(commandBar);
-    expect(workbench).toContainElement(rows);
-    expect(filterGrid.compareDocumentPosition(rows) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(commandBar.compareDocumentPosition(rows) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(shell).toHaveClass('flex', 'flex-col', 'gap-6', 'px-4', 'xl:px-8');
+    expect(workbench).toContainElement(boardShell);
+    expect(boardShell).toContainElement(rows);
+    expect(boardShell).toContainElement(detailRail);
+    expect(addFilterRow.compareDocumentPosition(boardShell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(boardShell.compareDocumentPosition(commandBar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(shell).toHaveClass('flex', 'flex-col', 'gap-5', 'px-4', 'xl:px-8');
     expect(workbench.parentElement).toBe(shell);
   });
 
@@ -422,7 +431,7 @@ describe('WatchlistPage', () => {
 
     fireEvent.change(screen.getByLabelText('排序'), { target: { value: 'scannerScore' } });
 
-    const rows = Array.from(document.querySelectorAll('tbody tr'));
+    const rows = Array.from(screen.getByTestId('watchlist-candidate-list').querySelectorAll('[data-testid^="watchlist-row-"]'));
     expect(within(rows[0] as HTMLElement).getByText('NVDA')).toBeInTheDocument();
     expect(within(rows[1] as HTMLElement).getByText('TSM')).toBeInTheDocument();
     expect(within(rows[2] as HTMLElement).getByText('600519')).toBeInTheDocument();
@@ -516,12 +525,26 @@ describe('WatchlistPage', () => {
     await screen.findByTestId('watchlist-row-NVDA');
 
     fireEvent.change(screen.getByLabelText('排序'), { target: { value: 'backtestReturn' } });
-    let rows = Array.from(document.querySelectorAll('tbody tr'));
+    let rows = Array.from(screen.getByTestId('watchlist-candidate-list').querySelectorAll('[data-testid^="watchlist-row-"]'));
     expect(within(rows[0] as HTMLElement).getByText('NVDA')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('排序'), { target: { value: 'historicalHitRate' } });
-    rows = Array.from(document.querySelectorAll('tbody tr'));
+    rows = Array.from(screen.getByTestId('watchlist-candidate-list').querySelectorAll('[data-testid^="watchlist-row-"]'));
     expect(within(rows[0] as HTMLElement).getByText('NVDA')).toBeInTheDocument();
+  });
+
+  it('shows the first filtered symbol in the detail rail and updates it when another row is focused', async () => {
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-NVDA');
+    const detailRail = screen.getByTestId('watchlist-detail-rail');
+    expect(within(detailRail).getByText('NVDA')).toBeInTheDocument();
+    expect(within(detailRail).getByText('观察摘要')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看详情 TSM' }));
+
+    expect(within(detailRail).getByText('TSM')).toBeInTheDocument();
+    expect(within(detailRail).getByText('TSMC')).toBeInTheDocument();
   });
 
   it('filters rows with backtest evidence', async () => {
@@ -699,8 +722,9 @@ describe('WatchlistPage', () => {
 
     renderWatchlist();
 
-    expect(await screen.findByText('暂无追踪候选。')).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole('button', { name: /打开扫描器/ })[1]);
+    const emptyState = await screen.findByTestId('watchlist-compact-empty-state');
+    expect(within(emptyState).getByText('暂无追踪候选。')).toBeInTheDocument();
+    fireEvent.click(within(emptyState).getByRole('button', { name: /打开扫描器/ }));
     expect(screen.getByText('scanner')).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/zh/scanner');
   });
