@@ -11,7 +11,7 @@ import math
 import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 
 MAX_CUSTOM_STRATEGY_BARS = 5000
@@ -22,11 +22,15 @@ MAX_CUSTOM_STRATEGY_REASON_CODES = 8
 MAX_CUSTOM_STRATEGY_DIAGNOSTICS = 32
 MAX_CUSTOM_STRATEGY_PARAMETER_KEYS = 32
 MAX_CUSTOM_STRATEGY_PARAMETER_STRING_LENGTH = 128
+MAX_CUSTOM_STRATEGY_PARAMETER_ABS_VALUE = 1_000_000_000
 MAX_CUSTOM_STRATEGY_SOURCE_CODE_LENGTH = 16000
 
 _SAFE_CODE_RE = re.compile(r"^[a-z0-9][a-z0-9_:-]{0,63}$")
 _SAFE_KEY_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]{0,63}$")
 _SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+_BLOCKED_IMPORT_RE = re.compile(r"(^|\n)\s*(from\s+\S+\s+import|import\s+\S+)")
+_BLOCKED_EXEC_RE = re.compile(r"(__import__\s*\(|eval\s*\(|exec\s*\(|compile\s*\(|open\s*\()")
+_BLOCKED_PATH_TRAVERSAL_RE = re.compile(r"(\.\./|\.\.\\\\|/etc/|%2e%2e/)", re.IGNORECASE)
 
 
 class _CustomStrategySchema(BaseModel):
@@ -70,7 +74,22 @@ def _validate_parameter_mapping(
         elif isinstance(value, float):
             if not math.isfinite(value):
                 raise ValueError(f"{field_name} has non-finite float parameter: {key}")
+            if abs(value) > MAX_CUSTOM_STRATEGY_PARAMETER_ABS_VALUE:
+                raise ValueError(f"{field_name} float parameter magnitude is too large: {key}")
+        elif isinstance(value, int):
+            if abs(value) > MAX_CUSTOM_STRATEGY_PARAMETER_ABS_VALUE:
+                raise ValueError(f"{field_name} integer parameter is too large: {key}")
     return mapping
+
+
+def _validate_restricted_python_source_code(value: str) -> None:
+    lowered = value.lower()
+    if _BLOCKED_IMPORT_RE.search(lowered):
+        raise ValueError("sourceCode contains blocked import content")
+    if _BLOCKED_EXEC_RE.search(lowered):
+        raise ValueError("sourceCode contains blocked execution content")
+    if _BLOCKED_PATH_TRAVERSAL_RE.search(lowered):
+        raise ValueError("sourceCode contains blocked path traversal content")
 
 
 class CustomStrategyBar(_CustomStrategySchema):
@@ -141,10 +160,12 @@ class CustomStrategyInput(_CustomStrategySchema):
 
     @field_validator("source_code")
     @classmethod
-    def _validate_source_code(cls, value: str) -> str:
+    def _validate_source_code(cls, value: str, info: ValidationInfo) -> str:
         normalized = value.strip()
         if not normalized:
             raise ValueError("sourceCode must not be empty")
+        if info.data.get("language") == "restricted_python":
+            _validate_restricted_python_source_code(normalized)
         return normalized
 
 
@@ -282,6 +303,7 @@ __all__ = [
     "MAX_CUSTOM_STRATEGY_BARS",
     "MAX_CUSTOM_STRATEGY_DIAGNOSTICS",
     "MAX_CUSTOM_STRATEGY_PARAMETER_KEYS",
+    "MAX_CUSTOM_STRATEGY_PARAMETER_ABS_VALUE",
     "MAX_CUSTOM_STRATEGY_PARAMETER_STRING_LENGTH",
     "MAX_CUSTOM_STRATEGY_PAYLOAD_BYTES",
     "MAX_CUSTOM_STRATEGY_REASON_CODES",

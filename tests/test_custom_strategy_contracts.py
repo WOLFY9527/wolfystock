@@ -27,6 +27,7 @@ from src.services.custom_strategy_contracts import (
     MAX_CUSTOM_STRATEGY_REASON_LENGTH,
     MAX_CUSTOM_STRATEGY_SIGNALS,
     compute_custom_strategy_output_digest,
+    serialize_custom_strategy_validation_error,
     validate_custom_strategy_input,
     validate_custom_strategy_output,
 )
@@ -152,6 +153,63 @@ def test_input_contract_enforces_max_bars() -> None:
         validate_custom_strategy_input(_build_input(bars=MAX_CUSTOM_STRATEGY_BARS + 1))
 
 
+@pytest.mark.parametrize(
+    ("source_code", "reason_code"),
+    [
+        ('import os\nos.system("echo owned")\n', "source_code_import_blocked"),
+        ('result = eval("1 + 1")\n', "source_code_exec_blocked"),
+        ('path = "../../etc/passwd"\n', "source_code_path_traversal_blocked"),
+    ],
+)
+def test_input_contract_rejects_malicious_source_code_markers(source_code: str, reason_code: str) -> None:
+    payload = _build_input()
+    payload["sourceCode"] = source_code
+
+    with pytest.raises(ValidationError) as exc_info:
+        validate_custom_strategy_input(payload)
+
+    serialized = serialize_custom_strategy_validation_error(exc_info.value, kind="input")
+    assert serialized["issues"] == [
+        {
+            "field": "sourceCode",
+            "reasonCode": reason_code,
+            "message": "Custom strategy source code contains blocked content",
+        }
+    ]
+
+
+def test_input_contract_rejects_unknown_nested_context_and_bar_fields() -> None:
+    payload = _build_input()
+    payload["context"]["sessionHandle"] = "danger"
+    payload["bars"][0]["filesystemPath"] = "../../secrets.txt"
+
+    with pytest.raises(ValidationError) as exc_info:
+        validate_custom_strategy_input(payload)
+
+    serialized = serialize_custom_strategy_validation_error(exc_info.value, kind="input")
+    assert serialized["issues"] == [
+        {
+            "field": "bars.0.filesystemPath",
+            "reasonCode": "extra_forbidden",
+            "message": "Extra inputs are not permitted",
+        },
+        {
+            "field": "context.sessionHandle",
+            "reasonCode": "extra_forbidden",
+            "message": "Extra inputs are not permitted",
+        },
+    ]
+
+
+def test_input_contract_rejects_resource_abuse_like_parameter_values() -> None:
+    payload = _build_input()
+    payload["parameters"]["ints"]["max_iterations"] = 10**12
+    payload["parameters"]["floats"]["leverage"] = 10**12
+
+    with pytest.raises(ValidationError):
+        validate_custom_strategy_input(payload)
+
+
 def test_output_contract_accepts_bounded_signals_and_audit_fields() -> None:
     contract = validate_custom_strategy_output(_build_output())
 
@@ -193,6 +251,29 @@ def test_output_contract_enforces_max_signals() -> None:
         validate_custom_strategy_output(_build_output(signals=MAX_CUSTOM_STRATEGY_SIGNALS + 1))
 
 
+def test_output_contract_rejects_malformed_signal_and_audit_shapes() -> None:
+    payload = _build_output()
+    payload["signals"] = {"timestamp": "2026-05-18T15:00:00Z"}
+    payload["auditEvents"][0]["stderrPath"] = "/tmp/strategy.stderr"
+
+    with pytest.raises(ValidationError) as exc_info:
+        validate_custom_strategy_output(payload)
+
+    serialized = serialize_custom_strategy_validation_error(exc_info.value, kind="output")
+    assert serialized["issues"] == [
+        {
+            "field": "auditEvents.0.stderrPath",
+            "reasonCode": "extra_forbidden",
+            "message": "Extra inputs are not permitted",
+        },
+        {
+            "field": "signals",
+            "reasonCode": "tuple_type",
+            "message": "Input should be a valid tuple",
+        },
+    ]
+
+
 def test_output_contract_exposes_typed_error_records() -> None:
     payload = _build_output()
     payload["errors"] = [
@@ -219,6 +300,24 @@ def test_payload_size_guard_rejects_oversized_input_and_output() -> None:
 
     with pytest.raises(ValueError, match="payload exceeds"):
         validate_custom_strategy_output(_build_output(), max_payload_bytes=64)
+
+
+def test_payload_size_error_serialization_is_structured_and_deterministic() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        validate_custom_strategy_input(_build_input(), max_payload_bytes=64)
+
+    serialized = serialize_custom_strategy_validation_error(exc_info.value, kind="input")
+    assert serialized == {
+        "error": "validation_error",
+        "message": "Custom strategy input contract validation failed",
+        "issues": [
+            {
+                "field": "$",
+                "reasonCode": "payload_too_large",
+                "message": "Custom strategy input payload exceeds byte limit",
+            }
+        ],
+    }
 
 
 def test_output_digest_is_stable_sha256_hex() -> None:
@@ -282,3 +381,19 @@ def test_schema_models_can_be_constructed_directly() -> None:
 
     assert isinstance(output, CustomStrategyOutput)
     assert output.audit_events[0].exit_reason == "validation_failed"
+
+
+def test_validation_error_serialization_does_not_echo_malicious_source() -> None:
+    payload = _build_input()
+    payload["sourceCode"] = '__import__("os").system("touch /tmp/owned")'
+
+    with pytest.raises(ValidationError) as exc_info:
+        validate_custom_strategy_input(payload)
+
+    serialized = serialize_custom_strategy_validation_error(exc_info.value, kind="input")
+    dumped = json.dumps(serialized, ensure_ascii=False, sort_keys=True)
+
+    assert "__import__" not in dumped
+    assert "/tmp/owned" not in dumped
+    assert "errors.pydantic.dev" not in dumped
+    assert '"input"' not in dumped
