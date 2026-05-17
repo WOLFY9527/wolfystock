@@ -14,6 +14,7 @@ import { AdminEvidenceDiagnosticsConsole } from '../components/evidence/AdminEvi
 import { AdminEvidenceDryRunPreview } from '../components/evidence/AdminEvidenceDryRunPreview';
 import {
   TerminalChip,
+  TerminalDenseList,
   TerminalDisclosure,
   TerminalMetric,
   TerminalNestedBlock,
@@ -223,20 +224,22 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
             title="操作员证据路径"
             action={<TerminalChip variant="info">6 步只读流程</TerminalChip>}
           />
-          <div
+          <TerminalDenseList
             data-testid="admin-evidence-workflow-grid"
-            className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6"
+            className="mt-5"
           >
             {workflowSteps.map((step, index) => (
               <article key={step.label} className="min-w-0">
-                <TerminalNestedBlock className="h-full">
-                  <p className="font-mono text-[11px] text-white/36">{String(index + 1).padStart(2, '0')}</p>
-                  <h3 className="mt-2 min-h-10 text-sm font-semibold leading-5 text-white/86">{step.label}</h3>
-                  <p className="mt-2 text-xs leading-5 text-white/42">{step.note}</p>
+                <TerminalNestedBlock className="flex items-start gap-4">
+                  <p className="w-8 shrink-0 font-mono text-[11px] text-white/36">{String(index + 1).padStart(2, '0')}</p>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-semibold leading-5 text-white/86">{step.label}</h3>
+                    <p className="mt-1 text-xs leading-5 text-white/42">{step.note}</p>
+                  </div>
                 </TerminalNestedBlock>
               </article>
             ))}
-          </div>
+          </TerminalDenseList>
         </TerminalPanel>
 
         <div className="grid grid-cols-1 gap-6 xl:col-span-4">
@@ -313,31 +316,29 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
             title="操作员工作流参考"
             action={<TerminalChip variant="neutral">静态标签</TerminalChip>}
           />
-          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <TerminalDenseList className="mt-5">
             {runbookReferences.map(({ label, docLabel, stage, icon: Icon }) => (
               <article
                 key={docLabel}
                 className="min-w-0"
                 aria-label={`${label}：${docLabel}`}
               >
-                <TerminalNestedBlock className="h-full">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">参考卡</p>
-                      <h3 className="mt-2 text-sm font-semibold leading-5 text-white/88">{label}</h3>
-                    </div>
-                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-cyan-300/15 bg-cyan-400/8 text-cyan-100">
-                      <Icon className="h-4 w-4" aria-hidden="true" />
-                    </span>
+                <TerminalNestedBlock className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">参考卡</p>
+                    <h3 className="mt-2 text-sm font-semibold leading-5 text-white/88">{label}</h3>
+                    <p className="mt-3 break-all rounded-xl border border-white/[0.04] bg-white/[0.02] px-2.5 py-2 font-mono text-[11px] leading-5 text-cyan-100/78">
+                      {docLabel}
+                    </p>
+                    <p className="mt-3 text-xs leading-5 text-white/44">{stage}</p>
                   </div>
-                  <p className="mt-4 break-all rounded-xl border border-white/[0.04] bg-white/[0.02] px-2.5 py-2 font-mono text-[11px] leading-5 text-cyan-100/78">
-                    {docLabel}
-                  </p>
-                  <p className="mt-3 text-xs leading-5 text-white/44">{stage}</p>
+                  <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-cyan-300/15 bg-cyan-400/8 text-cyan-100">
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                  </span>
                 </TerminalNestedBlock>
               </article>
             ))}
-          </div>
+          </TerminalDenseList>
         </div>
       </TerminalDisclosure>
 
@@ -354,14 +355,14 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
             )}
           />
 
-          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <TerminalDenseList className="mt-5">
             {schemaReferenceGroups.map((group) => (
               <article
                 key={group.artifact}
                 className="min-w-0"
                 aria-label={`${group.label}：${group.artifact}`}
               >
-                <TerminalNestedBlock className="h-full">
+                <TerminalNestedBlock className="min-w-0">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">证据类别</p>
@@ -369,7 +370,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
                     </div>
                     <TerminalChip variant="info">本地校验</TerminalChip>
                   </div>
-                  <dl className="mt-4 space-y-3 text-xs leading-5">
+                  <dl className="mt-4 grid gap-3 text-xs leading-5 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto] md:items-start">
                     <div>
                       <dt className="text-white/34">预期证据文件</dt>
                       <dd className="mt-1 break-all font-mono text-white/74">{group.artifact}</dd>
@@ -378,7 +379,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
                       <dt className="text-white/34">validator / review stage</dt>
                       <dd className="mt-1 break-all font-mono text-cyan-100/78">{group.validator}</dd>
                     </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-1 2xl:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-1">
                       <TerminalNestedBlock className="px-2.5 py-2">
                         <span className="font-mono text-[11px] text-amber-100/86">manual review required</span>
                       </TerminalNestedBlock>
@@ -390,7 +391,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
                 </TerminalNestedBlock>
               </article>
             ))}
-          </div>
+          </TerminalDenseList>
 
           <TerminalDisclosure
             data-testid="admin-evidence-schema-notes"
@@ -410,14 +411,14 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
           <div className="xl:col-span-8">
             <div data-testid="admin-evidence-command-snippets">
               <TerminalSectionHeader eyebrow="离线命令" title="可复制的静态片段" />
-              <div className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-3">
+              <TerminalDenseList className="mt-5">
                 {commandSnippets.map((snippet) => (
                   <article
                     key={snippet.label}
                     className="min-w-0"
                     aria-labelledby={`admin-evidence-command-${snippet.label}`}
                   >
-                    <TerminalNestedBlock className="h-full">
+                    <TerminalNestedBlock className="min-w-0">
                       <p id={`admin-evidence-command-${snippet.label}`} className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/34">
                         {snippet.label}
                       </p>
@@ -433,7 +434,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
                     </TerminalNestedBlock>
                   </article>
                 ))}
-              </div>
+              </TerminalDenseList>
             </div>
           </div>
 
