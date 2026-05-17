@@ -8,9 +8,11 @@ import { scannerApi } from '../api/scanner';
 import { backtestApi } from '../api/backtest';
 import {
   ConsoleBoard,
-  ConsoleContextRail,
   ConsoleDisclosure,
   ConsoleStatusStrip,
+  FloatingDetailPanel,
+  RailPanel,
+  ScrollPanel,
   WolfyCommandBar,
   WolfyShellSurface,
 } from '../components/linear';
@@ -1215,7 +1217,7 @@ const ChatPage: React.FC = () => {
 
       <div
         data-testid={testId}
-        className="flex flex-1 min-h-0 flex-col gap-1 overflow-y-auto no-scrollbar"
+        className="flex min-h-0 flex-col gap-1"
       >
         {sessionsLoading ? (
           <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-4 text-xs text-[color:var(--wolfy-text-muted)]">
@@ -1298,7 +1300,7 @@ const ChatPage: React.FC = () => {
   );
 
   const renderDataEvidencePanel = (testId = 'chat-evidence-panel') => (
-    <section data-testid={testId} className="flex flex-col gap-0">
+    <div data-testid={testId} className="flex flex-col gap-0">
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-[11px] text-[color:var(--wolfy-text-secondary)]">
           {language === 'en' ? 'Data Evidence' : '数据证据'}
@@ -1338,7 +1340,7 @@ const ChatPage: React.FC = () => {
           </div>
         ))}
       </div>
-    </section>
+    </div>
   );
 
   const renderQuickActions = () => {
@@ -1422,14 +1424,13 @@ const ChatPage: React.FC = () => {
       ? smartRoute.recommendedLenses.slice(0, 2).join(' / ')
       : selectedLens.label;
     return (
-      <section
+      <ConsoleDisclosure
         data-testid={testId}
-        className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-left"
+        title={language === 'en' ? 'Research context' : '研究上下文'}
+        summary={smartRoute.symbols.length ? `${routeText} · ${lensText}` : (language === 'en' ? 'Waiting for question' : '等待问题')}
+        className="bg-[var(--wolfy-surface-input)] text-left"
       >
-        <p className="text-[11px] text-[color:var(--wolfy-text-secondary)]">
-          {language === 'en' ? 'Research context' : '研究上下文'}
-        </p>
-        <div className="mt-3 grid gap-2">
+        <div data-testid={`${testId}-body`} className="mt-3 grid gap-2">
           {[
             { label: language === 'en' ? 'Question' : '问题', value: smartRoute.symbols.length ? routeText : (language === 'en' ? 'Waiting for question' : '等待问题') },
             { label: language === 'en' ? 'Context' : '上下文', value: smartRoute.symbols.length ? lensText : (language === 'en' ? 'No context yet' : '暂无上下文') },
@@ -1448,7 +1449,7 @@ const ChatPage: React.FC = () => {
             </div>
           ))}
         </div>
-      </section>
+      </ConsoleDisclosure>
     );
   };
 
@@ -1549,10 +1550,12 @@ const ChatPage: React.FC = () => {
 
         <ConsoleDisclosure
           title={language === 'en' ? 'Evidence detail' : '证据明细'}
-          summary={language === 'en' ? 'Open only when you need source-by-source readiness.' : '需要逐项查看证据状态时再展开。'}
+          summary={language === 'en' ? 'Collapsed by default until you need source-by-source readiness.' : '逐项证据默认折叠，按需展开。'}
           className="bg-[var(--wolfy-surface-input)]"
         >
-          {renderDataEvidencePanel()}
+          <FloatingDetailPanel className="mt-3">
+            {renderDataEvidencePanel()}
+          </FloatingDetailPanel>
         </ConsoleDisclosure>
         <div className="hidden lg:block">
           {renderQuickActions()}
@@ -1721,6 +1724,7 @@ const ChatPage: React.FC = () => {
           variant="console"
           padding="sm"
           data-testid="chat-workspace-command"
+          data-layout-zone="HeaderStrip"
           className="shrink-0"
         >
           <WolfyCommandBar trailing={renderConsoleActions(true)} className="min-h-12 rounded-lg bg-[var(--wolfy-surface-input)] px-3 py-2">
@@ -1744,80 +1748,67 @@ const ChatPage: React.FC = () => {
                 data-testid="chat-conversation-board"
                 className="flex h-full min-h-0 flex-1 min-w-0 flex-col rounded-lg"
               >
-                {showEmptyState ? (
-                  <main
-                    id="chat-scroll-container"
-                    data-testid="chat-main"
-                    className="flex h-full flex-1 flex-col overflow-hidden"
+                <main
+                  id="chat-scroll-container"
+                  data-testid="chat-main"
+                  className="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
+                >
+                  <ScrollPanel
+                    data-testid="chat-conversation-scroll"
+                    zone="PrimaryWorkRegion"
+                    maxHeight="min(100%, calc(100vh - 18rem))"
+                    className="flex min-h-0 flex-1"
+                    onWheel={() => {
+                      isAutoScroll.current = false;
+                    }}
+                    onTouchMove={() => {
+                      isAutoScroll.current = false;
+                    }}
+                    onScroll={(e) => {
+                      const target = e.target as HTMLElement;
+                      if (target.scrollHeight - target.scrollTop - target.clientHeight < 50) {
+                        isAutoScroll.current = true;
+                      }
+                    }}
                   >
-                    <div
-                      data-testid="chat-empty-state"
-                      className="flex flex-1 flex-col items-center justify-start overflow-y-auto no-scrollbar"
-                    >
-                      <div className="flex min-h-0 w-full flex-1 flex-col gap-4 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 md:px-5">
-                        {skillsLoadError ? (
-                          <ApiErrorAlert
-                            error={skillsLoadError}
-                            actionLabel={chat('retryLoadSkills')}
-                            onAction={() => {
-                              void loadSkills();
-                            }}
-                          />
-                        ) : null}
+                    {showEmptyState ? (
+                      <div
+                        data-testid="chat-empty-state"
+                        className="flex min-h-full flex-col items-center justify-start"
+                      >
+                        <div className="flex w-full flex-col gap-4 px-4 pt-4 md:px-5">
+                          {skillsLoadError ? (
+                            <ApiErrorAlert
+                              error={skillsLoadError}
+                              actionLabel={chat('retryLoadSkills')}
+                              onAction={() => {
+                                void loadSkills();
+                              }}
+                            />
+                          ) : null}
 
-                        <div
-                          data-testid="chat-research-entry-grid"
-                          className="flex min-h-0 flex-1 flex-col justify-between gap-4"
-                        >
-                          <WolfyShellSurface
-                            as="section"
-                            variant="input"
-                            padding="md"
-                            data-testid="chat-empty-research-stream"
-                            className="flex min-h-[180px] flex-1 flex-col items-center justify-center text-center"
+                          <div
+                            data-testid="chat-research-entry-grid"
+                            className="mx-auto flex w-full max-w-3xl flex-col gap-4"
                           >
-                            <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
-                              {language === 'en' ? 'Waiting for a research question' : '等待问题'}
-                            </p>
-                            <p className="mt-2 text-xs text-[color:var(--wolfy-text-muted)]">
-                              {language === 'en' ? 'No context yet. Data is checked during analysis.' : '暂无上下文。分析时检查数据。'}
-                            </p>
-                          </WolfyShellSurface>
-
-                          <div data-testid="chat-input-shell" className="sticky bottom-0 w-full shrink-0 min-w-0">
-                            <div data-testid="chat-input-gradient" className="w-full shrink-0">
-                              <div data-testid="chat-console-inner" className="w-full">
-                                {renderComposerBody(false)}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="lg:hidden">
-                            {renderMobileComposerActions()}
+                            <WolfyShellSurface
+                              as="section"
+                              variant="input"
+                              padding="md"
+                              data-testid="chat-empty-research-stream"
+                              className="flex min-h-[13rem] flex-col items-center justify-center text-center"
+                            >
+                              <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+                                {language === 'en' ? 'Waiting for a research question' : '等待问题'}
+                              </p>
+                              <p className="mt-2 text-xs text-[color:var(--wolfy-text-muted)]">
+                                {language === 'en' ? 'No context yet. Data is checked during analysis.' : '暂无上下文。分析时检查数据。'}
+                              </p>
+                            </WolfyShellSurface>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </main>
-                ) : (
-                  <>
-                    <main
-                      id="chat-scroll-container"
-                      data-testid="chat-main"
-                      onWheel={() => {
-                        isAutoScroll.current = false;
-                      }}
-                      onTouchMove={() => {
-                        isAutoScroll.current = false;
-                      }}
-                      onScroll={(e) => {
-                        const target = e.target as HTMLElement;
-                        if (target.scrollHeight - target.scrollTop - target.clientHeight < 50) {
-                          isAutoScroll.current = true;
-                        }
-                      }}
-                      className="min-h-0 w-full flex-1 overflow-y-auto no-scrollbar"
-                    >
+                    ) : (
                       <div data-testid="chat-message-scroll" className="w-full min-h-full">
                         <div
                           data-testid="chat-message-stream"
@@ -1937,58 +1928,57 @@ const ChatPage: React.FC = () => {
                           ) : null}
                         </div>
                       </div>
-                    </main>
+                    )}
+                  </ScrollPanel>
 
-                    <footer data-testid="chat-input-shell" className="shrink-0 w-full border-t border-[color:var(--wolfy-divider)]">
-                      <div data-testid="chat-input-gradient" className="w-full shrink-0 px-4 py-4 md:px-5">
-                        <div data-testid="chat-console-inner" className="w-full">
-                          {renderComposerBody()}
-                        </div>
+                  <footer data-testid="chat-input-shell" className="shrink-0 w-full border-t border-[color:var(--wolfy-divider)]">
+                    <div data-testid="chat-input-gradient" className="w-full shrink-0 px-4 py-4 md:px-5">
+                      <div data-testid="chat-console-inner" className="w-full">
+                        {renderComposerBody()}
                       </div>
-                    </footer>
-                  </>
-                )}
+                    </div>
+                  </footer>
+                </main>
               </ConsoleBoard>
             </section>
           </div>
 
-          <aside
+          <RailPanel
             data-testid="chat-context-rail"
+            railWidth="md"
             className="hidden h-full min-h-0 w-full shrink-0 flex-col lg:flex"
           >
-            <ConsoleContextRail className="h-full rounded-lg bg-[var(--wolfy-surface-rail)] p-3 no-scrollbar">
-              <div className="flex items-center justify-between gap-3 pb-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{chatConsoleTitle}</p>
-                  <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">{consoleMode === 'engines' ? contextPaneSummary : chat('historyTitle')}</p>
+            <div className="flex items-center justify-between gap-3 pb-3">
+              <div className="min-w-0">
+                <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{chatConsoleTitle}</p>
+                <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">{consoleMode === 'engines' ? contextPaneSummary : chat('historyTitle')}</p>
+              </div>
+              {renderConsoleActions()}
+            </div>
+
+            <div className="py-3">
+              <SeamlessSegmentedControl
+                dataTestId="chat-console-mode-toggle"
+                value={consoleMode}
+                onChange={setConsoleMode}
+                language={language}
+              />
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar pt-3">
+              {consoleMode === 'engines' ? (
+                <div className="flex flex-col gap-4">
+                  {renderContextBriefRail()}
+                  {renderControlPanel('chat-control-panel')}
                 </div>
-                {renderConsoleActions()}
-              </div>
-
-              <div className="py-3">
-                <SeamlessSegmentedControl
-                  dataTestId="chat-console-mode-toggle"
-                  value={consoleMode}
-                  onChange={setConsoleMode}
-                  language={language}
-                />
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar pt-3">
-                {consoleMode === 'engines' ? (
-                  <div className="flex flex-col gap-4">
-                    {renderContextBriefRail()}
-                    {renderControlPanel('chat-control-panel')}
-                  </div>
-                ) : (
-                  <div className="flex min-h-full flex-col gap-4">
-                    <h3 className="text-xs font-medium text-[color:var(--wolfy-text-secondary)]">{chat('historyTitle')}</h3>
-                    {renderHistoryList('chat-history-list')}
-                  </div>
-                )}
-              </div>
-            </ConsoleContextRail>
-          </aside>
+              ) : (
+                <div className="flex min-h-full flex-col gap-4">
+                  <h3 className="text-xs font-medium text-[color:var(--wolfy-text-secondary)]">{chat('historyTitle')}</h3>
+                  {renderHistoryList('chat-history-list')}
+                </div>
+              )}
+            </div>
+          </RailPanel>
         </div>
       </div>
 

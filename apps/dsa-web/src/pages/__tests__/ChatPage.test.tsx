@@ -323,8 +323,10 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('chat-data-context-section')).toBeInTheDocument();
     expect(contextRail).toHaveTextContent('研究上下文');
     expect(contextRail).toHaveTextContent('等待问题');
-    expect(contextRail).toHaveTextContent('暂无上下文');
-    expect(contextRail).toHaveTextContent('分析时检查数据');
+    expect(screen.getByRole('button', { name: '展开 研究上下文' })).toBeInTheDocument();
+    expect(screen.queryByTestId('chat-context-brief-rail-body')).not.toBeInTheDocument();
+    expect(screen.queryByText('暂无上下文')).not.toBeInTheDocument();
+    expect(screen.queryByText('分析时检查数据')).not.toBeInTheDocument();
     expect(screen.getByText('分析视角')).toBeInTheDocument();
     expect(screen.getByText('数据上下文')).toBeInTheDocument();
     expect(screen.queryByTestId('chat-engine-section')).not.toBeInTheDocument();
@@ -642,8 +644,13 @@ describe('ChatPage', () => {
 
     fireEvent.click(await screen.findByTestId('chat-mobile-context-trigger'));
 
-    expect(await screen.findByTestId('chat-mobile-context-drawer')).toBeInTheDocument();
+    const drawer = await screen.findByTestId('chat-mobile-context-drawer');
+    expect(drawer).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: '研究上下文' })).toBeInTheDocument();
+    expect(screen.getByTestId('chat-context-brief-rail-mobile')).toHaveTextContent('研究上下文');
+    expect(screen.getByTestId('chat-context-brief-rail-mobile')).toHaveTextContent('等待问题');
+    expect(within(drawer).getByRole('button', { name: '展开 研究上下文' })).toBeInTheDocument();
+    expect(screen.queryByTestId('chat-context-brief-rail-mobile-body')).not.toBeInTheDocument();
     expect(screen.getByTestId('chat-drawer-control-panel')).not.toHaveTextContent('AI 引擎');
     expect(screen.getByTestId('chat-drawer-control-panel')).toHaveTextContent('分析视角');
     expect(screen.getByTestId('chat-drawer-control-panel')).toHaveTextContent('数据上下文');
@@ -684,29 +691,33 @@ describe('ChatPage', () => {
     expect(container.querySelectorAll('main')).toHaveLength(1);
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
     expect(screen.getByTestId('chat-workspace')).toHaveClass('w-full', 'flex', 'flex-1', 'min-h-0', 'overflow-hidden');
-    expect(screen.getByTestId('chat-workspace-command')).toBeInTheDocument();
+    expect(screen.getByTestId('chat-workspace-command')).toHaveAttribute('data-layout-zone', 'HeaderStrip');
     expect(screen.queryByTestId('chat-history-pane')).not.toBeInTheDocument();
     expect(screen.getByTestId('chat-research-shell')).toBeInTheDocument();
     expect(screen.getByTestId('chat-main-shell')).toHaveClass('flex', 'h-full', 'min-h-0', 'flex-1', 'min-w-0', 'overflow-hidden');
     expect(screen.getByTestId('chat-main-panel')).toHaveClass('relative', 'flex', 'h-full', 'min-h-0', 'flex-1', 'min-w-0', 'flex-col');
     expect(screen.getByTestId('chat-main').tagName).toBe('MAIN');
     expect(screen.getByTestId('chat-main')).toHaveAttribute('id', 'chat-scroll-container');
-    expect(screen.getByTestId('chat-main')).toHaveClass('flex-1', 'flex', 'flex-col', 'h-full', 'overflow-hidden');
+    expect(screen.getByTestId('chat-main')).toHaveClass('flex', 'h-full', 'min-h-0', 'flex-1', 'flex-col', 'overflow-hidden');
     expect(screen.getByTestId('chat-main')).not.toHaveClass('relative');
+    expect(screen.getByTestId('chat-conversation-scroll')).toHaveAttribute('data-layout-zone', 'PrimaryWorkRegion');
+    expect(screen.getByTestId('chat-conversation-scroll')).toHaveAttribute('data-linear-primitive', 'scroll-panel');
+    expect(screen.getByTestId('chat-conversation-scroll')).toHaveClass('flex', 'min-h-0', 'flex-1', 'overflow-y-auto', 'no-scrollbar');
+    expect(screen.getByTestId('chat-conversation-scroll')).toHaveStyle({ maxHeight: 'min(100%, calc(100vh - 18rem))' });
     expect(screen.queryByTestId('chat-status-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-bento-hero-skill')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'WOLFY AI 研究台' })).toBeInTheDocument();
     expect(screen.queryByTitle('查看摘要')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-message-scroll')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-message-stream')).not.toBeInTheDocument();
-    expect(screen.getByTestId('chat-empty-state')).toHaveClass('flex-1', 'overflow-y-auto', 'flex', 'flex-col', 'items-center', 'justify-start');
-    expect(screen.getByTestId('chat-empty-state')).not.toHaveClass('pb-10', 'pb-8', 'mb-8');
+    expect(screen.getByTestId('chat-empty-state')).toHaveClass('flex', 'min-h-full', 'flex-col', 'items-center', 'justify-start');
+    expect(screen.getByTestId('chat-empty-state')).not.toHaveClass('overflow-y-auto', 'pb-10', 'pb-8', 'mb-8');
     expect(screen.getByTestId('chat-input-shell')).toHaveClass('w-full', 'shrink-0');
     expect(screen.getByTestId('chat-input-shell')).not.toHaveClass('mt-auto', 'pt-4', 'pb-8', 'pb-10', 'mb-8');
     expect(screen.getByTestId('chat-input-shell')).not.toHaveClass('absolute', 'bottom-0', 'left-0', 'z-50', 'pointer-events-none');
     expect(screen.getByTestId('chat-console-inner')).toHaveClass('w-full');
-    expect(screen.getByTestId('chat-input-shell').parentElement).toBe(screen.getByTestId('chat-research-entry-grid'));
-    expect(screen.getByTestId('chat-input-shell').parentElement).not.toBe(screen.getByTestId('chat-main-panel'));
+    expect(screen.getByTestId('chat-input-shell').parentElement).toBe(screen.getByTestId('chat-main'));
+    expect(screen.getByTestId('chat-input-shell').previousElementSibling).toBe(screen.getByTestId('chat-conversation-scroll'));
     expect(screen.getByTestId('chat-composer-omnibar')).toHaveClass(
       'relative',
       'w-full',
@@ -719,10 +730,15 @@ describe('ChatPage', () => {
     );
     expect(screen.getByText('仅供研究参考，不构成投资建议。')).toHaveClass('mt-3', 'text-center', 'text-[10px]', 'text-white/30');
     expect(screen.queryByTestId('chat-skill-toolbar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('chat-context-rail')).toHaveAttribute('data-layout-zone', 'ContextRail');
+    expect(screen.getByTestId('chat-context-rail')).toHaveAttribute('data-linear-primitive', 'rail-panel');
     expect(screen.getByTestId('chat-context-rail')).toHaveClass('hidden', 'lg:flex', 'h-full', 'min-h-0', 'w-full', 'shrink-0', 'flex-col');
+    expect(screen.getByTestId('chat-context-rail')).toHaveClass('lg:w-[clamp(18rem,22vw,22.5rem)]');
     expect(screen.getByTestId('chat-context-rail')).not.toHaveClass('bg-gradient-to-b', 'from-white/[0.01]', 'to-transparent');
     expect(screen.getByTestId('chat-console-mode-toggle')).toBeInTheDocument();
     expect(screen.getByTestId('chat-strategy-grid')).toHaveClass('grid', 'grid-cols-2', 'gap-2');
+    expect(screen.queryByTestId('chat-context-brief-rail-body')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('chat-evidence-panel')).not.toBeInTheDocument();
     expect(mockLoadInitialSession).toHaveBeenCalled();
     expect(mockClearCompletionBadge).toHaveBeenCalled();
 
@@ -803,7 +819,8 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByTestId('chat-empty-research-stream')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-empty-state')).toHaveClass('flex-1', 'overflow-y-auto', 'flex', 'flex-col', 'items-center', 'justify-start');
+    expect(screen.getByTestId('chat-empty-state')).toHaveClass('flex', 'min-h-full', 'flex-col', 'items-center', 'justify-start');
+    expect(screen.getByTestId('chat-empty-state')).not.toHaveClass('overflow-y-auto');
     expect(screen.getByRole('heading', { name: 'WOLFY AI 研究台' })).toHaveClass('truncate', 'text-lg', 'font-semibold');
     expect(screen.getByRole('heading', { name: 'WOLFY AI 研究台' })).not.toHaveClass('text-white', 'sm:text-xl');
     expect(screen.queryByTestId('chat-starter-grid')).not.toBeInTheDocument();
@@ -837,7 +854,7 @@ describe('ChatPage', () => {
     expect(stream.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(contextRail).toHaveTextContent('研究上下文');
     expect(contextRail).toHaveTextContent('等待问题');
-    expect(contextRail).toHaveTextContent('暂无上下文');
+    expect(screen.queryByTestId('chat-context-brief-rail-body')).not.toBeInTheDocument();
     expect(contextRail).not.toHaveTextContent('DeepSeek');
     expect(contextRail).not.toHaveTextContent('provider');
     expect(screen.getByTestId('chat-empty-state')).toHaveClass('justify-start');
