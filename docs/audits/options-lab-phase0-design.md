@@ -370,7 +370,7 @@ Page sections:
 
 Design style:
 
-- WolfyStock OLED/deep-space/ghost-glass.
+- WolfyStock Reflect-Linear route surface guidance.
 - Dense professional terminal.
 - No loud casino/gambling visual language.
 - No "buy now" CTA.

@@ -15,6 +15,9 @@ evidence, local artifacts, and older inherited guides.
 - [Archive Index](./ARCHIVE_INDEX.md): retained historical evidence and audit
   provenance that must not be treated as current authority unless another
   current doc says so.
+- [File Governance Taxonomy](./architecture/file-governance-taxonomy.md):
+  active-vs-archive rules, docs lanes, asset/fixture policy, and AI navigation
+  rules.
 - [Operations Runbook](./operations/WOLFYSTOCK_RUNBOOK.md): operator runbook
   skeleton and links to current operational guides.
 - [README](../README.md): repository overview, local run commands, and product
@@ -40,9 +43,10 @@ operator workflows.
 | Prompt compression | [Compact Prompt Protocol](./codex/WOLFYSTOCK_CODEX_COMPACT_PROMPT_PROTOCOL.md) |
 | Model routing | [Model Routing](./codex/WOLFYSTOCK_CODEX_MODEL_ROUTING.md) |
 | Prompt context lookup | [Prompt Context Index](./codex/WOLFYSTOCK_PROMPT_CONTEXT_INDEX.md) |
+| File/docs governance | [File Governance Taxonomy](./architecture/file-governance-taxonomy.md) |
 | Frontend design authority | [Linear OS Design Language](./codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md) |
 | Frontend route taxonomy | [Frontend Surface Usage](./codex/WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md) and [Route Templates](./codex/WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md) |
-| Frontend primitive policy | [Terminal Primitives Usage](./codex/WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md) and [Canonical UI Primitives](./design/wolfystock-canonical-ui-primitives.md) |
+| Frontend primitive policy | [Terminal Primitives Usage](./codex/WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md), [Design Docs](./design/README.md), and [Canonical UI Primitives](./design/wolfystock-canonical-ui-primitives.md) |
 | Frontend validation | [Frontend Validation Playbook](./codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md) and [Visual Evidence Protocol](./codex/WOLFYSTOCK_CODEX_VISUAL_EVIDENCE_PROTOCOL.md) |
 | Launch readiness | [Audit Index](./audits/README.md), [Public Launch Readiness Master](./audits/public-launch-readiness-master.md), and [Public Launch Gap Register](./audits/public-launch-gap-register.md) |
 
@@ -97,7 +101,11 @@ specific question.
 - [Audit Index](./audits/README.md): current audit navigation, launch posture,
   and archived audit warnings.
 - `docs/audits/archive/`: archived audit and consolidation notes.
+- `docs/audits/archive/frontend/`: archived frontend DOM/CSS/bundle/old launch
+  UX evidence.
 - `docs/architecture/archive/`: archived architecture and Phase F evidence.
+- `docs/qa/archive/`: archived point-in-time QA reports.
+- `docs/design/archive/old-ui/`: archived transitional UI replacement notes.
 
 ## Local Or Ignored Docs Excluded From Authority
 

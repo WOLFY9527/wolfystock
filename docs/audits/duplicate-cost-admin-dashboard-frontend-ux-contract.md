@@ -19,7 +19,7 @@ This contract prepares a later frontend implementation. It does not implement a 
 | Phase 1D scanner AI counters | `docs/audits/scanner-ai-interpretation-cache-design.md`, roadmap | In progress or pending backend stabilization | Scanner AI started/completed/skipped and duplicate candidates. |
 | `GET /api/v1/admin/cost/duplicate-summary` | `docs/audits/duplicate-cost-admin-summary-api-design.md` | Designed; not a stable frontend dependency yet | Read-only aggregate summary; no external calls. |
 | Duplicate-cost admin summary API design | `docs/audits/duplicate-cost-admin-summary-api-design.md` | Frontend source of truth once implemented | Must expose `metadata.dataSources`, limitations, redaction, readOnly, and noExternalCalls. |
-| Existing admin patterns | `AdminLogsPage.tsx`, `MarketProviderOperationsPage.tsx` | Static reference only | Read-only admin surface, sanitized links, limitations panel, ghost-glass density. |
+| Existing admin patterns | `AdminLogsPage.tsx`, `MarketProviderOperationsPage.tsx` | Static reference only | Read-only admin surface, sanitized links, limitations panel, Reflect-Linear density. |
 
 The dirty working tree included cost-observability backend/test files during this docs pass. Those files were not edited.
 
@@ -129,7 +129,7 @@ Allowed display:
 
 The future dashboard must follow WolfyStock admin visual rules:
 
-- OLED/deep-space route background.
+- Reflect-Linear route background from `docs/codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`.
 - Ghost-glass metric cards with thin white borders and low-noise status glow.
 - Dense admin tables with compact labels, fixed action/link columns, and no default-looking table chrome.
 - Compact segmented filters using existing project primitives, not default browser controls.

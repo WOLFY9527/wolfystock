@@ -2,7 +2,7 @@
 
 Status: Superseded
 Owner domain: Frontend bundle and visual audit
-Replacement or related docs: `docs/audits/wolfystock-echarts-chart-workspace-audit.md`, `docs/audits/wolfystock-phase0-bundle-design-inventory.md`
+Replacement or related docs: `docs/audits/archive/frontend/wolfystock-echarts-chart-workspace-audit.md`, `docs/audits/archive/frontend/wolfystock-phase0-bundle-design-inventory.md`
 
 Date: 2026-05-05 Asia/Shanghai
 Repository: `/Users/yehengli/daily_stock_analysis`
@@ -60,8 +60,8 @@ Preflight result:
 
 Read-first documents:
 
-- `docs/audits/wolfystock-global-codebase-audit.md`
-- `docs/audits/wolfystock-phase0-bundle-design-inventory.md`
+- `docs/audits/archive/frontend/wolfystock-global-codebase-audit.md`
+- `docs/audits/archive/frontend/wolfystock-phase0-bundle-design-inventory.md`
 - `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
 - `docs/operations/parallel-codex-playbook.md`
 - `docs/checks/ci-gate-clarity.md`
@@ -521,4 +521,4 @@ This report task intentionally did not:
 
 The only intended repository change is:
 
-- `docs/audits/wolfystock-bundle-composition-report.md`
+- `docs/audits/archive/frontend/wolfystock-bundle-composition-report.md`

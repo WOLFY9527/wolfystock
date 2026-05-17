@@ -1,48 +1,33 @@
 # WolfyStock Archive And Historical Evidence Index
 
 This index explains where historical evidence lives and how to use it safely.
-It does not move, delete, or reclassify tracked files.
-
-## Rule
-
-Historical evidence is useful for provenance, but it is not current authority
-unless a current authority document explicitly points to it for the question at
-hand.
+Archived docs preserve provenance only. They are not current launch, frontend,
+provider, security, portfolio, backtest, or API authority unless a current
+authority document explicitly points to them for that specific question.
 
 Start current work from:
 
 - [Docs Index](./DOCS_INDEX.md)
 - [System Handbook](./WOLFYSTOCK_SYSTEM_HANDBOOK.md)
+- [AI Maintenance Manual](./WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md)
 - [Audit Index](./audits/README.md)
-- [Public Launch Readiness Master](./audits/public-launch-readiness-master.md)
-- [Public Launch Gap Register](./audits/public-launch-gap-register.md)
+- [File Governance Taxonomy](./architecture/file-governance-taxonomy.md)
 
 ## Current Archive Locations
 
 | Location | Contents | Use |
 | --- | --- | --- |
 | `docs/audits/archive/` | Retired audit notes, consolidation plans, older launch/security/admin findings | Provenance only; do not use for current launch verdict |
+| `docs/audits/archive/frontend/` | Retired frontend DOM, CSS, route, bundle, scroll, and old launch UX reports | Historical UI evidence only; current visual authority lives in `docs/codex/` and `docs/design/` |
+| `docs/qa/archive/` | Point-in-time QA reports | QA provenance only |
+| `docs/design/archive/old-ui/` | Transitional UI replacement notes | Historical migration context only |
 | `docs/architecture/archive/audits/` | Older backend and backend/frontend audit reports | Historical architecture evidence |
 | `docs/architecture/archive/multi-user-foundation/` | Multi-user foundation phase snapshots | Prior WS/multi-user design evidence |
 | `docs/architecture/archive/phase-f/` | Phase F evidence plans and runbooks | Portfolio comparison/proof provenance |
 
-## Active Indexes That Mention Archives
-
-- [Audit Index](./audits/README.md): current audit navigation and explicit
-  historical/superseded notes.
-- [Public Launch Readiness Master](./audits/public-launch-readiness-master.md):
-  launch verdict and warning not to treat archived audits as current launch
-  control.
-- [Public Launch Gap Register](./audits/public-launch-gap-register.md):
-  current blocker register and source-doc list.
-- [Provider/data/options index](./audits/index-provider-data-options.md)
-- [Cost/quota/observability index](./audits/index-cost-quota-observability.md)
-- [DB/WS2/deployment index](./audits/index-db-ws2-deployment.md)
-- [Security/RBAC/MFA index](./audits/index-security-rbac-mfa.md)
-
 ## Historical Audit Files
 
-Retained audit archive files currently include:
+Retained audit archive files include:
 
 - `docs/audits/archive/final-pre-push-audit.md`
 - `docs/audits/archive/markdown-inventory.md`
@@ -53,7 +38,35 @@ Retained audit archive files currently include:
 - `docs/audits/archive/wolfystock-final-admin-security-options-qa.md`
 - `docs/audits/archive/db-index-migration-plan-auth-task-log.md`
 
-Retained architecture archive files currently include:
+Archived frontend audit evidence includes:
+
+- `docs/audits/archive/frontend/frontend-launch-ux-round2-review.md`
+- `docs/audits/archive/frontend/wolfystock-backtest-dom-verification.md`
+- `docs/audits/archive/frontend/wolfystock-bundle-composition-report.md`
+- `docs/audits/archive/frontend/wolfystock-chat-dom-verification.md`
+- `docs/audits/archive/frontend/wolfystock-chinese-form-label-review.md`
+- `docs/audits/archive/frontend/wolfystock-corrected-scroll-proof.md`
+- `docs/audits/archive/frontend/wolfystock-css-cleanup-closure-report.md`
+- `docs/audits/archive/frontend/wolfystock-echarts-chart-workspace-audit.md`
+- `docs/audits/archive/frontend/wolfystock-global-codebase-audit.md`
+- `docs/audits/archive/frontend/wolfystock-phase0-bundle-design-inventory.md`
+- `docs/audits/archive/frontend/wolfystock-post-batch-integration-qa.md`
+- `docs/audits/archive/frontend/wolfystock-product-command-card-owner-audit.md`
+- `docs/audits/archive/frontend/wolfystock-scanner-dom-verification.md`
+- `docs/audits/archive/frontend/wolfystock-scrollarea-custom-scrollbar-owner-inventory.md`
+- `docs/audits/archive/frontend/wolfystock-scrollbar-dom-verification.md`
+
+Archived QA reports include:
+
+- `docs/qa/archive/full-stack-usability-audit-2026-05-01.md`
+- `docs/qa/archive/wolfystock-duckdb-admin-control-surface-qa.md`
+- `docs/qa/archive/wolfystock-portfolio-populated-holdings-qa.md`
+
+Archived design-transition notes include:
+
+- `docs/design/archive/old-ui/WOLFYSTOCK_FRONTEND_UI_DOC_REPLACEMENT_MAP.md`
+
+Retained architecture archive files include:
 
 - `docs/architecture/archive/audits/backend-final-audit-report.md`
 - `docs/architecture/archive/audits/backend-frontend-global-audit-report.md`
@@ -108,12 +121,11 @@ as local evidence.
 
 ## Future Archive Cleanup
 
-Archive moves, deletes, or consolidations require a separate explicit task.
 Before moving or deleting tracked docs:
 
 1. confirm current source-of-truth replacements;
-2. search current references;
-3. update links in current indexes;
+2. search current references by full path and basename;
+3. update links in active indexes and current docs;
 4. run docs validation;
 5. report what was moved/deleted and why;
 6. keep launch and protected-domain authority unchanged unless explicitly

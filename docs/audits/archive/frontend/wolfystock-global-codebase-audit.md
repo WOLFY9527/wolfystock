@@ -386,7 +386,7 @@ Recommendation:
 
 Evidence:
 
-- Existing audit/roadmap docs include `docs/architecture/system-optimization-audit.md`, `docs/architecture/system-optimization-roadmap.md`, `docs/architecture/wolfystock-frontend-visual-constitution-audit.md`, and `docs/qa/full-stack-usability-audit-2026-05-01.md`.
+- Existing audit/roadmap docs include `docs/architecture/system-optimization-audit.md`, `docs/architecture/system-optimization-roadmap.md`, `docs/architecture/wolfystock-frontend-visual-constitution-audit.md`, and `docs/qa/archive/full-stack-usability-audit-2026-05-01.md`.
 
 Uncertainty:
 

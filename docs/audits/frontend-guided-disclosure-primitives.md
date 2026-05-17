@@ -121,8 +121,9 @@ Best fit:
 
 ## Design Notes
 
-- Visual language follows deep-space ghost glass: transparent white surfaces,
-  black inner blocks, subtle borders, restrained cyan/emerald/amber/rose tones.
+- Visual language follows current Reflect-Linear guidance: restrained dark
+  finance surfaces, thin borders, controlled blur, and semantic tones used only
+  for state.
 - Components avoid solid gray backgrounds and native-looking controls.
 - The disclosure primitive uses native semantics for keyboard and screen-reader
   behavior rather than a custom clickable `div`.

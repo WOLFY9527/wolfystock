@@ -33,3 +33,4 @@ If any instruction in this file conflicts with `AGENTS.md`, follow `AGENTS.md`.
 - `CLAUDE.md` must remain a symlink to `AGENTS.md`.
 - Use `.github/instructions/*.instructions.md` for path-specific guidance.
 - Current repository collaboration skills live in `.claude/skills/`; keep them aligned with `AGENTS.md`.
+- Use `docs/architecture/file-governance-taxonomy.md` for archive/delete, active-doc authority, generated-artifact, and `.claude/skills` versus `.agents` governance.

@@ -57,7 +57,7 @@ Mandatory reading completed:
 
 - `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
 - `docs/checks/css-visual-regression-checklist.md`
-- `docs/audits/wolfystock-css-cleanup-closure-report.md`
+- `docs/audits/archive/frontend/wolfystock-css-cleanup-closure-report.md`
 - `docs/audits/wolfystock-frontend-design-conformance-audit.md`
 - `docs/design/wolfystock-canonical-ui-primitives.md`
 - `docs/operations/parallel-codex-playbook.md`
@@ -306,8 +306,8 @@ Validation commands:
 - `npm run lint`: PASS, `eslint .` exited 0.
 - `npm run build`: PASS with Vite chunk warning for `DeterministicBacktestChartWorkspace-CqMcjVp7.js`.
 - `python3 -m compileall -q src api`: PASS.
-- `sed -n '1,360p' docs/audits/wolfystock-chat-dom-verification.md`: run after writing for report inspection.
-- `git diff --check -- docs/audits/wolfystock-chat-dom-verification.md`: run after writing.
+- `sed -n '1,360p' docs/audits/archive/frontend/wolfystock-chat-dom-verification.md`: run after writing for report inspection.
+- `git diff --check -- docs/audits/archive/frontend/wolfystock-chat-dom-verification.md`: run after writing.
 
 Cleanup policy:
 

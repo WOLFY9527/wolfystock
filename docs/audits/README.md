@@ -1,214 +1,132 @@
 # Audit Index
 
-Date: 2026-05-08
-Branch checked: `main`
-Mode: docs-only audit navigation cleanup. No source code, tests, scripts,
-frontend files, production configs, or market-rotation files are changed by
-this index.
+Status: active audit navigation.
 
-## Current launch status
+Use this file to find current launch, safety, domain, and operator evidence.
+Historical point-in-time reports now live in archive lanes and should not be
+treated as current authority unless a current doc explicitly cites them.
+
+## Current Launch Authority
 
 Current public launch status: **NO-GO**.
 
-Do not treat historical notes, point-in-time audits, or archived candidates as
-the current launch decision. The canonical launch verdict lives in
-`docs/audits/public-launch-readiness-master.md` and the detailed blocker
-register lives in `docs/audits/public-launch-gap-register.md`.
+- `public-launch-readiness-master.md`: executive launch verdict and cross-domain readiness summary.
+- `public-launch-gap-register.md`: detailed blocker register and recommended next tasks.
+- `public-launch-blocker-burndown.md`: active blocker tracker only.
+- `deployment-readiness-checklist.md`: release-candidate operational checklist and final gate requirements.
+- `launch-acceptance-evidence-pack.md`: sanitized launch evidence contract, not acceptance by itself.
+- `incident-response-audit-evidence-pack.md`: incident response evidence contract, not acceptance by itself.
+- `known-test-warnings-register.md`: accepted warning inventory that must not be confused with launch acceptance.
 
-## Canonical current docs
+## Current Domain Indexes
 
-Use this file as the audit navigation entry point. For current launch posture,
-use the launch-control docs below; do not infer launch status from archived
-notes, fixture examples, or a single product-capability changelog entry.
+- `index-security-rbac-mfa.md`: security, RBAC, role-governance, and MFA.
+- `index-db-ws2-deployment.md`: database readiness, WS2 runtime, and deployment.
+- `index-cost-quota-observability.md`: cost, quota, provider budget, and observability.
+- `index-provider-data-options.md`: provider, data-quality, and Options readiness.
 
-- `docs/audits/public-launch-readiness-master.md`: executive launch verdict and
-  cross-domain readiness summary.
-- `docs/audits/public-launch-gap-register.md`: detailed blocker register and
-  recommended next tasks by domain.
-- `docs/audits/deployment-readiness-checklist.md`: release-candidate
-  operational checklist and final gate requirements.
-- `docs/audits/public-launch-blocker-burndown.md`: short-form blocker tracker
-  for active launch gaps only.
-- `docs/audits/launch-acceptance-evidence-pack.md`: sanitized operator
-  acceptance evidence contract and review matrix for launch review. It is not
-  accepted operator evidence by itself.
-- `docs/audits/incident-response-audit-evidence-pack.md`: sanitized incident
-  response and auditability evidence contract for launch review. It is not
-  accepted operator evidence by itself.
-- `docs/audits/operator-evidence-real-runbook.md`: concise offline workflow
-  and current source of truth for collecting sanitized real operator evidence,
-  running validator/tool commands, creating a manifest, rendering a review
-  report, and handing it to manual reviewers.
-- `docs/audits/operator-evidence-dry-run-handoff.md`: synthetic-fixture-only
-  dry-run handoff sequence for rehearsing the offline evidence workflow without
-  touching launch acceptance plumbing or runtime behavior.
-- `docs/audits/operator-evidence-redaction-checklist.md`: pre-handoff checklist
-  for removing secrets, sessions, raw payloads, DB material, logs, personal
-  identifiers, and unsafe approval wording from evidence packets.
-- `docs/audits/release-rollback-runbook.md`: rollback instructions for a
-  reviewed release candidate.
-- `docs/audits/known-test-warnings-register.md`: accepted warning inventory
-  that must not be confused with launch acceptance.
+## Current Supporting Audits And Runbooks
 
-## Current product capability notes
+Security and public-safety:
 
-- Market Rotation Radar is now a read-only product capability with
-  `/api/v1/market/rotation-radar` and `/zh/market/rotation-radar` coverage. It
-  is not a launch blocker, not operator launch evidence, and not a substitute
-  for provider entitlement/freshness acceptance. Current launch status remains
-  governed by the launch-control docs above.
-- `backtest-quant-capability-audit.md`: current docs-only boundary audit for
-  backtest, local-only universe jobs, and optional DuckDB quant diagnostics.
-  It preserves the current conclusion that these surfaces are research
-  prototype / diagnostic capabilities, not professional quant readiness or
-  production signal-routing approval.
+- `auth-rbac-release-security-guide.md`
+- `admin-rbac-capability-model-design.md`
+- `admin-rbac-r5-coarse-fallback-removal-plan.md`
+- `admin-role-governance-plan.md`
+- `production-security-hardening-audit.md`
+- `security-mfa-secret-storage-hardening-plan.md`
+- `security-password-kdf-upgrade-plan.md`
+- `backtest-portfolio-public-safety-audit.md`
+- `trading-no-advice-product-policy.md`
 
-## Evidence packs and operational runbooks
+Provider, data quality, and Options:
 
-- `docs/audits/backtest-portfolio-public-safety-audit.md`,
-  `docs/audits/production-security-hardening-audit.md`,
-  `docs/audits/cost-system-final-qa-matrix.md`: current supporting evidence for
-  public-safety, security-hardening, and cost-system readiness.
-- `docs/audits/admin-governance-cost-e2e-qa-runbook.md`,
-  `docs/audits/operator-evidence-dry-run-handoff.md`,
-  `docs/audits/operator-evidence-real-runbook.md`,
-  `docs/audits/operator-evidence-redaction-checklist.md`,
-  `docs/audits/provider-data-incident-runbook.md`,
-  `docs/audits/ci-gate-usage.md`,
-  `docs/audits/ci-postgres-gate-triage-guide.md`: operator runbooks and gate
-  usage notes.
-- `docs/audits/db-retention-backup-restore-drill-plan.md`,
-  `docs/audits/ws2-multi-instance-smoke-test-design.md`: active evidence plans
-  for backup/restore and WS2 multi-instance proof that still remain launch
-  blockers until exercised.
+- `provider-data-freshness-reliability-guide.md`
+- `provider-data-incident-runbook.md`
+- `market-data-provider-upgrade-decision-matrix.md`
+- `data-quality-user-disclosure-policy.md`
+- `data-pipeline-r2-progressive-enrichment.md`
+- `options-provider-adapter-contract.md`
+- `options-lab-phase0-design.md`
+- `scanner-ai-interpretation-cache-design.md`
+- `guest-preview-reuse-design.md`
+- `backtest-quant-capability-audit.md`
 
-## Open NO-GO blockers
+Database, WS2, deployment, and gates:
 
-- Global MFA enforcement is not globally accepted or enabled.
-- RBAC coarse-fallback default and full code-path removal remain pending.
-- Real provider credentials, live provider calls, and provider-circuit
-  enforcement are not active by default.
-- Live quota enforcement is not globally active.
-- Real isolated PostgreSQL restore and PITR execution remain pending unless
-  accepted sanitized evidence is supplied.
-- WS2 multi-instance smoke and process-local SSE limitation proof remain open.
-- Final clean full `./scripts/ci_gate.sh` is still required before any launch
-  tag or launch approval.
+- `db-production-readiness-index-retention-audit.md`
+- `db-retention-backup-restore-drill-plan.md`
+- `db-index-batch-b-execution-provider-cost-plan.md`
+- `ws2-multi-instance-smoke-test-design.md`
+- `ws2-multi-user-runtime-cost-control-design.md`
+- `ci-gate-usage.md`
+- `ci-postgres-gate-triage-guide.md`
+- `staging-integration-smoke-guide.md`
+- `release-rollback-runbook.md`
 
-## Domain index documents
+Cost, quota, LLM, and observability:
 
-- `docs/audits/index-security-rbac-mfa.md`: security, RBAC, role-governance,
-  and MFA audit index.
-- `docs/audits/index-db-ws2-deployment.md`: database readiness, WS2 runtime,
-  and deployment audit index.
-- `docs/audits/index-cost-quota-observability.md`: cost, quota, provider
-  budget, and observability audit index.
-- `docs/audits/index-provider-data-options.md`: provider, data-quality, and
-  Options/decision-readiness audit index.
+- `cost-observability-design-index.md`
+- `cost-observability-implementation-roadmap.md`
+- `cost-system-final-qa-matrix.md`
+- `duplicate-cost-admin-summary-api-design.md`
+- `duplicate-cost-admin-dashboard-frontend-ux-contract.md`
+- `llm-external-api-cost-audit.md`
+- `llm-instrumentation-validation-plan.md`
+- `llm-provider-duplicate-cost-metrics-design.md`
+- `llm-report-output-cache-design.md`
+- `quota-cost-notification-release-guide.md`
+- `ws2-provider-circuit-data-model-plan.md`
+- `ws2-provider-quota-circuit-breaker-policy-design.md`
 
-## Domain-specific audits and designs
+Admin data and governance designs:
 
-- Security and admin governance:
-  `admin-rbac-capability-model-design.md`,
-  `admin-rbac-r5-coarse-fallback-removal-plan.md`,
-  `admin-role-governance-plan.md`,
-  `admin-role-management-ui-design.md`,
-  `security-mfa-secret-storage-hardening-plan.md`,
-  `security-password-kdf-upgrade-plan.md`,
-  `admin-data-control-center-design.md`,
-  `admin-data-control-center-frontend-ux-contract.md`,
-  `admin-data-governance-next-phase-design.md`,
-  `admin-data-schema-inventory.md`,
-  `admin-user-activity-timeline-api-design.md`,
-  `admin-user-directory-api-design.md`.
-- Provider, data quality, and Options:
-  `data-pipeline-r2-progressive-enrichment.md`,
-  `data-quality-user-disclosure-policy.md`,
-  `guest-preview-reuse-design.md`,
-  `market-data-provider-upgrade-decision-matrix.md`,
-  `options-lab-phase0-design.md`,
-  `options-provider-adapter-contract.md`,
-  `provider-data-freshness-reliability-guide.md`,
-  `scanner-ai-interpretation-cache-design.md`,
-  `trading-no-advice-product-policy.md`,
-  `ws2-provider-circuit-data-model-plan.md`,
-  `ws2-provider-quota-circuit-breaker-policy-design.md`,
-  `llm-report-output-cache-design.md`.
-- Cost, quota, and observability:
-  `cost-observability-design-index.md`,
-  `cost-observability-implementation-roadmap.md`,
-  `duplicate-cost-admin-dashboard-frontend-ux-contract.md`,
-  `duplicate-cost-admin-summary-api-design.md`,
-  `llm-external-api-cost-audit.md`,
-  `llm-instrumentation-validation-plan.md`,
-  `llm-provider-duplicate-cost-metrics-design.md`,
-  `ws2-multi-user-runtime-cost-control-design.md`.
-  The `duplicate-cost-*` files are complementary API/UI contracts, not current
-  archive candidates.
-- DB, retention, and deployment:
-  `db-index-batch-b-execution-provider-cost-plan.md`,
-  `db-production-readiness-index-retention-audit.md`,
-  `ws2-multi-instance-smoke-test-design.md`,
-  `db-retention-backup-restore-drill-plan.md`.
-- WolfyStock frontend, DOM, and UX evidence:
-  `wolfystock-backtest-dom-verification.md`,
-  `wolfystock-bundle-composition-report.md`,
-  `wolfystock-chat-dom-verification.md`,
-  `wolfystock-chinese-form-label-review.md`,
-  `wolfystock-corrected-scroll-proof.md`,
-  `wolfystock-css-cleanup-closure-report.md`,
-  `wolfystock-css-ownership-inventory.md`,
-  `wolfystock-css-selector-usage-verification.md`,
-  `wolfystock-echarts-chart-workspace-audit.md`,
-  `wolfystock-frontend-design-conformance-audit.md`,
-  `wolfystock-global-codebase-audit.md`,
-  `wolfystock-phase0-bundle-design-inventory.md`,
-  `wolfystock-post-batch-integration-qa.md`,
-  `wolfystock-product-command-card-owner-audit.md`,
-  `wolfystock-scanner-dom-verification.md`,
-  `wolfystock-scrollarea-custom-scrollbar-owner-inventory.md`,
-  `wolfystock-scrollbar-dom-verification.md`.
+- `admin-data-schema-inventory.md`
+- `admin-data-governance-next-phase-design.md`
+- `admin-data-control-center-design.md`
+- `admin-data-control-center-frontend-ux-contract.md`
+- `admin-user-directory-api-design.md`
+- `admin-user-activity-timeline-api-design.md`
+- `admin-governance-cost-e2e-qa-runbook.md`
+- `admin-role-management-ui-design.md`
 
-Completed pre-closure CSS/DOM pass notes are consolidated into
-`wolfystock-css-cleanup-closure-report.md`. Prefer the closure report plus the
-retained route-specific DOM proofs above over older pass-by-pass audit history.
+Frontend guidance retained as current code-support material:
 
-Operator evidence wrappers were similarly consolidated: prefer
-`operator-evidence-real-runbook.md`,
-`operator-evidence-dry-run-handoff.md`, and
-`operator-evidence-redaction-checklist.md` over older per-tool or per-category
-guide documents.
+- `frontend-information-density-and-guidance-standard.md`
+- `frontend-guided-information-system.md`
+- `frontend-guided-disclosure-primitives.md`
+- `frontend-domain-education-copy-pack.md`
+- `frontend-ux-density-audit-harness.md`
+- `wolfystock-css-ownership-inventory.md`
+- `wolfystock-css-selector-usage-verification.md`
+- `wolfystock-frontend-design-conformance-audit.md`
 
-Release review reporting, rollback rehearsal, and restore/PITR launch
-procedures are likewise governed by the retained current runbooks:
-`operator-evidence-real-runbook.md` for bundle/report rendering,
-`release-rollback-runbook.md` for rollback decisioning and rehearsal evidence,
-and `db-retention-backup-restore-drill-plan.md` plus
-`deployment-readiness-checklist.md` for restore/PITR readiness. Do not treat
-older single-purpose release drill or renderer guides as separate launch
-control sources of truth.
+The three `wolfystock-*` frontend support files above are retained because
+current CSS deletion and design-check guidance still cites them. They are not
+current visual source-of-truth; Reflect-Linear docs in `docs/codex/` and
+`docs/design/` win for frontend design work.
 
-## Historical and superseded notes
+## Operator Evidence
 
-- Archived historical notes now live under `docs/audits/archive/`:
-  `final-pre-push-audit.md`, `markdown-inventory.md`,
-  `markdown-consolidation-plan.md`,
-  `release-integration-plan-main-ahead.md`.
-- Older supporting evidence and superseded foundations now live under
-  `docs/audits/archive/`: `admin-rbac-final-qa-report.md`,
-  `security-admin-mfa-backend-foundation.md`,
-  `wolfystock-final-admin-security-options-qa.md`,
-  `db-index-migration-plan-auth-task-log.md`.
-- Current launch-control and operator docs remain canonical at the top level of
-  `docs/audits/`. Historical links from active docs now point to the archived
-  locations.
+- `operator-evidence-real-runbook.md`
+- `operator-evidence-dry-run-handoff.md`
+- `operator-evidence-redaction-checklist.md`
+- `evidence-artifact-sanitizer-guide.md`
+- `public-api-abuse-limiter-operator-note.md`
 
-## Reuse warning
+## Archive Pointers
 
-Use historical notes only as supporting evidence. For any current GO/NO-GO,
-release, or public-launch claim, start from:
+- `docs/audits/archive/`: historical audit and consolidation notes.
+- `docs/audits/archive/frontend/`: retired frontend DOM, CSS, bundle, route, and old launch UX reports.
+- `docs/qa/archive/`: point-in-time QA reports retained for provenance.
+- `docs/architecture/archive/`: historical architecture and Phase F evidence.
+- `docs/design/archive/old-ui/`: transitional UI replacement notes, not active design authority.
 
-- `docs/audits/README.md`
-- `docs/audits/public-launch-readiness-master.md`
-- `docs/audits/public-launch-gap-register.md`
-- `docs/audits/deployment-readiness-checklist.md`
+Use `docs/ARCHIVE_INDEX.md` for the archive inventory and safe-use rules.
+
+## Reuse Warning
+
+For current GO/NO-GO, launch, frontend visual, provider, security, portfolio,
+backtest, or API claims, start from active docs, current source, and current
+validation. Do not cite archived audits, stale screenshots, local artifacts, or
+old route proofs as current acceptance evidence.

@@ -7,8 +7,8 @@ Owner domain: Release readiness
 Related docs: `docs/audits/public-launch-readiness-master.md`,
 `docs/audits/archive/final-pre-push-audit.md`,
 `docs/audits/archive/wolfystock-final-admin-security-options-qa.md`,
-`docs/qa/wolfystock-portfolio-populated-holdings-qa.md`,
-`docs/audits/wolfystock-echarts-chart-workspace-audit.md`
+`docs/qa/archive/wolfystock-portfolio-populated-holdings-qa.md`,
+`docs/audits/archive/frontend/wolfystock-echarts-chart-workspace-audit.md`
 
 Mode: docs-only warning register. No warning filters, production code, tests,
 scripts, frontend app files, provider configuration, or changelog files were

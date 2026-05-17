@@ -2,7 +2,7 @@
 
 Status: Current
 Owner domain: Frontend bundle and chart workspace
-Related docs: `docs/audits/wolfystock-bundle-composition-report.md`, `docs/audits/wolfystock-phase0-bundle-design-inventory.md`
+Related docs: `docs/audits/archive/frontend/wolfystock-bundle-composition-report.md`, `docs/audits/archive/frontend/wolfystock-phase0-bundle-design-inventory.md`
 
 Date: 2026-05-05 Asia/Shanghai
 Repository: `/Users/yehengli/daily_stock_analysis`
@@ -55,8 +55,8 @@ Preflight result:
 
 Read-first files:
 
-- `docs/audits/wolfystock-bundle-composition-report.md`
-- `docs/audits/wolfystock-phase0-bundle-design-inventory.md`
+- `docs/audits/archive/frontend/wolfystock-bundle-composition-report.md`
+- `docs/audits/archive/frontend/wolfystock-phase0-bundle-design-inventory.md`
 - `apps/dsa-web/src/components/backtest/DeterministicBacktestChartWorkspace.tsx`
 - `apps/dsa-web/src/components/backtest/DeterministicBacktestResultView.tsx`
 - `apps/dsa-web/src/pages/DeterministicBacktestResultPage.tsx`
@@ -350,8 +350,8 @@ Report validation commands:
 
 ```bash
 cd /Users/yehengli/daily_stock_analysis
-sed -n '1,320p' docs/audits/wolfystock-echarts-chart-workspace-audit.md
-git diff --check -- docs/audits/wolfystock-echarts-chart-workspace-audit.md
+sed -n '1,320p' docs/audits/archive/frontend/wolfystock-echarts-chart-workspace-audit.md
+git diff --check -- docs/audits/archive/frontend/wolfystock-echarts-chart-workspace-audit.md
 ```
 
 Markdown lint:

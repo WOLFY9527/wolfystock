@@ -1,5 +1,18 @@
 ## 2026-05-18
 
+- 🧭 **Docs governance archive pruning** - Slimmed active docs navigation by
+  moving stale frontend DOM/CSS/bundle/old launch UX evidence into
+  `docs/audits/archive/frontend/`, moving point-in-time QA reports into
+  `docs/qa/archive/`, archiving the transitional UI replacement map under
+  `docs/design/archive/old-ui/`, and deleting the generated design scan
+  artifact. Added
+  `docs/architecture/file-governance-taxonomy.md`, simplified
+  `docs/audits/README.md`, refreshed archive/index links, and fixed stale
+  documentation links for contributing, bilingual READMEs, bot config, and
+  root AI governance. This is docs/governance-only cleanup: no runtime code,
+  source modules, tests, workflows, configs, package files, databases, logs, or
+  generated runtime artifacts changed.
+
 - 🧹 **Artifact ignore and ownership policy hardening** - Added ignore coverage
   for root `screenshots/` and frontend `apps/dsa-web/blob-report/`, then added
   a focused artifact cleanup policy plus runbook/docs-index links clarifying

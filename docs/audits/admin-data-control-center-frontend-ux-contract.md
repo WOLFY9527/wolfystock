@@ -81,7 +81,7 @@ Interactions:
 
 States:
 
-- Loading: ghost-glass skeleton table and rail placeholders.
+- Loading: Reflect-Linear skeleton table and rail placeholders.
 - Empty: `暂无符合条件的用户`.
 - Error: sanitized `ApiErrorAlert` copy; no stack trace.
 - No-data: explain that the backend has no users or filters are too narrow.
@@ -260,9 +260,10 @@ Allowed safe display:
 
 ## 7. Visual design contract
 
-The future UI must follow the WolfyStock deep-space / OLED / ghost-glass system:
+The future UI must follow the current WolfyStock Reflect-Linear system:
 
-- Deep OLED background: route frame based on `bg-[#050505]` / black surfaces.
+- Dark finance background: route frame based on the approved Reflect-Linear
+  canvas/surface ladder, not standalone OLED or pure-black page islands.
 - Ghost-glass panels: transparent white/black surfaces, thin white borders, restrained blur.
 - Dense but readable admin typography: compact labels, no oversized marketing hero.
 - Compact badges: status/risk chips with clear tone and no loud solid-color blocks.
