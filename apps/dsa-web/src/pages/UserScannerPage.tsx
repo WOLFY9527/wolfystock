@@ -24,7 +24,6 @@ import { ScannerActionButton as ActionButton } from '../components/scanner/Scann
 import {
   ScannerCandidateDetailPanel,
   ScannerCandidateDiagnosticRow,
-  ScannerCandidateTableRow,
 } from '../components/scanner/ScannerCandidatePresenters';
 import {
   AdvancedDisclosure,
@@ -55,7 +54,6 @@ import {
   DensePageHeader,
   DenseSecondaryDisclosure,
   DenseStatusStrip,
-  DenseTableFrame,
   DenseTableShell,
 } from '../components/terminal/DenseWorkbenchPrimitives';
 import { WideWorkspaceShellScope } from '../components/layout/WideWorkspaceShell';
@@ -322,12 +320,6 @@ function formatDateOnly(value?: string | null, language: 'zh' | 'en' = 'zh'): st
   }).format(date);
 }
 
-function scoreBadgeClass(score: number): string {
-  if (score >= 90) return 'bg-white/[0.08] text-white border-white/12';
-  if (score >= 80) return 'bg-indigo-500/12 text-indigo-200 border-indigo-500/20';
-  return 'bg-white/[0.04] text-white/72 border-white/10';
-}
-
 function findCandidateValue(
   candidate: ScannerCandidate,
   keywords: string[],
@@ -408,11 +400,6 @@ function getKeyReason(candidate: ScannerCandidate, runDetail: ScannerRunDetail |
     language,
     language === 'en' ? 'No selection note provided' : '未提供入选说明',
   );
-}
-
-function getSourceBadge(candidate: ScannerCandidate, runDetail: ScannerRunDetail | null, language: 'zh' | 'en'): string | null {
-  if (runDetail) return getRunDataStatusLabel(runDetail, language);
-  return candidate.score != null ? (language === 'en' ? 'Verified' : '已验证') : null;
 }
 
 function getRunSummaryCount(runDetail: ScannerRunDetail, key: keyof NonNullable<ScannerRunDetail['summary']>, fallback = 0): number {
@@ -691,22 +678,6 @@ function buildRejectionBuckets(candidates: ScannerCandidateDiagnostic[], languag
     .filter((item) => item.value !== '0');
 }
 
-function getSelectedDiagnosticCandidate(
-  diagnostics: ScannerCandidateDiagnostic[],
-  shortlist: ScannerCandidate[],
-  selectedSymbol: string | null,
-): ScannerCandidateDiagnostic | null {
-  if (selectedSymbol) {
-    const normalized = normalizeCandidateSymbol(selectedSymbol);
-    const match = diagnostics.find((candidate) => normalizeCandidateSymbol(candidate.symbol) === normalized);
-    if (match) return match;
-  }
-  return diagnostics.find((candidate) => candidate.status === 'selected')
-    || (shortlist[0] ? diagnostics.find((candidate) => normalizeCandidateSymbol(candidate.symbol) === normalizeCandidateSymbol(shortlist[0].symbol)) || null : null)
-    || diagnostics[0]
-    || null;
-}
-
 function diagnosticToCandidate(candidate: ScannerCandidateDiagnostic): ScannerCandidate {
   return {
     symbol: candidate.symbol,
@@ -746,6 +717,52 @@ function diagnosticToCandidate(candidate: ScannerCandidateDiagnostic): ScannerCa
     },
     diagnostics: {},
   };
+}
+
+function fallbackDiagnosticFromCandidate(candidate: ScannerCandidate): ScannerCandidateDiagnostic {
+  return {
+    symbol: candidate.symbol,
+    name: candidate.companyName || candidate.name,
+    rank: candidate.rank,
+    status: 'selected',
+    score: candidate.score,
+    provider: null,
+    reason: candidate.reasonSummary,
+    failedRules: [],
+    missingFields: [],
+    metrics: Object.fromEntries((candidate.keyMetrics || []).map((item) => [item.label, item.value])),
+    metadata: {},
+  };
+}
+
+function formatWorkbenchWatchSummary(
+  candidate: ScannerCandidate,
+  language: 'zh' | 'en',
+): string {
+  const entryRange = getEntryRange(candidate);
+  const targetPrice = getTargetPrice(candidate);
+  if (!entryRange && !targetPrice) {
+    return language === 'en' ? 'No explicit watch band' : '未提供明确观察区间';
+  }
+  return [
+    entryRange ? `${language === 'en' ? 'Watch' : '观察'} ${entryRange}` : null,
+    targetPrice ? `${language === 'en' ? 'Target' : '目标'} ${targetPrice}` : null,
+  ].filter(Boolean).join(' · ');
+}
+
+function formatWorkbenchRangeSummary(
+  candidate: ScannerCandidate,
+  language: 'zh' | 'en',
+): string {
+  const stopLoss = getStopLoss(candidate);
+  const riskSummary = getRiskSummary(candidate, language);
+  if (!stopLoss && !riskSummary) {
+    return language === 'en' ? 'No explicit risk boundary' : '未提供明确风险边界';
+  }
+  return [
+    stopLoss ? `${language === 'en' ? 'Stop' : '止损'} ${stopLoss}` : null,
+    riskSummary || null,
+  ].filter(Boolean).join(' · ');
 }
 
 function buildRunComparison(
@@ -1231,7 +1248,6 @@ const UserScannerPage: React.FC = () => {
   const [previewThreshold, setPreviewThreshold] = useState(50);
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
   const [inspectorSymbol, setInspectorSymbol] = useState<string | null>(null);
   const [pendingAnalyzeSymbol, setPendingAnalyzeSymbol] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -1241,11 +1257,20 @@ const UserScannerPage: React.FC = () => {
   const [strategySimulation, setStrategySimulation] = useState<ScannerStrategySimulationResult | null>(null);
   const [isStrategySimulationLoading, setIsStrategySimulationLoading] = useState(false);
   const [strategySimulationError, setStrategySimulationError] = useState<string | null>(null);
+  const [viewportWidth, setViewportWidth] = useState(() => (typeof window === 'undefined' ? 1440 : window.innerWidth));
   const selectedRunIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     document.title = t('scanner.documentTitle');
   }, [t]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handleResize = () => setViewportWidth(window.innerWidth);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const profileOptions = useMemo(() => getScannerProfileOptions(market, t), [market, t]);
   const universeOptions = useMemo(() => getScannerUniverseOptions(market, language), [language, market]);
@@ -1334,7 +1359,6 @@ const UserScannerPage: React.FC = () => {
       setRunDetail(response);
       selectedRunIdRef.current = response.id;
       setSelectedRunId(response.id);
-      setExpandedSymbol(null);
       setPageError(null);
     } catch (error) {
       setPageError(getParsedApiError(error));
@@ -1379,7 +1403,6 @@ const UserScannerPage: React.FC = () => {
     setRunDetail(null);
     selectedRunIdRef.current = null;
     setSelectedRunId(null);
-    setExpandedSymbol(null);
     setStrategySimulation(null);
     setStrategySimulationError(null);
   }, [market, profile]);
@@ -1433,7 +1456,6 @@ const UserScannerPage: React.FC = () => {
       setRunDetail(response);
       selectedRunIdRef.current = response.id;
       setSelectedRunId(response.id);
-      setExpandedSymbol(null);
       setValidationErrors({});
       setPageError(null);
       await fetchHistory(1, response.id);
@@ -1590,10 +1612,6 @@ const UserScannerPage: React.FC = () => {
     () => buildRunComparisonHighlights(runDetail, previousRunDetail, comparisonState, language),
     [comparisonState, language, previousRunDetail, runDetail],
   );
-  const inspectorCandidate = useMemo(
-    () => getSelectedDiagnosticCandidate(diagnosticCandidates, sortedCandidates, inspectorSymbol),
-    [diagnosticCandidates, inspectorSymbol, sortedCandidates],
-  );
   const filteredDiagnosticCandidates = useMemo(() => {
     if (candidateFilter === 'selected') {
       return diagnosticCandidates.filter((candidate) => candidate.status === 'selected');
@@ -1613,7 +1631,27 @@ const UserScannerPage: React.FC = () => {
     () => sortDiagnosticsForDecision(filteredDiagnosticCandidates, previewThreshold),
     [filteredDiagnosticCandidates, previewThreshold],
   );
-  const showDiagnosticRows = Boolean(runDetail && hasCandidateDiagnostics && candidateFilter !== 'selected');
+  const shortlistCandidateBySymbol = useMemo(
+    () => new Map(sortedCandidates.map((candidate) => [normalizeCandidateSymbol(candidate.symbol), candidate] as const)),
+    [sortedCandidates],
+  );
+  const workbenchDiagnostics = useMemo(
+    () => (hasCandidateDiagnostics ? decisionSortedDiagnosticCandidates : sortedCandidates.map(fallbackDiagnosticFromCandidate)),
+    [decisionSortedDiagnosticCandidates, hasCandidateDiagnostics, sortedCandidates],
+  );
+  const activeDetailDiagnostic = useMemo(() => {
+    if (!workbenchDiagnostics.length) return null;
+    const normalizedInspector = normalizeCandidateSymbol(inspectorSymbol);
+    if (normalizedInspector) {
+      const matched = workbenchDiagnostics.find((candidate) => normalizeCandidateSymbol(candidate.symbol) === normalizedInspector);
+      if (matched) return matched;
+    }
+    return workbenchDiagnostics[0] || null;
+  }, [inspectorSymbol, workbenchDiagnostics]);
+  const activeDetailCandidate = useMemo(() => {
+    if (!activeDetailDiagnostic) return null;
+    return shortlistCandidateBySymbol.get(normalizeCandidateSymbol(activeDetailDiagnostic.symbol)) || diagnosticToCandidate(activeDetailDiagnostic);
+  }, [activeDetailDiagnostic, shortlistCandidateBySymbol]);
   const topFiveDiagnostics = useMemo(
     () => sortDiagnosticsForDecision(diagnosticCandidates, previewThreshold).slice(0, 5),
     [diagnosticCandidates, previewThreshold],
@@ -1632,11 +1670,18 @@ const UserScannerPage: React.FC = () => {
       official_selected: sortedCandidates,
       preview_selected: previewSelectedDiagnostics.map(diagnosticToCandidate),
       top_5: topFiveDiagnostics.map(diagnosticToCandidate),
-      current_filter: decisionSortedDiagnosticCandidates.map(diagnosticToCandidate),
+      current_filter: workbenchDiagnostics.map((candidate) => shortlistCandidateBySymbol.get(normalizeCandidateSymbol(candidate.symbol)) || diagnosticToCandidate(candidate)),
     },
   });
+  const activeDetailBacktestItem = getBacktestItem(activeDetailCandidate?.symbol);
+  const activeDetailWatchlistIdentity = activeDetailDiagnostic
+    ? getWatchlistIdentity(runDetail?.market || market, activeDetailDiagnostic.symbol)
+    : '';
+  const activeDetailTracked = Boolean(activeDetailWatchlistIdentity && trackedWatchlistIdentitySet.has(activeDetailWatchlistIdentity));
+  const activeDetailTrackPending = pendingWatchlistIdentity === activeDetailWatchlistIdentity;
   const activeSimulationTheme = runDetail?.themeId || (scanScope === 'theme' ? themeId : null);
   const strategySimulationDisabled = !runDetail || (runDetail.universeType === 'theme' && !runDetail.themeId);
+  const showDetailRail = viewportWidth >= 1600;
 
   const handleStrategySimulation = useCallback(async () => {
     if (!runDetail) return;
@@ -1667,15 +1712,15 @@ const UserScannerPage: React.FC = () => {
   }, [candidateFilter, hasCandidateDiagnostics]);
 
   useEffect(() => {
-    if (!hasCandidateDiagnostics) {
+    if (!workbenchDiagnostics.length) {
       setInspectorSymbol(null);
       return;
     }
-    const current = getSelectedDiagnosticCandidate(diagnosticCandidates, sortedCandidates, inspectorSymbol);
+    const current = activeDetailDiagnostic;
     if (current && (!inspectorSymbol || normalizeCandidateSymbol(current.symbol) !== normalizeCandidateSymbol(inspectorSymbol))) {
       setInspectorSymbol(current.symbol);
     }
-  }, [diagnosticCandidates, hasCandidateDiagnostics, inspectorSymbol, sortedCandidates]);
+  }, [activeDetailDiagnostic, inspectorSymbol, workbenchDiagnostics]);
 
   useEffect(() => {
     let isMounted = true;
@@ -1989,7 +2034,6 @@ const UserScannerPage: React.FC = () => {
   }, [
     backtestUnavailableLabel,
     copiedKey,
-    formatProviderDiagnostics,
     getBacktestActionLabel,
     handleAnalyzeCandidate,
     handleBacktestCandidate,
@@ -2021,15 +2065,14 @@ const UserScannerPage: React.FC = () => {
     <>
       <div
         ref={surfaceRef}
-        data-testid="user-scanner-bento-page"
-        data-bento-surface="true"
+        data-testid="scanner-ranking-board-page"
         aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
         aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
-	        className={getSafariReadySurfaceClassName(
-	          isSafariReady,
-	          'bento-surface-root flex w-full flex-1 flex-col min-w-0 bg-transparent text-foreground',
-	        )}
-	      >
+        className={getSafariReadySurfaceClassName(
+          isSafariReady,
+          'flex w-full flex-1 flex-col min-w-0 bg-transparent text-foreground',
+        )}
+      >
           <WideWorkspaceShellScope data-testid="scanner-wide-workspace-scope" className="flex-1">
 	        <TerminalPageShell
 	          data-testid="user-scanner-workspace"
@@ -2045,7 +2088,7 @@ const UserScannerPage: React.FC = () => {
                   ref={openHistoryDrawerButton.ref}
                   type="button"
                   variant="secondary"
-                  data-testid="user-scanner-bento-drawer-trigger"
+                  data-testid="scanner-history-trigger"
                   onClick={openHistoryDrawerButton.onClick}
                   onPointerUp={openHistoryDrawerButton.onPointerUp}
                   className="h-9 px-3 text-xs"
@@ -2092,640 +2135,626 @@ const UserScannerPage: React.FC = () => {
                 <DenseTableShell
                   data-testid="scanner-launch-bar"
                   variant="board"
-                  className="flex min-h-[520px] flex-1"
+                  className="flex min-h-[520px] flex-1 flex-col"
                 >
                   <DenseCommandBar
                     data-testid="scanner-command-bar"
                     className="bg-transparent px-2 py-2"
                   >
-                  <div className="grid min-w-0 grid-cols-2 gap-1 xl:grid-cols-[minmax(112px,0.55fr)_minmax(150px,0.72fr)_minmax(106px,0.45fr)_minmax(156px,0.72fr)_minmax(118px,0.5fr)_minmax(118px,0.5fr)_auto] xl:items-end">
-                    <PillTagGroup compact label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} variant="market" testId="scanner-market-toggle" />
-                    <PillTagGroup compact label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
-                    <PillTagGroup compact label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
-                    <div data-testid="scanner-launch-controls" className="contents">
-                      <PillTagGroup
-                        compact
-                        label={language === 'en' ? 'Universe' : '标的池'}
-                        value={scanScope}
-                        onChange={(next) => setScanScope(next as ScanScope)}
-                        options={[
-                          { value: 'default', label: language === 'en' ? 'Default market universe' : '默认市场池' },
-                          { value: 'theme', label: language === 'en' ? 'Theme universe' : '主题标的池' },
-                          { value: 'symbols', label: language === 'en' ? 'Custom symbols' : '自定义标的' },
-                        ]}
-                        testId="scanner-scope-selector"
-                      />
-                      <PillTagGroup compact label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
-                      <PillTagGroup compact label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
-                    </div>
-                    <TerminalButton
-                      ref={runScannerButton.ref}
-                      type="button"
-                      onClick={runScannerButton.onClick}
-                      onPointerUp={runScannerButton.onPointerUp}
-                      disabled={runDisabled}
-                      aria-busy={isRunning}
-                      data-testid="scanner-run-button"
-                      className="group col-span-2 h-8 w-full px-3 text-sm font-bold active:scale-95 disabled:pointer-events-none xl:col-span-1 xl:min-w-[132px]"
-                      variant="primary"
-                    >
-                      <Play className="h-4 w-4 group-hover:animate-pulse" />
-                      <span>{isRunning ? t('scanner.running') : (language === 'zh' ? '启动扫描' : t('scanner.run'))}</span>
-                    </TerminalButton>
-                  </div>
-                  {scanScope !== 'default' ? (
-                  <AdvancedDisclosure
-                    testId="scanner-advanced-controls"
-                    title={language === 'en' ? 'Advanced controls' : '高级参数'}
-                    summary={language === 'en' ? 'Theme or custom-symbol inputs only' : '仅主题或自定义标的输入'}
-                    icon="more"
-                  >
-                  {scanScope === 'theme' ? (
-                    <div className="flex min-w-0 flex-col gap-1.5" data-testid="scanner-theme-control">
-                      <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">{language === 'en' ? 'Theme' : '主题'}</span>
-                      <div className="select-field__control ui-control-shell group relative min-w-0 w-full max-w-full">
-                        <select
-                          data-testid="scanner-theme-select"
-                          value={themeId}
-                          className="select-surface absolute inset-0 z-10 h-full w-full min-w-0 cursor-pointer appearance-none truncate rounded-lg pr-10 opacity-0 outline-none"
-                          onChange={(event) => setThemeId(event.target.value)}
-                          aria-invalid={Boolean(validationErrors.theme)}
-                          aria-describedby={validationErrors.theme ? 'scanner-theme-error' : undefined}
-                        >
-                          <option value="">{language === 'en' ? 'Select a theme' : '选择主题'}</option>
-                          {configuredMarketThemes.length ? (
-                            <optgroup label={language === 'en' ? 'Ready seed lists' : '可用 seed 主题'}>
-                              {configuredMarketThemes.map((theme) => (
-                                <option key={theme.id} value={theme.id}>
-                                  {getThemeLabel(theme, language)} · {theme.symbols.length}
-                                </option>
-                              ))}
-                            </optgroup>
-                          ) : null}
-                          {unconfiguredMarketThemes.length ? (
-                            <optgroup label={language === 'en' ? 'Unavailable / unconfigured' : '未配置'}>
-                              {unconfiguredMarketThemes.map((theme) => (
-                                <option key={theme.id} value={theme.id} disabled>
-                                  {getThemeLabel(theme, language)} · {language === 'en' ? 'not configured' : '未配置'}
-                                </option>
-                              ))}
-                            </optgroup>
-                          ) : null}
-                        </select>
-                        <div
-                          aria-hidden="true"
-                          className={`select-field__overlay pointer-events-none flex h-full min-h-[2.25rem] w-full min-w-0 items-center rounded-lg border bg-black/40 px-2.5 py-1.5 text-xs text-white transition-all ${
-                            validationErrors.theme
-                              ? 'border-rose-500/50 text-rose-100'
-                              : 'border-white/8 group-focus-within:border-indigo-400/50'
-                          }`}
-                        >
-                          <span className="select-field__value min-w-0 flex-1 truncate">
-                            {selectedTheme
-                              ? `${getThemeLabel(selectedTheme, language)} · ${selectedTheme.symbols.length}`
-                              : (language === 'en' ? 'Select a theme' : '选择主题')}
-                          </span>
-                          <ChevronDown className="select-field__icon ui-control-icon ml-2 h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />
-                        </div>
+                    <div className="grid min-w-0 grid-cols-2 gap-1 xl:grid-cols-[minmax(112px,0.55fr)_minmax(150px,0.72fr)_minmax(106px,0.45fr)_minmax(156px,0.72fr)_minmax(118px,0.5fr)_minmax(118px,0.5fr)_auto] xl:items-end">
+                      <PillTagGroup compact label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} variant="market" testId="scanner-market-toggle" />
+                      <PillTagGroup compact label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
+                      <PillTagGroup compact label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
+                      <div data-testid="scanner-launch-controls" className="contents">
+                        <PillTagGroup
+                          compact
+                          label={language === 'en' ? 'Universe' : '标的池'}
+                          value={scanScope}
+                          onChange={(next) => setScanScope(next as ScanScope)}
+                          options={[
+                            { value: 'default', label: language === 'en' ? 'Default market universe' : '默认市场池' },
+                            { value: 'theme', label: language === 'en' ? 'Theme universe' : '主题标的池' },
+                            { value: 'symbols', label: language === 'en' ? 'Custom symbols' : '自定义标的' },
+                          ]}
+                          testId="scanner-scope-selector"
+                        />
+                        <PillTagGroup compact label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
+                        <PillTagGroup compact label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
                       </div>
-                      {selectedTheme && !selectedTheme.symbols.length ? (
-                        <p className="text-[11px] leading-relaxed text-amber-100/72">
-                          {language === 'en' ? 'This theme is not configured yet.' : '该主题尚未配置成分股。'}
-                        </p>
-                      ) : null}
-                      {validationErrors.theme ? (
-                        <p id="scanner-theme-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
-                          {validationErrors.theme}
-                        </p>
-                      ) : null}
-                      <div className="mt-2 flex flex-col gap-2 border-t border-white/8 pt-2" data-testid="scanner-ai-theme-builder">
-                        <div className="flex items-center gap-2 text-[11px] font-medium text-white/70">
-                          <Sparkles className="h-3.5 w-3.5 text-indigo-200/80" aria-hidden="true" />
-                          <span>{language === 'en' ? 'AI custom theme' : 'AI 自定义主题'}</span>
-                        </div>
-                        <input
-                          data-testid="scanner-ai-theme-label-input"
-                          value={customThemeLabel}
-                          className="w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
-                          onChange={(event) => setCustomThemeLabel(event.target.value)}
-                          aria-invalid={Boolean(validationErrors.customThemeLabel)}
-                          aria-describedby={validationErrors.customThemeLabel ? 'scanner-ai-theme-label-error' : undefined}
-                          maxLength={80}
-                          placeholder={language === 'en' ? 'White House Stocks' : 'White House Stocks'}
-                        />
-                        {validationErrors.customThemeLabel ? (
-                          <p id="scanner-ai-theme-label-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
-                            {validationErrors.customThemeLabel}
-                          </p>
-                        ) : null}
-                        <textarea
-                          data-testid="scanner-ai-theme-prompt-input"
-                          value={customThemePrompt}
-                          onChange={(event) => setCustomThemePrompt(event.target.value)}
-                          aria-invalid={Boolean(validationErrors.customThemePrompt)}
-                          aria-describedby={validationErrors.customThemePrompt ? 'scanner-ai-theme-prompt-error' : undefined}
-                          maxLength={600}
-                          rows={3}
-                          placeholder={language === 'en' ? 'Stocks associated with White House policy, federal contracts, and government decisions.' : '例如：与白宫政策、联邦合同和政府决策相关的股票。'}
-                          className="w-full resize-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
-                        />
-                        {validationErrors.customThemePrompt ? (
-                          <p id="scanner-ai-theme-prompt-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
-                            {validationErrors.customThemePrompt}
-                          </p>
-                        ) : null}
-                        <input
-                          data-testid="scanner-ai-theme-manual-symbols-input"
-                          value={customThemeManualSymbols}
-                          className="w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
-                          onChange={(event) => setCustomThemeManualSymbols(event.target.value)}
-                          aria-invalid={Boolean(validationErrors.customThemeManualSymbols)}
-                          aria-describedby={validationErrors.customThemeManualSymbols ? 'scanner-ai-theme-manual-symbols-error' : undefined}
-                          placeholder={language === 'en' ? 'Optional: add symbols, e.g. NVDA PLTR' : '可选：手动补充代码，例如 NVDA PLTR'}
-                        />
-                        {validationErrors.customThemeManualSymbols ? (
-                          <p id="scanner-ai-theme-manual-symbols-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
-                            {validationErrors.customThemeManualSymbols}
-                          </p>
-                        ) : null}
-                        <TerminalButton
-                          ref={generateThemeButton.ref}
-                          type="button"
-                          variant="secondary"
-                          disabled={generateThemeDisabled}
-                          onPointerUp={generateThemeButton.onPointerUp}
-                          onClick={generateThemeButton.onClick}
-                          className="h-8 px-3 text-xs"
-                        >
-                          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                          <span>{isGeneratingTheme ? (language === 'en' ? 'Generating...' : '生成中...') : (language === 'en' ? 'Generate theme' : '生成主题')}</span>
-                        </TerminalButton>
-                        {themeSuggestions.length ? (
-                          <div className="flex flex-col gap-1.5" data-testid="scanner-ai-theme-suggestions">
-                            {themeSuggestions.slice(0, 6).map((suggestion) => (
-                              <div key={suggestion.symbol} className="shrink-0 border-t border-white/8 px-0 py-1.5">
-                                <div className="flex items-center justify-between gap-2 text-[11px] text-white/75">
-                                  <span className="font-semibold text-white">{suggestion.symbol}</span>
-                                  <span>{Math.round(suggestion.confidence * 100)}%</span>
-                                </div>
-                                <p className="mt-1 text-[10px] leading-snug text-white/45">{suggestion.reason}</p>
+                      <TerminalButton
+                        ref={runScannerButton.ref}
+                        type="button"
+                        onClick={runScannerButton.onClick}
+                        onPointerUp={runScannerButton.onPointerUp}
+                        disabled={runDisabled}
+                        aria-busy={isRunning}
+                        data-testid="scanner-run-button"
+                        className="group col-span-2 h-8 w-full px-3 text-sm font-bold active:scale-95 disabled:pointer-events-none xl:col-span-1 xl:min-w-[132px]"
+                        variant="primary"
+                      >
+                        <Play className="h-4 w-4 group-hover:animate-pulse" />
+                        <span>{isRunning ? t('scanner.running') : (language === 'zh' ? '启动扫描' : t('scanner.run'))}</span>
+                      </TerminalButton>
+                    </div>
+                    {scanScope !== 'default' ? (
+                      <AdvancedDisclosure
+                        testId="scanner-advanced-controls"
+                        title={language === 'en' ? 'Advanced controls' : '高级参数'}
+                        summary={language === 'en' ? 'Theme or custom-symbol inputs only' : '仅主题或自定义标的输入'}
+                        icon="more"
+                      >
+                        {scanScope === 'theme' ? (
+                          <div className="flex min-w-0 flex-col gap-1.5" data-testid="scanner-theme-control">
+                            <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">{language === 'en' ? 'Theme' : '主题'}</span>
+                            <div className="select-field__control ui-control-shell group relative min-w-0 w-full max-w-full">
+                              <select
+                                data-testid="scanner-theme-select"
+                                value={themeId}
+                                className="select-surface absolute inset-0 z-10 h-full w-full min-w-0 cursor-pointer appearance-none truncate rounded-lg pr-10 opacity-0 outline-none"
+                                onChange={(event) => setThemeId(event.target.value)}
+                                aria-invalid={Boolean(validationErrors.theme)}
+                                aria-describedby={validationErrors.theme ? 'scanner-theme-error' : undefined}
+                              >
+                                <option value="">{language === 'en' ? 'Select a theme' : '选择主题'}</option>
+                                {configuredMarketThemes.length ? (
+                                  <optgroup label={language === 'en' ? 'Ready seed lists' : '可用 seed 主题'}>
+                                    {configuredMarketThemes.map((theme) => (
+                                      <option key={theme.id} value={theme.id}>
+                                        {getThemeLabel(theme, language)} · {theme.symbols.length}
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                ) : null}
+                                {unconfiguredMarketThemes.length ? (
+                                  <optgroup label={language === 'en' ? 'Unavailable / unconfigured' : '未配置'}>
+                                    {unconfiguredMarketThemes.map((theme) => (
+                                      <option key={theme.id} value={theme.id} disabled>
+                                        {getThemeLabel(theme, language)} · {language === 'en' ? 'not configured' : '未配置'}
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                ) : null}
+                              </select>
+                              <div
+                                aria-hidden="true"
+                                className={`select-field__overlay pointer-events-none flex h-full min-h-[2.25rem] w-full min-w-0 items-center rounded-lg border bg-black/40 px-2.5 py-1.5 text-xs text-white transition-all ${
+                                  validationErrors.theme
+                                    ? 'border-rose-500/50 text-rose-100'
+                                    : 'border-white/8 group-focus-within:border-indigo-400/50'
+                                }`}
+                              >
+                                <span className="select-field__value min-w-0 flex-1 truncate">
+                                  {selectedTheme
+                                    ? `${getThemeLabel(selectedTheme, language)} · ${selectedTheme.symbols.length}`
+                                    : (language === 'en' ? 'Select a theme' : '选择主题')}
+                                </span>
+                                <ChevronDown className="select-field__icon ui-control-icon ml-2 h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />
                               </div>
+                            </div>
+                            {selectedTheme && !selectedTheme.symbols.length ? (
+                              <p className="text-[11px] leading-relaxed text-amber-100/72">
+                                {language === 'en' ? 'This theme is not configured yet.' : '该主题尚未配置成分股。'}
+                              </p>
+                            ) : null}
+                            {validationErrors.theme ? (
+                              <p id="scanner-theme-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                                {validationErrors.theme}
+                              </p>
+                            ) : null}
+                            <div className="mt-2 flex flex-col gap-2 border-t border-white/8 pt-2" data-testid="scanner-ai-theme-builder">
+                              <div className="flex items-center gap-2 text-[11px] font-medium text-white/70">
+                                <Sparkles className="h-3.5 w-3.5 text-indigo-200/80" aria-hidden="true" />
+                                <span>{language === 'en' ? 'AI custom theme' : 'AI 自定义主题'}</span>
+                              </div>
+                              <input
+                                data-testid="scanner-ai-theme-label-input"
+                                value={customThemeLabel}
+                                className="w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
+                                onChange={(event) => setCustomThemeLabel(event.target.value)}
+                                aria-invalid={Boolean(validationErrors.customThemeLabel)}
+                                aria-describedby={validationErrors.customThemeLabel ? 'scanner-ai-theme-label-error' : undefined}
+                                maxLength={80}
+                                placeholder={language === 'en' ? 'White House Stocks' : 'White House Stocks'}
+                              />
+                              {validationErrors.customThemeLabel ? (
+                                <p id="scanner-ai-theme-label-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                                  {validationErrors.customThemeLabel}
+                                </p>
+                              ) : null}
+                              <textarea
+                                data-testid="scanner-ai-theme-prompt-input"
+                                value={customThemePrompt}
+                                onChange={(event) => setCustomThemePrompt(event.target.value)}
+                                aria-invalid={Boolean(validationErrors.customThemePrompt)}
+                                aria-describedby={validationErrors.customThemePrompt ? 'scanner-ai-theme-prompt-error' : undefined}
+                                maxLength={600}
+                                rows={3}
+                                placeholder={language === 'en' ? 'Stocks associated with White House policy, federal contracts, and government decisions.' : '例如：与白宫政策、联邦合同和政府决策相关的股票。'}
+                                className="w-full resize-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
+                              />
+                              {validationErrors.customThemePrompt ? (
+                                <p id="scanner-ai-theme-prompt-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                                  {validationErrors.customThemePrompt}
+                                </p>
+                              ) : null}
+                              <input
+                                data-testid="scanner-ai-theme-manual-symbols-input"
+                                value={customThemeManualSymbols}
+                                className="w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
+                                onChange={(event) => setCustomThemeManualSymbols(event.target.value)}
+                                aria-invalid={Boolean(validationErrors.customThemeManualSymbols)}
+                                aria-describedby={validationErrors.customThemeManualSymbols ? 'scanner-ai-theme-manual-symbols-error' : undefined}
+                                placeholder={language === 'en' ? 'Optional: add symbols, e.g. NVDA PLTR' : '可选：手动补充代码，例如 NVDA PLTR'}
+                              />
+                              {validationErrors.customThemeManualSymbols ? (
+                                <p id="scanner-ai-theme-manual-symbols-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                                  {validationErrors.customThemeManualSymbols}
+                                </p>
+                              ) : null}
+                              <TerminalButton
+                                ref={generateThemeButton.ref}
+                                type="button"
+                                variant="secondary"
+                                disabled={generateThemeDisabled}
+                                onPointerUp={generateThemeButton.onPointerUp}
+                                onClick={generateThemeButton.onClick}
+                                className="h-8 px-3 text-xs"
+                              >
+                                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                                <span>{isGeneratingTheme ? (language === 'en' ? 'Generating...' : '生成中...') : (language === 'en' ? 'Generate theme' : '生成主题')}</span>
+                              </TerminalButton>
+                              {themeSuggestions.length ? (
+                                <div className="flex flex-col gap-1.5" data-testid="scanner-ai-theme-suggestions">
+                                  {themeSuggestions.slice(0, 6).map((suggestion) => (
+                                    <div key={suggestion.symbol} className="shrink-0 border-t border-white/8 px-0 py-1.5">
+                                      <div className="flex items-center justify-between gap-2 text-[11px] text-white/75">
+                                        <span className="font-semibold text-white">{suggestion.symbol}</span>
+                                        <span>{Math.round(suggestion.confidence * 100)}%</span>
+                                      </div>
+                                      <p className="mt-1 text-[10px] leading-snug text-white/45">{suggestion.reason}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : null}
+                        {scanScope === 'symbols' ? (
+                          <div className="flex flex-col gap-1.5" data-testid="scanner-custom-symbols-control">
+                            <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">{language === 'en' ? 'Symbols' : '代码'}</span>
+                            <textarea
+                              data-testid="scanner-custom-symbols-input"
+                              value={customSymbols}
+                              onChange={(event) => setCustomSymbols(event.target.value)}
+                              aria-invalid={Boolean(validationErrors.customSymbols)}
+                              aria-describedby={validationErrors.customSymbols ? 'scanner-custom-symbols-error' : undefined}
+                              rows={3}
+                              placeholder={language === 'en' ? 'MARA RIOT CLSK' : 'MARA RIOT CLSK'}
+                              className="w-full resize-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
+                            />
+                            <p className="text-[11px] text-white/45">
+                              {language === 'en' ? `Parsed ${parsedCustomSymbols.length}` : `已解析 ${parsedCustomSymbols.length}`}
+                            </p>
+                            {validationErrors.customSymbols ? (
+                              <p id="scanner-custom-symbols-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                                {validationErrors.customSymbols}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </AdvancedDisclosure>
+                    ) : null}
+                    {validationErrors.run ? (
+                      <p role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                        {validationErrors.run}
+                      </p>
+                    ) : null}
+                  </DenseCommandBar>
+
+                  <div data-testid="scanner-ranked-workbench" className="flex min-h-0 flex-1 min-w-0 flex-col border-t border-white/10">
+                    <div data-testid="scanner-primary-actions" className="flex shrink-0 flex-row flex-wrap items-center justify-between gap-2 px-2 py-2">
+                      <div className="flex min-w-0 flex-row flex-wrap items-center gap-2">
+                        {runDetail && hasCandidateDiagnostics ? (
+                          <div data-testid="scanner-candidate-filters" className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1 border-r border-white/10 pr-2" role="group" aria-label={language === 'en' ? 'Candidate diagnostics filter' : '候选诊断过滤'}>
+                            {([
+                              ['selected', language === 'en' ? 'Selected' : '入选'],
+                              ['pool', language === 'en' ? 'Candidate pool' : '候选池'],
+                              ['rejected', language === 'en' ? 'Rejected' : '淘汰'],
+                              ['data_failed', language === 'en' ? 'Data failed' : '数据失败'],
+                              ['all', language === 'en' ? 'All' : '全部'],
+                            ] as const).map(([key, label]) => (
+                              <button
+                                key={key}
+                                type="button"
+                                className={`inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 text-xs ${
+                                  candidateFilter === key
+                                    ? 'border-white/16 bg-white/[0.08] text-white'
+                                    : 'border-transparent text-white/45 hover:text-white/75'
+                                }`}
+                                onClick={() => setCandidateFilter(key)}
+                              >
+                                <span className="ui-truncate block">{label}</span>
+                              </button>
                             ))}
                           </div>
                         ) : null}
+                        <div data-testid="scanner-ranked-sortbar" className="flex flex-wrap items-center gap-1.5 text-xs text-white/42">
+                          <span>{language === 'en' ? 'Sort by' : '排序'}</span>
+                          {([
+                            ['score', language === 'en' ? 'scanner score' : '扫描评分'],
+                            ['symbol', language === 'en' ? 'symbol' : '代码'],
+                            ['target', language === 'en' ? 'target' : '目标'],
+                            ['risk', language === 'en' ? 'risk' : '风险'],
+                          ] as const).map(([key, label]) => (
+                            <button
+                              key={key}
+                              type="button"
+                              className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 ${sortKey === key ? 'border-white/16 bg-white/[0.08] text-white' : 'border-white/5 bg-white/[0.02] text-white/48 hover:text-white/75'}`}
+                              onClick={() => handleSortChange(key)}
+                            >
+                              {label}
+                              {sortKey === key ? <ArrowDownUp className="h-3 w-3" /> : null}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex min-w-0 flex-row flex-wrap items-center justify-end gap-2">
+                        {runDetail ? (
+                          <div data-testid="scanner-summary-counters" className="flex flex-wrap items-center gap-1.5 text-[11px] text-white/42">
+                            {[
+                              [language === 'en' ? 'Evaluated' : '已评估', runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize],
+                              [language === 'en' ? 'Selected' : '入选', runDetail.summary?.selectedCount ?? shortlistCount],
+                              [language === 'en' ? 'Rejected' : '淘汰', runDetail.summary?.rejectedCount ?? 0],
+                              [language === 'en' ? 'Data failed' : '数据失败', runDetail.summary?.dataFailedCount ?? 0],
+                            ].map(([label, value]) => (
+                              <span key={String(label)} className="inline-flex items-baseline gap-1 rounded-md border border-white/8 bg-white/[0.03] px-2 py-0.5">
+                                <span className="text-white/36">{label}</span>
+                                <span className="font-mono text-white/78">{value}</span>
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div data-testid="scanner-more-actions" className="relative min-w-0">
+                          <TerminalButton
+                            type="button"
+                            variant="compact"
+                            aria-expanded={isMoreActionsOpen}
+                            aria-label={language === 'en' ? 'More scanner actions' : '更多扫描操作'}
+                            className="h-8 px-2.5 py-1 text-xs"
+                            onClick={() => setIsMoreActionsOpen((current) => !current)}
+                          >
+                            <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>{language === 'en' ? 'More' : '更多'}</span>
+                          </TerminalButton>
+                          {isMoreActionsOpen ? (
+                            <div data-testid="scanner-more-actions-panel" className="absolute right-0 z-20 mt-2 grid min-w-[220px] gap-1.5 rounded-xl border border-white/10 bg-black/90 p-2 shadow-xl">
+                              <ActionButton
+                                label={language === 'en' ? 'Export CSV' : '导出 CSV'}
+                                icon={<Download className="h-3.5 w-3.5" />}
+                                onClick={() => runDetail && handleExportRows(
+                                  sortedCandidates.map((candidate) => buildScannerExportRow(candidate, runDetail, language)),
+                                  buildScannerExportFilename(runDetail),
+                                )}
+                                disabled={!runDetail || !sortedCandidates.length}
+                              />
+                              <ActionButton
+                                label={language === 'en' ? 'Copy all symbols' : '复制全部代码'}
+                                icon={<Copy className="h-3.5 w-3.5" />}
+                                onClick={() => void handleCopyText(sortedCandidates.map((candidate) => candidate.symbol).join(', '), 'all-symbols')}
+                                disabled={!sortedCandidates.length}
+                              />
+                              <ActionButton
+                                label={language === 'en' ? 'Copy top 5' : '复制前 5'}
+                                icon={<Copy className="h-3.5 w-3.5" />}
+                                onClick={() => void handleCopyText(sortedCandidates.slice(0, 5).map((candidate) => candidate.symbol).join(', '), 'top-5-symbols')}
+                                disabled={!sortedCandidates.length}
+                              />
+                              <ActionButton
+                                label={language === 'en' ? 'Add official selected' : '加入全部入选'}
+                                icon={<BookmarkPlus className="h-3.5 w-3.5" />}
+                                onClick={() => void handleBatchTrackCandidates('official', sortedCandidates)}
+                                disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !sortedCandidates.length}
+                              />
+                              <ActionButton
+                                label={language === 'en' ? 'Add preview selected' : '加入预览入选'}
+                                icon={<BookmarkPlus className="h-3.5 w-3.5" />}
+                                onClick={() => void handleBatchTrackCandidates('preview', previewSelectedDiagnostics.map(diagnosticToCandidate))}
+                                disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !previewSelectedDiagnostics.length}
+                              />
+                              <ActionButton
+                                label={language === 'en' ? 'Add filtered' : '加入当前筛选'}
+                                icon={<BookmarkPlus className="h-3.5 w-3.5" />}
+                                onClick={() => void handleBatchTrackCandidates('filtered', workbenchDiagnostics.map((candidate) => shortlistCandidateBySymbol.get(normalizeCandidateSymbol(candidate.symbol)) || diagnosticToCandidate(candidate)))}
+                                disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !workbenchDiagnostics.length}
+                              />
+                              <ActionButton
+                                label={language === 'en' ? 'Batch backtest' : '批量回测'}
+                                icon={<LineChart className="h-3.5 w-3.5" />}
+                                onClick={() => handleBacktestBatch('official_selected')}
+                                disabled={isBacktestBatchRunning || backtestCounts.official_selected === 0}
+                              />
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
-                  ) : null}
-	                  {scanScope === 'symbols' ? (
-                    <div className="flex flex-col gap-1.5" data-testid="scanner-custom-symbols-control">
-                      <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">{language === 'en' ? 'Symbols' : '代码'}</span>
-                      <textarea
-                        data-testid="scanner-custom-symbols-input"
-                        value={customSymbols}
-                        onChange={(event) => setCustomSymbols(event.target.value)}
-                        aria-invalid={Boolean(validationErrors.customSymbols)}
-                        aria-describedby={validationErrors.customSymbols ? 'scanner-custom-symbols-error' : undefined}
-                        rows={3}
-                        placeholder={language === 'en' ? 'MARA RIOT CLSK' : 'MARA RIOT CLSK'}
-                        className="w-full resize-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
-                      />
-                      <p className="text-[11px] text-white/45">
-                        {language === 'en' ? `Parsed ${parsedCustomSymbols.length}` : `已解析 ${parsedCustomSymbols.length}`}
-                      </p>
-                      {validationErrors.customSymbols ? (
-                        <p id="scanner-custom-symbols-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
-                          {validationErrors.customSymbols}
-                        </p>
-                      ) : null}
-	                    </div>
-	                  ) : null}
-                  </AdvancedDisclosure>
-                  ) : null}
-                  {validationErrors.run ? (
-                    <p role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
-                      {validationErrors.run}
-                    </p>
-                  ) : null}
-                  </DenseCommandBar>
 
-              <div data-testid="scanner-results-pane" className="flex min-h-0 flex-1 min-w-0 flex-col">
-              <div data-testid="scanner-primary-actions" className="flex shrink-0 flex-row flex-wrap items-center justify-between gap-1.5 border-b border-white/10 bg-transparent px-2 py-1">
-                <div className="flex min-w-0 flex-row flex-wrap items-center gap-2">
-                  {runDetail && hasCandidateDiagnostics ? (
-                    <div data-testid="scanner-candidate-filters" className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1 border-r border-white/10 pr-2" role="group" aria-label={language === 'en' ? 'Candidate diagnostics filter' : '候选诊断过滤'}>
-                      {([
-                        ['selected', language === 'en' ? 'Selected' : '入选'],
-                        ['pool', language === 'en' ? 'Candidate pool' : '候选池'],
-                        ['rejected', language === 'en' ? 'Rejected' : '淘汰'],
-                        ['data_failed', language === 'en' ? 'Data failed' : '数据失败'],
-                        ['all', language === 'en' ? 'All' : '全部'],
-                      ] as const).map(([key, label]) => (
-                        <button
-                          key={key}
-                          type="button"
-                          className={`inline-flex shrink-0 items-center border-b px-1.5 py-0.5 text-xs ${candidateFilter === key ? 'border-white/40 text-white' : 'border-transparent text-white/45 hover:text-white/75'}`}
-                          onClick={() => setCandidateFilter(key)}
-                        >
-                          <span className="ui-truncate block">{label}</span>
-                        </button>
-                      ))}
+                    <div className={`grid min-h-0 flex-1 min-w-0 gap-3 px-2 py-2 ${showDetailRail ? 'xl:grid-cols-[minmax(820px,1fr)_minmax(320px,340px)]' : 'grid-cols-1'}`}>
+                      <div className="min-w-0">
+                        {workbenchDiagnostics.length ? (
+                          <div data-testid="scanner-ranked-list" className="overflow-hidden rounded-xl border border-white/5 bg-white/[0.02]">
+                            <div data-testid="scanner-result-table" className="contents">
+                              <div className="hidden items-center gap-3 border-b border-white/5 bg-black/[0.18] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/38 md:grid md:grid-cols-[64px_minmax(180px,1fr)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)_auto]">
+                                <span>{language === 'en' ? 'Rank' : '排名'}</span>
+                                <span>{language === 'en' ? 'Symbol / name' : '代码 / 名称'}</span>
+                                <span>{language === 'en' ? 'Score' : '评分'}</span>
+                                <span>{language === 'en' ? 'Status' : '状态'}</span>
+                                <span>{language === 'en' ? 'Key reason' : '关键原因'}</span>
+                                <span>{language === 'en' ? 'Data quality' : '数据质量'}</span>
+                                <span>{language === 'en' ? 'Watch / risk' : '观察 / 风险'}</span>
+                                <span className="text-right">{language === 'en' ? 'Actions' : '操作'}</span>
+                              </div>
+                              <div data-testid="scanner-candidate-scroll-region" className="min-w-0">
+                                {workbenchDiagnostics.map((candidate) => {
+                                  const activeRunDetail = runDetail;
+                                  if (!activeRunDetail) return null;
+                                  const sourceCandidate = shortlistCandidateBySymbol.get(normalizeCandidateSymbol(candidate.symbol)) || diagnosticToCandidate(candidate);
+                                  const candidateMarket = normalizeScannerMarket(activeRunDetail.market || market);
+                                  const candidateIdentity = getWatchlistIdentity(candidateMarket, candidate.symbol);
+                                  const isTracked = Boolean(candidateIdentity && trackedWatchlistIdentitySet.has(candidateIdentity));
+                                  const isTrackPending = pendingWatchlistIdentity === candidateIdentity;
+                                  const backtestItem = getBacktestItem(sourceCandidate.symbol);
+                                  const comparison = comparisonState.bySymbol.get(normalizeCandidateSymbol(candidate.symbol) || '');
+                                  return (
+                                    <ScannerCandidateDiagnosticRow
+                                      key={`ranked-${candidate.symbol}`}
+                                      candidate={candidate}
+                                      language={language}
+                                      isSelectedCandidate={normalizeCandidateSymbol(activeDetailDiagnostic?.symbol) === normalizeCandidateSymbol(candidate.symbol)}
+                                      isExpanded={false}
+                                      isMoreOpen={rowMoreSymbol === candidate.symbol}
+                                      displayName={sourceCandidate.companyName || sourceCandidate.name || candidate.name || candidate.symbol || '--'}
+                                      keyReason={isOfficialSelected(candidate) ? getKeyReason(sourceCandidate, runDetail, language) : formatFriendlyDiagnosticReason(candidate, language)}
+                                      previewLabel={previewDecisionLabel(candidate, previewThreshold, language)}
+                                      previewBadgeClassName={previewDecisionClass(candidate, previewThreshold)}
+                                      dataQualityLabel={formatCandidateDataQuality(candidate, language)}
+                                      watchSummary={formatWorkbenchWatchSummary(sourceCandidate, language)}
+                                      rangeSummary={formatWorkbenchRangeSummary(sourceCandidate, language)}
+                                      evidenceSummary={getScannerEvidenceSummary(candidate)}
+                                      scoreLabel={candidate.score == null ? '--' : `${candidate.score}/100`}
+                                      scoreDelta={formatScoreDelta(comparison?.scoreDelta ?? null)}
+                                      comparisonLabel={comparison?.label || null}
+                                      statusLabel={diagnosticStatusLabel(candidate.status, language)}
+                                      watchlistActionLabel={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
+                                      watchlistActionTitle={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
+                                      copyLabel={copiedKey === `candidate:${candidate.symbol}` ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制')}
+                                      exportLabel={language === 'en' ? 'Export' : '导出'}
+                                      isTracked={isTracked}
+                                      isTrackPending={isTrackPending}
+                                      isWatchlistAuthBlocked={watchlistAuthBlocked}
+                                      isAnalyzing={pendingAnalyzeSymbol === sourceCandidate.symbol}
+                                      backtestLabel={getBacktestActionLabel(backtestItem)}
+                                      backtestTitle={!normalizeCandidateSymbol(sourceCandidate.symbol) ? backtestUnavailableLabel : undefined}
+                                      backtestItem={backtestItem}
+                                      onSelect={() => setInspectorSymbol(sourceCandidate.symbol)}
+                                      onAnalyze={() => void handleAnalyzeCandidate(sourceCandidate)}
+                                      onBacktest={() => void handleBacktestCandidate(sourceCandidate)}
+                                      onTrack={() => void handleTrackCandidate(sourceCandidate)}
+                                      onCopy={() => void handleCopyText(sourceCandidate.symbol, `candidate:${candidate.symbol}`)}
+                                      onExport={() => handleExportRows(
+                                        [buildScannerExportRow(sourceCandidate, activeRunDetail, language)],
+                                        buildScannerExportFilename(activeRunDetail, `candidate-${candidate.symbol}`),
+                                      )}
+                                      onToggleMore={() => setRowMoreSymbol((current) => current === candidate.symbol ? null : candidate.symbol)}
+                                    />
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <CompactEmptyRow
+                            title={runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length ? (language === 'en' ? 'No selected candidates' : '本次无入选候选') : emptyStateTitle}
+                            className="m-0 min-h-[120px]"
+                          >
+                            {runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length
+                              ? (language === 'en' ? 'Open Candidate pool or All to inspect rejected and data-failed candidates.' : '切换到候选池或全部查看淘汰与数据失败原因。')
+                              : pageErrorSummary || emptyStateBody}
+                          </CompactEmptyRow>
+                        )}
+
+                        {!showDetailRail && activeDetailCandidate ? (
+                          <div data-testid="scanner-inline-detail-panel" className="mt-3 rounded-xl border border-white/5 bg-black/20 p-3">
+                            <div data-testid={`scanner-candidate-detail-${activeDetailCandidate.symbol || 'unknown'}`} className="contents">
+                              <div data-testid="scanner-candidate-inspector" className="contents">
+                              <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/48">
+                                <span className="font-semibold text-white/72">{language === 'en' ? 'Selected detail' : '当前详情'}</span>
+                                <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 font-mono text-white/72">{activeDetailCandidate.symbol || '--'}</span>
+                                {activeDetailDiagnostic ? (
+                                  <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5">
+                                    {diagnosticStatusLabel(activeDetailDiagnostic.status, language)}
+                                  </span>
+                                ) : null}
+                              </div>
+                              {activeDetailDiagnostic ? (
+                                <p className="mb-2 text-xs text-white/58">
+                                  {isOfficialSelected(activeDetailDiagnostic)
+                                    ? getKeyReason(activeDetailCandidate, runDetail, language)
+                                    : formatFriendlyDiagnosticReason(activeDetailDiagnostic, language)}
+                                </p>
+                              ) : null}
+                              {renderCandidateDetailPanel(activeDetailCandidate, activeDetailTracked, activeDetailTrackPending, activeDetailBacktestItem)}
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {showDetailRail && activeDetailCandidate ? (
+                        <aside data-testid="scanner-detail-rail" className="sticky top-4 self-start rounded-xl border border-white/5 bg-black/20 p-3">
+                          <div data-testid={`scanner-candidate-detail-${activeDetailCandidate.symbol || 'unknown'}`} className="contents">
+                            <div data-testid="scanner-candidate-inspector" className="contents">
+                            <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/48">
+                              <span className="font-semibold text-white/72">{language === 'en' ? 'Candidate detail' : '候选详情'}</span>
+                              <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 font-mono text-white/72">{activeDetailCandidate.symbol || '--'}</span>
+                              {activeDetailDiagnostic ? (
+                                <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5">
+                                  {diagnosticStatusLabel(activeDetailDiagnostic.status, language)}
+                                </span>
+                              ) : null}
+                            </div>
+                            {activeDetailDiagnostic ? (
+                              <p className="mb-2 text-xs text-white/58">
+                                {isOfficialSelected(activeDetailDiagnostic)
+                                  ? getKeyReason(activeDetailCandidate, runDetail, language)
+                                  : formatFriendlyDiagnosticReason(activeDetailDiagnostic, language)}
+                              </p>
+                            ) : null}
+                            {renderCandidateDetailPanel(activeDetailCandidate, activeDetailTracked, activeDetailTrackPending, activeDetailBacktestItem)}
+                            </div>
+                          </div>
+                        </aside>
+                      ) : null}
                     </div>
-                  ) : null}
-                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-white/42">
-                  <span>{language === 'en' ? 'Sort by' : '排序'}</span>
-                  {([
-                    ['score', language === 'en' ? 'scanner score' : '扫描评分'],
-                    ['symbol', language === 'en' ? 'symbol' : '代码'],
-                    ['risk', language === 'en' ? 'risk' : '风险'],
-                  ] as const).map(([key, label]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className={`inline-flex items-center gap-1 border-b px-1.5 py-0.5 ${sortKey === key ? 'border-white/40 text-white' : 'border-transparent text-white/48 hover:text-white/75'}`}
-                      onClick={() => handleSortChange(key)}
-                    >
-                      {label}
-                      {sortKey === key ? <ArrowDownUp className="h-3 w-3" /> : null}
-                    </button>
-                  ))}
-                </div>
-                </div>
-                <div className="flex min-w-0 flex-row flex-wrap items-center gap-2">
-                  <div data-testid="scanner-more-actions" className="min-w-0">
-                    <TerminalButton
-                      type="button"
-                      variant="compact"
-                      aria-expanded={isMoreActionsOpen}
-                      aria-label={language === 'en' ? 'More scanner actions' : '更多扫描操作'}
-                      className="h-8 px-2.5 py-1 text-xs"
-                      onClick={() => setIsMoreActionsOpen((current) => !current)}
-                    >
-                      <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                      <span>{language === 'en' ? 'More' : '更多'}</span>
-                    </TerminalButton>
-                    {isMoreActionsOpen ? (
-	                      <div data-testid="scanner-more-actions-panel" className="absolute right-3 z-20 mt-2 grid min-w-[220px] gap-1.5 border border-white/10 bg-black/90 p-2 shadow-xl">
-                        <ActionButton
-                          label={language === 'en' ? 'Export CSV' : '导出 CSV'}
-                          icon={<Download className="h-3.5 w-3.5" />}
-                          onClick={() => runDetail && handleExportRows(
-                            sortedCandidates.map((candidate) => buildScannerExportRow(candidate, runDetail, language)),
-                            buildScannerExportFilename(runDetail),
-                          )}
-                          disabled={!runDetail || !sortedCandidates.length}
-                        />
-                        <ActionButton
-                          label={language === 'en' ? 'Copy all symbols' : '复制全部代码'}
-                          icon={<Copy className="h-3.5 w-3.5" />}
-                          onClick={() => void handleCopyText(sortedCandidates.map((candidate) => candidate.symbol).join(', '), 'all-symbols')}
-                          disabled={!sortedCandidates.length}
-                        />
-                        <ActionButton
-                          label={language === 'en' ? 'Copy top 5' : '复制前 5'}
-                          icon={<Copy className="h-3.5 w-3.5" />}
-                          onClick={() => void handleCopyText(sortedCandidates.slice(0, 5).map((candidate) => candidate.symbol).join(', '), 'top-5-symbols')}
-                          disabled={!sortedCandidates.length}
-                        />
-                        <ActionButton
-                          label={language === 'en' ? 'Add official selected' : '加入全部入选'}
-                          icon={<BookmarkPlus className="h-3.5 w-3.5" />}
-                          onClick={() => void handleBatchTrackCandidates('official', sortedCandidates)}
-                          disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !sortedCandidates.length}
-                        />
-                        <ActionButton
-                          label={language === 'en' ? 'Add preview selected' : '加入预览入选'}
-                          icon={<BookmarkPlus className="h-3.5 w-3.5" />}
-                          onClick={() => void handleBatchTrackCandidates('preview', previewSelectedDiagnostics.map(diagnosticToCandidate))}
-                          disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !previewSelectedDiagnostics.length}
-                        />
-                        <ActionButton
-                          label={language === 'en' ? 'Add top 5' : '加入前 5 名'}
-                          icon={<BookmarkPlus className="h-3.5 w-3.5" />}
-                          onClick={() => void handleBatchTrackCandidates('top5', sortDiagnosticsForDecision(diagnosticCandidates, previewThreshold).slice(0, 5).map(diagnosticToCandidate))}
-                          disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !diagnosticCandidates.length}
-                        />
-                        <ActionButton
-                          label={language === 'en' ? 'Add filtered' : '加入当前筛选'}
-                          icon={<BookmarkPlus className="h-3.5 w-3.5" />}
-                          onClick={() => void handleBatchTrackCandidates('filtered', decisionSortedDiagnosticCandidates.map(diagnosticToCandidate))}
-                          disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !decisionSortedDiagnosticCandidates.length}
-                        />
-                        <ActionButton
-                          label={language === 'en' ? 'Batch backtest' : '批量回测'}
-                          icon={<LineChart className="h-3.5 w-3.5" />}
-                          onClick={() => handleBacktestBatch('official_selected')}
-                          disabled={isBacktestBatchRunning || backtestCounts.official_selected === 0}
-                        />
+
+                    {runDetail && hasCandidateDiagnostics ? (
+                      <div data-testid="scanner-secondary-sections" className="border-t border-white/10 px-2 py-0">
+                        <div>
+                          {rejectionBuckets.length || hasRunDiagnosticsContent(runDetail) ? (
+                            <DenseSecondaryDisclosure
+                              data-testid="scanner-diagnostics-disclosure"
+                              variant="row"
+                              title={language === 'en' ? 'Data status' : '数据状态'}
+                              summary={language === 'en'
+                                ? `Evaluated ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · selected ${runDetail.summary?.selectedCount ?? shortlistCount} · main rejection ${rejectionBuckets[0]?.label || 'n/a'}`
+                                : `评估 ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · 入选 ${runDetail.summary?.selectedCount ?? shortlistCount} · 主要淘汰 ${rejectionBuckets[0]?.label || '暂无'}`}
+                            >
+                              <div data-testid="scanner-diagnostics-summary" className="mb-2 border-t border-white/8 py-2 text-xs">
+                                <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                                  <p className="min-w-0 text-white/64">
+                                    {language === 'en'
+                                      ? `Evaluated ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · selected ${runDetail.summary?.selectedCount ?? shortlistCount} · main rejection ${rejectionBuckets[0]?.label || 'n/a'}`
+                                      : `评估 ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · 入选 ${runDetail.summary?.selectedCount ?? shortlistCount} · 主要淘汰 ${rejectionBuckets[0]?.label || '暂无'}`}
+                                  </p>
+                                  <ActionButton
+                                    label={language === 'en' ? 'Rejection mix' : '淘汰分布'}
+                                    onClick={() => setIsRejectionSummaryOpen((current) => !current)}
+                                  />
+                                </div>
+                                {isRejectionSummaryOpen && rejectionBuckets.length ? (
+                                  <div data-testid="scanner-rejection-aggregate" className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                                    {rejectionBuckets.map((bucket) => (
+                                      <button
+                                        key={bucket.label}
+                                        type="button"
+                                        className="inline-flex max-w-full items-baseline gap-1 border-b border-white/15 px-1.5 py-0.5 text-[10px] text-white/62 hover:text-white"
+                                        onClick={() => setCandidateFilter(bucket.label === rejectionBucketLabel('data', language) ? 'data_failed' : 'rejected')}
+                                      >
+                                        <span className="truncate">{bucket.label}</span>
+                                        <span className="font-mono text-white/82">{bucket.value}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                              <ScannerDiagnosticsPanel runDetail={runDetail} language={language} />
+                            </DenseSecondaryDisclosure>
+                          ) : null}
+                          <DenseSecondaryDisclosure
+                            data-testid="scanner-run-comparison-strip"
+                            variant="row"
+                            title={language === 'en' ? 'Previous run' : '上次对比'}
+                            summary={comparisonState.previousRun && comparisonState.chips.length
+                              ? `${language === 'en' ? 'Compared with previous run' : '上次对比'}：${comparisonState.chips[0]}`
+                              : (language === 'en' ? 'No previous comparable run' : '暂无上次扫描对比')}
+                          >
+                            <ScannerResultHistorySummary
+                              currentSummary={currentRunSummary}
+                              recentSummary={recentRunSummary}
+                              previousSummary={previousRunSummary}
+                              comparisonItems={comparisonHighlights}
+                              hasHistory={historyItems.length > 0}
+                              language={language}
+                            />
+                            <div className="ui-scroll-x-quiet flex max-w-full items-center gap-1.5">
+                              <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                                {language === 'en' ? 'Compared with previous run' : '上次对比'}
+                              </span>
+                              {comparisonState.previousRun && comparisonState.chips.length ? (
+                                comparisonState.chips.map((chip) => (
+                                  <span key={chip} className="shrink-0 border-b border-white/15 px-1.5 py-0.5 text-white/62">
+                                    {chip}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="shrink-0 border-b border-white/15 px-1.5 py-0.5 text-white/42">
+                                  {language === 'en' ? 'No previous comparable run' : '暂无上次扫描对比'}
+                                </span>
+                              )}
+                            </div>
+                          </DenseSecondaryDisclosure>
+                          <DenseSecondaryDisclosure
+                            data-testid="scanner-strategy-experiment"
+                            variant="row"
+                            title={language === 'en' ? 'Backtest lab' : '回测实验'}
+                            summary={language === 'en' ? 'Simulation · batch backtest · recent results' : '模拟 · 批量回测 · 最近结果'}
+                          >
+                            <div className="grid gap-3">
+                              <div
+                                data-testid="scanner-strategy-preview"
+                                className="border-t border-white/8 py-2 text-xs"
+                              >
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                                    <LineChart className="h-3.5 w-3.5" aria-hidden="true" />
+                                    {language === 'en' ? 'Threshold preview' : '阈值预览'}
+                                  </span>
+                                  {[40, 50, 60].map((threshold) => (
+                                    <button
+                                      key={threshold}
+                                      type="button"
+                                      aria-pressed={previewThreshold === threshold}
+                                      className={`rounded-md border px-2 py-0.5 font-mono text-[11px] ${previewThreshold === threshold ? 'border-blue-400/30 bg-blue-400/12 text-blue-100' : 'border-white/10 bg-white/5 text-white/58 hover:bg-white/10'}`}
+                                      onClick={() => setPreviewThreshold(threshold)}
+                                    >
+                                      {threshold}
+                                    </button>
+                                  ))}
+                                  <FieldChip label={language === 'en' ? 'Official' : '官方'} value={String(runDetail.summary?.selectedCount ?? officialSelectedDiagnostics.length)} />
+                                  <FieldChip label={language === 'en' ? 'Preview' : '预览'} value={String(previewSelectedDiagnostics.length)} />
+                                </div>
+                              </div>
+                              <Suspense fallback={<ScannerStrategySimulationPanelFallback language={language} />}>
+                                <LazyScannerStrategySimulationPanel
+                                  language={language}
+                                  lookbackDays={simulationLookbackDays}
+                                  forwardDays={simulationForwardDays}
+                                  onLookbackDaysChange={setSimulationLookbackDays}
+                                  onForwardDaysChange={setSimulationForwardDays}
+                                  onRun={() => void handleStrategySimulation()}
+                                  result={strategySimulation}
+                                  isLoading={isStrategySimulationLoading}
+                                  error={strategySimulationError}
+                                  disabled={strategySimulationDisabled}
+                                />
+                              </Suspense>
+                              <ScannerBacktestLab
+                                language={language}
+                                items={backtestItems}
+                                isRunning={isBacktestBatchRunning}
+                                onRunBatch={handleBacktestBatch}
+                                onCopySymbol={(symbol) => void handleCopyText(symbol, `backtest:${symbol}`)}
+                                counts={backtestCounts}
+                              />
+                            </div>
+                          </DenseSecondaryDisclosure>
+                        </div>
                       </div>
                     ) : null}
                   </div>
-                </div>
-              </div>
-
-			              <div data-testid="scanner-candidate-scroll-region" className="px-0 py-0">
-	                {showDiagnosticRows ? (
-	                  decisionSortedDiagnosticCandidates.length ? (
-		                    <DenseTableFrame data-testid="scanner-candidate-diagnostics-table" className="px-0 py-0">
-		                      <div>
-	                        {decisionSortedDiagnosticCandidates.map((candidate) => {
-	                          const activeRunDetail = runDetail;
-	                          if (!activeRunDetail) {
-	                            return null;
-	                          }
-	                          const diagnosticCandidate = diagnosticToCandidate(candidate);
-	                          const candidateMarket = normalizeScannerMarket(activeRunDetail.market || market);
-	                          const candidateIdentity = getWatchlistIdentity(candidateMarket, candidate.symbol);
-	                          const isTracked = Boolean(candidateIdentity && trackedWatchlistIdentitySet.has(candidateIdentity));
-	                          const isTrackPending = pendingWatchlistIdentity === candidateIdentity;
-	                          const backtestItem = getBacktestItem(candidate.symbol);
-	                          const isExpanded = expandedSymbol === candidate.symbol;
-	                          const comparison = comparisonState.bySymbol.get(normalizeCandidateSymbol(candidate.symbol) || '');
-	                          const scoreDelta = formatScoreDelta(comparison?.scoreDelta ?? null);
-	                          const isInspectorActive = normalizeCandidateSymbol(inspectorCandidate?.symbol) === normalizeCandidateSymbol(candidate.symbol);
-	                          const isMoreOpen = rowMoreSymbol === candidate.symbol;
-	                          const friendlyReason = formatFriendlyDiagnosticReason(candidate, language);
-	                          const dataQualityLabel = formatCandidateDataQuality(candidate, language);
-	                          const evidenceSummary = getScannerEvidenceSummary(candidate);
-	                          const isSelectedCandidate = isOfficialSelected(candidate);
-	                          const statusLabel = diagnosticStatusLabel(candidate.status, language);
-	                          const missingCount = candidate.missingFields?.length || 0;
-	                          const failedRuleNotes = Array.from(new Set([
-	                            friendlyReason,
-	                            ...(candidate.failedRules || []).map((item) => sanitizeUserFacingDataIssue(item, language)),
-	                          ]));
-	                          const missingFieldNotes = Array.from(new Set((candidate.missingFields || []).map((item) => sanitizeUserFacingDataIssue(item, language))));
-	                          return (
-	                            <ScannerCandidateDiagnosticRow
-	                              key={`diagnostic-${candidate.symbol}`}
-	                              candidate={candidate}
-	                              language={language}
-	                              isSelectedCandidate={isSelectedCandidate}
-	                              isInspectorActive={isInspectorActive}
-	                              isExpanded={isExpanded}
-	                              isMoreOpen={isMoreOpen}
-	                              previewLabel={previewDecisionLabel(candidate, previewThreshold, language)}
-	                              previewBadgeClassName={previewDecisionClass(candidate, previewThreshold)}
-	                              friendlyReason={friendlyReason}
-	                              dataQualityLabel={dataQualityLabel}
-	                              evidenceSummary={evidenceSummary}
-	                              scoreLabel={candidate.score == null ? '--' : `${candidate.score}/100`}
-	                              scoreDelta={scoreDelta}
-	                              comparisonLabel={comparison?.label || null}
-	                              statusLabel={statusLabel}
-	                              missingCount={missingCount}
-	                              failedRuleNotes={failedRuleNotes}
-	                              missingFieldNotes={missingFieldNotes}
-	                              watchlistActionLabel={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
-	                              watchlistActionTitle={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
-	                              isTracked={isTracked}
-	                              isTrackPending={isTrackPending}
-	                              isWatchlistAuthBlocked={watchlistAuthBlocked}
-	                              backtestLabel={getBacktestActionLabel(backtestItem)}
-	                              backtestTitle={!normalizeCandidateSymbol(candidate.symbol) ? backtestUnavailableLabel : undefined}
-	                              backtestItem={backtestItem}
-	                              copyLabel={copiedKey === `candidate:${candidate.symbol}` ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制')}
-	                              onSelect={() => {
-	                                setInspectorSymbol(candidate.symbol);
-	                                setExpandedSymbol(candidate.symbol);
-	                              }}
-	                              onViewEvidence={() => {
-	                                setInspectorSymbol(candidate.symbol);
-	                                setExpandedSymbol(candidate.symbol);
-	                              }}
-	                              onToggleMore={() => setRowMoreSymbol((current) => current === candidate.symbol ? null : candidate.symbol)}
-	                              onBacktest={() => void handleBacktestCandidate(diagnosticCandidate)}
-	                              onTrack={() => void handleTrackCandidate(diagnosticCandidate)}
-	                              onCopy={() => void handleCopyText(candidate.symbol, `candidate:${candidate.symbol}`)}
-	                              onExport={() => {
-	                                handleExportRows(
-	                                  [buildScannerExportRow(diagnosticCandidate, activeRunDetail, language)],
-	                                  buildScannerExportFilename(activeRunDetail, `candidate-${candidate.symbol}`),
-	                                );
-	                              }}
-	                            />
-	                          );
-	                        })}
-	                      </div>
-	                    </DenseTableFrame>
-	                  ) : (
-	                    <CompactEmptyRow
-	                      title={language === 'en' ? 'No candidates in this filter' : '当前过滤无候选'}
-	                      className="m-3"
-	                    >
-	                      {language === 'en' ? 'Switch to Candidate pool or All to inspect the full submitted universe.' : '切换到候选池或全部查看完整提交范围。'}
-	                    </CompactEmptyRow>
-	                  )
-	                ) : sortedCandidates.length ? (
-	                  <DenseTableFrame data-testid="scanner-result-table">
-	                    <table className="w-full min-w-[760px] border-collapse text-left text-xs xl:min-w-full">
-                      <thead className="border-b border-white/10 bg-black/[0.18] text-[10px] uppercase tracking-[0.14em] text-white/38">
-                        <tr>
-                          <th className="px-2.5 py-1.5">{language === 'en' ? 'Rank' : '排名'}</th>
-                          <th className="px-2.5 py-1.5">{language === 'en' ? 'Symbol / name' : '代码 / 名称'}</th>
-                          <th className="px-2.5 py-1.5">{language === 'en' ? 'Score' : '评分'}</th>
-                          <th className="px-2.5 py-1.5">{language === 'en' ? 'Status' : '状态'}</th>
-                          <th className="px-2.5 py-1.5">{language === 'en' ? 'Key reason' : '关键原因'}</th>
-                          <th className="px-2.5 py-1.5">{language === 'en' ? 'Data state' : '数据状态'}</th>
-                          <th className="px-2.5 py-1.5 text-right">{language === 'en' ? 'Actions' : '操作'}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sortedCandidates.map((candidate) => {
-                          const isExpanded = expandedSymbol === candidate.symbol;
-                          const candidateIdentity = getCandidateIdentity(candidate);
-                          const candidateWatchlistIdentity = getWatchlistIdentity(runDetail?.market || market, candidate.symbol);
-                          const isTracked = trackedWatchlistIdentitySet.has(candidateWatchlistIdentity);
-                          const isTrackPending = pendingWatchlistIdentity === candidateWatchlistIdentity;
-                          const backtestItem = getBacktestItem(candidate.symbol);
-                          const isMoreOpen = rowMoreSymbol === candidate.symbol;
-                          return (
-                            <ScannerCandidateTableRow
-                              key={`table-${candidateIdentity}`}
-                              candidate={candidate}
-                              candidateIdentity={candidateIdentity}
-                              language={language}
-                              isExpanded={isExpanded}
-                              keyReason={getKeyReason(candidate, runDetail, language)}
-                              riskSummary={getRiskSummary(candidate, language)}
-                              sourceBadge={getSourceBadge(candidate, runDetail, language) || (language === 'en' ? 'Verified' : '已验证')}
-                              scoreBadgeClassName={scoreBadgeClass(candidate.score)}
-                              watchlistActionLabel={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
-                              watchlistActionTitle={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
-                              copyLabel={copiedKey === `candidate:${candidate.symbol}` ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制')}
-                              backtestLabel={getBacktestActionLabel(backtestItem)}
-                              backtestTitle={!normalizeCandidateSymbol(candidate.symbol) ? backtestUnavailableLabel : undefined}
-                              isTracked={isTracked}
-                              isTrackPending={isTrackPending}
-                              isAnalyzing={pendingAnalyzeSymbol === candidate.symbol}
-                              isBacktestDisabled={!normalizeCandidateSymbol(candidate.symbol) || backtestItem?.status === 'running' || backtestItem?.status === 'queued'}
-                              isMoreOpen={isMoreOpen}
-                              detailPanel={renderCandidateDetailPanel(candidate, isTracked, isTrackPending, backtestItem)}
-                              onSelect={() => {
-                                setInspectorSymbol(candidate.symbol);
-                                setExpandedSymbol(isExpanded ? null : candidate.symbol);
-                              }}
-                              onAnalyze={() => void handleAnalyzeCandidate(candidate)}
-                              onTrack={() => void handleTrackCandidate(candidate)}
-                              onCopy={() => void handleCopyText(candidate.symbol, `candidate:${candidate.symbol}`)}
-                              onToggleDetail={() => setExpandedSymbol(isExpanded ? null : candidate.symbol)}
-                              onToggleMore={() => setRowMoreSymbol((current) => current === candidate.symbol ? null : candidate.symbol)}
-                              onBacktest={() => void handleBacktestCandidate(candidate)}
-                            />
-                          );
-                        })}
-                      </tbody>
-                    </table>
-	                  </DenseTableFrame>
-	              ) : (
-	                <CompactEmptyRow
-	                  title={runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length ? (language === 'en' ? 'No selected candidates' : '本次无入选候选') : emptyStateTitle}
-	                  className="m-3"
-	                >
-	                  {runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length
-	                    ? (language === 'en' ? 'Open Candidate pool or All to inspect rejected and data-failed candidates.' : '切换到候选池或全部查看淘汰与数据失败原因。')
-		                    : pageErrorSummary || emptyStateBody}
-	                </CompactEmptyRow>
-	              )}
-	              </div>
-
-	              {runDetail && hasCandidateDiagnostics ? (
-		                <div data-testid="scanner-secondary-sections" className="border-t border-white/10 px-2 py-0">
-		                  <div>
-	                    {rejectionBuckets.length || hasRunDiagnosticsContent(runDetail) ? (
-		                      <DenseSecondaryDisclosure
-		                        data-testid="scanner-diagnostics-disclosure"
-		                        variant="row"
-	                        title={language === 'en' ? 'Data status' : '数据状态'}
-	                        summary={language === 'en'
-	                          ? `Evaluated ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · selected ${runDetail.summary?.selectedCount ?? shortlistCount} · main rejection ${rejectionBuckets[0]?.label || 'n/a'}`
-	                          : `评估 ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · 入选 ${runDetail.summary?.selectedCount ?? shortlistCount} · 主要淘汰 ${rejectionBuckets[0]?.label || '暂无'}`}
-	                      >
-                        <div data-testid="scanner-diagnostics-summary" className="mb-2 border-t border-white/8 py-2 text-xs">
-                          <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                            <p className="min-w-0 text-white/64">
-                              {language === 'en'
-                                ? `Evaluated ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · selected ${runDetail.summary?.selectedCount ?? shortlistCount} · main rejection ${rejectionBuckets[0]?.label || 'n/a'}`
-                                : `评估 ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · 入选 ${runDetail.summary?.selectedCount ?? shortlistCount} · 主要淘汰 ${rejectionBuckets[0]?.label || '暂无'}`}
-                            </p>
-                            <ActionButton
-                              label={language === 'en' ? 'Rejection mix' : '淘汰分布'}
-                              onClick={() => setIsRejectionSummaryOpen((current) => !current)}
-                            />
-                          </div>
-                          {isRejectionSummaryOpen && rejectionBuckets.length ? (
-                            <div data-testid="scanner-rejection-aggregate" className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
-                              {rejectionBuckets.map((bucket) => (
-                                <button
-                                  key={bucket.label}
-                                  type="button"
-                                  className="inline-flex max-w-full items-baseline gap-1 border-b border-white/15 px-1.5 py-0.5 text-[10px] text-white/62 hover:text-white"
-                                  onClick={() => setCandidateFilter(bucket.label === rejectionBucketLabel('data', language) ? 'data_failed' : 'rejected')}
-                                >
-                                  <span className="truncate">{bucket.label}</span>
-                                  <span className="font-mono text-white/82">{bucket.value}</span>
-                                </button>
-                              ))}
-                            </div>
-                          ) : null}
-	                        </div>
-	                        <ScannerDiagnosticsPanel runDetail={runDetail} language={language} />
-	                      </DenseSecondaryDisclosure>
-	                    ) : null}
-	                    <DenseSecondaryDisclosure
-	                      data-testid="scanner-run-comparison-strip"
-	                      variant="row"
-	                      title={language === 'en' ? 'Previous run' : '上次对比'}
-                      summary={comparisonState.previousRun && comparisonState.chips.length
-                        ? `${language === 'en' ? 'Compared with previous run' : '上次对比'}：${comparisonState.chips[0]}`
-                        : (language === 'en' ? 'No previous comparable run' : '暂无上次扫描对比')}
-	                    >
-                      <ScannerResultHistorySummary
-                        currentSummary={currentRunSummary}
-                        recentSummary={recentRunSummary}
-                        previousSummary={previousRunSummary}
-                        comparisonItems={comparisonHighlights}
-                        hasHistory={historyItems.length > 0}
-                        language={language}
-                      />
-                      <div className="ui-scroll-x-quiet flex max-w-full items-center gap-1.5">
-                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-white/40">
-                          {language === 'en' ? 'Compared with previous run' : '上次对比'}
-                        </span>
-                        {comparisonState.previousRun && comparisonState.chips.length ? (
-                          comparisonState.chips.map((chip) => (
-                            <span key={chip} className="shrink-0 border-b border-white/15 px-1.5 py-0.5 text-white/62">
-                              {chip}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="shrink-0 border-b border-white/15 px-1.5 py-0.5 text-white/42">
-                            {language === 'en' ? 'No previous comparable run' : '暂无上次扫描对比'}
-	                          </span>
-	                        )}
-	                      </div>
-	                    </DenseSecondaryDisclosure>
-	                    <DenseSecondaryDisclosure
-	                      data-testid="scanner-strategy-experiment"
-	                      variant="row"
-	                      title={language === 'en' ? 'Backtest lab' : '回测实验'}
-	                      summary={language === 'en' ? 'Simulation · batch backtest · recent results' : '模拟 · 批量回测 · 最近结果'}
-	                    >
-                      <div className="grid gap-3">
-                        <div
-                          data-testid="scanner-strategy-preview"
-                          className="border-t border-white/8 py-2 text-xs"
-                        >
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-white/40">
-                              <LineChart className="h-3.5 w-3.5" aria-hidden="true" />
-                              {language === 'en' ? 'Threshold preview' : '阈值预览'}
-                            </span>
-                            {[40, 50, 60].map((threshold) => (
-                              <button
-                                key={threshold}
-                                type="button"
-                                aria-pressed={previewThreshold === threshold}
-                                className={`rounded-md border px-2 py-0.5 font-mono text-[11px] ${previewThreshold === threshold ? 'border-blue-400/30 bg-blue-400/12 text-blue-100' : 'border-white/10 bg-white/5 text-white/58 hover:bg-white/10'}`}
-                                onClick={() => setPreviewThreshold(threshold)}
-                              >
-                                {threshold}
-                              </button>
-                            ))}
-                            <FieldChip label={language === 'en' ? 'Official' : '官方'} value={String(runDetail.summary?.selectedCount ?? officialSelectedDiagnostics.length)} />
-                            <FieldChip label={language === 'en' ? 'Preview' : '预览'} value={String(previewSelectedDiagnostics.length)} />
-                          </div>
-                        </div>
-                        <Suspense fallback={<ScannerStrategySimulationPanelFallback language={language} />}>
-                          <LazyScannerStrategySimulationPanel
-                            language={language}
-                            lookbackDays={simulationLookbackDays}
-                            forwardDays={simulationForwardDays}
-                            onLookbackDaysChange={setSimulationLookbackDays}
-                            onForwardDaysChange={setSimulationForwardDays}
-                            onRun={() => void handleStrategySimulation()}
-                            result={strategySimulation}
-                            isLoading={isStrategySimulationLoading}
-                            error={strategySimulationError}
-                            disabled={strategySimulationDisabled}
-                          />
-                        </Suspense>
-                        <ScannerBacktestLab
-                          language={language}
-                          items={backtestItems}
-                          isRunning={isBacktestBatchRunning}
-                          onRunBatch={handleBacktestBatch}
-                          onCopySymbol={(symbol) => void handleCopyText(symbol, `backtest:${symbol}`)}
-	                          counts={backtestCounts}
-	                        />
-	                      </div>
-	                    </DenseSecondaryDisclosure>
-                  </div>
-                </div>
-              ) : null}
-              </div>
-	            </DenseTableShell>
+                </DenseTableShell>
 		          </div>
-		        </TerminalPageShell>
+	        </TerminalPageShell>
           </WideWorkspaceShellScope>
       </div>
 
