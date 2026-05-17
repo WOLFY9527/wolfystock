@@ -1,3 +1,16 @@
+## 2026-05-17
+
+- **WolfyStock system handbook and docs navigation layer** - Added
+  `docs/DOCS_INDEX.md`, `docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md`,
+  `docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md`,
+  `docs/ARCHIVE_INDEX.md`, and
+  `docs/operations/WOLFYSTOCK_RUNBOOK.md` as a consolidated entry layer for
+  human and AI maintenance. `README.md` now links the new index/handbooks and
+  fixes the stale Frontend Design Constitution link to the tracked
+  `docs/codex/` file. This is docs-only navigation and maintenance guidance:
+  no runtime code, API behavior, frontend source, tests, scripts, workflows,
+  package files, archive moves/deletes, or protected-domain semantics changed.
+
 ## 2026-05-11
 
 - 🛡️ **Codex guard-source-of-truth hardening** — Updated the existing WolfyStock

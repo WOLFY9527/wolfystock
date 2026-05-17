@@ -28,6 +28,9 @@ tool.
 
 Useful entry points:
 
+- `docs/DOCS_INDEX.md`: documentation navigation start page.
+- `docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md`: system/module/route/API handbook.
+- `docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md`: AI maintenance workflow manual.
 - `main.py`: analysis and local run entry.
 - `server.py`: FastAPI service entry.
 - `apps/dsa-web/`: WolfyStock web terminal.
@@ -60,6 +63,9 @@ Useful entry points:
 
 Related docs:
 
+- [Docs Index](docs/DOCS_INDEX.md)
+- [WolfyStock System Handbook](docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md)
+- [WolfyStock AI Maintenance Manual](docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md)
 - [Market Scanner](docs/market-scanner.md)
 - [Full Guide](docs/full-guide.md)
 - [FAQ](docs/FAQ.md)
@@ -84,9 +90,12 @@ Current engineering priorities:
 
 Primary reference docs:
 
+- [WolfyStock Documentation Index](docs/DOCS_INDEX.md)
+- [WolfyStock System Handbook](docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md)
+- [WolfyStock AI Maintenance Manual](docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md)
 - [WolfyStock Modular Architecture Manual](docs/architecture/WOLFYSTOCK_MODULE_ARCHITECTURE.md)
 - [Backend / Frontend Modular Maintenance Handbook](docs/architecture/backend-frontend-modular-maintenance-handbook.md)
-- [Frontend Design Constitution](CODEX_FRONTEND_DESIGN_CONSTITUTION.md)
+- [Frontend Design Constitution](docs/codex/CODEX_FRONTEND_DESIGN_CONSTITUTION.md)
 - [Frontend Validation Playbook](docs/codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md)
 
 ## AI-Agent Assisted Development
