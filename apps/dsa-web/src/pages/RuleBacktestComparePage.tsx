@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Button, Card, Disclosure, WorkspacePageHeader } from '../components/common';
+import { ApiErrorAlert, Button } from '../components/common';
 import {
   TerminalChip,
   TerminalEmptyState,
@@ -12,6 +12,15 @@ import {
   TerminalPageShell,
   TerminalSectionHeader,
 } from '../components/terminal';
+import {
+  ConsoleBoard,
+  ConsoleContextRail,
+  ConsoleDisclosure,
+  ConsoleStatusStrip,
+  KeyLevelStrip,
+  ResearchConsoleShell,
+  WolfyCommandBar,
+} from '../components/linear';
 import RuleBacktestCompareHeatmapProjectionPanel from '../components/backtest/RuleBacktestCompareHeatmapProjectionPanel';
 import {
   Banner,
@@ -1270,12 +1279,18 @@ const RuleBacktestComparePage: React.FC = () => {
   return (
     <main className="w-full overflow-x-hidden text-white">
       <TerminalPageShell data-testid="rule-backtest-compare-page">
-        <WorkspacePageHeader
-          eyebrow="WolfyStock"
-          title="规则回测比较工作台"
-          description={`按请求顺序对比已完成规则回测运行。当前 runIds: ${runIds.length ? runIds.join(', ') : '--'}`}
-          actions={(
-            <div className="product-action-row">
+        <WolfyCommandBar
+          leading={(
+            <div className="min-w-0">
+              <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">WolfyStock</p>
+              <h1 className="mt-1 truncate text-lg font-semibold text-[color:var(--wolfy-text-primary)] md:text-xl">规则回测比较工作台</h1>
+              <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">
+                按请求顺序对比已完成规则回测运行。当前 runIds: {runIds.length ? runIds.join(', ') : '--'}
+              </p>
+            </div>
+          )}
+          trailing={(
+            <div className="flex flex-wrap gap-2">
               <Button variant="ghost" onClick={() => navigate('/backtest')}>
                 返回回测工作区
               </Button>
@@ -1286,310 +1301,350 @@ const RuleBacktestComparePage: React.FC = () => {
           )}
         />
 
-          {runIds.length < 2 ? (
-            <section className="backtest-display-section">
-              <Card title="比较工作台未就绪" subtitle="需要至少两条运行记录" className="product-section-card product-section-card--backtest-result">
-                <div className="product-empty-state product-empty-state--compact">至少需要 2 条已完成运行才能打开比较工作台。</div>
-              </Card>
-            </section>
-          ) : null}
-
-          {runIds.length >= 2 && isLoading && !response ? (
-            <section className="backtest-display-section">
-              <Card title="加载比较结果" subtitle="正在调用存储优先比较接口" className="product-section-card product-section-card--backtest-result">
-                <div className="product-empty-state product-empty-state--compact">正在拉取比较结果…</div>
-              </Card>
-            </section>
-          ) : null}
-
-          {runIds.length >= 2 && error ? (
-            <section className="backtest-display-section">
-              <Card title="比较加载失败" subtitle="比较接口返回了错误" className="product-section-card product-section-card--backtest-result">
-                <ApiErrorAlert error={error} />
-              </Card>
-            </section>
-          ) : null}
-
-          {runIds.length >= 2 && response ? (
-            <>
-              <div className="compare-section-nav-shell">
-                <nav className="compare-section-nav" aria-label="比较区块导航">
-                  {COMPARE_SECTION_LINKS.map((item) => (
-                    <a key={item.id} className="product-chip product-chip--interactive compare-section-nav__link" href={`#${item.id}`}>
-                      {item.label}
-                    </a>
-                  ))}
-                </nav>
+        {runIds.length < 2 ? (
+          <section className="backtest-display-section">
+            <ConsoleBoard>
+              <div className="p-4 md:p-5">
+                <TerminalEmptyState title="比较工作台未就绪">
+                  至少需要 2 条已完成运行才能打开比较工作台。
+                </TerminalEmptyState>
               </div>
+            </ConsoleBoard>
+          </section>
+        ) : null}
 
-          <section id="compare-summary" className="backtest-display-section">
-            <Card title="比较摘要" subtitle="先看整体上下文，再决定是否相信单项领先" className="product-section-card product-section-card--backtest-result">
-              <SummaryStrip
+        {runIds.length >= 2 && isLoading && !response ? (
+          <section className="backtest-display-section">
+            <ConsoleBoard>
+              <div className="flex flex-col gap-3 p-4 md:p-5">
+                <div>
+                  <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">正在调用存储优先比较接口</p>
+                  <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">加载比较结果</h2>
+                </div>
+                <div className="text-sm text-[color:var(--wolfy-text-secondary)]">正在拉取比较结果…</div>
+              </div>
+            </ConsoleBoard>
+          </section>
+        ) : null}
+
+        {runIds.length >= 2 && error ? (
+          <section className="backtest-display-section">
+            <ConsoleBoard>
+              <div className="flex flex-col gap-3 p-4 md:p-5">
+                <div>
+                  <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">比较接口返回了错误</p>
+                  <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">比较加载失败</h2>
+                </div>
+                <ApiErrorAlert error={error} />
+              </div>
+            </ConsoleBoard>
+          </section>
+        ) : null}
+
+        {runIds.length >= 2 && response ? (
+          <ResearchConsoleShell
+            command={(
+              <ConsoleStatusStrip
                 items={[
                   {
+                    key: 'baseline',
                     label: '基准运行',
                     value: baselineRunId == null ? '--' : `#${baselineRunId}`,
-                    note: baselineItem?.metadata.code || comparisonSummary?.baseline.code || '--',
                   },
                   {
+                    key: 'overall',
                     label: '整体状态',
                     value: formatCompareStateWithRaw(robustnessSummary?.overallState),
-                    note: `请求 ${response.requestedRunIds.length} / 可比 ${response.comparableRunIds.length}`,
                   },
                   {
+                    key: 'profile',
                     label: '主要画像',
                     value: formatCompareStateWithRaw(comparisonProfile?.primaryProfile),
-                    note: comparisonProfile?.drivingDimensions?.length ? formatCompareList(comparisonProfile.drivingDimensions) : '无驱动维度',
                   },
                   {
+                    key: 'source',
                     label: '比较来源',
                     value: formatCompareStateWithRaw(response.comparisonSource),
-                    note: formatCompareStateWithRaw(response.readMode),
                   },
                 ]}
               />
-              <div className="compare-share-actions">
-                <Button size="sm" variant="ghost" onClick={() => void handleCopyText(compareUrl, '已复制当前比较链接')}>复制链接</Button>
-                <Button size="sm" variant="ghost" onClick={() => void handleCopyText(runIds.join(','), '已复制当前运行 ID')}>复制运行 ID</Button>
-                <Button size="sm" variant="ghost" onClick={() => void handleCopyText(compareSummaryText, '已复制比较摘要')}>复制摘要</Button>
-                {copyFeedback ? <span className="product-footnote compare-share-actions__feedback">{copyFeedback}</span> : null}
-              </div>
-              <div className="preview-grid">
-                <div className="preview-card">
-                  <p className="metric-card__label">基准</p>
-                  <p className="preview-card__text">#{baselineRunId ?? '--'} · {formatCompareStateWithRaw(comparisonSummary?.baseline.strategyType)}</p>
-                </div>
-                <div className="preview-card">
-                  <p className="metric-card__label">周期 / 代码</p>
-                  <p className="preview-card__text">{comparisonSummary?.baseline.timeframe || '--'} · {comparisonSummary?.baseline.code || '--'}</p>
-                </div>
-                <div className="preview-card">
-                  <p className="metric-card__label">缺失运行</p>
-                  <p className="preview-card__text">{response.missingRunIds.length ? response.missingRunIds.join(', ') : '--'}</p>
-                </div>
-                <div className="preview-card">
-                  <p className="metric-card__label">字段分组</p>
-                  <p className="preview-card__text">{formatCompareList(response.fieldGroups)}</p>
-                </div>
-              </div>
-              {response.unavailableRuns.length ? (
-                <div className="mt-4">
-                  <Banner
-                    tone="warning"
-                    title="存在不可用运行"
-                    body={response.unavailableRuns.map((item) => `#${item.runId}: ${item.reason}`).join(' | ')}
+            )}
+            rail={(
+              <ConsoleContextRail className="gap-0">
+                <section id="compare-summary" className="space-y-3">
+                  <div>
+                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">比较摘要</p>
+                    <h2 className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">先看整体上下文，再决定是否相信单项领先</h2>
+                  </div>
+                  <nav aria-label="比较区块导航" className="flex flex-wrap gap-2">
+                    {COMPARE_SECTION_LINKS.map((item) => (
+                      <a key={item.id} className="product-chip product-chip--interactive compare-section-nav__link" href={`#${item.id}`}>
+                        {item.label}
+                      </a>
+                    ))}
+                  </nav>
+                  <div className="space-y-2 text-xs text-[color:var(--wolfy-text-secondary)]">
+                    <div className="flex items-start justify-between gap-3">
+                      <span>基准</span>
+                      <span className="max-w-[60%] truncate text-right font-mono text-[color:var(--wolfy-text-primary)]">
+                        #{baselineRunId ?? '--'} · {formatCompareStateWithRaw(comparisonSummary?.baseline.strategyType)}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <span>周期 / 代码</span>
+                      <span className="max-w-[60%] truncate text-right font-mono text-[color:var(--wolfy-text-primary)]">
+                        {comparisonSummary?.baseline.timeframe || '--'} · {comparisonSummary?.baseline.code || '--'}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <span>缺失运行</span>
+                      <span className="max-w-[60%] truncate text-right font-mono text-[color:var(--wolfy-text-primary)]">
+                        {response.missingRunIds.length ? response.missingRunIds.join(', ') : '--'}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <span>字段分组</span>
+                      <span className="max-w-[60%] truncate text-right font-mono text-[color:var(--wolfy-text-primary)]">
+                        {formatCompareList(response.fieldGroups)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => void handleCopyText(compareUrl, '已复制当前比较链接')}>复制链接</Button>
+                    <Button size="sm" variant="ghost" onClick={() => void handleCopyText(runIds.join(','), '已复制当前运行 ID')}>复制运行 ID</Button>
+                    <Button size="sm" variant="ghost" onClick={() => void handleCopyText(compareSummaryText, '已复制比较摘要')}>复制摘要</Button>
+                  </div>
+                  {copyFeedback ? <p className="text-xs text-[color:var(--wolfy-text-muted)]">{copyFeedback}</p> : null}
+                  {response.unavailableRuns.length ? (
+                    <Banner
+                      tone="warning"
+                      title="存在不可用运行"
+                      body={response.unavailableRuns.map((item) => `#${item.runId}: ${item.reason}`).join(' | ')}
+                    />
+                  ) : null}
+                </section>
+                <ConsoleDisclosure id="compare-highlights" title="比较亮点" summary="只展示后端已标记可信的比较亮点" defaultOpen>
+                  <SummaryStrip
+                    items={[
+                      {
+                        label: '主要画像',
+                        value: formatCompareStateWithRaw(comparisonHighlights?.primaryProfile),
+                        note: formatCompareStateWithRaw(comparisonHighlights?.selectionRule),
+                      },
+                      {
+                        label: '整体上下文',
+                        value: formatCompareStateWithRaw(comparisonHighlights?.overallContextState),
+                        note: `基准 #${comparisonHighlights?.baselineRunId ?? '--'}`,
+                      },
+                    ]}
                   />
-                </div>
-              ) : null}
-            </Card>
-          </section>
-
-          <section id="compare-chart-strip" className="backtest-display-section">
-            <Card title="指标条带" subtitle="只取最小已校验指标子集，先用轻量条带看基准与候选的相对位置" className="product-section-card product-section-card--backtest-secondary">
-              <CompareMetricChartStrip
-                items={orderedItems}
-                baselineRunId={baselineRunId}
-                metricDeltas={comparisonSummary?.metricDeltas || {}}
-                highlights={comparisonHighlights?.highlights || {}}
-              />
-            </Card>
-          </section>
-
-          <section id="compare-highlights" className="backtest-display-section">
-            <Card title="比较亮点" subtitle="只展示后端已标记可信的比较亮点" className="product-section-card product-section-card--backtest-secondary">
-              <Disclosure defaultOpen summary="展开 / 比较亮点" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
-                <SummaryStrip
-                  items={[
-                    {
-                      label: '主要画像',
-                      value: formatCompareStateWithRaw(comparisonHighlights?.primaryProfile),
-                      note: formatCompareStateWithRaw(comparisonHighlights?.selectionRule),
-                    },
-                    {
-                      label: '整体上下文',
-                      value: formatCompareStateWithRaw(comparisonHighlights?.overallContextState),
-                      note: `基准 #${comparisonHighlights?.baselineRunId ?? '--'}`,
-                    },
-                  ]}
-                />
-                <div className="mt-4">
-                  <HighlightCards highlights={comparisonHighlights?.highlights || {}} />
-                </div>
-                <div className="mt-4">
-                  <DiagnosticChipList diagnostics={comparisonHighlights?.diagnostics} />
-                </div>
-              </Disclosure>
-            </Card>
-          </section>
-
-          <section id="compare-metric-matrix" className="backtest-display-section">
-            <Card title="指标矩阵" subtitle="把基准、差异、领先项与不可用状态压到一张易扫读的比较表" className="product-section-card product-section-card--backtest-secondary">
-              <SummaryStrip
-                items={[
+                  <div className="mt-4">
+                    <HighlightCards highlights={comparisonHighlights?.highlights || {}} />
+                  </div>
+                  <div className="mt-4">
+                    <DiagnosticChipList diagnostics={comparisonHighlights?.diagnostics} />
+                  </div>
+                </ConsoleDisclosure>
+                <ConsoleDisclosure id="compare-robustness" title="稳健性画像" summary="明确显示部分、有限、不可用状态，而不是静默吞掉" defaultOpen>
+                  <SummaryStrip
+                    items={[
+                      {
+                        label: '稳健性',
+                        value: formatCompareStateWithRaw(robustnessSummary?.overallState),
+                        note: `可直接比较 ${robustnessSummary?.directlyComparable == null ? '--' : renderBooleanLabel(robustnessSummary.directlyComparable)}`,
+                      },
+                      {
+                        label: '一致维度',
+                        value: String(robustnessSummary?.alignedDimensions.length ?? 0),
+                        note: formatCompareList(robustnessSummary?.alignedDimensions),
+                      },
+                      {
+                        label: '部分维度',
+                        value: String(robustnessSummary?.partialDimensions.length ?? 0),
+                        note: formatCompareList(robustnessSummary?.partialDimensions),
+                      },
+                      {
+                        label: '主要画像',
+                        value: formatCompareStateWithRaw(comparisonProfile?.primaryProfile),
+                        note: formatCompareList(comparisonProfile?.diagnostics),
+                      },
+                    ]}
+                  />
+                  <div className="preview-grid mt-4">
+                    <div className="preview-card">
+                      <p className="metric-card__label">同一标的</p>
+                      <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.sameCode)}</p>
+                    </div>
+                    <div className="preview-card">
+                      <p className="metric-card__label">同一市场</p>
+                      <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.sameMarket)}</p>
+                    </div>
+                    <div className="preview-card">
+                      <p className="metric-card__label">存在参数差异</p>
+                      <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.parameterDifferencesPresent)}</p>
+                    </div>
+                    <div className="preview-card">
+                      <p className="metric-card__label">存在区间差异</p>
+                      <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.periodDifferencesPresent)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <RobustnessDimensionCards dimensions={robustnessSummary?.dimensions || {}} />
+                  </div>
+                </ConsoleDisclosure>
+                <ConsoleDisclosure title="市场与区间上下文" summary="比较边界直接展示后端判定，不二次推断" defaultOpen>
+                  <div id="compare-market-period" className="preview-grid">
+                    <div className="preview-card">
+                      <p className="metric-card__label">市场 / 代码比较</p>
+                      <p className="preview-card__text">{formatCompareStateWithRaw(marketCodeComparison?.state)}</p>
+                      <p className="product-footnote">关系：{formatCompareStateWithRaw(marketCodeComparison?.relationship)}</p>
+                      <p className="product-footnote">可直接比较：{marketCodeComparison?.directlyComparable == null ? '--' : renderBooleanLabel(marketCodeComparison.directlyComparable)}</p>
+                      <DiagnosticChipList diagnostics={marketCodeComparison?.diagnostics} />
+                    </div>
+                    <div className="preview-card">
+                      <p className="metric-card__label">区间比较</p>
+                      <p className="preview-card__text">{formatCompareStateWithRaw(periodComparison?.state)}</p>
+                      <p className="product-footnote">关系：{formatCompareStateWithRaw(periodComparison?.relationship)}</p>
+                      <p className="product-footnote">有意义可比：{periodComparison?.meaningfullyComparable == null ? '--' : renderBooleanLabel(periodComparison.meaningfullyComparable)}</p>
+                      <DiagnosticChipList diagnostics={periodComparison?.diagnostics} />
+                    </div>
+                  </div>
+                </ConsoleDisclosure>
+                <ConsoleDisclosure title="参数与指标" summary="参数差异与已校验指标差异放在同一工作台里读" defaultOpen>
+                  <div id="compare-parameter-metrics" className="space-y-4">
+                    <div className="preview-grid">
+                      <div className="preview-card">
+                        <p className="metric-card__label">参数比较</p>
+                        <p className="preview-card__text">{formatCompareStateWithRaw(parameterComparison?.state)}</p>
+                        <p className="product-footnote">共享：{parameterComparison?.sharedParameterKeys.length ?? 0}</p>
+                        <p className="product-footnote">不同：{parameterComparison?.differingParameterKeys.length ?? 0}</p>
+                        <p className="product-footnote">缺失：{parameterComparison?.missingParameterKeys.length ?? 0}</p>
+                      </div>
+                      <div className="preview-card">
+                        <p className="metric-card__label">摘要上下文</p>
+                        <p className="preview-card__text">全部同标的：{renderBooleanLabel(comparisonSummary?.context.allSameCode)}</p>
+                        <p className="product-footnote">全部同周期：{renderBooleanLabel(comparisonSummary?.context.allSameTimeframe)}</p>
+                        <p className="product-footnote">全部同日期区间：{renderBooleanLabel(comparisonSummary?.context.allSameDateRange)}</p>
+                      </div>
+                    </div>
+                    <MetricDeltaTable metricDeltas={comparisonSummary?.metricDeltas || {}} />
+                  </div>
+                </ConsoleDisclosure>
+              </ConsoleContextRail>
+            )}
+          >
+            <ConsoleBoard className="min-h-0">
+              <KeyLevelStrip
+                className="sm:grid-cols-2 xl:grid-cols-4"
+                levels={[
                   {
-                    label: '基准',
+                    key: 'baseline',
+                    label: '基准运行',
                     value: baselineRunId == null ? '--' : `#${baselineRunId}`,
-                    note: baselineItem?.metadata.code || '--',
                   },
                   {
+                    key: 'overall',
                     label: '整体状态',
                     value: formatCompareStateWithRaw(robustnessSummary?.overallState),
-                    note: formatCompareStateWithRaw(comparisonProfile?.primaryProfile),
                   },
                   {
-                    label: '指标数',
-                    value: String(Object.keys(comparisonSummary?.metricDeltas || {}).length),
-                    note: response.comparableRunIds.map((id) => `#${id}`).join(', ') || '--',
+                    key: 'counts',
+                    label: '请求 / 可比',
+                    value: `${response.requestedRunIds.length} / ${response.comparableRunIds.length}`,
+                  },
+                  {
+                    key: 'parameters',
+                    label: '参数状态',
+                    value: formatCompareStateWithRaw(parameterComparison?.state),
                   },
                 ]}
               />
-              <div className="mt-4">
-                <CompareMetricMatrix
-                  items={orderedItems}
-                  baselineRunId={baselineRunId}
-                  metricDeltas={comparisonSummary?.metricDeltas || {}}
-                  highlights={comparisonHighlights?.highlights || {}}
-                  overallState={robustnessSummary?.overallState}
-                  primaryProfile={comparisonProfile?.primaryProfile}
-                />
+              <div className="flex flex-col gap-6 p-3 md:p-4">
+                <section id="compare-chart-strip" className="space-y-3">
+                  <div>
+                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">指标条带</p>
+                    <h2 className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">只取最小已校验指标子集，先用轻量条带看基准与候选的相对位置</h2>
+                  </div>
+                  <CompareMetricChartStrip
+                    items={orderedItems}
+                    baselineRunId={baselineRunId}
+                    metricDeltas={comparisonSummary?.metricDeltas || {}}
+                    highlights={comparisonHighlights?.highlights || {}}
+                  />
+                </section>
+
+                <section id="compare-metric-matrix" className="space-y-4">
+                  <div>
+                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">指标矩阵</p>
+                    <h2 className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">把基准、差异、领先项与不可用状态压到一张易扫读的比较表</h2>
+                  </div>
+                  <SummaryStrip
+                    items={[
+                      {
+                        label: '基准',
+                        value: baselineRunId == null ? '--' : `#${baselineRunId}`,
+                        note: baselineItem?.metadata.code || '--',
+                      },
+                      {
+                        label: '整体状态',
+                        value: formatCompareStateWithRaw(robustnessSummary?.overallState),
+                        note: formatCompareStateWithRaw(comparisonProfile?.primaryProfile),
+                      },
+                      {
+                        label: '指标数',
+                        value: String(Object.keys(comparisonSummary?.metricDeltas || {}).length),
+                        note: response.comparableRunIds.map((id) => `#${id}`).join(', ') || '--',
+                      },
+                    ]}
+                  />
+                  <CompareMetricMatrix
+                    items={orderedItems}
+                    baselineRunId={baselineRunId}
+                    metricDeltas={comparisonSummary?.metricDeltas || {}}
+                    highlights={comparisonHighlights?.highlights || {}}
+                    overallState={robustnessSummary?.overallState}
+                    primaryProfile={comparisonProfile?.primaryProfile}
+                  />
+                </section>
+
+                <section id="compare-parameter-sensitivity" className="space-y-4">
+                  <div>
+                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">参数敏感度网格</p>
+                    <h2 className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">只复用已存储的参数差异、亮点指标与场景元数据，不追加后端计算</h2>
+                  </div>
+                  <CompareCostSlippagePanel
+                    items={orderedItems}
+                    baselineRunId={baselineRunId}
+                    parameterComparison={parameterComparison}
+                    highlights={comparisonHighlights?.highlights || {}}
+                    metricDeltas={comparisonSummary?.metricDeltas || {}}
+                  />
+                  <RuleBacktestCompareHeatmapProjectionPanel projection={response.heatmapProjection} />
+                  <CompareSensitivityGrid
+                    items={orderedItems}
+                    baselineRunId={baselineRunId}
+                    parameterComparison={parameterComparison}
+                    highlights={comparisonHighlights?.highlights || {}}
+                  />
+                </section>
+
+                <section id="compare-items" className="space-y-3">
+                  <div>
+                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">参与运行</p>
+                    <h2 className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">保留紧凑运行表，方便 AI / 人快速对照基准与候选</h2>
+                  </div>
+                  <CompareItemsTable
+                    items={orderedItems}
+                    baselineRunId={baselineRunId}
+                    onOpenRun={handleOpenRun}
+                    onMakeBaseline={handleMakeBaseline}
+                    onRemoveRun={handleRemoveRun}
+                  />
+                </section>
               </div>
-            </Card>
-          </section>
-
-          <section id="compare-parameter-sensitivity" className="backtest-display-section">
-            <Card title="参数敏感度网格" subtitle="只复用已存储的参数差异、亮点指标与场景元数据，不追加后端计算" className="product-section-card product-section-card--backtest-secondary">
-              <Disclosure defaultOpen summary="展开 / 参数敏感度" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
-                <CompareCostSlippagePanel
-                  items={orderedItems}
-                  baselineRunId={baselineRunId}
-                  parameterComparison={parameterComparison}
-                  highlights={comparisonHighlights?.highlights || {}}
-                  metricDeltas={comparisonSummary?.metricDeltas || {}}
-                />
-                <RuleBacktestCompareHeatmapProjectionPanel projection={response.heatmapProjection} />
-                <CompareSensitivityGrid
-                  items={orderedItems}
-                  baselineRunId={baselineRunId}
-                  parameterComparison={parameterComparison}
-                  highlights={comparisonHighlights?.highlights || {}}
-                />
-              </Disclosure>
-            </Card>
-          </section>
-
-          <section id="compare-robustness" className="backtest-display-section">
-            <Card title="稳健性画像" subtitle="明确显示部分、有限、不可用状态，而不是静默吞掉" className="product-section-card product-section-card--backtest-secondary">
-              <SummaryStrip
-                items={[
-                  {
-                    label: '稳健性',
-                    value: formatCompareStateWithRaw(robustnessSummary?.overallState),
-                    note: `可直接比较 ${robustnessSummary?.directlyComparable == null ? '--' : renderBooleanLabel(robustnessSummary.directlyComparable)}`,
-                  },
-                  {
-                    label: '一致维度',
-                    value: String(robustnessSummary?.alignedDimensions.length ?? 0),
-                    note: formatCompareList(robustnessSummary?.alignedDimensions),
-                  },
-                  {
-                    label: '部分维度',
-                    value: String(robustnessSummary?.partialDimensions.length ?? 0),
-                    note: formatCompareList(robustnessSummary?.partialDimensions),
-                  },
-                  {
-                    label: '主要画像',
-                    value: formatCompareStateWithRaw(comparisonProfile?.primaryProfile),
-                    note: formatCompareList(comparisonProfile?.diagnostics),
-                  },
-                ]}
-              />
-              <div className="preview-grid">
-                <div className="preview-card">
-                  <p className="metric-card__label">同一标的</p>
-                  <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.sameCode)}</p>
-                </div>
-                <div className="preview-card">
-                  <p className="metric-card__label">同一市场</p>
-                  <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.sameMarket)}</p>
-                </div>
-                <div className="preview-card">
-                  <p className="metric-card__label">存在参数差异</p>
-                  <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.parameterDifferencesPresent)}</p>
-                </div>
-                <div className="preview-card">
-                  <p className="metric-card__label">存在区间差异</p>
-                  <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.periodDifferencesPresent)}</p>
-                </div>
-              </div>
-              <div className="mt-4">
-                <RobustnessDimensionCards dimensions={robustnessSummary?.dimensions || {}} />
-              </div>
-            </Card>
-          </section>
-
-          <section id="compare-market-period" className="backtest-display-section">
-            <Card title="市场与区间上下文" subtitle="比较边界直接展示后端判定，不二次推断" className="product-section-card product-section-card--backtest-secondary">
-              <Disclosure defaultOpen summary="展开 / 市场与区间上下文" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
-                <div className="preview-grid">
-                  <div className="preview-card">
-                    <p className="metric-card__label">市场 / 代码比较</p>
-                    <p className="preview-card__text">{formatCompareStateWithRaw(marketCodeComparison?.state)}</p>
-                    <p className="product-footnote">关系：{formatCompareStateWithRaw(marketCodeComparison?.relationship)}</p>
-                    <p className="product-footnote">可直接比较：{marketCodeComparison?.directlyComparable == null ? '--' : renderBooleanLabel(marketCodeComparison.directlyComparable)}</p>
-                    <DiagnosticChipList diagnostics={marketCodeComparison?.diagnostics} />
-                  </div>
-                  <div className="preview-card">
-                    <p className="metric-card__label">区间比较</p>
-                    <p className="preview-card__text">{formatCompareStateWithRaw(periodComparison?.state)}</p>
-                    <p className="product-footnote">关系：{formatCompareStateWithRaw(periodComparison?.relationship)}</p>
-                    <p className="product-footnote">有意义可比：{periodComparison?.meaningfullyComparable == null ? '--' : renderBooleanLabel(periodComparison.meaningfullyComparable)}</p>
-                    <DiagnosticChipList diagnostics={periodComparison?.diagnostics} />
-                  </div>
-                </div>
-              </Disclosure>
-            </Card>
-          </section>
-
-          <section id="compare-parameter-metrics" className="backtest-display-section">
-            <Card title="参数与指标" subtitle="参数差异与已校验指标差异放在同一工作台里读" className="product-section-card product-section-card--backtest-secondary">
-              <Disclosure defaultOpen summary="展开 / 参数与指标" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
-                <div className="preview-grid">
-                  <div className="preview-card">
-                    <p className="metric-card__label">参数比较</p>
-                    <p className="preview-card__text">{formatCompareStateWithRaw(parameterComparison?.state)}</p>
-                    <p className="product-footnote">共享：{parameterComparison?.sharedParameterKeys.length ?? 0}</p>
-                    <p className="product-footnote">不同：{parameterComparison?.differingParameterKeys.length ?? 0}</p>
-                    <p className="product-footnote">缺失：{parameterComparison?.missingParameterKeys.length ?? 0}</p>
-                  </div>
-                  <div className="preview-card">
-                    <p className="metric-card__label">摘要上下文</p>
-                    <p className="preview-card__text">全部同标的：{renderBooleanLabel(comparisonSummary?.context.allSameCode)}</p>
-                    <p className="product-footnote">全部同周期：{renderBooleanLabel(comparisonSummary?.context.allSameTimeframe)}</p>
-                    <p className="product-footnote">全部同日期区间：{renderBooleanLabel(comparisonSummary?.context.allSameDateRange)}</p>
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <MetricDeltaTable metricDeltas={comparisonSummary?.metricDeltas || {}} />
-                </div>
-              </Disclosure>
-            </Card>
-          </section>
-
-          <section id="compare-items" className="backtest-display-section">
-            <Card title="参与运行" subtitle="保留紧凑运行表，方便 AI / 人快速对照基准与候选" className="product-section-card product-section-card--backtest-secondary">
-              <Disclosure defaultOpen summary="展开 / 参与运行" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
-                <CompareItemsTable
-                  items={orderedItems}
-                  baselineRunId={baselineRunId}
-                  onOpenRun={handleOpenRun}
-                  onMakeBaseline={handleMakeBaseline}
-                  onRemoveRun={handleRemoveRun}
-                />
-              </Disclosure>
-            </Card>
-          </section>
-            </>
-          ) : null}
+            </ConsoleBoard>
+          </ResearchConsoleShell>
+        ) : null}
       </TerminalPageShell>
     </main>
   );
