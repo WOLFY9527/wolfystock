@@ -57,7 +57,7 @@ export const TechCard: React.FC<TechCardProps> = ({
   return (
     <BentoCard
       eyebrow={title}
-      className="w-full rounded-[24px]"
+      className="w-full rounded-[12px] px-4 py-3"
       researchCard={researchCard}
       testId="home-bento-card-tech"
       action={(

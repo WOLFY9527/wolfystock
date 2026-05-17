@@ -74,6 +74,7 @@ type HomeCandlestickChartProps = {
   currentPrice?: number | null;
   isLocked?: boolean;
   onContextChange?: (context: HomeCandlestickChartContext | null) => void;
+  className?: string;
 };
 
 export type HomeCandlestickChartContext = {
@@ -464,6 +465,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
   currentPrice,
   isLocked = false,
   onContextChange,
+  className,
 }) => {
   const { language } = useI18n();
   const locale = language === 'zh' ? 'zh-CN' : 'en-US';
@@ -810,7 +812,10 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
   return (
     <div
       ref={sizeRef}
-      className="home-chart-well min-w-0 rounded-[14px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-3 py-3 shadow-[var(--wolfy-shadow-panel)]"
+      className={cn(
+        'home-chart-well min-w-0 rounded-[14px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-3 py-3 shadow-[var(--wolfy-shadow-panel)]',
+        className,
+      )}
       data-testid="home-linear-technical-chart"
       data-visual-role="primary-chart"
       data-surface-system="reflect-linear-console"
@@ -896,7 +901,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
 
       {status === 'ready' && candles.length ? (
         <div
-          className="relative h-[270px] min-w-[280px] overflow-visible sm:h-[300px] xl:h-[330px]"
+          className="relative h-[280px] min-w-[280px] overflow-visible sm:h-[310px] xl:h-[340px]"
           data-testid="home-candlestick-chart-frame"
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoveredIndex(null)}
@@ -941,7 +946,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       ) : (
         <div
           className={cn(
-            'flex h-[270px] min-w-[280px] flex-col items-center justify-center rounded-[12px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-4 text-center sm:h-[300px] xl:h-[330px]',
+            'flex h-[280px] min-w-[280px] flex-col items-center justify-center rounded-[12px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-4 text-center sm:h-[310px] xl:h-[340px]',
             status === 'loading' ? 'text-white/46' : 'text-white/42',
           )}
           data-testid="home-candlestick-unavailable"

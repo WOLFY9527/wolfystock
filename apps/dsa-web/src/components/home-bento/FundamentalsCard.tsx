@@ -63,7 +63,7 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
   return (
     <BentoCard
       eyebrow={title}
-      className="w-full h-full rounded-[24px]"
+      className="w-full h-full rounded-[12px] px-4 py-3"
       researchCard={researchCard}
       testId="home-bento-card-fundamentals"
       action={(
