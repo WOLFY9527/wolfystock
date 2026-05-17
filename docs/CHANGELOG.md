@@ -1,3 +1,14 @@
+## 2026-05-18
+
+- 🧹 **Artifact ignore and ownership policy hardening** - Added ignore coverage
+  for root `screenshots/` and frontend `apps/dsa-web/blob-report/`, then added
+  a focused artifact cleanup policy plus runbook/docs-index links clarifying
+  tracked fixtures versus generated artifacts, Playwright evidence, visual
+  screenshots, audit bundles, no broad `rm -rf`, cleanup only after accepted
+  final reports, and never deleting active worktree artifacts while Codex is
+  still running. This is config/docs-only guidance: no source/runtime/API/test/
+  build/package/workflow behavior changed and no cleanup or deletion was run.
+
 ## 2026-05-17
 
 - **WolfyStock system handbook and docs navigation layer** - Added
