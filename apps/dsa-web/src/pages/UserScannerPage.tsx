@@ -2078,58 +2078,60 @@ const UserScannerPage: React.FC = () => {
 	          data-testid="user-scanner-workspace"
 	          className="flex-1 min-w-0 max-w-none gap-3 -mx-4 px-2 sm:-mx-2 sm:px-2 md:mx-0 md:px-3 xl:px-4"
 	        >
-            {/* <TerminalPageHeading /> marker: DensePageHeader emits the page-level h1. */}
-            <DensePageHeader
-              data-testid="scanner-page-heading"
-              eyebrow={runDetail ? `${runDetail.market.toUpperCase()} · ${runDetail.profileLabel || runDetail.profile}` : (language === 'en' ? 'Candidate workbench' : '候选工作台')}
-              title={language === 'en' ? 'Scanner' : '扫描器'}
-              action={(
-                <TerminalButton
-                  ref={openHistoryDrawerButton.ref}
-                  type="button"
-                  variant="secondary"
-                  data-testid="scanner-history-trigger"
-                  onClick={openHistoryDrawerButton.onClick}
-                  onPointerUp={openHistoryDrawerButton.onPointerUp}
-                  className="h-9 px-3 text-xs"
-                >
-                  <History className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>{language === 'en' ? 'History' : '历史'}</span>
-                </TerminalButton>
-              )}
-            />
-	          {pageError ? (
-	            <div className="mx-3 mt-3 rounded-xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-sm text-rose-100" role="alert" data-testid="scanner-page-error-summary">
-	              <div className="flex flex-wrap items-center gap-2">
-	                <span className="font-medium">{language === 'en' ? 'Scan did not complete' : '扫描未完成'}</span>
-	                <span className="rounded border border-rose-300/20 bg-black/20 px-1.5 py-0.5 text-[11px]">{pageErrorSummary}</span>
+            <div data-testid="scanner-header-strip" className="flex min-w-0 flex-col gap-3">
+              {/* <TerminalPageHeading /> marker: DensePageHeader emits the page-level h1. */}
+              <DensePageHeader
+                data-testid="scanner-page-heading"
+                eyebrow={runDetail ? `${runDetail.market.toUpperCase()} · ${runDetail.profileLabel || runDetail.profile}` : (language === 'en' ? 'Candidate workbench' : '候选工作台')}
+                title={language === 'en' ? 'Scanner' : '扫描器'}
+                action={(
+                  <TerminalButton
+                    ref={openHistoryDrawerButton.ref}
+                    type="button"
+                    variant="secondary"
+                    data-testid="scanner-history-trigger"
+                    onClick={openHistoryDrawerButton.onClick}
+                    onPointerUp={openHistoryDrawerButton.onPointerUp}
+                    className="h-9 px-3 text-xs"
+                  >
+                    <History className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>{language === 'en' ? 'History' : '历史'}</span>
+                  </TerminalButton>
+                )}
+              />
+	            {pageError ? (
+	              <div className="mx-3 mt-3 rounded-xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-sm text-rose-100" role="alert" data-testid="scanner-page-error-summary">
+	                <div className="flex flex-wrap items-center gap-2">
+	                  <span className="font-medium">{language === 'en' ? 'Scan did not complete' : '扫描未完成'}</span>
+	                  <span className="rounded border border-rose-300/20 bg-black/20 px-1.5 py-0.5 text-[11px]">{pageErrorSummary}</span>
+	                </div>
+	                <p className="mt-2 text-xs text-rose-50/70">
+	                  {language === 'en' ? 'Internal error details are hidden on this page.' : '内部错误详情已隐藏。'}
+	                </p>
 	              </div>
-	              <p className="mt-2 text-xs text-rose-50/70">
-	                {language === 'en' ? 'Internal error details are hidden on this page.' : '内部错误详情已隐藏。'}
-	              </p>
-	            </div>
-	          ) : null}
-          {actionNotice ? (
-            <div
-              role={actionNotice.tone === 'danger' ? 'alert' : 'status'}
-              className={`border-y px-3 py-2 text-sm ${
-                actionNotice.tone === 'danger'
-                  ? 'border-red-400/20 bg-red-400/10 text-red-100'
-                  : actionNotice.tone === 'warning'
-                    ? 'border-amber-400/20 bg-amber-400/10 text-amber-100'
-                    : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
-              }`}
-            >
-              {actionNotice.message}
-            </div>
-          ) : null}
+	            ) : null}
+              {actionNotice ? (
+                <div
+                  role={actionNotice.tone === 'danger' ? 'alert' : 'status'}
+                  className={`border-y px-3 py-2 text-sm ${
+                    actionNotice.tone === 'danger'
+                      ? 'border-red-400/20 bg-red-400/10 text-red-100'
+                      : actionNotice.tone === 'warning'
+                        ? 'border-amber-400/20 bg-amber-400/10 text-amber-100'
+                        : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
+                  }`}
+                >
+                  {actionNotice.message}
+                </div>
+              ) : null}
 
-          <DenseStatusStrip
-            data-testid="scanner-status-strip"
-            ariaLabel={language === 'en' ? 'Scanner run summary' : '扫描运行摘要'}
-            items={scannerStatusItems}
-            className="ui-scroll-x-quiet flex-nowrap overflow-x-auto border-y border-white/10 bg-transparent px-2 py-1"
-          />
+              <DenseStatusStrip
+                data-testid="scanner-status-strip"
+                ariaLabel={language === 'en' ? 'Scanner run summary' : '扫描运行摘要'}
+                items={scannerStatusItems}
+                className="ui-scroll-x-quiet flex-nowrap overflow-x-auto border-y border-white/10 bg-transparent px-2 py-1"
+              />
+            </div>
 
 		          <div data-testid="scanner-workspace-grid" className="w-full flex-1 min-w-0">
                 <DenseTableShell
@@ -2355,27 +2357,29 @@ const UserScannerPage: React.FC = () => {
                     <div data-testid="scanner-primary-actions" className="flex shrink-0 flex-row flex-wrap items-center justify-between gap-2 px-2 py-2">
                       <div className="flex min-w-0 flex-row flex-wrap items-center gap-2">
                         {runDetail && hasCandidateDiagnostics ? (
-                          <div data-testid="scanner-candidate-filters" className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1 border-r border-white/10 pr-2" role="group" aria-label={language === 'en' ? 'Candidate diagnostics filter' : '候选诊断过滤'}>
-                            {([
-                              ['selected', language === 'en' ? 'Selected' : '入选'],
-                              ['pool', language === 'en' ? 'Candidate pool' : '候选池'],
-                              ['rejected', language === 'en' ? 'Rejected' : '淘汰'],
-                              ['data_failed', language === 'en' ? 'Data failed' : '数据失败'],
-                              ['all', language === 'en' ? 'All' : '全部'],
-                            ] as const).map(([key, label]) => (
-                              <button
-                                key={key}
-                                type="button"
-                                className={`inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 text-xs ${
-                                  candidateFilter === key
-                                    ? 'border-white/16 bg-white/[0.08] text-white'
-                                    : 'border-transparent text-white/45 hover:text-white/75'
-                                }`}
-                                onClick={() => setCandidateFilter(key)}
-                              >
-                                <span className="ui-truncate block">{label}</span>
-                              </button>
-                            ))}
+                          <div data-testid="scanner-compact-filter-bar" className="min-w-0">
+                            <div data-testid="scanner-candidate-filters" className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1 border-r border-white/10 pr-2" role="group" aria-label={language === 'en' ? 'Candidate diagnostics filter' : '候选诊断过滤'}>
+                              {([
+                                ['selected', language === 'en' ? 'Selected' : '入选'],
+                                ['pool', language === 'en' ? 'Candidate pool' : '候选池'],
+                                ['rejected', language === 'en' ? 'Rejected' : '淘汰'],
+                                ['data_failed', language === 'en' ? 'Data failed' : '数据失败'],
+                                ['all', language === 'en' ? 'All' : '全部'],
+                              ] as const).map(([key, label]) => (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  className={`inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 text-xs ${
+                                    candidateFilter === key
+                                      ? 'border-white/16 bg-white/[0.08] text-white'
+                                      : 'border-transparent text-white/45 hover:text-white/75'
+                                  }`}
+                                  onClick={() => setCandidateFilter(key)}
+                                >
+                                  <span className="ui-truncate block">{label}</span>
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         ) : null}
                         <div data-testid="scanner-ranked-sortbar" className="flex flex-wrap items-center gap-1.5 text-xs text-white/42">
@@ -2480,7 +2484,7 @@ const UserScannerPage: React.FC = () => {
                     </div>
 
                     <div className={`grid min-h-0 flex-1 min-w-0 gap-3 px-2 py-2 ${showDetailRail ? 'xl:grid-cols-[minmax(820px,1fr)_minmax(320px,340px)]' : 'grid-cols-1'}`}>
-                      <div className="min-w-0">
+                      <div data-testid="scanner-primary-work-region" className="min-w-0">
                         {workbenchDiagnostics.length ? (
                           <div data-testid="scanner-ranked-list" className="overflow-hidden rounded-xl border border-white/5 bg-white/[0.02]">
                             <div data-testid="scanner-result-table" className="contents">
@@ -2563,63 +2567,66 @@ const UserScannerPage: React.FC = () => {
                           </CompactEmptyRow>
                         )}
 
+                      </div>
+
+                      <div data-testid="scanner-context-rail" className="min-w-0">
                         {!showDetailRail && activeDetailCandidate ? (
-                          <div data-testid="scanner-inline-detail-panel" className="mt-3 rounded-xl border border-white/5 bg-black/20 p-3">
+                          <div data-testid="scanner-inline-detail-panel" className="max-h-[min(72vh,42rem)] overflow-y-auto rounded-xl border border-white/5 bg-black/20 p-3 no-scrollbar ui-scroll-y-quiet">
                             <div data-testid={`scanner-candidate-detail-${activeDetailCandidate.symbol || 'unknown'}`} className="contents">
                               <div data-testid="scanner-candidate-inspector" className="contents">
-                              <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/48">
-                                <span className="font-semibold text-white/72">{language === 'en' ? 'Selected detail' : '当前详情'}</span>
-                                <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 font-mono text-white/72">{activeDetailCandidate.symbol || '--'}</span>
+                                <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/48">
+                                  <span className="font-semibold text-white/72">{language === 'en' ? 'Selected detail' : '当前详情'}</span>
+                                  <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 font-mono text-white/72">{activeDetailCandidate.symbol || '--'}</span>
+                                  {activeDetailDiagnostic ? (
+                                    <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5">
+                                      {diagnosticStatusLabel(activeDetailDiagnostic.status, language)}
+                                    </span>
+                                  ) : null}
+                                </div>
                                 {activeDetailDiagnostic ? (
-                                  <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5">
-                                    {diagnosticStatusLabel(activeDetailDiagnostic.status, language)}
-                                  </span>
+                                  <p className="mb-2 text-xs text-white/58">
+                                    {isOfficialSelected(activeDetailDiagnostic)
+                                      ? getKeyReason(activeDetailCandidate, runDetail, language)
+                                      : formatFriendlyDiagnosticReason(activeDetailDiagnostic, language)}
+                                  </p>
                                 ) : null}
-                              </div>
-                              {activeDetailDiagnostic ? (
-                                <p className="mb-2 text-xs text-white/58">
-                                  {isOfficialSelected(activeDetailDiagnostic)
-                                    ? getKeyReason(activeDetailCandidate, runDetail, language)
-                                    : formatFriendlyDiagnosticReason(activeDetailDiagnostic, language)}
-                                </p>
-                              ) : null}
-                              {renderCandidateDetailPanel(activeDetailCandidate, activeDetailTracked, activeDetailTrackPending, activeDetailBacktestItem)}
+                                {renderCandidateDetailPanel(activeDetailCandidate, activeDetailTracked, activeDetailTrackPending, activeDetailBacktestItem)}
                               </div>
                             </div>
                           </div>
                         ) : null}
-                      </div>
 
-                      {showDetailRail && activeDetailCandidate ? (
-                        <aside data-testid="scanner-detail-rail" className="sticky top-4 self-start rounded-xl border border-white/5 bg-black/20 p-3">
-                          <div data-testid={`scanner-candidate-detail-${activeDetailCandidate.symbol || 'unknown'}`} className="contents">
-                            <div data-testid="scanner-candidate-inspector" className="contents">
-                            <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/48">
-                              <span className="font-semibold text-white/72">{language === 'en' ? 'Candidate detail' : '候选详情'}</span>
-                              <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 font-mono text-white/72">{activeDetailCandidate.symbol || '--'}</span>
-                              {activeDetailDiagnostic ? (
-                                <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5">
-                                  {diagnosticStatusLabel(activeDetailDiagnostic.status, language)}
-                                </span>
-                              ) : null}
+                        {showDetailRail && activeDetailCandidate ? (
+                          <aside data-testid="scanner-detail-rail" className="sticky top-4 self-start max-h-[min(72vh,42rem)] overflow-y-auto rounded-xl border border-white/5 bg-black/20 p-3 no-scrollbar ui-scroll-y-quiet">
+                            <div data-testid={`scanner-candidate-detail-${activeDetailCandidate.symbol || 'unknown'}`} className="contents">
+                              <div data-testid="scanner-candidate-inspector" className="contents">
+                                <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/48">
+                                  <span className="font-semibold text-white/72">{language === 'en' ? 'Candidate detail' : '候选详情'}</span>
+                                  <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 font-mono text-white/72">{activeDetailCandidate.symbol || '--'}</span>
+                                  {activeDetailDiagnostic ? (
+                                    <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5">
+                                      {diagnosticStatusLabel(activeDetailDiagnostic.status, language)}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                {activeDetailDiagnostic ? (
+                                  <p className="mb-2 text-xs text-white/58">
+                                    {isOfficialSelected(activeDetailDiagnostic)
+                                      ? getKeyReason(activeDetailCandidate, runDetail, language)
+                                      : formatFriendlyDiagnosticReason(activeDetailDiagnostic, language)}
+                                  </p>
+                                ) : null}
+                                {renderCandidateDetailPanel(activeDetailCandidate, activeDetailTracked, activeDetailTrackPending, activeDetailBacktestItem)}
+                              </div>
                             </div>
-                            {activeDetailDiagnostic ? (
-                              <p className="mb-2 text-xs text-white/58">
-                                {isOfficialSelected(activeDetailDiagnostic)
-                                  ? getKeyReason(activeDetailCandidate, runDetail, language)
-                                  : formatFriendlyDiagnosticReason(activeDetailDiagnostic, language)}
-                              </p>
-                            ) : null}
-                            {renderCandidateDetailPanel(activeDetailCandidate, activeDetailTracked, activeDetailTrackPending, activeDetailBacktestItem)}
-                            </div>
-                          </div>
-                        </aside>
-                      ) : null}
+                          </aside>
+                        ) : null}
+                      </div>
                     </div>
 
                     {runDetail && hasCandidateDiagnostics ? (
-                      <div data-testid="scanner-secondary-sections" className="border-t border-white/10 px-2 py-0">
-                        <div>
+                      <div data-testid="scanner-secondary-deck" className="border-t border-white/10 px-2 py-0">
+                        <div data-testid="scanner-secondary-sections">
                           {rejectionBuckets.length || hasRunDiagnosticsContent(runDetail) ? (
                             <DenseSecondaryDisclosure
                               data-testid="scanner-diagnostics-disclosure"

@@ -1026,6 +1026,30 @@ describe('UserScannerPage', () => {
     expect(await screen.findByTestId('scanner-diagnostics-panel')).toBeInTheDocument();
   });
 
+  it('renders the controlled RankingBoard zones with compact filters, bounded detail, and a secondary deck', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+
+    const headerStrip = await screen.findByTestId('scanner-header-strip');
+    const primaryWorkRegion = await screen.findByTestId('scanner-primary-work-region');
+    const compactFilterBar = screen.getByTestId('scanner-compact-filter-bar');
+    const secondaryDeck = screen.getByTestId('scanner-secondary-deck');
+    const contextRail = screen.getByTestId('scanner-context-rail');
+
+    expect(headerStrip).toContainElement(screen.getByTestId('scanner-status-strip'));
+    expectElementBefore(headerStrip, screen.getByTestId('scanner-command-bar'));
+    expect(compactFilterBar).toBeInTheDocument();
+    expect(primaryWorkRegion).toContainElement(screen.getByTestId('scanner-ranked-list'));
+    expect(primaryWorkRegion).toContainElement(screen.getByTestId('scanner-result-table'));
+    expect(contextRail).toContainElement(screen.getByTestId('scanner-inline-detail-panel'));
+    expect(contextRail).toContainElement(screen.getByTestId('scanner-candidate-inspector'));
+    expect(secondaryDeck).toContainElement(screen.getByTestId('scanner-diagnostics-disclosure'));
+    expect(secondaryDeck).toContainElement(screen.getByTestId('scanner-run-comparison-strip'));
+    expect(secondaryDeck).toContainElement(screen.getByTestId('scanner-strategy-experiment'));
+    expect(screen.queryByTestId('scanner-bento-grid')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('scanner-card-wall')).not.toBeInTheDocument();
+  });
+
   it('keeps first-fold scanner chrome compact and hides low-value counters from the primary flow', async () => {
     getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
     renderUserScannerPage();
