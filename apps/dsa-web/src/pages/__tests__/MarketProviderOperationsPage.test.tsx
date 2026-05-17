@@ -225,7 +225,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getByText('只读')).toBeInTheDocument();
     expect(screen.getByText('外部调用关闭')).toBeInTheDocument();
     expect(screen.getByText('缓存不变更')).toBeInTheDocument();
-    expect(screen.getAllByText('诊断详情').length).toBeGreaterThan(0);
+    expect(screen.getByText('限制与快照摘要')).toBeInTheDocument();
     expect(screen.getAllByText('缓存状态').length).toBeGreaterThan(0);
     expect(screen.getAllByText('最近异常').length).toBeGreaterThan(0);
     expect(screen.getAllByText('查看 Admin Logs').length).toBeGreaterThan(0);
@@ -240,12 +240,12 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.queryByText('tickflow_permission_unavailable')).not.toBeInTheDocument();
 
     const diagnosticsDisclosure = screen.getByTestId('market-provider-diagnostics-disclosure');
-    const disclosureToggle = screen.getByRole('button', { name: '展开 诊断详情' });
+    const disclosureToggle = screen.getByRole('button', { name: '展开 二级细节：限制代码、快照摘要、追踪标识' });
     expect(disclosureToggle).toBeInTheDocument();
     expect(diagnosticsDisclosure).not.toHaveAttribute('open');
     fireEvent.click(disclosureToggle);
     expect(diagnosticsDisclosure).toHaveAttribute('open');
-    expect(screen.getByRole('button', { name: '收起 诊断详情' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '收起 二级细节：限制代码、快照摘要、追踪标识' })).toBeInTheDocument();
     expect(screen.getByText('cache_metadata_unavailable:rates')).toBeVisible();
   });
 
@@ -285,7 +285,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getByText('暂无缓存状态')).toBeInTheDocument();
     expect(screen.getAllByText('窗口内暂无异常').length).toBeGreaterThan(0);
     expect(screen.getByText('缓存元数据未覆盖 indices')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '展开 诊断详情' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '展开 二级细节：限制代码、快照摘要、追踪标识' })).toBeInTheDocument();
   });
 
   it('renders API errors with the existing alert pattern', async () => {

@@ -320,7 +320,7 @@ const pricingPoliciesPayload = {
 };
 
 async function openCostSecondaryDisclosure() {
-  const toggle = await screen.findByRole('button', { name: '展开 二级细节：窗口筛选、账本、价格、Provider / 缓存' });
+  const toggle = await screen.findByRole('button', { name: '展开 二级细节：账本、价格、Provider / 缓存' });
   fireEvent.click(toggle);
 }
 

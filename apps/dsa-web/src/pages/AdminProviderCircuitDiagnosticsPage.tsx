@@ -571,8 +571,8 @@ const BoundaryPanel: React.FC<{ data?: ProviderCircuitDiagnosticsBundle | null }
         {boundaryOpen ? (
           <div className="mt-2 grid grid-cols-1 gap-2 text-[11px] text-white/50">
             <p>
-              权限能力
-              <span className="block font-mono text-white/68">ops:providers:read</span>
+              读取边界
+              <span className="block font-mono text-white/68">沿用既有 provider 读取门禁</span>
             </p>
             <p>
               只读 / 外呼 / 门禁

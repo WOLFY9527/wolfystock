@@ -243,7 +243,7 @@ describe('AdminEvidenceWorkflowPage', () => {
     const toggle = within(disclosure).getByRole('button', { name: '展开 原始 / 数据结构 / 数据源 / 调试字段' });
     toggle.focus();
     expect(toggle).toHaveFocus();
-    expect(toggle).toHaveClass('rounded-lg');
+    expect(toggle.closest('[data-terminal-primitive="disclosure"]')).not.toBeNull();
   });
 
   it('keeps review status language constrained to manual and missing-evidence states', () => {
@@ -285,8 +285,9 @@ describe('AdminEvidenceWorkflowPage', () => {
     const page = screen.getByTestId('admin-evidence-workflow-page');
     const workflowGrid = screen.getByTestId('admin-evidence-workflow-grid');
     const statusGrid = screen.getByTestId('admin-evidence-status-grid');
-    const commandGrid = screen.getByTestId('admin-evidence-command-snippets').querySelector('.grid');
-    const runbookGrid = screen.getByTestId('admin-evidence-runbook-references').querySelector('.grid');
+    const commandList = screen.getByTestId('admin-evidence-command-snippets').querySelector('[data-terminal-primitive="dense-list"]');
+    const runbookList = screen.getByTestId('admin-evidence-runbook-references').querySelector('[data-terminal-primitive="dense-list"]');
+    const workflowList = workflowGrid.closest('[data-terminal-primitive="dense-list"]') ?? workflowGrid;
 
     expect(page).toHaveClass('overflow-y-auto', 'overflow-x-hidden', 'no-scrollbar');
     expect(page.className).not.toContain('bg-[#050505]');
@@ -295,10 +296,10 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(page.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThan(5);
     expect(page.querySelectorAll('[data-terminal-primitive="disclosure"]').length).toBeGreaterThan(3);
     expect(page.querySelectorAll('[data-terminal-primitive="nested-block"]').length).toBeGreaterThan(10);
-    expect(workflowGrid).toHaveClass('grid-cols-1', 'xl:grid-cols-6');
+    expect(workflowList).toHaveAttribute('data-terminal-primitive', 'dense-list');
     expect(statusGrid).toHaveClass('grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-4');
-    expect(commandGrid).toHaveClass('grid-cols-1', 'xl:grid-cols-3');
-    expect(runbookGrid).toHaveClass('grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-5');
+    expect(commandList).toHaveAttribute('data-terminal-primitive', 'dense-list');
+    expect(runbookList).toHaveAttribute('data-terminal-primitive', 'dense-list');
   });
 
   it('keeps vertical shell spacing on TerminalPageShell instead of the route scroll wrapper', () => {

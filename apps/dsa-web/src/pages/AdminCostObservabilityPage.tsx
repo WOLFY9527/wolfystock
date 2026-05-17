@@ -299,8 +299,8 @@ const FilterRail: React.FC<{
 }> = ({ filters, onChange }) => (
   <TerminalPanel as="aside">
     <TerminalSectionHeader
-      eyebrow="Filters"
-      title={iconTitle(<ShieldCheck className="h-4 w-4" />, '安全过滤')}
+      eyebrow="观测过滤"
+      title={iconTitle(<ShieldCheck className="h-4 w-4" />, '窗口与范围')}
       action={<TerminalChip variant="neutral">只读筛选</TerminalChip>}
     />
     <div className="mt-5 grid gap-4">
@@ -973,9 +973,9 @@ const AdminCostObservabilityPage: React.FC = () => {
             title="成本观测"
             action={<ReadOnlyBadges data={data} />}
           />
-          <TerminalNotice variant="info" className="mt-4">
-            先判断预算压力、异常归属和下一步处理；模型、数据源、缓存细节默认放在二级区。
-          </TerminalNotice>
+          <p className="mt-3 max-w-4xl text-sm leading-6 text-white/54">
+            先判断预算压力、异常归属和下一步处理；账本、价格策略、Provider 与缓存细节默认后置到二级区。
+          </p>
           <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <TerminalMetric
               label="页面用途"
@@ -1013,53 +1013,54 @@ const AdminCostObservabilityPage: React.FC = () => {
         {data ? (
           <>
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-              <TerminalPanel as="section" className="xl:col-span-8">
-                <TerminalSectionHeader
-                  eyebrow="操作员判断"
-                  title="压力、异常、归属"
-                  action={emptyCounters ? <TerminalChip variant="caution">计数器尚未接入或当前窗口暂无事件</TerminalChip> : <TerminalChip variant="neutral">窗口 {data.window?.key || filters.window}</TerminalChip>}
-                />
-                <TerminalNotice variant={emptyCounters ? 'caution' : needsAttentionCount ? 'info' : 'neutral'} className="mt-4">
-                  {emptyCounters ? '计数器尚未接入或当前窗口暂无事件' : needsAttentionCount ? '优先查看重复候选、备用链路和完整性重试，再进入配额试运行。' : '当前成本观测保持稳定，先维持只读观察。'}
-                </TerminalNotice>
-                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <TerminalMetric
-                    label="成本压力"
-                    value={`${compactNumber(data.summary.estimatedDuplicateCandidates)} 重复候选`}
-                    subvalue={`${compactNumber(data.summary.fallbackAttempts)} 备用链路 · ${compactNumber(data.summary.integrityRetries)} 完整性重试`}
-                    valueClassName={metricValueClass(data.summary.estimatedDuplicateCandidates || data.summary.fallbackAttempts || data.summary.integrityRetries ? 'warn' : 'good')}
+              <div className="min-w-0 space-y-6 xl:col-span-8">
+                <TerminalPanel as="section">
+                  <TerminalSectionHeader
+                    eyebrow="主诊断板"
+                    title="压力、异常、归属"
+                    action={emptyCounters ? <TerminalChip variant="caution">计数器尚未接入或当前窗口暂无事件</TerminalChip> : <TerminalChip variant="neutral">窗口 {data.window?.key || filters.window}</TerminalChip>}
                   />
-                  <TerminalMetric
-                    label="缓存效率"
-                    value={`${percent(data.summary.providerCacheHitRate)} 数据源`}
-                    subvalue={`${percent(data.summary.marketCacheHitRate)} 市场缓存`}
-                    valueClassName={metricValueClass('good')}
-                  />
-                  <TerminalMetric
-                    label="模型归属"
-                    value={`${compactNumber(data.summary.llmCalls)} AI 调用`}
-                    subvalue={`${compactNumber(data.summary.llmUsageTokens)} tokens · ${compactNumber(data.summary.llmUsageCalls)} usage rows`}
-                    valueClassName={metricValueClass('info')}
-                  />
-                  <TerminalMetric
-                    label="功能归属"
-                    value={`${compactNumber(data.summary.scannerAiCompleted)} / ${compactNumber(data.summary.scannerAiAttempts)}`}
-                    subvalue={`${compactNumber(data.summary.scannerAiSkipped)} skipped`}
-                    valueClassName={metricValueClass('info')}
-                  />
-                </div>
-              </TerminalPanel>
-              <div className="min-w-0 xl:col-span-4">
+                  <TerminalNotice variant={emptyCounters ? 'caution' : needsAttentionCount ? 'info' : 'neutral'} className="mt-4">
+                    {emptyCounters ? '计数器尚未接入或当前窗口暂无事件' : needsAttentionCount ? '优先查看重复候选、备用链路和完整性重试，再进入配额试运行。' : '当前成本观测保持稳定，先维持只读观察。'}
+                  </TerminalNotice>
+                  <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <TerminalMetric
+                      label="成本压力"
+                      value={`${compactNumber(data.summary.estimatedDuplicateCandidates)} 重复候选`}
+                      subvalue={`${compactNumber(data.summary.fallbackAttempts)} 备用链路 · ${compactNumber(data.summary.integrityRetries)} 完整性重试`}
+                      valueClassName={metricValueClass(data.summary.estimatedDuplicateCandidates || data.summary.fallbackAttempts || data.summary.integrityRetries ? 'warn' : 'good')}
+                    />
+                    <TerminalMetric
+                      label="缓存效率"
+                      value={`${percent(data.summary.providerCacheHitRate)} 数据源`}
+                      subvalue={`${percent(data.summary.marketCacheHitRate)} 市场缓存`}
+                      valueClassName={metricValueClass('good')}
+                    />
+                    <TerminalMetric
+                      label="模型归属"
+                      value={`${compactNumber(data.summary.llmCalls)} AI 调用`}
+                      subvalue={`${compactNumber(data.summary.llmUsageTokens)} tokens · ${compactNumber(data.summary.llmUsageCalls)} usage rows`}
+                      valueClassName={metricValueClass('info')}
+                    />
+                    <TerminalMetric
+                      label="功能归属"
+                      value={`${compactNumber(data.summary.scannerAiCompleted)} / ${compactNumber(data.summary.scannerAiAttempts)}`}
+                      subvalue={`${compactNumber(data.summary.scannerAiSkipped)} skipped`}
+                      valueClassName={metricValueClass('info')}
+                    />
+                  </div>
+                </TerminalPanel>
+                <LimitationsPanel data={data} />
+              </div>
+              <div className="min-w-0 space-y-6 xl:col-span-4">
+                <FilterRail filters={filters} onChange={updateFilters} />
                 <QuotaDryRunPanel />
               </div>
             </div>
 
-            <TerminalDisclosure title="二级细节：窗口筛选、账本、价格、Provider / 缓存" summary="默认折叠">
+            <TerminalDisclosure title="二级细节：账本、价格、Provider / 缓存" summary="默认折叠">
               <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-                <div className="xl:col-span-3">
-                  <FilterRail filters={filters} onChange={updateFilters} />
-                </div>
-                <div className="min-w-0 space-y-6 xl:col-span-9">
+                <div className="min-w-0 space-y-6 xl:col-span-12">
                   <LlmLedgerPanel key={`${filters.window}-${filters.bucket}-${filters.limit}`} filters={filters} />
                   <PricingPolicyPanel />
                   <div className="grid grid-cols-1 gap-6 2xl:grid-cols-2">
@@ -1094,7 +1095,6 @@ const AdminCostObservabilityPage: React.FC = () => {
                         <RollupList items={[...data.scannerAi.interpretations, ...data.scannerAi.skips]} empty="暂无 Scanner AI 计数" />
                       </div>
                     </TerminalPanel>
-                    <LimitationsPanel data={data} />
                   </div>
                   <DeveloperDetails data={data} />
                 </div>

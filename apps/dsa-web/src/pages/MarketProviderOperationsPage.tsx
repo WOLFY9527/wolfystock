@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, ExternalLink, ServerCog } from 'lucide-react';
+import { Activity, ExternalLink } from 'lucide-react';
 import {
   marketProviderOperationsApi,
   type AdminLogDrillThrough,
@@ -24,6 +24,7 @@ import {
   TerminalMetric,
   TerminalNestedBlock,
   TerminalNotice,
+  TerminalPageHeading,
   TerminalPageShell,
   TerminalPanel,
   TerminalSectionHeader,
@@ -565,8 +566,8 @@ const DiagnosticsPanel: React.FC<{
   return (
     <TerminalPanel as="section" className="col-span-12">
       <TerminalSectionHeader
-        eyebrow="诊断详情"
-        title="诊断详情"
+        eyebrow="二级详情"
+        title="限制与快照摘要"
         action={response.limitations.length ? <TerminalChip variant="caution">{response.limitations.length} 条限制</TerminalChip> : <TerminalChip variant="neutral">暂无限制</TerminalChip>}
       />
       {tickflowProjection ? <div className="mt-4"><TickflowEntitlementRow projection={tickflowProjection} /></div> : null}
@@ -576,8 +577,8 @@ const DiagnosticsPanel: React.FC<{
         )) : <TerminalChip variant="neutral">暂无限制</TerminalChip>}
       </div>
       <TerminalDisclosure
-        title="诊断详情"
-        summary="原始限制代码、只读摘要、追踪标识默认折叠"
+        title="二级细节：限制代码、快照摘要、追踪标识"
+        summary="默认折叠"
         className="mt-4"
         data-testid="market-provider-diagnostics-disclosure"
       >
@@ -718,22 +719,16 @@ const MarketProviderOperationsPage: React.FC = () => {
     <div data-testid="market-provider-operations-page" className="market-provider-operations-page flex min-h-0 w-full flex-1 flex-col overflow-y-auto no-scrollbar text-white">
       <TerminalPageShell className="py-5 md:py-6">
         <TerminalPanel as="section" className="relative overflow-hidden">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/50 to-transparent" />
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-200/80">
-                <ServerCog className="h-4 w-4" aria-hidden="true" />
-                数据源就绪台
-              </div>
-              <h1 className="mt-3 text-3xl font-semibold tracking-normal text-white md:text-4xl">数据源运维</h1>
-              <p className="mt-3 max-w-4xl text-sm leading-6 text-white/54">
-                {isLoading
-                  ? '正在读取市场数据源运维快照'
-                  : `先看健康、熔断、失败率与缓存，再下钻诊断详情。生成 ${formatDisplayDate(response?.generatedAt, '待统计')} · 窗口 ${response?.window?.key || '24h'} · 只读快照`}
-              </p>
-            </div>
-            <ReadOnlyBadges response={response} />
-          </div>
+          <TerminalPageHeading
+            eyebrow="数据源就绪台"
+            title="数据源运维"
+            action={<ReadOnlyBadges response={response} />}
+          />
+          <p className="mt-3 max-w-4xl text-sm leading-6 text-white/54">
+            {isLoading
+              ? '正在读取市场数据源运维快照'
+              : `先看健康、熔断、失败率与缓存，再下钻限制、快照摘要与追踪标识。生成 ${formatDisplayDate(response?.generatedAt, '待统计')} · 窗口 ${response?.window?.key || '24h'} · 只读快照`}
+          </p>
           {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}
         </TerminalPanel>
 
