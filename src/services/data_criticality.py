@@ -74,6 +74,8 @@ SECRET_MARKERS = (
 
 ENRICHMENT_SOURCES = ("news", "sentiment", "detailed_fundamentals")
 NON_LIVE_SOURCE_MARKERS = ("synthetic", "mock", "fixture", "fallback")
+REQUIRED_TECHNICAL_FIELDS = {"technicals.ma20"}
+IMPORTANT_TECHNICAL_FIELDS = {"technicals.ma60", "technicals.rsi14", "technicals.macd"}
 
 
 @dataclass(frozen=True)
@@ -87,6 +89,13 @@ class DataQualityReport:
     provider_timeouts: List[str] = field(default_factory=list)
     provider_cooldowns: List[str] = field(default_factory=list)
     confidence_cap: int = 100
+    missing_required_domains: List[str] = field(default_factory=list)
+    important_domains_missing: List[str] = field(default_factory=list)
+    score_suppressed: bool = False
+    score_suppressed_reason: Optional[str] = None
+    stance_guardrail: str = "none"
+    key_level_guardrail: str = "grounded"
+    key_level_guardrail_reason: Optional[str] = None
     reason_codes: List[str] = field(default_factory=list)
     freshness: Dict[str, Any] = field(default_factory=dict)
     enrichment_status: str = "skipped"
@@ -110,6 +119,13 @@ class DataQualityReport:
             "providerTimeouts": list(self.provider_timeouts),
             "providerCooldowns": list(self.provider_cooldowns),
             "confidenceCap": self.confidence_cap,
+            "missingRequiredDomains": list(self.missing_required_domains),
+            "importantDomainsMissing": list(self.important_domains_missing),
+            "scoreSuppressed": self.score_suppressed,
+            "scoreSuppressedReason": self.score_suppressed_reason,
+            "stanceGuardrail": self.stance_guardrail,
+            "keyLevelGuardrail": self.key_level_guardrail,
+            "keyLevelGuardrailReason": self.key_level_guardrail_reason,
             "reasonCodes": list(self.reason_codes),
             "freshness": dict(self.freshness),
             "enrichmentStatus": self.enrichment_status,
@@ -354,11 +370,26 @@ def build_data_quality_report(
 
     missing_fields = [str(item) for item in data_quality.get("missing_fields", []) if str(item)]
     required_available = _quote_required_available(context)
+    price_history_status = str(data_quality.get("price_history_status") or "").strip().lower()
+    required_technical_missing = sorted(
+        item for item in set(missing_fields) if item in REQUIRED_TECHNICAL_FIELDS
+    )
+    technical_history_missing = bool(required_technical_missing) or (
+        bool(price_history_status) and price_history_status != "ok"
+    )
+    missing_required_domains: List[str] = []
+    if not required_available:
+        missing_required_domains.append("price_ohlcv")
+    if technical_history_missing:
+        missing_required_domains.append("technical_history")
     important_missing = [
         item
         for item in missing_fields
-        if item.startswith("technicals.") or item.startswith("fundamentals.") or item.startswith("earnings.")
+        if item in IMPORTANT_TECHNICAL_FIELDS
+        or item.startswith("fundamentals.")
+        or item.startswith("earnings.")
     ]
+    important_technical_missing = any(item in IMPORTANT_TECHNICAL_FIELDS for item in important_missing)
 
     optional_missing: List[str] = []
     if data_quality.get("sentiment_status") in {"weak", "missing", "failed"}:
@@ -370,6 +401,14 @@ def build_data_quality_report(
         optional_missing.append("detailed_fundamentals")
     if optional_enrichment_pending:
         optional_missing.append("optional_enrichment_pending")
+
+    important_domains_missing: List[str] = []
+    if any(item.startswith("fundamentals.") or item.startswith("earnings.") for item in important_missing):
+        important_domains_missing.append("fundamentals")
+    if optional_missing:
+        important_domains_missing.append("catalyst_news_event")
+    if any(item.startswith("profile.sector") or item.startswith("profile.market_cap") for item in missing_fields):
+        important_domains_missing.append("market_sector_context")
 
     provider_timeouts = sanitize_reason_codes(provider_health.get("provider_timeouts", []))
     provider_cooldowns = sanitize_reason_codes(provider_health.get("provider_cooldowns", []))
@@ -383,10 +422,12 @@ def build_data_quality_report(
     confidence_cap = 100
     score = 100
     reason_codes: List[str] = []
-    if not required_available:
+    if missing_required_domains:
         confidence_cap = min(confidence_cap, 40)
         score = min(score, 40)
         reason_codes.append("required_data_missing")
+        if technical_history_missing:
+            reason_codes.append("required_technical_history_missing")
     if important_missing:
         confidence_cap = min(confidence_cap, 70)
         score = min(score, 70)
@@ -400,16 +441,20 @@ def build_data_quality_report(
         score = min(score, 75)
         reason_codes.append("non_live_required_source")
     if optional_missing:
+        confidence_cap = min(confidence_cap, 75)
         score = max(0, score - min(8, 2 * len(set(optional_missing))))
         reason_codes.append("optional_enrichment_missing")
     if provider_timeouts:
+        confidence_cap = min(confidence_cap, 75)
         score = max(0, score - min(8, 2 * len(provider_timeouts)))
         reason_codes.append("provider_timeout")
     if provider_cooldowns:
+        confidence_cap = min(confidence_cap, 75)
         score = max(0, score - min(10, 3 * len(provider_cooldowns)))
         reason_codes.append("provider_hot_path_cooldown")
 
-    if not required_available:
+    score_suppressed = bool(missing_required_domains)
+    if score_suppressed:
         tier = "insufficient"
     elif not important_missing and not stale_sources and not non_live_required_source:
         tier = "decision_grade"
@@ -417,6 +462,24 @@ def build_data_quality_report(
         tier = "analysis_grade"
     else:
         tier = "partial"
+    observe_only = bool(
+        not score_suppressed
+        and (
+            confidence_cap < 100
+            or important_domains_missing
+            or stale_sources
+            or non_live_required_source
+            or provider_timeouts
+            or provider_cooldowns
+        )
+    )
+    key_level_ungrounded = bool(
+        score_suppressed
+        or technical_history_missing
+        or important_technical_missing
+        or stale_sources
+        or non_live_required_source
+    )
 
     freshness = {
         "marketTimestamp": context.get("market_timestamp"),
@@ -444,6 +507,15 @@ def build_data_quality_report(
         provider_timeouts=provider_timeouts,
         provider_cooldowns=provider_cooldowns,
         confidence_cap=confidence_cap,
+        missing_required_domains=missing_required_domains[:8],
+        important_domains_missing=list(dict.fromkeys(important_domains_missing))[:8],
+        score_suppressed=score_suppressed,
+        score_suppressed_reason="required_evidence_missing" if score_suppressed else None,
+        stance_guardrail="no_score" if score_suppressed else "observe_only" if observe_only else "none",
+        key_level_guardrail="ungrounded" if key_level_ungrounded else "grounded",
+        key_level_guardrail_reason=(
+            "technical_evidence_weak_or_stale" if key_level_ungrounded else None
+        ),
         reason_codes=sanitize_reason_codes([*reason_codes, *failure_reasons]),
         freshness=clean_freshness,
         **enrichment_metadata,

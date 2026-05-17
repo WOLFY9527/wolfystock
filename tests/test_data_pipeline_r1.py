@@ -137,6 +137,42 @@ def test_missing_fundamentals_caps_but_does_not_fail_when_required_exists():
     assert report["dataQualityTier"] != "insufficient"
 
 
+def test_required_technical_history_missing_suppresses_investment_score():
+    report = build_data_quality_report(
+        context=_quality_context(),
+        data_quality={
+            "price_history_status": "partial",
+            "missing_fields": ["technicals.ma20", "technicals.rsi14"],
+            "sentiment_status": "ok",
+        },
+        diagnostics={"news_status": "ok"},
+    ).to_api_dict()
+
+    assert report["dataQualityTier"] == "insufficient"
+    assert report["scoreSuppressed"] is True
+    assert report["scoreSuppressedReason"] == "required_evidence_missing"
+    assert "technical_history" in report["missingRequiredDomains"]
+    assert report["stanceGuardrail"] == "no_score"
+    assert report["keyLevelGuardrail"] == "ungrounded"
+
+
+def test_optional_vwap_gap_does_not_cap_otherwise_complete_home_analysis():
+    report = build_data_quality_report(
+        context=_quality_context(),
+        data_quality={
+            "price_history_status": "ok",
+            "missing_fields": ["technicals.vwap"],
+            "sentiment_status": "ok",
+        },
+        diagnostics={"news_status": "ok"},
+    ).to_api_dict()
+
+    assert report["dataQualityTier"] == "decision_grade"
+    assert report["confidenceCap"] == 100
+    assert report["scoreSuppressed"] is False
+    assert report["stanceGuardrail"] == "none"
+
+
 def test_optional_news_timeout_does_not_block_quick_decision():
     with ThreadPoolExecutor(max_workers=1) as pool:
         future = pool.submit(time.sleep, 0.2)

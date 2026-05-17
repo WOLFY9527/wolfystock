@@ -59,6 +59,39 @@ def _extract_data_quality_report(result: Any) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _sentiment_label_for_score(
+    score: Any,
+    report_language: str,
+    data_quality_report: Optional[Dict[str, Any]],
+) -> Optional[str]:
+    if score is None:
+        if isinstance(data_quality_report, dict) and data_quality_report.get("scoreSuppressed"):
+            return "Data insufficient" if report_language == "en" else "数据不足"
+        return None
+    return get_sentiment_label(score, report_language)
+
+
+def _score_state_from_quality(score: Any, data_quality_report: Optional[Dict[str, Any]]) -> str:
+    if isinstance(data_quality_report, dict) and data_quality_report.get("scoreSuppressed"):
+        return "suppressed"
+    if score is None:
+        return "unavailable"
+    if isinstance(data_quality_report, dict):
+        cap = data_quality_report.get("confidenceCap")
+        try:
+            cap_value = int(cap)
+        except (TypeError, ValueError):
+            cap_value = 100
+        if cap_value < 100:
+            return "capped"
+    return "scored"
+
+
+def _is_ungrounded_level(value: Any) -> bool:
+    text = str(value or "").strip().lower()
+    return text in {"待补充", "tbd", "data unavailable", "数据不足", "数据缺失"}
+
+
 def _redact_public_artifact(value: Any) -> Any:
     """Redact raw prompt/provider/debug content before public export."""
     sensitive_key_markers = (
@@ -227,7 +260,8 @@ class AnalysisService:
             sniper_points = result.get_sniper_points() or {}
 
         report_language = normalize_report_language(getattr(result, "report_language", "zh"))
-        sentiment_label = get_sentiment_label(result.sentiment_score, report_language)
+        data_quality_report = _extract_data_quality_report(result)
+        sentiment_label = _sentiment_label_for_score(result.sentiment_score, report_language, data_quality_report)
         stock_name = get_localized_stock_name(getattr(result, "name", None), result.code, report_language)
         dashboard = getattr(result, "dashboard", None) if isinstance(getattr(result, "dashboard", None), dict) else {}
         decision_panel = _nested_get(dashboard, "battle_plan", "sniper_points") or {}
@@ -250,6 +284,16 @@ class AnalysisService:
             "decision": getattr(result, "decision_type", None),
             "action": getattr(result, "operation_advice", None),
             "score": getattr(result, "sentiment_score", None),
+            "score_state": _score_state_from_quality(getattr(result, "sentiment_score", None), data_quality_report),
+            "score_suppressed_reason": (
+                data_quality_report.get("scoreSuppressedReason") if isinstance(data_quality_report, dict) else None
+            ),
+            "missing_required_domains": (
+                data_quality_report.get("missingRequiredDomains") if isinstance(data_quality_report, dict) else None
+            ),
+            "confidence_cap": (
+                data_quality_report.get("confidenceCap") if isinstance(data_quality_report, dict) else None
+            ),
             "confidence": getattr(result, "confidence_level", None),
             "strategy": getattr(result, "trend_prediction", None),
             "entry_price": _first_present(
@@ -294,7 +338,6 @@ class AnalysisService:
             query_id=query_id,
             report_type=report_type,
         )
-        data_quality_report = _extract_data_quality_report(result)
 
         payload = {
             "meta": {
@@ -319,6 +362,10 @@ class AnalysisService:
                 "trend_prediction": localize_trend_prediction(result.trend_prediction, report_language),
                 "sentiment_score": result.sentiment_score,
                 "sentiment_label": sentiment_label,
+                "score_state": _score_state_from_quality(result.sentiment_score, data_quality_report),
+                "confidence_cap": (
+                    data_quality_report.get("confidenceCap") if isinstance(data_quality_report, dict) else None
+                ),
             },
             "strategy": {
                 "ideal_buy": sniper_points.get("ideal_buy"),
@@ -347,6 +394,8 @@ class AnalysisService:
     @staticmethod
     def _normalize_action(value: Any) -> str:
         text = str(value or "").strip().lower()
+        if any(token in text for token in ("data_insufficient", "data insufficient", "数据不足", "禁止判断")):
+            return "data_insufficient"
         if any(token in text for token in ("sell", "reduce", "avoid", "卖", "减", "规避", "看空")):
             return "sell"
         if any(token in text for token in ("buy", "add", "accumulate", "买", "加仓", "建仓", "看多")):
@@ -447,6 +496,20 @@ class AnalysisService:
         sniper_points = result.get_sniper_points() if hasattr(result, "get_sniper_points") else {}
         if not isinstance(sniper_points, dict):
             sniper_points = {}
+        data_quality_report = (
+            structured.get("data_quality_report")
+            if isinstance(structured.get("data_quality_report"), dict)
+            else _extract_data_quality_report(result)
+        )
+        score_suppressed = (
+            bool(data_quality_report.get("scoreSuppressed"))
+            if isinstance(data_quality_report, dict)
+            else False
+        )
+        key_levels_ungrounded = (
+            isinstance(data_quality_report, dict)
+            and str(data_quality_report.get("keyLevelGuardrail") or "").strip().lower() == "ungrounded"
+        )
         runtime = getattr(result, "runtime_execution", None) if isinstance(getattr(result, "runtime_execution", None), dict) else {}
         runtime_ai = runtime.get("ai") if isinstance(runtime.get("ai"), dict) else {}
         runtime_data = runtime.get("data") if isinstance(runtime.get("data"), dict) else {}
@@ -458,7 +521,14 @@ class AnalysisService:
         mode = "rule_scoring_with_llm_explanation" if has_rule_scoring else ("llm_direct" if model_used else "unknown")
         action_source = "rule" if has_rule_scoring else ("llm" if model_used else "fallback")
         score_source = "rule" if has_rule_scoring else ("llm" if model_used else "fallback")
-        confidence_source = "llm" if model_used else "fallback"
+        if score_suppressed:
+            action_source = "data_quality_guardrail"
+            score_source = "data_quality_guardrail"
+        confidence_source = (
+            "data_quality_guardrail"
+            if isinstance(data_quality_report, dict) and data_quality_report.get("confidenceCap") not in (None, 100)
+            else "llm" if model_used else "fallback"
+        )
 
         data_sources: List[Dict[str, Any]] = []
         for name, field in runtime_data.items():
@@ -501,8 +571,21 @@ class AnalysisService:
                 "weight": None,
             })
 
-        action_value = self._normalize_action(getattr(result, "decision_type", None) or getattr(result, "operation_advice", None))
+        action_value = self._normalize_action(
+            getattr(result, "decision_type", None) or getattr(result, "operation_advice", None)
+        )
         confidence_value = self._confidence_numeric(getattr(result, "confidence_level", None))
+        entry_value = _first_present(sniper_points.get("ideal_buy"), sniper_points.get("secondary_buy"))
+        target_value = sniper_points.get("take_profit")
+        stop_value = sniper_points.get("stop_loss")
+
+        def _level_source(value: Any) -> str:
+            if not value:
+                return "unknown"
+            if key_levels_ungrounded or _is_ungrounded_level(value):
+                return "data_quality_guardrail"
+            return "llm"
+
         trace = {
             "engine_version": "analysis_decision_trace_v1",
             "mode": mode,
@@ -522,24 +605,39 @@ class AnalysisService:
                     "value": getattr(result, "sentiment_score", None),
                     "source": score_source,
                     "scale": "0-100",
-                    "notes": "Composite score uses deterministic market/technical/fundamental/news weights." if has_rule_scoring else None,
+                    "notes": (
+                        data_quality_report.get("scoreSuppressedReason")
+                        if score_suppressed and isinstance(data_quality_report, dict)
+                        else (
+                            "Composite score uses deterministic market/technical/fundamental/news weights."
+                            if has_rule_scoring
+                            else None
+                        )
+                    ),
                 },
                 "confidence": {
                     "value": getattr(result, "confidence_level", None),
                     "source": confidence_source,
-                    "notes": "Confidence is read from the LLM dashboard scalar when available.",
+                    "notes": (
+                        f"Confidence capped by data quality at {data_quality_report.get('confidenceCap')}."
+                        if (
+                            isinstance(data_quality_report, dict)
+                            and data_quality_report.get("confidenceCap") not in (None, 100)
+                        )
+                        else "Confidence is read from the LLM dashboard scalar when available."
+                    ),
                 },
                 "entry": {
-                    "value": _first_present(sniper_points.get("ideal_buy"), sniper_points.get("secondary_buy")),
-                    "source": "llm" if _first_present(sniper_points.get("ideal_buy"), sniper_points.get("secondary_buy")) else "unknown",
+                    "value": entry_value,
+                    "source": _level_source(entry_value),
                 },
                 "target": {
-                    "value": sniper_points.get("take_profit"),
-                    "source": "llm" if sniper_points.get("take_profit") else "unknown",
+                    "value": target_value,
+                    "source": _level_source(target_value),
                 },
                 "stop": {
-                    "value": sniper_points.get("stop_loss"),
-                    "source": "llm" if sniper_points.get("stop_loss") else "unknown",
+                    "value": stop_value,
+                    "source": _level_source(stop_value),
                 },
             },
             "data_sources": data_sources,

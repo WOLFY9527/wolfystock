@@ -1011,12 +1011,12 @@ class StockAnalysisPipeline:
             # Step 7.7: price_position fallback
             if result:
                 fill_price_position_if_needed(result, trend_result, realtime_quote)
-                self._apply_data_quality_caps(result, enhanced_context.get("data_quality_report", {}))
                 result = self._stabilize_analysis_result(
                     code=code,
                     query_id=query_id,
                     result=result,
                 )
+                self._apply_data_quality_caps(result, enhanced_context.get("data_quality_report", {}))
                 result.runtime_execution = self._build_runtime_execution_summary(
                     result=result,
                     enhanced_context=enhanced_context,
@@ -1169,17 +1169,153 @@ class StockAnalysisPipeline:
     def _apply_data_quality_caps(result: AnalysisResult, data_quality_report: Dict[str, Any]) -> None:
         if not isinstance(data_quality_report, dict):
             return
+        language = normalize_report_language(getattr(result, "report_language", "zh"))
+        no_score_text = "Data insufficient, no judgement" if language == "en" else "数据不足，禁止判断"
+        observe_text = localize_operation_advice("watch", language)
+        low_confidence = localize_confidence_level("low", language)
         cap = data_quality_report.get("confidenceCap")
         try:
             cap_value = int(cap)
         except (TypeError, ValueError):
-            return
-        if isinstance(getattr(result, "sentiment_score", None), (int, float)) and result.sentiment_score > cap_value:
-            result.sentiment_score = cap_value
-        if data_quality_report.get("dataQualityTier") == "insufficient":
+            cap_value = 100
+
+        score_suppressed = bool(data_quality_report.get("scoreSuppressed")) or (
+            data_quality_report.get("dataQualityTier") == "insufficient"
+            and data_quality_report.get("requiredAvailable") is False
+        )
+        stance_guardrail = str(data_quality_report.get("stanceGuardrail") or "").strip().lower()
+        key_level_guardrail = str(data_quality_report.get("keyLevelGuardrail") or "").strip().lower()
+
+        original_score = getattr(result, "sentiment_score", None)
+        score_capped = False
+        if score_suppressed:
+            result.sentiment_score = None
             result.decision_type = "data_insufficient"
-            if not str(getattr(result, "operation_advice", "") or "").strip():
-                result.operation_advice = "数据不足，暂不做高置信决策"
+            result.operation_advice = no_score_text
+            result.trend_prediction = no_score_text
+            result.confidence_level = low_confidence
+        elif isinstance(original_score, (int, float)) and original_score > cap_value:
+            result.sentiment_score = cap_value
+            score_capped = True
+
+        if not score_suppressed and stance_guardrail == "observe_only":
+            result.operation_advice = observe_text
+            result.decision_type = "hold"
+            result.trend_prediction = localize_trend_prediction("sideways", language)
+            if cap_value < 100:
+                result.confidence_level = (
+                    low_confidence
+                    if cap_value <= 75
+                    else localize_confidence_level("medium", language)
+                )
+
+        if score_suppressed or key_level_guardrail == "ungrounded":
+            StockAnalysisPipeline._mark_sniper_points_ungrounded(
+                result,
+                reason=str(
+                    data_quality_report.get("keyLevelGuardrailReason")
+                    or data_quality_report.get("scoreSuppressedReason")
+                    or "technical_evidence_weak_or_missing"
+                ),
+                language=language,
+            )
+        if score_suppressed:
+            StockAnalysisPipeline._neutralize_unsafe_decision_text(
+                result,
+                text=no_score_text,
+            )
+        elif stance_guardrail == "observe_only":
+            observe_only_text = (
+                "仅观察，等待缺失证据补齐后再判断。"
+                if language == "zh"
+                else "Observe only until missing evidence is available."
+            )
+            StockAnalysisPipeline._neutralize_unsafe_decision_text(
+                result,
+                text=observe_only_text,
+                preserve_summary=True,
+            )
+        StockAnalysisPipeline._attach_score_authenticity_metadata(
+            result,
+            data_quality_report=data_quality_report,
+            original_score=original_score,
+            score_capped=score_capped,
+        )
+
+    @staticmethod
+    def _mark_sniper_points_ungrounded(result: AnalysisResult, *, reason: str, language: str) -> None:
+        placeholder = "TBD" if language == "en" else "待补充"
+        dashboard = result.dashboard if isinstance(result.dashboard, dict) else {}
+        battle_plan = dashboard.get("battle_plan") if isinstance(dashboard.get("battle_plan"), dict) else {}
+        sniper_points = battle_plan.get("sniper_points") if isinstance(battle_plan.get("sniper_points"), dict) else {}
+        for field in ("ideal_buy", "secondary_buy", "stop_loss", "take_profit"):
+            if field in sniper_points or field in {"ideal_buy", "stop_loss"}:
+                sniper_points[field] = placeholder
+        battle_plan["sniper_points"] = sniper_points
+        battle_plan["sniper_points_meta"] = {
+            "grounding": "ungrounded",
+            "reason": reason[:120],
+        }
+        dashboard["battle_plan"] = battle_plan
+        result.dashboard = dashboard
+
+    @staticmethod
+    def _neutralize_unsafe_decision_text(
+        result: AnalysisResult,
+        *,
+        text: str,
+        preserve_summary: bool = False,
+    ) -> None:
+        dashboard = result.dashboard if isinstance(result.dashboard, dict) else {}
+        core = dashboard.get("core_conclusion") if isinstance(dashboard.get("core_conclusion"), dict) else {}
+        core["one_sentence"] = text
+        core["position_advice"] = {
+            "no_position": text,
+            "has_position": text,
+        }
+        dashboard["core_conclusion"] = core
+
+        battle_plan = dashboard.get("battle_plan") if isinstance(dashboard.get("battle_plan"), dict) else {}
+        battle_plan["position_strategy"] = {
+            "suggested_position": text,
+            "entry_plan": text,
+            "risk_control": text,
+        }
+        dashboard["battle_plan"] = battle_plan
+        result.dashboard = dashboard
+        if not preserve_summary:
+            result.analysis_summary = text
+
+    @staticmethod
+    def _attach_score_authenticity_metadata(
+        result: AnalysisResult,
+        *,
+        data_quality_report: Dict[str, Any],
+        original_score: Any,
+        score_capped: bool,
+    ) -> None:
+        dashboard = result.dashboard if isinstance(result.dashboard, dict) else {}
+        structured = (
+            dashboard.get("structured_analysis")
+            if isinstance(dashboard.get("structured_analysis"), dict)
+            else {}
+        )
+        structured["data_quality_report"] = data_quality_report
+        structured["score_authenticity"] = {
+            "scoreSuppressed": bool(data_quality_report.get("scoreSuppressed")),
+            "scoreSuppressedReason": data_quality_report.get("scoreSuppressedReason"),
+            "scoreCapped": bool(score_capped),
+            "originalScore": original_score,
+            "finalScore": getattr(result, "sentiment_score", None),
+            "confidenceCap": data_quality_report.get("confidenceCap"),
+            "stanceGuardrail": data_quality_report.get("stanceGuardrail"),
+            "keyLevelGuardrail": data_quality_report.get("keyLevelGuardrail"),
+            "missingRequiredDomains": list(data_quality_report.get("missingRequiredDomains") or []),
+            "importantDomainsMissing": list(data_quality_report.get("importantDomainsMissing") or []),
+            "reasonCodes": list(data_quality_report.get("reasonCodes") or []),
+        }
+        dashboard["structured_analysis"] = structured
+        result.dashboard = dashboard
 
     @staticmethod
     def _inject_structured_blocks_into_result(result: AnalysisResult, enhanced_context: Dict[str, Any]) -> None:
