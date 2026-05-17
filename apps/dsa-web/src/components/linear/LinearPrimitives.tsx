@@ -11,11 +11,15 @@ type LinearSurfaceElement = 'div' | 'section' | 'article' | 'aside' | 'header';
 type LinearSurfaceVariant = 'console' | 'input' | 'rail' | 'flat';
 type LinearSurfacePadding = 'none' | 'xs' | 'sm' | 'md' | 'lg';
 export type LinearLayoutZone =
+  | 'RouteConsole'
   | 'HeaderStrip'
   | 'CommandBar'
   | 'PrimaryWorkRegion'
   | 'ContextRail'
   | 'SecondaryDeck'
+  | 'ChartWell'
+  | 'MetricStrip'
+  | 'KeyLevelStrip'
   | 'DetailDrawer'
   | 'FloatingPanel';
 type LinearRailWidth = 'sm' | 'md' | 'lg';
@@ -46,6 +50,49 @@ const RAIL_WIDTHS: Record<LinearRailWidth, string> = {
   md: 'lg:w-[clamp(18rem,22vw,22.5rem)]',
   lg: 'lg:w-[clamp(20rem,24vw,25rem)]',
 };
+
+type FixedRegionWrapperProps = React.HTMLAttributes<HTMLDivElement> & {
+  children?: React.ReactNode;
+  className?: string;
+  'data-testid'?: string;
+};
+
+export function PrimaryWorkRegion({
+  className,
+  children,
+  ...props
+}: FixedRegionWrapperProps) {
+  return (
+    <div
+      data-linear-primitive="primary-work-region"
+      data-layout-zone="PrimaryWorkRegion"
+      className={cn('min-w-0', className)}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function SecondaryDeck({
+  className,
+  children,
+  ...props
+}: FixedRegionWrapperProps) {
+  return (
+    <div
+      data-linear-primitive="secondary-deck"
+      data-layout-zone="SecondaryDeck"
+      className={cn(
+        'min-w-0 border-t border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-console)]',
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+}
 
 export function WolfyShellSurface({
   as = 'section',
@@ -87,6 +134,8 @@ export function FixedRegionGrid({
   primaryClassName,
   railClassName,
   secondaryClassName,
+  railTestId,
+  secondaryTestId,
   children,
   ...props
 }: LinearPrimitiveProps<HTMLDivElement> & {
@@ -99,11 +148,14 @@ export function FixedRegionGrid({
   primaryClassName?: string;
   railClassName?: string;
   secondaryClassName?: string;
+  railTestId?: string;
+  secondaryTestId?: string;
 }) {
   const primaryContent = primary ?? children;
   return (
     <div
       data-linear-primitive="fixed-region-grid"
+      data-layout-contract="fixed-region-grid"
       className={cn('grid min-w-0 gap-0 overflow-hidden', className)}
       {...props}
     >
@@ -113,14 +165,20 @@ export function FixedRegionGrid({
         </div>
       ) : null}
       <div className={cn('grid min-w-0 gap-0', rail ? RAIL_GRID_TRACKS[railWidth] : '')}>
-        <div data-layout-zone="PrimaryWorkRegion" className={cn('min-w-0', primaryClassName)}>
+        <div
+          data-linear-primitive="primary-work-region"
+          data-layout-zone="PrimaryWorkRegion"
+          className={cn('min-w-0', primaryClassName)}
+        >
           {primaryContent}
         </div>
         {rail ? (
           <div
+            data-linear-primitive="context-rail"
             data-layout-zone="ContextRail"
+            data-testid={railTestId}
             className={cn(
-              'min-w-0 border-t border-[color:var(--wolfy-divider)] lg:border-l lg:border-t-0',
+              'flex min-w-0 flex-col divide-y divide-[color:var(--wolfy-divider)] overflow-hidden border-t border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-rail)] lg:border-l lg:border-t-0',
               railClassName,
             )}
           >
@@ -129,9 +187,12 @@ export function FixedRegionGrid({
         ) : null}
       </div>
       {secondary ? (
-        <div data-layout-zone="SecondaryDeck" className={cn('min-w-0 border-t border-[color:var(--wolfy-divider)]', secondaryClassName)}>
+        <SecondaryDeck
+          data-testid={secondaryTestId}
+          className={secondaryClassName}
+        >
           {secondary}
-        </div>
+        </SecondaryDeck>
       ) : null}
     </div>
   );
@@ -227,14 +288,21 @@ export function ResearchConsoleShell({
   return (
     <div
       data-linear-primitive="research-console-shell"
+      data-layout-zone="RouteConsole"
+      data-route-console="ResearchConsole"
       className={cn(
-        'flex w-full min-w-0 flex-col gap-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-2 shadow-none md:p-3',
+        'relative isolate flex w-full min-w-0 flex-col gap-3 overflow-hidden rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-2 shadow-[var(--wolfy-shadow-console)] md:p-3',
         className,
       )}
       {...props}
     >
       {command}
-      <div className="grid min-w-0 overflow-hidden rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-console)] lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div
+        className={cn(
+          'grid min-w-0 overflow-hidden rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-console)]',
+          rail ? 'lg:grid-cols-[minmax(0,1fr)_320px]' : '',
+        )}
+      >
         <div className="min-w-0">{children}</div>
         {rail ? <div className="min-w-0 border-t border-[color:var(--wolfy-divider)] lg:border-l lg:border-t-0">{rail}</div> : null}
       </div>

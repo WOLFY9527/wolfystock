@@ -15,12 +15,9 @@ import {
   CatalystRows,
   CompactFilterBar,
   ConsoleBoard,
-  ConsoleContextRail,
   FixedRegionGrid,
   KeyLevelStrip,
   ResearchConsoleShell,
-  RailPanel,
-  SectionDeck,
 } from '../components/linear';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -1187,10 +1184,7 @@ function LinearObservationPanel({
   ] as const;
 
   return (
-    <RailPanel
-      className="relative min-w-0"
-      data-testid="home-research-context-rail"
-    >
+    <div className="relative flex min-w-0 flex-col divide-y divide-[color:var(--wolfy-divider)] px-4 py-4 lg:max-h-[calc(100dvh-12rem)] lg:overflow-y-auto lg:px-5 lg:py-5 no-scrollbar">
       <section className="min-w-0 py-2 first:pt-0" data-testid="home-bento-card-strategy" data-research-card="opportunity">
         <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
           <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Observation Framework' : '观察框架'}</h2>
@@ -1258,7 +1252,7 @@ function LinearObservationPanel({
         </div>
       </section>
       {isGuest ? <div className="min-w-0 py-2 last:pb-0">{guestPaywall}</div> : null}
-    </RailPanel>
+    </div>
   );
 }
 
@@ -1359,27 +1353,25 @@ function LinearEventsStrip({
   const events = buildHomeCatalystEvents(report, locale);
 
   return (
-    <SectionDeck className="min-w-0 gap-2 pt-2" data-testid="home-research-secondary-deck">
-      <div className="min-w-0" data-testid="home-linear-events">
-        <div className="flex min-w-0 items-center justify-between gap-3 pb-1.5">
-          <h2 className="text-sm font-semibold text-white/88">{isEnglish ? 'Events & Catalysts' : '关键事件与催化剂'}</h2>
-          {events.length ? (
-            <span className="text-[11px] text-white/34">{events.length}{isEnglish ? ' rows' : ' 条'}</span>
-          ) : null}
-        </div>
-        <CatalystRows
-          className="border-t border-[color:var(--wolfy-divider)]"
-          emptyText={isEnglish ? 'No verified catalysts' : '暂无已验证催化剂'}
-          emptyTestId="home-linear-events-empty"
-          items={events.map((event, index) => ({
-            key: `${event.label}-${index}`,
-            title: isEmptyDashboardValue(event.title) ? EMPTY_FIELD_VALUE : event.title,
-            meta: `${event.label} · ${event.detail}`,
-            status: event.time,
-          }))}
-        />
+    <div className="min-w-0" data-testid="home-linear-events">
+      <div className="flex min-w-0 items-center justify-between gap-3 pb-1.5">
+        <h2 className="text-sm font-semibold text-white/88">{isEnglish ? 'Events & Catalysts' : '关键事件与催化剂'}</h2>
+        {events.length ? (
+          <span className="text-[11px] text-white/34">{events.length}{isEnglish ? ' rows' : ' 条'}</span>
+        ) : null}
       </div>
-    </SectionDeck>
+      <CatalystRows
+        className="border-t border-[color:var(--wolfy-divider)]"
+        emptyText={isEnglish ? 'No verified catalysts' : '暂无已验证催化剂'}
+        emptyTestId="home-linear-events-empty"
+        items={events.map((event, index) => ({
+          key: `${event.label}-${index}`,
+          title: isEmptyDashboardValue(event.title) ? EMPTY_FIELD_VALUE : event.title,
+          meta: `${event.label} · ${event.detail}`,
+          status: event.time,
+        }))}
+      />
+    </div>
   );
 }
 
@@ -4161,34 +4153,31 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           const scorePercent = normalizeLinearScore(readyCopy.decision.heroValue);
           const thesisCopy = readyCopy.decision.reasonBody || readyCopy.decision.summary || EMPTY_FIELD_VALUE;
           const stanceLabel = resolveLinearStanceLabel(locale, readyCopy.decision.signalLabel, readyCopy.decision.signalTone);
+          const contextRailContent = isHomeAnalyzing ? (
+            <div className="relative min-w-0 px-4 py-5 lg:px-5 lg:py-6">
+              <InPlaceStrategySkeleton locale={locale} />
+              <div className="grid gap-4 pt-4" data-testid="home-research-rail-loading-stack">
+                <InPlaceListSkeleton locale={locale} kind="tech" />
+                <InPlaceListSkeleton locale={locale} kind="fundamentals" />
+              </div>
+            </div>
+          ) : (
+            <LinearObservationPanel
+              locale={locale}
+              dashboard={readyCopy}
+              dataQualityReport={activeDataQualityReport}
+              sourceSummary={sourceSummary}
+              isGuest={Boolean(isGuest)}
+              guestPaywall={guestPaywall}
+              onOpenStrategy={() => setActiveDrawer('strategy')}
+              onOpenFundamentals={() => setActiveDrawer('fundamentals')}
+            />
+          );
           return (
             <ResearchConsoleShell
               data-testid="home-research-console"
               command={omnibarModule}
               className="gap-3"
-              rail={isHomeAnalyzing ? (
-                <ConsoleContextRail
-                  className="relative min-w-0 px-4 py-5 lg:px-5 lg:py-6"
-                  data-testid="home-research-context-rail"
-                >
-                  <InPlaceStrategySkeleton locale={locale} />
-                  <div className="grid gap-4 pt-4" data-testid="home-bento-secondary-grid">
-                    <InPlaceListSkeleton locale={locale} kind="tech" />
-                    <InPlaceListSkeleton locale={locale} kind="fundamentals" />
-                  </div>
-                </ConsoleContextRail>
-              ) : (
-                <LinearObservationPanel
-                  locale={locale}
-                  dashboard={readyCopy}
-                  dataQualityReport={activeDataQualityReport}
-                  sourceSummary={sourceSummary}
-                  isGuest={Boolean(isGuest)}
-                  guestPaywall={guestPaywall}
-                  onOpenStrategy={() => setActiveDrawer('strategy')}
-                  onOpenFundamentals={() => setActiveDrawer('fundamentals')}
-                />
-              )}
             >
               <ConsoleBoard
                 className="rounded-none border-0 bg-transparent"
@@ -4196,6 +4185,17 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               >
                 <FixedRegionGrid
                   className="min-w-0"
+                  rail={contextRailContent}
+                  railTestId="home-research-context-rail"
+                  railClassName="lg:max-h-[calc(100dvh-10.75rem)] lg:overflow-y-auto no-scrollbar"
+                  secondary={!isHomeAnalyzing ? (
+                    <LinearEventsStrip
+                      locale={locale}
+                      report={activeTraceReport}
+                    />
+                  ) : undefined}
+                  secondaryTestId={!isHomeAnalyzing ? 'home-research-secondary-deck' : undefined}
+                  secondaryClassName="px-4 py-4 md:px-7 md:py-4"
                   header={!isHomeAnalyzing ? (
                     <div
                       className="border-b border-[color:var(--wolfy-divider)] px-4 py-5 md:px-7 md:py-6"
@@ -4313,8 +4313,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           </div>
                         </div>
                         {!isHomeAnalyzing ? (
-                          <>
-                            <div className="mt-5 px-0" data-testid="home-bento-secondary-grid">
+                          <div className="mt-5 px-0" data-testid="home-research-chart-section">
                               <LinearTechnicalStructure
                                 locale={locale}
                                 ticker={readyCopy.ticker}
@@ -4326,14 +4325,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                                 detailLabel={readyCopy.tech.detailLabel}
                                 onChartContextChange={setHomeChartContext}
                               />
-                            </div>
-                            <div className="px-0 pb-0">
-                              <LinearEventsStrip
-                                locale={locale}
-                                report={activeTraceReport}
-                              />
-                            </div>
-                          </>
+                          </div>
                         ) : null}
                         </>
                       )}

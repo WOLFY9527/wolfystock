@@ -795,7 +795,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
   return (
     <div
       ref={sizeRef}
-      className="min-w-0 rounded-[12px] border border-white/[0.05] bg-[#0b0d11] px-3 py-3"
+      className="min-w-0 rounded-[10px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-3 py-3 shadow-[var(--wolfy-shadow-panel)]"
       data-testid="home-linear-technical-chart"
       data-chart-engine="echarts"
       data-chart-source={activeTimeframe === '1D' ? 'stocks-history-daily' : 'stocks-history-daily-aggregated'}
@@ -879,7 +879,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
 
       {status === 'ready' && candles.length ? (
         <div
-          className="relative h-[260px] min-w-[280px] overflow-visible sm:h-[300px] xl:h-[336px]"
+          className="relative h-[300px] min-w-[280px] overflow-visible sm:h-[340px] xl:h-[392px]"
           data-testid="home-candlestick-chart-frame"
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoveredIndex(null)}
@@ -924,7 +924,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       ) : (
         <div
           className={cn(
-            'flex h-[260px] min-w-[280px] flex-col items-center justify-center rounded border border-white/[0.045] bg-white/[0.012] px-4 text-center sm:h-[300px] xl:h-[336px]',
+            'flex h-[300px] min-w-[280px] flex-col items-center justify-center rounded border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-4 text-center sm:h-[340px] xl:h-[392px]',
             status === 'loading' ? 'text-white/46' : 'text-white/42',
           )}
           data-testid="home-candlestick-unavailable"

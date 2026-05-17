@@ -14,10 +14,10 @@ import {
   FloatingDetailPanel,
   MetricStrip,
   KeyLevelStrip,
+  PrimaryWorkRegion,
   ResearchConsoleShell,
-  RailPanel,
   ScrollPanel,
-  SectionDeck,
+  SecondaryDeck,
   WolfyCommandBar,
   WolfyShellSurface,
 } from '../LinearPrimitives';
@@ -55,6 +55,7 @@ describe('LinearPrimitives', () => {
       'border-[color:var(--wolfy-border-subtle)]',
       'rounded-lg',
     );
+    expect(screen.getByText('Search').closest('[data-linear-primitive="research-console-shell"]')).toHaveAttribute('data-route-console', 'ResearchConsole');
     expect(screen.getByText('Search').closest('[data-linear-primitive="command-bar"]')).toHaveClass(
       'bg-[var(--wolfy-surface-input)]',
       'rounded-lg',
@@ -77,9 +78,13 @@ describe('LinearPrimitives', () => {
               <ConsoleBoard>Board</ConsoleBoard>
             </ScrollPanel>
           )}
-          rail={<RailPanel><div>Rail</div></RailPanel>}
-          secondary={<SectionDeck><div>Deck</div></SectionDeck>}
+          rail={<div>Rail</div>}
+          railTestId="fixed-grid-rail"
+          secondary={<div>Deck</div>}
+          secondaryTestId="fixed-grid-deck"
         />
+        <PrimaryWorkRegion data-testid="named-primary">Named primary</PrimaryWorkRegion>
+        <SecondaryDeck data-testid="named-deck">Named deck</SecondaryDeck>
       </>,
     );
 
@@ -87,8 +92,13 @@ describe('LinearPrimitives', () => {
     expect(screen.getByText('Header').closest('[data-layout-zone="HeaderStrip"]')).toBeInTheDocument();
     expect(screen.getByText('Board').closest('[data-layout-zone="PrimaryWorkRegion"]')).toBeInTheDocument();
     expect(screen.getByText('Board').closest('[data-linear-primitive="scroll-panel"]')).toHaveClass('overflow-y-auto', 'no-scrollbar');
-    expect(screen.getByText('Rail').closest('[data-layout-zone="ContextRail"]')).toHaveAttribute('data-linear-primitive', 'rail-panel');
-    expect(screen.getByText('Deck').closest('[data-layout-zone="SecondaryDeck"]')).toHaveAttribute('data-linear-primitive', 'section-deck');
+    expect(screen.getByTestId('fixed-grid-rail')).toHaveAttribute('data-linear-primitive', 'context-rail');
+    expect(screen.getByTestId('fixed-grid-rail')).toHaveAttribute('data-layout-zone', 'ContextRail');
+    expect(screen.getByTestId('fixed-grid-rail')).toHaveClass('overflow-hidden', 'bg-[var(--wolfy-surface-rail)]');
+    expect(screen.getByTestId('fixed-grid-deck')).toHaveAttribute('data-linear-primitive', 'secondary-deck');
+    expect(screen.getByTestId('fixed-grid-deck')).toHaveAttribute('data-layout-zone', 'SecondaryDeck');
+    expect(screen.getByTestId('named-primary')).toHaveAttribute('data-linear-primitive', 'primary-work-region');
+    expect(screen.getByTestId('named-deck')).toHaveAttribute('data-linear-primitive', 'secondary-deck');
   });
 
   it('renders status, key-level, catalyst, metric strip, workbench, and dense row helpers', () => {

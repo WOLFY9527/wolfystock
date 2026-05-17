@@ -312,6 +312,8 @@ describe('HomeSurfacePage', () => {
     expect(researchConsole.contains(board)).toBe(true);
     expect(researchConsole.contains(rail)).toBe(true);
     expect(rail.closest('[data-testid="home-research-console"]')).toBe(researchConsole);
+    expect(board.contains(rail)).toBe(true);
+    expect(board.contains(secondaryDeck)).toBe(true);
     expect(commandBar.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     expect(commandBar).toHaveAttribute('data-linear-primitive', 'compact-filter-bar');
@@ -319,12 +321,12 @@ describe('HomeSurfacePage', () => {
     expect(commandBar).toHaveClass('bg-[var(--wolfy-surface-input)]', 'border-[color:var(--wolfy-border-subtle)]');
     expect(headerStrip.closest('[data-layout-zone="HeaderStrip"]')).toBeInTheDocument();
     expect(primaryWorkspace.closest('[data-layout-zone="PrimaryWorkRegion"]')).toBeInTheDocument();
-    expect(secondaryDeck).toHaveAttribute('data-linear-primitive', 'section-deck');
+    expect(secondaryDeck).toHaveAttribute('data-linear-primitive', 'secondary-deck');
     expect(secondaryDeck).toHaveAttribute('data-layout-zone', 'SecondaryDeck');
 
     expect(board).toHaveAttribute('data-linear-primitive', 'console-board');
     expect(board).toHaveClass('rounded-none', 'border-0', 'bg-transparent');
-    expect(rail).toHaveAttribute('data-linear-primitive', 'rail-panel');
+    expect(rail).toHaveAttribute('data-linear-primitive', 'context-rail');
     expect(rail).toHaveAttribute('data-layout-zone', 'ContextRail');
     expect(rail).toHaveClass('bg-[var(--wolfy-surface-rail)]', 'divide-y', 'divide-[color:var(--wolfy-divider)]');
 
@@ -419,6 +421,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-card-decision')).not.toHaveClass('rounded-[24px]');
     expect(screen.getByTestId('home-bento-card-strategy').compareDocumentPosition(screen.getByTestId('home-bento-card-fundamentals')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByTestId('home-bento-card-tech').compareDocumentPosition(secondaryDeck) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByTestId('home-bento-secondary-grid')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-research-chart-section')).toContainElement(chartWorkspace);
 
     expect(researchConsole.querySelector('[data-research-card] [data-research-card]')).toBeNull();
     const cardZones = Array.from(researchConsole.querySelectorAll('[data-research-card]'))
@@ -1366,6 +1370,9 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-research-primary-workspace').closest('[data-layout-zone="PrimaryWorkRegion"]')).toBeInTheDocument();
     expect(screen.getByTestId('home-research-secondary-deck')).toHaveAttribute('data-layout-zone', 'SecondaryDeck');
     expect(rail).toHaveAttribute('data-layout-zone', 'ContextRail');
+    expect(rail).toHaveAttribute('data-linear-primitive', 'context-rail');
+    expect(board.contains(rail)).toBe(true);
+    expect(board.contains(screen.getByTestId('home-research-secondary-deck'))).toBe(true);
     expect(researchConsole.contains(board)).toBe(true);
     expect(researchConsole.contains(rail)).toBe(true);
     expect(researchConsole).toHaveClass('rounded-lg', 'border-[color:var(--wolfy-border-subtle)]', 'bg-[var(--wolfy-surface-console)]');
@@ -1399,7 +1406,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-research-board')).toHaveAttribute('data-linear-primitive', 'console-board');
     expect(screen.getByTestId('home-research-command-bar')).toHaveAttribute('data-layout-zone', 'CommandBar');
     expect(screen.getByTestId('home-research-context-rail')).toHaveAttribute('data-layout-zone', 'ContextRail');
-    expect(screen.getByTestId('home-bento-secondary-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('home-research-rail-loading-stack')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-secondary-grid')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('min-w-0');
     expect(screen.getByTestId('home-bento-card-strategy')).toHaveClass('min-w-0');
     expect(screen.queryByRole('img', { name: 'WolfyStock analyzing' })).not.toBeInTheDocument();
@@ -2428,7 +2436,11 @@ describe('HomeSurfacePage', () => {
     expect(chartRoot).toHaveAttribute('data-x-axis-density', 'sampled');
     expect(chartRoot).toHaveAttribute('data-chart-timeframe', '1D');
     expect(chartRoot).toHaveAttribute('data-chart-source', 'stocks-history-daily');
-    expect(chartRoot).toHaveClass('rounded-[12px]', 'border-white/[0.05]', 'bg-[#0b0d11]');
+    expect(chartRoot).toHaveClass(
+      'rounded-[10px]',
+      'border-[color:var(--wolfy-border-faint)]',
+      'bg-[var(--wolfy-surface-inset)]',
+    );
 
     fireEvent.mouseMove(chartFrame, { clientX: 0 });
 
