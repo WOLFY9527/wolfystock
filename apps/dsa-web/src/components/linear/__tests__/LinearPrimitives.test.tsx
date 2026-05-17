@@ -53,12 +53,13 @@ describe('LinearPrimitives', () => {
     expect(screen.getByText('Search').closest('[data-linear-primitive="research-console-shell"]')).toHaveClass(
       'bg-[var(--wolfy-surface-console)]',
       'border-[color:var(--wolfy-border-subtle)]',
-      'rounded-lg',
+      'rounded-[18px]',
     );
     expect(screen.getByText('Search').closest('[data-linear-primitive="research-console-shell"]')).toHaveAttribute('data-route-console', 'ResearchConsole');
+    expect(screen.getByText('Search').closest('[data-linear-primitive="research-console-shell"]')).toHaveAttribute('data-visual-tier', 'dominant');
     expect(screen.getByText('Search').closest('[data-linear-primitive="command-bar"]')).toHaveClass(
       'bg-[var(--wolfy-surface-input)]',
-      'rounded-lg',
+      'rounded-xl',
     );
     expect(screen.getByText('Board').closest('[data-linear-primitive="console-board"]')).toHaveClass('overflow-hidden');
     expect(screen.getByText('Rail').closest('[data-linear-primitive="context-rail"]')).toHaveClass(

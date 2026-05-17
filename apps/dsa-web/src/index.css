@@ -16414,41 +16414,53 @@ html[data-theme='spacex'] .shell-context-panel__content {
 
 /* Reflect-Linear Research OS foundation: low-saturation dark financial workspace. */
 :root {
-  --wolfy-canvas-root: #060912;
-  --wolfy-canvas: #080c16;
-  --wolfy-canvas-elevated: #0b111d;
-  --wolfy-surface-console: #0d1421;
-  --wolfy-surface-input: #111a28;
-  --wolfy-surface-rail: #0a101a;
-  --wolfy-surface-panel: #101724;
-  --wolfy-surface-inset: #070c14;
-  --wolfy-border-faint: rgb(153 164 214 / 0.085);
-  --wolfy-border-subtle: rgb(160 169 218 / 0.13);
-  --wolfy-border-default: rgb(167 176 224 / 0.18);
-  --wolfy-border-focus: rgb(126 116 219 / 0.48);
-  --wolfy-divider: rgb(171 181 226 / 0.105);
+  --wolfy-canvas-root: #03060d;
+  --wolfy-canvas: #060a13;
+  --wolfy-canvas-elevated: #090f1b;
+  --wolfy-surface-console: #0b111c;
+  --wolfy-surface-input: #0f1725;
+  --wolfy-surface-rail: #080e18;
+  --wolfy-surface-panel: #101827;
+  --wolfy-surface-inset: #050a12;
+  --wolfy-surface-inset-lift: #0a1019;
+  --wolfy-border-faint: rgb(158 168 225 / 0.095);
+  --wolfy-border-subtle: rgb(166 176 230 / 0.15);
+  --wolfy-border-default: rgb(175 184 234 / 0.22);
+  --wolfy-border-focus: rgb(125 114 217 / 0.52);
+  --wolfy-divider: rgb(173 183 229 / 0.115);
   --wolfy-text-primary: rgb(245 247 252 / 0.94);
   --wolfy-text-secondary: rgb(213 219 235 / 0.72);
   --wolfy-text-muted: rgb(174 182 205 / 0.48);
-  --wolfy-accent: #7468d8;
-  --wolfy-accent-soft: rgb(116 104 216 / 0.18);
-  --wolfy-accent-focus: rgb(132 122 226 / 0.34);
-  --wolfy-glow-bloom: 0 0 86px rgb(96 84 196 / 0.14);
-  --wolfy-glow-focus: 0 0 0 1px rgb(132 122 226 / 0.34), 0 0 24px rgb(96 84 196 / 0.14);
+  --wolfy-accent: #766ddb;
+  --wolfy-accent-soft: rgb(118 109 219 / 0.18);
+  --wolfy-accent-focus: rgb(139 129 229 / 0.36);
+  --wolfy-bloom-violet: rgb(103 91 207 / 0.24);
+  --wolfy-bloom-indigo: rgb(68 88 172 / 0.16);
+  --wolfy-glow-bloom:
+    0 0 0 1px rgb(166 176 230 / 0.055),
+    0 26px 110px rgb(25 34 78 / 0.42),
+    0 0 96px rgb(103 91 207 / 0.16);
+  --wolfy-glow-focus:
+    0 0 0 1px rgb(139 129 229 / 0.36),
+    0 0 28px rgb(103 91 207 / 0.17);
   --wolfy-shadow-console:
-    0 24px 76px rgb(4 7 15 / 0.36),
-    inset 0 1px 0 rgb(255 255 255 / 0.035);
-  --wolfy-shadow-panel: inset 0 1px 0 rgb(255 255 255 / 0.028);
+    0 28px 92px rgb(2 5 13 / 0.54),
+    inset 0 1px 0 rgb(255 255 255 / 0.055),
+    inset 0 -1px 0 rgb(103 91 207 / 0.045);
+  --wolfy-shadow-panel:
+    0 18px 42px rgb(1 4 11 / 0.22),
+    inset 0 1px 0 rgb(255 255 255 / 0.04);
   --wolfy-market-up: #28b47c;
   --wolfy-market-down: #e95f6f;
   --wolfy-market-warn: #d4a047;
   --wolfy-app-background:
-    radial-gradient(circle at 56% 0%, rgb(103 91 207 / 0.13), transparent 34rem),
-    radial-gradient(circle at 94% 18%, rgb(40 71 136 / 0.1), transparent 28rem),
-    linear-gradient(180deg, var(--wolfy-canvas-root) 0%, var(--wolfy-canvas) 42%, #060914 100%);
+    radial-gradient(circle at 54% 2%, rgb(103 91 207 / 0.2), transparent 38rem),
+    radial-gradient(circle at 86% 22%, rgb(36 57 116 / 0.13), transparent 30rem),
+    radial-gradient(circle at 10% 88%, rgb(64 72 128 / 0.08), transparent 30rem),
+    linear-gradient(180deg, var(--wolfy-canvas-root) 0%, var(--wolfy-canvas) 44%, #030711 100%);
   --wolfy-grain:
-    radial-gradient(circle at 20% 30%, rgb(255 255 255 / 0.055) 0 0.5px, transparent 0.8px),
-    radial-gradient(circle at 70% 70%, rgb(255 255 255 / 0.035) 0 0.5px, transparent 0.8px);
+    radial-gradient(circle at 20% 30%, rgb(255 255 255 / 0.06) 0 0.5px, transparent 0.82px),
+    radial-gradient(circle at 70% 70%, rgb(255 255 255 / 0.038) 0 0.5px, transparent 0.82px);
 }
 
 html[data-theme='spacex'] {
@@ -16521,8 +16533,9 @@ html[data-theme='spacex'] .theme-shell--home .shell-main-column {
 html[data-theme='spacex'] body::before {
   display: block;
   background:
-    radial-gradient(circle at 54% 0%, rgb(116 104 216 / 0.12), transparent 34rem),
-    radial-gradient(circle at 12% 14%, rgb(60 77 140 / 0.08), transparent 24rem);
+    radial-gradient(circle at 52% 5%, rgb(116 104 216 / 0.18), transparent 38rem),
+    radial-gradient(circle at 12% 14%, rgb(60 77 140 / 0.1), transparent 26rem),
+    radial-gradient(circle at 76% 74%, rgb(88 77 170 / 0.08), transparent 32rem);
   opacity: 1;
 }
 
@@ -16530,7 +16543,7 @@ html[data-theme='spacex'] body::after {
   display: block;
   background-size: 96px 96px, 128px 128px;
   background-image: var(--wolfy-grain);
-  opacity: 0.16;
+  opacity: 0.18;
   mix-blend-mode: soft-light;
 }
 
@@ -16544,45 +16557,174 @@ html[data-theme='spacex'] .theme-shell--home .shell-main-column--home {
   padding-top: clamp(0.72rem, 1.2vw, 1rem);
 }
 
-html[data-theme='spacex'] [data-linear-primitive='research-console-shell'] {
-  border-color: var(--wolfy-border-subtle);
-  box-shadow: var(--wolfy-shadow-console), var(--wolfy-glow-bloom);
-}
-
-html[data-theme='spacex'] [data-linear-primitive='fixed-region-grid'] {
+html[data-theme='spacex'] [data-testid='home-bento-dashboard'] {
+  position: relative;
+  isolation: isolate;
   background:
-    linear-gradient(180deg, rgb(255 255 255 / 0.018), transparent 28%),
-    var(--wolfy-surface-console);
+    radial-gradient(ellipse at 52% 8%, rgb(103 91 207 / 0.18), transparent 34rem),
+    radial-gradient(ellipse at 70% 34%, rgb(46 65 131 / 0.11), transparent 30rem),
+    linear-gradient(180deg, rgb(4 7 14 / 0.34), transparent 42%);
 }
 
-html[data-theme='spacex'] [data-linear-primitive='command-bar'],
-html[data-theme='spacex'] [data-linear-primitive='compact-filter-bar'] {
-  background: var(--wolfy-surface-input);
+html[data-theme='spacex'] [data-testid='home-bento-dashboard']::before {
+  content: '';
+  position: absolute;
+  inset: clamp(3rem, 8vw, 7rem) 4vw auto;
+  height: min(42rem, 58vh);
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 42% 18%, var(--wolfy-bloom-violet), transparent 34rem),
+    radial-gradient(ellipse at 72% 34%, var(--wolfy-bloom-indigo), transparent 28rem);
+  filter: blur(28px);
+  opacity: 0.62;
+  z-index: -1;
+}
+
+html[data-theme='spacex'] [data-testid='home-bento-dashboard']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--wolfy-grain);
+  background-size: 96px 96px, 128px 128px;
+  opacity: 0.08;
+  mix-blend-mode: soft-light;
+  z-index: -1;
+}
+
+html[data-theme='spacex'] [data-testid='home-bento-dashboard'] [data-linear-primitive='research-console-shell'] {
   border-color: var(--wolfy-border-subtle);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.025);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.028), transparent 18rem),
+    radial-gradient(circle at 48% 0%, rgb(118 109 219 / 0.13), transparent 30rem),
+    linear-gradient(180deg, rgb(12 18 31 / 0.92), rgb(8 13 23 / 0.96));
+  box-shadow: var(--wolfy-shadow-console), var(--wolfy-glow-bloom);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
-html[data-theme='spacex'] [data-linear-primitive='command-bar']:focus-within,
-html[data-theme='spacex'] [data-linear-primitive='compact-filter-bar']:focus-within {
+html[data-theme='spacex'] [data-testid='home-bento-dashboard'] [data-linear-primitive='research-console-shell']::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.055), transparent 7rem),
+    radial-gradient(circle at 48% -8%, rgb(139 129 229 / 0.14), transparent 25rem);
+  opacity: 0.78;
+}
+
+html[data-theme='spacex'] [data-testid='home-bento-dashboard'] [data-linear-primitive='research-console-shell'] > * {
+  position: relative;
+  z-index: 1;
+}
+
+html[data-theme='spacex'] [data-testid='home-bento-dashboard'] [data-linear-primitive='fixed-region-grid'] {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.026), transparent 28%),
+    linear-gradient(90deg, rgb(118 109 219 / 0.03), transparent 34%),
+    rgb(9 14 24 / 0.92);
+}
+
+html[data-theme='spacex'] [data-testid='home-bento-dashboard'] [data-linear-primitive='command-bar'],
+html[data-theme='spacex'] [data-testid='home-bento-dashboard'] [data-linear-primitive='compact-filter-bar'] {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.035), transparent 70%),
+    rgb(13 20 33 / 0.92);
+  border-color: var(--wolfy-border-subtle);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.045),
+    0 12px 36px rgb(2 5 13 / 0.22);
+}
+
+html[data-theme='spacex'] [data-testid='home-bento-dashboard'] [data-linear-primitive='command-bar']:focus-within,
+html[data-theme='spacex'] [data-testid='home-bento-dashboard'] [data-linear-primitive='compact-filter-bar']:focus-within {
   border-color: var(--wolfy-border-focus);
   box-shadow: var(--wolfy-glow-focus);
 }
 
-html[data-theme='spacex'] [data-linear-primitive='context-rail'] {
-  background: var(--wolfy-surface-rail);
-}
-
-html[data-theme='spacex'] [data-linear-primitive='secondary-deck'] {
+html[data-theme='spacex'] [data-testid='home-bento-dashboard'] [data-linear-primitive='context-rail'] {
   background:
-    linear-gradient(180deg, rgb(255 255 255 / 0.012), transparent 64%),
-    var(--wolfy-surface-console);
+    linear-gradient(180deg, rgb(255 255 255 / 0.022), transparent 22rem),
+    linear-gradient(90deg, rgb(118 109 219 / 0.045), transparent 42%),
+    rgb(8 13 23 / 0.96);
+  box-shadow:
+    inset 1px 0 0 rgb(255 255 255 / 0.025),
+    inset 12px 0 30px rgb(118 109 219 / 0.025);
 }
 
-html[data-theme='spacex'] [data-linear-primitive='key-level-strip'],
-html[data-theme='spacex'] [data-linear-primitive='metric-strip'],
-html[data-theme='spacex'] [data-linear-primitive='status-strip'] {
-  background: var(--wolfy-surface-input);
+html[data-theme='spacex'] [data-testid='home-bento-dashboard'] [data-linear-primitive='secondary-deck'] {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.018), transparent 64%),
+    linear-gradient(90deg, rgb(118 109 219 / 0.025), transparent 50%),
+    rgb(9 14 24 / 0.94);
+}
+
+html[data-theme='spacex'] [data-testid='home-bento-dashboard'] [data-linear-primitive='key-level-strip'],
+html[data-theme='spacex'] [data-testid='home-bento-dashboard'] [data-linear-primitive='metric-strip'],
+html[data-theme='spacex'] [data-testid='home-bento-dashboard'] [data-linear-primitive='status-strip'] {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.018), transparent 100%),
+    rgb(13 20 33 / 0.7);
   border-color: var(--wolfy-divider);
+}
+
+html[data-theme='spacex'] .home-research-hero-matrix {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.024), transparent 72%),
+    linear-gradient(90deg, rgb(118 109 219 / 0.045), transparent 42%),
+    rgb(10 16 27 / 0.58);
+  border-color: var(--wolfy-divider);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.035),
+    0 18px 42px rgb(1 4 11 / 0.14);
+}
+
+html[data-theme='spacex'] .home-research-action-button {
+  border-color: rgb(166 176 230 / 0.11);
+  background: rgb(218 224 255 / 0.035);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.025);
+}
+
+html[data-theme='spacex'] .home-research-action-button:hover {
+  border-color: rgb(166 176 230 / 0.2);
+  background: rgb(218 224 255 / 0.065);
+}
+
+html[data-theme='spacex'] .home-research-action-button--primary {
+  border-color: rgb(139 129 229 / 0.3);
+  background:
+    linear-gradient(180deg, rgb(139 129 229 / 0.16), rgb(118 109 219 / 0.095)),
+    rgb(218 224 255 / 0.045);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.04),
+    0 0 24px rgb(118 109 219 / 0.09);
+}
+
+html[data-theme='spacex'] .home-research-command-bar {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.045),
+    0 16px 44px rgb(1 4 11 / 0.28),
+    0 0 36px rgb(103 91 207 / 0.055);
+}
+
+html[data-theme='spacex'] .home-research-context-rail,
+html[data-theme='spacex'] .home-research-rail-body,
+html[data-theme='spacex'] .home-research-signal-rail {
+  color: var(--wolfy-text-secondary);
+}
+
+html[data-theme='spacex'] .home-chart-well {
+  background:
+    radial-gradient(circle at 50% 0%, rgb(118 109 219 / 0.065), transparent 20rem),
+    linear-gradient(180deg, rgb(255 255 255 / 0.018), transparent 38%),
+    linear-gradient(180deg, var(--wolfy-surface-inset-lift), var(--wolfy-surface-inset));
+  border-color: var(--wolfy-border-faint);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.035),
+    inset 0 0 0 1px rgb(118 109 219 / 0.025),
+    0 24px 58px rgb(1 4 11 / 0.24);
 }
 
 .reflect-linear-grain {

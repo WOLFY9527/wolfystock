@@ -553,8 +553,8 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       animation: false,
       backgroundColor: 'transparent',
       grid: [
-        { left: 6, right: rightAxisGutter, top: 12, height: '58%', containLabel: true },
-        { left: 6, right: rightAxisGutter, top: '76%', height: '10%', containLabel: true },
+        { left: 8, right: rightAxisGutter, top: 14, height: '58%', containLabel: true },
+        { left: 8, right: rightAxisGutter, top: '76%', height: '10%', containLabel: true },
       ],
       tooltip: {
         trigger: 'axis',
@@ -568,17 +568,17 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
         transitionDuration: 0.08,
         axisPointer: {
           type: 'cross',
-          crossStyle: { color: 'rgba(226,232,240,0.52)' },
+          crossStyle: { color: 'rgba(186,194,238,0.46)' },
           label: {
-            backgroundColor: 'rgba(8,12,18,0.95)',
+            backgroundColor: 'rgba(9,14,24,0.96)',
             color: 'rgba(248,250,252,0.82)',
             fontSize: 10,
           },
         },
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.10)',
-        backgroundColor: 'rgba(6,10,16,0.96)',
-        borderRadius: 6,
+        borderColor: 'rgba(166,176,230,0.16)',
+        backgroundColor: 'rgba(7,11,19,0.96)',
+        borderRadius: 8,
         padding: 0,
         shadowBlur: 18,
         shadowColor: 'rgba(0,0,0,0.34)',
@@ -610,7 +610,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           type: 'category',
           data: dates,
           boundaryGap: true,
-          axisLine: { lineStyle: { color: 'rgba(255,255,255,0.10)' } },
+          axisLine: { lineStyle: { color: 'rgba(166,176,230,0.13)' } },
           axisTick: { show: false },
           axisLabel: { show: false },
           splitLine: { show: false },
@@ -620,14 +620,14 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           gridIndex: 1,
           data: dates,
           boundaryGap: true,
-          axisLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
+          axisLine: { lineStyle: { color: 'rgba(166,176,230,0.11)' } },
           axisTick: { show: false },
           axisLabel: {
             show: true,
             interval: xLabelInterval,
             hideOverlap: true,
             margin: 8,
-            color: 'rgba(255,255,255,0.36)',
+            color: 'rgba(213,219,235,0.42)',
             fontSize: isCompactChart ? 9 : 10,
             formatter: (value: string) => formatDate(value, locale),
           },
@@ -643,11 +643,11 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           axisLabel: {
             hideOverlap: true,
             margin: 8,
-            color: 'rgba(255,255,255,0.46)',
+            color: 'rgba(213,219,235,0.52)',
             fontSize: 10,
             formatter: (value: number) => formatPrice(value),
           },
-          splitLine: { lineStyle: { color: 'rgba(255,255,255,0.055)' } },
+          splitLine: { lineStyle: { color: 'rgba(166,176,230,0.075)' } },
         },
         {
           scale: true,
@@ -661,11 +661,11 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
             showMaxLabel: false,
             hideOverlap: true,
             margin: 6,
-            color: 'rgba(255,255,255,0.28)',
+            color: 'rgba(213,219,235,0.34)',
             fontSize: 9,
             formatter: (value: number) => formatVolume(value),
           },
-          splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
+          splitLine: { lineStyle: { color: 'rgba(166,176,230,0.052)' } },
         },
       ],
       dataZoom: [
@@ -684,19 +684,19 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           type: 'candlestick',
           data: candles.map((item) => [item.open, item.close, item.low, item.high]),
           itemStyle: {
-            color: '#34D399',
-            color0: '#FB7185',
-            borderColor: '#34D399',
-            borderColor0: '#FB7185',
+            color: '#2FC48D',
+            color0: '#E76576',
+            borderColor: '#2FC48D',
+            borderColor0: '#E76576',
           },
           markLine: safeCurrentPrice
             ? {
                 symbol: ['none', 'none'],
                 silent: true,
-                lineStyle: { color: 'rgba(52,211,153,0.58)', type: 'dashed', width: 1 },
+                lineStyle: { color: 'rgba(47,196,141,0.58)', type: 'dashed', width: 1 },
                 label: {
                   color: '#051016',
-                  backgroundColor: 'rgba(52,211,153,0.92)',
+                  backgroundColor: 'rgba(47,196,141,0.92)',
                   borderRadius: 3,
                   padding: [2, 5],
                   formatter: () => formatPrice(safeCurrentPrice),
@@ -728,7 +728,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           data: candles.map((item) => ({
             value: item.volume,
             itemStyle: {
-              color: item.close >= item.open ? 'rgba(52,211,153,0.34)' : 'rgba(251,113,133,0.34)',
+              color: item.close >= item.open ? 'rgba(47,196,141,0.28)' : 'rgba(231,101,118,0.28)',
             },
           })),
           barWidth: '58%',
@@ -795,8 +795,10 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
   return (
     <div
       ref={sizeRef}
-      className="min-w-0 rounded-[10px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-3 py-3 shadow-[var(--wolfy-shadow-panel)]"
+      className="home-chart-well min-w-0 rounded-[14px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-3 py-3 shadow-[var(--wolfy-shadow-panel)]"
       data-testid="home-linear-technical-chart"
+      data-visual-role="primary-chart"
+      data-surface-system="reflect-linear-console"
       data-chart-engine="echarts"
       data-chart-source={activeTimeframe === '1D' ? 'stocks-history-daily' : 'stocks-history-daily-aggregated'}
       data-chart-timeframe={activeTimeframe}
@@ -811,7 +813,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       <div className="mb-3 flex min-w-0 flex-col gap-2.5">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <div className="flex items-center gap-0.5 rounded-full border border-white/[0.06] bg-white/[0.02] p-0.5">
+            <div className="flex items-center gap-0.5 rounded-full border border-[color:var(--wolfy-border-faint)] bg-white/[0.025] p-0.5">
               {TIMEFRAME_OPTIONS.map((optionItem) => (
                 <button
                   key={optionItem.key}
@@ -820,7 +822,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
                   className={cn(
                     'rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors',
                     activeTimeframe === optionItem.key
-                      ? 'bg-white/[0.08] text-white/86'
+                      ? 'bg-[var(--wolfy-accent-soft)] text-white/86'
                       : 'text-white/42 hover:bg-white/[0.04] hover:text-white/72',
                   )}
                   onClick={() => handleTimeframeChange(optionItem.key)}
@@ -879,7 +881,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
 
       {status === 'ready' && candles.length ? (
         <div
-          className="relative h-[300px] min-w-[280px] overflow-visible sm:h-[340px] xl:h-[392px]"
+          className="relative h-[270px] min-w-[280px] overflow-visible sm:h-[300px] xl:h-[330px]"
           data-testid="home-candlestick-chart-frame"
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoveredIndex(null)}
@@ -924,7 +926,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       ) : (
         <div
           className={cn(
-            'flex h-[300px] min-w-[280px] flex-col items-center justify-center rounded border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-4 text-center sm:h-[340px] xl:h-[392px]',
+            'flex h-[270px] min-w-[280px] flex-col items-center justify-center rounded-[12px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-4 text-center sm:h-[300px] xl:h-[330px]',
             status === 'loading' ? 'text-white/46' : 'text-white/42',
           )}
           data-testid="home-candlestick-unavailable"

@@ -111,7 +111,7 @@ export function WolfyShellSurface({
     <Component
       data-linear-primitive="surface"
       className={cn(
-        'min-w-0 rounded-lg shadow-none',
+        'min-w-0 rounded-[14px] shadow-none',
         SURFACE_VARIANTS[variant],
         SURFACE_PADDING[padding],
         className,
@@ -236,7 +236,7 @@ export function WolfyCommandBar({
     <div
       data-linear-primitive="command-bar"
       className={cn(
-        'flex min-h-11 w-full min-w-0 flex-wrap items-center gap-2 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-[color:var(--wolfy-text-primary)] shadow-none',
+        'flex min-h-11 w-full min-w-0 flex-wrap items-center gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-[color:var(--wolfy-text-primary)] shadow-none',
         className,
       )}
       {...props}
@@ -263,7 +263,7 @@ export function CompactFilterBar({
       data-linear-primitive="compact-filter-bar"
       data-layout-zone="CommandBar"
       className={cn(
-        'flex min-h-11 w-full min-w-0 flex-wrap items-center gap-2 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-2 text-[color:var(--wolfy-text-primary)] shadow-none md:flex-nowrap md:px-3',
+        'flex min-h-11 w-full min-w-0 flex-wrap items-center gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-2 text-[color:var(--wolfy-text-primary)] shadow-none md:flex-nowrap md:px-3',
         className,
       )}
       {...props}
@@ -290,8 +290,9 @@ export function ResearchConsoleShell({
       data-linear-primitive="research-console-shell"
       data-layout-zone="RouteConsole"
       data-route-console="ResearchConsole"
+      data-visual-tier="dominant"
       className={cn(
-        'relative isolate flex w-full min-w-0 flex-col gap-3 overflow-hidden rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-2 shadow-[var(--wolfy-shadow-console)] md:p-3',
+        'relative isolate flex w-full min-w-0 flex-col gap-3 overflow-hidden rounded-[18px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-2.5 shadow-[var(--wolfy-shadow-console)] md:p-3',
         className,
       )}
       {...props}
@@ -299,7 +300,7 @@ export function ResearchConsoleShell({
       {command}
       <div
         className={cn(
-          'grid min-w-0 overflow-hidden rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-console)]',
+          'grid min-w-0 overflow-hidden rounded-[14px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-console)]',
           rail ? 'lg:grid-cols-[minmax(0,1fr)_320px]' : '',
         )}
       >

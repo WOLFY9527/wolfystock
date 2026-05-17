@@ -307,7 +307,9 @@ describe('HomeSurfacePage', () => {
     expect(main.firstElementChild).toBe(researchConsole);
 
     expect(researchConsole).toHaveAttribute('data-linear-primitive', 'research-console-shell');
-    expect(researchConsole).toHaveClass('rounded-lg', 'border', 'border-[color:var(--wolfy-border-subtle)]', 'bg-[var(--wolfy-surface-console)]');
+    expect(researchConsole).toHaveAttribute('data-visual-tier', 'dominant');
+    expect(researchConsole).toHaveAttribute('data-surface-system', 'reflect-linear-console');
+    expect(researchConsole).toHaveClass('rounded-[18px]', 'border', 'border-[color:var(--wolfy-border-subtle)]', 'bg-[var(--wolfy-surface-console)]');
     expect(researchConsole.contains(commandBar)).toBe(true);
     expect(researchConsole.contains(board)).toBe(true);
     expect(researchConsole.contains(rail)).toBe(true);
@@ -318,28 +320,32 @@ describe('HomeSurfacePage', () => {
 
     expect(commandBar).toHaveAttribute('data-linear-primitive', 'compact-filter-bar');
     expect(commandBar).toHaveAttribute('data-layout-zone', 'CommandBar');
-    expect(commandBar).toHaveClass('bg-[var(--wolfy-surface-input)]', 'border-[color:var(--wolfy-border-subtle)]');
+    expect(commandBar).toHaveAttribute('data-surface-system', 'reflect-linear-console');
+    expect(commandBar).toHaveClass('home-research-command-bar', 'rounded-xl', 'bg-[var(--wolfy-surface-input)]', 'border-[color:var(--wolfy-border-subtle)]');
     expect(headerStrip.closest('[data-layout-zone="HeaderStrip"]')).toBeInTheDocument();
     expect(primaryWorkspace.closest('[data-layout-zone="PrimaryWorkRegion"]')).toBeInTheDocument();
     expect(secondaryDeck).toHaveAttribute('data-linear-primitive', 'secondary-deck');
     expect(secondaryDeck).toHaveAttribute('data-layout-zone', 'SecondaryDeck');
+    expect(secondaryDeck).toHaveClass('home-research-secondary-deck');
 
     expect(board).toHaveAttribute('data-linear-primitive', 'console-board');
+    expect(board).toHaveAttribute('data-surface-system', 'reflect-linear-console');
     expect(board).toHaveClass('rounded-none', 'border-0', 'bg-transparent');
     expect(rail).toHaveAttribute('data-linear-primitive', 'context-rail');
     expect(rail).toHaveAttribute('data-layout-zone', 'ContextRail');
-    expect(rail).toHaveClass('bg-[var(--wolfy-surface-rail)]', 'divide-y', 'divide-[color:var(--wolfy-divider)]');
+    expect(rail).toHaveClass('home-research-context-rail', 'bg-[var(--wolfy-surface-rail)]', 'divide-y', 'divide-[color:var(--wolfy-divider)]');
 
     expect(homeSearch).toHaveAttribute('placeholder', '输入代码唤醒 AI (如 ORCL)...');
     expect(homeSearch).toHaveValue('');
-    expect(screen.getByTestId('home-bento-omnibar-input-shell')).toHaveClass('overflow-hidden', 'rounded-md', 'border', 'border-[color:var(--wolfy-border-subtle)]', 'bg-[var(--wolfy-surface-console)]');
+    expect(screen.getByTestId('home-bento-omnibar-input-shell')).toHaveClass('overflow-hidden', 'rounded-lg', 'border', 'border-[color:var(--wolfy-border-subtle)]', 'bg-[var(--wolfy-surface-console)]');
     expect(homeSearch).toHaveClass('bg-transparent', 'text-sm', 'leading-none', 'pl-11', 'caret-[#93C5FD]');
     expect(screen.getByTestId('home-bento-analyze-button')).toHaveTextContent('分析');
-    expect(screen.getByTestId('home-bento-analyze-button')).toHaveClass('rounded-md', 'bg-[var(--wolfy-accent)]');
+    expect(screen.getByTestId('home-bento-analyze-button')).toHaveClass('rounded-lg', 'bg-[var(--wolfy-accent)]');
     expect(within(commandBar).getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
     expect(within(commandBar).getByRole('button', { name: '历史记录' })).toBeInTheDocument();
 
     const decisionCard = screen.getByTestId('home-bento-card-decision');
+    const heroRow = screen.getByTestId('home-bento-decision-hero-row');
     const keyLevels = screen.getByTestId('home-research-key-levels');
     expect(within(decisionCard).getByText('投资立场')).toBeInTheDocument();
     expect(within(decisionCard).getByText('综合评分')).toBeInTheDocument();
@@ -359,8 +365,12 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-decision-insight')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-company-header')).toHaveTextContent('Oracle Corporation');
     expect(screen.getByTestId('home-bento-decision-sector')).toHaveTextContent('科技');
+    expect(screen.getByTestId('home-research-company-mark')).toHaveTextContent('OR');
+    expect(heroRow).toHaveAttribute('data-visual-role', 'hero-matrix');
+    expect(heroRow).toHaveClass('home-research-hero-matrix', 'rounded-[14px]', 'border');
 
     expect(keyLevels).toHaveAttribute('data-linear-primitive', 'key-level-strip');
+    expect(keyLevels).toHaveClass('rounded-[12px]', 'border', 'border-[color:var(--wolfy-divider)]');
     expect(primaryWorkspace.closest('[data-layout-zone="PrimaryWorkRegion"]')).toContainElement(keyLevels);
     expect(entryMetric.closest('[data-linear-primitive="key-level-strip"]')).toBe(keyLevels);
     expect(entryMetric).not.toHaveClass('bg-white/[0.02]', 'border-white/[0.08]', 'p-6', 'col-span-2');
@@ -374,6 +384,9 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('技术结构')).toBeInTheDocument();
     expect(screen.getByTestId('home-linear-technical-chart')).toHaveAttribute('data-chart-engine', 'echarts');
     expect(screen.getByTestId('home-linear-technical-chart')).toHaveAttribute('data-chart-source', 'stocks-history-daily');
+    expect(screen.getByTestId('home-linear-technical-chart')).toHaveAttribute('data-visual-role', 'primary-chart');
+    expect(screen.getByTestId('home-linear-technical-chart')).toHaveAttribute('data-surface-system', 'reflect-linear-console');
+    expect(screen.getByTestId('home-linear-technical-chart')).toHaveClass('home-chart-well', 'rounded-[14px]');
     const macdSignal = screen.getByTestId('home-bento-tech-signal-MACD');
     const macdSignalValue = within(macdSignal).getByText('二次扩张');
     expect(macdSignal).toHaveClass('flex', 'min-w-0', 'flex-col', 'gap-1');
@@ -390,6 +403,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-card-fundamentals')).toHaveAttribute('data-research-card', 'data-context');
 
     expect(secondaryDeck).toContainElement(catalysts);
+    expect(catalysts).toHaveAttribute('data-visual-role', 'attached-event-deck');
     expect(within(catalysts).getByText('关键事件与催化剂')).toBeInTheDocument();
     expect(screen.getByTestId('home-linear-events-empty')).toHaveTextContent('暂无已验证催化剂');
     expect(screen.getByTestId('home-linear-events-empty')).toHaveClass('py-2', 'text-[color:var(--wolfy-text-muted)]');
@@ -427,6 +441,7 @@ describe('HomeSurfacePage', () => {
     expect(researchConsole.querySelector('[data-research-card] [data-research-card]')).toBeNull();
     const cardZones = Array.from(researchConsole.querySelectorAll('[data-research-card]'))
       .map((node) => node.closest('[data-layout-zone]')?.getAttribute('data-layout-zone'));
+    expect(researchConsole.querySelectorAll('[data-research-card]').length).toBeLessThanOrEqual(4);
     expect(cardZones.every((zone) => zone === 'PrimaryWorkRegion' || zone === 'ContextRail')).toBe(true);
     expect(cardZones.filter((zone) => zone === 'PrimaryWorkRegion')).toHaveLength(2);
     expect(cardZones.filter((zone) => zone === 'ContextRail')).toHaveLength(2);
@@ -1375,9 +1390,11 @@ describe('HomeSurfacePage', () => {
     expect(board.contains(screen.getByTestId('home-research-secondary-deck'))).toBe(true);
     expect(researchConsole.contains(board)).toBe(true);
     expect(researchConsole.contains(rail)).toBe(true);
-    expect(researchConsole).toHaveClass('rounded-lg', 'border-[color:var(--wolfy-border-subtle)]', 'bg-[var(--wolfy-surface-console)]');
+    expect(researchConsole).toHaveAttribute('data-visual-tier', 'dominant');
+    expect(researchConsole).toHaveAttribute('data-surface-system', 'reflect-linear-console');
+    expect(researchConsole).toHaveClass('rounded-[18px]', 'border-[color:var(--wolfy-border-subtle)]', 'bg-[var(--wolfy-surface-console)]');
     expect(board).toHaveClass('rounded-none', 'border-0', 'bg-transparent');
-    expect(rail).toHaveClass('bg-[var(--wolfy-surface-rail)]');
+    expect(rail).toHaveClass('home-research-context-rail', 'bg-[var(--wolfy-surface-rail)]');
     expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
     expect(screen.queryByText('Ghost dashboard 承接中')).not.toBeInTheDocument();
     expect(screen.queryByText('待分析')).not.toBeInTheDocument();
@@ -2436,8 +2453,10 @@ describe('HomeSurfacePage', () => {
     expect(chartRoot).toHaveAttribute('data-x-axis-density', 'sampled');
     expect(chartRoot).toHaveAttribute('data-chart-timeframe', '1D');
     expect(chartRoot).toHaveAttribute('data-chart-source', 'stocks-history-daily');
+    expect(chartRoot).toHaveAttribute('data-visual-role', 'primary-chart');
     expect(chartRoot).toHaveClass(
-      'rounded-[10px]',
+      'home-chart-well',
+      'rounded-[14px]',
       'border-[color:var(--wolfy-border-faint)]',
       'bg-[var(--wolfy-surface-inset)]',
     );
@@ -2473,7 +2492,7 @@ describe('HomeSurfacePage', () => {
     expect(timeframe1D).toHaveAttribute('aria-pressed', 'true');
     expect(timeframe1W).toHaveAttribute('aria-pressed', 'false');
     expect(timeframe1M).toHaveAttribute('aria-pressed', 'false');
-    expect(timeframe1D).toHaveClass('rounded-full', 'bg-white/[0.08]', 'text-white/86');
+    expect(timeframe1D).toHaveClass('rounded-full', 'bg-[var(--wolfy-accent-soft)]', 'text-white/86');
     expect(timeframe1W).toHaveClass('rounded-full', 'text-white/42');
     expect(screen.queryByRole('button', { name: '1m' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '5m' })).not.toBeInTheDocument();

@@ -991,7 +991,7 @@ function LinearKeyLevelsStrip({
   return (
     <KeyLevelStrip
       data-testid="home-research-key-levels"
-      className="gap-0 border-y border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-0"
+      className="gap-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-0"
       levels={levels.map((metric, index) => ({
         key: metric.label,
         label: getMetricLabelForStrip(locale, metric.label),
@@ -1038,19 +1038,20 @@ function LinearTechnicalStructure({
 
   return (
     <section
-      className="relative min-w-0 border-t border-[color:var(--wolfy-divider)] pt-5"
+      className="relative min-w-0 border-t border-[color:var(--wolfy-divider)] pt-4"
       data-layout-zone="PrimaryWorkRegion"
+      data-visual-role="primary-chart-region"
       data-testid="home-bento-card-tech"
       data-research-card="risk-context"
     >
-      <div className="mb-3 flex min-w-0 flex-wrap items-end justify-between gap-3">
+      <div className="mb-2.5 flex min-w-0 flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm font-semibold tracking-[0] text-white">{locale === 'en' ? 'Technical Structure' : '技术结构'}</p>
         </div>
         <button
           ref={openDetailsButtonRef}
           type="button"
-          className="text-[11px] font-medium text-white/42 transition-colors hover:text-white/78"
+          className="home-research-action-button rounded-lg border px-2.5 py-1 text-[11px] font-medium text-white/54 transition-colors hover:text-white/78"
           data-testid="home-bento-drawer-trigger-tech"
           onClick={handleOpenDetailsClick}
           onPointerUp={handleOpenDetailsPointerUp}
@@ -1060,7 +1061,7 @@ function LinearTechnicalStructure({
       </div>
       <div
         className={cn(
-          'grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_clamp(14rem,18vw,16rem)]',
+          'grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_clamp(13rem,17vw,15.5rem)]',
           isGuest ? 'pointer-events-none opacity-80' : '',
         )}
         data-testid="home-research-chart-workspace"
@@ -1072,7 +1073,7 @@ function LinearTechnicalStructure({
           onContextChange={onChartContextChange}
         />
         <div
-          className="min-w-0 divide-y divide-white/[0.055] border-t border-white/[0.055] xl:border-l xl:border-t-0 xl:pl-4"
+          className="home-research-signal-rail min-w-0 divide-y divide-white/[0.055] border-t border-white/[0.055] xl:border-l xl:border-t-0 xl:pl-4"
           data-testid="home-bento-decision-support-grid"
         >
           {signals.map((signal) => {
@@ -1184,14 +1185,14 @@ function LinearObservationPanel({
   ] as const;
 
   return (
-    <div className="relative flex min-w-0 flex-col divide-y divide-[color:var(--wolfy-divider)] px-4 py-4 lg:max-h-[calc(100dvh-12rem)] lg:overflow-y-auto lg:px-5 lg:py-5 no-scrollbar">
+    <div className="home-research-rail-body relative flex min-w-0 flex-col divide-y divide-[color:var(--wolfy-divider)] px-4 py-4 lg:max-h-[calc(100dvh-12rem)] lg:overflow-y-auto lg:px-5 lg:py-4 no-scrollbar">
       <section className="min-w-0 py-2 first:pt-0" data-testid="home-bento-card-strategy" data-research-card="opportunity">
         <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
           <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Observation Framework' : '观察框架'}</h2>
           <button
             ref={openStrategyButtonRef}
             type="button"
-            className="text-[11px] font-medium text-white/38 transition-colors hover:text-white/72"
+            className="home-research-action-button rounded-lg border px-2.5 py-1 text-[11px] font-medium text-white/48 transition-colors hover:text-white/72"
             data-testid="home-bento-drawer-trigger-strategy"
             onClick={handleOpenStrategyClick}
             onPointerUp={handleOpenStrategyPointerUp}
@@ -1231,7 +1232,7 @@ function LinearObservationPanel({
           <button
             ref={openFundamentalsButtonRef}
             type="button"
-            className="text-[11px] font-medium text-white/38 transition-colors hover:text-white/72"
+            className="home-research-action-button rounded-lg border px-2.5 py-1 text-[11px] font-medium text-white/48 transition-colors hover:text-white/72"
             data-testid="home-bento-drawer-trigger-fundamentals"
             onClick={handleOpenFundamentalsClick}
             onPointerUp={handleOpenFundamentalsPointerUp}
@@ -1353,7 +1354,11 @@ function LinearEventsStrip({
   const events = buildHomeCatalystEvents(report, locale);
 
   return (
-    <div className="min-w-0" data-testid="home-linear-events">
+    <div
+      className="min-w-0"
+      data-testid="home-linear-events"
+      data-visual-role="attached-event-deck"
+    >
       <div className="flex min-w-0 items-center justify-between gap-3 pb-1.5">
         <h2 className="text-sm font-semibold text-white/88">{isEnglish ? 'Events & Catalysts' : '关键事件与催化剂'}</h2>
         {events.length ? (
@@ -3983,14 +3988,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     <>
       <button
         type="button"
-        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.045] px-2.5 py-1.5 text-xs font-medium text-white/74 transition-colors hover:border-white/[0.14] hover:bg-white/[0.075] hover:text-white"
+        className="home-research-action-button home-research-action-button--primary inline-flex min-h-8 min-w-0 items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium text-white/82 transition-colors hover:text-white"
         onClick={() => setFullReportDrawerOpen(true)}
       >
         <span className="truncate">{locale === 'en' ? 'Full Report' : '完整报告'}</span>
       </button>
       <button
         type="button"
-        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-transparent bg-transparent px-2.5 py-1.5 text-xs font-medium text-white/48 transition-colors hover:border-white/[0.08] hover:bg-white/[0.035] hover:text-white/78"
+        className="home-research-action-button inline-flex min-h-8 min-w-0 items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium text-white/60 transition-colors hover:text-white/82"
         onClick={() => setTraceDrawerOpen(true)}
         data-testid="home-bento-decision-trace-trigger"
       >
@@ -3999,7 +4004,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       </button>
       <button
         type="button"
-        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-transparent bg-transparent px-2.5 py-1.5 text-xs font-medium text-white/48 transition-colors hover:border-white/[0.08] hover:bg-white/[0.035] hover:text-white/78"
+        className="home-research-action-button inline-flex min-h-8 min-w-0 items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium text-white/60 transition-colors hover:text-white/82"
         onClick={() => { void handleCopyActiveReport(); }}
       >
         <Copy className="h-3.5 w-3.5 shrink-0" />
@@ -4007,7 +4012,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       </button>
       <button
         type="button"
-        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-transparent bg-transparent px-2.5 py-1.5 text-xs font-medium text-white/48 transition-colors hover:border-white/[0.08] hover:bg-white/[0.035] hover:text-white/78 disabled:cursor-wait disabled:text-white/35"
+        className="home-research-action-button inline-flex min-h-8 min-w-0 items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium text-white/60 transition-colors hover:text-white/82 disabled:cursor-wait disabled:text-white/35"
         disabled={isBusy || !reanalysisTicker}
         title={!reanalysisTicker ? '缺少股票代码' : undefined}
         onClick={() => { void handleAnalyze(reanalysisTicker); }}
@@ -4030,13 +4035,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       >
         <CompactFilterBar
           data-testid="home-research-command-bar"
-          className="min-h-12 items-stretch gap-2 rounded-lg bg-[var(--wolfy-surface-input)] px-2 py-2 sm:flex-nowrap"
+          data-surface-system="reflect-linear-console"
+          className="home-research-command-bar min-h-12 items-stretch gap-2 rounded-xl bg-[var(--wolfy-surface-input)] px-2.5 py-2 sm:flex-nowrap"
           trailing={(
             <>
               <button
                 type="submit"
                 disabled={isBusy}
-                className="min-h-10 shrink-0 rounded-md border border-[#7f89ea]/35 bg-[var(--wolfy-accent)] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#6d77d9] disabled:cursor-wait disabled:bg-white/[0.05] disabled:text-white/42"
+                className="min-h-10 shrink-0 rounded-lg border border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] px-5 text-sm font-semibold text-white shadow-[0_0_22px_rgba(118,109,219,0.18)] transition-colors hover:bg-[#8178e7] disabled:cursor-wait disabled:bg-white/[0.05] disabled:text-white/42"
                 data-testid="home-bento-analyze-button"
               >
                 {isHomeAnalyzing ? (locale === 'en' ? 'Analyzing...' : '分析中...') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
@@ -4049,7 +4055,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   onClick={openHistoryDrawerButton.onClick}
                   onPointerUp={openHistoryDrawerButton.onPointerUp}
                   disabled={isBusy}
-                  className="flex min-h-10 shrink-0 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-4 text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-white/[0.055] hover:text-[color:var(--wolfy-text-primary)] disabled:cursor-wait disabled:text-white/34"
+                  className="home-research-action-button flex min-h-10 shrink-0 items-center justify-center rounded-lg border px-4 text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] disabled:cursor-wait disabled:text-white/34"
                   data-testid="home-bento-history-drawer-trigger"
                 >
                   <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -4061,7 +4067,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           )}
         >
           <div
-            className="group relative flex min-h-10 min-w-0 flex-1 items-center overflow-hidden rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] transition-colors focus-within:border-[#5e6ad2]/55 focus-within:bg-[#10141b]"
+            className="group relative flex min-h-10 min-w-0 flex-1 items-center overflow-hidden rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors focus-within:border-[color:var(--wolfy-border-focus)] focus-within:bg-[var(--wolfy-surface-panel)]"
             data-testid="home-bento-omnibar-input-shell"
           >
             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
@@ -4099,7 +4105,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       aria-live={shouldGuardA11y ? 'polite' : undefined}
       className={getSafariReadySurfaceClassName(
         true,
-        'w-full flex-1 flex flex-col gap-5 min-h-0 min-w-0 bg-[var(--wolfy-canvas)]',
+        'relative isolate w-full flex-1 flex flex-col gap-5 min-h-0 min-w-0 overflow-hidden bg-[var(--wolfy-canvas)]',
       )}
     >
       {statusToast ? (
@@ -4176,18 +4182,21 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           return (
             <ResearchConsoleShell
               data-testid="home-research-console"
+              data-surface-system="reflect-linear-console"
               command={omnibarModule}
-              className="gap-3"
+              className="gap-2.5 md:gap-3"
             >
               <ConsoleBoard
                 className="rounded-none border-0 bg-transparent"
+                data-surface-system="reflect-linear-console"
                 data-testid="home-research-board"
               >
                 <FixedRegionGrid
-                  className="min-w-0"
+                  className="home-research-fixed-grid min-w-0"
+                  data-surface-system="reflect-linear-console"
                   rail={contextRailContent}
                   railTestId="home-research-context-rail"
-                  railClassName="lg:max-h-[calc(100dvh-10.75rem)] lg:overflow-y-auto no-scrollbar"
+                  railClassName="home-research-context-rail lg:max-h-[calc(100dvh-10.75rem)] lg:overflow-y-auto no-scrollbar"
                   secondary={!isHomeAnalyzing ? (
                     <LinearEventsStrip
                       locale={locale}
@@ -4195,28 +4204,37 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     />
                   ) : undefined}
                   secondaryTestId={!isHomeAnalyzing ? 'home-research-secondary-deck' : undefined}
-                  secondaryClassName="px-4 py-4 md:px-7 md:py-4"
+                  secondaryClassName="home-research-secondary-deck px-4 py-3.5 md:px-6 md:py-3.5"
                   header={!isHomeAnalyzing ? (
                     <div
-                      className="border-b border-[color:var(--wolfy-divider)] px-4 py-5 md:px-7 md:py-6"
+                      className="border-b border-[color:var(--wolfy-divider)] px-4 py-4 md:px-6 md:py-5"
                       data-testid="home-research-header-strip"
                     >
                       <div
                         className="flex min-w-0 flex-wrap items-start justify-between gap-4"
                         data-testid="home-bento-decision-company-header"
                       >
-                        <div className="min-w-0">
-                          <p
-                            className="text-[11px] leading-5 text-white/36"
-                            data-testid="home-bento-decision-sector"
+                        <div className="flex min-w-0 items-start gap-4">
+                          <div
+                            className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[linear-gradient(180deg,rgb(255_255_255_/_0.07),rgb(118_109_219_/_0.08))] font-mono text-[11px] font-semibold text-white/68 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_24px_rgba(118,109,219,0.11)]"
+                            data-testid="home-research-company-mark"
+                            aria-hidden="true"
                           >
-                            {[resolveLinearSectorTrail(locale, readyCopy.decision.sector), readyCopy.sessionBadge, readyCopy.regimeBadge].filter(Boolean).join(' / ')}
-                          </p>
-                          <div className="mt-2.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-                            <h1 className="min-w-0 truncate text-[28px] font-semibold tracking-[-0.03em] text-white md:text-[34px]">
-                              {readyCopy.decision.company}
-                            </h1>
-                            <span className="font-mono text-sm text-white/38">({readyCopy.ticker})</span>
+                            {readyCopy.ticker.slice(0, 2)}
+                          </div>
+                          <div className="min-w-0">
+                            <p
+                              className="text-[11px] leading-5 text-white/38"
+                              data-testid="home-bento-decision-sector"
+                            >
+                              {[resolveLinearSectorTrail(locale, readyCopy.decision.sector), readyCopy.sessionBadge, readyCopy.regimeBadge].filter(Boolean).join(' / ')}
+                            </p>
+                            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                              <h1 className="min-w-0 truncate text-[27px] font-semibold tracking-[-0.02em] text-white md:text-[34px]">
+                                {readyCopy.decision.company}
+                              </h1>
+                              <span className="font-mono text-sm text-white/42">({readyCopy.ticker})</span>
+                            </div>
                           </div>
                         </div>
                         {reportActionButtons ? (
@@ -4232,7 +4250,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   ) : undefined}
                   primary={(
                     <div
-                      className="min-w-0 px-4 py-5 md:px-7 md:py-6"
+                      className="min-w-0 px-4 py-4 md:px-6 md:py-5"
                       data-testid="home-research-primary-workspace"
                     >
                       {isHomeAnalyzing ? (
@@ -4252,8 +4270,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         >
                           <div data-testid={completedTaskReport ? 'home-bento-analysis-result-card' : undefined}>
                             <div
-                              className="mt-0 grid gap-4 border-b border-[color:var(--wolfy-divider)] pb-5 md:grid-cols-[minmax(12rem,17rem)_minmax(10rem,14rem)_minmax(9rem,12rem)] md:items-end"
+                              className="home-research-hero-matrix mt-0 grid gap-4 rounded-[14px] border px-4 py-4 md:grid-cols-[minmax(12rem,17rem)_minmax(10rem,14rem)_minmax(9rem,12rem)] md:items-end"
                               data-testid="home-bento-decision-hero-row"
+                              data-visual-role="hero-matrix"
                             >
                               <div className="min-w-0" data-testid="home-bento-decision-action">
                                 <p className="text-[11px] font-medium tracking-[0] text-white/36">{locale === 'en' ? 'Stance' : '投资立场'}</p>
@@ -4278,7 +4297,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                                 </div>
                                 <div className="mt-3 flex max-w-[220px] items-center gap-2">
                                   <span className="h-[2px] w-full overflow-hidden rounded-full bg-white/[0.08]">
-                                    <span className="block h-full rounded-full bg-[#7f89ea]" style={{ width: `${scorePercent}%` }} />
+                                    <span className="block h-full rounded-full bg-[var(--wolfy-accent)] shadow-[0_0_18px_rgba(118,109,219,0.24)]" style={{ width: `${scorePercent}%` }} />
                                   </span>
                                 </div>
                               </div>
@@ -4298,7 +4317,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                               </div>
                             </div>
 
-                            <div className="mt-4 max-w-4xl text-sm leading-6 text-white/68">
+                            <div className="mt-3.5 max-w-4xl text-sm leading-6 text-white/66">
                               <div data-testid="home-bento-decision-insight">
                                 <p className="text-[11px] font-medium tracking-[0] text-white/36">{locale === 'en' ? 'Thesis' : '核心观点'}</p>
                                 <p className="mt-1.5 max-w-[60rem]" data-testid="home-bento-decision-insight-copy">
@@ -4307,13 +4326,13 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                               </div>
                             </div>
 
-                            <div className="mt-4" data-testid="home-bento-research-state-row">
+                            <div className="mt-3.5" data-testid="home-bento-research-state-row">
                               <LinearKeyLevelsStrip metrics={readyCopy.strategy.metrics} locale={locale} />
                             </div>
                           </div>
                         </div>
                         {!isHomeAnalyzing ? (
-                          <div className="mt-5 px-0" data-testid="home-research-chart-section">
+                          <div className="mt-4 px-0" data-testid="home-research-chart-section">
                               <LinearTechnicalStructure
                                 locale={locale}
                                 ticker={readyCopy.ticker}
