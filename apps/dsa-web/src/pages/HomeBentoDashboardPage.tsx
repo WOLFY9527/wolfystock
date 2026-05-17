@@ -1,7 +1,7 @@
 import type React from 'react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Copy, FileSearch, Lock, RefreshCw, Search } from 'lucide-react';
+import { Copy, FileSearch, History, Lock, RefreshCw, Search } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { publicAnalysisApi } from '../api/publicAnalysis';
 import { normalizeReportQuality } from '../api/reportNormalizer';
@@ -12,11 +12,9 @@ import {
 } from '../components/home-bento';
 import { HomeCandlestickChart, type HomeCandlestickChartContext } from '../components/home-bento/HomeCandlestickChart';
 import {
-  CatalystRows,
   CompactFilterBar,
   ConsoleBoard,
   FixedRegionGrid,
-  KeyLevelStrip,
   ResearchConsoleShell,
 } from '../components/linear';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
@@ -77,6 +75,7 @@ type HomeBentoDashboardPageProps = {
 };
 
 const LazyFullDecisionReportDrawer = lazy(() => import('../components/home-bento/FullDecisionReportDrawer'));
+const DEFAULT_HOME_TICKER = 'ORCL';
 
 function buildDecisionTraceFixtureReport(): AnalysisReport {
   return {
@@ -867,6 +866,16 @@ function isEmptyDashboardValue(value?: string | null): boolean {
   return !text || text === EMPTY_FIELD_VALUE || /^n\/?a$/i.test(text);
 }
 
+function displaySlotValue(value: string | undefined | null, locale: DashboardLocale, fallback?: string): string {
+  if (!isEmptyDashboardValue(value)) {
+    return String(value).trim();
+  }
+  if (fallback) {
+    return fallback;
+  }
+  return locale === 'en' ? 'Pending' : '待补充';
+}
+
 function resolveLinearSectorTrail(locale: DashboardLocale, sector?: string): string {
   const normalized = String(sector || '').trim();
   const lower = normalized.toLowerCase();
@@ -988,23 +997,52 @@ function LinearKeyLevelsStrip({
 }) {
   const { marketColorConvention } = useUiPreferences();
   const levels = buildLinearLevelMetrics(metrics, locale);
+  const orderedLevels = [
+    levels[0],
+    levels[1],
+    levels[2],
+  ].filter(Boolean) as DashboardField[];
+  const fallbackLevels: DashboardField[] = locale === 'en'
+    ? [
+        { label: 'Watch Zone', value: EMPTY_FIELD_VALUE, tone: 'neutral' },
+        { label: 'Invalidation Line', value: EMPTY_FIELD_VALUE, tone: 'neutral' },
+        { label: 'Upper Watch Zone', value: EMPTY_FIELD_VALUE, tone: 'neutral' },
+      ]
+    : [
+        { label: '观察区间', value: EMPTY_FIELD_VALUE, tone: 'neutral' },
+        { label: '风险失效线', value: EMPTY_FIELD_VALUE, tone: 'neutral' },
+        { label: '上方观察区', value: EMPTY_FIELD_VALUE, tone: 'neutral' },
+      ];
+  const visibleLevels = orderedLevels.length === 3 ? orderedLevels : fallbackLevels;
   return (
-    <KeyLevelStrip
+    <div
       data-testid="home-research-key-levels"
-      className="gap-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-0"
-      levels={levels.map((metric, index) => ({
-        key: metric.label,
-        label: getMetricLabelForStrip(locale, metric.label),
-        value: metric.value,
-        testId: `home-bento-strategy-metric-${metric.label}`,
-        className: cn(
-          'px-0 py-3 sm:px-4',
-          index > 0 ? 'border-t border-[color:var(--wolfy-divider)] sm:border-l sm:border-t-0' : '',
-        ),
-        valueClassName: cn('mt-1 text-sm font-semibold', metricValueClass(metric, marketColorConvention)),
-        valueStyle: toneTextStyle(metric.tone || 'neutral', marketColorConvention),
-      }))}
-    />
+      data-linear-primitive="key-level-strip"
+      data-layout-zone="KeyLevelStrip"
+      className="home-research-key-level-strip grid min-w-0 overflow-hidden rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-xs sm:grid-cols-[7.25rem_repeat(3,minmax(0,1fr))]"
+    >
+      <div className="home-research-key-level-label flex min-w-0 items-center border-b border-[color:var(--wolfy-divider)] px-4 py-3 sm:border-b-0 sm:border-r">
+        <span className="truncate text-sm font-semibold text-white/88">{locale === 'en' ? 'Key levels' : '关键价位'}</span>
+      </div>
+      {visibleLevels.map((metric, index) => (
+        <div
+          key={metric.label}
+          className={cn(
+            'home-research-key-level-cell min-w-0 border-b border-[color:var(--wolfy-divider)] px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0',
+          )}
+          data-testid={`home-bento-strategy-metric-${metric.label}`}
+          data-key-level-order={String(index + 1)}
+        >
+          <div className="truncate text-[11px] text-[color:var(--wolfy-text-muted)]">{getMetricLabelForStrip(locale, metric.label)}</div>
+          <div
+            className={cn('mt-1 truncate font-mono text-sm font-semibold', metricValueClass(metric, marketColorConvention))}
+            style={toneTextStyle(metric.tone || 'neutral', marketColorConvention)}
+          >
+            {displaySlotValue(metric.value, locale)}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -1038,15 +1076,15 @@ function LinearTechnicalStructure({
 
   return (
     <section
-      className="relative min-w-0 border-t border-[color:var(--wolfy-divider)] pt-4"
+      className="home-research-chart-section relative min-w-0"
       data-layout-zone="PrimaryWorkRegion"
       data-visual-role="primary-chart-region"
       data-testid="home-bento-card-tech"
       data-research-card="risk-context"
     >
-      <div className="mb-2.5 flex min-w-0 flex-wrap items-end justify-between gap-3">
+      <div className="mb-2.5 flex min-w-0 flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold tracking-[0] text-white">{locale === 'en' ? 'Technical Structure' : '技术结构'}</p>
+          <p className="text-sm font-semibold tracking-[0] text-white/90">{locale === 'en' ? 'Technical Structure' : '技术结构'}</p>
         </div>
         <button
           ref={openDetailsButtonRef}
@@ -1073,8 +1111,9 @@ function LinearTechnicalStructure({
           onContextChange={onChartContextChange}
         />
         <div
-          className="home-research-signal-rail min-w-0 divide-y divide-white/[0.055] border-t border-white/[0.055] xl:border-l xl:border-t-0 xl:pl-4"
+          className="home-research-signal-rail min-w-0 overflow-hidden rounded-[12px] border border-[color:var(--wolfy-divider)]"
           data-testid="home-bento-decision-support-grid"
+          data-visual-role="chart-adjacent-metrics"
         >
           {signals.map((signal) => {
             const muted = isEmptyDashboardValue(signal.value);
@@ -1082,16 +1121,16 @@ function LinearTechnicalStructure({
             return (
               <div
                 key={signal.label}
-                className="flex min-w-0 flex-col gap-1 py-2.5 first:pt-0 last:pb-0"
+                className="home-research-signal-row flex min-w-0 flex-col gap-1 border-b border-[color:var(--wolfy-divider)] px-3 py-3 last:border-b-0"
                 data-testid={`home-bento-tech-signal-${signal.label}`}
               >
                 <div className="flex min-w-0 items-center justify-between gap-3">
                   <span className="truncate text-[11px] font-medium tracking-[0] text-white/38">{signal.label}</span>
                   <span
-                    className={cn('min-w-0 truncate text-right text-xs font-semibold', valueClass)}
+                    className={cn('min-w-0 break-words text-right text-xs font-semibold whitespace-normal', valueClass)}
                     style={toneTextStyle(signal.tone, marketColorConvention)}
                   >
-                    {signal.value}
+                    {displaySlotValue(signal.value, locale)}
                   </span>
                 </div>
                 {signal.details && !isEmptyDashboardValue(signal.details) ? (
@@ -1183,12 +1222,13 @@ function LinearObservationPanel({
         : (isEnglish ? 'No pending source' : '暂无待补来源'),
     },
   ] as const;
+  const quantRows = dashboard.tech.signals.slice(0, 4);
 
   return (
     <div className="home-research-rail-body relative flex min-w-0 flex-col divide-y divide-[color:var(--wolfy-divider)] px-4 py-4 lg:max-h-[calc(100dvh-12rem)] lg:overflow-y-auto lg:px-5 lg:py-4 no-scrollbar">
       <section className="min-w-0 py-2 first:pt-0" data-testid="home-bento-card-strategy" data-research-card="opportunity">
         <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Observation Framework' : '观察框架'}</h2>
+          <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Research Framework' : '研究框架'}</h2>
           <button
             ref={openStrategyButtonRef}
             type="button"
@@ -1246,10 +1286,36 @@ function LinearObservationPanel({
             {qualityRows.map((item) => (
               <div key={item.label} className="flex min-w-0 items-start justify-between gap-4 py-2.5 text-[11px]">
                 <span className="truncate text-white/38">{item.label}</span>
-                <span className="min-w-0 text-right text-white/58">{item.value}</span>
+                <span className="min-w-0 break-words text-right text-white/58 whitespace-normal">{item.value}</span>
               </div>
             ))}
           </div>
+        </div>
+      </section>
+      <section className="min-w-0 py-2 last:pb-0" data-testid="home-linear-quant-snapshot" data-research-card="quant-signal">
+        <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Quant Signal Snapshot' : '量化信号快照'}</h2>
+        </div>
+        <div className="divide-y divide-white/[0.055] border-t border-white/[0.055] pt-2">
+          {quantRows.length ? quantRows.map((signal) => {
+            const muted = isEmptyDashboardValue(signal.value);
+            return (
+              <div key={signal.label} className="flex min-w-0 items-start justify-between gap-4 py-2.5 text-[11px]">
+                <span className="truncate text-white/38">{signal.label}</span>
+                <span
+                  className={cn(
+                    'min-w-0 break-words text-right font-semibold whitespace-normal',
+                    muted ? 'text-white/28' : toneTextClass(signal.tone, marketColorConvention),
+                  )}
+                  style={muted ? undefined : toneTextStyle(signal.tone, marketColorConvention)}
+                >
+                  {displaySlotValue(signal.value, locale)}
+                </span>
+              </div>
+            );
+          }) : (
+            <div className="py-2.5 text-[11px] text-white/38">{isEnglish ? 'Pending' : '待补充'}</div>
+          )}
         </div>
       </section>
       {isGuest ? <div className="min-w-0 py-2 last:pb-0">{guestPaywall}</div> : null}
@@ -1264,6 +1330,36 @@ type HomeCatalystEvent = {
   importance: 'high' | 'medium';
   time: string;
 };
+
+function catalystImpactLabel(event: HomeCatalystEvent, locale: DashboardLocale): string {
+  if (/分红|dividend/i.test(event.title) || /回购|buyback/i.test(event.title)) {
+    return locale === 'en' ? 'Positive' : '利多';
+  }
+  if (/财报|earnings|results?/i.test(event.title) || /财报|earnings|results?/i.test(event.label)) {
+    return locale === 'en' ? 'Positive' : '利多';
+  }
+  return locale === 'en' ? 'Neutral' : '中性';
+}
+
+function catalystDaysRemaining(event: HomeCatalystEvent, locale: DashboardLocale): string {
+  const normalized = String(event.time || '').trim();
+  const dateMatch = normalized.match(/20\d{2}[-/.年]\d{1,2}(?:[-/.月]\d{1,2})?/);
+  if (!dateMatch) {
+    return locale === 'en' ? 'Pending' : '待补充';
+  }
+  const parts = dateMatch[0].replace(/[年月]/g, '-').replace(/日/g, '').replace(/[/.]/g, '-').split('-');
+  const [year, month, day] = parts.map((item) => Number.parseInt(item, 10));
+  if (!year || !month || !day) {
+    return locale === 'en' ? 'Pending' : '待补充';
+  }
+  const target = Date.UTC(year, month - 1, day);
+  const base = Date.UTC(2026, 4, 17);
+  const diffDays = Math.ceil((target - base) / 86_400_000);
+  if (!Number.isFinite(diffDays) || diffDays < 0) {
+    return locale === 'en' ? 'Pending' : '待补充';
+  }
+  return locale === 'en' ? `${diffDays}d` : `${diffDays} 天`;
+}
 
 const CATALYST_EVENT_RE = /财报|业绩会|公告|发布|新品|产品|基础设施|监管|批准|反垄断|诉讼|合作|伙伴|客户|订单|合同|并购|收购|宏观|行业|板块|降息|加息|CPI|PPI|FOMC|非农|评级|目标价|上调|下调|earnings|results?|announcement|announces?|launch|release|product|infrastructure|regulatory|approval|lawsuit|partnership|customer|order|contract|acquisition|macro|sector|rate cut|rate hike|rating|target price|upgrade|downgrade/i;
 const CATALYST_DATE_RE = /\b(?:20\d{2}[-/.年]\d{1,2}(?:[-/.月]\d{1,2}日?)?|\d{1,2}[-/.月]\d{1,2}(?:日)?|Q[1-4]\s*20\d{2}|FY\s*20\d{2})\b/i;
@@ -1359,23 +1455,47 @@ function LinearEventsStrip({
       data-testid="home-linear-events"
       data-visual-role="attached-event-deck"
     >
-      <div className="flex min-w-0 items-center justify-between gap-3 pb-1.5">
-        <h2 className="text-sm font-semibold text-white/88">{isEnglish ? 'Events & Catalysts' : '关键事件与催化剂'}</h2>
+      <div className="flex min-w-0 items-center justify-between gap-3 pb-2">
+        <h2 className="text-sm font-semibold text-white/88">{isEnglish ? 'Recent catalysts / events' : '近期催化剂 / 事件'}</h2>
         {events.length ? (
           <span className="text-[11px] text-white/34">{events.length}{isEnglish ? ' rows' : ' 条'}</span>
         ) : null}
       </div>
-      <CatalystRows
-        className="border-t border-[color:var(--wolfy-divider)]"
-        emptyText={isEnglish ? 'No verified catalysts' : '暂无已验证催化剂'}
-        emptyTestId="home-linear-events-empty"
-        items={events.map((event, index) => ({
-          key: `${event.label}-${index}`,
-          title: isEmptyDashboardValue(event.title) ? EMPTY_FIELD_VALUE : event.title,
-          meta: `${event.label} · ${event.detail}`,
-          status: event.time,
-        }))}
-      />
+      <div
+        className="home-research-event-table min-w-0 overflow-hidden border-t border-[color:var(--wolfy-divider)] text-xs"
+        data-testid="home-linear-events-table"
+      >
+        <div className="hidden min-w-0 grid-cols-[minmax(12rem,1.35fr)_7rem_7rem_7rem_7rem_6rem_minmax(14rem,1fr)] gap-4 border-b border-[color:var(--wolfy-divider)] py-2 text-[11px] text-[color:var(--wolfy-text-muted)] lg:grid">
+          <span>{isEnglish ? 'Event' : '事件'}</span>
+          <span>{isEnglish ? 'Type' : '类型'}</span>
+          <span>{isEnglish ? 'Impact' : '影响方向'}</span>
+          <span>{isEnglish ? 'Priority' : '重要性'}</span>
+          <span>{isEnglish ? 'Time' : '时间'}</span>
+          <span>{isEnglish ? 'Left' : '剩余'}</span>
+          <span>{isEnglish ? 'Notes' : '备注'}</span>
+        </div>
+        {events.length ? events.map((event, index) => (
+          <div
+            key={`${event.label}-${index}`}
+            className="home-research-event-row grid min-w-0 gap-2 border-b border-[color:var(--wolfy-divider)] py-2.5 last:border-b-0 lg:grid-cols-[minmax(12rem,1.35fr)_7rem_7rem_7rem_7rem_6rem_minmax(14rem,1fr)] lg:gap-4 lg:py-2"
+            data-testid={`home-linear-event-row-${index}`}
+          >
+            <span className="min-w-0 truncate text-[color:var(--wolfy-text-primary)]">{displaySlotValue(event.title, locale, isEnglish ? 'No event' : '暂无数据')}</span>
+            <span className="min-w-0 truncate text-white/58">{event.label}</span>
+            <span className={cn('min-w-0 truncate', catalystImpactLabel(event, locale) === '利多' || catalystImpactLabel(event, locale) === 'Positive' ? 'text-[color:var(--wolfy-market-up)]' : 'text-white/58')}>
+              {catalystImpactLabel(event, locale)}
+            </span>
+            <span className="min-w-0 truncate text-amber-200/80">{event.importance === 'high' ? (isEnglish ? 'High' : '高') : (isEnglish ? 'Medium' : '中')}</span>
+            <span className="min-w-0 truncate font-mono text-white/60">{displaySlotValue(event.time, locale)}</span>
+            <span className="min-w-0 truncate font-mono text-white/48">{catalystDaysRemaining(event, locale)}</span>
+            <span className="min-w-0 truncate text-white/46">{displaySlotValue(event.detail, locale, isEnglish ? 'Pending' : '待补充')}</span>
+          </div>
+        )) : (
+          <div className="py-2 text-[color:var(--wolfy-text-muted)]" data-testid="home-linear-events-empty">
+            {isEnglish ? 'No verified catalysts' : '暂无已验证催化剂'}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -2309,7 +2429,7 @@ function buildInPlacePlaceholderDashboard(
   locale: DashboardLocale,
   ticker?: string | null,
 ): DashboardPayload {
-  const normalizedTicker = normalizeTickerQuery(ticker ?? undefined) || EMPTY_FIELD_VALUE;
+  const normalizedTicker = normalizeTickerQuery(ticker ?? undefined) || DEFAULT_HOME_TICKER;
   const base = DASHBOARD_VARIANTS[locale].NVDA;
   const companyProfile = resolveCompanyProfile(normalizedTicker);
   const neutralStrategyMetrics = neutralizeDashboardFields(base.strategy.metrics);
@@ -3600,7 +3720,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         : buildInPlacePlaceholderDashboard(locale, activeTicker);
     }
 
-    const effectiveTicker = routeSymbol || activeTicker || selectedTicker || normalizeTickerQuery(recentHistoryItems[0]?.stockCode) || null;
+    const effectiveTicker = routeSymbol || activeTicker || selectedTicker || normalizeTickerQuery(recentHistoryItems[0]?.stockCode) || DEFAULT_HOME_TICKER;
 
     if (
       completedTaskReport
@@ -3658,10 +3778,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     () => buildTraceSummary(activeDecisionTrace, activeReportQuality, locale),
     [activeDecisionTrace, activeReportQuality, locale],
   );
+  const hasActiveTraceReport = Boolean(activeTraceReport);
   const reanalysisTicker = useMemo(() => {
-    const candidate = normalizeTickerQuery(activeTraceReport?.meta.stockCode) || normalizeTickerQuery(dashboardData.ticker);
+    const reportTicker = normalizeTickerQuery(activeTraceReport?.meta.stockCode);
+    const candidate = reportTicker || (hasActiveTraceReport ? '' : normalizeTickerQuery(dashboardData.ticker));
     return TICKER_FORMAT_RE.test(candidate) ? candidate : '';
-  }, [activeTraceReport?.meta.stockCode, dashboardData.ticker]);
+  }, [activeTraceReport?.meta.stockCode, dashboardData.ticker, hasActiveTraceReport]);
   const shouldRenderDashboardPanels = !isGuest || Boolean(guestPreview || pendingAnalysisTicker);
   const guestPaywall = isGuest ? <GuestPaywallOverlay registrationPath={registrationPath} /> : null;
   const deleteCopy = useMemo(() => ({
@@ -3775,10 +3897,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       return;
     }
 
-    const nextTicker = normalizeTickerQuery(selectedReport?.meta.stockCode) || normalizeTickerQuery(recentHistoryItems[0]?.stockCode);
-    if (!nextTicker) {
-      return;
-    }
+    const nextTicker = normalizeTickerQuery(selectedReport?.meta.stockCode) || normalizeTickerQuery(recentHistoryItems[0]?.stockCode) || DEFAULT_HOME_TICKER;
 
     const frame = window.requestAnimationFrame(() => {
       setActiveTicker(nextTicker);
@@ -4058,9 +4177,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   className="home-research-action-button flex min-h-10 shrink-0 items-center justify-center rounded-lg border px-4 text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] disabled:cursor-wait disabled:text-white/34"
                   data-testid="home-bento-history-drawer-trigger"
                 >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 1 1-3.2-6.9M21 4v5h-5" />
-                  </svg>
+                  <History className="h-4 w-4" aria-hidden="true" />
                 </button>
               ) : null}
             </>
@@ -4320,7 +4437,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                             <div className="mt-3.5 max-w-4xl text-sm leading-6 text-white/66">
                               <div data-testid="home-bento-decision-insight">
                                 <p className="text-[11px] font-medium tracking-[0] text-white/36">{locale === 'en' ? 'Thesis' : '核心观点'}</p>
-                                <p className="mt-1.5 max-w-[60rem]" data-testid="home-bento-decision-insight-copy">
+                                <p className="mt-1.5 min-w-0 max-w-[60rem] break-words text-[13px] leading-[1.7] text-white/75 whitespace-normal" data-testid="home-bento-decision-insight-copy">
                                   {thesisCopy}
                                 </p>
                               </div>

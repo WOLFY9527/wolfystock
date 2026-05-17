@@ -88,7 +88,7 @@ export const TechCard: React.FC<TechCardProps> = ({
                   {signal.label}
                 </span>
                 <span
-                  className={`min-w-0 text-right text-xs font-medium ${
+                  className={`min-w-0 break-words text-right text-xs font-medium whitespace-normal ${
                     isMutedValue(signal.value) ? 'text-white/20' : toneColor.textClass
                   }`}
                   style={{ textShadow: isMutedValue(signal.value) ? 'none' : toneColor.glowShadow }}
@@ -98,7 +98,7 @@ export const TechCard: React.FC<TechCardProps> = ({
               </div>
               {signal.description ? (
                 <p
-                  className="mt-1 block w-full overflow-hidden text-ellipsis whitespace-nowrap text-xs text-white/40"
+                  className="mt-1 block w-full break-words text-xs text-white/40 whitespace-normal"
                   data-testid={`home-bento-tech-signal-detail-${signal.label}`}
                   title={signal.description}
                 >

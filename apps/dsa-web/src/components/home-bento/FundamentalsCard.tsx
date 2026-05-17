@@ -91,15 +91,15 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
               className="grid min-w-0 gap-y-1"
               data-testid={`home-bento-fundamental-metric-${metric.label}`}
             >
-              <span className="block text-[10px] font-bold uppercase tracking-widest text-white/40">
+              <span className="block truncate text-[10px] font-bold uppercase tracking-widest text-white/40">
                 {metric.label}
               </span>
-              <p className={`text-xl font-mono font-medium leading-tight ${muted ? 'text-white/20' : 'text-white'}`}>
+              <p className={`break-words font-mono text-xl font-medium leading-tight whitespace-normal ${muted ? 'text-white/20' : 'text-white'}`}>
                 {surprise.main}
               </p>
               {surprise.surprise ? (
                 <p
-                  className={`mt-1 text-[10px] font-medium leading-tight ${
+                  className={`mt-1 break-words text-[10px] font-medium leading-tight whitespace-normal ${
                     surprise.tone === 'neutral' ? 'text-white/35' : surpriseColor.textClass
                   }`}
                   style={{ textShadow: surprise.tone === 'neutral' ? 'none' : surpriseColor.glowShadow }}

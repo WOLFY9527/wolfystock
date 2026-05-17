@@ -120,6 +120,25 @@ const DEFAULT_INDICATORS: Record<HomeIndicatorKey, boolean> = {
   vwap: false,
 };
 
+const HOME_CHART_GRID_SAFE_MARGIN = {
+  left: '2%',
+  right: '5%',
+  containLabel: true,
+} satisfies Pick<GridComponentOption, 'left' | 'right' | 'containLabel'>;
+
+const resolveHomeCandlestickGrid = (): GridComponentOption[] => [
+  {
+    ...HOME_CHART_GRID_SAFE_MARGIN,
+    top: '15%',
+    height: '55%',
+  },
+  {
+    ...HOME_CHART_GRID_SAFE_MARGIN,
+    top: '78%',
+    bottom: '8%',
+  },
+];
+
 const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 
 const toFiniteNumber = (value: unknown): number | undefined => {
@@ -547,15 +566,11 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
     const safeCurrentPrice = isFiniteNumber(currentPrice) ? currentPrice : undefined;
     const isCompactChart = size.width > 0 && size.width < 520;
     const xLabelInterval = Math.max(0, Math.ceil(candles.length / (isCompactChart ? 4 : 7)) - 1);
-    const rightAxisGutter = isCompactChart ? 44 : 56;
 
     return {
       animation: false,
       backgroundColor: 'transparent',
-      grid: [
-        { left: 8, right: rightAxisGutter, top: 14, height: '58%', containLabel: true },
-        { left: 8, right: rightAxisGutter, top: '76%', height: '10%', containLabel: true },
-      ],
+      grid: resolveHomeCandlestickGrid(),
       tooltip: {
         trigger: 'axis',
         renderMode: 'html',
