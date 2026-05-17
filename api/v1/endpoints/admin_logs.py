@@ -12,13 +12,14 @@ from api.deps import CurrentUser, require_admin_capability
 from api.v1.schemas.admin_logs import (
     AdminLogCleanupRequest,
     AdminLogCleanupResponse,
+    AdminDataMissingDrilldownResponse,
     AdminLogStorageSummaryModel,
     BusinessEventDetailModel,
     BusinessEventListResponse,
     ExecutionLogSessionDetailModel,
     ExecutionLogSessionListResponse,
 )
-from src.services.admin_logs_service import AdminLogsRetentionService
+from src.services.admin_logs_service import AdminDataMissingDrilldownService, AdminLogsRetentionService
 from src.services.execution_log_service import ExecutionLogService
 
 router = APIRouter()
@@ -261,6 +262,29 @@ def list_execution_logs_root(
         offset=effective_offset,
         hasMore=effective_offset + effective_limit < total,
         health_summary=getattr(service, "_last_business_health_summary", service.summarize_business_events(items)),
+    )
+
+
+@router.get(
+    "/data-missing-drilldown",
+    response_model=AdminDataMissingDrilldownResponse,
+    summary="Aggregate admin drilldown for missing or degraded data signals",
+)
+def list_data_missing_drilldown(
+    since: str = Query(default="24h", description="Relative window, for example 15m, 1h, 24h, 7d"),
+    date_from: Optional[str] = Query(default=None, description="ISO datetime start"),
+    date_to: Optional[str] = Query(default=None, description="ISO datetime end"),
+    limit: int = Query(default=100, ge=1, le=200),
+    _: CurrentUser = Depends(require_admin_capability("ops:logs:read")),
+):
+    service = AdminDataMissingDrilldownService()
+    return AdminDataMissingDrilldownResponse(
+        **service.list_items(
+            since=since,
+            date_from=_parse_optional_datetime(date_from) or _since_to_date_from(since),
+            date_to=_parse_optional_datetime(date_to),
+            limit=limit,
+        )
     )
 
 
