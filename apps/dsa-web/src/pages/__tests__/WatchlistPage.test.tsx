@@ -287,14 +287,16 @@ describe('WatchlistPage', () => {
     expect(screen.queryByText(/Track scanner candidates/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-TSM')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-600519')).toBeInTheDocument();
-    expect(screen.getByTestId('watchlist-primary-filters')).toHaveClass('min-w-0', 'grid-cols-1');
+    expect(screen.queryByText('Details')).not.toBeInTheDocument();
+    expect(screen.getByTestId('watchlist-primary-filters')).toHaveClass('grid', 'grid-cols-2');
     const marketSelect = screen.getByLabelText('市场');
     expect(marketSelect).toHaveClass('select-surface', 'absolute', 'inset-0', 'opacity-0');
     expect(marketSelect.closest('.select-field__control')).toHaveClass('ui-control-shell', 'relative', 'min-w-0', 'w-full');
     expect(marketSelect.closest('.select-field__control')?.querySelector('.select-field__overlay')).toHaveAttribute('aria-hidden', 'true');
     expect(marketSelect.closest('.select-field__control')?.querySelector('.select-field__value')).toHaveTextContent('全部');
     expect(marketSelect.closest('.select-field__control')?.querySelector('.select-field__icon')).toHaveClass('ml-2', 'shrink-0');
-    fireEvent.click(screen.getByRole('button', { name: '展开 更多筛选' }));
+    expect(screen.getByRole('button', { name: '高级筛选' })).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(screen.getByRole('button', { name: '高级筛选' }));
     const contextSelect = screen.getByLabelText('主题 / 候选范围');
     expect(contextSelect).toHaveClass('select-surface', 'absolute', 'inset-0', 'opacity-0');
     expect(contextSelect.closest('.select-field__control')).toHaveClass('ui-control-shell', 'relative', 'min-w-0', 'w-full');
@@ -393,14 +395,17 @@ describe('WatchlistPage', () => {
     renderWatchlist();
     await screen.findByTestId('watchlist-row-NVDA');
 
-    const disclosure = screen.getByTestId('watchlist-advanced-filters');
-    expect(disclosure).not.toHaveAttribute('open');
-    expect(screen.queryByLabelText('来源')).not.toBeInTheDocument();
+    const advancedFilters = screen.getByTestId('watchlist-advanced-filters');
+    expect(advancedFilters.tagName).toBe('DIV');
+    expect(screen.getByRole('button', { name: '高级筛选' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByLabelText('主题 / 候选范围')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('证据筛选')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '展开 更多筛选' }));
+    fireEvent.click(screen.getByRole('button', { name: '高级筛选' }));
 
-    expect(disclosure).toHaveAttribute('open');
-    expect(screen.getByLabelText('来源')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '高级筛选' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByLabelText('主题 / 候选范围')).toBeInTheDocument();
+    expect(screen.getByLabelText('证据筛选')).toBeInTheDocument();
   });
 
   it('disables intelligence actions for an empty filtered set with a compact reason', async () => {
@@ -439,7 +444,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
     await screen.findByTestId('watchlist-row-NVDA');
 
-    fireEvent.click(screen.getByRole('button', { name: '展开 更多筛选' }));
+    fireEvent.click(screen.getByRole('button', { name: '高级筛选' }));
     fireEvent.change(screen.getByLabelText('来源'), { target: { value: 'scanner' } });
     fireEvent.change(screen.getByLabelText('主题 / 候选范围'), { target: { value: 'theme:semis' } });
 
@@ -588,7 +593,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
     await screen.findByTestId('watchlist-row-NVDA');
 
-    fireEvent.click(screen.getByRole('button', { name: '展开 更多筛选' }));
+    fireEvent.click(screen.getByRole('button', { name: '高级筛选' }));
     fireEvent.change(screen.getByLabelText('证据筛选'), { target: { value: 'hasBacktest' } });
 
     expect(screen.getByTestId('watchlist-row-NVDA')).toBeInTheDocument();
@@ -691,10 +696,9 @@ describe('WatchlistPage', () => {
     renderWatchlist();
     await screen.findByTestId('watchlist-row-NVDA');
 
-    const diagnostics = screen.getByTestId('watchlist-diagnostics-disclosure');
-    expect(diagnostics).not.toHaveAttribute('open');
-    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开/ }));
-    expect(within(diagnostics).getByText('开盘前自动更新')).toBeInTheDocument();
+    const runtimeStatus = screen.getByTestId('watchlist-runtime-status');
+    expect(runtimeStatus).toHaveTextContent('自动刷新');
+    expect(runtimeStatus).toHaveTextContent('运行状态');
     expect(screen.getAllByText('最新').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: /刷新评分/ }));
@@ -750,11 +754,23 @@ describe('WatchlistPage', () => {
     const emptyState = await screen.findByTestId('watchlist-compact-empty-state');
     expect(watchBoard).toContainElement(primaryWorkRegion);
     expect(primaryWorkRegion).toContainElement(emptyState);
-    expect(emptyState).toHaveClass('min-h-[72px]');
+    expect(emptyState).toHaveClass('min-h-[64px]', 'rounded-none', 'border-x-0', 'border-t');
     expect(within(emptyState).getByText('暂无追踪候选。')).toBeInTheDocument();
     fireEvent.click(within(emptyState).getByRole('button', { name: /打开扫描器/ }));
     expect(screen.getByText('scanner')).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/zh/scanner');
+  });
+
+  it('keeps batch actions and auto refresh in compact product-labeled rows', async () => {
+    renderWatchlist();
+    await screen.findByTestId('watchlist-row-NVDA');
+
+    expect(screen.getByTestId('watchlist-command-bar')).toHaveTextContent('批量操作');
+    expect(screen.getByTestId('watchlist-command-bar')).toHaveTextContent('运行状态');
+    expect(screen.getByTestId('watchlist-command-bar')).toHaveTextContent('扫描当前筛选');
+    expect(screen.getByTestId('watchlist-command-bar')).toHaveTextContent('回测当前筛选');
+    expect(screen.getByRole('button', { name: '刷新情报' })).toBeInTheDocument();
+    expect(screen.getByTestId('watchlist-runtime-status')).toHaveTextContent('自动刷新');
   });
 
   it('renders the authentication guard for guests', () => {

@@ -27,7 +27,6 @@ import {
   CompactEmptyRow,
   DenseCommandBar,
   DensePageHeader,
-  DenseSecondaryDisclosure,
   DenseStatusStrip,
   DenseTableShell,
   TerminalButton,
@@ -324,6 +323,10 @@ function getCopy(language: 'zh' | 'en') {
       staleCoverage: 'Stale intelligence',
       failureCoverage: 'Failed / no data',
       latestUpdate: 'Latest update',
+      filters: 'Filters',
+      advancedFilters: 'Advanced filters',
+      runtimeStatus: 'Runtime status',
+      batchActions: 'Batch actions',
       historyPrefix: 'HIST',
       hitPrefix: 'HIT',
       search: 'Search',
@@ -369,7 +372,7 @@ function getCopy(language: 'zh' | 'en') {
       scoreFreshness: 'Score freshness',
       refreshScores: 'Refresh scores',
       refreshingScores: 'Refreshing...',
-      autoRefresh: 'Pre-open auto update',
+      autoRefresh: 'Auto refresh',
       enabled: 'Enabled',
       stale: 'Stale',
       fresh: 'Fresh',
@@ -411,6 +414,10 @@ function getCopy(language: 'zh' | 'en') {
     staleCoverage: '情报过期',
     failureCoverage: '失败 / 无数据',
     latestUpdate: '最近更新时间',
+    filters: '筛选',
+    advancedFilters: '高级筛选',
+    runtimeStatus: '运行状态',
+    batchActions: '批量操作',
     historyPrefix: '历史',
     hitPrefix: '命中',
     search: '搜索',
@@ -456,7 +463,7 @@ function getCopy(language: 'zh' | 'en') {
     scoreFreshness: '评分状态',
     refreshScores: '刷新评分',
     refreshingScores: '刷新中...',
-    autoRefresh: '开盘前自动更新',
+    autoRefresh: '自动刷新',
     enabled: '已启用',
     stale: '过期',
     fresh: '最新',
@@ -515,6 +522,7 @@ const WatchlistPage: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [useSelectedScope, setUseSelectedScope] = useState(false);
   const [activeItemId, setActiveItemId] = useState<number | null>(null);
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
 
   useEffect(() => {
     document.title = language === 'en' ? 'Watchlist - WolfyStock' : '观察列表 - WolfyStock';
@@ -977,6 +985,20 @@ const WatchlistPage: React.FC = () => {
   const activeHasEvidence = activeItem
     ? hasScannerEvidence(activeItem) || activeSimulation?.status === 'ready' || hasBacktestEvidence(activeItem)
     : false;
+  const runtimeStatusLabel = batchProgress
+    ? `${batchProgress.completed}/${batchProgress.total}`
+    : isBatchBacktesting
+      ? copy.batchBacktesting
+      : isBatchScanning
+        ? copy.batchScanFilter
+        : language === 'zh'
+          ? '空闲'
+          : 'Idle';
+  const runtimeStatusTone = batchProgress
+    ? 'info'
+    : isBatchBacktesting || isBatchScanning
+      ? 'warning'
+      : 'neutral';
 
   return (
     <TerminalPageShell data-testid="watchlist-page" className="flex-1 min-w-0 py-5 md:py-6">
@@ -1008,12 +1030,13 @@ const WatchlistPage: React.FC = () => {
       <DenseTableShell data-testid="watchlist-watch-board" variant="board">
         <CompactFilterBar
           data-testid="watchlist-compact-filter-bar"
-          className="min-h-0 rounded-none border-x-0 border-t-0 px-3 py-3"
+          className="min-h-0 rounded-none border-x-0 border-t-0 px-3 py-2"
+          leading={<span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.filters}</span>}
           trailing={(
             <TerminalButton
               type="button"
               variant="secondary"
-              className="h-10 px-4 text-sm"
+              className="h-9 px-3 text-xs"
               onClick={() => navigate(scannerPath)}
             >
               <ExternalLink className="h-4 w-4" />
@@ -1024,62 +1047,88 @@ const WatchlistPage: React.FC = () => {
           <div className="flex min-w-0 flex-col gap-2">
             <div
               data-testid="watchlist-primary-filters"
-              className="grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1.35fr)_minmax(10.5rem,13rem)_minmax(10.5rem,12rem)]"
+              className="grid min-w-0 grid-cols-2 gap-2 md:flex md:flex-wrap md:items-end"
             >
-              <Input
-                label={copy.search}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={copy.searchPlaceholder}
-                containerClassName="min-w-0"
-                trailingAction={<Search className="h-4 w-4 text-white/35" />}
-              />
-              <Select label={copy.market} value={marketFilter} onChange={setMarketFilter} options={marketOptions} className="min-w-0" />
-              <Select
-                label={copy.sort}
-                value={sortKey}
-                onChange={(value) => setSortKey(value as SortKey)}
-                className="min-w-0"
-                options={[
-                  { value: 'newest', label: copy.newest },
-                  { value: 'scannerScore', label: copy.scannerScore },
-                  { value: 'backtestReturn', label: copy.backtestReturn },
-                  { value: 'historicalHitRate', label: copy.historicalHitRate },
-                  { value: 'recentlyScored', label: copy.recentlyScored },
-                  { value: 'recentlyBacktested', label: copy.recentlyBacktested },
-                  { value: 'symbol', label: copy.symbol },
-                  { value: 'market', label: copy.market },
-                ]}
-              />
-            </div>
-            <DenseSecondaryDisclosure
-              data-testid="watchlist-advanced-filters"
-              title={language === 'zh' ? '更多筛选' : 'More filters'}
-              summary={`${copy.source} / ${copy.context} / ${copy.evidence}`}
-              variant="row"
-              className="border-0 bg-transparent px-0 py-0 hover:border-transparent"
-            >
-              <div
-                data-testid="watchlist-advanced-filter-grid"
-                className="grid min-w-0 grid-cols-1 gap-2 pt-1 md:grid-cols-3"
-              >
-                <Select label={copy.source} value={sourceFilter} onChange={setSourceFilter} options={sourceOptions} className="min-w-0" />
-                <Select label={copy.context} value={contextFilter} onChange={setContextFilter} options={contextOptions} className="min-w-0" />
+              <div className="col-span-2 min-w-0 md:flex-[2_1_20rem]">
+                <Input
+                  label={copy.search}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={copy.searchPlaceholder}
+                  containerClassName="min-w-0"
+                  trailingAction={<Search className="h-4 w-4 text-white/35" />}
+                />
+              </div>
+              <div className="min-w-0 md:flex-[0_0_9rem]">
+                <Select label={copy.market} value={marketFilter} onChange={setMarketFilter} options={marketOptions} className="min-w-0" />
+              </div>
+              <div className="min-w-0 md:flex-[0_0_10.5rem]">
                 <Select
-                  label={copy.evidence}
-                  value={evidenceFilter}
-                  onChange={(value) => setEvidenceFilter(value as EvidenceFilter)}
+                  label={copy.sort}
+                  value={sortKey}
+                  onChange={(value) => setSortKey(value as SortKey)}
                   className="min-w-0"
                   options={[
-                    { value: 'all', label: copy.all },
-                    { value: 'hasScanner', label: copy.hasScanner },
-                    { value: 'hasBacktest', label: copy.hasBacktest },
-                    { value: 'scannerSelected', label: copy.scannerSelected },
-                    { value: 'staleIntelligence', label: copy.staleIntelligence },
+                    { value: 'newest', label: copy.newest },
+                    { value: 'scannerScore', label: copy.scannerScore },
+                    { value: 'backtestReturn', label: copy.backtestReturn },
+                    { value: 'historicalHitRate', label: copy.historicalHitRate },
+                    { value: 'recentlyScored', label: copy.recentlyScored },
+                    { value: 'recentlyBacktested', label: copy.recentlyBacktested },
+                    { value: 'symbol', label: copy.symbol },
+                    { value: 'market', label: copy.market },
                   ]}
                 />
               </div>
-            </DenseSecondaryDisclosure>
+              <div className="min-w-0 md:flex-[0_0_9.5rem]">
+                <Select label={copy.source} value={sourceFilter} onChange={setSourceFilter} options={sourceOptions} className="min-w-0" />
+              </div>
+              <div className="min-w-0">
+                <TerminalButton
+                  type="button"
+                  variant="secondary"
+                  className="h-9 w-full px-3 text-xs"
+                  aria-expanded={advancedFiltersOpen}
+                  aria-controls="watchlist-advanced-filter-grid"
+                  onClick={() => setAdvancedFiltersOpen((current) => !current)}
+                >
+                  {copy.advancedFilters}
+                </TerminalButton>
+              </div>
+            </div>
+            <div
+              data-testid="watchlist-advanced-filters"
+              className="flex min-w-0 flex-col gap-2 border-t border-[color:var(--wolfy-divider)] pt-2"
+            >
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.advancedFilters}</span>
+                  <TerminalChip variant="neutral">{advancedFiltersOpen ? copy.enabled : language === 'zh' ? '默认收起' : 'Collapsed'}</TerminalChip>
+                </div>
+              </div>
+              {advancedFiltersOpen ? (
+                <div
+                  id="watchlist-advanced-filter-grid"
+                  data-testid="watchlist-advanced-filter-grid"
+                  className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2"
+                >
+                  <Select label={copy.context} value={contextFilter} onChange={setContextFilter} options={contextOptions} className="min-w-0" />
+                  <Select
+                    label={copy.evidence}
+                    value={evidenceFilter}
+                    onChange={(value) => setEvidenceFilter(value as EvidenceFilter)}
+                    className="min-w-0"
+                    options={[
+                      { value: 'all', label: copy.all },
+                      { value: 'hasScanner', label: copy.hasScanner },
+                      { value: 'hasBacktest', label: copy.hasBacktest },
+                      { value: 'scannerSelected', label: copy.scannerSelected },
+                      { value: 'staleIntelligence', label: copy.staleIntelligence },
+                    ]}
+                  />
+                </div>
+              ) : null}
+            </div>
           </div>
         </CompactFilterBar>
 
@@ -1350,11 +1399,12 @@ const WatchlistPage: React.FC = () => {
                   <CompactEmptyRow
                     data-testid="watchlist-compact-empty-state"
                     title={copy.emptyTitle}
+                    className="rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent px-4 py-3 min-h-[64px]"
                     action={(
                       <TerminalButton
                         type="button"
                         variant="secondary"
-                        className="mt-4 h-10 px-4 text-sm sm:mt-0"
+                        className="h-9 px-3 text-xs"
                         onClick={() => navigate(scannerPath)}
                       >
                         <ExternalLink className="h-4 w-4" />
@@ -1509,8 +1559,8 @@ const WatchlistPage: React.FC = () => {
           <DenseCommandBar
             data-testid="watchlist-command-bar"
             className="border-t-0"
-            heading={copy.batchBacktestLabel}
-            summary={<span data-testid="watchlist-action-scope">{actionScopeLabel} · {language === 'zh' ? '并发 2' : 'concurrency 2'}</span>}
+            heading={copy.batchActions}
+            summary={<span data-testid="watchlist-action-scope">{copy.runtimeStatus} · {actionScopeLabel} · {language === 'zh' ? '并发 2' : 'concurrency 2'}</span>}
             notice={actionItems.length === 0 ? <TerminalChip variant="caution">{copy.noMatchedSymbols}</TerminalChip> : null}
             progress={batchProgress ? (
               <p data-testid="watchlist-batch-progress" className="text-xs text-white/55">
@@ -1580,13 +1630,12 @@ const WatchlistPage: React.FC = () => {
               </>
             )}
           />
-          <DenseSecondaryDisclosure
-            data-testid="watchlist-diagnostics-disclosure"
-            title={language === 'zh' ? '二级状态：自动刷新' : 'Secondary status: auto refresh'}
-            summary={language === 'zh' ? '默认折叠' : 'Collapsed by default'}
+          <div
+            data-testid="watchlist-runtime-status"
+            className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2"
           >
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.autoRefresh}</span>
+              <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.autoRefresh}</span>
               <TerminalChip variant={terminalChipVariant(autoRefreshStatus.tone)} className="font-mono">
                 {refreshStatus ? autoRefreshStatus.label : '--'}
               </TerminalChip>
@@ -1594,7 +1643,13 @@ const WatchlistPage: React.FC = () => {
                 US {refreshStatus?.usTime || '08:45'} / CN {refreshStatus?.cnTime || '09:00'} / HK {refreshStatus?.hkTime || '09:00'}
               </span>
             </div>
-          </DenseSecondaryDisclosure>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.runtimeStatus}</span>
+              <TerminalChip variant={terminalChipVariant(runtimeStatusTone)} className="font-mono">
+                {runtimeStatusLabel}
+              </TerminalChip>
+            </div>
+          </div>
         </div>
       </DenseTableShell>
       </TerminalPageShell>
