@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../i18n/core';
@@ -124,13 +124,22 @@ describe('PersonalSettingsPage', () => {
 
     const heading = screen.getByRole('heading', { level: 1, name: '设置' });
     const workspace = screen.getByTestId('personal-settings-workspace');
+    const settingsConsole = screen.getByTestId('personal-settings-console');
+    const primaryBoard = screen.getByTestId('personal-settings-primary-board');
+    const helpRail = screen.getByTestId('personal-settings-help-rail');
     expect(heading).toHaveClass('text-xl', 'md:text-2xl');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(container.querySelectorAll('main')).toHaveLength(0);
     expect(workspace).toHaveAttribute('data-terminal-primitive', 'page-shell');
-    expect(workspace).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6', 'py-5', 'md:py-6');
+    expect(workspace).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'py-5', 'md:py-6');
     expect(workspace).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'py-8');
     expect(workspace).not.toHaveClass('max-w-4xl');
+    expect(settingsConsole).toBeInTheDocument();
+    expect(primaryBoard).toHaveAttribute('data-linear-primitive', 'console-board');
+    expect(helpRail).toHaveAttribute('data-linear-primitive', 'context-rail');
+    expect(screen.getByTestId('personal-settings-profile-header')).toBeInTheDocument();
+    expect(screen.getByTestId('personal-settings-security-section')).toBeInTheDocument();
+    expect(screen.getByTestId('personal-settings-preferences-section')).toBeInTheDocument();
     expect(screen.getByText(zh('settings.personalGuestPreferencesTitle'))).toBeInTheDocument();
     expect(screen.queryByText(zh('settings.personalGuestPreferencesBody'))).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: zh('language.zh') })).not.toBeInTheDocument();
@@ -143,6 +152,8 @@ describe('PersonalSettingsPage', () => {
     expect(screen.getByRole('link', { name: zh('settings.personalGuestCreateAccountAction') })).toHaveAttribute('href', '/login?mode=create&redirect=%2Fsettings');
     expect(screen.queryByRole('link', { name: zh('nav.independentConsole') })).not.toBeInTheDocument();
     expect(screen.queryByText(/provider_timeout|MarketCache|generatedCandidates|failedCandidates/i)).not.toBeInTheDocument();
+    expect(within(screen.getByTestId('personal-settings-boundary-disclosure')).getByRole('button')).toHaveAttribute('aria-expanded', 'false');
+    expect(within(screen.getByTestId('personal-settings-help-disclosure')).getByRole('button')).toHaveAttribute('aria-expanded', 'false');
     expect(getNotificationPreferences).not.toHaveBeenCalled();
   });
 
@@ -211,11 +222,19 @@ describe('PersonalSettingsPage', () => {
     );
 
     const workspace = screen.getByTestId('personal-settings-workspace');
+    const profileHeader = screen.getByTestId('personal-settings-profile-header');
+    const saveButton = screen.getByRole('button', { name: zh('settings.personalNotificationSaveAction') });
     expect(container.querySelectorAll('main')).toHaveLength(0);
     expect(workspace).toHaveAttribute('data-terminal-primitive', 'page-shell');
-    expect(workspace).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6', 'py-5', 'md:py-6');
+    expect(workspace).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'py-5', 'md:py-6');
     expect(workspace).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'py-8');
     await waitFor(() => expect(getNotificationPreferences).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('personal-settings-console')).toBeInTheDocument();
+    expect(screen.getByTestId('personal-settings-primary-board')).toHaveAttribute('data-linear-primitive', 'console-board');
+    expect(screen.getByTestId('personal-settings-help-rail')).toHaveAttribute('data-linear-primitive', 'context-rail');
+    expect(screen.getByTestId('personal-settings-account-row')).toBeInTheDocument();
+    expect(screen.getByTestId('personal-settings-notification-row')).toBeInTheDocument();
+    expect(profileHeader).toHaveTextContent('Admin');
     expect(screen.queryByText(zh('settings.personalAdminConsoleTitle'))).not.toBeInTheDocument();
     expect(screen.queryByText(zh('settings.personalAdminConsoleDesc'))).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: zh('nav.independentConsole') })).not.toBeInTheDocument();
@@ -223,8 +242,9 @@ describe('PersonalSettingsPage', () => {
     expect(screen.queryByRole('button', { name: /管理工具/ })).not.toBeInTheDocument();
     expect(screen.getByDisplayValue('admin@example.com')).toBeInTheDocument();
     expect(screen.getByDisplayValue('https://discord.com/api/webhooks/123/token')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: zh('settings.personalNotificationSaveAction') })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: zh('settings.personalNotificationSaveAction') })).toHaveClass('bg-white/5', 'border-white/10', 'text-white');
+    expect(saveButton).toBeInTheDocument();
+    expect(saveButton).toHaveAttribute('data-terminal-primitive', 'button');
+    expect(within(screen.getByTestId('personal-settings-boundary-disclosure')).getByRole('button')).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByTestId('change-password-card')).toBeInTheDocument();
     expect(screen.getByTestId('font-size-card')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '紧凑' }));

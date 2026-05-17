@@ -4,9 +4,9 @@ import type { ParsedApiError } from '../../api/error';
 import { isParsedApiError } from '../../api/error';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { useAuth } from '../../hooks';
-import { Button, Input } from '../common';
+import { Input } from '../common';
 import { SettingsAlert } from './SettingsAlert';
-import { SettingsSectionCard } from './SettingsSectionCard';
+import { TerminalButton } from '../terminal';
 
 export const ChangePasswordCard: React.FC = () => {
   const { language, t } = useI18n();
@@ -63,43 +63,44 @@ export const ChangePasswordCard: React.FC = () => {
   };
 
   return (
-    <SettingsSectionCard
-      title={t('settings.passwordTitle')}
-    >
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-3">
-            <Input
-              id="change-pass-current"
-              type="password"
-              allowTogglePassword
-              iconType="password"
-              label={t('settings.passwordCurrent')}
-              placeholder={t('settings.passwordCurrentPlaceholder')}
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              disabled={isSubmitting}
-              autoComplete="current-password"
-            />
-          </div>
+    <div data-testid="change-password-card" className="grid gap-3 px-4 py-4 md:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">{t('settings.passwordTitle')}</p>
+        <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+          {language === 'en' ? 'Rotate your account password without leaving personal settings.' : '在个人设置内直接完成账户密码轮换。'}
+        </p>
+      </div>
 
-          <div className="space-y-3">
-            <Input
-              id="change-pass-new"
-              type="password"
-              allowTogglePassword
-              iconType="password"
-              label={t('settings.passwordNew')}
-              placeholder={t('settings.passwordNewPlaceholder')}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              disabled={isSubmitting}
-              autoComplete="new-password"
-            />
-          </div>
+      <form onSubmit={handleSubmit} className="min-w-0 space-y-3 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Input
+            id="change-pass-current"
+            type="password"
+            allowTogglePassword
+            iconType="password"
+            label={t('settings.passwordCurrent')}
+            placeholder={t('settings.passwordCurrentPlaceholder')}
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            disabled={isSubmitting}
+            autoComplete="current-password"
+          />
+
+          <Input
+            id="change-pass-new"
+            type="password"
+            allowTogglePassword
+            iconType="password"
+            label={t('settings.passwordNew')}
+            placeholder={t('settings.passwordNewPlaceholder')}
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            disabled={isSubmitting}
+            autoComplete="new-password"
+          />
         </div>
 
-        <div className="space-y-3 md:max-w-md">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <Input
             id="change-pass-confirm"
             type="password"
@@ -112,6 +113,10 @@ export const ChangePasswordCard: React.FC = () => {
             disabled={isSubmitting}
             autoComplete="new-password"
           />
+
+          <TerminalButton type="submit" variant="primary" disabled={isSubmitting} className="w-full lg:w-auto">
+            {isSubmitting ? t('common.processing') : t('settings.passwordSave')}
+          </TerminalButton>
         </div>
 
         {error
@@ -122,11 +127,7 @@ export const ChangePasswordCard: React.FC = () => {
         {success ? (
           <SettingsAlert title={t('settings.passwordSuccessTitle')} message={successMessage} variant="success" />
         ) : null}
-
-        <Button type="submit" variant="settings-primary" isLoading={isSubmitting}>
-          {t('settings.passwordSave')}
-        </Button>
       </form>
-    </SettingsSectionCard>
+    </div>
   );
 };
