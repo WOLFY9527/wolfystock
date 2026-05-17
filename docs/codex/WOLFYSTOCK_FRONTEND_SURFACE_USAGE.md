@@ -28,21 +28,22 @@ Read with:
 - `Terminal*` names are compatibility adapters only.
 - Use one dominant surface per route.
 - Prefer rows, dividers, dense lists, tables, strips, drawers, and rails before cards.
+- Cards and panels are allowed only inside named layout regions with fixed sizing, explicit overflow behavior, and a clear hierarchy.
+- Do not allow uncontrolled card sprawl, card walls, or nested panel/card stacks outside the contract zones.
 - Keep diagnostics and provider/runtime detail collapsed unless the route is explicitly admin/operator.
 
 ## Home: ResearchConsole
 
 Required anatomy:
 
-- wide command/search bar;
-- stock identity and decision state;
-- key-level strip;
-- real chart workspace;
-- catalyst/event rows;
-- compact context rail;
-- report and source drawers.
+- `CommandBar` with the wide command/search row;
+- `HeaderStrip` for identity and decision state;
+- `PrimaryWorkRegion` for the score, thesis, key levels, and chart workspace;
+- `SecondaryDeck` for catalyst/event rows;
+- `ContextRail` for compact data quality, assumptions, and source state;
+- `DetailDrawer` / `FloatingPanel` for report and source detail.
 
-Do not perform a card/bento-first Home migration.
+Do not perform a card/bento-first Home migration. Do not turn the route into uncontrolled card sprawl.
 
 ## Scanner: RankingBoard
 

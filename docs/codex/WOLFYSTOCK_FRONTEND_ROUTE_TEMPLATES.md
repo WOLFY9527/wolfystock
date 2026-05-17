@@ -32,9 +32,19 @@ Rules:
 
 - result/input is the hero, not onboarding copy;
 - chart data must be real when presented as market data;
-- no card/bento-first first fold;
+- cards and panels are allowed only inside fixed named regions with explicit sizing and overflow;
+- no uncontrolled card/bento-first first fold;
 - no fake LLM or market content;
 - no raw provider/debug detail in the primary flow.
+
+Recommended zone order:
+
+1. `CommandBar`
+2. `HeaderStrip`
+3. `PrimaryWorkRegion`
+4. `SecondaryDeck`
+5. `ContextRail`
+6. `DetailDrawer` / `FloatingPanel`
 
 ## Template B: RankingBoard
 

@@ -13,11 +13,14 @@ import {
 import { HomeCandlestickChart, type HomeCandlestickChartContext } from '../components/home-bento/HomeCandlestickChart';
 import {
   CatalystRows,
+  CompactFilterBar,
   ConsoleBoard,
   ConsoleContextRail,
+  FixedRegionGrid,
   KeyLevelStrip,
   ResearchConsoleShell,
-  WolfyCommandBar,
+  RailPanel,
+  SectionDeck,
 } from '../components/linear';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -1038,7 +1041,8 @@ function LinearTechnicalStructure({
 
   return (
     <section
-      className="relative min-w-0 border-t border-white/[0.06] pt-5"
+      className="relative min-w-0 border-t border-[color:var(--wolfy-divider)] pt-5"
+      data-layout-zone="PrimaryWorkRegion"
       data-testid="home-bento-card-tech"
       data-research-card="risk-context"
     >
@@ -1059,7 +1063,7 @@ function LinearTechnicalStructure({
       </div>
       <div
         className={cn(
-          'grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_232px]',
+          'grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_clamp(14rem,18vw,16rem)]',
           isGuest ? 'pointer-events-none opacity-80' : '',
         )}
         data-testid="home-research-chart-workspace"
@@ -1183,11 +1187,11 @@ function LinearObservationPanel({
   ] as const;
 
   return (
-    <ConsoleContextRail
-      className="relative min-w-0 rounded-none border-0 bg-[var(--wolfy-surface-rail)] px-4 py-5 lg:px-5 lg:py-6"
+    <RailPanel
+      className="relative min-w-0"
       data-testid="home-research-context-rail"
     >
-      <section className="min-w-0 pb-4" data-testid="home-bento-card-strategy" data-research-card="opportunity">
+      <section className="min-w-0 py-2 first:pt-0" data-testid="home-bento-card-strategy" data-research-card="opportunity">
         <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
           <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Observation Framework' : '观察框架'}</h2>
           <button
@@ -1224,7 +1228,7 @@ function LinearObservationPanel({
       </section>
 
       <section
-        className="min-w-0 pt-4"
+        className="min-w-0 py-2 last:pb-0"
         data-testid="home-bento-card-fundamentals"
         data-research-card="data-context"
       >
@@ -1253,8 +1257,8 @@ function LinearObservationPanel({
           </div>
         </div>
       </section>
-      {isGuest ? guestPaywall : null}
-    </ConsoleContextRail>
+      {isGuest ? <div className="min-w-0 py-2 last:pb-0">{guestPaywall}</div> : null}
+    </RailPanel>
   );
 }
 
@@ -1355,25 +1359,27 @@ function LinearEventsStrip({
   const events = buildHomeCatalystEvents(report, locale);
 
   return (
-    <section className="min-w-0" data-testid="home-linear-events">
-      <div className="flex min-w-0 items-center justify-between gap-3 pb-1.5">
-        <h2 className="text-sm font-semibold text-white/88">{isEnglish ? 'Events & Catalysts' : '关键事件与催化剂'}</h2>
-        {events.length ? (
-          <span className="text-[11px] text-white/34">{events.length}{isEnglish ? ' rows' : ' 条'}</span>
-        ) : null}
+    <SectionDeck className="min-w-0 gap-2 pt-2" data-testid="home-research-secondary-deck">
+      <div className="min-w-0" data-testid="home-linear-events">
+        <div className="flex min-w-0 items-center justify-between gap-3 pb-1.5">
+          <h2 className="text-sm font-semibold text-white/88">{isEnglish ? 'Events & Catalysts' : '关键事件与催化剂'}</h2>
+          {events.length ? (
+            <span className="text-[11px] text-white/34">{events.length}{isEnglish ? ' rows' : ' 条'}</span>
+          ) : null}
+        </div>
+        <CatalystRows
+          className="border-t border-[color:var(--wolfy-divider)]"
+          emptyText={isEnglish ? 'No verified catalysts' : '暂无已验证催化剂'}
+          emptyTestId="home-linear-events-empty"
+          items={events.map((event, index) => ({
+            key: `${event.label}-${index}`,
+            title: isEmptyDashboardValue(event.title) ? EMPTY_FIELD_VALUE : event.title,
+            meta: `${event.label} · ${event.detail}`,
+            status: event.time,
+          }))}
+        />
       </div>
-      <CatalystRows
-        className="border-t border-[color:var(--wolfy-divider)]"
-        emptyText={isEnglish ? 'No verified catalysts' : '暂无已验证催化剂'}
-        emptyTestId="home-linear-events-empty"
-        items={events.map((event, index) => ({
-          key: `${event.label}-${index}`,
-          title: isEmptyDashboardValue(event.title) ? EMPTY_FIELD_VALUE : event.title,
-          meta: `${event.label} · ${event.detail}`,
-          status: event.time,
-        }))}
-      />
-    </section>
+    </SectionDeck>
   );
 }
 
@@ -4030,7 +4036,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           void handleAnalyze();
         }}
       >
-        <WolfyCommandBar
+        <CompactFilterBar
           data-testid="home-research-command-bar"
           className="min-h-12 items-stretch gap-2 rounded-lg bg-[var(--wolfy-surface-input)] px-2 py-2 sm:flex-nowrap"
           trailing={(
@@ -4082,7 +4088,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               placeholder={copy?.omnibarPlaceholder || standbyCopy.omnibarPlaceholder}
             />
           </div>
-        </WolfyCommandBar>
+        </CompactFilterBar>
       </form>
       {guestFallbackNotice ? (
         <p className="mt-3 text-xs text-white/50">{guestFallbackNotice}</p>
@@ -4162,7 +4168,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               className="gap-3"
               rail={isHomeAnalyzing ? (
                 <ConsoleContextRail
-                  className="relative min-w-0 rounded-none border-0 bg-[var(--wolfy-surface-rail)] px-4 py-5 lg:px-5 lg:py-6"
+                  className="relative min-w-0 px-4 py-5 lg:px-5 lg:py-6"
                   data-testid="home-research-context-rail"
                 >
                   <InPlaceStrategySkeleton locale={locale} />
@@ -4188,29 +4194,17 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                 className="rounded-none border-0 bg-transparent"
                 data-testid="home-research-board"
               >
-                <div
-                  className="min-w-0 px-4 py-5 md:px-7 md:py-6"
-                  data-testid="home-research-primary-workspace"
-                >
-                  {isHomeAnalyzing ? (
-                    <InPlaceDecisionSkeleton
-                      locale={locale}
-                      ticker={pendingAnalysisTicker || activeTicker || readyCopy.ticker}
-                      progressModules={focusedTask?.progressModules}
-                      message={focusedTask?.message}
-                      progress={focusedTask?.progress}
-                    />
-                  ) : (
+                <FixedRegionGrid
+                  className="min-w-0"
+                  header={!isHomeAnalyzing ? (
                     <div
-                      className="min-w-0"
-                      data-testid="home-bento-card-decision"
-                      data-research-card="decision"
+                      className="border-b border-[color:var(--wolfy-divider)] px-4 py-5 md:px-7 md:py-6"
+                      data-testid="home-research-header-strip"
                     >
-                      <div data-testid={completedTaskReport ? 'home-bento-analysis-result-card' : undefined}>
-                        <div
-                          className="flex min-w-0 flex-wrap items-start justify-between gap-4"
-                          data-testid="home-bento-decision-company-header"
-                        >
+                      <div
+                        className="flex min-w-0 flex-wrap items-start justify-between gap-4"
+                        data-testid="home-bento-decision-company-header"
+                      >
                         <div className="min-w-0">
                           <p
                             className="text-[11px] leading-5 text-white/36"
@@ -4234,95 +4228,118 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           </div>
                         ) : null}
                       </div>
-
+                    </div>
+                  ) : undefined}
+                  primary={(
+                    <div
+                      className="min-w-0 px-4 py-5 md:px-7 md:py-6"
+                      data-testid="home-research-primary-workspace"
+                    >
+                      {isHomeAnalyzing ? (
+                        <InPlaceDecisionSkeleton
+                          locale={locale}
+                          ticker={pendingAnalysisTicker || activeTicker || readyCopy.ticker}
+                          progressModules={focusedTask?.progressModules}
+                          message={focusedTask?.message}
+                          progress={focusedTask?.progress}
+                        />
+                      ) : (
+                        <>
                         <div
-                          className="mt-6 grid gap-4 border-b border-white/[0.055] pb-5 md:grid-cols-[minmax(12rem,17rem)_minmax(10rem,14rem)_minmax(9rem,12rem)] md:items-end"
-                          data-testid="home-bento-decision-hero-row"
+                          className="min-w-0"
+                          data-testid="home-bento-card-decision"
+                          data-research-card="decision"
                         >
-                        <div className="min-w-0" data-testid="home-bento-decision-action">
-                          <p className="text-[11px] font-medium tracking-[0] text-white/36">{locale === 'en' ? 'Stance' : '投资立场'}</p>
-                          <p
-                            className="mt-2 text-[38px] font-semibold tracking-[-0.04em] text-white md:text-[46px]"
-                            data-testid="home-bento-decision-signal-hero"
-                          >
-                            {stanceLabel}
-                          </p>
-                        </div>
-
-                        <div className="min-w-0" data-testid="home-bento-decision-score">
-                          <p className="text-[11px] font-medium tracking-[0] text-white/36">{locale === 'en' ? 'Score' : '综合评分'}</p>
-                          <div className="mt-2 flex items-end gap-2" data-testid="home-bento-decision-core-metrics">
-                            <p
-                              className="font-mono text-[34px] font-semibold leading-none text-white md:text-[40px]"
-                              data-testid="home-bento-decision-score-value"
+                          <div data-testid={completedTaskReport ? 'home-bento-analysis-result-card' : undefined}>
+                            <div
+                              className="mt-0 grid gap-4 border-b border-[color:var(--wolfy-divider)] pb-5 md:grid-cols-[minmax(12rem,17rem)_minmax(10rem,14rem)_minmax(9rem,12rem)] md:items-end"
+                              data-testid="home-bento-decision-hero-row"
                             >
-                              {readyCopy.decision.heroValue}
-                            </p>
-                            <span className="pb-1 text-sm text-white/38">{locale === 'en' ? '/100' : '/100'}</span>
-                          </div>
-                          <div className="mt-3 flex max-w-[220px] items-center gap-2">
-                            <span className="h-[2px] w-full overflow-hidden rounded-full bg-white/[0.08]">
-                              <span className="block h-full rounded-full bg-[#7f89ea]" style={{ width: `${scorePercent}%` }} />
-                            </span>
-                          </div>
-                        </div>
+                              <div className="min-w-0" data-testid="home-bento-decision-action">
+                                <p className="text-[11px] font-medium tracking-[0] text-white/36">{locale === 'en' ? 'Stance' : '投资立场'}</p>
+                                <p
+                                  className="mt-2 text-[38px] font-semibold tracking-[-0.04em] text-white md:text-[46px]"
+                                  data-testid="home-bento-decision-signal-hero"
+                                >
+                                  {stanceLabel}
+                                </p>
+                              </div>
 
-                        <div className="min-w-0" data-testid="home-bento-decision-conviction">
-                          <div className="flex min-w-0 items-center justify-between gap-3">
-                            <p className="text-[11px] font-medium tracking-[0] text-white/36">{locale === 'en' ? 'Confidence' : '置信度'}</p>
-                            {activeDataQualityReport ? (
-                              <TraceBadge tone={dataQualityChipTone(activeDataQualityReport)}>
-                                {dataQualityTierLabel(activeDataQualityReport.dataQualityTier, locale)}
-                              </TraceBadge>
-                            ) : null}
+                              <div className="min-w-0" data-testid="home-bento-decision-score">
+                                <p className="text-[11px] font-medium tracking-[0] text-white/36">{locale === 'en' ? 'Score' : '综合评分'}</p>
+                                <div className="mt-2 flex items-end gap-2" data-testid="home-bento-decision-core-metrics">
+                                  <p
+                                    className="font-mono text-[34px] font-semibold leading-none text-white md:text-[40px]"
+                                    data-testid="home-bento-decision-score-value"
+                                  >
+                                    {readyCopy.decision.heroValue}
+                                  </p>
+                                  <span className="pb-1 text-sm text-white/38">{locale === 'en' ? '/100' : '/100'}</span>
+                                </div>
+                                <div className="mt-3 flex max-w-[220px] items-center gap-2">
+                                  <span className="h-[2px] w-full overflow-hidden rounded-full bg-white/[0.08]">
+                                    <span className="block h-full rounded-full bg-[#7f89ea]" style={{ width: `${scorePercent}%` }} />
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="min-w-0" data-testid="home-bento-decision-conviction">
+                                <div className="flex min-w-0 items-center justify-between gap-3">
+                                  <p className="text-[11px] font-medium tracking-[0] text-white/36">{locale === 'en' ? 'Confidence' : '置信度'}</p>
+                                  {activeDataQualityReport ? (
+                                    <TraceBadge tone={dataQualityChipTone(activeDataQualityReport)}>
+                                      {dataQualityTierLabel(activeDataQualityReport.dataQualityTier, locale)}
+                                    </TraceBadge>
+                                  ) : null}
+                                </div>
+                                <p className="mt-2 font-mono text-2xl font-semibold text-white/80" data-testid="home-bento-decision-conviction-value">
+                                  {readyCopy.decision.confidenceValue || EMPTY_FIELD_VALUE}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="mt-4 max-w-4xl text-sm leading-6 text-white/68">
+                              <div data-testid="home-bento-decision-insight">
+                                <p className="text-[11px] font-medium tracking-[0] text-white/36">{locale === 'en' ? 'Thesis' : '核心观点'}</p>
+                                <p className="mt-1.5 max-w-[60rem]" data-testid="home-bento-decision-insight-copy">
+                                  {thesisCopy}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="mt-4" data-testid="home-bento-research-state-row">
+                              <LinearKeyLevelsStrip metrics={readyCopy.strategy.metrics} locale={locale} />
+                            </div>
                           </div>
-                          <p className="mt-2 font-mono text-2xl font-semibold text-white/80" data-testid="home-bento-decision-conviction-value">
-                            {readyCopy.decision.confidenceValue || EMPTY_FIELD_VALUE}
-                          </p>
                         </div>
-                        </div>
-
-                        <div className="mt-4 max-w-4xl text-sm leading-6 text-white/68">
-                          <div data-testid="home-bento-decision-insight">
-                            <p className="text-[11px] font-medium tracking-[0] text-white/36">{locale === 'en' ? 'Thesis' : '核心观点'}</p>
-                            <p className="mt-1.5 max-w-[60rem]" data-testid="home-bento-decision-insight-copy">
-                              {thesisCopy}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mt-4" data-testid="home-bento-research-state-row">
-                          <LinearKeyLevelsStrip metrics={readyCopy.strategy.metrics} locale={locale} />
-                        </div>
-
-                        <div className="mt-5" data-testid="home-bento-secondary-grid">
-                          <LinearTechnicalStructure
-                            locale={locale}
-                            ticker={readyCopy.ticker}
-                            currentPrice={parseHomeChartPrice(activeTraceReport?.meta.currentPrice ?? activeTraceReport?.details?.standardReport?.summaryPanel?.currentPrice)}
-                            signals={technicalSignals}
-                            isGuest={Boolean(isGuest)}
-                            guestPaywall={guestPaywall}
-                            onOpenDetails={() => setActiveDrawer('tech')}
-                            detailLabel={readyCopy.tech.detailLabel}
-                            onChartContextChange={setHomeChartContext}
-                          />
-                        </div>
-                      </div>
+                        {!isHomeAnalyzing ? (
+                          <>
+                            <div className="mt-5 px-0" data-testid="home-bento-secondary-grid">
+                              <LinearTechnicalStructure
+                                locale={locale}
+                                ticker={readyCopy.ticker}
+                                currentPrice={parseHomeChartPrice(activeTraceReport?.meta.currentPrice ?? activeTraceReport?.details?.standardReport?.summaryPanel?.currentPrice)}
+                                signals={technicalSignals}
+                                isGuest={Boolean(isGuest)}
+                                guestPaywall={guestPaywall}
+                                onOpenDetails={() => setActiveDrawer('tech')}
+                                detailLabel={readyCopy.tech.detailLabel}
+                                onChartContextChange={setHomeChartContext}
+                              />
+                            </div>
+                            <div className="px-0 pb-0">
+                              <LinearEventsStrip
+                                locale={locale}
+                                report={activeTraceReport}
+                              />
+                            </div>
+                          </>
+                        ) : null}
+                        </>
+                      )}
                     </div>
                   )}
-                </div>
-                {!isHomeAnalyzing ? (
-                  <div
-                    className="min-w-0 border-t border-[color:var(--wolfy-divider)] px-4 py-3 md:px-7"
-                    data-testid="home-research-catalysts"
-                  >
-                    <LinearEventsStrip
-                      locale={locale}
-                      report={activeTraceReport}
-                    />
-                  </div>
-                ) : null}
+                />
               </ConsoleBoard>
             </ResearchConsoleShell>
           );

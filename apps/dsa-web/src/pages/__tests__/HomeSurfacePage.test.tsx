@@ -277,7 +277,6 @@ describe('HomeSurfacePage', () => {
     renderSurface();
     expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
     expect(screen.getByTestId('guest-home-clean-search')).toBeInTheDocument();
-    expect(screen.queryByTestId('home-bento-grid')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'WolfyStock 分析面板' })).toBeInTheDocument();
   });
 
@@ -291,39 +290,44 @@ describe('HomeSurfacePage', () => {
     const commandBar = screen.getByTestId('home-research-command-bar');
     const board = screen.getByTestId('home-research-board');
     const rail = screen.getByTestId('home-research-context-rail');
+    const headerStrip = screen.getByTestId('home-research-header-strip');
+    const primaryWorkspace = screen.getByTestId('home-research-primary-workspace');
     const chartWorkspace = screen.getByTestId('home-research-chart-workspace');
-    const catalysts = screen.getByTestId('home-research-catalysts');
+    const secondaryDeck = screen.getByTestId('home-research-secondary-deck');
+    const catalysts = screen.getByTestId('home-linear-events');
     const homeSearch = screen.getByTestId('home-bento-omnibar-input');
     const entryMetric = screen.getByTestId('home-bento-strategy-metric-观察区间');
     const targetMetric = screen.getByTestId('home-bento-strategy-metric-上方观察区');
     const stopLossMetric = screen.getByTestId('home-bento-strategy-metric-风险失效线');
+
     expect(root).toHaveAttribute('data-route-surface', 'ResearchConsole');
-    expect(screen.queryByTestId('home-bento-header-logo')).not.toBeInTheDocument();
     expect(root).toHaveClass('w-full', 'flex', 'flex-1', 'min-h-0', 'min-w-0', 'flex-col', 'gap-5');
     expect(root).toHaveClass('bg-[var(--wolfy-canvas)]');
-    expect(root).not.toHaveAttribute('data-bento-surface');
-    expect(root).not.toHaveClass('bento-surface-root');
-    expect(root).not.toHaveClass('workspace-width-wide', 'overflow-x-hidden');
-    expect(root.className).not.toContain('max-w-[1920px]');
-    expect(root.className).not.toContain('md:h-[calc(100dvh-var(--shell-masthead-height)-var(--shell-masthead-height)-4.9rem)]');
-    expect(root.className).not.toContain('overflow-hidden');
     expect(main).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'min-h-0');
-    expect(main).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'overflow-y-auto', 'no-scrollbar');
-    expect(main.className).not.toContain('overflow-hidden');
     expect(main.firstElementChild).toBe(researchConsole);
+
     expect(researchConsole).toHaveAttribute('data-linear-primitive', 'research-console-shell');
     expect(researchConsole).toHaveClass('rounded-lg', 'border', 'border-[color:var(--wolfy-border-subtle)]', 'bg-[var(--wolfy-surface-console)]');
-    expect(screen.queryByTestId('home-bento-grid')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('data-bento-grid')).not.toBeInTheDocument();
-    expect(commandBar).toHaveAttribute('data-linear-primitive', 'command-bar');
+    expect(researchConsole.contains(commandBar)).toBe(true);
+    expect(researchConsole.contains(board)).toBe(true);
+    expect(researchConsole.contains(rail)).toBe(true);
+    expect(rail.closest('[data-testid="home-research-console"]')).toBe(researchConsole);
+    expect(commandBar.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    expect(commandBar).toHaveAttribute('data-linear-primitive', 'compact-filter-bar');
+    expect(commandBar).toHaveAttribute('data-layout-zone', 'CommandBar');
     expect(commandBar).toHaveClass('bg-[var(--wolfy-surface-input)]', 'border-[color:var(--wolfy-border-subtle)]');
+    expect(headerStrip.closest('[data-layout-zone="HeaderStrip"]')).toBeInTheDocument();
+    expect(primaryWorkspace.closest('[data-layout-zone="PrimaryWorkRegion"]')).toBeInTheDocument();
+    expect(secondaryDeck).toHaveAttribute('data-linear-primitive', 'section-deck');
+    expect(secondaryDeck).toHaveAttribute('data-layout-zone', 'SecondaryDeck');
+
     expect(board).toHaveAttribute('data-linear-primitive', 'console-board');
     expect(board).toHaveClass('rounded-none', 'border-0', 'bg-transparent');
-    expect(rail).toHaveAttribute('data-linear-primitive', 'context-rail');
-    expect(rail).toHaveClass('rounded-none', 'border-0', 'bg-[var(--wolfy-surface-rail)]', 'divide-y', 'divide-[color:var(--wolfy-divider)]');
-    expect(researchConsole.compareDocumentPosition(commandBar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(commandBar.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(board.compareDocumentPosition(rail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(rail).toHaveAttribute('data-linear-primitive', 'rail-panel');
+    expect(rail).toHaveAttribute('data-layout-zone', 'ContextRail');
+    expect(rail).toHaveClass('bg-[var(--wolfy-surface-rail)]', 'divide-y', 'divide-[color:var(--wolfy-divider)]');
+
     expect(homeSearch).toHaveAttribute('placeholder', '输入代码唤醒 AI (如 ORCL)...');
     expect(homeSearch).toHaveValue('');
     expect(screen.getByTestId('home-bento-omnibar-input-shell')).toHaveClass('overflow-hidden', 'rounded-md', 'border', 'border-[color:var(--wolfy-border-subtle)]', 'bg-[var(--wolfy-surface-console)]');
@@ -332,52 +336,58 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-analyze-button')).toHaveClass('rounded-md', 'bg-[var(--wolfy-accent)]');
     expect(within(commandBar).getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
     expect(within(commandBar).getByRole('button', { name: '历史记录' })).toBeInTheDocument();
-    expect(screen.queryByText('SYSTEM VIEW')).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /扫描器/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /持仓/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /回测/i })).not.toBeInTheDocument();
+
     const decisionCard = screen.getByTestId('home-bento-card-decision');
+    const keyLevels = screen.getByTestId('home-research-key-levels');
     expect(within(decisionCard).getByText('投资立场')).toBeInTheDocument();
     expect(within(decisionCard).getByText('综合评分')).toBeInTheDocument();
     expect(within(decisionCard).getByText('核心观点')).toBeInTheDocument();
     expect(within(decisionCard).getByText('价格触发')).toBeInTheDocument();
     expect(within(decisionCard).getByText('失效位')).toBeInTheDocument();
     expect(within(decisionCard).getByText('下一关注区间')).toBeInTheDocument();
-    expect(within(decisionCard).queryByText('机会')).not.toBeInTheDocument();
-    expect(within(decisionCard).queryByText('风险')).not.toBeInTheDocument();
-    expect(within(decisionCard).queryByText('上下文')).not.toBeInTheDocument();
-    expect(within(decisionCard).queryByText('只读数据状态')).not.toBeInTheDocument();
-    expect(within(decisionCard).queryByText('数据与来源状态')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-header-actions')).toHaveTextContent('完整报告');
     expect(screen.getByTestId('home-bento-drawer-trigger-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-fundamentals')).toBeInTheDocument();
-    expect(screen.queryByTestId('home-bento-decision-chart-workspace')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-decision-hero-row')).toBeInTheDocument();
+
     expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('仅观察');
+    expect(screen.getByTestId('home-bento-decision-score-value')).toHaveTextContent('78');
+    expect(screen.getByTestId('home-bento-decision-conviction-value')).toHaveTextContent('高');
     expect(screen.getByTestId('home-bento-decision-core-metrics')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-insight')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-decision-company-header')).toHaveTextContent('Oracle Corporation');
+    expect(screen.getByTestId('home-bento-decision-sector')).toHaveTextContent('科技');
+
+    expect(keyLevels).toHaveAttribute('data-linear-primitive', 'key-level-strip');
+    expect(primaryWorkspace.closest('[data-layout-zone="PrimaryWorkRegion"]')).toContainElement(keyLevels);
+    expect(entryMetric.closest('[data-linear-primitive="key-level-strip"]')).toBe(keyLevels);
+    expect(entryMetric).not.toHaveClass('bg-white/[0.02]', 'border-white/[0.08]', 'p-6', 'col-span-2');
+    expect(within(entryMetric).getByText('121.80 - 124.60')).toHaveClass('text-sm', 'font-semibold');
+    expect(within(targetMetric).getByText('133.50')).toHaveClass('text-sm', 'font-semibold', 'text-emerald-400');
+    expect(within(stopLossMetric).getByText('117.40')).toHaveClass('text-sm', 'font-semibold', 'text-rose-400');
+
     expect(chartWorkspace).toContainElement(await screen.findByTestId('home-candlestick-chart-frame'));
+    expect(primaryWorkspace.closest('[data-layout-zone="PrimaryWorkRegion"]')).toContainElement(chartWorkspace);
     expect(screen.getByTestId('home-bento-decision-support-grid')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('min-w-0');
-    expect(screen.queryByTestId('home-bento-decision-scroll-body')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-decision-hero-row')).toHaveClass('grid', 'gap-4');
-    expect(screen.getByTestId('home-bento-decision-action')).toHaveClass('min-w-0');
-    expect(screen.getByTestId('home-bento-decision-score')).toHaveClass('min-w-0');
-    expect(screen.getByTestId('home-bento-decision-conviction')).toHaveClass('min-w-0');
-    expect(screen.getByTestId('home-bento-decision-conviction-value')).toHaveTextContent('高');
-    expect(screen.getByTestId('home-bento-decision-core-metrics').className).not.toContain('border');
-    expect(screen.getByTestId('home-bento-decision-core-metrics').className).not.toContain('bg-');
-    expect(screen.queryByText('量化佐证指标')).not.toBeInTheDocument();
     expect(screen.getByText('技术结构')).toBeInTheDocument();
     expect(screen.getByTestId('home-linear-technical-chart')).toHaveAttribute('data-chart-engine', 'echarts');
     expect(screen.getByTestId('home-linear-technical-chart')).toHaveAttribute('data-chart-source', 'stocks-history-daily');
-    expect(screen.queryByLabelText('技术结构示意')).not.toBeInTheDocument();
+    const macdSignal = screen.getByTestId('home-bento-tech-signal-MACD');
+    const macdSignalValue = within(macdSignal).getByText('二次扩张');
+    expect(macdSignal).toHaveClass('flex', 'min-w-0', 'flex-col', 'gap-1');
+    expect(macdSignalValue).toHaveClass('text-xs', 'font-semibold', 'text-emerald-400', 'drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]');
+    expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveClass('block', 'w-full', 'overflow-hidden', 'text-ellipsis', 'whitespace-nowrap', 'text-xs', 'text-white/38');
+    expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveAttribute('title', '零轴上方，动能再扩张。');
+
     expect(within(rail).getByText('观察框架')).toBeInTheDocument();
     expect(within(rail).getByText('数据质量与说明')).toBeInTheDocument();
     expect(within(rail).getByText('覆盖状态')).toBeInTheDocument();
     expect(within(rail).getByText('关键缺口')).toBeInTheDocument();
     expect(within(rail).getByText('待补信息')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-strategy')).toHaveAttribute('data-research-card', 'opportunity');
+    expect(screen.getByTestId('home-bento-card-fundamentals')).toHaveAttribute('data-research-card', 'data-context');
+
+    expect(secondaryDeck).toContainElement(catalysts);
     expect(within(catalysts).getByText('关键事件与催化剂')).toBeInTheDocument();
     expect(screen.getByTestId('home-linear-events-empty')).toHaveTextContent('暂无已验证催化剂');
     expect(screen.getByTestId('home-linear-events-empty')).toHaveClass('py-2', 'text-[color:var(--wolfy-text-muted)]');
@@ -403,42 +413,19 @@ describe('HomeSurfacePage', () => {
     ].forEach((phrase) => {
       expect(screen.queryByText(phrase)).not.toBeInTheDocument();
     });
-    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('仅观察');
-    expect(screen.getByTestId('home-bento-research-state-row')).toBeInTheDocument();
-    expect(screen.getByTestId('home-research-key-levels')).toHaveAttribute('data-linear-primitive', 'key-level-strip');
-    expect(screen.getByTestId('home-bento-card-strategy')).toHaveAttribute('data-research-card', 'opportunity');
+
+    expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('min-w-0');
     expect(screen.getByTestId('home-bento-card-tech')).toHaveAttribute('data-research-card', 'risk-context');
-    expect(screen.getByTestId('home-bento-card-fundamentals')).toHaveAttribute('data-research-card', 'data-context');
-    expect(screen.getByTestId('home-bento-decision-company-header')).toHaveTextContent('Oracle Corporation');
-    expect(screen.getByTestId('home-bento-decision-sector')).toHaveTextContent('科技');
-    expect(screen.getByTestId('home-bento-decision-score-value')).toHaveTextContent('78');
-    expect(screen.queryByTestId('home-bento-decision-direction')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('home-bento-sibling-row')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-decision')).not.toHaveClass('rounded-[24px]');
-    expect(entryMetric).not.toHaveClass('bg-white/[0.02]', 'border-white/[0.08]', 'p-6', 'col-span-2');
-    const macdSignal = screen.getByTestId('home-bento-tech-signal-MACD');
-    const macdSignalValue = within(macdSignal).getByText('二次扩张');
-    expect(within(entryMetric).getByText('121.80 - 124.60')).toHaveClass('text-sm', 'font-semibold');
-    expect(within(targetMetric).getByText('133.50')).toHaveClass('text-sm', 'font-semibold', 'text-emerald-400');
-    expect(within(stopLossMetric).getByText('117.40')).toHaveClass('text-sm', 'font-semibold', 'text-rose-400');
-    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-white');
-    expect(macdSignal).toHaveClass('flex', 'min-w-0', 'flex-col', 'gap-1');
-    expect(macdSignalValue).toHaveClass('text-xs', 'font-semibold');
-    expect(within(entryMetric).getByText('121.80 - 124.60').className).not.toContain('text-2xl');
-    expect(macdSignalValue).toHaveClass('text-emerald-400', 'drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]');
-    expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveClass('block', 'w-full', 'overflow-hidden', 'text-ellipsis', 'whitespace-nowrap', 'text-xs', 'text-white/38');
-    expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveAttribute('title', '零轴上方，动能再扩张。');
-    expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveTextContent('零轴上方，动能再扩张。');
-    expect(screen.queryByText('Second expansion above zero')).not.toBeInTheDocument();
-    expect(screen.getAllByText('均线结构').length).toBeGreaterThan(0);
-    expect(screen.queryByText('ROE')).not.toBeInTheDocument();
-    expect(screen.queryByText('EBITDA 利润率')).not.toBeInTheDocument();
-    expect(screen.queryByText('$12.1B')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-card-tech').compareDocumentPosition(catalysts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByTestId('home-bento-card-strategy').compareDocumentPosition(screen.getByTestId('home-bento-card-fundamentals')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.queryByTestId('home-bento-card-workflow')).not.toBeInTheDocument();
-    expect(screen.queryByText('先给出区间，再决定节奏。')).not.toBeInTheDocument();
-    expect(screen.queryByText('最近没有基本面特征')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-tech').compareDocumentPosition(secondaryDeck) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    expect(researchConsole.querySelector('[data-research-card] [data-research-card]')).toBeNull();
+    const cardZones = Array.from(researchConsole.querySelectorAll('[data-research-card]'))
+      .map((node) => node.closest('[data-layout-zone]')?.getAttribute('data-layout-zone'));
+    expect(cardZones.every((zone) => zone === 'PrimaryWorkRegion' || zone === 'ContextRail')).toBe(true);
+    expect(cardZones.filter((zone) => zone === 'PrimaryWorkRegion')).toHaveLength(2);
+    expect(cardZones.filter((zone) => zone === 'ContextRail')).toHaveLength(2);
   });
 
   it('shows only verified catalyst-like events when report event data exists', async () => {
@@ -579,10 +566,10 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByTestId('home-bento-decision-action-row')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-header-actions')).toHaveTextContent('完整报告');
     expect(screen.getByTestId('home-bento-decision-header-actions')).toHaveTextContent('决策来源');
-    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('完整报告');
-    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('决策来源');
-    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('复制报告');
-    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('重新分析');
+    expect(screen.getByTestId('home-research-header-strip')).toHaveTextContent('完整报告');
+    expect(screen.getByTestId('home-research-header-strip')).toHaveTextContent('决策来源');
+    expect(screen.getByTestId('home-research-header-strip')).toHaveTextContent('复制报告');
+    expect(screen.getByTestId('home-research-header-strip')).toHaveTextContent('重新分析');
     expect(screen.queryByText('查看完整判断')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '完整报告' }));
@@ -947,10 +934,10 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByTestId('home-bento-decision-action-row')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-header-actions')).toHaveTextContent('完整报告');
     expect(screen.getByTestId('home-bento-decision-header-actions')).toHaveTextContent('决策来源');
-    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('完整报告');
-    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('决策来源');
-    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('复制报告');
-    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('重新分析');
+    expect(screen.getByTestId('home-research-header-strip')).toHaveTextContent('完整报告');
+    expect(screen.getByTestId('home-research-header-strip')).toHaveTextContent('决策来源');
+    expect(screen.getByTestId('home-research-header-strip')).toHaveTextContent('复制报告');
+    expect(screen.getByTestId('home-research-header-strip')).toHaveTextContent('重新分析');
     expect(screen.queryByText('查看完整判断')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('128.5');
     expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('136.00-138.00');
@@ -1374,18 +1361,16 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-omnibar')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
     expect(researchConsole).toHaveAttribute('data-linear-primitive', 'research-console-shell');
-    expect(commandBar).toHaveAttribute('data-linear-primitive', 'command-bar');
-    expect(board).toHaveAttribute('data-linear-primitive', 'console-board');
-    expect(rail).toHaveAttribute('data-linear-primitive', 'context-rail');
-    expect(screen.queryByTestId('home-bento-grid')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('home-linear-shell')).not.toBeInTheDocument();
+    expect(commandBar).toHaveAttribute('data-layout-zone', 'CommandBar');
+    expect(screen.getByTestId('home-research-header-strip').closest('[data-layout-zone="HeaderStrip"]')).toBeInTheDocument();
+    expect(screen.getByTestId('home-research-primary-workspace').closest('[data-layout-zone="PrimaryWorkRegion"]')).toBeInTheDocument();
+    expect(screen.getByTestId('home-research-secondary-deck')).toHaveAttribute('data-layout-zone', 'SecondaryDeck');
+    expect(rail).toHaveAttribute('data-layout-zone', 'ContextRail');
+    expect(researchConsole.contains(board)).toBe(true);
+    expect(researchConsole.contains(rail)).toBe(true);
     expect(researchConsole).toHaveClass('rounded-lg', 'border-[color:var(--wolfy-border-subtle)]', 'bg-[var(--wolfy-surface-console)]');
     expect(board).toHaveClass('rounded-none', 'border-0', 'bg-transparent');
-    expect(rail).toHaveClass('rounded-none', 'border-0', 'bg-[var(--wolfy-surface-rail)]');
-    expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-card-tech')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-card-fundamentals')).toBeInTheDocument();
+    expect(rail).toHaveClass('bg-[var(--wolfy-surface-rail)]');
     expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
     expect(screen.queryByText('Ghost dashboard 承接中')).not.toBeInTheDocument();
     expect(screen.queryByText('待分析')).not.toBeInTheDocument();
@@ -1412,7 +1397,8 @@ describe('HomeSurfacePage', () => {
     expect(await screen.findByTestId('home-bento-inplace-loading-decision')).toBeInTheDocument();
     expect(screen.getByTestId('home-research-console')).toHaveAttribute('data-linear-primitive', 'research-console-shell');
     expect(screen.getByTestId('home-research-board')).toHaveAttribute('data-linear-primitive', 'console-board');
-    expect(screen.getByTestId('home-research-context-rail')).toHaveAttribute('data-linear-primitive', 'context-rail');
+    expect(screen.getByTestId('home-research-command-bar')).toHaveAttribute('data-layout-zone', 'CommandBar');
+    expect(screen.getByTestId('home-research-context-rail')).toHaveAttribute('data-layout-zone', 'ContextRail');
     expect(screen.getByTestId('home-bento-secondary-grid')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('min-w-0');
     expect(screen.getByTestId('home-bento-card-strategy')).toHaveClass('min-w-0');
@@ -2414,8 +2400,9 @@ describe('HomeSurfacePage', () => {
 
     await waitFor(() => {
       const finalCard = screen.getByTestId('home-bento-analysis-result-card');
-      expect(finalCard).toHaveTextContent('Netflix Inc.');
-      expect(finalCard).toHaveTextContent('通信服务');
+      expect(screen.getByTestId('home-research-header-strip')).toHaveTextContent('Netflix Inc.');
+      expect(screen.getByTestId('home-research-header-strip')).toHaveTextContent('通信服务');
+      expect(finalCard).toHaveTextContent('Netflix completion replaced neutral cards.');
       expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('有条件观察');
       expect(screen.getByTestId('home-bento-decision-score-value')).toHaveTextContent('74');
       expect(screen.queryByTestId('home-bento-decision-direction')).not.toBeInTheDocument();

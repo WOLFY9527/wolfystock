@@ -10,6 +10,15 @@ type LinearPrimitiveProps<T extends HTMLElement = HTMLElement> = React.HTMLAttri
 type LinearSurfaceElement = 'div' | 'section' | 'article' | 'aside' | 'header';
 type LinearSurfaceVariant = 'console' | 'input' | 'rail' | 'flat';
 type LinearSurfacePadding = 'none' | 'xs' | 'sm' | 'md' | 'lg';
+export type LinearLayoutZone =
+  | 'HeaderStrip'
+  | 'CommandBar'
+  | 'PrimaryWorkRegion'
+  | 'ContextRail'
+  | 'SecondaryDeck'
+  | 'DetailDrawer'
+  | 'FloatingPanel';
+type LinearRailWidth = 'sm' | 'md' | 'lg';
 
 const SURFACE_VARIANTS: Record<LinearSurfaceVariant, string> = {
   console: 'border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] text-[color:var(--wolfy-text-primary)]',
@@ -24,6 +33,18 @@ const SURFACE_PADDING: Record<LinearSurfacePadding, string> = {
   sm: 'p-3',
   md: 'p-4 md:p-5',
   lg: 'p-5 md:p-6',
+};
+
+const RAIL_GRID_TRACKS: Record<LinearRailWidth, string> = {
+  sm: 'lg:grid-cols-[minmax(0,1fr)_clamp(16rem,19vw,19rem)]',
+  md: 'lg:grid-cols-[minmax(0,1fr)_clamp(18rem,22vw,22.5rem)]',
+  lg: 'lg:grid-cols-[minmax(0,1fr)_clamp(20rem,24vw,25rem)]',
+};
+
+const RAIL_WIDTHS: Record<LinearRailWidth, string> = {
+  sm: 'lg:w-[clamp(16rem,19vw,19rem)]',
+  md: 'lg:w-[clamp(18rem,22vw,22.5rem)]',
+  lg: 'lg:w-[clamp(20rem,24vw,25rem)]',
 };
 
 export function WolfyShellSurface({
@@ -55,6 +76,91 @@ export function WolfyShellSurface({
   );
 }
 
+export function FixedRegionGrid({
+  header,
+  primary,
+  rail,
+  secondary,
+  railWidth = 'md',
+  className,
+  headerClassName,
+  primaryClassName,
+  railClassName,
+  secondaryClassName,
+  children,
+  ...props
+}: LinearPrimitiveProps<HTMLDivElement> & {
+  header?: React.ReactNode;
+  primary?: React.ReactNode;
+  rail?: React.ReactNode;
+  secondary?: React.ReactNode;
+  railWidth?: LinearRailWidth;
+  headerClassName?: string;
+  primaryClassName?: string;
+  railClassName?: string;
+  secondaryClassName?: string;
+}) {
+  const primaryContent = primary ?? children;
+  return (
+    <div
+      data-linear-primitive="fixed-region-grid"
+      className={cn('grid min-w-0 gap-0 overflow-hidden', className)}
+      {...props}
+    >
+      {header ? (
+        <div data-layout-zone="HeaderStrip" className={cn('min-w-0', headerClassName)}>
+          {header}
+        </div>
+      ) : null}
+      <div className={cn('grid min-w-0 gap-0', rail ? RAIL_GRID_TRACKS[railWidth] : '')}>
+        <div data-layout-zone="PrimaryWorkRegion" className={cn('min-w-0', primaryClassName)}>
+          {primaryContent}
+        </div>
+        {rail ? (
+          <div
+            data-layout-zone="ContextRail"
+            className={cn(
+              'min-w-0 border-t border-[color:var(--wolfy-divider)] lg:border-l lg:border-t-0',
+              railClassName,
+            )}
+          >
+            {rail}
+          </div>
+        ) : null}
+      </div>
+      {secondary ? (
+        <div data-layout-zone="SecondaryDeck" className={cn('min-w-0 border-t border-[color:var(--wolfy-divider)]', secondaryClassName)}>
+          {secondary}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function ScrollPanel({
+  zone = 'PrimaryWorkRegion',
+  maxHeight,
+  className,
+  style,
+  children,
+  ...props
+}: LinearPrimitiveProps<HTMLDivElement> & {
+  zone?: LinearLayoutZone;
+  maxHeight?: React.CSSProperties['maxHeight'];
+}) {
+  return (
+    <div
+      data-linear-primitive="scroll-panel"
+      data-layout-zone={zone}
+      className={cn('min-w-0 overflow-y-auto overscroll-contain no-scrollbar', className)}
+      style={{ maxHeight, ...style }}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function WolfyCommandBar({
   className,
   children,
@@ -70,6 +176,33 @@ export function WolfyCommandBar({
       data-linear-primitive="command-bar"
       className={cn(
         'flex min-h-11 w-full min-w-0 flex-wrap items-center gap-2 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-[color:var(--wolfy-text-primary)] shadow-none',
+        className,
+      )}
+      {...props}
+    >
+      {leading ? <div className="flex min-w-0 items-center gap-2">{leading}</div> : null}
+      <div className="min-w-[12rem] flex-1">{children}</div>
+      {trailing ? <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">{trailing}</div> : null}
+    </div>
+  );
+}
+
+export function CompactFilterBar({
+  className,
+  children,
+  leading,
+  trailing,
+  ...props
+}: LinearPrimitiveProps<HTMLDivElement> & {
+  leading?: React.ReactNode;
+  trailing?: React.ReactNode;
+}) {
+  return (
+    <div
+      data-linear-primitive="compact-filter-bar"
+      data-layout-zone="CommandBar"
+      className={cn(
+        'flex min-h-11 w-full min-w-0 flex-wrap items-center gap-2 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-2 text-[color:var(--wolfy-text-primary)] shadow-none md:flex-nowrap md:px-3',
         className,
       )}
       {...props}
@@ -109,6 +242,32 @@ export function ResearchConsoleShell({
   );
 }
 
+export function RailPanel({
+  railWidth = 'md',
+  className,
+  children,
+  ...props
+}: LinearPrimitiveProps<HTMLElement> & {
+  railWidth?: LinearRailWidth;
+}) {
+  return (
+    <WolfyShellSurface
+      data-linear-primitive="rail-panel"
+      data-layout-zone="ContextRail"
+      variant="rail"
+      padding="sm"
+      className={cn(
+        'flex min-w-0 flex-col divide-y divide-[color:var(--wolfy-divider)] overflow-hidden',
+        RAIL_WIDTHS[railWidth],
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </WolfyShellSurface>
+  );
+}
+
 export function ConsoleBoard({ className, children, ...props }: LinearPrimitiveProps<HTMLElement>) {
   return (
     <WolfyShellSurface
@@ -125,15 +284,30 @@ export function ConsoleBoard({ className, children, ...props }: LinearPrimitiveP
 
 export function ConsoleContextRail({ className, children, ...props }: LinearPrimitiveProps<HTMLElement>) {
   return (
-    <WolfyShellSurface
+    <RailPanel
       data-linear-primitive="context-rail"
-      variant="rail"
-      padding="sm"
-      className={cn('flex min-w-0 flex-col divide-y divide-[color:var(--wolfy-divider)]', className)}
+      className={className}
       {...props}
     >
       {children}
-    </WolfyShellSurface>
+    </RailPanel>
+  );
+}
+
+export function SectionDeck({
+  className,
+  children,
+  ...props
+}: LinearPrimitiveProps<HTMLDivElement>) {
+  return (
+    <div
+      data-linear-primitive="section-deck"
+      data-layout-zone="SecondaryDeck"
+      className={cn('grid min-w-0 gap-3', className)}
+      {...props}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -157,6 +331,39 @@ export function ConsoleStatusStrip({
         <div key={item.key ?? index} className="flex min-w-0 items-baseline gap-1.5 border-r border-[color:var(--wolfy-divider)] pr-4 last:border-r-0">
           <span className="shrink-0 text-[11px] text-[color:var(--wolfy-text-muted)]">{item.label}</span>
           <span className="truncate font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function MetricStrip({
+  items,
+  className,
+  ...props
+}: Omit<LinearPrimitiveProps<HTMLDivElement>, 'children'> & {
+  items: Array<{ label: React.ReactNode; value: React.ReactNode; key?: React.Key; testId?: string; className?: string }>;
+}) {
+  return (
+    <div
+      data-linear-primitive="metric-strip"
+      className={cn(
+        'grid min-w-0 gap-0 border-y border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-xs sm:grid-cols-3',
+        className,
+      )}
+      {...props}
+    >
+      {items.map((item, index) => (
+        <div
+          key={item.key ?? index}
+          className={cn(
+            'min-w-0 px-3 py-2.5 sm:border-l sm:border-[color:var(--wolfy-divider)] sm:first:border-l-0',
+            item.className,
+          )}
+          data-testid={item.testId}
+        >
+          <div className="truncate text-[11px] text-[color:var(--wolfy-text-muted)]">{item.label}</div>
+          <div className="mt-0.5 truncate font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.value}</div>
         </div>
       ))}
     </div>
@@ -296,14 +503,37 @@ export function DataWorkbenchFrame({ className, children, ...props }: LinearPrim
   );
 }
 
-export function DenseRows({ className, children, ...props }: LinearPrimitiveProps<HTMLDivElement>) {
+export function DataRows({ className, children, ...props }: LinearPrimitiveProps<HTMLDivElement>) {
   return (
     <div
-      data-linear-primitive="dense-rows"
+      data-linear-primitive="data-rows"
       className={cn('divide-y divide-[color:var(--wolfy-divider)] text-xs text-[color:var(--wolfy-text-secondary)]', className)}
       {...props}
     >
       {children}
     </div>
+  );
+}
+
+export function DenseRows(props: LinearPrimitiveProps<HTMLDivElement>) {
+  return <DataRows data-linear-primitive="dense-rows" {...props} />;
+}
+
+export function FloatingDetailPanel({
+  className,
+  children,
+  ...props
+}: LinearPrimitiveProps<HTMLElement>) {
+  return (
+    <WolfyShellSurface
+      data-linear-primitive="floating-detail-panel"
+      data-layout-zone="FloatingPanel"
+      variant="rail"
+      padding="md"
+      className={cn('max-h-[min(72vh,42rem)] overflow-y-auto no-scrollbar', className)}
+      {...props}
+    >
+      {children}
+    </WolfyShellSurface>
   );
 }

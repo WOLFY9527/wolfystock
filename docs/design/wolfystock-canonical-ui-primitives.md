@@ -247,6 +247,50 @@ Rules:
 - no secrets;
 - raw provider/schema/debug details never in primary user UI.
 
+### 4.13 Layout Containment Primitives
+
+Use these primitives to keep route surfaces inside the Linear OS contract:
+
+- `FixedRegionGrid`: named-region grid for primary work, rails, and lower decks;
+- `ScrollPanel`: local overflow owner for bounded content areas;
+- `RailPanel`: compact rail surface with fixed width rules;
+- `SectionDeck`: bounded lower band for secondary evidence, catalysts, or grouped detail;
+- `CompactFilterBar`: compact command/filter row for route controls;
+- `MetricStrip`: compact labeled metric strip for controlled status or level rows;
+- `DataRows`: dense row container for list and table content;
+- `FloatingDetailPanel`: bounded overlay or anchored detail surface.
+
+Rules:
+
+- these primitives encode containment, not business logic;
+- each primitive must accept `className` escape hatches;
+- each primitive must keep mobile stacking or collapse behavior explicit;
+- cards and panels may appear inside them, but only as contained pieces;
+- avoid nested panel/card stacks that replicate page architecture;
+- tests should assert zone attributes, width/overflow behavior, and scroll ownership.
+
+## 5. Layout Contract
+
+The Linear OS layout contract is the route-level rule set that the primitives must support.
+
+Named zones:
+
+- `HeaderStrip`
+- `CommandBar`
+- `PrimaryWorkRegion`
+- `ContextRail`
+- `SecondaryDeck`
+- `DetailDrawer` / `FloatingPanel`
+
+Expected behavior:
+
+- desktop routes use a bounded primary track with a fixed-clamp rail;
+- the rail is compact, never a second dashboard, and stacks below primary content on mobile;
+- local scroll belongs to `ScrollPanel` or drawer surfaces only;
+- filter controls stay in the command bar or compact filter row;
+- diagnostics and detail surfaces stay collapsed by default;
+- maximum nesting depth is route surface -> region -> contained card/panel -> content leaf.
+
 ## 5. Inputs And Actions
 
 Use existing shared input/action components only if they already follow the Linear OS material and accessibility requirements.
