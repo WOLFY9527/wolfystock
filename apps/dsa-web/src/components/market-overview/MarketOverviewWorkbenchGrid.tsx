@@ -1,6 +1,11 @@
 import type React from 'react';
 import type { MarketOverviewPanel } from '../../api/marketOverview';
 import { DataFreshnessBadge, MarketOverviewCardFrame } from './marketOverviewPrimitives';
+import {
+  ConsoleBoard,
+  ConsoleContextRail,
+  ConsoleDisclosure,
+} from '../linear';
 import { TerminalChip, TerminalGrid } from '../terminal';
 import { cn } from '../../utils/cn';
 
@@ -60,102 +65,120 @@ type MarketOverviewWorkbenchGridProps = {
   showExecutiveGroups: boolean;
 };
 
-const CompactRailCard: React.FC<{
-  railKey: string;
+const RailSummaryBlock: React.FC<{
   testId: string;
   eyebrow: string;
   title: string;
-  value?: string;
-  tone?: string;
-  lines: React.ReactNode[];
-}> = ({ railKey, testId, eyebrow, title, value, tone = 'text-white', lines }) => (
-  <MarketOverviewCardFrame
-    size="rail"
-    testId="market-overview-compact-rail-card"
-    railKey={railKey}
-    className="min-w-0 overflow-hidden"
+  children: React.ReactNode;
+}> = ({ testId, eyebrow, title, children }) => (
+  <div
+    data-testid={testId}
+    className="min-w-0 rounded-md border border-[color:var(--wolfy-divider)] bg-[color:var(--wolfy-surface-input)] px-3 py-2"
   >
-    <div data-testid={testId} className="flex h-full min-w-0 flex-col gap-2">
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{eyebrow}</p>
-          <p className="mt-1 truncate text-sm font-semibold text-white/80">{title}</p>
+    <p className="truncate text-[10px] font-bold uppercase tracking-widest text-white/38">{eyebrow}</p>
+    <p className="mt-1 truncate text-sm font-semibold text-white/80">{title}</p>
+    <div className="mt-2 min-w-0 text-[11px] leading-4 text-white/48">
+      {children}
+    </div>
+  </div>
+);
+
+const RuntimeDetailsRail: React.FC<{
+  coverageRail: MarketOverviewCoverageRailView;
+  qualityRail: MarketOverviewQualityRailView;
+}> = ({ coverageRail, qualityRail }) => (
+  <section data-testid="market-overview-runtime-details" className="flex min-w-0 flex-col gap-3">
+    <RailSummaryBlock
+      testId="market-overview-rail-coverage"
+      eyebrow="覆盖"
+      title={`${coverageRail.label}数据覆盖`}
+    >
+      <span data-testid="market-overview-coverage-summary">
+        <span className="text-white/62">{coverageRail.label}数据覆盖：</span>
+        <span className="font-mono">真实 {coverageRail.real} · 混合 {coverageRail.mixed} · 备用 {coverageRail.fallback}</span>
+      </span>
+    </RailSummaryBlock>
+    <RailSummaryBlock
+      testId="market-overview-rail-quality"
+      eyebrow="质量"
+      title={`数据质量：${qualityRail.status}`}
+    >
+      <div className="space-y-1">
+        <span data-testid="market-data-quality">可用快照 · 备用 {qualityRail.fallbackCount}</span>
+        <div className="font-mono">过期 {qualityRail.staleCount} · 缺失 {qualityRail.errorCount}</div>
+      </div>
+    </RailSummaryBlock>
+    <ConsoleDisclosure
+      title="数据来源与运行细节"
+      summary={`${coverageRail.label} ${coverageRail.real}/${coverageRail.total} · ${qualityRail.status}`}
+    >
+      <div className="space-y-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+        <div className="rounded-md border border-[color:var(--wolfy-divider)] bg-[color:var(--wolfy-surface-console)] px-3 py-2">
+          <p className="text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">覆盖拆分</p>
+          <p className="mt-1 font-mono text-sm text-[color:var(--wolfy-text-primary)]">
+            真实 {coverageRail.real} · 混合 {coverageRail.mixed} · 备用 {coverageRail.fallback}
+          </p>
         </div>
-        {value ? <p className={cn('shrink-0 text-right font-mono text-lg font-semibold leading-none tabular-nums', tone)}>{value}</p> : null}
+        <div className="rounded-md border border-[color:var(--wolfy-divider)] bg-[color:var(--wolfy-surface-console)] px-3 py-2">
+          <p className="text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">运行质量</p>
+          <p className="mt-1 font-mono text-sm text-[color:var(--wolfy-text-primary)]">
+            可用 {qualityRail.availableCount} · 备用 {qualityRail.fallbackCount} · 过期 {qualityRail.staleCount} · 缺失 {qualityRail.errorCount}
+          </p>
+        </div>
       </div>
-      <div className="min-w-0 space-y-1 text-[11px] leading-4 text-white/46">
-        {lines.slice(0, 4).map((line, index) => (
-          <div key={index} className="truncate">{line}</div>
-        ))}
-      </div>
+    </ConsoleDisclosure>
+  </section>
+);
+
+const SignalWatchDisclosure: React.FC<{ items: MarketOverviewSignalWatchRailItem[] }> = ({ items }) => (
+  <section data-testid="market-overview-signal-disclosure" className="flex min-w-0 flex-col gap-3">
+    <div data-testid="market-overview-rail-signal-watch" className="flex min-w-0 flex-wrap gap-1.5">
+      {items.map((item) => (
+        <TerminalChip key={item.label} variant="neutral" className="max-w-full px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/48">
+          <span className="shrink-0">{item.label}</span>
+          <span className={cn('min-w-0 truncate font-mono tracking-normal', item.changeToneClass)}>
+            {item.changeText}
+          </span>
+        </TerminalChip>
+      ))}
     </div>
-  </MarketOverviewCardFrame>
-);
-
-const CategoryCoverageSummary: React.FC<{
-  summary: MarketOverviewCoverageRailView;
-}> = ({ summary }) => (
-  <CompactRailCard
-    railKey="coverage"
-    testId="market-overview-rail-coverage"
-    eyebrow="覆盖"
-    title={`${summary.label}数据覆盖`}
-    value={`${summary.real}/${summary.total}`}
-    lines={[
-      <span key="coverage" data-testid="market-overview-coverage-summary"><span className="text-white/62">{summary.label}数据覆盖：</span><span className="font-mono">真实 {summary.real} · 混合 {summary.mixed} · 备用 {summary.fallback}</span></span>,
-    ]}
-  />
-);
-
-const SignalWatchRailCard: React.FC<{ items: MarketOverviewSignalWatchRailItem[] }> = ({ items }) => (
-  <MarketOverviewCardFrame
-    size="rail"
-    testId="market-overview-compact-rail-card"
-    railKey="signal-watch"
-    className="min-w-0 overflow-hidden"
-  >
-    <div data-testid="market-overview-rail-signal-watch" className="flex h-full min-w-0 flex-col gap-2">
-      <div className="min-w-0">
-        <p className="truncate text-[10px] font-bold tracking-widest text-white/40">信号观察</p>
-        <p className="mt-1 truncate text-sm font-semibold text-white/80">关键观测</p>
-      </div>
-      <div className="flex min-w-0 flex-wrap gap-1.5 overflow-hidden">
+    <ConsoleDisclosure
+      title="关键观测"
+      summary={`${items.length} 个跨资产观测点`}
+    >
+      <div className="space-y-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
         {items.map((item) => (
-          <TerminalChip key={item.label} variant="neutral" className="max-w-full px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/48">
-            <span className="shrink-0">{item.label}</span>
-            <span className={cn('min-w-0 truncate font-mono tracking-normal', item.changeToneClass)}>
-              {item.changeText}
-            </span>
-          </TerminalChip>
+          <div
+            key={item.label}
+            className="flex items-center justify-between gap-3 rounded-md border border-[color:var(--wolfy-divider)] bg-[color:var(--wolfy-surface-console)] px-3 py-2"
+          >
+            <span className="text-[color:var(--wolfy-text-primary)]">{item.label}</span>
+            <span className={cn('font-mono', item.changeToneClass)}>{item.changeText}</span>
+          </div>
         ))}
       </div>
-    </div>
-  </MarketOverviewCardFrame>
+    </ConsoleDisclosure>
+  </section>
 );
 
-const ActionHintRailCard: React.FC<{ actionHint: MarketOverviewActionHintView }> = ({ actionHint }) => (
-  <CompactRailCard
-    railKey="action-hint"
-    testId="market-overview-rail-action-hint"
-    eyebrow="观察提示"
-    title={actionHint.title}
-    lines={[actionHint.line]}
-  />
-);
-
-const DataQualityCompactRailCard: React.FC<{ summary: MarketOverviewQualityRailView }> = ({ summary }) => (
-  <CompactRailCard
-    railKey="quality"
-    testId="market-overview-rail-quality"
-    eyebrow="质量"
-    title={`数据质量：${summary.status}`}
-    value={`${summary.availableCount}`}
-    tone={summary.hasConcern ? 'text-amber-200' : 'text-emerald-300'}
-    lines={[
-      <span key="quality" data-testid="market-data-quality">可用快照 · 备用 {summary.fallbackCount}</span>,
-      <span key="risk" className="font-mono">过期 {summary.staleCount} · 缺失 {summary.errorCount}</span>,
-    ]}
-  />
+const ActionHintDisclosure: React.FC<{ actionHint: MarketOverviewActionHintView }> = ({ actionHint }) => (
+  <section data-testid="market-overview-action-disclosure" className="flex min-w-0 flex-col gap-3">
+    <RailSummaryBlock
+      testId="market-overview-rail-action-hint"
+      eyebrow="观察提示"
+      title={actionHint.title}
+    >
+      {actionHint.line}
+    </RailSummaryBlock>
+    <ConsoleDisclosure
+      title="观察提示"
+      summary={actionHint.title}
+    >
+      <div className="rounded-md border border-[color:var(--wolfy-divider)] bg-[color:var(--wolfy-surface-console)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+        {actionHint.line}
+      </div>
+    </ConsoleDisclosure>
+  </section>
 );
 
 const ExecutiveSecondaryGroups: React.FC<{
@@ -217,40 +240,50 @@ export const MarketOverviewWorkbenchGrid: React.FC<MarketOverviewWorkbenchGridPr
   executiveGroups,
   showExecutiveGroups,
 }) => (
-  <TerminalGrid data-testid="market-overview-main-grid" data-workbench-split="9:3" className="gap-4">
+  <TerminalGrid
+    data-testid="market-overview-main-grid"
+    data-workbench-split="9:3"
+    data-market-monitor-layout="board-plus-context"
+    className="gap-4"
+  >
     <section
       data-testid="market-overview-primary-rail"
       data-mobile-order="main"
       className="flex min-w-0 flex-col gap-4 xl:col-span-9"
     >
-      <div data-testid="market-overview-main-stack" className="flex min-w-0 flex-col gap-4">
-        <section data-testid="market-overview-hero-lane" data-card-tier="hero" className="min-w-0">
-          {heroRows}
-        </section>
-        <section data-testid="market-overview-secondary-grid" data-card-tier="secondary" className="flex min-w-0 flex-col gap-4">
-          {secondaryRows}
-        </section>
-      </div>
+      <ConsoleBoard className="h-full">
+        <div data-testid="market-overview-main-stack" className="flex min-w-0 flex-col gap-4 p-3 md:p-4">
+          <section data-testid="market-overview-hero-lane" data-card-tier="hero" className="min-w-0">
+            {heroRows}
+          </section>
+          <section data-testid="market-overview-secondary-grid" data-card-tier="secondary" className="flex min-w-0 flex-col gap-4">
+            {secondaryRows}
+          </section>
+          {showDeepSection ? (
+            <section
+              data-testid="market-overview-deep-panels"
+              data-panel-grouping="deterministic-rows"
+              data-mobile-order="deep"
+              data-card-tier="deep"
+              className="flex min-w-0 flex-col gap-4"
+            >
+              {deepRows}
+              {showExecutiveGroups ? <ExecutiveSecondaryGroups groups={executiveGroups} /> : null}
+            </section>
+          ) : null}
+        </div>
+      </ConsoleBoard>
     </section>
     <aside data-testid="market-overview-side-rail" data-mobile-order="rail" className="flex min-w-0 flex-col gap-3 xl:col-span-3">
-      <div data-testid="market-overview-rail" className="flex min-w-0 flex-col gap-3">
-        {showCoverageRail ? <CategoryCoverageSummary summary={coverageRail} /> : null}
-        {showQualityRail ? <DataQualityCompactRailCard summary={qualityRail} /> : null}
-        {showSignalWatchRail ? <SignalWatchRailCard items={signalWatchItems} /> : null}
-        {showActionHintRail ? <ActionHintRailCard actionHint={actionHint} /> : null}
-      </div>
+      <ConsoleContextRail>
+        <div data-testid="market-overview-rail" className="flex min-w-0 flex-col gap-3">
+          {showCoverageRail || showQualityRail ? (
+            <RuntimeDetailsRail coverageRail={coverageRail} qualityRail={qualityRail} />
+          ) : null}
+          {showSignalWatchRail ? <SignalWatchDisclosure items={signalWatchItems} /> : null}
+          {showActionHintRail ? <ActionHintDisclosure actionHint={actionHint} /> : null}
+        </div>
+      </ConsoleContextRail>
     </aside>
-    {showDeepSection ? (
-      <section
-        data-testid="market-overview-deep-panels"
-        data-panel-grouping="deterministic-rows"
-        data-mobile-order="deep"
-        data-card-tier="deep"
-        className="flex min-w-0 flex-col gap-4 xl:col-span-9"
-      >
-        {deepRows}
-        {showExecutiveGroups ? <ExecutiveSecondaryGroups groups={executiveGroups} /> : null}
-      </section>
-    ) : null}
   </TerminalGrid>
 );

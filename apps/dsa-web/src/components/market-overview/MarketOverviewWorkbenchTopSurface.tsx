@@ -1,5 +1,10 @@
 import type React from 'react';
 import type { MarketOverviewTab } from '../../pages/MarketOverviewTabConfig';
+import {
+  ConsoleBoard,
+  ConsoleStatusStrip,
+  KeyLevelStrip,
+} from '../linear';
 import { TerminalChip, TerminalDenseList, TerminalNotice, TerminalPanel, TerminalSectionHeader } from '../terminal';
 import { cn } from '../../utils/cn';
 
@@ -71,34 +76,27 @@ type MarketOverviewWorkbenchTopSurfaceProps = {
 };
 
 const CrossAssetHeroRibbon: React.FC<{ anchors: MarketOverviewHeroAnchorView[] }> = ({ anchors }) => (
-  <TerminalPanel
-    as="section"
+  <KeyLevelStrip
     data-testid="market-overview-hero-ribbon"
-    data-mobile-order="pulse"
-    className="overflow-hidden p-0"
-    aria-label="Cross asset hero ribbon"
-  >
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(112px,1fr))] divide-x divide-y divide-white/5">
-      {anchors.map((anchor) => (
-        <div
-          key={anchor.key}
-          data-testid={`market-overview-hero-${anchor.key}`}
-          className="min-w-0 bg-white/[0.02] px-4 py-3.5"
-        >
-          <p className="block truncate text-[10px] font-semibold uppercase tracking-widest text-white/50">
-            {anchor.primaryLabel}
-            {anchor.secondaryLabel ? <span className="ml-1 text-white/28">({anchor.secondaryLabel})</span> : null}
-          </p>
-          <p className="mt-1 truncate font-mono text-[22px] font-semibold leading-none text-white md:text-2xl">
+    className="rounded-none border-x-0"
+    levels={anchors.map((anchor) => ({
+      key: anchor.key,
+      testId: `market-overview-hero-${anchor.key}`,
+      label: anchor.secondaryLabel ? `${anchor.primaryLabel} (${anchor.secondaryLabel})` : anchor.primaryLabel,
+      value: (
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate font-mono text-[22px] font-semibold leading-none text-white md:text-2xl">
             {anchor.valueText}
-          </p>
-          <p className={cn('mt-1 font-mono text-xs font-semibold', anchor.changeToneClass)}>
+          </span>
+          <span className={cn('mt-1 truncate font-mono text-xs font-semibold', anchor.changeToneClass)}>
             {anchor.changeText}
-          </p>
-        </div>
-      ))}
-    </div>
-  </TerminalPanel>
+          </span>
+        </span>
+      ),
+      valueClassName: 'text-left text-inherit',
+      className: 'py-2.5',
+    }))}
+  />
 );
 
 const MarketDecisionStrip: React.FC<{
@@ -341,28 +339,63 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
   exportLabel,
   onExportSummary,
   heroAnchors,
-}) => (
-  <section data-testid="market-overview-pulse-header" className="flex w-full min-w-0 flex-col gap-4">
-    {heading}
-    <div data-testid="market-overview-top-stack" className="flex w-full min-w-0 flex-col gap-4">
-      <MarketDecisionStrip text={decisionText} chips={decisionChips} reliable={decisionReliable} />
-      <MarketOverviewDataStateStrip dataState={dataState} />
-      <section data-testid="market-overview-summary-band" data-mobile-order="summary" data-market-research-flow="trust" className="min-w-0">
-        <MarketOverviewStatusStrip
-          temperatureSummary={temperatureSummary}
-          briefingSummary={briefingSummary}
+}) => {
+  const regimeStripItems = [
+    { key: 'regime', label: '状态', value: decisionReliable ? temperatureSummary.label : '数据不足' },
+    { key: 'temperature', label: '温度', value: temperatureSummary.valueText },
+    { key: 'confidence', label: '可信度', value: temperatureSummary.confidenceLabel },
+    {
+      key: 'coverage',
+      label: '覆盖',
+      value: `可用 ${dataState.availableCount} · 备用 ${dataState.fallbackCount} · 过期 ${dataState.staleCount}`,
+    },
+    {
+      key: 'updatedAt',
+      label: '更新时间',
+      value: dataState.updatedAtLabel || (dataState.isRefreshing ? '刷新中' : '待刷新'),
+    },
+  ];
+
+  return (
+    <section data-testid="market-overview-pulse-header" className="flex w-full min-w-0 flex-col gap-4">
+      {heading}
+      <section data-testid="market-overview-market-monitor" className="flex w-full min-w-0 flex-col gap-4">
+        <ConsoleStatusStrip
+          data-testid="market-overview-regime-strip"
+          items={regimeStripItems}
         />
+        <ConsoleBoard data-testid="market-overview-primary-board">
+          <div data-testid="market-overview-top-stack" className="flex w-full min-w-0 flex-col">
+            <MarketDecisionStrip text={decisionText} chips={decisionChips} reliable={decisionReliable} />
+            <div className="border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4">
+              <MarketOverviewCategoryControls
+                categoryTabs={categoryTabs}
+                activeCategory={activeCategory}
+                onCategoryChange={onCategoryChange}
+                exportLabel={exportLabel}
+                onExportSummary={onExportSummary}
+              />
+            </div>
+            <section
+              data-testid="market-overview-summary-band"
+              data-mobile-order="summary"
+              data-market-research-flow="trust"
+              className="min-w-0 border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4"
+            >
+              <MarketOverviewStatusStrip
+                temperatureSummary={temperatureSummary}
+                briefingSummary={briefingSummary}
+              />
+            </section>
+            <div data-market-research-flow="pulse" className="border-t border-[color:var(--wolfy-divider)]">
+              <CrossAssetHeroRibbon anchors={heroAnchors} />
+            </div>
+            <div className="border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4">
+              <MarketOverviewDataStateStrip dataState={dataState} />
+            </div>
+          </div>
+        </ConsoleBoard>
       </section>
-      <MarketOverviewCategoryControls
-        categoryTabs={categoryTabs}
-        activeCategory={activeCategory}
-        onCategoryChange={onCategoryChange}
-        exportLabel={exportLabel}
-        onExportSummary={onExportSummary}
-      />
-      <div data-market-research-flow="pulse">
-        <CrossAssetHeroRibbon anchors={heroAnchors} />
-      </div>
-    </div>
-  </section>
-);
+    </section>
+  );
+};
