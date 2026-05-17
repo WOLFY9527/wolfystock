@@ -66,6 +66,8 @@ operator workflows.
 
 - [WolfyStock Operations Runbook](./operations/WOLFYSTOCK_RUNBOOK.md):
   high-level operator flow and triage skeleton.
+- [Artifact Cleanup Policy](./operations/ARTIFACT_CLEANUP_POLICY.md):
+  tracked-vs-generated artifact ownership and cleanup timing rules.
 - [Parallel Codex Operator Playbook](./operations/parallel-codex-playbook.md):
   same-repo and parallel worker safety.
 - [Provider Data Incident Runbook](./audits/provider-data-incident-runbook.md):
@@ -106,7 +108,8 @@ source document:
 - `.claude/reviews/`: local analysis/review outputs.
 - `.codex/` and `.codex-artifacts/`: local Codex runtime artifacts.
 - `reports/`: generated local reports.
-- `test-results/` and `playwright-report/`: generated test/browser artifacts.
+- `test-results/`, `playwright-report/`, `blob-report/`, and `screenshots/`:
+  generated test/browser/visual artifacts.
 - `coverage/`, `.coverage`, and generated coverage output.
 - `repo_archive/`, `repo_trash/`, and packaged/exported archives unless a
   current tracked doc explicitly references the artifact.

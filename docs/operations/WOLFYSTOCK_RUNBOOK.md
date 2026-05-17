@@ -94,6 +94,7 @@ Use:
 - [Operator Evidence Dry-Run Handoff](../audits/operator-evidence-dry-run-handoff.md)
 - [Operator Evidence Redaction Checklist](../audits/operator-evidence-redaction-checklist.md)
 - [Evidence artifact sanitizer guide](../audits/evidence-artifact-sanitizer-guide.md)
+- [Artifact Cleanup Policy](./ARTIFACT_CLEANUP_POLICY.md)
 
 Never include:
 
@@ -101,6 +102,16 @@ Never include:
   keys, session IDs, raw `.env` values, raw provider payloads, raw prompts, raw
   LLM responses, production DB contents, or stack traces containing sensitive
   data.
+
+Artifact handling rules:
+
+- treat Playwright outputs, screenshot captures, audit bundles, `reports/`,
+  `artifacts/`, and `backtest_outputs/` as generated local artifacts unless the
+  task explicitly asks for a tracked doc;
+- keep tracked fixtures/examples separate from generated evidence;
+- do not run broad `rm -rf` cleanup on storage paths;
+- clean generated artifacts only after the related final report is accepted;
+- never delete active worktree artifacts while Codex is still running.
 
 ## Rollback Skeleton
 

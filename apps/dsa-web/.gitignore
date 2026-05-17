@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 playwright-report
+blob-report
 test-results
 coverage/
 

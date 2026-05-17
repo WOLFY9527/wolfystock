@@ -50,6 +50,7 @@ env/
 # 数据和日志
 /data/
 logs/
+screenshots/
 reports/
 backtest_outputs/
 output/
