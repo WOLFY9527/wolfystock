@@ -41,7 +41,10 @@ from src.services.market_overview_yfinance_transport import (
     fetch_yfinance_spy_atr_history_frame,
 )
 from src.services.market_cache import MARKET_CACHE_TTLS, REFRESH_WARNING, market_cache
-from src.services.market_intelligence_trust_gate import evaluate_market_intelligence_trust_from_sources
+from src.services.market_intelligence_trust_gate import (
+    evaluate_market_intelligence_trust,
+    evaluate_market_intelligence_trust_from_sources,
+)
 from src.services.rotation_state_evidence import build_rotation_state_evidence
 from src.services.rotation_radar_quote_provider import get_rotation_radar_quote_provider
 from src.storage import DatabaseManager
@@ -68,6 +71,9 @@ SOURCE_TYPE_CONFIDENCE = {
     "exchange_public": 1.0,
     "public_api": 0.9,
     "unofficial_public_api": 0.7,
+    "unofficial_proxy": 0.7,
+    "public_proxy": 0.7,
+    "proxy_public": 0.7,
     "computed_from_real": 0.6,
 }
 
@@ -318,8 +324,29 @@ def get_freshness_status(
         "sentiment": 24 * 60,
     }
 
+    source_type_key = str(source_type or "").lower()
+    delayed_public_quote_source = source_key == "yfinance_proxy" or source_type_key in {
+        "unofficial_proxy",
+        "public_proxy",
+        "proxy_public",
+    }
+
     daily_categories = {"equity_index", "breadth", "flows", "sentiment"}
-    if category_key in daily_categories:
+    if category_key == "macro_rate" and source_type_key == "official_public":
+        days_old = (current.date() - parsed_as_of.date()).days
+        freshness = "delayed" if days_old <= 3 else "stale"
+    elif delayed_public_quote_source and category_key in daily_categories:
+        days_old = (current.date() - parsed_as_of.date()).days
+        if days_old > 1 or (category_key == "sentiment" and days_old > 0):
+            freshness = "stale"
+        elif days_old == 0:
+            freshness = "delayed"
+        else:
+            freshness = "cached"
+    elif delayed_public_quote_source and category_key in {"macro_rate", "fx_commodity", "futures"}:
+        stale_after = stale_minutes.get(category_key, 60)
+        freshness = "stale" if delay_minutes > stale_after else "delayed"
+    elif category_key in daily_categories:
         days_old = (current.date() - parsed_as_of.date()).days
         if days_old > 1 or (category_key == "sentiment" and days_old > 0):
             freshness = "stale"
@@ -327,10 +354,7 @@ def get_freshness_status(
             freshness = "live"
         else:
             freshness = "cached"
-    elif category_key == "macro_rate" and str(source_type or "").lower() == "official_public":
-        days_old = (current.date() - parsed_as_of.date()).days
-        freshness = "delayed" if days_old <= 3 else "stale"
-    elif category_key == "futures" and str(source_type or "").lower() in {"unofficial_proxy", "public_proxy", "disabled_live_stub"}:
+    elif category_key == "futures" and source_type_key in {"unofficial_proxy", "public_proxy", "disabled_live_stub"}:
         freshness = "stale" if delay_minutes > stale_minutes["futures"] else "delayed"
     elif category_key == "macro_rate" and delay_minutes > stale_minutes["macro_rate"]:
         freshness = "cached" if parsed_as_of.date() == current.date() else "stale"
@@ -445,6 +469,8 @@ class MarketOverviewService:
         "000905.SH": "sh000905",
         "000852.SH": "sh000852",
         "899050.BJ": "bj899050",
+        "HSI": "rt_hkHSI",
+        "HSTECH": "rt_hkHSTECH",
     }
 
     def get_indices(self, actor: Optional[Dict[str, Any]] = None) -> PanelPayload:
@@ -1017,8 +1043,9 @@ class MarketOverviewService:
         return all(
             item.get("isFallback")
             or item.get("fallbackUsed")
+            or item.get("isUnavailable")
             or str(item.get("source") or "").lower() in {"fallback", "mock", "unavailable"}
-            or str(item.get("freshness") or "").lower() in {"fallback", "mock", "error"}
+            or str(item.get("freshness") or "").lower() in {"fallback", "mock", "unavailable", "error"}
             for item in items
         )
 
@@ -1258,8 +1285,9 @@ class MarketOverviewService:
             item for item in items
             if item.get("isFallback")
             or item.get("fallbackUsed")
+            or item.get("isUnavailable")
             or str(item.get("source") or "").lower() in {"fallback", "mock", "unavailable"}
-            or str(item.get("freshness") or "").lower() in {"fallback", "mock", "error"}
+            or str(item.get("freshness") or "").lower() in {"fallback", "mock", "unavailable", "error"}
         ]
         real_items = [item for item in items if item not in fallback_items]
         has_error = bool(payload.get("lastError") or payload.get("refreshError") or payload.get("error"))
@@ -1543,6 +1571,48 @@ class MarketOverviewService:
             "lastSuccessfulAt": payload.get("lastSuccessfulAt"),
         }
 
+    def _source_degradation_reason(self, payload: Dict[str, Any], freshness: str) -> Optional[str]:
+        explicit = payload.get("degradationReason") or payload.get("fallbackReason")
+        if explicit:
+            return str(explicit)
+        if bool(payload.get("isUnavailable")) or freshness in {"unavailable", "error"}:
+            return "unavailable_source"
+        if bool(payload.get("isFallback") or payload.get("fallbackUsed")) or freshness in {"fallback", "mock"}:
+            return "fallback_source"
+        if bool(payload.get("isStale")) or freshness == "stale":
+            return "stale_source"
+        if bool(payload.get("isPartial")) or freshness == "partial":
+            return "partial_coverage"
+        if freshness in {"delayed", "cached"}:
+            return "delayed_source"
+        return None
+
+    def _source_trust_meta(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        freshness = str(payload.get("freshness") or "").lower()
+        degradation_reason = self._source_degradation_reason(payload, freshness)
+        explicit_coverage = self._clean_number(payload.get("coverage"))
+        coverage = (
+            max(0.0, min(1.0, explicit_coverage))
+            if explicit_coverage is not None
+            else 0.0 if bool(payload.get("isUnavailable")) else 1.0 if _has_valid_market_value(payload) else 0.0
+        )
+        trust_payload = {
+            **payload,
+            "freshness": freshness,
+            "coverage": coverage,
+        }
+        if degradation_reason:
+            trust_payload["degradationReason"] = degradation_reason
+        trust = evaluate_market_intelligence_trust(trust_payload)
+        meta = {
+            "sourceTier": trust["sourceTier"],
+            "trustLevel": trust["trustLevel"],
+            "degradationReasons": trust["degradationReasons"],
+        }
+        if degradation_reason:
+            meta["degradationReason"] = degradation_reason
+        return meta
+
     def _with_item_meta(self, item: Dict[str, Any], category: str, panel: Dict[str, Any]) -> Dict[str, Any]:
         source = str(item.get("source") or panel.get("source") or "mixed")
         is_fallback = bool(item.get("isFallback") or item.get("fallbackUsed") or source.lower() in {"fallback", "mock"})
@@ -1563,7 +1633,7 @@ class MarketOverviewService:
                     "warning": item.get("warning") or panel.get("warning") or "数据源刷新失败，当前显示最近成功快照",
                 }
         reliability = classify_market_payload_reliability({**item, "source": source, "freshness": freshness["freshness"], "isFallback": freshness["isFallback"]}, category)
-        return {
+        normalized = {
             **item,
             "source": source,
             "sourceLabel": item.get("sourceLabel") or self._source_label(source),
@@ -1579,6 +1649,7 @@ class MarketOverviewService:
             "warning": item.get("warning") or freshness["warning"],
             "isFromSnapshot": bool(item.get("isFromSnapshot") or panel.get("isFromSnapshot")),
         }
+        return {**normalized, **self._source_trust_meta(normalized)}
 
     def _fetch_indices(self) -> PanelPayload:
         return self._quote_panel("IndexTrendsCard", self.INDEX_SYMBOLS)
@@ -1593,7 +1664,17 @@ class MarketOverviewService:
             change_scale=1.0,
         )
         if official_vix:
-            items = [official_vix if str(item.get("symbol") or "") == "VIX" else item for item in items]
+            replaced_vix = False
+            next_items = []
+            for item in items:
+                if str(item.get("symbol") or "") == "VIX":
+                    next_items.append(official_vix)
+                    replaced_vix = True
+                else:
+                    next_items.append(item)
+            if not replaced_vix:
+                next_items.insert(0, official_vix)
+            items = next_items
         try:
             atr_item = self._atr_item()
         except Exception:
@@ -2043,6 +2124,8 @@ class MarketOverviewService:
         return quotes
 
     def _sina_cn_index_item(self, canonical_symbol: str, row: List[str]) -> Optional[Dict[str, Any]]:
+        if canonical_symbol in {"HSI", "HSTECH"}:
+            return self._sina_hk_index_item(canonical_symbol, row)
         value = self._clean_number(row[3] if len(row) > 3 else None)
         previous = self._clean_number(row[2] if len(row) > 2 else None)
         open_price = self._clean_number(row[1] if len(row) > 1 else None)
@@ -2068,9 +2151,45 @@ class MarketOverviewService:
             "asOf": as_of,
         }
 
+    def _sina_hk_index_item(self, canonical_symbol: str, row: List[str]) -> Optional[Dict[str, Any]]:
+        value = self._clean_number(row[6] if len(row) > 6 else None)
+        previous = self._clean_number(row[3] if len(row) > 3 else None)
+        open_price = self._clean_number(row[2] if len(row) > 2 else None)
+        high = self._clean_number(row[4] if len(row) > 4 else None)
+        low = self._clean_number(row[5] if len(row) > 5 else None)
+        change = self._clean_number(row[7] if len(row) > 7 else None)
+        change_percent = self._clean_number(row[8] if len(row) > 8 else None)
+        if value is None:
+            return None
+        if change is None and previous is not None:
+            change = value - previous
+        if change_percent is None and previous is not None:
+            change_percent = self._percent_change(previous, value)
+        trade_date = row[17] if len(row) > 17 else ""
+        trade_time = row[18] if len(row) > 18 else ""
+        as_of = self._sina_as_of(trade_date, trade_time)
+        trend = [price for price in (open_price, low, high, value) if price is not None]
+        names = {
+            "HSI": "恒生指数",
+            "HSTECH": "恒生科技",
+        }
+        return {
+            "name": names.get(canonical_symbol, canonical_symbol),
+            "symbol": canonical_symbol,
+            "value": round(value, 3),
+            "change": round(change or 0.0, 3),
+            "changePercent": round(change_percent or 0.0, 3),
+            "change_text": f"{(change or 0.0):+.2f}",
+            "sparkline": trend[-4:] or [round(value, 3)],
+            "trend": trend[-4:] or [round(value, 3)],
+            "asOf": as_of,
+        }
+
     def _sina_as_of(self, trade_date: str, trade_time: str) -> str:
         try:
-            parsed = datetime.fromisoformat(f"{trade_date}T{trade_time}")
+            normalized_date = str(trade_date or "").strip().replace("/", "-")
+            normalized_time = str(trade_time or "").strip()
+            parsed = datetime.fromisoformat(f"{normalized_date}T{normalized_time}")
             return parsed.replace(tzinfo=CN_TZ).isoformat(timespec="seconds")
         except Exception:
             return _now_iso()
@@ -2907,8 +3026,8 @@ class MarketOverviewService:
             ("中证500", "000905.SH", 5488.12, 11.42, 0.21, "CN", [5440, 5466, 5482, 5488.12]),
             ("中证1000", "000852.SH", 5626.77, -8.92, -0.16, "CN", [5660, 5642, 5631, 5626.77]),
             ("北证50", "899050.BJ", 853.40, 5.10, 0.60, "CN", [838, 846, 850, 853.40]),
-            ("恒生指数", "HSI.HK", 17680.30, 146.20, 0.83, "HK", [17410, 17520, 17610, 17680.30]),
-            ("恒生科技", "HSTECH.HK", 3668.18, 44.80, 1.24, "HK", [3590, 3622, 3650, 3668.18]),
+            ("恒生指数", "HSI", 17680.30, 146.20, 0.83, "HK", [17410, 17520, 17610, 17680.30]),
+            ("恒生科技", "HSTECH", 3668.18, 44.80, 1.24, "HK", [3590, 3622, 3650, 3668.18]),
             ("富时A50期货", "CN00Y", 12580.00, 38.00, 0.30, "Futures", [12420, 12488, 12542, 12580.00]),
         ]
         return self._card_snapshot([
@@ -3434,7 +3553,10 @@ class MarketOverviewService:
         etf_flow = self._item_value(inputs.get("flows", {}).get("items", []), "CN_ETF")
         us10y_change = self._item_change(inputs.get("rates", {}).get("items", []), "US10Y")
         dxy_change = self._item_change(inputs.get("fx", {}).get("items", []), "DXY")
-        cn_index_change = self._avg_change(inputs.get("indices", {}).get("items", []), {"000001.SH", "399001.SZ", "399006.SZ", "000300.SH", "HSI.HK", "HSTECH.HK"})
+        cn_index_change = self._avg_change(
+            inputs.get("indices", {}).get("items", []),
+            {"000001.SH", "399001.SZ", "399006.SZ", "000300.SH", "HSI", "HSTECH", "HSI.HK", "HSTECH.HK"},
+        )
         adv_ratio = self._item_value(inputs.get("breadth", {}).get("items", []), "ADV_RATIO")
         limit_up = self._item_value(inputs.get("breadth", {}).get("items", []), "LIMIT_UP")
         limit_down = self._item_value(inputs.get("breadth", {}).get("items", []), "LIMIT_DOWN")
@@ -3705,9 +3827,15 @@ class MarketOverviewService:
             "asOf": updated_at,
             "freshness": "fallback",
             "isFallback": True,
+            "isUnavailable": True,
             "warning": message,
             "risk_direction": "neutral",
             "hover_details": [detail or message],
+            "sourceFreshnessEvidence": {
+                "freshness": "unavailable",
+                "isUnavailable": True,
+                "warning": message,
+            },
         }
 
     def _mark_static_fallback_item(self, item: Dict[str, Any], updated_at: str) -> Dict[str, Any]:
@@ -3820,17 +3948,38 @@ class MarketOverviewService:
         return "下跌家数占优，TickFlow 市场广度偏弱。"
 
     def _quote_panel(self, panel_name: str, symbols: Dict[str, tuple]) -> PanelPayload:
-        return self._success_panel(panel_name, self._quote_items(symbols))
+        items = self._quote_items(symbols)
+        payload = self._success_panel(panel_name, items)
+        as_of_values = [
+            str(item.get("asOf"))
+            for item in items
+            if isinstance(item, dict)
+            and item.get("asOf")
+            and not item.get("isUnavailable")
+            and not item.get("isFallback")
+        ]
+        updated_at = _now_iso()
+        payload["source"] = "yfinance"
+        payload["sourceLabel"] = self._source_label("yfinance")
+        payload["sourceType"] = "unofficial_proxy"
+        payload["updatedAt"] = updated_at
+        payload["asOf"] = min(as_of_values) if as_of_values else updated_at
+        payload["fallbackUsed"] = any(bool(item.get("isFallback") or item.get("isUnavailable")) for item in items)
+        if payload["fallbackUsed"]:
+            payload["warning"] = "部分 Yahoo Finance 行情暂不可用"
+        return payload
 
     def _quote_items(self, symbols: Dict[str, tuple]) -> List[Dict[str, Any]]:
         items = []
+        updated_at = _now_iso()
         for symbol, config in symbols.items():
             label, ticker = config[0], config[1]
             unit = config[2] if len(config) > 2 else "pts"
             try:
                 quote = self._latest_quote(ticker)
             except Exception:
-                quote = {"value": None, "change_pct": None, "trend": []}
+                items.append(self._quote_unavailable_item(label, symbol, unit, updated_at))
+                continue
             value = quote.get("value")
             change_pct = quote.get("change_pct")
             items.append({
@@ -3839,11 +3988,46 @@ class MarketOverviewService:
                 "value": value,
                 "unit": unit,
                 "change_pct": change_pct,
+                "changePercent": change_pct,
                 "risk_direction": self._risk_direction(change_pct),
                 "trend": quote.get("trend", []),
                 "source": "yfinance",
+                "sourceLabel": self._source_label("yfinance"),
+                "sourceType": "unofficial_proxy",
+                "updatedAt": updated_at,
+                "asOf": quote.get("asOf") or updated_at,
             })
         return items
+
+    def _quote_unavailable_item(self, label: str, symbol: str, unit: str, updated_at: str) -> Dict[str, Any]:
+        message = "Yahoo Finance 行情暂不可用"
+        return {
+            "symbol": symbol,
+            "label": label,
+            "value": None,
+            "price": None,
+            "unit": unit,
+            "change": None,
+            "change_pct": None,
+            "changePercent": None,
+            "risk_direction": "neutral",
+            "trend": [],
+            "source": "yfinance",
+            "sourceLabel": self._source_label("yfinance"),
+            "sourceType": "unofficial_proxy",
+            "updatedAt": updated_at,
+            "asOf": updated_at,
+            "freshness": "unavailable",
+            "isUnavailable": True,
+            "isFallback": False,
+            "warning": message,
+            "degradationReason": "provider_unavailable",
+            "sourceFreshnessEvidence": {
+                "freshness": "unavailable",
+                "isUnavailable": True,
+                "warning": message,
+            },
+        }
 
     def _latest_quote(self, ticker: str) -> Dict[str, Any]:
         if self._quote_request_memo is None:
@@ -3863,17 +4047,20 @@ class MarketOverviewService:
 
     def _latest_quote_uncached(self, ticker: str) -> Dict[str, Any]:
         frame = fetch_yfinance_quote_history_frame(ticker)
-        closes, _ = self._history_frame_closes_and_as_of(frame, ticker)
+        closes, as_of = self._history_frame_closes_and_as_of(frame, ticker)
         latest = closes[-1]
         previous = closes[-2] if len(closes) > 1 else latest
         change_pct = ((latest - previous) / previous * 100) if previous else 0.0
         volume = self._clean_number(frame["Volume"].tolist()[-1]) if "Volume" in frame else None
-        return {
+        quote = {
             "value": round(latest, 3),
             "change_pct": round(change_pct, 3),
             "trend": [round(value, 3) for value in closes[-8:]],
             "volume": volume,
         }
+        if as_of:
+            quote["asOf"] = as_of
+        return quote
 
     def _history_frame_closes_and_as_of(self, frame: Any, ticker: str) -> tuple[List[float], Optional[str]]:
         if frame is None or frame.empty:
