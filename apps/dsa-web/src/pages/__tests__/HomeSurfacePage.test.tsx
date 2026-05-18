@@ -335,6 +335,8 @@ describe('HomeSurfacePage', () => {
     expect(secondaryDeck).toHaveAttribute('data-linear-primitive', 'secondary-deck');
     expect(secondaryDeck).toHaveAttribute('data-layout-zone', 'SecondaryDeck');
     expect(secondaryDeck).toHaveClass('home-research-secondary-deck');
+    expect(primaryWorkspace).toContainElement(secondaryDeck);
+    expect(chartWorkspace.compareDocumentPosition(secondaryDeck) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     expect(board).toHaveAttribute('data-linear-primitive', 'console-board');
     expect(board).toHaveAttribute('data-surface-system', 'reflect-linear-console');
@@ -2352,11 +2354,17 @@ describe('HomeSurfacePage', () => {
     renderSurface();
 
     await screen.findByTestId('home-bento-card-decision');
+    const quantSnapshot = screen.getByTestId('home-linear-quant-snapshot');
     expect(screen.getByTestId('home-bento-decision-ticker')).toHaveTextContent('TSLA');
     expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-fundamentals')).toBeInTheDocument();
     expect(screen.getAllByText('待补充数据').length).toBeGreaterThan(2);
+    expect(within(quantSnapshot).getByText('RSI-14')).toBeInTheDocument();
+    expect(within(quantSnapshot).getByText('MACD')).toBeInTheDocument();
+    expect(within(quantSnapshot).getByText('趋势强度')).toBeInTheDocument();
+    expect(within(quantSnapshot).getByText('相对强度 (vs. SPY)')).toBeInTheDocument();
+    expect(within(quantSnapshot).getAllByText('字段待接入').length).toBeGreaterThan(0);
     expect(screen.queryByText('0%')).not.toBeInTheDocument();
     expect(screen.queryByText('N/A')).not.toBeInTheDocument();
     expect(screen.queryByText('反弹验证')).not.toBeInTheDocument();
@@ -2617,6 +2625,9 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('该周期行情暂不可用');
     });
+    expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('OHLC 数据待补');
+    expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('暂无已验证 K 线');
+    expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('请结合右侧质量说明继续观察当前覆盖状态。');
     expect(screen.queryByTestId('home-candlestick-chart-frame')).not.toBeInTheDocument();
   });
 

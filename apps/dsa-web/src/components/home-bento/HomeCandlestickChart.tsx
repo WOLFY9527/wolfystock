@@ -808,12 +808,16 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
     : (language === 'en'
       ? 'Daily OHLC history was not returned for this ticker.'
       : '当前标的未返回可用的日线 OHLC 数据。');
+  const chartUnavailableStatus = language === 'en' ? 'OHLC feed pending' : 'OHLC 数据待补';
+  const chartUnavailableFallback = language === 'en' ? 'Review the right-rail notes for current coverage.' : '请结合右侧质量说明继续观察当前覆盖状态。';
+  const chartUnavailableTimeframe = language === 'en' ? `Timeframe ${activeTimeframe}` : `当前周期 ${activeTimeframe}`;
+  const chartUnavailableDataset = language === 'en' ? 'No verified candles' : '暂无已验证 K 线';
 
   return (
     <div
       ref={sizeRef}
       className={cn(
-        'home-chart-well min-w-0 rounded-[14px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-3 py-3 shadow-[var(--wolfy-shadow-panel)]',
+        'home-chart-well min-w-0 rounded-[14px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-3 py-2.5 shadow-[var(--wolfy-shadow-panel)]',
         className,
       )}
       data-testid="home-linear-technical-chart"
@@ -830,7 +834,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       data-tooltip-container="body"
       data-tooltip-bounds="viewport"
     >
-      <div className="mb-3 flex min-w-0 flex-col gap-2.5">
+      <div className="mb-2.5 flex min-w-0 flex-col gap-2.5">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <div className="flex items-center gap-0.5 rounded-full border border-[color:var(--wolfy-border-faint)] bg-white/[0.025] p-0.5">
@@ -901,7 +905,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
 
       {status === 'ready' && candles.length ? (
         <div
-          className="relative h-[260px] min-w-[280px] overflow-visible sm:h-[285px] xl:h-[305px]"
+          className="relative h-[236px] min-w-[280px] overflow-visible sm:h-[252px] xl:h-[272px]"
           data-testid="home-candlestick-chart-frame"
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoveredIndex(null)}
@@ -946,17 +950,39 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       ) : (
         <div
           className={cn(
-            'flex h-[260px] min-w-[280px] flex-col items-center justify-center rounded-[12px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-4 text-center sm:h-[285px] xl:h-[305px]',
+            'relative flex h-[224px] min-w-[280px] flex-col justify-center overflow-hidden rounded-[12px] border border-[color:var(--wolfy-border-faint)] bg-[linear-gradient(180deg,rgba(17,22,38,0.92),rgba(13,18,32,0.98))] px-5 text-left sm:h-[236px] xl:h-[248px]',
             status === 'loading' ? 'text-white/46' : 'text-white/42',
           )}
           data-testid="home-candlestick-unavailable"
         >
-          <p className="text-sm font-medium">{chartUnavailableTitle}</p>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-5 top-5 h-px bg-gradient-to-r from-transparent via-white/14 to-transparent"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white/48">
+              {chartUnavailableStatus}
+            </span>
+            <span className="text-[10px] uppercase tracking-[0.16em] text-white/24">{chartUnavailableTimeframe}</span>
+          </div>
+          <div className="mt-4 max-w-sm">
+            <p className="text-sm font-semibold text-white/72">{chartUnavailableTitle}</p>
           {chartUnavailableBody ? (
-            <p className="mt-2 max-w-xs text-xs leading-5 text-white/34">
+              <p className="mt-2 text-xs leading-5 text-white/36">
               {chartUnavailableBody}
             </p>
           ) : null}
+          </div>
+          <div className="mt-5 grid w-full max-w-[22rem] gap-2 sm:grid-cols-2">
+            <div className="rounded-[10px] border border-white/[0.07] bg-white/[0.03] px-3 py-2.5">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-white/30">{chartUnavailableTimeframe}</p>
+              <p className="mt-1.5 text-xs font-medium text-white/62">{chartUnavailableDataset}</p>
+            </div>
+            <div className="rounded-[10px] border border-white/[0.07] bg-white/[0.03] px-3 py-2.5">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Fallback' : '观察提示'}</p>
+              <p className="mt-1.5 text-xs font-medium leading-5 text-white/50">{chartUnavailableFallback}</p>
+            </div>
+          </div>
         </div>
       )}
     </div>
