@@ -8,23 +8,23 @@ from typing import Any
 import requests
 
 
-SENTIMENT_TIMEOUT_SECONDS = 8
+SENTIMENT_TIMEOUT_SECONDS = 3.0
 
 
-def fetch_cnn_fear_greed_payload() -> Any:
+def fetch_cnn_fear_greed_payload(*, timeout: float = SENTIMENT_TIMEOUT_SECONDS) -> Any:
     response = requests.get(
         "https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
-        timeout=SENTIMENT_TIMEOUT_SECONDS,
+        timeout=timeout,
     )
     response.raise_for_status()
     return response.json()
 
 
-def fetch_alternative_fear_greed_payload() -> Any:
+def fetch_alternative_fear_greed_payload(*, timeout: float = SENTIMENT_TIMEOUT_SECONDS) -> Any:
     response = requests.get(
         "https://api.alternative.me/fng/",
         params={"limit": 8, "format": "json"},
-        timeout=SENTIMENT_TIMEOUT_SECONDS,
+        timeout=timeout,
     )
     response.raise_for_status()
     return response.json()

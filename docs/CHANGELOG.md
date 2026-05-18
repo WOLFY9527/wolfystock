@@ -1,5 +1,11 @@
 ## 2026-05-18
 
+- **Market Overview provider deadlines** - Added bounded yfinance transport
+  timeouts plus aggregate budgets for yfinance proxy panels, official macro
+  collection, sentiment fallback, and Market Temperature input gathering. Slow
+  provider paths now return stale/fallback/unavailable snapshots sooner while
+  preserving provider order, source labels, MarketCache semantics, scoring, and
+  public API response compatibility.
 - **Scanner additive factor observation export** - Public scanner candidate
   diagnostics now expose additive `factor_observations` records that project
   existing scanner component scores into `FactorObservation`-compatible
