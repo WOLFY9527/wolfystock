@@ -17,6 +17,7 @@ except ModuleNotFoundError:
     sys.modules["litellm"] = MagicMock()
 
 from src.analyzer import AnalysisResult, GeminiAnalyzer, check_content_integrity, apply_placeholder_fill
+from src.services.llm_identity_semantics import build_llm_identity_contract
 
 
 class TestCheckContentIntegrity(unittest.TestCase):
@@ -272,3 +273,100 @@ class TestIntegrityRetryPrompt(unittest.TestCase):
         self.assertEqual(mock_call.call_count, 2)
         emitted = [call.args[0] for call in mock_event.call_args_list]
         self.assertIn("llm_integrity_retry", emitted)
+
+    def test_analyze_threads_distinct_attempt_hashes_across_integrity_retry(self) -> None:
+        cfg = MagicMock()
+        cfg.report_language = "zh"
+        cfg.gemini_request_delay = 0
+        cfg.report_integrity_enabled = True
+        cfg.report_integrity_retry = 1
+        cfg.litellm_model = "gemini/gemini-2.5-flash"
+        cfg.llm_temperature = 0.7
+        cfg.home_quick_analysis_enabled = True
+        cfg.home_quick_analysis_temperature = 0.2
+        cfg.home_quick_analysis_max_output_tokens = 4096
+        cfg.home_analysis_log_full_prompt = False
+        cfg.debug = False
+
+        analyzer = GeminiAnalyzer.__new__(GeminiAnalyzer)
+        analyzer._router = None
+        analyzer._litellm_available = True
+
+        incomplete = AnalysisResult(
+            code="600519",
+            name="贵州茅台",
+            trend_prediction="震荡",
+            sentiment_score=50,
+            operation_advice="持有",
+            analysis_summary="",
+            decision_type="hold",
+            dashboard={},
+        )
+        complete = AnalysisResult(
+            code="600519",
+            name="贵州茅台",
+            trend_prediction="震荡",
+            sentiment_score=50,
+            operation_advice="持有",
+            analysis_summary="完整分析",
+            decision_type="hold",
+            dashboard={
+                "core_conclusion": {"one_sentence": "持有观望"},
+                "intelligence": {"risk_alerts": []},
+                "battle_plan": {"sniper_points": {"stop_loss": "100"}},
+            },
+        )
+        identities = []
+
+        def capture_identity(**kwargs):
+            identity = build_llm_identity_contract(**kwargs)
+            identities.append(identity)
+            return identity
+
+        with patch("src.analyzer.get_config", return_value=cfg), \
+             patch("src.analyzer.get_effective_litellm_model", return_value="gemini/gemini-2.5-flash"), \
+             patch.object(analyzer, "_get_analysis_system_prompt", return_value="system"), \
+             patch.object(analyzer, "_format_prompt", return_value="base prompt"), \
+             patch.object(
+                 analyzer,
+                 "_call_litellm",
+                 side_effect=[
+                     ("{}", "gemini/gemini-2.5-flash", {"total_tokens": 11}, []),
+                     ("{}", "gemini/gemini-2.5-flash", {"total_tokens": 12}, []),
+                 ],
+             ), \
+             patch.object(analyzer, "_parse_response", side_effect=[incomplete, complete]), \
+             patch.object(analyzer, "_build_integrity_retry_prompt", return_value="retry prompt"), \
+             patch.object(analyzer, "_fill_alpha_vantage_from_context", return_value=None), \
+             patch.object(analyzer, "_build_market_snapshot", return_value={}), \
+             patch("src.analyzer.build_llm_identity_contract", side_effect=capture_identity) as mock_identity, \
+             patch("src.analyzer.persist_llm_usage") as mock_persist, \
+             patch("src.analyzer.emit_llm_event"):
+            result = analyzer.analyze(
+                {"code": "600519", "stock_name": "贵州茅台"},
+                owner_user_id="owner-1",
+                route_family="analysis",
+            )
+
+        self.assertEqual(result.analysis_summary, "完整分析")
+        self.assertEqual(mock_identity.call_count, 2)
+        self.assertEqual(
+            [call.kwargs["retry_attempt_index"] for call in mock_identity.call_args_list],
+            [0, 1],
+        )
+        self.assertEqual(mock_identity.call_args_list[0].kwargs["prompt_text"], "base prompt")
+        self.assertEqual(mock_identity.call_args_list[1].kwargs["prompt_text"], "base prompt")
+        self.assertEqual(mock_identity.call_args_list[0].kwargs["surface"], "analysis")
+        self.assertEqual(len(identities), 2)
+        self.assertEqual(identities[0].logical_request_hash, identities[1].logical_request_hash)
+        self.assertNotEqual(identities[0].billable_attempt_hash, identities[1].billable_attempt_hash)
+        persisted = mock_persist.call_args.kwargs
+        self.assertEqual(persisted["request_hash"], identities[1].billable_attempt_hash)
+        self.assertEqual(
+            persisted["metadata"]["llm_identity"]["logical_hash"],
+            identities[1].logical_request_hash,
+        )
+        self.assertEqual(
+            persisted["metadata"]["llm_identity"]["attempt_hash"],
+            identities[1].billable_attempt_hash,
+        )

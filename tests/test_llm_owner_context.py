@@ -128,6 +128,89 @@ class LlmOwnerContextPropagationTestCase(unittest.TestCase):
             self.assertIsNone(row.owner_user_id)
             self.assertIsNone(row.guest_bucket_hash)
 
+    def test_generate_text_with_meta_threads_owner_and_guest_identity_metadata(self) -> None:
+        analyzer = GeminiAnalyzer.__new__(GeminiAnalyzer)
+        analyzer._call_litellm = MagicMock(
+            return_value=(
+                "synthetic response",
+                "openai/gpt-4o-mini",
+                {"prompt_tokens": 4, "completion_tokens": 5, "total_tokens": 9},
+                [],
+            )
+        )
+
+        with patch("src.analyzer.persist_llm_usage") as mock_persist:
+            analyzer.generate_text_with_meta(
+                "same prompt",
+                call_type="analysis",
+                owner_user_id="user-owner-1",
+                route_family="analysis",
+            )
+            analyzer.generate_text_with_meta(
+                "same prompt",
+                call_type="analysis",
+                guest_bucket_hash="guest-bucket-1",
+                route_family="guest_preview",
+            )
+
+        self.assertEqual(mock_persist.call_count, 2)
+        owner_kwargs = mock_persist.call_args_list[0].kwargs
+        guest_kwargs = mock_persist.call_args_list[1].kwargs
+
+        self.assertEqual(
+            owner_kwargs["request_hash"],
+            owner_kwargs["metadata"]["llm_identity"]["attempt_hash"],
+        )
+        self.assertEqual(
+            guest_kwargs["request_hash"],
+            guest_kwargs["metadata"]["llm_identity"]["attempt_hash"],
+        )
+        self.assertEqual(owner_kwargs["metadata"]["llm_identity"]["owner_scope"], "owner")
+        self.assertEqual(owner_kwargs["metadata"]["llm_identity"]["surface"], "analysis")
+        self.assertEqual(guest_kwargs["metadata"]["llm_identity"]["owner_scope"], "guest")
+        self.assertEqual(guest_kwargs["metadata"]["llm_identity"]["surface"], "guest_preview")
+        self.assertNotEqual(
+            owner_kwargs["metadata"]["llm_identity"]["logical_hash"],
+            guest_kwargs["metadata"]["llm_identity"]["logical_hash"],
+        )
+        self.assertNotEqual(owner_kwargs["request_hash"], guest_kwargs["request_hash"])
+
+    def test_generate_text_with_meta_separates_prompt_version_by_call_type(self) -> None:
+        analyzer = GeminiAnalyzer.__new__(GeminiAnalyzer)
+        analyzer._call_litellm = MagicMock(
+            return_value=(
+                "synthetic response",
+                "openai/gpt-4o-mini",
+                {"prompt_tokens": 6, "completion_tokens": 7, "total_tokens": 13},
+                [],
+            )
+        )
+
+        with patch("src.analyzer.persist_llm_usage") as mock_persist:
+            analyzer.generate_text_with_meta(
+                "same prompt",
+                call_type="analysis",
+                owner_user_id="user-owner-1",
+                route_family="analysis",
+            )
+            analyzer.generate_text_with_meta(
+                "same prompt",
+                call_type="market_review",
+                owner_user_id="user-owner-1",
+                route_family="analysis",
+            )
+
+        self.assertEqual(mock_persist.call_count, 2)
+        analysis_kwargs = mock_persist.call_args_list[0].kwargs
+        market_kwargs = mock_persist.call_args_list[1].kwargs
+        self.assertEqual(analysis_kwargs["metadata"]["llm_identity"]["version"], "analysis_v1")
+        self.assertEqual(market_kwargs["metadata"]["llm_identity"]["version"], "market_review_v1")
+        self.assertNotEqual(
+            analysis_kwargs["metadata"]["llm_identity"]["logical_hash"],
+            market_kwargs["metadata"]["llm_identity"]["logical_hash"],
+        )
+        self.assertNotEqual(analysis_kwargs["request_hash"], market_kwargs["request_hash"])
+
     def test_pricing_unknown_writes_safe_row_without_raw_prompt_or_payload(self) -> None:
         analyzer = GeminiAnalyzer.__new__(GeminiAnalyzer)
         analyzer._call_litellm = MagicMock(
@@ -150,7 +233,11 @@ class LlmOwnerContextPropagationTestCase(unittest.TestCase):
             usage = session.query(LLMUsage).one()
             self.assertEqual(ledger.status, "pricing_unknown")
             self.assertEqual(ledger.total_tokens, 19)
-            self.assertEqual(ledger.to_dict()["metadata"], {})
+            metadata = ledger.to_dict()["metadata"]
+            self.assertEqual(metadata["llm_identity"]["owner_scope"], "owner")
+            self.assertEqual(metadata["llm_identity"]["surface"], "analysis")
+            self.assertEqual(metadata["llm_identity"]["version"], "analysis_v1")
+            self.assertEqual(metadata["llm_identity"]["attempt_hash"], ledger.request_hash)
             self.assertEqual(usage.total_tokens, 19)
 
     def test_ledger_observer_failure_does_not_change_llm_response(self) -> None:
