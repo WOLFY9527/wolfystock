@@ -52,6 +52,7 @@ from src.report_language import (
     normalize_report_language,
 )
 from src.schemas.report_schema import AnalysisReportSchema
+from src.services.llm_identity_semantics import build_llm_identity_contract
 from src.services.llm_instrumentation import (
     emit_llm_event,
     provider_from_model,
@@ -1083,6 +1084,18 @@ class GeminiAnalyzer:
     ) -> Optional[Dict[str, Any]]:
         """Public text generation entry with model/usage diagnostics."""
         try:
+            identity = build_llm_identity_contract(
+                owner_user_id=owner_user_id,
+                guest_bucket_hash=guest_bucket_hash,
+                surface=self._llm_identity_surface(call_type=call_type, route_family=route_family),
+                prompt_version=self._llm_identity_prompt_version(call_type=call_type, route_family=route_family),
+                prompt_text=prompt,
+                logical_context=self._llm_identity_context(
+                    call_type=call_type,
+                    route_family=route_family,
+                ),
+                retry_attempt_index=0,
+            )
             call_kwargs: Dict[str, Any] = {
                 "generation_config": {"max_tokens": max_tokens, "temperature": temperature},
             }
@@ -1118,6 +1131,8 @@ class GeminiAnalyzer:
                 owner_user_id=owner_user_id,
                 guest_bucket_hash=guest_bucket_hash,
                 route_family=route_family or call_type,
+                request_hash=identity.billable_attempt_hash,
+                metadata=identity.to_ledger_metadata(),
             )
             emit_llm_event(
                 "llm_usage_persisted",
@@ -1238,8 +1253,23 @@ class GeminiAnalyzer:
             current_prompt = prompt
             retry_count = 0
             max_retries = config.report_integrity_retry if config.report_integrity_enabled else 0
+            llm_identity = None
 
             while True:
+                llm_identity = build_llm_identity_contract(
+                    owner_user_id=owner_user_id,
+                    guest_bucket_hash=guest_bucket_hash,
+                    surface=self._llm_identity_surface(call_type="analysis", route_family=route_family),
+                    prompt_version=self._llm_identity_prompt_version(call_type="analysis", route_family=route_family),
+                    prompt_text=prompt,
+                    logical_context=self._llm_identity_context(
+                        call_type="analysis",
+                        route_family=route_family,
+                        stock_code=code,
+                        report_language=report_language,
+                    ),
+                    retry_attempt_index=retry_count,
+                )
                 llm_started_at = time.perf_counter()
                 response_text, model_used, llm_usage, llm_attempt_trace = self._call_litellm(
                     current_prompt,
@@ -1320,6 +1350,8 @@ class GeminiAnalyzer:
                 owner_user_id=owner_user_id,
                 guest_bucket_hash=guest_bucket_hash,
                 route_family=route_family,
+                request_hash=llm_identity.billable_attempt_hash if llm_identity else None,
+                metadata=llm_identity.to_ledger_metadata() if llm_identity else None,
             )
             emit_llm_event(
                 "llm_usage_persisted",
@@ -1362,6 +1394,39 @@ class GeminiAnalyzer:
             "temperature": getattr(config, "llm_temperature", 0.7),
             "max_output_tokens": 8192,
         }
+
+    @staticmethod
+    def _llm_identity_surface(*, call_type: str, route_family: Optional[str]) -> str:
+        return str(route_family or call_type or "analysis").strip() or "analysis"
+
+    @staticmethod
+    def _llm_identity_prompt_version(*, call_type: str, route_family: Optional[str]) -> str:
+        if call_type == "analysis":
+            return "analysis_v1"
+        if route_family == "scanner_ai" or call_type == "scanner_interpretation":
+            return "scanner_ai_v1"
+        if call_type == "market_review":
+            return "market_review_v1"
+        normalized = str(route_family or call_type or "unversioned").strip().lower().replace("-", "_").replace(" ", "_")
+        return f"{normalized or 'unversioned'}_v1"
+
+    @staticmethod
+    def _llm_identity_context(
+        *,
+        call_type: str,
+        route_family: Optional[str],
+        stock_code: Optional[str] = None,
+        report_language: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        context: Dict[str, Any] = {
+            "call_type": str(call_type or "analysis").strip() or "analysis",
+            "route_family": str(route_family or call_type or "analysis").strip() or "analysis",
+        }
+        if stock_code:
+            context["stock_code"] = stock_code
+        if report_language:
+            context["report_language"] = report_language
+        return context
 
     @staticmethod
     def _log_home_analysis_stage(

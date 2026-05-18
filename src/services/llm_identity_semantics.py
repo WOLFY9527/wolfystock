@@ -40,6 +40,22 @@ class LlmIdentityContract:
             "retryAttemptIndex": self.retry_attempt_index,
         }
 
+    def to_ledger_metadata(self) -> dict[str, Any]:
+        """Return sanitizer-safe additive metadata for non-mutating ledger attachment."""
+        return {
+            "llm_identity": {
+                "owner_scope": self.owner_scope,
+                "scope_subject_hash": self.scope_subject_hash,
+                "surface": self.surface,
+                "version": self.prompt_version,
+                "template_hash": self.prompt_fingerprint,
+                "context_hash": self.logical_context_hash,
+                "logical_hash": self.logical_request_hash,
+                "attempt_hash": self.billable_attempt_hash,
+                "retry_index": self.retry_attempt_index,
+            }
+        }
+
 
 def build_llm_identity_contract(
     *,
