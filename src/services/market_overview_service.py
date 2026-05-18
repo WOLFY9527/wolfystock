@@ -1672,13 +1672,19 @@ class MarketOverviewService:
     def _fetch_market_sentiment_snapshot(self) -> Dict[str, Any]:
         provider_error = None
         deadline = self._deadline_after(self.SENTIMENT_AGGREGATE_BUDGET_SECONDS)
+        timeout = self._deadline_timeout(deadline, self.SENTIMENT_AGGREGATE_BUDGET_SECONDS)
+        if timeout is None:
+            raise TimeoutError("sentiment provider deadline exceeded")
         try:
-            payload = self._fetch_cnn_fear_greed_snapshot()
+            payload = self._fetch_cnn_fear_greed_snapshot(timeout=timeout)
         except Exception as exc:
             provider_error = str(exc)
             if self._deadline_exhausted(deadline):
                 raise TimeoutError("sentiment provider deadline exceeded") from exc
-            payload = self._fetch_alternative_fear_greed_snapshot()
+            timeout = self._deadline_timeout(deadline, self.SENTIMENT_AGGREGATE_BUDGET_SECONDS)
+            if timeout is None:
+                raise TimeoutError("sentiment provider deadline exceeded") from exc
+            payload = self._fetch_alternative_fear_greed_snapshot(timeout=timeout)
             payload["source"] = "alternative_me"
 
         values = [item["value"] for item in payload["history"]]
@@ -1746,8 +1752,12 @@ class MarketOverviewService:
             "source": payload["source"],
         }
 
-    def _fetch_cnn_fear_greed_snapshot(self) -> Dict[str, Any]:
-        payload = fetch_cnn_fear_greed_payload()
+    def _fetch_cnn_fear_greed_snapshot(self, *, timeout: Optional[float] = None) -> Dict[str, Any]:
+        payload = (
+            fetch_cnn_fear_greed_payload(timeout=timeout)
+            if timeout is not None
+            else fetch_cnn_fear_greed_payload()
+        )
         history_rows = payload.get("fear_and_greed_historical") or payload.get("fear_and_greed")
         if not isinstance(history_rows, list) or not history_rows:
             raise RuntimeError("CNN Fear & Greed payload unavailable")
@@ -1760,8 +1770,12 @@ class MarketOverviewService:
             raise RuntimeError("CNN Fear & Greed history unavailable")
         return {"history": history, "source": "cnn"}
 
-    def _fetch_alternative_fear_greed_snapshot(self) -> Dict[str, Any]:
-        payload = fetch_alternative_fear_greed_payload()
+    def _fetch_alternative_fear_greed_snapshot(self, *, timeout: Optional[float] = None) -> Dict[str, Any]:
+        payload = (
+            fetch_alternative_fear_greed_payload(timeout=timeout)
+            if timeout is not None
+            else fetch_alternative_fear_greed_payload()
+        )
         rows = payload.get("data") or []
         history = []
         for row in reversed(rows):
@@ -2359,11 +2373,12 @@ class MarketOverviewService:
             if symbol not in delayed_proxy_symbols or not ticker:
                 merged_items.append(fallback_item)
                 continue
-            if self._deadline_exhausted(deadline):
+            timeout = self._deadline_timeout(deadline, self.YFINANCE_PROXY_AGGREGATE_BUDGET_SECONDS)
+            if timeout is None:
                 merged_items.append(fallback_item)
                 continue
             try:
-                frame = fetch_yfinance_quote_history_frame(ticker)
+                frame = fetch_yfinance_quote_history_frame(ticker, timeout=timeout)
                 closes, as_of = self._history_frame_closes_and_as_of(frame, ticker)
             except Exception:
                 merged_items.append(fallback_item)
@@ -2439,11 +2454,12 @@ class MarketOverviewService:
             if symbol not in delayed_proxy_symbols or not ticker:
                 merged_items.append(fallback_item)
                 continue
-            if self._deadline_exhausted(deadline):
+            timeout = self._deadline_timeout(deadline, self.YFINANCE_PROXY_AGGREGATE_BUDGET_SECONDS)
+            if timeout is None:
                 merged_items.append(fallback_item)
                 continue
             try:
-                frame = fetch_yfinance_quote_history_frame(ticker)
+                frame = fetch_yfinance_quote_history_frame(ticker, timeout=timeout)
                 closes, as_of = self._history_frame_closes_and_as_of(frame, ticker)
             except Exception:
                 merged_items.append(fallback_item)
