@@ -52,7 +52,7 @@ from src.report_language import (
     normalize_report_language,
 )
 from src.schemas.report_schema import AnalysisReportSchema
-from src.services.llm_identity_semantics import build_llm_identity_contract
+from src.services.llm_identity_semantics import LlmIdentityContract, build_llm_identity_contract
 from src.services.llm_instrumentation import (
     emit_llm_event,
     provider_from_model,
@@ -1124,23 +1124,14 @@ class GeminiAnalyzer:
 
             if not text:
                 return None
-            persist_llm_usage(
-                usage,
-                model_used,
+            self._persist_llm_attempt_usage(
+                usage=usage,
+                model_used=model_used,
                 call_type=call_type,
                 owner_user_id=owner_user_id,
                 guest_bucket_hash=guest_bucket_hash,
                 route_family=route_family or call_type,
-                request_hash=identity.billable_attempt_hash,
-                metadata=identity.to_ledger_metadata(),
-            )
-            emit_llm_event(
-                "llm_usage_persisted",
-                call_type=call_type,
-                route="analyzer",
-                provider=provider_from_model(model_used),
-                model_family=model_used,
-                token_bucket=usage.get("total_tokens", 0),
+                identity=identity,
             )
             provider = model_used.split("/", 1)[0] if "/" in model_used else model_used
             return {
@@ -1276,6 +1267,16 @@ class GeminiAnalyzer:
                     generation_config,
                     system_prompt=system_prompt,
                 )
+                self._persist_llm_attempt_usage(
+                    usage=llm_usage,
+                    model_used=model_used,
+                    call_type="analysis",
+                    stock_code=code,
+                    owner_user_id=owner_user_id,
+                    guest_bucket_hash=guest_bucket_hash,
+                    route_family=route_family,
+                    identity=llm_identity,
+                )
                 llm_elapsed = time.perf_counter() - llm_started_at
                 self._log_home_analysis_stage(
                     symbol=code,
@@ -1342,26 +1343,6 @@ class GeminiAnalyzer:
                     )
                     break
 
-            persist_llm_usage(
-                llm_usage,
-                model_used,
-                call_type="analysis",
-                stock_code=code,
-                owner_user_id=owner_user_id,
-                guest_bucket_hash=guest_bucket_hash,
-                route_family=route_family,
-                request_hash=llm_identity.billable_attempt_hash if llm_identity else None,
-                metadata=llm_identity.to_ledger_metadata() if llm_identity else None,
-            )
-            emit_llm_event(
-                "llm_usage_persisted",
-                call_type="analysis",
-                route="analyzer",
-                provider=provider_from_model(model_used),
-                model_family=model_used,
-                token_bucket=llm_usage.get("total_tokens", 0),
-            )
-
             logger.info(f"[LLM解析] {name}({code}) 分析完成: {result.trend_prediction}, 评分 {result.sentiment_score}")
 
             return result
@@ -1382,6 +1363,42 @@ class GeminiAnalyzer:
                 model_used=None,
                 report_language=report_language,
             )
+
+    def _persist_llm_attempt_usage(
+        self,
+        *,
+        usage: Optional[Dict[str, Any]],
+        model_used: str,
+        call_type: str,
+        owner_user_id: Optional[str] = None,
+        guest_bucket_hash: Optional[str] = None,
+        route_family: Optional[str] = None,
+        stock_code: Optional[str] = None,
+        identity: Optional[LlmIdentityContract] = None,
+    ) -> None:
+        usage_payload = usage or {}
+        try:
+            persist_llm_usage(
+                usage_payload,
+                model_used,
+                call_type=call_type,
+                stock_code=stock_code,
+                owner_user_id=owner_user_id,
+                guest_bucket_hash=guest_bucket_hash,
+                route_family=route_family or call_type,
+                request_hash=identity.billable_attempt_hash if identity else None,
+                metadata=identity.to_ledger_metadata() if identity else None,
+            )
+        except Exception as exc:
+            logger.debug("[LLM usage] attempt persistence skipped: %s", type(exc).__name__)
+        emit_llm_event(
+            "llm_usage_persisted",
+            call_type=call_type,
+            route="analyzer",
+            provider=provider_from_model(model_used),
+            model_family=model_used,
+            token_bucket=usage_payload.get("total_tokens", 0),
+        )
 
     @staticmethod
     def _build_home_generation_config(config: Config) -> Dict[str, Any]:

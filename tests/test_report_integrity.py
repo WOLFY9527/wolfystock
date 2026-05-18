@@ -274,7 +274,7 @@ class TestIntegrityRetryPrompt(unittest.TestCase):
         emitted = [call.args[0] for call in mock_event.call_args_list]
         self.assertIn("llm_integrity_retry", emitted)
 
-    def test_analyze_threads_distinct_attempt_hashes_across_integrity_retry(self) -> None:
+    def test_analyze_persists_each_integrity_retry_attempt_with_distinct_hashes(self) -> None:
         cfg = MagicMock()
         cfg.report_language = "zh"
         cfg.gemini_request_delay = 0
@@ -360,13 +360,26 @@ class TestIntegrityRetryPrompt(unittest.TestCase):
         self.assertEqual(len(identities), 2)
         self.assertEqual(identities[0].logical_request_hash, identities[1].logical_request_hash)
         self.assertNotEqual(identities[0].billable_attempt_hash, identities[1].billable_attempt_hash)
-        persisted = mock_persist.call_args.kwargs
-        self.assertEqual(persisted["request_hash"], identities[1].billable_attempt_hash)
+        self.assertEqual(mock_persist.call_count, 2)
+        persisted_attempts = [call.kwargs for call in mock_persist.call_args_list]
         self.assertEqual(
-            persisted["metadata"]["llm_identity"]["logical_hash"],
-            identities[1].logical_request_hash,
+            [call.args[0]["total_tokens"] for call in mock_persist.call_args_list],
+            [11, 12],
         )
         self.assertEqual(
-            persisted["metadata"]["llm_identity"]["attempt_hash"],
-            identities[1].billable_attempt_hash,
+            [attempt["request_hash"] for attempt in persisted_attempts],
+            [identities[0].billable_attempt_hash, identities[1].billable_attempt_hash],
+        )
+        self.assertNotEqual(persisted_attempts[0]["request_hash"], persisted_attempts[1]["request_hash"])
+        self.assertEqual(
+            [attempt["metadata"]["llm_identity"]["logical_hash"] for attempt in persisted_attempts],
+            [identities[0].logical_request_hash, identities[1].logical_request_hash],
+        )
+        self.assertEqual(
+            [attempt["metadata"]["llm_identity"]["attempt_hash"] for attempt in persisted_attempts],
+            [identities[0].billable_attempt_hash, identities[1].billable_attempt_hash],
+        )
+        self.assertEqual(
+            [attempt["metadata"]["llm_identity"]["retry_index"] for attempt in persisted_attempts],
+            [0, 1],
         )
