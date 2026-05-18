@@ -41,6 +41,7 @@ from src.services.market_overview_yfinance_transport import (
     fetch_yfinance_spy_atr_history_frame,
 )
 from src.services.market_cache import MARKET_CACHE_TTLS, REFRESH_WARNING, market_cache
+from src.services.market_intelligence_trust_gate import evaluate_market_intelligence_trust_from_sources
 from src.services.rotation_state_evidence import build_rotation_state_evidence
 from src.services.rotation_radar_quote_provider import get_rotation_radar_quote_provider
 from src.storage import DatabaseManager
@@ -3161,11 +3162,55 @@ class MarketOverviewService:
             and reliable_panel_count >= 3
             and coverage >= 0.25
         )
+        trust_gate = self._market_intelligence_trust_gate(inputs, coverage=coverage)
         return {
             **trust,
-            "confidence": confidence,
-            "isReliable": is_reliable,
+            "confidence": round(min(confidence, float(trust_gate["scoreCap"])), 2),
+            "isReliable": bool(is_reliable and trust_gate["isReliable"]),
+            "trustLevel": trust_gate["trustLevel"],
+            "sourceTier": trust_gate["sourceTier"],
+            "degradationReasons": trust_gate["degradationReasons"],
+            "scoreCap": trust_gate["scoreCap"],
+            "conclusionAllowed": trust_gate["conclusionAllowed"],
         }
+
+    def _market_intelligence_trust_gate(self, inputs: Dict[str, Any], *, coverage: float) -> Dict[str, Any]:
+        source_payloads: List[Dict[str, Any]] = []
+        degraded_payloads: List[Dict[str, Any]] = []
+        degradation_reasons: List[str] = []
+        for key in ("indices", "breadth", "flows", "sectors", "rates", "fx", "futures", "sentiment", "crypto"):
+            panel = inputs.get(key)
+            if not isinstance(panel, dict):
+                continue
+            category = self._category_for_cache_key(key)
+            panel_items = panel.get("items") if isinstance(panel.get("items"), list) else []
+            if panel_items:
+                for item in panel_items:
+                    if not isinstance(item, dict):
+                        continue
+                    if self._is_trust_gate_stale_input(item):
+                        degradation_reasons.append("stale_source")
+                    if self._market_data_confidence(item, category) > 0:
+                        source_payloads.append(dict(item))
+                    else:
+                        degraded_payloads.append(dict(item))
+                continue
+            if self._is_trust_gate_stale_input(panel):
+                degradation_reasons.append("stale_source")
+            if self._market_data_confidence(panel, category) > 0:
+                source_payloads.append(dict(panel))
+            else:
+                degraded_payloads.append(dict(panel))
+
+        return evaluate_market_intelligence_trust_from_sources(
+            source_payloads or degraded_payloads,
+            coverage=coverage,
+            degradation_reasons=degradation_reasons,
+        )
+
+    @staticmethod
+    def _is_trust_gate_stale_input(value: Dict[str, Any]) -> bool:
+        return bool(value.get("isStale")) or str(value.get("freshness") or "").lower() == "stale"
 
     def _real_market_temperature_inputs(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         filtered: Dict[str, Any] = {"fallback_notice": bool(inputs.get("fallback_notice"))}

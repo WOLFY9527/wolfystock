@@ -184,6 +184,9 @@ def test_market_overview_liquidity_and_degraded_temperature_stay_truthful() -> N
     assert temperature_payload["freshness"] != "live"
     assert temperature_payload["isFallback"] is True
     assert temperature_payload["isReliable"] is False
+    assert temperature_payload["conclusionAllowed"] is False
+    assert temperature_payload["trustLevel"] in {"weak", "unavailable"}
+    assert temperature_payload["scoreCap"] <= 0.4
     assert temperature_payload["scores"]["overall"]["label"] == "数据不足"
     assert temperature_payload["evidenceSnapshot"]["degradationReason"] == "provider_unavailable"
 
@@ -215,6 +218,10 @@ def test_market_overview_liquidity_and_degraded_temperature_stay_truthful() -> N
     assert degraded_temperature_payload["isFallback"] is False
     assert degraded_temperature_payload["fallbackUsed"] is True
     assert degraded_temperature_payload["isReliable"] is False
+    assert degraded_temperature_payload["conclusionAllowed"] is False
+    assert degraded_temperature_payload["trustLevel"] == "weak"
+    assert degraded_temperature_payload["scoreCap"] <= 0.4
+    assert "low_coverage" in degraded_temperature_payload["degradationReasons"]
     assert degraded_temperature_payload["confidence"] < 0.25
     assert degraded_temperature_payload["evidenceSnapshot"]["coverage"] < 0.25
     assert degraded_temperature_payload["evidenceSnapshot"]["degradationReason"] == "partial_coverage"
