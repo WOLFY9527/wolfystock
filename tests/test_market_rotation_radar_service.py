@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
+from data_provider.provider_credentials import ProviderCredentialBundle
 from src.services.market_data_source_registry import project_source_provenance
 from src.services.market_rotation_radar_service import MarketRotationRadarService
 from src.services.rotation_radar_quote_provider import load_rotation_radar_quotes
@@ -45,6 +46,34 @@ def _quote(
     if time_windows is not None:
         payload["timeWindows"] = time_windows
     return payload
+
+
+def _alpaca_credentials(*, feed: str = "sip") -> ProviderCredentialBundle:
+    return ProviderCredentialBundle(
+        provider="alpaca",
+        auth_mode="key_secret",
+        key_id="alpaca-key-id",
+        secret_key="alpaca-secret",
+        extras={"data_feed": feed},
+    )
+
+
+def _missing_alpaca_credentials() -> ProviderCredentialBundle:
+    return ProviderCredentialBundle(
+        provider="alpaca",
+        auth_mode="key_secret",
+        key_id=None,
+        secret_key=None,
+        extras={"data_feed": "iex"},
+    )
+
+
+def _alpaca_bars(*, start_close: float = 100.0, end_close: float = 102.0, as_of: str | None = None) -> list[dict]:
+    timestamp = as_of or (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+    return [
+        {"t": (datetime.now(timezone.utc) - timedelta(minutes=6)).isoformat(), "o": 99.0, "h": 101.0, "l": 98.5, "c": start_close, "v": 1000, "vw": start_close},
+        {"t": timestamp, "o": start_close, "h": end_close + 1.0, "l": start_close - 1.0, "c": end_close, "v": 1500, "vw": (start_close + end_close) / 2},
+    ]
 
 
 class MarketRotationRadarServiceTestCase(unittest.TestCase):
@@ -498,6 +527,148 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertAlmostEqual(quote["volumeRatio"], 1.364, places=3)
         self.assertEqual(quote["timeWindows"]["1d"]["changePercent"], quote["changePercent"])
         self.assertEqual(quote["timeWindows"]["1d"]["freshness"], "delayed")
+
+    def test_configured_alpaca_quote_provider_supplies_intraday_windows_without_yfinance(self) -> None:
+        fetch_calls: list[tuple[str, str]] = []
+
+        class FakeAlpacaFetcher:
+            def __init__(self, *, api_key_id: str, secret_key: str, data_feed: str, timeout: int = 15, **kwargs) -> None:
+                self.data_feed = data_feed
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                fetch_calls.append((symbol, timeframe))
+                return _alpaca_bars(
+                    start_close=100.0,
+                    end_close={
+                        "5Min": 101.0,
+                        "15Min": 102.0,
+                        "1Hour": 103.0,
+                        "1Day": 104.0,
+                    }[timeframe],
+                )
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            FakeAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            side_effect=AssertionError("yfinance fallback should not be called when Alpaca covers all symbols"),
+        ):
+            payload = load_rotation_radar_quotes(["APP", "QQQ"])
+
+        metadata = payload["metadata"]
+        self.assertEqual(metadata["status"], "success")
+        self.assertEqual(metadata["quoteMode"], "configured")
+        self.assertEqual(metadata["source"], "alpaca")
+        self.assertEqual(metadata["sourceLabel"], "Alpaca SIP")
+        self.assertEqual(metadata["sourceTier"], "broker_authorized")
+        self.assertEqual(metadata["providerTier"], "tier_1_configured")
+        self.assertEqual(metadata["providerOrder"], ["alpaca", "yfinance"])
+        self.assertEqual(metadata["coverage"]["coveragePercent"], 100.0)
+        self.assertGreaterEqual(metadata["confidenceWeight"], 0.8)
+        self.assertEqual(metadata["failedSymbolReasons"], {})
+        self.assertEqual(sorted(payload["quotes"]), ["APP", "QQQ"])
+        self.assertEqual(fetch_calls.count(("APP", "5Min")), 1)
+        quote = payload["quotes"]["APP"]
+        self.assertEqual(quote["source"], "alpaca")
+        self.assertEqual(quote["sourceTier"], "broker_authorized")
+        self.assertEqual(quote["providerTier"], "tier_1_configured")
+        self.assertEqual(set(quote["timeWindows"]), {"5m", "15m", "60m", "1d"})
+        self.assertTrue(all(window["available"] for window in quote["timeWindows"].values()))
+        self.assertTrue(all(not window["isFallback"] for window in quote["timeWindows"].values()))
+        self.assertTrue(all(window["source"] == "alpaca" for window in quote["timeWindows"].values()))
+
+    def test_missing_alpaca_credentials_skips_configured_provider_and_keeps_yfinance_degraded(self) -> None:
+        latest_date = datetime.now(timezone.utc).date()
+        frame = pd.DataFrame(
+            {
+                "Open": [100.0, 101.0],
+                "High": [101.0, 103.0],
+                "Low": [99.0, 100.0],
+                "Close": [100.0, 102.0],
+                "Volume": [1_000_000.0, 1_250_000.0],
+            },
+            index=pd.DatetimeIndex([(latest_date - timedelta(days=1)).isoformat(), latest_date.isoformat()]),
+        )
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_missing_alpaca_credentials(),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            side_effect=AssertionError("Alpaca should not be constructed without credentials"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider._QUOTE_PROVIDER_REQUEST_TIMEOUT_SECONDS",
+            0.25,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=frame,
+        ) as mock_yfinance:
+            payload = load_rotation_radar_quotes(["APP"])
+
+        quote = payload["quotes"]["APP"]
+        metadata = payload["metadata"]
+        mock_yfinance.assert_called_once_with("APP")
+        self.assertEqual(metadata["configuredProviderStatus"], "not_configured")
+        self.assertEqual(metadata["quoteMode"], "proxy")
+        self.assertEqual(metadata["source"], "yfinance_proxy")
+        self.assertEqual(metadata["sourceLabel"], "Yahoo Finance")
+        self.assertEqual(metadata["sourceTier"], "unofficial_public_api")
+        self.assertEqual(metadata["providerTier"], "tier_2_delayed_proxy")
+        self.assertEqual(metadata["providerOrder"], ["alpaca", "yfinance"])
+        self.assertEqual(metadata["providerTimeoutSeconds"], 0.25)
+        self.assertLessEqual(metadata["confidenceWeight"], 0.5)
+        self.assertEqual(set(quote["timeWindows"]), {"1d"})
+        self.assertEqual(quote["freshness"], "delayed")
+        self.assertEqual(quote["sourceTier"], "unofficial_public_api")
+        self.assertEqual(quote["providerTier"], "tier_2_delayed_proxy")
+        self.assertNotIn("5m", quote["timeWindows"])
+        self.assertNotIn(metadata["freshness"], {"live", "fresh"})
+
+    def test_configured_provider_symbol_failures_reduce_coverage_and_confidence(self) -> None:
+        class FakeAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                if symbol == "SQ":
+                    raise RuntimeError("no data")
+                return _alpaca_bars(end_close=102.0)
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            FakeAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=pd.DataFrame(),
+        ):
+            payload = load_rotation_radar_quotes(["APP", "SQ"])
+
+        metadata = payload["metadata"]
+        self.assertEqual(sorted(payload["quotes"]), ["APP"])
+        self.assertEqual(metadata["status"], "partial")
+        self.assertEqual(metadata["coverage"]["requestedSymbolCount"], 2)
+        self.assertEqual(metadata["coverage"]["usableSymbolCount"], 1)
+        self.assertEqual(metadata["coverage"]["coveragePercent"], 50.0)
+        self.assertLess(metadata["confidenceWeight"], 0.8)
+        self.assertEqual(metadata["failedSymbols"], ["SQ"])
+        self.assertEqual(metadata["failedSymbolReasons"], {"SQ": "symbol_unavailable"})
+        self.assertEqual(metadata["configuredProviderFailedSymbols"], ["SQ"])
+        self.assertEqual(metadata["configuredProviderFailedSymbolReasons"], {"SQ": "symbol_unavailable"})
+        self.assertEqual(metadata["unavailableReason"], "symbol_unavailable")
 
     def test_rotation_radar_yfinance_quote_provider_bounds_unavailable_symbols_and_skips_retry_within_cooldown(self) -> None:
         frame = pd.DataFrame(

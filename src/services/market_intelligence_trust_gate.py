@@ -80,6 +80,7 @@ _SOURCE_TO_TIER = {
     "cnn": MarketIntelligenceSourceTier.OFFICIAL_PUBLIC,
     "alternative": MarketIntelligenceSourceTier.OFFICIAL_PUBLIC,
     "alternative_me": MarketIntelligenceSourceTier.OFFICIAL_PUBLIC,
+    "alpaca": MarketIntelligenceSourceTier.BROKER_AUTHORIZED,
     "binance": MarketIntelligenceSourceTier.EXCHANGE_PUBLIC,
     "binance_ws": MarketIntelligenceSourceTier.EXCHANGE_PUBLIC,
     "sina": MarketIntelligenceSourceTier.UNOFFICIAL_PUBLIC_API,

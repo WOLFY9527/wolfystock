@@ -100,6 +100,34 @@ class AlpacaFetcher(BaseFetcher):
             raise DataFetchError(f"Alpaca 未返回 {symbol} 的历史 bars")
         return pd.DataFrame(bars)
 
+    def get_bars(
+        self,
+        stock_code: str,
+        *,
+        timeframe: str,
+        start: str,
+        end: str,
+        limit: int = 100,
+    ) -> list[Dict[str, Any]]:
+        symbol = str(stock_code or "").strip().upper()
+        if not is_us_stock_code(symbol):
+            raise DataFetchError(f"AlpacaFetcher 仅支持美股代码: {stock_code}")
+        payload = self._request_json(
+            f"/v2/stocks/{symbol}/bars",
+            params={
+                "timeframe": str(timeframe or "1Day"),
+                "start": start,
+                "end": end,
+                "adjustment": "all",
+                "feed": self.data_feed,
+                "limit": max(1, int(limit or 100)),
+            },
+        )
+        bars = payload.get("bars") if isinstance(payload, dict) else None
+        if not isinstance(bars, list):
+            raise DataFetchError(f"Alpaca 未返回 {symbol} 的 bars")
+        return bars
+
     def _normalize_data(self, df: pd.DataFrame, stock_code: str) -> pd.DataFrame:
         if df is None or df.empty:
             return pd.DataFrame(columns=["code", *STANDARD_COLUMNS])
