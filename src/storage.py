@@ -110,6 +110,17 @@ _POSTGRES_PHASE_STORE_SPECS = tuple(
 # SQLAlchemy ORM 基类
 Base = declarative_base()
 
+DURABLE_TASK_ACTIVE_STATUSES = frozenset(
+    {
+        "queued",
+        "pending",
+        "waiting_retry",
+        "leased",
+        "processing",
+        "running",
+    }
+)
+
 if TYPE_CHECKING:
     from src.search_service import SearchResponse
 
@@ -496,6 +507,7 @@ class DurableTaskState(Base):
     lease_expires_at = Column(DateTime, index=True)
     idempotency_key_hash = Column(String(128), index=True)
     dedupe_key_hash = Column(String(128), index=True)
+    active_dedupe_key_hash = Column(String(128), index=True)
     metadata_json = Column(Text)
     created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False, index=True)
@@ -509,6 +521,13 @@ class DurableTaskState(Base):
         Index('ix_durable_task_owner_status_created', 'owner_user_id', 'status', 'created_at'),
         Index('ix_durable_task_status_updated', 'status', 'updated_at'),
         Index('ix_durable_task_status_lease', 'status', 'lease_expires_at'),
+        Index(
+            'ux_durable_task_active_dedupe',
+            'owner_user_id',
+            'task_type',
+            'active_dedupe_key_hash',
+            unique=True,
+        ),
     )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -2377,6 +2396,7 @@ class DatabaseManager:
             self._add_column_if_missing(conn, "durable_task_states", "max_attempts", "INTEGER NOT NULL DEFAULT 1")
             self._add_column_if_missing(conn, "durable_task_states", "lease_owner", "VARCHAR(128)")
             self._add_column_if_missing(conn, "durable_task_states", "lease_expires_at", "DATETIME")
+            self._add_column_if_missing(conn, "durable_task_states", "active_dedupe_key_hash", "VARCHAR(128)")
             self._add_column_if_missing(conn, "quota_policy_definitions", "provider", "VARCHAR(64)")
             self._add_column_if_missing(conn, "quota_policy_definitions", "model_tier", "VARCHAR(64)")
             self._add_column_if_missing(conn, "quota_policy_definitions", "daily_budget_units", "INTEGER")
@@ -2550,6 +2570,12 @@ class DatabaseManager:
                 "ix_durable_task_states_dedupe_key_hash",
                 "durable_task_states",
                 "dedupe_key_hash",
+            )
+            self._create_unique_index_if_missing(
+                conn,
+                "ux_durable_task_active_dedupe",
+                "durable_task_states",
+                "owner_user_id, task_type, active_dedupe_key_hash",
             )
             self._create_index_if_missing(
                 conn,
@@ -2779,6 +2805,12 @@ class DatabaseManager:
     def _create_index_if_missing(conn, index_name: str, table_name: str, columns_sql: str) -> None:
         conn.exec_driver_sql(
             f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} ({columns_sql})"
+        )
+
+    @staticmethod
+    def _create_unique_index_if_missing(conn, index_name: str, table_name: str, columns_sql: str) -> None:
+        conn.exec_driver_sql(
+            f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} ON {table_name} ({columns_sql})"
         )
 
     @staticmethod
@@ -3541,6 +3573,176 @@ class DatabaseManager:
     def _bounded_durable_task_progress_limit(limit: int) -> int:
         return max(1, min(int(limit or 50), 100))
 
+    @staticmethod
+    def _is_durable_task_active_status(status: Optional[str]) -> bool:
+        return str(status or "").strip().lower() in DURABLE_TASK_ACTIVE_STATUSES
+
+    @staticmethod
+    def _active_dedupe_key_hash_for_row(dedupe_key_hash: Optional[str], status: Optional[str]) -> Optional[str]:
+        if not dedupe_key_hash:
+            return None
+        return dedupe_key_hash if DatabaseManager._is_durable_task_active_status(status) else None
+
+    def _find_active_durable_task_duplicate(
+        self,
+        *,
+        session: Session,
+        owner_user_id: str,
+        task_type: str,
+        active_dedupe_key_hash: Optional[str],
+        exclude_task_id: Optional[str] = None,
+    ) -> Optional[DurableTaskState]:
+        if not active_dedupe_key_hash:
+            return None
+        query = select(DurableTaskState).where(
+            DurableTaskState.owner_user_id == owner_user_id,
+            DurableTaskState.task_type == task_type,
+            DurableTaskState.status.in_(tuple(DURABLE_TASK_ACTIVE_STATUSES)),
+            or_(
+                DurableTaskState.active_dedupe_key_hash == active_dedupe_key_hash,
+                and_(
+                    DurableTaskState.active_dedupe_key_hash.is_(None),
+                    DurableTaskState.dedupe_key_hash == active_dedupe_key_hash,
+                ),
+            ),
+        )
+        normalized_exclude = str(exclude_task_id or "").strip()
+        if normalized_exclude:
+            query = query.where(DurableTaskState.task_id != normalized_exclude)
+        return session.execute(
+            query.order_by(asc(DurableTaskState.created_at), asc(DurableTaskState.id)).limit(1)
+        ).scalar_one_or_none()
+
+    def _store_durable_task_state(
+        self,
+        *,
+        task_id: str,
+        owner_user_id: Optional[str],
+        task_type: str,
+        status: str = "pending",
+        progress: int = 0,
+        current_step: Optional[str] = None,
+        route_family: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        dedupe_key: Optional[str] = None,
+        max_attempts: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        session: Optional[Session] = None,
+    ) -> Dict[str, Any]:
+        normalized_task_id = str(task_id or "").strip()
+        if not normalized_task_id:
+            raise ValueError("task_id is required")
+        resolved_owner_id = self.require_user_id(owner_user_id)
+        now = datetime.now()
+        safe_metadata = self._sanitize_task_metadata(metadata or {})
+        status_text = str(status or "pending")[:32]
+        dedupe_key_hash = self._hash_optional_key(dedupe_key)
+        active_dedupe_key_hash = self._active_dedupe_key_hash_for_row(dedupe_key_hash, status_text)
+
+        def write(active_session: Session) -> Dict[str, Any]:
+            row = active_session.execute(
+                select(DurableTaskState)
+                .where(DurableTaskState.task_id == normalized_task_id)
+                .limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                row = DurableTaskState(
+                    task_id=normalized_task_id,
+                    owner_user_id=resolved_owner_id,
+                    task_type=str(task_type or "analysis")[:32],
+                    created_at=now,
+                )
+                active_session.add(row)
+            row.owner_user_id = resolved_owner_id
+            row.task_type = str(task_type or "analysis")[:32]
+            row.route_family = str(route_family or "")[:64] or None
+            row.status = status_text
+            row.progress = max(0, min(int(progress or 0), 100))
+            row.current_step = sanitize_message(str(current_step or ""))[:500] or None
+            if max_attempts is not None:
+                row.max_attempts = max(1, min(int(max_attempts or 1), 10))
+            elif not row.max_attempts:
+                row.max_attempts = 1
+            row.attempt_count = max(0, int(row.attempt_count or 0))
+            row.idempotency_key_hash = self._hash_optional_key(idempotency_key)
+            row.dedupe_key_hash = dedupe_key_hash
+            row.active_dedupe_key_hash = active_dedupe_key_hash
+            row.metadata_json = self._safe_json_dumps(safe_metadata)
+            row.updated_at = now
+            if row.status in {"processing", "running"} and row.started_at is None:
+                row.started_at = now
+            active_session.flush()
+            return self._durable_task_payload(row)
+
+        if session is not None:
+            return write(session)
+        with self.session_scope() as scoped_session:
+            return write(scoped_session)
+
+    def reserve_durable_task_state(
+        self,
+        *,
+        task_id: str,
+        owner_user_id: Optional[str],
+        task_type: str,
+        status: str = "pending",
+        progress: int = 0,
+        current_step: Optional[str] = None,
+        route_family: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        dedupe_key: Optional[str] = None,
+        max_attempts: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+        normalized_task_id = str(task_id or "").strip()
+        if not normalized_task_id:
+            raise ValueError("task_id is required")
+        resolved_owner_id = self.require_user_id(owner_user_id)
+        normalized_task_type = str(task_type or "analysis")[:32]
+        status_text = str(status or "pending")[:32]
+        dedupe_key_hash = self._hash_optional_key(dedupe_key)
+        active_dedupe_key_hash = self._active_dedupe_key_hash_for_row(dedupe_key_hash, status_text)
+
+        try:
+            with self.session_scope() as session:
+                duplicate_row = self._find_active_durable_task_duplicate(
+                    session=session,
+                    owner_user_id=resolved_owner_id,
+                    task_type=normalized_task_type,
+                    active_dedupe_key_hash=active_dedupe_key_hash,
+                    exclude_task_id=normalized_task_id,
+                )
+                if duplicate_row is not None:
+                    return None, self._durable_task_payload(duplicate_row)
+
+                payload = self._store_durable_task_state(
+                    task_id=normalized_task_id,
+                    owner_user_id=resolved_owner_id,
+                    task_type=normalized_task_type,
+                    status=status_text,
+                    progress=progress,
+                    current_step=current_step,
+                    route_family=route_family,
+                    idempotency_key=idempotency_key,
+                    dedupe_key=dedupe_key,
+                    max_attempts=max_attempts,
+                    metadata=metadata,
+                    session=session,
+                )
+                return payload, None
+        except IntegrityError:
+            with self.get_session() as session:
+                duplicate_row = self._find_active_durable_task_duplicate(
+                    session=session,
+                    owner_user_id=resolved_owner_id,
+                    task_type=normalized_task_type,
+                    active_dedupe_key_hash=active_dedupe_key_hash,
+                    exclude_task_id=normalized_task_id,
+                )
+                if duplicate_row is not None:
+                    return None, self._durable_task_payload(duplicate_row)
+            raise
+
     def create_durable_task_state(
         self,
         *,
@@ -3556,45 +3758,24 @@ class DatabaseManager:
         max_attempts: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        normalized_task_id = str(task_id or "").strip()
-        if not normalized_task_id:
-            raise ValueError("task_id is required")
-        resolved_owner_id = self.require_user_id(owner_user_id)
-        now = datetime.now()
-        safe_metadata = self._sanitize_task_metadata(metadata or {})
-        with self.session_scope() as session:
-            row = session.execute(
-                select(DurableTaskState)
-                .where(DurableTaskState.task_id == normalized_task_id)
-                .limit(1)
-            ).scalar_one_or_none()
-            if row is None:
-                row = DurableTaskState(
-                    task_id=normalized_task_id,
-                    owner_user_id=resolved_owner_id,
-                    task_type=str(task_type or "analysis")[:32],
-                    created_at=now,
-                )
-                session.add(row)
-            row.owner_user_id = resolved_owner_id
-            row.task_type = str(task_type or "analysis")[:32]
-            row.route_family = str(route_family or "")[:64] or None
-            row.status = str(status or "pending")[:32]
-            row.progress = max(0, min(int(progress or 0), 100))
-            row.current_step = sanitize_message(str(current_step or ""))[:500] or None
-            if max_attempts is not None:
-                row.max_attempts = max(1, min(int(max_attempts or 1), 10))
-            elif not row.max_attempts:
-                row.max_attempts = 1
-            row.attempt_count = max(0, int(row.attempt_count or 0))
-            row.idempotency_key_hash = self._hash_optional_key(idempotency_key)
-            row.dedupe_key_hash = self._hash_optional_key(dedupe_key)
-            row.metadata_json = self._safe_json_dumps(safe_metadata)
-            row.updated_at = now
-            if row.status in {"processing", "running"} and row.started_at is None:
-                row.started_at = now
-            session.flush()
-            return self._durable_task_payload(row)
+        payload, duplicate = self.reserve_durable_task_state(
+            task_id=task_id,
+            owner_user_id=owner_user_id,
+            task_type=task_type,
+            status=status,
+            progress=progress,
+            current_step=current_step,
+            route_family=route_family,
+            idempotency_key=idempotency_key,
+            dedupe_key=dedupe_key,
+            max_attempts=max_attempts,
+            metadata=metadata,
+        )
+        if duplicate is not None:
+            raise IntegrityError("active durable task duplicate", params=None, orig=None)
+        if payload is None:
+            raise RuntimeError("failed to create durable task state")
+        return payload
 
     def append_durable_task_progress_event(
         self,
@@ -3748,6 +3929,10 @@ class DatabaseManager:
                 return None
             if status is not None:
                 row.status = str(status or "")[:32]
+                row.active_dedupe_key_hash = self._active_dedupe_key_hash_for_row(
+                    row.dedupe_key_hash,
+                    row.status,
+                )
             if progress is not None:
                 row.progress = max(0, min(int(progress or 0), 100))
             if current_step is not None:
@@ -3817,6 +4002,10 @@ class DatabaseManager:
             row.status = "leased"
             row.lease_owner = normalized_worker
             row.lease_expires_at = current_time + timedelta(seconds=lease_seconds)
+            row.active_dedupe_key_hash = self._active_dedupe_key_hash_for_row(
+                row.dedupe_key_hash,
+                row.status,
+            )
             row.attempt_count = max(0, int(row.attempt_count or 0)) + 1
             row.max_attempts = max(1, int(row.max_attempts or 1))
             row.updated_at = current_time
@@ -3854,6 +4043,10 @@ class DatabaseManager:
             if row is None:
                 return None
             row.status = str(status or "processing")[:32]
+            row.active_dedupe_key_hash = self._active_dedupe_key_hash_for_row(
+                row.dedupe_key_hash,
+                row.status,
+            )
             row.lease_expires_at = current_time + timedelta(seconds=max(1, min(int(lease_seconds or 60), 3600)))
             if progress is not None:
                 row.progress = max(0, min(int(progress or 0), 100))
@@ -3899,6 +4092,7 @@ class DatabaseManager:
                 prior.update(self._sanitize_task_metadata(metadata))
                 row.metadata_json = self._safe_json_dumps(prior)
             row.status = "completed"
+            row.active_dedupe_key_hash = None
             row.progress = 100
             row.current_step = sanitize_message(str(current_step or ""))[:500] or None
             row.completed_at = current_time
@@ -3944,6 +4138,10 @@ class DatabaseManager:
             max_attempts = max(1, int(row.max_attempts or 1))
             should_retry = bool(retryable) and attempts < max_attempts
             row.status = "queued" if should_retry else "failed"
+            row.active_dedupe_key_hash = self._active_dedupe_key_hash_for_row(
+                row.dedupe_key_hash,
+                row.status,
+            )
             row.progress = 0 if should_retry else 100
             row.current_step = sanitize_message(str(current_step or ""))[:500] or None
             row.error_code = str(error_code or "worker_error")[:64] or None

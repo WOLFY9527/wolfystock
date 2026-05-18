@@ -42,6 +42,7 @@ from src.enums import ReportType
 from src.services.analysis_service import AnalysisService
 from src.services.image_stock_extractor import _call_litellm_vision
 from src.services.task_queue import AnalysisTaskQueue
+from src.storage import DatabaseManager
 from data_provider.realtime_types import RealtimeSource
 
 
@@ -1110,7 +1111,10 @@ class AnalysisApiContractTestCase(unittest.TestCase):
 
         original_instance = AnalysisTaskQueue._instance
         AnalysisTaskQueue._instance = None
+        DatabaseManager.reset_instance()
+        temp_dir = tempfile.TemporaryDirectory()
         try:
+            DatabaseManager(db_url=f"sqlite:///{Path(temp_dir.name) / 'api-duplicate-task.sqlite'}")
             queue = AnalysisTaskQueue(max_workers=1)
             queue._executor = type("ExecutorStub", (), {"submit": lambda self, *args, **kwargs: Future()})()
 
@@ -1157,6 +1161,8 @@ class AnalysisApiContractTestCase(unittest.TestCase):
                 if executor is not None and hasattr(executor, "shutdown"):
                     executor.shutdown(wait=False, cancel_futures=True)
             AnalysisTaskQueue._instance = original_instance
+            DatabaseManager.reset_instance()
+            temp_dir.cleanup()
 
     def test_trigger_analysis_batch_does_not_apply_single_stock_name_to_all_tasks(self) -> None:
         if trigger_analysis is None:
@@ -1217,6 +1223,10 @@ class BatchTaskQueueContractTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._original_instance = AnalysisTaskQueue._instance
         AnalysisTaskQueue._instance = None
+        DatabaseManager.reset_instance()
+        self._temp_dir = tempfile.TemporaryDirectory()
+        self._db_path = Path(self._temp_dir.name) / "batch-task-queue.sqlite"
+        self._db = DatabaseManager(db_url=f"sqlite:///{self._db_path}")
 
     def tearDown(self) -> None:
         queue = AnalysisTaskQueue._instance
@@ -1225,6 +1235,8 @@ class BatchTaskQueueContractTestCase(unittest.TestCase):
             if executor is not None and hasattr(executor, "shutdown"):
                 executor.shutdown(wait=False, cancel_futures=True)
         AnalysisTaskQueue._instance = self._original_instance
+        DatabaseManager.reset_instance()
+        self._temp_dir.cleanup()
 
     def test_batch_submit_rolls_back_when_executor_submit_fails(self) -> None:
         class FailingExecutor:

@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import HTTPException
+from sqlalchemy import text
 
 from api.v1.endpoints.analysis import _format_sse_event, get_analysis_status, poll_analysis_task_progress
 from src.storage import DatabaseManager
@@ -70,6 +71,128 @@ class DurableTaskStateTestCase(unittest.TestCase):
         self.assertEqual(completed["status"], "completed")
         self.assertEqual(completed["progress"], 100)
         self.assertIsNotNone(completed["completed_at"])
+
+    def test_active_durable_task_reservation_returns_existing_duplicate(self) -> None:
+        created, duplicate = self.db.reserve_durable_task_state(
+            task_id="task-active-a",
+            owner_user_id="user-a",
+            task_type="analysis",
+            status="pending",
+            progress=0,
+            current_step="Queued",
+            dedupe_key="user-a:AAPL.US",
+            metadata={"stock_code": "AAPL.US"},
+        )
+
+        second, second_duplicate = self.db.reserve_durable_task_state(
+            task_id="task-active-b",
+            owner_user_id="user-a",
+            task_type="analysis",
+            status="pending",
+            progress=0,
+            current_step="Queued",
+            dedupe_key="user-a:AAPL.US",
+            metadata={"stock_code": "AAPL.US"},
+        )
+
+        self.assertIsNotNone(created)
+        self.assertIsNone(duplicate)
+        self.assertIsNone(second)
+        self.assertIsNotNone(second_duplicate)
+        self.assertEqual(second_duplicate["task_id"], "task-active-a")
+        self.assertIsNone(self.db.get_durable_task_state(task_id="task-active-b", owner_user_id="user-a"))
+
+    def test_active_durable_reservation_honors_legacy_dedupe_hash_rows(self) -> None:
+        created = self.db.create_durable_task_state(
+            task_id="task-legacy-active",
+            owner_user_id="user-a",
+            task_type="analysis",
+            status="pending",
+            dedupe_key="user-a:NVDA.US",
+            metadata={"stock_code": "NVDA.US"},
+        )
+        with self.db._engine.begin() as conn:
+            conn.execute(
+                text("UPDATE durable_task_states SET active_dedupe_key_hash = NULL WHERE task_id = :task_id"),
+                {"task_id": created["task_id"]},
+            )
+
+        second, duplicate = self.db.reserve_durable_task_state(
+            task_id="task-legacy-duplicate",
+            owner_user_id="user-a",
+            task_type="analysis",
+            status="pending",
+            dedupe_key="user-a:NVDA.US",
+            metadata={"stock_code": "NVDA.US"},
+        )
+
+        self.assertIsNone(second)
+        self.assertIsNotNone(duplicate)
+        self.assertEqual(duplicate["task_id"], "task-legacy-active")
+
+    def test_terminal_durable_task_reservation_releases_dedupe_slot(self) -> None:
+        created, duplicate = self.db.reserve_durable_task_state(
+            task_id="task-terminal-a",
+            owner_user_id="user-a",
+            task_type="analysis",
+            status="pending",
+            dedupe_key="user-a:MSFT.US",
+            metadata={"stock_code": "MSFT.US"},
+        )
+        self.assertIsNotNone(created)
+        self.assertIsNone(duplicate)
+
+        self.db.mark_durable_task_completed(task_id="task-terminal-a", owner_user_id="user-a")
+        second, second_duplicate = self.db.reserve_durable_task_state(
+            task_id="task-terminal-b",
+            owner_user_id="user-a",
+            task_type="analysis",
+            status="pending",
+            dedupe_key="user-a:MSFT.US",
+            metadata={"stock_code": "MSFT.US"},
+        )
+        self.assertIsNotNone(second)
+        self.assertIsNone(second_duplicate)
+
+        self.db.mark_durable_task_failed(
+            task_id="task-terminal-b",
+            owner_user_id="user-a",
+            error_code="fixture_failed",
+            error_summary="fixture failed",
+        )
+        third, third_duplicate = self.db.reserve_durable_task_state(
+            task_id="task-terminal-c",
+            owner_user_id="user-a",
+            task_type="analysis",
+            status="pending",
+            dedupe_key="user-a:MSFT.US",
+            metadata={"stock_code": "MSFT.US"},
+        )
+        self.assertIsNotNone(third)
+        self.assertIsNone(third_duplicate)
+
+    def test_durable_task_reservation_is_owner_scoped(self) -> None:
+        first, first_duplicate = self.db.reserve_durable_task_state(
+            task_id="task-owner-a",
+            owner_user_id="user-a",
+            task_type="analysis",
+            status="pending",
+            dedupe_key="user-a:TSLA.US",
+            metadata={"stock_code": "TSLA.US"},
+        )
+        second, second_duplicate = self.db.reserve_durable_task_state(
+            task_id="task-owner-b",
+            owner_user_id="user-b",
+            task_type="analysis",
+            status="pending",
+            dedupe_key="user-b:TSLA.US",
+            metadata={"stock_code": "TSLA.US"},
+        )
+
+        self.assertIsNotNone(first)
+        self.assertIsNone(first_duplicate)
+        self.assertIsNotNone(second)
+        self.assertIsNone(second_duplicate)
 
     def test_owner_can_read_own_durable_task_status(self) -> None:
         self.db.create_durable_task_state(

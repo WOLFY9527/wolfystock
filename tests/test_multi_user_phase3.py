@@ -546,6 +546,12 @@ class TaskQueueIsolationTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._original_instance = AnalysisTaskQueue._instance
         AnalysisTaskQueue._instance = None
+        DatabaseManager.reset_instance()
+        self._temp_dir = tempfile.TemporaryDirectory()
+        self._db_path = Path(self._temp_dir.name) / "multi-user-task-queue.sqlite"
+        self._db = DatabaseManager(db_url=f"sqlite:///{self._db_path}")
+        self._db.create_or_update_app_user(user_id="user-a", username="alice")
+        self._db.create_or_update_app_user(user_id="user-b", username="bob")
 
     def tearDown(self) -> None:
         queue = AnalysisTaskQueue._instance
@@ -554,6 +560,8 @@ class TaskQueueIsolationTestCase(unittest.TestCase):
             if executor is not None and hasattr(executor, "shutdown"):
                 executor.shutdown(wait=False, cancel_futures=True)
         AnalysisTaskQueue._instance = self._original_instance
+        DatabaseManager.reset_instance()
+        self._temp_dir.cleanup()
 
     def test_duplicate_detection_is_owner_scoped(self) -> None:
         queue = AnalysisTaskQueue(max_workers=1)

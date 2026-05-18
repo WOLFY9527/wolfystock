@@ -71,6 +71,7 @@ class DbIndexBatchATestCase(unittest.TestCase):
                 "ix_durable_task_status_lease",
                 "ix_durable_task_states_idempotency_key_hash",
                 "ix_durable_task_states_dedupe_key_hash",
+                "ux_durable_task_active_dedupe",
             },
             "durable_task_progress_events": {
                 "ix_durable_task_progress_task_sequence",
@@ -104,6 +105,10 @@ class DbIndexBatchATestCase(unittest.TestCase):
         self.assertEqual(
             durable_indexes["ix_durable_task_states_dedupe_key_hash"],
             ("dedupe_key_hash",),
+        )
+        self.assertEqual(
+            durable_indexes["ux_durable_task_active_dedupe"],
+            ("owner_user_id", "task_type", "active_dedupe_key_hash"),
         )
 
         progress_indexes = _sqlite_index_columns(db._engine, "durable_task_progress_events")
