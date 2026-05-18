@@ -1,5 +1,13 @@
 ## 2026-05-18
 
+- 🧯 **Admin incident timeline backend foundation** - Added a read-only
+  `/api/v1/admin/logs/incident-timeline` projection that correlates existing
+  execution log sessions/events into a sanitized incident timeline by
+  session/request/query/symbol/time window. Data-missing drilldown now includes
+  safe sample session and business-event ids, and Admin Logs business-event
+  provider/model/channel filters are honored without changing provider runtime,
+  LLM cost writes, notifications, scoring, or frontend code.
+
 - 🧭 **Docs governance archive pruning** - Slimmed active docs navigation by
   moving stale frontend DOM/CSS/bundle/old launch UX evidence into
   `docs/audits/archive/frontend/`, moving point-in-time QA reports into

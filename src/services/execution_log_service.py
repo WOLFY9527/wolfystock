@@ -3358,6 +3358,9 @@ class ExecutionLogService:
         backtest_id: Optional[str] = None,
         request_id: Optional[str] = None,
         user_id: Optional[str] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        channel: Optional[str] = None,
         status: Optional[str] = None,
         query: Optional[str] = None,
         since: Optional[str] = None,
@@ -3381,15 +3384,20 @@ class ExecutionLogService:
         backtest_filter = _as_str(backtest_id)
         request_filter = _as_str(request_id)
         user_filter = _as_str(user_id)
+        provider_filter = _as_str(provider).lower()
+        model_filter = _as_str(model).lower()
+        channel_filter = _as_str(channel).lower()
         status_filter = _normalize_business_status(status) if status else None
         query_text = _as_str(query).lower()
         items: List[Dict[str, Any]] = []
         details_by_session = self._load_session_details(rows)
         for row in rows:
             session_id = str(row.get("session_id") or "")
-            event = self._session_to_business_event(row, detail=details_by_session.get(session_id, {}))
+            detail = details_by_session.get(session_id, {})
+            event = self._session_to_business_event(row, detail=detail)
             if event is None:
                 continue
+            steps = self._build_business_steps_from_session(detail)
             if category_filter and event.get("category") != category_filter:
                 continue
             if status_filter and event.get("status") != status_filter:
@@ -3407,6 +3415,12 @@ class ExecutionLogService:
             if request_filter and event.get("requestId") != request_filter:
                 continue
             if user_filter and event.get("userId") != user_filter:
+                continue
+            if provider_filter and not self._business_event_matches_dimension(event, steps, provider_filter, "provider"):
+                continue
+            if model_filter and not self._business_event_matches_dimension(event, steps, model_filter, "model"):
+                continue
+            if channel_filter and not self._business_event_matches_dimension(event, steps, channel_filter, "channel"):
                 continue
             if query_text:
                 haystack = " ".join(
@@ -3448,6 +3462,46 @@ class ExecutionLogService:
         requested_limit = max(1, min(int(limit), 200))
         start = max(0, int(offset))
         return items[start:start + requested_limit], total
+
+    @staticmethod
+    def _business_event_matches_dimension(
+        event: Dict[str, Any],
+        steps: List[Dict[str, Any]],
+        filter_text: str,
+        dimension: str,
+    ) -> bool:
+        if not filter_text:
+            return True
+
+        def contains(value: Any) -> bool:
+            return filter_text in _as_str(value).lower()
+
+        if dimension == "provider":
+            if contains(event.get("provider")) or contains(event.get("source")):
+                return True
+            return any(contains(step.get("provider")) for step in steps if isinstance(step, dict))
+        if dimension == "model":
+            if contains((event.get("metadata") or {}).get("model") if isinstance(event.get("metadata"), dict) else None):
+                return True
+            return any(contains(step.get("model")) for step in steps if isinstance(step, dict))
+        if dimension == "channel":
+            if event.get("category") == "notification" and (contains(event.get("provider")) or contains(event.get("source"))):
+                return True
+            return any(
+                (
+                    contains(step.get("provider"))
+                    or contains(step.get("channel"))
+                    or contains(step.get("name"))
+                )
+                for step in steps
+                if isinstance(step, dict)
+                and (
+                    _as_str(step.get("category")).lower() == "notification"
+                    or "notification" in _as_str(step.get("name")).lower()
+                    or "send_notification" in _as_str(step.get("name")).lower()
+                )
+            )
+        return False
 
     def get_business_event_detail(self, event_id: str) -> Optional[Dict[str, Any]]:
         row = self.db.get_execution_log_session_detail(event_id)

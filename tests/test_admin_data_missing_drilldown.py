@@ -198,12 +198,16 @@ class AdminDataMissingDrilldownServiceTestCase(unittest.TestCase):
         self.assertEqual(quote_bucket["latest_seen_at"], newer.isoformat())
         self.assertEqual(quote_bucket["count"], 2)
         self.assertEqual(quote_bucket["sample_event_ids"], [str(first_id), str(second_id)])
+        self.assertEqual(quote_bucket["sample_session_ids"], ["analysis-aapl", "analysis-tsla"])
+        self.assertEqual(quote_bucket["sample_business_event_ids"], ["evt-aapl", "evt-tsla"])
 
         news_bucket = next(item for item in payload["items"] if item["missing_domain"] == "news")
         self.assertEqual(news_bucket["provider"], "newsapi")
         self.assertEqual(news_bucket["freshness_status"], "missing")
         self.assertEqual(news_bucket["count"], 1)
         self.assertEqual(news_bucket["symbol"], "NVDA")
+        self.assertEqual(news_bucket["sample_session_ids"], ["analysis-nvda"])
+        self.assertEqual(news_bucket["sample_business_event_ids"], ["evt-nvda"])
 
     def test_sanitizes_details_and_does_not_expose_secrets_or_tokens(self) -> None:
         now = datetime(2026, 5, 18, 10, 0, 0)
