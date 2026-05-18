@@ -13,7 +13,10 @@ Test backend data contract extensions:
 
 from api.v1.schemas.analysis import AnalyzeRequest
 from concurrent.futures import Future
+import tempfile
+from pathlib import Path
 from src.services.task_queue import TaskInfo, get_task_queue, DuplicateTaskError, AnalysisTaskQueue
+from src.storage import DatabaseManager
 
 
 class TestAnalyzeRequest:
@@ -117,6 +120,10 @@ class TestTaskQueue:
     def setup_method(self):
         self._original_instance = AnalysisTaskQueue._instance
         AnalysisTaskQueue._instance = None
+        DatabaseManager.reset_instance()
+        self._temp_dir = tempfile.TemporaryDirectory()
+        self._db_path = Path(self._temp_dir.name) / "autocomplete-task-queue.sqlite"
+        self._db = DatabaseManager(db_url=f"sqlite:///{self._db_path}")
 
     def teardown_method(self):
         queue = AnalysisTaskQueue._instance
@@ -125,6 +132,8 @@ class TestTaskQueue:
             if executor is not None and hasattr(executor, "shutdown"):
                 executor.shutdown(wait=False, cancel_futures=True)
         AnalysisTaskQueue._instance = self._original_instance
+        DatabaseManager.reset_instance()
+        self._temp_dir.cleanup()
 
     @staticmethod
     def _build_queue():
@@ -204,6 +213,10 @@ class TestIntegration:
     def setup_method(self):
         self._original_instance = AnalysisTaskQueue._instance
         AnalysisTaskQueue._instance = None
+        DatabaseManager.reset_instance()
+        self._temp_dir = tempfile.TemporaryDirectory()
+        self._db_path = Path(self._temp_dir.name) / "autocomplete-integration.sqlite"
+        self._db = DatabaseManager(db_url=f"sqlite:///{self._db_path}")
 
     def teardown_method(self):
         queue = AnalysisTaskQueue._instance
@@ -212,6 +225,8 @@ class TestIntegration:
             if executor is not None and hasattr(executor, "shutdown"):
                 executor.shutdown(wait=False, cancel_futures=True)
         AnalysisTaskQueue._instance = self._original_instance
+        DatabaseManager.reset_instance()
+        self._temp_dir.cleanup()
 
     def test_end_to_end_flow_with_autocomplete(self):
         """Test end-to-end flow: autocomplete -> analysis request -> task creation"""

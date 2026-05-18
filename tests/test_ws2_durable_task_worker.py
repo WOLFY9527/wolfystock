@@ -214,6 +214,44 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
         self.assertEqual(second_claim["attempt_count"], 2)
         self.assertIsNone(stale_complete)
 
+    def test_reclaimed_active_lease_still_blocks_duplicate_reservation(self) -> None:
+        self.db.create_durable_task_state(
+            task_id="task-active-dedupe-reclaim",
+            owner_user_id="user-a",
+            task_type=SYNTHETIC_TASK_TYPE,
+            status="queued",
+            current_step="Queued",
+            max_attempts=3,
+            dedupe_key="user-a:AAPL.US",
+            metadata={"stock_code": "AAPL"},
+        )
+        first_claim = self.db.claim_next_durable_task_state(
+            worker_id="worker-a",
+            task_type=SYNTHETIC_TASK_TYPE,
+            lease_seconds=1,
+        )
+        self.assertIsNotNone(first_claim)
+        expired_time = datetime.fromisoformat(first_claim["lease_expires_at"]) + timedelta(seconds=1)
+        second_claim = self.db.claim_next_durable_task_state(
+            worker_id="worker-b",
+            task_type=SYNTHETIC_TASK_TYPE,
+            now=expired_time,
+        )
+
+        duplicate_create, active_duplicate = self.db.reserve_durable_task_state(
+            task_id="task-active-dedupe-duplicate",
+            owner_user_id="user-a",
+            task_type=SYNTHETIC_TASK_TYPE,
+            status="queued",
+            dedupe_key="user-a:AAPL.US",
+            metadata={"stock_code": "AAPL"},
+        )
+
+        self.assertIsNotNone(second_claim)
+        self.assertIsNone(duplicate_create)
+        self.assertIsNotNone(active_duplicate)
+        self.assertEqual(active_duplicate["task_id"], "task-active-dedupe-reclaim")
+
     def test_terminal_completion_and_failure_are_idempotent_for_repeated_attempts(self) -> None:
         self._create_task("task-repeat-complete")
         worker = DurableTaskWorkerPrototype(db=self.db, worker_id="worker-a")

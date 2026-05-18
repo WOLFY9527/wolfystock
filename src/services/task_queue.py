@@ -557,6 +557,34 @@ class AnalysisTaskQueue:
             logger.warning("[TaskQueue] Durable task create mirror failed for task_id=%s: %s", task.task_id, type(exc).__name__)
 
     @staticmethod
+    def _reserve_durable_task_create(task: TaskInfo, *, force_refresh: bool) -> Optional[DuplicateTaskError]:
+        """Reserve the durable active-dedupe slot before local execution starts."""
+        try:
+            from src.storage import DatabaseManager
+
+            db = DatabaseManager.get_instance()
+            created, duplicate = db.reserve_durable_task_state(
+                task_id=task.task_id,
+                owner_user_id=task.owner_id,
+                task_type="analysis",
+                route_family="/api/v1/analysis",
+                status=task.status.value,
+                progress=task.progress,
+                current_step=task.message,
+                dedupe_key=_dedupe_stock_code_key(task.stock_code, task.owner_id),
+                metadata=AnalysisTaskQueue._durable_metadata_for_task(task, force_refresh=force_refresh),
+            )
+            if duplicate is not None:
+                existing_task_id = str(duplicate.get("task_id") or "").strip()
+                if existing_task_id:
+                    return DuplicateTaskError(task.stock_code, existing_task_id)
+            if created is None:
+                logger.warning("[TaskQueue] Durable task reservation returned no task for task_id=%s", task.task_id)
+        except Exception as exc:
+            logger.warning("[TaskQueue] Durable task reservation failed for task_id=%s: %s", task.task_id, type(exc).__name__)
+        return None
+
+    @staticmethod
     def _mirror_durable_task_update(
         task: TaskInfo,
         *,
@@ -739,9 +767,13 @@ class AnalysisTaskQueue:
                     owner_id=owner_id,
                     research_mode=normalized_research_mode,
                 )
+                durable_duplicate = self._reserve_durable_task_create(task_info, force_refresh=force_refresh)
+                if durable_duplicate is not None:
+                    duplicates.append(durable_duplicate)
+                    continue
+
                 self._tasks[task_id] = task_info
                 self._analyzing_stocks[dedupe_key] = task_id
-                self._mirror_durable_task_create(task_info, force_refresh=force_refresh)
 
                 try:
                     future = self.executor.submit(
@@ -780,9 +812,18 @@ class AnalysisTaskQueue:
 
             task = self._tasks.pop(task_id, None)
             if task:
-                    dedupe_key = _dedupe_stock_code_key(task.stock_code, task.owner_id)
-                    if self._analyzing_stocks.get(dedupe_key) == task_id:
-                        del self._analyzing_stocks[dedupe_key]
+                dedupe_key = _dedupe_stock_code_key(task.stock_code, task.owner_id)
+                if self._analyzing_stocks.get(dedupe_key) == task_id:
+                    del self._analyzing_stocks[dedupe_key]
+                self._mirror_durable_task_update(
+                    task,
+                    status=TaskStatus.FAILED.value,
+                    progress=100,
+                    current_step="任务提交失败",
+                    failed_at=datetime.now(),
+                    error_code="task_submission_failed",
+                    error_summary="Executor submission failed before task acceptance",
+                )
     
     def get_task(self, task_id: str, owner_id: Optional[str] = None) -> Optional[TaskInfo]:
         """
