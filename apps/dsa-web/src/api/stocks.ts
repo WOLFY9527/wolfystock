@@ -1,4 +1,5 @@
 import apiClient from './index';
+import { toCamelCase } from './utils';
 
 export type ExtractItem = {
   code?: string | null;
@@ -23,10 +24,58 @@ export type StockHistoryPoint = {
   changePercent?: number | null;
 };
 
+export type StockHistoryProviderTraceItem = {
+  sequence?: number | null;
+  provider?: string | null;
+  action?: string | null;
+  outcome?: string | null;
+  status?: string | null;
+  reason?: string | null;
+  message?: string | null;
+};
+
+export type StockHistoryLocalFallback = {
+  source?: string | null;
+  rows?: number | null;
+  latestTradeDate?: string | null;
+  dataSources?: string[] | null;
+};
+
+export type StockHistoryDiagnostics = {
+  status?: string | null;
+  reason?: string | null;
+  message?: string | null;
+  source?: string | null;
+  rows?: number | null;
+  requestedDays?: number | null;
+  providerTrace?: StockHistoryProviderTraceItem[] | null;
+  localFallback?: StockHistoryLocalFallback | null;
+  error?: string | null;
+};
+
+export type StockHistorySourceConfidence = {
+  source?: string | null;
+  sourceLabel?: string | null;
+  asOf?: string | null;
+  freshness?: string | null;
+  isFallback?: boolean;
+  isStale?: boolean;
+  isPartial?: boolean;
+  isSynthetic?: boolean;
+  isUnavailable?: boolean;
+  confidenceWeight?: number | null;
+  coverage?: number | null;
+  degradationReason?: string | null;
+  capReason?: string | null;
+};
+
 export type StockHistoryResponse = {
   stockCode: string;
   stockName?: string | null;
   period: 'daily' | 'weekly' | 'monthly' | 'yearly' | string;
+  source?: string | null;
+  diagnostics?: StockHistoryDiagnostics | null;
+  sourceConfidence?: StockHistorySourceConfidence | null;
   data: StockHistoryPoint[];
 };
 
@@ -54,10 +103,35 @@ export type StockValidationResponse = {
   stockName?: string | null;
 };
 
+function normalizeStockHistoryResponse(payload: unknown): StockHistoryResponse {
+  const normalized = toCamelCase<StockHistoryResponse>(payload);
+  return {
+    stockCode: normalized.stockCode,
+    stockName: normalized.stockName ?? null,
+    period: normalized.period,
+    source: normalized.source ?? null,
+    diagnostics: normalized.diagnostics ?? null,
+    sourceConfidence: normalized.sourceConfidence ?? null,
+    data: Array.isArray(normalized.data) ? normalized.data : [],
+  };
+}
+
+function normalizeStockIntradayResponse(payload: unknown): StockIntradayResponse {
+  const normalized = toCamelCase<StockIntradayResponse>(payload);
+  return {
+    stockCode: normalized.stockCode,
+    stockName: normalized.stockName ?? null,
+    interval: normalized.interval,
+    range: normalized.range,
+    source: normalized.source ?? null,
+    data: Array.isArray(normalized.data) ? normalized.data : [],
+  };
+}
+
 export const stocksApi = {
   async verifyTickerExists(stockCode: string): Promise<StockValidationResponse> {
     const response = await apiClient.get(`/api/v1/stocks/${encodeURIComponent(stockCode)}/validate`);
-    return response.data as StockValidationResponse;
+    return toCamelCase<StockValidationResponse>(response.data);
   },
 
   async getHistory(
@@ -70,7 +144,7 @@ export const stocksApi = {
     const response = await apiClient.get(`/api/v1/stocks/${encodeURIComponent(stockCode)}/history`, {
       params,
     });
-    return response.data as StockHistoryResponse;
+    return normalizeStockHistoryResponse(response.data);
   },
 
   async getIntraday(
@@ -83,7 +157,7 @@ export const stocksApi = {
     const response = await apiClient.get(`/api/v1/stocks/${encodeURIComponent(stockCode)}/intraday`, {
       params,
     });
-    return response.data as StockIntradayResponse;
+    return normalizeStockIntradayResponse(response.data);
   },
 
   async extractFromImage(file: File): Promise<ExtractFromImageResponse> {
