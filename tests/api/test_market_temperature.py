@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
@@ -63,6 +64,7 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertGreater(payload["fallbackInputCount"], 0)
         self.assertGreater(payload["excludedInputCount"], 0)
         self.assertFalse(payload["isReliable"])
+        self.assertEqual(payload["evidenceSnapshot"]["degradationReason"], "provider_unavailable")
         self.assertEqual(set(payload["scores"].keys()), {"overall", "usRiskAppetite", "cnMoneyEffect", "macroPressure", "liquidity"})
         for score in payload["scores"].values():
             self.assertGreaterEqual(score["value"], 0)
@@ -120,6 +122,39 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertTrue(payload["isReliable"])
         self.assertEqual(payload["excludedInputCount"], 1)
         self.assertGreater(payload["scores"]["usRiskAppetite"]["value"], 40)
+
+    def test_low_coverage_mixed_temperature_is_not_reliable(self) -> None:
+        service = MarketOverviewService()
+        inputs = copy.deepcopy(service._fallback_market_temperature_inputs())
+
+        for key, source in (("indices", "sina"), ("rates", "sina"), ("crypto", "binance")):
+            panel = inputs[key]
+            panel["source"] = source
+            panel["sourceLabel"] = "实时数据"
+            panel["fallbackUsed"] = False
+            panel["isFallback"] = False
+            panel["freshness"] = "live"
+            for idx, item in enumerate(panel.get("items", [])):
+                if idx != 0:
+                    continue
+                item["source"] = source
+                item["sourceLabel"] = "实时数据"
+                item["fallbackUsed"] = False
+                item["isFallback"] = False
+                item["freshness"] = "live"
+
+        with patch.object(service, "_build_market_temperature_inputs", return_value=inputs):
+            payload = service.get_market_temperature()
+
+        self.assertFalse(payload["isReliable"])
+        self.assertEqual(payload["source"], "mixed")
+        self.assertEqual(payload["sourceLabel"], "多来源")
+        self.assertFalse(payload["isFallback"])
+        self.assertTrue(payload["fallbackUsed"])
+        self.assertLess(payload["confidence"], 0.25)
+        self.assertLess(payload["evidenceSnapshot"]["coverage"], 0.25)
+        self.assertEqual(payload["evidenceSnapshot"]["degradationReason"], "partial_coverage")
+        self.assertEqual(payload["scores"]["overall"]["label"], "数据不足")
 
     def test_temperature_counts_real_inputs(self) -> None:
         service = MarketOverviewService()

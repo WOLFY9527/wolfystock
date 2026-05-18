@@ -563,7 +563,10 @@ class MarketOverviewService:
     def get_market_temperature(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         def fetcher() -> Dict[str, Any]:
             inputs = self._get_market_temperature_input_snapshot()
-            trust = self._summarize_market_temperature_confidence(inputs)
+            trust = self._market_temperature_trust(
+                inputs,
+                self._summarize_market_temperature_confidence(inputs),
+            )
             source = "computed" if trust["isReliable"] and not trust["fallbackInputCount"] else "mixed"
             if trust["reliableInputCount"] == 0:
                 source = "fallback"
@@ -590,7 +593,10 @@ class MarketOverviewService:
 
         def fallback_factory() -> Dict[str, Any]:
             inputs = self._fallback_market_temperature_inputs()
-            trust = self._summarize_market_temperature_confidence(inputs)
+            trust = self._market_temperature_trust(
+                inputs,
+                self._summarize_market_temperature_confidence(inputs),
+            )
             return {
                 "source": "fallback",
                 "updatedAt": _now_iso(),
@@ -3116,6 +3122,9 @@ class MarketOverviewService:
             "excludedInputCount": excluded_count,
             "isReliable": is_reliable,
         }
+
+    def _market_temperature_trust(self, inputs: Dict[str, Any], trust: Dict[str, Any]) -> Dict[str, Any]:
+        return self._market_briefing_trust(inputs, trust)
 
     def _market_briefing_trust(self, inputs: Dict[str, Any], trust: Dict[str, Any]) -> Dict[str, Any]:
         reliable_panel_count = 0

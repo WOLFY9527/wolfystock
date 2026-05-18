@@ -185,6 +185,44 @@ def test_market_overview_liquidity_and_degraded_temperature_stay_truthful() -> N
     assert temperature_payload["isFallback"] is True
     assert temperature_payload["isReliable"] is False
     assert temperature_payload["scores"]["overall"]["label"] == "数据不足"
+    assert temperature_payload["evidenceSnapshot"]["degradationReason"] == "provider_unavailable"
+
+    market_cache.clear()
+    MarketOverviewService._market_cache.clear()
+    MarketOverviewService._market_data_cache.clear()
+
+    degraded_temperature_inputs = copy.deepcopy(service._fallback_market_temperature_inputs())
+    for key, source in (("indices", "sina"), ("rates", "sina"), ("crypto", "binance")):
+        panel = degraded_temperature_inputs[key]
+        panel["source"] = source
+        panel["sourceLabel"] = "实时数据"
+        panel["fallbackUsed"] = False
+        panel["isFallback"] = False
+        panel["freshness"] = "live"
+        for idx, item in enumerate(panel.get("items", [])):
+            if idx != 0:
+                continue
+            item["source"] = source
+            item["sourceLabel"] = "实时数据"
+            item["fallbackUsed"] = False
+            item["isFallback"] = False
+            item["freshness"] = "live"
+
+    with patch.object(service, "_build_market_temperature_inputs", return_value=degraded_temperature_inputs):
+        degraded_temperature_payload = service.get_market_temperature()
+
+    assert degraded_temperature_payload["source"] == "mixed"
+    assert degraded_temperature_payload["isFallback"] is False
+    assert degraded_temperature_payload["fallbackUsed"] is True
+    assert degraded_temperature_payload["isReliable"] is False
+    assert degraded_temperature_payload["confidence"] < 0.25
+    assert degraded_temperature_payload["evidenceSnapshot"]["coverage"] < 0.25
+    assert degraded_temperature_payload["evidenceSnapshot"]["degradationReason"] == "partial_coverage"
+    assert degraded_temperature_payload["scores"]["overall"]["label"] == "数据不足"
+
+    market_cache.clear()
+    MarketOverviewService._market_cache.clear()
+    MarketOverviewService._market_data_cache.clear()
 
     legacy_sentiment_only_inputs = {
         "indices": {"items": []},
@@ -217,10 +255,10 @@ def test_market_overview_liquidity_and_degraded_temperature_stay_truthful() -> N
     with patch.object(service, "_build_market_temperature_inputs", return_value=legacy_sentiment_only_inputs):
         briefing_payload = service.get_market_briefing()
 
-    assert briefing_payload["source"] == "fallback"
-    assert briefing_payload["freshness"] == "fallback"
-    assert briefing_payload["freshness"] != "live"
-    assert briefing_payload["isFallback"] is True
+    assert briefing_payload["source"] == "mixed"
+    assert briefing_payload["freshness"] == "live"
+    assert briefing_payload["isFallback"] is False
+    assert briefing_payload["fallbackUsed"] is True
     assert briefing_payload["isReliable"] is False
     assert all(item["category"] == "risk" for item in briefing_payload["items"])
     assert all(item["severity"] in {"warning", "neutral"} for item in briefing_payload["items"])
