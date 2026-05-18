@@ -1,5 +1,14 @@
 ## 2026-05-18
 
+- **Offline factor research report scaffold** - Added additive
+  `src/services/factor_research_report.py` plus fixture-backed contract tests to
+  aggregate `FactorObservation` inputs with offline factor metrics,
+  neutralization summaries, and exposure helpers into a deterministic research
+  summary. The scaffold reports factor coverage, IC/Rank IC/decay/turnover and
+  peer-correlation sections, neutralization warnings, basket/portfolio exposure
+  summaries, and explicit missing-data or insufficient-sample reasons. This
+  remains offline-only and does not wire into Scanner, Backtest, provider
+  runtime, database schema, or frontend surfaces.
 - **Market Overview provider deadlines** - Added bounded yfinance transport
   timeouts plus aggregate budgets for yfinance proxy panels, official macro
   collection, sentiment fallback, and Market Temperature input gathering. Slow
