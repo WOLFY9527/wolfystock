@@ -285,7 +285,7 @@ Baseline checks:
 - `apps/dsa-web/src/pages/__tests__/UserScannerPage.test.tsx`: test `exports csv with expected scanner result headers` asserts the current English header row.
 - `apps/dsa-web/src/i18n/core.ts`: Scanner route chrome contains localized export copy such as `导出 CSV` / `Export CSV`; no localized CSV header map exists.
 - `docs/audits/archive/frontend/wolfystock-chinese-form-label-review.md`: classifies Scanner CSV headers and generated filenames as P3 export artifacts requiring a product decision before implementation.
-- `docs/design/wolfystock-canonical-ui-primitives.md`: Chinese route chrome should localize except accepted domain/developer terms.
+- `docs/frontend/visual-system.md`: Chinese route chrome should localize except accepted domain/developer terms.
 - `docs/operations/parallel-codex-playbook.md`: docs-only tasks should use targeted inspection, stage explicit paths only, and avoid unrelated files.
 
 ### Compatibility-Sensitive Fields

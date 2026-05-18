@@ -100,12 +100,9 @@ Final response:
 Task: <frontend implementation task>.
 
 Read and obey:
-- docs/codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md
-- docs/codex/WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md
-- docs/codex/WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md
-- docs/codex/WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md
-- docs/codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md
-- docs/codex/CODEX_FRONTEND_DESIGN_CONSTITUTION.md
+- docs/frontend/README.md
+- docs/frontend/visual-system.md
+- docs/frontend/validation-playbook.md
 
 Goal:
 - <3-6 line goal>

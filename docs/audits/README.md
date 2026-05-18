@@ -90,21 +90,15 @@ Admin data and governance designs:
 - `admin-governance-cost-e2e-qa-runbook.md`
 - `admin-role-management-ui-design.md`
 
-Frontend guidance retained as current code-support material:
+Frontend guidance:
 
-- `frontend-information-density-and-guidance-standard.md`
-- `frontend-guided-information-system.md`
-- `frontend-guided-disclosure-primitives.md`
-- `frontend-domain-education-copy-pack.md`
-- `frontend-ux-density-audit-harness.md`
-- `wolfystock-css-ownership-inventory.md`
-- `wolfystock-css-selector-usage-verification.md`
-- `wolfystock-frontend-design-conformance-audit.md`
+Current frontend guidance now lives in `docs/frontend/`. Historical frontend
+audit evidence lives in `docs/frontend/archive/` and
+`docs/audits/archive/frontend/`.
 
-The three `wolfystock-*` frontend support files above are retained because
-current CSS deletion and design-check guidance still cites them. They are not
-current visual source-of-truth; Reflect-Linear docs in `docs/codex/` and
-`docs/design/` win for frontend design work.
+Use [Frontend Docs](../frontend/README.md) and
+[Frontend Validation Playbook](../frontend/validation-playbook.md) for current
+frontend work.
 
 ## Operator Evidence
 
@@ -122,7 +116,8 @@ current visual source-of-truth; Reflect-Linear docs in `docs/codex/` and
 - `docs/audits/archive/frontend/`: retired frontend DOM, CSS, bundle, route, and old launch UX reports.
 - `docs/qa/archive/`: point-in-time QA reports retained for provenance.
 - `docs/architecture/archive/`: historical architecture and Phase F evidence.
-- `docs/design/archive/old-ui/`: transitional UI replacement notes, not active design authority.
+- `docs/frontend/archive/`: frontend consolidation and transitional UI
+  replacement notes, not active design authority.
 
 Use `docs/ARCHIVE_INDEX.md` for the archive inventory and safe-use rules.
 

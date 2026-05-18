@@ -6,6 +6,11 @@ This document intentionally supersedes older deep-space / terminal / bento / gen
 
 # WolfyStock Frontend UI Documentation Replacement Map
 
+Status: archived historical replacement note. The file paths and install
+commands below describe the original Reflect-Linear docs replacement pack and
+are retained as provenance only. Current frontend authority lives in
+`docs/frontend/`.
+
 This pack replaces the canonical frontend UI/UX design documents with the Reflect-Linear Research OS direction.
 
 ## Included files

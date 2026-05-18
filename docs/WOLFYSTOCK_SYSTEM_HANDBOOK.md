@@ -97,10 +97,9 @@ router defines localized branches.
 
 Route taxonomy authority:
 
-- [Linear OS Design Language](./codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md)
-- [Frontend Surface Usage](./codex/WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md)
-- [Frontend Route Templates](./codex/WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md)
-- [Canonical UI Primitives](./design/wolfystock-canonical-ui-primitives.md)
+- [Frontend Docs](./frontend/README.md)
+- [Frontend Visual System](./frontend/visual-system.md)
+- [Frontend Validation Playbook](./frontend/validation-playbook.md)
 
 ## T-196 Route Migration Status
 
@@ -202,11 +201,8 @@ OS material.
 
 Source:
 
-- [Linear OS Design Language](./codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md)
-- [Frontend Surface Usage](./codex/WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md)
-- [Frontend Route Templates](./codex/WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md)
-- [Terminal Primitives Usage](./codex/WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md)
-- [Canonical UI Primitives](./design/wolfystock-canonical-ui-primitives.md)
+- [Frontend Docs](./frontend/README.md)
+- [Frontend Visual System](./frontend/visual-system.md)
 
 ## Provider And Data Architecture
 
@@ -413,8 +409,7 @@ Current validation authority:
 
 - [Codex Standard Guard](./codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md)
 - [Codex Task Runtime Rules](./codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md)
-- [Frontend Validation Playbook](./codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md)
-- [Visual Evidence Protocol](./codex/WOLFYSTOCK_CODEX_VISUAL_EVIDENCE_PROTOCOL.md)
+- [Frontend Validation Playbook](./frontend/validation-playbook.md)
 - [CI Gate Usage](./audits/ci-gate-usage.md)
 
 ## Local Troubleshooting Commands
@@ -501,7 +496,7 @@ source-of-truth documents are:
 - [Codex Standard Guard](./codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md)
 - [Codex Task Runtime Rules](./codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md)
 - [Backend Protected Domains](./codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md)
-- [Linear OS Design Language](./codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md)
+- [Frontend Visual System](./frontend/visual-system.md)
 - [Audit Index](./audits/README.md)
 - [Archive Index](./ARCHIVE_INDEX.md)
 

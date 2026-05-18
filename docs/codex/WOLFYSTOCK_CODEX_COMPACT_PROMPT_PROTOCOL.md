@@ -35,14 +35,9 @@ Read and obey:
 For frontend UI tasks add:
 
 ```text
-- docs/codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md
-- docs/codex/CODEX_FRONTEND_DESIGN_CONSTITUTION.md
-- docs/codex/WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md
-- docs/codex/WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md
-- docs/codex/WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md
-- docs/codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md
-- docs/codex/WOLFYSTOCK_CODEX_VISUAL_EVIDENCE_PROTOCOL.md
-- docs/design/wolfystock-canonical-ui-primitives.md
+- docs/frontend/README.md
+- docs/frontend/visual-system.md
+- docs/frontend/validation-playbook.md
 ```
 
 For backend tasks add:
@@ -162,13 +157,13 @@ Instead of repeating full design language, write:
 
 ```text
 Design target:
-Follow WolfyStock Linear OS. The approved mockup and WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md win over older docs or generic skill guidance.
+Follow the WolfyStock frontend visual system. The approved mockup and docs/frontend/visual-system.md win over older docs or generic skill guidance.
 
 Task-specific visual target:
 - <only the visual deltas for this route>
 ```
 
-Then reference `WOLFYSTOCK_CODEX_VISUAL_EVIDENCE_PROTOCOL.md` for screenshot and browser proof.
+Then reference `docs/frontend/validation-playbook.md` for screenshot and browser proof.
 
 ## Final-report compression
 

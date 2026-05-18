@@ -33,10 +33,9 @@ Use the current WolfyStock Linear OS design language:
 Read with:
 
 ```text
-docs/codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md
-docs/codex/WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md
-docs/codex/WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md
-docs/codex/CODEX_FRONTEND_DESIGN_CONSTITUTION.md
+docs/frontend/README.md
+docs/frontend/visual-system.md
+docs/frontend/validation-playbook.md
 docs/codex/WOLFYSTOCK_PROVIDER_BUDGET_AND_ROUTING_RULES.md
 docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md
 ```

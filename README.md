@@ -95,8 +95,8 @@ Primary reference docs:
 - [WolfyStock AI Maintenance Manual](docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md)
 - [WolfyStock Modular Architecture Manual](docs/architecture/WOLFYSTOCK_MODULE_ARCHITECTURE.md)
 - [Backend / Frontend Modular Maintenance Handbook](docs/architecture/backend-frontend-modular-maintenance-handbook.md)
-- [Frontend Design Constitution](docs/codex/CODEX_FRONTEND_DESIGN_CONSTITUTION.md)
-- [Frontend Validation Playbook](docs/codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md)
+- [Frontend Docs](docs/frontend/README.md)
+- [Frontend Validation Playbook](docs/frontend/validation-playbook.md)
 
 ## AI-Agent Assisted Development
 
@@ -225,7 +225,7 @@ WolfyStock favors focused validation over vague "it should work" claims.
 - **Secret scan**: `bash scripts/release_secret_scan.sh`
 
 For frontend execution tasks, follow the
-[WolfyStock Frontend Validation Playbook](docs/codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md).
+[WolfyStock Frontend Validation Playbook](docs/frontend/validation-playbook.md).
 
 ## Roadmap
 

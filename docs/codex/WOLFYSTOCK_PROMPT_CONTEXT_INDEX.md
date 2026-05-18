@@ -52,13 +52,10 @@ Rules:
 Read:
 
 - `WOLFYSTOCK_CODEX_STANDARD_GUARD.md`
-- `WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`
-- `WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md`
-- `WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md`
-- `WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md`
-- `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
+- `docs/frontend/README.md`
+- `docs/frontend/visual-system.md`
+- `docs/frontend/validation-playbook.md`
 - `WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`
-- `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
 
 ### Admin / operator UI implementation
 
@@ -130,7 +127,7 @@ Do not repeat long lists from these docs unless the task is high-risk:
 For UI work:
 
 1. approved WolfyStock Linear mockup;
-2. `WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`;
-3. frontend surface/route docs;
+2. `docs/frontend/visual-system.md`;
+3. `docs/frontend/README.md`;
 4. `DESIGN.md` as reference only;
 5. installed design skills as execution aids.

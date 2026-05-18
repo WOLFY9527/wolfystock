@@ -31,11 +31,28 @@ evidence, local artifacts, and older inherited guides.
   evidence navigation.
 - [Architecture Docs](./architecture/README.md): current backend, storage, and
   portfolio architecture navigation.
-- [Codex Docs](./codex/README.md): current Codex workflow, prompt, and frontend
-  validation navigation.
-- [Design Docs](./design/README.md): current Reflect-Linear design navigation.
+- [Codex Docs](./codex/README.md): current Codex workflow and prompt
+  navigation.
+- [Design Docs](./design/README.md): current design asset navigation.
 - [Operations Docs](./operations/README.md): current operator runbook and
   artifact-handling navigation.
+- [Frontend Docs](./frontend/README.md): current frontend visual, route,
+  primitive, validation, and archived-evidence navigation.
+- [Backend Docs](./backend/README.md): current backend architecture and
+  protected-domain navigation.
+- [Provider And Data Docs](./provider-data/README.md): current provider,
+  freshness, source-confidence, and data-quality navigation.
+- [Scanner Docs](./scanner/README.md): current scanner/watchlist navigation.
+- [Market Overview Docs](./market-overview/README.md): current market monitor
+  navigation.
+- [Rotation Docs](./rotation/README.md): current rotation-radar navigation.
+- [Liquidity Docs](./liquidity/README.md): current liquidity-monitor navigation.
+- [Portfolio Docs](./portfolio/README.md): current portfolio/ledger navigation.
+- [Backtest Docs](./backtest/README.md): current backtest navigation.
+- [Options Docs](./options/README.md): current Options Lab navigation.
+- [Admin And Ops Docs](./admin-ops/README.md): current admin/operator
+  navigation.
+- [AI And LLM Docs](./ai-llm/README.md): current AI/LLM navigation.
 
 ## Current Authority
 
@@ -56,10 +73,8 @@ operator workflows.
 | Model routing | [Model Routing](./codex/WOLFYSTOCK_CODEX_MODEL_ROUTING.md) |
 | Prompt context lookup | [Prompt Context Index](./codex/WOLFYSTOCK_PROMPT_CONTEXT_INDEX.md) |
 | File/docs governance | [File Governance Taxonomy](./architecture/file-governance-taxonomy.md) |
-| Frontend design authority | [Linear OS Design Language](./codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md) |
-| Frontend route taxonomy | [Frontend Surface Usage](./codex/WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md) and [Route Templates](./codex/WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md) |
-| Frontend primitive policy | [Terminal Primitives Usage](./codex/WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md), [Design Docs](./design/README.md), and [Canonical UI Primitives](./design/wolfystock-canonical-ui-primitives.md) |
-| Frontend validation | [Frontend Validation Playbook](./codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md) and [Visual Evidence Protocol](./codex/WOLFYSTOCK_CODEX_VISUAL_EVIDENCE_PROTOCOL.md) |
+| Frontend design, route taxonomy, primitive policy | [Frontend Docs](./frontend/README.md) and [Frontend Visual System](./frontend/visual-system.md) |
+| Frontend validation | [Frontend Validation Playbook](./frontend/validation-playbook.md) |
 | Launch readiness | [Audit Index](./audits/README.md), [Public Launch Readiness Master](./audits/public-launch-readiness-master.md), and [Public Launch Gap Register](./audits/public-launch-gap-register.md) |
 
 ## Module References
@@ -67,15 +82,15 @@ operator workflows.
 | Module or workflow | Start with | Supporting docs |
 | --- | --- | --- |
 | Analysis and reports | [Full Guide](./full-guide.md), [AI Decision Engine](./ai-decision-engine.md) | [LLM Config Guide](./LLM_CONFIG_GUIDE.md), [Image Extract Prompt](./image-extract-prompt.md) |
-| Scanner and watchlist | [Market Scanner](./market-scanner.md) | [Scanner export label policy](./product/wolfystock-scanner-export-label-policy.md) |
-| Backtest | [Backtest System](./backtest-system.md) | [Backtest helper maintenance](./backtest-helper-maintenance.md), [Rule backtest reopen trust status](./architecture/rule-backtest-reopen-trustworthiness-p0-status-index-2026-04-22.md) |
+| Scanner and watchlist | [Scanner Docs](./scanner/README.md) | [Market Scanner](./market-scanner.md), [Scanner export label policy](./product/wolfystock-scanner-export-label-policy.md) |
+| Backtest | [Backtest Docs](./backtest/README.md) | [Backtest System](./backtest-system.md), [Backtest helper maintenance](./backtest-helper-maintenance.md), [Rule backtest reopen trust status](./architecture/rule-backtest-reopen-trustworthiness-p0-status-index-2026-04-22.md) |
 | Bot notifications | [Discord bot config](./bot/discord-bot-config.md) | [DingTalk bot config](./bot/dingding-bot-config.md), [Feishu bot config](./bot/feishu-bot-config.md) |
-| Portfolio | [Modular Architecture Manual](./architecture/WOLFYSTOCK_MODULE_ARCHITECTURE.md) | [Phase F decisions](./architecture/phase-f/decisions.md), [Phase F status](./architecture/phase-f/status.md), [Phase F runbook](./architecture/phase-f/runbook.md) |
-| Provider and freshness | [Provider Data Freshness Reliability Guide](./audits/provider-data-freshness-reliability-guide.md) | [Provider Capability Metadata](./operations/provider-capability-metadata.md), [Market Data Provider Upgrade Matrix](./audits/market-data-provider-upgrade-decision-matrix.md), [Provider Incident Runbook](./audits/provider-data-incident-runbook.md) |
+| Portfolio | [Portfolio Docs](./portfolio/README.md) | [Phase F decisions](./architecture/phase-f/decisions.md), [Phase F status](./architecture/phase-f/status.md), [Phase F runbook](./architecture/phase-f/runbook.md) |
+| Provider and freshness | [Provider And Data Docs](./provider-data/README.md) | [Provider Data Freshness Reliability Guide](./audits/provider-data-freshness-reliability-guide.md), [Provider Capability Metadata](./operations/provider-capability-metadata.md), [Market Data Provider Upgrade Matrix](./audits/market-data-provider-upgrade-decision-matrix.md), [Provider Incident Runbook](./audits/provider-data-incident-runbook.md) |
 | Provider operations dashboard | [Market Provider Operations Dashboard](./design/wolfystock-market-provider-operations-dashboard.md) | [Provider Capability Metadata](./operations/provider-capability-metadata.md), [Provider Budget And Routing Rules](./codex/WOLFYSTOCK_PROVIDER_BUDGET_AND_ROUTING_RULES.md) |
-| Options Lab | [Options provider adapter contract](./audits/options-provider-adapter-contract.md) | [Options Lab phase 0 design](./audits/options-lab-phase0-design.md), [Trading no-advice policy](./audits/trading-no-advice-product-policy.md) |
-| Admin, security, RBAC | [Auth/RBAC release security guide](./audits/auth-rbac-release-security-guide.md) | [Admin RBAC capability model](./audits/admin-rbac-capability-model-design.md), [Admin role governance plan](./audits/admin-role-governance-plan.md), [Production security hardening audit](./audits/production-security-hardening-audit.md) |
-| Cost, quota, observability | [Cost observability design index](./audits/cost-observability-design-index.md) | [Cost observability roadmap](./audits/cost-observability-implementation-roadmap.md), [Quota/cost notification release guide](./audits/quota-cost-notification-release-guide.md) |
+| Options Lab | [Options Docs](./options/README.md) | [Options provider adapter contract](./audits/options-provider-adapter-contract.md), [Options Lab phase 0 design](./audits/options-lab-phase0-design.md), [Trading no-advice policy](./audits/trading-no-advice-product-policy.md) |
+| Admin, security, RBAC | [Admin And Ops Docs](./admin-ops/README.md) | [Auth/RBAC release security guide](./audits/auth-rbac-release-security-guide.md), [Admin RBAC capability model](./audits/admin-rbac-capability-model-design.md), [Admin role governance plan](./audits/admin-role-governance-plan.md), [Production security hardening audit](./audits/production-security-hardening-audit.md) |
+| Cost, quota, observability | [Admin And Ops Docs](./admin-ops/README.md) and [AI And LLM Docs](./ai-llm/README.md) | [Cost observability roadmap](./audits/cost-observability-implementation-roadmap.md), [Quota/cost notification release guide](./audits/quota-cost-notification-release-guide.md) |
 | DuckDB quant diagnostics | [Quant DuckDB Engine](./quant-duckdb-engine.md) | [DuckDB Operator Smoke Guide](./operations/duckdb-operator-smoke-guide.md), [DuckDB Production Readiness Checklist](./operations/duckdb-production-readiness-checklist.md) |
 | Deployment | [Deploy Guide](./DEPLOY.md) | [Deployment readiness checklist](./audits/deployment-readiness-checklist.md), [Release rollback runbook](./audits/release-rollback-runbook.md), [Zeabur deployment](./docker/zeabur-deployment.md) |
 | Desktop package | [Desktop package guide](./desktop-package.md) | [Deploy Guide](./DEPLOY.md) |
@@ -119,9 +134,12 @@ specific question.
   machine-readable audit bundles.
 - `docs/audits/archive/frontend/`: archived frontend DOM/CSS/bundle/old launch
   UX evidence.
+- `docs/frontend/archive/`: archived frontend docs moved out of active lanes by
+  domain consolidation.
 - `docs/architecture/archive/`: archived architecture and Phase F evidence.
 - `docs/qa/archive/`: archived point-in-time QA reports.
-- `docs/design/archive/old-ui/`: archived transitional UI replacement notes.
+- `docs/frontend/archive/`: archived frontend consolidation and transitional UI
+  replacement notes.
 
 ## Local Or Ignored Docs Excluded From Authority
 
