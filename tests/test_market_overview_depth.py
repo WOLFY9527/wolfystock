@@ -236,6 +236,32 @@ def test_latest_quote_service_shapes_yfinance_transport_history_frame() -> None:
     }
 
 
+def test_us_breadth_reuses_shared_yfinance_quotes_within_public_request() -> None:
+    service = MarketOverviewService()
+    calls: dict[str, int] = {}
+
+    def fake_history_frame(ticker: str) -> _HistoryFrame:
+        calls[ticker] = calls.get(ticker, 0) + 1
+        base = float(100 + len(calls) * 10)
+        return _HistoryFrame(
+            closes=[base, base + 1.0, base + 2.0],
+            volumes=[1_000_000.0, 1_100_000.0, 1_200_000.0],
+        )
+
+    with (
+        patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", side_effect=fake_history_frame),
+        patch("src.services.market_overview_service.ExecutionLogService") as log_service,
+    ):
+        log_service.return_value.record_market_overview_fetch.return_value = "log-us-breadth"
+        payload = service.get_us_breadth()
+
+    assert payload["source"] == "yfinance_proxy"
+    assert calls["SPY"] == 1
+    assert calls["RSP"] == 1
+    assert calls["QQQ"] == 1
+    assert calls["IWM"] == 1
+
+
 def test_crypto_snapshot_includes_sol_and_funding_when_binance_public_data_available() -> None:
     service = MarketOverviewService()
 

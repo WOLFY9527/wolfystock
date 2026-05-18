@@ -353,6 +353,7 @@ class MarketOverviewService:
     YFINANCE_PROXY_AGGREGATE_BUDGET_SECONDS = 1.8
     OFFICIAL_MACRO_AGGREGATE_BUDGET_SECONDS = 1.8
     OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS = 0.9
+    OFFICIAL_MACRO_MICRO_CACHE_TTL_SECONDS = 15.0
     SENTIMENT_AGGREGATE_BUDGET_SECONDS = 1.8
     MARKET_TEMPERATURE_INPUT_BUDGET_SECONDS = 3.0
     TEMPERATURE_INPUT_SNAPSHOT_CACHE_KEY = "temperature_input_snapshot"
@@ -363,6 +364,10 @@ class MarketOverviewService:
     _cache: Dict[str, tuple[float, PanelPayload]] = {}
     _market_data_cache: Dict[str, Dict[str, Any]] = {}
     _market_cache = market_cache
+
+    def __init__(self) -> None:
+        self._official_macro_micro_cache: Dict[str, tuple[float, List[MacroObservation]]] = {}
+        self._quote_request_memo: Optional[Dict[str, tuple[bool, Any]]] = None
 
     INDEX_SYMBOLS = {
         "SPX": ("S&P 500", "^GSPC"),
@@ -434,10 +439,14 @@ class MarketOverviewService:
     }
 
     def get_indices(self, actor: Optional[Dict[str, Any]] = None) -> PanelPayload:
-        return self._panel("indices", "IndexTrendsCard", "/api/v1/market-overview/indices", self._fetch_indices, actor)
+        return self._with_request_quote_memo(
+            lambda: self._panel("indices", "IndexTrendsCard", "/api/v1/market-overview/indices", self._fetch_indices, actor)
+        )
 
     def get_volatility(self, actor: Optional[Dict[str, Any]] = None) -> PanelPayload:
-        return self._panel("volatility", "VolatilityCard", "/api/v1/market-overview/volatility", self._fetch_volatility, actor)
+        return self._with_request_quote_memo(
+            lambda: self._panel("volatility", "VolatilityCard", "/api/v1/market-overview/volatility", self._fetch_volatility, actor)
+        )
 
     def get_sentiment(self, actor: Optional[Dict[str, Any]] = None) -> PanelPayload:
         return self._panel(
@@ -449,10 +458,14 @@ class MarketOverviewService:
         )
 
     def get_funds_flow(self, actor: Optional[Dict[str, Any]] = None) -> PanelPayload:
-        return self._panel("funds_flow", "FundsFlowCard", "/api/v1/market-overview/funds-flow", self._fetch_funds_flow, actor)
+        return self._with_request_quote_memo(
+            lambda: self._panel("funds_flow", "FundsFlowCard", "/api/v1/market-overview/funds-flow", self._fetch_funds_flow, actor)
+        )
 
     def get_macro(self, actor: Optional[Dict[str, Any]] = None) -> PanelPayload:
-        return self._panel("macro", "MacroIndicatorsCard", "/api/v1/market-overview/macro", self._fetch_macro, actor)
+        return self._with_request_quote_memo(
+            lambda: self._panel("macro", "MacroIndicatorsCard", "/api/v1/market-overview/macro", self._fetch_macro, actor)
+        )
 
     def get_crypto(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         return self._market_snapshot(
@@ -515,13 +528,15 @@ class MarketOverviewService:
         )
 
     def get_us_breadth(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return self._classified_snapshot(
-            cache_key="us_breadth",
-            panel_name="UsBreadthCard",
-            endpoint_url="/api/v1/market/us-breadth",
-            fetcher=self._fetch_us_breadth_snapshot,
-            fallback_factory=self._fallback_us_breadth_snapshot,
-            actor=actor,
+        return self._with_request_quote_memo(
+            lambda: self._classified_snapshot(
+                cache_key="us_breadth",
+                panel_name="UsBreadthCard",
+                endpoint_url="/api/v1/market/us-breadth",
+                fetcher=self._fetch_us_breadth_snapshot,
+                fallback_factory=self._fallback_us_breadth_snapshot,
+                actor=actor,
+            )
         )
 
     def get_rates(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -1210,6 +1225,15 @@ class MarketOverviewService:
         if remaining <= 0:
             return None
         return min(max(0.001, float(per_call_timeout)), remaining)
+
+    def _with_request_quote_memo(self, callback: Callable[[], Dict[str, Any]]) -> Dict[str, Any]:
+        if self._quote_request_memo is not None:
+            return callback()
+        self._quote_request_memo = {}
+        try:
+            return callback()
+        finally:
+            self._quote_request_memo = None
 
     def _provider_health_status(self, payload: Dict[str, Any]) -> str:
         source = str(payload.get("source") or "").lower()
@@ -2233,20 +2257,35 @@ class MarketOverviewService:
         budget_seconds: Optional[float] = None,
     ) -> Dict[str, List[MacroObservation]]:
         points: Dict[str, List[MacroObservation]] = {}
+        fetched_at = time.monotonic()
+        fred_series_ids = ["DGS2", "DGS10", "DGS30", "VIXCLS", "SOFR"]
+        if include_credit_stress:
+            fred_series_ids.append("BAMLH0A0HYM2")
+        for series_id in fred_series_ids:
+            cached_points = self._cached_official_macro_series(series_id, fetched_at)
+            if cached_points:
+                points[series_id] = cached_points
+
         deadline = self._deadline_after(
             self.OFFICIAL_MACRO_AGGREGATE_BUDGET_SECONDS
             if budget_seconds is None
             else budget_seconds
         )
-        timeout = self._deadline_timeout(deadline, self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
+        treasury_series_ids = {"DGS2", "DGS10", "DGS30"}
+        if any(series_id not in points for series_id in treasury_series_ids):
+            timeout = self._deadline_timeout(deadline, self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
+        else:
+            timeout = None
         if timeout is not None:
             try:
-                points.update(fetch_treasury_daily_rate_observation_points(limit=2, timeout=timeout))
+                treasury_points = fetch_treasury_daily_rate_observation_points(limit=2, timeout=timeout)
             except Exception:
-                pass
-        fred_series_ids = ["DGS2", "DGS10", "DGS30", "VIXCLS", "SOFR"]
-        if include_credit_stress:
-            fred_series_ids.append("BAMLH0A0HYM2")
+                treasury_points = {}
+            self._store_official_macro_points(treasury_points, fetched_at)
+            for series_id in treasury_series_ids:
+                series_points = treasury_points.get(series_id, [])
+                if series_points:
+                    points[series_id] = list(series_points)
         for series_id in fred_series_ids:
             if series_id in points and points[series_id]:
                 continue
@@ -2258,8 +2297,24 @@ class MarketOverviewService:
             except Exception:
                 series_points = []
             if series_points:
+                self._store_official_macro_points({series_id: series_points}, fetched_at)
                 points[series_id] = series_points
         return points
+
+    def _cached_official_macro_series(self, series_id: str, now_monotonic: float) -> Optional[List[MacroObservation]]:
+        cached = self._official_macro_micro_cache.get(series_id)
+        if not cached:
+            return None
+        fetched_at, observations = cached
+        if now_monotonic - fetched_at > float(self.OFFICIAL_MACRO_MICRO_CACHE_TTL_SECONDS):
+            self._official_macro_micro_cache.pop(series_id, None)
+            return None
+        return list(observations)
+
+    def _store_official_macro_points(self, points: Dict[str, List[MacroObservation]], fetched_at: float) -> None:
+        for series_id, observations in points.items():
+            if observations:
+                self._official_macro_micro_cache[series_id] = (fetched_at, list(observations))
 
     def _official_macro_item(
         self,
@@ -2716,6 +2771,11 @@ class MarketOverviewService:
         }
 
     def _build_market_temperature_inputs(self, *, budget_seconds: Optional[float] = None) -> Dict[str, Any]:
+        return self._with_request_quote_memo(
+            lambda: self._build_market_temperature_inputs_from_internal_snapshots(budget_seconds=budget_seconds)
+        )
+
+    def _build_market_temperature_inputs_from_internal_snapshots(self, *, budget_seconds: Optional[float] = None) -> Dict[str, Any]:
         deadline = self._deadline_after(
             self.MARKET_TEMPERATURE_INPUT_BUDGET_SECONDS
             if budget_seconds is None
@@ -2723,62 +2783,102 @@ class MarketOverviewService:
         )
         indices = self._temperature_panel(
             "indices",
-            self.get_cn_indices,
+            lambda: self._cached_payload(
+                "cn_indices",
+                self._fetch_cn_indices_snapshot,
+                self._fallback_cn_indices_snapshot,
+            ),
             self._fallback_cn_indices_snapshot,
             deadline=deadline,
         )
         breadth = self._temperature_panel(
             "breadth",
-            self.get_cn_breadth,
+            lambda: self._cached_payload(
+                "cn_breadth",
+                self._fetch_cn_breadth_snapshot,
+                self._fallback_cn_breadth_snapshot,
+            ),
             self._fallback_cn_breadth_snapshot,
             deadline=deadline,
         )
         flows = self._temperature_panel(
             "flows",
-            self.get_cn_flows,
+            lambda: self._cached_payload(
+                "cn_flows",
+                self._fetch_cn_flows_snapshot,
+                self._fallback_cn_flows_snapshot,
+            ),
             self._fallback_cn_flows_snapshot,
             deadline=deadline,
         )
         sectors = self._temperature_panel(
             "sectors",
-            self.get_sector_rotation,
+            lambda: self._cached_payload(
+                "sector_rotation",
+                self._fetch_sector_rotation_snapshot,
+                self._fallback_sector_rotation_snapshot,
+            ),
             self._fallback_sector_rotation_snapshot,
             deadline=deadline,
         )
         rates = self._temperature_panel(
             "rates",
-            self.get_rates,
+            lambda: self._cached_payload(
+                "rates",
+                self._fetch_rates_snapshot,
+                self._fallback_rates_snapshot,
+            ),
             self._fallback_rates_snapshot,
             deadline=deadline,
         )
         volatility = self._temperature_panel(
             "volatility",
-            self.get_volatility,
-            self._fallback_rates_snapshot,
+            lambda: self._cached_payload(
+                "volatility",
+                self._fetch_volatility,
+                lambda: self._fallback_overview_panel("volatility", "VolatilityCard", "数据源刷新超时，当前显示备用快照"),
+            ),
+            lambda: self._fallback_overview_panel("volatility", "VolatilityCard", "数据源刷新超时，当前显示备用快照"),
             deadline=deadline,
         )
         rates["items"] = [*rates.get("items", []), *volatility.get("items", [])]
         fx = self._temperature_panel(
             "fx",
-            self.get_fx_commodities,
+            lambda: self._cached_payload(
+                "fx_commodities",
+                self._fetch_fx_commodities_snapshot,
+                self._fallback_fx_commodities_snapshot,
+            ),
             self._fallback_fx_commodities_snapshot,
             deadline=deadline,
         )
         futures = self._temperature_panel(
             "futures",
-            self.get_futures,
+            lambda: self._cached_payload(
+                "futures",
+                self._fetch_futures_snapshot,
+                self._fallback_futures_snapshot,
+            ),
             self._fallback_futures_snapshot,
             deadline=deadline,
         )
         sentiment = self._temperature_panel(
             "sentiment",
-            self.get_market_sentiment,
+            lambda: self._cached_payload(
+                self.MARKET_SENTIMENT_CACHE_KEY,
+                self._fetch_market_sentiment_snapshot,
+                lambda: self._fallback_market_snapshot(self.MARKET_SENTIMENT_CACHE_KEY, "unavailable"),
+            ),
             lambda: self._fallback_market_snapshot(self.MARKET_SENTIMENT_CACHE_KEY, "unavailable"),
             deadline=deadline,
         )
         crypto = self._temperature_panel(
             "crypto",
-            self.get_crypto,
+            lambda: self._cached_payload(
+                "crypto",
+                self._fetch_crypto_market_snapshot,
+                self._fallback_crypto_market_snapshot,
+            ),
             self._fallback_crypto_market_snapshot,
             deadline=deadline,
         )
@@ -3392,6 +3492,22 @@ class MarketOverviewService:
         return items
 
     def _latest_quote(self, ticker: str) -> Dict[str, Any]:
+        if self._quote_request_memo is None:
+            return self._latest_quote_uncached(ticker)
+        if ticker in self._quote_request_memo:
+            ok, cached = self._quote_request_memo[ticker]
+            if ok:
+                return copy.deepcopy(cached)
+            raise cached
+        try:
+            quote = self._latest_quote_uncached(ticker)
+        except Exception as exc:
+            self._quote_request_memo[ticker] = (False, exc)
+            raise
+        self._quote_request_memo[ticker] = (True, copy.deepcopy(quote))
+        return quote
+
+    def _latest_quote_uncached(self, ticker: str) -> Dict[str, Any]:
         frame = fetch_yfinance_quote_history_frame(ticker)
         closes, _ = self._history_frame_closes_and_as_of(frame, ticker)
         latest = closes[-1]
