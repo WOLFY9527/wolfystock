@@ -29,6 +29,12 @@ from src.services.sector_rotation_taxonomy import (
     get_rotation_taxonomy_by_market,
     normalize_rotation_market,
 )
+from src.services.rotation_theme_registry import (
+    ROTATION_THEME_REGISTRY_VERSION,
+    RotationThemeDefinition,
+    list_rotation_theme_definitions,
+    list_rotation_theme_proxy_etfs,
+)
 from src.services.rotation_state_evidence import build_rotation_state_evidence
 
 
@@ -36,8 +42,12 @@ NO_ADVICE_DISCLOSURE = "仅用于观察资金轮动迹象，非买卖建议。"
 RADAR_ENDPOINT = "/api/v1/market/rotation-radar"
 TIME_WINDOW_KEYS = ("5m", "15m", "60m", "1d")
 MARKET_BENCHMARK_SYMBOLS = ("QQQ", "SPY", "IWM")
-SECTOR_BENCHMARK_SYMBOLS = ("IGV", "SMH", "CIBR", "CLOU", "PAVE", "BOTZ")
-BENCHMARK_SYMBOLS = MARKET_BENCHMARK_SYMBOLS + SECTOR_BENCHMARK_SYMBOLS
+SECTOR_BENCHMARK_SYMBOLS = tuple(
+    symbol
+    for symbol in list_rotation_theme_proxy_etfs("US")
+    if symbol not in MARKET_BENCHMARK_SYMBOLS
+)
+BENCHMARK_SYMBOLS = tuple(dict.fromkeys((*MARKET_BENCHMARK_SYMBOLS, *SECTOR_BENCHMARK_SYMBOLS)))
 TIME_WINDOW_LABELS = {
     "5m": "5分钟",
     "15m": "15分钟",
@@ -63,10 +73,20 @@ class ThemeBasket:
     id: str
     name: str
     englishName: str
+    definition: str
+    category: str
     benchmark: str
     sectorBenchmark: str
     members: Sequence[str]
     focus: str
+    primarySymbols: Sequence[str] = ()
+    secondarySymbols: Sequence[str] = ()
+    relatedSymbols: Sequence[str] = ()
+    proxyEtfs: Sequence[str] = ()
+    proxyIndices: Sequence[str] = ()
+    benchmarkSymbols: Sequence[str] = ()
+    inclusionNotes: Mapping[str, str] = field(default_factory=dict)
+    dataQualityNotes: Sequence[str] = ()
     market: str = "US"
     taxonomyType: str = "theme_cluster"
     aliases: Sequence[str] = ()
@@ -130,9 +150,15 @@ def _theme_basket_from_taxonomy(entry: RotationTaxonomyEntry) -> ThemeBasket:
         id=entry.id.rsplit(":", 1)[-1],
         name=entry.displayName,
         englishName=entry.englishName,
+        definition=entry.operatorNote,
+        category=entry.taxonomyType,
         benchmark=benchmark,
         sectorBenchmark=sector_benchmark,
         members=tuple(entry.representativeSymbols or entry.representativeLabels),
+        primarySymbols=tuple(entry.representativeSymbols or entry.representativeLabels),
+        proxyEtfs=proxy_symbols,
+        benchmarkSymbols=tuple(dict.fromkeys((benchmark, sector_benchmark, *proxy_symbols))),
+        dataQualityNotes=(entry.riskNote, entry.operatorNote),
         focus="、".join(entry.mappedConcepts[:4]) if entry.mappedConcepts else entry.operatorNote,
         market=entry.market,
         taxonomyType=entry.taxonomyType,
@@ -146,9 +172,45 @@ def _theme_basket_from_taxonomy(entry: RotationTaxonomyEntry) -> ThemeBasket:
     )
 
 
+def _theme_basket_from_registry(theme: RotationThemeDefinition) -> ThemeBasket:
+    proxy_etfs = tuple(dict.fromkeys(theme.proxy_etfs))
+    benchmark_symbols = tuple(dict.fromkeys(theme.benchmark_symbols or ("QQQ", *proxy_etfs)))
+    benchmark = next((symbol for symbol in benchmark_symbols if symbol in MARKET_BENCHMARK_SYMBOLS), "QQQ")
+    sector_benchmark = next((symbol for symbol in proxy_etfs if symbol not in MARKET_BENCHMARK_SYMBOLS), benchmark)
+    members = theme.all_constituent_symbols()
+    return ThemeBasket(
+        id=theme.theme_id,
+        name=theme.display_name,
+        englishName=theme.category,
+        definition=theme.definition,
+        category=theme.category,
+        benchmark=benchmark,
+        sectorBenchmark=sector_benchmark,
+        members=members,
+        primarySymbols=tuple(theme.primary_symbols),
+        secondarySymbols=tuple(theme.secondary_symbols),
+        relatedSymbols=tuple(theme.related_symbols),
+        proxyEtfs=proxy_etfs,
+        proxyIndices=tuple(theme.proxy_indices),
+        benchmarkSymbols=benchmark_symbols,
+        inclusionNotes=dict(theme.inclusion_notes),
+        dataQualityNotes=tuple(theme.data_quality_notes),
+        focus=theme.definition,
+        market=theme.market,
+        taxonomyType=theme.taxonomy_type,
+        aliases=tuple(theme.aliases),
+        proxySymbols=proxy_etfs,
+        mappedConcepts=tuple(theme.aliases),
+        dataCoverage=theme.data_coverage,
+        sourceClass=theme.source_class,
+        riskNote=theme.risk_note,
+        operatorNote=theme.operator_note,
+    )
+
+
 THEME_BASKETS: Sequence[ThemeBasket] = tuple(
-    _theme_basket_from_taxonomy(entry)
-    for entry in get_rotation_taxonomy_by_market("US")
+    _theme_basket_from_registry(theme)
+    for theme in list_rotation_theme_definitions("US")
 )
 
 FALLBACK_PRESETS: Dict[str, Dict[str, Any]] = {
@@ -157,9 +219,15 @@ FALLBACK_PRESETS: Dict[str, Dict[str, Any]] = {
     "semiconductors": {"score": 30, "leaders": ("NVDA", "AVGO", "AMD")},
     "cybersecurity": {"score": 27, "leaders": ("CRWD", "PANW", "ZS")},
     "cloud_software": {"score": 26, "leaders": ("MSFT", "SNOW", "NOW")},
+    "ai_neocloud": {"score": 25, "leaders": ("ORCL", "CRWV", "NBIS")},
     "data_center_power": {"score": 25, "leaders": ("VRT", "ETN", "PWR")},
     "liquid_cooling": {"score": 24, "leaders": ("VRT", "MOD", "SMCI")},
     "robotics": {"score": 23, "leaders": ("ISRG", "TER", "SYM")},
+    "crypto_miners": {"score": 23, "leaders": ("MARA", "RIOT", "CLSK")},
+    "crypto_exchanges_brokers": {"score": 22, "leaders": ("COIN", "HOOD", "IBKR")},
+    "bitcoin_treasury": {"score": 21, "leaders": ("MSTR", "SMLR", "BTBT")},
+    "ethereum_treasury": {"score": 20, "leaders": ("BMNR", "SBET", "BTCS")},
+    "stablecoin_tokenization": {"score": 19, "leaders": ("CRCL", "COIN", "PYPL")},
 }
 
 QuoteProvider = Callable[[Iterable[str]], Mapping[str, Any]]
@@ -232,11 +300,13 @@ class MarketRotationRadarService:
             "themes": themes,
             "metadata": {
                 "schemaVersion": "market_rotation_radar_phase4_v1",
+                "themeRegistryVersion": ROTATION_THEME_REGISTRY_VERSION,
                 "noExternalCalls": bool(quote_provider_metadata["noExternalCalls"]),
                 "alertsAreReadOnlyEvidence": True,
                 "notificationDeliveryEnabled": False,
-                "basketSource": "manual_static_baskets",
+                "basketSource": "rotation_theme_registry_v2",
                 "taxonomySource": "src.services.sector_rotation_taxonomy",
+                "themeRegistrySource": "src.services.rotation_theme_registry",
                 "themeCount": len(THEME_BASKETS),
                 "liveThemeCount": live_theme_count,
                 "fallbackThemeCount": fallback_theme_count,
@@ -306,6 +376,7 @@ class MarketRotationRadarService:
             "themes": themes,
             "metadata": {
                 "schemaVersion": "market_rotation_radar_phase4_v1",
+                "themeRegistryVersion": ROTATION_THEME_REGISTRY_VERSION,
                 "noExternalCalls": True,
                 "alertsAreReadOnlyEvidence": True,
                 "notificationDeliveryEnabled": False,
@@ -328,12 +399,73 @@ class MarketRotationRadarService:
         representative = list(entry.representativeSymbols or entry.representativeLabels)
         mapped_concepts = list(entry.mappedConcepts or entry.aliases)
         score = 18 if entry.dataCoverage == "taxonomy_only" else 22
+        score_breakdown = self._fallback_score_breakdown(
+            final_score=score,
+            stage="weak_or_no_signal",
+            method="taxonomy_only_static",
+        )
+        missing_proxy_symbols = list(entry.proxySymbols)
+        constituent_coverage = {
+            "configuredCount": len(representative),
+            "observedCount": 0,
+            "coveragePercent": 0.0,
+            "primarySymbols": list(entry.representativeSymbols or entry.representativeLabels),
+            "secondarySymbols": [],
+            "relatedSymbols": [],
+            "observedSymbols": [],
+            "missingSymbols": representative,
+            "dataQualityNotes": [entry.riskNote, entry.operatorNote],
+        }
+        theme_definition = {
+            "registryVersion": ROTATION_THEME_REGISTRY_VERSION,
+            "themeId": entry.id,
+            "displayName": entry.displayName,
+            "definition": entry.operatorNote,
+            "category": entry.taxonomyType,
+            "primarySymbols": list(entry.representativeSymbols or entry.representativeLabels),
+            "secondarySymbols": [],
+            "relatedSymbols": [],
+            "proxyEtfs": list(entry.proxySymbols),
+            "proxyIndices": [],
+            "benchmarkSymbols": list(entry.proxySymbols),
+            "inclusionNotes": {},
+            "dataQualityNotes": [entry.riskNote, entry.operatorNote],
+        }
+        proxy_evidence = {
+            "claimBoundary": "ETF proxy, participation proxy, relative strength proxy only; no real fund-flow dollars.",
+            "freshness": "fallback",
+            "isFallback": True,
+            "isStale": False,
+            "isPartial": bool(entry.proxySymbols),
+            "proxyQualityLabel": "静态主题库",
+            "proxyCoveragePercent": 0,
+            "requiredProxySymbols": list(entry.proxySymbols),
+            "missingProxySymbols": missing_proxy_symbols,
+            "marketBenchmarks": [],
+            "proxyEtfs": [
+                {
+                    "symbol": symbol,
+                    "role": "etf_proxy",
+                    "freshness": "fallback",
+                    "isFallback": True,
+                    "isStale": False,
+                    "available": False,
+                    "missingReason": "taxonomy_only",
+                    "qualityLabel": "代理待补齐",
+                    "asOf": generated_at,
+                }
+                for symbol in entry.proxySymbols
+            ],
+            "proxyIndices": [],
+            "dataQualityNotes": [entry.riskNote, entry.operatorNote],
+        }
         payload = {
             "id": entry.id,
             "market": entry.market,
             "taxonomyType": entry.taxonomyType,
             "name": entry.displayName,
             "englishName": entry.englishName or entry.displayName,
+            "themeDefinition": theme_definition,
             "focus": "、".join(mapped_concepts[:4]) if mapped_concepts else entry.operatorNote,
             "benchmark": f"{entry.market}_LOCAL_TAXONOMY",
             "sectorBenchmark": None,
@@ -435,6 +567,14 @@ class MarketRotationRadarService:
             "updatedAt": generated_at,
             "evidence": ["主题库已载入", "行情评分待本地数据覆盖", "仅作分类观察"],
             "members": [],
+            "constituentCoverage": constituent_coverage,
+            "proxyEvidence": proxy_evidence,
+            "scoreBreakdown": score_breakdown,
+            "weightBreakdown": self._weight_breakdown(),
+            "coveragePenalty": score_breakdown["penalties"]["coverage"],
+            "fallbackPenalty": score_breakdown["penalties"]["fallback"],
+            "missingProxySymbols": missing_proxy_symbols,
+            "missingConstituentSymbols": representative,
             "sortOrder": index,
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         }
@@ -447,7 +587,10 @@ class MarketRotationRadarService:
                 {symbol for theme in THEME_BASKETS for symbol in theme.members}
                 | {theme.benchmark for theme in THEME_BASKETS}
                 | {theme.sectorBenchmark for theme in THEME_BASKETS}
+                | {symbol for theme in THEME_BASKETS for symbol in theme.benchmarkSymbols}
+                | {symbol for theme in THEME_BASKETS for symbol in theme.proxyEtfs}
                 | set(MARKET_BENCHMARK_SYMBOLS)
+                | set(BENCHMARK_SYMBOLS)
             )
         )
         observed_result = self._load_observed_evidence(symbols)
@@ -872,7 +1015,8 @@ class MarketRotationRadarService:
         source_state = self._source_state(observations, benchmarks, theme.benchmark)
         source_state["timeWindowState"] = window_state
         source_state["proxyQuality"] = proxy_quality
-        score = self._score(
+        benchmark_proxies = self._benchmark_proxies(theme, benchmarks, observed)
+        score_breakdown = self._score_breakdown(
             average_relative_strength=average_relative_strength,
             average_relative_volume=average_relative_volume,
             percent_up=percent_up,
@@ -885,6 +1029,7 @@ class MarketRotationRadarService:
             is_stale=source_state["isStale"],
             fallback_used=source_state["fallbackUsed"],
         )
+        score = int(score_breakdown["finalScore"])
         confidence = self._confidence(
             coverage=coverage,
             source_state=source_state,
@@ -910,6 +1055,7 @@ class MarketRotationRadarService:
             percent_outperforming=percent_outperforming,
             average_relative_volume=average_relative_volume,
         )
+        score_breakdown["stage"] = stage
         newsless_rotation = self._newsless_rotation(
             score=score,
             confidence=confidence,
@@ -952,6 +1098,7 @@ class MarketRotationRadarService:
             "taxonomyType": theme.taxonomyType,
             "name": theme.name,
             "englishName": theme.englishName,
+            "themeDefinition": self._theme_definition(theme),
             "focus": theme.focus,
             "benchmark": theme.benchmark,
             "sectorBenchmark": theme.sectorBenchmark,
@@ -996,7 +1143,7 @@ class MarketRotationRadarService:
                 "vsBenchmarks": self._relative_vs_benchmarks(observed, benchmarks),
             },
             "proxyQuality": proxy_quality,
-            "benchmarkProxies": self._benchmark_proxies(theme, benchmarks, observed),
+            "benchmarkProxies": benchmark_proxies,
             "timeWindows": time_windows,
             "volume": {
                 "averageRelativeVolume": round(average_relative_volume, 2),
@@ -1039,6 +1186,21 @@ class MarketRotationRadarService:
             "updatedAt": generated_at,
             "evidence": evidence,
             "members": observations,
+            "constituentCoverage": self._constituent_coverage(theme, observations, coverage),
+            "proxyEvidence": self._proxy_evidence(
+                theme=theme,
+                benchmarks=benchmarks,
+                benchmark_proxies=benchmark_proxies,
+                proxy_quality=proxy_quality,
+                source_state=source_state,
+                generated_at=generated_at,
+            ),
+            "scoreBreakdown": score_breakdown,
+            "weightBreakdown": self._weight_breakdown(),
+            "coveragePenalty": score_breakdown["penalties"]["coverage"],
+            "fallbackPenalty": score_breakdown["penalties"]["fallback"],
+            "missingProxySymbols": self._missing_proxy_symbols(theme, benchmarks),
+            "missingConstituentSymbols": self._missing_constituent_symbols(theme, observations),
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         }
         payload["rotationStateEvidence"] = self._rotation_state_evidence(payload, generated_at)
@@ -1064,12 +1226,20 @@ class MarketRotationRadarService:
             }
             for symbol in preset.get("leaders", theme.members[:3])
         ]
+        proxy_quality = self._proxy_quality(theme, benchmarks)
+        benchmark_proxies = self._benchmark_proxies(theme, benchmarks, [])
+        score_breakdown = self._fallback_score_breakdown(
+            final_score=int(preset["score"]),
+            stage="weak_or_no_signal",
+            method="fallback_static_preset",
+        )
         payload = {
             "id": theme.id,
             "market": theme.market,
             "taxonomyType": theme.taxonomyType,
             "name": theme.name,
             "englishName": theme.englishName,
+            "themeDefinition": self._theme_definition(theme),
             "focus": theme.focus,
             "benchmark": theme.benchmark,
             "sectorBenchmark": theme.sectorBenchmark,
@@ -1102,8 +1272,8 @@ class MarketRotationRadarService:
                 "averageRelativeStrengthPercent": None,
                 "vsBenchmarks": {symbol: None for symbol in BENCHMARK_SYMBOLS},
             },
-            "proxyQuality": self._proxy_quality(theme, benchmarks),
-            "benchmarkProxies": self._benchmark_proxies(theme, benchmarks, []),
+            "proxyQuality": proxy_quality,
+            "benchmarkProxies": benchmark_proxies,
             "timeWindows": self._empty_time_windows(),
             "volume": {
                 "averageRelativeVolume": None,
@@ -1150,6 +1320,21 @@ class MarketRotationRadarService:
                 "需等待真实价格、成交额、广度与同步性数据。",
             ],
             "members": list(observations),
+            "constituentCoverage": self._constituent_coverage(theme, observations, 0.0),
+            "proxyEvidence": self._proxy_evidence(
+                theme=theme,
+                benchmarks=benchmarks,
+                benchmark_proxies=benchmark_proxies,
+                proxy_quality=proxy_quality,
+                source_state={"fallbackUsed": True, "isStale": False},
+                generated_at=generated_at,
+            ),
+            "scoreBreakdown": score_breakdown,
+            "weightBreakdown": self._weight_breakdown(),
+            "coveragePenalty": score_breakdown["penalties"]["coverage"],
+            "fallbackPenalty": score_breakdown["penalties"]["fallback"],
+            "missingProxySymbols": self._missing_proxy_symbols(theme, benchmarks),
+            "missingConstituentSymbols": self._missing_constituent_symbols(theme, observations),
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         }
         payload["rotationStateEvidence"] = self._rotation_state_evidence(payload, generated_at)
@@ -1165,6 +1350,190 @@ class MarketRotationRadarService:
                 "asOf": theme.get("asOf") or generated_at,
             },
         )
+
+    def _theme_definition(self, theme: ThemeBasket) -> Dict[str, Any]:
+        return {
+            "registryVersion": ROTATION_THEME_REGISTRY_VERSION,
+            "themeId": theme.id,
+            "displayName": theme.name,
+            "definition": theme.definition,
+            "category": theme.category,
+            "primarySymbols": list(theme.primarySymbols),
+            "secondarySymbols": list(theme.secondarySymbols),
+            "relatedSymbols": list(theme.relatedSymbols),
+            "proxyEtfs": list(theme.proxyEtfs),
+            "proxyIndices": list(theme.proxyIndices),
+            "benchmarkSymbols": list(theme.benchmarkSymbols),
+            "inclusionNotes": dict(theme.inclusionNotes),
+            "dataQualityNotes": list(theme.dataQualityNotes),
+        }
+
+    def _constituent_coverage(
+        self,
+        theme: ThemeBasket,
+        observations: Sequence[Mapping[str, Any]],
+        coverage: float,
+    ) -> Dict[str, Any]:
+        observed_symbols = [
+            str(item.get("symbol"))
+            for item in observations
+            if item.get("observed") and item.get("symbol")
+        ]
+        missing_symbols = self._missing_constituent_symbols(theme, observations)
+        return {
+            "configuredCount": len(theme.members),
+            "observedCount": len(observed_symbols),
+            "coveragePercent": round(max(0.0, min(1.0, coverage)) * 100, 1),
+            "primarySymbols": list(theme.primarySymbols),
+            "secondarySymbols": list(theme.secondarySymbols),
+            "relatedSymbols": list(theme.relatedSymbols),
+            "observedSymbols": observed_symbols,
+            "missingSymbols": missing_symbols,
+            "dataQualityNotes": list(theme.dataQualityNotes),
+        }
+
+    def _missing_constituent_symbols(
+        self,
+        theme: ThemeBasket,
+        observations: Sequence[Mapping[str, Any]],
+    ) -> List[str]:
+        observed_symbols = {
+            str(item.get("symbol"))
+            for item in observations
+            if item.get("observed") and item.get("symbol")
+        }
+        return [symbol for symbol in theme.members if symbol not in observed_symbols]
+
+    def _proxy_symbols(self, theme: ThemeBasket) -> tuple[str, ...]:
+        return tuple(dict.fromkeys((*MARKET_BENCHMARK_SYMBOLS, *theme.proxyEtfs)))
+
+    def _missing_proxy_symbols(
+        self,
+        theme: ThemeBasket,
+        benchmarks: Mapping[str, Dict[str, Any]],
+    ) -> List[str]:
+        missing: List[str] = []
+        for symbol in self._proxy_symbols(theme):
+            if not self._proxy_status(symbol, benchmarks.get(symbol, {}))["available"]:
+                missing.append(symbol)
+        return missing
+
+    def _proxy_evidence(
+        self,
+        *,
+        theme: ThemeBasket,
+        benchmarks: Mapping[str, Dict[str, Any]],
+        benchmark_proxies: Mapping[str, Any],
+        proxy_quality: Mapping[str, Any],
+        source_state: Mapping[str, Any],
+        generated_at: str,
+    ) -> Dict[str, Any]:
+        missing_proxy_symbols = self._missing_proxy_symbols(theme, benchmarks)
+        proxy_etf_rows: List[Dict[str, Any]] = []
+        for symbol in theme.proxyEtfs:
+            proxy = benchmark_proxies.get(symbol, {})
+            quality = proxy.get("quality") if isinstance(proxy.get("quality"), Mapping) else {}
+            proxy_etf_rows.append({
+                "symbol": symbol,
+                "role": "etf_proxy",
+                "changePercent": proxy.get("changePercent"),
+                "relativeStrength": proxy.get("relativeStrength"),
+                "freshness": proxy.get("freshness", "fallback"),
+                "isFallback": bool(proxy.get("isFallback", True)),
+                "isStale": bool(proxy.get("isStale")),
+                "available": bool(quality.get("available")),
+                "missingReason": quality.get("missingReason"),
+                "qualityLabel": quality.get("qualityLabel"),
+                "asOf": proxy.get("asOf") or generated_at,
+            })
+
+        market_benchmark_rows: List[Dict[str, Any]] = []
+        for symbol in MARKET_BENCHMARK_SYMBOLS:
+            proxy = benchmark_proxies.get(symbol, {})
+            quality = proxy.get("quality") if isinstance(proxy.get("quality"), Mapping) else {}
+            market_benchmark_rows.append({
+                "symbol": symbol,
+                "role": "market_proxy",
+                "freshness": proxy.get("freshness", "fallback"),
+                "isFallback": bool(proxy.get("isFallback", True)),
+                "isStale": bool(proxy.get("isStale")),
+                "available": bool(quality.get("available")),
+                "missingReason": quality.get("missingReason"),
+            })
+
+        proxy_index_rows = [
+            {
+                "symbol": symbol,
+                "role": "index_concept",
+                "usedAsQuoteProxy": False,
+                "includedInMissingProxySymbols": False,
+                "freshness": "not_queried",
+                "available": False,
+                "note": "Index or asset concept only; ETF proxies are listed separately.",
+            }
+            for symbol in theme.proxyIndices
+        ]
+        freshness = str(proxy_quality.get("freshness") or "fallback")
+        is_fallback = freshness == "fallback" or bool(source_state.get("fallbackUsed"))
+        is_stale = freshness == "stale" or bool(source_state.get("isStale"))
+        return {
+            "claimBoundary": "ETF proxy, participation proxy, relative strength proxy only; no real fund-flow dollars.",
+            "freshness": "fallback" if is_fallback else "stale" if is_stale else freshness,
+            "isFallback": is_fallback,
+            "isStale": is_stale,
+            "isPartial": bool(proxy_quality.get("hasMissingRequiredProxy") or proxy_quality.get("hasStaleProxy")),
+            "proxyQualityLabel": proxy_quality.get("label"),
+            "proxyCoveragePercent": proxy_quality.get("coveragePercent"),
+            "requiredProxySymbols": list(self._proxy_symbols(theme)),
+            "missingProxySymbols": missing_proxy_symbols,
+            "marketBenchmarks": market_benchmark_rows,
+            "proxyEtfs": proxy_etf_rows,
+            "proxyIndices": proxy_index_rows,
+            "dataQualityNotes": list(theme.dataQualityNotes),
+        }
+
+    @staticmethod
+    def _weight_breakdown() -> Dict[str, float]:
+        return {
+            "relativeStrength": 0.28,
+            "breadth": 0.22,
+            "volume": 0.18,
+            "synchronization": 0.14,
+            "vwapParticipation": 0.10,
+            "persistence": 0.08,
+        }
+
+    def _fallback_score_breakdown(
+        self,
+        *,
+        final_score: int,
+        stage: str,
+        method: str,
+    ) -> Dict[str, Any]:
+        return {
+            "method": method,
+            "rawScore": None,
+            "finalScore": int(final_score),
+            "stage": stage,
+            "componentScores": {
+                "relativeStrength": None,
+                "breadth": None,
+                "volume": None,
+                "synchronization": None,
+                "vwapParticipation": None,
+                "persistence": None,
+            },
+            "weightedContributions": {},
+            "weights": self._weight_breakdown(),
+            "penalties": {
+                "coverage": 12,
+                "fallback": 8,
+                "stale": 0,
+                "concentration": 0,
+                "total": 20,
+            },
+            "explanation": "Static fallback preset; score/rank/stage fields remain backward compatible.",
+        }
 
     def _member_observation(
         self,
@@ -1523,30 +1892,95 @@ class MarketRotationRadarService:
         is_stale: bool,
         fallback_used: bool,
     ) -> int:
+        return int(self._score_breakdown(
+            average_relative_strength=average_relative_strength,
+            average_relative_volume=average_relative_volume,
+            percent_up=percent_up,
+            percent_outperforming=percent_outperforming,
+            synchronization_pct=synchronization_pct,
+            above_vwap_pct=above_vwap_pct,
+            persistence_pct=persistence_pct,
+            coverage=coverage,
+            concentration=concentration,
+            is_stale=is_stale,
+            fallback_used=fallback_used,
+        )["finalScore"])
+
+    def _score_breakdown(
+        self,
+        *,
+        average_relative_strength: float,
+        average_relative_volume: float,
+        percent_up: float,
+        percent_outperforming: float,
+        synchronization_pct: float,
+        above_vwap_pct: float,
+        persistence_pct: float,
+        coverage: float,
+        concentration: float,
+        is_stale: bool,
+        fallback_used: bool,
+    ) -> Dict[str, Any]:
         relative_score = self._clamp(50 + average_relative_strength * 10)
         volume_score = self._clamp(50 + (average_relative_volume - 1.0) * 30)
         breadth_score = self._clamp(percent_up * 0.55 + percent_outperforming * 0.45)
         sync_score = self._clamp(synchronization_pct)
         vwap_score = self._clamp(above_vwap_pct)
         persistence_score = self._clamp(persistence_pct)
+        weights = self._weight_breakdown()
         raw_score = (
-            relative_score * 0.28
-            + breadth_score * 0.22
-            + volume_score * 0.18
-            + sync_score * 0.14
-            + vwap_score * 0.10
-            + persistence_score * 0.08
+            relative_score * weights["relativeStrength"]
+            + breadth_score * weights["breadth"]
+            + volume_score * weights["volume"]
+            + sync_score * weights["synchronization"]
+            + vwap_score * weights["vwapParticipation"]
+            + persistence_score * weights["persistence"]
         )
-        penalty = 0.0
-        if coverage < 0.6:
-            penalty += 12
-        if fallback_used:
-            penalty += 8
-        if is_stale:
-            penalty += 12
-        if concentration > 0.48:
-            penalty += 7
-        return int(round(self._clamp(raw_score - penalty)))
+        coverage_penalty = 12 if coverage < 0.6 else 0
+        fallback_penalty = 8 if fallback_used else 0
+        stale_penalty = 12 if is_stale else 0
+        concentration_penalty = 7 if concentration > 0.48 else 0
+        total_penalty = coverage_penalty + fallback_penalty + stale_penalty + concentration_penalty
+        component_scores = {
+            "relativeStrength": round(relative_score, 3),
+            "breadth": round(breadth_score, 3),
+            "volume": round(volume_score, 3),
+            "synchronization": round(sync_score, 3),
+            "vwapParticipation": round(vwap_score, 3),
+            "persistence": round(persistence_score, 3),
+        }
+        return {
+            "method": "deterministic_proxy_v2",
+            "rawScore": round(raw_score, 3),
+            "finalScore": int(round(self._clamp(raw_score - total_penalty))),
+            "stage": None,
+            "componentScores": component_scores,
+            "weightedContributions": {
+                key: round(component_scores[key] * weights[key], 3)
+                for key in weights
+            },
+            "weights": weights,
+            "penalties": {
+                "coverage": coverage_penalty,
+                "fallback": fallback_penalty,
+                "stale": stale_penalty,
+                "concentration": concentration_penalty,
+                "total": total_penalty,
+            },
+            "inputs": {
+                "averageRelativeStrength": round(average_relative_strength, 3),
+                "averageRelativeVolume": round(average_relative_volume, 3),
+                "percentUp": round(percent_up, 3),
+                "percentOutperforming": round(percent_outperforming, 3),
+                "synchronizationPercent": round(synchronization_pct, 3),
+                "aboveVwapPercent": round(above_vwap_pct, 3),
+                "persistencePercent": round(persistence_pct, 3),
+                "coverage": round(coverage, 4),
+                "concentration": round(concentration, 4),
+                "isStale": bool(is_stale),
+                "fallbackUsed": bool(fallback_used),
+            },
+        }
 
     def _confidence(
         self,
@@ -1780,13 +2214,14 @@ class MarketRotationRadarService:
             default=0.0,
         ) if observed else None
         proxies: Dict[str, Any] = {}
-        for symbol in (*MARKET_BENCHMARK_SYMBOLS, theme.sectorBenchmark):
+        for symbol in self._proxy_symbols(theme):
             benchmark = benchmarks.get(symbol, {})
             change = benchmark.get("changePercent")
             proxy_status = self._proxy_status(symbol, benchmark)
             proxies[symbol] = {
                 "symbol": symbol,
-                "role": "sector_proxy" if symbol == theme.sectorBenchmark else "market_proxy",
+                "role": "market_proxy" if symbol in MARKET_BENCHMARK_SYMBOLS else "sector_proxy",
+                "proxyType": "market_etf" if symbol in MARKET_BENCHMARK_SYMBOLS else "theme_etf",
                 "changePercent": change,
                 "relativeStrength": round(average_change - float(change), 3) if average_change is not None and change is not None else None,
                 "timeWindows": benchmark.get("timeWindows") or self._empty_time_windows(),
@@ -1804,7 +2239,7 @@ class MarketRotationRadarService:
         theme: ThemeBasket,
         benchmarks: Mapping[str, Dict[str, Any]],
     ) -> Dict[str, Any]:
-        proxy_symbols = list(dict.fromkeys((*MARKET_BENCHMARK_SYMBOLS, theme.sectorBenchmark)))
+        proxy_symbols = list(self._proxy_symbols(theme))
         statuses = {
             symbol: self._proxy_status(symbol, benchmarks.get(symbol, {}))
             for symbol in proxy_symbols

@@ -191,6 +191,101 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             self.assertEqual(theme["proxyQuality"]["coveragePercent"], 0)
             self.assertTrue(all(proxy["quality"]["missingReason"] for proxy in theme["benchmarkProxies"].values()))
 
+    def test_registry_v2_metadata_and_proxy_explainability_are_additive(self) -> None:
+        service = MarketRotationRadarService(now_provider=lambda: datetime(2026, 5, 7, tzinfo=timezone.utc))
+
+        payload = service.get_rotation_radar()
+        neocloud = next(theme for theme in payload["themes"] if theme["id"] == "ai_neocloud")
+        ethereum = next(theme for theme in payload["themes"] if theme["id"] == "ethereum_treasury")
+        semis = next(theme for theme in payload["themes"] if theme["id"] == "semiconductors")
+
+        self.assertEqual(payload["metadata"]["themeRegistryVersion"], "rotation_theme_registry_v2")
+        self.assertEqual(neocloud["themeDefinition"]["themeId"], "ai_neocloud")
+        self.assertEqual(neocloud["themeDefinition"]["category"], "AI Compute")
+        self.assertIn("ORCL", neocloud["membersConfigured"])
+        self.assertIn("ORCL", neocloud["themeDefinition"]["primarySymbols"])
+        self.assertIn("ORCL", neocloud["themeDefinition"]["inclusionNotes"])
+        self.assertIn("AI cloud", neocloud["themeDefinition"]["inclusionNotes"]["ORCL"])
+        self.assertIn("BMNR", ethereum["membersConfigured"])
+        self.assertIn("BMNR", ethereum["themeDefinition"]["inclusionNotes"])
+        self.assertIn("Ethereum", ethereum["themeDefinition"]["inclusionNotes"]["BMNR"])
+        self.assertIn("ETH beta", ethereum["themeDefinition"]["inclusionNotes"]["BMNR"])
+
+        self.assertIn("SOX", semis["themeDefinition"]["proxyIndices"])
+        self.assertNotIn("SOX", semis["themeDefinition"]["proxyEtfs"])
+        self.assertIn("SMH", semis["themeDefinition"]["proxyEtfs"])
+        self.assertIn("SOXX", semis["themeDefinition"]["proxyEtfs"])
+        self.assertNotIn("SOX", semis["missingProxySymbols"])
+        self.assertTrue(all(row["role"] == "index_concept" for row in semis["proxyEvidence"]["proxyIndices"]))
+        self.assertIn("ETF proxy", semis["proxyEvidence"]["claimBoundary"])
+        self.assertIn("relative strength proxy", semis["proxyEvidence"]["claimBoundary"])
+        self.assertIn("no real fund-flow dollars", semis["proxyEvidence"]["claimBoundary"])
+
+    def test_score_and_weight_breakdown_are_deterministic_without_changing_final_fields(self) -> None:
+        quotes = {
+            "QQQ": _quote("QQQ", 0.4),
+            "SPY": _quote("SPY", 0.2),
+            "IWM": _quote("IWM", 0.1),
+            "IGV": _quote("IGV", 0.6),
+            "APP": _quote("APP", 3.0, volume_ratio=1.8),
+            "PLTR": _quote("PLTR", 2.4, volume_ratio=1.5),
+            "CRM": _quote("CRM", 1.8, volume_ratio=1.3),
+        }
+
+        def provider(symbols):
+            return {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "proxy",
+                    "sourceType": "cache_snapshot",
+                    "freshness": "delayed",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "noExternalCalls": True,
+                },
+            }
+
+        service = MarketRotationRadarService(
+            quote_provider=provider,
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        first = service.get_rotation_radar()
+        second = service.get_rotation_radar()
+        first_theme = next(item for item in first["themes"] if item["id"] == "ai_applications")
+        second_theme = next(item for item in second["themes"] if item["id"] == "ai_applications")
+
+        self.assertEqual(first_theme["scoreBreakdown"], second_theme["scoreBreakdown"])
+        self.assertEqual(first_theme["weightBreakdown"], second_theme["weightBreakdown"])
+        self.assertEqual(first_theme["scoreBreakdown"]["finalScore"], first_theme["rotationScore"])
+        self.assertEqual(first_theme["scoreBreakdown"]["stage"], first_theme["stage"])
+        self.assertEqual(first_theme["weightBreakdown"]["relativeStrength"], 0.28)
+        self.assertEqual(first_theme["weightBreakdown"]["breadth"], 0.22)
+        self.assertEqual(first_theme["weightBreakdown"]["volume"], 0.18)
+        self.assertEqual(first_theme["weightBreakdown"]["synchronization"], 0.14)
+        self.assertEqual(first_theme["weightBreakdown"]["vwapParticipation"], 0.10)
+        self.assertEqual(first_theme["weightBreakdown"]["persistence"], 0.08)
+        self.assertEqual(first_theme["coveragePenalty"], first_theme["scoreBreakdown"]["penalties"]["coverage"])
+        self.assertEqual(first_theme["fallbackPenalty"], first_theme["scoreBreakdown"]["penalties"]["fallback"])
+
+    def test_degraded_proxy_evidence_never_appears_live_or_claims_real_flows(self) -> None:
+        service = MarketRotationRadarService(now_provider=lambda: datetime(2026, 5, 7, tzinfo=timezone.utc))
+
+        payload = service.get_rotation_radar()
+        semis = next(theme for theme in payload["themes"] if theme["id"] == "semiconductors")
+
+        self.assertEqual(semis["proxyEvidence"]["freshness"], "fallback")
+        self.assertTrue(semis["proxyEvidence"]["isFallback"])
+        self.assertNotIn(semis["proxyEvidence"]["freshness"], {"live", "fresh"})
+        self.assertGreaterEqual(len(semis["missingProxySymbols"]), 1)
+        self.assertNotIn("SOX", semis["missingProxySymbols"])
+        self.assertIn("SMH", semis["missingProxySymbols"])
+        self.assertIn("SOXX", semis["missingProxySymbols"])
+        dumped = json.dumps(semis["proxyEvidence"], ensure_ascii=False).lower()
+        self.assertIn("etf proxy", dumped)
+        self.assertIn("participation proxy", dumped)
+        self.assertIn("relative strength proxy", dumped)
+        self.assertNotIn("real fund-flow dollars", dumped.replace("no real fund-flow dollars", ""))
+
     def test_quote_provider_success_metadata_can_mark_local_proxy_snapshot_without_external_calls(self) -> None:
         def provider(symbols):
             quotes = {}

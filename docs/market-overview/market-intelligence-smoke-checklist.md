@@ -16,6 +16,7 @@ python3 -m pytest tests/test_market_intelligence_smoke_checklist.py -q
 python3 -m pytest \
   tests/test_market_overview_snapshot.py \
   tests/test_liquidity_monitor_service.py \
+  tests/test_rotation_theme_registry.py \
   tests/test_market_rotation_radar_service.py \
   tests/test_market_temperature_input_snapshot.py \
   tests/test_market_cache_fallback_contracts.py \
@@ -46,6 +47,7 @@ Expected degraded-state semantics:
 - Snapshot reuse may keep prior real values visible, but the payload and item freshness must disclose `stale` or `fallback`.
 - Liquidity Monitor evidence must keep degraded inputs explicit through indicator evidence instead of silently counting them as healthy.
 - Rotation Radar and Sector Rotation must keep proxy/taxonomy/fallback evidence visible through metadata, evidence snapshots, and source freshness fields.
+- Rotation Radar Theme Registry v2 metadata must separate ETF proxies from index/asset concepts and keep proxy evidence framed as ETF proxy / participation proxy / relative strength proxy only.
 - Market Temperature and Market Briefing must degrade to insufficient-data posture when reliable inputs are missing; they must not emit strong bullish/bearish action language from fallback-only inputs.
 
 Backend-only:

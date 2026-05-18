@@ -108,6 +108,7 @@ def test_market_intelligence_checklist_captures_scope_and_validation_commands() 
     assert "python3 -m pytest tests/test_market_intelligence_smoke_checklist.py -q" in checklist
     assert "tests/test_market_overview_snapshot.py" in checklist
     assert "tests/test_liquidity_monitor_service.py" in checklist
+    assert "tests/test_rotation_theme_registry.py" in checklist
     assert "tests/test_market_rotation_radar_service.py" in checklist
     assert "tests/api/test_market_rotation_radar.py" in checklist
     assert "python3 -m py_compile" in checklist
@@ -297,6 +298,10 @@ def test_rotation_radar_and_sector_rotation_projection_keep_evidence_non_live_wh
     top_theme = radar_payload["themes"][0]
     assert top_theme["freshness"] == "delayed"
     assert top_theme["freshness"] != "live"
+    assert top_theme["themeDefinition"]["themeId"]
+    assert top_theme["proxyEvidence"]["claimBoundary"]
+    assert top_theme["scoreBreakdown"]["finalScore"] == top_theme["rotationScore"]
+    assert top_theme["weightBreakdown"]["relativeStrength"] == 0.28
     assert top_theme["rotationStateEvidence"]["evidenceSnapshot"]["contractVersion"] == "source_confidence_contract_v1"
     assert top_theme["rotationStateEvidence"]["sourceConfidence"]["freshness"] in {"delayed", "partial"}
     assert top_theme["rotationStateEvidence"]["sourceConfidence"]["freshness"] != "live"
