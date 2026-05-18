@@ -386,6 +386,17 @@ class LlmCostLedgerService:
         metadata: Optional[Dict[str, Any]] = None,
         at: Optional[datetime] = None,
     ) -> LedgerWriteResult:
+        existing = self.db.get_llm_cost_ledger_by_request_identity(
+            owner_user_id=owner_user_id,
+            guest_bucket_hash=guest_bucket_hash,
+            request_hash=request_hash,
+        )
+        if existing is not None:
+            return LedgerWriteResult(
+                status=str(existing.get("status") or "ok"),
+                ledger_id=str(existing.get("ledger_id") or "") or None,
+            )
+
         cost = self.calculate_cost(
             provider=provider,
             model=model,
@@ -398,7 +409,7 @@ class LlmCostLedgerService:
             at=at,
         )
         ledger_id = f"llmcost_{uuid.uuid4().hex}"
-        self.db.record_llm_cost_ledger(
+        ledger_row = self.db.record_llm_cost_ledger(
             ledger_id=ledger_id,
             owner_user_id=owner_user_id,
             guest_bucket_hash=guest_bucket_hash,
@@ -423,8 +434,10 @@ class LlmCostLedgerService:
             metadata=metadata or {},
             created_at=at or datetime.now(),
         )
+        effective_ledger_id = str((ledger_row or {}).get("ledger_id") or ledger_id)
+        inserted_new_row = effective_ledger_id == ledger_id
         quota_reconciliation = None
-        if quota_reservation_id:
+        if quota_reservation_id and inserted_new_row:
             quota_reconciliation = QuotaReservationReconciliationHelper(
                 db=self.db,
                 quota_policy_service=self._quota_policy_service,
@@ -435,7 +448,7 @@ class LlmCostLedgerService:
             )
         return LedgerWriteResult(
             status=cost.status,
-            ledger_id=ledger_id,
+            ledger_id=effective_ledger_id,
             cost=cost,
             quota_reconciliation=quota_reconciliation,
         )

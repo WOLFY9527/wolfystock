@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from src.services.llm_identity_semantics import build_llm_identity_contract
 from src.services.llm_cost_ledger_service import LlmCostLedgerService
 from src.services.quota_policy_service import QuotaPolicyService
 from src.storage import DatabaseManager, LLMCostLedger, ModelPricingPolicy, QuotaReservation
@@ -193,6 +194,147 @@ class LlmCostLedgerServiceTestCase(unittest.TestCase):
             self.assertEqual(row.route_family, "analysis")
             self.assertEqual(row.provider, "openai")
             self.assertEqual(row.model, "openai/gpt-4o-mini")
+
+    def test_reconcile_usage_deduplicates_repeated_billable_attempt_identity(self) -> None:
+        self._seed_policy()
+
+        first = self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            request_hash="attempt-hash-1",
+            metadata={"llm_identity": {"attempt_hash": "attempt-hash-1", "retry_index": 0}},
+        )
+        second = self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=9_000,
+            completion_tokens=9_000,
+            total_tokens=18_000,
+            request_hash="attempt-hash-1",
+            metadata={"llm_identity": {"attempt_hash": "attempt-hash-1", "retry_index": 0}},
+        )
+
+        self.assertEqual(first.status, "ok")
+        self.assertEqual(second.status, "ok")
+        self.assertEqual(second.ledger_id, first.ledger_id)
+        with self.db.session_scope() as session:
+            rows = session.query(LLMCostLedger).all()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0].request_hash, "attempt-hash-1")
+            self.assertEqual(rows[0].total_tokens, 2_000)
+        summary = self.service.get_summary(
+            from_dt=datetime.now() - timedelta(days=1),
+            to_dt=datetime.now() + timedelta(days=1),
+        )
+        self.assertEqual(summary["total"]["calls"], 1)
+        self.assertEqual(summary["total"]["total_tokens"], 2_000)
+
+    def test_null_request_hash_keeps_legacy_append_only_behavior(self) -> None:
+        self._seed_policy()
+
+        first = self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            request_hash=None,
+        )
+        second = self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            request_hash=None,
+        )
+
+        self.assertNotEqual(first.ledger_id, second.ledger_id)
+        with self.db.session_scope() as session:
+            rows = session.query(LLMCostLedger).order_by(LLMCostLedger.id).all()
+            self.assertEqual(len(rows), 2)
+            self.assertTrue(all(row.request_hash is None for row in rows))
+
+    def test_billable_attempt_idempotency_is_owner_scoped(self) -> None:
+        self._seed_policy()
+
+        for owner in ("user-a", "user-b"):
+            self.service.reconcile_usage(
+                owner_user_id=owner,
+                route_family="analysis",
+                call_type="analysis",
+                provider="openai",
+                model="openai/gpt-4o-mini",
+                prompt_tokens=1_000,
+                completion_tokens=1_000,
+                total_tokens=2_000,
+                request_hash="same-explicit-attempt-hash",
+            )
+
+        with self.db.session_scope() as session:
+            rows = session.query(LLMCostLedger).order_by(LLMCostLedger.owner_user_id).all()
+            self.assertEqual(len(rows), 2)
+            self.assertEqual([row.owner_user_id for row in rows], ["user-a", "user-b"])
+            self.assertEqual({row.request_hash for row in rows}, {"same-explicit-attempt-hash"})
+
+    def test_retry_attempts_with_distinct_billable_hashes_write_separate_rows(self) -> None:
+        self._seed_policy()
+        first_identity = build_llm_identity_contract(
+            owner_user_id="user-a",
+            surface="analysis",
+            prompt_version="analysis_v1",
+            prompt_text="same prompt",
+            logical_context={"symbol": "AAPL"},
+            retry_attempt_index=0,
+        )
+        retry_identity = build_llm_identity_contract(
+            owner_user_id="user-a",
+            surface="analysis",
+            prompt_version="analysis_v1",
+            prompt_text="same prompt",
+            logical_context={"symbol": "AAPL"},
+            retry_attempt_index=1,
+        )
+        self.assertEqual(first_identity.logical_request_hash, retry_identity.logical_request_hash)
+        self.assertNotEqual(first_identity.billable_attempt_hash, retry_identity.billable_attempt_hash)
+
+        for identity in (first_identity, retry_identity):
+            self.service.reconcile_usage(
+                owner_user_id="user-a",
+                route_family="analysis",
+                call_type="analysis",
+                provider="openai",
+                model="openai/gpt-4o-mini",
+                prompt_tokens=1_000,
+                completion_tokens=1_000,
+                total_tokens=2_000,
+                request_hash=identity.billable_attempt_hash,
+                metadata=identity.to_ledger_metadata(),
+            )
+
+        with self.db.session_scope() as session:
+            rows = session.query(LLMCostLedger).order_by(LLMCostLedger.id).all()
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(
+                {row.request_hash for row in rows},
+                {first_identity.billable_attempt_hash, retry_identity.billable_attempt_hash},
+            )
+            self.assertEqual([row.to_dict()["metadata"]["llm_identity"]["retry_index"] for row in rows], [0, 1])
 
     def test_per_user_summary_differentiates_users(self) -> None:
         self._seed_policy()

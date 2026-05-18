@@ -4319,6 +4319,51 @@ class DatabaseManager:
             session.expunge(row)
             return row
 
+    @staticmethod
+    def _llm_cost_identity_filters(
+        *,
+        owner_user_id: Optional[str],
+        guest_bucket_hash: Optional[str],
+        request_hash: str,
+    ) -> Tuple[Any, ...]:
+        filters: List[Any] = [LLMCostLedger.request_hash == request_hash]
+        if owner_user_id is None:
+            filters.append(LLMCostLedger.owner_user_id.is_(None))
+        else:
+            filters.append(LLMCostLedger.owner_user_id == owner_user_id)
+        if guest_bucket_hash is None:
+            filters.append(LLMCostLedger.guest_bucket_hash.is_(None))
+        else:
+            filters.append(LLMCostLedger.guest_bucket_hash == guest_bucket_hash)
+        return tuple(filters)
+
+    def get_llm_cost_ledger_by_request_identity(
+        self,
+        *,
+        owner_user_id: Optional[str] = None,
+        guest_bucket_hash: Optional[str] = None,
+        request_hash: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        request_key = self._normalize_cost_label(request_hash, limit=128, lowercase=False)
+        if not request_key:
+            return None
+        owner_key = self._normalize_cost_label(owner_user_id, limit=64, lowercase=False)
+        guest_key = self._normalize_cost_label(guest_bucket_hash, limit=128, lowercase=False)
+        with self.get_session() as session:
+            row = session.execute(
+                select(LLMCostLedger)
+                .where(
+                    *self._llm_cost_identity_filters(
+                        owner_user_id=owner_key,
+                        guest_bucket_hash=guest_key,
+                        request_hash=request_key,
+                    )
+                )
+                .order_by(asc(LLMCostLedger.id))
+                .limit(1)
+            ).scalar_one_or_none()
+            return row.to_dict() if row is not None else None
+
     def record_llm_cost_ledger(self, **kwargs: Any) -> Dict[str, Any]:
         now = kwargs.get("created_at") or datetime.now()
         metadata = self._sanitize_llm_cost_metadata(kwargs.get("metadata") or {})
@@ -4351,6 +4396,21 @@ class DatabaseManager:
         if not row.ledger_id:
             raise ValueError("ledger_id is required")
         with self.session_scope() as session:
+            if row.request_hash:
+                existing = session.execute(
+                    select(LLMCostLedger)
+                    .where(
+                        *self._llm_cost_identity_filters(
+                            owner_user_id=row.owner_user_id,
+                            guest_bucket_hash=row.guest_bucket_hash,
+                            request_hash=row.request_hash,
+                        )
+                    )
+                    .order_by(asc(LLMCostLedger.id))
+                    .limit(1)
+                ).scalar_one_or_none()
+                if existing is not None:
+                    return existing.to_dict()
             session.add(row)
             session.flush()
             return row.to_dict()
