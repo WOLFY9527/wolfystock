@@ -4351,6 +4351,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       ref={surfaceRef}
       data-testid="home-bento-dashboard"
       data-route-surface="ResearchConsole"
+      data-home-surface-role={isGuest ? 'guest' : 'member'}
       aria-live={shouldGuardA11y ? 'polite' : undefined}
       className={getSafariReadySurfaceClassName(
         true,
