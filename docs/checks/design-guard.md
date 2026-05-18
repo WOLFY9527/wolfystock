@@ -1,6 +1,6 @@
 # WolfyStock Design Guard
 
-The frontend design guard turns `CODEX_FRONTEND_DESIGN_CONSTITUTION.md` into a conservative automated check for production source.
+The frontend design guard turns `docs/frontend/visual-system.md` into a conservative automated check for production source.
 
 Run it from the web app:
 

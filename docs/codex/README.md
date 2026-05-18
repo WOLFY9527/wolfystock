@@ -20,13 +20,9 @@ validation policy, and reusable task templates.
 - `WOLFYSTOCK_CODEX_COMPACT_TASK_EXAMPLES.md`
 - `WOLFYSTOCK_CODEX_TASK_TEMPLATES.md`
 
-## Frontend And Protected-Domain Guidance
+## Protected-Domain Guidance
 
 - `WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md`
-- `WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md`
-- `WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md`
-- `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
-- `WOLFYSTOCK_CODEX_VISUAL_EVIDENCE_PROTOCOL.md`
-- `WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`
-- `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
-- `WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md`
+
+Frontend implementation, route taxonomy, visual system, primitive policy, and
+browser-evidence rules now live in `../frontend/README.md`.

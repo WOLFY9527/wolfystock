@@ -53,11 +53,9 @@ Read and obey:
 - docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md
 - docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md
 - docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md
-- docs/codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md
-- docs/codex/WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md
-- docs/codex/WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md
-- docs/codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md
-- docs/codex/WOLFYSTOCK_CODEX_VISUAL_EVIDENCE_PROTOCOL.md
+- docs/frontend/README.md
+- docs/frontend/visual-system.md
+- docs/frontend/validation-playbook.md
 
 Current state:
 - <required commits>
@@ -88,7 +86,7 @@ Validation:
 - ./scripts/release_secret_scan.sh
 
 Browser:
-Follow WOLFYSTOCK_CODEX_VISUAL_EVIDENCE_PROTOCOL.md.
+Follow docs/frontend/validation-playbook.md.
 Route/viewports:
 - <route> at 1440x1000, 1920x1080, 390x844
 

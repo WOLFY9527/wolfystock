@@ -150,11 +150,9 @@ partial by default; exact route status must be checked on current main.
 
 Source:
 
-- [Linear OS Design Language](./codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md)
-- [Frontend Surface Usage](./codex/WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md)
-- [Frontend Route Templates](./codex/WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md)
-- [Terminal Primitives Usage](./codex/WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md)
-- [Visual Evidence Protocol](./codex/WOLFYSTOCK_CODEX_VISUAL_EVIDENCE_PROTOCOL.md)
+- [Frontend Docs](./frontend/README.md)
+- [Frontend Visual System](./frontend/visual-system.md)
+- [Frontend Validation Playbook](./frontend/validation-playbook.md)
 
 ## Backend, Provider, And Data Safety
 
@@ -216,8 +214,7 @@ Backend:
 
 Source:
 
-- [Frontend Validation Playbook](./codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md)
-- [Visual Evidence Protocol](./codex/WOLFYSTOCK_CODEX_VISUAL_EVIDENCE_PROTOCOL.md)
+- [Frontend Validation Playbook](./frontend/validation-playbook.md)
 - [CI Gate Usage](./audits/ci-gate-usage.md)
 
 ## Stale-Doc Traps

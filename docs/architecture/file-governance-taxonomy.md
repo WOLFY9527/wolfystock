@@ -28,7 +28,8 @@ remain the final authority when docs disagree with reality.
 | Architecture | `docs/architecture/` | Current module, storage, source-of-truth, provider/scoring, and database design. |
 | Current audits | `docs/audits/` | Current launch posture, domain indexes, safety policies, accepted support audits, and active runbooks. |
 | Archived audits | `docs/audits/archive/`, `docs/architecture/archive/`, `docs/qa/archive/` | Provenance only. Do not treat archived reports as current authority. |
-| Frontend design | `docs/codex/`, `docs/design/` | Current Reflect-Linear source of truth, route taxonomy, validation, and UI primitives. |
+| Frontend | `docs/frontend/` | Current Reflect-Linear source of truth, route taxonomy, validation, UI primitives, and frontend archive navigation. |
+| Design assets | `docs/design/` | Current frontend reference image and non-frontend design notes. |
 | Operations | `docs/operations/` | Runbooks, artifact cleanup policy, provider metadata, and operator procedures. |
 | Product policy | `docs/product/` | Product-specific labels, export semantics, and user-facing policy. |
 | Local/generated evidence | `.claude/reviews/`, `.codex/`, `.codex-artifacts/`, `reports/`, `artifacts/`, `test-results/`, `playwright-report/`, `backtest_outputs/` | Not repository authority; keep ignored unless a task explicitly asks for tracked summary docs. |
@@ -63,19 +64,15 @@ unless an active doc explicitly re-promotes that evidence.
 
 Current frontend visual authority is:
 
-- `docs/codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`
-- `docs/codex/WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md`
-- `docs/codex/WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md`
-- `docs/codex/CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
-- `docs/codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
-- `docs/design/WOLFYSTOCK_REFLECT_LINEAR_VISUAL_SPEC.md`
-- `docs/design/wolfystock-canonical-ui-primitives.md`
+- `docs/frontend/README.md`
+- `docs/frontend/visual-system.md`
+- `docs/frontend/validation-playbook.md`
 - `docs/design/reference/wolfystock-reflect-linear-home-mockup.png`
 
 Older deep-space, ghost-glass, OLED terminal, bento-first, card-first, or
 generic Linear-only wording is historical unless one of the current docs above
 keeps it intentionally. Future frontend tasks should start from the current
-Reflect-Linear docs and inspect the live route/source before citing archived
+frontend docs and inspect the live route/source before citing archived
 screenshots or old DOM reports.
 
 ## Backend Architecture And Provider Lanes
@@ -161,7 +158,7 @@ When unsure, archive instead of delete.
    domains.
 3. Read `docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md` for worker rules and stale
    doc traps.
-4. For frontend work, use the Reflect-Linear docs listed above before any
+4. For frontend work, use the frontend docs listed above before any
    archived UI reports.
 5. For backend/API/provider/storage work, inspect current source/tests and the
    current architecture or audit index for the domain.

@@ -144,12 +144,9 @@ Wrapper rule:
 
 Frontend implementation tasks should also read:
 
-- `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
-- `WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`
-- `WOLFYSTOCK_FRONTEND_SURFACE_USAGE.md`
-- `WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md`
-- `WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md`
-- `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
+- `docs/frontend/README.md`
+- `docs/frontend/visual-system.md`
+- `docs/frontend/validation-playbook.md`
 
 Rules:
 
@@ -232,7 +229,7 @@ npm --prefix apps/dsa-web run check:design
 ./scripts/release_secret_scan.sh
 ```
 
-Browser verification should use `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`.
+Browser verification should use `docs/frontend/validation-playbook.md`.
 
 ### Backend/source tasks
 

@@ -129,7 +129,7 @@ Allowed display:
 
 The future dashboard must follow WolfyStock admin visual rules:
 
-- Reflect-Linear route background from `docs/codex/WOLFYSTOCK_LINEAR_OS_DESIGN_LANGUAGE.md`.
+- Reflect-Linear route background from `docs/frontend/visual-system.md`.
 - Ghost-glass metric cards with thin white borders and low-noise status glow.
 - Dense admin tables with compact labels, fixed action/link columns, and no default-looking table chrome.
 - Compact segmented filters using existing project primitives, not default browser controls.

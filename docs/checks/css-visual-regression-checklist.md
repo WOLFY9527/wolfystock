@@ -255,10 +255,11 @@ Before committing:
 
 ## 10. Source Documents Inspected
 
-- `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
-- `docs/audits/wolfystock-css-ownership-inventory.md`
-- `docs/audits/wolfystock-css-selector-usage-verification.md`
-- `docs/audits/wolfystock-frontend-design-conformance-audit.md`
+- `docs/frontend/visual-system.md`
+- `docs/frontend/validation-playbook.md`
+- `docs/frontend/archive/css-ownership-inventory-2026-05-05.md`
+- `docs/frontend/archive/css-selector-usage-verification-2026-05-05.md`
+- `docs/frontend/archive/frontend-design-conformance-audit-2026-05-05.md`
 - `docs/qa/wolfystock-workflow-qa-pass.md`
 - `docs/checks/design-guard.md`
 - `docs/operations/parallel-codex-playbook.md`

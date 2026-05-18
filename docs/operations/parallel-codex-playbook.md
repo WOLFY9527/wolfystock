@@ -146,7 +146,7 @@ Run checks that match the files changed. Do not over-fix unrelated failures from
 All frontend tasks must read:
 
 ```text
-CODEX_FRONTEND_DESIGN_CONSTITUTION.md
+docs/frontend/visual-system.md
 ```
 
 Run the design guard for frontend changes:

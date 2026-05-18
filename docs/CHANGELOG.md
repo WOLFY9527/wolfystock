@@ -8,6 +8,18 @@
   scanner provider runtime/order, fallback behavior, score thresholds, score
   caps, ranking semantics, backtest wiring, portfolio wiring, and database
   schema remain unchanged.
+- **Docs domain consolidation** - Added current domain entry lanes under
+  `docs/frontend/`, `docs/backend/`, `docs/provider-data/`, `docs/scanner/`,
+  `docs/market-overview/`, `docs/rotation/`, `docs/liquidity/`,
+  `docs/portfolio/`, `docs/backtest/`, `docs/options/`,
+  `docs/admin-ops/`, and `docs/ai-llm/`. Frontend guidance is now
+  consolidated into `docs/frontend/README.md`,
+  `docs/frontend/visual-system.md`, and
+  `docs/frontend/validation-playbook.md`; superseded active frontend docs were
+  deleted after merging, while historical CSS/route/shell audit evidence moved
+  to `docs/frontend/archive/`. Updated docs indexes and live references. This
+  is docs-only taxonomy cleanup with no runtime source, tests, configs,
+  workflows, scripts, app assets, or generated outputs changed.
 
 - **Scanner score caps and explainability metadata** - Market Scanner now
   separates deterministic `raw_score` from capped `final_score` when existing
@@ -37,8 +49,8 @@
 - 🧭 **Docs governance archive pruning** - Slimmed active docs navigation by
   moving stale frontend DOM/CSS/bundle/old launch UX evidence into
   `docs/audits/archive/frontend/`, moving point-in-time QA reports into
-  `docs/qa/archive/`, archiving the transitional UI replacement map under
-  `docs/design/archive/old-ui/`, and deleting the generated design scan
+  `docs/qa/archive/`, archiving the transitional UI replacement map now under
+  `docs/frontend/archive/`, and deleting the generated design scan
   artifact. Added
   `docs/architecture/file-governance-taxonomy.md`, simplified
   `docs/audits/README.md`, refreshed archive/index links, and fixed stale
@@ -90,8 +102,8 @@
   cache, scanner, rotation, options, backtest, portfolio, auth/RBAC, storage,
   or API wiring changed.
 
-- 📝 **Frontend Playwright invocation guardrail** — Updated
-  `docs/codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md` to standardize
+- 📝 **Frontend Playwright invocation guardrail** — Updated the frontend
+  validation playbook, now at `docs/frontend/validation-playbook.md`, to standardize
   Playwright validation on WolfyStock frontend tasks: prefer
   `cd apps/dsa-web && DSA_WEB_PLAYWRIGHT_PORT=<port> npx playwright test ...`,
   allow repo-root execution only with
@@ -654,8 +666,8 @@
 - 🧭 **Home 决策台激活动态 ticker、历史回溯与导航右侧文字链** — `apps/dsa-web` 的 Home / shared nav 这一轮不再停留在静态占位：`SidebarNav.tsx` 将 header 右侧的语言、设置、控制台、登出从胶囊按钮样式收口回纯文本 utility link；`HomeBentoDashboardPage.tsx` 把搜索框、分析按钮与最近分析 history pills 直接并入首页现有 5 列 Bento grid 首行，保证它与下方 `AI Decision` 双列卡片做严格网格对齐；首页同时引入 `activeTicker + dashboardData` 状态，并在搜索、最近分析点击与历史报告命中时切换整张仪表盘的数据源，不再固定写死 NVDA。历史回溯优先消费现有 `historyApi` / `stockPoolStore` 的最近报告；没有历史命中时则退回本地动态预设，保持页面即时反馈。此次改动不调整分析 API、鉴权模型或后台任务链路，只修复首页信息流与导航呈现。
 - 🧭 **导航栏去按钮化、首页搜索归位、扫描器右侧滚动权恢复** — `apps/dsa-web` 这轮对 Home / Scanner 做了一次严格纠偏：顶部导航移除了误塞进 Header 的全局 Omnibar，`首页 / 扫描器 / 问股 / 持仓 / 回测` 回到纯文本极简链接，不再使用胶囊背景、边框和药丸样式；首页分析入口重新回到 `HomeBentoDashboardPage` 内部，在 Bento 主网格正上方恢复为独立一行的轻玻璃搜索栏，继续复用已有 `submitAnalysis` 行为；`UserScannerPage` 则把滚动权从卡片网格内部移交回右侧结果区容器本身，通过 `min-h-0 + overflow-y-auto + no-scrollbar` 恢复真实的纵向浏览能力，避免外层 flex/高度链路再次掐死滚动。此次改动不调整分析 API、路由权限或扫描业务逻辑，只纠正导航入口归属、首页搜索位置和扫描器滚动容器层级。
 - 🔎 **全局 Omnibar 复活，并废除 Home / Scanner 的暴力截断链路** — `apps/dsa-web` 将已登录桌面壳层的顶部导航升级为真正的全局 Omnibar：分析入口不再只挂在首页局部 Hero 中，而是固定出现在 masthead 中部，支持随时输入代码或公司名发起分析；与此同时，`Shell`、`HomeBentoDashboardPage` 与 `UserScannerPage` 这轮停止依赖 `overflow-hidden / h-screen / scanner shell clip` 来伪造“一屏看全”，首页与扫描器重新允许页面自然向下延展。为把首屏压回合理高度，Home Bento 的卡片 padding、网格 gap、技术/基本面卡片节奏与决策图表容器都同步收紧，图表改为 `flex-1 + min-height` 的弹性结构，避免右侧数据栈或外层等高拉伸制造空白背景。此次改动不调整后端分析接口、scanner API 或权限边界，只修复全局分析入口回退与首页/扫描器的滚动截断问题。
-- 🌌 **WolfyStock 视觉宪法第二、三阶段落地到核心工作区页面** — `apps/dsa-web` 继续按 `docs/architecture/wolfystock-frontend-visual-constitution-audit.md` 推进页面级收敛：`/chat` 去掉了消息流与底部控制台的居中 `max-w` 囚笼，改成真正跟随 `px-6 md:px-8 xl:px-12` 安全边距展开的三栏研究台；`/portfolio` 移除了 `max-w-[1920px]` 外层容器，并把交易/资金/公司行为、建账、IBKR 只读同步等主 CTA 统一切到高对比白底按钮；`/scanner` 则移除了 `mx-auto + max-w-[1920px]` 壳层，把运行按钮和命中徽标从装饰性绿色收回到白/indigo 体系，同时保留盈亏语义才继续使用绿色。`/settings/system`、`/admin/logs`、个人设置及共享 `Drawer / WorkspacePageHeader` 也同步切到更克制的深空玻璃材质、24px 级圆角、紧凑标题与非绿色 toggle/segment 语义。此次改动不改后端接口、路由权限和业务流程，只继续修正核心工作区的宽屏利用率、材质统一性与语义颜色纪律。
-- 🧭 **WolfyStock 视觉宪法第一阶段落地到共享壳层** — `apps/dsa-web` 对共享 `Layout/Nav` 做了一次严格限域收敛：`Shell`、`PreviewShell`、`SidebarNav` 与 `index.css` 现在统一改成真正的 edge-to-edge 外层壳层，去掉共享 masthead / route frame 的居中限宽，统一只保留安全边距；顶部导航、移动抽屉、预览壳层与确认对话框同步切到更克制的深色玻璃材质、边框提亮式 hover/active 反馈和中性 CTA 色，移除旧的 SpaceX 式霓虹渐变品牌强调。配套新增 `docs/architecture/wolfystock-frontend-visual-constitution-audit.md`，把仍待处理的页面级 `mx-auto / max-w-* / 绿色误用 / 过大字号` 违宪点分阶段列清，后续页面收敛将按这份审计计划继续推进。
+- 🌌 **WolfyStock 视觉宪法第二、三阶段落地到核心工作区页面** — `apps/dsa-web` 继续按前端视觉宪法审计推进页面级收敛；该历史审计现归档于 `docs/frontend/archive/frontend-visual-constitution-audit-2026-04-27.md`。`/chat` 去掉了消息流与底部控制台的居中 `max-w` 囚笼，改成真正跟随 `px-6 md:px-8 xl:px-12` 安全边距展开的三栏研究台；`/portfolio` 移除了 `max-w-[1920px]` 外层容器，并把交易/资金/公司行为、建账、IBKR 只读同步等主 CTA 统一切到高对比白底按钮；`/scanner` 则移除了 `mx-auto + max-w-[1920px]` 壳层，把运行按钮和命中徽标从装饰性绿色收回到白/indigo 体系，同时保留盈亏语义才继续使用绿色。`/settings/system`、`/admin/logs`、个人设置及共享 `Drawer / WorkspacePageHeader` 也同步切到更克制的深空玻璃材质、24px 级圆角、紧凑标题与非绿色 toggle/segment 语义。此次改动不改后端接口、路由权限和业务流程，只继续修正核心工作区的宽屏利用率、材质统一性与语义颜色纪律。
+- 🧭 **WolfyStock 视觉宪法第一阶段落地到共享壳层** — `apps/dsa-web` 对共享 `Layout/Nav` 做了一次严格限域收敛：`Shell`、`PreviewShell`、`SidebarNav` 与 `index.css` 现在统一改成真正的 edge-to-edge 外层壳层，去掉共享 masthead / route frame 的居中限宽，统一只保留安全边距；顶部导航、移动抽屉、预览壳层与确认对话框同步切到更克制的深色玻璃材质、边框提亮式 hover/active 反馈和中性 CTA 色，移除旧的 SpaceX 式霓虹渐变品牌强调。配套新增的前端视觉宪法审计现归档于 `docs/frontend/archive/frontend-visual-constitution-audit-2026-04-27.md`，保留待处理的页面级 `mx-auto / max-w-* / 绿色误用 / 过大字号` 违宪点阶段记录。
 - ✨ **问股 `/chat` 补齐 Glassmorphism 材质并精装控制台细节** — `apps/dsa-web/src/pages/ChatPage.tsx` 继续对问股页做严格限域视觉收口：底部输入区从偏沉的纯色盒子升级为带 `backdrop-blur-3xl`、细边框、hover/focus 发光反馈的 Glass Command Center，风险提示语也内嵌回输入容器底部操作带；右侧“分析引擎与视角”改成带左分隔线和渐变背景的独立 Bento 侧栏，标题增加霓虹状态点，策略胶囊统一切到更清晰的 active/inactive 材质体系；User 消息气泡同步升级为带轻毛玻璃、边框与阴影的高密度对话气泡。此次改动不调整消息流、技能语义或接口行为，只修复 `/chat` 与主站 Glassmorphism 材质语言不对齐的问题。
 - 💬 **问股 `/chat` 拆成高密度三栏工作台并把技能控制彻底右移** — `apps/dsa-web/src/pages/ChatPage.tsx` 将问股页从单列堆叠改成真正的工作台骨架：保留左侧历史对话栏，中间区域重写为独立聊天画布，右侧新增固定宽度的策略/技能控制台；原本堆在输入框上方的“通用分析 / 缠论 / 箱体震荡”等胶囊按钮已整体迁入右栏，不再挤压底部输入区。聊天滚动容器继续只负责消息流本身，内部消息画布收口到 `max-w-4xl`，并把底部安全留白改为 `pb-48`，确保最后一行回复稳定停在吸底输入框之上。与此同时，assistant Markdown 阅读节奏被强制压缩到 `text-[15px] / leading-[1.6]`，段落与列表间距同步收紧，解决此前回答文本过松、信息密度过低的问题。此次改动不调整 agent API、会话历史持久化或跟随上下文逻辑，只重构 `/chat` 的前端工作区结构与阅读密度。
 - 📐 **回测 `/backtest` 破除居中限宽并重构为真通栏工作台** — `apps/dsa-web` 对回测配置页做了一次严格限域的布局骨架修复：移除 `/backtest` 路由壳层的额外横向 padding，回测页不再依赖共享 `PageChrome` 的居中 header 容器；顶部标题区改为独立全宽 section，二级导航栏（确定性回测 / 历史评估、Normal / Professional）下沉为独立 `w-full` 通栏，主体工作区统一切换到 `px-6 xl:px-10` 的全宽画布；同时把确定性回测 cockpit 的内层 `px-* / mt-* / mb-*` 收口删除，确保左侧控制台与右侧配置台真正跟随窗口横向展开。此次改动不触碰回测 API、策略解析、结果路由或历史数据逻辑，只修复 `/backtest` 的父级限宽囚笼与桌面工作区铺开问题。
