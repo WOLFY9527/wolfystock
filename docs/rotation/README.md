@@ -22,5 +22,11 @@ fund-flow interpretation, or rotation evidence disclosure.
   notes, ETF proxy coverage, and index/asset proxy concepts explicit. ETF
   proxies are relative-strength and participation proxies only, not real
   fund-flow dollar claims.
+- US Rotation Radar quote evidence uses the configured Alpaca market-data
+  credentials (`ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`, and
+  `ALPACA_DATA_FEED`) when present to populate bounded 5m/15m/60m/1d OHLCV
+  windows. If credentials, feed entitlement, or symbol data are unavailable,
+  the provider falls back to degraded yfinance daily/proxy evidence only and
+  must not synthesize intraday windows or mark fallback/static data live.
 - Rotation UI changes must not alter score, ranking, provider, or evidence
   semantics unless explicitly scoped.

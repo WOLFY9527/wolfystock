@@ -959,6 +959,8 @@ class MarketRotationRadarService:
                     "isStale": bool(quote.get("isStale")),
                     "source": quote.get("source"),
                     "sourceLabel": quote.get("sourceLabel"),
+                    "sourceTier": quote.get("sourceTier"),
+                    "providerTier": quote.get("providerTier"),
                     "asOf": quote.get("asOf"),
                 }
             else:
@@ -971,6 +973,8 @@ class MarketRotationRadarService:
                     "isStale": False,
                     "source": "fallback",
                     "sourceLabel": "备用数据",
+                    "sourceTier": "static_fallback",
+                    "providerTier": "fallback",
                     "asOf": generated_at,
                 }
         return benchmarks
@@ -1586,6 +1590,9 @@ class MarketRotationRadarService:
             "isStale": bool(quote.get("isStale")),
             "source": quote.get("source"),
             "sourceLabel": quote.get("sourceLabel"),
+            "sourceTier": quote.get("sourceTier"),
+            "providerTier": quote.get("providerTier"),
+            "confidenceWeight": quote.get("confidenceWeight"),
             "asOf": quote.get("asOf"),
             "notes": [],
         }
@@ -1640,6 +1647,9 @@ class MarketRotationRadarService:
             "source": source,
             "sourceLabel": source_label,
             "sourceType": raw_quote.get("sourceType", raw_quote.get("source_type")),
+            "sourceTier": raw_quote.get("sourceTier", raw_quote.get("source_tier")),
+            "providerTier": raw_quote.get("providerTier", raw_quote.get("provider_tier")),
+            "confidenceWeight": raw_quote.get("confidenceWeight", raw_quote.get("confidence_weight")),
             "isFromSnapshot": bool(raw_quote.get("isFromSnapshot") or raw_quote.get("is_from_snapshot")),
             "asOf": as_of,
         }
@@ -1708,6 +1718,8 @@ class MarketRotationRadarService:
                     "isStale": window_is_stale,
                     "source": str(raw_window.get("source") or source),
                     "sourceLabel": str(raw_window.get("sourceLabel") or raw_window.get("source_label") or source_label),
+                    "sourceTier": raw_window.get("sourceTier", raw_window.get("source_tier")),
+                    "providerTier": raw_window.get("providerTier", raw_window.get("provider_tier")),
                     "asOf": str(raw_window.get("asOf") or raw_window.get("as_of") or as_of),
                     "reason": None if available else "window_unavailable",
                 }

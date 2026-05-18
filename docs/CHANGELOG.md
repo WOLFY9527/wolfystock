@@ -13,6 +13,17 @@
   fresh data. Frontend, database schema, API shape compatibility, and protected
   Scanner/Portfolio/Backtest/Options/auth/LLM/accounting domains remain
   unchanged.
+- **Rotation Radar US quote provider intraday windows** - Rotation Radar now
+  attempts a bounded configured Alpaca quote/OHLCV path before the existing
+  yfinance fallback, using the existing `ALPACA_API_KEY_ID`,
+  `ALPACA_API_SECRET_KEY`, and `ALPACA_DATA_FEED` settings. Configured provider
+  evidence can populate additive 5m/15m/60m/1d windows with source tier,
+  coverage, confidence, freshness, as-of, and per-symbol failure metadata.
+  Missing credentials or feed/symbol failures fail closed to degraded evidence;
+  yfinance remains Tier 2 delayed daily/proxy fallback only and never fabricates
+  intraday windows. Rotation Radar score/rank/stage fields, frontend, database
+  schema, MarketCache core behavior, and adjacent product domains remain
+  unchanged.
 - **Market Intelligence trust gate contract** - Added a pure backend source-tier
   trust gate for Market Intelligence evidence, covering official, exchange,
   broker-authorized, unofficial public API, public-web fallback, snapshot,
