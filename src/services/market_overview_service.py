@@ -285,7 +285,7 @@ def get_freshness_status(
             "delayMinutes": 0,
             "warning": "模拟数据，不代表当前行情",
         }
-    if is_fallback or source_key in {"fallback", "synthetic"}:
+    if is_fallback or source_key in {"fallback", "synthetic", "unavailable"}:
         return {
             "freshness": "fallback",
             "isFallback": True,
@@ -350,6 +350,11 @@ class MarketOverviewService:
 
     CACHE_TTL_SECONDS = 300
     MARKET_COLD_START_TIMEOUT_SECONDS = 2.0
+    YFINANCE_PROXY_AGGREGATE_BUDGET_SECONDS = 1.8
+    OFFICIAL_MACRO_AGGREGATE_BUDGET_SECONDS = 1.8
+    OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS = 0.9
+    SENTIMENT_AGGREGATE_BUDGET_SECONDS = 1.8
+    MARKET_TEMPERATURE_INPUT_BUDGET_SECONDS = 3.0
     CRYPTO_FANOUT_WORKERS = 4
     LEGACY_SHARED_SENTIMENT_CACHE_KEY = "sentiment"
     OVERVIEW_SENTIMENT_CACHE_KEY = "overview_sentiment"
@@ -1060,9 +1065,14 @@ class MarketOverviewService:
             "items": [],
             "last_update": updated_at,
             "updatedAt": updated_at,
+            "asOf": updated_at,
             "error": None,
             "fallback_used": True,
+            "fallbackUsed": True,
+            "isFallback": True,
+            "freshness": "fallback",
             "source": source,
+            "sourceLabel": self._source_label(source),
         }
 
     def _fallback_crypto_market_snapshot(self) -> Dict[str, Any]:
@@ -1157,6 +1167,23 @@ class MarketOverviewService:
 
     def _source_label(self, source: Any) -> str:
         return SOURCE_LABELS.get(str(source or "").lower(), str(source or "公开数据"))
+
+    @staticmethod
+    def _deadline_after(seconds: float) -> float:
+        return time.monotonic() + max(0.0, float(seconds))
+
+    @staticmethod
+    def _deadline_remaining(deadline: float) -> float:
+        return max(0.0, deadline - time.monotonic())
+
+    def _deadline_exhausted(self, deadline: float) -> bool:
+        return self._deadline_remaining(deadline) <= 0
+
+    def _deadline_timeout(self, deadline: float, per_call_timeout: float) -> Optional[float]:
+        remaining = self._deadline_remaining(deadline)
+        if remaining <= 0:
+            return None
+        return min(max(0.001, float(per_call_timeout)), remaining)
 
     def _provider_health_status(self, payload: Dict[str, Any]) -> str:
         source = str(payload.get("source") or "").lower()
@@ -1644,10 +1671,13 @@ class MarketOverviewService:
 
     def _fetch_market_sentiment_snapshot(self) -> Dict[str, Any]:
         provider_error = None
+        deadline = self._deadline_after(self.SENTIMENT_AGGREGATE_BUDGET_SECONDS)
         try:
             payload = self._fetch_cnn_fear_greed_snapshot()
         except Exception as exc:
             provider_error = str(exc)
+            if self._deadline_exhausted(deadline):
+                raise TimeoutError("sentiment provider deadline exceeded") from exc
             payload = self._fetch_alternative_fear_greed_snapshot()
             payload["source"] = "alternative_me"
 
@@ -2156,20 +2186,35 @@ class MarketOverviewService:
             "items": items,
         }
 
-    def _official_macro_points(self, *, include_credit_stress: bool = False) -> Dict[str, List[MacroObservation]]:
+    def _official_macro_points(
+        self,
+        *,
+        include_credit_stress: bool = False,
+        budget_seconds: Optional[float] = None,
+    ) -> Dict[str, List[MacroObservation]]:
         points: Dict[str, List[MacroObservation]] = {}
-        try:
-            points.update(fetch_treasury_daily_rate_observation_points(limit=2))
-        except Exception:
-            pass
+        deadline = self._deadline_after(
+            self.OFFICIAL_MACRO_AGGREGATE_BUDGET_SECONDS
+            if budget_seconds is None
+            else budget_seconds
+        )
+        timeout = self._deadline_timeout(deadline, self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
+        if timeout is not None:
+            try:
+                points.update(fetch_treasury_daily_rate_observation_points(limit=2, timeout=timeout))
+            except Exception:
+                pass
         fred_series_ids = ["DGS2", "DGS10", "DGS30", "VIXCLS", "SOFR"]
         if include_credit_stress:
             fred_series_ids.append("BAMLH0A0HYM2")
         for series_id in fred_series_ids:
             if series_id in points and points[series_id]:
                 continue
+            timeout = self._deadline_timeout(deadline, self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
+            if timeout is None:
+                break
             try:
-                series_points = fetch_fred_observation_points(series_id, limit=2)
+                series_points = fetch_fred_observation_points(series_id, limit=2, timeout=timeout)
             except Exception:
                 series_points = []
             if series_points:
@@ -2306,11 +2351,15 @@ class MarketOverviewService:
         merged_items: List[Dict[str, Any]] = []
         proxy_as_of_values: List[str] = []
         proxy_count = 0
+        deadline = self._deadline_after(self.YFINANCE_PROXY_AGGREGATE_BUDGET_SECONDS)
 
         for fallback_item in fallback_items:
             symbol = str(fallback_item.get("symbol") or "")
             ticker = self.FX_COMMODITY_PROXY_TICKERS.get(symbol)
             if symbol not in delayed_proxy_symbols or not ticker:
+                merged_items.append(fallback_item)
+                continue
+            if self._deadline_exhausted(deadline):
                 merged_items.append(fallback_item)
                 continue
             try:
@@ -2382,11 +2431,15 @@ class MarketOverviewService:
         merged_items: List[Dict[str, Any]] = []
         proxy_as_of_values: List[str] = []
         proxy_count = 0
+        deadline = self._deadline_after(self.YFINANCE_PROXY_AGGREGATE_BUDGET_SECONDS)
 
         for fallback_item in fallback_items:
             symbol = str(fallback_item.get("symbol") or "")
             ticker = self.FUTURES_DELAYED_PROXY_TICKERS.get(symbol)
             if symbol not in delayed_proxy_symbols or not ticker:
+                merged_items.append(fallback_item)
+                continue
+            if self._deadline_exhausted(deadline):
                 merged_items.append(fallback_item)
                 continue
             try:
@@ -2620,22 +2673,73 @@ class MarketOverviewService:
             "metrics": metrics,
         }
 
-    def _build_market_temperature_inputs(self) -> Dict[str, Any]:
-        indices = self._temperature_panel("indices", self.get_cn_indices, self._fallback_cn_indices_snapshot)
-        breadth = self._temperature_panel("breadth", self.get_cn_breadth, self._fallback_cn_breadth_snapshot)
-        flows = self._temperature_panel("flows", self.get_cn_flows, self._fallback_cn_flows_snapshot)
-        sectors = self._temperature_panel("sectors", self.get_sector_rotation, self._fallback_sector_rotation_snapshot)
-        rates = self._temperature_panel("rates", self.get_rates, self._fallback_rates_snapshot)
-        volatility = self._temperature_panel("volatility", self.get_volatility, self._fallback_rates_snapshot)
+    def _build_market_temperature_inputs(self, *, budget_seconds: Optional[float] = None) -> Dict[str, Any]:
+        deadline = self._deadline_after(
+            self.MARKET_TEMPERATURE_INPUT_BUDGET_SECONDS
+            if budget_seconds is None
+            else budget_seconds
+        )
+        indices = self._temperature_panel(
+            "indices",
+            self.get_cn_indices,
+            self._fallback_cn_indices_snapshot,
+            deadline=deadline,
+        )
+        breadth = self._temperature_panel(
+            "breadth",
+            self.get_cn_breadth,
+            self._fallback_cn_breadth_snapshot,
+            deadline=deadline,
+        )
+        flows = self._temperature_panel(
+            "flows",
+            self.get_cn_flows,
+            self._fallback_cn_flows_snapshot,
+            deadline=deadline,
+        )
+        sectors = self._temperature_panel(
+            "sectors",
+            self.get_sector_rotation,
+            self._fallback_sector_rotation_snapshot,
+            deadline=deadline,
+        )
+        rates = self._temperature_panel(
+            "rates",
+            self.get_rates,
+            self._fallback_rates_snapshot,
+            deadline=deadline,
+        )
+        volatility = self._temperature_panel(
+            "volatility",
+            self.get_volatility,
+            self._fallback_rates_snapshot,
+            deadline=deadline,
+        )
         rates["items"] = [*rates.get("items", []), *volatility.get("items", [])]
-        fx = self._temperature_panel("fx", self.get_fx_commodities, self._fallback_fx_commodities_snapshot)
-        futures = self._temperature_panel("futures", self.get_futures, self._fallback_futures_snapshot)
+        fx = self._temperature_panel(
+            "fx",
+            self.get_fx_commodities,
+            self._fallback_fx_commodities_snapshot,
+            deadline=deadline,
+        )
+        futures = self._temperature_panel(
+            "futures",
+            self.get_futures,
+            self._fallback_futures_snapshot,
+            deadline=deadline,
+        )
         sentiment = self._temperature_panel(
             "sentiment",
             self.get_market_sentiment,
             lambda: self._fallback_market_snapshot(self.MARKET_SENTIMENT_CACHE_KEY, "unavailable"),
+            deadline=deadline,
         )
-        crypto = self._temperature_panel("crypto", self.get_crypto, self._fallback_crypto_market_snapshot)
+        crypto = self._temperature_panel(
+            "crypto",
+            self.get_crypto,
+            self._fallback_crypto_market_snapshot,
+            deadline=deadline,
+        )
         return {
             "indices": indices,
             "breadth": breadth,
@@ -2681,9 +2785,15 @@ class MarketOverviewService:
         key: str,
         fetcher: Callable[..., Dict[str, Any]],
         fallback_factory: Callable[[], Dict[str, Any]],
+        *,
+        deadline: Optional[float] = None,
     ) -> Dict[str, Any]:
         try:
-            panel = fetcher()
+            panel = (
+                fallback_factory()
+                if deadline is not None and self._deadline_exhausted(deadline)
+                else fetcher()
+            )
         except Exception:
             panel = fallback_factory()
         category = self._category_for_cache_key(key)

@@ -186,32 +186,35 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
 
     def test_rates_and_macro_panels_expose_official_macro_metadata_when_available(self) -> None:
         service = MarketOverviewService()
+        latest_date = datetime.now(timezone.utc).date()
+        latest_date_text = latest_date.isoformat()
+        previous_date_text = (latest_date - timedelta(days=1)).isoformat()
         treasury_points = {
             "DGS2": [
-                MacroObservation("DGS2", 3.87, "2026-05-13", "2026-05-13", "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
-                MacroObservation("DGS2", 3.91, "2026-05-12", "2026-05-12", "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
+                MacroObservation("DGS2", 3.87, latest_date_text, latest_date_text, "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
+                MacroObservation("DGS2", 3.91, previous_date_text, previous_date_text, "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
             ],
             "DGS10": [
-                MacroObservation("DGS10", 4.41, "2026-05-13", "2026-05-13", "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
-                MacroObservation("DGS10", 4.45, "2026-05-12", "2026-05-12", "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
+                MacroObservation("DGS10", 4.41, latest_date_text, latest_date_text, "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
+                MacroObservation("DGS10", 4.45, previous_date_text, previous_date_text, "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
             ],
             "DGS30": [
-                MacroObservation("DGS30", 4.89, "2026-05-13", "2026-05-13", "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
-                MacroObservation("DGS30", 4.92, "2026-05-12", "2026-05-12", "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
+                MacroObservation("DGS30", 4.89, latest_date_text, latest_date_text, "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
+                MacroObservation("DGS30", 4.92, previous_date_text, previous_date_text, "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
             ],
         }
         fred_points = {
             "BAMLH0A0HYM2": [
-                MacroObservation("BAMLH0A0HYM2", 3.31, "2026-05-13", "2026-05-13", "fred:BAMLH0A0HYM2", "official_public", "daily_credit_stress"),
-                MacroObservation("BAMLH0A0HYM2", 3.45, "2026-05-12", "2026-05-12", "fred:BAMLH0A0HYM2", "official_public", "daily_credit_stress"),
+                MacroObservation("BAMLH0A0HYM2", 3.31, latest_date_text, latest_date_text, "fred:BAMLH0A0HYM2", "official_public", "daily_credit_stress"),
+                MacroObservation("BAMLH0A0HYM2", 3.45, previous_date_text, previous_date_text, "fred:BAMLH0A0HYM2", "official_public", "daily_credit_stress"),
             ],
             "VIXCLS": [
-                MacroObservation("VIXCLS", 18.22, "2026-05-13", "2026-05-13", "fred:VIXCLS", "official_public", "daily_close"),
-                MacroObservation("VIXCLS", 19.11, "2026-05-12", "2026-05-12", "fred:VIXCLS", "official_public", "daily_close"),
+                MacroObservation("VIXCLS", 18.22, latest_date_text, latest_date_text, "fred:VIXCLS", "official_public", "daily_close"),
+                MacroObservation("VIXCLS", 19.11, previous_date_text, previous_date_text, "fred:VIXCLS", "official_public", "daily_close"),
             ],
             "SOFR": [
-                MacroObservation("SOFR", 5.31, "2026-05-13", "2026-05-13", "fred:SOFR", "official_public", "daily_fixing"),
-                MacroObservation("SOFR", 5.32, "2026-05-12", "2026-05-12", "fred:SOFR", "official_public", "daily_fixing"),
+                MacroObservation("SOFR", 5.31, latest_date_text, latest_date_text, "fred:SOFR", "official_public", "daily_fixing"),
+                MacroObservation("SOFR", 5.32, previous_date_text, previous_date_text, "fred:SOFR", "official_public", "daily_fixing"),
             ],
         }
 
@@ -232,7 +235,7 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
         self.assertEqual(rates_items["US2Y"]["sourceType"], "official_public")
         self.assertEqual(rates_items["US2Y"]["sourceId"], "treasury:daily_treasury_yield_curve")
         self.assertEqual(rates_items["US10Y"]["sourceLabel"], "US Treasury Daily Par Yield Curve Rates")
-        self.assertEqual(rates_items["US30Y"]["asOf"], "2026-05-13")
+        self.assertEqual(rates_items["US30Y"]["asOf"], latest_date_text)
         self.assertEqual(rates_items["SOFR"]["sourceType"], "official_public")
         self.assertEqual(rates_items["SOFR"]["sourceId"], "fred:SOFR")
         self.assertFalse(rates_items["US10Y"]["isFallback"])
@@ -259,7 +262,7 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
             macro_items["CREDIT"]["sourceLabel"],
             "FRED ICE BofA US High Yield Index Option-Adjusted Spread",
         )
-        self.assertEqual(macro_items["CREDIT"]["asOf"], "2026-05-13")
+        self.assertEqual(macro_items["CREDIT"]["asOf"], latest_date_text)
         self.assertEqual(macro_items["CREDIT"]["freshness"], "delayed")
         self.assertTrue(macro_items["CREDIT"]["observationOnly"])
         self.assertFalse(macro_items["CREDIT"]["includedInScore"])
