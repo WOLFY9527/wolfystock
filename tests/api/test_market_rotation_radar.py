@@ -67,6 +67,9 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
         assert all("rotationStateEvidence" in theme for theme in payload["themes"])
         assert all(theme["rotationStateEvidence"]["schemaVersion"] == "rotation_state_evidence_v1" for theme in payload["themes"])
         assert all(theme["rotationStateEvidence"]["flowLanguageAllowed"] is False for theme in payload["themes"])
+        assert all(theme["rotationStateEvidence"]["evidenceSnapshot"]["contractVersion"] == "source_confidence_contract_v1" for theme in payload["themes"])
+        assert all(theme["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["freshness"] == "fallback" for theme in payload["themes"])
+        assert all(theme["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["isFallback"] is True for theme in payload["themes"])
         assert all(theme["proxyQuality"]["coveragePercent"] <= 100 for theme in payload["themes"])
         assert all("persistenceEvidence" in theme for theme in payload["themes"])
         assert "watchlistSortingExplanation" in payload["summary"]
@@ -444,6 +447,10 @@ def test_market_rotation_radar_partial_quote_failures_are_sanitized_in_api_paylo
         assert payload["metadata"]["quoteProvider"]["failedSymbolCount"] == 5
         assert payload["metadata"]["quoteProvider"]["unavailableReason"] == "symbol_unavailable"
         assert "部分主题行情暂不可用" in payload["warning"]
+        ai_apps = next(theme for theme in payload["themes"] if theme["id"] == "ai_applications")
+        assert ai_apps["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["freshness"] == "partial"
+        assert ai_apps["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["isPartial"] is True
+        assert ai_apps["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["freshness"] not in {"live", "fresh"}
         assert "possibly delisted" not in json.dumps(payload, ensure_ascii=False).lower()
     finally:
         client.close()

@@ -7,6 +7,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Mapping
 
+from src.contracts.source_confidence import (
+    SOURCE_CONFIDENCE_CONTRACT_VERSION,
+    coerce_source_confidence_contract,
+)
+
 
 ROTATION_STATE_EVIDENCE_SCHEMA_VERSION = "rotation_state_evidence_v1"
 NO_ADVICE_DISCLOSURE = "仅用于观察资金轮动迹象，非买卖建议。"
@@ -233,6 +238,15 @@ def _signal_status(value: float | None, *, strong: float, usable: float = 0.0) -
     return "weak"
 
 
+def _ratio(value: Any) -> float | None:
+    number = _number(value)
+    if number is None:
+        return None
+    if number > 1.0:
+        number = number / 100.0
+    return max(0.0, min(1.0, number))
+
+
 def _signals(
     theme: Mapping[str, Any],
     flow_type: RotationFlowEvidenceType,
@@ -431,6 +445,199 @@ def _ui_summary(state: str, signals: Mapping[str, RotationStateSignal], required
     return summary
 
 
+def _signal_source_confidence(
+    *,
+    source: str,
+    source_label: str,
+    as_of: str | None,
+    freshness: str,
+    coverage_ratio: float | None,
+    is_fallback: bool,
+    is_stale: bool,
+    is_partial: bool,
+    is_unavailable: bool,
+    degradation_reason: str | None,
+) -> dict[str, Any]:
+    confidence_weight = 0.0 if is_unavailable else coverage_ratio if coverage_ratio is not None else 0.0
+    return coerce_source_confidence_contract(
+        {
+            "source": source,
+            "sourceLabel": source_label,
+            "asOf": as_of,
+            "freshness": freshness,
+            "isFallback": is_fallback,
+            "isStale": is_stale,
+            "isPartial": is_partial,
+            "isUnavailable": is_unavailable,
+            "confidenceWeight": confidence_weight,
+            "coverage": coverage_ratio,
+            "degradationReason": degradation_reason,
+        }
+    ).to_dict()
+
+
+def _evidence_snapshot(
+    theme: Mapping[str, Any],
+    *,
+    computed_at: str | None,
+    as_of: str | None,
+    signals: Mapping[str, RotationStateSignal],
+) -> dict[str, Any]:
+    theme_source = str(theme.get("source") or "rotation_state").strip() or "rotation_state"
+    theme_source_label = str(theme.get("sourceLabel") or "轮动证据").strip() or "轮动证据"
+    theme_freshness = str(theme.get("freshness") or "unknown").strip() or "unknown"
+    theme_is_fallback = bool(theme.get("isFallback"))
+    theme_is_stale = bool(theme.get("isStale"))
+
+    breadth = _mapping(theme.get("breadth"))
+    volume = _mapping(theme.get("volume"))
+    synchronization = _mapping(theme.get("synchronization"))
+    persistence = _mapping(theme.get("persistenceEvidence"))
+    required_windows = _string_list(persistence.get("requiredWindows")) or ["5m", "15m", "60m", "1d"]
+    available_windows = _string_list(persistence.get("availableWindows"))
+    stale_or_fallback_windows = _string_list(persistence.get("staleOrFallbackWindows"))
+
+    breadth_coverage_ratio = _ratio(breadth.get("coveragePercent"))
+    configured_members = max(int(_number(breadth.get("configuredMembers")) or 0), 0)
+    volume_available_members = max(int(_number(volume.get("availableMemberCount")) or 0), 0)
+    volume_coverage_ratio = (
+        max(0.0, min(1.0, volume_available_members / configured_members))
+        if configured_members > 0
+        else breadth_coverage_ratio
+    )
+    persistence_coverage_ratio = (
+        max(0.0, min(1.0, len(available_windows) / len(required_windows)))
+        if required_windows
+        else 0.0
+    )
+    signal_definitions = {
+        "relativeStrength": {
+            "label": "代理强度",
+            "status": signals["relativeStrength"].status,
+            "value": signals["relativeStrength"].value,
+            "coverageRatio": breadth_coverage_ratio,
+            "isFallback": theme_is_fallback,
+            "isStale": theme_is_stale,
+            "isPartial": (breadth_coverage_ratio or 0.0) < 1.0 or signals["relativeStrength"].status == "weak",
+            "isUnavailable": signals["relativeStrength"].value is None,
+            "degradationReason": "weak_signal" if signals["relativeStrength"].status == "weak" else "signal_unavailable" if signals["relativeStrength"].value is None else "partial_coverage" if (breadth_coverage_ratio or 0.0) < 1.0 else None,
+        },
+        "breadth": {
+            "label": "广度确认",
+            "status": signals["breadth"].status,
+            "value": signals["breadth"].value,
+            "coverageRatio": breadth_coverage_ratio,
+            "isFallback": theme_is_fallback,
+            "isStale": theme_is_stale,
+            "isPartial": (breadth_coverage_ratio or 0.0) < 1.0 or signals["breadth"].status == "weak",
+            "isUnavailable": signals["breadth"].value is None,
+            "degradationReason": "weak_signal" if signals["breadth"].status == "weak" else "signal_unavailable" if signals["breadth"].value is None else "partial_coverage" if (breadth_coverage_ratio or 0.0) < 1.0 else None,
+        },
+        "volume": {
+            "label": "量能确认",
+            "status": signals["volumeExpansion"].status,
+            "value": signals["volumeExpansion"].value,
+            "coverageRatio": volume_coverage_ratio,
+            "isFallback": theme_is_fallback,
+            "isStale": theme_is_stale,
+            "isPartial": (volume_coverage_ratio or 0.0) < 1.0 or signals["volumeExpansion"].status == "weak",
+            "isUnavailable": signals["volumeExpansion"].value is None,
+            "degradationReason": "weak_signal" if signals["volumeExpansion"].status == "weak" else "signal_unavailable" if signals["volumeExpansion"].value is None else "partial_coverage" if (volume_coverage_ratio or 0.0) < 1.0 else None,
+        },
+        "persistence": {
+            "label": "跨时窗延续",
+            "status": signals["momentumPersistence"].status,
+            "value": signals["momentumPersistence"].value,
+            "coverageRatio": persistence_coverage_ratio,
+            "isFallback": theme_is_fallback,
+            "isStale": theme_is_stale,
+            "isPartial": len(available_windows) < len(required_windows) or signals["momentumPersistence"].status in {"weak", "usable"} or bool(stale_or_fallback_windows),
+            "isUnavailable": signals["momentumPersistence"].value is None or not available_windows,
+            "degradationReason": "signal_unavailable" if signals["momentumPersistence"].value is None or not available_windows else "partial_coverage" if len(available_windows) < len(required_windows) or bool(stale_or_fallback_windows) else "weak_signal" if signals["momentumPersistence"].status == "weak" else None,
+        },
+        "vwapParticipation": {
+            "label": "VWAP 参与度",
+            "status": _signal_status(_number(synchronization.get("aboveVwapPercent")), strong=70.0, usable=50.0),
+            "value": _number(synchronization.get("aboveVwapPercent")),
+            "coverageRatio": breadth_coverage_ratio,
+            "isFallback": theme_is_fallback,
+            "isStale": theme_is_stale,
+            "isPartial": (breadth_coverage_ratio or 0.0) < 1.0 or (_number(synchronization.get("aboveVwapPercent")) or 0.0) < 50.0,
+            "isUnavailable": _number(synchronization.get("aboveVwapPercent")) is None,
+            "degradationReason": "weak_signal" if (_number(synchronization.get("aboveVwapPercent")) or 0.0) < 50.0 and _number(synchronization.get("aboveVwapPercent")) is not None else "signal_unavailable" if _number(synchronization.get("aboveVwapPercent")) is None else "partial_coverage" if (breadth_coverage_ratio or 0.0) < 1.0 else None,
+        },
+    }
+
+    signal_snapshots: dict[str, Any] = {}
+    degraded_signal_count = 0
+    unavailable_signal_count = 0
+    coverage_ratios: list[float] = []
+    for key, item in signal_definitions.items():
+        coverage_ratio = item["coverageRatio"]
+        coverage_percent = round(coverage_ratio * 100, 1) if coverage_ratio is not None else None
+        source_confidence = _signal_source_confidence(
+            source=f"{theme_source}.{key}",
+            source_label=f"{theme_source_label} {item['label']}",
+            as_of=as_of,
+            freshness=theme_freshness,
+            coverage_ratio=coverage_ratio,
+            is_fallback=bool(item["isFallback"]),
+            is_stale=bool(item["isStale"]),
+            is_partial=bool(item["isPartial"]),
+            is_unavailable=bool(item["isUnavailable"]),
+            degradation_reason=item["degradationReason"],
+        )
+        degraded = bool(
+            source_confidence["isFallback"]
+            or source_confidence["isStale"]
+            or source_confidence["isPartial"]
+            or source_confidence["isUnavailable"]
+            or item["status"] in {"weak", "missing"}
+        )
+        if degraded:
+            degraded_signal_count += 1
+        if source_confidence["isUnavailable"]:
+            unavailable_signal_count += 1
+        if coverage_ratio is not None:
+            coverage_ratios.append(coverage_ratio)
+        signal_snapshots[key] = {
+            "label": item["label"],
+            "status": item["status"],
+            "value": item["value"],
+            "available": not source_confidence["isUnavailable"],
+            "degraded": degraded,
+            "coveragePercent": coverage_percent,
+            "sourceConfidence": source_confidence,
+        }
+
+    overall_coverage_ratio = min(coverage_ratios) if coverage_ratios else 0.0
+    overall_signal_count = len(signal_snapshots)
+    overall_partial = degraded_signal_count > 0 and not theme_is_fallback and not theme_is_stale
+    overall_confidence = _signal_source_confidence(
+        source=f"{theme_source}.snapshot",
+        source_label=f"{theme_source_label} 快照",
+        as_of=as_of,
+        freshness=theme_freshness,
+        coverage_ratio=overall_coverage_ratio,
+        is_fallback=theme_is_fallback,
+        is_stale=theme_is_stale,
+        is_partial=overall_partial,
+        is_unavailable=False,
+        degradation_reason="partial_coverage" if overall_partial else "fallback_source" if theme_is_fallback else "stale_source" if theme_is_stale else None,
+    )
+    return {
+        "contractVersion": SOURCE_CONFIDENCE_CONTRACT_VERSION,
+        "computedAt": computed_at,
+        "asOf": as_of,
+        "signalCount": overall_signal_count,
+        "degradedSignalCount": degraded_signal_count,
+        "unavailableSignalCount": unavailable_signal_count,
+        "coveragePercent": round(overall_coverage_ratio * 100, 1),
+        "sourceConfidence": overall_confidence,
+        "signals": signal_snapshots,
+    }
+
+
 def build_rotation_state_evidence(
     theme: Mapping[str, Any],
     context: Mapping[str, Any] | None = None,
@@ -497,4 +704,10 @@ def build_rotation_state_evidence(
         adminDiagnostics=diagnostics,
         noAdviceDisclosure=str(theme.get("noAdviceDisclosure") or NO_ADVICE_DISCLOSURE),
     ).to_dict()
+    evidence["evidenceSnapshot"] = _evidence_snapshot(
+        theme,
+        computed_at=evidence.get("computedAt"),
+        as_of=evidence.get("asOf"),
+        signals=signals,
+    )
     return evidence

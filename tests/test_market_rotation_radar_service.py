@@ -342,6 +342,17 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertIn("部分主题行情暂不可用", payload["warning"])
         self.assertNotIn("possibly delisted", json.dumps(payload, ensure_ascii=False).lower())
 
+        theme = next(item for item in payload["themes"] if item["id"] == "ai_applications")
+        snapshot = theme["rotationStateEvidence"]["evidenceSnapshot"]
+
+        self.assertEqual(snapshot["contractVersion"], "source_confidence_contract_v1")
+        self.assertEqual(snapshot["sourceConfidence"]["freshness"], "partial")
+        self.assertTrue(snapshot["sourceConfidence"]["isPartial"])
+        self.assertFalse(snapshot["sourceConfidence"]["isFallback"])
+        self.assertNotIn(snapshot["sourceConfidence"]["freshness"], {"live", "fresh"})
+        self.assertEqual(snapshot["signals"]["breadth"]["sourceConfidence"]["freshness"], "partial")
+        self.assertEqual(snapshot["signals"]["volume"]["sourceConfidence"]["freshness"], "partial")
+
     def test_rotation_radar_yfinance_quote_provider_reuses_history_transport(self) -> None:
         frame = pd.DataFrame(
             {
@@ -539,6 +550,12 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(infra["stage"], "weak_or_no_signal")
         self.assertEqual(infra["rotationScore"], 36)
         self.assertEqual(infra["rotationStateEvidence"]["state"], "divergence")
+        self.assertEqual(infra["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["freshness"], "stale")
+        self.assertTrue(infra["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["isStale"])
+        self.assertNotIn(
+            infra["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["freshness"],
+            {"live", "fresh"},
+        )
         self.assertFalse(infra["newslessRotation"])
 
     def test_rotation_state_evidence_does_not_trigger_additional_provider_calls(self) -> None:

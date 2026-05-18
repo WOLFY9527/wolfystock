@@ -318,3 +318,177 @@ def test_rotation_state_ui_summary_stays_user_safe() -> None:
     assert "raw" not in lowered
     assert "debug" not in lowered
     assert "schema" not in lowered
+
+
+def test_rotation_state_evidence_adds_signal_snapshot_metadata_and_caps_weak_partial_inputs() -> None:
+    from src.services.rotation_state_evidence import build_rotation_state_evidence
+
+    evidence = build_rotation_state_evidence(
+        _theme_payload(
+            freshness="live",
+            breadth={
+                "observedMembers": 2,
+                "configuredMembers": 4,
+                "coveragePercent": 50.0,
+                "percentUp": 50.0,
+                "percentOutperformingBenchmark": 25.0,
+            },
+            volume={
+                "averageRelativeVolume": 0.94,
+                "availableMemberCount": 2,
+                "label": "量能偏弱",
+            },
+            relativeStrength={
+                "benchmark": "QQQ",
+                "benchmarkChangePercent": 0.4,
+                "averageThemeChangePercent": 0.5,
+                "averageRelativeStrengthPercent": 0.1,
+                "vsBenchmarks": {"QQQ": 0.1},
+            },
+            synchronization={
+                "sameDirectionPercent": 50.0,
+                "aboveVwapPercent": 25.0,
+                "persistencePercent": 50.0,
+                "persistenceScore": 0.4,
+                "label": "同步性不足",
+            },
+            timeWindows={
+                "5m": {"available": False, "isFallback": True, "isStale": False, "averageChangePercent": None},
+                "15m": {"available": True, "isFallback": False, "isStale": False, "averageChangePercent": 0.2},
+                "60m": {"available": False, "isFallback": False, "isStale": True, "averageChangePercent": None},
+                "1d": {"available": True, "isFallback": False, "isStale": False, "averageChangePercent": 0.5},
+            },
+            persistenceEvidence={
+                "score": 0.4,
+                "label": "跨时窗证据不足",
+                "availableWindows": ["15m", "1d"],
+                "missingWindows": ["5m", "60m"],
+                "staleOrFallbackWindows": ["5m", "60m"],
+                "positiveWindowCount": 1,
+                "negativeWindowCount": 0,
+                "sameDirectionWindowCount": 1,
+                "requiredWindows": ["5m", "15m", "60m", "1d"],
+                "explanation": "跨时窗证据不足：可用 15m/1d，缺失 5m/60m，备用/过期 5m/60m。",
+            },
+        ),
+        {"market": "US", "taxonomyVersion": "sector_rotation_taxonomy_v1"},
+    )
+
+    snapshot = evidence["evidenceSnapshot"]
+    overall = snapshot["sourceConfidence"]
+    relative_strength = snapshot["signals"]["relativeStrength"]["sourceConfidence"]
+    persistence = snapshot["signals"]["persistence"]["sourceConfidence"]
+    vwap = snapshot["signals"]["vwapParticipation"]["sourceConfidence"]
+
+    assert snapshot["contractVersion"] == "source_confidence_contract_v1"
+    assert overall["freshness"] == "partial"
+    assert overall["isPartial"] is True
+    assert overall["isFallback"] is False
+    assert overall["isStale"] is False
+    assert overall["confidenceWeight"] <= 0.7
+    assert overall["coverage"] == 0.5
+    assert snapshot["degradedSignalCount"] >= 3
+    assert snapshot["signals"]["relativeStrength"]["status"] == "weak"
+    assert relative_strength["freshness"] == "partial"
+    assert relative_strength["isPartial"] is True
+    assert relative_strength["isUnavailable"] is False
+    assert persistence["freshness"] == "partial"
+    assert persistence["isPartial"] is True
+    assert vwap["freshness"] == "partial"
+    assert vwap["isPartial"] is True
+    assert vwap["isUnavailable"] is False
+
+
+def test_rotation_state_evidence_marks_fallback_stale_and_unavailable_snapshot_inputs_as_degraded() -> None:
+    from src.services.rotation_state_evidence import build_rotation_state_evidence
+
+    fallback_evidence = build_rotation_state_evidence(
+        _theme_payload(
+            source="fallback",
+            sourceLabel="备用数据",
+            freshness="fallback",
+            isFallback=True,
+            confidence=0.12,
+            breadth={
+                "observedMembers": 0,
+                "configuredMembers": 4,
+                "coveragePercent": 0.0,
+                "percentUp": None,
+                "percentOutperformingBenchmark": None,
+            },
+            volume={"averageRelativeVolume": None, "availableMemberCount": 0, "label": "成交额扩张证据不足"},
+            relativeStrength={
+                "benchmark": "QQQ",
+                "benchmarkChangePercent": None,
+                "averageThemeChangePercent": None,
+                "averageRelativeStrengthPercent": None,
+                "vsBenchmarks": {},
+            },
+            synchronization={
+                "sameDirectionPercent": None,
+                "aboveVwapPercent": None,
+                "persistencePercent": None,
+                "persistenceScore": 0.0,
+                "label": "同步性证据不足",
+            },
+            timeWindows={
+                "5m": {"available": False, "isFallback": True, "isStale": False, "averageChangePercent": None},
+                "15m": {"available": False, "isFallback": True, "isStale": False, "averageChangePercent": None},
+                "60m": {"available": False, "isFallback": True, "isStale": False, "averageChangePercent": None},
+                "1d": {"available": False, "isFallback": True, "isStale": False, "averageChangePercent": None},
+            },
+            persistenceEvidence={
+                "score": 0.0,
+                "label": "跨时窗证据待补齐",
+                "availableWindows": [],
+                "missingWindows": ["5m", "15m", "60m", "1d"],
+                "staleOrFallbackWindows": ["5m", "15m", "60m", "1d"],
+                "positiveWindowCount": 0,
+                "negativeWindowCount": 0,
+                "sameDirectionWindowCount": 0,
+                "requiredWindows": ["5m", "15m", "60m", "1d"],
+                "explanation": "跨时窗证据待补齐：可用 无，缺失 5m/15m/60m/1d，备用/过期 5m/15m/60m/1d。",
+            },
+        ),
+        {"market": "US", "taxonomyVersion": "sector_rotation_taxonomy_v1"},
+    )
+    stale_evidence = build_rotation_state_evidence(
+        _theme_payload(
+            freshness="stale",
+            isStale=True,
+            timeWindows={
+                "5m": {"available": True, "isFallback": False, "isStale": True, "averageChangePercent": 0.4},
+                "15m": {"available": True, "isFallback": False, "isStale": True, "averageChangePercent": 0.8},
+                "60m": {"available": True, "isFallback": False, "isStale": True, "averageChangePercent": 1.1},
+                "1d": {"available": True, "isFallback": False, "isStale": True, "averageChangePercent": 1.3},
+            },
+            persistenceEvidence={
+                "score": 0.6,
+                "label": "跨时窗待确认",
+                "availableWindows": ["5m", "15m", "60m", "1d"],
+                "missingWindows": [],
+                "staleOrFallbackWindows": ["5m", "15m", "60m", "1d"],
+                "positiveWindowCount": 4,
+                "negativeWindowCount": 0,
+                "sameDirectionWindowCount": 4,
+                "requiredWindows": ["5m", "15m", "60m", "1d"],
+                "explanation": "跨时窗待确认：可用 5m/15m/60m/1d，缺失 无，备用/过期 5m/15m/60m/1d。",
+            },
+        ),
+        {"market": "US", "taxonomyVersion": "sector_rotation_taxonomy_v1"},
+    )
+
+    fallback_snapshot = fallback_evidence["evidenceSnapshot"]
+    stale_snapshot = stale_evidence["evidenceSnapshot"]
+
+    assert fallback_snapshot["sourceConfidence"]["freshness"] == "fallback"
+    assert fallback_snapshot["sourceConfidence"]["isFallback"] is True
+    assert fallback_snapshot["sourceConfidence"]["confidenceWeight"] <= 0.4
+    assert fallback_snapshot["signals"]["relativeStrength"]["sourceConfidence"]["freshness"] == "unavailable"
+    assert fallback_snapshot["signals"]["relativeStrength"]["sourceConfidence"]["isUnavailable"] is True
+    assert fallback_snapshot["signals"]["breadth"]["sourceConfidence"]["freshness"] == "unavailable"
+    assert fallback_snapshot["signals"]["vwapParticipation"]["sourceConfidence"]["freshness"] == "unavailable"
+    assert stale_snapshot["sourceConfidence"]["freshness"] == "stale"
+    assert stale_snapshot["sourceConfidence"]["isStale"] is True
+    assert stale_snapshot["sourceConfidence"]["confidenceWeight"] <= 0.6
+    assert stale_snapshot["signals"]["persistence"]["sourceConfidence"]["freshness"] == "stale"
