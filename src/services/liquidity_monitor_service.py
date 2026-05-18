@@ -8,6 +8,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
+from src.contracts.source_confidence import (
+    SOURCE_CONFIDENCE_CONTRACT_VERSION,
+    coerce_source_confidence_contract,
+)
 from src.services.market_cache import MarketCache, market_cache
 from src.services.market_data_source_registry import project_source_provenance
 from src.services.market_overview_binance_transport import fetch_binance_funding_row
@@ -20,6 +24,19 @@ ADVISORY_DISCLOSURE = "仅用于观察市场流动性环境，非买卖建议，
 FRESHNESS_ORDER = {"live": 0, "cached": 1, "delayed": 2, "stale": 3, "fallback": 4, "mock": 5, "error": 6, "unavailable": 7}
 RELIABLE_FRESHNESS = {"live", "cached", "delayed"}
 POSSIBLE_WEIGHT = 43
+SOURCE_CONFIDENCE_BY_TYPE = {
+    "official_public": 1.0,
+    "exchange_public": 1.0,
+    "public_proxy": 0.8,
+    "unofficial_proxy": 0.7,
+    "cache_snapshot": 0.6,
+    "fallback_static": 0.4,
+    "synthetic_fixture": 0.2,
+    "delayed_fixture": 0.4,
+    "malformed_fixture": 0.0,
+    "disabled_live_stub": 0.0,
+    "missing": 0.0,
+}
 OFFICIAL_PANEL_REQUIRED_SYMBOL_GROUPS = {
     "volatility": ({"VIX", "VIXCLS"},),
     "rates": ({"US2Y"}, {"US10Y"}, {"US30Y"}),
@@ -313,6 +330,20 @@ class LiquidityMonitorService:
             True,
             f"{int(breadth['advancers'])}/{int(breadth['count'])} 上涨 | 均值 {float(breadth['avg_change']):+.2f}%",
             freshness=str(breadth["freshness"]),
+            evidence=self._indicator_evidence(
+                status=status,
+                freshness=str(breadth["freshness"]),
+                inputs=[
+                    self._source_confidence_input_from_item(
+                        item,
+                        panel,
+                        key=str(item.get("symbol") or ""),
+                        label=str(item.get("label") or item.get("symbol") or ""),
+                    )
+                    for item, _ in breadth["entries"]
+                ],
+                expected_input_count=3,
+            ),
         )
 
     def _crypto_funding_indicator(self, panel: PanelState) -> Dict[str, Any]:
@@ -367,6 +398,20 @@ class LiquidityMonitorService:
             False,
             f"{' | '.join(values)} | 均值 {avg_value:+.4f}% | 来源 {source_label} | 类型 {source_type}",
             freshness=freshness,
+            evidence=self._indicator_evidence(
+                status=status,
+                freshness=freshness,
+                inputs=[
+                    self._source_confidence_input_from_item(
+                        item,
+                        funding_panel,
+                        key=str(item.get("symbol") or ""),
+                        label=str(item.get("label") or item.get("symbol") or ""),
+                    )
+                    for item in items
+                ],
+                expected_input_count=2,
+            ),
         )
 
     def _vix_indicator(self, panel: PanelState, macro_panel: PanelState) -> Dict[str, Any]:
@@ -430,6 +475,19 @@ class LiquidityMonitorService:
             True,
             self._summary_with_metadata(self._signed_percent_text(change), item=item, freshness=freshness),
             freshness=freshness,
+            evidence=self._indicator_evidence(
+                status=status,
+                freshness=freshness,
+                inputs=[
+                    self._source_confidence_input_from_item(
+                        item,
+                        panel,
+                        key=str(item.get("symbol") or "VIX"),
+                        label=str(item.get("label") or "VIX"),
+                    )
+                ],
+                expected_input_count=1,
+            ),
         )
 
     def _usd_pressure_indicator(self, fx_panel: PanelState, rates_panel: PanelState) -> Dict[str, Any]:
@@ -476,6 +534,15 @@ class LiquidityMonitorService:
             True,
             self._summary_with_metadata(summary, item=components[0], freshness=freshness),
             freshness=freshness,
+            evidence=self._indicator_evidence(
+                status=status,
+                freshness=freshness,
+                inputs=[
+                    self._source_confidence_input_from_component(component)
+                    for component in components
+                ],
+                expected_input_count=max(2, len(components)) if components else 2,
+            ),
         )
 
     def _us_rates_indicator(self, panel: PanelState, macro_panel: PanelState) -> Dict[str, Any]:
@@ -558,6 +625,15 @@ class LiquidityMonitorService:
             True,
             self._summary_with_component_metadata(summary, components, freshness=freshness),
             freshness=freshness,
+            evidence=self._indicator_evidence(
+                status=status,
+                freshness=freshness,
+                inputs=[
+                    self._source_confidence_input_from_component(component)
+                    for component in components
+                ],
+                expected_input_count=max(2, len(yield_components)) if components else 2,
+            ),
         )
 
     def _us_etf_flow_indicator(self, panel: PanelState) -> Dict[str, Any]:
@@ -566,7 +642,31 @@ class LiquidityMonitorService:
             return self._indicator("us_etf_flow_proxy", "US ETF 资金代理", panel, "unavailable", 0, 5, False, "仅在可靠 funds-flow 缓存存在时启用")
         value = self._numeric(item.get("value"))
         contribution = 5 if (value or 0) > 0 else -5 if (value or 0) < 0 else 0
-        return self._indicator("us_etf_flow_proxy", "US ETF 资金代理", panel, "partial", contribution, 5, True, self._signed_number_text(value), freshness=self._item_freshness(item, panel))
+        freshness = self._item_freshness(item, panel)
+        return self._indicator(
+            "us_etf_flow_proxy",
+            "US ETF 资金代理",
+            panel,
+            "partial",
+            contribution,
+            5,
+            True,
+            self._signed_number_text(value),
+            freshness=freshness,
+            evidence=self._indicator_evidence(
+                status="partial",
+                freshness=freshness,
+                inputs=[
+                    self._source_confidence_input_from_item(
+                        item,
+                        panel,
+                        key=str(item.get("symbol") or "ETF"),
+                        label=str(item.get("label") or "ETF"),
+                    )
+                ],
+                expected_input_count=1,
+            ),
+        )
 
     def _us_breadth_indicator(self, panel: PanelState) -> Dict[str, Any]:
         breadth = self._extract_us_breadth_components(panel)
@@ -589,6 +689,15 @@ class LiquidityMonitorService:
             True,
             " | ".join(summary_parts),
             freshness=str(breadth["freshness"]),
+            evidence=self._indicator_evidence(
+                status=status,
+                freshness=str(breadth["freshness"]),
+                inputs=[
+                    self._source_confidence_input_from_component(proxy)
+                    for proxy in breadth["proxies"]
+                ],
+                expected_input_count=max(2, len(breadth["proxies"])) if breadth["proxies"] else 2,
+            ),
         )
 
     def _cn_hk_index_indicator(self, panel: PanelState) -> Dict[str, Any]:
@@ -624,6 +733,15 @@ class LiquidityMonitorService:
             True,
             " | ".join(summary_parts),
             freshness=str(extracted["freshness"]),
+            evidence=self._indicator_evidence(
+                status=status,
+                freshness=str(extracted["freshness"]),
+                inputs=[
+                    self._source_confidence_input_from_component(flow)
+                    for flow in extracted["flows"]
+                ],
+                expected_input_count=max(2, len(extracted["flows"])) if extracted["flows"] else 2,
+            ),
         )
 
     def _cn_money_rates_indicator(self, panel: PanelState) -> Dict[str, Any]:
@@ -634,7 +752,31 @@ class LiquidityMonitorService:
         available = [item for item in (dr007, shibor) if item is not None]
         avg_change = sum(float(self._change_value(item) or 0.0) for item in available) / len(available)
         freshness = self._weakest_freshness([self._item_freshness(item, panel) for item in available])
-        return self._indicator("cn_money_market_rates", "CN 货币市场利率", panel, "partial", 0, 0, False, f"均值 {avg_change:+.2f}%", freshness=freshness)
+        return self._indicator(
+            "cn_money_market_rates",
+            "CN 货币市场利率",
+            panel,
+            "partial",
+            0,
+            0,
+            False,
+            f"均值 {avg_change:+.2f}%",
+            freshness=freshness,
+            evidence=self._indicator_evidence(
+                status="partial",
+                freshness=freshness,
+                inputs=[
+                    self._source_confidence_input_from_item(
+                        item,
+                        panel,
+                        key=str(item.get("symbol") or ""),
+                        label=str(item.get("label") or item.get("symbol") or ""),
+                    )
+                    for item in available
+                ],
+                expected_input_count=2,
+            ),
+        )
 
     def _futures_indicator(self, panel: PanelState) -> Dict[str, Any]:
         if panel.is_fallback or panel.freshness in {"fallback", "mock", "error", "unavailable"}:
@@ -644,7 +786,31 @@ class LiquidityMonitorService:
             return self._indicator("futures_premarket", "期货 / 盘前方向", panel, "unavailable", 0, 0, False, "缺少可靠期货快照")
         avg_change = sum(float(self._change_value(item) or 0.0) for item in items) / len(items)
         freshness = self._weakest_freshness([self._item_freshness(item, panel) for item in items])
-        return self._indicator("futures_premarket", "期货 / 盘前方向", panel, "partial", 0, 0, False, f"均值 {avg_change:+.2f}%", freshness=freshness)
+        return self._indicator(
+            "futures_premarket",
+            "期货 / 盘前方向",
+            panel,
+            "partial",
+            0,
+            0,
+            False,
+            f"均值 {avg_change:+.2f}%",
+            freshness=freshness,
+            evidence=self._indicator_evidence(
+                status="partial",
+                freshness=freshness,
+                inputs=[
+                    self._source_confidence_input_from_item(
+                        item,
+                        panel,
+                        key=str(item.get("symbol") or ""),
+                        label=str(item.get("label") or item.get("symbol") or ""),
+                    )
+                    for item in items
+                ],
+                expected_input_count=max(2, len(items)) if items else 2,
+            ),
+        )
 
     def _indicator(
         self,
@@ -658,6 +824,7 @@ class LiquidityMonitorService:
         summary: str,
         *,
         freshness: Optional[str] = None,
+        evidence: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         return {
             "key": key,
@@ -669,6 +836,12 @@ class LiquidityMonitorService:
             "scoreWeight": weight,
             "summary": summary,
             "updatedAt": panel.as_of or panel.updated_at,
+            "evidence": evidence or self._indicator_evidence(
+                status=status,
+                freshness=freshness or panel.freshness or "unavailable",
+                panel=panel,
+                label=label,
+            ),
         }
 
     def _first_reliable_item(self, panel: PanelState, symbols: Optional[set[str]]) -> Optional[Dict[str, Any]]:
@@ -737,6 +910,7 @@ class LiquidityMonitorService:
             "decliners": decliners,
             "avg_change": avg_change,
             "freshness": freshness,
+            "entries": entries,
         }
 
     def _extract_usd_pressure_components(self, fx_panel: PanelState, rates_panel: PanelState) -> List[Dict[str, Any]]:
@@ -897,6 +1071,15 @@ class LiquidityMonitorService:
                 negative_votes += 1
             freshness_values.append(self._item_freshness(item, panel))
             proxies.append({"symbol": symbol, "label": label, "value": value})
+            proxies[-1].update(
+                {
+                    "source": item.get("source") or panel.source,
+                    "sourceLabel": item.get("sourceLabel") or panel.payload.get("sourceLabel"),
+                    "sourceType": item.get("sourceType") or panel.payload.get("sourceType"),
+                    "asOf": item.get("asOf") or item.get("updatedAt") or panel.as_of or panel.updated_at,
+                    "freshness": self._item_freshness(item, panel),
+                }
+            )
         if up_value is None or down_value is None:
             if not proxies:
                 return None
@@ -937,6 +1120,15 @@ class LiquidityMonitorService:
                 negative_votes += 1
             freshness_values.append(self._item_freshness(item, panel))
             flows.append({"symbol": symbol, "label": flow_labels[symbol], "value": value})
+            flows[-1].update(
+                {
+                    "source": item.get("source") or panel.source,
+                    "sourceLabel": item.get("sourceLabel") or panel.payload.get("sourceLabel"),
+                    "sourceType": item.get("sourceType") or panel.payload.get("sourceType"),
+                    "asOf": item.get("asOf") or item.get("updatedAt") or panel.as_of or panel.updated_at,
+                    "freshness": self._item_freshness(item, panel),
+                }
+            )
         if not flows:
             return None
         breadth_summary = self._extract_cn_breadth_summary(breadth_panel)
@@ -1321,6 +1513,217 @@ class LiquidityMonitorService:
 
     def _panel_unavailable_reason(self, panel: PanelState, default: str) -> str:
         return self._text(panel.payload.get("warning")) or self._text(panel.payload.get("error")) or default
+
+    def _indicator_evidence(
+        self,
+        *,
+        status: str,
+        freshness: str,
+        inputs: Optional[List[Dict[str, Any]]] = None,
+        panel: Optional[PanelState] = None,
+        label: Optional[str] = None,
+        expected_input_count: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        normalized_inputs = [dict(item) for item in (inputs or []) if isinstance(item, dict)]
+        if not normalized_inputs and panel is not None:
+            normalized_inputs.append(
+                self._source_confidence_input_from_panel(
+                    panel,
+                    key=panel.key,
+                    label=label or panel.key,
+                    is_unavailable=status == "unavailable",
+                    coverage=0.0 if status == "unavailable" else 1.0,
+                )
+            )
+
+        observed_count = len(normalized_inputs)
+        target_count = max(observed_count, int(expected_input_count or observed_count or 1))
+        coverage = round(min(1.0, observed_count / target_count), 2) if target_count else 0.0
+        unique_sources = list(dict.fromkeys(str(item.get("source") or "") for item in normalized_inputs if str(item.get("source") or "")))
+        unique_labels = list(dict.fromkeys(str(item.get("sourceLabel") or "") for item in normalized_inputs if str(item.get("sourceLabel") or "")))
+        as_of_values = [str(item.get("asOf") or "") for item in normalized_inputs if item.get("asOf")]
+        weakest_freshness = self._weakest_freshness([str(item.get("freshness") or "") for item in normalized_inputs] or [freshness])
+        confidence_values = [float(item.get("confidenceWeight") or 0.0) for item in normalized_inputs]
+        confidence_weight = round(sum(confidence_values) / len(confidence_values), 2) if confidence_values else 0.0
+        contract = coerce_source_confidence_contract(
+            {
+                "source": unique_sources[0] if len(unique_sources) == 1 else ("mixed" if unique_sources else "unavailable"),
+                "sourceLabel": unique_labels[0] if len(unique_labels) == 1 else (" / ".join(unique_labels) if unique_labels else "未接入"),
+                "asOf": max(as_of_values) if as_of_values else None,
+                "freshness": weakest_freshness,
+                "isFallback": any(bool(item.get("isFallback")) for item in normalized_inputs),
+                "isStale": any(bool(item.get("isStale")) for item in normalized_inputs),
+                "isPartial": status == "partial" or coverage < 1.0,
+                "isUnavailable": status == "unavailable" or all(bool(item.get("isUnavailable")) for item in normalized_inputs),
+                "confidenceWeight": confidence_weight,
+                "coverage": 0.0 if status == "unavailable" else coverage,
+                "degradationReason": self._indicator_degradation_reason(status, normalized_inputs),
+            }
+        ).to_dict()
+        return {
+            "contractVersion": SOURCE_CONFIDENCE_CONTRACT_VERSION,
+            "source": contract["source"],
+            "sourceLabel": contract["sourceLabel"],
+            "asOf": contract["asOf"],
+            "freshness": contract["freshness"],
+            "isFallback": contract["isFallback"],
+            "isStale": contract["isStale"],
+            "isPartial": contract["isPartial"],
+            "isUnavailable": contract["isUnavailable"],
+            "coverage": contract["coverage"],
+            "confidenceWeight": contract["confidenceWeight"],
+            "degradationReason": contract["degradationReason"],
+            "capReason": contract["capReason"],
+            "inputs": normalized_inputs,
+        }
+
+    def _source_confidence_input_from_component(self, component: Dict[str, Any]) -> Dict[str, Any]:
+        return self._source_confidence_input(
+            key=str(component.get("symbol") or component.get("key") or ""),
+            label=str(component.get("label") or component.get("symbol") or component.get("key") or ""),
+            source=component.get("source"),
+            source_label=component.get("sourceLabel"),
+            source_type=component.get("sourceType"),
+            as_of=component.get("asOf"),
+            freshness=str(component.get("freshness") or "unavailable"),
+        )
+
+    def _source_confidence_input_from_item(
+        self,
+        item: Dict[str, Any],
+        panel: PanelState,
+        *,
+        key: str,
+        label: str,
+        coverage: float = 1.0,
+        is_unavailable: bool = False,
+    ) -> Dict[str, Any]:
+        freshness = self._item_freshness(item, panel)
+        return self._source_confidence_input(
+            key=key,
+            label=label,
+            source=item.get("source") or panel.source,
+            source_label=item.get("sourceLabel") or panel.payload.get("sourceLabel"),
+            source_type=item.get("sourceType") or panel.payload.get("sourceType"),
+            as_of=item.get("asOf") or item.get("updatedAt") or panel.as_of or panel.updated_at,
+            freshness=freshness,
+            is_fallback=bool(item.get("isFallback") or item.get("fallbackUsed") or panel.is_fallback),
+            is_stale=bool(item.get("isStale") or freshness == "stale" or panel.is_stale),
+            coverage=coverage,
+            is_unavailable=is_unavailable,
+        )
+
+    def _source_confidence_input_from_panel(
+        self,
+        panel: PanelState,
+        *,
+        key: str,
+        label: str,
+        coverage: float,
+        is_unavailable: bool,
+    ) -> Dict[str, Any]:
+        input_is_unavailable = is_unavailable and panel.freshness in {"unavailable", "error"} and panel.source in {"", "unavailable"}
+        return self._source_confidence_input(
+            key=key,
+            label=label,
+            source=panel.source,
+            source_label=panel.payload.get("sourceLabel"),
+            source_type=panel.payload.get("sourceType"),
+            as_of=panel.as_of or panel.updated_at,
+            freshness=panel.freshness,
+            is_fallback=panel.is_fallback,
+            is_stale=panel.is_stale,
+            coverage=coverage,
+            is_partial=not is_unavailable and coverage < 1.0,
+            is_unavailable=input_is_unavailable,
+            degradation_reason=self._panel_unavailable_reason(panel, "liquidity_input_unavailable") if is_unavailable else None,
+        )
+
+    def _source_confidence_input(
+        self,
+        *,
+        key: str,
+        label: str,
+        source: Any,
+        source_label: Any,
+        source_type: Any,
+        as_of: Any,
+        freshness: str,
+        is_fallback: bool = False,
+        is_stale: bool = False,
+        is_partial: bool = False,
+        is_unavailable: bool = False,
+        coverage: Optional[float] = None,
+        degradation_reason: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        explicit_source_type = self._text(source_type)
+        provenance = project_source_provenance(
+            source=source,
+            source_type=explicit_source_type or None,
+            source_label=source_label,
+            freshness=freshness,
+            is_fallback=is_fallback,
+            is_stale=is_stale,
+        )
+        resolved_source_type = explicit_source_type or provenance["sourceType"]
+        resolved_source_label = self._text(source_label) or provenance["sourceLabel"]
+        contract = coerce_source_confidence_contract(
+            {
+                "source": self._text(source) or "unavailable",
+                "sourceLabel": resolved_source_label,
+                "asOf": self._text(as_of),
+                "freshness": self._source_confidence_freshness(freshness),
+                "isFallback": is_fallback,
+                "isStale": is_stale,
+                "isPartial": is_partial,
+                "isUnavailable": is_unavailable or freshness == "unavailable",
+                "confidenceWeight": self._source_confidence_weight(resolved_source_type),
+                "coverage": coverage,
+                "degradationReason": degradation_reason,
+            }
+        ).to_dict()
+        return {
+            "key": key,
+            "label": label,
+            "source": contract["source"],
+            "sourceLabel": contract["sourceLabel"],
+            "sourceType": resolved_source_type,
+            "asOf": contract["asOf"],
+            "freshness": contract["freshness"],
+            "isFallback": contract["isFallback"],
+            "isStale": contract["isStale"],
+            "isPartial": contract["isPartial"],
+            "isUnavailable": contract["isUnavailable"],
+            "coverage": contract["coverage"],
+            "confidenceWeight": contract["confidenceWeight"],
+            "degradationReason": contract["degradationReason"],
+            "capReason": contract["capReason"],
+        }
+
+    @staticmethod
+    def _source_confidence_weight(source_type: str) -> float:
+        return SOURCE_CONFIDENCE_BY_TYPE.get(str(source_type or "").lower(), 0.5)
+
+    @staticmethod
+    def _source_confidence_freshness(freshness: str) -> str:
+        normalized = str(freshness or "").lower()
+        if normalized == "mock":
+            return "synthetic"
+        if normalized == "error":
+            return "unavailable"
+        return normalized or "unknown"
+
+    @staticmethod
+    def _indicator_degradation_reason(status: str, inputs: List[Dict[str, Any]]) -> Optional[str]:
+        if any(bool(item.get("isFallback")) for item in inputs):
+            return "fallback_source"
+        if any(bool(item.get("isStale")) for item in inputs):
+            return "stale_source"
+        if status == "partial" or any(bool(item.get("isPartial")) for item in inputs):
+            return "partial_coverage"
+        if status == "unavailable" or any(bool(item.get("isUnavailable")) for item in inputs):
+            return "unavailable_source"
+        return None
 
     @staticmethod
     def _timestamp_millis_to_iso(value: Any) -> Optional[str]:

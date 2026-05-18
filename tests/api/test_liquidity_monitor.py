@@ -57,6 +57,36 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
                 "freshness": "live",
                 "includedInScore": True,
                 "scoreContribution": 8,
+                "evidence": {
+                    "contractVersion": "source_confidence_contract_v1",
+                    "source": "fred",
+                    "sourceLabel": "FRED VIXCLS",
+                    "asOf": "2026-05-07T10:00:00+08:00",
+                    "freshness": "live",
+                    "isFallback": False,
+                    "isStale": False,
+                    "isPartial": False,
+                    "isUnavailable": False,
+                    "coverage": 1.0,
+                    "confidenceWeight": 1.0,
+                    "inputs": [
+                        {
+                            "key": "VIX",
+                            "label": "VIX",
+                            "source": "fred",
+                            "sourceLabel": "FRED VIXCLS",
+                            "sourceType": "official_public",
+                            "asOf": "2026-05-07T10:00:00+08:00",
+                            "freshness": "live",
+                            "isFallback": False,
+                            "isStale": False,
+                            "isPartial": False,
+                            "isUnavailable": False,
+                            "coverage": 1.0,
+                            "confidenceWeight": 1.0,
+                        }
+                    ],
+                },
             }
         ],
         "advisoryDisclosure": "仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。",
@@ -78,6 +108,8 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
     assert body["score"]["regime"] == "supportive"
     assert set(body["sourceMetadata"]) == {"externalProviderCalls", "providerRuntimeChanged", "marketCacheMutation"}
     assert body["sourceMetadata"]["externalProviderCalls"] is False
+    assert body["indicators"][0]["evidence"]["source"] == "fred"
+    assert body["indicators"][0]["evidence"]["inputs"][0]["sourceType"] == "official_public"
 
 
 def test_liquidity_monitor_route_preserves_explicit_non_live_indicator_contracts() -> None:
@@ -108,6 +140,39 @@ def test_liquidity_monitor_route_preserves_explicit_non_live_indicator_contracts
                 "freshness": "fallback",
                 "includedInScore": False,
                 "scoreContribution": 0,
+                "evidence": {
+                    "contractVersion": "source_confidence_contract_v1",
+                    "source": "fallback",
+                    "sourceLabel": "备用数据",
+                    "asOf": "2026-05-07T10:00:00+08:00",
+                    "freshness": "unavailable",
+                    "isFallback": True,
+                    "isStale": False,
+                    "isPartial": False,
+                    "isUnavailable": True,
+                    "coverage": 0.0,
+                    "confidenceWeight": 0.0,
+                    "degradationReason": "fallback_source",
+                    "capReason": "unavailable_source",
+                    "inputs": [
+                        {
+                            "key": "cn_flows",
+                            "label": "CN/HK 资金流",
+                            "source": "fallback",
+                            "sourceLabel": "备用数据",
+                            "sourceType": "fallback_static",
+                            "asOf": "2026-05-07T10:00:00+08:00",
+                            "freshness": "fallback",
+                            "isFallback": True,
+                            "isStale": False,
+                            "isPartial": False,
+                            "isUnavailable": False,
+                            "coverage": 0.0,
+                            "confidenceWeight": 0.4,
+                            "capReason": "fallback_source",
+                        }
+                    ],
+                },
             },
             {
                 "key": "vix_pressure",
@@ -116,6 +181,38 @@ def test_liquidity_monitor_route_preserves_explicit_non_live_indicator_contracts
                 "freshness": "delayed",
                 "includedInScore": True,
                 "scoreContribution": 8,
+                "evidence": {
+                    "contractVersion": "source_confidence_contract_v1",
+                    "source": "yfinance_proxy",
+                    "sourceLabel": "Yahoo Finance",
+                    "asOf": "2026-05-07T10:00:00+08:00",
+                    "freshness": "partial",
+                    "isFallback": False,
+                    "isStale": False,
+                    "isPartial": True,
+                    "isUnavailable": False,
+                    "coverage": 1.0,
+                    "confidenceWeight": 0.7,
+                    "degradationReason": "partial_coverage",
+                    "capReason": "partial_coverage",
+                    "inputs": [
+                        {
+                            "key": "VIX",
+                            "label": "VIX",
+                            "source": "yfinance_proxy",
+                            "sourceLabel": "Yahoo Finance",
+                            "sourceType": "unofficial_proxy",
+                            "asOf": "2026-05-07T10:00:00+08:00",
+                            "freshness": "delayed",
+                            "isFallback": False,
+                            "isStale": False,
+                            "isPartial": False,
+                            "isUnavailable": False,
+                            "coverage": 1.0,
+                            "confidenceWeight": 0.7,
+                        }
+                    ],
+                },
             },
         ],
         "advisoryDisclosure": "仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。",
@@ -135,9 +232,11 @@ def test_liquidity_monitor_route_preserves_explicit_non_live_indicator_contracts
     assert indicators["cn_hk_flows"]["status"] == "unavailable"
     assert indicators["cn_hk_flows"]["freshness"] == "fallback"
     assert indicators["cn_hk_flows"]["includedInScore"] is False
+    assert indicators["cn_hk_flows"]["evidence"]["isFallback"] is True
     assert indicators["vix_pressure"]["status"] == "partial"
     assert indicators["vix_pressure"]["freshness"] == "delayed"
     assert indicators["vix_pressure"]["includedInScore"] is True
+    assert indicators["vix_pressure"]["evidence"]["isPartial"] is True
 
 
 def test_liquidity_monitor_route_accepts_all_golden_fixture_payloads() -> None:

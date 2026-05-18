@@ -1818,6 +1818,86 @@ def test_derived_freshness_uses_weakest_input_freshness(isolated_db: DatabaseMan
     assert payload["freshness"]["weakestIndicatorFreshness"] == "delayed"
 
 
+def test_liquidity_evidence_snapshot_marks_partial_inputs_without_claiming_live(
+    isolated_db: DatabaseManager,
+) -> None:
+    del isolated_db
+    payload = _cache_only_liquidity_service_payload(_seed_official_cached_macro_rates_context)
+    indicator = {item["key"]: item for item in payload["indicators"]}["us_rates_pressure"]
+    evidence = indicator["evidence"]
+
+    assert evidence is not None
+    assert evidence["contractVersion"] == "source_confidence_contract_v1"
+    assert evidence["freshness"] == "partial"
+    assert evidence["isPartial"] is True
+    assert evidence["isUnavailable"] is False
+    assert evidence["coverage"] == 1.0
+    assert evidence["confidenceWeight"] == 0.7
+    assert evidence["degradationReason"] == "partial_coverage"
+    assert len(evidence["inputs"]) >= 2
+    assert {item["source"] for item in evidence["inputs"]} == {"treasury", "fred"}
+    assert all(item["freshness"] == "cached" for item in evidence["inputs"])
+    assert all(item["confidenceWeight"] == 1.0 for item in evidence["inputs"])
+
+
+def test_liquidity_evidence_snapshot_marks_unavailable_inputs_without_coverage(
+    isolated_db: DatabaseManager,
+) -> None:
+    del isolated_db
+    payload = _cache_only_liquidity_service_payload(_seed_official_cached_macro_rates_context)
+    indicator = {item["key"]: item for item in payload["indicators"]}["crypto_funding"]
+    evidence = indicator["evidence"]
+
+    assert evidence is not None
+    assert evidence["freshness"] == "unavailable"
+    assert evidence["isUnavailable"] is True
+    assert evidence["coverage"] == 0.0
+    assert evidence["confidenceWeight"] == 0.0
+    assert evidence["capReason"] == "unavailable_source"
+    assert len(evidence["inputs"]) == 1
+    assert evidence["inputs"][0]["isUnavailable"] is True
+    assert evidence["inputs"][0]["coverage"] == 0.0
+    assert evidence["inputs"][0]["capReason"] == "unavailable_source"
+
+
+def test_liquidity_evidence_snapshot_preserves_stale_input_state_when_indicator_is_unavailable(
+    isolated_db: DatabaseManager,
+) -> None:
+    del isolated_db
+    payload = _cache_only_liquidity_service_payload(_seed_provider_unavailable_stale_malformed_context)
+    indicator = {item["key"]: item for item in payload["indicators"]}["us_rates_pressure"]
+    evidence = indicator["evidence"]
+
+    assert evidence is not None
+    assert evidence["isUnavailable"] is True
+    assert evidence["isStale"] is True
+    assert evidence["coverage"] == 0.0
+    assert evidence["confidenceWeight"] == 0.0
+    assert evidence["degradationReason"] == "stale_source"
+    assert evidence["inputs"][0]["freshness"] == "stale"
+    assert evidence["inputs"][0]["isStale"] is True
+    assert evidence["inputs"][0]["capReason"] == "stale_source"
+
+
+def test_liquidity_evidence_snapshot_preserves_fallback_input_state_when_indicator_is_unavailable(
+    isolated_db: DatabaseManager,
+) -> None:
+    del isolated_db
+    payload = _cache_only_liquidity_service_payload(_seed_provider_unavailable_stale_malformed_context)
+    indicator = {item["key"]: item for item in payload["indicators"]}["cn_hk_flows"]
+    evidence = indicator["evidence"]
+
+    assert evidence is not None
+    assert evidence["isUnavailable"] is True
+    assert evidence["isFallback"] is True
+    assert evidence["coverage"] == 0.0
+    assert evidence["confidenceWeight"] == 0.0
+    assert evidence["degradationReason"] == "fallback_source"
+    assert evidence["inputs"][0]["freshness"] == "fallback"
+    assert evidence["inputs"][0]["isFallback"] is True
+    assert evidence["inputs"][0]["capReason"] == "fallback_source"
+
+
 def test_crypto_funding_uses_binance_public_endpoint_when_cache_snapshot_lacks_funding(isolated_db: DatabaseManager) -> None:
     service = _make_service()
     now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
