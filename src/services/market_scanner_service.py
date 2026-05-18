@@ -26,6 +26,7 @@ from src.repositories.stock_repo import StockRepository
 from src.contracts.source_confidence import coerce_source_confidence_contract
 from src.services.scanner_ai_service import ScannerAiInterpretationService
 from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION, build_scanner_evidence_packet
+from src.services.scanner_factor_observations import attach_scanner_factor_observations
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback, get_us_stock_parquet_dir
 from src.storage import (
     DatabaseManager,
@@ -1221,6 +1222,7 @@ class MarketScannerService:
         self._attach_shortlist_evidence_packets(
             shortlist=shortlist_list,
             market=profile_config.market,
+            observed_at=run_started_at.isoformat(),
         )
 
         run_model = MarketScannerRun(
@@ -1259,6 +1261,7 @@ class MarketScannerService:
             shortlist=shortlist_list,
             market=profile_config.market,
             run_id=saved_run.id,
+            observed_at=run_started_at.isoformat(),
         )
 
         response_shortlist = []
@@ -5910,6 +5913,7 @@ class MarketScannerService:
         shortlist: Sequence[Dict[str, Any]],
         market: str,
         run_id: Optional[int] = None,
+        observed_at: Optional[str] = None,
     ) -> None:
         for candidate in shortlist:
             diagnostics = dict(candidate.get("_diagnostics") or {})
@@ -5922,3 +5926,8 @@ class MarketScannerService:
                 },
             )
             candidate["_diagnostics"] = diagnostics
+            attach_scanner_factor_observations(
+                candidate,
+                market=market,
+                observed_at=str(observed_at or candidate.get("scan_timestamp") or candidate.get("last_trade_date") or ""),
+            )

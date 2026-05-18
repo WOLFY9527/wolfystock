@@ -1,5 +1,14 @@
 ## 2026-05-18
 
+- **Scanner additive factor observation export** - Public scanner candidate
+  diagnostics now expose additive `factor_observations` records that project
+  existing scanner component scores into `FactorObservation`-compatible
+  payloads using the landed factor contracts plus current scanner
+  explainability/provenance metadata. The export is bridge-only metadata:
+  scanner provider runtime/order, fallback behavior, score thresholds, score
+  caps, ranking semantics, backtest wiring, portfolio wiring, and database
+  schema remain unchanged.
+
 - **Scanner score caps and explainability metadata** - Market Scanner now
   separates deterministic `raw_score` from capped `final_score` when existing
   weak evidence is present, preventing fallback/stale/partial evidence from
