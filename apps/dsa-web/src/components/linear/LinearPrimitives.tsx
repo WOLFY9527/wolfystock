@@ -42,13 +42,13 @@ const SURFACE_PADDING: Record<LinearSurfacePadding, string> = {
 const RAIL_GRID_TRACKS: Record<LinearRailWidth, string> = {
   sm: 'lg:grid-cols-[minmax(0,1fr)_clamp(16rem,19vw,19rem)]',
   md: 'lg:grid-cols-[minmax(0,1fr)_clamp(18rem,22vw,22.5rem)]',
-  lg: 'lg:grid-cols-[minmax(0,1fr)_clamp(20rem,24vw,25rem)]',
+  lg: 'lg:grid-cols-[minmax(0,1fr)_clamp(27rem,25vw,34rem)]',
 };
 
 const RAIL_WIDTHS: Record<LinearRailWidth, string> = {
   sm: 'lg:w-[clamp(16rem,19vw,19rem)]',
   md: 'lg:w-[clamp(18rem,22vw,22.5rem)]',
-  lg: 'lg:w-[clamp(20rem,24vw,25rem)]',
+  lg: 'lg:w-[clamp(27rem,25vw,34rem)]',
 };
 
 type FixedRegionWrapperProps = React.HTMLAttributes<HTMLDivElement> & {

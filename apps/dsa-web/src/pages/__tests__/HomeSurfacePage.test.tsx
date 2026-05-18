@@ -380,10 +380,10 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-decision-ticker')).toHaveTextContent('ORCL');
     expect(screen.getByTestId('home-bento-decision-sector')).toHaveTextContent('科技');
     expect(screen.getByTestId('home-research-company-mark')).toHaveTextContent('OR');
-    expect(screen.getByTestId('home-research-company-mark')).toHaveAttribute('data-company-mark', 'fallback-monogram');
-    expect(screen.getByTestId('home-research-company-mark')).toHaveClass('h-16', 'w-16', 'rounded-[14px]');
+    expect(screen.getByTestId('home-research-company-mark')).toHaveAttribute('data-company-mark', 'oracle-logo');
+    expect(screen.getByTestId('home-research-company-mark')).toHaveClass('h-[72px]', 'w-[72px]', 'rounded-[14px]');
     expect(heroRow).toHaveAttribute('data-visual-role', 'hero-matrix');
-    expect(heroRow).toHaveClass('home-research-hero-matrix', 'rounded-[14px]', 'border', 'bg-[var(--wolfy-surface-input)]');
+    expect(heroRow).toHaveClass('home-research-hero-matrix', 'rounded-[8px]', 'border', 'bg-[var(--wolfy-surface-input)]');
     expect(screen.getByTestId('home-bento-decision-confidence-indicator')).toBeInTheDocument();
 
     expect(keyLevels).toHaveAttribute('data-linear-primitive', 'key-level-strip');
@@ -444,7 +444,7 @@ describe('HomeSurfacePage', () => {
     expect(eventTable).toHaveTextContent('时间');
     expect(eventTable).toHaveTextContent('剩余');
     expect(eventTable).toHaveTextContent('备注');
-    expect(screen.getByTestId('home-linear-events-empty')).toHaveTextContent('暂无已验证事件');
+    expect(screen.getByTestId('home-linear-events-empty')).toHaveTextContent('待补充数据');
     expect(screen.getAllByTestId(/home-linear-event-placeholder-row-/)).toHaveLength(3);
     expect(screen.getByTestId('home-linear-event-placeholder-row-0')).toHaveTextContent('待补充');
     expect(catalysts).not.toHaveTextContent('报告主线');
