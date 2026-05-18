@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
+from src.contracts.source_confidence import coerce_source_confidence_contract
 from src.services.execution_log_service import ExecutionLogService
 from src.services.fx_commodities_contracts import FX_COMMODITY_DELAYED_PROXY_SYMBOLS
 from src.services.futures_contracts import list_futures_contracts
@@ -583,6 +584,7 @@ class MarketOverviewService:
         payload = self._cached_payload("temperature", fetcher, fallback_factory)
         payload = self._with_market_meta(payload, self._category_for_cache_key("temperature"))
         payload["providerHealth"] = self._provider_health(payload, "temperature", duration_ms=int((time.monotonic() - started_at) * 1000), error_summary=_compact_error_summary(payload.get("lastError")))
+        payload = self._with_evidence_snapshot(payload, self._category_for_cache_key("temperature"))
         return payload
 
     def get_market_briefing(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -630,6 +632,7 @@ class MarketOverviewService:
         payload = self._cached_payload("market_briefing", fetcher, fallback_factory)
         payload = self._with_market_meta(payload, self._category_for_cache_key("market_briefing"))
         payload["providerHealth"] = self._provider_health(payload, "market_briefing", duration_ms=int((time.monotonic() - started_at) * 1000), error_summary=_compact_error_summary(payload.get("lastError")))
+        payload = self._with_evidence_snapshot(payload, self._category_for_cache_key("market_briefing"))
         return payload
 
     def get_futures(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -647,6 +650,7 @@ class MarketOverviewService:
         payload = self._with_market_meta(payload, "futures")
         payload["items"] = [self._with_item_meta(item, "futures", payload) for item in payload.get("items", [])]
         payload["providerHealth"] = self._provider_health(payload, "futures", duration_ms=int((time.monotonic() - started_at) * 1000), error_summary=_compact_error_summary(payload.get("lastError")))
+        payload = self._with_evidence_snapshot(payload, "futures")
         return payload
 
     def get_cn_short_sentiment(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -660,6 +664,7 @@ class MarketOverviewService:
         payload.setdefault("updatedAt", _now_iso())
         payload = self._with_market_meta(payload, self._category_for_cache_key("cn_short_sentiment"))
         payload["providerHealth"] = self._provider_health(payload, "cn_short_sentiment", duration_ms=int((time.monotonic() - started_at) * 1000), error_summary=_compact_error_summary(payload.get("lastError")))
+        payload = self._with_evidence_snapshot(payload, self._category_for_cache_key("cn_short_sentiment"))
         return payload
 
     def _panel(
@@ -697,6 +702,7 @@ class MarketOverviewService:
         snapshot = self._with_market_meta(snapshot, self._category_for_cache_key(cache_key))
         snapshot["items"] = [self._with_item_meta(item, self._category_for_cache_key(cache_key), snapshot) for item in snapshot.get("items", [])]
         snapshot["providerHealth"] = self._provider_health(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message)
+        snapshot = self._with_evidence_snapshot(snapshot, self._category_for_cache_key(cache_key))
         raw_response.update(self._provider_log_meta(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message))
         log_session_id = ExecutionLogService().record_market_overview_fetch(
             panel_name=panel_name,
@@ -743,6 +749,7 @@ class MarketOverviewService:
         snapshot = self._with_market_meta(snapshot, self._category_for_cache_key(cache_key))
         snapshot["items"] = [self._with_item_meta(item, self._category_for_cache_key(cache_key), snapshot) for item in snapshot.get("items", [])]
         snapshot["providerHealth"] = self._provider_health(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message)
+        snapshot = self._with_evidence_snapshot(snapshot, self._category_for_cache_key(cache_key))
         raw_response.update(self._provider_log_meta(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message))
         log_session_id = ExecutionLogService().record_market_overview_fetch(
             panel_name=panel_name,
@@ -786,6 +793,7 @@ class MarketOverviewService:
         snapshot = self._with_market_meta(snapshot, self._category_for_cache_key(cache_key))
         snapshot["items"] = [self._with_item_meta(item, self._category_for_cache_key(cache_key), snapshot) for item in snapshot.get("items", [])]
         snapshot["providerHealth"] = self._provider_health(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message)
+        snapshot = self._with_evidence_snapshot(snapshot, self._category_for_cache_key(cache_key))
         raw_response.update(self._provider_log_meta(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message))
         log_session_id = ExecutionLogService().record_market_overview_fetch(
             panel_name=panel_name,
@@ -1250,6 +1258,120 @@ class MarketOverviewService:
             "isStale": bool(payload.get("isStale") or health.get("isStale")),
             "error": error_summary,
         }
+
+    def _with_evidence_snapshot(self, payload: Dict[str, Any], category: str) -> Dict[str, Any]:
+        return {
+            **payload,
+            "evidenceSnapshot": self._build_evidence_snapshot(payload, category),
+        }
+
+    def _build_evidence_snapshot(self, payload: Dict[str, Any], category: str) -> Dict[str, Any]:
+        source = str(payload.get("source") or "")
+        coverage = self._evidence_snapshot_coverage(payload, category)
+        contract = coerce_source_confidence_contract(
+            {
+                "source": source,
+                "sourceLabel": payload.get("sourceLabel") or self._source_label(source),
+                "asOf": payload.get("asOf") or payload.get("updatedAt") or payload.get("last_update") or payload.get("last_refresh_at"),
+                "freshness": payload.get("freshness"),
+                "isFallback": bool(payload.get("isFallback")),
+                "isStale": bool(payload.get("isStale")),
+                "isPartial": self._is_partial_evidence_snapshot(payload, coverage=coverage, category=category),
+                "isUnavailable": self._is_unavailable_evidence_snapshot(payload),
+                "confidenceWeight": self._evidence_snapshot_confidence_weight(payload, category),
+                "coverage": coverage,
+                "degradationReason": payload.get("fallbackReason"),
+            }
+        )
+        evidence = contract.to_dict()
+        evidence["coverage"] = round(float(evidence["coverage"]), 2) if isinstance(evidence.get("coverage"), (int, float)) else evidence.get("coverage")
+        evidence["confidenceWeight"] = round(float(evidence["confidenceWeight"]), 2)
+        return evidence
+
+    def _evidence_snapshot_coverage(self, payload: Dict[str, Any], category: str) -> float:
+        explicit_coverage = self._clean_number(payload.get("coverage"))
+        if explicit_coverage is not None:
+            return round(max(0.0, min(1.0, explicit_coverage)), 2)
+
+        reliable_input_count = self._clean_number(payload.get("reliableInputCount"))
+        fallback_input_count = self._clean_number(payload.get("fallbackInputCount"))
+        excluded_input_count = self._clean_number(payload.get("excludedInputCount"))
+        if any(value is not None for value in (reliable_input_count, fallback_input_count, excluded_input_count)):
+            reliable = max(0.0, reliable_input_count or 0.0)
+            fallback = max(0.0, fallback_input_count or 0.0)
+            excluded = max(0.0, excluded_input_count or 0.0)
+            total = reliable + fallback + excluded
+            return round(reliable / total, 2) if total > 0 else 0.0
+
+        items = [item for item in payload.get("items", []) if isinstance(item, dict)]
+        if items:
+            covered_item_count = sum(1 for item in items if self._is_covered_evidence_item(item))
+            return round(covered_item_count / len(items), 2)
+
+        if self._is_unavailable_evidence_snapshot(payload):
+            return 0.0
+        reliability = classify_market_payload_reliability(payload, category)
+        return 1.0 if reliability["isReliable"] else 0.0
+
+    def _evidence_snapshot_confidence_weight(self, payload: Dict[str, Any], category: str) -> float:
+        explicit_confidence_weight = self._clean_number(payload.get("confidenceWeight"))
+        if explicit_confidence_weight is not None:
+            return max(0.0, min(1.0, explicit_confidence_weight))
+
+        explicit_confidence = self._clean_number(payload.get("confidence"))
+        if explicit_confidence is not None:
+            return max(0.0, min(1.0, explicit_confidence))
+
+        items = [item for item in payload.get("items", []) if isinstance(item, dict)]
+        if items:
+            return round(sum(self._base_evidence_item_confidence(item) for item in items) / len(items), 2)
+
+        reliability = classify_market_payload_reliability(payload, category)
+        return max(0.0, min(1.0, float(reliability["confidenceWeight"])))
+
+    def _is_partial_evidence_snapshot(self, payload: Dict[str, Any], *, coverage: float, category: str) -> bool:
+        if bool(payload.get("isPartial")):
+            return True
+        provider_health = payload.get("providerHealth") if isinstance(payload.get("providerHealth"), dict) else {}
+        if str(provider_health.get("status") or "").lower() == "partial":
+            return True
+        if bool(payload.get("isFallback") or payload.get("isStale")) or self._is_unavailable_evidence_snapshot(payload):
+            return False
+        items = [item for item in payload.get("items", []) if isinstance(item, dict)]
+        if items:
+            reliable_item_count = sum(1 for item in items if self._market_data_confidence(item, category) > 0)
+            return 0 < reliable_item_count < len(items)
+        return 0.0 < coverage < 1.0
+
+    def _is_unavailable_evidence_snapshot(self, payload: Dict[str, Any]) -> bool:
+        source = str(payload.get("source") or "").lower()
+        if source == "unavailable" or bool(payload.get("isUnavailable")):
+            return True
+        provider_health = payload.get("providerHealth") if isinstance(payload.get("providerHealth"), dict) else {}
+        return str(provider_health.get("status") or "").lower() == "unavailable"
+
+    @staticmethod
+    def _is_covered_evidence_item(item: Dict[str, Any]) -> bool:
+        source = str(item.get("source") or "").lower()
+        freshness = str(item.get("freshness") or "").lower()
+        if bool(item.get("isFallback") or item.get("fallbackUsed")):
+            return False
+        if source == "unavailable" or freshness in {"fallback", "mock", "unavailable", "error"}:
+            return False
+        return _has_valid_market_value(item)
+
+    @staticmethod
+    def _base_evidence_item_confidence(item: Dict[str, Any]) -> float:
+        source = str(item.get("source") or "").lower()
+        freshness = str(item.get("freshness") or "").lower()
+        if bool(item.get("isFallback") or item.get("fallbackUsed")):
+            return 0.0
+        if source == "unavailable" or freshness in {"fallback", "mock", "unavailable", "error"}:
+            return 0.0
+        if not _has_valid_market_value(item):
+            return 0.0
+        source_type = _infer_source_type(source, item.get("sourceType"))
+        return float(SOURCE_TYPE_CONFIDENCE.get(source_type, 0.0))
 
     def _with_market_meta(self, payload: Dict[str, Any], category: str) -> Dict[str, Any]:
         source = str(payload.get("source") or ("fallback" if payload.get("fallbackUsed") or payload.get("fallback_used") else "mixed"))

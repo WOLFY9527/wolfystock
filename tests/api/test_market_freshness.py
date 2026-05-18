@@ -70,7 +70,7 @@ class MarketFreshnessCacheTestCase(unittest.TestCase):
         service = MarketOverviewService()
         updated_at = datetime(2026, 4, 30, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
         service._market_cache.set(
-            "sentiment",
+            service.MARKET_SENTIMENT_CACHE_KEY,
             {
                 "items": [{"symbol": "FGI", "price": 52, "change": 0, "trend": [50, 52], "source": "cnn", "last_update": updated_at}],
                 "last_update": updated_at,
@@ -79,7 +79,7 @@ class MarketFreshnessCacheTestCase(unittest.TestCase):
             },
             ttl_seconds=1,
         )
-        entry = service._market_cache.get("sentiment")
+        entry = service._market_cache.get(service.MARKET_SENTIMENT_CACHE_KEY)
         entry.expires_at = entry.fetched_at - timedelta(seconds=1)
 
         with patch.object(service, "_fetch_market_sentiment_snapshot", side_effect=RuntimeError("cnn down")):
