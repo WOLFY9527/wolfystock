@@ -2616,12 +2616,26 @@ describe('HomeSurfacePage', () => {
     expect(rightEdge[1] + chartRect.top + size.contentSize[1]).toBeLessThanOrEqual(viewport.height - 10);
   });
 
-  it('shows the Home K-line unavailable state when daily OHLC history is missing', async () => {
+  it('shows compact Home history diagnostics when daily OHLC is unavailable', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(stocksApi.getHistory).mockResolvedValue({
       stockCode: 'ORCL',
       stockName: 'Oracle',
       period: 'daily',
+      source: 'unavailable',
+      diagnostics: {
+        status: 'unavailable',
+        reason: 'us_daily_history_unavailable',
+        providerTrace: [
+          { provider: 'AlpacaFetcher', status: 'failed' },
+          { provider: 'YfinanceFetcher', status: 'empty_result' },
+        ],
+      },
+      sourceConfidence: {
+        source: 'unavailable',
+        freshness: 'unavailable',
+        isUnavailable: true,
+      },
       data: [],
     });
 
@@ -2630,9 +2644,48 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('该周期行情暂不可用');
     });
-    expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('OHLC 数据待补');
-    expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('暂无已验证 K 线');
-    expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('请结合右侧质量说明继续观察当前覆盖状态。');
+    expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('主数据源失败');
+    expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('本地回补不可用');
+    expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('可信度 不可用');
+    expect(screen.queryByTestId('home-candlestick-chart-frame')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-candlestick-echarts-node')).not.toBeInTheDocument();
+  });
+
+  it('labels local fallback history metadata without fabricating Home candles', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stocksApi.getHistory).mockResolvedValue({
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      period: 'daily',
+      source: 'local_db',
+      diagnostics: {
+        status: 'degraded',
+        reason: 'provider_failed_local_db_fallback',
+        localFallback: {
+          source: 'local_db',
+          rows: 2,
+        },
+        providerTrace: [
+          { provider: 'AlpacaFetcher', status: 'failed' },
+        ],
+      },
+      sourceConfidence: {
+        source: 'local_db',
+        freshness: 'cached',
+        isFallback: true,
+        confidenceWeight: 0.75,
+      },
+      data: [],
+    });
+
+    renderSurface();
+
+    const unavailable = await screen.findByTestId('home-candlestick-unavailable');
+    expect(unavailable).toHaveTextContent('主数据源失败');
+    expect(unavailable).toHaveTextContent('本地回补');
+    expect(unavailable).toHaveTextContent('可信度 备用');
+    expect(screen.getByTestId('home-linear-technical-chart')).toHaveAttribute('data-history-source', 'local_db');
+    expect(screen.getByTestId('home-linear-technical-chart')).toHaveAttribute('data-history-confidence', 'cached');
     expect(screen.queryByTestId('home-candlestick-chart-frame')).not.toBeInTheDocument();
   });
 

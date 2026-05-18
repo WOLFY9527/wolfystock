@@ -15,7 +15,12 @@ import type {
 } from 'echarts/components';
 import type { ComposeOption, ECharts, SetOptionOpts } from 'echarts/core';
 import { SVGRenderer } from 'echarts/renderers';
-import { stocksApi, type StockHistoryPoint } from '../../api/stocks';
+import {
+  stocksApi,
+  type StockHistoryDiagnostics,
+  type StockHistoryPoint,
+  type StockHistorySourceConfidence,
+} from '../../api/stocks';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { useElementSize } from '../../hooks/useElementSize';
 import { cn } from '../../utils/cn';
@@ -67,6 +72,26 @@ type CandlePointBase = {
   low: number;
   close: number;
   volume: number;
+};
+
+type HomeHistoryAvailabilityMeta = {
+  rawRows: number;
+  source?: string | null;
+  diagnostics?: StockHistoryDiagnostics | null;
+  sourceConfidence?: StockHistorySourceConfidence | null;
+};
+
+type UnavailableDiagnosticCard = {
+  label: string;
+  value: string;
+};
+
+type UnavailableDiagnosticSummary = {
+  status: string;
+  confidence?: string;
+  title: string;
+  body?: string | null;
+  cards: UnavailableDiagnosticCard[];
 };
 
 type HomeCandlestickChartProps = {
@@ -461,6 +486,144 @@ const volumeSupportStatus = (candles: CandlePoint[]) => {
   };
 };
 
+const normalizeDiagnosticToken = (value?: string | null): string => (
+  String(value || '').trim().toLowerCase()
+);
+
+const hasFailedProviderAttempt = (diagnostics?: StockHistoryDiagnostics | null): boolean => {
+  const reason = normalizeDiagnosticToken(diagnostics?.reason);
+  if (reason.includes('provider_failed') || reason.includes('request_failed')) {
+    return true;
+  }
+  return Array.isArray(diagnostics?.providerTrace)
+    && diagnostics.providerTrace.some((item) => {
+      const status = normalizeDiagnosticToken(item.status);
+      const outcome = normalizeDiagnosticToken(item.outcome);
+      const action = normalizeDiagnosticToken(item.action);
+      return ['failed', 'error'].includes(status)
+        || ['failed', 'error'].includes(outcome)
+        || ['failed', 'error'].includes(action);
+    });
+};
+
+const resolveHistorySourceLabel = (
+  source: string | null | undefined,
+  language: 'zh' | 'en',
+): string => {
+  const normalized = normalizeDiagnosticToken(source);
+  if (language === 'en') {
+    if (normalized === 'local_db') return 'Local fallback';
+    if (normalized === 'local_us_daily_parquet') return 'Local parquet';
+    if (normalized === 'unavailable') return 'Unavailable';
+    if (normalized === 'alpacafetcher') return 'Alpaca';
+    if (normalized === 'yfinancefetcher') return 'Yahoo Finance';
+    return normalized ? 'Primary feed' : 'Unknown';
+  }
+  if (normalized === 'local_db') return '本地回补';
+  if (normalized === 'local_us_daily_parquet') return '本地历史缓存';
+  if (normalized === 'unavailable') return '不可用';
+  if (normalized === 'alpacafetcher') return 'Alpaca';
+  if (normalized === 'yfinancefetcher') return 'Yahoo Finance';
+  return normalized ? '主数据源' : '未知';
+};
+
+const resolveConfidenceLabel = (
+  sourceConfidence: StockHistorySourceConfidence | null | undefined,
+  language: 'zh' | 'en',
+): string => {
+  const freshness = normalizeDiagnosticToken(sourceConfidence?.freshness);
+  if (sourceConfidence?.isUnavailable || freshness === 'unavailable') {
+    return language === 'en' ? 'Unavailable' : '不可用';
+  }
+  if (sourceConfidence?.isFallback || freshness === 'fallback') {
+    return language === 'en' ? 'Fallback' : '备用';
+  }
+  if (sourceConfidence?.isStale || freshness === 'stale') {
+    return language === 'en' ? 'Stale' : '陈旧';
+  }
+  if (sourceConfidence?.isPartial || freshness === 'partial') {
+    return language === 'en' ? 'Partial' : '部分可用';
+  }
+  if (freshness === 'cached') {
+    return language === 'en' ? 'Cached' : '缓存';
+  }
+  if (freshness === 'delayed') {
+    return language === 'en' ? 'Delayed' : '延迟';
+  }
+  if (freshness === 'fresh' || freshness === 'live') {
+    return language === 'en' ? 'Available' : '可用';
+  }
+  return language === 'en' ? 'Unknown' : '未知';
+};
+
+const buildUnavailableDiagnosticSummary = (
+  meta: HomeHistoryAvailabilityMeta | null,
+  language: 'zh' | 'en',
+): UnavailableDiagnosticSummary => {
+  const diagnostics = meta?.diagnostics;
+  const sourceConfidence = meta?.sourceConfidence;
+  const providerFailed = hasFailedProviderAttempt(diagnostics);
+  const confidenceLabel = resolveConfidenceLabel(sourceConfidence, language);
+  const sourceLabel = resolveHistorySourceLabel(sourceConfidence?.source || meta?.source, language);
+  const localFallbackActive = normalizeDiagnosticToken(sourceConfidence?.source || meta?.source) === 'local_db'
+    || Boolean(sourceConfidence?.isFallback && meta?.rawRows);
+  const localFallbackUnavailable = providerFailed && !localFallbackActive;
+  const rawRows = meta?.rawRows ?? 0;
+
+  const status = providerFailed
+    ? (language === 'en' ? 'Provider failed' : '主数据源失败')
+    : (language === 'en' ? 'OHLC feed pending' : 'OHLC 数据待补');
+
+  const body = providerFailed
+    ? (
+      localFallbackActive
+        ? (language === 'en'
+          ? 'Primary provider failed; only fallback metadata is available and no usable candles were rendered.'
+          : '主数据源失败，仅收到回补来源元数据，未形成可渲染的真实 K 线。')
+        : (language === 'en'
+          ? 'Primary provider failed and no usable local fallback candles are available.'
+          : '主数据源失败，本地回补未提供可用的真实 K 线。')
+    )
+    : sourceConfidence?.isUnavailable
+      ? (language === 'en'
+        ? 'Source confidence is unavailable and no verified daily OHLC was returned.'
+        : '来源可信度不可用，当前未返回可验证的日线 OHLC。')
+      : rawRows > 0
+        ? (language === 'en'
+          ? 'History rows were returned but none were usable as verified OHLC bars.'
+          : '已返回历史行，但未形成可验证的真实 OHLC。')
+        : (language === 'en'
+          ? 'Daily OHLC history was not returned for this ticker.'
+          : '当前标的未返回可用的日线 OHLC 数据。');
+
+  return {
+    status,
+    confidence: confidenceLabel,
+    title: language === 'en' ? 'Selected timeframe is unavailable' : '该周期行情暂不可用',
+    body,
+    cards: [
+      {
+        label: language === 'en' ? 'Diagnostic' : '诊断',
+        value: providerFailed
+          ? (language === 'en' ? 'Provider failed' : '主数据源失败')
+          : rawRows > 0
+            ? (language === 'en' ? 'No usable candles' : '未形成可用 K 线')
+            : (language === 'en' ? 'No verified candles' : '暂无已验证 K 线'),
+      },
+      {
+        label: language === 'en' ? 'Source' : '来源',
+        value: localFallbackUnavailable
+          ? (language === 'en' ? 'Local fallback unavailable' : '本地回补不可用')
+          : sourceLabel,
+      },
+      {
+        label: language === 'en' ? 'Confidence' : '可信度',
+        value: confidenceLabel,
+      },
+    ],
+  };
+};
+
 export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
   ticker,
   currentPrice,
@@ -476,6 +639,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
   const chartRef = useRef<ECharts | null>(null);
   const [dailyCandles, setDailyCandles] = useState<CandlePointBase[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle');
+  const [historyMeta, setHistoryMeta] = useState<HomeHistoryAvailabilityMeta | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [activeTimeframe, setActiveTimeframe] = useState<HomeTimeframeKey>('1D');
   const [indicatorVisibility, setIndicatorVisibility] = useState<Record<HomeIndicatorKey, boolean>>(DEFAULT_INDICATORS);
@@ -486,22 +650,43 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       const normalizedTicker = String(ticker || '').trim().toUpperCase();
       if (!normalizedTicker || normalizedTicker === '-' || isLocked) {
         setDailyCandles([]);
+        setHistoryMeta(null);
         setStatus('unavailable');
         return;
       }
       setStatus('loading');
       setDailyCandles([]);
+      setHistoryMeta(null);
       try {
         const response = await stocksApi.getHistory(normalizedTicker, { period: 'daily', days: 365 });
         if (cancelled) {
           return;
         }
         const normalized = normalizeCandles(response.data || []);
+        setHistoryMeta({
+          rawRows: Array.isArray(response.data) ? response.data.length : 0,
+          source: response.source ?? null,
+          diagnostics: response.diagnostics ?? null,
+          sourceConfidence: response.sourceConfidence ?? null,
+        });
         setDailyCandles(normalized);
         setStatus(normalized.length ? 'ready' : 'unavailable');
       } catch {
         if (!cancelled) {
           setDailyCandles([]);
+          setHistoryMeta({
+            rawRows: 0,
+            source: 'unavailable',
+            diagnostics: {
+              status: 'unavailable',
+              reason: 'history_request_failed',
+            },
+            sourceConfidence: {
+              source: 'unavailable',
+              freshness: 'unavailable',
+              isUnavailable: true,
+            },
+          });
           setStatus('unavailable');
         }
       }
@@ -546,6 +731,10 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
   const enabledIndicators = useMemo(
     () => INDICATOR_CONFIGS.filter(({ key }) => indicatorVisibility[key] && indicatorEnabledState[key]),
     [indicatorEnabledState, indicatorVisibility],
+  );
+  const unavailableSummary = useMemo(
+    () => buildUnavailableDiagnosticSummary(historyMeta, language === 'en' ? 'en' : 'zh'),
+    [historyMeta, language],
   );
 
   useEffect(() => {
@@ -804,16 +993,15 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
   const maStructure = getMaStructure(candles, language === 'en' ? 'en' : 'zh');
   const chartUnavailableTitle = status === 'loading'
     ? (language === 'en' ? 'Loading candles...' : '正在加载 K 线...')
-    : (language === 'en' ? 'Selected timeframe is unavailable' : '该周期行情暂不可用');
+    : unavailableSummary.title;
   const chartUnavailableBody = status === 'loading'
     ? null
-    : (language === 'en'
-      ? 'Daily OHLC history was not returned for this ticker.'
-      : '当前标的未返回可用的日线 OHLC 数据。');
-  const chartUnavailableStatus = language === 'en' ? 'OHLC feed pending' : 'OHLC 数据待补';
-  const chartUnavailableFallback = language === 'en' ? 'Review the right-rail notes for current coverage.' : '请结合右侧质量说明继续观察当前覆盖状态。';
+    : unavailableSummary.body;
+  const chartUnavailableStatus = status === 'loading'
+    ? (language === 'en' ? 'OHLC feed pending' : 'OHLC 数据待补')
+    : unavailableSummary.status;
   const chartUnavailableTimeframe = language === 'en' ? `Timeframe ${activeTimeframe}` : `当前周期 ${activeTimeframe}`;
-  const chartUnavailableDataset = language === 'en' ? 'No verified candles' : '暂无已验证 K 线';
+  const chartUnavailableCards = unavailableSummary.cards;
 
   return (
     <div
@@ -830,6 +1018,9 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       data-chart-source={activeTimeframe === '1D' ? 'stocks-history-daily' : 'stocks-history-daily-aggregated'}
       data-chart-timeframe={activeTimeframe}
       data-chart-points={String(candles.length)}
+      data-history-source={historyMeta?.source || 'unknown'}
+      data-history-status={historyMeta?.diagnostics?.status || 'unknown'}
+      data-history-confidence={historyMeta?.sourceConfidence?.freshness || 'unknown'}
       data-enabled-indicators={enabledIndicatorLabels}
       data-vwap-available={String(indicatorEnabledState.vwap)}
       data-axis-layout="split-price-volume"
@@ -966,25 +1157,28 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
             <span className="inline-flex items-center rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white/48">
               {chartUnavailableStatus}
             </span>
+            {status !== 'loading' && unavailableSummary.confidence ? (
+              <span className="inline-flex items-center rounded-full border border-white/[0.08] bg-white/[0.02] px-2.5 py-1 text-[10px] font-medium text-white/42">
+                {language === 'en' ? `Confidence ${unavailableSummary.confidence}` : `可信度 ${unavailableSummary.confidence}`}
+              </span>
+            ) : null}
             <span className="text-[10px] uppercase tracking-[0.16em] text-white/24">{chartUnavailableTimeframe}</span>
           </div>
           <div className="mt-4 max-w-sm">
             <p className="text-sm font-semibold text-white/72">{chartUnavailableTitle}</p>
-          {chartUnavailableBody ? (
+            {chartUnavailableBody ? (
               <p className="mt-2 text-xs leading-5 text-white/36">
-              {chartUnavailableBody}
-            </p>
-          ) : null}
+                {chartUnavailableBody}
+              </p>
+            ) : null}
           </div>
-          <div className="mt-5 grid w-full max-w-[22rem] gap-2 sm:grid-cols-2">
-            <div className="rounded-[10px] border border-white/[0.07] bg-white/[0.03] px-3 py-2.5">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-white/30">{chartUnavailableTimeframe}</p>
-              <p className="mt-1.5 text-xs font-medium text-white/62">{chartUnavailableDataset}</p>
-            </div>
-            <div className="rounded-[10px] border border-white/[0.07] bg-white/[0.03] px-3 py-2.5">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Fallback' : '观察提示'}</p>
-              <p className="mt-1.5 text-xs font-medium leading-5 text-white/50">{chartUnavailableFallback}</p>
-            </div>
+          <div className="mt-5 grid w-full max-w-[32rem] gap-2 sm:grid-cols-3">
+            {chartUnavailableCards.map((card) => (
+              <div key={card.label} className="rounded-[10px] border border-white/[0.07] bg-white/[0.03] px-3 py-2.5">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/30">{card.label}</p>
+                <p className="mt-1.5 text-xs font-medium leading-5 text-white/62">{card.value}</p>
+              </div>
+            ))}
           </div>
         </div>
       )}
