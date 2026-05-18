@@ -61,17 +61,20 @@ class MarketCacheEntry:
     ttl_seconds: int
     is_refreshing: bool = False
     last_error: Optional[str] = None
+    refresh_started_at: Optional[float] = None
+    refresh_generation: int = 0
 
 
 class MarketCache:
     """Thread-safe market cache shaped so it can be swapped for Redis later."""
 
-    def __init__(self, max_workers: int = 4) -> None:
+    def __init__(self, max_workers: int = 4, refresh_stale_after_seconds: float = 30.0) -> None:
         self._entries: Dict[str, MarketCacheEntry] = {}
         self._locks: Dict[str, threading.RLock] = {}
         self._global_lock = threading.RLock()
         self._executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="market-cache")
         self._futures: set[Future] = set()
+        self._refresh_stale_after_seconds = refresh_stale_after_seconds
 
     def get(self, key: str) -> Optional[MarketCacheEntry]:
         with self._lock_for(key):
@@ -106,10 +109,17 @@ class MarketCache:
     ) -> dict:
         lock = self._lock_for(key)
         wait_started_at: Optional[float] = None
+        refresh_generation: Optional[int] = None
         while True:
             with lock:
                 entry = self._entries.get(key)
+                refresh_was_stale = False
+                if entry and entry.is_refreshing and self._refresh_is_stale(entry):
+                    self._clear_refresh_state(entry)
+                    refresh_was_stale = True
                 if entry and entry.expires_at > self._now():
+                    if refresh_was_stale and background_refresh:
+                        self._start_background_refresh(key, ttl_seconds, fetcher)
                     logger.debug("[MarketCache] cache hit key=%s", key)
                     self._emit_cache_event(key, "market_cache_hit", freshness_bucket="fresh")
                     return self._payload(entry)
@@ -150,10 +160,9 @@ class MarketCache:
                         fetched_at=self._now(),
                         expires_at=self._now() - timedelta(seconds=1),
                         ttl_seconds=ttl_seconds,
-                        is_refreshing=True,
                     )
-                    placeholder.is_refreshing = True
                     placeholder.ttl_seconds = ttl_seconds
+                    refresh_generation = self._mark_refresh_started(placeholder)
                     self._entries[key] = placeholder
                     break
             time.sleep(0.01)
@@ -161,7 +170,7 @@ class MarketCache:
         if background_refresh and fallback_factory is not None and cold_start_timeout_seconds is not None:
             logger.debug("[MarketCache] cold fetch start key=%s timeout=%s", key, cold_start_timeout_seconds)
             self._emit_cache_event(key, "market_cache_refresh_started", refresh_mode="cold")
-            future = self._executor.submit(self._refresh, key, ttl_seconds, fetcher, "cold")
+            future = self._executor.submit(self._refresh, key, ttl_seconds, fetcher, "cold", refresh_generation)
             with self._global_lock:
                 self._futures.add(future)
             future.add_done_callback(self._discard_future)
@@ -179,7 +188,6 @@ class MarketCache:
                         fetched_at=self._now(),
                         expires_at=self._now() - timedelta(seconds=1),
                         ttl_seconds=ttl_seconds,
-                        is_refreshing=True,
                     )
                     now = self._now()
                     placeholder.data = copy.deepcopy(data)
@@ -187,6 +195,10 @@ class MarketCache:
                     placeholder.expires_at = now + timedelta(seconds=ttl_seconds)
                     placeholder.ttl_seconds = ttl_seconds
                     placeholder.is_refreshing = True
+                    if placeholder.refresh_started_at is None:
+                        placeholder.refresh_started_at = time.monotonic()
+                    if placeholder.refresh_generation == 0 and refresh_generation is not None:
+                        placeholder.refresh_generation = refresh_generation
                     self._entries[key] = placeholder
                     logger.debug("[MarketCache] cold fallback return key=%s", key)
                     self._emit_cache_event(
@@ -235,7 +247,7 @@ class MarketCache:
                 with lock:
                     current = self._entries.get(key)
                     if current:
-                        current.is_refreshing = False
+                        self._clear_refresh_state(current)
                         current.last_error = str(exc)
                 raise
             data = fallback_factory()
@@ -285,14 +297,21 @@ class MarketCache:
         entry = self._entries.get(key)
         if entry is None or entry.is_refreshing:
             return
-        entry.is_refreshing = True
+        refresh_generation = self._mark_refresh_started(entry)
         self._emit_cache_event(key, "market_cache_refresh_started", refresh_mode="background")
-        future = self._executor.submit(self._refresh, key, ttl_seconds, fetcher, "background")
+        future = self._executor.submit(self._refresh, key, ttl_seconds, fetcher, "background", refresh_generation)
         with self._global_lock:
             self._futures.add(future)
         future.add_done_callback(self._discard_future)
 
-    def _refresh(self, key: str, ttl_seconds: int, fetcher: Callable[[], dict], refresh_mode: str = "background") -> None:
+    def _refresh(
+        self,
+        key: str,
+        ttl_seconds: int,
+        fetcher: Callable[[], dict],
+        refresh_mode: str = "background",
+        refresh_generation: Optional[int] = None,
+    ) -> None:
         lock = self._lock_for(key)
         started_at = time.monotonic()
         try:
@@ -300,8 +319,8 @@ class MarketCache:
         except Exception as exc:
             with lock:
                 entry = self._entries.get(key)
-                if entry:
-                    entry.is_refreshing = False
+                if entry and self._is_current_refresh(entry, refresh_generation):
+                    self._clear_refresh_state(entry)
                     entry.last_error = str(exc)
             logger.debug("[MarketCache] refresh failed key=%s error=%s", key, exc)
             self._emit_cache_event(
@@ -314,7 +333,13 @@ class MarketCache:
             )
             return
         with lock:
-            self._entries[key] = self._entry_from_data(key, data, ttl_seconds)
+            current = self._entries.get(key)
+            if not current or not self._is_current_refresh(current, refresh_generation):
+                logger.debug("[MarketCache] ignored superseded refresh key=%s", key)
+                return
+            new_entry = self._entry_from_data(key, data, ttl_seconds)
+            new_entry.refresh_generation = current.refresh_generation
+            self._entries[key] = new_entry
         logger.debug("[MarketCache] refresh success key=%s", key)
         self._emit_cache_event(
             key,
@@ -349,6 +374,28 @@ class MarketCache:
             ttl_seconds=ttl_seconds,
             is_refreshing=False,
         )
+
+    def _mark_refresh_started(self, entry: MarketCacheEntry) -> int:
+        entry.is_refreshing = True
+        entry.refresh_started_at = time.monotonic()
+        entry.refresh_generation += 1
+        return entry.refresh_generation
+
+    @staticmethod
+    def _clear_refresh_state(entry: MarketCacheEntry) -> None:
+        entry.is_refreshing = False
+        entry.refresh_started_at = None
+
+    def _refresh_is_stale(self, entry: MarketCacheEntry) -> bool:
+        if not entry.is_refreshing:
+            return False
+        if entry.refresh_started_at is None:
+            return True
+        return time.monotonic() - entry.refresh_started_at >= self._refresh_stale_after_seconds
+
+    @staticmethod
+    def _is_current_refresh(entry: MarketCacheEntry, refresh_generation: Optional[int]) -> bool:
+        return refresh_generation is None or entry.refresh_generation == refresh_generation
 
     def _lock_for(self, key: str) -> threading.RLock:
         with self._global_lock:

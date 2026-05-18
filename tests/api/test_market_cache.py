@@ -29,6 +29,14 @@ class MarketCacheTestCase(unittest.TestCase):
     def _event_counts(self) -> dict[str, int]:
         return {item["event"]: item["count"] for item in snapshot_llm_event_counters()}
 
+    def _wait_until(self, predicate, timeout: float = 1.0) -> bool:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if predicate():
+                return True
+            time.sleep(0.01)
+        return bool(predicate())
+
     def test_fresh_cache_hit_does_not_call_fetcher(self) -> None:
         cache = MarketCache(max_workers=1)
         cache.set("crypto", {"source": "binance", "value": 1}, ttl_seconds=30)
@@ -89,6 +97,54 @@ class MarketCacheTestCase(unittest.TestCase):
         self.assertEqual(counts.get("market_cache_refresh_started"), 1)
         self.assertEqual(counts.get("market_cache_refresh_completed"), 1)
         self.assertEqual(counts.get("market_cache_cold_start_fallback_served"), 1)
+
+    def test_cold_fallback_with_stuck_refresh_allows_retry_after_lease_expires(self) -> None:
+        cache = MarketCache(max_workers=2, refresh_stale_after_seconds=0.02)
+        first_started = threading.Event()
+        release_first = threading.Event()
+        retry_started = threading.Event()
+
+        def stuck_fetcher() -> dict:
+            first_started.set()
+            release_first.wait(2)
+            return {"source": "binance", "value": 99}
+
+        def retry_fetcher() -> dict:
+            retry_started.set()
+            return {"source": "binance", "value": 2}
+
+        try:
+            fallback = cache.get_or_refresh(
+                "crypto",
+                30,
+                stuck_fetcher,
+                fallback_factory=lambda: {"source": "fallback", "value": 1, "freshness": "fallback", "isFallback": True},
+                cold_start_timeout_seconds=0.01,
+            )
+            self.assertEqual(fallback["value"], 1)
+            self.assertEqual(fallback["freshness"], "fallback")
+            self.assertTrue(fallback["isRefreshing"])
+            self.assertTrue(first_started.wait(1))
+            time.sleep(0.03)
+
+            retry_payload = cache.get_or_refresh(
+                "crypto",
+                30,
+                retry_fetcher,
+                fallback_factory=lambda: {"source": "fallback", "value": 1, "freshness": "fallback", "isFallback": True},
+                cold_start_timeout_seconds=0.01,
+            )
+
+            self.assertEqual(retry_payload["value"], 1)
+            self.assertEqual(retry_payload["freshness"], "fallback")
+            self.assertTrue(retry_payload["isRefreshing"])
+            self.assertTrue(retry_started.wait(1))
+            self.assertTrue(self._wait_until(lambda: cache.get("crypto").data.get("value") == 2))
+        finally:
+            release_first.set()
+
+        self.assertTrue(cache.wait_for_refreshes(timeout=2))
+        self.assertEqual(cache.get("crypto").data["value"], 2)
 
     def test_concurrent_cold_request_returns_fallback_while_first_refreshes(self) -> None:
         cache = MarketCache(max_workers=1)
@@ -173,6 +229,129 @@ class MarketCacheTestCase(unittest.TestCase):
         release_refresh.set()
         self.assertTrue(cache.wait_for_refreshes(timeout=2))
         self.assertEqual(calls, 1)
+
+    def test_stale_snapshot_returns_while_global_refresh_executor_is_saturated(self) -> None:
+        cache = MarketCache(max_workers=1)
+        cache.set("crypto", {"source": "binance", "value": 1}, ttl_seconds=1)
+        cache.get("crypto").expires_at = cache.get("crypto").fetched_at - timedelta(seconds=1)
+        cache.set("sentiment", {"source": "cnn", "value": 52}, ttl_seconds=1)
+        cache.get("sentiment").expires_at = cache.get("sentiment").fetched_at - timedelta(seconds=1)
+        release_hung_refresh = threading.Event()
+        hung_started = threading.Event()
+        unrelated_started = threading.Event()
+
+        def hung_fetcher() -> dict:
+            hung_started.set()
+            release_hung_refresh.wait(2)
+            return {"source": "binance", "value": 2}
+
+        def unrelated_fetcher() -> dict:
+            unrelated_started.set()
+            return {"source": "cnn", "value": 60}
+
+        try:
+            crypto_payload = cache.get_or_refresh("crypto", 1, hung_fetcher, allow_stale=True, background_refresh=True)
+            self.assertEqual(crypto_payload["value"], 1)
+            self.assertTrue(crypto_payload["isRefreshing"])
+            self.assertTrue(hung_started.wait(1))
+
+            started = time.monotonic()
+            sentiment_payload = cache.get_or_refresh(
+                "sentiment",
+                1,
+                unrelated_fetcher,
+                allow_stale=True,
+                background_refresh=True,
+            )
+            elapsed = time.monotonic() - started
+
+            self.assertLess(elapsed, 0.5)
+            self.assertEqual(sentiment_payload["value"], 52)
+            self.assertTrue(sentiment_payload["isStale"])
+            self.assertTrue(sentiment_payload["isRefreshing"])
+            self.assertFalse(unrelated_started.is_set())
+        finally:
+            release_hung_refresh.set()
+
+        self.assertTrue(cache.wait_for_refreshes(timeout=2))
+        self.assertTrue(unrelated_started.is_set())
+
+    def test_background_refresh_failure_can_retry_on_next_stale_request(self) -> None:
+        cache = MarketCache(max_workers=1)
+        cache.set("rates", {"source": "fred", "value": 4.1}, ttl_seconds=1)
+        cache.get("rates").expires_at = cache.get("rates").fetched_at - timedelta(seconds=1)
+
+        failed_payload = cache.get_or_refresh(
+            "rates",
+            1,
+            Mock(side_effect=RuntimeError("fred timeout")),
+            allow_stale=True,
+            background_refresh=True,
+        )
+        self.assertEqual(failed_payload["value"], 4.1)
+        self.assertTrue(failed_payload["isRefreshing"])
+        self.assertTrue(cache.wait_for_refreshes(timeout=2))
+        self.assertFalse(cache.get("rates").is_refreshing)
+
+        retry_started = threading.Event()
+
+        def retry_fetcher() -> dict:
+            retry_started.set()
+            return {"source": "fred", "value": 4.2}
+
+        retry_payload = cache.get_or_refresh(
+            "rates",
+            1,
+            retry_fetcher,
+            allow_stale=True,
+            background_refresh=True,
+        )
+
+        self.assertEqual(retry_payload["value"], 4.1)
+        self.assertEqual(retry_payload["warning"], "数据源刷新失败，当前显示最近快照")
+        self.assertTrue(retry_started.wait(1))
+        self.assertTrue(cache.wait_for_refreshes(timeout=2))
+        self.assertEqual(cache.get("rates").data["value"], 4.2)
+
+    def test_cold_fallback_under_worker_saturation_remains_fallback_not_live(self) -> None:
+        cache = MarketCache(max_workers=1)
+        cache.set("crypto", {"source": "binance", "value": 1}, ttl_seconds=1)
+        cache.get("crypto").expires_at = cache.get("crypto").fetched_at - timedelta(seconds=1)
+        release_hung_refresh = threading.Event()
+        hung_started = threading.Event()
+        queued_started = threading.Event()
+
+        def hung_fetcher() -> dict:
+            hung_started.set()
+            release_hung_refresh.wait(2)
+            return {"source": "binance", "value": 2}
+
+        def queued_fetcher() -> dict:
+            queued_started.set()
+            return {"source": "sina", "value": 999, "freshness": "live"}
+
+        try:
+            cache.get_or_refresh("crypto", 1, hung_fetcher, allow_stale=True, background_refresh=True)
+            self.assertTrue(hung_started.wait(1))
+
+            payload = cache.get_or_refresh(
+                "cn_indices",
+                30,
+                queued_fetcher,
+                fallback_factory=lambda: {"source": "fallback", "value": 7, "freshness": "fallback", "isFallback": True},
+                cold_start_timeout_seconds=0.01,
+            )
+
+            self.assertEqual(payload["value"], 7)
+            self.assertEqual(payload["freshness"], "fallback")
+            self.assertTrue(payload["isFallback"])
+            self.assertNotEqual(payload["freshness"], "live")
+            self.assertTrue(payload["isRefreshing"])
+            self.assertFalse(queued_started.is_set())
+        finally:
+            release_hung_refresh.set()
+
+        self.assertTrue(cache.wait_for_refreshes(timeout=2))
 
     def test_fetcher_failure_uses_fallback_without_changing_freshness(self) -> None:
         cache = MarketCache(max_workers=1)
