@@ -70,6 +70,14 @@ def test_build_scanner_evidence_packet_maps_missing_and_internal_terms_to_safe_l
             "market": "us",
             "run_id": 42,
             "evidence_version": "scanner_evidence_v1",
+            "score_explainability": {
+                "raw_score": 81.6,
+                "final_score": 40.0,
+                "cap_reason": "fallback_source",
+                "degradation_reason": "fallback_source",
+                "score_confidence": 0.4,
+                "evidence_coverage": 1.0,
+            },
             "internal_reason_codes": [
                 "not_enough_history",
                 "optional_news_timeout",
@@ -82,7 +90,12 @@ def test_build_scanner_evidence_packet_maps_missing_and_internal_terms_to_safe_l
     assert packet["symbol"] == "PLTR"
     assert packet["market"] == "us"
     assert packet["rank"] == 1
-    assert packet["score"] == 81.6
+    assert packet["score"] == 40.0
+    assert packet["rawScore"] == 81.6
+    assert packet["finalScore"] == 40.0
+    assert packet["capReason"] == "fallback_source"
+    assert packet["degradationReason"] == "fallback_source"
+    assert packet["scoreConfidence"] == 0.4
     assert packet["evidenceVersion"] == "scanner_evidence_v1"
     assert packet["runId"] == 42
     assert packet["freshnessState"] == "fallback"
@@ -108,7 +121,6 @@ def test_build_scanner_evidence_packet_maps_missing_and_internal_terms_to_safe_l
         "not_enough_history",
         "fundamentals_unavailable",
         "optional_news_timeout",
-        "raw",
         "debug",
         "schema",
         "trace",
@@ -129,6 +141,14 @@ def test_build_scanner_evidence_packet_preserves_supported_evidence_buckets_with
             "market": "us",
             "run_id": 7,
             "evidence_version": "scanner_evidence_v1",
+            "score_explainability": {
+                "raw_score": 81.6,
+                "final_score": 40.0,
+                "cap_reason": "fallback_source",
+                "degradation_reason": "fallback_source",
+                "score_confidence": 0.4,
+                "evidence_coverage": 1.0,
+            },
         },
     )
 
@@ -143,3 +163,5 @@ def test_build_scanner_evidence_packet_preserves_supported_evidence_buckets_with
     assert packet["warningFlags"] == ["仅供观察", "需人工复核", "依据需复核"]
     assert packet["freshnessDetail"]["quoteState"] == "fallback"
     assert packet["freshnessDetail"]["historyState"] == "stale"
+    assert packet["rawScore"] == 81.6
+    assert packet["finalScore"] == 40.0

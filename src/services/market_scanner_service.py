@@ -23,6 +23,7 @@ from src.core.trading_calendar import MARKET_TIMEZONE, is_market_open
 from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER, normalize_scope
 from src.repositories.scanner_repo import ScannerRepository
 from src.repositories.stock_repo import StockRepository
+from src.contracts.source_confidence import coerce_source_confidence_contract
 from src.services.scanner_ai_service import ScannerAiInterpretationService
 from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION, build_scanner_evidence_packet
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback, get_us_stock_parquet_dir
@@ -49,6 +50,8 @@ MIN_US_SCANNER_SEED_TARGET = 24
 MAX_US_SCANNER_SUPPLEMENT_TARGET = 80
 MAX_HK_SCANNER_SUPPLEMENT_TARGET = 60
 SCANNER_DETAIL_HISTORY_MAX_WORKERS = 4
+SCANNER_SCORE_CAP_FALLBACK_SOURCES = {"fallback", "history_only_us_scan", "history_only_hk_scan", "mock", "synthetic"}
+SCANNER_SCORE_CAP_PARTIAL_SOURCES = {"local_partial_fallback"}
 CURATED_US_LIQUID_SEED_SYMBOLS: Tuple[str, ...] = (
     "NVDA",
     "AAPL",
@@ -5310,7 +5313,7 @@ class MarketScannerService:
     def _finalize_candidates(self, candidates: List[Dict[str, Any]]) -> None:
         for candidate in candidates:
             components = dict(candidate.get("_component_scores") or {})
-            score = (
+            raw_score = (
                 _safe_float(components.get("pre_rank"))
                 + _safe_float(components.get("trend"))
                 + _safe_float(components.get("momentum"))
@@ -5322,7 +5325,8 @@ class MarketScannerService:
                 + _safe_float(components.get("sector_bonus"))
                 - _safe_float(components.get("penalties"))
             )
-            candidate["score"] = round(_clamp(score, 0.0, 100.0), 1)
+            candidate["score"] = round(_clamp(raw_score, 0.0, 100.0), 1)
+            self._apply_score_caps_and_explainability(candidate)
             candidate["quality_hint"] = self._quality_hint(candidate["score"])
 
             reasons = self._build_reasons(candidate)
@@ -5341,7 +5345,7 @@ class MarketScannerService:
     def _finalize_us_candidates(self, candidates: List[Dict[str, Any]]) -> None:
         for candidate in candidates:
             components = dict(candidate.get("_component_scores") or {})
-            score = (
+            raw_score = (
                 _safe_float(components.get("pre_rank"))
                 + _safe_float(components.get("trend"))
                 + _safe_float(components.get("momentum"))
@@ -5353,7 +5357,8 @@ class MarketScannerService:
                 + _safe_float(components.get("gap_context"))
                 - _safe_float(components.get("penalties"))
             )
-            candidate["score"] = round(_clamp(score, 0.0, 100.0), 1)
+            candidate["score"] = round(_clamp(raw_score, 0.0, 100.0), 1)
+            self._apply_score_caps_and_explainability(candidate)
             candidate["quality_hint"] = self._quality_hint(candidate["score"])
 
             reasons = self._build_us_reasons(candidate)
@@ -5372,7 +5377,7 @@ class MarketScannerService:
     def _finalize_hk_candidates(self, candidates: List[Dict[str, Any]]) -> None:
         for candidate in candidates:
             components = dict(candidate.get("_component_scores") or {})
-            score = (
+            raw_score = (
                 _safe_float(components.get("pre_rank"))
                 + _safe_float(components.get("trend"))
                 + _safe_float(components.get("momentum"))
@@ -5384,7 +5389,8 @@ class MarketScannerService:
                 + _safe_float(components.get("gap_context"))
                 - _safe_float(components.get("penalties"))
             )
-            candidate["score"] = round(_clamp(score, 0.0, 100.0), 1)
+            candidate["score"] = round(_clamp(raw_score, 0.0, 100.0), 1)
+            self._apply_score_caps_and_explainability(candidate)
             candidate["quality_hint"] = self._quality_hint(candidate["score"])
 
             reasons = self._build_hk_reasons(candidate)
@@ -5409,6 +5415,109 @@ class MarketScannerService:
         if score >= 58:
             return "条件确认"
         return "题材跟踪"
+
+    @staticmethod
+    def _has_numeric_signal(value: Any) -> bool:
+        return _safe_float(value, default=np.nan) == _safe_float(value, default=np.nan)  # NaN-safe presence check
+
+    def _score_cap_missing_evidence(self, candidate: Dict[str, Any]) -> List[str]:
+        diagnostics = dict(candidate.get("_diagnostics") or {})
+        history_diag = dict(diagnostics.get("history") or {})
+        quote_diag = dict(diagnostics.get("quote_context") or {})
+        missing: List[str] = []
+        quote_context_present = bool(quote_diag) or "quote_available" in candidate or "quote_available" in diagnostics
+
+        if not history_diag.get("latest_trade_date"):
+            missing.append("history")
+        if int(history_diag.get("rows") or 0) and int(history_diag.get("rows") or 0) < 60:
+            missing.append("history_depth")
+        if quote_context_present and not quote_diag.get("available"):
+            missing.append("quote_context")
+        if not self._has_numeric_signal(candidate.get("ret_5d")) or not self._has_numeric_signal(candidate.get("ret_20d")):
+            missing.append("momentum")
+        if not self._has_numeric_signal(candidate.get("avg_amount_20")) or not self._has_numeric_signal(candidate.get("amount")):
+            missing.append("liquidity")
+        if not self._has_numeric_signal(candidate.get("atr20_pct")):
+            missing.append("risk")
+        if not self._has_numeric_signal(candidate.get("_relative_strength_pct")):
+            missing.append("relative_strength")
+        trend_component = dict(candidate.get("_component_scores") or {}).get("trend")
+        trend_inputs = (candidate.get("close"), candidate.get("price"), candidate.get("ma20"), candidate.get("ma60"))
+        if not self._has_numeric_signal(trend_component) and not any(self._has_numeric_signal(value) for value in trend_inputs):
+            missing.append("trend")
+        return missing
+
+    def _apply_score_caps_and_explainability(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
+        diagnostics = dict(candidate.get("_diagnostics") or {})
+        history_diag = dict(diagnostics.get("history") or {})
+        quote_diag = dict(diagnostics.get("quote_context") or {})
+        missing_evidence = self._score_cap_missing_evidence(candidate)
+        core_missing = [item for item in missing_evidence if item in {"history", "history_depth", "trend", "momentum", "liquidity", "risk", "relative_strength"}]
+        evidence_coverage = round(max(0.0, 1.0 - (len(core_missing) / 6.0)), 4)
+
+        quote_source = str(quote_diag.get("source") or "").strip().lower()
+        history_source = str(history_diag.get("source") or candidate.get("history_source") or "").strip().lower()
+        quote_context_present = bool(quote_diag) or "quote_available" in candidate or "quote_available" in diagnostics
+        is_fallback = (
+            (quote_context_present and not quote_diag.get("available"))
+            or quote_source in SCANNER_SCORE_CAP_FALLBACK_SOURCES
+            or history_source in SCANNER_SCORE_CAP_FALLBACK_SOURCES
+        )
+        is_stale = bool(history_diag.get("stale"))
+        is_partial = history_source in SCANNER_SCORE_CAP_PARTIAL_SOURCES or bool(core_missing)
+        degradation_reason = None
+        if is_fallback:
+            degradation_reason = "fallback_source"
+        elif is_stale:
+            degradation_reason = "stale_source"
+        elif is_partial:
+            degradation_reason = "partial_coverage"
+
+        confidence_source = quote_source or history_source or "scanner"
+        confidence_source_label = confidence_source
+        if quote_context_present and not quote_diag.get("available"):
+            confidence_source = history_source or "quote_context_missing"
+            confidence_source_label = confidence_source
+
+        confidence_contract = coerce_source_confidence_contract(
+            {
+                "source": confidence_source,
+                "sourceLabel": confidence_source_label,
+                "freshness": "live" if quote_diag.get("available") else "unknown",
+                "isFallback": is_fallback,
+                "isStale": is_stale,
+                "isPartial": is_partial,
+                "confidenceWeight": 1.0,
+                "coverage": evidence_coverage,
+                "degradationReason": degradation_reason,
+                "capReason": degradation_reason,
+            }
+        ).to_dict()
+
+        raw_score = round(_clamp(_safe_float(candidate.get("raw_score"), default=_safe_float(candidate.get("score"))), 0.0, 100.0), 1)
+        score_cap = round(_clamp(float(confidence_contract.get("confidenceWeight") or 0.0) * 100.0, 0.0, 100.0), 1)
+        cap_reason = confidence_contract.get("capReason")
+        cap_applied = bool(cap_reason) and raw_score > score_cap
+        final_score = round(min(raw_score, score_cap), 1) if cap_reason else raw_score
+
+        candidate["raw_score"] = raw_score
+        candidate["final_score"] = final_score
+        candidate["score"] = final_score
+        diagnostics["score_explainability"] = {
+            "raw_score": raw_score,
+            "final_score": final_score,
+            "score_delta": round(final_score - raw_score, 1),
+            "score_cap": score_cap if cap_reason else None,
+            "score_confidence": round(float(confidence_contract.get("confidenceWeight") or 0.0), 4),
+            "evidence_coverage": evidence_coverage,
+            "cap_reason": cap_reason,
+            "degradation_reason": confidence_contract.get("degradationReason"),
+            "cap_applied": cap_applied,
+            "missing_evidence": missing_evidence,
+            "source_confidence": confidence_contract,
+        }
+        candidate["_diagnostics"] = diagnostics
+        return diagnostics["score_explainability"]
 
     def _build_reasons(self, candidate: Dict[str, Any]) -> List[str]:
         reasons: List[str] = []
@@ -5740,11 +5849,16 @@ class MarketScannerService:
 
     def _candidate_row_to_dict(self, candidate: MarketScannerCandidate) -> Dict[str, Any]:
         diagnostics = _json_load(candidate.diagnostics_json, {})
+        explainability = dict(diagnostics.get("score_explainability") or {})
+        final_score = explainability.get("final_score")
+        raw_score = explainability.get("raw_score")
         return {
             "symbol": candidate.symbol,
             "name": candidate.name,
             "rank": int(candidate.rank),
             "score": float(candidate.score),
+            "raw_score": float(raw_score) if raw_score is not None else float(candidate.score),
+            "final_score": float(final_score) if final_score is not None else float(candidate.score),
             "quality_hint": candidate.quality_hint,
             "reason_summary": candidate.reason_summary,
             "reasons": _json_load(candidate.reasons_json, []),
@@ -5765,11 +5879,16 @@ class MarketScannerService:
             "component_scores": dict(candidate.get("_component_scores") or {}),
             "last_trade_date": candidate.get("last_trade_date"),
         }
+        explainability = dict(diagnostics.get("score_explainability") or {})
+        final_score = candidate.get("final_score", explainability.get("final_score", candidate.get("score")))
+        raw_score = candidate.get("raw_score", explainability.get("raw_score", candidate.get("score")))
         return {
             "symbol": candidate["symbol"],
             "name": candidate["name"],
             "rank": int(candidate.get("rank") or 0),
-            "score": float(candidate.get("score") or 0.0),
+            "score": float(final_score or 0.0),
+            "raw_score": float(raw_score or 0.0),
+            "final_score": float(final_score or 0.0),
             "quality_hint": candidate.get("quality_hint"),
             "reason_summary": candidate.get("reason_summary"),
             "reasons": candidate.get("reasons") or [],

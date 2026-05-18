@@ -136,6 +136,24 @@ Current score composition:
 - `sector_bonus`: up to 5
 - `penalties`: overheating / excessive volatility / degraded history cases
 
+### Score caps and explainability
+
+The scanner still computes the existing deterministic `raw score` first. A conservative `final score` cap is then applied only when already-available weak evidence is present:
+
+- `fallback_source`: quote context is missing, fallback-only, or history-only, so the score is capped at `40`
+- `stale_source`: history evidence is explicitly stale, so the score is capped at `60`
+- `partial_coverage`: key scoring evidence is missing, sample depth is weak, or partial history fallback was used, so the score is capped at `70`
+
+This change does not alter provider order, runtime fallback behavior, or the underlying score factors. It only prevents weak-evidence candidates from presenting an overconfident final scanner score.
+
+Shortlisted candidates now expose additive explainability metadata:
+
+- top-level `score` remains the final ranking score, with additive `raw_score` and `final_score`
+- `diagnostics.score_explainability` includes `cap_reason`, `degradation_reason`, `score_confidence`, `evidence_coverage`, and `missing_evidence`
+- `diagnostics.evidence_packet` mirrors `rawScore`, `finalScore`, `capReason`, `degradationReason`, and `scoreConfidence`
+
+If no cap is triggered, then `raw_score == final_score == score` and ranking behavior stays unchanged.
+
 ### Main Feature Groups
 
 - `trend`: whether price is above MA20 / MA60 and whether MA20 is still rising
@@ -153,6 +171,7 @@ Each shortlisted candidate includes:
 - `symbol / name`
 - `rank`
 - `scanner score`
+- `raw score / final score`
 - `quality hint`
 - `reason summary`
 - `reasons`

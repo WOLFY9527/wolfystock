@@ -49,6 +49,8 @@ SCANNER_CANDIDATE_REQUIRED_KEYS = {
     "name",
     "rank",
     "score",
+    "raw_score",
+    "final_score",
     "quality_hint",
     "reason_summary",
     "reasons",
@@ -135,12 +137,15 @@ def test_scanner_candidate_golden_fixture_matches_public_candidate_contract() ->
     assert candidate["symbol"] == "NVDA"
     assert candidate["rank"] == 1
     assert candidate["score"] == 91.25
+    assert candidate["raw_score"] == 91.25
+    assert candidate["final_score"] == 91.25
     assert candidate["reason_summary"]
     assert candidate["reasons"]
     assert candidate["risk_notes"]
     assert candidate["watch_context"]
     assert candidate["key_metrics"]
     assert candidate["feature_signals"]
+    assert candidate["score"] == candidate["final_score"]
     _assert_iso_timestamp(candidate["scan_timestamp"])
 
     ai_payload = candidate["ai_interpretation"]

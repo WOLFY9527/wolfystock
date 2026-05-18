@@ -206,6 +206,8 @@ class ScannerCandidateResponse(BaseModel):
     name: str
     rank: int
     score: float
+    raw_score: Optional[float] = None
+    final_score: Optional[float] = None
     quality_hint: Optional[str] = None
     reason_summary: Optional[str] = None
     reasons: List[str] = Field(default_factory=list)

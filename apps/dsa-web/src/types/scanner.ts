@@ -249,6 +249,8 @@ export interface ScannerCandidate {
   companyName?: string | null;
   rank: number;
   score: number;
+  rawScore?: number | null;
+  finalScore?: number | null;
   qualityHint?: string | null;
   reasonSummary?: string | null;
   reasons: string[];

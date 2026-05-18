@@ -1,5 +1,16 @@
 ## 2026-05-18
 
+- **Scanner score caps and explainability metadata** - Market Scanner now
+  separates deterministic `raw_score` from capped `final_score` when existing
+  weak evidence is present, preventing fallback/stale/partial evidence from
+  surfacing as an overconfident final scanner score. Shortlisted candidates now
+  expose additive score explainability metadata in public scanner DTOs and
+  `evidence_packet` diagnostics, including `cap_reason`,
+  `degradation_reason`, `score_confidence`, `evidence_coverage`, and
+  `missing_evidence`. Provider runtime order, quote/history fallback behavior,
+  and underlying scanner factor scoring remain otherwise unchanged; only weak
+  evidence candidates have their final score capped.
+
 - **US daily history fallback diagnostics** - Hardened `/api/v1/stocks/{code}/history`
   for US equities so Alpaca/yfinance daily-history failures no longer collapse
   silently into an empty chart when persisted local OHLC rows are available.
