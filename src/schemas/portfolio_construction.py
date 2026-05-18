@@ -13,6 +13,13 @@ PortfolioConstructionSuggestedAction = Literal[
     "reduce_exposure",
     "no_action",
 ]
+PortfolioConstructionEstimatedTradeDirection = Literal[
+    "buy",
+    "sell",
+    "hold",
+    "raise_cash",
+    "deploy_cash",
+]
 
 
 class PortfolioConstructionConstraintViolation(BaseModel):
@@ -34,6 +41,8 @@ class PortfolioConstructionPositionReadModel(BaseModel):
     currentWeight: float
     targetWeight: float
     drift: float
+    suggestedDeltaWeight: float = 0.0
+    estimatedTradeDirection: PortfolioConstructionEstimatedTradeDirection = "hold"
     suggestedAction: PortfolioConstructionSuggestedAction
     currentMarketValue: float = 0.0
     constraintViolations: List[PortfolioConstructionConstraintViolation] = Field(default_factory=list)
@@ -41,6 +50,13 @@ class PortfolioConstructionPositionReadModel(BaseModel):
     noTradeReasons: List[str] = Field(default_factory=list)
     noActionReasons: List[str] = Field(default_factory=list)
     evidence: PortfolioConstructionPositionEvidence
+
+
+class PortfolioConstructionAdvisoryConstraints(BaseModel):
+    minTradeThreshold: float = 0.0
+    maxPositionWeight: Optional[float] = None
+    cashBufferTarget: Optional[float] = None
+    noTradeBand: float = 1.0
 
 
 class PortfolioConstructionEvidenceMetadata(BaseModel):
@@ -72,6 +88,13 @@ class PortfolioConstructionReadModel(BaseModel):
     brokerIntegration: bool = False
     tradeExecution: bool = False
     executionReadiness: Literal["advisory_only_not_trade_execution"] = "advisory_only_not_trade_execution"
+    constraints: PortfolioConstructionAdvisoryConstraints
+    currentCashWeight: float = 0.0
+    targetCashWeight: Optional[float] = None
+    cashDrift: Optional[float] = None
+    cashSuggestedDeltaWeight: float = 0.0
+    cashTradeDirection: PortfolioConstructionEstimatedTradeDirection = "hold"
+    constraintViolations: List[PortfolioConstructionConstraintViolation] = Field(default_factory=list)
     riskBudgetNotes: List[str] = Field(default_factory=list)
     noTradeReasons: List[str] = Field(default_factory=list)
     positions: List[PortfolioConstructionPositionReadModel] = Field(default_factory=list)
