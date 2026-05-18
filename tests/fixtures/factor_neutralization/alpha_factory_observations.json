@@ -1,0 +1,114 @@
+[
+  {
+    "observation": {
+      "factor_id": "relative_strength.relative_strength_63d",
+      "symbol": "AAA",
+      "value": 1.0,
+      "source_name": "unit_fixture",
+      "source_type": "synthetic_fixture",
+      "as_of": "2026-05-16",
+      "observed_at": "2026-05-16T15:00:00Z",
+      "freshness_status": "partial",
+      "confidence": 0.55,
+      "is_partial": true
+    },
+    "sector": "Technology",
+    "market_cap": 100.0
+  },
+  {
+    "observation": {
+      "factor_id": "relative_strength.relative_strength_63d",
+      "symbol": "BBB",
+      "value": 3.0,
+      "source_name": "unit_fixture",
+      "source_type": "synthetic_fixture",
+      "as_of": "2026-05-16",
+      "observed_at": "2026-05-16T15:00:00Z",
+      "freshness_status": "partial",
+      "confidence": 0.55,
+      "is_partial": true
+    },
+    "sector": "Technology",
+    "market_cap": 300.0
+  },
+  {
+    "observation": {
+      "factor_id": "relative_strength.relative_strength_63d",
+      "symbol": "CCC",
+      "value": 2.0,
+      "source_name": "unit_fixture",
+      "source_type": "synthetic_fixture",
+      "as_of": "2026-05-16",
+      "observed_at": "2026-05-16T15:00:00Z",
+      "freshness_status": "partial",
+      "confidence": 0.55,
+      "is_partial": true
+    },
+    "sector": "Finance",
+    "market_cap": 200.0
+  },
+  {
+    "observation": {
+      "factor_id": "relative_strength.relative_strength_63d",
+      "symbol": "DDD",
+      "value": 4.0,
+      "source_name": "unit_fixture",
+      "source_type": "synthetic_fixture",
+      "as_of": "2026-05-16",
+      "observed_at": "2026-05-16T15:00:00Z",
+      "freshness_status": "partial",
+      "confidence": 0.55,
+      "is_partial": true
+    },
+    "sector": "Finance",
+    "market_cap": 400.0
+  },
+  {
+    "observation": {
+      "factor_id": "relative_strength.relative_strength_63d",
+      "symbol": "EEE",
+      "value": 10.0,
+      "source_name": "unit_fixture",
+      "source_type": "synthetic_fixture",
+      "as_of": "2026-05-16",
+      "observed_at": "2026-05-16T15:00:00Z",
+      "freshness_status": "partial",
+      "confidence": 0.55,
+      "is_partial": true
+    },
+    "sector": "Healthcare",
+    "market_cap": 500.0
+  },
+  {
+    "observation": {
+      "factor_id": "relative_strength.relative_strength_63d",
+      "symbol": "FFF",
+      "value": 8.0,
+      "source_name": "unit_fixture",
+      "source_type": "synthetic_fixture",
+      "as_of": "2026-05-16",
+      "observed_at": "2026-05-16T15:00:00Z",
+      "freshness_status": "partial",
+      "confidence": 0.55,
+      "is_partial": true
+    },
+    "sector": null,
+    "market_cap": 600.0
+  },
+  {
+    "observation": {
+      "factor_id": "relative_strength.relative_strength_63d",
+      "symbol": "GGG",
+      "value": 5.0,
+      "source_name": "unit_fixture",
+      "source_type": "synthetic_fixture",
+      "as_of": "2026-05-16",
+      "observed_at": "2026-05-16T15:00:00Z",
+      "freshness_status": "partial",
+      "confidence": 0.55,
+      "is_partial": true
+    },
+    "sector": "Technology",
+    "market_cap": null
+  }
+]
