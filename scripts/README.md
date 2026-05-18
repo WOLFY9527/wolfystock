@@ -1,155 +1,231 @@
 # Scripts Index
 
-This index exists to reduce helper duplication and to make evidence-related
-scripts easier to find. Unless a script explicitly says otherwise, treat it as
-a local operator/helper tool, not as automatic release approval.
+This file documents how helper scripts are organized today without moving or
+renaming them. Use it as a discoverability index first, not as a replacement
+for each script's own `--help`, header comments, or workflow definition.
 
-Release/evidence scripts in this directory are designed around sanitized,
-synthetic, or operator-supplied inputs. Their outputs are examples or local
-checks unless a human operator attaches accepted evidence through the documented
-review flow.
+Unless a script explicitly says otherwise, treat it as a local operator or
+developer tool. A documented script is not automatic release approval, and a
+release/evidence helper does not become production-safe just because it lives
+under `scripts/`.
 
-## Release gate / summary
+## Taxonomy
 
-- `release_gate_summary.sh`: prints a release gate summary and optional
-  sanitized GO/NO-GO JSON. Informational only; does not approve a release or
-  run the full gate.
-- `rollback_rehearsal_evidence.py`: validates sanitized rollback dry-run
-  rehearsal evidence offline. It does not approve launch, deploy, mutate git
-  history, or touch databases.
-- `ci_gate_fast.sh`: changed-file-focused local gate for quick iteration.
-- `ci_gate_profile.sh`: profiles gate runtime; not a substitute for
-  `ci_gate.sh`.
-- `ci_gate.sh`: full backend local gate.
-- `task_preflight.sh`: repository/branch/dirty-state preflight helper.
+### CI-critical
 
-## Secret scan
+These scripts are directly referenced by blocking or policy-enforcing CI jobs,
+or are invoked by scripts that CI treats as required:
 
-- `release_secret_scan.sh`: release-oriented secret scan across branch, staged,
-  worktree, and untracked text files.
-- `security_scan.sh`: broader local security scan wrapper for secret scan,
-  Bandit, optional dependency audit, and optional container scan.
+- `check_ai_assets.py`: required by the `ai-governance` job in
+  `.github/workflows/ci.yml`. Verifies `AGENTS.md` / `CLAUDE.md` /
+  `.github/copilot-instructions.md` / `.github/instructions/*.instructions.md`
+  / `.claude/skills/` relationships. Safe usage: local read-only policy check;
+  it should not rewrite files.
+- `ci_gate.sh`: required by the `backend-gate` job in
+  `.github/workflows/ci.yml` and by `docker-publish.yml`. Runs
+  `task_preflight.sh`, critical flake8 coverage, targeted `py_compile`, root
+  `test.sh` deterministic checks, and `pytest -m "not network"`. Safe usage:
+  full local backend gate before push/PR; expect it to execute tests, not just
+  static parsing.
+- `task_preflight.sh`: called by `ci_gate.sh`. Prints branch, upstream, dirty
+  file summary, and recent commits so local/CI runs are easier to interpret.
+  Safe usage: read-only repository state snapshot.
 
-## Production config readiness
+### Local/dev-only or iterative helpers
 
-- `production_config_readiness.py`: validates a sanitized production-config
-  contract without reading real `.env` values or printing secrets.
+These scripts are primarily for local diagnosis, development loops, smoke
+checks, or packaging work. Some may appear in non-blocking workflows, but they
+are not the main required CI gate:
 
-## Launch acceptance evidence
-
-- `launch_acceptance_evidence.py`: validates sanitized launch-acceptance
-  evidence packs for public launch review.
-
-## Operator evidence workflow
-
-- Operator-facing runbook pack:
-  `docs/audits/operator-evidence-dry-run-handoff.md`,
-  `docs/audits/operator-evidence-real-runbook.md` and
-  `docs/audits/operator-evidence-redaction-checklist.md`.
-- `operator_evidence_template_pack.py`: generates sanitized JSON templates for
-  operator evidence categories. Operators must replace placeholders with
-  sanitized evidence before review; generated templates are not real evidence.
-- `provider_operator_evidence_check.py`: validates sanitized provider operator
-  evidence offline.
-- `restore_pitr_operator_evidence_check.py`: validates sanitized real
-  restore/PITR operator evidence offline; it does not execute restore commands.
-- `security_operator_acceptance_check.py`: validates sanitized MFA/RBAC
-  operator acceptance evidence offline.
-- `quota_operator_evidence_check.py`: validates sanitized quota/budget operator
-  evidence offline and does not send notifications.
-- `staging_ingress_operator_evidence_check.py`: validates sanitized staging
-  ingress operator evidence offline and does not make network calls.
-- `ws2_sse_operator_decision_check.py`: validates sanitized WS2/SSE topology
-  operator decision evidence offline.
-- `config_snapshot_evidence_check.py`: validates sanitized config snapshot
-  evidence offline without reading raw `.env` values.
-- `manual_release_approval_evidence_check.py`: validates sanitized manual
-  release review-record evidence while keeping release approval external and
-  manual.
-- `operator_evidence_manifest_check.py`: creates and verifies checksum
-  manifests for sanitized operator artifact files without printing raw artifact
-  bodies.
-- `operator_evidence_bundle_check.py`: aggregates already-sanitized domain
-  validator summaries for reviewer convenience. It does not replace real
-  operator artifacts or approve launch.
-- `operator_evidence_workflow_smoke.py`: runs the offline workflow against
-  synthetic fixtures, writes the standard review outputs to a temp/local output
-  directory, and verifies unsafe fixture data is rejected safely.
-- `release_review_report_render.py`: renders an offline Markdown review report
-  from sanitized summary JSON. The report is informational only and cannot
-  approve launch.
-- `evidence_safety.py`: internal helper module for sanitized labels and JSON
-  traversal used by offline evidence validators.
-
-## Backup / restore / PITR
-
-- `backup_restore_drill_check.sh`: dry-run PostgreSQL backup/restore/PITR
-  preflight plus validation of optional sanitized real-restore evidence.
-
-## Staging ingress smoke
-
-- `staging_ingress_smoke.py`: safe-by-default staging ingress preflight; only
-  performs live HTTP checks when explicitly opted in. It also accepts sanitized
-  operator evidence JSON for offline validation.
-
-## Incident response evidence
-
-- `incident_response_evidence.py`: validates sanitized incident-response and
-  auditability evidence for launch review.
-
-## Runtime verification and support diagnostics
-
-- `database_doctor.py`: CLI entrypoint for the database doctor bundle.
-- `database_doctor_smoke.py`: smoke entrypoint for the split database doctor
-  harness.
-- `dev_start_backend.sh`: local backend startup helper that prefers the
-  repo-local `.venv/bin/python`, does not source `.env`, can set
-  `SSL_CERT_FILE` from `certifi`, and restarts a busy port only when
-  `--restart-port` is passed explicitly.
+- Root `test.sh`: scenario runner for `main.py` smoke flows. It is referenced by
+  `ci_gate.sh` for deterministic `code` / `yfinance` checks and by
+  `.github/workflows/network-smoke.yml` for non-blocking `quick` smoke. Safe
+  usage: run a named scenario only; it executes the app, so prefer targeted
+  modes over `all`.
+- `ci_gate_fast.sh`: faster changed-file-focused iteration gate. Safe usage:
+  local feedback loop only; it explicitly does not replace `ci_gate.sh`.
+- `ci_gate_profile.sh`: measures gate runtime. Safe usage: profiling helper
+  only; do not use it as evidence that the real gate passed.
+- `dev_start_backend.sh`: local backend launcher that prefers a repo-local
+  virtualenv and can restart a busy port only when explicitly asked. Safe
+  usage: developer startup helper, not a deployment entrypoint.
+- `database_doctor.py` / `database_doctor_smoke.py`: local database doctor
+  entrypoints.
 - `verify_runtime_writes.py`: local write-through verification against a
-  running backend and local database; generates report artifacts.
-- `check_ai_assets.py`: validates AI-governance asset relationships required by
-  repo policy.
-- `clean_test_history.py`: removes `analysis_history` rows marked as test data.
+  running backend/database.
+- `clean_test_history.py`: cleans rows already marked as test data.
+- Backtest, benchmark, and trace helpers such as
+  `run_execution_trace_scenarios.py`, `smoke_backtest_standard.py`,
+  `smoke_backtest_rule.py`, `benchmark_portfolio_snapshot.py`, and
+  `ws1_baseline_capture.py`: local analysis/debug aids rather than CI policy
+  gates.
+- Data/index utilities such as `generate_index_from_csv.py` and
+  `generate_stock_index.py`: content/build helpers for generated index data.
 
-## Backtest and execution-trace helpers
+### Release/deploy/operator workflows
 
-- `auto_trace_check.py`: acceptance checks for exported deterministic execution
-  traces.
-- `run_execution_trace_scenarios.py`: runs deterministic backtest scenarios and
-  exports acceptance tables.
-- `backtest_smoke_support.py`: shared helpers for backtest smoke scripts.
-- `smoke_backtest_rule.py`: canonical rule-backtest API smoke.
-- `smoke_backtest_standard.py`: canonical standard-backtest API smoke.
-- `seed_canonical_history_browser_check.py`: seeds a deterministic analysis
-  history row for browser verification.
+These scripts support release review, secret scanning, packaging, staging, or
+sanitized operator evidence flows. They should be run deliberately and with the
+relevant runbook context:
 
-## Benchmarks and targeted local runners
+- `release_secret_scan.sh`: release-oriented secret scan across branch diff,
+  staged files, worktree files, and untracked text files. Safe usage: local
+  pre-release or pre-push credential check; it scans text content and exits
+  non-zero on findings, but does not rewrite files.
+- `security_scan.sh`: broader local security wrapper around secret scanning,
+  Bandit, optional dependency audit, and optional container scanning. Note:
+  `.github/workflows/security-scan.yml` currently runs GitHub-native tools
+  directly and only watches this file for workflow triggers; it does not call
+  `security_scan.sh` itself.
+- `release_gate_summary.sh`: informational release summary and optional
+  sanitized GO/NO-GO JSON. Safe usage: summarize evidence posture; it does not
+  approve a release and does not run the full backend gate by default.
+- `production_config_readiness.py`, `launch_acceptance_evidence.py`,
+  `incident_response_evidence.py`, and the `*_operator_*` / `*_evidence_*`
+  validators: offline validation of sanitized release/operator artifacts. Safe
+  usage: validate externally prepared sanitized evidence only; they are not
+  substitutes for human release approval.
+- `staging_ingress_smoke.py`: safe-by-default staging ingress preflight with
+  live HTTP checks only when explicitly enabled.
+- `backup_restore_drill_check.sh` and `release_restore_rollback_drill.py`:
+  restore/PITR and rollback evidence helpers; review each script's flags
+  carefully before use.
+- Desktop packaging scripts:
+  `build-all-macos.sh`, `build-backend-macos.sh`, `build-desktop-macos.sh`,
+  `build-all.ps1`, `build-backend.ps1`, `build-desktop.ps1`, `run-desktop.ps1`.
+  These are referenced by `.github/workflows/desktop-release.yml` for Windows
+  and macOS artifact builds. Safe usage: packaging/build helpers; they install
+  dependencies, build frontend assets, package the backend, and invoke Electron
+  builders, so expect generated artifacts and local build output changes.
 
-- `benchmark_portfolio_snapshot.py`: synthetic WS2 portfolio snapshot benchmark
-  harness.
-- `ws1_baseline_capture.py`: reproducible WS1 baseline capture harness.
-- `run_wolfystock_p2.py`: CLI wrapper for the WolfyStock P2 local-parquet
-  runner.
-- `run_wolfystock_p3.py`: CLI wrapper for the WolfyStock P3 local-parquet
-  runner.
+## Important Entry Points
 
-## Data/index utilities
+### Backend gate stack
 
-- `generate_index_from_csv.py`: builds frontend stock index data from CSV.
-- `generate_stock_index.py`: builds frontend stock index data from the internal
-  mapping.
+- `./scripts/ci_gate.sh`
+  Purpose: canonical local backend gate and the same high-level check CI treats
+  as blocking.
+- `./scripts/task_preflight.sh`
+  Purpose: repository state preflight printed at the start of the backend gate.
+- `python scripts/check_ai_assets.py`
+  Purpose: AI-governance policy check required by CI before backend validation.
 
-## Build and desktop packaging
+Recommended usage order for local validation:
 
-- `build-all-macos.sh`: macOS wrapper for backend + desktop builds.
-- `build-all.ps1`: Windows wrapper for backend + desktop builds.
-- `build-backend-macos.sh`: macOS backend packaging flow.
-- `build-backend.ps1`: Windows backend packaging flow.
-- `build-desktop-macos.sh`: macOS Electron packaging flow.
-- `build-desktop.ps1`: Windows Electron packaging flow.
-- `run-desktop.ps1`: Windows dev-mode desktop launcher.
+1. `python scripts/check_ai_assets.py`
+2. `./scripts/ci_gate.sh`
 
-## Other
+### Secret and release checks
 
-- `__init__.py`: package marker for importing helpers from `scripts/`.
+- `./scripts/release_secret_scan.sh`
+  Purpose: focused credential/secret hygiene check before release or push.
+- `./scripts/release_gate_summary.sh`
+  Purpose: summarize release evidence posture without mutating release state.
+
+### Frontend design and UX checks
+
+Frontend-specific script entrypoints live under `apps/dsa-web/scripts/`, not
+under this directory, but they are part of the same tooling surface:
+
+- `npm run check:design`
+  From `apps/dsa-web/package.json`, runs
+  `apps/dsa-web/scripts/check-design-constitution.mjs`.
+  Purpose: Node-based design constitution scan over frontend source files, with
+  some checks delegated to `scripts/check_frontend_design_constitution.py`.
+- `python scripts/check_frontend_design_constitution.py`
+  Purpose: Python-side design constitution guard used by the frontend scanner.
+- `npm run test:smoke`
+  From `apps/dsa-web/package.json`, runs
+  `apps/dsa-web/scripts/run-smoke.sh`.
+  Purpose: build the web app, reuse or start a backend, launch a local preview,
+  then run Playwright smoke flows.
+- `apps/dsa-web/scripts/run-full-ux-verification.mjs` and
+  `apps/dsa-web/scripts/verify-browser-flows.mjs`
+  Purpose: richer browser/UX verification helpers for local investigation.
+
+Safe usage notes:
+
+- Design checks are policy/style guardrails, not backend correctness tests.
+- Smoke/UX scripts launch local services and browsers; expect logs and temp
+  artifacts.
+
+### Desktop build flow
+
+Desktop packaging logic is intentionally split:
+
+- `build-all-macos.sh` -> `build-backend-macos.sh` ->
+  `build-desktop-macos.sh`
+- `build-all.ps1` -> `build-backend.ps1` -> `build-desktop.ps1`
+
+This mirrors `.github/workflows/desktop-release.yml`, which uses the wrapper
+scripts as the workflow entrypoint instead of calling Electron or PyInstaller
+directly in YAML.
+
+## Workflow And Package References
+
+The fastest way to tell whether a script is "policy-critical" or "just a local
+helper" is to check who calls it:
+
+- `.github/workflows/ci.yml`
+  Calls `python scripts/check_ai_assets.py` and `./scripts/ci_gate.sh`.
+- `.github/workflows/network-smoke.yml`
+  Calls root `./test.sh quick --no-notify` as a non-blocking smoke check.
+- `.github/workflows/desktop-release.yml`
+  Calls `scripts/build-all.ps1` on Windows and `scripts/build-all-macos.sh` on
+  macOS.
+- `apps/dsa-web/package.json`
+  Exposes `npm run check:design` and `npm run test:smoke`, which point into
+  `apps/dsa-web/scripts/`.
+- `.github/workflows/security-scan.yml`
+  Watches `scripts/security_scan.sh` in path filters but currently uses
+  GitHub-native scanners directly rather than invoking the local wrapper.
+
+## Related Helpers By Topic
+
+### Governance and repository policy
+
+- `check_ai_assets.py`
+- `task_preflight.sh`
+
+### Backend verification
+
+- `ci_gate.sh`
+- `ci_gate_fast.sh`
+- `ci_gate_profile.sh`
+- Root `test.sh`
+
+### Frontend verification
+
+- `scripts/check_frontend_design_constitution.py`
+- `apps/dsa-web/scripts/check-design-constitution.mjs`
+- `apps/dsa-web/scripts/run-smoke.sh`
+- `apps/dsa-web/scripts/run-full-ux-verification.mjs`
+- `apps/dsa-web/scripts/verify-browser-flows.mjs`
+
+### Release and security
+
+- `release_secret_scan.sh`
+- `security_scan.sh`
+- `release_gate_summary.sh`
+- `production_config_readiness.py`
+- `launch_acceptance_evidence.py`
+- `incident_response_evidence.py`
+
+### Desktop packaging
+
+- `build-all-macos.sh`
+- `build-backend-macos.sh`
+- `build-desktop-macos.sh`
+- `build-all.ps1`
+- `build-backend.ps1`
+- `build-desktop.ps1`
+- `run-desktop.ps1`
+
+## Notes
+
+- This index intentionally does not move scripts or redefine ownership
+  boundaries.
+- When a script header, `--help`, or workflow definition disagrees with this
+  file, trust the executable source and update this index in the same change.
+- `__init__.py` remains a package marker for importing helper modules from
+  `scripts/`.
