@@ -449,6 +449,7 @@ class DataFetcherManager:
         self._fundamental_timeout_worker_limit = 8
         self._fundamental_timeout_slots = BoundedSemaphore(self._fundamental_timeout_worker_limit)
         self._last_realtime_quote_trace: List[Dict[str, Any]] = []
+        self._last_daily_history_trace: List[Dict[str, Any]] = []
         self._cn_stock_list_cache: Dict[Tuple[str, ...], Dict[str, Any]] = {}
         self._cn_stock_list_cache_lock = RLock()
         self._cn_stock_list_cache_ttl_seconds = 60.0
@@ -635,6 +636,31 @@ class DataFetcherManager:
 
     def get_last_realtime_quote_trace(self) -> List[Dict[str, Any]]:
         return [dict(item) for item in (self._last_realtime_quote_trace or [])]
+
+    def _set_last_daily_history_trace(self, entries: List[Dict[str, Any]]) -> None:
+        normalized: List[Dict[str, Any]] = []
+        for idx, item in enumerate(entries or []):
+            if not isinstance(item, dict):
+                continue
+            provider = str(item.get("provider") or "").strip()
+            action = str(item.get("action") or "").strip().lower() or "attempting"
+            outcome = str(item.get("outcome") or "").strip().lower() or "unknown"
+            status = str(item.get("status") or "").strip().lower()
+            normalized.append(
+                {
+                    "sequence": idx + 1,
+                    "provider": provider or f"source_{idx + 1}",
+                    "action": action,
+                    "outcome": outcome,
+                    "status": status or outcome,
+                    "reason": str(item.get("reason") or "").strip() or None,
+                    "message": str(item.get("message") or "").strip() or None,
+                }
+            )
+        self._last_daily_history_trace = normalized
+
+    def get_last_daily_history_trace(self) -> List[Dict[str, Any]]:
+        return [dict(item) for item in (self._last_daily_history_trace or [])]
 
     @staticmethod
     def _classify_provider_error(exc: Exception) -> tuple[str, str]:
@@ -1044,6 +1070,25 @@ class DataFetcherManager:
         errors = []
         total_fetchers = len(self._fetchers)
         request_start = time.time()
+        daily_trace_entries: List[Dict[str, Any]] = []
+
+        def append_daily_trace(
+            *,
+            provider: str,
+            action: str,
+            outcome: str = "unknown",
+            reason: Optional[str] = None,
+            message: Optional[str] = None,
+        ) -> None:
+            daily_trace_entries.append(
+                {
+                    "provider": provider,
+                    "action": action,
+                    "outcome": outcome,
+                    "reason": reason,
+                    "message": message,
+                }
+            )
 
         # 快速路径：美股指数/美股股票走受控 provider 链路
         if is_us_index_code(stock_code) or is_us_stock_code(stock_code):
@@ -1062,9 +1107,33 @@ class DataFetcherManager:
             yfinance_fetcher = next((fetcher for fetcher in self._fetchers if fetcher.name == "YfinanceFetcher"), None)
             if yfinance_fetcher is not None:
                 us_candidates.append(("YfinanceFetcher", yfinance_fetcher))
+            else:
+                errors.append("[YfinanceFetcher] (ConfigError) fetcher_not_available")
+
+            route_steps = [name for name, _ in us_candidates]
+            append_daily_trace(
+                provider="market_route",
+                action="selected",
+                outcome="ok",
+                message=f"US daily history route selected: {' -> '.join(route_steps) if route_steps else 'none'}.",
+            )
+            if not yfinance_fetcher:
+                append_daily_trace(
+                    provider="yfinance",
+                    action="skipped",
+                    outcome="not_configured",
+                    reason="fetcher_not_available",
+                    message="YfinanceFetcher is not available for US daily history.",
+                )
 
             for attempt, (fetcher_name, fetcher) in enumerate(us_candidates, start=1):
                 try:
+                    append_daily_trace(
+                        provider=fetcher_name,
+                        action="attempting",
+                        outcome="unknown",
+                        message=f"Attempting daily history from {fetcher_name} for {stock_code}.",
+                    )
                     logger.info(
                         f"[数据源尝试 {attempt}/{max(len(us_candidates), 1)}] [{fetcher_name}] "
                         f"美股/美股指数 {stock_code} 直接路由..."
@@ -1085,7 +1154,23 @@ class DataFetcherManager:
                             f"[数据源完成] {stock_code} 使用 [{resolved_source}] 获取成功: "
                             f"rows={len(df)}, elapsed={elapsed:.2f}s"
                         )
+                        append_daily_trace(
+                            provider=str(resolved_source),
+                            action="succeeded",
+                            outcome="ok",
+                            message=f"Daily history accepted from {resolved_source}: rows={len(df)}.",
+                        )
+                        self._set_last_daily_history_trace(daily_trace_entries)
                         return df, str(resolved_source)
+                    empty_reason = "provider_returned_empty_history"
+                    errors.append(f"[{fetcher_name}] (EmptyResult) {empty_reason}")
+                    append_daily_trace(
+                        provider=fetcher_name,
+                        action="failed",
+                        outcome="empty_result",
+                        reason=empty_reason,
+                        message=f"Provider returned no daily history for {stock_code}.",
+                    )
                 except Exception as e:
                     error_type, error_reason = summarize_exception(e)
                     error_msg = f"[{fetcher_name}] ({error_type}) {error_reason}"
@@ -1094,11 +1179,27 @@ class DataFetcherManager:
                         f"error_type={error_type}, reason={error_reason}"
                     )
                     errors.append(error_msg)
+                    outcome, reason = self._classify_provider_error(e)
+                    append_daily_trace(
+                        provider=fetcher_name,
+                        action="failed",
+                        outcome=outcome,
+                        reason=reason,
+                        message=f"Daily history failed on {fetcher_name}: {error_reason}",
+                    )
 
             # 所有美股 provider 均失败或不可用
             error_summary = f"美股/美股指数 {stock_code} 获取失败:\n" + "\n".join(errors)
             elapsed = time.time() - request_start
             logger.error(f"[数据源终止] {stock_code} 获取失败: elapsed={elapsed:.2f}s\n{error_summary}")
+            append_daily_trace(
+                provider="market_history",
+                action="completed",
+                outcome="failed",
+                reason="all_providers_failed",
+                message="No available provider returned US daily history.",
+            )
+            self._set_last_daily_history_trace(daily_trace_entries)
             raise DataFetchError(error_summary)
 
         # 港股优先尝试 Twelve Data，再回退到现有 fetcher 链

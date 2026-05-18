@@ -1,5 +1,12 @@
 ## 2026-05-18
 
+- **US daily history fallback diagnostics** - Hardened `/api/v1/stocks/{code}/history`
+  for US equities so Alpaca/yfinance daily-history failures no longer collapse
+  silently into an empty chart when persisted local OHLC rows are available.
+  The response now includes additive source, diagnostic, and source-confidence
+  metadata for history availability; when no real OHLC exists, it returns an
+  explicit unavailable diagnostic without fabricating candles.
+
 - 🧭 **Docs governance archive pruning** - Slimmed active docs navigation by
   moving stale frontend DOM/CSS/bundle/old launch UX evidence into
   `docs/audits/archive/frontend/`, moving point-in-time QA reports into

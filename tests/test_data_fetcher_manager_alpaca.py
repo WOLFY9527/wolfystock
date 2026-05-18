@@ -4,12 +4,13 @@
 from __future__ import annotations
 
 import unittest
+from ssl import SSLEOFError
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pandas as pd
 
-from data_provider.base import DataFetcherManager
+from data_provider.base import DataFetchError, DataFetcherManager
 from data_provider.provider_credentials import ProviderCredentialBundle
 from data_provider.realtime_types import RealtimeSource, UnifiedRealtimeQuote
 
@@ -194,6 +195,44 @@ class DataFetcherManagerAlpacaTestCase(unittest.TestCase):
         self.assertEqual(source, "YfinanceFetcher")
         self.assertEqual(alpaca.daily_calls, ["AAPL"])
         self.assertEqual(yfinance.daily_calls, ["AAPL"])
+
+    def test_us_daily_history_trace_records_alpaca_ssl_and_yfinance_empty(self) -> None:
+        yfinance = _YfinanceStub(
+            UnifiedRealtimeQuote(code="ORCL", source=RealtimeSource.YFINANCE, price=130.0),
+            daily_result=(pd.DataFrame(), "YfinanceFetcher"),
+        )
+        manager = DataFetcherManager(fetchers=[yfinance])
+        alpaca = _AlpacaStub(
+            UnifiedRealtimeQuote(code="ORCL", source=RealtimeSource.ALPACA, price=131.0),
+            daily_error=SSLEOFError("EOF occurred in violation of protocol"),
+        )
+
+        with patch("data_provider.base.get_provider_credentials") as mock_credentials:
+            mock_credentials.return_value = ProviderCredentialBundle(
+                provider="alpaca",
+                auth_mode="key_secret",
+                key_id="alpaca-id",
+                secret_key="alpaca-secret",
+                extras={"data_feed": "iex"},
+            )
+            with patch.object(manager, "_get_alpaca_fetcher", return_value=alpaca):
+                with self.assertRaises(DataFetchError) as raised:
+                    manager.get_daily_data("ORCL", days=365)
+
+        message = str(raised.exception)
+        self.assertIn("SSLEOFError", message)
+        self.assertIn("YfinanceFetcher", message)
+        self.assertIn("provider_returned_empty_history", message)
+        trace = manager.get_last_daily_history_trace()
+        self.assertTrue(any(item["provider"] == "AlpacaFetcher" and item["action"] == "failed" for item in trace))
+        self.assertTrue(
+            any(
+                item["provider"] == "YfinanceFetcher"
+                and item["action"] == "failed"
+                and item["outcome"] == "empty_result"
+                for item in trace
+            )
+        )
 
 
 if __name__ == "__main__":
