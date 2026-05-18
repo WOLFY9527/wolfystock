@@ -8,11 +8,14 @@ public safety.
 
 from __future__ import annotations
 
+import copy
+import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from statistics import mean
+from time import monotonic
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from src.services.market_data_source_registry import (
@@ -50,6 +53,9 @@ STAGE_LABELS = {
 }
 FAILED_SYMBOL_LIST_LIMIT = 8
 _QUOTE_PROVIDER_TIMEOUT_SECONDS = 3.0
+_SHARED_RADAR_SNAPSHOT_TTL_SECONDS = 180.0
+_SHARED_RADAR_SNAPSHOT_CACHE_LOCK = threading.RLock()
+_SHARED_RADAR_SNAPSHOT_CACHE: Dict[str, "_SharedRotationRadarSnapshotEntry"] = {}
 
 
 @dataclass(frozen=True)
@@ -83,6 +89,37 @@ class QuoteLoadResult:
     observed_present: bool = False
     observed_status: str = "absent"
     observed_metadata: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class _SharedRotationRadarSnapshotEntry:
+    payload: Dict[str, Any]
+    expires_at: float
+
+
+def _clear_shared_rotation_radar_snapshot_cache() -> None:
+    with _SHARED_RADAR_SNAPSHOT_CACHE_LOCK:
+        _SHARED_RADAR_SNAPSHOT_CACHE.clear()
+
+
+def _get_shared_rotation_radar_snapshot(cache_key: str) -> Optional[Dict[str, Any]]:
+    now_monotonic = monotonic()
+    with _SHARED_RADAR_SNAPSHOT_CACHE_LOCK:
+        entry = _SHARED_RADAR_SNAPSHOT_CACHE.get(cache_key)
+        if entry is None:
+            return None
+        if entry.expires_at <= now_monotonic:
+            _SHARED_RADAR_SNAPSHOT_CACHE.pop(cache_key, None)
+            return None
+        return copy.deepcopy(entry.payload)
+
+
+def _store_shared_rotation_radar_snapshot(cache_key: str, payload: Dict[str, Any]) -> None:
+    with _SHARED_RADAR_SNAPSHOT_CACHE_LOCK:
+        _SHARED_RADAR_SNAPSHOT_CACHE[cache_key] = _SharedRotationRadarSnapshotEntry(
+            payload=copy.deepcopy(payload),
+            expires_at=monotonic() + _SHARED_RADAR_SNAPSHOT_TTL_SECONDS,
+        )
 
 
 def _theme_basket_from_taxonomy(entry: RotationTaxonomyEntry) -> ThemeBasket:
@@ -138,15 +175,22 @@ class MarketRotationRadarService:
         quote_provider: Optional[QuoteProvider] = None,
         observed_evidence: Optional[Mapping[str, Any]] = None,
         now_provider: Optional[NowProvider] = None,
+        use_shared_cache: bool = False,
     ) -> None:
         self.quote_provider = quote_provider
         self.observed_evidence = observed_evidence
         self.now_provider = now_provider or (lambda: datetime.now(timezone.utc))
+        self.use_shared_cache = bool(use_shared_cache)
 
     def get_rotation_radar(self, market: str = "US") -> Dict[str, Any]:
         normalized_market = normalize_rotation_market(market)
         if normalized_market != "US":
             return self._taxonomy_rotation_radar(normalized_market)
+        shared_cache_key = self._shared_snapshot_cache_key(normalized_market)
+        if shared_cache_key:
+            cached_payload = _get_shared_rotation_radar_snapshot(shared_cache_key)
+            if cached_payload is not None:
+                return cached_payload
         generated_at = self._now_iso()
         quote_result = self._load_quotes()
         quote_provider_metadata = self._quote_provider_metadata(quote_result)
@@ -171,7 +215,7 @@ class MarketRotationRadarService:
         ]
         if not payload_fallback:
             warnings = [warning for warning in warnings if "Fallback/静态篮子" not in warning]
-        return {
+        payload = {
             "endpoint": RADAR_ENDPOINT,
             "market": "US",
             "supportedMarkets": list(SUPPORTED_ROTATION_MARKETS),
@@ -211,6 +255,25 @@ class MarketRotationRadarService:
                 "newslessRotationMeaning": "未配置新闻催化证据时，价格/量能/广度/同步性同时满足阈值的保守观察标记，不代表因果确认。",
             },
         }
+        if shared_cache_key and not payload_fallback:
+            _store_shared_rotation_radar_snapshot(shared_cache_key, payload)
+        return payload
+
+    def _shared_snapshot_cache_key(self, market: str) -> Optional[str]:
+        if not self.use_shared_cache:
+            return None
+        if market != "US":
+            return None
+        if self.quote_provider is None or self.observed_evidence is not None:
+            return None
+        return f"market={market}|quote_provider={self._quote_provider_cache_identity(self.quote_provider)}"
+
+    def _quote_provider_cache_identity(self, provider: QuoteProvider) -> str:
+        module = str(getattr(provider, "__module__", "") or "")
+        qualname = str(getattr(provider, "__qualname__", "") or "")
+        if module == "src.services.rotation_radar_quote_provider" and qualname == "load_rotation_radar_quotes":
+            return f"{module}.{qualname}"
+        return f"id:{id(provider)}"
 
     def _taxonomy_rotation_radar(self, market: str) -> Dict[str, Any]:
         generated_at = self._now_iso()

@@ -5,11 +5,33 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
 from api.v1.endpoints import market
+from src.services import market_rotation_radar_service as radar_service_module
+from src.services import rotation_radar_quote_provider
+from src.services.market_overview_service import MarketOverviewService
+
+
+@pytest.fixture(autouse=True)
+def _clear_rotation_radar_shared_state():
+    MarketOverviewService._market_cache.clear()
+    MarketOverviewService._market_data_cache.clear()
+    clear_shared_cache = getattr(
+        radar_service_module,
+        "_clear_shared_rotation_radar_snapshot_cache",
+        None,
+    )
+    if clear_shared_cache:
+        clear_shared_cache()
+    yield
+    MarketOverviewService._market_cache.clear()
+    MarketOverviewService._market_data_cache.clear()
+    if clear_shared_cache:
+        clear_shared_cache()
 
 
 def _client(monkeypatch: pytest.MonkeyPatch, provider_factory=None) -> TestClient:
@@ -21,6 +43,68 @@ def _client(monkeypatch: pytest.MonkeyPatch, provider_factory=None) -> TestClien
     app = FastAPI()
     app.include_router(market.router, prefix="/api/v1/market")
     return TestClient(app)
+
+
+def _shared_cache_quote(symbol: str, index: int, *, freshness: str = "delayed") -> dict:
+    change = round(0.4 + (index % 7) * 0.17, 3)
+    as_of = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return {
+        "symbol": symbol,
+        "name": symbol,
+        "price": 100.0 + index,
+        "changePercent": change,
+        "volume": 1_000_000 + index,
+        "averageVolume": 900_000,
+        "volumeRatio": 1.25,
+        "vwap": 99.0 + index,
+        "freshness": freshness,
+        "isStale": freshness == "stale",
+        "isFallback": False,
+        "source": "unit_fixture",
+        "sourceLabel": "Unit Fixture",
+        "sourceType": "unofficial_public_api",
+        "asOf": as_of,
+        "timeWindows": {
+            "1d": {
+                "changePercent": change,
+                "relativeVolume": 1.25,
+                "freshness": freshness,
+                "asOf": as_of,
+            }
+        },
+    }
+
+
+def _install_counting_default_provider(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    freshness: str = "delayed",
+) -> list[tuple[str, ...]]:
+    provider_calls: list[tuple[str, ...]] = []
+
+    def provider(symbols):
+        requested = tuple(symbols)
+        provider_calls.append(requested)
+        return {
+            "quotes": {
+                symbol: _shared_cache_quote(symbol, index, freshness=freshness)
+                for index, symbol in enumerate(requested)
+            },
+            "metadata": {
+                "quoteMode": "proxy",
+                "sourceType": "unofficial_public_api",
+                "freshness": freshness,
+                "asOf": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "noExternalCalls": False,
+            },
+        }
+
+    monkeypatch.setattr(
+        rotation_radar_quote_provider,
+        "load_rotation_radar_quotes",
+        provider,
+    )
+    return provider_calls
 
 
 def test_market_rotation_radar_route_is_exposed(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -151,7 +235,13 @@ def test_market_rotation_radar_crypto_market_is_available_when_tab_exists(monkey
 
 
 def test_market_rotation_radar_non_us_tabs_stay_local_taxonomy_and_non_live(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
+    def provider_factory():
+        def provider(symbols):
+            raise AssertionError(f"non-US radar should not call quote provider: {tuple(symbols)}")
+
+        return provider
+
+    client = _client(monkeypatch, provider_factory=provider_factory)
     try:
         for market_name in ("CN", "HK", "CRYPTO"):
             response = client.get(f"/api/v1/market/rotation-radar?market={market_name}")
@@ -338,6 +428,62 @@ def test_market_rotation_radar_default_us_route_uses_injected_quote_provider_whe
         assert payload["metadata"]["quoteProvider"]["coverage"]["usableSymbolCount"] > 0
         assert payload["source"] == "computed"
         assert any(theme["id"] == "ai_applications" and theme["source"] != "fallback" for theme in payload["themes"])
+    finally:
+        client.close()
+
+
+def test_market_rotation_radar_then_sector_rotation_reuses_provider_backed_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider_calls = _install_counting_default_provider(monkeypatch)
+    app = FastAPI()
+    app.include_router(market.router, prefix="/api/v1/market")
+    client = TestClient(app)
+    try:
+        radar_response = client.get("/api/v1/market/rotation-radar")
+        sector_response = client.get("/api/v1/market/sector-rotation")
+
+        assert radar_response.status_code == 200
+        assert sector_response.status_code == 200
+        radar_payload = radar_response.json()
+        sector_payload = sector_response.json()
+        assert len(provider_calls) == 1
+        assert radar_payload["endpoint"] == "/api/v1/market/rotation-radar"
+        assert radar_payload["market"] == "US"
+        assert radar_payload["metadata"]["schemaVersion"] == "market_rotation_radar_phase4_v1"
+        assert {"benchmarks", "summary", "themes", "metadata"}.issubset(radar_payload)
+        assert "endpoint" not in sector_payload
+        assert {"source", "sourceLabel", "updatedAt", "items", "providerHealth", "evidenceSnapshot"}.issubset(sector_payload)
+        assert sector_payload["items"]
+        assert sector_payload["source"] == radar_payload["source"]
+    finally:
+        client.close()
+
+
+def test_sector_rotation_then_market_rotation_radar_reuses_provider_backed_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider_calls = _install_counting_default_provider(monkeypatch)
+    app = FastAPI()
+    app.include_router(market.router, prefix="/api/v1/market")
+    client = TestClient(app)
+    try:
+        sector_response = client.get("/api/v1/market/sector-rotation")
+        radar_response = client.get("/api/v1/market/rotation-radar")
+
+        assert sector_response.status_code == 200
+        assert radar_response.status_code == 200
+        sector_payload = sector_response.json()
+        radar_payload = radar_response.json()
+        assert len(provider_calls) == 1
+        assert sector_payload["items"]
+        assert {"relativeStrength", "rank"}.issubset(sector_payload["items"][0])
+        assert radar_payload["endpoint"] == "/api/v1/market/rotation-radar"
+        assert radar_payload["metadata"]["quoteProvider"]["present"] is True
+        assert radar_payload["metadata"]["quoteProvider"]["status"] == "success"
+        assert radar_payload["metadata"]["quoteProvider"]["freshness"] == "delayed"
+        assert radar_payload["metadata"]["observedEvidence"]["present"] is False
+        assert radar_payload["themes"]
     finally:
         client.close()
 

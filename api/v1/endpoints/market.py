@@ -115,6 +115,7 @@ def get_rotation_radar(
 ):
     return MarketRotationRadarService(
         quote_provider=get_rotation_radar_quote_provider(),
+        use_shared_cache=True,
     ).get_rotation_radar(market=market)
 
 

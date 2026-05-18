@@ -117,7 +117,7 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
 
                 payload = service.get_sector_rotation()
 
-        radar_service_cls.assert_called_once_with(quote_provider=provider)
+        radar_service_cls.assert_called_once_with(quote_provider=provider, use_shared_cache=True)
         radar_service_cls.return_value.get_rotation_radar.assert_called_once_with()
         self.assertEqual(payload["source"], "computed")
         self.assertEqual(payload["sourceLabel"], "主题篮子计算")
