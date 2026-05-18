@@ -1,6 +1,22 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { adminLogsApi, type AdminLogCleanupResponse, type AdminLogHealthSummary, type AdminLogStorageSummary, type BusinessEvent, type BusinessEventDetail, type BusinessEventListResponse, type ExecutionLogSessionDetail, type ExecutionLogSessionListResponse, type ExecutionLogSessionSummary, type ExecutionStep } from '../api/adminLogs';
+import {
+  adminLogsApi,
+  type AdminDataMissingDrilldownItem,
+  type AdminLogCleanupResponse,
+  type AdminLogHealthSummary,
+  type AdminLogStorageSummary,
+  type AdminIncidentTimelineHook,
+  type AdminIncidentTimelineItem,
+  type AdminIncidentTimelineResponse,
+  type BusinessEvent,
+  type BusinessEventDetail,
+  type BusinessEventListResponse,
+  type ExecutionLogSessionDetail,
+  type ExecutionLogSessionListResponse,
+  type ExecutionLogSessionSummary,
+  type ExecutionStep,
+} from '../api/adminLogs';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Drawer } from '../components/common';
@@ -29,6 +45,16 @@ type LevelFilter = 'all' | 'warning_plus' | 'error_plus' | LogLevel;
 type LogCategory = 'system' | 'auth' | 'market' | 'cache' | 'data_source' | 'analysis' | 'scanner' | 'backtest' | 'trading' | 'portfolio' | 'scheduler' | 'notification' | 'api' | 'security';
 type LogsTab = 'business' | 'analysis' | 'scanner' | 'backtest' | 'data_source' | 'security' | 'raw';
 type EventSeverity = 'success' | 'degraded' | 'failed';
+type IncidentLookupInput = {
+  sessionId?: string;
+  requestId?: string;
+  queryId?: string;
+  symbol?: string;
+  since?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
+};
 
 const LEVEL_FILTER_OPTIONS: LevelFilter[] = ['all', 'warning_plus', 'error_plus', 'DEBUG', 'INFO', 'NOTICE', 'WARNING', 'ERROR', 'CRITICAL'];
 const CATEGORY_OPTIONS: LogCategory[] = ['system', 'auth', 'market', 'cache', 'data_source', 'analysis', 'scanner', 'backtest', 'trading', 'portfolio', 'scheduler', 'notification', 'api', 'security'];
@@ -36,6 +62,8 @@ const SINCE_OPTIONS = ['15m', '1h', '24h', '7d'] as const;
 const STATUS_FILTER_OPTIONS = ['all', 'success', 'partial', 'failed', 'skipped', 'running', 'unknown', 'cancelled'] as const;
 const PAGE_SIZE = 20;
 type TerminalChipVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+
+const INCIDENT_KIND_ORDER = ['data_quality', 'provider_cache_circuit', 'llm_cost', 'notification', 'evidence_posture'] as const;
 
 function statusChipVariant(status: UnifiedStatus): TerminalChipVariant {
   if (status === 'success') return 'success';
@@ -479,6 +507,95 @@ function statusFilterLabel(value: (typeof STATUS_FILTER_OPTIONS)[number], locale
     cancelled: { zh: '已取消', en: 'Cancelled' },
   };
   return labels[value][locale];
+}
+
+function incidentKindLabel(value: string | null | undefined, locale: AdminLogsLanguage): string {
+  const key = String(value || '').trim();
+  const labels: Record<string, { zh: string; en: string }> = {
+    data_quality: { zh: '数据质量', en: 'Data quality' },
+    provider_cache_circuit: { zh: 'Provider / 缓存 / 熔断', en: 'Provider / cache / circuit' },
+    llm_cost: { zh: 'LLM / 成本', en: 'LLM / cost' },
+    notification: { zh: '通知姿态', en: 'Notification posture' },
+    evidence_posture: { zh: '证据姿态', en: 'Evidence posture' },
+    business_event: { zh: '业务事件', en: 'Business event' },
+  };
+  return (labels[key] || { zh: key || '--', en: key || '--' })[locale];
+}
+
+function incidentHookStatusLabel(value: string | null | undefined, locale: AdminLogsLanguage): string {
+  const key = String(value || '').trim().toLowerCase();
+  const labels: Record<string, { zh: string; en: string }> = {
+    degraded: { zh: '降级', en: 'Degraded' },
+    available: { zh: '可用', en: 'Available' },
+    placeholder: { zh: '占位', en: 'Placeholder' },
+    not_observed: { zh: '未观察到', en: 'Not observed' },
+    unknown: { zh: '未确认', en: 'Unknown' },
+  };
+  return (labels[key] || { zh: key || '--', en: key || '--' })[locale];
+}
+
+function incidentHookVariant(value: string | null | undefined): TerminalChipVariant {
+  const key = String(value || '').trim().toLowerCase();
+  if (key === 'degraded') return 'caution';
+  if (key === 'available') return 'info';
+  return 'neutral';
+}
+
+function incidentItemVariant(item: AdminIncidentTimelineItem): TerminalChipVariant {
+  if (item.severity === 'error') return 'danger';
+  if (item.severity === 'warning') return 'caution';
+  if (normalizeStatus(item.status) === 'success') return 'success';
+  return 'neutral';
+}
+
+function dataMissingFreshnessLabel(value: string | null | undefined, locale: AdminLogsLanguage): string {
+  const key = String(value || '').trim().toLowerCase();
+  const labels: Record<string, { zh: string; en: string }> = {
+    missing: { zh: '缺失', en: 'Missing' },
+    stale: { zh: '陈旧', en: 'Stale' },
+    fallback: { zh: '回退', en: 'Fallback' },
+    partial: { zh: '部分', en: 'Partial' },
+    fresh: { zh: '新鲜', en: 'Fresh' },
+    unknown: { zh: '未确认', en: 'Unknown' },
+  };
+  return (labels[key] || { zh: key || '--', en: key || '--' })[locale];
+}
+
+function dataMissingTone(item: AdminDataMissingDrilldownItem): TerminalChipVariant {
+  if (item.freshnessStatus === 'missing' || item.reasonCode === 'timeout') return 'danger';
+  if (item.fallbackUsed || item.partial || item.stale) return 'caution';
+  return 'neutral';
+}
+
+function trimLookupValue(value: unknown): string | undefined {
+  const normalized = String(value ?? '').trim();
+  return normalized || undefined;
+}
+
+function buildIncidentLookupFromBusinessEvent(event: Pick<BusinessEvent, 'requestId' | 'symbol'>): IncidentLookupInput | null {
+  const requestId = trimLookupValue(event.requestId);
+  const symbol = trimLookupValue(event.symbol);
+  if (!requestId && !symbol) return null;
+  return { requestId, symbol };
+}
+
+function buildIncidentLookupFromSession(detail: Pick<ExecutionLogSessionSummary, 'sessionId' | 'queryId' | 'code' | 'readableSummary'>): IncidentLookupInput | null {
+  const requestId = trimLookupValue(detail.readableSummary?.requestId || detail.readableSummary?.actorRequestId);
+  const lookup = {
+    sessionId: trimLookupValue(detail.sessionId),
+    queryId: trimLookupValue(detail.queryId),
+    requestId,
+    symbol: trimLookupValue(detail.code),
+  };
+  return lookup.sessionId || lookup.queryId || lookup.requestId || lookup.symbol ? lookup : null;
+}
+
+function buildIncidentLookupFromDrilldown(item: AdminDataMissingDrilldownItem): IncidentLookupInput | null {
+  const lookup = {
+    sessionId: trimLookupValue(item.sampleSessionIds[0]),
+    symbol: trimLookupValue(item.symbol),
+  };
+  return lookup.sessionId || lookup.symbol ? lookup : null;
 }
 
 function tabLabel(value: LogsTab, locale: AdminLogsLanguage): string {
@@ -945,9 +1062,16 @@ const AdminLogsPage: React.FC = () => {
   const [cleanupPreview, setCleanupPreview] = useState<AdminLogCleanupResponse | null>(null);
   const [cleanupMessage, setCleanupMessage] = useState<string | null>(null);
   const [isCleanupBusy, setIsCleanupBusy] = useState(false);
+  const [dataMissingItems, setDataMissingItems] = useState<AdminDataMissingDrilldownItem[]>([]);
+  const [isLoadingDataMissing, setIsLoadingDataMissing] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState<ExecutionLogSessionDetail | null>(null);
   const [selectedBusinessDetail, setSelectedBusinessDetail] = useState<BusinessEventDetail | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isIncidentDrawerOpen, setIsIncidentDrawerOpen] = useState(false);
+  const [incidentContextLabel, setIncidentContextLabel] = useState<string | null>(null);
+  const [incidentTimeline, setIncidentTimeline] = useState<AdminIncidentTimelineResponse | null>(null);
+  const [incidentDrawerError, setIncidentDrawerError] = useState<ParsedApiError | null>(null);
+  const [isIncidentLoading, setIsIncidentLoading] = useState(false);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [error, setError] = useState<ParsedApiError | null>(null);
@@ -962,6 +1086,25 @@ const AdminLogsPage: React.FC = () => {
       setStorageSummary(null);
     }
   }, []);
+
+  const loadDataMissing = useCallback(async () => {
+    if (activeTab === 'raw') {
+      setDataMissingItems([]);
+      return;
+    }
+    setIsLoadingDataMissing(true);
+    try {
+      const response = await adminLogsApi.listDataMissingDrilldown({
+        since: sinceFilter,
+        limit: 4,
+      });
+      setDataMissingItems(response.items || []);
+    } catch {
+      setDataMissingItems([]);
+    } finally {
+      setIsLoadingDataMissing(false);
+    }
+  }, [activeTab, sinceFilter]);
 
   const loadSessions = useCallback(async () => {
     setIsLoadingList(true);
@@ -1114,6 +1257,10 @@ const AdminLogsPage: React.FC = () => {
     void loadStorageSummary();
   }, [loadStorageSummary]);
 
+  useEffect(() => {
+    void loadDataMissing();
+  }, [loadDataMissing]);
+
   const filteredSessions = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return sessions.filter((item) => {
@@ -1185,6 +1332,90 @@ const AdminLogsPage: React.FC = () => {
     }
   }, []);
 
+  const openIncidentTimeline = useCallback(async (lookup: IncidentLookupInput, contextLabel?: string) => {
+    const request = {
+      sessionId: trimLookupValue(lookup.sessionId),
+      requestId: trimLookupValue(lookup.requestId),
+      queryId: trimLookupValue(lookup.queryId),
+      symbol: trimLookupValue(lookup.symbol),
+      since: lookup.since || sinceFilter,
+      dateFrom: trimLookupValue(lookup.dateFrom),
+      dateTo: trimLookupValue(lookup.dateTo),
+      limit: lookup.limit || 60,
+    };
+    if (!(request.sessionId || request.requestId || request.queryId || request.symbol)) return;
+    setIncidentContextLabel(contextLabel || null);
+    setIncidentTimeline(null);
+    setIncidentDrawerError(null);
+    setIsIncidentDrawerOpen(true);
+    setIsIncidentLoading(true);
+    try {
+      const response = await adminLogsApi.getIncidentTimeline(request);
+      setIncidentTimeline(response);
+    } catch (err) {
+      setIncidentDrawerError(getParsedApiError(err));
+    } finally {
+      setIsIncidentLoading(false);
+    }
+  }, [sinceFilter]);
+
+  const openIncidentTimelineFromBusinessEvent = useCallback(async (event: BusinessEvent) => {
+    const lookup = buildIncidentLookupFromBusinessEvent(event);
+    if (!lookup) return;
+    await openIncidentTimeline(lookup, text(event.contextLabel || event.symbol || event.event));
+  }, [openIncidentTimeline]);
+
+  const openIncidentTimelineFromSession = useCallback(async (detail: ExecutionLogSessionSummary) => {
+    const lookup = buildIncidentLookupFromSession(detail);
+    if (!lookup) return;
+    await openIncidentTimeline(lookup, text(detail.code || detail.name || detail.readableSummary?.operationTarget));
+  }, [openIncidentTimeline]);
+
+  const openIncidentTimelineFromDrilldown = useCallback(async (item: AdminDataMissingDrilldownItem) => {
+    const lookup = buildIncidentLookupFromDrilldown(item);
+    if (!lookup) return;
+    await openIncidentTimeline(lookup, text(item.symbol || item.affectedSurface || item.missingDomain));
+  }, [openIncidentTimeline]);
+
+  const openIncidentNavigation = useCallback(async (item: AdminIncidentTimelineItem) => {
+    const nav = item.navigation || {};
+    if (nav.businessEventId) {
+      setIsIncidentDrawerOpen(false);
+      const existing = businessEvents.find((entry) => entry.id === nav.businessEventId);
+      await openBusinessDetail(existing || {
+        id: nav.businessEventId,
+        event: item.title,
+        category: item.category || 'system',
+        status: item.status || 'unknown',
+        summary: item.summary || item.title,
+        symbol: item.symbol || undefined,
+        requestId: item.requestId || undefined,
+        stepCount: 0,
+        successStepCount: 0,
+        failedStepCount: 0,
+        skippedStepCount: 0,
+        unknownStepCount: 0,
+      });
+      return;
+    }
+    if (nav.sessionId) {
+      setIsIncidentDrawerOpen(false);
+      await openDetail({
+        sessionId: nav.sessionId,
+        queryId: nav.queryId || item.queryId || null,
+        code: item.symbol || null,
+        name: item.title,
+        overallStatus: item.status || 'unknown',
+        truthLevel: 'safe_projection',
+        startedAt: item.timestamp || null,
+        readableSummary: {
+          requestId: item.requestId || null,
+          operationTarget: item.symbol || item.title,
+        },
+      });
+    }
+  }, [businessEvents, openBusinessDetail, openDetail]);
+
   const toggleDebugLogs = useCallback(() => {
     setShowDebugLogs((current) => !current);
   }, []);
@@ -1214,6 +1445,16 @@ const AdminLogsPage: React.FC = () => {
   const rawTraceValue = readable.traceId || readable.requestId || readable.actorRequestId || drawerDetail?.queryId;
   const rawRootCause = text(readable.errorSummary || readable.topFailureReason || readable.eventMessage || readable.summaryParagraph, locale === 'zh' ? '原因未确认' : 'Reason unknown');
   const rawActorRole = String(readable.actorRole || '').trim().toLowerCase();
+  const incidentHooks = useMemo(() => {
+    const hooks = incidentTimeline?.hooks || [];
+    return [...hooks].sort((left, right) => {
+      const leftIndex = INCIDENT_KIND_ORDER.indexOf(left.kind as (typeof INCIDENT_KIND_ORDER)[number]);
+      const rightIndex = INCIDENT_KIND_ORDER.indexOf(right.kind as (typeof INCIDENT_KIND_ORDER)[number]);
+      return (leftIndex === -1 ? 99 : leftIndex) - (rightIndex === -1 ? 99 : rightIndex);
+    });
+  }, [incidentTimeline]);
+  const canOpenBusinessIncident = Boolean(businessDetail && buildIncidentLookupFromBusinessEvent(businessDetail));
+  const canOpenRawIncident = Boolean(drawerDetail && buildIncidentLookupFromSession(drawerDetail));
   const computedSummary = useMemo(() => {
     const emptySummary = {
       errorCount: 0,
@@ -1652,6 +1893,75 @@ const AdminLogsPage: React.FC = () => {
           </div>
         </TerminalPanel>
 
+        {activeTab !== 'raw' ? (
+          <TerminalPanel as="section" data-testid="admin-logs-data-missing-section" dense>
+            <TerminalSectionHeader
+              eyebrow={locale === 'zh' ? '数据缺口' : 'DATA GAPS'}
+              title={locale === 'zh' ? '缺失 / 降级数据样本' : 'Missing / degraded data samples'}
+              action={<TerminalChip variant="neutral">{countLabel(dataMissingItems.length, 'sample', 'samples', '样本', locale)}</TerminalChip>}
+            />
+            <TerminalNotice variant="neutral" className="mt-3">
+              {locale === 'zh'
+                ? '只读聚合：按当前时间窗口抽取最常见的数据缺口，必要时再打开 support timeline。'
+                : 'Read-only aggregate for the current time window. Open the support timeline only when you need deeper context.'}
+            </TerminalNotice>
+            {isLoadingDataMissing ? (
+              <p className="mt-3 text-sm text-muted-text">{t('adminLogs.loading')}</p>
+            ) : dataMissingItems.length === 0 ? (
+              <TerminalEmptyState className="mt-3 min-h-[72px]" title={locale === 'zh' ? '当前窗口暂无缺失数据聚合' : 'No data-gap aggregate in this window'}>
+                {locale === 'zh' ? '未观察到需要额外 support timeline 的缺失或降级数据样本。' : 'No missing or degraded data sample in this window needs extra support-timeline triage.'}
+              </TerminalEmptyState>
+            ) : (
+              <TerminalDenseList className="mt-3 gap-0 overflow-hidden rounded-xl border border-white/6 bg-black/15">
+                {dataMissingItems.map((item) => {
+                  const sampleBusinessEventId = item.sampleBusinessEventIds[0];
+                  const sampleEvent = sampleBusinessEventId
+                    ? businessEvents.find((entry) => entry.id === sampleBusinessEventId)
+                    : undefined;
+                  const canOpenTimeline = Boolean(buildIncidentLookupFromDrilldown(item));
+                  return (
+                    <div
+                      key={`${item.affectedSurface}-${item.missingDomain}-${item.reasonCode}`}
+                      className="grid gap-3 border-b border-white/6 px-3 py-2.5 last:border-b-0 lg:grid-cols-[minmax(10rem,1fr)_minmax(12rem,1.25fr)_minmax(10rem,1fr)_auto]"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground" title={text(item.symbol || item.affectedSurface)}>{text(item.symbol || item.affectedSurface)}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-text" title={text(item.market || item.affectedSurface)}>{text(item.market || item.affectedSurface)}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium text-foreground">{incidentKindLabel('data_quality', locale)} · {text(item.missingDomain)}</p>
+                        <p className="mt-1 truncate text-[11px] text-muted-text" title={text([item.provider, item.source, item.reasonCode].filter(Boolean).join(' · '))}>
+                          {text([item.provider, item.source, item.reasonCode].filter(Boolean).join(' · '), locale === 'zh' ? '未记录' : 'Not recorded')}
+                        </p>
+                      </div>
+                      <div className="min-w-0 space-y-1">
+                        <TerminalChip variant={dataMissingTone(item)} className="w-fit font-semibold">
+                          {dataMissingFreshnessLabel(item.freshnessStatus, locale)}
+                        </TerminalChip>
+                        <p className="truncate text-[11px] text-muted-text">
+                          {countLabel(item.count, 'signal', 'signals', '条信号', locale)} · {formatDateTime(item.latestSeenAt, locale)}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
+                        {sampleEvent ? (
+                          <TerminalButton type="button" variant="compact" className="px-2.5 py-1 text-xs" onClick={() => void openBusinessDetail(sampleEvent)}>
+                            {locale === 'zh' ? '查看事件' : 'View event'}
+                          </TerminalButton>
+                        ) : null}
+                        {canOpenTimeline ? (
+                          <TerminalButton type="button" variant="compact" className="px-2.5 py-1 text-xs" onClick={() => void openIncidentTimelineFromDrilldown(item)}>
+                            {locale === 'zh' ? '打开时间线' : 'Open timeline'}
+                          </TerminalButton>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </TerminalDenseList>
+            )}
+          </TerminalPanel>
+        ) : null}
+
         {activeTab === 'scanner' ? (
           <TerminalPanel as="section" data-testid="admin-logs-scanner-summary" dense>
             <TerminalSectionHeader
@@ -1857,6 +2167,15 @@ const AdminLogsPage: React.FC = () => {
                   <p className="mt-2 text-sm text-secondary-text">{businessDetail.summary} · {categoryLabel(businessDetail.category, locale)} · {text(businessDetail.type)} · {formatDateTime(businessDetail.startedAt, locale)}</p>
                 </div>
                 <div className="grid gap-2 text-xs text-secondary-text">
+                  <TerminalButton
+                    type="button"
+                    variant="secondary"
+                    className="px-3 py-1.5 text-xs"
+                    onClick={() => void openIncidentTimelineFromBusinessEvent(businessDetail)}
+                    disabled={!canOpenBusinessIncident}
+                  >
+                    {locale === 'zh' ? '事件时间线' : 'Incident timeline'}
+                  </TerminalButton>
                   <TerminalButton type="button" variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => void copyTextValue(buildBusinessDebugSummary(businessDetail))}>
                     {locale === 'zh' ? '复制执行摘要' : 'Copy execution summary'}
                   </TerminalButton>
@@ -1963,6 +2282,15 @@ const AdminLogsPage: React.FC = () => {
                   <p className="mt-2 text-sm text-secondary-text">{operationLabel(drawerOperationType, locale)} · {formatDateTime(drawerDetail.startedAt, locale)}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <TerminalButton
+                    type="button"
+                    variant="secondary"
+                    className="px-3 py-1.5 text-xs"
+                    onClick={() => void openIncidentTimelineFromSession(drawerDetail)}
+                    disabled={!canOpenRawIncident}
+                  >
+                    {locale === 'zh' ? '事件时间线' : 'Incident timeline'}
+                  </TerminalButton>
                   <TerminalButton type="button" variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => void copyTextValue(buildRawDebugSummary(drawerDetail))}>
                     {locale === 'zh' ? '复制执行摘要' : 'Copy execution summary'}
                   </TerminalButton>
@@ -2101,6 +2429,113 @@ const AdminLogsPage: React.FC = () => {
         ) : (
           <p className="text-sm text-muted-text">{t('adminLogs.selectSessionBody')}</p>
         )}
+      </Drawer>
+
+      <Drawer
+        isOpen={isIncidentDrawerOpen}
+        onClose={() => setIsIncidentDrawerOpen(false)}
+        title={locale === 'zh' ? '事件时间线' : 'Incident timeline'}
+        width="max-w-[min(100vw,42rem)]"
+      >
+        <div className="space-y-4" data-testid="admin-incident-timeline-drawer">
+          {incidentDrawerError ? <ApiErrorAlert error={incidentDrawerError} /> : null}
+          {isIncidentLoading ? <p className="text-sm text-muted-text">{t('adminLogs.loading')}</p> : null}
+
+          <TerminalPanel as="section" dense>
+            <TerminalSectionHeader
+              eyebrow={locale === 'zh' ? '只读 support trace' : 'Read-only support trace'}
+              title={incidentContextLabel || (locale === 'zh' ? '事件时间线' : 'Incident timeline')}
+              action={<TerminalChip variant="neutral">{locale === 'zh' ? '只读' : 'Read-only'}</TerminalChip>}
+            />
+            <div className="mt-3 grid gap-2 text-xs text-secondary-text md:grid-cols-2">
+              <p>{locale === 'zh' ? '会话' : 'Session'}: <span className="text-foreground">{text(incidentTimeline?.lookup.sessionId, locale === 'zh' ? '未指定' : 'Not specified')}</span></p>
+              <p>{locale === 'zh' ? '请求' : 'Request'}: <span className="text-foreground">{text(incidentTimeline?.lookup.requestId, locale === 'zh' ? '未指定' : 'Not specified')}</span></p>
+              <p>{locale === 'zh' ? 'Query' : 'Query'}: <span className="text-foreground">{text(incidentTimeline?.lookup.queryId, locale === 'zh' ? '未指定' : 'Not specified')}</span></p>
+              <p>{locale === 'zh' ? '标的' : 'Symbol'}: <span className="text-foreground">{text(incidentTimeline?.lookup.symbol, locale === 'zh' ? '未指定' : 'Not specified')}</span></p>
+            </div>
+            <TerminalNotice variant="neutral" className="mt-3">
+              {locale === 'zh'
+                ? '仅复用既有 execution logs / read models，不展示 prompt、凭据、原始响应或任何可变控制入口。'
+                : 'Reuses existing execution logs and read models only. No prompts, credentials, raw responses, or mutable controls are exposed.'}
+            </TerminalNotice>
+          </TerminalPanel>
+
+          <TerminalPanel as="section" dense>
+            <TerminalSectionHeader
+              eyebrow={locale === 'zh' ? '时间线 hooks' : 'Timeline hooks'}
+              title={locale === 'zh' ? '聚合线索' : 'Grouped hints'}
+              action={<TerminalChip variant="neutral">{countLabel(incidentHooks.length, 'hook', 'hooks', '组', locale)}</TerminalChip>}
+            />
+            {incidentHooks.length ? (
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {incidentHooks.map((hook: AdminIncidentTimelineHook) => (
+                  <TerminalNestedBlock key={hook.kind} className="min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold text-foreground">{incidentKindLabel(hook.kind, locale)}</p>
+                        <p className="mt-1 truncate text-[11px] text-muted-text">{countLabel(hook.count, 'signal', 'signals', '条信号', locale)}</p>
+                      </div>
+                      <TerminalChip variant={incidentHookVariant(hook.status)} className="shrink-0 font-semibold">
+                        {incidentHookStatusLabel(hook.status, locale)}
+                      </TerminalChip>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-secondary-text">{hook.summary}</p>
+                    <p className="mt-2 truncate text-[11px] text-muted-text">
+                      {text([hook.provider, hook.model, hook.channel, hook.reasonCode].filter(Boolean).join(' · '), locale === 'zh' ? '无附加线索' : 'No extra hint')}
+                    </p>
+                  </TerminalNestedBlock>
+                ))}
+              </div>
+            ) : (
+              <TerminalEmptyState className="mt-3 min-h-[72px]" title={locale === 'zh' ? '当前无聚合线索' : 'No grouped hint yet'}>
+                {locale === 'zh' ? '没有匹配到可展示的 timeline hooks。' : 'No timeline hook matched this lookup.'}
+              </TerminalEmptyState>
+            )}
+          </TerminalPanel>
+
+          <TerminalPanel as="section" dense>
+            <TerminalSectionHeader
+              eyebrow={locale === 'zh' ? '匹配事件' : 'Matched events'}
+              title={locale === 'zh' ? '时间线条目' : 'Timeline items'}
+              action={<TerminalChip variant="neutral">{countLabel(incidentTimeline?.items.length || 0, 'item', 'items', '条', locale)}</TerminalChip>}
+            />
+            {incidentTimeline?.items.length ? (
+              <TerminalDenseList className="mt-3 gap-0 overflow-hidden rounded-xl border border-white/6 bg-black/15">
+                {incidentTimeline.items.map((item: AdminIncidentTimelineItem) => (
+                  <div key={item.id} className="grid gap-3 border-b border-white/6 px-3 py-2.5 last:border-b-0 lg:grid-cols-[7rem_minmax(0,1fr)_auto]">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs text-secondary-text" title={formatDateTime(item.timestamp, locale)}>{formatDateTime(item.timestamp, locale)}</p>
+                      <p className="mt-1 truncate text-[11px] text-muted-text">{incidentKindLabel(item.kind, locale)}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-semibold text-foreground">{item.title}</p>
+                        <TerminalChip variant={incidentItemVariant(item)} className="w-fit font-semibold">
+                          {item.severity === 'error' ? (locale === 'zh' ? '错误' : 'Error') : item.severity === 'warning' ? (locale === 'zh' ? '警告' : 'Warning') : statusLabel(normalizeStatus(item.status), locale)}
+                        </TerminalChip>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-secondary-text">{text(item.summary, locale === 'zh' ? '未附加摘要' : 'No summary attached')}</p>
+                      <p className="mt-1 truncate text-[11px] text-muted-text">
+                        {text([item.phase, item.category, item.provider, item.model, item.channel, item.reasonCode].filter(Boolean).join(' · '), locale === 'zh' ? '无附加上下文' : 'No extra context')}
+                      </p>
+                    </div>
+                    <div className="flex items-start justify-start lg:justify-end">
+                      {item.navigation?.businessEventId || item.navigation?.sessionId ? (
+                        <TerminalButton type="button" variant="compact" className="px-2.5 py-1 text-xs" onClick={() => void openIncidentNavigation(item)}>
+                          {locale === 'zh' ? '打开关联记录' : 'Open linked record'}
+                        </TerminalButton>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </TerminalDenseList>
+            ) : (
+              <TerminalEmptyState data-testid="admin-incident-timeline-empty-state" className="mt-3 min-h-[72px]" title={locale === 'zh' ? '当前无匹配时间线' : 'No matching timeline'}>
+                {incidentTimeline?.emptyState.message || (locale === 'zh' ? '当前 lookup 未命中任何只读事件或辅助 hints。' : 'This lookup did not match any read-only event or support hint.')}
+              </TerminalEmptyState>
+            )}
+          </TerminalPanel>
+        </div>
       </Drawer>
     </section>
   );

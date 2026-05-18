@@ -34,6 +34,15 @@
   provider/model/channel filters are honored without changing provider runtime,
   LLM cost writes, notifications, scoring, or frontend code.
 
+- 🧭 **Admin Logs incident timeline drawer** - `/admin/logs` now surfaces a
+  compact read-only data-gap sample strip plus an `Incident timeline` drawer
+  backed by the landed `/api/v1/admin/logs/incident-timeline` projection.
+  Operators can open sanitized timeline hooks for data quality,
+  provider/cache/circuit posture, LLM/cost placeholders, notification posture,
+  and evidence posture from sample rows or existing log details without
+  changing filters, mutating provider/quota/config/notification state, or
+  exposing prompts, credentials, or raw payloads.
+
 - 🧭 **Docs governance archive pruning** - Slimmed active docs navigation by
   moving stale frontend DOM/CSS/bundle/old launch UX evidence into
   `docs/audits/archive/frontend/`, moving point-in-time QA reports into

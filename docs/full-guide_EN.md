@@ -1109,6 +1109,7 @@ A: Check if Actions is enabled, and if cron expression is correct (note it's UTC
 ## Web Product Experience Notes
 
 - The Web app now runs on one shared product shell and design system: login, boot loading, sidebar navigation, home, portfolio, backtest, and admin logs use the same typography, spacing, surface layering, and state-feedback language.
+- `/admin/logs` now includes a compact read-only incident-timeline workflow: the page surfaces small data-gap samples and lets operators open a sanitized incident timeline by sample session or symbol to inspect data-quality, provider/cache/circuit, LLM/cost, notification, and evidence-posture hooks. The flow does not mutate provider, quota, config, or notification state and does not expose prompts, credentials, or raw payloads.
 - Guest preview still follows the "no persistent user history" rule: `/api/v1/analysis/preview` now issues a lightweight anonymous session cookie so preview query chains are isolated per visitor without mapping guests onto a shared user or the bootstrap admin.
 - `/settings` now remains the personal-preference surface, and signed-in users can store their own notification email target and Discord webhook there. System notification providers, webhooks, and operator channels stay in admin-only system settings instead of being reused as personal notification targets.
 - Admin accounts now default to the safer `User Mode` product surface. `/settings/system`, `/admin/logs`, and other operator pages only appear after Admin Mode is enabled explicitly.
