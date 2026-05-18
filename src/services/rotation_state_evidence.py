@@ -488,6 +488,8 @@ def _evidence_snapshot(
     theme_freshness = str(theme.get("freshness") or "unknown").strip() or "unknown"
     theme_is_fallback = bool(theme.get("isFallback"))
     theme_is_stale = bool(theme.get("isStale"))
+    theme_is_partial = bool(theme.get("isPartial"))
+    theme_is_unavailable = bool(theme.get("isUnavailable")) or theme_freshness in {"unavailable", "error"}
 
     breadth = _mapping(theme.get("breadth"))
     volume = _mapping(theme.get("volume"))
@@ -601,19 +603,33 @@ def _evidence_snapshot(
         if coverage_ratio is not None:
             coverage_ratios.append(coverage_ratio)
         signal_snapshots[key] = {
+            "key": key,
             "label": item["label"],
             "status": item["status"],
             "value": item["value"],
             "available": not source_confidence["isUnavailable"],
             "degraded": degraded,
             "coveragePercent": coverage_percent,
+            "coverageRatio": coverage_ratio,
+            "source": source_confidence["source"],
+            "sourceLabel": source_confidence["sourceLabel"],
+            "asOf": source_confidence["asOf"],
+            "freshness": source_confidence["freshness"],
+            "isFallback": source_confidence["isFallback"],
+            "isStale": source_confidence["isStale"],
+            "isPartial": source_confidence["isPartial"],
+            "isUnavailable": source_confidence["isUnavailable"],
+            "degradationReason": source_confidence["degradationReason"],
+            "capReason": source_confidence["capReason"],
             "sourceConfidence": source_confidence,
         }
 
     overall_coverage_ratio = min(coverage_ratios) if coverage_ratios else 0.0
     overall_signal_count = len(signal_snapshots)
-    overall_partial = degraded_signal_count > 0 and not theme_is_fallback and not theme_is_stale
-    overall_confidence = _signal_source_confidence(
+    overall_partial = bool(theme_is_partial) or (
+        degraded_signal_count > 0 and not theme_is_fallback and not theme_is_stale and not theme_is_unavailable
+    )
+    source_confidence = _signal_source_confidence(
         source=f"{theme_source}.snapshot",
         source_label=f"{theme_source_label} 快照",
         as_of=as_of,
@@ -622,18 +638,37 @@ def _evidence_snapshot(
         is_fallback=theme_is_fallback,
         is_stale=theme_is_stale,
         is_partial=overall_partial,
-        is_unavailable=False,
-        degradation_reason="partial_coverage" if overall_partial else "fallback_source" if theme_is_fallback else "stale_source" if theme_is_stale else None,
+        is_unavailable=theme_is_unavailable,
+        degradation_reason=(
+            "source_unavailable"
+            if theme_is_unavailable
+            else "partial_coverage"
+            if overall_partial
+            else "fallback_source"
+            if theme_is_fallback
+            else "stale_source"
+            if theme_is_stale
+            else None
+        ),
     )
     return {
         "contractVersion": SOURCE_CONFIDENCE_CONTRACT_VERSION,
         "computedAt": computed_at,
         "asOf": as_of,
+        "source": theme_source,
+        "sourceLabel": theme_source_label,
+        "freshness": source_confidence["freshness"],
+        "isFallback": source_confidence["isFallback"],
+        "isStale": source_confidence["isStale"],
+        "isPartial": source_confidence["isPartial"],
+        "isUnavailable": source_confidence["isUnavailable"],
         "signalCount": overall_signal_count,
         "degradedSignalCount": degraded_signal_count,
         "unavailableSignalCount": unavailable_signal_count,
         "coveragePercent": round(overall_coverage_ratio * 100, 1),
-        "sourceConfidence": overall_confidence,
+        "coverageRatio": round(overall_coverage_ratio, 4),
+        "signalOrder": list(signal_snapshots),
+        "sourceConfidence": source_confidence,
         "signals": signal_snapshots,
     }
 
@@ -710,4 +745,13 @@ def build_rotation_state_evidence(
         as_of=evidence.get("asOf"),
         signals=signals,
     )
+    evidence["source"] = evidence["evidenceSnapshot"]["source"]
+    evidence["sourceLabel"] = evidence["evidenceSnapshot"]["sourceLabel"]
+    evidence["freshness"] = evidence["evidenceSnapshot"]["freshness"]
+    evidence["isFallback"] = evidence["evidenceSnapshot"]["isFallback"]
+    evidence["isStale"] = evidence["evidenceSnapshot"]["isStale"]
+    evidence["isPartial"] = evidence["evidenceSnapshot"]["isPartial"]
+    evidence["isUnavailable"] = evidence["evidenceSnapshot"]["isUnavailable"]
+    evidence["sourceConfidence"] = evidence["evidenceSnapshot"]["sourceConfidence"]
+    evidence["signalOrder"] = list(evidence["evidenceSnapshot"]["signalOrder"])
     return evidence

@@ -136,7 +136,7 @@ def test_proxy_only_rotation_state_evidence_never_enables_flow_language() -> Non
     from src.services.rotation_state_evidence import build_rotation_state_evidence
 
     evidence = build_rotation_state_evidence(
-        _theme_payload(),
+        _theme_payload(freshness="delayed"),
         {
             "market": "US",
             "taxonomyVersion": "sector_rotation_taxonomy_v1",
@@ -152,6 +152,75 @@ def test_proxy_only_rotation_state_evidence_never_enables_flow_language() -> Non
     assert evidence["signals"]["fundFlow"]["label"] == "轮动代理证据"
     assert "资金流入确认" not in evidence["uiSummary"]
     assert "真实资金流" not in evidence["stateExplanation"]
+
+
+def test_rotation_state_evidence_exposes_complete_source_and_signal_metadata() -> None:
+    from src.services.rotation_state_evidence import build_rotation_state_evidence
+
+    evidence = build_rotation_state_evidence(
+        _theme_payload(freshness="delayed"),
+        {
+            "market": "US",
+            "taxonomyVersion": "sector_rotation_taxonomy_v1",
+            "computedAt": "2026-05-07T09:50:00+00:00",
+        },
+    )
+
+    snapshot = evidence["evidenceSnapshot"]
+    first_signal = snapshot["signals"]["breadth"]
+
+    assert evidence["source"] == "computed"
+    assert evidence["sourceLabel"] == "主题篮子计算"
+    assert evidence["freshness"] == "delayed"
+    assert evidence["isFallback"] is False
+    assert evidence["isStale"] is False
+    assert evidence["isPartial"] is False
+    assert evidence["isUnavailable"] is False
+    assert evidence["sourceConfidence"]["source"] == "computed.snapshot"
+    assert evidence["sourceConfidence"]["freshness"] == "delayed"
+    assert evidence["signalOrder"] == ["relativeStrength", "breadth", "volume", "persistence", "vwapParticipation"]
+    assert snapshot["source"] == "computed"
+    assert snapshot["sourceLabel"] == "主题篮子计算"
+    assert snapshot["freshness"] == "delayed"
+    assert snapshot["signalOrder"] == list(snapshot["signals"])
+    assert first_signal["source"] == "computed.breadth"
+    assert first_signal["sourceLabel"] == "主题篮子计算 广度确认"
+    assert first_signal["asOf"] == "2026-05-07T09:45:00+00:00"
+    assert first_signal["freshness"] == "delayed"
+    assert "sourceConfidence" in first_signal
+    assert first_signal["sourceConfidence"]["freshness"] == "delayed"
+
+
+def test_rotation_state_evidence_keeps_degraded_freshness_explicit() -> None:
+    from src.services.rotation_state_evidence import build_rotation_state_evidence
+
+    cases = [
+        _theme_payload(freshness="fallback", isFallback=True, source="fallback", sourceLabel="备用数据"),
+        _theme_payload(freshness="stale", isStale=True),
+        _theme_payload(freshness="partial", isPartial=True),
+        _theme_payload(freshness="unavailable", isUnavailable=True),
+    ]
+
+    for theme in cases:
+        evidence = build_rotation_state_evidence(
+            theme,
+            {
+                "market": "US",
+                "taxonomyVersion": "sector_rotation_taxonomy_v1",
+                "computedAt": "2026-05-07T09:50:00+00:00",
+            },
+        )
+        freshness = evidence["sourceConfidence"]["freshness"]
+        assert freshness not in {"live", "fresh"}
+        assert evidence["evidenceSnapshot"]["sourceConfidence"]["freshness"] == freshness
+        if theme.get("isUnavailable"):
+            assert freshness == "unavailable"
+        elif theme.get("isPartial"):
+            assert freshness == "partial"
+        elif theme.get("isStale"):
+            assert freshness == "stale"
+        else:
+            assert freshness == "fallback"
 
 
 def test_taxonomy_only_non_us_evidence_stays_insufficient_and_safe() -> None:

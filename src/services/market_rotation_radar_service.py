@@ -427,6 +427,8 @@ class MarketRotationRadarService:
             "freshness": "fallback",
             "isFallback": True,
             "isStale": False,
+            "isPartial": False,
+            "isUnavailable": False,
             "source": "local_taxonomy",
             "sourceLabel": "静态主题库",
             "asOf": generated_at,
@@ -916,6 +918,19 @@ class MarketRotationRadarService:
             average_relative_volume=average_relative_volume,
             source_state=source_state,
         )
+        partial_evidence = bool(
+            not source_state["isStale"]
+            and not (source_state["fallbackUsed"] and coverage < 0.6)
+            and (
+                coverage < 1.0
+                or source_state["fallbackUsed"]
+                or bool(proxy_quality.get("hasMissingRequiredProxy"))
+                or bool(proxy_quality.get("hasStaleProxy"))
+                or int(window_state.get("availableWindowCount") or 0) < len(TIME_WINDOW_KEYS)
+                or bool(window_state.get("hasStaleWindow"))
+                or bool(window_state.get("hasFallbackWindow"))
+            )
+        )
         leaders = self._leaders(observed)
         evidence = self._evidence(
             theme=theme,
@@ -1016,6 +1031,8 @@ class MarketRotationRadarService:
             "freshness": freshness,
             "isFallback": bool(source_state["fallbackUsed"] and coverage < 0.6),
             "isStale": bool(source_state["isStale"]),
+            "isPartial": partial_evidence,
+            "isUnavailable": False,
             "source": "mixed" if source_state["fallbackUsed"] else "computed",
             "sourceLabel": "部分数据降级" if source_state["fallbackUsed"] else "主题篮子计算",
             "asOf": source_state["asOf"] or generated_at,
@@ -1121,6 +1138,8 @@ class MarketRotationRadarService:
             "freshness": "fallback",
             "isFallback": True,
             "isStale": False,
+            "isPartial": False,
+            "isUnavailable": False,
             "source": "fallback",
             "sourceLabel": "备用数据",
             "asOf": generated_at,

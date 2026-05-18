@@ -456,6 +456,18 @@ def test_market_rotation_radar_then_sector_rotation_reuses_provider_backed_snaps
         assert {"source", "sourceLabel", "updatedAt", "items", "providerHealth", "evidenceSnapshot"}.issubset(sector_payload)
         assert sector_payload["items"]
         assert sector_payload["source"] == radar_payload["source"]
+        assert sector_payload["freshness"] == radar_payload["freshness"]
+        assert sector_payload["radarSnapshot"]["source"] == radar_payload["source"]
+        assert sector_payload["radarSnapshot"]["sourceLabel"] == radar_payload["sourceLabel"]
+        assert sector_payload["radarSnapshot"]["asOf"] == radar_payload["metadata"]["quoteProvider"]["asOf"]
+        assert sector_payload["radarSnapshot"]["freshness"] == radar_payload["freshness"]
+        assert sector_payload["sourceFreshnessEvidence"]["freshness"] == radar_payload["freshness"]
+        assert sector_payload["sourceFreshnessEvidence"]["freshness"] not in {"live", "fresh"}
+        assert sector_payload["items"][0]["rotationStateEvidence"]
+        assert sector_payload["items"][0]["rotationStateEvidence"]["source"] == radar_payload["themes"][0]["rotationStateEvidence"]["source"]
+        assert sector_payload["items"][0]["rotationStateEvidence"]["sourceConfidence"]["freshness"] == radar_payload["themes"][0]["rotationStateEvidence"]["sourceConfidence"]["freshness"]
+        assert sector_payload["items"][0]["sourceFreshnessEvidence"]["freshness"] == radar_payload["themes"][0]["freshness"]
+        assert sector_payload["items"][0]["freshness"] == radar_payload["themes"][0]["freshness"]
     finally:
         client.close()
 
@@ -478,6 +490,10 @@ def test_sector_rotation_then_market_rotation_radar_reuses_provider_backed_snaps
         assert len(provider_calls) == 1
         assert sector_payload["items"]
         assert {"relativeStrength", "rank"}.issubset(sector_payload["items"][0])
+        assert sector_payload["radarSnapshot"]["freshness"] == "delayed"
+        assert sector_payload["sourceFreshnessEvidence"]["freshness"] == "delayed"
+        assert sector_payload["items"][0]["rotationStateEvidence"]["sourceConfidence"]["freshness"] == sector_payload["items"][0]["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["freshness"]
+        assert sector_payload["items"][0]["freshness"] == "delayed"
         assert radar_payload["endpoint"] == "/api/v1/market/rotation-radar"
         assert radar_payload["metadata"]["quoteProvider"]["present"] is True
         assert radar_payload["metadata"]["quoteProvider"]["status"] == "success"
