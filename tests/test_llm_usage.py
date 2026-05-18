@@ -236,6 +236,37 @@ class TestPersistUsageHelper(unittest.TestCase):
             self.assertEqual(ledger_row.status, "pricing_unknown")
             self.assertEqual(ledger_row.total_tokens, 14)
 
+    def test_persist_usage_keeps_raw_usage_append_only_while_deduping_cost_ledger_identity(self):
+        self.db.upsert_model_pricing_policy(
+            policy_key="openai-gpt-4o-mini",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            pricing_unit="per_1m_tokens",
+            input_price_per_1m=0.15,
+            output_price_per_1m=0.6,
+            effective_from=datetime(2025, 1, 1),
+            active=True,
+            metadata_json={},
+        )
+
+        for _ in range(2):
+            persist_llm_usage(
+                {"prompt_tokens": 5, "completion_tokens": 9, "total_tokens": 14},
+                "openai/gpt-4o-mini",
+                call_type="analysis",
+                owner_user_id="user-owner",
+                route_family="analysis",
+                request_hash="persisted-billable-attempt",
+                metadata={"llm_identity": {"attempt_hash": "persisted-billable-attempt", "retry_index": 0}},
+            )
+
+        with self.db.session_scope() as session:
+            self.assertEqual(session.query(LLMUsage).count(), 2)
+            ledger_rows = session.query(LLMCostLedger).all()
+            self.assertEqual(len(ledger_rows), 1)
+            self.assertEqual(ledger_rows[0].request_hash, "persisted-billable-attempt")
+            self.assertEqual(ledger_rows[0].total_tokens, 14)
+
     def test_persist_usage_ledger_failure_does_not_change_success_result(self):
         with patch(
             "src.services.llm_cost_ledger_service.LlmCostLedgerService.reconcile_usage",
