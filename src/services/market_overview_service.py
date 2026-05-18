@@ -3152,17 +3152,21 @@ class MarketOverviewService:
         reliable_count = int(trust.get("reliableInputCount") or 0)
         fallback_count = int(trust.get("fallbackInputCount") or 0)
         total_count = reliable_count + fallback_count
-        coverage = reliable_count / total_count if total_count else 0.0
+        raw_coverage = reliable_count / total_count if total_count else 0.0
         panel_factor = min(1.0, reliable_panel_count / 3.0) if reliable_panel_count else 0.0
         item_factor = min(1.0, reliable_count / 5.0) if reliable_count else 0.0
-        confidence = round(min(float(trust.get("confidence") or 0.0), coverage, panel_factor, item_factor), 2)
+        raw_confidence = float(trust.get("confidence") or 0.0)
+        trust_gate_coverage = raw_coverage
+        if reliable_count >= 5 and reliable_panel_count >= 3 and raw_confidence > 0.25:
+            trust_gate_coverage = max(trust_gate_coverage, min(panel_factor, item_factor))
+        confidence = round(min(raw_confidence, raw_coverage, panel_factor, item_factor), 2)
         is_reliable = bool(
             trust.get("isReliable")
             and reliable_count >= 5
             and reliable_panel_count >= 3
-            and coverage >= 0.25
+            and raw_coverage >= 0.25
         )
-        trust_gate = self._market_intelligence_trust_gate(inputs, coverage=coverage)
+        trust_gate = self._market_intelligence_trust_gate(inputs, coverage=trust_gate_coverage)
         return {
             **trust,
             "confidence": round(min(confidence, float(trust_gate["scoreCap"])), 2),

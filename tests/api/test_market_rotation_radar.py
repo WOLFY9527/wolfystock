@@ -135,6 +135,7 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
         assert payload["metadata"]["observedEvidence"]["present"] is False
         assert payload["metadata"]["observedEvidence"]["status"] == "absent"
         assert payload["metadata"]["schemaVersion"] == "market_rotation_radar_phase4_v1"
+        assert payload["metadata"]["themeRegistryVersion"] == "rotation_theme_registry_v2"
         assert payload["metadata"]["timeWindows"] == ["5m", "15m", "60m", "1d"]
         assert payload["metadata"]["proxyQualityRequired"] is True
         assert payload["metadata"]["alertsAreReadOnlyEvidence"] is True
@@ -148,6 +149,15 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
         assert all(theme["themeDetail"]["watchlistSafe"] is True for theme in payload["themes"])
         assert all("benchmarkProxies" in theme for theme in payload["themes"])
         assert all("proxyQuality" in theme for theme in payload["themes"])
+        assert all("themeDefinition" in theme for theme in payload["themes"])
+        assert all("proxyEvidence" in theme for theme in payload["themes"])
+        assert all("constituentCoverage" in theme for theme in payload["themes"])
+        assert all("scoreBreakdown" in theme for theme in payload["themes"])
+        assert all("weightBreakdown" in theme for theme in payload["themes"])
+        assert all("coveragePenalty" in theme for theme in payload["themes"])
+        assert all("fallbackPenalty" in theme for theme in payload["themes"])
+        assert all("missingProxySymbols" in theme for theme in payload["themes"])
+        assert all("missingConstituentSymbols" in theme for theme in payload["themes"])
         assert all("rotationStateEvidence" in theme for theme in payload["themes"])
         assert all(theme["rotationStateEvidence"]["schemaVersion"] == "rotation_state_evidence_v1" for theme in payload["themes"])
         assert all(theme["rotationStateEvidence"]["flowLanguageAllowed"] is False for theme in payload["themes"])
@@ -155,6 +165,17 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
         assert all(theme["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["freshness"] == "fallback" for theme in payload["themes"])
         assert all(theme["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["isFallback"] is True for theme in payload["themes"])
         assert all(theme["proxyQuality"]["coveragePercent"] <= 100 for theme in payload["themes"])
+        semis = next(theme for theme in payload["themes"] if theme["id"] == "semiconductors")
+        assert "SOX" in semis["themeDefinition"]["proxyIndices"]
+        assert "SOX" not in semis["themeDefinition"]["proxyEtfs"]
+        assert "SOX" not in semis["missingProxySymbols"]
+        assert {"SMH", "SOXX"}.issubset(set(semis["themeDefinition"]["proxyEtfs"]))
+        neocloud = next(theme for theme in payload["themes"] if theme["id"] == "ai_neocloud")
+        eth_treasury = next(theme for theme in payload["themes"] if theme["id"] == "ethereum_treasury")
+        assert "ORCL" in neocloud["membersConfigured"]
+        assert "ORCL" in neocloud["themeDefinition"]["inclusionNotes"]
+        assert "BMNR" in eth_treasury["membersConfigured"]
+        assert "BMNR" in eth_treasury["themeDefinition"]["inclusionNotes"]
         assert all("persistenceEvidence" in theme for theme in payload["themes"])
         assert "watchlistSortingExplanation" in payload["summary"]
         assert "非买卖建议" in payload["summary"]["watchlistSortingExplanation"]

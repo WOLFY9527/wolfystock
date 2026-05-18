@@ -9,6 +9,21 @@
   stale, fallback, synthetic, unavailable, mixed, or low-coverage inputs cannot
   be treated as strong reliable conclusions. Provider order, MarketCache core,
   scoring formulas, frontend, and database schema remain unchanged.
+- **Rotation Radar Theme Registry v2** - Added a backend-only curated
+  `rotation_theme_registry_v2` for US Rotation Radar themes, expanding AI
+  compute/cloud and crypto proxy coverage with explicit metadata for theme
+  definitions, primary/secondary constituents, inclusion notes, ETF proxies,
+  index/asset concepts, benchmark symbols, and data-quality notes. Rotation
+  Radar theme payloads now expose additive `themeDefinition`, `proxyEvidence`,
+  `constituentCoverage`, `scoreBreakdown`, `weightBreakdown`,
+  `coveragePenalty`, `fallbackPenalty`, `missingProxySymbols`, and
+  `missingConstituentSymbols` fields while preserving existing
+  `rotationScore`, `confidence`, `stage`, sorting, provider order, MarketCache
+  behavior, API compatibility, frontend behavior, DB state, and protected
+  Portfolio/Backtest/Options/auth/LLM domains. ORCL is explicitly covered as
+  AI cloud/neocloud-adjacent, BMNR is explicitly covered as an Ethereum
+  treasury / ETH beta equity, SOX is kept as an index concept, and SMH/SOXX
+  plus IGV/CLOU are used as ETF proxy evidence where appropriate.
 - **Offline factor research report scaffold** - Added additive
   `src/services/factor_research_report.py` plus fixture-backed contract tests to
   aggregate `FactorObservation` inputs with offline factor metrics,

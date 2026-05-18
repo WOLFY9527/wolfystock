@@ -85,6 +85,7 @@ class RotationRadarThemeModel(BaseModel):
     taxonomyType: Optional[str] = None
     name: str
     englishName: str
+    themeDefinition: Dict[str, Any] = Field(default_factory=dict)
     focus: str
     benchmark: str
     sectorBenchmark: Optional[str] = None
@@ -112,6 +113,14 @@ class RotationRadarThemeModel(BaseModel):
     alertCandidates: List[Dict[str, Any]] = Field(default_factory=list)
     relativeStrength: Dict[str, Any] = Field(default_factory=dict)
     proxyQuality: Dict[str, Any] = Field(default_factory=dict)
+    proxyEvidence: Dict[str, Any] = Field(default_factory=dict)
+    constituentCoverage: Dict[str, Any] = Field(default_factory=dict)
+    scoreBreakdown: Dict[str, Any] = Field(default_factory=dict)
+    weightBreakdown: Dict[str, Any] = Field(default_factory=dict)
+    coveragePenalty: Optional[float] = None
+    fallbackPenalty: Optional[float] = None
+    missingProxySymbols: List[str] = Field(default_factory=list)
+    missingConstituentSymbols: List[str] = Field(default_factory=list)
     benchmarkProxies: Dict[str, Any] = Field(default_factory=dict)
     timeWindows: Dict[str, RotationRadarTimeWindowModel] = Field(default_factory=dict)
     volume: Dict[str, Any] = Field(default_factory=dict)
