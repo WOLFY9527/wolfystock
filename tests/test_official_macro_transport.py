@@ -141,6 +141,30 @@ def test_build_fred_observations_request_supports_credit_stress_series_without_e
     assert [item.params["series_id"] for item in build_supported_fred_requests()] == ["VIXCLS", "DGS2", "DGS10", "DGS30", "SOFR"]
 
 
+@pytest.mark.parametrize(
+    ("series_id", "limit"),
+    [
+        ("DFF", 2),
+        ("CPIAUCSL", 13),
+        ("PPIACO", 13),
+    ],
+)
+def test_build_fred_observations_request_supports_additional_official_macro_series_without_expanding_runtime_default_set(
+    series_id: str,
+    limit: int,
+) -> None:
+    request = build_fred_observations_request(series_id, limit=limit)
+
+    assert request.method == "GET"
+    assert request.url == FRED_OBSERVATIONS_URL
+    assert request.params["series_id"] == series_id
+    assert request.params["limit"] == str(limit)
+    assert request.source_id == f"fred:{series_id}"
+    assert request.source_type == "official_public"
+    assert request.requires_api_key is True
+    assert [item.params["series_id"] for item in build_supported_fred_requests()] == ["VIXCLS", "DGS2", "DGS10", "DGS30", "SOFR"]
+
+
 def test_build_fred_observations_request_rejects_unsupported_series() -> None:
     with pytest.raises(ValueError, match="unsupported FRED series"):
         build_fred_observations_request("DXY")
@@ -150,10 +174,13 @@ def test_build_fred_observations_request_rejects_unsupported_series() -> None:
     ("series_id", "fixture_name", "expected_value", "expected_date", "expected_hint"),
     [
         ("BAMLH0A0HYM2", "fred_bamlh0a0hym2.json", 3.31, "2026-05-13", "daily_credit_stress"),
+        ("CPIAUCSL", "fred_cpiaucsl.json", 321.0, "2026-05-15", "monthly_inflation_index"),
+        ("DFF", "fred_dff.json", 4.33, "2026-05-15", "daily_policy_rate"),
         ("VIXCLS", "fred_vixcls.json", 18.22, "2026-05-13", "daily_close"),
         ("DGS2", "fred_dgs2.json", 3.87, "2026-05-13", "daily_rate"),
         ("DGS10", "fred_dgs10.json", 4.45, "2026-05-12", "daily_rate"),
         ("DGS30", "fred_dgs30.json", 4.89, "2026-05-13", "daily_rate"),
+        ("PPIACO", "fred_ppiaco.json", 282.0, "2026-05-15", "monthly_inflation_index"),
         ("SOFR", "fred_sofr.json", 5.31, "2026-05-13", "daily_fixing"),
     ],
 )

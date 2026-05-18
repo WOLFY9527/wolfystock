@@ -4,6 +4,7 @@ Status: backend-only smoke/checklist coverage for the current Market Intelligenc
 
 Scope:
 - Market Overview panel/freshness backend contracts
+- Official macro registry/transport coverage and delayed/unavailable semantics
 - Liquidity Monitor evidence/backfill disclosure
 - Rotation Radar evidence/projection disclosure
 - Sector Rotation projection disclosure
@@ -44,6 +45,10 @@ Manual backend endpoints to probe:
 
 Expected degraded-state semantics:
 - Fallback, stale, delayed, partial, or unavailable payloads must not appear live/fresh.
+- Official macro rows for Treasury/FRED daily and monthly releases must keep
+  `official_public` provenance, provider `asOf`, and delayed/stale/unavailable
+  disclosure; effective fed funds, CPI YoY, PPI YoY, and credit-spread proxy
+  rows must not appear realtime.
 - Snapshot reuse may keep prior real values visible, but the payload and item freshness must disclose `stale` or `fallback`.
 - Liquidity Monitor evidence must keep degraded inputs explicit through indicator evidence instead of silently counting them as healthy.
 - Rotation Radar and Sector Rotation must keep proxy/taxonomy/fallback evidence visible through metadata, evidence snapshots, and source freshness fields.

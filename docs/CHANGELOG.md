@@ -1,5 +1,18 @@
 ## 2026-05-18
 
+- **Market Overview official macro expansion** - Expanded the backend-only
+  official macro registry/transport projection so Market Overview macro cards
+  now surface official-public metadata for effective fed funds (`DFF` relayed
+  as `FEDFUNDS`), CPI (`CPIAUCSL` projected as YoY), PPI (`PPIACO` projected
+  as YoY), and the existing credit-spread proxy (`BAMLH0A0HYM2`) alongside the
+  Treasury/SOFR/VIX official paths. The implementation reuses the existing
+  official macro deadline and micro-cache behavior, preserves provider order
+  and MarketCache core behavior, keeps monthly/daily official series labeled as
+  delayed or stale rather than live, and marks insufficient-history monthly
+  inflation rows as explicitly unavailable instead of silently masquerading as
+  fresh data. Frontend, database schema, API shape compatibility, and protected
+  Scanner/Portfolio/Backtest/Options/auth/LLM/accounting domains remain
+  unchanged.
 - **Market Intelligence trust gate contract** - Added a pure backend source-tier
   trust gate for Market Intelligence evidence, covering official, exchange,
   broker-authorized, unofficial public API, public-web fallback, snapshot,

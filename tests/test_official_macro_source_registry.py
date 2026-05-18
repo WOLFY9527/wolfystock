@@ -17,10 +17,13 @@ from src.services.official_macro_source_registry import (
 
 EXPECTED_SOURCE_SERIES = {
     "FRED_BAMLH0A0HYM2": ("BAMLH0A0HYM2",),
+    "FRED_CPIAUCSL": ("CPIAUCSL",),
+    "FRED_DFF": ("DFF",),
     "FRED_VIXCLS": ("VIXCLS",),
     "FRED_DGS2": ("DGS2",),
     "FRED_DGS10": ("DGS10",),
     "FRED_DGS30": ("DGS30",),
+    "FRED_PPIACO": ("PPIACO",),
     "FRED_SOFR": ("SOFR",),
     "TREASURY_DAILY_RATES": ("BC_2YEAR", "BC_10YEAR", "BC_30YEAR"),
     "NYFED_SOFR": ("SOFR",),
@@ -61,11 +64,20 @@ def test_lookup_is_case_insensitive_and_exposes_expected_series_codes() -> None:
 def test_transport_source_lookup_maps_runtime_source_ids_back_to_contracts() -> None:
     treasury_contract = get_official_macro_source_for_transport_source("treasury:daily_treasury_yield_curve")
     vix_contract = get_official_macro_source_for_transport_source("fred:VIXCLS")
+    fed_funds_contract = get_official_macro_source_for_transport_source("fred:DFF")
+    cpi_contract = get_official_macro_source_for_transport_source("fred:CPIAUCSL")
+    ppi_contract = get_official_macro_source_for_transport_source("fred:PPIACO")
 
     assert treasury_contract is not None
     assert treasury_contract.source_id == "TREASURY_DAILY_RATES"
     assert vix_contract is not None
     assert vix_contract.source_id == "FRED_VIXCLS"
+    assert fed_funds_contract is not None
+    assert fed_funds_contract.source_id == "FRED_DFF"
+    assert cpi_contract is not None
+    assert cpi_contract.source_id == "FRED_CPIAUCSL"
+    assert ppi_contract is not None
+    assert ppi_contract.source_id == "FRED_PPIACO"
 
 
 def test_official_macro_contracts_project_to_non_live_daily_observation_provenance() -> None:
@@ -95,6 +107,33 @@ def test_credit_stress_contract_uses_single_explicit_high_yield_oas_series() -> 
     assert contract.observation_only is True
     assert any("high yield" in note.lower() for note in contract.notes)
     assert any("not-live" in note.lower() or "not live" in note.lower() for note in contract.notes)
+
+
+def test_new_macro_contracts_cover_daily_policy_rate_and_monthly_inflation_releases() -> None:
+    fed_funds = get_official_macro_source("fred_dff")
+    cpi = get_official_macro_source("fred_cpiaucsl")
+    ppi = get_official_macro_source("fred_ppiaco")
+
+    assert fed_funds is not None
+    assert fed_funds.display_name == "FRED Federal Funds Effective Rate"
+    assert fed_funds.series_codes == ("DFF",)
+    assert fed_funds.cadence == "business_daily"
+    assert fed_funds.live_eligible is False
+    assert fed_funds.delayed_eligible is True
+
+    assert cpi is not None
+    assert cpi.display_name == "FRED CPI All Urban Consumers Headline Index"
+    assert cpi.series_codes == ("CPIAUCSL",)
+    assert cpi.cadence == "monthly"
+    assert cpi.live_eligible is False
+    assert cpi.delayed_eligible is True
+
+    assert ppi is not None
+    assert ppi.display_name == "FRED PPI All Commodities Index"
+    assert ppi.series_codes == ("PPIACO",)
+    assert ppi.cadence == "monthly"
+    assert ppi.live_eligible is False
+    assert ppi.delayed_eligible is True
 
 
 def test_registry_import_has_no_runtime_or_provider_side_effects() -> None:

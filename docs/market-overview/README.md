@@ -24,3 +24,11 @@ evidence.
   story.
 - Partial data should render a degraded but readable state, never a blank page
   or overconfident healthy state.
+- Official macro rows that come from FRED or Treasury must keep
+  `official_public` provenance and delayed/stale semantics; daily or monthly
+  official releases must never be projected as realtime.
+- Current backend macro coverage includes Treasury curve tenors, SOFR, VIX
+  close, effective fed funds, CPI YoY, PPI YoY, and the observation-only
+  credit-spread proxy. When monthly inflation history is insufficient, the row
+  must stay explicitly unavailable rather than falling back to a fake fresh
+  reading.
