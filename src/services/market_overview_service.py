@@ -355,6 +355,7 @@ class MarketOverviewService:
     OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS = 0.9
     SENTIMENT_AGGREGATE_BUDGET_SECONDS = 1.8
     MARKET_TEMPERATURE_INPUT_BUDGET_SECONDS = 3.0
+    TEMPERATURE_INPUT_SNAPSHOT_CACHE_KEY = "temperature_input_snapshot"
     CRYPTO_FANOUT_WORKERS = 4
     LEGACY_SHARED_SENTIMENT_CACHE_KEY = "sentiment"
     OVERVIEW_SENTIMENT_CACHE_KEY = "overview_sentiment"
@@ -545,7 +546,7 @@ class MarketOverviewService:
 
     def get_market_temperature(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         def fetcher() -> Dict[str, Any]:
-            inputs = self._build_market_temperature_inputs()
+            inputs = self._get_market_temperature_input_snapshot()
             trust = self._summarize_market_temperature_confidence(inputs)
             source = "computed" if trust["isReliable"] and not trust["fallbackInputCount"] else "mixed"
             if trust["reliableInputCount"] == 0:
@@ -594,7 +595,7 @@ class MarketOverviewService:
 
     def get_market_briefing(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         def fetcher() -> Dict[str, Any]:
-            inputs = self._build_market_temperature_inputs()
+            inputs = self._get_market_temperature_input_snapshot()
             trust = self._summarize_market_temperature_confidence(inputs)
             briefing_trust = self._market_briefing_trust(inputs, trust)
             source = "computed" if briefing_trust["isReliable"] and not trust["fallbackInputCount"] else "mixed"
@@ -639,6 +640,16 @@ class MarketOverviewService:
         payload["providerHealth"] = self._provider_health(payload, "market_briefing", duration_ms=int((time.monotonic() - started_at) * 1000), error_summary=_compact_error_summary(payload.get("lastError")))
         payload = self._with_evidence_snapshot(payload, self._category_for_cache_key("market_briefing"))
         return payload
+
+    def _get_market_temperature_input_snapshot(self) -> Dict[str, Any]:
+        return self._market_cache.get_or_refresh(
+            self.TEMPERATURE_INPUT_SNAPSHOT_CACHE_KEY,
+            self._market_temperature_input_snapshot_ttl_seconds(),
+            self._build_market_temperature_inputs,
+            fallback_factory=None,
+            allow_stale=False,
+            background_refresh=False,
+        )
 
     def get_futures(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         started_at = time.monotonic()
@@ -1140,6 +1151,21 @@ class MarketOverviewService:
             self.MARKET_SENTIMENT_CACHE_KEY: "sentiment",
         }.get(cache_key, cache_key)
         return MARKET_CACHE_TTLS.get(ttl_key, self.CACHE_TTL_SECONDS)
+
+    def _market_temperature_input_snapshot_ttl_seconds(self) -> int:
+        # Keep the shared bundle no fresher than the fastest-moving panel it contains.
+        return min(
+            self._ttl_for_cache_key("crypto"),
+            self._ttl_for_cache_key("futures"),
+            self._ttl_for_cache_key("cn_indices"),
+            self._ttl_for_cache_key("cn_breadth"),
+            self._ttl_for_cache_key("cn_flows"),
+            self._ttl_for_cache_key("sector_rotation"),
+            self._ttl_for_cache_key("rates"),
+            self._ttl_for_cache_key("fx_commodities"),
+            self._ttl_for_cache_key("volatility"),
+            self._ttl_for_cache_key(self.MARKET_SENTIMENT_CACHE_KEY),
+        )
 
     def _category_for_cache_key(self, cache_key: str) -> str:
         mapping = {
