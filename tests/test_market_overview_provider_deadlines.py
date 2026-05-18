@@ -88,11 +88,108 @@ def test_sentiment_deadline_skips_secondary_provider_and_fallback_is_not_live(mo
     assert payload["providerHealth"]["status"] == "unavailable"
 
 
+def test_sentiment_snapshot_passes_remaining_deadline_to_transports(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = MarketOverviewService()
+    monkeypatch.setattr(service, "SENTIMENT_AGGREGATE_BUDGET_SECONDS", 0.4, raising=False)
+    cnn_timeouts: list[float] = []
+    alternative_timeouts: list[float] = []
+
+    def cnn_payload(*, timeout: float) -> dict:
+        cnn_timeouts.append(timeout)
+        raise RuntimeError("cnn unavailable")
+
+    def alternative_payload(*, timeout: float) -> dict:
+        alternative_timeouts.append(timeout)
+        return {"data": [{"value": "22"}, {"value": "24"}, {"value": "35"}]}
+
+    with (
+        patch("src.services.market_overview_service.fetch_cnn_fear_greed_payload", side_effect=cnn_payload),
+        patch("src.services.market_overview_service.fetch_alternative_fear_greed_payload", side_effect=alternative_payload),
+    ):
+        payload = service._fetch_market_sentiment_snapshot()
+
+    assert payload["source"] == "alternative_me"
+    assert cnn_timeouts and 0 < cnn_timeouts[0] <= 0.45
+    assert alternative_timeouts and 0 < alternative_timeouts[0] <= 0.45
+
+
+def test_fx_proxy_snapshot_passes_deadline_to_yfinance_transport(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = MarketOverviewService()
+    monkeypatch.setattr(service, "YFINANCE_PROXY_AGGREGATE_BUDGET_SECONDS", 0.4, raising=False)
+    timeouts: list[float] = []
+
+    class _FrameColumn:
+        def __init__(self, values: list[float]) -> None:
+            self._values = values
+
+        def tolist(self) -> list[float]:
+            return list(self._values)
+
+    class _HistoryFrame:
+        def __init__(self, closes: list[float]) -> None:
+            self.empty = False
+            self.index = [0, 1]
+            self._columns = {"Close": _FrameColumn(closes)}
+
+        def __getitem__(self, key: str) -> _FrameColumn:
+            return self._columns[key]
+
+        def __contains__(self, key: str) -> bool:
+            return key in self._columns
+
+    def fake_history(ticker: str, *, timeout: float) -> _HistoryFrame:
+        timeouts.append(timeout)
+        return _HistoryFrame([1.0, 1.1])
+
+    with patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", side_effect=fake_history):
+        payload = service._fetch_fx_commodities_snapshot()
+
+    assert payload["source"] == "yfinance_proxy"
+    assert timeouts
+    assert all(0 < timeout <= 0.45 for timeout in timeouts)
+
+
+def test_futures_snapshot_passes_deadline_to_yfinance_transport(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = MarketOverviewService()
+    monkeypatch.setattr(service, "YFINANCE_PROXY_AGGREGATE_BUDGET_SECONDS", 0.4, raising=False)
+    timeouts: list[float] = []
+
+    class _FrameColumn:
+        def __init__(self, values: list[float]) -> None:
+            self._values = values
+
+        def tolist(self) -> list[float]:
+            return list(self._values)
+
+    class _HistoryFrame:
+        def __init__(self, closes: list[float]) -> None:
+            self.empty = False
+            self.index = [0, 1]
+            self._columns = {"Close": _FrameColumn(closes)}
+
+        def __getitem__(self, key: str) -> _FrameColumn:
+            return self._columns[key]
+
+        def __contains__(self, key: str) -> bool:
+            return key in self._columns
+
+    def fake_history(ticker: str, *, timeout: float) -> _HistoryFrame:
+        timeouts.append(timeout)
+        return _HistoryFrame([1.0, 1.1])
+
+    with patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", side_effect=fake_history):
+        payload = service._fetch_futures_snapshot()
+
+    assert payload["source"] == "mixed"
+    assert timeouts
+    assert all(0 < timeout <= 0.45 for timeout in timeouts)
+
+
 def test_fx_yfinance_stage_deadline_preserves_honest_fallback_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     service = MarketOverviewService()
     monkeypatch.setattr(service, "YFINANCE_PROXY_AGGREGATE_BUDGET_SECONDS", 0.03, raising=False)
 
-    def slow_proxy_history(_: str) -> object:
+    def slow_proxy_history(_: str, *, timeout: float) -> object:
         time.sleep(0.02)
         raise TimeoutError("yfinance proxy timeout")
 
