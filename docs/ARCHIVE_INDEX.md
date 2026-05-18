@@ -20,11 +20,13 @@ Start current work from:
 | `docs/audits/archive/` | Retired audit notes, consolidation plans, older launch/security/admin findings | Provenance only; do not use for current launch verdict |
 | `docs/audits/archive/backtest/` | Archived backtest maintenance evidence and machine-readable audit bundles | Historical backtest maintenance provenance only |
 | `docs/audits/archive/frontend/` | Retired frontend DOM, CSS, route, bundle, scroll, and old launch UX reports | Historical UI evidence only; current visual authority lives in `docs/frontend/` |
+| `docs/assets/archive/` | Archived documentation-only images and screenshots removed from active doc lanes | Historical doc asset provenance only |
 | `docs/frontend/archive/` | Retired frontend route, CSS, shell, visual-constitution, and UI-doc replacement evidence moved during domain consolidation | Historical UI evidence only; current frontend authority lives in `docs/frontend/` |
 | `docs/qa/archive/` | Point-in-time QA reports | QA provenance only |
 | `docs/architecture/archive/audits/` | Older backend and backend/frontend audit reports plus archived implementation plans | Historical architecture evidence |
 | `docs/architecture/archive/multi-user-foundation/` | Multi-user foundation phase snapshots | Prior WS/multi-user design evidence |
 | `docs/architecture/archive/phase-f/` | Phase F evidence plans and runbooks | Portfolio comparison/proof provenance |
+| `sources/archive/legacy-screenshots/` | Legacy root-level screenshots and GIF captures retired from active references | Historical binary evidence only |
 
 ## Historical Audit Files
 
