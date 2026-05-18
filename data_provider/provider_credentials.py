@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Dict, Mapping, Optional, Sequence, Tuple
 
@@ -14,12 +15,22 @@ def _coerce_non_empty(value: object) -> Optional[str]:
     return text or None
 
 
+def _get_config_raw(config: object, attr_name: str) -> object:
+    if isinstance(config, Mapping):
+        for candidate in (attr_name, attr_name.upper(), attr_name.lower()):
+            if candidate in config:
+                return config[candidate]
+        return None
+    for candidate in (attr_name, attr_name.upper(), attr_name.lower()):
+        if hasattr(config, candidate):
+            return getattr(config, candidate)
+    return None
+
+
 def _collect_non_empty_strings(config: object, attr_names: Sequence[str]) -> Tuple[str, ...]:
     values: list[str] = []
     for attr_name in attr_names:
-        if not hasattr(config, attr_name):
-            continue
-        raw_value = getattr(config, attr_name)
+        raw_value = _get_config_raw(config, attr_name)
         if isinstance(raw_value, (list, tuple)):
             for item in raw_value:
                 token = _coerce_non_empty(item)
@@ -39,6 +50,43 @@ def _collect_non_empty_strings(config: object, attr_names: Sequence[str]) -> Tup
     return tuple(deduped)
 
 
+def _infer_alpaca_credential_source(
+    config: object,
+    *,
+    key_id: Optional[str],
+    secret_key: Optional[str],
+) -> str:
+    env_names = ("ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY")
+    if isinstance(config, Mapping):
+        normalized_keys = {str(key).upper() for key in config.keys()}
+        if any(name in normalized_keys for name in env_names):
+            return "control_plane"
+        return "config" if (key_id or secret_key) else "unknown"
+    if any(_coerce_non_empty(os.getenv(name)) for name in env_names):
+        return "env"
+    if key_id or secret_key:
+        return "config"
+    return "unavailable"
+
+
+def _infer_twelve_data_credential_source(
+    config: object,
+    *,
+    api_keys: Tuple[str, ...],
+) -> str:
+    env_names = ("TWELVE_DATA_API_KEY", "TWELVE_DATA_API_KEYS")
+    if isinstance(config, Mapping):
+        normalized_keys = {str(key).upper() for key in config.keys()}
+        if any(name in normalized_keys for name in env_names):
+            return "control_plane"
+        return "config" if api_keys else "unknown"
+    if any(_coerce_non_empty(os.getenv(name)) for name in env_names):
+        return "env"
+    if api_keys:
+        return "config"
+    return "unavailable"
+
+
 @dataclass(frozen=True)
 class ProviderCredentialBundle:
     """Normalized provider credential payload."""
@@ -49,6 +97,7 @@ class ProviderCredentialBundle:
     key_id: Optional[str] = None
     secret_key: Optional[str] = None
     extras: Dict[str, str] = field(default_factory=dict)
+    credential_source: str = "unknown"
 
     @property
     def primary_api_key(self) -> Optional[str]:
@@ -91,8 +140,6 @@ def get_provider_credentials(
 
     normalized = str(provider or "").strip().lower()
     config_obj: object = config if config is not None else get_config()
-    if isinstance(config_obj, Mapping):
-        config_obj = type("ProviderCredentialMap", (), dict(config_obj))()
 
     if normalized in {"twelve_data", "twelvedata"}:
         api_keys = _collect_non_empty_strings(
@@ -100,23 +147,37 @@ def get_provider_credentials(
             (
                 "twelve_data_api_keys",
                 "twelve_data_api_key",
+                "TWELVE_DATA_API_KEYS",
+                "TWELVE_DATA_API_KEY",
             ),
         )
         return ProviderCredentialBundle(
             provider="twelve_data",
             auth_mode="single_key",
             api_keys=api_keys,
+            credential_source=_infer_twelve_data_credential_source(
+                config_obj,
+                api_keys=api_keys,
+            ),
         )
 
     if normalized == "alpaca":
+        key_id = _coerce_non_empty(_get_config_raw(config_obj, "alpaca_api_key_id"))
+        secret_key = _coerce_non_empty(_get_config_raw(config_obj, "alpaca_api_secret_key"))
+        data_feed = _coerce_non_empty(_get_config_raw(config_obj, "alpaca_data_feed")) or "iex"
         return ProviderCredentialBundle(
             provider="alpaca",
             auth_mode="key_secret",
-            key_id=_coerce_non_empty(getattr(config_obj, "alpaca_api_key_id", None)),
-            secret_key=_coerce_non_empty(getattr(config_obj, "alpaca_api_secret_key", None)),
+            key_id=key_id,
+            secret_key=secret_key,
             extras={
-                "data_feed": _coerce_non_empty(getattr(config_obj, "alpaca_data_feed", None)) or "iex",
+                "data_feed": data_feed,
             },
+            credential_source=_infer_alpaca_credential_source(
+                config_obj,
+                key_id=key_id,
+                secret_key=secret_key,
+            ),
         )
 
     raise ValueError(f"Unsupported provider credential lookup: {provider}")

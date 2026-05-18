@@ -1,5 +1,13 @@
 ## 2026-05-18
 
+- **Rotation Radar credential-source diagnostics fix** - Rotation Radar provider
+  diagnostics now reuse the same Alpaca credential source resolved by the
+  runtime Config/provider-credential path, expose only sanitized
+  `credentialSource`, missing env field names, feed, construction status, and
+  failure reason codes, and preserve those diagnostics even when the quote
+  provider times out before returning quotes. Raw credential values remain
+  suppressed; fallback/static/yfinance degradation remains explicit and
+  non-live.
 - **Rotation Radar provider diagnostics** - Added backend-only, additive
   provider activation diagnostics for Rotation Radar quote metadata. The
   diagnostics show whether the configured Alpaca provider was attempted,

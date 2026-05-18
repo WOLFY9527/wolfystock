@@ -30,9 +30,9 @@ fund-flow interpretation, or rotation evidence disclosure.
   must not synthesize intraday windows or mark fallback/static data live.
 - Provider activation diagnostics live under
   `metadata.quoteProvider.providerDiagnostics` / quote-provider metadata. They
-  expose credential presence, missing credential field names, construction
-  status, window coverage, sanitized failure reason codes, fallback usage, and
-  final trust/source-tier classification without exposing raw credential
-  values.
+  expose credential presence, safely inferable credential source, missing env
+  credential field names, configured feed, construction status, window
+  coverage, sanitized failure reason codes, fallback usage, and final
+  trust/source-tier classification without exposing raw credential values.
 - Rotation UI changes must not alter score, ranking, provider, or evidence
   semantics unless explicitly scoped.

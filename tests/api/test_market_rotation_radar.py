@@ -453,6 +453,51 @@ def test_market_rotation_radar_default_us_route_uses_injected_quote_provider_whe
         client.close()
 
 
+def test_market_rotation_radar_timeout_preserves_configured_provider_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def provider_factory():
+        def provider(symbols):
+            time.sleep(0.05)
+            return {}
+
+        provider.rotation_radar_provider_diagnostics = lambda: {
+            "configuredProviderAttempted": True,
+            "configuredProviderName": "alpaca",
+            "credentialsPresent": True,
+            "credentialFieldsMissing": [],
+            "credentialSource": "env",
+            "providerConstructed": False,
+            "feed": "iex",
+            "feedEntitlementStatus": "not_checked",
+        }
+        return provider
+
+    monkeypatch.setattr(radar_service_module, "_QUOTE_PROVIDER_TIMEOUT_SECONDS", 0.001)
+    client = _client(monkeypatch, provider_factory=provider_factory)
+    try:
+        response = client.get("/api/v1/market/rotation-radar?market=US")
+
+        assert response.status_code == 200
+        payload = response.json()
+        diagnostics = payload["metadata"]["quoteProvider"]["providerDiagnostics"]
+        assert diagnostics["configuredProviderAttempted"] is True
+        assert diagnostics["configuredProviderName"] == "alpaca"
+        assert diagnostics["credentialsPresent"] is True
+        assert diagnostics["credentialFieldsMissing"] == []
+        assert diagnostics["credentialSource"] == "env"
+        assert diagnostics["providerConstructed"] is False
+        assert diagnostics["feed"] == "iex"
+        assert diagnostics["feedEntitlementStatus"] == "not_checked"
+        assert diagnostics["providerFailureReason"] == "quote_fetch_failed"
+        assert diagnostics["providerFailureReasons"] == ["quote_fetch_failed"]
+        assert diagnostics["finalSourceTier"] == "fallback_static"
+        assert diagnostics["trustLevel"] == "unavailable"
+        assert "raw-secret-value" not in json.dumps(diagnostics, ensure_ascii=False)
+    finally:
+        client.close()
+
+
 def test_market_rotation_radar_then_sector_rotation_reuses_provider_backed_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

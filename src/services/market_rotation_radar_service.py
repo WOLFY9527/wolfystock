@@ -619,6 +619,7 @@ class MarketRotationRadarService:
                     "failedSymbols": self._sanitize_symbol_list(symbols),
                     "failedSymbolCount": len(symbols),
                     "unavailableReason": "quote_fetch_failed",
+                    "providerDiagnostics": self._quote_provider_failure_diagnostics("quote_fetch_failed"),
                 },
             )
         except Exception:
@@ -633,6 +634,7 @@ class MarketRotationRadarService:
                     "failedSymbols": [],
                     "failedSymbolCount": 0,
                     "unavailableReason": "provider_unavailable",
+                    "providerDiagnostics": self._quote_provider_failure_diagnostics("provider_unavailable"),
                 },
             )
         raw_quotes, provider_metadata = self._unpack_quote_provider_result(raw_result)
@@ -772,6 +774,15 @@ class MarketRotationRadarService:
             diagnostics.get("providerFailureReasons"),
             metadata.get("unavailableReason"),
         )
+        provider_failure_reason = str(diagnostics.get("providerFailureReason") or "").strip()
+        if not provider_failure_reason and provider_failure_reasons:
+            provider_failure_reason = provider_failure_reasons[0]
+        credential_source = self._credential_source(diagnostics.get("credentialSource"))
+        feed = str(
+            diagnostics.get("feed")
+            or diagnostics.get("configuredProviderFeed")
+            or ""
+        ).strip()
         requested_windows = (
             self._string_list(diagnostics.get("requestedWindows"))
             if "requestedWindows" in diagnostics
@@ -796,8 +807,12 @@ class MarketRotationRadarService:
             "configuredProviderAttempted": bool(diagnostics.get("configuredProviderAttempted", False)),
             "configuredProviderName": diagnostics.get("configuredProviderName"),
             "credentialsPresent": bool(diagnostics.get("credentialsPresent", False)),
+            "credentialSource": credential_source,
             "credentialFieldsMissing": self._string_list(diagnostics.get("credentialFieldsMissing")),
             "providerConstructed": bool(diagnostics.get("providerConstructed", False)),
+            "providerFailureReason": provider_failure_reason or None,
+            "configuredProviderFeed": diagnostics.get("configuredProviderFeed") or feed or None,
+            "feed": feed or None,
             "feedEntitlementStatus": str(diagnostics.get("feedEntitlementStatus") or "not_checked"),
             "requestedWindows": requested_windows,
             "fulfilledWindows": fulfilled_windows,
@@ -821,6 +836,34 @@ class MarketRotationRadarService:
             ),
         })
         return diagnostics
+
+    def _quote_provider_failure_diagnostics(self, failure_reason: str) -> Dict[str, Any]:
+        diagnostics = self._quote_provider_static_diagnostics()
+        if not diagnostics:
+            return {}
+        sanitized_reason = str(failure_reason or "provider_unavailable").strip() or "provider_unavailable"
+        reasons = self._string_list(diagnostics.get("providerFailureReasons"))
+        if sanitized_reason not in reasons:
+            reasons.append(sanitized_reason)
+        diagnostics["providerFailureReason"] = sanitized_reason
+        diagnostics["providerFailureReasons"] = reasons[:FAILED_SYMBOL_LIST_LIMIT]
+        diagnostics["providerConstructed"] = bool(diagnostics.get("providerConstructed", False))
+        return diagnostics
+
+    def _quote_provider_static_diagnostics(self) -> Dict[str, Any]:
+        provider = self.quote_provider
+        diagnostics_factory = getattr(provider, "rotation_radar_provider_diagnostics", None)
+        if not callable(diagnostics_factory):
+            return {}
+        try:
+            diagnostics = diagnostics_factory()
+        except Exception:
+            return {}
+        return dict(diagnostics) if isinstance(diagnostics, Mapping) else {}
+
+    def _credential_source(self, value: Any) -> str:
+        source = str(value or "").strip()
+        return source if source in {"env", "config", "control_plane", "unavailable", "unknown"} else "unknown"
 
     def _provider_failure_reasons(self, raw_reasons: Any, unavailable_reason: Any) -> List[str]:
         reasons = self._string_list(raw_reasons)

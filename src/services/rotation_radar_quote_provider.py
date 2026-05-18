@@ -12,7 +12,7 @@ from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence
 import pandas as pd
 
 from data_provider.alpaca_fetcher import AlpacaFetcher
-from data_provider.provider_credentials import get_provider_credentials
+from data_provider.provider_credentials import ProviderCredentialBundle, get_provider_credentials
 from src.services.market_overview_yfinance_transport import fetch_yfinance_quote_history_frame
 
 QuoteProvider = Callable[[Iterable[str]], Mapping[str, Any]]
@@ -44,6 +44,11 @@ _QUOTE_PROVIDER_REQUEST_TIMEOUT_SECONDS = 2.5
 _UNAVAILABLE_SYMBOL_COOLDOWN_SECONDS = 1800.0
 _UNAVAILABLE_SYMBOL_STATE: Dict[str, Dict[str, Any]] = {}
 _PROVIDER_DIAGNOSTIC_REASON_LIMIT = 8
+_ALPACA_CREDENTIAL_ENV_NAMES = {
+    "key_id": "ALPACA_API_KEY_ID",
+    "secret_key": "ALPACA_API_SECRET_KEY",
+}
+_CREDENTIAL_SOURCE_VALUES = {"env", "config", "control_plane", "unavailable", "unknown"}
 
 
 @dataclass
@@ -56,6 +61,12 @@ class _ProviderAttempt:
 
 def get_rotation_radar_quote_provider() -> QuoteProvider:
     return load_rotation_radar_quotes
+
+
+def get_rotation_radar_provider_diagnostics() -> Dict[str, Any]:
+    """Return sanitized configured-provider credential diagnostics without network calls."""
+
+    return _configured_provider_base_metadata(get_provider_credentials(_CONFIGURED_PROVIDER_ID))
 
 
 def load_rotation_radar_quotes(symbols: Iterable[str]) -> Dict[str, Any]:
@@ -90,32 +101,17 @@ def load_rotation_radar_quotes(symbols: Iterable[str]) -> Dict[str, Any]:
 
 def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt:
     credentials = get_provider_credentials(_CONFIGURED_PROVIDER_ID)
-    missing_fields = list(credentials.missing_fields)
-    metadata = {
-        "configuredProvider": _CONFIGURED_PROVIDER_ID,
-        "configuredProviderStatus": "not_configured",
-        "configuredProviderAttempted": True,
-        "configuredProviderName": _CONFIGURED_PROVIDER_ID,
-        "credentialsPresent": bool(credentials.is_configured),
-        "credentialFieldsMissing": missing_fields,
-        "providerConstructed": False,
-        "providerFailureReasons": [],
-        "feedEntitlementStatus": "not_checked",
-    }
+    metadata = _configured_provider_base_metadata(credentials)
     if credentials.is_partial:
-        metadata["configuredProviderStatus"] = "incomplete_credentials"
-        metadata["missingCredentialFields"] = missing_fields
-        metadata["providerFailureReasons"] = ["credential_fields_missing"]
         return _ProviderAttempt(status="incomplete_credentials", metadata=metadata)
     if not credentials.is_configured:
-        metadata["missingCredentialFields"] = missing_fields
-        metadata["providerFailureReasons"] = ["credentials_missing"] if missing_fields else []
         return _ProviderAttempt(status="not_configured", metadata=metadata)
 
-    data_feed = str(credentials.extras.get("data_feed") or "iex").strip().lower() or "iex"
+    data_feed = str(metadata.get("feed") or credentials.extras.get("data_feed") or "iex").strip().lower() or "iex"
     metadata.update({
         "configuredProviderStatus": "configured",
         "configuredProviderFeed": data_feed,
+        "feed": data_feed,
         "feedEntitlementStatus": "unknown",
     })
     try:
@@ -125,7 +121,8 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
             data_feed=data_feed,
             timeout=max(1, int(float(_QUOTE_PROVIDER_REQUEST_TIMEOUT_SECONDS))),
         )
-    except Exception:
+    except Exception as exc:
+        failure_reason = _sanitize_provider_failure_reason(str(exc))
         return _ProviderAttempt(
             status="provider_unavailable",
             failed_symbol_reasons={symbol: "provider_unavailable" for symbol in symbols},
@@ -133,7 +130,8 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
                 **metadata,
                 "configuredProviderStatus": "provider_unavailable",
                 "providerConstructed": False,
-                "providerFailureReasons": ["provider_unavailable"],
+                "providerFailureReason": failure_reason,
+                "providerFailureReasons": [failure_reason],
             },
         )
     metadata["providerConstructed"] = True
@@ -191,10 +189,60 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
             **metadata,
             "configuredProviderStatus": status if status != "success" else "success",
             "configuredProviderFeed": data_feed,
+            "feed": data_feed,
             "providerConstructed": True,
+            "providerFailureReason": _first_failure_reason(failed_symbol_reasons.values()),
             "providerFailureReasons": _bounded_unique_reasons(failed_symbol_reasons.values()),
         },
     )
+
+
+def _configured_provider_base_metadata(credentials: ProviderCredentialBundle) -> Dict[str, Any]:
+    missing_fields = _credential_env_field_names(credentials.missing_fields)
+    data_feed = str(credentials.extras.get("data_feed") or "iex").strip().lower() or "iex"
+    provider_failure_reason: Optional[str] = None
+    provider_failure_reasons: list[str] = []
+    configured_status = "configured" if credentials.is_configured else "not_configured"
+    if credentials.is_partial:
+        configured_status = "incomplete_credentials"
+        provider_failure_reason = "credential_fields_missing"
+        provider_failure_reasons = [provider_failure_reason]
+    elif not credentials.is_configured and missing_fields:
+        provider_failure_reason = "credentials_missing"
+        provider_failure_reasons = [provider_failure_reason]
+    return {
+        "configuredProvider": _CONFIGURED_PROVIDER_ID,
+        "configuredProviderStatus": configured_status,
+        "configuredProviderAttempted": True,
+        "configuredProviderName": _CONFIGURED_PROVIDER_ID,
+        "credentialsPresent": bool(credentials.is_configured),
+        "credentialFieldsMissing": missing_fields,
+        "missingCredentialFields": missing_fields,
+        "credentialSource": _credential_source(credentials),
+        "providerConstructed": False,
+        "providerFailureReason": provider_failure_reason,
+        "providerFailureReasons": provider_failure_reasons,
+        "configuredProviderFeed": data_feed,
+        "feed": data_feed,
+        "feedEntitlementStatus": "unknown" if credentials.is_configured else "not_checked",
+    }
+
+
+def _credential_env_field_names(missing_fields: Sequence[str]) -> list[str]:
+    return [
+        _ALPACA_CREDENTIAL_ENV_NAMES.get(str(field), str(field))
+        for field in missing_fields
+        if str(field or "").strip()
+    ]
+
+
+def _credential_source(credentials: ProviderCredentialBundle) -> str:
+    source = str(getattr(credentials, "credential_source", "") or "").strip()
+    if source in _CREDENTIAL_SOURCE_VALUES:
+        return source
+    if credentials.is_configured or credentials.is_partial:
+        return "unknown"
+    return "unavailable"
 
 
 def _load_yfinance_quotes(symbols: Sequence[str]) -> _ProviderAttempt:
@@ -471,6 +519,7 @@ def _provider_activation_diagnostics(
             or _CONFIGURED_PROVIDER_ID
         ),
         "credentialsPresent": bool(configured_attempt.metadata.get("credentialsPresent")),
+        "credentialSource": _safe_credential_source(configured_attempt.metadata.get("credentialSource")),
         "credentialFieldsMissing": list(_as_string_sequence(
             configured_attempt.metadata.get(
                 "credentialFieldsMissing",
@@ -478,6 +527,17 @@ def _provider_activation_diagnostics(
             )
         )),
         "providerConstructed": bool(configured_attempt.metadata.get("providerConstructed")),
+        "providerFailureReason": (
+            str(configured_attempt.metadata.get("providerFailureReason"))
+            if configured_attempt.metadata.get("providerFailureReason")
+            else (provider_failure_reasons[0] if provider_failure_reasons else None)
+        ),
+        "configuredProviderFeed": configured_attempt.metadata.get("configuredProviderFeed"),
+        "feed": str(
+            configured_attempt.metadata.get("feed")
+            or configured_attempt.metadata.get("configuredProviderFeed")
+            or "iex"
+        ),
         "feedEntitlementStatus": feed_entitlement_status,
         "requestedWindows": requested_windows,
         "fulfilledWindows": fulfilled_windows,
@@ -499,6 +559,11 @@ def _provider_activation_diagnostics(
             static_basket_fallback_used=static_basket_fallback_used,
         ),
     }
+
+
+def _safe_credential_source(value: Any) -> str:
+    source = str(value or "").strip()
+    return source if source in _CREDENTIAL_SOURCE_VALUES else "unknown"
 
 
 def _provider_trust_level(
@@ -563,6 +628,14 @@ def _bounded_unique_reasons(reasons: Iterable[Any]) -> list[str]:
         if len(bounded) >= _PROVIDER_DIAGNOSTIC_REASON_LIMIT:
             break
     return bounded
+
+
+def _first_failure_reason(reasons: Iterable[Any]) -> Optional[str]:
+    for reason in reasons:
+        normalized = str(reason or "").strip()
+        if normalized:
+            return normalized
+    return None
 
 
 def _quote_window_failure_reasons(quotes: Mapping[str, Dict[str, Any]]) -> list[str]:
@@ -1084,6 +1157,15 @@ def _sanitize_unavailable_reason(raw_reason: str) -> str:
     return "quote_unavailable"
 
 
+def _sanitize_provider_failure_reason(raw_reason: str) -> str:
+    normalized = str(raw_reason or "").strip().lower()
+    if not normalized:
+        return "provider_unavailable"
+    if "timeout" in normalized or "request" in normalized or "fetch" in normalized:
+        return "quote_fetch_failed"
+    return "provider_unavailable"
+
+
 def _sanitize_window_failure_reason(raw_reason: str) -> str:
     normalized = str(raw_reason or "").strip().lower()
     if (
@@ -1113,3 +1195,6 @@ def _mark_symbol_unavailable(symbol: str, reason: str, now_monotonic: float) -> 
         "reason": reason,
         "retryAfterMonotonic": now_monotonic + _UNAVAILABLE_SYMBOL_COOLDOWN_SECONDS,
     }
+
+
+load_rotation_radar_quotes.rotation_radar_provider_diagnostics = get_rotation_radar_provider_diagnostics

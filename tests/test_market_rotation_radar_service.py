@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -12,6 +13,7 @@ from unittest.mock import patch
 import pandas as pd
 
 from data_provider.provider_credentials import ProviderCredentialBundle
+from src.config import Config
 from src.services.market_data_source_registry import project_source_provenance
 from src.services.market_rotation_radar_service import MarketRotationRadarService
 from src.services.rotation_radar_quote_provider import load_rotation_radar_quotes
@@ -75,6 +77,20 @@ def _partial_alpaca_credentials() -> ProviderCredentialBundle:
         key_id="alpaca-key-id",
         secret_key=None,
         extras={"data_feed": "sip"},
+    )
+
+
+def _yfinance_frame() -> pd.DataFrame:
+    latest_date = datetime.now(timezone.utc).date()
+    return pd.DataFrame(
+        {
+            "Open": [100.0, 101.0],
+            "High": [101.0, 103.0],
+            "Low": [99.0, 100.0],
+            "Close": [100.0, 102.0],
+            "Volume": [1_000_000.0, 1_250_000.0],
+        },
+        index=pd.DatetimeIndex([(latest_date - timedelta(days=1)).isoformat(), latest_date.isoformat()]),
     )
 
 
@@ -515,6 +531,10 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         expected_as_of = f"{latest_date.isoformat()}T00:00:00+00:00"
 
         with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_missing_alpaca_credentials(),
+            create=True,
+        ), patch(
             "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
             return_value=frame,
         ) as mock_fetch:
@@ -544,6 +564,48 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertAlmostEqual(quote["volumeRatio"], 1.364, places=3)
         self.assertEqual(quote["timeWindows"]["1d"]["changePercent"], quote["changePercent"])
         self.assertEqual(quote["timeWindows"]["1d"]["freshness"], "delayed")
+
+    def test_env_alpaca_credentials_are_reflected_in_configured_provider_diagnostics(self) -> None:
+        class FakeAlpacaFetcher:
+            def __init__(self, *, api_key_id: str, secret_key: str, data_feed: str, timeout: int = 15, **kwargs) -> None:
+                self.data_feed = data_feed
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                return _alpaca_bars(end_close=102.0)
+
+        try:
+            with patch.dict(
+                os.environ,
+                {
+                    "ALPACA_API_KEY_ID": "env-alpaca-key-id",
+                    "ALPACA_API_SECRET_KEY": "env-alpaca-secret-value",
+                    "ALPACA_DATA_FEED": "sip",
+                },
+                clear=False,
+            ), patch(
+                "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+                FakeAlpacaFetcher,
+                create=True,
+            ), patch(
+                "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+                side_effect=AssertionError("yfinance fallback should not be called when Alpaca covers all symbols"),
+            ):
+                Config.reset_instance()
+                payload = load_rotation_radar_quotes(["APP"])
+        finally:
+            Config.reset_instance()
+
+        diagnostics = payload["metadata"]["providerDiagnostics"]
+        self.assertTrue(diagnostics["credentialsPresent"])
+        self.assertTrue(diagnostics["configuredProviderAttempted"])
+        self.assertEqual(diagnostics["credentialFieldsMissing"], [])
+        self.assertEqual(diagnostics["credentialSource"], "env")
+        self.assertEqual(diagnostics["configuredProviderName"], "alpaca")
+        self.assertEqual(diagnostics["feed"], "sip")
+        self.assertEqual(diagnostics["feedEntitlementStatus"], "unknown")
+        dumped = json.dumps(diagnostics, ensure_ascii=False)
+        self.assertNotIn("env-alpaca-key-id", dumped)
+        self.assertNotIn("env-alpaca-secret-value", dumped)
 
     def test_configured_alpaca_quote_provider_supplies_intraday_windows_without_yfinance(self) -> None:
         fetch_calls: list[tuple[str, str]] = []
@@ -618,19 +680,60 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(all(not window["isFallback"] for window in quote["timeWindows"].values()))
         self.assertTrue(all(window["source"] == "alpaca" for window in quote["timeWindows"].values()))
 
-    def test_missing_alpaca_credentials_skips_configured_provider_and_keeps_yfinance_degraded(self) -> None:
-        latest_date = datetime.now(timezone.utc).date()
-        frame = pd.DataFrame(
-            {
-                "Open": [100.0, 101.0],
-                "High": [101.0, 103.0],
-                "Low": [99.0, 100.0],
-                "Close": [100.0, 102.0],
-                "Volume": [1_000_000.0, 1_250_000.0],
-            },
-            index=pd.DatetimeIndex([(latest_date - timedelta(days=1)).isoformat(), latest_date.isoformat()]),
-        )
+    def test_missing_alpaca_credentials_report_required_env_names(self) -> None:
+        with patch.object(
+            Config,
+            "_instance",
+            Config(alpaca_api_key_id=None, alpaca_api_secret_key=None, alpaca_data_feed="iex"),
+        ), patch.dict(
+            os.environ,
+            {"ALPACA_API_KEY_ID": "", "ALPACA_API_SECRET_KEY": "", "ALPACA_DATA_FEED": "iex"},
+            clear=False,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            side_effect=AssertionError("Alpaca should not be constructed without credentials"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=_yfinance_frame(),
+        ):
+            payload = load_rotation_radar_quotes(["APP"])
 
+        diagnostics = payload["metadata"]["providerDiagnostics"]
+        self.assertFalse(diagnostics["credentialsPresent"])
+        self.assertEqual(
+            diagnostics["credentialFieldsMissing"],
+            ["ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY"],
+        )
+        self.assertEqual(diagnostics["credentialSource"], "unavailable")
+        self.assertEqual(diagnostics["providerFailureReason"], "credentials_missing")
+
+    def test_partial_alpaca_credentials_report_missing_required_env_name(self) -> None:
+        with patch.object(
+            Config,
+            "_instance",
+            Config(alpaca_api_key_id="configured-key-id", alpaca_api_secret_key=None, alpaca_data_feed="iex"),
+        ), patch.dict(
+            os.environ,
+            {"ALPACA_API_KEY_ID": "", "ALPACA_API_SECRET_KEY": "", "ALPACA_DATA_FEED": "iex"},
+            clear=False,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            side_effect=AssertionError("Alpaca should not be constructed with partial credentials"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=_yfinance_frame(),
+        ):
+            payload = load_rotation_radar_quotes(["APP"])
+
+        diagnostics = payload["metadata"]["providerDiagnostics"]
+        self.assertFalse(diagnostics["credentialsPresent"])
+        self.assertEqual(diagnostics["credentialFieldsMissing"], ["ALPACA_API_SECRET_KEY"])
+        self.assertEqual(diagnostics["credentialSource"], "config")
+        self.assertEqual(diagnostics["providerFailureReason"], "credential_fields_missing")
+
+    def test_missing_alpaca_credentials_skips_configured_provider_and_keeps_yfinance_degraded(self) -> None:
         with patch(
             "src.services.rotation_radar_quote_provider.get_provider_credentials",
             return_value=_missing_alpaca_credentials(),
@@ -645,7 +748,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             create=True,
         ), patch(
             "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
-            return_value=frame,
+            return_value=_yfinance_frame(),
         ) as mock_yfinance:
             payload = load_rotation_radar_quotes(["APP"])
 
@@ -665,8 +768,9 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(diagnostics["configuredProviderAttempted"])
         self.assertEqual(diagnostics["configuredProviderName"], "alpaca")
         self.assertFalse(diagnostics["credentialsPresent"])
-        self.assertEqual(diagnostics["credentialFieldsMissing"], ["key_id", "secret_key"])
+        self.assertEqual(diagnostics["credentialFieldsMissing"], ["ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY"])
         self.assertFalse(diagnostics["providerConstructed"])
+        self.assertEqual(diagnostics["providerFailureReason"], "credentials_missing")
         self.assertEqual(diagnostics["providerFailureReasons"], ["credentials_missing"])
         self.assertTrue(diagnostics["fallbackProviderUsed"])
         self.assertTrue(diagnostics["yfinanceFallbackUsed"])
@@ -681,18 +785,6 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertNotIn(metadata["freshness"], {"live", "fresh"})
 
     def test_partial_alpaca_credentials_report_missing_field_without_constructing_provider(self) -> None:
-        latest_date = datetime.now(timezone.utc).date()
-        frame = pd.DataFrame(
-            {
-                "Open": [100.0, 101.0],
-                "High": [101.0, 103.0],
-                "Low": [99.0, 100.0],
-                "Close": [100.0, 102.0],
-                "Volume": [1_000_000.0, 1_250_000.0],
-            },
-            index=pd.DatetimeIndex([(latest_date - timedelta(days=1)).isoformat(), latest_date.isoformat()]),
-        )
-
         with patch(
             "src.services.rotation_radar_quote_provider.get_provider_credentials",
             return_value=_partial_alpaca_credentials(),
@@ -703,7 +795,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             create=True,
         ), patch(
             "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
-            return_value=frame,
+            return_value=_yfinance_frame(),
         ):
             payload = load_rotation_radar_quotes(["APP"])
 
@@ -712,8 +804,9 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(diagnostics["configuredProviderAttempted"])
         self.assertEqual(diagnostics["configuredProviderName"], "alpaca")
         self.assertFalse(diagnostics["credentialsPresent"])
-        self.assertEqual(diagnostics["credentialFieldsMissing"], ["secret_key"])
+        self.assertEqual(diagnostics["credentialFieldsMissing"], ["ALPACA_API_SECRET_KEY"])
         self.assertFalse(diagnostics["providerConstructed"])
+        self.assertEqual(diagnostics["providerFailureReason"], "credential_fields_missing")
         self.assertEqual(diagnostics["providerFailureReasons"], ["credential_fields_missing"])
         self.assertTrue(diagnostics["fallbackProviderUsed"])
         self.assertTrue(diagnostics["yfinanceFallbackUsed"])
@@ -722,18 +815,6 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["trustLevel"], "degraded")
 
     def test_configured_provider_constructor_failure_is_diagnosed_without_secret_leak(self) -> None:
-        latest_date = datetime.now(timezone.utc).date()
-        frame = pd.DataFrame(
-            {
-                "Open": [100.0, 101.0],
-                "High": [101.0, 103.0],
-                "Low": [99.0, 100.0],
-                "Close": [100.0, 102.0],
-                "Volume": [1_000_000.0, 1_250_000.0],
-            },
-            index=pd.DatetimeIndex([(latest_date - timedelta(days=1)).isoformat(), latest_date.isoformat()]),
-        )
-
         class FailingAlpacaFetcher:
             def __init__(self, **kwargs) -> None:
                 raise RuntimeError("bad secret value SHOULD_NOT_LEAK")
@@ -748,13 +829,14 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             create=True,
         ), patch(
             "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
-            return_value=frame,
+            return_value=_yfinance_frame(),
         ):
             payload = load_rotation_radar_quotes(["APP"])
 
         diagnostics = payload["metadata"]["providerDiagnostics"]
         self.assertEqual(payload["metadata"]["quoteMode"], "proxy")
         self.assertFalse(diagnostics["providerConstructed"])
+        self.assertEqual(diagnostics["providerFailureReason"], "provider_unavailable")
         self.assertEqual(diagnostics["providerFailureReasons"], ["provider_unavailable"])
         self.assertTrue(diagnostics["fallbackProviderUsed"])
         self.assertTrue(diagnostics["yfinanceFallbackUsed"])
@@ -763,6 +845,42 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         dumped = json.dumps(diagnostics, ensure_ascii=False)
         self.assertNotIn("SHOULD_NOT_LEAK", dumped)
         self.assertNotIn("alpaca-secret", dumped)
+
+    def test_quote_provider_timeout_preserves_sanitized_credential_diagnostics(self) -> None:
+        def provider(symbols):
+            time.sleep(0.05)
+            return {}
+
+        provider.rotation_radar_provider_diagnostics = lambda: {
+            "configuredProviderAttempted": True,
+            "configuredProviderName": "alpaca",
+            "credentialsPresent": True,
+            "credentialFieldsMissing": [],
+            "credentialSource": "env",
+            "providerConstructed": False,
+            "feed": "iex",
+            "feedEntitlementStatus": "not_checked",
+        }
+
+        service = MarketRotationRadarService(
+            quote_provider=provider,
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        with patch("src.services.market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS", 0.001):
+            payload = service.get_rotation_radar()
+
+        diagnostics = payload["metadata"]["quoteProvider"]["providerDiagnostics"]
+        self.assertTrue(diagnostics["configuredProviderAttempted"])
+        self.assertTrue(diagnostics["credentialsPresent"])
+        self.assertEqual(diagnostics["credentialFieldsMissing"], [])
+        self.assertEqual(diagnostics["credentialSource"], "env")
+        self.assertEqual(diagnostics["feed"], "iex")
+        self.assertFalse(diagnostics["providerConstructed"])
+        self.assertEqual(diagnostics["providerFailureReason"], "quote_fetch_failed")
+        self.assertEqual(diagnostics["providerFailureReasons"], ["quote_fetch_failed"])
+        self.assertEqual(diagnostics["finalSourceTier"], "fallback_static")
+        self.assertEqual(diagnostics["trustLevel"], "unavailable")
 
     def test_configured_provider_partial_windows_cap_activation_trust(self) -> None:
         class DailyOnlyAlpacaFetcher:
@@ -856,6 +974,10 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
 
         with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}):
             with patch(
+                "src.services.rotation_radar_quote_provider.get_provider_credentials",
+                return_value=_missing_alpaca_credentials(),
+                create=True,
+            ), patch(
                 "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
                 side_effect=[RuntimeError("possibly delisted; no price data found"), frame, frame],
             ) as mock_fetch:
@@ -895,6 +1017,10 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
 
         with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}):
             with patch(
+                "src.services.rotation_radar_quote_provider.get_provider_credentials",
+                return_value=_missing_alpaca_credentials(),
+                create=True,
+            ), patch(
                 "src.services.rotation_radar_quote_provider._QUOTE_PROVIDER_REQUEST_TIMEOUT_SECONDS",
                 0.01,
                 create=True,
