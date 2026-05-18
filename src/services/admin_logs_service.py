@@ -340,6 +340,8 @@ class AdminDataMissingDrilldownService:
                         "latest_seen_at": event_time_text,
                         "count": 0,
                         "sample_events": [],
+                        "sample_sessions": [],
+                        "sample_business_events": [],
                         "symbols": set(),
                         "markets": set(),
                     },
@@ -354,12 +356,25 @@ class AdminDataMissingDrilldownService:
                 event_id = self._text(safe_event.get("id"))
                 if event_id:
                     bucket["sample_events"].append((event_time or datetime.min, event_id))
+                if session_id:
+                    bucket["sample_sessions"].append((event_time or datetime.min, session_id))
+                business_id = self._text(business.get("id")) or session_id
+                if business_id:
+                    bucket["sample_business_events"].append((event_time or datetime.min, business_id))
 
         items: List[Dict[str, Any]] = []
         for bucket in aggregates.values():
             sample_ids = [
                 event_id
                 for _, event_id in sorted(bucket["sample_events"], key=lambda entry: (entry[0], entry[1]))[:5]
+            ]
+            sample_session_ids = [
+                sample_session_id
+                for _, sample_session_id in sorted(bucket["sample_sessions"], key=lambda entry: (entry[0], entry[1]))[:5]
+            ]
+            sample_business_event_ids = [
+                business_event_id
+                for _, business_event_id in sorted(bucket["sample_business_events"], key=lambda entry: (entry[0], entry[1]))[:5]
             ]
             symbols = sorted(bucket["symbols"])
             markets = sorted(bucket["markets"])
@@ -379,6 +394,8 @@ class AdminDataMissingDrilldownService:
                     "latest_seen_at": bucket["latest_seen_at"],
                     "count": int(bucket["count"]),
                     "sample_event_ids": sample_ids,
+                    "sample_session_ids": sample_session_ids,
+                    "sample_business_event_ids": sample_business_event_ids,
                 }
             )
         items.sort(key=lambda item: ((-(int(item.get("count") or 0))), str(item.get("latest_seen_at") or ""), str(item.get("affected_surface") or ""), str(item.get("missing_domain") or "")), reverse=False)

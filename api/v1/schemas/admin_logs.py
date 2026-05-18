@@ -188,11 +188,74 @@ class AdminDataMissingDrilldownItemModel(BaseModel):
     latest_seen_at: Optional[str] = None
     count: int = 0
     sample_event_ids: List[str] = Field(default_factory=list)
+    sample_session_ids: List[str] = Field(default_factory=list)
+    sample_business_event_ids: List[str] = Field(default_factory=list)
 
 
 class AdminDataMissingDrilldownResponse(BaseModel):
     total: int = 0
     items: List[AdminDataMissingDrilldownItemModel] = Field(default_factory=list)
+
+
+class AdminIncidentTimelineLookupModel(BaseModel):
+    session_id: Optional[str] = None
+    request_id: Optional[str] = None
+    query_id: Optional[str] = None
+    symbol: Optional[str] = None
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
+    limit: int = 100
+
+
+class AdminIncidentTimelineItemModel(BaseModel):
+    id: str
+    kind: str
+    timestamp: Optional[str] = None
+    status: str = "unknown"
+    severity: str = "info"
+    title: str
+    summary: Optional[str] = None
+    session_id: Optional[str] = None
+    business_event_id: Optional[str] = None
+    query_id: Optional[str] = None
+    request_id: Optional[str] = None
+    symbol: Optional[str] = None
+    phase: Optional[str] = None
+    category: Optional[str] = None
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    channel: Optional[str] = None
+    reason_code: Optional[str] = None
+    navigation: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AdminIncidentTimelineHookModel(BaseModel):
+    kind: str
+    status: str = "not_observed"
+    summary: str
+    count: int = 0
+    latest_at: Optional[str] = None
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    channel: Optional[str] = None
+    reason_code: Optional[str] = None
+    sample_session_ids: List[str] = Field(default_factory=list)
+    sample_business_event_ids: List[str] = Field(default_factory=list)
+
+
+class AdminIncidentTimelineEmptyStateModel(BaseModel):
+    reason: Optional[str] = None
+    read_only: bool = True
+    message: Optional[str] = None
+
+
+class AdminIncidentTimelineResponse(BaseModel):
+    lookup: AdminIncidentTimelineLookupModel
+    total: int = 0
+    items: List[AdminIncidentTimelineItemModel] = Field(default_factory=list)
+    hooks: List[AdminIncidentTimelineHookModel] = Field(default_factory=list)
+    empty_state: AdminIncidentTimelineEmptyStateModel = Field(default_factory=AdminIncidentTimelineEmptyStateModel)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class AdminLogStorageSummaryModel(BaseModel):

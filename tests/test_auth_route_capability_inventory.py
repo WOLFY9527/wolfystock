@@ -123,7 +123,7 @@ EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS = {
     "admin.users.portfolio_read": 4,
     "admin.users.security_write": 3,
     "admin.activity.legacy_read": 1,
-    "admin.logs.read": 5,
+    "admin.logs.read": 7,
     "admin.logs.write": 1,
     "admin.notifications.read": 2,
     "admin.notifications.write": 5,

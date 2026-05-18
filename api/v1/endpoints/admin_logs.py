@@ -13,12 +13,14 @@ from api.v1.schemas.admin_logs import (
     AdminLogCleanupRequest,
     AdminLogCleanupResponse,
     AdminDataMissingDrilldownResponse,
+    AdminIncidentTimelineResponse,
     AdminLogStorageSummaryModel,
     BusinessEventDetailModel,
     BusinessEventListResponse,
     ExecutionLogSessionDetailModel,
     ExecutionLogSessionListResponse,
 )
+from src.services.admin_incident_timeline_service import AdminIncidentTimelineService
 from src.services.admin_logs_service import AdminDataMissingDrilldownService, AdminLogsRetentionService
 from src.services.execution_log_service import ExecutionLogService
 
@@ -234,7 +236,7 @@ def list_execution_logs_root(
     cursor: Optional[str] = Query(default=None),
     _: CurrentUser = Depends(require_admin_capability("ops:logs:read")),
 ):
-    del task_id, task_id_alias, min_level, min_level_alias, level, provider, model, channel
+    del task_id, task_id_alias, min_level, min_level_alias, level
     service = ExecutionLogService()
     effective_limit = _query_int(limit, 50)
     effective_offset = _effective_offset(offset=offset, page=page, cursor=cursor, limit=effective_limit)
@@ -248,6 +250,9 @@ def list_execution_logs_root(
         backtest_id=_query_text(backtest_id),
         request_id=_query_text(request_id),
         user_id=_query_text(user_id),
+        provider=_query_text(provider),
+        model=_query_text(model),
+        channel=_query_text(channel),
         status=_query_text(status),
         query=_query_text(query),
         date_from=_parse_optional_datetime(date_from) or _since_to_date_from(since),
@@ -262,6 +267,40 @@ def list_execution_logs_root(
         offset=effective_offset,
         hasMore=effective_offset + effective_limit < total,
         health_summary=getattr(service, "_last_business_health_summary", service.summarize_business_events(items)),
+    )
+
+
+@router.get(
+    "/incident-timeline",
+    response_model=AdminIncidentTimelineResponse,
+    summary="Build a read-only admin incident timeline from existing logs",
+)
+def get_incident_timeline(
+    session_id: Optional[str] = Query(default=None, description="Filter by execution session id"),
+    session_id_alias: Optional[str] = Query(default=None, alias="sessionId", description="Camel-case alias for session_id"),
+    request_id: Optional[str] = Query(default=None, description="Filter by safe request id"),
+    request_id_alias: Optional[str] = Query(default=None, alias="requestId", description="Camel-case alias for request_id"),
+    query_id: Optional[str] = Query(default=None, description="Filter by analysis query id"),
+    query_id_alias: Optional[str] = Query(default=None, alias="queryId", description="Camel-case alias for query_id"),
+    symbol: Optional[str] = Query(default=None, description="Filter by symbol"),
+    since: str = Query(default="24h", description="Relative window, for example 15m, 1h, 24h, 7d"),
+    date_from: Optional[str] = Query(default=None, description="ISO datetime start"),
+    date_to: Optional[str] = Query(default=None, description="ISO datetime end"),
+    limit: int = Query(default=100, ge=1, le=200),
+    _: CurrentUser = Depends(require_admin_capability("ops:logs:read")),
+):
+    service = AdminIncidentTimelineService()
+    return AdminIncidentTimelineResponse(
+        **service.build_timeline(
+            session_id=_coalesce_query_text(session_id, session_id_alias),
+            request_id=_coalesce_query_text(request_id, request_id_alias),
+            query_id=_coalesce_query_text(query_id, query_id_alias),
+            symbol=_query_text(symbol),
+            since=since,
+            date_from=_parse_optional_datetime(date_from) or _since_to_date_from(since),
+            date_to=_parse_optional_datetime(date_to),
+            limit=limit,
+        )
     )
 
 

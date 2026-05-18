@@ -277,6 +277,60 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(payload.items[0].failedStepCount, 1)
         self.assertEqual(payload.items[0].recordId, "record-tsla")
 
+    def test_root_filters_business_events_by_provider_model_and_channel(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            tsla = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="TSLA",
+                summary="用户分析 TSLA",
+                subject="TSLA",
+                symbol="TSLA",
+                request_id="req-tsla",
+            )
+            service.start_step(tsla, "fetch_quote", "获取行情", category="data_market", provider="fmp")
+            service.finish_step_failed(tsla, "fetch_quote", provider="fmp", reason="timeout", error_message="timeout")
+            service.start_step(tsla, "ai_analysis", "AI 分析", category="ai_model", provider="openai", model="gpt-4o-mini")
+            service.finish_step_success(tsla, "ai_analysis", provider="openai", model="gpt-4o-mini")
+            service.start_step(tsla, "send_notification", "发送通知", category="notification", provider="email")
+            service.skip_step(
+                tsla,
+                "send_notification",
+                "发送通知",
+                provider="email",
+                reason="channel_not_configured",
+                metadata={"category": "notification"},
+            )
+            service.finish_execution(tsla, status="partial")
+
+            other = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="MSFT",
+                summary="用户分析 MSFT",
+                subject="MSFT",
+                symbol="MSFT",
+                request_id="req-msft",
+            )
+            service.start_step(other, "fetch_quote", "获取行情", category="data_market", provider="yahoo")
+            service.finish_step_success(other, "fetch_quote", provider="yahoo")
+            service.start_step(other, "ai_analysis", "AI 分析", category="ai_model", provider="anthropic", model="claude-3")
+            service.finish_step_success(other, "ai_analysis", provider="anthropic", model="claude-3")
+            service.start_step(other, "send_notification", "发送通知", category="notification", provider="discord")
+            service.finish_step_success(other, "send_notification", provider="discord")
+            service.finish_execution(other, status="success")
+
+            by_provider = admin_logs.list_execution_logs_root(provider="fmp", since="", _=_admin_user())
+            by_model = admin_logs.list_execution_logs_root(model="gpt-4o-mini", since="", _=_admin_user())
+            by_channel = admin_logs.list_execution_logs_root(channel="email", since="", _=_admin_user())
+            no_match = admin_logs.list_execution_logs_root(provider="fmp", model="claude-3", since="", _=_admin_user())
+
+        self.assertEqual([item.id for item in by_provider.items], [tsla])
+        self.assertEqual([item.id for item in by_model.items], [tsla])
+        self.assertEqual([item.id for item in by_channel.items], [tsla])
+        self.assertEqual(no_match.total, 0)
+
     def test_root_detail_returns_business_event_steps(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()
@@ -1472,6 +1526,30 @@ class AdminLogsApiTestCase(unittest.TestCase):
             )
 
         self.assertEqual(payload.model_dump(), {"total": 0, "items": []})
+
+    def test_incident_timeline_endpoint_requires_logs_read_capability(self) -> None:
+        app = FastAPI()
+        app.include_router(admin_logs.router, prefix="/api/v1/admin/logs")
+        app.dependency_overrides[get_current_user] = lambda: _admin_user()
+        client = TestClient(app)
+
+        response = client.get("/api/v1/admin/logs/incident-timeline")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"]["error"], "admin_capability_required")
+
+    def test_incident_timeline_endpoint_returns_empty_payload(self) -> None:
+        with patch("src.services.admin_incident_timeline_service.get_db", return_value=self.db):
+            payload = admin_logs.get_incident_timeline(
+                session_id="missing-session",
+                since="",
+                limit=100,
+                _=_admin_user_with_capabilities("ops:logs:read"),
+            )
+
+        self.assertEqual(payload.total, 0)
+        self.assertEqual(payload.items, [])
+        self.assertEqual(payload.empty_state.reason, "no_matching_read_models")
 
 
 if __name__ == "__main__":

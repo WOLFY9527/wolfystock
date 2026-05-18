@@ -6,6 +6,13 @@
   The response now includes additive source, diagnostic, and source-confidence
   metadata for history availability; when no real OHLC exists, it returns an
   explicit unavailable diagnostic without fabricating candles.
+- 🧯 **Admin incident timeline backend foundation** - Added a read-only
+  `/api/v1/admin/logs/incident-timeline` projection that correlates existing
+  execution log sessions/events into a sanitized incident timeline by
+  session/request/query/symbol/time window. Data-missing drilldown now includes
+  safe sample session and business-event ids, and Admin Logs business-event
+  provider/model/channel filters are honored without changing provider runtime,
+  LLM cost writes, notifications, scoring, or frontend code.
 
 - 🧭 **Docs governance archive pruning** - Slimmed active docs navigation by
   moving stale frontend DOM/CSS/bundle/old launch UX evidence into
@@ -1330,7 +1337,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Market review strategy consistency — unified cn/us template
 - Agent test assertions updated (`6 -> 11`)
 
-
 ## [3.2.11] - 2026-02-23
 
 ### 修复（#patch）
@@ -1906,7 +1912,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### 改进
 - 📝 README 精简优化
   - 高级配置移至 `docs/full-guide.md`
-
 
 ## [1.3.0] - 2026-01-12
 
