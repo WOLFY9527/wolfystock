@@ -23,6 +23,15 @@ from src.storage import DatabaseManager
 CN_TZ = timezone(timedelta(hours=8))
 
 
+@pytest.fixture(autouse=True)
+def _clear_market_overview_state() -> None:
+    MarketOverviewService._market_cache.clear()
+    MarketOverviewService._market_data_cache.clear()
+    yield
+    MarketOverviewService._market_cache.clear()
+    MarketOverviewService._market_data_cache.clear()
+
+
 class _FrameColumn:
     def __init__(self, values: list[float]) -> None:
         self._values = values
@@ -352,7 +361,7 @@ def test_sector_rotation_projection_stays_proxy_computed_not_official_or_live() 
         mp.setattr("src.services.market_overview_service.get_rotation_radar_quote_provider", lambda: None, raising=False)
 
         class _RadarService:
-            def __init__(self, quote_provider=None) -> None:
+            def __init__(self, quote_provider=None, **_: Any) -> None:
                 self.quote_provider = quote_provider
 
             def get_rotation_radar(self) -> dict[str, Any]:
@@ -410,7 +419,7 @@ def test_sector_rotation_taxonomy_only_projection_stays_fallback_local_taxonomy_
         mp.setattr("src.services.market_overview_service.get_rotation_radar_quote_provider", lambda: None, raising=False)
 
         class _RadarService:
-            def __init__(self, quote_provider=None) -> None:
+            def __init__(self, quote_provider=None, **_: Any) -> None:
                 self.quote_provider = quote_provider
 
             def get_rotation_radar(self) -> dict[str, Any]:
@@ -450,7 +459,7 @@ def test_market_overview_fx_commodities_proxy_payload_projects_to_unofficial_pro
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(
             "src.services.market_overview_service.fetch_yfinance_quote_history_frame",
-            lambda ticker: frames[ticker],
+            lambda ticker, **_: frames[ticker],
         )
         with pytest.MonkeyPatch.context() as log_mp:
             class _LogService:
@@ -485,7 +494,7 @@ def test_market_overview_futures_proxy_payload_projects_to_unofficial_proxy_and_
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(
             "src.services.market_overview_service.fetch_yfinance_quote_history_frame",
-            lambda ticker: frames[ticker],
+            lambda ticker, **_: frames[ticker],
         )
         payload = service.get_futures()
 

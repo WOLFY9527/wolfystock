@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import time
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pandas as pd
@@ -354,6 +354,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(snapshot["signals"]["volume"]["sourceConfidence"]["freshness"], "partial")
 
     def test_rotation_radar_yfinance_quote_provider_reuses_history_transport(self) -> None:
+        latest_date = datetime.now(timezone.utc).date()
         frame = pd.DataFrame(
             {
                 "Open": [100.0, 101.0, 103.0],
@@ -362,8 +363,15 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
                 "Close": [100.0, 103.0, 105.0],
                 "Volume": [1_000_000.0, 1_200_000.0, 1_500_000.0],
             },
-            index=pd.DatetimeIndex(["2026-05-09", "2026-05-12", "2026-05-13"]),
+            index=pd.DatetimeIndex(
+                [
+                    (latest_date - timedelta(days=2)).isoformat(),
+                    (latest_date - timedelta(days=1)).isoformat(),
+                    latest_date.isoformat(),
+                ]
+            ),
         )
+        expected_as_of = f"{latest_date.isoformat()}T00:00:00+00:00"
 
         with patch(
             "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
@@ -385,7 +393,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(metadata["sourceType"], "unofficial_public_api")
         self.assertFalse(metadata["noExternalCalls"])
         self.assertEqual(metadata["freshness"], "delayed")
-        self.assertEqual(metadata["asOf"], "2026-05-13T00:00:00+00:00")
+        self.assertEqual(metadata["asOf"], expected_as_of)
         self.assertEqual(quote["source"], "yfinance_proxy")
         self.assertEqual(quote["sourceLabel"], "Yahoo Finance")
         self.assertEqual(quote["freshness"], "delayed")

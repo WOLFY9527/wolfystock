@@ -2132,7 +2132,8 @@ class MarketOverviewService:
 
     def _fetch_sector_rotation_snapshot(self) -> Dict[str, Any]:
         radar_payload = MarketRotationRadarService(
-            quote_provider=get_rotation_radar_quote_provider()
+            quote_provider=get_rotation_radar_quote_provider(),
+            use_shared_cache=True,
         ).get_rotation_radar()
         return self._project_sector_rotation_snapshot(radar_payload)
 
@@ -2186,8 +2187,24 @@ class MarketOverviewService:
         if not themes:
             return self._fallback_sector_rotation_snapshot()
 
-        updated_at = radar_payload.get("updatedAt") or _now_iso()
-        as_of = radar_payload.get("asOf") or updated_at
+        radar_metadata = radar_payload.get("metadata") if isinstance(radar_payload.get("metadata"), dict) else {}
+        quote_provider_metadata = (
+            radar_metadata.get("quoteProvider")
+            if isinstance(radar_metadata.get("quoteProvider"), dict)
+            else {}
+        )
+        observed_evidence_metadata = (
+            radar_metadata.get("observedEvidence")
+            if isinstance(radar_metadata.get("observedEvidence"), dict)
+            else {}
+        )
+        updated_at = radar_payload.get("updatedAt") or radar_payload.get("generatedAt") or _now_iso()
+        as_of = (
+            radar_payload.get("asOf")
+            or quote_provider_metadata.get("asOf")
+            or observed_evidence_metadata.get("asOf")
+            or updated_at
+        )
         payload_source = str(radar_payload.get("source") or "computed")
         payload_source_label = radar_payload.get("sourceLabel") or self._source_label(payload_source)
         payload_freshness = radar_payload.get("freshness")
