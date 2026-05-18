@@ -13,6 +13,7 @@ evidence.
 - [Frontend Validation Playbook](../frontend/validation-playbook.md)
 - [Data Quality User Disclosure Policy](../audits/data-quality-user-disclosure-policy.md)
 - [Provider Data Freshness Reliability Guide](../audits/provider-data-freshness-reliability-guide.md)
+- [Market Intelligence Smoke Checklist](./market-intelligence-smoke-checklist.md)
 
 ## Current Rules
 
