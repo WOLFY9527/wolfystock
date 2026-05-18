@@ -381,6 +381,188 @@ def test_sector_rotation_projection_stays_proxy_computed_not_official_or_live() 
     assert item_provenance["freshnessLabel"] != "实时"
 
 
+def test_sector_rotation_projection_preserves_explicit_source_freshness_state() -> None:
+    service = MarketOverviewService()
+    source_as_of = "2026-05-13T09:30:00+00:00"
+    updated_at = "2026-05-13T09:45:00+00:00"
+    radar_payload = {
+        "source": "computed",
+        "sourceLabel": "主题篮子计算",
+        "updatedAt": updated_at,
+        "asOf": source_as_of,
+        "freshness": "stale",
+        "isFallback": False,
+        "isStale": True,
+        "isPartial": True,
+        "isUnavailable": False,
+        "sourceFreshnessEvidence": {
+            "source": "computed",
+            "sourceLabel": "主题篮子计算",
+            "asOf": source_as_of,
+            "freshness": "stale",
+            "isFallback": False,
+            "isStale": True,
+            "isPartial": True,
+            "isUnavailable": False,
+        },
+        "radarSnapshot": {
+            "source": "computed",
+            "sourceLabel": "主题篮子计算",
+            "updatedAt": updated_at,
+            "asOf": source_as_of,
+            "freshness": "stale",
+            "isFallback": False,
+            "isStale": True,
+            "isPartial": True,
+            "isUnavailable": False,
+        },
+        "themes": [
+            {
+                "id": "ai_applications",
+                "name": "AI 应用",
+                "market": "US",
+                "rotationScore": 73,
+                "relativeStrength": {
+                    "averageRelativeStrengthPercent": 4.0,
+                },
+                "source": "computed",
+                "sourceLabel": "主题篮子计算",
+                "freshness": "stale",
+                "isFallback": False,
+                "isStale": True,
+                "isPartial": True,
+                "isUnavailable": False,
+                "updatedAt": updated_at,
+                "asOf": source_as_of,
+                "stageExplanation": "已有相对强势，但仍需更多广度确认。",
+                "proxyQuality": {"coveragePercent": 100, "explanation": "代理覆盖完整。"},
+                "themeDetail": {"dataStateLabel": "行情证据已接入"},
+                "timeWindows": {"1d": {"available": True, "averageChangePercent": 4.0}},
+                "evidence": ["相对强弱领先"],
+                "rotationStateEvidence": {
+                    "source": "computed",
+                    "sourceLabel": "主题篮子计算",
+                    "freshness": "stale",
+                    "isFallback": False,
+                    "isStale": True,
+                    "isPartial": True,
+                    "isUnavailable": False,
+                    "sourceConfidence": {
+                        "source": "computed.snapshot",
+                        "sourceLabel": "主题篮子计算 快照",
+                        "asOf": source_as_of,
+                        "freshness": "stale",
+                        "isFallback": False,
+                        "isStale": True,
+                        "isPartial": True,
+                        "isUnavailable": False,
+                        "confidenceWeight": 1.0,
+                        "coverage": 1.0,
+                        "degradationReason": "stale_source",
+                        "capReason": "stale_source",
+                    },
+                    "evidenceSnapshot": {
+                        "contractVersion": "source_confidence_contract_v1",
+                        "computedAt": updated_at,
+                        "asOf": source_as_of,
+                        "source": "computed",
+                        "sourceLabel": "主题篮子计算",
+                        "freshness": "stale",
+                        "isFallback": False,
+                        "isStale": True,
+                        "isPartial": True,
+                        "isUnavailable": False,
+                        "signalCount": 1,
+                        "degradedSignalCount": 1,
+                        "unavailableSignalCount": 0,
+                        "coveragePercent": 100.0,
+                        "coverageRatio": 1.0,
+                        "signalOrder": ["relativeStrength"],
+                        "sourceConfidence": {
+                            "source": "computed.snapshot",
+                            "sourceLabel": "主题篮子计算 快照",
+                            "asOf": source_as_of,
+                            "freshness": "stale",
+                            "isFallback": False,
+                            "isStale": True,
+                            "isPartial": True,
+                            "isUnavailable": False,
+                            "confidenceWeight": 1.0,
+                            "coverage": 1.0,
+                            "degradationReason": "stale_source",
+                            "capReason": "stale_source",
+                        },
+                        "signals": {
+                            "relativeStrength": {
+                                "key": "relativeStrength",
+                                "label": "代理强度",
+                                "status": "strong",
+                                "value": 4.0,
+                                "available": True,
+                                "degraded": True,
+                                "coveragePercent": 100.0,
+                                "coverageRatio": 1.0,
+                                "source": "computed.relativeStrength",
+                                "sourceLabel": "主题篮子计算 代理强度",
+                                "asOf": source_as_of,
+                                "freshness": "stale",
+                                "isFallback": False,
+                                "isStale": True,
+                                "isPartial": True,
+                                "isUnavailable": False,
+                                "degradationReason": "stale_source",
+                                "capReason": "stale_source",
+                                "sourceConfidence": {
+                                    "source": "computed.relativeStrength",
+                                    "sourceLabel": "主题篮子计算 代理强度",
+                                    "asOf": source_as_of,
+                                    "freshness": "stale",
+                                    "isFallback": False,
+                                    "isStale": True,
+                                    "isPartial": True,
+                                    "isUnavailable": False,
+                                    "confidenceWeight": 1.0,
+                                    "coverage": 1.0,
+                                    "degradationReason": "stale_source",
+                                    "capReason": "stale_source",
+                                },
+                            }
+                        },
+                    },
+                },
+            }
+        ],
+    }
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(service, "_cached_payload", lambda _key, fetcher, _fallback: fetcher())
+        mp.setattr("src.services.market_overview_service.get_rotation_radar_quote_provider", lambda: None, raising=False)
+
+        class _RadarService:
+            def __init__(self, quote_provider=None, **_: Any) -> None:
+                self.quote_provider = quote_provider
+
+            def get_rotation_radar(self) -> dict[str, Any]:
+                return radar_payload
+
+        mp.setattr("src.services.market_overview_service.MarketRotationRadarService", _RadarService, raising=False)
+        payload = service.get_sector_rotation()
+
+    assert payload["freshness"] == "stale"
+    assert payload["isStale"] is True
+    assert payload["isPartial"] is True
+    assert payload["freshness"] not in {"live", "fresh"}
+    assert payload["sourceFreshnessEvidence"]["freshness"] == "stale"
+    assert payload["sourceFreshnessEvidence"]["freshness"] not in {"live", "fresh"}
+    assert payload["radarSnapshot"]["freshness"] == "stale"
+    assert payload["items"][0]["freshness"] == "stale"
+    assert payload["items"][0]["isStale"] is True
+    assert payload["items"][0]["isPartial"] is True
+    assert payload["items"][0]["sourceFreshnessEvidence"]["freshness"] == "stale"
+    assert payload["items"][0]["rotationStateEvidence"]["sourceConfidence"]["freshness"] == "stale"
+    assert payload["providerHealth"]["isStale"] is True
+
+
 def test_sector_rotation_taxonomy_only_projection_stays_fallback_local_taxonomy_non_live() -> None:
     service = MarketOverviewService()
     radar_payload = {

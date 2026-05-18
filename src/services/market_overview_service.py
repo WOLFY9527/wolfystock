@@ -41,6 +41,7 @@ from src.services.market_overview_yfinance_transport import (
     fetch_yfinance_spy_atr_history_frame,
 )
 from src.services.market_cache import MARKET_CACHE_TTLS, REFRESH_WARNING, market_cache
+from src.services.rotation_state_evidence import build_rotation_state_evidence
 from src.services.rotation_radar_quote_provider import get_rotation_radar_quote_provider
 from src.storage import DatabaseManager
 
@@ -1450,12 +1451,48 @@ class MarketOverviewService:
         source_type = _infer_source_type(source, item.get("sourceType"))
         return float(SOURCE_TYPE_CONFIDENCE.get(source_type, 0.0))
 
+    @staticmethod
+    def _preserved_freshness_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
+        value = payload.get("sourceFreshnessEvidence")
+        return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _apply_preserved_freshness(
+        freshness: Dict[str, Any],
+        preserved: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        explicit_freshness = str(preserved.get("freshness") or "").strip().lower()
+        if not explicit_freshness:
+            return freshness
+        is_fallback = bool(preserved.get("isFallback"))
+        is_stale = bool(preserved.get("isStale"))
+        is_partial = bool(preserved.get("isPartial"))
+        is_unavailable = bool(preserved.get("isUnavailable"))
+        if is_unavailable and explicit_freshness in {"live", "fresh", "delayed", "cached"}:
+            explicit_freshness = "unavailable"
+        elif is_fallback and explicit_freshness in {"live", "fresh", "delayed", "cached", "partial"}:
+            explicit_freshness = "fallback"
+        elif is_stale and explicit_freshness in {"live", "fresh"}:
+            explicit_freshness = "stale"
+        elif is_partial and explicit_freshness in {"live", "fresh"}:
+            explicit_freshness = "partial"
+        return {
+            **freshness,
+            "freshness": explicit_freshness,
+            "isFallback": bool(freshness.get("isFallback") or is_fallback or explicit_freshness in {"fallback", "mock"}),
+            "isStale": bool(freshness.get("isStale") or is_stale or explicit_freshness == "stale"),
+            "warning": preserved.get("warning") or freshness.get("warning"),
+        }
+
     def _with_market_meta(self, payload: Dict[str, Any], category: str) -> Dict[str, Any]:
         source = str(payload.get("source") or ("fallback" if payload.get("fallbackUsed") or payload.get("fallback_used") else "mixed"))
         is_fallback = bool(payload.get("isFallback") or source.lower() in {"fallback", "mock"})
         updated_at = payload.get("updatedAt") or payload.get("last_update") or payload.get("last_refresh_at") or _now_iso()
         as_of = payload.get("asOf") or payload.get("last_update") or payload.get("last_refresh_at") or updated_at
         freshness = get_freshness_status(as_of, category, source, is_fallback, source_type=payload.get("sourceType") or "")
+        preserved_freshness = self._preserved_freshness_meta(payload)
+        if preserved_freshness:
+            freshness = self._apply_preserved_freshness(freshness, preserved_freshness)
         raw_error = payload.get("refreshError") or payload.get("lastError") or payload.get("error")
         if payload.get("isFromSnapshot"):
             snapshot_freshness = str(payload.get("freshness") or "").lower()
@@ -1479,6 +1516,8 @@ class MarketOverviewService:
             "freshness": freshness["freshness"],
             "isFallback": freshness["isFallback"],
             "isStale": bool(payload.get("isStale") or freshness["isStale"]),
+            "isPartial": bool(payload.get("isPartial") or preserved_freshness.get("isPartial") or freshness["freshness"] == "partial"),
+            "isUnavailable": bool(payload.get("isUnavailable") or preserved_freshness.get("isUnavailable") or freshness["freshness"] in {"unavailable", "error"}),
             "delayMinutes": freshness["delayMinutes"],
             "warning": payload.get("warning") or (REFRESH_WARNING if payload.get("lastError") else None) or freshness["warning"],
             "fallbackUsed": bool(payload.get("fallbackUsed") or freshness["isFallback"]),
@@ -1496,6 +1535,9 @@ class MarketOverviewService:
         as_of = item.get("asOf") or item.get("last_update") or item.get("updatedAt") or panel.get("asOf") or panel.get("updatedAt")
         updated_at = item.get("updatedAt") or panel.get("updatedAt") or _now_iso()
         freshness = get_freshness_status(as_of, category, source, is_fallback, source_type=item.get("sourceType") or panel.get("sourceType") or "")
+        preserved_freshness = self._preserved_freshness_meta(item)
+        if preserved_freshness:
+            freshness = self._apply_preserved_freshness(freshness, preserved_freshness)
         if item.get("isFromSnapshot") or panel.get("isFromSnapshot"):
             snapshot_freshness = str(item.get("freshness") or panel.get("freshness") or "").lower()
             if snapshot_freshness in {"stale", "fallback", "mock", "error"}:
@@ -1517,6 +1559,8 @@ class MarketOverviewService:
             "freshness": freshness["freshness"],
             "isFallback": freshness["isFallback"],
             "isStale": freshness["isStale"],
+            "isPartial": bool(item.get("isPartial") or preserved_freshness.get("isPartial") or freshness["freshness"] == "partial"),
+            "isUnavailable": bool(item.get("isUnavailable") or preserved_freshness.get("isUnavailable") or freshness["freshness"] in {"unavailable", "error"}),
             "delayMinutes": freshness["delayMinutes"],
             "warning": item.get("warning") or freshness["warning"],
             "isFromSnapshot": bool(item.get("isFromSnapshot") or panel.get("isFromSnapshot")),
@@ -2210,7 +2254,22 @@ class MarketOverviewService:
         payload_freshness = radar_payload.get("freshness")
         payload_is_fallback = bool(radar_payload.get("isFallback"))
         payload_is_stale = bool(radar_payload.get("isStale"))
+        payload_is_partial = bool(radar_payload.get("isPartial")) or any(bool(theme.get("isPartial")) for theme in themes)
+        payload_is_unavailable = bool(radar_payload.get("isUnavailable")) or str(payload_freshness or "").lower() in {"unavailable", "error"}
         items: List[Dict[str, Any]] = []
+        radar_snapshot = {
+            "source": payload_source,
+            "sourceLabel": payload_source_label,
+            "updatedAt": updated_at,
+            "asOf": as_of,
+            "freshness": payload_freshness,
+            "isFallback": payload_is_fallback,
+            "isStale": payload_is_stale,
+            "isPartial": payload_is_partial,
+            "isUnavailable": payload_is_unavailable,
+            "generatedAt": radar_payload.get("generatedAt") or updated_at,
+            "warning": radar_payload.get("warning"),
+        }
 
         for index, theme in enumerate(themes):
             rotation_score = self._clean_number(theme.get("rotationScore"))
@@ -2218,9 +2277,33 @@ class MarketOverviewService:
                 continue
             name = str(theme.get("name") or theme.get("label") or theme.get("id") or "")
             symbol = str(theme.get("id") or theme.get("symbol") or name)
-            relative_strength_pct = self._clean_number(theme.get("relativeStrength"))
+            relative_strength_source = theme.get("relativeStrength")
+            relative_strength_pct = (
+                self._clean_number(relative_strength_source.get("averageRelativeStrengthPercent"))
+                if isinstance(relative_strength_source, dict)
+                else self._clean_number(relative_strength_source)
+            )
             explanation = self._sector_rotation_theme_explanation(theme)
             trend = self._sector_rotation_theme_trend(theme, rotation_score, relative_strength_pct)
+            rotation_state_evidence = (
+                copy.deepcopy(theme.get("rotationStateEvidence"))
+                if isinstance(theme.get("rotationStateEvidence"), dict)
+                else build_rotation_state_evidence(
+                    theme,
+                    {
+                        "market": theme.get("market") or radar_payload.get("market") or "US",
+                        "taxonomyVersion": "sector_rotation_taxonomy_v1",
+                        "computedAt": theme.get("updatedAt") or updated_at,
+                        "asOf": theme.get("asOf") or as_of,
+                    },
+                )
+            )
+            source_confidence = rotation_state_evidence.get("sourceConfidence") if isinstance(rotation_state_evidence, dict) else {}
+            item_is_partial = bool(theme.get("isPartial"))
+            item_is_unavailable = bool(theme.get("isUnavailable"))
+            if isinstance(source_confidence, dict):
+                item_is_partial = item_is_partial or bool(source_confidence.get("isPartial"))
+                item_is_unavailable = item_is_unavailable or bool(source_confidence.get("isUnavailable"))
             item: Dict[str, Any] = {
                 "name": name,
                 "label": name,
@@ -2241,10 +2324,23 @@ class MarketOverviewService:
                 "freshness": theme.get("freshness") or payload_freshness,
                 "isFallback": bool(theme.get("isFallback") or payload_is_fallback),
                 "isStale": bool(theme.get("isStale") or payload_is_stale),
+                "isPartial": item_is_partial,
+                "isUnavailable": item_is_unavailable,
                 "relativeStrength": round(rotation_score, 3),
                 "rank": index + 1,
                 "risk_direction": self._risk_direction(relative_strength_pct if relative_strength_pct is not None else 0.0),
                 "hover_details": self._sector_rotation_theme_hover_details(theme, explanation),
+                "rotationStateEvidence": rotation_state_evidence,
+                "sourceFreshnessEvidence": {
+                    "source": theme.get("source") or payload_source,
+                    "sourceLabel": theme.get("sourceLabel") or payload_source_label,
+                    "asOf": theme.get("asOf") or as_of,
+                    "freshness": theme.get("freshness") or payload_freshness,
+                    "isFallback": bool(theme.get("isFallback") or payload_is_fallback),
+                    "isStale": bool(theme.get("isStale") or payload_is_stale),
+                    "isPartial": item_is_partial,
+                    "isUnavailable": item_is_unavailable,
+                },
             }
             if explanation:
                 item["explanation"] = explanation
@@ -2261,9 +2357,13 @@ class MarketOverviewService:
             "freshness": payload_freshness,
             "isFallback": payload_is_fallback,
             "isStale": payload_is_stale,
+            "isPartial": payload_is_partial,
+            "isUnavailable": payload_is_unavailable,
             "fallbackUsed": bool(radar_payload.get("fallbackUsed") or payload_is_fallback),
             "warning": radar_payload.get("warning"),
             "explanation": "Rotation Radar 主题轮动证据投影，分数用于观察相对强弱与覆盖状态。",
+            "radarSnapshot": radar_snapshot,
+            "sourceFreshnessEvidence": radar_snapshot,
             "items": items,
         }
 
