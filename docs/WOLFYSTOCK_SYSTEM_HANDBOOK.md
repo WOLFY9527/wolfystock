@@ -78,7 +78,7 @@ router defines localized branches.
 | `/portfolio` | RiskConsole / LedgerBoard | Portfolio holdings, risk, ledger, sync/import |
 | `/market-overview` | MarketMonitor | Market regime and comparative panels |
 | `/market/liquidity-monitor` | MarketMonitor | Liquidity diagnostics |
-| `/market/rotation-radar` | MarketMonitor | Rotation radar and theme state |
+| `/market/rotation-radar` | MarketMonitor | Rotation radar, theme state, and additive evidence snapshots |
 | `/watchlist` | WatchBoard / DenseList | User watchlist workflow |
 | `/backtest` | Backtest workbench | Backtest configuration and submission |
 | `/backtest/results/:runId` | Backtest result | Stored-first result readback |
