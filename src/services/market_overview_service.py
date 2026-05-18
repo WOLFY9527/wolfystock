@@ -47,6 +47,7 @@ from src.services.market_intelligence_trust_gate import (
 )
 from src.services.rotation_state_evidence import build_rotation_state_evidence
 from src.services.rotation_radar_quote_provider import get_rotation_radar_quote_provider
+from src.services.vix_metadata import normalize_vix_panel_metadata, normalize_vix_quote_metadata
 from src.storage import DatabaseManager
 
 PanelPayload = Dict[str, Any]
@@ -1649,6 +1650,7 @@ class MarketOverviewService:
             "warning": item.get("warning") or freshness["warning"],
             "isFromSnapshot": bool(item.get("isFromSnapshot") or panel.get("isFromSnapshot")),
         }
+        normalized = normalize_vix_quote_metadata(normalized)
         return {**normalized, **self._source_trust_meta(normalized)}
 
     def _fetch_indices(self) -> PanelPayload:
@@ -1685,6 +1687,7 @@ class MarketOverviewService:
         payload["source"] = "mixed" if official_vix else "yfinance"
         payload["sourceLabel"] = self._source_label(payload["source"])
         payload["fallbackUsed"] = False
+        payload = normalize_vix_panel_metadata(payload)
         return payload
 
     def _fetch_sentiment(self) -> PanelPayload:

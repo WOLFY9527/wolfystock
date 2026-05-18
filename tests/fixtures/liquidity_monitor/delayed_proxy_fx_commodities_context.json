@@ -157,7 +157,7 @@
       "includedInScore": true,
       "scoreContribution": 6,
       "scoreWeight": 8,
-      "summary": "-2.50% | 来源 Yahoo Finance (yfinance_proxy) | 类型 proxy_public | 新鲜度 delayed",
+      "summary": "-2.50% | 来源 Yahoo Finance (yfinance_proxy) | 类型 unofficial_proxy | 新鲜度 delayed",
       "updatedAt": "2026-05-07T10:00:00+08:00",
       "evidence": {
         "contractVersion": "source_confidence_contract_v1",
@@ -170,7 +170,7 @@
         "isPartial": true,
         "isUnavailable": false,
         "coverage": 1.0,
-        "confidenceWeight": 0.5,
+        "confidenceWeight": 0.7,
         "degradationReason": "partial_coverage",
         "capReason": "partial_coverage",
         "inputs": [
@@ -179,7 +179,7 @@
             "label": "VIX",
             "source": "yfinance_proxy",
             "sourceLabel": "Yahoo Finance",
-            "sourceType": "proxy_public",
+            "sourceType": "unofficial_proxy",
             "asOf": "2026-05-07T10:00:00+08:00",
             "freshness": "delayed",
             "isFallback": false,
@@ -187,7 +187,7 @@
             "isPartial": false,
             "isUnavailable": false,
             "coverage": 1.0,
-            "confidenceWeight": 0.5,
+            "confidenceWeight": 0.7,
             "degradationReason": null,
             "capReason": null
           }

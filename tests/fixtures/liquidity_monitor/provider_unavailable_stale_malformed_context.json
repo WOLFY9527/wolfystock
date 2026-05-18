@@ -157,7 +157,7 @@
       "includedInScore": true,
       "scoreContribution": 0,
       "scoreWeight": 8,
-      "summary": "待确认 | 新鲜度 delayed",
+      "summary": "待确认 | 来源 Yahoo Finance (yfinance_proxy) | 类型 unofficial_proxy | 新鲜度 delayed",
       "updatedAt": "2026-05-07T02:00:00+08:00",
       "evidence": {
         "contractVersion": "source_confidence_contract_v1",

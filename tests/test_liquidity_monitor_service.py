@@ -2603,7 +2603,7 @@ def test_vix_indicator_ignores_malformed_official_macro_cache_and_keeps_cached_p
     assert indicator["freshness"] == "delayed"
     assert "Yahoo Finance" in str(indicator["summary"])
     assert "类型 official_public" not in str(indicator["summary"])
-    assert "类型 proxy_public" in str(indicator["summary"])
+    assert "类型 unofficial_proxy" in str(indicator["summary"])
     assert "FRED VIXCLS" not in str(indicator["summary"])
 
 
@@ -2631,6 +2631,51 @@ def test_yfinance_proxy_panels_remain_delayed_and_not_live_provider_labels(isola
     assert "新鲜度 live" not in str(indicator["summary"])
     assert "类型 unofficial_proxy" in str(indicator["summary"])
     assert "类型 official_public" not in str(indicator["summary"])
+
+
+def test_vix_indicator_normalizes_cached_yfinance_proxy_live_freshness(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    as_of = "2026-05-12T16:15:00+08:00"
+    service.cache.set(
+        "volatility",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="live",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 15.2,
+                    "changePercent": -2.5,
+                    "source": "yfinance_proxy",
+                    "sourceType": "unofficial_proxy",
+                    "sourceLabel": "Yahoo Finance",
+                    "freshness": "live",
+                    "asOf": as_of,
+                    "updatedAt": as_of,
+                }
+            ],
+            updated_at=as_of,
+            as_of=as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = {item["key"]: item for item in payload["indicators"]}["vix_pressure"]
+
+    assert indicator["includedInScore"] is True
+    assert indicator["status"] == "partial"
+    assert indicator["freshness"] == "delayed"
+    assert indicator["freshness"] not in {"live", "fresh"}
+    assert indicator["evidence"]["inputs"][0]["freshness"] == "delayed"
+    assert indicator["coverageDiagnostics"]["sourceTier"] == "unofficial_public_api"
+    assert indicator["coverageDiagnostics"]["trustLevel"] == "usable_with_caution"
+    assert indicator["coverageDiagnostics"]["freshness"] == "partial"
+    assert "新鲜度 delayed" in str(indicator["summary"])
+    assert "新鲜度 live" not in str(indicator["summary"])
 
 
 def test_usd_pressure_uses_yfinance_dxy_proxy_when_fx_panel_is_unavailable(isolated_db: DatabaseManager) -> None:

@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from api.v1.schemas.liquidity_monitor import LiquidityMonitorResponse
+from src.services.liquidity_monitor_service import LiquidityMonitorService
 from src.services.market_cache import market_cache
 from src.services.market_overview_service import MarketOverviewService
 from src.services.market_rotation_radar_service import MarketRotationRadarService
@@ -102,6 +103,27 @@ def _quote(
     }
 
 
+class _FrameColumn:
+    def __init__(self, values: list[float]) -> None:
+        self._values = values
+
+    def tolist(self) -> list[float]:
+        return list(self._values)
+
+
+class _HistoryFrame:
+    def __init__(self, closes: list[float], *, as_of: datetime) -> None:
+        self.empty = False
+        self.index = [as_of]
+        self._columns = {"Close": _FrameColumn(closes)}
+
+    def __getitem__(self, key: str) -> _FrameColumn:
+        return self._columns[key]
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._columns
+
+
 def test_market_intelligence_checklist_captures_scope_and_validation_commands() -> None:
     checklist = CHECKLIST_PATH.read_text(encoding="utf-8")
 
@@ -139,6 +161,38 @@ def test_market_intelligence_checklist_captures_scope_and_validation_commands() 
     assert "sourceTier" in checklist
     assert "trustLevel" in checklist
     assert "N/A is allowed only with explicit unavailable evidence" in checklist
+
+
+def test_market_intelligence_smoke_aligns_proxy_vix_freshness_and_trust_metadata() -> None:
+    service = MarketOverviewService()
+    as_of = datetime(2026, 5, 18, 20, 0, tzinfo=timezone.utc)
+
+    def history(ticker: str) -> _HistoryFrame:
+        if ticker == "^VIX":
+            return _HistoryFrame([18.0, 15.0], as_of=as_of)
+        raise RuntimeError(f"{ticker} fixture unavailable")
+
+    with (
+        patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", side_effect=history),
+        patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", side_effect=history, create=True),
+        patch.object(service, "_official_macro_points", return_value={}),
+        patch.object(service, "_atr_item", return_value=None),
+        patch("src.services.market_overview_service.ExecutionLogService") as log_service,
+    ):
+        log_service.return_value.record_market_overview_fetch.return_value = "log-vix-smoke"
+        volatility_payload = service.get_volatility()
+        liquidity_payload = LiquidityMonitorService(db=DatabaseManager.get_instance()).get_liquidity_monitor()
+
+    market_vix = next(item for item in volatility_payload["items"] if item["symbol"] == "VIX")
+    liquidity_vix = next(item for item in liquidity_payload["indicators"] if item["key"] == "vix_pressure")
+
+    assert volatility_payload["freshness"] == "delayed"
+    assert volatility_payload["freshness"] not in {"live", "fresh"}
+    assert market_vix["freshness"] == liquidity_vix["freshness"] == "delayed"
+    assert market_vix["sourceTier"] == liquidity_vix["coverageDiagnostics"]["sourceTier"]
+    assert market_vix["trustLevel"] == liquidity_vix["coverageDiagnostics"]["trustLevel"] == "usable_with_caution"
+    assert market_vix["source"] in {"yfinance", "yfinance_proxy"}
+    assert liquidity_vix["evidence"]["source"] == "yfinance_proxy"
 
 
 def test_market_overview_liquidity_and_degraded_temperature_stay_truthful() -> None:

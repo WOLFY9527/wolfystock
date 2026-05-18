@@ -17,6 +17,7 @@ from src.services.market_cache import MarketCache, market_cache
 from src.services.market_data_source_registry import project_source_provenance
 from src.services.market_overview_binance_transport import fetch_binance_funding_row
 from src.services.market_overview_yfinance_transport import fetch_yfinance_quote_history_frame
+from src.services.vix_metadata import normalize_vix_quote_metadata
 from src.storage import DatabaseManager
 
 
@@ -511,10 +512,19 @@ class LiquidityMonitorService:
                     "未读取到可靠 VIX",
                     source="yfinance_proxy",
                     source_label="Yahoo Finance",
-                    source_type="proxy_public",
+                    source_type="unofficial_proxy",
                     reason=self._panel_unavailable_reason(panel, "VIX 代理不可用"),
                 ),
             )
+        item = normalize_vix_quote_metadata(
+            {
+                **item,
+                "source": item.get("source") or panel.source,
+                "sourceLabel": item.get("sourceLabel") or panel.payload.get("sourceLabel"),
+                "sourceType": item.get("sourceType") or panel.payload.get("sourceType"),
+                "freshness": self._item_freshness(item, panel),
+            }
+        )
         change = self._change_value(item)
         value = self._numeric(item.get("value") or item.get("price"))
         contribution = 0
@@ -526,7 +536,7 @@ class LiquidityMonitorService:
             contribution = 8
         elif value is not None and value >= 25:
             contribution = -8
-        freshness = self._item_freshness(item, panel)
+        freshness = str(item.get("freshness") or self._item_freshness(item, panel))
         source_type = self._item_source_type(item, panel)
         status = (
             "live"

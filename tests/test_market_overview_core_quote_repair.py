@@ -145,6 +145,43 @@ def test_vix_official_quote_keeps_delayed_macro_semantics() -> None:
     assert vix["degradationReason"] in {"delayed_source", "stale_source"}
 
 
+def test_vix_yfinance_proxy_panel_and_item_cannot_claim_live_realtime() -> None:
+    service = MarketOverviewService()
+    as_of = datetime.now(CN_TZ)
+
+    def history(ticker: str) -> _HistoryFrame:
+        if ticker == "^VIX":
+            return _HistoryFrame([18.0, 15.0], as_of=as_of, volumes=[1_000_000, 1_100_000])
+        raise RuntimeError(f"{ticker} fixture unavailable")
+
+    log_patcher = _log_patch()
+    try:
+        with (
+            patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", side_effect=history),
+            patch.object(service, "_official_macro_points", return_value={}),
+            patch.object(service, "_atr_item", return_value=None),
+        ):
+            payload = service.get_volatility()
+    finally:
+        log_patcher.stop()
+
+    vix = _item(payload, "VIX")
+    assert vix["value"] == 15.0
+    assert vix["source"] == "yfinance"
+    assert vix["sourceType"] == "unofficial_proxy"
+    assert vix["sourceTier"] == "unofficial_public_api"
+    assert vix["freshness"] == "delayed"
+    assert vix["freshness"] not in {"live", "fresh"}
+    assert vix["trustLevel"] == "usable_with_caution"
+    assert vix["degradationReason"] == "delayed_source"
+
+    assert payload["source"] == "yfinance"
+    assert payload["sourceType"] == "unofficial_proxy"
+    assert payload["freshness"] == "delayed"
+    assert payload["freshness"] not in {"live", "fresh"}
+    assert payload["evidenceSnapshot"]["freshness"] == "partial"
+
+
 def test_hsi_sina_proxy_quote_uses_dashboard_symbol_and_truthful_metadata() -> None:
     service = MarketOverviewService()
     row = [

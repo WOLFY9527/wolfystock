@@ -1,5 +1,13 @@
 ## 2026-05-18
 
+- **VIX source/freshness alignment** - Market Overview volatility and Liquidity
+  Monitor VIX paths now normalize yfinance/yfinance_proxy semantics to
+  explicit unofficial-proxy/delayed metadata instead of accidental live
+  freshness, while official FRED VIX rows stay explicitly labeled with their
+  stronger source tier and as-of time. The backend change is additive and
+  metadata-only: numeric values are preserved, provider order and MarketCache
+  behavior are unchanged, and the updated trust/evidence snapshots keep the
+  source difference visible to API consumers.
 - **Rotation Radar credential-source diagnostics fix** - Rotation Radar provider
   diagnostics now reuse the same Alpaca credential source resolved by the
   runtime Config/provider-credential path, expose only sanitized
