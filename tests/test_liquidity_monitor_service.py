@@ -97,6 +97,10 @@ def _load_fixture(name: str) -> dict[str, Any]:
     return json.loads((FIXTURE_DIR / name).read_text(encoding="utf-8"))
 
 
+def _indicators_by_key(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    return {str(item["key"]): item for item in payload["indicators"]}
+
+
 def _iter_strings(value: Any):
     if isinstance(value, dict):
         for key, item in value.items():
@@ -1288,7 +1292,8 @@ def test_raw_rates_snapshot_with_sofr_only_official_data_uses_proxy_yields_for_s
 
     assert service._external_provider_calls_used is True
     assert indicator["includedInScore"] is True
-    assert indicator["scoreContribution"] == 6
+    assert indicator["scoreContribution"] == 4
+    assert indicator["coverageDiagnostics"]["capReason"] == "partial_coverage"
     assert indicator["freshness"] == "delayed"
     assert "US10Y -1.97%" in indicator["summary"]
     assert "US30Y -1.26%" in indicator["summary"]
@@ -1697,7 +1702,7 @@ def test_fallback_stale_mock_and_error_indicators_are_excluded_from_score(isolat
     indicators = {item["key"]: item for item in payload["indicators"]}
 
     assert payload["score"]["regime"] == "supportive"
-    assert payload["score"]["value"] == 69
+    assert payload["score"]["value"] == 64
     assert indicators["crypto_spot_momentum"]["includedInScore"] is False
     assert indicators["us_rates_pressure"]["includedInScore"] is False
     assert indicators["usd_pressure"]["includedInScore"] is False
@@ -1868,7 +1873,7 @@ def test_reliable_indicators_move_score_deterministically(isolated_db: DatabaseM
 
     payload = service.get_liquidity_monitor()
 
-    assert payload["score"]["value"] == 87
+    assert payload["score"]["value"] == 78
     assert payload["score"]["regime"] == "abundant"
     assert payload["score"]["confidence"] > 0.5
 
@@ -1923,6 +1928,156 @@ def test_derived_freshness_uses_weakest_input_freshness(isolated_db: DatabaseMan
     assert indicators["crypto_spot_momentum"]["freshness"] == "delayed"
     assert indicators["us_breadth_proxy"]["freshness"] == "delayed"
     assert payload["freshness"]["weakestIndicatorFreshness"] == "delayed"
+
+
+def test_missing_cn_hk_flow_source_reports_activation_diagnostic_without_score(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["cn_hk_flows"]
+    diagnostic = indicator["coverageDiagnostics"]
+
+    assert indicator["status"] == "unavailable"
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostic["indicatorId"] == "cn_hk_flows"
+    assert diagnostic["indicatorName"] == "CN/HK 资金流"
+    assert "NORTHBOUND" in diagnostic["requiredInputs"]
+    assert diagnostic["fulfilledInputs"] == []
+    assert "NORTHBOUND" in diagnostic["missingInputs"]
+    assert diagnostic["sourceTier"] == "unavailable"
+    assert diagnostic["freshness"] == "unavailable"
+    assert diagnostic["trustLevel"] == "unavailable"
+    assert diagnostic["contributesToScore"] is False
+    assert diagnostic["scoreContribution"] == 0
+    assert diagnostic["capReason"] == "unavailable_source"
+    assert "No audited CN/HK flow provider" in diagnostic["activationHint"]
+
+
+def test_missing_us_etf_flow_proxy_reports_diagnostic_and_no_strong_score(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["us_etf_flow_proxy"]
+    diagnostic = indicator["coverageDiagnostics"]
+
+    assert indicator["status"] == "unavailable"
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostic["requiredInputs"] == ["ETF"]
+    assert diagnostic["fulfilledInputs"] == []
+    assert diagnostic["missingInputs"] == ["ETF"]
+    assert diagnostic["sourceTier"] == "unavailable"
+    assert diagnostic["trustLevel"] == "unavailable"
+    assert diagnostic["contributesToScore"] is False
+    assert diagnostic["scoreContribution"] == 0
+    assert "funds_flow" in diagnostic["activationHint"]
+
+
+def test_fresh_binance_crypto_input_remains_live_exchange_public_when_fresh(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "crypto",
+        _cache_entry(
+            source="binance",
+            freshness="live",
+            items=[
+                {"symbol": "BTC", "label": "Bitcoin", "changePercent": 3.0, "value": 65000},
+                {"symbol": "ETH", "label": "Ethereum", "changePercent": 2.0, "value": 3200},
+                {"symbol": "BNB", "label": "BNB", "changePercent": 1.0, "value": 600},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["crypto_spot_momentum"]
+    diagnostic = indicator["coverageDiagnostics"]
+
+    assert indicator["status"] == "live"
+    assert indicator["includedInScore"] is True
+    assert diagnostic["sourceTier"] == "exchange_public"
+    assert diagnostic["freshness"] == "live"
+    assert diagnostic["trustLevel"] == "reliable"
+    assert diagnostic["fulfilledInputs"] == ["BTC", "ETH", "BNB"]
+    assert diagnostic["missingInputs"] == []
+    assert diagnostic["contributesToScore"] is True
+    assert diagnostic["scoreContribution"] == 6
+    assert diagnostic["capReason"] is None
+
+
+def test_delayed_yfinance_macro_proxy_is_score_capped_by_trust_gate(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    quote_index = [
+        datetime(2026, 5, 12, 16, 0, tzinfo=timezone.utc),
+        datetime(2026, 5, 13, 16, 0, tzinfo=timezone.utc),
+    ]
+
+    with patch(
+        "src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame",
+        return_value=_FakeHistoryFrame([18.0, 15.0], index=quote_index),
+        create=True,
+    ):
+        payload = service.get_liquidity_monitor()
+
+    indicator = _indicators_by_key(payload)["vix_pressure"]
+    diagnostic = indicator["coverageDiagnostics"]
+
+    assert indicator["status"] == "partial"
+    assert indicator["includedInScore"] is True
+    assert 0 < indicator["scoreContribution"] < 8
+    assert diagnostic["sourceTier"] == "unofficial_public_api"
+    assert diagnostic["freshness"] == "partial"
+    assert diagnostic["trustLevel"] == "usable_with_caution"
+    assert diagnostic["contributesToScore"] is True
+    assert diagnostic["scoreContribution"] == indicator["scoreContribution"]
+    assert diagnostic["capReason"] == "partial_coverage"
+    assert diagnostic["degradationReason"] == "partial_coverage"
+    assert "capped" in diagnostic["activationHint"]
+
+
+def test_fallback_static_liquidity_inputs_never_appear_live_in_diagnostics(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "funds_flow",
+        _cache_entry(
+            source="fallback",
+            freshness="fallback",
+            is_fallback=True,
+            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+            updated_at=now,
+            as_of=now,
+            warning="备用快照",
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["us_etf_flow_proxy"]
+    diagnostic = indicator["coverageDiagnostics"]
+
+    assert indicator["status"] == "unavailable"
+    assert indicator["freshness"] == "fallback"
+    assert indicator["includedInScore"] is False
+    assert diagnostic["freshness"] != "live"
+    assert diagnostic["trustLevel"] == "unavailable"
+    assert diagnostic["contributesToScore"] is False
+    assert diagnostic["scoreContribution"] == 0
+    assert diagnostic["capReason"] == "unavailable_source"
 
 
 def test_liquidity_evidence_snapshot_marks_partial_inputs_without_claiming_live(
@@ -2274,7 +2429,8 @@ def test_us_breadth_indicator_uses_relative_proxy_votes(isolated_db: DatabaseMan
     indicators = {item["key"]: item for item in payload["indicators"]}
 
     assert indicators["us_breadth_proxy"]["includedInScore"] is True
-    assert indicators["us_breadth_proxy"]["scoreContribution"] == -6
+    assert indicators["us_breadth_proxy"]["scoreContribution"] == -4
+    assert indicators["us_breadth_proxy"]["coverageDiagnostics"]["capReason"] == "partial_coverage"
     assert "RSP/SPY" in indicators["us_breadth_proxy"]["summary"]
 
 
@@ -2341,7 +2497,8 @@ def test_vix_indicator_uses_yfinance_proxy_when_volatility_panel_is_unavailable(
     assert indicators["vix_pressure"]["includedInScore"] is True
     assert indicators["vix_pressure"]["status"] == "partial"
     assert indicators["vix_pressure"]["freshness"] == "delayed"
-    assert indicators["vix_pressure"]["scoreContribution"] == 8
+    assert indicators["vix_pressure"]["scoreContribution"] == 6
+    assert indicators["vix_pressure"]["coverageDiagnostics"]["capReason"] == "partial_coverage"
     assert "Yahoo Finance" in str(indicators["vix_pressure"]["summary"])
     assert "unofficial_proxy" in str(indicators["vix_pressure"]["summary"])
 
@@ -2498,7 +2655,8 @@ def test_usd_pressure_uses_yfinance_dxy_proxy_when_fx_panel_is_unavailable(isola
     assert indicators["usd_pressure"]["includedInScore"] is True
     assert indicators["usd_pressure"]["status"] == "partial"
     assert indicators["usd_pressure"]["freshness"] == "delayed"
-    assert indicators["usd_pressure"]["scoreContribution"] == 6
+    assert indicators["usd_pressure"]["scoreContribution"] == 4
+    assert indicators["usd_pressure"]["coverageDiagnostics"]["capReason"] == "partial_coverage"
     assert "DXY" in str(indicators["usd_pressure"]["summary"])
     assert "Yahoo Finance" in str(indicators["usd_pressure"]["summary"])
 
@@ -2526,7 +2684,8 @@ def test_us_rates_indicator_uses_yfinance_treasury_proxies_when_rates_panel_is_u
     assert indicators["us_rates_pressure"]["includedInScore"] is True
     assert indicators["us_rates_pressure"]["status"] == "partial"
     assert indicators["us_rates_pressure"]["freshness"] == "delayed"
-    assert indicators["us_rates_pressure"]["scoreContribution"] == 6
+    assert indicators["us_rates_pressure"]["scoreContribution"] == 4
+    assert indicators["us_rates_pressure"]["coverageDiagnostics"]["capReason"] == "partial_coverage"
     assert "US10Y" in str(indicators["us_rates_pressure"]["summary"])
     assert "US30Y" in str(indicators["us_rates_pressure"]["summary"])
     assert "Yahoo Finance" in str(indicators["us_rates_pressure"]["summary"])
@@ -2620,7 +2779,8 @@ def test_us_rates_indicator_prefers_official_macro_cache_and_keeps_sofr_observat
     assert indicator["includedInScore"] is True
     assert indicator["status"] == "partial"
     assert indicator["freshness"] == "cached"
-    assert indicator["scoreContribution"] == 6
+    assert indicator["scoreContribution"] == 4
+    assert indicator["coverageDiagnostics"]["capReason"] == "partial_coverage"
     assert "US2Y -0.22%" in str(indicator["summary"])
     assert "US10Y -0.31%" in str(indicator["summary"])
     assert "US30Y -0.18%" in str(indicator["summary"])
@@ -2676,7 +2836,8 @@ def test_us_rates_indicator_uses_official_macro_cache_when_rates_panel_is_unavai
     assert indicator["includedInScore"] is True
     assert indicator["status"] == "partial"
     assert indicator["freshness"] == "cached"
-    assert indicator["scoreContribution"] == 6
+    assert indicator["scoreContribution"] == 4
+    assert indicator["coverageDiagnostics"]["capReason"] == "partial_coverage"
     assert "US10Y" in str(indicator["summary"])
     assert "US30Y" in str(indicator["summary"])
     assert "US Treasury" in str(indicator["summary"])
@@ -2758,7 +2919,8 @@ def test_us_rates_indicator_falls_back_to_proxy_yields_when_official_yields_are_
     assert payload["sourceMetadata"]["externalProviderCalls"] is True
     assert indicator["includedInScore"] is True
     assert indicator["freshness"] == "delayed"
-    assert indicator["scoreContribution"] == 6
+    assert indicator["scoreContribution"] == 4
+    assert indicator["coverageDiagnostics"]["capReason"] == "partial_coverage"
     assert "US10Y -1.97%" in str(indicator["summary"])
     assert "US30Y -1.26%" in str(indicator["summary"])
     assert "SOFR +5.31%" in str(indicator["summary"])
@@ -2991,7 +3153,7 @@ def test_official_credit_stress_observation_is_summary_only_and_does_not_change_
     with_credit_indicator = {item["key"]: item for item in with_credit["indicators"]}["us_rates_pressure"]
 
     assert baseline["score"] == with_credit["score"] == {
-        "value": 69,
+        "value": 64,
         "regime": "supportive",
         "confidence": 0.44,
         "includedIndicatorCount": 3,
@@ -3000,11 +3162,11 @@ def test_official_credit_stress_observation_is_summary_only_and_does_not_change_
     }
     assert baseline_indicator["includedInScore"] is True
     assert baseline_indicator["scoreWeight"] == 6
-    assert baseline_indicator["scoreContribution"] == 6
+    assert baseline_indicator["scoreContribution"] == 4
     assert "CREDIT" not in str(baseline_indicator["summary"])
     assert with_credit_indicator["includedInScore"] is True
     assert with_credit_indicator["scoreWeight"] == 6
-    assert with_credit_indicator["scoreContribution"] == 6
+    assert with_credit_indicator["scoreContribution"] == 4
     assert "CREDIT +341.00bps" in str(with_credit_indicator["summary"])
 
 
@@ -3043,7 +3205,7 @@ def test_liquidity_monitor_credit_stress_fixture_remains_observation_only_and_pr
     with_credit_indicator = {item["key"]: item for item in with_credit["indicators"]}["us_rates_pressure"]
 
     assert baseline["score"] == with_credit["score"] == {
-        "value": 69,
+        "value": 64,
         "regime": "supportive",
         "confidence": 0.72,
         "includedIndicatorCount": 5,
@@ -3052,7 +3214,7 @@ def test_liquidity_monitor_credit_stress_fixture_remains_observation_only_and_pr
     }
     assert "CREDIT" not in str(baseline_indicator["summary"])
     assert "CREDIT +341.00bps" in str(with_credit_indicator["summary"])
-    assert baseline_indicator["scoreContribution"] == with_credit_indicator["scoreContribution"] == 6
+    assert baseline_indicator["scoreContribution"] == with_credit_indicator["scoreContribution"] == 4
 
 
 def test_all_liquidity_golden_fixtures_are_explicitly_enumerated_and_sanitized() -> None:

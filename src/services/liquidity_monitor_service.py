@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional
 from src.contracts.source_confidence import (
     SOURCE_CONFIDENCE_CONTRACT_VERSION,
     coerce_source_confidence_contract,
+    evaluate_market_intelligence_trust_from_sources,
 )
 from src.services.market_cache import MarketCache, market_cache
 from src.services.market_data_source_registry import project_source_provenance
@@ -51,6 +52,38 @@ OFFICIAL_PANEL_REQUIRED_SYMBOL_GROUPS = {
     "volatility": ({"VIX", "VIXCLS"},),
     "rates": ({"US2Y"}, {"US10Y"}, {"US30Y"}),
     "macro": ({"VIX", "VIXCLS"}, {"US2Y"}, {"US10Y"}, {"US30Y"}),
+}
+
+LIQUIDITY_INDICATOR_REQUIRED_INPUTS = {
+    "crypto_spot_momentum": ("BTC", "ETH", "BNB"),
+    "crypto_funding": ("BTC_FUNDING", "ETH_FUNDING"),
+    "vix_pressure": ("VIX",),
+    "usd_pressure": ("DXY", "USDCNH", "USDJPY", "EURUSD"),
+    "us_rates_pressure": ("US2Y", "US10Y", "US30Y", "SOFR", "US10Y2Y", "US10Y3M"),
+    "us_etf_flow_proxy": ("ETF",),
+    "us_breadth_proxy": ("SECTORS_UP", "SECTORS_DOWN", "RSP_SPY", "IWM_SPY", "QQQ_SPY"),
+    "cn_hk_index_context": ("000001.SH", "399001.SZ", "HSI.HK", "HSTECH.HK", "CN00Y"),
+    "cn_hk_flows": ("NORTHBOUND", "SOUTHBOUND", "CN_ETF", "MARGIN_BALANCE", "MAINLAND_MAIN"),
+    "cn_money_market_rates": ("DR007", "SHIBOR"),
+    "futures_premarket": ("NQ", "ES", "YM", "RTY"),
+}
+
+LIQUIDITY_INPUT_ALIASES = {
+    "VIXCLS": "VIX",
+}
+
+LIQUIDITY_INDICATOR_ACTIVATION_HINTS = {
+    "crypto_spot_momentum": "Binance 现货输入 fresh 时可直接计分；缺少 BTC / ETH / BNB 时保持不可用。",
+    "crypto_funding": "仅在现有 Binance Futures funding 回填和 BTC / ETH 现货上下文可用时激活。",
+    "vix_pressure": "现有宏观 / 波动率快照可用时激活；yfinance proxy 会被 trust gate 限制为延迟或部分。",
+    "usd_pressure": "现有 FX / commodities 快照可用时激活；缺少 DXY 时可退化到 USD/CNH、USD/JPY、EUR/USD 代理。",
+    "us_rates_pressure": "官方利率快照优先；没有 US2Y / US10Y / US30Y / SOFR 时只能退化为代理或不可用。",
+    "us_etf_flow_proxy": "激活现有 `funds_flow` snapshot 或 Market Overview 的 SPY / QQQ / IWM proxy；缺少 ETF 条目时保持不可用。",
+    "us_breadth_proxy": "激活现有 sector ETF breadth proxy；需要 SECTORS_UP、SECTORS_DOWN 和相对强弱代理。",
+    "cn_hk_index_context": "CN / HK 指数上下文只能来自现有快照，缺少可用指数条目时保持不可用。",
+    "cn_hk_flows": "No audited CN/HK flow provider；只有非 fallback 的 `cn_flows` 快照才会参与评分。",
+    "cn_money_market_rates": "仅在 `rates` 或 `macro` 快照里有 DR007 / SHIBOR 时激活，缺失则保持观测态。",
+    "futures_premarket": "现有 futures snapshot 或延迟 proxy 可用时才激活；没有真实期货快照时保持不可用。",
 }
 
 
@@ -716,6 +749,20 @@ class LiquidityMonitorService:
             for proxy in breadth["proxies"]
         )
         status = "live" if len(breadth["proxies"]) >= 2 and str(breadth["freshness"]) in {"live", "cached"} else "partial"
+        breadth_inputs = [
+            self._source_confidence_input_from_item(
+                item,
+                panel,
+                key=str(item.get("symbol") or ""),
+                label=str(item.get("label") or item.get("symbol") or ""),
+            )
+            for item in (breadth.get("up_item"), breadth.get("down_item"))
+            if isinstance(item, dict)
+        ]
+        breadth_inputs.extend(
+            self._source_confidence_input_from_component(proxy)
+            for proxy in breadth["proxies"]
+        )
         return self._indicator(
             "us_breadth_proxy",
             "US 广度代理",
@@ -729,11 +776,8 @@ class LiquidityMonitorService:
             evidence=self._indicator_evidence(
                 status=status,
                 freshness=str(breadth["freshness"]),
-                inputs=[
-                    self._source_confidence_input_from_component(proxy)
-                    for proxy in breadth["proxies"]
-                ],
-                expected_input_count=max(2, len(breadth["proxies"])) if breadth["proxies"] else 2,
+                inputs=breadth_inputs,
+                expected_input_count=max(2, len(breadth_inputs)) if breadth_inputs else 2,
             ),
         )
 
@@ -863,22 +907,33 @@ class LiquidityMonitorService:
         freshness: Optional[str] = None,
         evidence: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        evidence = evidence or self._indicator_evidence(
+            status=status,
+            freshness=freshness or panel.freshness or "unavailable",
+            panel=panel,
+            label=label,
+        )
+        diagnostics = self._indicator_coverage_diagnostics(
+            key,
+            label,
+            status=status,
+            included=included,
+            score_contribution=contribution,
+            evidence=evidence,
+            panel=panel,
+        )
         return {
             "key": key,
             "label": label,
             "status": status,
             "freshness": freshness or panel.freshness or "unavailable",
-            "includedInScore": included,
-            "scoreContribution": contribution if included else 0,
+            "includedInScore": diagnostics["contributesToScore"],
+            "scoreContribution": diagnostics["scoreContribution"],
             "scoreWeight": weight,
             "summary": summary,
             "updatedAt": panel.as_of or panel.updated_at,
-            "evidence": evidence or self._indicator_evidence(
-                status=status,
-                freshness=freshness or panel.freshness or "unavailable",
-                panel=panel,
-                label=label,
-            ),
+            "evidence": evidence,
+            "coverageDiagnostics": diagnostics,
         }
 
     def _first_reliable_item(self, panel: PanelState, symbols: Optional[set[str]]) -> Optional[Dict[str, Any]]:
@@ -1125,6 +1180,8 @@ class LiquidityMonitorService:
         return {
             "up_value": up_value,
             "down_value": down_value,
+            "up_item": up,
+            "down_item": down,
             "proxies": proxies,
             "positive_votes": positive_votes,
             "negative_votes": negative_votes,
@@ -1761,6 +1818,181 @@ class LiquidityMonitorService:
             "degradationReason": contract["degradationReason"],
             "capReason": contract["capReason"],
         }
+
+    def _indicator_coverage_diagnostics(
+        self,
+        key: str,
+        label: str,
+        *,
+        status: str,
+        included: bool,
+        score_contribution: int,
+        evidence: Dict[str, Any],
+        panel: PanelState,
+    ) -> Dict[str, Any]:
+        inputs = [dict(item) for item in evidence.get("inputs", []) if isinstance(item, dict)]
+        required_inputs = self._indicator_required_inputs(key, inputs, panel)
+        fulfilled_inputs = self._indicator_fulfilled_inputs(required_inputs, inputs, panel, status)
+        missing_inputs = [item for item in required_inputs if item not in fulfilled_inputs]
+        coverage = self._indicator_coverage(required_inputs, fulfilled_inputs, evidence, status)
+        trust_sources = inputs or [self._source_confidence_input_from_panel(
+            panel,
+            key=panel.key,
+            label=label,
+            coverage=coverage if coverage > 0.0 else (0.0 if status == "unavailable" else 1.0),
+            is_unavailable=status == "unavailable",
+        )]
+        trust = evaluate_market_intelligence_trust_from_sources(
+            trust_sources,
+            coverage=coverage,
+            degradation_reasons=self._indicator_degradation_reasons(evidence),
+        )
+        should_cap = self._should_cap_indicator_score(status, trust, evidence)
+        final_contribution = 0
+        if included and trust["trustLevel"] not in {"weak", "unavailable"}:
+            final_contribution = int(round(float(score_contribution) * float(trust["scoreCap"] if should_cap else 1.0)))
+        activation_hint = self._indicator_activation_hint(
+            key,
+            label,
+            missing_inputs=missing_inputs,
+            fulfilled_inputs=fulfilled_inputs,
+            trust=trust,
+            panel=panel,
+            evidence=evidence,
+        )
+        cap_reason = self._indicator_cap_reason(trust, evidence, should_cap)
+        contributes_to_score = bool(
+            included
+            and trust["trustLevel"] not in {"weak", "unavailable"}
+            and (final_contribution != 0 or score_contribution == 0)
+        )
+        degradation_reason = evidence.get("degradationReason")
+        if not degradation_reason:
+            degradation_reason = trust["degradationReasons"][0] if trust["degradationReasons"] else evidence.get("capReason")
+        return {
+            "indicatorId": key,
+            "indicatorName": label,
+            "requiredInputs": list(required_inputs),
+            "fulfilledInputs": fulfilled_inputs,
+            "missingInputs": missing_inputs,
+            "sourceTier": trust["sourceTier"],
+            "freshness": trust["freshness"],
+            "trustLevel": trust["trustLevel"],
+            "contributesToScore": contributes_to_score,
+            "scoreContribution": final_contribution if contributes_to_score else 0,
+            "capReason": cap_reason,
+            "degradationReason": degradation_reason,
+            "activationHint": activation_hint,
+        }
+
+    def _indicator_required_inputs(self, key: str, inputs: List[Dict[str, Any]], panel: PanelState) -> tuple[str, ...]:
+        required = LIQUIDITY_INDICATOR_REQUIRED_INPUTS.get(key)
+        if required:
+            return required
+        if inputs:
+            return tuple(self._indicator_input_key(item) for item in inputs if self._indicator_input_key(item))
+        if panel.key:
+            return (panel.key,)
+        return (key,)
+
+    def _indicator_fulfilled_inputs(
+        self,
+        required_inputs: tuple[str, ...],
+        inputs: List[Dict[str, Any]],
+        panel: PanelState,
+        status: str,
+    ) -> list[str]:
+        required = set(required_inputs)
+        seen: list[str] = []
+        for item in inputs:
+            key = self._indicator_input_key(item)
+            if key and key in required and key not in seen:
+                seen.append(key)
+        if seen:
+            return seen
+        if status != "unavailable" and panel.key in required:
+            return [panel.key]
+        return []
+
+    def _indicator_coverage(
+        self,
+        required_inputs: tuple[str, ...],
+        fulfilled_inputs: list[str],
+        evidence: Dict[str, Any],
+        status: str,
+    ) -> float:
+        explicit = self._numeric(evidence.get("coverage"))
+        if explicit is not None:
+            return round(max(0.0, min(1.0, explicit)), 2)
+        if required_inputs:
+            return round(min(1.0, len(fulfilled_inputs) / len(required_inputs)), 2)
+        return 0.0 if status == "unavailable" else 1.0
+
+    @staticmethod
+    def _indicator_input_key(item: Dict[str, Any]) -> str:
+        for key in ("key", "symbol", "label"):
+            value = str(item.get(key) or "").strip()
+            if value:
+                return LIQUIDITY_INPUT_ALIASES.get(value, value)
+        return ""
+
+    def _indicator_activation_hint(
+        self,
+        key: str,
+        label: str,
+        *,
+        missing_inputs: list[str],
+        fulfilled_inputs: list[str],
+        trust: Dict[str, Any],
+        panel: PanelState,
+        evidence: Dict[str, Any],
+    ) -> str:
+        hint = LIQUIDITY_INDICATOR_ACTIVATION_HINTS.get(key)
+        parts: list[str] = []
+        if hint:
+            parts.append(hint)
+        if trust["trustLevel"] in {"weak", "unavailable"}:
+            parts.append(f"trust gate={trust['trustLevel']} / {trust['sourceTier']}")
+        if missing_inputs:
+            parts.append(f"缺少: {', '.join(missing_inputs)}")
+        elif fulfilled_inputs:
+            parts.append(f"已激活: {', '.join(fulfilled_inputs)}")
+        if trust["freshness"] in {"stale", "fallback", "partial"}:
+            parts.append(f"freshness={trust['freshness']}")
+        if evidence.get("capReason"):
+            parts.append(f"cap={evidence['capReason']}")
+        if trust["scoreCap"] < 1.0:
+            parts.append("score capped")
+        if panel.source and panel.source != "unavailable":
+            parts.append(f"source={panel.source}")
+        if not parts:
+            parts.append(f"{label} 暂无可用激活路径")
+        return "；".join(parts)
+
+    @staticmethod
+    def _indicator_cap_reason(trust: Dict[str, Any], evidence: Dict[str, Any], should_cap: bool) -> Optional[str]:
+        if not should_cap:
+            return evidence.get("capReason")
+        return evidence.get("capReason") or (trust["degradationReasons"][0] if trust["degradationReasons"] else None)
+
+    @staticmethod
+    def _indicator_degradation_reasons(evidence: Dict[str, Any]) -> tuple[str, ...]:
+        reasons: list[str] = []
+        for key in ("degradationReason", "capReason"):
+            value = str(evidence.get(key) or "").strip()
+            if value and value not in reasons:
+                reasons.append(value)
+        return tuple(reasons)
+
+    @staticmethod
+    def _should_cap_indicator_score(status: str, trust: Dict[str, Any], evidence: Dict[str, Any]) -> bool:
+        if trust["trustLevel"] in {"weak", "unavailable"}:
+            return True
+        if status in {"partial", "stale", "fallback"}:
+            return True
+        if str(evidence.get("freshness") or "").lower() in {"stale", "fallback", "mock"}:
+            return True
+        return False
 
     @staticmethod
     def _source_confidence_weight(source_type: str) -> float:

@@ -1,5 +1,16 @@
 ## 2026-05-18
 
+- **Liquidity Monitor coverage diagnostics** - Added backend-only, additive
+  `coverageDiagnostics` metadata for Liquidity Monitor indicators so missing,
+  partial, stale, fallback, or unavailable source inputs disclose required,
+  fulfilled, and missing inputs, source tier, freshness, trust level, score
+  contribution, cap/degradation reason, and activation hints. Existing
+  configured exchange/macro/proxy inputs are only activated through current
+  cache/provider metadata; CN/HK flow and futures gaps remain explicitly
+  unavailable when audited sources are absent. Weak or unavailable evidence is
+  capped or excluded from scoring, with frontend, database schema, MarketCache
+  core behavior, provider order, and Scanner/Portfolio/Backtest/Options/auth/
+  RBAC/LLM/accounting domains unchanged.
 - **Rotation Radar provider diagnostics** - Added backend-only, additive
   provider activation diagnostics for Rotation Radar quote metadata. The
   diagnostics show whether the configured Alpaca provider was attempted,
