@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import ast
 import json
-import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -55,6 +54,16 @@ def _module_imports() -> set[str]:
     return imported_modules
 
 
+@pytest.fixture(autouse=True)
+def _isolate_fred_api_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FRED_API_KEY", "")
+    Config.reset_instance()
+    try:
+        yield
+    finally:
+        Config.reset_instance()
+
+
 def test_official_macro_transport_stays_stdlib_only() -> None:
     forbidden_imports = sorted(
         module
@@ -74,26 +83,26 @@ def test_build_supported_fred_requests_covers_expected_series() -> None:
 
 
 def test_build_fred_observations_request_omits_api_key_when_not_supplied() -> None:
-    Config.reset_instance()
-    previous_key = os.environ.pop("FRED_API_KEY", None)
-    try:
-        request = build_fred_observations_request("DGS10", limit=7, observation_start="2026-05-01")
-    finally:
-        if previous_key is not None:
-            os.environ["FRED_API_KEY"] = previous_key
-        Config.reset_instance()
+    request = build_fred_observations_request("DGS10", limit=7, observation_start="2026-05-01")
 
     assert request.method == "GET"
     assert request.url == FRED_OBSERVATIONS_URL
-    assert request.params == {
-        "series_id": "DGS10",
-        "file_type": "json",
-        "sort_order": "desc",
-        "limit": "7",
-        "observation_start": "2026-05-01",
-    }
+    assert request.params["series_id"] == "DGS10"
+    assert request.params["file_type"] == "json"
+    assert request.params["sort_order"] == "desc"
+    assert request.params["limit"] == "7"
+    assert request.params["observation_start"] == "2026-05-01"
+    assert "api_key" not in request.params
     assert request.source_id == "fred:DGS10"
     assert request.requires_api_key is True
+
+
+def test_build_fred_observations_request_includes_explicit_dummy_api_key() -> None:
+    request = build_fred_observations_request("DGS10", api_key="fred-explicit-test-key", limit=2)
+
+    assert request.params["series_id"] == "DGS10"
+    assert request.params["limit"] == "2"
+    assert request.params["api_key"] == "fred-explicit-test-key"
 
 
 def test_fetch_fred_observation_points_uses_runtime_configured_fred_api_key_without_exposing_it(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -129,12 +138,11 @@ def test_build_fred_observations_request_supports_credit_stress_series_without_e
 
     assert request.method == "GET"
     assert request.url == FRED_OBSERVATIONS_URL
-    assert request.params == {
-        "series_id": "BAMLH0A0HYM2",
-        "file_type": "json",
-        "sort_order": "desc",
-        "limit": "3",
-    }
+    assert request.params["series_id"] == "BAMLH0A0HYM2"
+    assert request.params["file_type"] == "json"
+    assert request.params["sort_order"] == "desc"
+    assert request.params["limit"] == "3"
+    assert "api_key" not in request.params
     assert request.source_id == "fred:BAMLH0A0HYM2"
     assert request.source_type == "official_public"
     assert request.requires_api_key is True
