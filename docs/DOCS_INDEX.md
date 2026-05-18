@@ -25,6 +25,18 @@ evidence, local artifacts, and older inherited guides.
 - [Changelog](./CHANGELOG.md): user-visible, operational, and documentation
   navigation changes.
 
+## Directory Guides
+
+- [Audit Index](./audits/README.md): current audit, launch, and operator
+  evidence navigation.
+- [Architecture Docs](./architecture/README.md): current backend, storage, and
+  portfolio architecture navigation.
+- [Codex Docs](./codex/README.md): current Codex workflow, prompt, and frontend
+  validation navigation.
+- [Design Docs](./design/README.md): current Reflect-Linear design navigation.
+- [Operations Docs](./operations/README.md): current operator runbook and
+  artifact-handling navigation.
+
 ## Current Authority
 
 Use these documents before changing code, tests, routes, API contracts, or
@@ -40,7 +52,7 @@ operator workflows.
 | Codex task guard | [Codex Standard Guard](./codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md) |
 | Codex runtime modes | [Codex Task Runtime Rules](./codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md) |
 | Codex final reports | [Codex Final Report Template](./codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md) |
-| Prompt compression | [Compact Prompt Protocol](./codex/WOLFYSTOCK_CODEX_COMPACT_PROMPT_PROTOCOL.md) |
+| Prompt compression and task examples | [Compact Prompt Protocol](./codex/WOLFYSTOCK_CODEX_COMPACT_PROMPT_PROTOCOL.md) and [Compact Task Examples](./codex/WOLFYSTOCK_CODEX_COMPACT_TASK_EXAMPLES.md) |
 | Model routing | [Model Routing](./codex/WOLFYSTOCK_CODEX_MODEL_ROUTING.md) |
 | Prompt context lookup | [Prompt Context Index](./codex/WOLFYSTOCK_PROMPT_CONTEXT_INDEX.md) |
 | File/docs governance | [File Governance Taxonomy](./architecture/file-governance-taxonomy.md) |
@@ -57,8 +69,10 @@ operator workflows.
 | Analysis and reports | [Full Guide](./full-guide.md), [AI Decision Engine](./ai-decision-engine.md) | [LLM Config Guide](./LLM_CONFIG_GUIDE.md), [Image Extract Prompt](./image-extract-prompt.md) |
 | Scanner and watchlist | [Market Scanner](./market-scanner.md) | [Scanner export label policy](./product/wolfystock-scanner-export-label-policy.md) |
 | Backtest | [Backtest System](./backtest-system.md) | [Backtest helper maintenance](./backtest-helper-maintenance.md), [Rule backtest reopen trust status](./architecture/rule-backtest-reopen-trustworthiness-p0-status-index-2026-04-22.md) |
+| Bot notifications | [Discord bot config](./bot/discord-bot-config.md) | [DingTalk bot config](./bot/dingding-bot-config.md), [Feishu bot config](./bot/feishu-bot-config.md) |
 | Portfolio | [Modular Architecture Manual](./architecture/WOLFYSTOCK_MODULE_ARCHITECTURE.md) | [Phase F decisions](./architecture/phase-f/decisions.md), [Phase F status](./architecture/phase-f/status.md), [Phase F runbook](./architecture/phase-f/runbook.md) |
 | Provider and freshness | [Provider Data Freshness Reliability Guide](./audits/provider-data-freshness-reliability-guide.md) | [Provider Capability Metadata](./operations/provider-capability-metadata.md), [Market Data Provider Upgrade Matrix](./audits/market-data-provider-upgrade-decision-matrix.md), [Provider Incident Runbook](./audits/provider-data-incident-runbook.md) |
+| Provider operations dashboard | [Market Provider Operations Dashboard](./design/wolfystock-market-provider-operations-dashboard.md) | [Provider Capability Metadata](./operations/provider-capability-metadata.md), [Provider Budget And Routing Rules](./codex/WOLFYSTOCK_PROVIDER_BUDGET_AND_ROUTING_RULES.md) |
 | Options Lab | [Options provider adapter contract](./audits/options-provider-adapter-contract.md) | [Options Lab phase 0 design](./audits/options-lab-phase0-design.md), [Trading no-advice policy](./audits/trading-no-advice-product-policy.md) |
 | Admin, security, RBAC | [Auth/RBAC release security guide](./audits/auth-rbac-release-security-guide.md) | [Admin RBAC capability model](./audits/admin-rbac-capability-model-design.md), [Admin role governance plan](./audits/admin-role-governance-plan.md), [Production security hardening audit](./audits/production-security-hardening-audit.md) |
 | Cost, quota, observability | [Cost observability design index](./audits/cost-observability-design-index.md) | [Cost observability roadmap](./audits/cost-observability-implementation-roadmap.md), [Quota/cost notification release guide](./audits/quota-cost-notification-release-guide.md) |
@@ -101,6 +115,8 @@ specific question.
 - [Audit Index](./audits/README.md): current audit navigation, launch posture,
   and archived audit warnings.
 - `docs/audits/archive/`: archived audit and consolidation notes.
+- `docs/audits/archive/backtest/`: archived backtest maintenance evidence and
+  machine-readable audit bundles.
 - `docs/audits/archive/frontend/`: archived frontend DOM/CSS/bundle/old launch
   UX evidence.
 - `docs/architecture/archive/`: archived architecture and Phase F evidence.

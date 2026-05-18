@@ -117,6 +117,8 @@ current visual source-of-truth; Reflect-Linear docs in `docs/codex/` and
 ## Archive Pointers
 
 - `docs/audits/archive/`: historical audit and consolidation notes.
+- `docs/audits/archive/backtest/`: archived backtest helper maintenance evidence
+  and machine-readable audit bundles.
 - `docs/audits/archive/frontend/`: retired frontend DOM, CSS, bundle, route, and old launch UX reports.
 - `docs/qa/archive/`: point-in-time QA reports retained for provenance.
 - `docs/architecture/archive/`: historical architecture and Phase F evidence.

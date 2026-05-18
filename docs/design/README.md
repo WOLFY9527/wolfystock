@@ -13,5 +13,11 @@ Current frontend visual source of truth:
 - `../codex/CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
 - `../codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
 
+Additional retained design note:
+
+- `wolfystock-market-provider-operations-dashboard.md`: future read-only
+  Admin/Ops provider health surface. Keep for operator-surface planning only;
+  it is not the visual source of truth for normal product routes.
+
 Historical or transitional UI notes live under `archive/old-ui/`. They are
 provenance only and must not override the Reflect-Linear docs above.

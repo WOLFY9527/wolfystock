@@ -18,10 +18,11 @@ Start current work from:
 | Location | Contents | Use |
 | --- | --- | --- |
 | `docs/audits/archive/` | Retired audit notes, consolidation plans, older launch/security/admin findings | Provenance only; do not use for current launch verdict |
+| `docs/audits/archive/backtest/` | Archived backtest maintenance evidence and machine-readable audit bundles | Historical backtest maintenance provenance only |
 | `docs/audits/archive/frontend/` | Retired frontend DOM, CSS, route, bundle, scroll, and old launch UX reports | Historical UI evidence only; current visual authority lives in `docs/codex/` and `docs/design/` |
 | `docs/qa/archive/` | Point-in-time QA reports | QA provenance only |
 | `docs/design/archive/old-ui/` | Transitional UI replacement notes | Historical migration context only |
-| `docs/architecture/archive/audits/` | Older backend and backend/frontend audit reports | Historical architecture evidence |
+| `docs/architecture/archive/audits/` | Older backend and backend/frontend audit reports plus archived implementation plans | Historical architecture evidence |
 | `docs/architecture/archive/multi-user-foundation/` | Multi-user foundation phase snapshots | Prior WS/multi-user design evidence |
 | `docs/architecture/archive/phase-f/` | Phase F evidence plans and runbooks | Portfolio comparison/proof provenance |
 
@@ -37,6 +38,7 @@ Retained audit archive files include:
 - `docs/audits/archive/security-admin-mfa-backend-foundation.md`
 - `docs/audits/archive/wolfystock-final-admin-security-options-qa.md`
 - `docs/audits/archive/db-index-migration-plan-auth-task-log.md`
+- `docs/audits/archive/backtest/backtest-helper-maintenance-audit-2026-04-23.json`
 
 Archived frontend audit evidence includes:
 
@@ -52,6 +54,7 @@ Archived frontend audit evidence includes:
 - `docs/audits/archive/frontend/wolfystock-phase0-bundle-design-inventory.md`
 - `docs/audits/archive/frontend/wolfystock-post-batch-integration-qa.md`
 - `docs/audits/archive/frontend/wolfystock-product-command-card-owner-audit.md`
+- `docs/audits/archive/frontend/wolfystock-frontend-route-render-profiling-2026-05-06.md`
 - `docs/audits/archive/frontend/wolfystock-scanner-dom-verification.md`
 - `docs/audits/archive/frontend/wolfystock-scrollarea-custom-scrollbar-owner-inventory.md`
 - `docs/audits/archive/frontend/wolfystock-scrollbar-dom-verification.md`
@@ -68,6 +71,7 @@ Archived design-transition notes include:
 
 Retained architecture archive files include:
 
+- `docs/architecture/archive/audits/2026-04-25-storage-seam-audit-implementation-plan.md`
 - `docs/architecture/archive/audits/backend-final-audit-report.md`
 - `docs/architecture/archive/audits/backend-frontend-global-audit-report.md`
 - `docs/architecture/archive/multi-user-foundation/multi-user-foundation-phase0.md`
