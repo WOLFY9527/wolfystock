@@ -9,7 +9,7 @@
 2. 定义历史 K 线数据模型
 """
 
-from typing import Optional, List
+from typing import Any, Dict, Optional, List
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -98,12 +98,19 @@ class StockHistoryResponse(BaseModel):
     """股票历史行情响应"""
 
     model_config = ConfigDict(
+        populate_by_name=True,
         json_schema_extra={
             "example": {
                 "stock_code": "600519",
                 "stock_name": "贵州茅台",
                 "period": "daily",
                 "data": [],
+                "source": "unavailable",
+                "diagnostics": {
+                    "status": "unavailable",
+                    "reason": "history_unavailable",
+                    "message": "No real OHLC daily history is currently available.",
+                },
             }
         }
     )
@@ -112,6 +119,9 @@ class StockHistoryResponse(BaseModel):
     stock_name: Optional[str] = Field(None, description="股票名称")
     period: str = Field(..., description="K 线周期")
     data: List[KLineData] = Field(default_factory=list, description="K 线数据列表")
+    source: Optional[str] = Field(None, description="历史行情数据来源")
+    diagnostics: Optional[Dict[str, Any]] = Field(None, description="历史行情数据可用性诊断")
+    source_confidence: Optional[Dict[str, Any]] = Field(None, alias="sourceConfidence", description="数据来源可信度元信息")
 
 
 class IntradayBar(BaseModel):

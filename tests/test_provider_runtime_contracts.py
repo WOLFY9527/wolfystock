@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
-from data_provider.base import DataFetcherManager
+from data_provider.base import DataFetchError, DataFetcherManager
 from data_provider.realtime_types import RealtimeSource, UnifiedRealtimeQuote
 from src.repositories.stock_repo import StockRepository
 from src.services.agent_stock_evidence_service import StockEvidenceService
@@ -301,33 +301,198 @@ def test_stock_service_history_payload_preserves_aggregation_shape() -> None:
     ):
         payload = StockService().get_history_data("AAPL", period="daily", days=2)
 
-    assert payload == {
-        "stock_code": "AAPL",
-        "stock_name": "Apple",
-        "period": "daily",
-        "data": [
-            {
-                "date": "2024-01-01",
-                "open": 10.0,
-                "high": 10.5,
-                "low": 9.8,
-                "close": 10.2,
-                "volume": 1000.0,
-                "amount": 10200.0,
-                "change_percent": 2.0,
-            },
-            {
-                "date": "2024-01-02",
-                "open": 10.2,
-                "high": 10.8,
-                "low": 10.1,
-                "close": 10.6,
-                "volume": 1200.0,
-                "amount": 12720.0,
-                "change_percent": 3.92,
-            },
-        ],
-    }
+    assert payload["stock_code"] == "AAPL"
+    assert payload["stock_name"] == "Apple"
+    assert payload["period"] == "daily"
+    assert payload["source"] == LOCAL_US_PARQUET_SOURCE
+    assert payload["diagnostics"]["status"] == "ok"
+    assert payload["sourceConfidence"]["source"] == LOCAL_US_PARQUET_SOURCE
+    assert payload["data"] == [
+        {
+            "date": "2024-01-01",
+            "open": 10.0,
+            "high": 10.5,
+            "low": 9.8,
+            "close": 10.2,
+            "volume": 1000.0,
+            "amount": 10200.0,
+            "change_percent": 2.0,
+        },
+        {
+            "date": "2024-01-02",
+            "open": 10.2,
+            "high": 10.8,
+            "low": 10.1,
+            "close": 10.6,
+            "volume": 1200.0,
+            "amount": 12720.0,
+            "change_percent": 3.92,
+        },
+    ]
+
+
+def _stock_daily_row(
+    *,
+    code: str,
+    trade_date: date,
+    open_price: float,
+    high: float,
+    low: float,
+    close: float,
+    volume: float = 1000.0,
+    amount: float = 100000.0,
+    pct_chg: float = 0.5,
+    data_source: str = "LocalWarmCache",
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        code=code,
+        date=trade_date,
+        open=open_price,
+        high=high,
+        low=low,
+        close=close,
+        volume=volume,
+        amount=amount,
+        pct_chg=pct_chg,
+        data_source=data_source,
+    )
+
+
+def test_stock_service_us_daily_history_uses_persisted_rows_after_provider_failures_for_core_symbols() -> None:
+    provider_trace = [
+        {
+            "sequence": 1,
+            "provider": "AlpacaFetcher",
+            "action": "failed",
+            "outcome": "failed",
+            "status": "failed",
+            "reason": "EOF occurred in violation of protocol",
+            "message": "Daily history failed on AlpacaFetcher: EOF occurred in violation of protocol",
+        },
+        {
+            "sequence": 2,
+            "provider": "YfinanceFetcher",
+            "action": "failed",
+            "outcome": "empty_result",
+            "status": "empty_result",
+            "reason": "provider_returned_empty_history",
+            "message": "Provider returned no daily history for ORCL.",
+        },
+    ]
+
+    class _RepoStub:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, int]] = []
+
+        def get_recent_daily_rows(self, *, code: str, limit: int):
+            self.calls.append((code, limit))
+            return [
+                _stock_daily_row(
+                    code=code,
+                    trade_date=date(2026, 5, 14),
+                    open_price=100.0,
+                    high=102.0,
+                    low=99.5,
+                    close=101.0,
+                ),
+                _stock_daily_row(
+                    code=code,
+                    trade_date=date(2026, 5, 15),
+                    open_price=101.0,
+                    high=103.0,
+                    low=100.5,
+                    close=102.25,
+                ),
+            ]
+
+    for symbol in ("ORCL", "AAPL", "MSFT", "NVDA"):
+        repo = _RepoStub()
+        manager = SimpleNamespace(
+            get_stock_name=lambda stock_code: f"{stock_code} Inc.",
+            get_last_daily_history_trace=lambda: provider_trace,
+        )
+        provider_error = DataFetchError(
+            f"美股/美股指数 {symbol} 获取失败:\n"
+            "[AlpacaFetcher] (SSLEOFError) EOF occurred in violation of protocol\n"
+            f"[YfinanceFetcher] (DataFetchError) Yahoo Finance 未查询到 {symbol} 的数据"
+        )
+
+        with (
+            patch("src.services.stock_service.StockRepository", return_value=repo),
+            patch("data_provider.base.DataFetcherManager", return_value=manager),
+            patch(
+                "src.services.stock_service.fetch_daily_history_with_local_us_fallback",
+                side_effect=provider_error,
+            ),
+        ):
+            payload = StockService().get_history_data(symbol, period="daily", days=365)
+
+        assert payload["stock_code"] == symbol
+        assert payload["stock_name"] == f"{symbol} Inc."
+        assert payload["source"] == "local_db"
+        assert payload["diagnostics"]["status"] == "degraded"
+        assert payload["diagnostics"]["reason"] == "provider_failed_local_db_fallback"
+        assert payload["diagnostics"]["localFallback"]["rows"] == 2
+        assert payload["sourceConfidence"]["source"] == "local_db"
+        assert payload["sourceConfidence"]["isFallback"] is True
+        assert len(payload["data"]) == 2
+        assert payload["data"][0]["open"] == 100.0
+        assert payload["data"][1]["close"] == 102.25
+        assert repo.calls == [(symbol, 365)]
+
+
+def test_stock_service_us_daily_history_reports_unavailable_without_fake_ohlc_when_providers_and_local_fail() -> None:
+    provider_trace = [
+        {
+            "sequence": 1,
+            "provider": "AlpacaFetcher",
+            "action": "failed",
+            "outcome": "failed",
+            "status": "failed",
+            "reason": "EOF occurred in violation of protocol",
+            "message": "Daily history failed on AlpacaFetcher: EOF occurred in violation of protocol",
+        },
+        {
+            "sequence": 2,
+            "provider": "YfinanceFetcher",
+            "action": "failed",
+            "outcome": "empty_result",
+            "status": "empty_result",
+            "reason": "provider_returned_empty_history",
+            "message": "Provider returned no daily history for ORCL.",
+        },
+    ]
+    repo = SimpleNamespace(get_recent_daily_rows=MagicMock(return_value=[]))
+    manager = SimpleNamespace(
+        get_stock_name=lambda stock_code: "Oracle",
+        get_last_daily_history_trace=lambda: provider_trace,
+    )
+    provider_error = DataFetchError(
+        "美股/美股指数 ORCL 获取失败:\n"
+        "[AlpacaFetcher] (SSLEOFError) EOF occurred in violation of protocol\n"
+        "[YfinanceFetcher] (DataFetchError) Yahoo Finance 未查询到 ORCL 的数据"
+    )
+
+    with (
+        patch("src.services.stock_service.StockRepository", return_value=repo),
+        patch("data_provider.base.DataFetcherManager", return_value=manager),
+        patch(
+            "src.services.stock_service.fetch_daily_history_with_local_us_fallback",
+            side_effect=provider_error,
+        ),
+    ):
+        payload = StockService().get_history_data("ORCL", period="daily", days=365)
+
+    assert payload["stock_code"] == "ORCL"
+    assert payload["stock_name"] == "Oracle"
+    assert payload["data"] == []
+    assert payload["source"] == "unavailable"
+    assert payload["diagnostics"]["status"] == "unavailable"
+    assert payload["diagnostics"]["reason"] == "us_daily_history_unavailable"
+    assert payload["diagnostics"]["providerTrace"] == provider_trace
+    assert payload["sourceConfidence"]["isUnavailable"] is True
+    assert payload["sourceConfidence"]["confidenceWeight"] == 0.0
+    repo.get_recent_daily_rows.assert_called_once_with(code="ORCL", limit=365)
 
 
 def test_stock_name_lookup_prefers_cache_before_realtime_and_remote_fetchers() -> None:

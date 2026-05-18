@@ -460,7 +460,10 @@ def get_stock_history(
             stock_code=stock_code,
             stock_name=result.get("stock_name"),
             period=period,
-            data=data
+            data=data,
+            source=result.get("source"),
+            diagnostics=result.get("diagnostics"),
+            source_confidence=result.get("sourceConfidence") or result.get("source_confidence"),
         )
     
     except ValueError as e:
