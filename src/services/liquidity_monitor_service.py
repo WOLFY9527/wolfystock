@@ -22,8 +22,10 @@ from src.storage import DatabaseManager
 CN_TZ = timezone(timedelta(hours=8))
 ADVISORY_DISCLOSURE = "仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。"
 FRESHNESS_ORDER = {"live": 0, "cached": 1, "delayed": 2, "stale": 3, "fallback": 4, "mock": 5, "error": 6, "unavailable": 7}
+EVIDENCE_FRESHNESS_ORDER = {**FRESHNESS_ORDER, "fresh": 0, "partial": 2.5, "synthetic": 5}
 RELIABLE_FRESHNESS = {"live", "cached", "delayed"}
 POSSIBLE_WEIGHT = 43
+CRYPTO_FUNDING_BACKFILL_MAX_AGE = timedelta(hours=12)
 SOURCE_CONFIDENCE_BY_TYPE = {
     "official_public": 1.0,
     "exchange_public": 1.0,
@@ -36,6 +38,14 @@ SOURCE_CONFIDENCE_BY_TYPE = {
     "malformed_fixture": 0.0,
     "disabled_live_stub": 0.0,
     "missing": 0.0,
+}
+SOURCE_TYPE_FRESHNESS_FLOOR = {
+    "fallback_static": "fallback",
+    "synthetic_fixture": "mock",
+    "delayed_fixture": "delayed",
+    "malformed_fixture": "unavailable",
+    "disabled_live_stub": "unavailable",
+    "missing": "unavailable",
 }
 OFFICIAL_PANEL_REQUIRED_SYMBOL_GROUPS = {
     "volatility": ({"VIX", "VIXCLS"},),
@@ -170,8 +180,26 @@ class LiquidityMonitorService:
             payload = self._normalize_market_overview_snapshot_payload(key, payload)
         source = str(payload.get("source") or "unavailable")
         freshness = str(payload.get("freshness") or ("fallback" if payload.get("isFallback") or payload.get("fallbackUsed") else "unavailable"))
-        is_fallback = bool(payload.get("isFallback") or payload.get("fallbackUsed") or source in {"fallback", "mock", "unavailable"})
-        if from_snapshot and source == "mixed" and self._snapshot_has_non_fallback_official_rows(payload):
+        payload_source_type = str(payload.get("sourceType") or "").lower()
+        item_freshness_floor = self._panel_item_freshness_floor(payload)
+        has_non_fallback_official_snapshot_rows = (
+            from_snapshot and source == "mixed" and self._snapshot_has_non_fallback_official_rows(payload)
+        )
+        panel_fallback_flag = bool(payload.get("isFallback") or payload.get("fallbackUsed")) and not has_non_fallback_official_snapshot_rows
+        freshness = self._freshness_with_source_type(
+            freshness,
+            payload_source_type,
+            is_fallback=panel_fallback_flag,
+            is_stale=bool(payload.get("isStale")),
+        )
+        if item_freshness_floor:
+            freshness = self._weakest_freshness([freshness, item_freshness_floor])
+        is_fallback = bool(
+            panel_fallback_flag
+            or source in {"fallback", "mock", "unavailable"}
+            or freshness in {"fallback", "mock"}
+        )
+        if has_non_fallback_official_snapshot_rows:
             is_fallback = False
         if source == "mock":
             freshness = "mock"
@@ -350,7 +378,9 @@ class LiquidityMonitorService:
         items = [item for item in self._reliable_items(panel, None) if str(item.get("symbol") or "").endswith("_FUNDING") and self._numeric(item.get("value")) is not None]
         funding_panel = panel
         if not items:
-            funding_panel = self._fetch_live_crypto_funding_panel(panel) or panel
+            fetched_panel = self._fetch_live_crypto_funding_panel(panel)
+            if fetched_panel is not None:
+                funding_panel = fetched_panel
             items = [
                 item
                 for item in self._reliable_items(funding_panel, None)
@@ -360,16 +390,19 @@ class LiquidityMonitorService:
             message = "Binance Futures funding 暂不可用"
             if not self._has_live_crypto_context(panel):
                 message = "缺少 BTC/ETH 现货上下文，未触发实时 funding 查询"
+            elif funding_panel is not panel and funding_panel.freshness == "stale":
+                message = "Binance Futures funding 数据过期"
+            unavailable_freshness = "unavailable" if funding_panel.freshness in RELIABLE_FRESHNESS else funding_panel.freshness
             return self._indicator(
                 "crypto_funding",
                 "Crypto Funding",
-                panel,
+                funding_panel,
                 "unavailable",
                 0,
                 0,
                 False,
                 message,
-                freshness="unavailable" if panel.freshness in RELIABLE_FRESHNESS else panel.freshness,
+                freshness=unavailable_freshness,
             )
         avg_value = sum(float(self._numeric(item.get("value")) or 0.0) for item in items) / len(items)
         freshness = self._weakest_freshness([self._item_freshness(item, funding_panel) for item in items])
@@ -387,7 +420,11 @@ class LiquidityMonitorService:
         )
         source_label = source_meta["sourceLabel"]
         source_type = source_meta["sourceType"]
-        status = "live" if len(items) >= 2 and freshness == "live" else "partial"
+        direct_backfill = funding_panel.key == "crypto_funding_live" or any(
+            str(item.get("degradationReason") or "") == "direct_provider_backfill"
+            for item in items
+        )
+        status = "live" if len(items) >= 2 and freshness == "live" and not direct_backfill else "partial"
         return self._indicator(
             "crypto_funding",
             "Crypto Funding",
@@ -1181,6 +1218,7 @@ class LiquidityMonitorService:
         items: List[Dict[str, Any]] = []
         updated_at = self._now().isoformat(timespec="seconds")
         provenance = project_source_provenance(source="binance", freshness="live")
+        current = self._now()
         for futures_symbol, short_symbol in (("BTCUSDT", "BTC"), ("ETHUSDT", "ETH")):
             try:
                 row = fetch_binance_funding_row(futures_symbol)
@@ -1190,6 +1228,7 @@ class LiquidityMonitorService:
             if funding_rate is None:
                 continue
             as_of = self._timestamp_millis_to_iso(row.get("time")) or updated_at
+            item_freshness = self._direct_backfill_freshness(as_of, max_age=CRYPTO_FUNDING_BACKFILL_MAX_AGE, now=current)
             funding_percent = round(funding_rate * 100, 4)
             items.append(
                 {
@@ -1203,19 +1242,23 @@ class LiquidityMonitorService:
                     "sourceType": provenance["sourceType"],
                     "asOf": as_of,
                     "updatedAt": updated_at,
-                    "freshness": "live",
+                    "freshness": item_freshness,
                     "isFallback": False,
                     "fallbackUsed": False,
+                    "isStale": item_freshness == "stale",
+                    "isPartial": item_freshness in RELIABLE_FRESHNESS,
+                    "degradationReason": "direct_provider_backfill" if item_freshness in RELIABLE_FRESHNESS else "stale_source",
                 }
             )
         if not items:
             return None
         latest_as_of = max(str(item.get("asOf") or updated_at) for item in items)
+        panel_freshness = self._weakest_freshness(str(item.get("freshness") or "") for item in items)
         payload = {
             "source": "binance",
             "sourceLabel": provenance["sourceLabel"],
             "sourceType": provenance["sourceType"],
-            "freshness": "live",
+            "freshness": panel_freshness,
             "asOf": latest_as_of,
             "updatedAt": updated_at,
             "isFallback": False,
@@ -1226,11 +1269,11 @@ class LiquidityMonitorService:
             key="crypto_funding_live",
             payload=payload,
             source="binance",
-            freshness="live",
+            freshness=panel_freshness,
             as_of=latest_as_of,
             updated_at=updated_at,
             is_fallback=False,
-            is_stale=False,
+            is_stale=panel_freshness == "stale",
         )
 
     def _fetch_macro_proxy_panel(self, key: str, specs: List[Dict[str, Any]]) -> Optional[PanelState]:
@@ -1343,15 +1386,22 @@ class LiquidityMonitorService:
     def _item_freshness(self, item: Dict[str, Any], panel: PanelState) -> str:
         explicit = str(item.get("freshness") or "").lower()
         source = str(item.get("source") or panel.source or "").lower()
+        source_type = self._item_source_type(item, panel)
         is_fallback = bool(item.get("isFallback") or item.get("fallbackUsed") or panel.is_fallback or source in {"fallback", "mock", "unavailable"})
+        is_stale = bool(item.get("isStale") or panel.is_stale)
+        source_type_floor = self._source_type_freshness_floor(source_type)
         if source == "mock" or explicit == "mock":
             return "mock"
+        if is_fallback:
+            return self._weakest_freshness([explicit, "fallback"])
+        if source_type_floor in {"fallback", "mock", "unavailable"}:
+            return self._weakest_freshness([explicit, source_type_floor])
+        if is_stale:
+            return self._weakest_freshness([explicit, "stale"])
         if explicit in FRESHNESS_ORDER:
             return explicit
-        if is_fallback:
-            return "fallback"
-        if panel.is_stale:
-            return "stale"
+        if source_type_floor:
+            return source_type_floor
         if source == "yfinance_proxy":
             return "delayed"
         item_as_of = self._parse_time(item.get("asOf") or item.get("updatedAt"))
@@ -1542,7 +1592,7 @@ class LiquidityMonitorService:
         unique_sources = list(dict.fromkeys(str(item.get("source") or "") for item in normalized_inputs if str(item.get("source") or "")))
         unique_labels = list(dict.fromkeys(str(item.get("sourceLabel") or "") for item in normalized_inputs if str(item.get("sourceLabel") or "")))
         as_of_values = [str(item.get("asOf") or "") for item in normalized_inputs if item.get("asOf")]
-        weakest_freshness = self._weakest_freshness([str(item.get("freshness") or "") for item in normalized_inputs] or [freshness])
+        weakest_freshness = self._weakest_evidence_freshness([str(item.get("freshness") or "") for item in normalized_inputs] or [freshness])
         confidence_values = [float(item.get("confidenceWeight") or 0.0) for item in normalized_inputs]
         confidence_weight = round(sum(confidence_values) / len(confidence_values), 2) if confidence_values else 0.0
         contract = coerce_source_confidence_contract(
@@ -1597,6 +1647,7 @@ class LiquidityMonitorService:
         label: str,
         coverage: float = 1.0,
         is_unavailable: bool = False,
+        is_partial: bool = False,
     ) -> Dict[str, Any]:
         freshness = self._item_freshness(item, panel)
         return self._source_confidence_input(
@@ -1609,8 +1660,10 @@ class LiquidityMonitorService:
             freshness=freshness,
             is_fallback=bool(item.get("isFallback") or item.get("fallbackUsed") or panel.is_fallback),
             is_stale=bool(item.get("isStale") or freshness == "stale" or panel.is_stale),
+            is_partial=is_partial or bool(item.get("isPartial")),
             coverage=coverage,
             is_unavailable=is_unavailable,
+            degradation_reason=self._text(item.get("degradationReason")),
         )
 
     def _source_confidence_input_from_panel(
@@ -1667,6 +1720,15 @@ class LiquidityMonitorService:
         )
         resolved_source_type = explicit_source_type or provenance["sourceType"]
         resolved_source_label = self._text(source_label) or provenance["sourceLabel"]
+        freshness = self._freshness_with_source_type(
+            freshness,
+            resolved_source_type,
+            is_fallback=is_fallback,
+            is_stale=is_stale,
+        )
+        is_fallback = is_fallback or freshness == "fallback"
+        is_stale = is_stale or freshness == "stale"
+        is_unavailable = is_unavailable or freshness == "unavailable"
         contract = coerce_source_confidence_contract(
             {
                 "source": self._text(source) or "unavailable",
@@ -1715,6 +1777,13 @@ class LiquidityMonitorService:
 
     @staticmethod
     def _indicator_degradation_reason(status: str, inputs: List[Dict[str, Any]]) -> Optional[str]:
+        explicit_reasons = [
+            str(item.get("degradationReason") or "")
+            for item in inputs
+            if str(item.get("degradationReason") or "")
+        ]
+        if "direct_provider_backfill" in explicit_reasons:
+            return "direct_provider_backfill"
         if any(bool(item.get("isFallback")) for item in inputs):
             return "fallback_source"
         if any(bool(item.get("isStale")) for item in inputs):
@@ -1732,12 +1801,74 @@ class LiquidityMonitorService:
             return None
         return datetime.fromtimestamp(millis / 1000, tz=timezone.utc).astimezone(CN_TZ).isoformat(timespec="seconds")
 
+    def _direct_backfill_freshness(self, as_of: Any, *, max_age: timedelta, now: datetime) -> str:
+        parsed = self._parse_time(as_of)
+        if parsed is None:
+            return "unavailable"
+        age = now.astimezone(CN_TZ) - parsed.astimezone(CN_TZ)
+        if age > max_age:
+            return "stale"
+        return "live"
+
+    @staticmethod
+    def _source_type_freshness_floor(source_type: str) -> Optional[str]:
+        return SOURCE_TYPE_FRESHNESS_FLOOR.get(str(source_type or "").lower())
+
+    def _freshness_with_source_type(
+        self,
+        freshness: str,
+        source_type: str,
+        *,
+        is_fallback: bool = False,
+        is_stale: bool = False,
+    ) -> str:
+        values = [str(freshness or "").lower()]
+        source_type_floor = self._source_type_freshness_floor(source_type)
+        if source_type_floor:
+            values.append(source_type_floor)
+        if is_fallback:
+            values.append("fallback")
+        if is_stale:
+            values.append("stale")
+        return self._weakest_freshness(values)
+
+    def _panel_item_freshness_floor(self, payload: Dict[str, Any]) -> Optional[str]:
+        items = [item for item in payload.get("items", []) if isinstance(item, dict)]
+        if not items:
+            return None
+        floors = [self._raw_item_freshness_floor(item, payload) for item in items]
+        if any(floor is None for floor in floors):
+            return None
+        return self._weakest_freshness(str(floor or "") for floor in floors)
+
+    def _raw_item_freshness_floor(self, item: Dict[str, Any], payload: Dict[str, Any]) -> Optional[str]:
+        explicit = str(item.get("freshness") or "").lower()
+        source = str(item.get("source") or payload.get("source") or "").lower()
+        source_type = str(item.get("sourceType") or payload.get("sourceType") or "").lower()
+        if source == "mock" or explicit == "mock":
+            return "mock"
+        if bool(item.get("isFallback") or item.get("fallbackUsed")) or source in {"fallback", "mock", "unavailable"}:
+            return self._weakest_freshness([explicit, "fallback"])
+        source_type_floor = self._source_type_freshness_floor(source_type)
+        if source_type_floor in {"fallback", "mock", "unavailable"}:
+            return self._weakest_freshness([explicit, source_type_floor])
+        if bool(item.get("isStale")):
+            return self._weakest_freshness([explicit, "stale"])
+        return source_type_floor
+
     @staticmethod
     def _weakest_freshness(values: Iterable[str]) -> str:
         filtered = [value for value in values if value in FRESHNESS_ORDER]
         if not filtered:
             return "unavailable"
         return max(filtered, key=lambda value: FRESHNESS_ORDER.get(value, 99))
+
+    @staticmethod
+    def _weakest_evidence_freshness(values: Iterable[str]) -> str:
+        filtered = [value for value in values if value in EVIDENCE_FRESHNESS_ORDER]
+        if not filtered:
+            return "unavailable"
+        return max(filtered, key=lambda value: EVIDENCE_FRESHNESS_ORDER.get(value, 99))
 
     @staticmethod
     def _regime(score: int) -> str:

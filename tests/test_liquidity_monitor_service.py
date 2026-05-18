@@ -1706,6 +1706,113 @@ def test_fallback_stale_mock_and_error_indicators_are_excluded_from_score(isolat
     assert indicators["usd_pressure"]["status"] == "unavailable"
 
 
+def test_fallback_source_type_items_do_not_inherit_live_panel_freshness(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "crypto",
+        _cache_entry(
+            source="mixed",
+            freshness="live",
+            items=[
+                {
+                    "symbol": "BTC",
+                    "label": "Bitcoin",
+                    "changePercent": 3.0,
+                    "value": 65000,
+                    "source": "curated_seed",
+                    "sourceType": "fallback_static",
+                    "sourceLabel": "Curated fallback seed",
+                },
+                {
+                    "symbol": "ETH",
+                    "label": "Ethereum",
+                    "changePercent": 2.0,
+                    "value": 3200,
+                    "source": "curated_seed",
+                    "sourceType": "fallback_static",
+                    "sourceLabel": "Curated fallback seed",
+                },
+                {
+                    "symbol": "BNB",
+                    "label": "BNB",
+                    "changePercent": 1.0,
+                    "value": 600,
+                    "source": "curated_seed",
+                    "sourceType": "fallback_static",
+                    "sourceLabel": "Curated fallback seed",
+                },
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = {item["key"]: item for item in payload["indicators"]}["crypto_spot_momentum"]
+    evidence = indicator["evidence"]
+
+    assert indicator["status"] == "unavailable"
+    assert indicator["freshness"] == "fallback"
+    assert indicator["includedInScore"] is False
+    assert evidence["isFallback"] is True
+    assert evidence["isUnavailable"] is True
+    assert evidence["coverage"] == 0.0
+    assert evidence["freshness"] != "live"
+    assert all(input_item["freshness"] != "live" for input_item in evidence["inputs"])
+
+
+def test_item_stale_flag_overrides_live_freshness_for_indicator_inputs(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="yahoo",
+            freshness="live",
+            items=[
+                {
+                    "symbol": "US10Y",
+                    "label": "10Y yield",
+                    "changePercent": -0.2,
+                    "value": 4.2,
+                    "freshness": "live",
+                    "isStale": True,
+                    "source": "yahoo",
+                    "sourceType": "unofficial_proxy",
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "30Y yield",
+                    "changePercent": -0.1,
+                    "value": 4.6,
+                    "freshness": "live",
+                    "isStale": True,
+                    "source": "yahoo",
+                    "sourceType": "unofficial_proxy",
+                },
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = {item["key"]: item for item in payload["indicators"]}["us_rates_pressure"]
+    evidence = indicator["evidence"]
+
+    assert indicator["status"] == "unavailable"
+    assert indicator["freshness"] == "stale"
+    assert indicator["includedInScore"] is False
+    assert evidence["isStale"] is True
+    assert evidence["isUnavailable"] is True
+    assert evidence["degradationReason"] == "stale_source"
+    assert evidence["freshness"] != "live"
+    assert all(input_item["freshness"] == "stale" for input_item in evidence["inputs"])
+
+
 def test_reliable_indicators_move_score_deterministically(isolated_db: DatabaseManager) -> None:
     service = _make_service()
     now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
@@ -1898,9 +2005,10 @@ def test_liquidity_evidence_snapshot_preserves_fallback_input_state_when_indicat
     assert evidence["inputs"][0]["capReason"] == "fallback_source"
 
 
-def test_crypto_funding_uses_binance_public_endpoint_when_cache_snapshot_lacks_funding(isolated_db: DatabaseManager) -> None:
+def test_crypto_funding_uses_explicit_bounded_binance_backfill_when_cache_snapshot_lacks_funding(isolated_db: DatabaseManager) -> None:
     service = _make_service()
-    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    now_dt = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ)
+    now = now_dt.isoformat(timespec="seconds")
     service.cache.set(
         "crypto",
         _cache_entry(
@@ -1918,27 +2026,84 @@ def test_crypto_funding_uses_binance_public_endpoint_when_cache_snapshot_lacks_f
     )
 
     funding_rows = {
-        "BTCUSDT": {"lastFundingRate": "0.00012", "time": 1770000000000},
-        "ETHUSDT": {"lastFundingRate": "-0.00005", "time": 1770003600000},
+        "BTCUSDT": {"lastFundingRate": "0.00012", "time": int(now_dt.timestamp() * 1000)},
+        "ETHUSDT": {"lastFundingRate": "-0.00005", "time": int((now_dt - timedelta(hours=1)).timestamp() * 1000)},
     }
 
-    with patch("src.services.liquidity_monitor_service.fetch_binance_funding_row", side_effect=lambda symbol: funding_rows[symbol]):
+    with (
+        patch.object(LiquidityMonitorService, "_now", return_value=now_dt),
+        patch("src.services.liquidity_monitor_service.fetch_binance_funding_row", side_effect=lambda symbol: funding_rows[symbol]),
+    ):
         payload = service.get_liquidity_monitor()
 
     indicators = {item["key"]: item for item in payload["indicators"]}
+    funding = indicators["crypto_funding"]
+    evidence = funding["evidence"]
 
     assert payload["sourceMetadata"] == {
         "externalProviderCalls": True,
         "providerRuntimeChanged": False,
         "marketCacheMutation": False,
     }
-    assert indicators["crypto_funding"]["status"] == "live"
-    assert indicators["crypto_funding"]["freshness"] == "live"
-    assert "BTC" in str(indicators["crypto_funding"]["summary"])
-    assert "ETH" in str(indicators["crypto_funding"]["summary"])
-    assert "Binance" in str(indicators["crypto_funding"]["summary"])
-    assert "exchange_public" in str(indicators["crypto_funding"]["summary"])
-    assert "cache_snapshot" not in str(indicators["crypto_funding"]["summary"])
+    assert funding["status"] == "partial"
+    assert funding["freshness"] == "live"
+    assert funding["includedInScore"] is False
+    assert evidence["isPartial"] is True
+    assert evidence["freshness"] == "partial"
+    assert evidence["degradationReason"] == "direct_provider_backfill"
+    assert evidence["coverage"] == 1.0
+    assert all(input_item["degradationReason"] == "direct_provider_backfill" for input_item in evidence["inputs"])
+    assert all(input_item["freshness"] == "partial" for input_item in evidence["inputs"])
+    assert "BTC" in str(funding["summary"])
+    assert "ETH" in str(funding["summary"])
+    assert "Binance" in str(funding["summary"])
+    assert "exchange_public" in str(funding["summary"])
+    assert "cache_snapshot" not in str(funding["summary"])
+
+
+def test_crypto_funding_backfill_drops_stale_provider_rows_without_claiming_live(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    now_dt = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ)
+    now = now_dt.isoformat(timespec="seconds")
+    service.cache.set(
+        "crypto",
+        _cache_entry(
+            source="binance_ws",
+            freshness="live",
+            items=[
+                {"symbol": "BTC", "label": "Bitcoin", "changePercent": 2.0, "value": 65000, "asOf": now},
+                {"symbol": "ETH", "label": "Ethereum", "changePercent": 1.0, "value": 3200, "asOf": now},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    old_time = int((now_dt - timedelta(days=3)).timestamp() * 1000)
+    funding_rows = {
+        "BTCUSDT": {"lastFundingRate": "0.00012", "time": old_time},
+        "ETHUSDT": {"lastFundingRate": "-0.00005", "time": old_time},
+    }
+
+    with (
+        patch.object(LiquidityMonitorService, "_now", return_value=now_dt),
+        patch("src.services.liquidity_monitor_service.fetch_binance_funding_row", side_effect=lambda symbol: funding_rows[symbol]),
+    ):
+        payload = service.get_liquidity_monitor()
+
+    funding = {item["key"]: item for item in payload["indicators"]}["crypto_funding"]
+    evidence = funding["evidence"]
+
+    assert payload["sourceMetadata"]["externalProviderCalls"] is True
+    assert funding["status"] == "unavailable"
+    assert funding["freshness"] == "stale"
+    assert funding["includedInScore"] is False
+    assert evidence["isStale"] is True
+    assert evidence["isUnavailable"] is True
+    assert evidence["coverage"] == 0.0
+    assert evidence["degradationReason"] == "stale_source"
+    assert evidence["freshness"] != "live"
+    assert all(input_item["freshness"] == "stale" for input_item in evidence["inputs"])
 
 
 def test_crypto_funding_stays_unavailable_when_binance_public_endpoint_fails(isolated_db: DatabaseManager) -> None:
