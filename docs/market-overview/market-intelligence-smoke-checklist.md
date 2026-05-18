@@ -4,6 +4,7 @@ Status: backend-only smoke/checklist coverage for the current Market Intelligenc
 
 Scope:
 - Market Overview panel/freshness backend contracts
+- Core quote indicators for SPX, VIX, HSI, US10Y, DXY, BTC, and existing CN/HK indices
 - Official macro registry/transport coverage and delayed/unavailable semantics
 - Liquidity Monitor evidence/backfill disclosure
 - Rotation Radar evidence/projection disclosure
@@ -15,6 +16,7 @@ Run:
 ```bash
 python3 -m pytest tests/test_market_intelligence_smoke_checklist.py -q
 python3 -m pytest \
+  tests/test_market_overview_core_quote_repair.py \
   tests/test_market_overview_snapshot.py \
   tests/test_liquidity_monitor_service.py \
   tests/test_rotation_theme_registry.py \
@@ -45,6 +47,8 @@ Manual backend endpoints to probe:
 
 Expected degraded-state semantics:
 - Fallback, stale, delayed, partial, or unavailable payloads must not appear live/fresh.
+- Core quote indicators must keep `source`, `sourceLabel`, `sourceTier`, `asOf`, `freshness`, and `trustLevel` when available, and any delayed/fallback/unavailable row must carry an explicit `degradationReason`.
+- N/A is allowed only with explicit unavailable evidence; do not mask it as live or fresh.
 - Official macro rows for Treasury/FRED daily and monthly releases must keep
   `official_public` provenance, provider `asOf`, and delayed/stale/unavailable
   disclosure; effective fed funds, CPI YoY, PPI YoY, and credit-spread proxy

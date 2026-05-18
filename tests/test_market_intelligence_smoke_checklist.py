@@ -106,6 +106,7 @@ def test_market_intelligence_checklist_captures_scope_and_validation_commands() 
     checklist = CHECKLIST_PATH.read_text(encoding="utf-8")
 
     assert "python3 -m pytest tests/test_market_intelligence_smoke_checklist.py -q" in checklist
+    assert "tests/test_market_overview_core_quote_repair.py" in checklist
     assert "tests/test_market_overview_snapshot.py" in checklist
     assert "tests/test_liquidity_monitor_service.py" in checklist
     assert "tests/test_rotation_theme_registry.py" in checklist
@@ -132,6 +133,12 @@ def test_market_intelligence_checklist_captures_scope_and_validation_commands() 
     assert "No provider order changes." in checklist
     assert "No MarketCache core changes." in checklist
     assert "No scoring/ranking/stage changes." in checklist
+    assert "Core quote indicators" in checklist
+    for symbol in ("SPX", "VIX", "HSI", "US10Y", "DXY", "BTC"):
+        assert symbol in checklist
+    assert "sourceTier" in checklist
+    assert "trustLevel" in checklist
+    assert "N/A is allowed only with explicit unavailable evidence" in checklist
 
 
 def test_market_overview_liquidity_and_degraded_temperature_stay_truthful() -> None:
