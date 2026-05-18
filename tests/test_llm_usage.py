@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from src.services.llm_identity_semantics import build_llm_identity_contract
 from src.storage import DatabaseManager, LLMCostLedger, LLMUsage, persist_llm_usage
 
 
@@ -266,6 +267,76 @@ class TestPersistUsageHelper(unittest.TestCase):
             self.assertEqual(len(ledger_rows), 1)
             self.assertEqual(ledger_rows[0].request_hash, "persisted-billable-attempt")
             self.assertEqual(ledger_rows[0].total_tokens, 14)
+
+    def test_persist_usage_records_distinct_integrity_retry_attempts_once_each(self):
+        self.db.upsert_model_pricing_policy(
+            policy_key="openai-gpt-4o-mini",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            pricing_unit="per_1m_tokens",
+            input_price_per_1m=0.15,
+            output_price_per_1m=0.6,
+            effective_from=datetime(2025, 1, 1),
+            active=True,
+            metadata_json={},
+        )
+        first_identity = build_llm_identity_contract(
+            owner_user_id="user-owner",
+            surface="analysis",
+            prompt_version="analysis_v1",
+            prompt_text="base prompt",
+            logical_context={"symbol": "AAPL"},
+            retry_attempt_index=0,
+        )
+        retry_identity = build_llm_identity_contract(
+            owner_user_id="user-owner",
+            surface="analysis",
+            prompt_version="analysis_v1",
+            prompt_text="base prompt",
+            logical_context={"symbol": "AAPL"},
+            retry_attempt_index=1,
+        )
+
+        for _ in range(2):
+            persist_llm_usage(
+                {"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14},
+                "openai/gpt-4o-mini",
+                call_type="analysis",
+                owner_user_id="user-owner",
+                route_family="analysis",
+                request_hash=first_identity.billable_attempt_hash,
+                metadata=first_identity.to_ledger_metadata(),
+            )
+            persist_llm_usage(
+                {"prompt_tokens": 11, "completion_tokens": 5, "total_tokens": 16},
+                "openai/gpt-4o-mini",
+                call_type="analysis",
+                owner_user_id="user-owner",
+                route_family="analysis",
+                request_hash=retry_identity.billable_attempt_hash,
+                metadata=retry_identity.to_ledger_metadata(),
+            )
+
+        with self.db.session_scope() as session:
+            self.assertEqual(session.query(LLMUsage).count(), 4)
+            ledger_rows = session.query(LLMCostLedger).order_by(LLMCostLedger.id).all()
+            self.assertEqual(len(ledger_rows), 2)
+            self.assertEqual(
+                {row.request_hash for row in ledger_rows},
+                {first_identity.billable_attempt_hash, retry_identity.billable_attempt_hash},
+            )
+            self.assertEqual(
+                [row.to_dict()["metadata"]["llm_identity"]["retry_index"] for row in ledger_rows],
+                [0, 1],
+            )
+
+        summary = self.db.get_llm_cost_ledger_summary(
+            from_dt=datetime.now() - timedelta(days=1),
+            to_dt=datetime.now() + timedelta(days=1),
+            limit=10,
+        )
+        self.assertEqual(summary["total"]["calls"], 2)
+        self.assertEqual(summary["total"]["total_tokens"], 30)
 
     def test_persist_usage_ledger_failure_does_not_change_success_result(self):
         with patch(
