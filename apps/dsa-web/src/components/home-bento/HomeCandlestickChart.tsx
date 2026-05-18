@@ -75,6 +75,7 @@ type HomeCandlestickChartProps = {
   isLocked?: boolean;
   onContextChange?: (context: HomeCandlestickChartContext | null) => void;
   className?: string;
+  style?: React.CSSProperties;
 };
 
 export type HomeCandlestickChartContext = {
@@ -466,6 +467,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
   isLocked = false,
   onContextChange,
   className,
+  style,
 }) => {
   const { language } = useI18n();
   const locale = language === 'zh' ? 'zh-CN' : 'en-US';
@@ -820,6 +822,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
         'home-chart-well min-w-0 rounded-[14px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-3 py-2.5 shadow-[var(--wolfy-shadow-panel)]',
         className,
       )}
+      style={style}
       data-testid="home-linear-technical-chart"
       data-visual-role="primary-chart"
       data-surface-system="reflect-linear-console"
@@ -905,7 +908,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
 
       {status === 'ready' && candles.length ? (
         <div
-          className="relative h-[236px] min-w-[280px] overflow-visible sm:h-[252px] xl:h-[272px]"
+          className="relative h-[216px] min-w-[280px] overflow-visible sm:h-[228px] xl:h-[242px]"
           data-testid="home-candlestick-chart-frame"
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoveredIndex(null)}
@@ -950,7 +953,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       ) : (
         <div
           className={cn(
-            'relative flex h-[224px] min-w-[280px] flex-col justify-center overflow-hidden rounded-[12px] border border-[color:var(--wolfy-border-faint)] bg-[linear-gradient(180deg,rgba(17,22,38,0.92),rgba(13,18,32,0.98))] px-5 text-left sm:h-[236px] xl:h-[248px]',
+            'relative flex h-[208px] min-w-[280px] flex-col justify-center overflow-hidden rounded-[12px] border border-[color:var(--wolfy-border-faint)] bg-[linear-gradient(180deg,rgba(17,22,38,0.92),rgba(13,18,32,0.98))] px-5 text-left sm:h-[220px] xl:h-[232px]',
             status === 'loading' ? 'text-white/46' : 'text-white/42',
           )}
           data-testid="home-candlestick-unavailable"

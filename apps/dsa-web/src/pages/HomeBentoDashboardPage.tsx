@@ -1161,6 +1161,7 @@ function LinearTechnicalStructure({
           isLocked={isGuest}
           onContextChange={onChartContextChange}
           className="rounded-none border-0 bg-transparent shadow-none"
+          style={{ background: 'transparent', borderColor: 'transparent', boxShadow: 'none' }}
         />
         <div
           className="home-research-signal-rail grid min-w-0 content-start overflow-hidden border-t border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] xl:h-full xl:border-l xl:border-t-0"
@@ -1284,14 +1285,14 @@ function LinearObservationPanel({
   const quantRows = buildQuantSnapshotRows(locale, dashboard.tech.signals);
 
   return (
-    <div className="home-research-rail-body relative flex min-w-0 flex-col gap-2.5 px-0 py-0 lg:max-h-[calc(100dvh-8.2rem)] lg:overflow-y-auto no-scrollbar">
+    <div className="home-research-rail-body relative flex min-w-0 flex-col gap-2 px-0 py-0">
       <section
-        className="home-research-rail-card min-w-0 rounded-[14px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-3.5 py-3"
+        className="home-research-rail-card min-w-0 rounded-[14px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-3 py-2.5"
         data-testid="home-bento-card-strategy"
         data-research-card="opportunity"
         data-rail-section="research-framework"
       >
-        <div className="mb-2.5 flex min-w-0 items-center justify-between gap-3">
+        <div className="mb-2 flex min-w-0 items-center justify-between gap-3">
           <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Research Framework' : '研究框架'}</h2>
           <button
             ref={openStrategyButtonRef}
@@ -1306,7 +1307,7 @@ function LinearObservationPanel({
         </div>
         <div className="divide-y divide-white/[0.055]">
           {observationRows.map((row) => (
-            <div key={row.label} className="flex min-w-0 items-start justify-between gap-3 py-2">
+            <div key={row.label} className="flex min-w-0 items-start justify-between gap-3 py-1.5">
               <span className="truncate text-[11px] text-white/38">{row.label}</span>
               <span
                 className={cn(
@@ -1319,7 +1320,7 @@ function LinearObservationPanel({
               </span>
             </div>
           ))}
-          <div className="py-2">
+          <div className="py-1.5">
             <p className="text-[11px] text-white/38">{dashboard.strategy.positionLabel}</p>
             <p className="mt-1 text-xs leading-[1.55] text-white/58">{dashboard.strategy.positionBody}</p>
           </div>
@@ -1327,12 +1328,12 @@ function LinearObservationPanel({
       </section>
 
       <section
-        className="home-research-rail-card min-w-0 rounded-[14px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-3.5 py-3"
+        className="home-research-rail-card min-w-0 rounded-[14px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-3 py-2.5"
         data-testid="home-bento-card-fundamentals"
         data-research-card="data-context"
         data-rail-section="data-quality"
       >
-        <div className="mb-2.5 flex min-w-0 items-center justify-between gap-3">
+        <div className="mb-2 flex min-w-0 items-center justify-between gap-3">
           <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Data Quality & Notes' : '数据质量与说明'}</h2>
           <button
             ref={openFundamentalsButtonRef}
@@ -1346,10 +1347,10 @@ function LinearObservationPanel({
           </button>
         </div>
         <div className="border-t border-white/[0.055] pt-2" data-testid="home-linear-quality-summary">
-          <p className="pb-2.5 text-xs leading-[1.55] text-white/58">{qualityPreview}</p>
+          <p className="pb-2 text-xs leading-[1.45] text-white/58">{qualityPreview}</p>
           <div className="divide-y divide-white/[0.055]">
             {qualityRows.map((item) => (
-              <div key={item.label} className="flex min-w-0 items-start justify-between gap-3 py-2 text-[11px]">
+              <div key={item.label} className="flex min-w-0 items-start justify-between gap-3 py-1.5 text-[11px]">
                 <span className="truncate text-white/38">{item.label}</span>
                 <span className="min-w-0 break-words text-right text-white/58 whitespace-normal">{displaySlotValue(item.value, locale)}</span>
               </div>
@@ -1358,12 +1359,12 @@ function LinearObservationPanel({
         </div>
       </section>
       <section
-        className="home-research-rail-card min-w-0 rounded-[14px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-3.5 py-3"
+        className="home-research-rail-card min-w-0 rounded-[14px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-3 py-2.5"
         data-testid="home-linear-quant-snapshot"
         data-research-card="quant-signal"
         data-rail-section="quant-snapshot"
       >
-        <div className="mb-2.5 flex min-w-0 items-center justify-between gap-3">
+        <div className="mb-2 flex min-w-0 items-center justify-between gap-3">
           <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Quant Signal Snapshot' : '量化信号快照'}</h2>
         </div>
         <div className="divide-y divide-white/[0.055] border-t border-white/[0.055] pt-2">
@@ -1371,7 +1372,7 @@ function LinearObservationPanel({
             const muted = isEmptyDashboardValue(signal.value);
             const rowKey = signal.placeholderKey || signal.label;
             return (
-              <div key={rowKey} className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(6.4rem,auto)] items-start gap-3 py-2 text-[11px]">
+              <div key={rowKey} className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(6.4rem,auto)] items-start gap-3 py-1.5 text-[11px]">
                 <span className="truncate text-white/38">{signal.label}</span>
                 <div className="min-w-0 text-right">
                   <span
@@ -4351,11 +4352,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       aria-live={shouldGuardA11y ? 'polite' : undefined}
       className={getSafariReadySurfaceClassName(
         true,
-        'relative isolate w-full flex-1 flex flex-col min-h-0 min-w-0 overflow-x-hidden bg-[var(--wolfy-canvas)]',
+        'relative isolate w-full flex-1 flex flex-col min-h-0 min-w-0 overflow-x-hidden bg-transparent',
       )}
-      style={{
-        backgroundImage: 'radial-gradient(1200px circle at 24% 0%, rgba(118,109,219,0.13), transparent 42%), radial-gradient(900px circle at 86% 12%, rgba(65,88,190,0.08), transparent 40%), linear-gradient(180deg, rgba(7,11,22,0.96), rgba(4,8,16,0.98))',
-      }}
     >
       {statusToast ? (
         <div className="pointer-events-none fixed right-6 top-24 z-50" data-testid="home-bento-fallback-toast">
@@ -4438,7 +4436,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           );
           return (
             <div
-              className="home-research-stage mx-auto flex w-full max-w-[1760px] min-w-0 flex-col gap-2.5 px-0 py-3 lg:py-3"
+              className="home-research-stage mx-auto flex w-full max-w-[1920px] min-w-0 flex-col gap-2.5 px-3 py-3 sm:px-4 xl:px-6"
               data-testid="home-research-stage"
             >
               {omnibarModule}
@@ -4452,13 +4450,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                 className="relative isolate w-full max-w-full min-w-0 overflow-visible rounded-none border border-transparent bg-transparent shadow-none"
               >
                 <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 opacity-55"
-                  style={{
-                    background: 'radial-gradient(900px circle at 22% 0%, rgba(118,109,219,0.10), transparent 42%), linear-gradient(180deg, rgba(18,24,42,0.18), transparent 28%)',
-                  }}
-                />
-                <div
                   className="relative z-10 min-w-0 overflow-visible"
                   data-linear-primitive="console-board"
                   data-surface-system="reflect-linear-console"
@@ -4467,10 +4458,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                 <FixedRegionGrid
                   className="home-research-fixed-grid w-full min-w-0 gap-3 overflow-visible"
                   data-surface-system="reflect-linear-console"
-                  railWidth="sm"
                   rail={contextRailContent}
                   railTestId="home-research-context-rail"
-                  railClassName="home-research-context-rail divide-y-0 overflow-visible bg-transparent lg:max-h-[calc(100dvh-7.8rem)] lg:overflow-y-auto lg:border-l-0 no-scrollbar"
+                  railWidth="lg"
+                  primaryClassName="lg:pr-3"
+                  railClassName="home-research-context-rail divide-y-0 self-start overflow-visible bg-transparent lg:border-l-0"
                   primary={(
                     <>
                     {!isHomeAnalyzing ? (
@@ -4524,7 +4516,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       </div>
                     ) : null}
                     <div
-                      className="min-w-0 rounded-[14px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-console)] px-4 py-2.5 md:px-5 md:py-3"
+                      className="min-w-0 rounded-none border-0 bg-transparent px-0 py-0"
                       data-testid="home-research-primary-workspace"
                     >
                       {isHomeAnalyzing ? (
@@ -4544,7 +4536,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         >
                           <div data-testid={completedTaskReport ? 'home-bento-analysis-result-card' : undefined}>
                             <div
-                              className="home-research-hero-matrix mt-0 grid gap-2.5 rounded-[14px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-4 py-3 md:grid-cols-[minmax(0,1.55fr)_minmax(9.75rem,11.25rem)_minmax(10.5rem,12rem)] md:items-end"
+                              className="home-research-hero-matrix mt-0 grid gap-2.5 rounded-[14px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-4 py-3 md:grid-cols-[minmax(0,1.62fr)_minmax(9.75rem,11.25rem)_minmax(10.5rem,12rem)] md:items-end"
                               data-testid="home-bento-decision-hero-row"
                               data-visual-role="hero-matrix"
                             >

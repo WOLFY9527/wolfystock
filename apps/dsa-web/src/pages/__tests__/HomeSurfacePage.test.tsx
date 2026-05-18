@@ -304,10 +304,11 @@ describe('HomeSurfacePage', () => {
 
     expect(root).toHaveAttribute('data-route-surface', 'ResearchConsole');
     expect(root).toHaveClass('w-full', 'flex', 'flex-1', 'min-h-0', 'min-w-0', 'flex-col', 'overflow-x-hidden');
-    expect(root).toHaveClass('bg-[var(--wolfy-canvas)]');
+    expect(root).toHaveClass('bg-transparent');
+    expect(root.getAttribute('style') || '').not.toContain('radial-gradient');
     expect(main).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'min-h-0');
     expect(main.firstElementChild).toBe(stage);
-    expect(stage).toHaveClass('home-research-stage', 'w-full', 'max-w-[1760px]', 'min-w-0');
+    expect(stage).toHaveClass('home-research-stage', 'w-full', 'max-w-[1920px]', 'min-w-0', 'px-3');
     expect(stage).not.toHaveClass('lg:w-[96vw]', 'lg:max-w-[1840px]');
     expect(stage.contains(commandBar)).toBe(true);
     expect(stage.contains(researchConsole)).toBe(true);
@@ -332,6 +333,7 @@ describe('HomeSurfacePage', () => {
     expect(commandBar).toHaveClass('home-research-command-bar', 'rounded-xl', 'bg-[var(--wolfy-surface-input)]', 'border-[color:var(--wolfy-border-subtle)]');
     expect(headerStrip.closest('[data-layout-zone="HeaderStrip"]')).toBeInTheDocument();
     expect(primaryWorkspace.closest('[data-layout-zone="PrimaryWorkRegion"]')).toBeInTheDocument();
+    expect(primaryWorkspace).toHaveClass('rounded-none', 'border-0', 'bg-transparent', 'px-0', 'py-0');
     expect(secondaryDeck).toHaveAttribute('data-linear-primitive', 'secondary-deck');
     expect(secondaryDeck).toHaveAttribute('data-layout-zone', 'SecondaryDeck');
     expect(secondaryDeck).toHaveClass('home-research-secondary-deck');
@@ -405,6 +407,9 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-linear-technical-chart')).toHaveAttribute('data-visual-role', 'primary-chart');
     expect(screen.getByTestId('home-linear-technical-chart')).toHaveAttribute('data-surface-system', 'reflect-linear-console');
     expect(screen.getByTestId('home-linear-technical-chart')).toHaveClass('home-chart-well', 'rounded-none', 'border-0', 'bg-transparent');
+    expect(screen.getByTestId('home-linear-technical-chart').getAttribute('style') || '').toContain('background: transparent');
+    expect(screen.getByTestId('home-linear-technical-chart').getAttribute('style') || '').toContain('border-color: transparent');
+    expect(screen.getByTestId('home-linear-technical-chart').getAttribute('style') || '').toContain('box-shadow: none');
     expect(screen.getByTestId('home-bento-decision-support-grid')).toHaveAttribute('data-visual-role', 'chart-adjacent-metrics');
     expect(screen.getByTestId('home-bento-decision-support-grid')).toHaveClass('home-research-signal-rail', 'xl:border-l');
     const macdSignal = screen.getByTestId('home-bento-tech-signal-MACD');
