@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +11,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+import api.app as api_app
 from api.app import create_app
 
 
@@ -51,6 +53,68 @@ class _QueueStub:
 
     def shutdown(self, *, wait: bool = False, cancel_futures: bool = True) -> None:
         self.shutdown_calls.append((wait, cancel_futures))
+
+
+def _forbidden_startup_call(label: str):
+    def _raise(*_args, **_kwargs):
+        raise AssertionError(f"{label} should not run during app creation/startup")
+
+    return _raise
+
+
+def _forbid_market_overview_startup_calls(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "src.services.market_cache.MarketCache.get_or_refresh",
+        _forbidden_startup_call("MarketCache prewarm"),
+    )
+    monkeypatch.setattr(
+        "src.services.market_overview_service.ExecutionLogService.record_market_overview_fetch",
+        _forbidden_startup_call("market overview fetch logging"),
+    )
+    monkeypatch.setattr(
+        "src.services.market_overview_service.fetch_binance_ticker_snapshot",
+        _forbidden_startup_call("binance market overview provider"),
+    )
+    monkeypatch.setattr(
+        "src.services.market_overview_service.fetch_binance_funding_row",
+        _forbidden_startup_call("binance funding provider"),
+    )
+    monkeypatch.setattr(
+        "src.services.market_overview_service.fetch_binance_kline_history_rows",
+        _forbidden_startup_call("binance kline provider"),
+    )
+    monkeypatch.setattr(
+        "src.services.market_overview_service.fetch_alternative_fear_greed_payload",
+        _forbidden_startup_call("alternative sentiment provider"),
+    )
+    monkeypatch.setattr(
+        "src.services.market_overview_service.fetch_cnn_fear_greed_payload",
+        _forbidden_startup_call("cnn sentiment provider"),
+    )
+    monkeypatch.setattr(
+        "src.services.market_overview_service.fetch_sina_cn_index_rows",
+        _forbidden_startup_call("sina cn indices provider"),
+    )
+    monkeypatch.setattr(
+        "src.services.market_overview_service.fetch_tickflow_cn_breadth_snapshot",
+        _forbidden_startup_call("tickflow breadth provider"),
+    )
+    monkeypatch.setattr(
+        "src.services.market_overview_service.fetch_yfinance_quote_history_frame",
+        _forbidden_startup_call("yfinance quote provider"),
+    )
+    monkeypatch.setattr(
+        "src.services.market_overview_service.fetch_yfinance_spy_atr_history_frame",
+        _forbidden_startup_call("yfinance atr provider"),
+    )
+    monkeypatch.setattr(
+        "src.services.market_overview_service.fetch_fred_observation_points",
+        _forbidden_startup_call("fred macro provider"),
+    )
+    monkeypatch.setattr(
+        "src.services.market_overview_service.fetch_treasury_daily_rate_observation_points",
+        _forbidden_startup_call("treasury macro provider"),
+    )
 
 
 class ApiAppHealthTestCase(unittest.TestCase):
@@ -139,9 +203,47 @@ class ApiAppHealthTestCase(unittest.TestCase):
 
         with TestClient(app) as client:
             response = client.get("/api/health/live")
-            self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200)
 
         self.assertEqual(queue.shutdown_calls, [(False, True)])
+
+
+def test_importing_api_app_does_not_trigger_market_overview_providers_or_prewarm(monkeypatch) -> None:
+    _forbid_market_overview_startup_calls(monkeypatch)
+
+    reloaded = importlib.reload(api_app)
+
+    assert reloaded.app is not None
+
+
+def test_create_app_does_not_trigger_market_overview_providers_or_prewarm(monkeypatch, tmp_path: Path) -> None:
+    _forbid_market_overview_startup_calls(monkeypatch)
+
+    app = api_app.create_app(static_dir=tmp_path)
+
+    assert app is not None
+
+
+def test_lifespan_skips_crypto_realtime_startup_when_disabled(monkeypatch, tmp_path: Path) -> None:
+    queue = _QueueStub()
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setenv("CRYPTO_REALTIME_ENABLED", "0")
+    monkeypatch.setattr(api_app, "SystemConfigService", lambda: object())
+    monkeypatch.setattr(api_app, "get_task_queue", lambda: queue)
+    monkeypatch.setattr(
+        api_app,
+        "get_crypto_realtime_service",
+        _forbidden_startup_call("crypto realtime service"),
+    )
+
+    app = api_app.create_app(static_dir=tmp_path)
+
+    with TestClient(app) as client:
+        response = client.get("/api/health/live")
+
+    assert response.status_code == 200
+    assert not hasattr(app.state, "crypto_realtime_service")
+    assert queue.shutdown_calls == [(False, True)]
 
 
 if __name__ == "__main__":
