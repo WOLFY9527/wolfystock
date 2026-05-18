@@ -23,6 +23,7 @@
   - `GET /api/v1/backtest/rule/runs/{run_id}/support-bundle-reproducibility-manifest`
   - `GET /api/v1/backtest/rule/runs/{run_id}/export-index`
   - `GET /api/v1/backtest/rule/runs/{run_id}/execution-trace.json`
+  - `GET /api/v1/backtest/rule/runs/{run_id}/robustness-evidence.json`
   - `GET /api/v1/backtest/rule/runs/{run_id}/execution-trace.csv`
   - `POST /api/v1/backtest/rule/runs/{run_id}/cancel`
   - `POST /api/v1/backtest/rule/universe-jobs`
@@ -30,6 +31,33 @@
   - `GET /api/v1/backtest/rule/universe-jobs/{job_id}/status`
   - `GET /api/v1/backtest/rule/universe-jobs/{job_id}/diagnostics`
   - `GET /api/v1/backtest/rule/universe-jobs/{job_id}/results`
+
+## 当前语义边界
+
+- `POST /api/v1/backtest/run` 这条 lane 是标准历史分析评估：它评估已存
+  `AnalysisHistory` 快照在后续市场 bars 上的表现，不运行 deterministic
+  rule strategy engine。若 `GET /api/v1/backtest/performance` 在缺少标准汇总时
+  fallback 到既有规则回测历史，响应会明确暴露
+  `evaluation_mode=rule_deterministic_fallback` 与
+  `resolved_source=stored_rule_backtest_runs`，避免把两条 lane 混成同一语义。
+- `POST /api/v1/backtest/rule/run` 是 deterministic 的单标的规则策略回测。
+  它输出单标的执行结果与研究指标，不是组合分配、资金跨标的调仓或组合级账本
+  回测。
+- universe jobs 是围绕既有单标的规则回测引擎的 batch research wrapper。
+  create 阶段只做 local-data preflight；run 阶段按 `sequence_index` 顺序逐标
+  的执行，并产出 compact per-symbol rows。它不是 portfolio allocation
+  backtest，也不会做多标的资金竞争、权重优化或组合净值模拟。
+- 当前 walk-forward 是诊断性 rolling replay：它在滑动窗口里重复运行同一份已
+  解析策略，只返回窗口级 metrics/diagnostics，不做参数训练、策略优化、自动
+  调参或 OOS winner selection。
+- 当前 compare heatmap 是 stored comparison projection：它只基于已持久化的
+  compare payload 推导坐标与 cells，不触发 parameter grid sweep、策略重跑、
+  provider 调用或新执行。
+- 当前 robustness analysis 在未显式传入 `robustness_config` 时，默认仍会产
+  生 stored robustness evidence：walk-forward 默认
+  `train_window=24 / test_window=12 / step=12 / max_windows=4`，monte-carlo
+  默认 `simulation_count=12 / noise_scale=0.75 / seed=derived`，并附带固定
+  stress scenarios。它属于 research-prototype 证据面，不是 optimizer。
 
 ## 异步 / 后台任务
 
@@ -42,8 +70,9 @@
 - `GET /api/v1/backtest/rule/runs/{run_id}/status` 提供轻量状态轮询，不必每次拉取完整详情。
 - `GET /api/v1/backtest/rule/runs/{run_id}/support-bundle-manifest` 提供单条规则回测的紧凑 stored-first support bundle manifest。它复用既有 detail 读回结果中的 `run_timing`、`run_diagnostics`、`artifact_availability`、`readback_integrity` 与归一化 `result_authority.domains`，并只额外附带轻量 `artifact_counts`，用于 backend handoff、AI 调试和自动化脚本读取；默认不会把 `trades`、`equity_curve`、`audit_rows` 或完整 `execution_trace` 这类 heavy payload 直接塞进 manifest。
 - `GET /api/v1/backtest/rule/runs/{run_id}/support-bundle-reproducibility-manifest` 提供与 support bundle manifest 同一条运行的紧凑 reproducibility manifest，复用相同的 `run_timing`、`run_diagnostics`、`artifact_availability`、`readback_integrity`，并补充 `execution_assumptions_fingerprint` 与压缩后的 `result_authority.domains.execution_trace` 摘要，便于 migration / replay / reproducibility 检查。
-- `GET /api/v1/backtest/rule/runs/{run_id}/export-index` 提供单条规则回测当前可发现的导出项索引，当前稳定集合是：`support_bundle_manifest_json`、`support_bundle_reproducibility_manifest_json`、`execution_trace_json`、`execution_trace_csv`。两个 manifest 都会给出可直接读取的 API path；execution-trace JSON/CSV 现在也都暴露真实的 API path，而不再只是 service-file-only 提示。trace 可用性按当前 detail 读回后的 `execution_trace.rows` 是否非空判断，因此当历史运行缺少可导出的 trace rows 时，index 会稳定返回 `available=false` 与 `execution_trace_rows_missing`。
+- `GET /api/v1/backtest/rule/runs/{run_id}/export-index` 提供单条规则回测当前可发现的导出项索引，当前稳定集合是：`support_bundle_manifest_json`、`support_bundle_reproducibility_manifest_json`、`execution_trace_json`、`execution_trace_csv`、`robustness_evidence_json`。两个 manifest 都会给出可直接读取的 API path；execution-trace JSON/CSV 与 stored robustness evidence JSON 现在也都暴露真实的 API path，而不再只是 service-file-only 提示。trace 可用性按当前 detail 读回后的 `execution_trace.rows` 是否非空判断，因此当历史运行缺少可导出的 trace rows 时，index 会稳定返回 `available=false` 与 `execution_trace_rows_missing`；robustness evidence 则按已存 `robustness_analysis` 是否存在返回 `stored_robustness_analysis_present / stored_robustness_analysis_missing`。
 - `GET /api/v1/backtest/rule/runs/{run_id}/execution-trace.json` 与 `GET /api/v1/backtest/rule/runs/{run_id}/execution-trace.csv` 构成 support bundle 的 heavy trace 导出面：前者返回 AI / automation 更友好的结构化 trace payload，后者返回 operator / spreadsheet 更友好的 CSV 载荷。两者都与 export index 共用同一套 stored-first trace 可用性判断，在 trace rows 缺失时返回 `409 export_unavailable`，而不是伪造空导出。
+- `GET /api/v1/backtest/rule/runs/{run_id}/robustness-evidence.json` 返回当前已存的 robustness evidence export。它直接复用 stored `robustness_analysis` payload；若运行历史里没有该 payload，则稳定返回 `409 export_unavailable`，不会临时重算 robustness。
 - `POST /api/v1/backtest/rule/runs/{run_id}/cancel` 提供 best-effort cancel：对尚未完成的任务会标记为 `cancelled`；若任务已结束，则返回当前最终状态而不覆盖结果。
 - `POST /api/v1/backtest/rule/universe-jobs` 创建 stored local-only universe job scaffold。创建阶段仅做本地日线数据预检：按规范化代码去重并排序、持久化 `sequence_index`、记录 compact per-symbol readiness row，并默认限制最多 500 个标的。缺少本地数据的标的会标记为 `skipped / blocked_missing_local_data`。创建接口不会执行单标的规则回测、不会调用 provider 拉取、不会写入 heavy run detail、不会启用 worker concurrency，也不会把 DuckDB 作为运行时真源。
 - `POST /api/v1/backtest/rule/universe-jobs/{job_id}/run` 对已创建的 local-only universe job 做同步顺序执行。该路径只读取本地 `StockDaily` 行情，不调用 `_ensure_market_history`、provider fallback 或 DuckDB；标的按已持久化 `sequence_index` 顺序逐个运行既有规则回测引擎，单标的异常会写入 compact failed row 并继续后续标的。重复运行已执行任务会拒绝，避免重复写入同一 job/symbol 结果。
