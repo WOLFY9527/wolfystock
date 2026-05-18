@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 FreshnessLabel = Literal["live", "cached", "delayed", "stale", "fallback", "mock", "error", "unavailable"]
 LiquidityRegime = Literal["abundant", "supportive", "neutral", "tight", "stress", "unavailable"]
 IndicatorStatus = Literal["live", "partial", "unavailable"]
+EvidenceFreshnessLabel = Literal["live", "fresh", "cached", "delayed", "stale", "partial", "fallback", "synthetic", "unavailable", "unknown"]
 
 
 class LiquidityMonitorScore(BaseModel):
@@ -20,6 +21,41 @@ class LiquidityMonitorScore(BaseModel):
     includedIndicatorCount: int = Field(ge=0)
     possibleIndicatorWeight: int = Field(ge=0)
     includedIndicatorWeight: int = Field(ge=0)
+
+
+class LiquidityMonitorEvidenceInput(BaseModel):
+    key: str
+    label: str
+    source: str
+    sourceLabel: Optional[str] = None
+    sourceType: Optional[str] = None
+    asOf: Optional[str] = None
+    freshness: EvidenceFreshnessLabel
+    isFallback: bool = False
+    isStale: bool = False
+    isPartial: bool = False
+    isUnavailable: bool = False
+    coverage: Optional[float] = Field(default=None, ge=0, le=1)
+    confidenceWeight: float = Field(ge=0, le=1)
+    degradationReason: Optional[str] = None
+    capReason: Optional[str] = None
+
+
+class LiquidityMonitorEvidenceSnapshot(BaseModel):
+    contractVersion: str
+    source: str
+    sourceLabel: Optional[str] = None
+    asOf: Optional[str] = None
+    freshness: EvidenceFreshnessLabel
+    isFallback: bool = False
+    isStale: bool = False
+    isPartial: bool = False
+    isUnavailable: bool = False
+    coverage: Optional[float] = Field(default=None, ge=0, le=1)
+    confidenceWeight: float = Field(ge=0, le=1)
+    degradationReason: Optional[str] = None
+    capReason: Optional[str] = None
+    inputs: list[LiquidityMonitorEvidenceInput] = Field(default_factory=list)
 
 
 class LiquidityMonitorIndicator(BaseModel):
@@ -32,6 +68,7 @@ class LiquidityMonitorIndicator(BaseModel):
     scoreWeight: int = 0
     summary: Optional[str] = None
     updatedAt: Optional[str] = None
+    evidence: Optional[LiquidityMonitorEvidenceSnapshot] = None
 
 
 class LiquidityMonitorFreshnessSummary(BaseModel):
