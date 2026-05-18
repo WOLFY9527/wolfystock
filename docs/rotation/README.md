@@ -28,5 +28,11 @@ fund-flow interpretation, or rotation evidence disclosure.
   windows. If credentials, feed entitlement, or symbol data are unavailable,
   the provider falls back to degraded yfinance daily/proxy evidence only and
   must not synthesize intraday windows or mark fallback/static data live.
+- Provider activation diagnostics live under
+  `metadata.quoteProvider.providerDiagnostics` / quote-provider metadata. They
+  expose credential presence, missing credential field names, construction
+  status, window coverage, sanitized failure reason codes, fallback usage, and
+  final trust/source-tier classification without exposing raw credential
+  values.
 - Rotation UI changes must not alter score, ranking, provider, or evidence
   semantics unless explicitly scoped.

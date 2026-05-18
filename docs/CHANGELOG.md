@@ -1,5 +1,15 @@
 ## 2026-05-18
 
+- **Rotation Radar provider diagnostics** - Added backend-only, additive
+  provider activation diagnostics for Rotation Radar quote metadata. The
+  diagnostics show whether the configured Alpaca provider was attempted,
+  whether complete credentials were present, which credential field names are
+  missing, whether construction succeeded, which 5m/15m/60m/1d windows were
+  fulfilled or missing, sanitized provider failure reason codes, fallback usage,
+  final source tier, and trust level. Raw credential values are never emitted.
+  Provider order, scoring/ranking/stage semantics, frontend, database schema,
+  MarketCache core behavior, and adjacent Scanner/Portfolio/Backtest/Options/
+  auth/RBAC/LLM/accounting domains remain unchanged.
 - **Market Overview official macro expansion** - Expanded the backend-only
   official macro registry/transport projection so Market Overview macro cards
   now surface official-public metadata for effective fed funds (`DFF` relayed

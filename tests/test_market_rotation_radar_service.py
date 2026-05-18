@@ -68,6 +68,16 @@ def _missing_alpaca_credentials() -> ProviderCredentialBundle:
     )
 
 
+def _partial_alpaca_credentials() -> ProviderCredentialBundle:
+    return ProviderCredentialBundle(
+        provider="alpaca",
+        auth_mode="key_secret",
+        key_id="alpaca-key-id",
+        secret_key=None,
+        extras={"data_feed": "sip"},
+    )
+
+
 def _alpaca_bars(*, start_close: float = 100.0, end_close: float = 102.0, as_of: str | None = None) -> list[dict]:
     timestamp = as_of or (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
     return [
@@ -428,6 +438,13 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(provider_meta["failedSymbols"], [])
         self.assertEqual(provider_meta["failedSymbolCount"], 0)
         self.assertFalse(payload["metadata"]["noExternalCalls"])
+        diagnostics = provider_meta["providerDiagnostics"]
+        self.assertFalse(diagnostics["providerConstructed"])
+        self.assertTrue(diagnostics["fallbackProviderUsed"])
+        self.assertTrue(diagnostics["staticBasketFallbackUsed"])
+        self.assertEqual(diagnostics["providerFailureReasons"], ["provider_unavailable"])
+        self.assertEqual(diagnostics["finalSourceTier"], "fallback_static")
+        self.assertEqual(diagnostics["trustLevel"], "unavailable")
 
     def test_partial_quote_provider_sanitizes_failed_symbols_and_keeps_payload_computed(self) -> None:
         quotes = {
@@ -572,6 +589,24 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(metadata["coverage"]["coveragePercent"], 100.0)
         self.assertGreaterEqual(metadata["confidenceWeight"], 0.8)
         self.assertEqual(metadata["failedSymbolReasons"], {})
+        diagnostics = metadata["providerDiagnostics"]
+        self.assertTrue(diagnostics["configuredProviderAttempted"])
+        self.assertEqual(diagnostics["configuredProviderName"], "alpaca")
+        self.assertTrue(diagnostics["credentialsPresent"])
+        self.assertEqual(diagnostics["credentialFieldsMissing"], [])
+        self.assertTrue(diagnostics["providerConstructed"])
+        self.assertEqual(diagnostics["feedEntitlementStatus"], "unknown")
+        self.assertEqual(diagnostics["requestedWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(diagnostics["fulfilledWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(diagnostics["missingWindows"], [])
+        self.assertEqual(diagnostics["symbolSuccessCount"], 2)
+        self.assertEqual(diagnostics["symbolFailureCount"], 0)
+        self.assertEqual(diagnostics["providerFailureReasons"], [])
+        self.assertFalse(diagnostics["fallbackProviderUsed"])
+        self.assertFalse(diagnostics["yfinanceFallbackUsed"])
+        self.assertFalse(diagnostics["staticBasketFallbackUsed"])
+        self.assertEqual(diagnostics["finalSourceTier"], "broker_authorized")
+        self.assertEqual(diagnostics["trustLevel"], "active")
         self.assertEqual(sorted(payload["quotes"]), ["APP", "QQQ"])
         self.assertEqual(fetch_calls.count(("APP", "5Min")), 1)
         quote = payload["quotes"]["APP"]
@@ -626,12 +661,149 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(metadata["providerOrder"], ["alpaca", "yfinance"])
         self.assertEqual(metadata["providerTimeoutSeconds"], 0.25)
         self.assertLessEqual(metadata["confidenceWeight"], 0.5)
+        diagnostics = metadata["providerDiagnostics"]
+        self.assertTrue(diagnostics["configuredProviderAttempted"])
+        self.assertEqual(diagnostics["configuredProviderName"], "alpaca")
+        self.assertFalse(diagnostics["credentialsPresent"])
+        self.assertEqual(diagnostics["credentialFieldsMissing"], ["key_id", "secret_key"])
+        self.assertFalse(diagnostics["providerConstructed"])
+        self.assertEqual(diagnostics["providerFailureReasons"], ["credentials_missing"])
+        self.assertTrue(diagnostics["fallbackProviderUsed"])
+        self.assertTrue(diagnostics["yfinanceFallbackUsed"])
+        self.assertFalse(diagnostics["staticBasketFallbackUsed"])
+        self.assertEqual(diagnostics["finalSourceTier"], "unofficial_public_api")
+        self.assertEqual(diagnostics["trustLevel"], "degraded")
         self.assertEqual(set(quote["timeWindows"]), {"1d"})
         self.assertEqual(quote["freshness"], "delayed")
         self.assertEqual(quote["sourceTier"], "unofficial_public_api")
         self.assertEqual(quote["providerTier"], "tier_2_delayed_proxy")
         self.assertNotIn("5m", quote["timeWindows"])
         self.assertNotIn(metadata["freshness"], {"live", "fresh"})
+
+    def test_partial_alpaca_credentials_report_missing_field_without_constructing_provider(self) -> None:
+        latest_date = datetime.now(timezone.utc).date()
+        frame = pd.DataFrame(
+            {
+                "Open": [100.0, 101.0],
+                "High": [101.0, 103.0],
+                "Low": [99.0, 100.0],
+                "Close": [100.0, 102.0],
+                "Volume": [1_000_000.0, 1_250_000.0],
+            },
+            index=pd.DatetimeIndex([(latest_date - timedelta(days=1)).isoformat(), latest_date.isoformat()]),
+        )
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_partial_alpaca_credentials(),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            side_effect=AssertionError("Alpaca should not be constructed with partial credentials"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=frame,
+        ):
+            payload = load_rotation_radar_quotes(["APP"])
+
+        diagnostics = payload["metadata"]["providerDiagnostics"]
+        self.assertEqual(payload["metadata"]["configuredProviderStatus"], "incomplete_credentials")
+        self.assertTrue(diagnostics["configuredProviderAttempted"])
+        self.assertEqual(diagnostics["configuredProviderName"], "alpaca")
+        self.assertFalse(diagnostics["credentialsPresent"])
+        self.assertEqual(diagnostics["credentialFieldsMissing"], ["secret_key"])
+        self.assertFalse(diagnostics["providerConstructed"])
+        self.assertEqual(diagnostics["providerFailureReasons"], ["credential_fields_missing"])
+        self.assertTrue(diagnostics["fallbackProviderUsed"])
+        self.assertTrue(diagnostics["yfinanceFallbackUsed"])
+        self.assertFalse(diagnostics["staticBasketFallbackUsed"])
+        self.assertEqual(diagnostics["finalSourceTier"], "unofficial_public_api")
+        self.assertEqual(diagnostics["trustLevel"], "degraded")
+
+    def test_configured_provider_constructor_failure_is_diagnosed_without_secret_leak(self) -> None:
+        latest_date = datetime.now(timezone.utc).date()
+        frame = pd.DataFrame(
+            {
+                "Open": [100.0, 101.0],
+                "High": [101.0, 103.0],
+                "Low": [99.0, 100.0],
+                "Close": [100.0, 102.0],
+                "Volume": [1_000_000.0, 1_250_000.0],
+            },
+            index=pd.DatetimeIndex([(latest_date - timedelta(days=1)).isoformat(), latest_date.isoformat()]),
+        )
+
+        class FailingAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                raise RuntimeError("bad secret value SHOULD_NOT_LEAK")
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            FailingAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=frame,
+        ):
+            payload = load_rotation_radar_quotes(["APP"])
+
+        diagnostics = payload["metadata"]["providerDiagnostics"]
+        self.assertEqual(payload["metadata"]["quoteMode"], "proxy")
+        self.assertFalse(diagnostics["providerConstructed"])
+        self.assertEqual(diagnostics["providerFailureReasons"], ["provider_unavailable"])
+        self.assertTrue(diagnostics["fallbackProviderUsed"])
+        self.assertTrue(diagnostics["yfinanceFallbackUsed"])
+        self.assertEqual(diagnostics["finalSourceTier"], "unofficial_public_api")
+        self.assertEqual(diagnostics["trustLevel"], "degraded")
+        dumped = json.dumps(diagnostics, ensure_ascii=False)
+        self.assertNotIn("SHOULD_NOT_LEAK", dumped)
+        self.assertNotIn("alpaca-secret", dumped)
+
+    def test_configured_provider_partial_windows_cap_activation_trust(self) -> None:
+        class DailyOnlyAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                if timeframe != "1Day":
+                    raise RuntimeError("subscription required")
+                return _alpaca_bars(end_close=102.0)
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            DailyOnlyAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            side_effect=AssertionError("yfinance fallback should not be called when Alpaca returns quotes"),
+        ):
+            payload = load_rotation_radar_quotes(["APP", "QQQ"])
+
+        metadata = payload["metadata"]
+        diagnostics = metadata["providerDiagnostics"]
+        self.assertEqual(metadata["quoteMode"], "configured")
+        self.assertEqual(metadata["windowCoverage"]["1d"]["coveragePercent"], 100.0)
+        self.assertEqual(metadata["windowCoverage"]["5m"]["usableSymbolCount"], 0)
+        self.assertEqual(diagnostics["fulfilledWindows"], ["1d"])
+        self.assertEqual(diagnostics["missingWindows"], ["5m", "15m", "60m"])
+        self.assertTrue(diagnostics["providerConstructed"])
+        self.assertEqual(diagnostics["feedEntitlementStatus"], "missing_or_denied")
+        self.assertEqual(diagnostics["symbolSuccessCount"], 2)
+        self.assertEqual(diagnostics["symbolFailureCount"], 0)
+        self.assertEqual(diagnostics["providerFailureReasons"], ["subscription_required"])
+        self.assertFalse(diagnostics["fallbackProviderUsed"])
+        self.assertFalse(diagnostics["yfinanceFallbackUsed"])
+        self.assertEqual(diagnostics["finalSourceTier"], "broker_authorized")
+        self.assertEqual(diagnostics["trustLevel"], "partial")
 
     def test_configured_provider_symbol_failures_reduce_coverage_and_confidence(self) -> None:
         class FakeAlpacaFetcher:

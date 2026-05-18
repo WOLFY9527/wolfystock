@@ -743,13 +743,114 @@ class MarketRotationRadarService:
         return raw_result, {}
 
     def _quote_provider_metadata(self, quote_result: QuoteLoadResult) -> Dict[str, Any]:
-        return self._source_snapshot_metadata(
+        metadata = self._source_snapshot_metadata(
             quotes=quote_result.quotes,
             requested_symbols=quote_result.requested_symbols,
             source_present=quote_result.provider_present,
             source_status=quote_result.provider_status,
             source_metadata=quote_result.provider_metadata,
         )
+        metadata["providerDiagnostics"] = self._quote_provider_diagnostics(quote_result, metadata)
+        return metadata
+
+    def _quote_provider_diagnostics(
+        self,
+        quote_result: QuoteLoadResult,
+        metadata: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        raw_diagnostics = quote_result.provider_metadata.get("providerDiagnostics")
+        diagnostics = dict(raw_diagnostics) if isinstance(raw_diagnostics, Mapping) else {}
+        requested_symbol_count = len(quote_result.requested_symbols)
+        usable_symbol_count = len(quote_result.quotes)
+        failed_symbol_count = int(metadata.get("failedSymbolCount") or 0)
+        static_basket_fallback_used = bool(requested_symbol_count and usable_symbol_count == 0)
+        final_source_tier = str(
+            diagnostics.get("finalSourceTier")
+            or ("fallback_static" if static_basket_fallback_used else metadata.get("sourceType") or "unknown")
+        )
+        provider_failure_reasons = self._provider_failure_reasons(
+            diagnostics.get("providerFailureReasons"),
+            metadata.get("unavailableReason"),
+        )
+        requested_windows = (
+            self._string_list(diagnostics.get("requestedWindows"))
+            if "requestedWindows" in diagnostics
+            else list(TIME_WINDOW_KEYS)
+        )
+        fulfilled_windows = (
+            self._string_list(diagnostics.get("fulfilledWindows"))
+            if "fulfilledWindows" in diagnostics
+            else []
+        )
+        missing_windows = (
+            self._string_list(diagnostics.get("missingWindows"))
+            if "missingWindows" in diagnostics
+            else list(TIME_WINDOW_KEYS)
+        )
+        fallback_provider_used = bool(
+            diagnostics.get("fallbackProviderUsed")
+            or static_basket_fallback_used
+            or quote_result.provider_status == "partial"
+        )
+        diagnostics.update({
+            "configuredProviderAttempted": bool(diagnostics.get("configuredProviderAttempted", False)),
+            "configuredProviderName": diagnostics.get("configuredProviderName"),
+            "credentialsPresent": bool(diagnostics.get("credentialsPresent", False)),
+            "credentialFieldsMissing": self._string_list(diagnostics.get("credentialFieldsMissing")),
+            "providerConstructed": bool(diagnostics.get("providerConstructed", False)),
+            "feedEntitlementStatus": str(diagnostics.get("feedEntitlementStatus") or "not_checked"),
+            "requestedWindows": requested_windows,
+            "fulfilledWindows": fulfilled_windows,
+            "missingWindows": missing_windows,
+            "symbolSuccessCount": int(diagnostics.get("symbolSuccessCount", usable_symbol_count) or 0),
+            "symbolFailureCount": int(diagnostics.get("symbolFailureCount", failed_symbol_count) or 0),
+            "providerFailureReasons": provider_failure_reasons,
+            "fallbackProviderUsed": fallback_provider_used,
+            "yfinanceFallbackUsed": bool(diagnostics.get("yfinanceFallbackUsed", False)),
+            "staticBasketFallbackUsed": static_basket_fallback_used,
+            "finalSourceTier": final_source_tier,
+            "trustLevel": str(
+                diagnostics.get("trustLevel")
+                or self._diagnostic_trust_level(
+                    source_status=quote_result.provider_status,
+                    final_source_tier=final_source_tier,
+                    usable_symbol_count=usable_symbol_count,
+                    failed_symbol_count=failed_symbol_count,
+                    static_basket_fallback_used=static_basket_fallback_used,
+                )
+            ),
+        })
+        return diagnostics
+
+    def _provider_failure_reasons(self, raw_reasons: Any, unavailable_reason: Any) -> List[str]:
+        reasons = self._string_list(raw_reasons)
+        sanitized_unavailable = self._sanitize_unavailable_reason(unavailable_reason)
+        if sanitized_unavailable and sanitized_unavailable not in reasons:
+            reasons.append(sanitized_unavailable)
+        return reasons[:FAILED_SYMBOL_LIST_LIMIT]
+
+    def _diagnostic_trust_level(
+        self,
+        *,
+        source_status: str,
+        final_source_tier: str,
+        usable_symbol_count: int,
+        failed_symbol_count: int,
+        static_basket_fallback_used: bool,
+    ) -> str:
+        if static_basket_fallback_used or usable_symbol_count == 0 or final_source_tier == "fallback_static":
+            return "unavailable"
+        if source_status == "partial" or failed_symbol_count:
+            return "partial"
+        if final_source_tier in {"official_public", "broker_authorized"}:
+            return "active"
+        return "degraded"
+
+    def _string_list(self, value: Any) -> List[str]:
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+            return [str(item) for item in value if str(item or "").strip()]
+        text = str(value or "").strip()
+        return [text] if text else []
 
     def _observed_evidence_metadata(self, quote_result: Optional[QuoteLoadResult]) -> Dict[str, Any]:
         if quote_result is None:

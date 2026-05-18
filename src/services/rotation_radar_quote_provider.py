@@ -43,6 +43,7 @@ _QUOTE_PROVIDER_MAX_WORKERS = 6
 _QUOTE_PROVIDER_REQUEST_TIMEOUT_SECONDS = 2.5
 _UNAVAILABLE_SYMBOL_COOLDOWN_SECONDS = 1800.0
 _UNAVAILABLE_SYMBOL_STATE: Dict[str, Dict[str, Any]] = {}
+_PROVIDER_DIAGNOSTIC_REASON_LIMIT = 8
 
 
 @dataclass
@@ -89,21 +90,33 @@ def load_rotation_radar_quotes(symbols: Iterable[str]) -> Dict[str, Any]:
 
 def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt:
     credentials = get_provider_credentials(_CONFIGURED_PROVIDER_ID)
+    missing_fields = list(credentials.missing_fields)
     metadata = {
         "configuredProvider": _CONFIGURED_PROVIDER_ID,
         "configuredProviderStatus": "not_configured",
+        "configuredProviderAttempted": True,
+        "configuredProviderName": _CONFIGURED_PROVIDER_ID,
+        "credentialsPresent": bool(credentials.is_configured),
+        "credentialFieldsMissing": missing_fields,
+        "providerConstructed": False,
+        "providerFailureReasons": [],
+        "feedEntitlementStatus": "not_checked",
     }
     if credentials.is_partial:
         metadata["configuredProviderStatus"] = "incomplete_credentials"
-        metadata["missingCredentialFields"] = list(credentials.missing_fields)
+        metadata["missingCredentialFields"] = missing_fields
+        metadata["providerFailureReasons"] = ["credential_fields_missing"]
         return _ProviderAttempt(status="incomplete_credentials", metadata=metadata)
     if not credentials.is_configured:
+        metadata["missingCredentialFields"] = missing_fields
+        metadata["providerFailureReasons"] = ["credentials_missing"] if missing_fields else []
         return _ProviderAttempt(status="not_configured", metadata=metadata)
 
     data_feed = str(credentials.extras.get("data_feed") or "iex").strip().lower() or "iex"
     metadata.update({
         "configuredProviderStatus": "configured",
         "configuredProviderFeed": data_feed,
+        "feedEntitlementStatus": "unknown",
     })
     try:
         fetcher = AlpacaFetcher(
@@ -116,8 +129,14 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
         return _ProviderAttempt(
             status="provider_unavailable",
             failed_symbol_reasons={symbol: "provider_unavailable" for symbol in symbols},
-            metadata={**metadata, "configuredProviderStatus": "provider_unavailable"},
+            metadata={
+                **metadata,
+                "configuredProviderStatus": "provider_unavailable",
+                "providerConstructed": False,
+                "providerFailureReasons": ["provider_unavailable"],
+            },
         )
+    metadata["providerConstructed"] = True
 
     timeout_seconds = max(float(_QUOTE_PROVIDER_REQUEST_TIMEOUT_SECONDS), 0.001)
     max_workers = max(1, min(int(_QUOTE_PROVIDER_MAX_WORKERS), len(symbols) or 1))
@@ -172,6 +191,8 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
             **metadata,
             "configuredProviderStatus": status if status != "success" else "success",
             "configuredProviderFeed": data_feed,
+            "providerConstructed": True,
+            "providerFailureReasons": _bounded_unique_reasons(failed_symbol_reasons.values()),
         },
     )
 
@@ -335,6 +356,15 @@ def _quote_metadata(
         _dominant_label(_count_values(failed_symbol_reasons.values()), default="symbol_unavailable")
         if failed_symbol_reasons else None
     )
+    provider_diagnostics = _provider_activation_diagnostics(
+        requested_symbols=requested_symbols,
+        quotes=quotes,
+        failed_symbol_reasons=failed_symbol_reasons,
+        configured_attempt=configured_attempt,
+        yfinance_attempt=yfinance_attempt,
+        window_coverage=window_coverage,
+        source_summary=source_summary,
+    )
     return {
         "status": status,
         "quoteMode": quote_mode,
@@ -364,6 +394,7 @@ def _quote_metadata(
             for symbol in _bounded_unique_symbols(list(configured_attempt.failed_symbol_reasons))
         },
         "yfinanceProviderStatus": yfinance_attempt.status,
+        "providerDiagnostics": provider_diagnostics,
         "noExternalCalls": False,
         "failedSymbols": _bounded_unique_symbols(list(failed_symbol_reasons)),
         "failedSymbolCount": failed_symbol_count,
@@ -392,6 +423,158 @@ def _quote_metadata(
     }
 
 
+def _provider_activation_diagnostics(
+    *,
+    requested_symbols: Sequence[str],
+    quotes: Mapping[str, Dict[str, Any]],
+    failed_symbol_reasons: Mapping[str, str],
+    configured_attempt: _ProviderAttempt,
+    yfinance_attempt: _ProviderAttempt,
+    window_coverage: Mapping[str, int],
+    source_summary: Mapping[str, str],
+) -> Dict[str, Any]:
+    requested_windows = list(_ALPACA_TIMEFRAMES)
+    requested_symbol_count = len(requested_symbols)
+    fulfilled_windows = [
+        window
+        for window in requested_windows
+        if requested_symbol_count > 0 and int(window_coverage.get(window, 0)) >= requested_symbol_count
+    ]
+    missing_windows = [
+        window
+        for window in requested_windows
+        if requested_symbol_count > 0 and int(window_coverage.get(window, 0)) < requested_symbol_count
+    ]
+    yfinance_fallback_used = yfinance_attempt.status != "not_requested"
+    static_basket_fallback_used = bool(requested_symbol_count and not quotes)
+    final_source_tier = str(source_summary.get("sourceTier") or "unknown")
+    provider_failure_reasons = _bounded_unique_reasons(
+        [
+            *_as_string_sequence(configured_attempt.metadata.get("providerFailureReasons")),
+            *configured_attempt.failed_symbol_reasons.values(),
+            *failed_symbol_reasons.values(),
+            *_quote_window_failure_reasons(quotes),
+        ]
+    )
+    fallback_provider_used = bool(yfinance_fallback_used or static_basket_fallback_used)
+    feed_entitlement_status = _feed_entitlement_status(
+        configured_attempt.metadata,
+        provider_failure_reasons=provider_failure_reasons,
+        fulfilled_windows=fulfilled_windows,
+        missing_windows=missing_windows,
+    )
+    return {
+        "configuredProviderAttempted": bool(configured_attempt.metadata.get("configuredProviderAttempted", True)),
+        "configuredProviderName": str(
+            configured_attempt.metadata.get("configuredProviderName")
+            or configured_attempt.metadata.get("configuredProvider")
+            or _CONFIGURED_PROVIDER_ID
+        ),
+        "credentialsPresent": bool(configured_attempt.metadata.get("credentialsPresent")),
+        "credentialFieldsMissing": list(_as_string_sequence(
+            configured_attempt.metadata.get(
+                "credentialFieldsMissing",
+                configured_attempt.metadata.get("missingCredentialFields"),
+            )
+        )),
+        "providerConstructed": bool(configured_attempt.metadata.get("providerConstructed")),
+        "feedEntitlementStatus": feed_entitlement_status,
+        "requestedWindows": requested_windows,
+        "fulfilledWindows": fulfilled_windows,
+        "missingWindows": missing_windows,
+        "symbolSuccessCount": len(quotes),
+        "symbolFailureCount": len(failed_symbol_reasons),
+        "providerFailureReasons": provider_failure_reasons,
+        "fallbackProviderUsed": fallback_provider_used,
+        "yfinanceFallbackUsed": yfinance_fallback_used,
+        "staticBasketFallbackUsed": static_basket_fallback_used,
+        "finalSourceTier": final_source_tier,
+        "trustLevel": _provider_trust_level(
+            final_source_tier=final_source_tier,
+            provider_constructed=bool(configured_attempt.metadata.get("providerConstructed")),
+            fulfilled_windows=fulfilled_windows,
+            missing_windows=missing_windows,
+            symbol_failure_count=len(failed_symbol_reasons),
+            yfinance_fallback_used=yfinance_fallback_used,
+            static_basket_fallback_used=static_basket_fallback_used,
+        ),
+    }
+
+
+def _provider_trust_level(
+    *,
+    final_source_tier: str,
+    provider_constructed: bool,
+    fulfilled_windows: Sequence[str],
+    missing_windows: Sequence[str],
+    symbol_failure_count: int,
+    yfinance_fallback_used: bool,
+    static_basket_fallback_used: bool,
+) -> str:
+    if static_basket_fallback_used or final_source_tier == "static_fallback":
+        return "unavailable"
+    if final_source_tier == _CONFIGURED_SOURCE_TIER and provider_constructed:
+        if not missing_windows and symbol_failure_count == 0 and not yfinance_fallback_used:
+            return "active"
+        return "partial"
+    if final_source_tier == "mixed":
+        return "partial"
+    if yfinance_fallback_used or final_source_tier == _QUOTE_SOURCE_TIER:
+        return "degraded"
+    if fulfilled_windows and not missing_windows and symbol_failure_count == 0:
+        return "active"
+    return "partial" if fulfilled_windows else "degraded"
+
+
+def _feed_entitlement_status(
+    metadata: Mapping[str, Any],
+    *,
+    provider_failure_reasons: Sequence[str],
+    fulfilled_windows: Sequence[str],
+    missing_windows: Sequence[str],
+) -> str:
+    explicit = str(metadata.get("feedEntitlementStatus") or "").strip()
+    if explicit and explicit not in {"unknown", "not_checked"}:
+        return explicit
+    entitlement_markers = {"feed_entitlement_missing", "permission_denied", "subscription_required"}
+    if any(reason in entitlement_markers for reason in provider_failure_reasons):
+        return "missing_or_denied"
+    if fulfilled_windows and missing_windows:
+        return "not_inferable"
+    return explicit or "unknown"
+
+
+def _as_string_sequence(value: Any) -> list[str]:
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return [str(item) for item in value if str(item or "").strip()]
+    text = str(value or "").strip()
+    return [text] if text else []
+
+
+def _bounded_unique_reasons(reasons: Iterable[Any]) -> list[str]:
+    bounded: list[str] = []
+    seen: set[str] = set()
+    for reason in reasons:
+        normalized = str(reason or "").strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        bounded.append(normalized)
+        if len(bounded) >= _PROVIDER_DIAGNOSTIC_REASON_LIMIT:
+            break
+    return bounded
+
+
+def _quote_window_failure_reasons(quotes: Mapping[str, Dict[str, Any]]) -> list[str]:
+    reasons: list[str] = []
+    for quote in quotes.values():
+        raw_reasons = quote.get("windowFailureReasons")
+        if not isinstance(raw_reasons, Mapping):
+            continue
+        reasons.extend(str(reason) for reason in raw_reasons.values() if str(reason or "").strip())
+    return reasons
+
+
 def _record_failed_symbol(
     *,
     symbol: str,
@@ -412,6 +595,7 @@ def _quote_from_alpaca_fetcher(fetcher: AlpacaFetcher, symbol: str, data_feed: s
     end_dt = datetime.now(timezone.utc)
     windows: Dict[str, Dict[str, Any]] = {}
     window_sources: Dict[str, Dict[str, Any]] = {}
+    window_failure_reasons: Dict[str, str] = {}
     for window, (timeframe, lookback, limit) in _ALPACA_TIMEFRAMES.items():
         try:
             bars = fetcher.get_bars(
@@ -421,7 +605,8 @@ def _quote_from_alpaca_fetcher(fetcher: AlpacaFetcher, symbol: str, data_feed: s
                 end=end_dt.isoformat(),
                 limit=limit,
             )
-        except Exception:
+        except Exception as exc:
+            window_failure_reasons[window] = _sanitize_window_failure_reason(str(exc))
             continue
         slot = _window_from_alpaca_bars(symbol, window, bars, data_feed=data_feed)
         if slot is not None:
@@ -460,7 +645,7 @@ def _quote_from_alpaca_fetcher(fetcher: AlpacaFetcher, symbol: str, data_feed: s
     freshness = _freshest_configured_freshness(windows.values())
     as_of = str(preferred_slot.get("asOf") or "")
     source_label = _configured_source_label(data_feed)
-    return {
+    quote = {
         "symbol": symbol,
         "name": symbol,
         "price": close,
@@ -482,6 +667,9 @@ def _quote_from_alpaca_fetcher(fetcher: AlpacaFetcher, symbol: str, data_feed: s
         "confidenceWeight": _CONFIGURED_CONFIDENCE_WEIGHT,
         "asOf": as_of or None,
     }
+    if window_failure_reasons:
+        quote["windowFailureReasons"] = window_failure_reasons
+    return quote
 
 
 def _window_from_alpaca_bars(
@@ -894,6 +1082,19 @@ def _sanitize_unavailable_reason(raw_reason: str) -> str:
     if "timeout" in normalized or "request" in normalized or "fetch" in normalized:
         return "quote_fetch_failed"
     return "quote_unavailable"
+
+
+def _sanitize_window_failure_reason(raw_reason: str) -> str:
+    normalized = str(raw_reason or "").strip().lower()
+    if (
+        "subscription" in normalized
+        or "entitlement" in normalized
+        or "permission" in normalized
+        or "forbidden" in normalized
+        or "403" in normalized
+    ):
+        return "subscription_required"
+    return _sanitize_unavailable_reason(raw_reason)
 
 
 def _cooldown_reason(symbol: str, now_monotonic: float) -> Optional[str]:
