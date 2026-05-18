@@ -1204,6 +1204,66 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(persisted_packet["symbol"], "PLTR")
         self.assertEqual(persisted_packet["evidenceVersion"], SCANNER_EVIDENCE_VERSION)
 
+    def test_run_scan_attaches_additive_factor_observations_without_mutating_scores_or_ranks(self) -> None:
+        seed_us_local_history(self.stock_repo)
+        service = MarketScannerService(
+            self.db,
+            data_manager=SlowMissingQuoteDataManager(),
+        )
+
+        result = service.run_scan(
+            market="us",
+            profile="us_preopen_v1",
+            shortlist_size=3,
+            universe_limit=50,
+            detail_limit=10,
+            universe_type="symbols",
+            symbols=["NVDA", "AAPL", "PLTR"],
+        )
+
+        self.assertEqual(
+            [
+                (item["symbol"], item["rank"], item["score"], item["raw_score"], item["final_score"])
+                for item in result["shortlist"]
+            ],
+            [
+                ("NVDA", 1, 65.8, 65.8, 65.8),
+                ("AAPL", 2, 62.8, 62.8, 62.8),
+                ("PLTR", 3, 40.0, 81.6, 40.0),
+            ],
+        )
+
+        pltr = next(item for item in result["shortlist"] if item["symbol"] == "PLTR")
+        exported = pltr["diagnostics"]["factor_observations"]
+        self.assertEqual(
+            [item["component"] for item in exported],
+            [
+                "trend",
+                "momentum",
+                "liquidity",
+                "activity",
+                "volatility_quality",
+                "relative_strength",
+                "benchmark_relative",
+                "gap_context",
+            ],
+        )
+        self.assertEqual(exported[0]["observation"]["symbol"], "PLTR")
+        self.assertEqual(exported[0]["observation"]["observed_at"], result["run_at"])
+        self.assertEqual(exported[0]["observation"]["as_of"], pltr["last_trade_date"])
+        self.assertEqual(
+            exported[0]["observation_id"],
+            (
+                "scanner_factor_observation:us:us_preopen_v1:pltr:"
+                f"trend.trend_strength_20d:trend:{pltr['last_trade_date']}"
+            ),
+        )
+
+        detail = service.get_run_detail(result["id"])
+        assert detail is not None
+        persisted = next(item for item in detail["shortlist"] if item["symbol"] == "PLTR")["diagnostics"]["factor_observations"]
+        self.assertEqual([item["observation_id"] for item in persisted], [item["observation_id"] for item in exported])
+
     def test_run_scan_parallelizes_cn_remote_history_without_drifting_results(self) -> None:
         data_manager = SlowFaultyScannerDataManager()
         service = MarketScannerService(self.db, data_manager=data_manager)
