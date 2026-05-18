@@ -18,6 +18,23 @@ public-safety wording.
 
 ## Current Rules
 
+- Standard historical evaluation and deterministic rule backtest are different
+  contract lanes. `POST /api/v1/backtest/run` evaluates stored historical
+  analysis snapshots against later market bars; `POST /api/v1/backtest/rule/run`
+  runs the deterministic single-symbol rule strategy engine.
+- Universe jobs are batch research wrappers around the existing single-symbol
+  rule engine. They emit sequential per-symbol compact rows, not portfolio
+  allocation, cross-symbol capital allocation, or multi-asset ledger backtests.
+- Walk-forward and compare heatmap outputs are diagnostic read surfaces. Current
+  walk-forward replays the same parsed strategy on rolling windows; current
+  heatmap is a stored compare projection derived from persisted compare payloads.
+  Neither surface performs optimizer training, OOS model selection, parameter
+  sweeps, or grid-search execution.
+- Support exports are stored-first contract artifacts. The current export set is
+  `support_bundle_manifest_json`,
+  `support_bundle_reproducibility_manifest_json`, `execution_trace_json`,
+  `execution_trace_csv`, and `robustness_evidence_json` when stored robustness
+  evidence exists.
 - Backtest pages lead with result, risk metrics, assumptions, and evidence
   quality before export, rerun, trace, ledger, or raw controls.
 - Execution assumptions and data quality can be professional evidence when

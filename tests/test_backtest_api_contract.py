@@ -2307,6 +2307,16 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.run_id, 123)
         self.assertEqual(response.status, "completed")
         self.assertEqual(len(response.exports), 5)
+        self.assertEqual(
+            [item.key for item in response.exports],
+            [
+                "support_bundle_manifest_json",
+                "support_bundle_reproducibility_manifest_json",
+                "execution_trace_json",
+                "execution_trace_csv",
+                "robustness_evidence_json",
+            ],
+        )
         self.assertEqual(response.exports[0].key, "support_bundle_manifest_json")
         self.assertTrue(response.exports[0].available)
         self.assertEqual(response.exports[0].delivery_mode, "api")

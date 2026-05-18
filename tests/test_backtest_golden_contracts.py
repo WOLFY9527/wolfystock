@@ -283,6 +283,7 @@ def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_bou
     assert export_index["exports"][3]["availability_reason"] == "execution_trace_rows_missing"
     assert export_index["exports"][4]["available"] is True
     assert export_index["exports"][4]["availability_reason"] == "stored_robustness_analysis_present"
+    assert export_index["exports"][4]["endpoint_path"] == "/api/v1/backtest/rule/runs/7001/robustness-evidence.json"
 
     assert manifest["manifest_kind"] == "rule_backtest_support_bundle"
     assert manifest["run"]["id"] == export_index["run_id"]
@@ -336,6 +337,7 @@ def test_compare_golden_fixture_is_stored_first_and_contains_no_recalculation_se
     assert compare["heatmap_projection"]["read_mode"] == "stored_projection_only"
     assert compare["heatmap_projection"]["authority"]["execution_count"] == 0
     assert compare["heatmap_projection"]["authority"]["provider_calls_executed"] is False
+    assert compare["heatmap_projection"]["authority"]["authority_scope"] == "stored_compare_derived_heatmap_only"
     assert compare["heatmap_projection"]["axes"]["x"]["axis_key"] == "strategy_spec.signal.fast_period"
     assert compare["heatmap_projection"]["metric_keys"] == ["total_return_pct", "max_drawdown_pct"]
     assert len(compare["items"]) == 2
@@ -350,6 +352,7 @@ def test_compare_golden_fixture_is_stored_first_and_contains_no_recalculation_se
 
     _assert_no_sensitive_public_payload(compare)
     _assert_no_live_provider_authority(compare)
+    _assert_no_robustness_optimizer_semantics(compare["heatmap_projection"])
 
 
 def test_compare_heatmap_golden_fixture_freezes_stored_compare_projection_vocabulary() -> None:
@@ -366,6 +369,7 @@ def test_compare_heatmap_golden_fixture_freezes_stored_compare_projection_vocabu
     assert authority["execution_count"] == 0
     assert authority["provider_calls_executed"] is False
     assert authority["compare_payload_reused"] is True
+    assert authority["authority_scope"] == "stored_compare_derived_heatmap_only"
 
     assert heatmap["source_run_ids"] == [7001, 7002, 7003]
     assert heatmap["requested_compare_run_ids"] == [7001, 7002, 7003, 7999]
@@ -408,6 +412,7 @@ def test_compare_heatmap_golden_fixture_freezes_stored_compare_projection_vocabu
 
     _assert_no_sensitive_public_payload(heatmap)
     _assert_no_live_provider_authority(heatmap)
+    _assert_no_robustness_optimizer_semantics(heatmap)
 
 
 def test_universe_job_golden_fixtures_freeze_local_only_diagnostics_and_compact_rows() -> None:

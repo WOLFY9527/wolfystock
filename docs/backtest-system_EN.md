@@ -23,6 +23,7 @@
   - `GET /api/v1/backtest/rule/runs/{run_id}/support-bundle-reproducibility-manifest`
   - `GET /api/v1/backtest/rule/runs/{run_id}/export-index`
   - `GET /api/v1/backtest/rule/runs/{run_id}/execution-trace.json`
+  - `GET /api/v1/backtest/rule/runs/{run_id}/robustness-evidence.json`
   - `GET /api/v1/backtest/rule/runs/{run_id}/execution-trace.csv`
   - `POST /api/v1/backtest/rule/runs/{run_id}/cancel`
   - `POST /api/v1/backtest/rule/universe-jobs`
@@ -30,6 +31,39 @@
   - `GET /api/v1/backtest/rule/universe-jobs/{job_id}/status`
   - `GET /api/v1/backtest/rule/universe-jobs/{job_id}/diagnostics`
   - `GET /api/v1/backtest/rule/universe-jobs/{job_id}/results`
+
+## Current Semantic Boundaries
+
+- `POST /api/v1/backtest/run` is the standard historical-evaluation lane. It
+  evaluates stored `AnalysisHistory` snapshots against later market bars and
+  does not run the deterministic rule strategy engine. If
+  `GET /api/v1/backtest/performance` falls back to stored rule-backtest history
+  because no standard summary exists, the payload explicitly reports
+  `evaluation_mode=rule_deterministic_fallback` and
+  `resolved_source=stored_rule_backtest_runs` so the two lanes are not conflated.
+- `POST /api/v1/backtest/rule/run` is a deterministic single-symbol rule
+  strategy backtest. It returns single-symbol execution results and research
+  metrics; it is not a portfolio-allocation, cross-symbol capital-allocation,
+  or portfolio-ledger backtest.
+- Universe jobs are batch research wrappers around the existing single-symbol
+  rule engine. The create phase only performs local-data preflight; the run
+  phase executes symbols one by one in persisted `sequence_index` order and
+  emits compact per-symbol rows. This surface is not a portfolio-allocation
+  backtest and does not simulate shared capital, weight optimization, or
+  multi-asset NAV.
+- The current walk-forward surface is diagnostic rolling replay. It reuses the
+  same parsed strategy across sliding windows and only reports window-level
+  metrics and diagnostics; it does not perform parameter training, optimizer
+  search, auto-tuning, or OOS winner selection.
+- The current compare heatmap is a stored comparison projection. It derives
+  axes and cells from already-persisted compare payloads only, and does not
+  trigger parameter grid sweeps, backtest re-execution, provider calls, or any
+  new execution.
+- When `robustness_config` is omitted, the current robustness-analysis surface
+  still emits stored robustness evidence with defaults:
+  `walk_forward(train=24,test=12,step=12,max_windows=4)`,
+  `monte_carlo(simulation_count=12,noise_scale=0.75,seed=derived)`, plus fixed
+  stress scenarios. This remains research-prototype evidence, not an optimizer.
 
 ## Async And Background Execution
 
@@ -42,8 +76,9 @@
 - `GET /api/v1/backtest/rule/runs/{run_id}/status` is the lightweight polling endpoint for background progress.
 - `GET /api/v1/backtest/rule/runs/{run_id}/support-bundle-manifest` returns the compact stored-first support bundle manifest for one rule-backtest run. It reuses the existing detail readback summaries for `run_timing`, `run_diagnostics`, `artifact_availability`, `readback_integrity`, and normalized `result_authority.domains`, then adds only lightweight `artifact_counts` for handoff, AI debugging, and automation scripts; it does not inline heavy payloads such as `trades`, `equity_curve`, `audit_rows`, or the full `execution_trace` by default.
 - `GET /api/v1/backtest/rule/runs/{run_id}/support-bundle-reproducibility-manifest` returns the compact reproducibility manifest for the same run. It reuses the same `run_timing`, `run_diagnostics`, `artifact_availability`, and `readback_integrity` blocks as the support bundle manifest, then adds `execution_assumptions_fingerprint` plus the reduced `result_authority.domains.execution_trace` summary for migration, replay, and reproducibility checks.
-- `GET /api/v1/backtest/rule/runs/{run_id}/export-index` returns the compact discovery index for the currently exportable artifacts of one rule-backtest run. The current stable set is: `support_bundle_manifest_json`, `support_bundle_reproducibility_manifest_json`, `execution_trace_json`, and `execution_trace_csv`. Both manifests expose their readable API paths directly, and the execution-trace JSON/CSV exports now do the same instead of remaining service-file-only. Trace availability is still determined from the resolved detail readback `execution_trace.rows`, so older runs without exportable trace rows return `available=false` with `execution_trace_rows_missing`.
+- `GET /api/v1/backtest/rule/runs/{run_id}/export-index` returns the compact discovery index for the currently exportable artifacts of one rule-backtest run. The current stable set is: `support_bundle_manifest_json`, `support_bundle_reproducibility_manifest_json`, `execution_trace_json`, `execution_trace_csv`, and `robustness_evidence_json`. Both manifests expose their readable API paths directly, and the execution-trace plus stored-robustness JSON exports now do the same instead of remaining service-file-only. Trace availability is still determined from the resolved detail readback `execution_trace.rows`, so older runs without exportable trace rows return `available=false` with `execution_trace_rows_missing`; robustness evidence availability is reported independently as `stored_robustness_analysis_present / stored_robustness_analysis_missing`.
 - `GET /api/v1/backtest/rule/runs/{run_id}/execution-trace.json` and `GET /api/v1/backtest/rule/runs/{run_id}/execution-trace.csv` are the heavy trace exports of the support bundle surface: the JSON payload is optimized for AI and automation consumers, while the CSV payload is optimized for operator review and spreadsheets. Both share the same stored-first trace-availability gate as the export index and return `409 export_unavailable` when trace rows are missing instead of faking an empty export.
+- `GET /api/v1/backtest/rule/runs/{run_id}/robustness-evidence.json` returns the stored robustness-evidence export. It directly reuses the stored `robustness_analysis` payload; if that payload is missing from the stored run, the endpoint returns `409 export_unavailable` instead of recalculating robustness on demand.
 - `POST /api/v1/backtest/rule/runs/{run_id}/cancel` is a best-effort cancel endpoint: unfinished runs are marked `cancelled`, while already-finished runs keep their final state.
 - `POST /api/v1/backtest/rule/universe-jobs` creates a stored local-only universe job scaffold. The create phase performs local daily-bar preflight only: it deduplicates and sorts normalized symbols, persists `sequence_index`, records compact per-symbol readiness rows, and defaults to a 500-symbol cap. Symbols without local daily bars are marked `skipped / blocked_missing_local_data`. The create endpoint does not execute single-symbol rule backtests, call provider hydration, write heavy run details, enable worker concurrency, or make DuckDB a runtime source of truth.
 - `POST /api/v1/backtest/rule/universe-jobs/{job_id}/run` synchronously executes an existing local-only universe job in sequence. The path reads only local `StockDaily` rows and does not call `_ensure_market_history`, provider fallback, or DuckDB; symbols run one at a time in persisted `sequence_index` order through the existing rule backtest engine. Per-symbol failures write compact failed rows and do not abort later symbols. Re-running an already executed job is rejected to avoid duplicate job/symbol results.

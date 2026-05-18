@@ -1365,6 +1365,10 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(payload["configuration"]["monte_carlo"]["simulation_count"], 12)
         self.assertEqual(payload["configuration"]["monte_carlo"]["noise_scale"], 0.75)
         self.assertIsNone(payload["configuration"]["monte_carlo"]["seed"])
+        self.assertEqual(
+            payload["configuration"]["stress_tests"]["scenario_keys"],
+            ["single_day_shock_down_15", "volatility_whipsaw"],
+        )
         self.assertGreater(payload["walk_forward"]["window_count"], 0)
         self.assertEqual(payload["monte_carlo"]["simulation_count"], 12)
         self.assertEqual(
@@ -1378,6 +1382,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                 initial_capital=100000.0,
             ),
         )
+        self._assert_robustness_payload_avoids_optimizer_semantics(payload)
 
     def test_run_backtest_persists_custom_monte_carlo_robustness_config(self) -> None:
         service = RuleBacktestService(self.db)
@@ -1564,6 +1569,74 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(detail["robustness_analysis"]["state"], "available")
         self.assertEqual(history["items"][0]["robustness_analysis"]["state"], "available")
         self.assertEqual(detail["summary"]["robustness_analysis"], detail["robustness_analysis"])
+
+    def test_universe_jobs_remain_local_only_and_execute_symbols_in_sequence(self) -> None:
+        service = RuleBacktestService(self.db)
+        self._seed_history(
+            "AAPL",
+            [100.0 + (index * 0.2) for index in range(80)],
+            start=date(2024, 1, 1),
+        )
+        self._seed_history(
+            "MSFT",
+            [200.0 + (index * 0.15) for index in range(80)],
+            start=date(2024, 1, 1),
+        )
+
+        created = service.create_universe_job(
+            symbols=["MSFT", "AAPL", "MSFT"],
+            strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            start_date="2024-01-01",
+            end_date="2024-02-29",
+            lookback_bars=20,
+        )
+
+        self.assertTrue(created["local_data_only"])
+        self.assertEqual(created["execution_mode"], "preflight_only")
+        self.assertEqual(created["symbol_count"], 2)
+        self.assertEqual(created["completed_count"], 2)
+        self.assertEqual(created["skipped_count"], 0)
+        self.assertEqual(created["professionalReadiness"]["overall_state"], "research_prototype")
+
+        stored_rows = service.repo.get_universe_symbol_results(int(created["id"]))
+        self.assertEqual([row.symbol for row in stored_rows], ["AAPL", "MSFT"])
+        self.assertEqual([int(row.sequence_index) for row in stored_rows], [0, 1])
+        self.assertTrue(all(str(row.status) == "ready_local_data" for row in stored_rows))
+
+        executed_codes: list[str] = []
+
+        def _fake_engine_run(**kwargs: object) -> SimpleNamespace:
+            code = str(kwargs["code"])
+            executed_codes.append(code)
+            return SimpleNamespace(
+                metrics={
+                    "trade_count": 1,
+                    "total_return_pct": 1.5 if code == "AAPL" else 2.5,
+                    "max_drawdown_pct": -0.8 if code == "AAPL" else -1.1,
+                    "win_rate_pct": 100.0,
+                    "final_equity": 101500.0 if code == "AAPL" else 102500.0,
+                },
+                no_result_reason=None,
+            )
+
+        with patch.object(service.engine, "run", side_effect=_fake_engine_run) as engine_run:
+            finished = service.run_universe_job_sequential(int(created["id"]))
+
+        self.assertEqual(executed_codes, ["AAPL", "MSFT"])
+        self.assertEqual(engine_run.call_count, 2)
+        service._ensure_market_history.assert_not_called()
+        self.assertEqual(finished["execution_mode"], "sequential_local")
+        self.assertEqual(finished["status"], "completed")
+        self.assertEqual(finished["completed_count"], 2)
+        self.assertEqual(finished["failed_count"], 0)
+        self.assertEqual(finished["skipped_count"], 0)
+
+        result_payload = service.list_universe_job_results(int(created["id"]), page=1, limit=10)
+        self.assertEqual([item["symbol"] for item in result_payload["items"]], ["AAPL", "MSFT"])
+        self.assertEqual([item["sequence_index"] for item in result_payload["items"]], [0, 1])
+        self.assertEqual([item["status"] for item in result_payload["items"]], ["completed", "completed"])
+        self.assertEqual(result_payload["items"][0]["total_return_pct"], 1.5)
+        self.assertEqual(result_payload["items"][1]["total_return_pct"], 2.5)
 
     def test_build_drawdown_regime_attribution_payload_available_from_stored_audit_rows(self) -> None:
         service = RuleBacktestService(self.db)
