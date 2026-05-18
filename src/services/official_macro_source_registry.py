@@ -55,6 +55,36 @@ _CONTRACTS = tuple(
                 ),
             ),
             OfficialMacroSourceContract(
+                source_id="FRED_CPIAUCSL",
+                display_name="FRED CPI All Urban Consumers Headline Index",
+                source_type=_SOURCE_TYPE_OFFICIAL_PUBLIC,
+                cadence="monthly",
+                expected_freshness_window="Expect one monthly CPI release after the BLS publication posts to FRED.",
+                series_codes=("CPIAUCSL",),
+                requires_api_key_or_config=False,
+                live_eligible=False,
+                delayed_eligible=True,
+                observation_only=True,
+                notes=_notes(
+                    "Monthly CPI index only; downstream consumers must compute YoY inflation explicitly rather than treating the raw index level as a live rate.",
+                ),
+            ),
+            OfficialMacroSourceContract(
+                source_id="FRED_DFF",
+                display_name="FRED Federal Funds Effective Rate",
+                source_type=_SOURCE_TYPE_OFFICIAL_PUBLIC,
+                cadence="business_daily",
+                expected_freshness_window="Expect one official business-day publication after the H.15 effective fed funds release posts.",
+                series_codes=("DFF",),
+                requires_api_key_or_config=False,
+                live_eligible=False,
+                delayed_eligible=True,
+                observation_only=True,
+                notes=_notes(
+                    "Daily effective fed funds history only; do not project it as an intraday live policy rate.",
+                ),
+            ),
+            OfficialMacroSourceContract(
                 source_id="FRED_DGS10",
                 display_name="FRED US Treasury 10Y Constant Maturity",
                 source_type=_SOURCE_TYPE_OFFICIAL_PUBLIC,
@@ -97,6 +127,21 @@ _CONTRACTS = tuple(
                 observation_only=True,
                 notes=_notes(
                     "FRED relays the official Treasury daily yield series; do not treat it as intraday live rates.",
+                ),
+            ),
+            OfficialMacroSourceContract(
+                source_id="FRED_PPIACO",
+                display_name="FRED PPI All Commodities Index",
+                source_type=_SOURCE_TYPE_OFFICIAL_PUBLIC,
+                cadence="monthly",
+                expected_freshness_window="Expect one monthly PPI release after the BLS publication posts to FRED.",
+                series_codes=("PPIACO",),
+                requires_api_key_or_config=False,
+                live_eligible=False,
+                delayed_eligible=True,
+                observation_only=True,
+                notes=_notes(
+                    "Monthly PPI index only; downstream consumers must compute YoY inflation explicitly rather than treating the raw index level as a live rate.",
                 ),
             ),
             OfficialMacroSourceContract(
@@ -167,9 +212,12 @@ _CONTRACTS = tuple(
 _CONTRACTS_BY_ID = MappingProxyType({item.source_id: item for item in _CONTRACTS})
 _CONTRACT_IDS_BY_TRANSPORT_SOURCE = MappingProxyType({
     "fred:BAMLH0A0HYM2": "FRED_BAMLH0A0HYM2",
+    "fred:CPIAUCSL": "FRED_CPIAUCSL",
+    "fred:DFF": "FRED_DFF",
     "fred:DGS10": "FRED_DGS10",
     "fred:DGS2": "FRED_DGS2",
     "fred:DGS30": "FRED_DGS30",
+    "fred:PPIACO": "FRED_PPIACO",
     "fred:SOFR": "FRED_SOFR",
     "fred:VIXCLS": "FRED_VIXCLS",
     "nyfed:sofr": "NYFED_SOFR",

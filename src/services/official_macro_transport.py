@@ -19,7 +19,17 @@ TREASURY_DAILY_RATES_CSV_URL = (
     "interest-rates/daily-treasury-rates.csv/all/all"
 )
 OFFICIAL_SOURCE_TYPE = "official_public"
-FRED_SUPPORTED_SERIES_IDS = ("BAMLH0A0HYM2", "VIXCLS", "DGS2", "DGS10", "DGS30", "SOFR")
+FRED_SUPPORTED_SERIES_IDS = (
+    "BAMLH0A0HYM2",
+    "CPIAUCSL",
+    "DFF",
+    "VIXCLS",
+    "DGS2",
+    "DGS10",
+    "DGS30",
+    "PPIACO",
+    "SOFR",
+)
 FRED_DEFAULT_REQUEST_SERIES_IDS = ("VIXCLS", "DGS2", "DGS10", "DGS30", "SOFR")
 TREASURY_RATE_SYMBOLS = ("DGS2", "DGS10", "DGS30")
 TREASURY_COLUMN_ALIASES = {
@@ -29,10 +39,13 @@ TREASURY_COLUMN_ALIASES = {
 }
 FRED_FRESHNESS_HINTS = {
     "BAMLH0A0HYM2": "daily_credit_stress",
+    "CPIAUCSL": "monthly_inflation_index",
+    "DFF": "daily_policy_rate",
     "VIXCLS": "daily_close",
     "DGS2": "daily_rate",
     "DGS10": "daily_rate",
     "DGS30": "daily_rate",
+    "PPIACO": "monthly_inflation_index",
     "SOFR": "daily_fixing",
 }
 TREASURY_FRESHNESS_HINT = "daily_1530_et"

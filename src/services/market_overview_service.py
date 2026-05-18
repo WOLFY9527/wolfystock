@@ -50,6 +50,7 @@ PanelPayload = Dict[str, Any]
 CN_TZ = timezone(timedelta(hours=8))
 FALLBACK_WARNING = "备用示例数据，不代表当前行情"
 INSUFFICIENT_MARKET_DATA_WARNING = "当前真实数据不足，市场温度仅供界面演示"
+OFFICIAL_MACRO_UNAVAILABLE_WARNING = "部分官方宏观指标暂不可用"
 
 CONFIDENCE_BY_FRESHNESS = {
     "live": 1.0,
@@ -412,6 +413,12 @@ class MarketOverviewService:
         "US2Y": ("DGS2", "US 2Y", "%", "US"),
         "US10Y": ("DGS10", "US 10Y", "%", "US"),
         "US30Y": ("DGS30", "US 30Y", "%", "US"),
+    }
+    OFFICIAL_MACRO_SERIES = {
+        "FEDFUNDS": ("DFF", "Fed Funds", "%", "US"),
+        "CPI": ("CPIAUCSL", "CPI", "YoY %", "US"),
+        "PPI": ("PPIACO", "PPI", "YoY %", "US"),
+        "CREDIT": ("BAMLH0A0HYM2", "Credit spreads", "bps", None),
     }
     US_SECTOR_ETFS = {
         "XLK": "Technology",
@@ -1927,7 +1934,7 @@ class MarketOverviewService:
         return self._success_panel("FundsFlowCard", items)
 
     def _fetch_macro(self) -> PanelPayload:
-        official_points = self._official_macro_points(include_credit_stress=True)
+        official_points = self._official_macro_points(include_policy_and_inflation=True, include_credit_stress=True)
         item_map = {
             str(item.get("symbol") or ""): item
             for item in self._quote_items(self.MACRO_SYMBOLS)
@@ -1954,19 +1961,27 @@ class MarketOverviewService:
             official_credit["observationOnly"] = True
             official_credit["includedInScore"] = False
             item_map["CREDIT"] = official_credit
-        for symbol, label, unit in (
-            ("FEDFUNDS", "Fed Funds", "%"),
-            ("CPI", "CPI", "YoY %"),
-            ("PPI", "PPI", "YoY %"),
-            ("CREDIT", "Credit spreads", "bps"),
-        ):
-            item_map.setdefault(symbol, {"symbol": symbol, "label": label, "value": None, "unit": unit, "risk_direction": "neutral", "source": "pending_public_feed"})
+        official_fed_funds = self._official_macro_item("FEDFUNDS", "Fed Funds", official_points.get("DFF", []), unit="%", market="US")
+        if official_fed_funds:
+            item_map["FEDFUNDS"] = official_fed_funds
+        official_cpi = self._official_macro_yoy_item("CPI", "CPI", official_points.get("CPIAUCSL", []), unit="YoY %", market="US")
+        if official_cpi:
+            item_map["CPI"] = official_cpi
+        official_ppi = self._official_macro_yoy_item("PPI", "PPI", official_points.get("PPIACO", []), unit="YoY %", market="US")
+        if official_ppi:
+            item_map["PPI"] = official_ppi
+        for symbol, (series_id, label, unit, market) in self.OFFICIAL_MACRO_SERIES.items():
+            if symbol == "CREDIT" and symbol in item_map:
+                continue
+            item_map.setdefault(symbol, self._official_macro_unavailable_item(symbol, label, series_id, unit=unit, market=market))
         ordered_symbols = ["US2Y", "US10Y", "US30Y", "SOFR", "VIX", "DXY", "GOLD", "OIL", "FEDFUNDS", "CPI", "PPI", "CREDIT"]
         items = [item_map[symbol] for symbol in ordered_symbols if symbol in item_map]
         payload = self._success_panel("MacroIndicatorsCard", items)
         payload["source"] = "mixed"
         payload["sourceLabel"] = self._source_label("mixed")
-        payload["fallbackUsed"] = False
+        payload["fallbackUsed"] = any(bool(item.get("isFallback") or item.get("isUnavailable")) for item in items)
+        if payload["fallbackUsed"]:
+            payload["warning"] = OFFICIAL_MACRO_UNAVAILABLE_WARNING
         return payload
 
     def _fetch_cn_indices_snapshot(self) -> Dict[str, Any]:
@@ -2377,12 +2392,15 @@ class MarketOverviewService:
     def _official_macro_points(
         self,
         *,
+        include_policy_and_inflation: bool = False,
         include_credit_stress: bool = False,
         budget_seconds: Optional[float] = None,
     ) -> Dict[str, List[MacroObservation]]:
         points: Dict[str, List[MacroObservation]] = {}
         fetched_at = time.monotonic()
         fred_series_ids = ["DGS2", "DGS10", "DGS30", "VIXCLS", "SOFR"]
+        if include_policy_and_inflation:
+            fred_series_ids.extend(["DFF", "CPIAUCSL", "PPIACO"])
         if include_credit_stress:
             fred_series_ids.append("BAMLH0A0HYM2")
         for series_id in fred_series_ids:
@@ -2417,13 +2435,23 @@ class MarketOverviewService:
             if timeout is None:
                 break
             try:
-                series_points = fetch_fred_observation_points(series_id, limit=2, timeout=timeout)
+                series_points = fetch_fred_observation_points(
+                    series_id,
+                    limit=self._official_macro_history_limit(series_id),
+                    timeout=timeout,
+                )
             except Exception:
                 series_points = []
             if series_points:
                 self._store_official_macro_points({series_id: series_points}, fetched_at)
                 points[series_id] = series_points
         return points
+
+    @staticmethod
+    def _official_macro_history_limit(series_id: str) -> int:
+        if series_id in {"CPIAUCSL", "PPIACO"}:
+            return 13
+        return 2
 
     def _cached_official_macro_series(self, series_id: str, now_monotonic: float) -> Optional[List[MacroObservation]]:
         cached = self._official_macro_micro_cache.get(series_id)
@@ -2461,20 +2489,119 @@ class MarketOverviewService:
         previous_value = previous.value if previous is not None else None
         change = None if previous_value is None else round((latest.value - previous_value) * change_scale, 3)
         change_percent = self._percent_change(previous_value, latest.value)
-        source_label = self._official_source_label(latest.source_id)
         scaled_value = round(latest.value * value_scale, 3)
         scaled_trend = [round(point.value * value_scale, 3) for point in reversed(observations) if point.value is not None]
+        return self._official_macro_metric_item(
+            symbol,
+            label,
+            latest,
+            value=scaled_value,
+            unit=unit,
+            market=market,
+            change=change,
+            change_percent=change_percent,
+            trend=scaled_trend,
+        )
+
+    def _official_macro_yoy_item(
+        self,
+        symbol: str,
+        label: str,
+        observations: List[MacroObservation],
+        *,
+        unit: str,
+        market: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        latest = observations[0] if observations else None
+        valid_points = [point for point in observations if point.value is not None]
+        if latest is None or latest.value is None:
+            return self._official_macro_unavailable_item(symbol, label, self._official_macro_source_id_for_symbol(symbol), unit=unit, market=market)
+        latest_time = _parse_market_time(latest.as_of or latest.date)
+        if latest_time is None:
+            return self._official_macro_unavailable_item(
+                symbol,
+                label,
+                latest.source_id,
+                unit=unit,
+                market=market,
+                as_of=latest.as_of,
+            )
+        year_ago = next(
+            (
+                point
+                for point in valid_points[1:]
+                if point.value not in {None, 0}
+                and (candidate_time := _parse_market_time(point.as_of or point.date)) is not None
+                and (latest_time - candidate_time).days >= 330
+            ),
+            None,
+        )
+        if year_ago is None or year_ago.value in {None, 0}:
+            return self._official_macro_unavailable_item(
+                symbol,
+                label,
+                latest.source_id,
+                unit=unit,
+                market=market,
+                as_of=latest.as_of,
+            )
+        yoy_value = ((latest.value / year_ago.value) - 1.0) * 100.0
+        yoy_trend: List[float] = []
+        for current_index in range(len(valid_points) - 1, -1, -1):
+            current_point = valid_points[current_index]
+            current_time = _parse_market_time(current_point.as_of or current_point.date)
+            if current_point.value is None or current_time is None:
+                continue
+            comparison = next(
+                (
+                    point
+                    for point in valid_points[current_index + 1:]
+                    if point.value not in {None, 0}
+                    and (comparison_time := _parse_market_time(point.as_of or point.date)) is not None
+                    and (current_time - comparison_time).days >= 330
+                ),
+                None,
+            )
+            if comparison is None or comparison.value in {None, 0}:
+                continue
+            yoy_trend.append(round(((current_point.value / comparison.value) - 1.0) * 100.0, 3))
+        return self._official_macro_metric_item(
+            symbol,
+            label,
+            latest,
+            value=round(yoy_value, 3),
+            unit=unit,
+            market=market,
+            change=None,
+            change_percent=None,
+            trend=yoy_trend or [round(yoy_value, 3)],
+        )
+
+    def _official_macro_metric_item(
+        self,
+        symbol: str,
+        label: str,
+        latest: MacroObservation,
+        *,
+        value: float,
+        unit: str,
+        market: Optional[str],
+        change: float | None,
+        change_percent: float | None,
+        trend: List[float],
+    ) -> Dict[str, Any]:
+        source_label = self._official_source_label(latest.source_id)
         item: Dict[str, Any] = {
             "name": label,
             "label": label,
             "symbol": symbol,
-            "value": scaled_value,
-            "price": scaled_value,
+            "value": value,
+            "price": value,
             "change": change,
             "changePercent": round(change_percent, 3) if change_percent is not None else None,
             "change_text": f"{change:+.2f}" if change is not None else "待确认",
-            "sparkline": scaled_trend,
-            "trend": scaled_trend,
+            "sparkline": trend,
+            "trend": trend,
             "unit": unit,
             "source": latest.source_id.split(":", 1)[0],
             "sourceId": latest.source_id,
@@ -2489,6 +2616,58 @@ class MarketOverviewService:
         if market:
             item["market"] = market
         return item
+
+    def _official_macro_unavailable_item(
+        self,
+        symbol: str,
+        label: str,
+        series_id: str,
+        *,
+        unit: str,
+        market: Optional[str] = None,
+        as_of: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        source_id = series_id if ":" in series_id else f"fred:{series_id}"
+        resolved_as_of = as_of or _now_iso()
+        source_label = self._official_source_label(source_id)
+        item: Dict[str, Any] = {
+            "name": label,
+            "label": label,
+            "symbol": symbol,
+            "value": None,
+            "price": None,
+            "change": None,
+            "changePercent": None,
+            "change_text": "待确认",
+            "sparkline": [],
+            "trend": [],
+            "unit": unit,
+            "source": source_id.split(":", 1)[0],
+            "sourceId": source_id,
+            "sourceType": "official_public",
+            "sourceLabel": source_label,
+            "asOf": resolved_as_of,
+            "updatedAt": resolved_as_of,
+            "isFallback": False,
+            "isUnavailable": True,
+            "warning": OFFICIAL_MACRO_UNAVAILABLE_WARNING,
+            "risk_direction": "neutral",
+            "hover_details": [source_label, OFFICIAL_MACRO_UNAVAILABLE_WARNING],
+            "sourceFreshnessEvidence": {
+                "freshness": "unavailable",
+                "isUnavailable": True,
+                "warning": OFFICIAL_MACRO_UNAVAILABLE_WARNING,
+            },
+        }
+        if market:
+            item["market"] = market
+        return item
+
+    def _official_macro_source_id_for_symbol(self, symbol: str) -> str:
+        series = self.OFFICIAL_MACRO_SERIES.get(symbol)
+        if series:
+            return f"fred:{series[0]}"
+        return ""
 
     def _sector_rotation_theme_trend(
         self,

@@ -189,6 +189,8 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
         latest_date = datetime.now(timezone.utc).date()
         latest_date_text = latest_date.isoformat()
         previous_date_text = (latest_date - timedelta(days=1)).isoformat()
+        previous_month_text = (latest_date - timedelta(days=30)).isoformat()
+        year_ago_text = (latest_date - timedelta(days=365)).isoformat()
         treasury_points = {
             "DGS2": [
                 MacroObservation("DGS2", 3.87, latest_date_text, latest_date_text, "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
@@ -215,6 +217,20 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
             "SOFR": [
                 MacroObservation("SOFR", 5.31, latest_date_text, latest_date_text, "fred:SOFR", "official_public", "daily_fixing"),
                 MacroObservation("SOFR", 5.32, previous_date_text, previous_date_text, "fred:SOFR", "official_public", "daily_fixing"),
+            ],
+            "DFF": [
+                MacroObservation("DFF", 4.33, latest_date_text, latest_date_text, "fred:DFF", "official_public", "daily_policy_rate"),
+                MacroObservation("DFF", 4.31, previous_date_text, previous_date_text, "fred:DFF", "official_public", "daily_policy_rate"),
+            ],
+            "CPIAUCSL": [
+                MacroObservation("CPIAUCSL", 321.0, latest_date_text, latest_date_text, "fred:CPIAUCSL", "official_public", "monthly_inflation_index"),
+                MacroObservation("CPIAUCSL", 319.2, previous_month_text, previous_month_text, "fred:CPIAUCSL", "official_public", "monthly_inflation_index"),
+                MacroObservation("CPIAUCSL", 309.9, year_ago_text, year_ago_text, "fred:CPIAUCSL", "official_public", "monthly_inflation_index"),
+            ],
+            "PPIACO": [
+                MacroObservation("PPIACO", 282.0, latest_date_text, latest_date_text, "fred:PPIACO", "official_public", "monthly_inflation_index"),
+                MacroObservation("PPIACO", 279.5, previous_month_text, previous_month_text, "fred:PPIACO", "official_public", "monthly_inflation_index"),
+                MacroObservation("PPIACO", 248.0, year_ago_text, year_ago_text, "fred:PPIACO", "official_public", "monthly_inflation_index"),
             ],
         }
 
@@ -256,6 +272,20 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
         self.assertEqual(macro_items["VIX"]["sourceLabel"], "FRED CBOE VIX Close")
         self.assertEqual(macro_items["SOFR"]["sourceType"], "official_public")
         self.assertEqual(macro_items["SOFR"]["freshness"], "delayed")
+        self.assertEqual(macro_items["FEDFUNDS"]["sourceType"], "official_public")
+        self.assertEqual(macro_items["FEDFUNDS"]["sourceId"], "fred:DFF")
+        self.assertEqual(macro_items["FEDFUNDS"]["asOf"], latest_date_text)
+        self.assertEqual(macro_items["FEDFUNDS"]["freshness"], "delayed")
+        self.assertEqual(macro_items["CPI"]["sourceType"], "official_public")
+        self.assertEqual(macro_items["CPI"]["sourceId"], "fred:CPIAUCSL")
+        self.assertEqual(macro_items["CPI"]["asOf"], latest_date_text)
+        self.assertEqual(macro_items["CPI"]["freshness"], "delayed")
+        self.assertAlmostEqual(macro_items["CPI"]["value"], 3.582, places=3)
+        self.assertEqual(macro_items["PPI"]["sourceType"], "official_public")
+        self.assertEqual(macro_items["PPI"]["sourceId"], "fred:PPIACO")
+        self.assertEqual(macro_items["PPI"]["asOf"], latest_date_text)
+        self.assertEqual(macro_items["PPI"]["freshness"], "delayed")
+        self.assertAlmostEqual(macro_items["PPI"]["value"], 13.71, places=2)
         self.assertEqual(macro_items["CREDIT"]["sourceType"], "official_public")
         self.assertEqual(macro_items["CREDIT"]["sourceId"], "fred:BAMLH0A0HYM2")
         self.assertEqual(
@@ -274,6 +304,40 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
             is_stale=bool(macro_items["CREDIT"].get("isStale")),
         )
         self.assertEqual(credit_provenance["sourceType"], "official_public")
+
+    def test_macro_panel_marks_monthly_official_series_unavailable_without_live_masquerade_when_history_is_insufficient(self) -> None:
+        service = MarketOverviewService()
+        latest_date_text = datetime.now(timezone.utc).date().isoformat()
+
+        with patch.object(service, "_cached_payload", side_effect=lambda _key, fetcher, _fallback: fetcher()):
+            with patch(
+                "src.services.market_overview_service.fetch_treasury_daily_rate_observation_points",
+                return_value={},
+                create=True,
+            ), patch(
+                "src.services.market_overview_service.fetch_fred_observation_points",
+                side_effect=lambda series_id, **_: {
+                    "CPIAUCSL": [
+                        MacroObservation("CPIAUCSL", 321.0, latest_date_text, latest_date_text, "fred:CPIAUCSL", "official_public", "monthly_inflation_index"),
+                    ],
+                    "PPIACO": [
+                        MacroObservation("PPIACO", 282.0, latest_date_text, latest_date_text, "fred:PPIACO", "official_public", "monthly_inflation_index"),
+                    ],
+                }.get(series_id, []),
+                create=True,
+            ):
+                macro_payload = service.get_macro()
+
+        macro_items = {item["symbol"]: item for item in macro_payload["items"]}
+        self.assertTrue(macro_payload["fallbackUsed"])
+        self.assertTrue(macro_items["CPI"]["isUnavailable"])
+        self.assertEqual(macro_items["CPI"]["sourceType"], "official_public")
+        self.assertEqual(macro_items["CPI"]["sourceId"], "fred:CPIAUCSL")
+        self.assertNotIn(macro_items["CPI"]["freshness"], {"live", "fresh"})
+        self.assertTrue(macro_items["PPI"]["isUnavailable"])
+        self.assertEqual(macro_items["PPI"]["sourceType"], "official_public")
+        self.assertEqual(macro_items["PPI"]["sourceId"], "fred:PPIACO")
+        self.assertNotIn(macro_items["PPI"]["freshness"], {"live", "fresh"})
 
 
 if __name__ == "__main__":
