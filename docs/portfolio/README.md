@@ -12,6 +12,7 @@ hierarchy, or portfolio public-safety wording.
 - [Phase F Decisions](../architecture/phase-f/decisions.md)
 - [Phase F Status](../architecture/phase-f/status.md)
 - [Phase F Runbook](../architecture/phase-f/runbook.md)
+- [Portfolio Research Smoke Checklist](./portfolio-research-smoke-checklist.md)
 - [Backtest / Portfolio Public Safety Audit](../audits/backtest-portfolio-public-safety-audit.md)
 - [Frontend Visual System](../frontend/visual-system.md)
 
