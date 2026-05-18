@@ -30,6 +30,11 @@ public-safety wording.
   heatmap is a stored compare projection derived from persisted compare payloads.
   Neither surface performs optimizer training, OOS model selection, parameter
   sweeps, or grid-search execution.
+- Parameter stability helpers are additive scaffolds only. They can plan a
+  deterministic parameter grid and aggregate caller-supplied evaluation results
+  into a stability surface, but they do not execute rule runs, promote winners,
+  select live strategies, change engine math, call providers, or simulate
+  portfolio allocation.
 - Support exports are stored-first contract artifacts. The current export set is
   `support_bundle_manifest_json`,
   `support_bundle_reproducibility_manifest_json`, `execution_trace_json`,

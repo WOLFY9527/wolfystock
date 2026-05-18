@@ -53,6 +53,11 @@
 - 当前 compare heatmap 是 stored comparison projection：它只基于已持久化的
   compare payload 推导坐标与 cells，不触发 parameter grid sweep、策略重跑、
   provider 调用或新执行。
+- 当前 parameter stability surface helper 只是 additive scaffold：它只规划
+  deterministic parameter grid，并聚合调用方已经提供的 run / evaluation
+  results。它不会执行真实策略回测、不会做隐藏 optimizer、不会自动提升 winner、
+  不会选择 live strategy、不会修改 engine math、不会调用 provider，也不会做组合
+  allocation backtest。
 - 当前 robustness analysis 在未显式传入 `robustness_config` 时，默认仍会产
   生 stored robustness evidence：walk-forward 默认
   `train_window=24 / test_window=12 / step=12 / max_windows=4`，monte-carlo

@@ -59,6 +59,11 @@
   axes and cells from already-persisted compare payloads only, and does not
   trigger parameter grid sweeps, backtest re-execution, provider calls, or any
   new execution.
+- The current parameter stability surface helper is an additive scaffold only.
+  It plans a deterministic parameter grid and aggregates caller-supplied run or
+  evaluation results. It does not execute real strategy backtests, run a hidden
+  optimizer, automatically promote winners, select live strategies, change
+  engine math, call providers, or perform portfolio-allocation backtests.
 - When `robustness_config` is omitted, the current robustness-analysis surface
   still emits stored robustness evidence with defaults:
   `walk_forward(train=24,test=12,step=12,max_windows=4)`,
