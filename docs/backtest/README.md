@@ -9,6 +9,7 @@ public-safety wording.
 ## Current Authority
 
 - [Backtest System](../backtest-system.md)
+- [Backtest Research Manual Validation Checklist](./manual-validation-checklist.md)
 - [Backtest Helper Maintenance](../backtest-helper-maintenance.md)
 - [Backtest Universe Rules](../codex/WOLFYSTOCK_BACKTEST_UNIVERSE_RULES.md)
 - [Rule Backtest Reopen Trustworthiness Status](../architecture/rule-backtest-reopen-trustworthiness-p0-status-index-2026-04-22.md)
