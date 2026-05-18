@@ -2,7 +2,7 @@
   "endpoint": "/api/v1/market/liquidity-monitor",
   "generatedAt": "2026-05-07T10:00:00+08:00",
   "score": {
-    "value": 81,
+    "value": 72,
     "regime": "abundant",
     "confidence": 0.72,
     "includedIndicatorCount": 5,
@@ -58,6 +58,29 @@
             "capReason": "unavailable_source"
           }
         ]
+      },
+      "coverageDiagnostics": {
+        "indicatorId": "crypto_spot_momentum",
+        "indicatorName": "Crypto 现货动量",
+        "requiredInputs": [
+          "BTC",
+          "ETH",
+          "BNB"
+        ],
+        "fulfilledInputs": [],
+        "missingInputs": [
+          "BTC",
+          "ETH",
+          "BNB"
+        ],
+        "sourceTier": "unavailable",
+        "freshness": "unavailable",
+        "trustLevel": "unavailable",
+        "contributesToScore": false,
+        "scoreContribution": 0,
+        "capReason": "unavailable_source",
+        "degradationReason": "fallback_source",
+        "activationHint": "Binance 现货输入 fresh 时可直接计分；缺少 BTC / ETH / BNB 时保持不可用。；trust gate=unavailable / unavailable；缺少: BTC, ETH, BNB；cap=unavailable_source；score capped"
       }
     },
     {
@@ -103,6 +126,27 @@
             "capReason": "unavailable_source"
           }
         ]
+      },
+      "coverageDiagnostics": {
+        "indicatorId": "crypto_funding",
+        "indicatorName": "Crypto Funding",
+        "requiredInputs": [
+          "BTC_FUNDING",
+          "ETH_FUNDING"
+        ],
+        "fulfilledInputs": [],
+        "missingInputs": [
+          "BTC_FUNDING",
+          "ETH_FUNDING"
+        ],
+        "sourceTier": "unavailable",
+        "freshness": "unavailable",
+        "trustLevel": "unavailable",
+        "contributesToScore": false,
+        "scoreContribution": 0,
+        "capReason": "unavailable_source",
+        "degradationReason": "fallback_source",
+        "activationHint": "仅在现有 Binance Futures funding 回填和 BTC / ETH 现货上下文可用时激活。；trust gate=unavailable / unavailable；缺少: BTC_FUNDING, ETH_FUNDING；cap=unavailable_source；score capped"
       }
     },
     {
@@ -111,7 +155,7 @@
       "status": "partial",
       "freshness": "delayed",
       "includedInScore": true,
-      "scoreContribution": 8,
+      "scoreContribution": 6,
       "scoreWeight": 8,
       "summary": "-16.67% | 来源 Yahoo Finance (yfinance_proxy) | 类型 unofficial_proxy | 截至 2026-05-08T00:00:00+08:00 | 新鲜度 delayed",
       "updatedAt": "2026-05-08T00:00:00+08:00",
@@ -148,6 +192,25 @@
             "capReason": null
           }
         ]
+      },
+      "coverageDiagnostics": {
+        "indicatorId": "vix_pressure",
+        "indicatorName": "VIX / 波动率压力",
+        "requiredInputs": [
+          "VIX"
+        ],
+        "fulfilledInputs": [
+          "VIX"
+        ],
+        "missingInputs": [],
+        "sourceTier": "unofficial_public_api",
+        "freshness": "partial",
+        "trustLevel": "usable_with_caution",
+        "contributesToScore": true,
+        "scoreContribution": 6,
+        "capReason": "partial_coverage",
+        "degradationReason": "partial_coverage",
+        "activationHint": "现有宏观 / 波动率快照可用时激活；yfinance proxy 会被 trust gate 限制为延迟或部分。；已激活: VIX；freshness=partial；cap=partial_coverage；score capped；source=yfinance_proxy"
       }
     },
     {
@@ -156,7 +219,7 @@
       "status": "partial",
       "freshness": "delayed",
       "includedInScore": true,
-      "scoreContribution": 6,
+      "scoreContribution": 4,
       "scoreWeight": 6,
       "summary": "DXY -0.67% | 来源 Yahoo Finance (yfinance_proxy) | 类型 unofficial_proxy | 截至 2026-05-08T00:00:00+08:00 | 新鲜度 delayed",
       "updatedAt": "2026-05-08T00:00:00+08:00",
@@ -193,6 +256,32 @@
             "capReason": null
           }
         ]
+      },
+      "coverageDiagnostics": {
+        "indicatorId": "usd_pressure",
+        "indicatorName": "DXY / 美元压力",
+        "requiredInputs": [
+          "DXY",
+          "USDCNH",
+          "USDJPY",
+          "EURUSD"
+        ],
+        "fulfilledInputs": [
+          "DXY"
+        ],
+        "missingInputs": [
+          "USDCNH",
+          "USDJPY",
+          "EURUSD"
+        ],
+        "sourceTier": "unofficial_public_api",
+        "freshness": "partial",
+        "trustLevel": "usable_with_caution",
+        "contributesToScore": true,
+        "scoreContribution": 4,
+        "capReason": "partial_coverage",
+        "degradationReason": "partial_coverage",
+        "activationHint": "现有 FX / commodities 快照可用时激活；缺少 DXY 时可退化到 USD/CNH、USD/JPY、EUR/USD 代理。；缺少: USDCNH, USDJPY, EURUSD；freshness=partial；cap=partial_coverage；score capped；source=yfinance_proxy"
       }
     },
     {
@@ -201,7 +290,7 @@
       "status": "partial",
       "freshness": "delayed",
       "includedInScore": true,
-      "scoreContribution": 6,
+      "scoreContribution": 4,
       "scoreWeight": 6,
       "summary": "US10Y -1.97% | US30Y -1.26% | 来源 Yahoo Finance (yfinance_proxy) | 类型 unofficial_proxy | 截至 2026-05-08T00:00:00+08:00 | 新鲜度 delayed",
       "updatedAt": "2026-05-08T00:00:00+08:00",
@@ -255,6 +344,36 @@
             "capReason": null
           }
         ]
+      },
+      "coverageDiagnostics": {
+        "indicatorId": "us_rates_pressure",
+        "indicatorName": "US Rates / 利率压力",
+        "requiredInputs": [
+          "US2Y",
+          "US10Y",
+          "US30Y",
+          "SOFR",
+          "US10Y2Y",
+          "US10Y3M"
+        ],
+        "fulfilledInputs": [
+          "US10Y",
+          "US30Y"
+        ],
+        "missingInputs": [
+          "US2Y",
+          "SOFR",
+          "US10Y2Y",
+          "US10Y3M"
+        ],
+        "sourceTier": "unofficial_public_api",
+        "freshness": "partial",
+        "trustLevel": "usable_with_caution",
+        "contributesToScore": true,
+        "scoreContribution": 4,
+        "capReason": "partial_coverage",
+        "degradationReason": "partial_coverage",
+        "activationHint": "官方利率快照优先；没有 US2Y / US10Y / US30Y / SOFR 时只能退化为代理或不可用。；缺少: US2Y, SOFR, US10Y2Y, US10Y3M；freshness=partial；cap=partial_coverage；score capped；source=yfinance_proxy"
       }
     },
     {
@@ -263,7 +382,7 @@
       "status": "partial",
       "freshness": "delayed",
       "includedInScore": true,
-      "scoreContribution": 5,
+      "scoreContribution": 4,
       "scoreWeight": 5,
       "summary": "+1.20",
       "updatedAt": "2026-05-07T10:00:00+08:00",
@@ -300,6 +419,25 @@
             "capReason": null
           }
         ]
+      },
+      "coverageDiagnostics": {
+        "indicatorId": "us_etf_flow_proxy",
+        "indicatorName": "US ETF 资金代理",
+        "requiredInputs": [
+          "ETF"
+        ],
+        "fulfilledInputs": [
+          "ETF"
+        ],
+        "missingInputs": [],
+        "sourceTier": "unofficial_public_api",
+        "freshness": "partial",
+        "trustLevel": "usable_with_caution",
+        "contributesToScore": true,
+        "scoreContribution": 4,
+        "capReason": "partial_coverage",
+        "degradationReason": "partial_coverage",
+        "activationHint": "激活现有 `funds_flow` snapshot 或 Market Overview 的 SPY / QQQ / IWM proxy；缺少 ETF 条目时保持不可用。；已激活: ETF；freshness=partial；cap=partial_coverage；score capped；source=yfinance_proxy"
       }
     },
     {
@@ -308,25 +446,88 @@
       "status": "partial",
       "freshness": "delayed",
       "includedInScore": true,
-      "scoreContribution": 6,
+      "scoreContribution": 4,
       "scoreWeight": 6,
       "summary": "8/3",
       "updatedAt": "2026-05-07T10:00:00+08:00",
       "evidence": {
         "contractVersion": "source_confidence_contract_v1",
-        "source": "unavailable",
-        "sourceLabel": "未接入",
-        "asOf": null,
-        "freshness": "unavailable",
+        "source": "yfinance_proxy",
+        "sourceLabel": "Yahoo Finance",
+        "asOf": "2026-05-07T10:00:00+08:00",
+        "freshness": "partial",
         "isFallback": false,
         "isStale": false,
         "isPartial": true,
-        "isUnavailable": true,
-        "coverage": 0.0,
-        "confidenceWeight": 0.0,
+        "isUnavailable": false,
+        "coverage": 1.0,
+        "confidenceWeight": 0.7,
         "degradationReason": "partial_coverage",
-        "capReason": "unavailable_source",
-        "inputs": []
+        "capReason": "partial_coverage",
+        "inputs": [
+          {
+            "key": "SECTORS_UP",
+            "label": "Sectors Up",
+            "source": "yfinance_proxy",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_proxy",
+            "asOf": "2026-05-07T10:00:00+08:00",
+            "freshness": "delayed",
+            "isFallback": false,
+            "isStale": false,
+            "isPartial": false,
+            "isUnavailable": false,
+            "coverage": 1.0,
+            "confidenceWeight": 0.7,
+            "degradationReason": null,
+            "capReason": null
+          },
+          {
+            "key": "SECTORS_DOWN",
+            "label": "Sectors Down",
+            "source": "yfinance_proxy",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_proxy",
+            "asOf": "2026-05-07T10:00:00+08:00",
+            "freshness": "delayed",
+            "isFallback": false,
+            "isStale": false,
+            "isPartial": false,
+            "isUnavailable": false,
+            "coverage": 1.0,
+            "confidenceWeight": 0.7,
+            "degradationReason": null,
+            "capReason": null
+          }
+        ]
+      },
+      "coverageDiagnostics": {
+        "indicatorId": "us_breadth_proxy",
+        "indicatorName": "US 广度代理",
+        "requiredInputs": [
+          "SECTORS_UP",
+          "SECTORS_DOWN",
+          "RSP_SPY",
+          "IWM_SPY",
+          "QQQ_SPY"
+        ],
+        "fulfilledInputs": [
+          "SECTORS_UP",
+          "SECTORS_DOWN"
+        ],
+        "missingInputs": [
+          "RSP_SPY",
+          "IWM_SPY",
+          "QQQ_SPY"
+        ],
+        "sourceTier": "unofficial_public_api",
+        "freshness": "partial",
+        "trustLevel": "usable_with_caution",
+        "contributesToScore": true,
+        "scoreContribution": 4,
+        "capReason": "partial_coverage",
+        "degradationReason": "partial_coverage",
+        "activationHint": "激活现有 sector ETF breadth proxy；需要 SECTORS_UP、SECTORS_DOWN 和相对强弱代理。；缺少: RSP_SPY, IWM_SPY, QQQ_SPY；freshness=partial；cap=partial_coverage；score capped；source=yfinance_proxy"
       }
     },
     {
@@ -372,6 +573,33 @@
             "capReason": "unavailable_source"
           }
         ]
+      },
+      "coverageDiagnostics": {
+        "indicatorId": "cn_hk_index_context",
+        "indicatorName": "CN/HK 指数环境",
+        "requiredInputs": [
+          "000001.SH",
+          "399001.SZ",
+          "HSI.HK",
+          "HSTECH.HK",
+          "CN00Y"
+        ],
+        "fulfilledInputs": [],
+        "missingInputs": [
+          "000001.SH",
+          "399001.SZ",
+          "HSI.HK",
+          "HSTECH.HK",
+          "CN00Y"
+        ],
+        "sourceTier": "unavailable",
+        "freshness": "unavailable",
+        "trustLevel": "unavailable",
+        "contributesToScore": false,
+        "scoreContribution": 0,
+        "capReason": "unavailable_source",
+        "degradationReason": "fallback_source",
+        "activationHint": "CN / HK 指数上下文只能来自现有快照，缺少可用指数条目时保持不可用。；trust gate=unavailable / unavailable；缺少: 000001.SH, 399001.SZ, HSI.HK, HSTECH.HK, CN00Y；cap=unavailable_source；score capped"
       }
     },
     {
@@ -417,6 +645,33 @@
             "capReason": "unavailable_source"
           }
         ]
+      },
+      "coverageDiagnostics": {
+        "indicatorId": "cn_hk_flows",
+        "indicatorName": "CN/HK 资金流",
+        "requiredInputs": [
+          "NORTHBOUND",
+          "SOUTHBOUND",
+          "CN_ETF",
+          "MARGIN_BALANCE",
+          "MAINLAND_MAIN"
+        ],
+        "fulfilledInputs": [],
+        "missingInputs": [
+          "NORTHBOUND",
+          "SOUTHBOUND",
+          "CN_ETF",
+          "MARGIN_BALANCE",
+          "MAINLAND_MAIN"
+        ],
+        "sourceTier": "unavailable",
+        "freshness": "unavailable",
+        "trustLevel": "unavailable",
+        "contributesToScore": false,
+        "scoreContribution": 0,
+        "capReason": "unavailable_source",
+        "degradationReason": "fallback_source",
+        "activationHint": "No audited CN/HK flow provider；只有非 fallback 的 `cn_flows` 快照才会参与评分。；trust gate=unavailable / unavailable；缺少: NORTHBOUND, SOUTHBOUND, CN_ETF, MARGIN_BALANCE, MAINLAND_MAIN；cap=unavailable_source；score capped"
       }
     },
     {
@@ -462,6 +717,27 @@
             "capReason": "unavailable_source"
           }
         ]
+      },
+      "coverageDiagnostics": {
+        "indicatorId": "cn_money_market_rates",
+        "indicatorName": "CN 货币市场利率",
+        "requiredInputs": [
+          "DR007",
+          "SHIBOR"
+        ],
+        "fulfilledInputs": [],
+        "missingInputs": [
+          "DR007",
+          "SHIBOR"
+        ],
+        "sourceTier": "unavailable",
+        "freshness": "unavailable",
+        "trustLevel": "unavailable",
+        "contributesToScore": false,
+        "scoreContribution": 0,
+        "capReason": "unavailable_source",
+        "degradationReason": "fallback_source",
+        "activationHint": "仅在 `rates` 或 `macro` 快照里有 DR007 / SHIBOR 时激活，缺失则保持观测态。；trust gate=unavailable / unavailable；缺少: DR007, SHIBOR；cap=unavailable_source；score capped"
       }
     },
     {
@@ -507,6 +783,31 @@
             "capReason": "unavailable_source"
           }
         ]
+      },
+      "coverageDiagnostics": {
+        "indicatorId": "futures_premarket",
+        "indicatorName": "期货 / 盘前方向",
+        "requiredInputs": [
+          "NQ",
+          "ES",
+          "YM",
+          "RTY"
+        ],
+        "fulfilledInputs": [],
+        "missingInputs": [
+          "NQ",
+          "ES",
+          "YM",
+          "RTY"
+        ],
+        "sourceTier": "unavailable",
+        "freshness": "unavailable",
+        "trustLevel": "unavailable",
+        "contributesToScore": false,
+        "scoreContribution": 0,
+        "capReason": "unavailable_source",
+        "degradationReason": "fallback_source",
+        "activationHint": "现有 futures snapshot 或延迟 proxy 可用时才激活；没有真实期货快照时保持不可用。；trust gate=unavailable / unavailable；缺少: NQ, ES, YM, RTY；cap=unavailable_source；score capped"
       }
     }
   ],

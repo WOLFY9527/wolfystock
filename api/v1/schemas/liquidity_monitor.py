@@ -12,6 +12,18 @@ FreshnessLabel = Literal["live", "cached", "delayed", "stale", "fallback", "mock
 LiquidityRegime = Literal["abundant", "supportive", "neutral", "tight", "stress", "unavailable"]
 IndicatorStatus = Literal["live", "partial", "unavailable"]
 EvidenceFreshnessLabel = Literal["live", "fresh", "cached", "delayed", "stale", "partial", "fallback", "synthetic", "unavailable", "unknown"]
+SourceTierLabel = Literal[
+    "official_public",
+    "exchange_public",
+    "broker_authorized",
+    "unofficial_public_api",
+    "public_web_fallback",
+    "snapshot",
+    "static_fallback",
+    "synthetic",
+    "unavailable",
+]
+TrustLevelLabel = Literal["reliable", "usable_with_caution", "weak", "unavailable"]
 
 
 class LiquidityMonitorScore(BaseModel):
@@ -58,6 +70,22 @@ class LiquidityMonitorEvidenceSnapshot(BaseModel):
     inputs: list[LiquidityMonitorEvidenceInput] = Field(default_factory=list)
 
 
+class LiquidityMonitorCoverageDiagnostics(BaseModel):
+    indicatorId: str
+    indicatorName: str
+    requiredInputs: list[str] = Field(default_factory=list)
+    fulfilledInputs: list[str] = Field(default_factory=list)
+    missingInputs: list[str] = Field(default_factory=list)
+    sourceTier: SourceTierLabel
+    freshness: EvidenceFreshnessLabel
+    trustLevel: TrustLevelLabel
+    contributesToScore: bool = False
+    scoreContribution: int = 0
+    capReason: Optional[str] = None
+    degradationReason: Optional[str] = None
+    activationHint: Optional[str] = None
+
+
 class LiquidityMonitorIndicator(BaseModel):
     key: str
     label: str
@@ -69,6 +97,7 @@ class LiquidityMonitorIndicator(BaseModel):
     summary: Optional[str] = None
     updatedAt: Optional[str] = None
     evidence: Optional[LiquidityMonitorEvidenceSnapshot] = None
+    coverageDiagnostics: Optional[LiquidityMonitorCoverageDiagnostics] = None
 
 
 class LiquidityMonitorFreshnessSummary(BaseModel):

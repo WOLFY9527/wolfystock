@@ -54,7 +54,12 @@ Expected degraded-state semantics:
   disclosure; effective fed funds, CPI YoY, PPI YoY, and credit-spread proxy
   rows must not appear realtime.
 - Snapshot reuse may keep prior real values visible, but the payload and item freshness must disclose `stale` or `fallback`.
-- Liquidity Monitor evidence must keep degraded inputs explicit through indicator evidence instead of silently counting them as healthy.
+- Liquidity Monitor evidence must keep degraded inputs explicit through
+  indicator evidence and `coverageDiagnostics` instead of silently counting
+  them as healthy.
+- Liquidity Monitor `coverageDiagnostics` must keep unavailable or partial
+  inputs capped/excluded from strong score contribution and must not label
+  fallback/static data as live or fresh.
 - Rotation Radar and Sector Rotation must keep proxy/taxonomy/fallback evidence visible through metadata, evidence snapshots, and source freshness fields.
 - Rotation Radar Theme Registry v2 metadata must separate ETF proxies from index/asset concepts and keep proxy evidence framed as ETF proxy / participation proxy / relative strength proxy only.
 - Market Temperature and Market Briefing must degrade to insufficient-data posture when reliable inputs are missing; they must not emit strong bullish/bearish action language from fallback-only inputs.
