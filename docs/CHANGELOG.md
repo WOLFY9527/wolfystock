@@ -1,5 +1,14 @@
 ## 2026-05-18
 
+- **Market Intelligence trust gate contract** - Added a pure backend source-tier
+  trust gate for Market Intelligence evidence, covering official, exchange,
+  broker-authorized, unofficial public API, public-web fallback, snapshot,
+  static fallback, synthetic, and unavailable tiers. Market Temperature and
+  Market Briefing now expose additive trust metadata (`trustLevel`,
+  `sourceTier`, `scoreCap`, `conclusionAllowed`, and `degradationReasons`) so
+  stale, fallback, synthetic, unavailable, mixed, or low-coverage inputs cannot
+  be treated as strong reliable conclusions. Provider order, MarketCache core,
+  scoring formulas, frontend, and database schema remain unchanged.
 - **Offline factor research report scaffold** - Added additive
   `src/services/factor_research_report.py` plus fixture-backed contract tests to
   aggregate `FactorObservation` inputs with offline factor metrics,

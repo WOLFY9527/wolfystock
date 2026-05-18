@@ -47,6 +47,7 @@ Expected degraded-state semantics:
 - Liquidity Monitor evidence must keep degraded inputs explicit through indicator evidence instead of silently counting them as healthy.
 - Rotation Radar and Sector Rotation must keep proxy/taxonomy/fallback evidence visible through metadata, evidence snapshots, and source freshness fields.
 - Market Temperature and Market Briefing must degrade to insufficient-data posture when reliable inputs are missing; they must not emit strong bullish/bearish action language from fallback-only inputs.
+- Market Temperature and Market Briefing trust fields (`trustLevel`, `sourceTier`, `scoreCap`, `conclusionAllowed`, `degradationReasons`) must cap stale, fallback, unavailable, synthetic, mixed, or low-coverage evidence before strong conclusions are allowed.
 
 Backend-only:
 - This checklist is backend-only.
