@@ -44,6 +44,28 @@ _QUOTE_PROVIDER_REQUEST_TIMEOUT_SECONDS = 2.5
 _UNAVAILABLE_SYMBOL_COOLDOWN_SECONDS = 1800.0
 _UNAVAILABLE_SYMBOL_STATE: Dict[str, Dict[str, Any]] = {}
 _PROVIDER_DIAGNOSTIC_REASON_LIMIT = 8
+_CONFIGURED_FAILURE_CLASSES = {
+    "missing_credentials",
+    "entitlement_denied",
+    "auth_failed",
+    "rate_limited",
+    "timeout",
+    "empty_response",
+    "symbol_not_found",
+    "provider_error",
+    "unknown",
+}
+_CONFIGURED_FAILURE_PRIORITY = (
+    "auth_failed",
+    "entitlement_denied",
+    "rate_limited",
+    "timeout",
+    "empty_response",
+    "symbol_not_found",
+    "provider_error",
+    "missing_credentials",
+    "unknown",
+)
 _ALPACA_CREDENTIAL_ENV_NAMES = {
     "key_id": "ALPACA_API_KEY_ID",
     "secret_key": "ALPACA_API_SECRET_KEY",
@@ -57,6 +79,12 @@ class _ProviderAttempt:
     failed_symbol_reasons: Dict[str, str] = field(default_factory=dict)
     status: str = "not_configured"
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class _AlpacaQuoteResult:
+    quote: Optional[Dict[str, Any]] = None
+    window_failure_reasons: Dict[str, str] = field(default_factory=dict)
 
 
 def get_rotation_radar_quote_provider() -> QuoteProvider:
@@ -103,9 +131,23 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
     credentials = get_provider_credentials(_CONFIGURED_PROVIDER_ID)
     metadata = _configured_provider_base_metadata(credentials)
     if credentials.is_partial:
-        return _ProviderAttempt(status="incomplete_credentials", metadata=metadata)
+        return _ProviderAttempt(
+            status="incomplete_credentials",
+            metadata=_with_request_window_diagnostics(
+                metadata,
+                symbols=symbols,
+                failure_class="missing_credentials",
+            ),
+        )
     if not credentials.is_configured:
-        return _ProviderAttempt(status="not_configured", metadata=metadata)
+        return _ProviderAttempt(
+            status="not_configured",
+            metadata=_with_request_window_diagnostics(
+                metadata,
+                symbols=symbols,
+                failure_class="missing_credentials",
+            ),
+        )
 
     data_feed = str(metadata.get("feed") or credentials.extras.get("data_feed") or "iex").strip().lower() or "iex"
     metadata.update({
@@ -140,6 +182,8 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
     max_workers = max(1, min(int(_QUOTE_PROVIDER_MAX_WORKERS), len(symbols) or 1))
     quotes: Dict[str, Dict[str, Any]] = {}
     failed_symbol_reasons: Dict[str, str] = {}
+    request_window_results = _empty_request_window_results(len(symbols))
+    symbol_failure_samples: list[Dict[str, str]] = []
     executor = ThreadPoolExecutor(max_workers=max_workers)
     future_to_symbol = {
         executor.submit(_quote_from_alpaca_fetcher, fetcher, symbol, data_feed): symbol
@@ -149,13 +193,30 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
         for future in as_completed(future_to_symbol, timeout=timeout_seconds):
             symbol = future_to_symbol[future]
             try:
-                quote = future.result()
+                result = future.result()
             except Exception as exc:
-                reason = _sanitize_unavailable_reason(str(exc))
-                failed_symbol_reasons[symbol] = reason
+                failure_class = _classify_configured_failure(str(exc))
+                _record_symbol_window_failures(
+                    request_window_results,
+                    symbol_failure_samples,
+                    symbol=symbol,
+                    failure_reasons={window: failure_class for window in _ALPACA_TIMEFRAMES},
+                )
+                failed_symbol_reasons[symbol] = _legacy_symbol_failure_reason([failure_class])
                 continue
+            quote = result.quote if isinstance(result, _AlpacaQuoteResult) else result
+            window_failure_reasons = (
+                result.window_failure_reasons if isinstance(result, _AlpacaQuoteResult) else {}
+            )
+            _record_symbol_window_outcome(
+                request_window_results,
+                symbol_failure_samples,
+                symbol=symbol,
+                quote=quote,
+                window_failure_reasons=window_failure_reasons,
+            )
             if quote is None:
-                failed_symbol_reasons[symbol] = "symbol_unavailable"
+                failed_symbol_reasons[symbol] = _legacy_symbol_failure_reason(window_failure_reasons.values())
                 continue
             quotes[symbol] = quote
     except FuturesTimeoutError:
@@ -165,6 +226,12 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
             if not future.done()
         ]
         for symbol in pending_symbols:
+            _record_symbol_window_failures(
+                request_window_results,
+                symbol_failure_samples,
+                symbol=symbol,
+                failure_reasons={window: "timeout" for window in _ALPACA_TIMEFRAMES},
+            )
             failed_symbol_reasons[symbol] = "quote_fetch_failed"
             future = next(
                 (candidate for candidate, candidate_symbol in future_to_symbol.items() if candidate_symbol == symbol),
@@ -181,6 +248,16 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
         status = "success"
     else:
         status = "fallback" if symbols else "success"
+    request_window_results = _finalize_request_window_results(request_window_results)
+    configured_fulfilled_windows = _fulfilled_windows_from_request_results(request_window_results)
+    configured_missing_windows = _missing_windows_from_request_results(request_window_results)
+    configured_failure_reasons = _failure_classes_from_request_results(request_window_results)
+    provider_failure_reasons = (
+        configured_failure_reasons
+        if configured_failure_reasons
+        else _bounded_unique_reasons(failed_symbol_reasons.values())
+    )
+    provider_failure_reason = provider_failure_reasons[0] if provider_failure_reasons else None
     return _ProviderAttempt(
         quotes=quotes,
         failed_symbol_reasons=failed_symbol_reasons,
@@ -191,8 +268,12 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
             "configuredProviderFeed": data_feed,
             "feed": data_feed,
             "providerConstructed": True,
-            "providerFailureReason": _first_failure_reason(failed_symbol_reasons.values()),
-            "providerFailureReasons": _bounded_unique_reasons(failed_symbol_reasons.values()),
+            "providerFailureReason": provider_failure_reason,
+            "providerFailureReasons": provider_failure_reasons,
+            "requestWindowResults": request_window_results,
+            "symbolFailureSamples": symbol_failure_samples[:_FAILED_SYMBOL_LIST_LIMIT],
+            "configuredFulfilledWindows": configured_fulfilled_windows,
+            "configuredMissingWindows": configured_missing_windows,
         },
     )
 
@@ -226,6 +307,208 @@ def _configured_provider_base_metadata(credentials: ProviderCredentialBundle) ->
         "feed": data_feed,
         "feedEntitlementStatus": "unknown" if credentials.is_configured else "not_checked",
     }
+
+
+def _with_request_window_diagnostics(
+    metadata: Mapping[str, Any],
+    *,
+    symbols: Sequence[str],
+    failure_class: str,
+) -> Dict[str, Any]:
+    request_window_results = _empty_request_window_results(len(symbols))
+    symbol_failure_samples: list[Dict[str, str]] = []
+    for symbol in symbols:
+        _record_symbol_window_failures(
+            request_window_results,
+            symbol_failure_samples,
+            symbol=symbol,
+            failure_reasons={window: failure_class for window in _ALPACA_TIMEFRAMES},
+        )
+    finalized_results = _finalize_request_window_results(request_window_results)
+    provider_failure_reasons = _bounded_unique_reasons(_as_string_sequence(metadata.get("providerFailureReasons")))
+    return {
+        **dict(metadata),
+        "requestWindowResults": finalized_results,
+        "symbolFailureSamples": symbol_failure_samples[:_FAILED_SYMBOL_LIST_LIMIT],
+        "configuredFulfilledWindows": _fulfilled_windows_from_request_results(finalized_results),
+        "configuredMissingWindows": _missing_windows_from_request_results(finalized_results),
+        "providerFailureReasons": provider_failure_reasons,
+    }
+
+
+def _empty_request_window_results(requested_symbol_count: int) -> Dict[str, Dict[str, Any]]:
+    return {
+        window: {
+            "requestedSymbolCount": max(0, int(requested_symbol_count or 0)),
+            "successCount": 0,
+            "failureCount": 0,
+            "failureClasses": {},
+            "dominantFailureClass": None,
+            "fulfilled": False,
+        }
+        for window in _ALPACA_TIMEFRAMES
+    }
+
+
+def _record_symbol_window_outcome(
+    request_window_results: Dict[str, Dict[str, Any]],
+    symbol_failure_samples: list[Dict[str, str]],
+    *,
+    symbol: str,
+    quote: Optional[Mapping[str, Any]],
+    window_failure_reasons: Mapping[str, str],
+) -> None:
+    time_windows = quote.get("timeWindows") if isinstance(quote, Mapping) else {}
+    for window in _ALPACA_TIMEFRAMES:
+        slot = time_windows.get(window) if isinstance(time_windows, Mapping) else None
+        if isinstance(slot, Mapping) and slot.get("available", True):
+            request_window_results[window]["successCount"] += 1
+            continue
+        failure_class = (
+            str(window_failure_reasons.get(window) or "").strip()
+            or _classify_configured_failure(slot.get("reason") if isinstance(slot, Mapping) else "")
+            or "unknown"
+        )
+        _record_window_failure(
+            request_window_results,
+            symbol_failure_samples,
+            symbol=symbol,
+            window=window,
+            failure_class=failure_class,
+        )
+
+
+def _record_symbol_window_failures(
+    request_window_results: Dict[str, Dict[str, Any]],
+    symbol_failure_samples: list[Dict[str, str]],
+    *,
+    symbol: str,
+    failure_reasons: Mapping[str, str],
+) -> None:
+    for window in _ALPACA_TIMEFRAMES:
+        _record_window_failure(
+            request_window_results,
+            symbol_failure_samples,
+            symbol=symbol,
+            window=window,
+            failure_class=str(failure_reasons.get(window) or "unknown"),
+        )
+
+
+def _record_window_failure(
+    request_window_results: Dict[str, Dict[str, Any]],
+    symbol_failure_samples: list[Dict[str, str]],
+    *,
+    symbol: str,
+    window: str,
+    failure_class: str,
+) -> None:
+    normalized = _normalize_configured_failure_class(failure_class)
+    window_result = request_window_results.setdefault(
+        window,
+        {
+            "requestedSymbolCount": 0,
+            "successCount": 0,
+            "failureCount": 0,
+            "failureClasses": {},
+            "dominantFailureClass": None,
+            "fulfilled": False,
+        },
+    )
+    window_result["failureCount"] = int(window_result.get("failureCount") or 0) + 1
+    failure_classes = window_result.setdefault("failureClasses", {})
+    failure_classes[normalized] = int(failure_classes.get(normalized) or 0) + 1
+    if len(symbol_failure_samples) < _FAILED_SYMBOL_LIST_LIMIT:
+        symbol_failure_samples.append({
+            "symbol": _sanitize_symbol(symbol),
+            "window": str(window),
+            "failureClass": normalized,
+        })
+
+
+def _finalize_request_window_results(
+    request_window_results: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    finalized: Dict[str, Dict[str, Any]] = {}
+    for window in _ALPACA_TIMEFRAMES:
+        raw = request_window_results.get(window, {})
+        requested_count = max(0, int(raw.get("requestedSymbolCount") or 0))
+        success_count = max(0, int(raw.get("successCount") or 0))
+        failure_count = max(0, int(raw.get("failureCount") or 0))
+        failure_classes = {
+            _normalize_configured_failure_class(failure_class): max(0, int(count or 0))
+            for failure_class, count in dict(raw.get("failureClasses") or {}).items()
+            if max(0, int(count or 0)) > 0
+        }
+        finalized[window] = {
+            "requestedSymbolCount": requested_count,
+            "successCount": success_count,
+            "failureCount": failure_count,
+            "failureClasses": failure_classes,
+            "dominantFailureClass": _dominant_failure_class(failure_classes),
+            "fulfilled": bool(requested_count > 0 and success_count >= requested_count and failure_count == 0),
+        }
+    return finalized
+
+
+def _fulfilled_windows_from_request_results(request_window_results: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    return [
+        window
+        for window in _ALPACA_TIMEFRAMES
+        if bool(request_window_results.get(window, {}).get("fulfilled"))
+    ]
+
+
+def _missing_windows_from_request_results(request_window_results: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    return [
+        window
+        for window in _ALPACA_TIMEFRAMES
+        if not bool(request_window_results.get(window, {}).get("fulfilled"))
+    ]
+
+
+def _failure_classes_from_request_results(request_window_results: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    reasons: list[str] = []
+    for window in _ALPACA_TIMEFRAMES:
+        result = request_window_results.get(window, {})
+        failure_classes = result.get("failureClasses") if isinstance(result, Mapping) else {}
+        if isinstance(failure_classes, Mapping):
+            reasons.extend(str(reason) for reason in failure_classes)
+    return _bounded_unique_reasons(_sort_failure_classes(reasons))
+
+
+def _sort_failure_classes(reasons: Iterable[str]) -> list[str]:
+    seen = {reason for reason in reasons if str(reason or "").strip()}
+    return [
+        reason
+        for reason in _CONFIGURED_FAILURE_PRIORITY
+        if reason in seen
+    ] + sorted(reason for reason in seen if reason not in _CONFIGURED_FAILURE_PRIORITY)
+
+
+def _dominant_failure_class(failure_classes: Mapping[str, int]) -> Optional[str]:
+    if not failure_classes:
+        return None
+    return max(
+        failure_classes.items(),
+        key=lambda item: (int(item[1] or 0), -_failure_class_rank(item[0]), str(item[0])),
+    )[0]
+
+
+def _failure_class_rank(failure_class: str) -> int:
+    try:
+        return _CONFIGURED_FAILURE_PRIORITY.index(str(failure_class))
+    except ValueError:
+        return len(_CONFIGURED_FAILURE_PRIORITY)
+
+
+def _normalize_configured_failure_class(failure_class: Any) -> str:
+    normalized = str(failure_class or "").strip().lower()
+    return normalized if normalized in _CONFIGURED_FAILURE_CLASSES else "unknown"
+
+
+def _sanitize_symbol(symbol: Any) -> str:
+    return " ".join(str(symbol or "").strip().upper().split())
 
 
 def _credential_env_field_names(missing_fields: Sequence[str]) -> list[str]:
@@ -483,23 +766,34 @@ def _provider_activation_diagnostics(
 ) -> Dict[str, Any]:
     requested_windows = list(_ALPACA_TIMEFRAMES)
     requested_symbol_count = len(requested_symbols)
-    fulfilled_windows = [
-        window
-        for window in requested_windows
-        if requested_symbol_count > 0 and int(window_coverage.get(window, 0)) >= requested_symbol_count
-    ]
-    missing_windows = [
-        window
-        for window in requested_windows
-        if requested_symbol_count > 0 and int(window_coverage.get(window, 0)) < requested_symbol_count
-    ]
+    request_window_results = _diagnostic_request_window_results(
+        configured_attempt.metadata.get("requestWindowResults"),
+        requested_symbol_count=requested_symbol_count,
+    )
+    if request_window_results:
+        fulfilled_windows = _fulfilled_windows_from_request_results(request_window_results)
+        missing_windows = _missing_windows_from_request_results(request_window_results)
+    else:
+        fulfilled_windows = [
+            window
+            for window in requested_windows
+            if requested_symbol_count > 0 and int(window_coverage.get(window, 0)) >= requested_symbol_count
+        ]
+        missing_windows = [
+            window
+            for window in requested_windows
+            if requested_symbol_count > 0 and int(window_coverage.get(window, 0)) < requested_symbol_count
+        ]
     yfinance_fallback_used = yfinance_attempt.status != "not_requested"
     static_basket_fallback_used = bool(requested_symbol_count and not quotes)
     final_source_tier = str(source_summary.get("sourceTier") or "unknown")
+    request_failure_classes = _failure_classes_from_request_results(request_window_results)
+    provider_constructed = bool(configured_attempt.metadata.get("providerConstructed"))
     provider_failure_reasons = _bounded_unique_reasons(
         [
             *_as_string_sequence(configured_attempt.metadata.get("providerFailureReasons")),
-            *configured_attempt.failed_symbol_reasons.values(),
+            *(request_failure_classes if provider_constructed else []),
+            *([] if request_failure_classes else configured_attempt.failed_symbol_reasons.values()),
             *failed_symbol_reasons.values(),
             *_quote_window_failure_reasons(quotes),
         ]
@@ -510,6 +804,20 @@ def _provider_activation_diagnostics(
         provider_failure_reasons=provider_failure_reasons,
         fulfilled_windows=fulfilled_windows,
         missing_windows=missing_windows,
+    )
+    recommended_action = _recommended_action(
+        credentials_present=bool(configured_attempt.metadata.get("credentialsPresent")),
+        provider_constructed=provider_constructed,
+        fulfilled_windows=fulfilled_windows,
+        missing_windows=missing_windows,
+        provider_failure_reasons=provider_failure_reasons,
+    )
+    activation_hint = _activation_hint(
+        credentials_present=bool(configured_attempt.metadata.get("credentialsPresent")),
+        provider_constructed=provider_constructed,
+        fulfilled_windows=fulfilled_windows,
+        missing_windows=missing_windows,
+        provider_failure_reasons=provider_failure_reasons,
     )
     return {
         "configuredProviderAttempted": bool(configured_attempt.metadata.get("configuredProviderAttempted", True)),
@@ -526,7 +834,7 @@ def _provider_activation_diagnostics(
                 configured_attempt.metadata.get("missingCredentialFields"),
             )
         )),
-        "providerConstructed": bool(configured_attempt.metadata.get("providerConstructed")),
+        "providerConstructed": provider_constructed,
         "providerFailureReason": (
             str(configured_attempt.metadata.get("providerFailureReason"))
             if configured_attempt.metadata.get("providerFailureReason")
@@ -542,16 +850,22 @@ def _provider_activation_diagnostics(
         "requestedWindows": requested_windows,
         "fulfilledWindows": fulfilled_windows,
         "missingWindows": missing_windows,
+        "requestWindowResults": request_window_results,
         "symbolSuccessCount": len(quotes),
         "symbolFailureCount": len(failed_symbol_reasons),
+        "symbolFailureSamples": _sanitize_symbol_failure_samples(
+            configured_attempt.metadata.get("symbolFailureSamples")
+        ),
         "providerFailureReasons": provider_failure_reasons,
+        "recommendedAction": recommended_action,
+        "activationHint": activation_hint,
         "fallbackProviderUsed": fallback_provider_used,
         "yfinanceFallbackUsed": yfinance_fallback_used,
         "staticBasketFallbackUsed": static_basket_fallback_used,
         "finalSourceTier": final_source_tier,
         "trustLevel": _provider_trust_level(
             final_source_tier=final_source_tier,
-            provider_constructed=bool(configured_attempt.metadata.get("providerConstructed")),
+            provider_constructed=provider_constructed,
             fulfilled_windows=fulfilled_windows,
             missing_windows=missing_windows,
             symbol_failure_count=len(failed_symbol_reasons),
@@ -591,6 +905,39 @@ def _provider_trust_level(
     return "partial" if fulfilled_windows else "degraded"
 
 
+def _diagnostic_request_window_results(
+    raw_results: Any,
+    *,
+    requested_symbol_count: int,
+) -> Dict[str, Dict[str, Any]]:
+    if not isinstance(raw_results, Mapping):
+        return {}
+    finalized: Dict[str, Dict[str, Any]] = {}
+    for window in _ALPACA_TIMEFRAMES:
+        raw = raw_results.get(window, {})
+        if not isinstance(raw, Mapping):
+            continue
+        failure_classes = {
+            _normalize_configured_failure_class(failure_class): max(0, int(count or 0))
+            for failure_class, count in dict(raw.get("failureClasses") or {}).items()
+            if max(0, int(count or 0)) > 0
+        }
+        success_count = max(0, int(raw.get("successCount") or 0))
+        failure_count = max(0, int(raw.get("failureCount") or 0))
+        requested_count = max(0, int(raw.get("requestedSymbolCount") or requested_symbol_count))
+        finalized[window] = {
+            "requestedSymbolCount": requested_count,
+            "successCount": success_count,
+            "failureCount": failure_count,
+            "failureClasses": failure_classes,
+            "dominantFailureClass": _dominant_failure_class(failure_classes),
+            "fulfilled": bool(raw.get("fulfilled")) if "fulfilled" in raw else bool(
+                requested_count > 0 and success_count >= requested_count and failure_count == 0
+            ),
+        }
+    return finalized
+
+
 def _feed_entitlement_status(
     metadata: Mapping[str, Any],
     *,
@@ -601,12 +948,114 @@ def _feed_entitlement_status(
     explicit = str(metadata.get("feedEntitlementStatus") or "").strip()
     if explicit and explicit not in {"unknown", "not_checked"}:
         return explicit
-    entitlement_markers = {"feed_entitlement_missing", "permission_denied", "subscription_required"}
-    if any(reason in entitlement_markers for reason in provider_failure_reasons):
-        return "missing_or_denied"
+    reason_set = {str(reason or "").strip() for reason in provider_failure_reasons if str(reason or "").strip()}
+    if "auth_failed" in reason_set:
+        return "auth_failed"
+    if "entitlement_denied" in reason_set:
+        return "entitlement_denied"
+    if "rate_limited" in reason_set:
+        return "rate_limited"
+    if "timeout" in reason_set:
+        return "timeout"
+    if "empty_response" in reason_set or "symbol_not_found" in reason_set:
+        return "not_inferable" if not fulfilled_windows else "partial"
+    if "missing_credentials" in reason_set:
+        return "not_checked"
     if fulfilled_windows and missing_windows:
         return "not_inferable"
     return explicit or "unknown"
+
+
+def _recommended_action(
+    *,
+    credentials_present: bool,
+    provider_constructed: bool,
+    fulfilled_windows: Sequence[str],
+    missing_windows: Sequence[str],
+    provider_failure_reasons: Sequence[str],
+) -> str:
+    primary = _primary_failure_class(provider_failure_reasons)
+    if not credentials_present:
+        return "configure_alpaca_credentials"
+    if not provider_constructed:
+        return "check_alpaca_provider_configuration"
+    if primary == "auth_failed":
+        return "verify_alpaca_credentials"
+    if primary == "entitlement_denied":
+        return "enable_feed_entitlement_or_switch_feed"
+    if primary == "rate_limited":
+        return "retry_after_rate_limit"
+    if primary == "timeout":
+        return "retry_or_reduce_symbol_batch"
+    if primary in {"empty_response", "symbol_not_found"}:
+        return "verify_symbol_coverage"
+    if primary == "provider_error":
+        return "check_alpaca_provider_status"
+    if missing_windows:
+        return "review_missing_windows"
+    if fulfilled_windows:
+        return "none"
+    return "check_alpaca_provider_status"
+
+
+def _activation_hint(
+    *,
+    credentials_present: bool,
+    provider_constructed: bool,
+    fulfilled_windows: Sequence[str],
+    missing_windows: Sequence[str],
+    provider_failure_reasons: Sequence[str],
+) -> str:
+    primary = _primary_failure_class(provider_failure_reasons) or "unknown"
+    if not credentials_present:
+        return "Configure Alpaca credentials before Alpaca windows can activate."
+    if not provider_constructed:
+        return f"Alpaca credentials are present, but the provider could not be constructed: {primary}."
+    if not fulfilled_windows and missing_windows:
+        return (
+            "Alpaca credentials are present and the provider was constructed, "
+            f"but no configured windows were fulfilled: {primary}."
+        )
+    if fulfilled_windows and missing_windows:
+        return (
+            "Alpaca provider is active but missing "
+            f"{'/'.join(missing_windows)} windows: {primary}."
+        )
+    if fulfilled_windows:
+        return "Alpaca feed active for requested 5m/15m/60m/1d windows."
+    return f"Alpaca provider did not report window coverage: {primary}."
+
+
+def _primary_failure_class(provider_failure_reasons: Sequence[str]) -> Optional[str]:
+    normalized = [
+        _normalize_configured_failure_class(reason)
+        for reason in provider_failure_reasons
+        if str(reason or "").strip()
+    ]
+    sorted_reasons = _sort_failure_classes(normalized)
+    return sorted_reasons[0] if sorted_reasons else None
+
+
+def _sanitize_symbol_failure_samples(raw_samples: Any) -> list[Dict[str, str]]:
+    if not isinstance(raw_samples, Sequence) or isinstance(raw_samples, (str, bytes)):
+        return []
+    samples: list[Dict[str, str]] = []
+    for raw_sample in raw_samples:
+        if not isinstance(raw_sample, Mapping):
+            continue
+        symbol = _sanitize_symbol(raw_sample.get("symbol"))
+        window = str(raw_sample.get("window") or "").strip()
+        failure_class = _normalize_configured_failure_class(raw_sample.get("failureClass"))
+        if not symbol or window not in _ALPACA_TIMEFRAMES:
+            continue
+        samples.append({
+            "symbol": symbol,
+            "window": window,
+            "failureClass": failure_class,
+        })
+        if len(samples) >= _FAILED_SYMBOL_LIST_LIMIT:
+            break
+    return samples
 
 
 def _as_string_sequence(value: Any) -> list[str]:
@@ -664,7 +1113,7 @@ def _record_failed_symbol(
     return failed_symbol_count + 1
 
 
-def _quote_from_alpaca_fetcher(fetcher: AlpacaFetcher, symbol: str, data_feed: str) -> Optional[Dict[str, Any]]:
+def _quote_from_alpaca_fetcher(fetcher: AlpacaFetcher, symbol: str, data_feed: str) -> _AlpacaQuoteResult:
     end_dt = datetime.now(timezone.utc)
     windows: Dict[str, Dict[str, Any]] = {}
     window_sources: Dict[str, Dict[str, Any]] = {}
@@ -679,7 +1128,10 @@ def _quote_from_alpaca_fetcher(fetcher: AlpacaFetcher, symbol: str, data_feed: s
                 limit=limit,
             )
         except Exception as exc:
-            window_failure_reasons[window] = _sanitize_window_failure_reason(str(exc))
+            window_failure_reasons[window] = _classify_configured_failure(str(exc))
+            continue
+        if not _materialize_bars(bars):
+            window_failure_reasons[window] = "empty_response"
             continue
         slot = _window_from_alpaca_bars(symbol, window, bars, data_feed=data_feed)
         if slot is not None:
@@ -690,19 +1142,24 @@ def _quote_from_alpaca_fetcher(fetcher: AlpacaFetcher, symbol: str, data_feed: s
             }
 
     if not windows:
-        return None
+        if not window_failure_reasons:
+            window_failure_reasons = {window: "empty_response" for window in _ALPACA_TIMEFRAMES}
+        return _AlpacaQuoteResult(
+            quote=None,
+            window_failure_reasons=window_failure_reasons,
+        )
 
     preferred_window = next((window for window in ("1d", "60m", "15m", "5m") if window in windows), None)
     if preferred_window is None:
-        return None
+        return _AlpacaQuoteResult(quote=None, window_failure_reasons=window_failure_reasons)
     preferred_slot = windows[preferred_window]
     preferred_bars = window_sources[preferred_window]["bars"]
     last_bar = _last_bar(preferred_bars)
     if last_bar is None:
-        return None
+        return _AlpacaQuoteResult(quote=None, window_failure_reasons=window_failure_reasons)
     close = _number(_field(last_bar, "c", "close", "Close"))
     if close is None:
-        return None
+        return _AlpacaQuoteResult(quote=None, window_failure_reasons=window_failure_reasons)
     high = _number(_field(last_bar, "h", "high", "High"))
     low = _number(_field(last_bar, "l", "low", "Low"))
     volume = _number(_field(last_bar, "v", "volume", "Volume"))
@@ -742,7 +1199,10 @@ def _quote_from_alpaca_fetcher(fetcher: AlpacaFetcher, symbol: str, data_feed: s
     }
     if window_failure_reasons:
         quote["windowFailureReasons"] = window_failure_reasons
-    return quote
+    return _AlpacaQuoteResult(
+        quote=quote,
+        window_failure_reasons=window_failure_reasons,
+    )
 
 
 def _window_from_alpaca_bars(
@@ -1166,17 +1626,61 @@ def _sanitize_provider_failure_reason(raw_reason: str) -> str:
     return "provider_unavailable"
 
 
-def _sanitize_window_failure_reason(raw_reason: str) -> str:
+def _classify_configured_failure(raw_reason: Any) -> str:
     normalized = str(raw_reason or "").strip().lower()
+    if not normalized:
+        return "unknown"
     if (
-        "subscription" in normalized
+        "401" in normalized
+        or "unauthorized" in normalized
+        or "invalid api key" in normalized
+        or "invalid key" in normalized
+        or "authentication" in normalized
+        or "auth failed" in normalized
+    ):
+        return "auth_failed"
+    if (
+        "403" in normalized
+        or "forbidden" in normalized
         or "entitlement" in normalized
         or "permission" in normalized
-        or "forbidden" in normalized
-        or "403" in normalized
+        or "subscription" in normalized
     ):
-        return "subscription_required"
-    return _sanitize_unavailable_reason(raw_reason)
+        return "entitlement_denied"
+    if "429" in normalized or "rate limit" in normalized or "too many requests" in normalized:
+        return "rate_limited"
+    if "timeout" in normalized or "timed out" in normalized:
+        return "timeout"
+    if (
+        "delisted" in normalized
+        or "no price data" in normalized
+        or "no data" in normalized
+        or "symbol not found" in normalized
+        or "unknown symbol" in normalized
+    ):
+        return "symbol_not_found"
+    if "empty" in normalized or "no bars" in normalized or "未返回" in normalized:
+        return "empty_response"
+    return "provider_error"
+
+
+def _legacy_symbol_failure_reason(failure_classes: Iterable[Any]) -> str:
+    primary = _primary_failure_class([
+        _normalize_configured_failure_class(failure_class)
+        for failure_class in failure_classes
+        if str(failure_class or "").strip()
+    ])
+    if primary == "symbol_not_found":
+        return "symbol_unavailable"
+    if primary == "timeout":
+        return "quote_fetch_failed"
+    if primary in {"auth_failed", "entitlement_denied", "rate_limited", "empty_response", "provider_error"}:
+        return "quote_unavailable"
+    return "quote_unavailable"
+
+
+def _sanitize_window_failure_reason(raw_reason: str) -> str:
+    return _classify_configured_failure(raw_reason)
 
 
 def _cooldown_reason(symbol: str, now_monotonic: float) -> Optional[str]:

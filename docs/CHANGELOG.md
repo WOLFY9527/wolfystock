@@ -1,5 +1,15 @@
 ## 2026-05-18
 
+- **Rotation Radar Alpaca window entitlement diagnostics** - Rotation Radar
+  provider diagnostics now report configured Alpaca window outcomes separately
+  from fallback yfinance quotes, including per-window 5m/15m/60m/1d success and
+  failure counts, sanitized failure classes, capped symbol samples, feed
+  entitlement status, and recommended activation actions/hints when credentials
+  exist but windows are missing, empty, auth-failed, or partially entitled.
+  Fallback behavior remains unchanged: no synthetic intraday windows are
+  created, degraded yfinance/static evidence is not marked live, provider order
+  is unchanged, and frontend, database schema, MarketCache core behavior,
+  scoring/ranking, and adjacent product domains remain untouched.
 - **Rotation Radar credential-source diagnostics fix** - Rotation Radar provider
   diagnostics now reuse the same Alpaca credential source resolved by the
   runtime Config/provider-credential path, expose only sanitized
