@@ -81,6 +81,12 @@ class ScannerEvidencePacket:
     market: str
     rank: Optional[int]
     score: Optional[float]
+    rawScore: Optional[float]
+    finalScore: Optional[float]
+    scoreConfidence: Optional[float]
+    evidenceCoverage: Optional[float]
+    capReason: Optional[str]
+    degradationReason: Optional[str]
     evidenceVersion: str
     runId: Optional[int]
     trendEvidence: Dict[str, Any]
@@ -146,6 +152,7 @@ def build_scanner_evidence_packet(candidate: Dict[str, Any], context: Optional[D
     history_diag = dict(diagnostics.get("history") or {})
     quote_diag = dict(diagnostics.get("quote_context") or {})
     components = dict(payload.get("_component_scores") or {})
+    explainability = dict(context_payload.get("score_explainability") or diagnostics.get("score_explainability") or {})
 
     history_rows = int(history_diag.get("rows") or 0)
     history_state = _history_state(history_diag)
@@ -217,7 +224,13 @@ def build_scanner_evidence_packet(candidate: Dict[str, Any], context: Optional[D
         symbol=str(payload.get("symbol") or ""),
         market=str(context_payload.get("market") or payload.get("market") or "").lower(),
         rank=int(payload["rank"]) if payload.get("rank") is not None else None,
-        score=round(float(payload["score"]), 1) if payload.get("score") is not None else None,
+        score=round(float(explainability.get("final_score", payload.get("score"))), 1) if explainability.get("final_score", payload.get("score")) is not None else None,
+        rawScore=round(float(explainability.get("raw_score", payload.get("raw_score", payload.get("score")))), 1) if explainability.get("raw_score", payload.get("raw_score", payload.get("score"))) is not None else None,
+        finalScore=round(float(explainability.get("final_score", payload.get("final_score", payload.get("score")))), 1) if explainability.get("final_score", payload.get("final_score", payload.get("score"))) is not None else None,
+        scoreConfidence=_safe_float(explainability.get("score_confidence")),
+        evidenceCoverage=_safe_float(explainability.get("evidence_coverage")),
+        capReason=str(explainability.get("cap_reason")) if explainability.get("cap_reason") is not None else None,
+        degradationReason=str(explainability.get("degradation_reason")) if explainability.get("degradation_reason") is not None else None,
         evidenceVersion=str(context_payload.get("evidence_version") or SCANNER_EVIDENCE_VERSION),
         runId=context_payload.get("run_id"),
         trendEvidence=_bucket(

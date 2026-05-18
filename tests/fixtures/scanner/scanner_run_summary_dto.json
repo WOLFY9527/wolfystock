@@ -166,6 +166,8 @@
       "name": "NVIDIA",
       "rank": 1,
       "score": 91.25,
+      "raw_score": 91.25,
+      "final_score": 91.25,
       "quality_hint": "high_priority",
       "reason_summary": "Momentum and liquidity remain strong while the pre-open plan still requires confirmation.",
       "reasons": [
@@ -228,6 +230,15 @@
         "outperformed_benchmark": null
       },
       "diagnostics": {
+        "score_explainability": {
+          "raw_score": 91.25,
+          "final_score": 91.25,
+          "cap_reason": null,
+          "degradation_reason": null,
+          "score_confidence": 1.0,
+          "evidence_coverage": 1.0,
+          "missing_evidence": []
+        },
         "provider_diagnostics": {
           "providers_used": [
             "fixture_local_history"
@@ -292,6 +303,8 @@
       "name": "NVIDIA",
       "rank": 1,
       "score": 91.25,
+      "raw_score": 91.25,
+      "final_score": 91.25,
       "quality_hint": "high_priority",
       "reason_summary": "Momentum and liquidity remain strong while the pre-open plan still requires confirmation.",
       "reasons": [
@@ -354,6 +367,15 @@
         "outperformed_benchmark": null
       },
       "diagnostics": {
+        "score_explainability": {
+          "raw_score": 91.25,
+          "final_score": 91.25,
+          "cap_reason": null,
+          "degradation_reason": null,
+          "score_confidence": 1.0,
+          "evidence_coverage": 1.0,
+          "missing_evidence": []
+        },
         "provider_diagnostics": {
           "providers_used": [
             "fixture_local_history"

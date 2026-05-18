@@ -142,6 +142,24 @@ Scanner 不会对“全市场所有标的”做无边界盲扫，而是先构建
 - `sector_bonus`：最多 5 分
 - `penalties`：过热、波动过大、历史样本退化等扣分
 
+### Score cap 与 explainability
+
+当前 scanner 仍先按既有确定性规则计算 `raw score`，再只在已存在的弱证据命中时追加一个保守 `final score` cap：
+
+- `fallback_source`：实时/盘前 quote 缺失、fallback 或 history-only 上下文时，最高只保留到 `40`
+- `stale_source`：历史证据明确 stale 时，最高只保留到 `60`
+- `partial_coverage`：关键评分证据缺失、样本不足或 partial history fallback 时，最高只保留到 `70`
+
+这次改动不会改 provider 顺序、runtime fallback 路径或基础打分因子；它只防止弱证据候选带着高 raw score 被误读成高确信度结果。
+
+短名单候选现在会附带 additive explainability 元数据：
+
+- 顶层保留 `score` 作为最终排序分数，并补充 `raw_score`、`final_score`
+- `diagnostics.score_explainability` 会给出 `cap_reason`、`degradation_reason`、`score_confidence`、`evidence_coverage`、`missing_evidence`
+- `diagnostics.evidence_packet` 会同步暴露 `rawScore`、`finalScore`、`capReason`、`degradationReason` 与 `scoreConfidence`
+
+如果没有命中 cap，`raw_score == final_score == score`，排序与既有行为保持一致。
+
 ### 主要特征解释
 
 - `trend`：价格是否站稳 MA20 / MA60，MA20 是否继续上行
@@ -159,6 +177,7 @@ Scanner 不会对“全市场所有标的”做无边界盲扫，而是先构建
 - `symbol / name`
 - `rank`
 - `scanner score`
+- `raw score / final score`
 - `quality hint`
 - `reason summary`
 - `reasons`

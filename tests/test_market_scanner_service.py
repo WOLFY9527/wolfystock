@@ -951,6 +951,207 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         assert detail is not None
         self.assertIn("review_commentary", detail["shortlist"][0]["ai_interpretation"])
 
+    def test_apply_score_caps_and_explainability_caps_fallback_candidates(self) -> None:
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeScannerDataManager(),
+        )
+        candidate = {
+            "symbol": "PLTR",
+            "name": "Palantir",
+            "score": 81.6,
+            "reason_summary": "趋势与量能共振。",
+            "ret_5d": 6.8,
+            "ret_20d": 18.4,
+            "avg_amount_20": 7.6e8,
+            "amount": 7.67e8,
+            "avg_volume_20": 34_000_000,
+            "volume_expansion_20": 1.7,
+            "atr20_pct": 4.8,
+            "_relative_strength_pct": 0.92,
+            "_component_scores": {
+                "trend": 18.5,
+                "momentum": 13.2,
+                "liquidity": 14.0,
+                "activity": 10.4,
+                "volatility_quality": 6.6,
+                "relative_strength": 9.2,
+                "benchmark_relative": 7.1,
+                "gap_context": 4.0,
+                "penalties": 1.0,
+            },
+            "_diagnostics": {
+                "history": {
+                    "source": "local_db",
+                    "latest_trade_date": "2026-05-16",
+                    "rows": 130,
+                },
+                "quote_context": {
+                    "available": False,
+                    "source": "synthetic",
+                },
+            },
+        }
+
+        service._apply_score_caps_and_explainability(candidate)
+
+        explainability = candidate["_diagnostics"]["score_explainability"]
+        self.assertEqual(candidate["raw_score"], 81.6)
+        self.assertEqual(candidate["final_score"], 40.0)
+        self.assertEqual(candidate["score"], 40.0)
+        self.assertEqual(explainability["cap_reason"], "fallback_source")
+        self.assertEqual(explainability["degradation_reason"], "fallback_source")
+        self.assertEqual(explainability["score_confidence"], 0.4)
+        self.assertTrue(explainability["cap_applied"])
+        self.assertIn("quote_context", explainability["missing_evidence"])
+        self.assertEqual(explainability["source_confidence"]["capReason"], "fallback_source")
+
+    def test_apply_score_caps_and_explainability_caps_stale_and_partial_candidates(self) -> None:
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeScannerDataManager(),
+        )
+        stale_candidate = {
+            "symbol": "NVDA",
+            "name": "NVIDIA",
+            "score": 84.3,
+            "reason_summary": "趋势完好。",
+            "ret_5d": 7.1,
+            "ret_20d": 20.4,
+            "avg_amount_20": 2.9e10,
+            "amount": 3.95e10,
+            "avg_volume_20": 48_000_000,
+            "volume_expansion_20": 1.5,
+            "atr20_pct": 4.2,
+            "_relative_strength_pct": 0.94,
+            "_component_scores": {
+                "trend": 19.0,
+                "momentum": 14.2,
+                "liquidity": 16.0,
+                "activity": 10.8,
+                "volatility_quality": 6.8,
+                "relative_strength": 9.4,
+                "benchmark_relative": 7.5,
+                "gap_context": 2.6,
+                "penalties": 2.0,
+            },
+            "_diagnostics": {
+                "history": {
+                    "source": "local_db",
+                    "latest_trade_date": "2026-05-12",
+                    "rows": 130,
+                    "stale": True,
+                },
+                "quote_context": {
+                    "available": True,
+                    "source": "yfinance",
+                },
+            },
+        }
+        partial_candidate = {
+            "symbol": "AAPL",
+            "name": "Apple",
+            "score": 79.4,
+            "reason_summary": "需要补足风险证据。",
+            "ret_5d": 5.4,
+            "ret_20d": 15.1,
+            "avg_amount_20": 8.1e9,
+            "amount": 7.72e9,
+            "avg_volume_20": 39_000_000,
+            "volume_expansion_20": 1.3,
+            "atr20_pct": None,
+            "_relative_strength_pct": 0.88,
+            "_component_scores": {
+                "trend": 18.4,
+                "momentum": 12.6,
+                "liquidity": 14.8,
+                "activity": 10.0,
+                "volatility_quality": 8.0,
+                "relative_strength": 8.8,
+                "benchmark_relative": 6.2,
+                "gap_context": 3.6,
+                "penalties": 3.0,
+            },
+            "_diagnostics": {
+                "history": {
+                    "source": "local_db",
+                    "latest_trade_date": "2026-05-16",
+                    "rows": 130,
+                },
+                "quote_context": {
+                    "available": True,
+                    "source": "yfinance",
+                },
+            },
+        }
+
+        service._apply_score_caps_and_explainability(stale_candidate)
+        service._apply_score_caps_and_explainability(partial_candidate)
+
+        stale_explainability = stale_candidate["_diagnostics"]["score_explainability"]
+        partial_explainability = partial_candidate["_diagnostics"]["score_explainability"]
+        self.assertEqual(stale_candidate["score"], 60.0)
+        self.assertEqual(stale_explainability["cap_reason"], "stale_source")
+        self.assertEqual(stale_explainability["score_confidence"], 0.6)
+        self.assertEqual(partial_candidate["score"], 70.0)
+        self.assertEqual(partial_explainability["cap_reason"], "partial_coverage")
+        self.assertEqual(partial_explainability["score_confidence"], 0.7)
+        self.assertIn("risk", partial_explainability["missing_evidence"])
+
+    def test_apply_score_caps_and_explainability_preserves_strong_scores(self) -> None:
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeScannerDataManager(),
+        )
+        candidate = {
+            "symbol": "MSFT",
+            "name": "Microsoft",
+            "score": 82.2,
+            "reason_summary": "证据完整。",
+            "ret_5d": 4.1,
+            "ret_20d": 12.7,
+            "avg_amount_20": 1.2e10,
+            "amount": 1.1e10,
+            "avg_volume_20": 22_000_000,
+            "volume_expansion_20": 1.2,
+            "atr20_pct": 3.7,
+            "_relative_strength_pct": 0.81,
+            "boards": ["软件"],
+            "_component_scores": {
+                "trend": 18.0,
+                "momentum": 12.0,
+                "liquidity": 15.2,
+                "activity": 9.8,
+                "volatility_quality": 7.4,
+                "relative_strength": 8.1,
+                "benchmark_relative": 6.5,
+                "gap_context": 5.2,
+                "penalties": 0.0,
+            },
+            "_diagnostics": {
+                "history": {
+                    "source": "local_db",
+                    "latest_trade_date": "2026-05-16",
+                    "rows": 130,
+                },
+                "quote_context": {
+                    "available": True,
+                    "source": "yfinance",
+                },
+            },
+        }
+
+        service._apply_score_caps_and_explainability(candidate)
+
+        explainability = candidate["_diagnostics"]["score_explainability"]
+        self.assertEqual(candidate["raw_score"], 82.2)
+        self.assertEqual(candidate["final_score"], 82.2)
+        self.assertEqual(candidate["score"], 82.2)
+        self.assertFalse(explainability["cap_applied"])
+        self.assertIsNone(explainability["cap_reason"])
+        self.assertIsNone(explainability["degradation_reason"])
+        self.assertEqual(explainability["score_confidence"], 1.0)
+
     def test_run_scan_attaches_additive_evidence_packet_without_extra_provider_calls(self) -> None:
         seed_us_local_history(self.stock_repo)
         data_manager = SlowMissingQuoteDataManager()
@@ -971,26 +1172,35 @@ class MarketScannerServiceTestCase(unittest.TestCase):
 
         self.assertEqual(
             [(item["symbol"], item["rank"], item["score"]) for item in result["shortlist"]],
-            [("PLTR", 1, 81.6), ("NVDA", 2, 65.8), ("AAPL", 3, 62.8)],
+            [("NVDA", 1, 65.8), ("AAPL", 2, 62.8), ("PLTR", 3, 40.0)],
         )
         self.assertEqual(len(data_manager.realtime_quote_calls), 3)
         self.assertEqual(set(data_manager.realtime_quote_calls), {"NVDA", "AAPL", "PLTR"})
 
-        pltr = result["shortlist"][0]
+        pltr = next(item for item in result["shortlist"] if item["symbol"] == "PLTR")
         packet = pltr["diagnostics"]["evidence_packet"]
         self.assertEqual(packet["symbol"], "PLTR")
-        self.assertEqual(packet["rank"], 1)
-        self.assertEqual(packet["score"], 81.6)
+        self.assertEqual(packet["rank"], 3)
+        self.assertEqual(packet["score"], 40.0)
+        self.assertEqual(packet["rawScore"], 81.6)
+        self.assertEqual(packet["finalScore"], 40.0)
+        self.assertEqual(packet["capReason"], "fallback_source")
+        self.assertEqual(packet["degradationReason"], "fallback_source")
+        self.assertEqual(packet["scoreConfidence"], 0.4)
         self.assertEqual(packet["evidenceVersion"], SCANNER_EVIDENCE_VERSION)
         self.assertEqual(packet["freshnessState"], "fallback")
         self.assertIn("仅供观察", packet["userFacingLabels"])
         self.assertIn("需人工复核", packet["userFacingLabels"])
         self.assertIn("部分外部数据暂不可用", packet["userFacingLabels"])
         self.assertNotIn("provider_timeout", json.dumps(packet, ensure_ascii=False))
+        self.assertEqual(pltr["raw_score"], 81.6)
+        self.assertEqual(pltr["final_score"], 40.0)
+        self.assertEqual(pltr["score"], 40.0)
+        self.assertEqual(pltr["diagnostics"]["score_explainability"]["cap_reason"], "fallback_source")
 
         detail = service.get_run_detail(result["id"])
         assert detail is not None
-        persisted_packet = detail["shortlist"][0]["diagnostics"]["evidence_packet"]
+        persisted_packet = next(item for item in detail["shortlist"] if item["symbol"] == "PLTR")["diagnostics"]["evidence_packet"]
         self.assertEqual(persisted_packet["symbol"], "PLTR")
         self.assertEqual(persisted_packet["evidenceVersion"], SCANNER_EVIDENCE_VERSION)
 
@@ -1046,7 +1256,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
 
         self.assertEqual(
             [(item["symbol"], item["rank"], item["score"]) for item in result["shortlist"]],
-            [("PLTR", 1, 81.6), ("NVDA", 2, 65.8), ("AAPL", 3, 62.8)],
+            [("NVDA", 1, 65.8), ("AAPL", 2, 62.8), ("PLTR", 3, 40.0)],
         )
         self.assertEqual(result["diagnostics"]["live_quote_stats"]["attempted_candidates"], 3)
         self.assertEqual(result["diagnostics"]["live_quote_stats"]["available_candidates"], 2)

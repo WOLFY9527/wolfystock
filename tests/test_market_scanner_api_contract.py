@@ -28,6 +28,8 @@ def _make_candidate(symbol: str, rank: int, *, benchmark_code: str = "000300") -
         "name": f"股票{symbol}",
         "rank": rank,
         "score": 80.0 - rank,
+        "raw_score": 88.0 - rank,
+        "final_score": 80.0 - rank,
         "quality_hint": "高优先级",
         "reason_summary": "趋势与量能共振。",
         "reasons": ["趋势结构完整。"],
@@ -68,7 +70,18 @@ def _make_candidate(symbol: str, rank: int, *, benchmark_code: str = "000300") -
             "benchmark_return_pct": 1.8,
             "outperformed_benchmark": True,
         },
-        "diagnostics": {"history_source": "local_db"},
+        "diagnostics": {
+            "history_source": "local_db",
+            "score_explainability": {
+                "raw_score": 88.0 - rank,
+                "final_score": 80.0 - rank,
+                "cap_reason": None,
+                "degradation_reason": None,
+                "score_confidence": 1.0,
+                "evidence_coverage": 1.0,
+                "missing_evidence": [],
+            },
+        },
     }
 
 
@@ -277,6 +290,9 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.comparison_to_previous.new_count, 1)
         self.assertEqual(response.review_summary.best_symbol, "600001")
         self.assertEqual(response.diagnostics["ai_interpretation"]["status"], "completed")
+        self.assertEqual(response.shortlist[0].raw_score, 87.0)
+        self.assertEqual(response.shortlist[0].final_score, 79.0)
+        self.assertEqual(response.shortlist[0].score, 79.0)
         service.run_manual_scan.assert_called_once_with(
             market="cn",
             profile="cn_preopen_v1",
