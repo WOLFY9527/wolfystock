@@ -3,13 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../i18n/core';
 import AdminLogsPage from '../AdminLogsPage';
 
-const { listBusinessEvents, getBusinessEventDetail, listSessions, getSessionDetail, getStorageSummary, cleanupLogs } = vi.hoisted(() => ({
+const { listBusinessEvents, getBusinessEventDetail, listSessions, getSessionDetail, getStorageSummary, cleanupLogs, listDataMissingDrilldown, getIncidentTimeline } = vi.hoisted(() => ({
   listBusinessEvents: vi.fn(),
   getBusinessEventDetail: vi.fn(),
   listSessions: vi.fn(),
   getSessionDetail: vi.fn(),
   getStorageSummary: vi.fn(),
   cleanupLogs: vi.fn(),
+  listDataMissingDrilldown: vi.fn(),
+  getIncidentTimeline: vi.fn(),
 }));
 
 vi.mock('../../api/adminLogs', () => ({
@@ -20,6 +22,8 @@ vi.mock('../../api/adminLogs', () => ({
     getSessionDetail,
     getStorageSummary,
     cleanupLogs,
+    listDataMissingDrilldown,
+    getIncidentTimeline,
   },
 }));
 
@@ -326,6 +330,126 @@ const rawSessions = [
   },
 ];
 
+const dataMissingDrilldown = [
+  {
+    affectedSurface: 'Home quote panel',
+    symbol: 'NVDA',
+    market: 'US',
+    missingDomain: 'news',
+    provider: 'newsapi',
+    source: 'Yahoo',
+    freshnessStatus: 'missing',
+    fallbackUsed: true,
+    stale: false,
+    partial: true,
+    reasonCode: 'timeout',
+    latestSeenAt: '2026-04-30T13:20:04Z',
+    count: 2,
+    sampleEventIds: ['evt-tsla'],
+    sampleSessionIds: ['session-tsla'],
+    sampleBusinessEventIds: ['analysis-tsla'],
+  },
+];
+
+const incidentTimelinePayload = {
+  lookup: {
+    sessionId: 'session-tsla',
+    requestId: null,
+    queryId: null,
+    symbol: 'TSLA',
+    dateFrom: '2026-04-29T13:20:04Z',
+    dateTo: null,
+    limit: 60,
+  },
+  total: 3,
+  hooks: [
+    {
+      kind: 'data_quality',
+      status: 'degraded',
+      summary: '2 degraded data-quality signals matched this lookup.',
+      count: 2,
+      latestAt: '2026-04-30T13:20:04Z',
+      provider: 'newsapi',
+      model: null,
+      channel: null,
+      reasonCode: 'timeout',
+      sampleSessionIds: ['session-tsla'],
+      sampleBusinessEventIds: ['analysis-tsla'],
+    },
+    {
+      kind: 'llm_cost',
+      status: 'placeholder',
+      summary: 'LLM/cost summary placeholder only; no matching ledger row or model event was found.',
+      count: 0,
+      latestAt: null,
+      provider: null,
+      model: null,
+      channel: null,
+      reasonCode: null,
+      sampleSessionIds: [],
+      sampleBusinessEventIds: [],
+    },
+  ],
+  items: [
+    {
+      id: 'session:session-tsla',
+      kind: 'business_event',
+      timestamp: '2026-04-30T13:20:00Z',
+      status: 'partial',
+      severity: 'warning',
+      title: 'TSLA',
+      summary: '用户分析 TSLA，部分数据源失败',
+      sessionId: 'session-tsla',
+      businessEventId: 'analysis-tsla',
+      queryId: null,
+      requestId: 'req-tsla-123456789',
+      symbol: 'TSLA',
+      phase: null,
+      category: 'analysis',
+      provider: null,
+      model: null,
+      channel: null,
+      reasonCode: 'timeout',
+      navigation: {
+        sessionId: 'session-tsla',
+        businessEventId: 'analysis-tsla',
+      },
+    },
+    {
+      id: 'event:session-tsla:1',
+      kind: 'data_quality',
+      timestamp: '2026-04-30T13:20:04Z',
+      status: 'failed',
+      severity: 'error',
+      title: '获取新闻',
+      summary: 'News API timeout after 3000ms token=***',
+      sessionId: 'session-tsla',
+      businessEventId: 'analysis-tsla',
+      queryId: null,
+      requestId: 'req-tsla-123456789',
+      symbol: 'TSLA',
+      phase: 'data_fetch',
+      category: 'news',
+      provider: 'newsapi',
+      model: null,
+      channel: null,
+      reasonCode: 'timeout',
+      navigation: {
+        sessionId: 'session-tsla',
+        businessEventId: 'analysis-tsla',
+      },
+    },
+  ],
+  emptyState: {
+    reason: null,
+    readOnly: true,
+    message: null,
+  },
+  metadata: {
+    readOnly: true,
+  },
+};
+
 async function expandStorageDisclosure() {
   const disclosure = await screen.findByTestId('admin-logs-storage-disclosure');
   const toggle = within(disclosure).getByRole('button');
@@ -444,6 +568,11 @@ describe('AdminLogsPage', () => {
       message: null,
       postgresVacuumNote: null,
     });
+    listDataMissingDrilldown.mockResolvedValue({
+      total: dataMissingDrilldown.length,
+      items: dataMissingDrilldown,
+    });
+    getIncidentTimeline.mockResolvedValue(incidentTimelinePayload);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
@@ -470,6 +599,9 @@ describe('AdminLogsPage', () => {
     expect(screen.getByText('先处理失败和数据源降级')).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-filter-bar')).toBeInTheDocument();
     expect(await screen.findByTestId('admin-logs-health-summary')).toBeInTheDocument();
+    expect(await screen.findByTestId('admin-logs-data-missing-section')).toHaveTextContent('缺失 / 降级数据样本');
+    expect(screen.getByTestId('admin-logs-data-missing-section')).toHaveTextContent('NVDA');
+    expect(screen.getByTestId('admin-logs-data-missing-section')).toHaveTextContent('newsapi');
     await expandStorageDisclosure();
     expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('120,000 会话');
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('180,000 事件');
@@ -516,6 +648,56 @@ describe('AdminLogsPage', () => {
     expect(screen.getByRole('button', { name: '下一页' })).toBeInTheDocument();
     expect(screen.queryByText('fetch_news')).not.toBeInTheDocument();
     await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ since: '24h', limit: 20, offset: 0 })));
+    await waitFor(() => expect(listDataMissingDrilldown).toHaveBeenCalledWith({ since: '24h', limit: 4 }));
+  });
+
+  it('opens the incident timeline drawer from data-missing drilldown samples', async () => {
+    render(<AdminLogsPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '打开时间线' }));
+
+    await waitFor(() => expect(getIncidentTimeline).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-tsla',
+      since: '24h',
+      limit: 60,
+    })));
+    expect(await screen.findByTestId('admin-incident-timeline-drawer')).toHaveTextContent('只读');
+    expect(screen.getByTestId('admin-incident-timeline-drawer')).toHaveTextContent('聚合线索');
+    expect(screen.getByTestId('admin-incident-timeline-drawer')).toHaveTextContent('数据质量');
+    expect(screen.getByTestId('admin-incident-timeline-drawer')).toHaveTextContent('2 degraded data-quality signals matched this lookup.');
+    expect(screen.getByTestId('admin-incident-timeline-drawer')).toHaveTextContent('获取新闻');
+    expect(screen.queryByText('FRONTENDSECRET')).not.toBeInTheDocument();
+  });
+
+  it('renders a readable empty state when no incident timeline matches the lookup', async () => {
+    getIncidentTimeline.mockResolvedValueOnce({
+      lookup: {
+        sessionId: 'session-tsla',
+        requestId: null,
+        queryId: null,
+        symbol: 'TSLA',
+        dateFrom: '2026-04-29T13:20:04Z',
+        dateTo: null,
+        limit: 60,
+      },
+      total: 0,
+      hooks: [],
+      items: [],
+      emptyState: {
+        reason: 'no_matching_read_models',
+        readOnly: true,
+        message: 'No matching execution logs or read-model hints were found for the requested lookup.',
+      },
+      metadata: {
+        readOnly: true,
+      },
+    });
+
+    render(<AdminLogsPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '打开时间线' }));
+
+    expect(await screen.findByTestId('admin-incident-timeline-empty-state')).toHaveTextContent('No matching execution logs or read-model hints were found for the requested lookup.');
   });
 
   it('previews and confirms retention cleanup, then refreshes logs and storage summary', async () => {

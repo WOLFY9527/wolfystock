@@ -1262,6 +1262,7 @@ python main.py --serve-only --host 0.0.0.0 --port 8888
 - `/settings/system` 不再混入个人通知渠道编辑或个人偏好式内容；普通用户的通知邮箱 / Discord webhook 仍保留在普通 `/settings`。
 - 当前 system control-plane 会集中展示全局 provider / data-source 管理、global admin logs 入口以及分离的 admin actions 区：`runtime cache reset` 继续作为安全 maintenance 动作，`factory reset / system initialization` 则是单独的破坏性入口。
 - admin logs 现在面向真正的全局可观测性：管理员在 `Admin Mode` 下看到的是跨用户 / 系统级活动流，而不只是自己的执行痕迹；可区分 actor、activity type、subsystem 与 destructive admin action。
+- `/admin/logs` 现已补齐只读 incident timeline 抽屉：顶部会显示紧凑的数据缺口样本，支持按 sample session/symbol 打开脱敏 incident timeline，查看 data quality、provider/cache/circuit、LLM/cost、notification 与 evidence posture hooks；该能力不改变任何 provider/quota/config/notification 状态，也不会暴露 prompt、密钥或原始 payload。
 - 新增的 factory reset 使用强确认短语 `FACTORY RESET`；它会清空非 bootstrap 用户、其登录会话、用户偏好/通知目标、分析历史、聊天记录，以及用户拥有的 scanner / backtest / portfolio 使用状态，但保留 bootstrap admin、系统配置和 execution logs。
 - `/settings/system` 中的 provider / data-source 表单现在按凭据形态渲染：支持 single-key，以及 key+secret 两类 schema。Twelve Data 继续支持单 Key / 多 Key，Alpaca 需要 `ALPACA_API_KEY_ID + ALPACA_API_SECRET_KEY` 成对输入。
 - 普通用户的任务展示会优先显示标的、阶段、进度与更新时间，不再默认暴露长 task ID；技术标识仍保留在管理员日志等 operator 调试面中。

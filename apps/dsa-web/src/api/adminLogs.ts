@@ -229,6 +229,99 @@ export interface BusinessEventListResponse {
   healthSummary?: AdminLogHealthSummary | null;
 }
 
+export interface AdminDataMissingDrilldownItem {
+  affectedSurface: string;
+  symbol?: string | null;
+  market?: string | null;
+  missingDomain: string;
+  provider?: string | null;
+  source?: string | null;
+  freshnessStatus: string;
+  fallbackUsed: boolean;
+  stale: boolean;
+  partial: boolean;
+  reasonCode: string;
+  latestSeenAt?: string | null;
+  count: number;
+  sampleEventIds: string[];
+  sampleSessionIds: string[];
+  sampleBusinessEventIds: string[];
+}
+
+export interface AdminDataMissingDrilldownResponse {
+  total: number;
+  items: AdminDataMissingDrilldownItem[];
+}
+
+export interface AdminIncidentTimelineLookup {
+  sessionId?: string | null;
+  requestId?: string | null;
+  queryId?: string | null;
+  symbol?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  limit: number;
+}
+
+export interface AdminIncidentTimelineNavigation {
+  sessionId?: string | null;
+  businessEventId?: string | null;
+  queryId?: string | null;
+  analysisHistoryId?: number | null;
+  eventId?: string | null;
+}
+
+export interface AdminIncidentTimelineItem {
+  id: string;
+  kind: string;
+  timestamp?: string | null;
+  status: string;
+  severity: string;
+  title: string;
+  summary?: string | null;
+  sessionId?: string | null;
+  businessEventId?: string | null;
+  queryId?: string | null;
+  requestId?: string | null;
+  symbol?: string | null;
+  phase?: string | null;
+  category?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  channel?: string | null;
+  reasonCode?: string | null;
+  navigation: AdminIncidentTimelineNavigation;
+}
+
+export interface AdminIncidentTimelineHook {
+  kind: string;
+  status: string;
+  summary: string;
+  count: number;
+  latestAt?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  channel?: string | null;
+  reasonCode?: string | null;
+  sampleSessionIds: string[];
+  sampleBusinessEventIds: string[];
+}
+
+export interface AdminIncidentTimelineEmptyState {
+  reason?: string | null;
+  readOnly: boolean;
+  message?: string | null;
+}
+
+export interface AdminIncidentTimelineResponse {
+  lookup: AdminIncidentTimelineLookup;
+  total: number;
+  items: AdminIncidentTimelineItem[];
+  hooks: AdminIncidentTimelineHook[];
+  emptyState: AdminIncidentTimelineEmptyState;
+  metadata: Record<string, unknown>;
+}
+
 export interface AdminLogStorageSummary {
   totalLogCount: number;
   eventCount?: number;
@@ -307,6 +400,74 @@ function normalizeSessionDetail(payload: Record<string, unknown>): ExecutionLogS
     events: Array.isArray(normalized.events) ? normalized.events : [],
     operationDetail: normalized.operationDetail && typeof normalized.operationDetail === 'object'
       ? normalized.operationDetail
+      : {},
+  };
+}
+
+function normalizeDataMissingDrilldownItem(payload: Record<string, unknown>): AdminDataMissingDrilldownItem {
+  const normalized = toCamelCase<AdminDataMissingDrilldownItem>(payload);
+  return {
+    affectedSurface: normalized.affectedSurface || 'unknown',
+    symbol: normalized.symbol || null,
+    market: normalized.market || null,
+    missingDomain: normalized.missingDomain || 'unknown',
+    provider: normalized.provider || null,
+    source: normalized.source || null,
+    freshnessStatus: normalized.freshnessStatus || 'unknown',
+    fallbackUsed: Boolean(normalized.fallbackUsed),
+    stale: Boolean(normalized.stale),
+    partial: Boolean(normalized.partial),
+    reasonCode: normalized.reasonCode || 'unknown',
+    latestSeenAt: normalized.latestSeenAt || null,
+    count: Number(normalized.count || 0),
+    sampleEventIds: Array.isArray(normalized.sampleEventIds) ? normalized.sampleEventIds : [],
+    sampleSessionIds: Array.isArray(normalized.sampleSessionIds) ? normalized.sampleSessionIds : [],
+    sampleBusinessEventIds: Array.isArray(normalized.sampleBusinessEventIds) ? normalized.sampleBusinessEventIds : [],
+  };
+}
+
+function normalizeIncidentTimelineResponse(payload: Record<string, unknown>): AdminIncidentTimelineResponse {
+  const normalized = toCamelCase<AdminIncidentTimelineResponse>(payload);
+  return {
+    lookup: {
+      sessionId: normalized.lookup?.sessionId || null,
+      requestId: normalized.lookup?.requestId || null,
+      queryId: normalized.lookup?.queryId || null,
+      symbol: normalized.lookup?.symbol || null,
+      dateFrom: normalized.lookup?.dateFrom || null,
+      dateTo: normalized.lookup?.dateTo || null,
+      limit: Number(normalized.lookup?.limit || 0),
+    },
+    total: Number(normalized.total || 0),
+    items: Array.isArray(normalized.items)
+      ? normalized.items.map((item) => {
+        const entry = toCamelCase<AdminIncidentTimelineItem>(item as unknown as Record<string, unknown>);
+        return {
+          ...entry,
+          navigation: entry.navigation && typeof entry.navigation === 'object'
+            ? entry.navigation
+            : {},
+        };
+      })
+      : [],
+    hooks: Array.isArray(normalized.hooks)
+      ? normalized.hooks.map((hook) => {
+        const entry = toCamelCase<AdminIncidentTimelineHook>(hook as unknown as Record<string, unknown>);
+        return {
+          ...entry,
+          count: Number(entry.count || 0),
+          sampleSessionIds: Array.isArray(entry.sampleSessionIds) ? entry.sampleSessionIds : [],
+          sampleBusinessEventIds: Array.isArray(entry.sampleBusinessEventIds) ? entry.sampleBusinessEventIds : [],
+        };
+      })
+      : [],
+    emptyState: {
+      reason: normalized.emptyState?.reason || null,
+      readOnly: normalized.emptyState?.readOnly !== false,
+      message: normalized.emptyState?.message || null,
+    },
+    metadata: normalized.metadata && typeof normalized.metadata === 'object'
+      ? normalized.metadata
       : {},
   };
 }
@@ -416,6 +577,64 @@ export const adminLogsApi = {
       recommendedCleanupAction: normalized.recommendedCleanupAction || '',
       lastCleanupTimestamp: normalized.lastCleanupTimestamp || null,
     };
+  },
+
+  listDataMissingDrilldown: async (
+    params: {
+      since?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      limit?: number;
+    } = {},
+  ): Promise<AdminDataMissingDrilldownResponse> => {
+    const response = await apiClient.get<Record<string, unknown>>(
+      '/api/v1/admin/logs/data-missing-drilldown',
+      {
+        params: {
+          since: params.since,
+          date_from: params.dateFrom,
+          date_to: params.dateTo,
+          limit: params.limit,
+        },
+      },
+    );
+    const normalized = toCamelCase<AdminDataMissingDrilldownResponse>(response.data);
+    return {
+      total: Number(normalized.total || 0),
+      items: Array.isArray(normalized.items)
+        ? normalized.items.map((item) => normalizeDataMissingDrilldownItem(item as unknown as Record<string, unknown>))
+        : [],
+    };
+  },
+
+  getIncidentTimeline: async (
+    params: {
+      sessionId?: string;
+      requestId?: string;
+      queryId?: string;
+      symbol?: string;
+      since?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      limit?: number;
+    } = {},
+  ): Promise<AdminIncidentTimelineResponse> => {
+    const response = await apiClient.get<Record<string, unknown>>(
+      '/api/v1/admin/logs/incident-timeline',
+      {
+        params: {
+          session_id: params.sessionId,
+          request_id: params.requestId,
+          query_id: params.queryId,
+          symbol: params.symbol,
+          since: params.since,
+          date_from: params.dateFrom,
+          date_to: params.dateTo,
+          limit: params.limit,
+        },
+      },
+    );
+    return normalizeIncidentTimelineResponse(response.data);
   },
 
   cleanupLogs: async (
