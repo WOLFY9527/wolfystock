@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+from contextlib import ExitStack
 from unittest.mock import Mock, patch
 
 import pytest
@@ -297,3 +298,54 @@ def test_public_temperature_and_briefing_shapes_do_not_leak_the_shared_input_sna
     assert "temperatureInputSnapshot" not in briefing_payload
     assert {"source", "updatedAt", "scores", "confidence", "isReliable", "fallbackUsed", "providerHealth", "evidenceSnapshot"}.issubset(temperature_payload)
     assert {"source", "updatedAt", "items", "confidence", "isReliable", "fallbackUsed", "providerHealth", "evidenceSnapshot"}.issubset(briefing_payload)
+
+
+def test_temperature_input_builder_uses_internal_snapshots_without_public_wrapper_side_effects() -> None:
+    service = MarketOverviewService()
+    public_methods = (
+        "get_cn_indices",
+        "get_cn_breadth",
+        "get_cn_flows",
+        "get_sector_rotation",
+        "get_rates",
+        "get_volatility",
+        "get_fx_commodities",
+        "get_futures",
+        "get_market_sentiment",
+        "get_crypto",
+    )
+
+    def fallback_snapshot(_cache_key: str, _fetcher: object, fallback_factory: object) -> dict:
+        return fallback_factory()  # type: ignore[operator]
+
+    with patch.object(service, "_cached_payload", side_effect=fallback_snapshot):
+        with ExitStack() as stack:
+            public_mocks = [
+                stack.enter_context(patch.object(service, method_name, side_effect=AssertionError(f"public wrapper called: {method_name}")))
+                for method_name in public_methods
+            ]
+            inputs = service._build_market_temperature_inputs()
+
+    for public_mock in public_mocks:
+        assert public_mock.call_count == 0
+    assert set(inputs) >= {"indices", "breadth", "flows", "sectors", "rates", "fx", "futures", "sentiment", "crypto"}
+    assert inputs["rates"]["freshness"] == "fallback"
+    assert inputs["crypto"]["freshness"] == "fallback"
+    assert inputs["crypto"]["isFallback"] is True
+
+
+def test_public_rates_method_keeps_public_wrapper_shape() -> None:
+    service = MarketOverviewService()
+
+    with (
+        patch.object(service, "_cached_payload", return_value=service._fallback_rates_snapshot()),
+        patch("src.services.market_overview_service.ExecutionLogService") as log_service,
+    ):
+        log_service.return_value.record_market_overview_fetch.return_value = "log-rates"
+        payload = service.get_rates()
+
+    assert payload["panelName"] == "RatesCard"
+    assert payload["logSessionId"] == "log-rates"
+    assert "providerHealth" in payload
+    assert "evidenceSnapshot" in payload
+    assert payload["items"]

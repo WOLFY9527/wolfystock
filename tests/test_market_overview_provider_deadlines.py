@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from src.services.market_cache import market_cache
+from src.services.official_macro_transport import MacroObservation
 from src.services.market_overview_service import MarketOverviewService
 from src.services.market_overview_yfinance_transport import fetch_yfinance_quote_history_frame
 
@@ -57,6 +58,71 @@ def test_official_macro_points_stop_when_aggregate_deadline_is_exhausted(monkeyp
 
     assert points == {}
     assert calls == [("treasury", pytest.approx(0.01, abs=0.01))]
+
+
+def test_rates_macro_and_volatility_reuse_official_macro_observations_within_micro_cache_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = MarketOverviewService()
+    monkeypatch.setattr(service, "OFFICIAL_MACRO_MICRO_CACHE_TTL_SECONDS", 60.0, raising=False)
+    latest = "2026-05-15"
+    previous = "2026-05-14"
+    calls: list[str] = []
+    treasury_points = {
+        "DGS2": [
+            MacroObservation("DGS2", 3.87, latest, latest, "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
+            MacroObservation("DGS2", 3.91, previous, previous, "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
+        ],
+        "DGS10": [
+            MacroObservation("DGS10", 4.41, latest, latest, "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
+            MacroObservation("DGS10", 4.45, previous, previous, "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
+        ],
+        "DGS30": [
+            MacroObservation("DGS30", 4.89, latest, latest, "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
+            MacroObservation("DGS30", 4.92, previous, previous, "treasury:daily_treasury_yield_curve", "official_public", "daily_1530_et"),
+        ],
+    }
+    fred_points = {
+        "VIXCLS": [
+            MacroObservation("VIXCLS", 18.22, latest, latest, "fred:VIXCLS", "official_public", "daily_close"),
+            MacroObservation("VIXCLS", 19.11, previous, previous, "fred:VIXCLS", "official_public", "daily_close"),
+        ],
+        "SOFR": [
+            MacroObservation("SOFR", 5.31, latest, latest, "fred:SOFR", "official_public", "daily_fixing"),
+            MacroObservation("SOFR", 5.32, previous, previous, "fred:SOFR", "official_public", "daily_fixing"),
+        ],
+        "BAMLH0A0HYM2": [
+            MacroObservation("BAMLH0A0HYM2", 3.31, latest, latest, "fred:BAMLH0A0HYM2", "official_public", "daily_credit_stress"),
+            MacroObservation("BAMLH0A0HYM2", 3.45, previous, previous, "fred:BAMLH0A0HYM2", "official_public", "daily_credit_stress"),
+        ],
+    }
+
+    def treasury_observations(*, limit: int = 2, timeout: float | None = None) -> dict:
+        calls.append("treasury")
+        return treasury_points
+
+    def fred_observations(series_id: str, *, limit: int = 2, timeout: float | None = None) -> list:
+        calls.append(series_id)
+        return fred_points.get(series_id, [])
+
+    def direct_cached_payload(_cache_key: str, fetcher: object, _fallback_factory: object) -> dict:
+        return fetcher()  # type: ignore[operator]
+
+    with (
+        patch.object(service, "_cached_payload", side_effect=direct_cached_payload),
+        patch.object(service, "_quote_items", return_value=[{"symbol": "VIX", "value": 20.0, "change_pct": 0.0, "trend": [20.0], "source": "yfinance"}]),
+        patch.object(service, "_atr_item", return_value=None),
+        patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", side_effect=treasury_observations),
+        patch("src.services.market_overview_service.fetch_fred_observation_points", side_effect=fred_observations),
+        patch("src.services.market_overview_service.ExecutionLogService") as log_service,
+    ):
+        log_service.return_value.record_market_overview_fetch.return_value = "log-market"
+        rates_payload = service.get_rates()
+        macro_payload = service.get_macro()
+        volatility_payload = service.get_volatility()
+
+    assert rates_payload["items"]
+    assert macro_payload["items"]
+    assert volatility_payload["items"]
+    assert calls == ["treasury", "VIXCLS", "SOFR", "BAMLH0A0HYM2"]
 
 
 def test_sentiment_deadline_skips_secondary_provider_and_fallback_is_not_live(monkeypatch: pytest.MonkeyPatch) -> None:
