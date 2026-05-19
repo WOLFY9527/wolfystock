@@ -76,6 +76,14 @@ class LiquidityMonitorCoverageDiagnostics(BaseModel):
     requiredInputs: list[str] = Field(default_factory=list)
     fulfilledInputs: list[str] = Field(default_factory=list)
     missingInputs: list[str] = Field(default_factory=list)
+    requiredProviderClass: Optional[str] = None
+    configuredProviderAvailable: bool = False
+    realSourceAvailable: bool = False
+    proxyOnly: bool = False
+    observationOnly: bool = False
+    scoreContributionAllowed: bool = False
+    missingProviderReason: Optional[str] = None
+    paidDataLikelyRequired: bool = False
     sourceTier: SourceTierLabel
     freshness: EvidenceFreshnessLabel
     trustLevel: TrustLevelLabel

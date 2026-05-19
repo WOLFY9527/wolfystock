@@ -196,6 +196,8 @@ def test_market_intelligence_checklist_captures_scope_and_validation_commands() 
         assert symbol in checklist
     assert "sourceTier" in checklist
     assert "trustLevel" in checklist
+    assert "requiredProviderClass" in checklist
+    assert "scoreContributionAllowed" in checklist
     assert "N/A is allowed only with explicit unavailable evidence" in checklist
     assert "`temperatureAvailable=false`" in checklist
     assert "`disabledReason=insufficient_reliable_inputs`" in checklist

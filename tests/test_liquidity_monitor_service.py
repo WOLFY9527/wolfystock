@@ -166,6 +166,29 @@ def _make_service() -> LiquidityMonitorService:
     return LiquidityMonitorService(cache=MarketCache(max_workers=1), db=DatabaseManager.get_instance())
 
 
+def _activation(payload: Dict[str, Any], key: str) -> Dict[str, Any]:
+    return _indicators_by_key(payload)[key]["coverageDiagnostics"]
+
+
+def _assert_activation_fields(diagnostics: Dict[str, Any]) -> None:
+    for field in (
+        "indicatorId",
+        "requiredProviderClass",
+        "configuredProviderAvailable",
+        "realSourceAvailable",
+        "proxyOnly",
+        "observationOnly",
+        "scoreContributionAllowed",
+        "missingProviderReason",
+        "paidDataLikelyRequired",
+        "activationHint",
+        "sourceTier",
+        "trustLevel",
+        "freshness",
+    ):
+        assert field in diagnostics
+
+
 def _save_market_overview_snapshot(
     db: DatabaseManager,
     *,
@@ -2434,6 +2457,146 @@ def test_us_breadth_indicator_uses_relative_proxy_votes(isolated_db: DatabaseMan
     assert "RSP/SPY" in indicators["us_breadth_proxy"]["summary"]
 
 
+def test_liquidity_provider_activation_diagnostics_classify_proxy_indicators_and_cap_score(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "volatility",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="live",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 15.2,
+                    "changePercent": -2.5,
+                    "source": "yfinance_proxy",
+                    "sourceType": "unofficial_proxy",
+                    "sourceLabel": "Yahoo Finance",
+                }
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "fx_commodities",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="live",
+            items=[
+                {
+                    "symbol": "DXY",
+                    "label": "DXY",
+                    "changePercent": -0.42,
+                    "value": 103.8,
+                    "source": "yfinance_proxy",
+                    "sourceType": "unofficial_proxy",
+                    "sourceLabel": "Yahoo Finance",
+                }
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="live",
+            items=[
+                {
+                    "symbol": "US10Y",
+                    "label": "10Y yield",
+                    "changePercent": -0.31,
+                    "value": 4.31,
+                    "source": "yfinance_proxy",
+                    "sourceType": "unofficial_proxy",
+                    "sourceLabel": "Yahoo Finance",
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "30Y yield",
+                    "changePercent": -0.18,
+                    "value": 4.58,
+                    "source": "yfinance_proxy",
+                    "sourceType": "unofficial_proxy",
+                    "sourceLabel": "Yahoo Finance",
+                },
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "funds_flow",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="live",
+            items=[
+                {
+                    "symbol": "ETF",
+                    "label": "ETF flows",
+                    "value": 1.2,
+                    "source": "yfinance_proxy",
+                    "sourceType": "unofficial_proxy",
+                    "sourceLabel": "Yahoo Finance",
+                }
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "us_breadth",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="live",
+            items=[
+                {"symbol": "SECTORS_UP", "label": "Sectors Up", "value": 6, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "SECTORS_DOWN", "label": "Sectors Down", "value": 5, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "RSP_SPY", "label": "RSP vs SPY", "value": -0.4, "changePercent": -0.4, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "IWM_SPY", "label": "IWM vs SPY", "value": -0.5, "changePercent": -0.5, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "QQQ_SPY", "label": "QQQ vs SPY", "value": -0.2, "changePercent": -0.2, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicators = _indicators_by_key(payload)
+
+    expectations = {
+        "vix_pressure": ("official_public.vix_or_volatility", 8),
+        "usd_pressure": ("official_or_authorized.fx_dxy", 6),
+        "us_rates_pressure": ("official_public.us_treasury_curve", 6),
+        "us_etf_flow_proxy": ("authorized.us_etf_flow", 5),
+        "us_breadth_proxy": ("official_or_authorized.us_market_breadth", 6),
+    }
+    for key, (provider_class, max_abs_score) in expectations.items():
+        diagnostics = _activation(payload, key)
+        _assert_activation_fields(diagnostics)
+        assert diagnostics["requiredProviderClass"] == provider_class
+        assert diagnostics["configuredProviderAvailable"] is True
+        assert diagnostics["realSourceAvailable"] is False
+        assert diagnostics["proxyOnly"] is True
+        assert diagnostics["observationOnly"] is False
+        assert diagnostics["scoreContributionAllowed"] is True
+        assert diagnostics["sourceTier"] == "unofficial_public_api"
+        assert diagnostics["missingProviderReason"]
+        assert abs(indicators[key]["scoreContribution"]) < max_abs_score
+        assert diagnostics["capReason"] == "partial_coverage"
+
+
 def test_cn_flow_indicator_uses_reliable_flow_basket_and_cn_breadth_context(isolated_db: DatabaseManager) -> None:
     service = _make_service()
     now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
@@ -2470,9 +2633,134 @@ def test_cn_flow_indicator_uses_reliable_flow_basket_and_cn_breadth_context(isol
     payload = service.get_liquidity_monitor()
     indicators = {item["key"]: item for item in payload["indicators"]}
 
-    assert indicators["cn_hk_flows"]["includedInScore"] is True
-    assert indicators["cn_hk_flows"]["scoreContribution"] == 6
+    assert indicators["cn_hk_flows"]["includedInScore"] is False
+    assert indicators["cn_hk_flows"]["scoreContribution"] == 0
+    diagnostics = indicators["cn_hk_flows"]["coverageDiagnostics"]
+    _assert_activation_fields(diagnostics)
+    assert diagnostics["requiredProviderClass"] == "authorized.cn_hk_connect_flow"
+    assert diagnostics["configuredProviderAvailable"] is True
+    assert diagnostics["realSourceAvailable"] is False
+    assert diagnostics["proxyOnly"] is False
+    assert diagnostics["observationOnly"] is True
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["missingProviderReason"] == "requires_authorized.cn_hk_connect_flow"
+    assert diagnostics["paidDataLikelyRequired"] is True
     assert "宽度" in indicators["cn_hk_flows"]["summary"]
+
+
+def test_liquidity_provider_activation_keeps_cn_money_and_futures_observation_only(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="fallback",
+            freshness="fallback",
+            is_fallback=True,
+            items=[
+                {"symbol": "DR007", "label": "DR007", "value": 1.8, "source": "fallback", "sourceType": "fallback_static"},
+                {"symbol": "SHIBOR", "label": "SHIBOR", "value": 1.9, "source": "fallback", "sourceType": "fallback_static"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "futures",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="live",
+            items=[
+                {"symbol": "NQ", "label": "Nasdaq futures", "changePercent": 0.6, "value": 18900, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "ES", "label": "S&P futures", "changePercent": 0.4, "value": 5280, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicators = _indicators_by_key(payload)
+
+    cn_money = indicators["cn_money_market_rates"]
+    cn_money_diagnostics = cn_money["coverageDiagnostics"]
+    _assert_activation_fields(cn_money_diagnostics)
+    assert cn_money["includedInScore"] is False
+    assert cn_money["scoreContribution"] == 0
+    assert cn_money_diagnostics["requiredProviderClass"] == "official_public.cn_money_market_rates"
+    assert cn_money_diagnostics["realSourceAvailable"] is False
+    assert cn_money_diagnostics["observationOnly"] is True
+    assert cn_money_diagnostics["scoreContributionAllowed"] is False
+    assert cn_money_diagnostics["missingProviderReason"] == "requires_official_public.cn_money_market_rates"
+
+    futures = indicators["futures_premarket"]
+    futures_diagnostics = futures["coverageDiagnostics"]
+    _assert_activation_fields(futures_diagnostics)
+    assert futures["includedInScore"] is False
+    assert futures["scoreContribution"] == 0
+    assert futures_diagnostics["requiredProviderClass"] == "exchange_or_broker_authorized.index_futures"
+    assert futures_diagnostics["configuredProviderAvailable"] is True
+    assert futures_diagnostics["realSourceAvailable"] is False
+    assert futures_diagnostics["proxyOnly"] is True
+    assert futures_diagnostics["observationOnly"] is True
+    assert futures_diagnostics["scoreContributionAllowed"] is False
+    assert futures_diagnostics["paidDataLikelyRequired"] is True
+
+
+def test_binance_crypto_activation_keeps_exchange_public_spot_scoring(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "crypto",
+        _cache_entry(
+            source="binance",
+            freshness="live",
+            items=[
+                {"symbol": "BTC", "label": "BTC", "changePercent": 1.4, "value": 64000.0, "source": "binance", "sourceType": "exchange_public"},
+                {"symbol": "ETH", "label": "ETH", "changePercent": 1.1, "value": 3300.0, "source": "binance", "sourceType": "exchange_public"},
+                {"symbol": "BNB", "label": "BNB", "changePercent": 0.7, "value": 610.0, "source": "binance", "sourceType": "exchange_public"},
+                {"symbol": "BTC_FUNDING", "label": "BTC Funding", "value": 0.011, "changePercent": 0.011, "source": "binance", "sourceType": "exchange_public"},
+                {"symbol": "ETH_FUNDING", "label": "ETH Funding", "value": 0.009, "changePercent": 0.009, "source": "binance", "sourceType": "exchange_public"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicators = _indicators_by_key(payload)
+
+    spot = indicators["crypto_spot_momentum"]
+    spot_diagnostics = spot["coverageDiagnostics"]
+    _assert_activation_fields(spot_diagnostics)
+    assert spot["includedInScore"] is True
+    assert spot["scoreContribution"] == 6
+    assert spot_diagnostics["requiredProviderClass"] == "exchange_public.crypto_spot"
+    assert spot_diagnostics["configuredProviderAvailable"] is True
+    assert spot_diagnostics["realSourceAvailable"] is True
+    assert spot_diagnostics["proxyOnly"] is False
+    assert spot_diagnostics["observationOnly"] is False
+    assert spot_diagnostics["scoreContributionAllowed"] is True
+    assert spot_diagnostics["sourceTier"] == "exchange_public"
+    assert spot_diagnostics["trustLevel"] == "reliable"
+
+    funding = indicators["crypto_funding"]
+    funding_diagnostics = funding["coverageDiagnostics"]
+    _assert_activation_fields(funding_diagnostics)
+    assert funding["includedInScore"] is False
+    assert funding["scoreContribution"] == 0
+    assert funding_diagnostics["requiredProviderClass"] == "exchange_public.crypto_funding"
+    assert funding_diagnostics["configuredProviderAvailable"] is True
+    assert funding_diagnostics["realSourceAvailable"] is True
+    assert funding_diagnostics["observationOnly"] is True
+    assert funding_diagnostics["scoreContributionAllowed"] is False
 
 
 def test_vix_indicator_uses_yfinance_proxy_when_volatility_panel_is_unavailable(isolated_db: DatabaseManager) -> None:

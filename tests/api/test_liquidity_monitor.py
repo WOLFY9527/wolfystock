@@ -87,6 +87,27 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
                         }
                     ],
                 },
+                "coverageDiagnostics": {
+                    "indicatorId": "vix_pressure",
+                    "indicatorName": "VIX / 波动率压力",
+                    "requiredInputs": ["VIX"],
+                    "fulfilledInputs": ["VIX"],
+                    "missingInputs": [],
+                    "requiredProviderClass": "official_public.vix_or_volatility",
+                    "configuredProviderAvailable": True,
+                    "realSourceAvailable": True,
+                    "proxyOnly": False,
+                    "observationOnly": False,
+                    "scoreContributionAllowed": True,
+                    "missingProviderReason": None,
+                    "paidDataLikelyRequired": False,
+                    "sourceTier": "official_public",
+                    "freshness": "live",
+                    "trustLevel": "reliable",
+                    "contributesToScore": True,
+                    "scoreContribution": 8,
+                    "activationHint": "official VIX source active",
+                },
             }
         ],
         "advisoryDisclosure": "仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。",
@@ -110,6 +131,10 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
     assert body["sourceMetadata"]["externalProviderCalls"] is False
     assert body["indicators"][0]["evidence"]["source"] == "fred"
     assert body["indicators"][0]["evidence"]["inputs"][0]["sourceType"] == "official_public"
+    diagnostics = body["indicators"][0]["coverageDiagnostics"]
+    assert diagnostics["requiredProviderClass"] == "official_public.vix_or_volatility"
+    assert diagnostics["realSourceAvailable"] is True
+    assert diagnostics["scoreContributionAllowed"] is True
 
 
 def test_liquidity_monitor_route_preserves_explicit_non_live_indicator_contracts() -> None:
@@ -173,6 +198,29 @@ def test_liquidity_monitor_route_preserves_explicit_non_live_indicator_contracts
                         }
                     ],
                 },
+                "coverageDiagnostics": {
+                    "indicatorId": "cn_hk_flows",
+                    "indicatorName": "CN/HK 资金流",
+                    "requiredInputs": ["NORTHBOUND", "SOUTHBOUND"],
+                    "fulfilledInputs": [],
+                    "missingInputs": ["NORTHBOUND", "SOUTHBOUND"],
+                    "requiredProviderClass": "authorized.cn_hk_connect_flow",
+                    "configuredProviderAvailable": True,
+                    "realSourceAvailable": False,
+                    "proxyOnly": False,
+                    "observationOnly": True,
+                    "scoreContributionAllowed": False,
+                    "missingProviderReason": "requires_authorized.cn_hk_connect_flow",
+                    "paidDataLikelyRequired": True,
+                    "sourceTier": "static_fallback",
+                    "freshness": "fallback",
+                    "trustLevel": "unavailable",
+                    "contributesToScore": False,
+                    "scoreContribution": 0,
+                    "capReason": "unavailable_source",
+                    "degradationReason": "fallback_source",
+                    "activationHint": "requires real CN/HK flow provider",
+                },
             },
             {
                 "key": "vix_pressure",
@@ -213,6 +261,29 @@ def test_liquidity_monitor_route_preserves_explicit_non_live_indicator_contracts
                         }
                     ],
                 },
+                "coverageDiagnostics": {
+                    "indicatorId": "vix_pressure",
+                    "indicatorName": "VIX / 波动率压力",
+                    "requiredInputs": ["VIX"],
+                    "fulfilledInputs": ["VIX"],
+                    "missingInputs": [],
+                    "requiredProviderClass": "official_public.vix_or_volatility",
+                    "configuredProviderAvailable": True,
+                    "realSourceAvailable": False,
+                    "proxyOnly": True,
+                    "observationOnly": False,
+                    "scoreContributionAllowed": True,
+                    "missingProviderReason": "requires_official_public.vix_or_volatility",
+                    "paidDataLikelyRequired": False,
+                    "sourceTier": "unofficial_public_api",
+                    "freshness": "partial",
+                    "trustLevel": "usable_with_caution",
+                    "contributesToScore": True,
+                    "scoreContribution": 6,
+                    "capReason": "partial_coverage",
+                    "degradationReason": "partial_coverage",
+                    "activationHint": "proxy capped",
+                },
             },
         ],
         "advisoryDisclosure": "仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。",
@@ -233,10 +304,14 @@ def test_liquidity_monitor_route_preserves_explicit_non_live_indicator_contracts
     assert indicators["cn_hk_flows"]["freshness"] == "fallback"
     assert indicators["cn_hk_flows"]["includedInScore"] is False
     assert indicators["cn_hk_flows"]["evidence"]["isFallback"] is True
+    assert indicators["cn_hk_flows"]["coverageDiagnostics"]["observationOnly"] is True
+    assert indicators["cn_hk_flows"]["coverageDiagnostics"]["scoreContributionAllowed"] is False
     assert indicators["vix_pressure"]["status"] == "partial"
     assert indicators["vix_pressure"]["freshness"] == "delayed"
     assert indicators["vix_pressure"]["includedInScore"] is True
     assert indicators["vix_pressure"]["evidence"]["isPartial"] is True
+    assert indicators["vix_pressure"]["coverageDiagnostics"]["proxyOnly"] is True
+    assert indicators["vix_pressure"]["coverageDiagnostics"]["realSourceAvailable"] is False
 
 
 def test_liquidity_monitor_route_accepts_all_golden_fixture_payloads() -> None:
