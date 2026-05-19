@@ -48,6 +48,11 @@ Manual backend endpoints to probe:
 Expected degraded-state semantics:
 - Fallback, stale, delayed, partial, or unavailable payloads must not appear live/fresh.
 - Core quote indicators must keep `source`, `sourceLabel`, `sourceTier`, `asOf`, `freshness`, and `trustLevel` when available, and any delayed/fallback/unavailable row must carry an explicit `degradationReason`.
+- Core source activation diagnostics for SPX, VIX, US10Y, DXY, and CN00Y must expose
+  `providerAttempted`, `providerClass`, `officialOverlayAttempted`,
+  `officialOverlayAvailable`, `officialOverlayFailureReason`, and
+  `activationHint`; unavailable or stale official overlays must keep any
+  visible yfinance/proxy/static fallback row capped and non-live.
 - N/A is allowed only with explicit unavailable evidence; do not mask it as live or fresh.
 - Official macro rows for Treasury/FRED daily and monthly releases must keep
   `official_public` provenance, provider `asOf`, and delayed/stale/unavailable

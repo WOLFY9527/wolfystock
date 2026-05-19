@@ -442,6 +442,13 @@ class MarketOverviewService:
         "US10Y": ("DGS10", "US 10Y", "%", "US"),
         "US30Y": ("DGS30", "US 30Y", "%", "US"),
     }
+    OFFICIAL_OVERLAY_SERIES_BY_SYMBOL = {
+        "VIX": "VIXCLS",
+        "US2Y": "DGS2",
+        "US10Y": "DGS10",
+        "US30Y": "DGS30",
+    }
+    STATIC_FALLBACK_ACTIVATION_SYMBOLS = {"CN00Y"}
     OFFICIAL_MACRO_SERIES = {
         "FEDFUNDS": ("DFF", "Fed Funds", "%", "US"),
         "CPI": ("CPIAUCSL", "CPI", "YoY %", "US"),
@@ -1626,6 +1633,129 @@ class MarketOverviewService:
             meta["degradationReason"] = degradation_reason
         return meta
 
+    def _source_activation_meta(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        source = str(item.get("source") or "").lower()
+        symbol = str(item.get("symbol") or "")
+        source_type = str(item.get("sourceType") or _infer_source_type(source)).lower()
+        source_tier = str(item.get("sourceTier") or "").lower()
+        is_fallback = bool(item.get("isFallback") or item.get("fallbackUsed"))
+        is_unavailable = bool(item.get("isUnavailable"))
+        overlay_configured = symbol in self.OFFICIAL_OVERLAY_SERIES_BY_SYMBOL
+        overlay_attempted = bool(item.get("officialOverlayAttempted")) if "officialOverlayAttempted" in item else overlay_configured
+        overlay_available = (
+            bool(item.get("officialOverlayAvailable"))
+            if "officialOverlayAvailable" in item
+            else bool(overlay_attempted and source_type == "official_public" and not is_unavailable)
+        )
+        provider_class = str(item.get("providerClass") or self._provider_class_for_item(item)).strip()
+        failure_reason = item.get("officialOverlayFailureReason")
+        if failure_reason is None:
+            if overlay_attempted and not overlay_available:
+                failure_reason = "official_overlay_unavailable"
+            elif not overlay_attempted:
+                failure_reason = "not_configured"
+        provider_attempted = (
+            bool(item.get("providerAttempted"))
+            if "providerAttempted" in item
+            else self._provider_attempted_for_item(
+                source=source,
+                source_type=source_type,
+                source_tier=source_tier,
+                provider_class=provider_class,
+                overlay_attempted=overlay_attempted,
+                symbol=symbol,
+                is_fallback=is_fallback,
+            )
+        )
+        activation_hint = str(item.get("activationHint") or "").strip() or self._activation_hint_for_item(
+            provider_class=provider_class,
+            overlay_attempted=overlay_attempted,
+            overlay_available=overlay_available,
+            failure_reason=str(failure_reason or ""),
+        )
+        return {
+            "providerAttempted": provider_attempted,
+            "officialOverlayAttempted": overlay_attempted,
+            "officialOverlayAvailable": overlay_available,
+            "officialOverlayFailureReason": failure_reason,
+            "providerClass": provider_class,
+            "activationHint": activation_hint,
+        }
+
+    def _provider_class_for_item(self, item: Dict[str, Any]) -> str:
+        source = str(item.get("source") or "").lower()
+        source_type = str(item.get("sourceType") or _infer_source_type(source)).lower()
+        symbol = str(item.get("symbol") or "")
+        if source_type == "official_public":
+            return "official_daily"
+        if source_type == "exchange_public":
+            return "exchange_public"
+        if source_type == "broker_authorized":
+            return "broker_authorized"
+        if (
+            symbol in self.STATIC_FALLBACK_ACTIVATION_SYMBOLS
+            or bool(item.get("isFallback") or item.get("fallbackUsed"))
+            or source in {"fallback", "mock", "synthetic"}
+            or source_type in {"fallback_static", "synthetic_fixture", "static_fallback"}
+        ):
+            return "static" if _has_valid_market_value(item) else "fallback"
+        if source in {"unavailable", "missing"} or bool(item.get("isUnavailable")) or source_type == "missing":
+            return "fallback"
+        return "proxy"
+
+    def _provider_attempted_for_item(
+        self,
+        *,
+        source: str,
+        source_type: str,
+        source_tier: str,
+        provider_class: str,
+        overlay_attempted: bool,
+        symbol: str,
+        is_fallback: bool,
+    ) -> bool:
+        if provider_class in {"official_daily", "exchange_public", "broker_authorized", "proxy"}:
+            return True
+        if overlay_attempted:
+            return True
+        if symbol in self.STATIC_FALLBACK_ACTIVATION_SYMBOLS:
+            return False
+        if is_fallback or source in {"fallback", "mock", "synthetic"} or source_type in {"fallback_static", "synthetic_fixture"}:
+            return False
+        return bool(source or source_type or source_tier)
+
+    @staticmethod
+    def _activation_hint_for_item(
+        *,
+        provider_class: str,
+        overlay_attempted: bool,
+        overlay_available: bool,
+        failure_reason: str,
+    ) -> str:
+        if provider_class == "official_daily" and overlay_attempted and overlay_available:
+            return "official_daily_overlay_active"
+        if overlay_attempted and not overlay_available:
+            if failure_reason == "official_overlay_stale":
+                return (
+                    "official_overlay_stale_using_proxy"
+                    if provider_class == "proxy"
+                    else "official_overlay_stale_using_static_fallback"
+                )
+            return (
+                "official_overlay_unavailable_using_proxy"
+                if provider_class == "proxy"
+                else "official_overlay_unavailable_using_static_fallback"
+            )
+        if provider_class == "proxy":
+            return "proxy_only_no_official_overlay"
+        if provider_class == "static":
+            return "static_fallback_no_provider"
+        if provider_class == "exchange_public":
+            return "exchange_public_provider_active"
+        if provider_class == "broker_authorized":
+            return "broker_authorized_provider_active"
+        return "provider_unavailable"
+
     def _with_item_meta(self, item: Dict[str, Any], category: str, panel: Dict[str, Any]) -> Dict[str, Any]:
         source = str(item.get("source") or panel.get("source") or "mixed")
         is_fallback = bool(item.get("isFallback") or item.get("fallbackUsed") or source.lower() in {"fallback", "mock"})
@@ -1663,14 +1793,15 @@ class MarketOverviewService:
             "isFromSnapshot": bool(item.get("isFromSnapshot") or panel.get("isFromSnapshot")),
         }
         normalized = normalize_vix_quote_metadata(normalized)
-        return {**normalized, **self._source_trust_meta(normalized)}
+        normalized = {**normalized, **self._source_trust_meta(normalized)}
+        return {**normalized, **self._source_activation_meta(normalized)}
 
     def _fetch_indices(self) -> PanelPayload:
         return self._quote_panel("IndexTrendsCard", self.INDEX_SYMBOLS)
 
     def _fetch_volatility(self) -> PanelPayload:
         items = self._quote_items(self.VOL_SYMBOLS)
-        official_vix = self._official_macro_item(
+        official_vix, official_vix_failure = self._official_macro_overlay_item(
             "VIX",
             "VIX",
             self._official_macro_points().get("VIXCLS", []),
@@ -1689,6 +1820,13 @@ class MarketOverviewService:
             if not replaced_vix:
                 next_items.insert(0, official_vix)
             items = next_items
+        elif official_vix_failure:
+            items = [
+                self._with_official_overlay_failure(item, official_vix_failure)
+                if str(item.get("symbol") or "") == "VIX"
+                else item
+                for item in items
+            ]
         try:
             atr_item = self._atr_item()
         except Exception:
@@ -2036,15 +2174,19 @@ class MarketOverviewService:
             for item in self._quote_items(self.MACRO_SYMBOLS)
         }
         for panel_symbol, (series_id, label, unit, market) in self.OFFICIAL_RATE_SERIES.items():
-            official_item = self._official_macro_item(panel_symbol, label, official_points.get(series_id, []), unit=unit, market=market)
+            official_item, official_failure = self._official_macro_overlay_item(panel_symbol, label, official_points.get(series_id, []), unit=unit, market=market)
             if official_item:
                 item_map[panel_symbol] = official_item
+            elif panel_symbol in item_map and official_failure:
+                item_map[panel_symbol] = self._with_official_overlay_failure(item_map[panel_symbol], official_failure)
         official_sofr = self._official_macro_item("SOFR", "SOFR", official_points.get("SOFR", []), unit="%", market="US")
         if official_sofr:
             item_map["SOFR"] = official_sofr
-        official_vix = self._official_macro_item("VIX", "VIX", official_points.get("VIXCLS", []), unit="pts", change_scale=1.0)
+        official_vix, official_vix_failure = self._official_macro_overlay_item("VIX", "VIX", official_points.get("VIXCLS", []), unit="pts", change_scale=1.0)
         if official_vix:
             item_map["VIX"] = official_vix
+        elif "VIX" in item_map and official_vix_failure:
+            item_map["VIX"] = self._with_official_overlay_failure(item_map["VIX"], official_vix_failure)
         official_credit = self._official_macro_item(
             "CREDIT",
             "Credit spreads",
@@ -2349,12 +2491,12 @@ class MarketOverviewService:
         official_count = 0
         for symbol in ("US2Y", "US10Y", "US30Y"):
             series_id, label, unit, market = self.OFFICIAL_RATE_SERIES[symbol]
-            official_item = self._official_macro_item(symbol, label, official_points.get(series_id, []), unit=unit, market=market)
+            official_item, official_failure = self._official_macro_overlay_item(symbol, label, official_points.get(series_id, []), unit=unit, market=market)
             if official_item:
                 items.append(official_item)
                 official_count += 1
             elif symbol in fallback_items:
-                items.append(fallback_items[symbol])
+                items.append(self._with_official_overlay_failure(fallback_items[symbol], official_failure))
         if "US10Y2Y" in fallback_items:
             items.append(fallback_items["US10Y2Y"])
         if "US10Y3M" in fallback_items:
@@ -2636,6 +2778,69 @@ class MarketOverviewService:
             change_percent=change_percent,
             trend=scaled_trend,
         )
+
+    def _official_macro_overlay_item(
+        self,
+        symbol: str,
+        label: str,
+        observations: List[MacroObservation],
+        *,
+        unit: str,
+        market: Optional[str] = None,
+        value_scale: float = 1.0,
+        change_scale: float = 100.0,
+    ) -> tuple[Optional[Dict[str, Any]], str | None]:
+        item = self._official_macro_item(
+            symbol,
+            label,
+            observations,
+            unit=unit,
+            market=market,
+            value_scale=value_scale,
+            change_scale=change_scale,
+        )
+        if item is None:
+            return None, "official_overlay_unavailable"
+        freshness = get_freshness_status(
+            item.get("asOf"),
+            "macro_rate",
+            str(item.get("source") or ""),
+            False,
+            source_type=str(item.get("sourceType") or ""),
+        )
+        if freshness["freshness"] in {"stale", "fallback", "mock", "unavailable", "error"}:
+            return None, "official_overlay_stale"
+        item.update({
+            "providerAttempted": True,
+            "providerClass": "official_daily",
+            "officialOverlayAttempted": True,
+            "officialOverlayAvailable": True,
+            "officialOverlayFailureReason": None,
+            "activationHint": "official_daily_overlay_active",
+        })
+        return item, None
+
+    @staticmethod
+    def _with_official_overlay_failure(item: Dict[str, Any], reason: str | None) -> Dict[str, Any]:
+        failure_reason = reason or "official_overlay_unavailable"
+        fallback_item = bool(item.get("isFallback") or item.get("fallbackUsed")) or str(item.get("source") or "").lower() in {
+            "fallback",
+            "mock",
+            "synthetic",
+        }
+        fallback_suffix = "static_fallback" if fallback_item else "proxy"
+        activation_hint = (
+            f"official_overlay_stale_using_{fallback_suffix}"
+            if failure_reason == "official_overlay_stale"
+            else f"official_overlay_unavailable_using_{fallback_suffix}"
+        )
+        return {
+            **item,
+            "officialOverlayAttempted": True,
+            "officialOverlayAvailable": False,
+            "officialOverlayFailureReason": failure_reason,
+            "activationHint": activation_hint,
+        }
 
     def _official_macro_yoy_item(
         self,

@@ -93,6 +93,14 @@ def test_spx_configured_quote_carries_delayed_source_and_trust_metadata() -> Non
     assert spx["degradationReason"] == "delayed_source"
     assert spx["asOf"] == as_of.isoformat(timespec="seconds")
     assert spx["freshness"] not in {"live", "fresh"}
+    assert spx["providerAttempted"] is True
+    assert spx["providerClass"] == "proxy"
+    assert spx["officialOverlayAttempted"] is False
+    assert spx["officialOverlayAvailable"] is False
+    assert spx["officialOverlayFailureReason"] == "not_configured"
+    assert spx["activationHint"] == "proxy_only_no_official_overlay"
+    assert spx["sourceType"] != "exchange_public"
+    assert spx["sourceTier"] != "exchange_public"
 
     unavailable = _item(payload, "NASDAQ")
     assert unavailable["value"] is None
@@ -143,6 +151,12 @@ def test_vix_official_quote_keeps_delayed_macro_semantics() -> None:
     assert vix["freshness"] not in {"live", "fresh"}
     assert vix["trustLevel"] in {"usable_with_caution", "weak"}
     assert vix["degradationReason"] in {"delayed_source", "stale_source"}
+    assert vix["providerAttempted"] is True
+    assert vix["providerClass"] == "official_daily"
+    assert vix["officialOverlayAttempted"] is True
+    assert vix["officialOverlayAvailable"] is True
+    assert vix["officialOverlayFailureReason"] is None
+    assert vix["activationHint"] == "official_daily_overlay_active"
 
 
 def test_vix_yfinance_proxy_panel_and_item_cannot_claim_live_realtime() -> None:
@@ -174,12 +188,62 @@ def test_vix_yfinance_proxy_panel_and_item_cannot_claim_live_realtime() -> None:
     assert vix["freshness"] not in {"live", "fresh"}
     assert vix["trustLevel"] == "usable_with_caution"
     assert vix["degradationReason"] == "delayed_source"
+    assert vix["providerAttempted"] is True
+    assert vix["providerClass"] == "proxy"
+    assert vix["officialOverlayAttempted"] is True
+    assert vix["officialOverlayAvailable"] is False
+    assert vix["officialOverlayFailureReason"] == "official_overlay_unavailable"
+    assert vix["activationHint"] == "official_overlay_unavailable_using_proxy"
 
     assert payload["source"] == "yfinance"
     assert payload["sourceType"] == "unofficial_proxy"
     assert payload["freshness"] == "delayed"
     assert payload["freshness"] not in {"live", "fresh"}
     assert payload["evidenceSnapshot"]["freshness"] == "partial"
+
+
+def test_vix_stale_official_overlay_does_not_replace_delayed_proxy() -> None:
+    service = MarketOverviewService()
+    as_of = datetime.now(CN_TZ)
+    stale_date = (datetime.now(CN_TZ) - timedelta(days=10)).date().isoformat()
+    previous = (datetime.now(CN_TZ) - timedelta(days=11)).date().isoformat()
+
+    def history(ticker: str) -> _HistoryFrame:
+        if ticker == "^VIX":
+            return _HistoryFrame([18.0, 15.0], as_of=as_of, volumes=[1_000_000, 1_100_000])
+        raise RuntimeError(f"{ticker} fixture unavailable")
+
+    def official_points(*args: object, **kwargs: object) -> dict:
+        from src.services.official_macro_transport import MacroObservation
+
+        return {
+            "VIXCLS": [
+                MacroObservation("VIXCLS", 21.5, stale_date, stale_date, "fred:VIXCLS", "official_public", "daily_close"),
+                MacroObservation("VIXCLS", 20.4, previous, previous, "fred:VIXCLS", "official_public", "daily_close"),
+            ]
+        }
+
+    log_patcher = _log_patch()
+    try:
+        with (
+            patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", side_effect=history),
+            patch.object(service, "_official_macro_points", side_effect=official_points),
+            patch.object(service, "_atr_item", return_value=None),
+        ):
+            payload = service.get_volatility()
+    finally:
+        log_patcher.stop()
+
+    vix = _item(payload, "VIX")
+    assert vix["value"] == 15.0
+    assert vix["source"] == "yfinance"
+    assert vix["sourceType"] == "unofficial_proxy"
+    assert vix["providerClass"] == "proxy"
+    assert vix["freshness"] == "delayed"
+    assert vix["officialOverlayAttempted"] is True
+    assert vix["officialOverlayAvailable"] is False
+    assert vix["officialOverlayFailureReason"] == "official_overlay_stale"
+    assert vix["activationHint"] == "official_overlay_stale_using_proxy"
 
 
 def test_hsi_sina_proxy_quote_uses_dashboard_symbol_and_truthful_metadata() -> None:
@@ -281,11 +345,47 @@ def test_us10y_dxy_and_btc_keep_truthful_source_freshness_metadata() -> None:
     assert us10y["freshness"] == "delayed"
     assert us10y["sourceTier"] == "unofficial_public_api"
     assert us10y["degradationReason"] == "delayed_source"
+    assert us10y["providerClass"] == "proxy"
+    assert us10y["officialOverlayAttempted"] is True
+    assert us10y["officialOverlayAvailable"] is False
+    assert us10y["officialOverlayFailureReason"] == "official_overlay_unavailable"
+    assert us10y["activationHint"] == "official_overlay_unavailable_using_proxy"
     assert dxy["source"] == "yfinance"
     assert dxy["freshness"] == "delayed"
     assert dxy["sourceTier"] == "unofficial_public_api"
     assert dxy["degradationReason"] == "delayed_source"
+    assert dxy["providerClass"] == "proxy"
+    assert dxy["officialOverlayAttempted"] is False
+    assert dxy["officialOverlayAvailable"] is False
+    assert dxy["officialOverlayFailureReason"] == "not_configured"
+    assert dxy["activationHint"] == "proxy_only_no_official_overlay"
+    assert dxy["freshness"] not in {"live", "fresh"}
     assert btc["source"] == "binance"
     assert btc["sourceTier"] == "exchange_public"
     assert btc["freshness"] == "live"
     assert btc.get("degradationReason") is None
+
+
+def test_cn00y_static_fallback_is_explicit_and_capped() -> None:
+    service = MarketOverviewService()
+
+    log_patcher = _log_patch()
+    try:
+        with patch.object(service, "_fetch_sina_cn_index_quotes", side_effect=RuntimeError("sina unavailable")):
+            payload = service.get_cn_indices()
+    finally:
+        log_patcher.stop()
+
+    cn00y = _item(payload, "CN00Y")
+    assert cn00y["source"] == "fallback"
+    assert cn00y["freshness"] == "fallback"
+    assert cn00y["isFallback"] is True
+    assert cn00y["providerAttempted"] is False
+    assert cn00y["providerClass"] == "static"
+    assert cn00y["officialOverlayAttempted"] is False
+    assert cn00y["officialOverlayAvailable"] is False
+    assert cn00y["officialOverlayFailureReason"] == "not_configured"
+    assert cn00y["sourceTier"] == "static_fallback"
+    assert cn00y["trustLevel"] == "weak"
+    assert cn00y["degradationReason"] == "fallback_source"
+    assert cn00y["activationHint"] == "static_fallback_no_provider"
