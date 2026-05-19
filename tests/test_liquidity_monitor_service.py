@@ -179,6 +179,9 @@ def _assert_activation_fields(diagnostics: Dict[str, Any]) -> None:
         "proxyOnly",
         "observationOnly",
         "scoreContributionAllowed",
+        "scoreExclusionReason",
+        "requiredRealSourceForScore",
+        "proxyObservationOnlyReason",
         "missingProviderReason",
         "paidDataLikelyRequired",
         "activationHint",
@@ -1268,7 +1271,7 @@ def test_expired_proxy_rates_cache_yields_to_newer_official_snapshot_without_pro
     assert "Yahoo Finance" not in indicator["summary"]
 
 
-def test_raw_rates_snapshot_with_sofr_only_official_data_uses_proxy_yields_for_scoring(isolated_db: DatabaseManager) -> None:
+def test_raw_rates_snapshot_with_sofr_only_official_data_keeps_proxy_yields_observation_only(isolated_db: DatabaseManager) -> None:
     service = _make_service()
     _save_market_overview_snapshot(
         isolated_db,
@@ -1314,8 +1317,10 @@ def test_raw_rates_snapshot_with_sofr_only_official_data_uses_proxy_yields_for_s
         indicator = service._us_rates_indicator(service._read_panel("rates"), service._read_panel("macro"))
 
     assert service._external_provider_calls_used is True
-    assert indicator["includedInScore"] is True
-    assert indicator["scoreContribution"] == 4
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert indicator["coverageDiagnostics"]["scoreContributionAllowed"] is False
+    assert indicator["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
     assert indicator["coverageDiagnostics"]["capReason"] == "partial_coverage"
     assert indicator["freshness"] == "delayed"
     assert "US10Y -1.97%" in indicator["summary"]
@@ -1443,7 +1448,9 @@ def test_malformed_raw_official_observation_is_skipped_and_proxy_fallback_remain
         indicator = service._vix_indicator(panel, service._read_panel("macro"))
 
     assert service._reliable_items(panel, {"VIX"}) == []
-    assert indicator["includedInScore"] is True
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert indicator["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
     assert indicator["freshness"] == "delayed"
     assert "Yahoo Finance" in indicator["summary"]
     assert "official_public" not in indicator["summary"]
@@ -1645,7 +1652,7 @@ def test_unavailable_when_fewer_than_three_reliable_indicators(isolated_db: Data
 
     assert payload["score"]["value"] == 50
     assert payload["score"]["regime"] == "unavailable"
-    assert payload["score"]["confidence"] == 0.3
+    assert payload["score"]["confidence"] == 0.0
 
 
 def test_fallback_stale_mock_and_error_indicators_are_excluded_from_score(isolated_db: DatabaseManager) -> None:
@@ -1724,8 +1731,8 @@ def test_fallback_stale_mock_and_error_indicators_are_excluded_from_score(isolat
     payload = service.get_liquidity_monitor()
     indicators = {item["key"]: item for item in payload["indicators"]}
 
-    assert payload["score"]["regime"] == "supportive"
-    assert payload["score"]["value"] == 64
+    assert payload["score"]["regime"] == "unavailable"
+    assert payload["score"]["value"] == 50
     assert indicators["crypto_spot_momentum"]["includedInScore"] is False
     assert indicators["us_rates_pressure"]["includedInScore"] is False
     assert indicators["usd_pressure"]["includedInScore"] is False
@@ -1841,7 +1848,7 @@ def test_item_stale_flag_overrides_live_freshness_for_indicator_inputs(isolated_
     assert all(input_item["freshness"] == "stale" for input_item in evidence["inputs"])
 
 
-def test_reliable_indicators_move_score_deterministically(isolated_db: DatabaseManager) -> None:
+def test_proxy_only_indicators_do_not_inflate_total_score(isolated_db: DatabaseManager) -> None:
     service = _make_service()
     now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
     for key, payload in {
@@ -1896,9 +1903,17 @@ def test_reliable_indicators_move_score_deterministically(isolated_db: DatabaseM
 
     payload = service.get_liquidity_monitor()
 
-    assert payload["score"]["value"] == 78
-    assert payload["score"]["regime"] == "abundant"
-    assert payload["score"]["confidence"] > 0.5
+    indicators = {item["key"]: item for item in payload["indicators"]}
+
+    assert payload["score"]["value"] == 50
+    assert payload["score"]["regime"] == "unavailable"
+    assert payload["score"]["confidence"] == 0.14
+    assert payload["score"]["includedIndicatorCount"] == 1
+    assert indicators["crypto_spot_momentum"]["includedInScore"] is True
+    for key in ("vix_pressure", "usd_pressure", "us_rates_pressure", "us_etf_flow_proxy", "us_breadth_proxy"):
+        assert indicators[key]["includedInScore"] is False
+        assert indicators[key]["scoreContribution"] == 0
+        assert indicators[key]["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
 
 
 def test_derived_freshness_uses_weakest_input_freshness(isolated_db: DatabaseManager) -> None:
@@ -2038,7 +2053,7 @@ def test_fresh_binance_crypto_input_remains_live_exchange_public_when_fresh(
     assert diagnostic["capReason"] is None
 
 
-def test_delayed_yfinance_macro_proxy_is_score_capped_by_trust_gate(
+def test_delayed_yfinance_macro_proxy_is_observation_only_without_real_source(
     isolated_db: DatabaseManager,
 ) -> None:
     service = _make_service()
@@ -2058,16 +2073,20 @@ def test_delayed_yfinance_macro_proxy_is_score_capped_by_trust_gate(
     diagnostic = indicator["coverageDiagnostics"]
 
     assert indicator["status"] == "partial"
-    assert indicator["includedInScore"] is True
-    assert 0 < indicator["scoreContribution"] < 8
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
     assert diagnostic["sourceTier"] == "unofficial_public_api"
     assert diagnostic["freshness"] == "partial"
     assert diagnostic["trustLevel"] == "usable_with_caution"
-    assert diagnostic["contributesToScore"] is True
-    assert diagnostic["scoreContribution"] == indicator["scoreContribution"]
+    assert diagnostic["scoreContributionAllowed"] is False
+    assert diagnostic["requiredRealSourceForScore"] is True
+    assert diagnostic["proxyObservationOnlyReason"] == "proxy_only_missing_real_source"
+    assert diagnostic["scoreExclusionReason"] == "proxy_only_missing_real_source"
+    assert diagnostic["contributesToScore"] is False
+    assert diagnostic["scoreContribution"] == 0
     assert diagnostic["capReason"] == "partial_coverage"
     assert diagnostic["degradationReason"] == "partial_coverage"
-    assert "capped" in diagnostic["activationHint"]
+    assert "scoreContributionAllowed=False" in diagnostic["activationHint"]
 
 
 def test_fallback_static_liquidity_inputs_never_appear_live_in_diagnostics(
@@ -2396,8 +2415,9 @@ def test_usd_pressure_uses_reliable_fx_crosses_when_dxy_missing(isolated_db: Dat
     payload = service.get_liquidity_monitor()
     indicators = {item["key"]: item for item in payload["indicators"]}
 
-    assert indicators["usd_pressure"]["includedInScore"] is True
-    assert indicators["usd_pressure"]["scoreContribution"] == -6
+    assert indicators["usd_pressure"]["includedInScore"] is False
+    assert indicators["usd_pressure"]["scoreContribution"] == 0
+    assert indicators["usd_pressure"]["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
     assert "USD/CNH" in indicators["usd_pressure"]["summary"]
 
 
@@ -2422,8 +2442,9 @@ def test_us_rates_indicator_uses_treasury_basket_when_us10y_missing(isolated_db:
     payload = service.get_liquidity_monitor()
     indicators = {item["key"]: item for item in payload["indicators"]}
 
-    assert indicators["us_rates_pressure"]["includedInScore"] is True
-    assert indicators["us_rates_pressure"]["scoreContribution"] == 6
+    assert indicators["us_rates_pressure"]["includedInScore"] is False
+    assert indicators["us_rates_pressure"]["scoreContribution"] == 0
+    assert indicators["us_rates_pressure"]["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
     assert "US2Y" in indicators["us_rates_pressure"]["summary"]
 
 
@@ -2451,8 +2472,9 @@ def test_us_breadth_indicator_uses_relative_proxy_votes(isolated_db: DatabaseMan
     payload = service.get_liquidity_monitor()
     indicators = {item["key"]: item for item in payload["indicators"]}
 
-    assert indicators["us_breadth_proxy"]["includedInScore"] is True
-    assert indicators["us_breadth_proxy"]["scoreContribution"] == -4
+    assert indicators["us_breadth_proxy"]["includedInScore"] is False
+    assert indicators["us_breadth_proxy"]["scoreContribution"] == 0
+    assert indicators["us_breadth_proxy"]["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
     assert indicators["us_breadth_proxy"]["coverageDiagnostics"]["capReason"] == "partial_coverage"
     assert "RSP/SPY" in indicators["us_breadth_proxy"]["summary"]
 
@@ -2590,10 +2612,15 @@ def test_liquidity_provider_activation_diagnostics_classify_proxy_indicators_and
         assert diagnostics["realSourceAvailable"] is False
         assert diagnostics["proxyOnly"] is True
         assert diagnostics["observationOnly"] is False
-        assert diagnostics["scoreContributionAllowed"] is True
+        assert diagnostics["scoreContributionAllowed"] is False
+        assert diagnostics["scoreExclusionReason"] == "proxy_only_missing_real_source"
+        assert diagnostics["requiredRealSourceForScore"] is True
+        assert diagnostics["proxyObservationOnlyReason"] == "proxy_only_missing_real_source"
         assert diagnostics["sourceTier"] == "unofficial_public_api"
         assert diagnostics["missingProviderReason"]
-        assert abs(indicators[key]["scoreContribution"]) < max_abs_score
+        assert indicators[key]["includedInScore"] is False
+        assert indicators[key]["scoreContribution"] == 0
+        assert diagnostics["scoreContribution"] == 0
         assert diagnostics["capReason"] == "partial_coverage"
 
 
@@ -2782,10 +2809,14 @@ def test_vix_indicator_uses_yfinance_proxy_when_volatility_panel_is_unavailable(
     indicators = {item["key"]: item for item in payload["indicators"]}
 
     assert payload["sourceMetadata"]["externalProviderCalls"] is True
-    assert indicators["vix_pressure"]["includedInScore"] is True
+    assert indicators["vix_pressure"]["includedInScore"] is False
     assert indicators["vix_pressure"]["status"] == "partial"
     assert indicators["vix_pressure"]["freshness"] == "delayed"
-    assert indicators["vix_pressure"]["scoreContribution"] == 6
+    assert indicators["vix_pressure"]["scoreContribution"] == 0
+    assert indicators["vix_pressure"]["coverageDiagnostics"]["scoreContributionAllowed"] is False
+    assert indicators["vix_pressure"]["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
+    assert indicators["vix_pressure"]["coverageDiagnostics"]["requiredRealSourceForScore"] is True
+    assert indicators["vix_pressure"]["coverageDiagnostics"]["proxyObservationOnlyReason"] == "proxy_only_missing_real_source"
     assert indicators["vix_pressure"]["coverageDiagnostics"]["capReason"] == "partial_coverage"
     assert "Yahoo Finance" in str(indicators["vix_pressure"]["summary"])
     assert "unofficial_proxy" in str(indicators["vix_pressure"]["summary"])
@@ -2887,7 +2918,9 @@ def test_vix_indicator_ignores_malformed_official_macro_cache_and_keeps_cached_p
     payload = service.get_liquidity_monitor()
     indicator = {item["key"]: item for item in payload["indicators"]}["vix_pressure"]
 
-    assert indicator["includedInScore"] is True
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert indicator["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
     assert indicator["freshness"] == "delayed"
     assert "Yahoo Finance" in str(indicator["summary"])
     assert "类型 official_public" not in str(indicator["summary"])
@@ -2954,7 +2987,8 @@ def test_vix_indicator_normalizes_cached_yfinance_proxy_live_freshness(
     payload = service.get_liquidity_monitor()
     indicator = {item["key"]: item for item in payload["indicators"]}["vix_pressure"]
 
-    assert indicator["includedInScore"] is True
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
     assert indicator["status"] == "partial"
     assert indicator["freshness"] == "delayed"
     assert indicator["freshness"] not in {"live", "fresh"}
@@ -2962,6 +2996,8 @@ def test_vix_indicator_normalizes_cached_yfinance_proxy_live_freshness(
     assert indicator["coverageDiagnostics"]["sourceTier"] == "unofficial_public_api"
     assert indicator["coverageDiagnostics"]["trustLevel"] == "usable_with_caution"
     assert indicator["coverageDiagnostics"]["freshness"] == "partial"
+    assert indicator["coverageDiagnostics"]["scoreContributionAllowed"] is False
+    assert indicator["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
     assert "新鲜度 delayed" in str(indicator["summary"])
     assert "新鲜度 live" not in str(indicator["summary"])
 
@@ -2985,10 +3021,12 @@ def test_usd_pressure_uses_yfinance_dxy_proxy_when_fx_panel_is_unavailable(isola
     indicators = {item["key"]: item for item in payload["indicators"]}
 
     assert payload["sourceMetadata"]["externalProviderCalls"] is True
-    assert indicators["usd_pressure"]["includedInScore"] is True
+    assert indicators["usd_pressure"]["includedInScore"] is False
     assert indicators["usd_pressure"]["status"] == "partial"
     assert indicators["usd_pressure"]["freshness"] == "delayed"
-    assert indicators["usd_pressure"]["scoreContribution"] == 4
+    assert indicators["usd_pressure"]["scoreContribution"] == 0
+    assert indicators["usd_pressure"]["coverageDiagnostics"]["scoreContributionAllowed"] is False
+    assert indicators["usd_pressure"]["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
     assert indicators["usd_pressure"]["coverageDiagnostics"]["capReason"] == "partial_coverage"
     assert "DXY" in str(indicators["usd_pressure"]["summary"])
     assert "Yahoo Finance" in str(indicators["usd_pressure"]["summary"])
@@ -3014,10 +3052,12 @@ def test_us_rates_indicator_uses_yfinance_treasury_proxies_when_rates_panel_is_u
     indicators = {item["key"]: item for item in payload["indicators"]}
 
     assert payload["sourceMetadata"]["externalProviderCalls"] is True
-    assert indicators["us_rates_pressure"]["includedInScore"] is True
+    assert indicators["us_rates_pressure"]["includedInScore"] is False
     assert indicators["us_rates_pressure"]["status"] == "partial"
     assert indicators["us_rates_pressure"]["freshness"] == "delayed"
-    assert indicators["us_rates_pressure"]["scoreContribution"] == 4
+    assert indicators["us_rates_pressure"]["scoreContribution"] == 0
+    assert indicators["us_rates_pressure"]["coverageDiagnostics"]["scoreContributionAllowed"] is False
+    assert indicators["us_rates_pressure"]["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
     assert indicators["us_rates_pressure"]["coverageDiagnostics"]["capReason"] == "partial_coverage"
     assert "US10Y" in str(indicators["us_rates_pressure"]["summary"])
     assert "US30Y" in str(indicators["us_rates_pressure"]["summary"])
@@ -3108,11 +3148,17 @@ def test_us_rates_indicator_prefers_official_macro_cache_and_keeps_sofr_observat
 
     payload = service.get_liquidity_monitor()
     indicator = {item["key"]: item for item in payload["indicators"]}["us_rates_pressure"]
+    diagnostic = indicator["coverageDiagnostics"]
 
     assert indicator["includedInScore"] is True
     assert indicator["status"] == "partial"
     assert indicator["freshness"] == "cached"
     assert indicator["scoreContribution"] == 4
+    assert diagnostic["realSourceAvailable"] is True
+    assert diagnostic["proxyOnly"] is False
+    assert diagnostic["scoreContributionAllowed"] is True
+    assert diagnostic["scoreExclusionReason"] is None
+    assert diagnostic["requiredRealSourceForScore"] is True
     assert indicator["coverageDiagnostics"]["capReason"] == "partial_coverage"
     assert "US2Y -0.22%" in str(indicator["summary"])
     assert "US10Y -0.31%" in str(indicator["summary"])
@@ -3250,9 +3296,11 @@ def test_us_rates_indicator_falls_back_to_proxy_yields_when_official_yields_are_
     indicator = {item["key"]: item for item in payload["indicators"]}["us_rates_pressure"]
 
     assert payload["sourceMetadata"]["externalProviderCalls"] is True
-    assert indicator["includedInScore"] is True
+    assert indicator["includedInScore"] is False
     assert indicator["freshness"] == "delayed"
-    assert indicator["scoreContribution"] == 4
+    assert indicator["scoreContribution"] == 0
+    assert indicator["coverageDiagnostics"]["scoreContributionAllowed"] is False
+    assert indicator["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
     assert indicator["coverageDiagnostics"]["capReason"] == "partial_coverage"
     assert "US10Y -1.97%" in str(indicator["summary"])
     assert "US30Y -1.26%" in str(indicator["summary"])
@@ -3486,12 +3534,12 @@ def test_official_credit_stress_observation_is_summary_only_and_does_not_change_
     with_credit_indicator = {item["key"]: item for item in with_credit["indicators"]}["us_rates_pressure"]
 
     assert baseline["score"] == with_credit["score"] == {
-        "value": 64,
-        "regime": "supportive",
-        "confidence": 0.44,
-        "includedIndicatorCount": 3,
+        "value": 50,
+        "regime": "unavailable",
+        "confidence": 0.14,
+        "includedIndicatorCount": 1,
         "possibleIndicatorWeight": 43,
-        "includedIndicatorWeight": 19,
+        "includedIndicatorWeight": 6,
     }
     assert baseline_indicator["includedInScore"] is True
     assert baseline_indicator["scoreWeight"] == 6
@@ -3538,12 +3586,12 @@ def test_liquidity_monitor_credit_stress_fixture_remains_observation_only_and_pr
     with_credit_indicator = {item["key"]: item for item in with_credit["indicators"]}["us_rates_pressure"]
 
     assert baseline["score"] == with_credit["score"] == {
-        "value": 64,
-        "regime": "supportive",
-        "confidence": 0.72,
-        "includedIndicatorCount": 5,
+        "value": 50,
+        "regime": "unavailable",
+        "confidence": 0.33,
+        "includedIndicatorCount": 2,
         "possibleIndicatorWeight": 43,
-        "includedIndicatorWeight": 31,
+        "includedIndicatorWeight": 14,
     }
     assert "CREDIT" not in str(baseline_indicator["summary"])
     assert "CREDIT +341.00bps" in str(with_credit_indicator["summary"])

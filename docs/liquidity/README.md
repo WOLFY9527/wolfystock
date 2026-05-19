@@ -29,10 +29,14 @@ signal tables, source/risk rails, or liquidity-related freshness disclosure.
   activation hints.
 - Provider activation diagnostics must also expose `requiredProviderClass`,
   `configuredProviderAvailable`, `realSourceAvailable`, `proxyOnly`,
-  `observationOnly`, `scoreContributionAllowed`, `missingProviderReason`, and
-  `paidDataLikelyRequired`.
+  `observationOnly`, `scoreContributionAllowed`, `scoreExclusionReason`,
+  `requiredRealSourceForScore`, `proxyObservationOnlyReason`,
+  `missingProviderReason`, and `paidDataLikelyRequired`.
 - Missing, stale, fallback, synthetic, or unavailable inputs must not appear
   live or contribute strong score.
+- `proxyOnly=true` with `realSourceAvailable=false` is observation-only by
+  default and must not contribute to the liquidity score unless an explicit
+  reviewed allowlist path is added with tests.
 - CN/HK flow, money-market, futures, and proxy indicators must stay explicit
   about unavailable sources unless an existing configured and audited source
   provides real data.
