@@ -17,6 +17,7 @@ PytdxFetcher - 通达信数据源 (Priority 2)
 import logging
 import re
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import Optional, Generator, List, Tuple
 
 import pandas as pd
@@ -30,6 +31,8 @@ from tenacity import (
 
 from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS, is_bse_code, _is_hk_market
 import os
+from src.contracts.source_confidence import evaluate_market_intelligence_trust
+from src.services.market_data_source_registry import project_source_provenance
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +122,19 @@ class PytdxFetcher(BaseFetcher):
     ]
     # Pytdx get_security_list returns at most 1000 items per page
     SECURITY_LIST_PAGE_SIZE = 1000
+    SUPPORTED_CAPABILITIES = (
+        "cn_history_daily",
+        "cn_name_lookup",
+        "cn_quote",
+        "cn_realtime_quote",
+    )
+    UNSUPPORTED_CAPABILITIES = (
+        "hk_history_daily",
+        "hk_quote",
+        "us_history_daily",
+        "us_quote",
+    )
+    FRESHNESS_EXPECTATION = "best_effort_realtime_quote_and_daily_history"
     
     def __init__(self, hosts: Optional[List[Tuple[str, int]]] = None):
         """
@@ -139,6 +155,88 @@ class PytdxFetcher(BaseFetcher):
         self._current_host_idx = 0
         self._stock_list_cache = None  # 股票列表缓存
         self._stock_name_cache = {}    # 股票名称缓存 {code: name}
+
+    def _normalize_probe_timeout(self, timeout_seconds: float) -> float:
+        try:
+            timeout = float(timeout_seconds)
+        except (TypeError, ValueError):
+            timeout = 5.0
+        return timeout if timeout > 0 else 5.0
+
+    def _probe_server_reachability(self, timeout_seconds: float) -> tuple[bool | None, str, str | None]:
+        TdxHq_API = self._get_pytdx()
+        if TdxHq_API is None:
+            return None, "missing_dependency", "pytdx_not_installed"
+        if not self._hosts:
+            return False, "no_hosts_configured", "pytdx_hosts_not_configured"
+
+        api = TdxHq_API()
+        try:
+            for i in range(len(self._hosts)):
+                host_idx = (self._current_host_idx + i) % len(self._hosts)
+                host, port = self._hosts[host_idx]
+                try:
+                    if api.connect(host, port, time_out=timeout_seconds):
+                        return True, "reachable", None
+                except Exception as exc:
+                    logger.debug(f"Pytdx capability probe connect {host}:{port} failed: {exc}")
+            return False, "unreachable", "tdx_server_unreachable"
+        finally:
+            try:
+                api.disconnect()
+            except Exception as exc:
+                logger.warning(f"Pytdx capability probe disconnect failed: {exc}")
+
+    def probe_capabilities(self, timeout_seconds: float = 5.0) -> dict:
+        """Return additive pytdx capability metadata without changing fetch behavior."""
+        timeout = self._normalize_probe_timeout(timeout_seconds)
+        attempted_at: str | None = None
+        provenance = project_source_provenance(
+            source="pytdx",
+            freshness="delayed",
+        )
+        server_reachable, server_health, degradation_reason = self._probe_server_reachability(timeout)
+        dependency_installed = server_health != "missing_dependency"
+        provider_available = bool(dependency_installed and server_reachable)
+        if dependency_installed:
+            attempted_at = datetime.now(timezone.utc).isoformat()
+
+        trust = evaluate_market_intelligence_trust(
+            source="pytdx",
+            sourceType=provenance["sourceType"],
+            sourceTier="unofficial_public_api",
+            freshness="delayed" if provider_available else "unavailable",
+            confidenceWeight=0.75,
+            degradationReason=degradation_reason,
+        )
+
+        missing_provider_reason = None
+        if not provider_available:
+            missing_provider_reason = degradation_reason or "pytdx_provider_unavailable"
+
+        return {
+            "providerName": "pytdx",
+            "providerId": "pytdx",
+            "source": "pytdx",
+            "sourceType": provenance["sourceType"],
+            "sourceLabel": provenance["sourceLabel"],
+            "dependencyInstalled": dependency_installed,
+            "providerAvailable": provider_available,
+            "serverReachable": server_reachable,
+            "serverHealth": server_health,
+            "supportedCapabilities": list(self.SUPPORTED_CAPABILITIES),
+            "unsupportedCapabilities": list(self.UNSUPPORTED_CAPABILITIES),
+            "sourceTier": trust["sourceTier"],
+            "trustLevel": trust["trustLevel"],
+            "freshness": trust["freshness"],
+            "freshnessExpectation": self.FRESHNESS_EXPECTATION,
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "degradationReason": degradation_reason,
+            "missingProviderReason": missing_provider_reason,
+            "timeoutSeconds": timeout_seconds,
+            "attemptedAt": attempted_at,
+        }
     
     def _get_pytdx(self):
         """
