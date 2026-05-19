@@ -73,11 +73,21 @@ def _reset_auth_globals() -> None:
     auth._rate_limit = {}
 
 
+def _reset_market_test_state() -> None:
+    MarketOverviewService._market_cache.wait_for_refreshes(timeout=2)
+    MarketOverviewService._market_cache.clear()
+    MarketOverviewService._market_data_cache.clear()
+    health_service_module.CNProviderHealthService.clear_snapshot_cache()
+    DatabaseManager.reset_instance()
+    os.environ.pop("MARKET_OVERVIEW_SNAPSHOT_TEST_DB", None)
+
+
 class MarketCnIndicesApiTestCase(unittest.TestCase):
     def setUp(self) -> None:
-        MarketOverviewService._market_cache.clear()
-        MarketOverviewService._market_data_cache.clear()
-        health_service_module.CNProviderHealthService.clear_snapshot_cache()
+        _reset_market_test_state()
+
+    def tearDown(self) -> None:
+        _reset_market_test_state()
 
     def test_cn_indices_endpoint_returns_stable_contract(self) -> None:
         payload = market.get_cn_indices()
@@ -484,6 +494,81 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         self.assertEqual([item["healthStatus"] for item in payload["providerHealth"]["observationProviders"]], ["missing_dependency", "probe_failure"])
         self.assertTrue(all(item["observationOnly"] is True for item in payload["providerHealth"]["observationProviders"]))
         self.assertTrue(all(item["scoreContributionAllowed"] is False for item in payload["providerHealth"]["observationProviders"]))
+
+    def test_cn_indices_test_reset_ignores_leaked_persistent_snapshot_state(self) -> None:
+        old_database_path = os.environ.get("DATABASE_PATH")
+        old_snapshot_db_flag = os.environ.get("MARKET_OVERVIEW_SNAPSHOT_TEST_DB")
+        temp_dir = tempfile.TemporaryDirectory()
+        db_path = Path(temp_dir.name) / "cn-indices-leak.sqlite"
+        leaked_snapshot = {
+            "source": "mixed",
+            "sourceLabel": "多来源",
+            "freshness": "partial",
+            "updatedAt": "2026-05-19T09:30:00+08:00",
+            "asOf": "2026-05-19T09:30:00+08:00",
+            "fallbackUsed": True,
+            "items": [
+                {
+                    "name": "上证指数",
+                    "symbol": "000001.SH",
+                    "value": 4107.51,
+                    "change": 28.88,
+                    "changePercent": 0.71,
+                    "sparkline": [4078.63, 4107.51],
+                    "source": "sina",
+                    "sourceLabel": "新浪财经",
+                    "updatedAt": "2026-05-19T09:30:00+08:00",
+                    "asOf": "2026-05-19T09:30:00+08:00",
+                },
+                {
+                    "name": "深证成指",
+                    "symbol": "399001.SZ",
+                    "value": 9820.42,
+                    "change": 52.18,
+                    "changePercent": 0.53,
+                    "sparkline": [9722.0, 9820.42],
+                    "source": "fallback",
+                    "sourceLabel": "备用数据",
+                    "freshness": "fallback",
+                    "isFallback": True,
+                    "updatedAt": "2026-05-19T09:30:00+08:00",
+                    "asOf": "2026-05-19T09:30:00+08:00",
+                },
+            ],
+        }
+
+        try:
+            os.environ["DATABASE_PATH"] = str(db_path)
+            os.environ["MARKET_OVERVIEW_SNAPSHOT_TEST_DB"] = "1"
+            DatabaseManager.reset_instance()
+            DatabaseManager(db_url=f"sqlite:///{db_path}").save_market_overview_snapshot(
+                key="market_overview:cn_indices",
+                payload=leaked_snapshot,
+            )
+
+            contaminated_service = MarketOverviewService()
+            with patch.object(contaminated_service, "_fetch_sina_cn_index_quotes", side_effect=RuntimeError("provider down")):
+                contaminated = contaminated_service.get_cn_indices()
+            self.assertEqual(contaminated["source"], "mixed")
+
+            _reset_market_test_state()
+
+            isolated_service = MarketOverviewService()
+            with patch.object(isolated_service, "_fetch_sina_cn_index_quotes", side_effect=RuntimeError("provider down")):
+                isolated = isolated_service.get_cn_indices()
+            self.assertEqual(isolated["source"], "fallback")
+            self.assertTrue(all(item["isFallback"] for item in isolated["items"]))
+        finally:
+            if old_database_path is None:
+                os.environ.pop("DATABASE_PATH", None)
+            else:
+                os.environ["DATABASE_PATH"] = old_database_path
+            if old_snapshot_db_flag is None:
+                os.environ.pop("MARKET_OVERVIEW_SNAPSHOT_TEST_DB", None)
+            else:
+                os.environ["MARKET_OVERVIEW_SNAPSHOT_TEST_DB"] = old_snapshot_db_flag
+            DatabaseManager.reset_instance()
+            temp_dir.cleanup()
 
     def test_cn_indices_reuses_cached_observation_provider_health_by_default(self) -> None:
         service = MarketOverviewService()
