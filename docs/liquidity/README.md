@@ -27,8 +27,24 @@ signal tables, source/risk rails, or liquidity-related freshness disclosure.
 - Diagnostics must explain required, fulfilled, and missing inputs; source
   tier; freshness; trust level; score contribution; cap/degradation reason; and
   activation hints.
+- Provider activation diagnostics must also expose `requiredProviderClass`,
+  `configuredProviderAvailable`, `realSourceAvailable`, `proxyOnly`,
+  `observationOnly`, `scoreContributionAllowed`, `missingProviderReason`, and
+  `paidDataLikelyRequired`.
 - Missing, stale, fallback, synthetic, or unavailable inputs must not appear
   live or contribute strong score.
 - CN/HK flow, money-market, futures, and proxy indicators must stay explicit
   about unavailable sources unless an existing configured and audited source
   provides real data.
+- CN/HK flow, CN money-market fallback, and futures/premarket score
+  contribution must remain disabled until `authorized.cn_hk_connect_flow`,
+  `official_public.cn_money_market_rates`, or
+  `exchange_or_broker_authorized.index_futures` is real and audited.
+- US ETF flow and US breadth proxies must advertise
+  `authorized.us_etf_flow` / `official_or_authorized.us_market_breadth`
+  as missing real provider classes; yfinance proxy evidence may only stay
+  delayed/capped rather than full-strength.
+- VIX, DXY, and US Treasury yfinance proxy inputs may remain visible only as
+  delayed/capped proxy diagnostics until official or authorized adapters are
+  active. Binance spot crypto remains eligible as `exchange_public.crypto_spot`
+  when fresh.

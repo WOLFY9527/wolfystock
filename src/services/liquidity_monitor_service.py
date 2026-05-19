@@ -87,6 +87,86 @@ LIQUIDITY_INDICATOR_ACTIVATION_HINTS = {
     "futures_premarket": "现有 futures snapshot 或延迟 proxy 可用时才激活；没有真实期货快照时保持不可用。",
 }
 
+LIQUIDITY_INDICATOR_PROVIDER_ACTIVATION = {
+    "crypto_spot_momentum": {
+        "requiredProviderClass": "exchange_public.crypto_spot",
+        "paidDataLikelyRequired": False,
+        "observationOnly": False,
+        "proxyOnly": False,
+        "scoreContributionAllowed": True,
+    },
+    "crypto_funding": {
+        "requiredProviderClass": "exchange_public.crypto_funding",
+        "paidDataLikelyRequired": False,
+        "observationOnly": True,
+        "proxyOnly": False,
+        "scoreContributionAllowed": False,
+    },
+    "vix_pressure": {
+        "requiredProviderClass": "official_public.vix_or_volatility",
+        "paidDataLikelyRequired": False,
+        "observationOnly": False,
+        "proxyOnly": True,
+        "scoreContributionAllowed": True,
+    },
+    "usd_pressure": {
+        "requiredProviderClass": "official_or_authorized.fx_dxy",
+        "paidDataLikelyRequired": True,
+        "observationOnly": False,
+        "proxyOnly": True,
+        "scoreContributionAllowed": True,
+    },
+    "us_rates_pressure": {
+        "requiredProviderClass": "official_public.us_treasury_curve",
+        "paidDataLikelyRequired": False,
+        "observationOnly": False,
+        "proxyOnly": True,
+        "scoreContributionAllowed": True,
+    },
+    "us_etf_flow_proxy": {
+        "requiredProviderClass": "authorized.us_etf_flow",
+        "paidDataLikelyRequired": True,
+        "observationOnly": False,
+        "proxyOnly": True,
+        "scoreContributionAllowed": True,
+    },
+    "us_breadth_proxy": {
+        "requiredProviderClass": "official_or_authorized.us_market_breadth",
+        "paidDataLikelyRequired": True,
+        "observationOnly": False,
+        "proxyOnly": True,
+        "scoreContributionAllowed": True,
+    },
+    "cn_hk_index_context": {
+        "requiredProviderClass": "official_public.cn_hk_index_snapshot",
+        "paidDataLikelyRequired": False,
+        "observationOnly": True,
+        "proxyOnly": False,
+        "scoreContributionAllowed": False,
+    },
+    "cn_hk_flows": {
+        "requiredProviderClass": "authorized.cn_hk_connect_flow",
+        "paidDataLikelyRequired": True,
+        "observationOnly": True,
+        "proxyOnly": False,
+        "scoreContributionAllowed": False,
+    },
+    "cn_money_market_rates": {
+        "requiredProviderClass": "official_public.cn_money_market_rates",
+        "paidDataLikelyRequired": False,
+        "observationOnly": True,
+        "proxyOnly": False,
+        "scoreContributionAllowed": False,
+    },
+    "futures_premarket": {
+        "requiredProviderClass": "exchange_or_broker_authorized.index_futures",
+        "paidDataLikelyRequired": True,
+        "observationOnly": True,
+        "proxyOnly": True,
+        "scoreContributionAllowed": False,
+    },
+}
+
 
 @dataclass(frozen=True)
 class PanelState:
@@ -821,7 +901,7 @@ class LiquidityMonitorService:
             status,
             6 if direction > 0 else -6 if direction < 0 else 0,
             6,
-            True,
+            False,
             " | ".join(summary_parts),
             freshness=str(extracted["freshness"]),
             evidence=self._indicator_evidence(
@@ -1857,9 +1937,15 @@ class LiquidityMonitorService:
             coverage=coverage,
             degradation_reasons=self._indicator_degradation_reasons(evidence),
         )
+        activation = self._indicator_provider_activation(
+            key,
+            panel=panel,
+            evidence=evidence,
+            trust=trust,
+        )
         should_cap = self._should_cap_indicator_score(status, trust, evidence)
         final_contribution = 0
-        if included and trust["trustLevel"] not in {"weak", "unavailable"}:
+        if included and activation["scoreContributionAllowed"] and trust["trustLevel"] not in {"weak", "unavailable"}:
             final_contribution = int(round(float(score_contribution) * float(trust["scoreCap"] if should_cap else 1.0)))
         activation_hint = self._indicator_activation_hint(
             key,
@@ -1867,24 +1953,37 @@ class LiquidityMonitorService:
             missing_inputs=missing_inputs,
             fulfilled_inputs=fulfilled_inputs,
             trust=trust,
+            activation=activation,
             panel=panel,
             evidence=evidence,
         )
-        cap_reason = self._indicator_cap_reason(trust, evidence, should_cap)
+        activation_cap_reason = self._indicator_activation_cap_reason(activation)
+        cap_reason = self._indicator_cap_reason(trust, evidence, should_cap, activation_cap_reason)
         contributes_to_score = bool(
             included
+            and activation["scoreContributionAllowed"]
             and trust["trustLevel"] not in {"weak", "unavailable"}
             and (final_contribution != 0 or score_contribution == 0)
         )
         degradation_reason = evidence.get("degradationReason")
         if not degradation_reason:
-            degradation_reason = trust["degradationReasons"][0] if trust["degradationReasons"] else evidence.get("capReason")
+            degradation_reason = activation_cap_reason or (
+                trust["degradationReasons"][0] if trust["degradationReasons"] else evidence.get("capReason")
+            )
         return {
             "indicatorId": key,
             "indicatorName": label,
             "requiredInputs": list(required_inputs),
             "fulfilledInputs": fulfilled_inputs,
             "missingInputs": missing_inputs,
+            "requiredProviderClass": activation["requiredProviderClass"],
+            "configuredProviderAvailable": activation["configuredProviderAvailable"],
+            "realSourceAvailable": activation["realSourceAvailable"],
+            "proxyOnly": activation["proxyOnly"],
+            "observationOnly": activation["observationOnly"],
+            "scoreContributionAllowed": activation["scoreContributionAllowed"],
+            "missingProviderReason": activation["missingProviderReason"],
+            "paidDataLikelyRequired": activation["paidDataLikelyRequired"],
             "sourceTier": trust["sourceTier"],
             "freshness": trust["freshness"],
             "trustLevel": trust["trustLevel"],
@@ -1894,6 +1993,98 @@ class LiquidityMonitorService:
             "degradationReason": degradation_reason,
             "activationHint": activation_hint,
         }
+
+    def _indicator_provider_activation(
+        self,
+        key: str,
+        *,
+        panel: PanelState,
+        evidence: Dict[str, Any],
+        trust: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        policy = LIQUIDITY_INDICATOR_PROVIDER_ACTIVATION.get(key, {})
+        required_provider_class = self._text(policy.get("requiredProviderClass"))
+        configured_provider_available = self._indicator_configured_provider_available(panel, evidence)
+        real_source_available = self._indicator_real_source_available(key, panel, evidence, trust)
+        proxy_only = bool(policy.get("proxyOnly")) and not real_source_available and self._indicator_has_proxy_input(panel, evidence)
+        observation_only = bool(policy.get("observationOnly"))
+        score_contribution_allowed = bool(
+            policy.get("scoreContributionAllowed", True)
+            and not observation_only
+            and bool(trust.get("conclusionAllowed"))
+        )
+        missing_provider_reason = None
+        if required_provider_class and not real_source_available:
+            missing_provider_reason = f"requires_{required_provider_class}"
+        return {
+            "requiredProviderClass": required_provider_class,
+            "configuredProviderAvailable": configured_provider_available,
+            "realSourceAvailable": real_source_available,
+            "proxyOnly": proxy_only,
+            "observationOnly": observation_only,
+            "scoreContributionAllowed": score_contribution_allowed,
+            "missingProviderReason": missing_provider_reason,
+            "paidDataLikelyRequired": bool(policy.get("paidDataLikelyRequired")),
+        }
+
+    @staticmethod
+    def _indicator_configured_provider_available(panel: PanelState, evidence: Dict[str, Any]) -> bool:
+        source = str(panel.source or "").lower()
+        if source and source != "unavailable":
+            return True
+        inputs = evidence.get("inputs")
+        return bool(inputs)
+
+    def _indicator_real_source_available(
+        self,
+        key: str,
+        panel: PanelState,
+        evidence: Dict[str, Any],
+        trust: Dict[str, Any],
+    ) -> bool:
+        if key in {"crypto_spot_momentum", "crypto_funding"}:
+            return (
+                str(trust.get("sourceTier") or "") == "exchange_public"
+                and self._indicator_source_seen(evidence, panel, {"binance", "binance_ws"})
+            )
+        if key in {"vix_pressure", "usd_pressure", "us_rates_pressure", "cn_hk_index_context"}:
+            return (
+                str(trust.get("sourceTier") or "") == "official_public"
+                and not self._indicator_has_proxy_input(panel, evidence)
+            )
+        return False
+
+    @staticmethod
+    def _indicator_has_proxy_input(panel: PanelState, evidence: Dict[str, Any]) -> bool:
+        proxy_sources = {"yahoo", "yfinance", "yfinance_proxy"}
+        proxy_source_types = {"public_proxy", "proxy_public", "unofficial_proxy", "unofficial_public_api"}
+        sources = {str(panel.source or "").lower()}
+        source_types = {str(panel.payload.get("sourceType") or "").lower()}
+        for item in evidence.get("inputs", []):
+            if not isinstance(item, dict):
+                continue
+            sources.add(str(item.get("source") or "").lower())
+            source_types.add(str(item.get("sourceType") or "").lower())
+        return bool((sources & proxy_sources) or (source_types & proxy_source_types))
+
+    @staticmethod
+    def _indicator_source_seen(evidence: Dict[str, Any], panel: PanelState, sources: set[str]) -> bool:
+        observed = {str(panel.source or "").lower()}
+        for item in evidence.get("inputs", []):
+            if isinstance(item, dict):
+                observed.add(str(item.get("source") or "").lower())
+        return bool(observed & sources)
+
+    @staticmethod
+    def _indicator_activation_cap_reason(activation: Dict[str, Any]) -> Optional[str]:
+        if activation.get("scoreContributionAllowed"):
+            return None
+        missing_reason = activation.get("missingProviderReason")
+        if missing_reason:
+            return str(missing_reason)
+        if activation.get("observationOnly"):
+            return "observation_only"
+        return None
 
     def _indicator_required_inputs(self, key: str, inputs: List[Dict[str, Any]], panel: PanelState) -> tuple[str, ...]:
         required = LIQUIDITY_INDICATOR_REQUIRED_INPUTS.get(key)
@@ -1954,6 +2145,7 @@ class LiquidityMonitorService:
         missing_inputs: list[str],
         fulfilled_inputs: list[str],
         trust: Dict[str, Any],
+        activation: Dict[str, Any],
         panel: PanelState,
         evidence: Dict[str, Any],
     ) -> str:
@@ -1961,12 +2153,24 @@ class LiquidityMonitorService:
         parts: list[str] = []
         if hint:
             parts.append(hint)
+        if activation.get("requiredProviderClass"):
+            parts.append(f"requiredProviderClass={activation['requiredProviderClass']}")
+        if activation.get("missingProviderReason"):
+            parts.append(f"missingProviderReason={activation['missingProviderReason']}")
+        if activation.get("paidDataLikelyRequired"):
+            parts.append("paidDataLikelyRequired=True")
         if trust["trustLevel"] in {"weak", "unavailable"}:
             parts.append(f"trust gate={trust['trustLevel']} / {trust['sourceTier']}")
         if missing_inputs:
             parts.append(f"缺少: {', '.join(missing_inputs)}")
         elif fulfilled_inputs:
             parts.append(f"已激活: {', '.join(fulfilled_inputs)}")
+        if activation.get("observationOnly"):
+            parts.append("observationOnly=True")
+        if activation.get("proxyOnly"):
+            parts.append("proxyOnly=True")
+        if not activation.get("scoreContributionAllowed"):
+            parts.append("scoreContributionAllowed=False")
         if trust["freshness"] in {"stale", "fallback", "partial"}:
             parts.append(f"freshness={trust['freshness']}")
         if evidence.get("capReason"):
@@ -1980,10 +2184,19 @@ class LiquidityMonitorService:
         return "；".join(parts)
 
     @staticmethod
-    def _indicator_cap_reason(trust: Dict[str, Any], evidence: Dict[str, Any], should_cap: bool) -> Optional[str]:
+    def _indicator_cap_reason(
+        trust: Dict[str, Any],
+        evidence: Dict[str, Any],
+        should_cap: bool,
+        activation_cap_reason: Optional[str],
+    ) -> Optional[str]:
         if not should_cap:
-            return evidence.get("capReason")
-        return evidence.get("capReason") or (trust["degradationReasons"][0] if trust["degradationReasons"] else None)
+            return evidence.get("capReason") or activation_cap_reason
+        return (
+            evidence.get("capReason")
+            or (trust["degradationReasons"][0] if trust["degradationReasons"] else None)
+            or activation_cap_reason
+        )
 
     @staticmethod
     def _indicator_degradation_reasons(evidence: Dict[str, Any]) -> tuple[str, ...]:

@@ -67,6 +67,16 @@ Expected degraded-state semantics:
 - Rotation Radar Theme Registry v2 metadata must separate ETF proxies from index/asset concepts and keep proxy evidence framed as ETF proxy / participation proxy / relative strength proxy only.
 - Headline indicators must not render ambiguous N/A when a backend item has a numeric value.
 - Missing headline indicator values must include `isUnavailable`, `degradationReason`, non-live `freshness`, and weak/unavailable trust metadata.
+- Liquidity Monitor provider activation diagnostics must include
+  `requiredProviderClass`, `configuredProviderAvailable`,
+  `realSourceAvailable`, `proxyOnly`, `observationOnly`,
+  `scoreContributionAllowed`, `missingProviderReason`, and
+  `paidDataLikelyRequired` so weak or proxy-only inputs cannot silently count
+  as strong liquidity evidence.
+- Liquidity Monitor score contribution stays blocked for the CN/HK connect
+  flow, CN money-market fallback, and futures/premarket classes until a real
+  audited provider is available; yfinance proxies remain capped rather than
+  live.
 - Market Temperature and Market Briefing must degrade to insufficient-data posture when reliable inputs are missing; they must not emit strong bullish/bearish action language from fallback-only inputs.
 - Market Temperature and Market Briefing trust fields (`trustLevel`, `sourceTier`, `scoreCap`, `conclusionAllowed`, `degradationReasons`) must cap stale, fallback, unavailable, synthetic, mixed, or low-coverage evidence before strong conclusions are allowed.
 - Market Temperature disabled states must expose explicit `temperatureAvailable=false`, `disabledReason=insufficient_reliable_inputs`, `unavailableReason`, `insufficientReliableInputs`, and `requiredReliableInputCount` metadata instead of collapsing to ambiguous `N/A`.
