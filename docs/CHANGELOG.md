@@ -1,3 +1,13 @@
+## 2026-05-19
+
+- **Rotation Radar fallback ranking quarantine** - Rotation Radar now marks
+  fallback/static, synthetic, unavailable, and taxonomy-only themes with
+  additive rank eligibility metadata and keeps them visible as observation-only
+  evidence while excluding them from `strongestThemes`, accelerating/headline
+  ranking, and strong conclusion eligibility. Existing score, evidence,
+  provider diagnostics, provider order, frontend, database schema, MarketCache,
+  and adjacent product domains remain unchanged.
+
 ## 2026-05-18
 
 - **VIX source/freshness alignment** - Market Overview volatility and Liquidity

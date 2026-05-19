@@ -29,6 +29,9 @@ def _quote(
     is_stale: bool = False,
     is_fallback: bool = False,
     time_windows: dict | None = None,
+    source: str = "unit_fixture",
+    source_type: str | None = None,
+    source_tier: str | None = None,
 ) -> dict:
     payload = {
         "symbol": symbol,
@@ -41,12 +44,16 @@ def _quote(
         "freshness": freshness,
         "isStale": is_stale,
         "isFallback": is_fallback,
-        "source": "unit_fixture",
+        "source": source,
         "sourceLabel": "Unit Fixture",
         "asOf": "2026-05-07T09:45:00+00:00",
     }
     if time_windows is not None:
         payload["timeWindows"] = time_windows
+    if source_type is not None:
+        payload["sourceType"] = source_type
+    if source_tier is not None:
+        payload["sourceTier"] = source_tier
     return payload
 
 
@@ -220,6 +227,11 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(payload["metadata"]["quoteProvider"]["present"], False)
         self.assertEqual(payload["metadata"]["quoteProvider"]["status"], "absent")
         self.assertGreaterEqual(len(payload["themes"]), 18)
+        self.assertEqual(payload["summary"]["strongestThemes"], [])
+        self.assertEqual(payload["summary"]["acceleratingThemes"], [])
+        self.assertTrue(payload["summary"]["observationThemes"])
+        self.assertIn("fallback/static", payload["summary"]["headlineWarning"])
+        self.assertIn("没有可用于头部排名", payload["warning"])
         self.assertEqual(
             [(theme["id"], theme["rotationScore"], theme["stage"]) for theme in payload["themes"][:5]],
             [
@@ -240,11 +252,121 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             self.assertEqual(theme["rotationStateEvidence"]["state"], "insufficient_evidence")
             self.assertEqual(theme["rotationStateEvidence"]["flowEvidenceType"], "none")
             self.assertFalse(theme["rotationStateEvidence"]["flowLanguageAllowed"])
+            self.assertFalse(theme["rankEligible"])
+            self.assertFalse(theme["headlineEligible"])
+            self.assertFalse(theme["scoreContributionAllowed"])
+            self.assertFalse(theme["conclusionAllowed"])
+            self.assertTrue(theme["observationOnly"])
+            self.assertFalse(theme["taxonomyOnly"])
+            self.assertEqual(theme["rankExclusionReason"], "fallback_static_source")
+            self.assertEqual(theme["sourceTier"], "static_fallback")
+            self.assertEqual(theme["trustLevel"], "unavailable")
+            self.assertEqual(theme["scoreBreakdown"]["rankEligible"], False)
+            self.assertEqual(theme["scoreBreakdown"]["scoreContributionAllowed"], False)
             self.assertIn("stale_or_incomplete_windows", theme["riskLabels"])
             self.assertTrue(all(not slot["available"] for slot in theme["timeWindows"].values()))
             self.assertTrue(theme["themeDetail"]["watchlistSafe"])
             self.assertEqual(theme["proxyQuality"]["coveragePercent"], 0)
             self.assertTrue(all(proxy["quality"]["missingReason"] for proxy in theme["benchmarkProxies"].values()))
+
+    def test_provider_backed_usable_themes_can_rank_while_fallback_static_stays_observation_only(self) -> None:
+        ai_members = ("APP", "PLTR", "CRM", "SNOW", "ADBE", "NOW", "DUOL", "MDB", "TEAM", "WDAY")
+        quotes = {
+            "QQQ": _quote("QQQ", 0.4, freshness="cached", source="cache", source_type="cache_snapshot", source_tier="snapshot"),
+            "SPY": _quote("SPY", 0.2, freshness="cached", source="cache", source_type="cache_snapshot", source_tier="snapshot"),
+            "IWM": _quote("IWM", 0.1, freshness="cached", source="cache", source_type="cache_snapshot", source_tier="snapshot"),
+            "IGV": _quote("IGV", 0.8, freshness="cached", source="cache", source_type="cache_snapshot", source_tier="snapshot"),
+        }
+        for index, symbol in enumerate(ai_members):
+            quotes[symbol] = _quote(
+                symbol,
+                2.0 + index * 0.2,
+                volume_ratio=1.35,
+                freshness="cached",
+                source="cache",
+                source_type="cache_snapshot",
+                source_tier="snapshot",
+            )
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "proxy",
+                    "sourceType": "cache_snapshot",
+                    "sourceTier": "snapshot",
+                    "freshness": "cached",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "noExternalCalls": False,
+                },
+            },
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        ai_theme = next(theme for theme in payload["themes"] if theme["id"] == "ai_applications")
+        fallback_theme = next(theme for theme in payload["themes"] if theme["id"] == "crypto_miners")
+        strongest_ids = {theme["id"] for theme in payload["summary"]["strongestThemes"]}
+
+        self.assertIn("ai_applications", strongest_ids)
+        self.assertTrue(ai_theme["rankEligible"])
+        self.assertTrue(ai_theme["headlineEligible"])
+        self.assertTrue(ai_theme["scoreContributionAllowed"])
+        self.assertTrue(ai_theme["conclusionAllowed"])
+        self.assertEqual(ai_theme["rankExclusionReason"], None)
+        self.assertEqual(ai_theme["trustLevel"], "usable_with_caution")
+        self.assertNotEqual(ai_theme["sourceTier"], "static_fallback")
+        self.assertFalse(fallback_theme["rankEligible"])
+        self.assertFalse(fallback_theme["headlineEligible"])
+        self.assertFalse(fallback_theme["scoreContributionAllowed"])
+        self.assertTrue(fallback_theme["observationOnly"])
+        self.assertEqual(fallback_theme["rankExclusionReason"], "fallback_static_source")
+        self.assertNotIn(fallback_theme["id"], strongest_ids)
+        self.assertTrue(all(theme["headlineEligible"] for theme in payload["summary"]["strongestThemes"]))
+
+    def test_synthetic_theme_scores_remain_visible_but_are_not_headline_eligible(self) -> None:
+        ai_members = ("APP", "PLTR", "CRM", "SNOW", "ADBE", "NOW", "DUOL", "MDB", "TEAM", "WDAY")
+        quotes = {
+            "QQQ": _quote("QQQ", 0.4, freshness="mock", source="synthetic_fixture", source_type="synthetic_fixture", source_tier="synthetic"),
+            "IGV": _quote("IGV", 0.8, freshness="mock", source="synthetic_fixture", source_type="synthetic_fixture", source_tier="synthetic"),
+        }
+        for symbol in ai_members:
+            quotes[symbol] = _quote(
+                symbol,
+                3.0,
+                volume_ratio=1.8,
+                freshness="mock",
+                source="synthetic_fixture",
+                source_type="synthetic_fixture",
+                source_tier="synthetic",
+            )
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "proxy",
+                    "sourceType": "synthetic_fixture",
+                    "sourceTier": "synthetic",
+                    "freshness": "mock",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "noExternalCalls": True,
+                },
+            },
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        theme = next(item for item in payload["themes"] if item["id"] == "ai_applications")
+
+        self.assertGreater(theme["rotationScore"], 0)
+        self.assertIn("scoreBreakdown", theme)
+        self.assertFalse(theme["rankEligible"])
+        self.assertFalse(theme["headlineEligible"])
+        self.assertFalse(theme["scoreContributionAllowed"])
+        self.assertTrue(theme["observationOnly"])
+        self.assertEqual(theme["rankExclusionReason"], "synthetic_source")
+        self.assertEqual(theme["sourceTier"], "synthetic")
+        self.assertIn(theme["trustLevel"], {"weak", "unavailable"})
+        self.assertNotIn(theme["id"], {item["id"] for item in payload["summary"]["strongestThemes"]})
 
     def test_registry_v2_metadata_and_proxy_explainability_are_additive(self) -> None:
         service = MarketRotationRadarService(now_provider=lambda: datetime(2026, 5, 7, tzinfo=timezone.utc))

@@ -61,6 +61,7 @@ Expected degraded-state semantics:
   inputs capped/excluded from strong score contribution and must not label
   fallback/static data as live or fresh.
 - Rotation Radar and Sector Rotation must keep proxy/taxonomy/fallback evidence visible through metadata, evidence snapshots, and source freshness fields.
+- Fallback/static Rotation Radar themes must stay observation-only and out of headline rankings.
 - Rotation Radar Theme Registry v2 metadata must separate ETF proxies from index/asset concepts and keep proxy evidence framed as ETF proxy / participation proxy / relative strength proxy only.
 - Market Temperature and Market Briefing must degrade to insufficient-data posture when reliable inputs are missing; they must not emit strong bullish/bearish action language from fallback-only inputs.
 - Market Temperature and Market Briefing trust fields (`trustLevel`, `sourceTier`, `scoreCap`, `conclusionAllowed`, `degradationReasons`) must cap stale, fallback, unavailable, synthetic, mixed, or low-coverage evidence before strong conclusions are allowed.
@@ -80,7 +81,7 @@ Out of scope:
 - No provider order changes.
 - No new providers.
 - No MarketCache core changes.
-- No scoring/ranking/stage changes.
+- No provider score/stage formula changes.
 - No API schema breaking changes.
 - No frontend changes.
 - No DB changes.

@@ -42,6 +42,8 @@ class RotationRadarTimeWindowModel(BaseModel):
 
 
 class RotationRadarBenchmarkModel(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     symbol: str
     changePercent: Optional[float] = None
     timeWindows: Dict[str, RotationRadarTimeWindowModel] = Field(default_factory=dict)
@@ -50,6 +52,9 @@ class RotationRadarBenchmarkModel(BaseModel):
     isStale: bool = False
     source: Optional[str] = None
     sourceLabel: Optional[str] = None
+    sourceType: Optional[str] = None
+    sourceTier: Optional[str] = None
+    providerTier: Optional[str] = None
     asOf: Optional[str] = None
 
 
@@ -102,6 +107,18 @@ class RotationRadarThemeModel(BaseModel):
     dataCoverage: Optional[str] = None
     sourceClass: Optional[str] = None
     staticThemeOnly: bool = False
+    rankEligible: bool = False
+    rankExclusionReason: Optional[str] = None
+    taxonomyOnly: bool = False
+    observationOnly: bool = False
+    headlineEligible: bool = False
+    scoreContributionAllowed: bool = False
+    sourceTier: Optional[str] = None
+    trustLevel: Optional[str] = None
+    scoreCap: Optional[float] = None
+    conclusionAllowed: bool = False
+    degradationReasons: List[str] = Field(default_factory=list)
+    rankingTrust: Dict[str, Any] = Field(default_factory=dict)
     stage: RotationStage
     stageExplanation: Optional[str] = None
     riskLabels: List[RotationRiskLabel] = Field(default_factory=list)
@@ -142,6 +159,8 @@ class RotationRadarThemeModel(BaseModel):
 
 
 class RotationRadarSummaryItemModel(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     id: str
     name: str
     rotationScore: int = Field(ge=0, le=100)
@@ -150,12 +169,26 @@ class RotationRadarSummaryItemModel(BaseModel):
     freshness: FreshnessLabel
     isFallback: bool
     riskLabels: List[RotationRiskLabel] = Field(default_factory=list)
+    rankEligible: bool = False
+    rankExclusionReason: Optional[str] = None
+    taxonomyOnly: bool = False
+    observationOnly: bool = False
+    headlineEligible: bool = False
+    scoreContributionAllowed: bool = False
+    sourceTier: Optional[str] = None
+    trustLevel: Optional[str] = None
 
 
 class RotationRadarSummaryModel(BaseModel):
     strongestThemes: List[RotationRadarSummaryItemModel] = Field(default_factory=list)
     acceleratingThemes: List[RotationRadarSummaryItemModel] = Field(default_factory=list)
     fadingThemes: List[RotationRadarSummaryItemModel] = Field(default_factory=list)
+    observationThemes: List[RotationRadarSummaryItemModel] = Field(default_factory=list)
+    taxonomyThemes: List[RotationRadarSummaryItemModel] = Field(default_factory=list)
+    headlineEligibleThemeCount: int = 0
+    observationThemeCount: int = 0
+    headlineWarning: Optional[str] = None
+    rankingPolicy: Optional[str] = None
     watchlistSortingExplanation: Optional[str] = None
     safeWording: List[str] = Field(default_factory=list)
     watchlistSignals: List[Dict[str, Any]] = Field(default_factory=list)

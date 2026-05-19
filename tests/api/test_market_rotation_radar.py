@@ -156,6 +156,17 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
         assert all("weightBreakdown" in theme for theme in payload["themes"])
         assert all("coveragePenalty" in theme for theme in payload["themes"])
         assert all("fallbackPenalty" in theme for theme in payload["themes"])
+        assert all("rankEligible" in theme for theme in payload["themes"])
+        assert all("headlineEligible" in theme for theme in payload["themes"])
+        assert all("rankExclusionReason" in theme for theme in payload["themes"])
+        assert all("scoreContributionAllowed" in theme for theme in payload["themes"])
+        assert all(theme["rankEligible"] is False for theme in payload["themes"])
+        assert all(theme["headlineEligible"] is False for theme in payload["themes"])
+        assert all(theme["scoreContributionAllowed"] is False for theme in payload["themes"])
+        assert payload["summary"]["strongestThemes"] == []
+        assert payload["summary"]["acceleratingThemes"] == []
+        assert payload["summary"]["observationThemes"]
+        assert "fallback/static" in payload["summary"]["headlineWarning"]
         assert all("missingProxySymbols" in theme for theme in payload["themes"])
         assert all("missingConstituentSymbols" in theme for theme in payload["themes"])
         assert all("rotationStateEvidence" in theme for theme in payload["themes"])
@@ -229,6 +240,12 @@ def test_market_rotation_radar_market_query_switches_theme_universe(monkeypatch:
         assert all(theme["staticThemeOnly"] is True for theme in cn_payload["themes"])
         assert all(theme["dataQuality"] in {"taxonomy_only", "local_only", "proxy_backed"} for theme in cn_payload["themes"])
         assert all(theme["confidenceLabel"] == "待行情确认" for theme in cn_payload["themes"])
+        assert all(theme["taxonomyOnly"] is True for theme in cn_payload["themes"])
+        assert all(theme["observationOnly"] is True for theme in cn_payload["themes"])
+        assert all(theme["rankEligible"] is False for theme in cn_payload["themes"])
+        assert all(theme["headlineEligible"] is False for theme in cn_payload["themes"])
+        assert cn_payload["summary"]["strongestThemes"] == []
+        assert cn_payload["summary"]["taxonomyThemes"]
         assert all(theme["rotationStateEvidence"]["state"] == "insufficient_evidence" for theme in cn_payload["themes"])
         assert all(theme["rotationStateEvidence"]["flowEvidenceType"] == "none" for theme in cn_payload["themes"])
         assert cn_payload["metadata"]["observedEvidence"]["present"] is False

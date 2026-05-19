@@ -154,7 +154,8 @@ def test_market_intelligence_checklist_captures_scope_and_validation_commands() 
     assert "not trading or investment signal execution" in checklist
     assert "No provider order changes." in checklist
     assert "No MarketCache core changes." in checklist
-    assert "No scoring/ranking/stage changes." in checklist
+    assert "Fallback/static Rotation Radar themes must stay observation-only and out of headline rankings." in checklist
+    assert "No provider score/stage formula changes." in checklist
     assert "Core quote indicators" in checklist
     for symbol in ("SPX", "VIX", "HSI", "US10Y", "DXY", "BTC"):
         assert symbol in checklist
@@ -395,4 +396,11 @@ def test_rotation_radar_and_sector_rotation_projection_keep_evidence_non_live_wh
     assert fallback_radar["freshness"] == "fallback"
     assert fallback_radar["freshness"] != "live"
     assert fallback_radar["metadata"]["quoteProvider"]["status"] == "absent"
+    assert fallback_radar["summary"]["strongestThemes"] == []
+    assert fallback_radar["summary"]["acceleratingThemes"] == []
+    assert "fallback/static" in fallback_radar["summary"]["headlineWarning"]
+    assert all(theme["rankEligible"] is False for theme in fallback_radar["themes"])
+    assert all(theme["headlineEligible"] is False for theme in fallback_radar["themes"])
+    assert all(theme["scoreContributionAllowed"] is False for theme in fallback_radar["themes"])
+    assert all(theme["scoreBreakdown"] for theme in fallback_radar["themes"])
     assert fallback_radar["themes"][0]["rotationStateEvidence"]["state"] == "insufficient_evidence"

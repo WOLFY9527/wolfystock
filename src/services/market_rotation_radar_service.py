@@ -22,6 +22,10 @@ from src.services.market_data_source_registry import (
     project_source_provenance,
     resolve_freshness_label,
 )
+from src.services.market_intelligence_trust_gate import (
+    evaluate_market_intelligence_trust,
+    evaluate_market_intelligence_trust_from_sources,
+)
 from src.services.sector_rotation_taxonomy import (
     ROTATION_TAXONOMY_VERSION,
     SUPPORTED_ROTATION_MARKETS,
@@ -66,6 +70,15 @@ _QUOTE_PROVIDER_TIMEOUT_SECONDS = 3.0
 _SHARED_RADAR_SNAPSHOT_TTL_SECONDS = 180.0
 _SHARED_RADAR_SNAPSHOT_CACHE_LOCK = threading.RLock()
 _SHARED_RADAR_SNAPSHOT_CACHE: Dict[str, "_SharedRotationRadarSnapshotEntry"] = {}
+_HEADLINE_RANKING_WARNING = (
+    "没有可用于头部排名的真实行情主题；fallback/static/taxonomy-only 主题仅保留在观察列表。"
+)
+_RANK_EXCLUDED_FALLBACK_TIERS = {"static_fallback", "public_web_fallback"}
+_RANK_EXCLUDED_SYNTHETIC_TIERS = {"synthetic"}
+_RANK_EXCLUDED_UNAVAILABLE_TIERS = {"unavailable"}
+_RANK_FALLBACK_MARKERS = {"fallback", "fallback_static", "static_fallback", "public_web_fallback"}
+_RANK_SYNTHETIC_MARKERS = {"synthetic", "synthetic_fixture", "mock", "fixture", "unit_fixture"}
+_RANK_UNAVAILABLE_MARKERS = {"unavailable", "missing", "disabled_live_stub", "malformed_fixture"}
 
 
 @dataclass(frozen=True)
@@ -268,6 +281,7 @@ class MarketRotationRadarService:
             self._analyze_theme(theme, quote_result.quotes, benchmarks, generated_at)
             for theme in THEME_BASKETS
         ]
+        themes = [self._annotate_ranking_quarantine(theme) for theme in themes]
         themes.sort(key=lambda item: (item["rotationScore"], item["confidence"]), reverse=True)
         live_theme_count = sum(1 for theme in themes if not theme["isFallback"] and not theme["isStale"])
         fallback_theme_count = sum(1 for theme in themes if theme["isFallback"])
@@ -283,6 +297,8 @@ class MarketRotationRadarService:
         ]
         if not payload_fallback:
             warnings = [warning for warning in warnings if "Fallback/静态篮子" not in warning]
+        if not any(theme.get("headlineEligible") for theme in themes):
+            warnings.append(_HEADLINE_RANKING_WARNING)
         payload = {
             "endpoint": RADAR_ENDPOINT,
             "market": "US",
@@ -352,6 +368,7 @@ class MarketRotationRadarService:
             self._taxonomy_only_theme(entry, generated_at, index)
             for index, entry in enumerate(entries)
         ]
+        themes = [self._annotate_ranking_quarantine(theme) for theme in themes]
         return {
             "endpoint": RADAR_ENDPOINT,
             "market": market,
@@ -362,13 +379,25 @@ class MarketRotationRadarService:
             "freshness": "fallback",
             "isFallback": True,
             "isStale": False,
-            "warning": "当前为静态主题库，本地行情覆盖后可计算轮动强度。不代表实时买卖信号。",
+            "warning": (
+                "当前为静态主题库，本地行情覆盖后可计算轮动强度。不代表实时买卖信号。"
+                f"{_HEADLINE_RANKING_WARNING}"
+            ),
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
             "benchmarks": {},
             "summary": {
                 "strongestThemes": [],
                 "acceleratingThemes": [],
                 "fadingThemes": [self._summary_item(theme) for theme in themes[:3]],
+                "observationThemes": [self._summary_item(theme) for theme in themes[:5]],
+                "taxonomyThemes": [self._summary_item(theme) for theme in themes[:5]],
+                "headlineEligibleThemeCount": 0,
+                "observationThemeCount": len(themes),
+                "headlineWarning": _HEADLINE_RANKING_WARNING,
+                "rankingPolicy": (
+                    "fallback/static/taxonomy-only/synthetic/unavailable evidence remains visible "
+                    "but is excluded from headline ranking and strong conclusion lists."
+                ),
                 "watchlistSignals": [],
                 "watchlistSortingExplanation": "静态主题库仅作分类观察；待本地行情覆盖后才计算轮动强度，非买卖建议。",
                 "safeWording": ["主题库已载入", "行情评分待本地数据覆盖", "仅作分类观察", "非买卖建议"],
@@ -1103,8 +1132,10 @@ class MarketRotationRadarService:
                     "isStale": bool(quote.get("isStale")),
                     "source": quote.get("source"),
                     "sourceLabel": quote.get("sourceLabel"),
+                    "sourceType": quote.get("sourceType"),
                     "sourceTier": quote.get("sourceTier"),
                     "providerTier": quote.get("providerTier"),
+                    "confidenceWeight": quote.get("confidenceWeight"),
                     "asOf": quote.get("asOf"),
                 }
             else:
@@ -1117,6 +1148,7 @@ class MarketRotationRadarService:
                     "isStale": False,
                     "source": "fallback",
                     "sourceLabel": "备用数据",
+                    "sourceType": "fallback_static",
                     "sourceTier": "static_fallback",
                     "providerTier": "fallback",
                     "asOf": generated_at,
@@ -1734,6 +1766,7 @@ class MarketRotationRadarService:
             "isStale": bool(quote.get("isStale")),
             "source": quote.get("source"),
             "sourceLabel": quote.get("sourceLabel"),
+            "sourceType": quote.get("sourceType"),
             "sourceTier": quote.get("sourceTier"),
             "providerTier": quote.get("providerTier"),
             "confidenceWeight": quote.get("confidenceWeight"),
@@ -1821,6 +1854,223 @@ class MarketRotationRadarService:
             "isStale": is_stale,
             "asOf": max(as_of_candidates) if as_of_candidates else None,
         }
+
+    def _annotate_ranking_quarantine(self, theme: Dict[str, Any]) -> Dict[str, Any]:
+        ranking = self._ranking_quarantine_metadata(theme)
+        theme.update(ranking)
+        score_breakdown = theme.get("scoreBreakdown")
+        if isinstance(score_breakdown, dict):
+            score_breakdown["rankEligible"] = ranking["rankEligible"]
+            score_breakdown["headlineEligible"] = ranking["headlineEligible"]
+            score_breakdown["scoreContributionAllowed"] = ranking["scoreContributionAllowed"]
+            score_breakdown["rankExclusionReason"] = ranking["rankExclusionReason"]
+        theme_detail = theme.get("themeDetail")
+        if isinstance(theme_detail, dict):
+            theme_detail["headlineEligible"] = ranking["headlineEligible"]
+            theme_detail["rankExclusionReason"] = ranking["rankExclusionReason"]
+        return theme
+
+    def _ranking_quarantine_metadata(self, theme: Mapping[str, Any]) -> Dict[str, Any]:
+        taxonomy_only = self._taxonomy_only_for_ranking(theme)
+        trust = self._ranking_trust(theme, taxonomy_only=taxonomy_only)
+        source_tier = str(trust.get("sourceTier") or "unavailable")
+        trust_level = str(trust.get("trustLevel") or "unavailable")
+        exclusion_reason = self._rank_exclusion_reason(
+            theme,
+            trust=trust,
+            taxonomy_only=taxonomy_only,
+        )
+        rank_eligible = exclusion_reason is None
+        headline_eligible = rank_eligible and bool(trust.get("conclusionAllowed"))
+        score_contribution_allowed = headline_eligible
+        return {
+            "rankEligible": rank_eligible,
+            "rankExclusionReason": exclusion_reason,
+            "taxonomyOnly": taxonomy_only,
+            "observationOnly": not headline_eligible,
+            "headlineEligible": headline_eligible,
+            "scoreContributionAllowed": score_contribution_allowed,
+            "sourceTier": source_tier,
+            "trustLevel": trust_level,
+            "scoreCap": trust.get("scoreCap"),
+            "conclusionAllowed": bool(trust.get("conclusionAllowed")) and rank_eligible,
+            "degradationReasons": list(trust.get("degradationReasons") or []),
+            "rankingTrust": {
+                "sourceTier": source_tier,
+                "trustLevel": trust_level,
+                "coverage": trust.get("coverage"),
+                "freshness": trust.get("freshness"),
+                "scoreCap": trust.get("scoreCap"),
+                "conclusionAllowed": bool(trust.get("conclusionAllowed")),
+                "degradationReasons": list(trust.get("degradationReasons") or []),
+                "warning": trust.get("warning"),
+            },
+        }
+
+    def _ranking_trust(self, theme: Mapping[str, Any], *, taxonomy_only: bool) -> Dict[str, Any]:
+        if taxonomy_only:
+            return evaluate_market_intelligence_trust(
+                {
+                    "source": theme.get("source") or "local_taxonomy",
+                    "sourceType": "taxonomy_only",
+                    "sourceTier": "static_fallback",
+                    "freshness": "fallback",
+                    "isFallback": True,
+                    "coverage": 0.0,
+                    "degradationReasons": ["taxonomy_only"],
+                }
+            )
+        inputs = self._ranking_source_inputs(theme)
+        coverage = self._ranking_coverage(theme)
+        degradation_reasons = self._ranking_degradation_reasons(theme)
+        if not inputs:
+            return evaluate_market_intelligence_trust(
+                {
+                    "source": theme.get("source"),
+                    "sourceType": theme.get("dataQuality"),
+                    "sourceTier": theme.get("sourceTier"),
+                    "freshness": theme.get("freshness"),
+                    "isFallback": bool(theme.get("isFallback")),
+                    "isStale": bool(theme.get("isStale")),
+                    "isPartial": bool(theme.get("isPartial")),
+                    "isUnavailable": bool(theme.get("isUnavailable")),
+                    "coverage": coverage,
+                    "degradationReasons": degradation_reasons,
+                }
+            )
+        return evaluate_market_intelligence_trust_from_sources(
+            inputs,
+            coverage=coverage,
+            degradation_reasons=degradation_reasons,
+        )
+
+    def _ranking_source_inputs(self, theme: Mapping[str, Any]) -> List[Dict[str, Any]]:
+        inputs: List[Dict[str, Any]] = []
+        members = theme.get("members")
+        if isinstance(members, Sequence) and not isinstance(members, (str, bytes)):
+            for member in members:
+                if isinstance(member, Mapping) and member.get("observed"):
+                    inputs.append(self._ranking_source_input(member))
+        benchmark_proxies = theme.get("benchmarkProxies")
+        if isinstance(benchmark_proxies, Mapping):
+            for proxy in benchmark_proxies.values():
+                if isinstance(proxy, Mapping) and proxy.get("changePercent") is not None:
+                    inputs.append(self._ranking_source_input(proxy))
+        return inputs
+
+    @staticmethod
+    def _ranking_source_input(item: Mapping[str, Any]) -> Dict[str, Any]:
+        markers = {
+            str(item.get("source") or "").strip().lower(),
+            str(item.get("sourceType") or "").strip().lower(),
+            str(item.get("sourceTier") or "").strip().lower(),
+            str(item.get("freshness") or "").strip().lower(),
+        }
+        return {
+            "source": item.get("source"),
+            "sourceType": item.get("sourceType"),
+            "sourceTier": item.get("sourceTier"),
+            "freshness": item.get("freshness"),
+            "isFallback": bool(item.get("isFallback")),
+            "isStale": bool(item.get("isStale")),
+            "isSynthetic": bool(markers.intersection(_RANK_SYNTHETIC_MARKERS)),
+            "isUnavailable": bool(item.get("isUnavailable"))
+            or bool(markers.intersection(_RANK_UNAVAILABLE_MARKERS)),
+            "coverage": 1.0,
+            "confidenceWeight": item.get("confidenceWeight"),
+        }
+
+    def _ranking_coverage(self, theme: Mapping[str, Any]) -> float:
+        candidates: List[float] = []
+        constituent_coverage = theme.get("constituentCoverage")
+        if isinstance(constituent_coverage, Mapping):
+            coverage = self._number(constituent_coverage.get("coveragePercent"))
+            if coverage is not None:
+                candidates.append(max(0.0, min(1.0, coverage / 100.0)))
+        proxy_quality = theme.get("proxyQuality")
+        if isinstance(proxy_quality, Mapping):
+            coverage = self._number(proxy_quality.get("coveragePercent"))
+            if coverage is not None:
+                candidates.append(max(0.0, min(1.0, coverage / 100.0)))
+        if not candidates:
+            return 0.0 if bool(theme.get("isFallback") or theme.get("isUnavailable")) else 1.0
+        return round(min(candidates), 4)
+
+    @staticmethod
+    def _ranking_degradation_reasons(theme: Mapping[str, Any]) -> List[str]:
+        reasons: List[str] = []
+        for label in theme.get("riskLabels") or []:
+            text = str(label or "").strip()
+            if text:
+                reasons.append(text)
+        if bool(theme.get("isPartial")):
+            reasons.append("partial_coverage")
+        if bool(theme.get("isFallback")):
+            reasons.append("fallback_source")
+        if bool(theme.get("isStale")):
+            reasons.append("stale_source")
+        if bool(theme.get("isUnavailable")):
+            reasons.append("unavailable_source")
+        return list(dict.fromkeys(reasons))
+
+    @staticmethod
+    def _taxonomy_only_for_ranking(theme: Mapping[str, Any]) -> bool:
+        data_markers = {
+            str(theme.get("dataQuality") or "").strip().lower(),
+            str(theme.get("dataCoverage") or "").strip().lower(),
+            str(theme.get("sourceClass") or "").strip().lower(),
+            str(theme.get("source") or "").strip().lower(),
+        }
+        return bool(
+            theme.get("staticThemeOnly")
+            and (
+                "taxonomy_only" in data_markers
+                or "local_taxonomy" in data_markers
+                or str(theme.get("source") or "").strip().lower() == "local_taxonomy"
+            )
+        )
+
+    def _rank_exclusion_reason(
+        self,
+        theme: Mapping[str, Any],
+        *,
+        trust: Mapping[str, Any],
+        taxonomy_only: bool,
+    ) -> Optional[str]:
+        source_tier = str(trust.get("sourceTier") or "").strip().lower()
+        trust_level = str(trust.get("trustLevel") or "").strip().lower()
+        freshness = str(trust.get("freshness") or theme.get("freshness") or "").strip().lower()
+        markers = self._rank_source_markers(theme, trust)
+        if source_tier in _RANK_EXCLUDED_SYNTHETIC_TIERS or markers.intersection(_RANK_SYNTHETIC_MARKERS):
+            return "synthetic_source"
+        if source_tier in _RANK_EXCLUDED_UNAVAILABLE_TIERS or markers.intersection(_RANK_UNAVAILABLE_MARKERS):
+            return "unavailable_source"
+        if taxonomy_only or "taxonomy_only" in markers:
+            return "taxonomy_only_observation"
+        if (
+            source_tier in _RANK_EXCLUDED_FALLBACK_TIERS
+            or freshness == "fallback"
+            or bool(theme.get("isFallback"))
+            or markers.intersection(_RANK_FALLBACK_MARKERS)
+        ):
+            return "fallback_static_source"
+        if trust_level in {"weak", "unavailable"} or not bool(trust.get("conclusionAllowed")):
+            return "trust_gate_blocks_headline"
+        return None
+
+    @staticmethod
+    def _rank_source_markers(theme: Mapping[str, Any], trust: Mapping[str, Any]) -> set[str]:
+        markers = {
+            str(theme.get("dataQuality") or "").strip().lower(),
+            str(theme.get("dataCoverage") or "").strip().lower(),
+            str(theme.get("sourceClass") or "").strip().lower(),
+            str(theme.get("source") or "").strip().lower(),
+            str(theme.get("sourceTier") or "").strip().lower(),
+            str(theme.get("finalSourceTier") or "").strip().lower(),
+            str(trust.get("sourceTier") or "").strip().lower(),
+            str(trust.get("freshness") or "").strip().lower(),
+        }
+        return {marker for marker in markers if marker}
 
     def _normalize_time_windows(
         self,
@@ -2312,10 +2562,13 @@ class MarketRotationRadarService:
         return items
 
     def _build_summary(self, themes: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
-        strongest = [self._summary_item(theme) for theme in themes[:3]]
+        headline_themes = [theme for theme in themes if theme.get("headlineEligible")]
+        observation_themes = [theme for theme in themes if theme.get("observationOnly")]
+        taxonomy_themes = [theme for theme in themes if theme.get("taxonomyOnly")]
+        strongest = [self._summary_item(theme) for theme in headline_themes[:3]]
         accelerating = [
             self._summary_item(theme)
-            for theme in themes
+            for theme in headline_themes
             if theme["rotationScore"] >= 55 and (theme["volume"]["averageRelativeVolume"] or 0) >= 1.1
         ][:3]
         fading = [
@@ -2324,7 +2577,7 @@ class MarketRotationRadarService:
             if theme["stage"] in {"cooling_watch", "weak_or_no_signal"}
         ][:3]
         watchlist_signals = []
-        for theme in themes[:3]:
+        for theme in headline_themes[:3]:
             candidates = theme.get("alertCandidates") or []
             if candidates:
                 watchlist_signals.extend(candidates[:2])
@@ -2332,6 +2585,15 @@ class MarketRotationRadarService:
             "strongestThemes": strongest,
             "acceleratingThemes": accelerating,
             "fadingThemes": fading,
+            "observationThemes": [self._summary_item(theme) for theme in observation_themes[:5]],
+            "taxonomyThemes": [self._summary_item(theme) for theme in taxonomy_themes[:5]],
+            "headlineEligibleThemeCount": len(headline_themes),
+            "observationThemeCount": len(observation_themes),
+            "headlineWarning": None if headline_themes else _HEADLINE_RANKING_WARNING,
+            "rankingPolicy": (
+                "fallback/static/taxonomy-only/synthetic/unavailable evidence remains visible "
+                "but is excluded from headline ranking and strong conclusion lists."
+            ),
             "watchlistSignals": watchlist_signals[:5],
             "watchlistSortingExplanation": (
                 "关注候选按主题轮动强度、置信度、跨时窗持续证据和成员相对强弱排序；"
@@ -2357,6 +2619,14 @@ class MarketRotationRadarService:
             "freshness": theme["freshness"],
             "isFallback": theme["isFallback"],
             "riskLabels": list(theme["riskLabels"]),
+            "rankEligible": bool(theme.get("rankEligible")),
+            "rankExclusionReason": theme.get("rankExclusionReason"),
+            "taxonomyOnly": bool(theme.get("taxonomyOnly")),
+            "observationOnly": bool(theme.get("observationOnly")),
+            "headlineEligible": bool(theme.get("headlineEligible")),
+            "scoreContributionAllowed": bool(theme.get("scoreContributionAllowed")),
+            "sourceTier": theme.get("sourceTier"),
+            "trustLevel": theme.get("trustLevel"),
         }
 
     def _benchmark_proxies(
@@ -2385,6 +2655,10 @@ class MarketRotationRadarService:
                 "isFallback": bool(benchmark.get("isFallback", True)),
                 "isStale": bool(benchmark.get("isStale")),
                 "sourceLabel": benchmark.get("sourceLabel"),
+                "sourceType": benchmark.get("sourceType"),
+                "sourceTier": benchmark.get("sourceTier"),
+                "providerTier": benchmark.get("providerTier"),
+                "confidenceWeight": benchmark.get("confidenceWeight"),
                 "asOf": benchmark.get("asOf"),
                 "quality": proxy_status,
             }
