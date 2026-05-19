@@ -16,6 +16,7 @@ from src.services.cn_provider_health_service import CNProviderHealthService
 from src.services.crypto_realtime_service import get_crypto_realtime_service
 from src.services.market_overview_service import MarketOverviewService
 from src.services.market_rotation_radar_service import MarketRotationRadarService
+from src.services.provider_fit_advisor_service import build_provider_fit_advisor_snapshot
 from src.services.rotation_radar_quote_provider import get_rotation_radar_quote_provider
 
 router = APIRouter()
@@ -160,3 +161,8 @@ def get_cn_provider_health(
     force_refresh: bool = Query(default=False, alias="forceRefresh"),
 ) -> list[dict[str, Any]]:
     return [item.to_dict() for item in CNProviderHealthService().get_snapshot(force_refresh=force_refresh)]
+
+
+@router.get("/provider-fit-advisor", summary="Get read-only provider-fit advisor snapshot")
+def get_provider_fit_advisor() -> dict[str, Any]:
+    return build_provider_fit_advisor_snapshot().to_dict()
