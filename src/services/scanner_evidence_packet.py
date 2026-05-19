@@ -99,6 +99,7 @@ class ScannerEvidencePacket:
     dataQualityState: str
     freshnessState: str
     freshnessDetail: Dict[str, Any]
+    providerObservation: Dict[str, Any] | None
     missingEvidence: List[str]
     userFacingLabels: List[str]
     warningFlags: List[str]
@@ -151,6 +152,7 @@ def build_scanner_evidence_packet(candidate: Dict[str, Any], context: Optional[D
     diagnostics = dict(payload.get("_diagnostics") or {})
     history_diag = dict(diagnostics.get("history") or {})
     quote_diag = dict(diagnostics.get("quote_context") or {})
+    provider_observation = diagnostics.get("cn_provider_observation")
     components = dict(payload.get("_component_scores") or {})
     explainability = dict(context_payload.get("score_explainability") or diagnostics.get("score_explainability") or {})
 
@@ -293,6 +295,7 @@ def build_scanner_evidence_packet(candidate: Dict[str, Any], context: Optional[D
             "historyState": history_state,
             "latestTradeDate": history_diag.get("latest_trade_date"),
         },
+        providerObservation=provider_observation if isinstance(provider_observation, dict) else None,
         missingEvidence=missing_evidence,
         userFacingLabels=user_labels,
         warningFlags=warning_flags,

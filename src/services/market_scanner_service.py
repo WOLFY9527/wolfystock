@@ -27,6 +27,7 @@ from src.contracts.source_confidence import coerce_source_confidence_contract
 from src.services.scanner_ai_service import ScannerAiInterpretationService
 from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION, build_scanner_evidence_packet
 from src.services.scanner_factor_observations import attach_scanner_factor_observations
+from src.services.provider_capability_matrix import get_provider_capability_support_contract
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback, get_us_stock_parquet_dir
 from src.storage import (
     DatabaseManager,
@@ -381,6 +382,18 @@ def _is_cn_common_stock_code(code: str) -> bool:
 def _is_hk_scanner_symbol(code: str) -> bool:
     normalized = normalize_stock_code(code).upper()
     return normalized.startswith("HK") and normalized[2:].isdigit()
+
+
+def _normalize_cn_provider_id(value: Any) -> Optional[str]:
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    compact = text.replace("_", "").replace("-", "")
+    if "akshare" in compact:
+        return "akshare"
+    if "pytdx" in compact:
+        return "pytdx"
+    return None
 
 
 class MarketScannerService:
@@ -761,6 +774,11 @@ class MarketScannerService:
         if not evaluated_candidates:
             raise ValueError("详细评估阶段未留下有效候选，请检查历史数据或放宽扫描条件")
 
+        self._attach_cn_provider_observation_metadata(
+            evaluated_candidates,
+            stock_list_source=stock_list_source,
+            snapshot_source=snapshot_source,
+        )
         self._apply_relative_strength(evaluated_candidates)
         self._apply_base_scores(evaluated_candidates, profile=profile_config)
 
@@ -1052,6 +1070,114 @@ class MarketScannerService:
             "relative_strength": _round_optional(components.get("relative_strength")),
         }
 
+    @staticmethod
+    def _build_cn_provider_observation_entry(
+        *,
+        provider_id: str,
+        capability: str,
+        stage: str,
+        as_of: Optional[str] = None,
+        updated_at: Optional[str] = None,
+        degradation_reason: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        contract = get_provider_capability_support_contract(provider_id, capability)
+        if contract is None:
+            return None
+
+        payload = contract.to_dict()
+        payload["stage"] = stage
+        payload["degradationReason"] = degradation_reason
+        payload["asOf"] = as_of
+        payload["updatedAt"] = updated_at
+        return payload
+
+    def _build_cn_provider_observation(
+        self,
+        candidate: Dict[str, Any],
+        *,
+        stock_list_source: Optional[str],
+        snapshot_source: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        diagnostics = dict(candidate.get("_diagnostics") or {})
+        history_diag = dict(diagnostics.get("history") or {})
+        history_source = history_diag.get("source") or candidate.get("history_source")
+        history_as_of = history_diag.get("latest_trade_date") or candidate.get("last_trade_date")
+        entries: List[Dict[str, Any]] = []
+        seen = set()
+
+        def append_entry(
+            *,
+            provider_id: Optional[str],
+            capability: str,
+            stage: str,
+            as_of: Optional[str] = None,
+            updated_at: Optional[str] = None,
+            degradation_reason: Optional[str] = None,
+        ) -> None:
+            normalized_provider_id = _normalize_cn_provider_id(provider_id)
+            if not normalized_provider_id:
+                return
+            dedupe_key = (stage, normalized_provider_id, capability)
+            if dedupe_key in seen:
+                return
+            payload = self._build_cn_provider_observation_entry(
+                provider_id=normalized_provider_id,
+                capability=capability,
+                stage=stage,
+                as_of=as_of,
+                updated_at=updated_at,
+                degradation_reason=degradation_reason,
+            )
+            if payload is None:
+                return
+            seen.add(dedupe_key)
+            entries.append(payload)
+
+        append_entry(
+            provider_id=stock_list_source,
+            capability="cn_stock_list",
+            stage="universe",
+        )
+        append_entry(
+            provider_id=snapshot_source,
+            capability="cn_realtime_snapshot",
+            stage="snapshot",
+        )
+        append_entry(
+            provider_id=history_source,
+            capability="cn_history_daily",
+            stage="history",
+            as_of=history_as_of,
+            updated_at=history_as_of,
+        )
+        if not entries:
+            return None
+
+        return {
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "entries": entries,
+        }
+
+    def _attach_cn_provider_observation_metadata(
+        self,
+        candidates: Sequence[Dict[str, Any]],
+        *,
+        stock_list_source: Optional[str],
+        snapshot_source: Optional[str],
+    ) -> None:
+        for candidate in candidates:
+            observation = self._build_cn_provider_observation(
+                candidate,
+                stock_list_source=stock_list_source,
+                snapshot_source=snapshot_source,
+            )
+            if observation is None:
+                continue
+            diagnostics = dict(candidate.get("_diagnostics") or {})
+            diagnostics["cn_provider_observation"] = observation
+            candidate["_diagnostics"] = diagnostics
+
     def _rejection_rules_for_candidate(self, candidate: Dict[str, Any], selected_cutoff: float) -> List[str]:
         components = dict(candidate.get("_component_scores") or {})
         failed_rules: List[str] = []
@@ -1111,6 +1237,7 @@ class MarketScannerService:
                 status = "selected" if symbol in selected_symbols else "rejected"
                 failed_rules = [] if status == "selected" else self._rejection_rules_for_candidate(ranked, selected_cutoff)
                 quote_context = dict((ranked.get("_diagnostics") or {}).get("quote_context") or {})
+                cn_provider_observation = dict((ranked.get("_diagnostics") or {}).get("cn_provider_observation") or {})
                 provider = quote_context.get("source") or ranked.get("snapshot_source") or ranked.get("history_source")
                 reason = "passed" if status == "selected" else str(ranked.get("reason_summary") or failed_rules[0])
                 base.update(
@@ -1126,6 +1253,8 @@ class MarketScannerService:
                         "metrics": self._diagnostic_metrics_from_candidate(ranked),
                     }
                 )
+                if cn_provider_observation:
+                    base["cn_provider_observation"] = cn_provider_observation
             else:
                 base.setdefault("symbol", symbol)
                 base.setdefault("name", symbol)

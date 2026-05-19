@@ -228,6 +228,20 @@ class StructuredScannerDataManager(FakeScannerDataManager):
         return cloned
 
 
+class ObservationScannerDataManager(FakeScannerDataManager):
+    def get_cn_stock_list(self):
+        stock_list, _ = super().get_cn_stock_list()
+        return stock_list, "AkshareFetcher"
+
+    def get_cn_realtime_snapshot(self):
+        snapshot, _ = super().get_cn_realtime_snapshot()
+        return snapshot, "AkshareFetcher"
+
+    def get_daily_data(self, code: str, days: int = 140):
+        history_df, _ = super().get_daily_data(code, days=days)
+        return history_df, "PytdxFetcher"
+
+
 class FakeScannerAiService:
     def interpret_shortlist(self, *, profile, candidates):  # noqa: ANN001
         enriched = [dict(candidate) for candidate in candidates]
@@ -2016,6 +2030,99 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             providers["providers_used"],
             ["FakeDailySource", "FakeSnapshotSource", "local_db", "local_universe_cache"],
         )
+
+    def test_run_scan_attaches_cn_provider_observation_metadata_without_changing_scores_or_ranks(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            baseline_cache = Path(temp_dir) / "baseline-universe-cache.csv"
+            observed_cache = Path(temp_dir) / "observed-universe-cache.csv"
+            baseline_db = DatabaseManager(db_url="sqlite:///:memory:")
+            observed_db = DatabaseManager(db_url="sqlite:///:memory:")
+            baseline_service = MarketScannerService(
+                baseline_db,
+                data_manager=FakeScannerDataManager(),
+                local_universe_cache_path=str(baseline_cache),
+            )
+            baseline = baseline_service.run_scan(
+                market="cn",
+                profile="cn_preopen_v1",
+                shortlist_size=2,
+                universe_limit=50,
+                detail_limit=10,
+            )
+
+            observed_service = MarketScannerService(
+                observed_db,
+                data_manager=ObservationScannerDataManager(),
+                local_universe_cache_path=str(observed_cache),
+            )
+            observed = observed_service.run_scan(
+                market="cn",
+                profile="cn_preopen_v1",
+                shortlist_size=2,
+                universe_limit=50,
+                detail_limit=10,
+            )
+
+            baseline_shortlist = [
+                (item["symbol"], item["rank"], item["score"], item["raw_score"], item["final_score"])
+                for item in baseline["shortlist"]
+            ]
+            observed_shortlist = [
+                (item["symbol"], item["rank"], item["score"], item["raw_score"], item["final_score"])
+                for item in observed["shortlist"]
+            ]
+            self.assertEqual(observed_shortlist, baseline_shortlist)
+
+            candidate = observed["shortlist"][0]
+            observation = candidate["diagnostics"].get("cn_provider_observation")
+            self.assertIsInstance(observation, dict)
+            self.assertTrue(observation["observationOnly"])
+            self.assertFalse(observation["scoreContributionAllowed"])
+            entries = observation["entries"]
+            self.assertEqual([item["stage"] for item in entries], ["universe", "snapshot"])
+            self.assertEqual([item["providerName"] for item in entries], ["akshare", "akshare"])
+            self.assertTrue(all(item["observationOnly"] is True for item in entries))
+            self.assertTrue(all(item["scoreContributionAllowed"] is False for item in entries))
+            self.assertEqual(entries[0]["capability"], "cn_stock_list")
+            self.assertEqual(entries[0]["sourceTier"], "unofficial_public_api")
+            self.assertEqual(entries[1]["capability"], "cn_realtime_snapshot")
+            self.assertEqual(entries[1]["trustLevel"], "weak")
+            self.assertIsNotNone(candidate["diagnostics"]["evidence_packet"]["providerObservation"])
+            self.assertTrue(candidate["diagnostics"]["evidence_packet"]["providerObservation"]["observationOnly"])
+
+    def test_attach_cn_provider_observation_metadata_adds_pytdx_history_without_mutating_score(self) -> None:
+        candidate = {
+            "symbol": "600001",
+            "name": "算力龙头",
+            "score": 82.4,
+            "raw_score": 82.4,
+            "final_score": 82.4,
+            "last_trade_date": "2026-04-30",
+            "_diagnostics": {
+                "history": {
+                    "source": "PytdxFetcher",
+                    "latest_trade_date": "2026-04-30",
+                }
+            },
+        }
+
+        self.service._attach_cn_provider_observation_metadata(
+            [candidate],
+            stock_list_source="AkshareFetcher",
+            snapshot_source="AkshareFetcher",
+        )
+
+        self.assertEqual(candidate["score"], 82.4)
+        observation = candidate["_diagnostics"]["cn_provider_observation"]
+        self.assertEqual([item["stage"] for item in observation["entries"]], ["universe", "snapshot", "history"])
+        self.assertEqual([item["providerName"] for item in observation["entries"]], ["akshare", "akshare", "pytdx"])
+        history_entry = observation["entries"][2]
+        self.assertEqual(history_entry["capability"], "cn_history_daily")
+        self.assertEqual(history_entry["trustLevel"], "usable_with_caution")
+        self.assertEqual(history_entry["asOf"], "2026-04-30")
+        self.assertEqual(history_entry["updatedAt"], "2026-04-30")
+        self.assertTrue(history_entry["observationOnly"])
+        self.assertFalse(history_entry["scoreContributionAllowed"])
 
     def test_scanner_runtime_source_tokens_keep_registry_backed_provenance_labels(self) -> None:
         detail = self.service.run_scan(

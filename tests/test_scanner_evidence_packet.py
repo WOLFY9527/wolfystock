@@ -165,3 +165,48 @@ def test_build_scanner_evidence_packet_preserves_supported_evidence_buckets_with
     assert packet["freshnessDetail"]["historyState"] == "stale"
     assert packet["rawScore"] == 81.6
     assert packet["finalScore"] == 40.0
+
+
+def test_build_scanner_evidence_packet_keeps_additive_provider_observation_metadata() -> None:
+    candidate = _candidate_fixture()
+    candidate["_diagnostics"]["cn_provider_observation"] = {
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "entries": [
+            {
+                "stage": "history",
+                "capability": "cn_history_daily",
+                "providerName": "pytdx",
+                "sourceTier": "unofficial_public_api",
+                "trustLevel": "usable_with_caution",
+                "freshnessExpectation": "best_effort_realtime_quote_and_daily_history",
+                "observationOnly": True,
+                "scoreContributionAllowed": False,
+                "degradationReason": None,
+                "asOf": "2026-05-08",
+                "updatedAt": "2026-05-08",
+            }
+        ],
+    }
+
+    packet = build_scanner_evidence_packet(
+        candidate,
+        {
+            "market": "us",
+            "run_id": 7,
+            "evidence_version": "scanner_evidence_v1",
+            "score_explainability": {
+                "raw_score": 81.6,
+                "final_score": 40.0,
+                "cap_reason": "fallback_source",
+                "degradation_reason": "fallback_source",
+                "score_confidence": 0.4,
+                "evidence_coverage": 1.0,
+            },
+        },
+    )
+
+    assert packet["providerObservation"]["observationOnly"] is True
+    assert packet["providerObservation"]["scoreContributionAllowed"] is False
+    assert packet["providerObservation"]["entries"][0]["providerName"] == "pytdx"
+    assert packet["providerObservation"]["entries"][0]["trustLevel"] == "usable_with_caution"
