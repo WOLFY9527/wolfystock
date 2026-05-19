@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import copy
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -165,7 +165,9 @@ def test_market_intelligence_checklist_captures_scope_and_validation_commands() 
 
 def test_market_intelligence_smoke_aligns_proxy_vix_freshness_and_trust_metadata() -> None:
     service = MarketOverviewService()
-    as_of = datetime(2026, 5, 18, 20, 0, tzinfo=timezone.utc)
+    # Keep the proxy fixture inside the delayed window so the test validates
+    # source alignment instead of accidental wall-clock staleness.
+    as_of = datetime.now(timezone.utc) - timedelta(minutes=10)
 
     def history(ticker: str) -> _HistoryFrame:
         if ticker == "^VIX":
@@ -189,6 +191,7 @@ def test_market_intelligence_smoke_aligns_proxy_vix_freshness_and_trust_metadata
     assert volatility_payload["freshness"] == "delayed"
     assert volatility_payload["freshness"] not in {"live", "fresh"}
     assert market_vix["freshness"] == liquidity_vix["freshness"] == "delayed"
+    assert market_vix["sourceType"] == liquidity_vix["evidence"]["inputs"][0]["sourceType"] == "unofficial_proxy"
     assert market_vix["sourceTier"] == liquidity_vix["coverageDiagnostics"]["sourceTier"]
     assert market_vix["trustLevel"] == liquidity_vix["coverageDiagnostics"]["trustLevel"] == "usable_with_caution"
     assert market_vix["source"] in {"yfinance", "yfinance_proxy"}

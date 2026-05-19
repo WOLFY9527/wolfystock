@@ -661,8 +661,51 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["requestedWindows"], ["5m", "15m", "60m", "1d"])
         self.assertEqual(diagnostics["fulfilledWindows"], ["5m", "15m", "60m", "1d"])
         self.assertEqual(diagnostics["missingWindows"], [])
+        self.assertEqual(diagnostics["recommendedAction"], "none")
+        self.assertEqual(
+            diagnostics["activationHint"],
+            "Alpaca feed active for requested 5m/15m/60m/1d windows.",
+        )
+        self.assertEqual(
+            diagnostics["requestWindowResults"],
+            {
+                "5m": {
+                    "requestedSymbolCount": 2,
+                    "successCount": 2,
+                    "failureCount": 0,
+                    "failureClasses": {},
+                    "dominantFailureClass": None,
+                    "fulfilled": True,
+                },
+                "15m": {
+                    "requestedSymbolCount": 2,
+                    "successCount": 2,
+                    "failureCount": 0,
+                    "failureClasses": {},
+                    "dominantFailureClass": None,
+                    "fulfilled": True,
+                },
+                "60m": {
+                    "requestedSymbolCount": 2,
+                    "successCount": 2,
+                    "failureCount": 0,
+                    "failureClasses": {},
+                    "dominantFailureClass": None,
+                    "fulfilled": True,
+                },
+                "1d": {
+                    "requestedSymbolCount": 2,
+                    "successCount": 2,
+                    "failureCount": 0,
+                    "failureClasses": {},
+                    "dominantFailureClass": None,
+                    "fulfilled": True,
+                },
+            },
+        )
         self.assertEqual(diagnostics["symbolSuccessCount"], 2)
         self.assertEqual(diagnostics["symbolFailureCount"], 0)
+        self.assertEqual(diagnostics["symbolFailureSamples"], [])
         self.assertEqual(diagnostics["providerFailureReasons"], [])
         self.assertFalse(diagnostics["fallbackProviderUsed"])
         self.assertFalse(diagnostics["yfinanceFallbackUsed"])
@@ -914,14 +957,129 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["fulfilledWindows"], ["1d"])
         self.assertEqual(diagnostics["missingWindows"], ["5m", "15m", "60m"])
         self.assertTrue(diagnostics["providerConstructed"])
-        self.assertEqual(diagnostics["feedEntitlementStatus"], "missing_or_denied")
+        self.assertEqual(diagnostics["feedEntitlementStatus"], "entitlement_denied")
+        self.assertEqual(diagnostics["recommendedAction"], "enable_feed_entitlement_or_switch_feed")
+        self.assertEqual(
+            diagnostics["activationHint"],
+            "Alpaca provider is active but missing 5m/15m/60m windows: entitlement_denied.",
+        )
+        self.assertEqual(diagnostics["requestWindowResults"]["5m"]["failureClasses"], {"entitlement_denied": 2})
+        self.assertEqual(diagnostics["requestWindowResults"]["15m"]["failureClasses"], {"entitlement_denied": 2})
+        self.assertEqual(diagnostics["requestWindowResults"]["60m"]["failureClasses"], {"entitlement_denied": 2})
+        self.assertEqual(diagnostics["requestWindowResults"]["1d"]["successCount"], 2)
+        self.assertEqual(diagnostics["requestWindowResults"]["1d"]["failureCount"], 0)
         self.assertEqual(diagnostics["symbolSuccessCount"], 2)
         self.assertEqual(diagnostics["symbolFailureCount"], 0)
-        self.assertEqual(diagnostics["providerFailureReasons"], ["subscription_required"])
+        self.assertEqual(diagnostics["providerFailureReasons"], ["entitlement_denied"])
         self.assertFalse(diagnostics["fallbackProviderUsed"])
         self.assertFalse(diagnostics["yfinanceFallbackUsed"])
         self.assertEqual(diagnostics["finalSourceTier"], "broker_authorized")
         self.assertEqual(diagnostics["trustLevel"], "partial")
+
+    def test_configured_provider_auth_failure_reports_actionable_window_diagnostics_without_secret_leak(self) -> None:
+        class AuthFailingAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                raise RuntimeError("401 unauthorized invalid alpaca-secret SHOULD_NOT_LEAK")
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            AuthFailingAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=_yfinance_frame(),
+        ):
+            payload = load_rotation_radar_quotes(["APP"])
+
+        metadata = payload["metadata"]
+        diagnostics = metadata["providerDiagnostics"]
+        self.assertEqual(metadata["quoteMode"], "proxy")
+        self.assertEqual(payload["quotes"]["APP"]["source"], "yfinance_proxy")
+        self.assertTrue(diagnostics["credentialsPresent"])
+        self.assertTrue(diagnostics["providerConstructed"])
+        self.assertEqual(diagnostics["fulfilledWindows"], [])
+        self.assertEqual(diagnostics["missingWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(diagnostics["providerFailureReason"], "auth_failed")
+        self.assertEqual(diagnostics["providerFailureReasons"], ["auth_failed"])
+        self.assertEqual(diagnostics["feedEntitlementStatus"], "auth_failed")
+        self.assertEqual(diagnostics["recommendedAction"], "verify_alpaca_credentials")
+        self.assertEqual(
+            diagnostics["activationHint"],
+            "Alpaca credentials are present and the provider was constructed, but no configured windows were fulfilled: auth_failed.",
+        )
+        self.assertTrue(diagnostics["fallbackProviderUsed"])
+        self.assertTrue(diagnostics["yfinanceFallbackUsed"])
+        self.assertEqual(diagnostics["trustLevel"], "degraded")
+        for window in ("5m", "15m", "60m", "1d"):
+            self.assertEqual(
+                diagnostics["requestWindowResults"][window],
+                {
+                    "requestedSymbolCount": 1,
+                    "successCount": 0,
+                    "failureCount": 1,
+                    "failureClasses": {"auth_failed": 1},
+                    "dominantFailureClass": "auth_failed",
+                    "fulfilled": False,
+                },
+            )
+        self.assertEqual(len(diagnostics["symbolFailureSamples"]), 4)
+        self.assertEqual(diagnostics["symbolFailureSamples"][0]["failureClass"], "auth_failed")
+        dumped = json.dumps(diagnostics, ensure_ascii=False)
+        self.assertNotIn("SHOULD_NOT_LEAK", dumped)
+        self.assertNotIn("alpaca-secret", dumped)
+        self.assertNotIn("alpaca-key-id", dumped)
+
+    def test_configured_provider_empty_all_windows_reports_empty_response_and_missing_windows(self) -> None:
+        class EmptyAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                return []
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            EmptyAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=_yfinance_frame(),
+        ):
+            payload = load_rotation_radar_quotes(["APP", "QQQ"])
+
+        metadata = payload["metadata"]
+        diagnostics = metadata["providerDiagnostics"]
+        self.assertEqual(metadata["quoteMode"], "proxy")
+        self.assertEqual(sorted(payload["quotes"]), ["APP", "QQQ"])
+        self.assertTrue(diagnostics["credentialsPresent"])
+        self.assertTrue(diagnostics["providerConstructed"])
+        self.assertEqual(diagnostics["fulfilledWindows"], [])
+        self.assertEqual(diagnostics["missingWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(diagnostics["providerFailureReason"], "empty_response")
+        self.assertEqual(diagnostics["providerFailureReasons"], ["empty_response"])
+        self.assertEqual(diagnostics["recommendedAction"], "verify_symbol_coverage")
+        self.assertEqual(
+            diagnostics["activationHint"],
+            "Alpaca credentials are present and the provider was constructed, but no configured windows were fulfilled: empty_response.",
+        )
+        for window in ("5m", "15m", "60m", "1d"):
+            self.assertEqual(diagnostics["requestWindowResults"][window]["requestedSymbolCount"], 2)
+            self.assertEqual(diagnostics["requestWindowResults"][window]["successCount"], 0)
+            self.assertEqual(diagnostics["requestWindowResults"][window]["failureCount"], 2)
+            self.assertEqual(diagnostics["requestWindowResults"][window]["failureClasses"], {"empty_response": 2})
+            self.assertFalse(diagnostics["requestWindowResults"][window]["fulfilled"])
+        self.assertLessEqual(len(diagnostics["symbolFailureSamples"]), 8)
 
     def test_configured_provider_symbol_failures_reduce_coverage_and_confidence(self) -> None:
         class FakeAlpacaFetcher:
