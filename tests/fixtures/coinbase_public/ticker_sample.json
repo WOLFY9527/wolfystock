@@ -1,0 +1,14 @@
+{
+  "product_id": "BTC-USD",
+  "symbol": "BTC-USD",
+  "sourceRef": "tests/fixtures/coinbase_public/ticker_sample.json",
+  "ticker": {
+    "trade_id": 21877291,
+    "price": "65001.42",
+    "size": "0.01000000",
+    "bid": "65001.41",
+    "ask": "65001.43",
+    "volume": "125.55000000",
+    "time": "2026-05-19T10:15:30.123456Z"
+  }
+}
