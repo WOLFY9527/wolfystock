@@ -829,11 +829,32 @@ class MarketRotationRadarService:
             if "missingWindows" in diagnostics
             else list(TIME_WINDOW_KEYS)
         )
+        staged_diagnostics_present = any(
+            key in diagnostics
+            for key in (
+                "maxSymbolsPerWindow",
+                "maxProbeSymbols",
+                "perWindowTimeout",
+                "totalProviderBudget",
+                "probeSymbolCount",
+                "fullUniverseSymbolCount",
+                "providerBudgetExceeded",
+                "timeoutSymbolCount",
+                "skippedDueToBudgetCount",
+                "activationScope",
+                "minimumActivationCoverageMet",
+            )
+        )
         fallback_provider_used = bool(
             diagnostics.get("fallbackProviderUsed")
             or static_basket_fallback_used
             or quote_result.provider_status == "partial"
         )
+        activation_scope = self._activation_scope(diagnostics.get("activationScope"))
+        minimum_activation_coverage_met = bool(diagnostics.get("minimumActivationCoverageMet", False))
+        provider_budget_exceeded = bool(diagnostics.get("providerBudgetExceeded", False))
+        timeout_symbol_count = self._safe_int(diagnostics.get("timeoutSymbolCount"))
+        skipped_due_to_budget_count = self._safe_int(diagnostics.get("skippedDueToBudgetCount"))
         activation_blocker = diagnostics.get("activationBlocker") or self._diagnostic_activation_blocker(
             credentials_present=bool(diagnostics.get("credentialsPresent", False)),
             provider_constructed=bool(diagnostics.get("providerConstructed", False)),
@@ -853,6 +874,8 @@ class MarketRotationRadarService:
             yfinance_fallback_used=bool(diagnostics.get("yfinanceFallbackUsed", False)),
             static_basket_fallback_used=static_basket_fallback_used,
             activation_blocker=activation_blocker,
+            activation_scope=activation_scope,
+            minimum_activation_coverage_met=minimum_activation_coverage_met,
         )
         diagnostics.update({
             "configuredProviderAttempted": bool(diagnostics.get("configuredProviderAttempted", False)),
@@ -875,6 +898,19 @@ class MarketRotationRadarService:
             "configuredProviderMissingWindows": self._string_list(
                 diagnostics.get("configuredProviderMissingWindows") or missing_windows
             ),
+            **({
+                "maxSymbolsPerWindow": self._safe_int(diagnostics.get("maxSymbolsPerWindow")),
+                "maxProbeSymbols": self._safe_int(diagnostics.get("maxProbeSymbols")),
+                "perWindowTimeout": self._safe_float(diagnostics.get("perWindowTimeout")),
+                "totalProviderBudget": self._safe_float(diagnostics.get("totalProviderBudget")),
+                "probeSymbolCount": self._safe_int(diagnostics.get("probeSymbolCount")),
+                "fullUniverseSymbolCount": self._safe_int(diagnostics.get("fullUniverseSymbolCount"), requested_symbol_count),
+                "providerBudgetExceeded": provider_budget_exceeded,
+                "timeoutSymbolCount": timeout_symbol_count,
+                "skippedDueToBudgetCount": skipped_due_to_budget_count,
+                "activationScope": activation_scope,
+                "minimumActivationCoverageMet": minimum_activation_coverage_met,
+            } if staged_diagnostics_present else {}),
             "symbolSuccessCount": int(diagnostics.get("symbolSuccessCount", usable_symbol_count) or 0),
             "symbolFailureCount": int(diagnostics.get("symbolFailureCount", failed_symbol_count) or 0),
             "providerFailureReasons": provider_failure_reasons,
@@ -926,6 +962,22 @@ class MarketRotationRadarService:
         source = str(value or "").strip()
         return source if source in {"env", "config", "control_plane", "unavailable", "unknown"} else "unknown"
 
+    def _activation_scope(self, value: Any) -> str:
+        scope = str(value or "").strip()
+        return scope if scope in {"probe_only", "partial_universe", "full_universe"} else "probe_only"
+
+    def _safe_int(self, value: Any, default: int = 0) -> int:
+        try:
+            return max(0, int(value))
+        except Exception:
+            return max(0, int(default or 0))
+
+    def _safe_float(self, value: Any, default: float = 0.0) -> float:
+        try:
+            return max(0.0, float(value))
+        except Exception:
+            return max(0.0, float(default or 0.0))
+
     def _provider_failure_reasons(self, raw_reasons: Any, unavailable_reason: Any) -> List[str]:
         reasons = self._string_list(raw_reasons)
         sanitized_unavailable = self._sanitize_unavailable_reason(unavailable_reason)
@@ -961,15 +1013,21 @@ class MarketRotationRadarService:
         yfinance_fallback_used: bool,
         static_basket_fallback_used: bool,
         activation_blocker: Any,
+        activation_scope: str,
+        minimum_activation_coverage_met: bool,
     ) -> str:
         blocker = str(activation_blocker or "").strip()
-        if static_basket_fallback_used or blocker == "timeout":
+        if static_basket_fallback_used:
+            return "unavailable"
+        if blocker == "timeout":
+            if minimum_activation_coverage_met and fulfilled_windows:
+                return "partial"
             return "unavailable"
         if not credentials_present:
             return "not_active"
         if not provider_constructed:
             return "unavailable" if blocker in {"provider_error", "unknown"} else "not_active"
-        if fulfilled_windows and not missing_windows and not yfinance_fallback_used:
+        if fulfilled_windows and not missing_windows and not yfinance_fallback_used and activation_scope == "full_universe":
             return "active"
         if fulfilled_windows:
             return "partial"

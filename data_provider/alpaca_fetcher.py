@@ -52,7 +52,7 @@ class AlpacaFetcher(BaseFetcher):
         self.secret_key = str(secret_key or "").strip()
         self.base_url = str(base_url or "https://data.alpaca.markets").rstrip("/")
         self.data_feed = str(data_feed or "iex").strip().lower() or "iex"
-        self.timeout = max(5, int(timeout))
+        self.timeout = max(1.0, float(timeout))
         self.session = session or requests.Session()
         if not self.api_key_id or not self.secret_key:
             raise ValueError("Alpaca requires both api_key_id and secret_key")

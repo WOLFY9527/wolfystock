@@ -14,6 +14,7 @@ import pandas as pd
 from data_provider.alpaca_fetcher import AlpacaFetcher
 from data_provider.provider_credentials import ProviderCredentialBundle, get_provider_credentials
 from src.services.market_overview_yfinance_transport import fetch_yfinance_quote_history_frame
+from src.services.rotation_theme_registry import list_rotation_theme_definitions
 
 QuoteProvider = Callable[[Iterable[str]], Mapping[str, Any]]
 
@@ -31,6 +32,10 @@ _CONFIGURED_PROVIDER_TIER = "tier_1_configured"
 _CONFIGURED_CONFIDENCE_WEIGHT = 0.9
 _CONFIGURED_PROVIDER_ID = "alpaca"
 _QUOTE_PROVIDER_ORDER = ("alpaca", "yfinance")
+_ALPACA_MAX_SYMBOLS_PER_WINDOW = 32
+_ALPACA_MAX_PROBE_SYMBOLS = 12
+_ALPACA_PER_WINDOW_TIMEOUT_SECONDS = 2.5
+_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS = 8.0
 _ALPACA_TIMEFRAMES = {
     "5m": ("5Min", timedelta(hours=2), 48),
     "15m": ("15Min", timedelta(hours=6), 48),
@@ -104,6 +109,15 @@ class _ProviderAttempt:
 class _AlpacaQuoteResult:
     quote: Optional[Dict[str, Any]] = None
     window_failure_reasons: Dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class _ConfiguredActivationStageResult:
+    quotes: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    failed_symbol_reasons: Dict[str, str] = field(default_factory=dict)
+    request_window_results: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    symbol_failure_samples: list[Dict[str, str]] = field(default_factory=list)
+    timeout_symbol_count: int = 0
 
 
 def get_rotation_radar_quote_provider() -> QuoteProvider:
@@ -197,92 +211,138 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
         )
     metadata["providerConstructed"] = True
 
-    timeout_seconds = max(float(_QUOTE_PROVIDER_REQUEST_TIMEOUT_SECONDS), 0.001)
-    max_workers = max(1, min(int(_QUOTE_PROVIDER_MAX_WORKERS), len(symbols) or 1))
+    limits = _configured_activation_limits()
+    max_workers = max(1, int(_QUOTE_PROVIDER_MAX_WORKERS))
+    probe_symbols = _configured_provider_probe_symbols(
+        symbols,
+        max_probe_symbols=limits["maxProbeSymbols"],
+    )
     quotes: Dict[str, Dict[str, Any]] = {}
     failed_symbol_reasons: Dict[str, str] = {}
-    request_window_results = _empty_request_window_results(len(symbols))
+    request_window_results = _empty_request_window_results(0)
     symbol_failure_samples: list[Dict[str, str]] = []
-    executor = ThreadPoolExecutor(max_workers=max_workers)
-    future_to_symbol = {
-        executor.submit(_quote_from_alpaca_fetcher, fetcher, symbol, data_feed): symbol
-        for symbol in symbols
-    }
-    try:
-        for future in as_completed(future_to_symbol, timeout=timeout_seconds):
-            symbol = future_to_symbol[future]
-            try:
-                result = future.result()
-            except Exception as exc:
-                failure_class = _classify_configured_failure(str(exc))
-                _record_symbol_window_failures(
+    provider_budget_exceeded = False
+    timeout_symbol_count = 0
+    skipped_due_to_budget_count = 0
+    activation_scope = "probe_only"
+    requested_stage_symbols: set[str] = set()
+    budget_started_at = monotonic()
+
+    def remaining_budget() -> float:
+        return limits["totalProviderBudget"] - (monotonic() - budget_started_at)
+
+    probe_stage = _load_configured_provider_symbol_batch(
+        fetcher=fetcher,
+        symbols=probe_symbols,
+        data_feed=data_feed,
+        timeout_seconds=min(limits["perWindowTimeout"], max(remaining_budget(), 0.001)),
+        max_workers=max_workers,
+    )
+    _merge_configured_activation_stage(
+        request_window_results,
+        symbol_failure_samples,
+        quotes,
+        failed_symbol_reasons,
+        probe_stage,
+    )
+    requested_stage_symbols.update(probe_symbols)
+    timeout_symbol_count += probe_stage.timeout_symbol_count
+    provider_budget_exceeded = provider_budget_exceeded or probe_stage.timeout_symbol_count > 0
+    probe_results = _finalize_request_window_results(
+        probe_stage.request_window_results,
+        minimum_success_count=len(probe_symbols),
+    )
+    probe_succeeded = bool(probe_symbols) and all(
+        bool(probe_results.get(window, {}).get("fulfilled"))
+        for window in _ALPACA_TIMEFRAMES
+    )
+
+    remaining_symbols = [symbol for symbol in symbols if symbol not in requested_stage_symbols]
+    if not symbols:
+        activation_scope = "full_universe"
+    elif probe_succeeded and not remaining_symbols:
+        activation_scope = "full_universe"
+    elif probe_succeeded and remaining_symbols:
+        if remaining_budget() <= 0:
+            provider_budget_exceeded = True
+            skipped_due_to_budget_count = len(remaining_symbols)
+        else:
+            activation_scope = "partial_universe"
+            while remaining_symbols:
+                budget_left = remaining_budget()
+                if budget_left <= 0:
+                    provider_budget_exceeded = True
+                    skipped_due_to_budget_count += len(remaining_symbols)
+                    break
+                batch = remaining_symbols[:limits["maxSymbolsPerWindow"]]
+                remaining_symbols = remaining_symbols[len(batch):]
+                batch_stage = _load_configured_provider_symbol_batch(
+                    fetcher=fetcher,
+                    symbols=batch,
+                    data_feed=data_feed,
+                    timeout_seconds=min(limits["perWindowTimeout"], max(budget_left, 0.001)),
+                    max_workers=max_workers,
+                )
+                _merge_configured_activation_stage(
                     request_window_results,
                     symbol_failure_samples,
-                    symbol=symbol,
-                    failure_reasons={window: failure_class for window in _ALPACA_TIMEFRAMES},
+                    quotes,
+                    failed_symbol_reasons,
+                    batch_stage,
                 )
-                failed_symbol_reasons[symbol] = _legacy_symbol_failure_reason([failure_class])
-                continue
-            quote = result.quote if isinstance(result, _AlpacaQuoteResult) else result
-            window_failure_reasons = (
-                result.window_failure_reasons if isinstance(result, _AlpacaQuoteResult) else {}
-            )
-            _record_symbol_window_outcome(
-                request_window_results,
-                symbol_failure_samples,
-                symbol=symbol,
-                quote=quote,
-                window_failure_reasons=window_failure_reasons,
-            )
-            if quote is None:
-                failed_symbol_reasons[symbol] = _legacy_symbol_failure_reason(window_failure_reasons.values())
-                continue
-            quotes[symbol] = quote
-    except FuturesTimeoutError:
-        pending_symbols = [
-            future_to_symbol[future]
-            for future in future_to_symbol
-            if not future.done()
-        ]
-        for symbol in pending_symbols:
-            _record_symbol_window_failures(
-                request_window_results,
-                symbol_failure_samples,
-                symbol=symbol,
-                failure_reasons={window: "timeout" for window in _ALPACA_TIMEFRAMES},
-            )
-            failed_symbol_reasons[symbol] = "quote_fetch_failed"
-            future = next(
-                (candidate for candidate, candidate_symbol in future_to_symbol.items() if candidate_symbol == symbol),
-                None,
-            )
-            if future is not None:
-                future.cancel()
-    finally:
-        executor.shutdown(wait=False, cancel_futures=True)
+                requested_stage_symbols.update(batch)
+                timeout_symbol_count += batch_stage.timeout_symbol_count
+                if batch_stage.timeout_symbol_count:
+                    provider_budget_exceeded = True
+                    skipped_due_to_budget_count += len(remaining_symbols)
+                    break
+            if not provider_budget_exceeded and not remaining_symbols:
+                activation_scope = "full_universe"
 
-    if quotes and failed_symbol_reasons:
+    minimum_success_count = len(probe_symbols) if probe_succeeded else len(probe_symbols)
+    if quotes and (failed_symbol_reasons or provider_budget_exceeded or skipped_due_to_budget_count):
         status = "partial"
     elif quotes:
         status = "success"
     else:
         status = "fallback" if symbols else "success"
-    request_window_results = _finalize_request_window_results(request_window_results)
+    request_window_results = _finalize_request_window_results(
+        request_window_results,
+        minimum_success_count=minimum_success_count,
+    )
     configured_fulfilled_windows = _fulfilled_windows_from_request_results(request_window_results)
     configured_missing_windows = _missing_windows_from_request_results(request_window_results)
-    configured_failure_reasons = _failure_classes_from_request_results(request_window_results)
+    configured_failure_reasons = [
+        *_failure_classes_from_request_results(request_window_results),
+        *(["timeout"] if provider_budget_exceeded or timeout_symbol_count or skipped_due_to_budget_count else []),
+    ]
     provider_failure_reasons = (
-        configured_failure_reasons
+        _bounded_unique_reasons(_sort_failure_classes(configured_failure_reasons))
         if configured_failure_reasons
         else _bounded_unique_reasons(failed_symbol_reasons.values())
     )
     provider_failure_reason = provider_failure_reasons[0] if provider_failure_reasons else None
+    minimum_activation_coverage_met = bool(probe_succeeded and configured_fulfilled_windows)
+    activation_limits = {
+        "maxSymbolsPerWindow": limits["maxSymbolsPerWindow"],
+        "maxProbeSymbols": limits["maxProbeSymbols"],
+        "perWindowTimeout": limits["perWindowTimeout"],
+        "totalProviderBudget": limits["totalProviderBudget"],
+        "probeSymbolCount": len(probe_symbols),
+        "fullUniverseSymbolCount": len(symbols),
+        "providerBudgetExceeded": bool(provider_budget_exceeded),
+        "timeoutSymbolCount": int(timeout_symbol_count),
+        "skippedDueToBudgetCount": int(skipped_due_to_budget_count),
+        "activationScope": activation_scope,
+        "minimumActivationCoverageMet": minimum_activation_coverage_met,
+    }
     return _ProviderAttempt(
         quotes=quotes,
         failed_symbol_reasons=failed_symbol_reasons,
         status=status,
         metadata={
             **metadata,
+            **activation_limits,
             "configuredProviderStatus": status if status != "success" else "success",
             "configuredProviderFeed": data_feed,
             "feed": data_feed,
@@ -297,6 +357,172 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
             "configuredProviderMissingWindows": configured_missing_windows,
         },
     )
+
+
+def _configured_activation_limits() -> Dict[str, Any]:
+    return {
+        "maxSymbolsPerWindow": max(1, int(_ALPACA_MAX_SYMBOLS_PER_WINDOW)),
+        "maxProbeSymbols": max(1, int(_ALPACA_MAX_PROBE_SYMBOLS)),
+        "perWindowTimeout": max(0.001, float(_ALPACA_PER_WINDOW_TIMEOUT_SECONDS)),
+        "totalProviderBudget": max(0.001, float(_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS)),
+    }
+
+
+def _configured_provider_probe_symbols(
+    symbols: Sequence[str],
+    *,
+    max_probe_symbols: int,
+) -> tuple[str, ...]:
+    requested = {str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()}
+    candidates: list[str] = []
+    candidates.extend(("QQQ", "SPY", "IWM"))
+    for theme in list_rotation_theme_definitions("US"):
+        candidates.extend(str(symbol) for symbol in theme.proxy_etfs)
+        candidates.extend(str(symbol) for symbol in theme.benchmark_symbols)
+    for theme in list_rotation_theme_definitions("US"):
+        candidates.extend(str(symbol) for symbol in theme.primary_symbols[:1])
+    candidates.extend(str(symbol) for symbol in symbols)
+
+    probe: list[str] = []
+    seen: set[str] = set()
+    for raw_symbol in candidates:
+        symbol = str(raw_symbol or "").strip().upper()
+        if not symbol or symbol in seen or symbol not in requested:
+            continue
+        seen.add(symbol)
+        probe.append(symbol)
+        if len(probe) >= max_probe_symbols:
+            break
+    return tuple(probe)
+
+
+def _load_configured_provider_symbol_batch(
+    *,
+    fetcher: AlpacaFetcher,
+    symbols: Sequence[str],
+    data_feed: str,
+    timeout_seconds: float,
+    max_workers: int,
+) -> _ConfiguredActivationStageResult:
+    batch_symbols = tuple(dict.fromkeys(str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()))
+    result = _ConfiguredActivationStageResult(
+        request_window_results=_empty_request_window_results(0),
+    )
+    if not batch_symbols:
+        return result
+
+    executor = ThreadPoolExecutor(max_workers=max(1, min(int(max_workers), len(batch_symbols))))
+    future_to_symbol = {
+        executor.submit(_quote_from_alpaca_fetcher, fetcher, symbol, data_feed): symbol
+        for symbol in batch_symbols
+    }
+    processed_futures = set()
+    try:
+        for future in as_completed(future_to_symbol, timeout=max(float(timeout_seconds), 0.001)):
+            processed_futures.add(future)
+            symbol = future_to_symbol[future]
+            _record_configured_future_result(result, future, symbol)
+    except FuturesTimeoutError:
+        for future, symbol in future_to_symbol.items():
+            if future in processed_futures:
+                continue
+            if future.done():
+                _record_configured_future_result(result, future, symbol)
+                continue
+            symbol = future_to_symbol[future]
+            _record_symbol_request_attempt(result.request_window_results)
+            _record_symbol_window_failures(
+                result.request_window_results,
+                result.symbol_failure_samples,
+                symbol=symbol,
+                failure_reasons={window: "timeout" for window in _ALPACA_TIMEFRAMES},
+            )
+            result.failed_symbol_reasons[symbol] = "quote_fetch_failed"
+            result.timeout_symbol_count += 1
+            future.cancel()
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+    return result
+
+
+def _record_configured_future_result(
+    result: _ConfiguredActivationStageResult,
+    future: Any,
+    symbol: str,
+) -> None:
+    _record_symbol_request_attempt(result.request_window_results)
+    try:
+        quote_result = future.result()
+    except Exception as exc:
+        failure_class = _classify_configured_failure(str(exc))
+        _record_symbol_window_failures(
+            result.request_window_results,
+            result.symbol_failure_samples,
+            symbol=symbol,
+            failure_reasons={window: failure_class for window in _ALPACA_TIMEFRAMES},
+        )
+        result.failed_symbol_reasons[symbol] = _legacy_symbol_failure_reason([failure_class])
+        return
+    quote = quote_result.quote if isinstance(quote_result, _AlpacaQuoteResult) else quote_result
+    window_failure_reasons = (
+        quote_result.window_failure_reasons if isinstance(quote_result, _AlpacaQuoteResult) else {}
+    )
+    _record_symbol_window_outcome(
+        result.request_window_results,
+        result.symbol_failure_samples,
+        symbol=symbol,
+        quote=quote,
+        window_failure_reasons=window_failure_reasons,
+    )
+    if quote is None:
+        result.failed_symbol_reasons[symbol] = _legacy_symbol_failure_reason(window_failure_reasons.values())
+        return
+    result.quotes[symbol] = quote
+
+
+def _record_symbol_request_attempt(request_window_results: Dict[str, Dict[str, Any]]) -> None:
+    for window in _ALPACA_TIMEFRAMES:
+        request_window_results.setdefault(
+            window,
+            {
+                "requestedSymbolCount": 0,
+                "successCount": 0,
+                "failureCount": 0,
+                "failureClasses": {},
+                "dominantFailureClass": None,
+                "fulfilled": False,
+            },
+        )
+        request_window_results[window]["requestedSymbolCount"] = int(
+            request_window_results[window].get("requestedSymbolCount") or 0
+        ) + 1
+
+
+def _merge_configured_activation_stage(
+    request_window_results: Dict[str, Dict[str, Any]],
+    symbol_failure_samples: list[Dict[str, str]],
+    quotes: Dict[str, Dict[str, Any]],
+    failed_symbol_reasons: Dict[str, str],
+    stage: _ConfiguredActivationStageResult,
+) -> None:
+    quotes.update(stage.quotes)
+    failed_symbol_reasons.update(stage.failed_symbol_reasons)
+    for window in _ALPACA_TIMEFRAMES:
+        source = stage.request_window_results.get(window, {})
+        target = request_window_results.setdefault(window, _empty_request_window_results(0)[window])
+        target["requestedSymbolCount"] = int(target.get("requestedSymbolCount") or 0) + int(
+            source.get("requestedSymbolCount") or 0
+        )
+        target["successCount"] = int(target.get("successCount") or 0) + int(source.get("successCount") or 0)
+        target["failureCount"] = int(target.get("failureCount") or 0) + int(source.get("failureCount") or 0)
+        target_classes = target.setdefault("failureClasses", {})
+        for failure_class, count in dict(source.get("failureClasses") or {}).items():
+            normalized = _normalize_configured_failure_class(failure_class)
+            target_classes[normalized] = int(target_classes.get(normalized) or 0) + int(count or 0)
+    for sample in stage.symbol_failure_samples:
+        if len(symbol_failure_samples) >= _FAILED_SYMBOL_LIST_LIMIT:
+            break
+        symbol_failure_samples.append(sample)
 
 
 def _configured_provider_base_metadata(credentials: ProviderCredentialBundle) -> Dict[str, Any]:
@@ -452,8 +678,11 @@ def _record_window_failure(
 
 def _finalize_request_window_results(
     request_window_results: Mapping[str, Mapping[str, Any]],
+    *,
+    minimum_success_count: int = 0,
 ) -> Dict[str, Dict[str, Any]]:
     finalized: Dict[str, Dict[str, Any]] = {}
+    success_floor = max(0, int(minimum_success_count or 0))
     for window in _ALPACA_TIMEFRAMES:
         raw = request_window_results.get(window, {})
         requested_count = max(0, int(raw.get("requestedSymbolCount") or 0))
@@ -470,7 +699,14 @@ def _finalize_request_window_results(
             "failureCount": failure_count,
             "failureClasses": failure_classes,
             "dominantFailureClass": _dominant_failure_class(failure_classes),
-            "fulfilled": bool(requested_count > 0 and success_count >= requested_count and failure_count == 0),
+            "fulfilled": bool(
+                requested_count > 0
+                and (
+                    success_count >= success_floor
+                    if success_floor
+                    else success_count >= requested_count and failure_count == 0
+                )
+            ),
         }
     return finalized
 
@@ -813,6 +1049,21 @@ def _provider_activation_diagnostics(
     final_source_tier = str(source_summary.get("sourceTier") or "unknown")
     request_failure_classes = _failure_classes_from_request_results(request_window_results)
     provider_constructed = bool(configured_attempt.metadata.get("providerConstructed"))
+    probe_symbol_count = _non_negative_int(configured_attempt.metadata.get("probeSymbolCount"), 0)
+    full_universe_symbol_count = _non_negative_int(
+        configured_attempt.metadata.get("fullUniverseSymbolCount"),
+        requested_symbol_count,
+    )
+    provider_budget_exceeded = bool(configured_attempt.metadata.get("providerBudgetExceeded", False))
+    timeout_symbol_count = _non_negative_int(configured_attempt.metadata.get("timeoutSymbolCount"), 0)
+    skipped_due_to_budget_count = _non_negative_int(
+        configured_attempt.metadata.get("skippedDueToBudgetCount"),
+        0,
+    )
+    activation_scope = _activation_scope(configured_attempt.metadata.get("activationScope"))
+    minimum_activation_coverage_met = bool(
+        configured_attempt.metadata.get("minimumActivationCoverageMet", False)
+    )
     provider_failure_reasons = _bounded_unique_reasons(
         [
             *_as_string_sequence(configured_attempt.metadata.get("providerFailureReasons")),
@@ -820,6 +1071,7 @@ def _provider_activation_diagnostics(
             *([] if request_failure_classes else configured_attempt.failed_symbol_reasons.values()),
             *failed_symbol_reasons.values(),
             *_quote_window_failure_reasons(quotes),
+            *(["timeout"] if provider_budget_exceeded or timeout_symbol_count or skipped_due_to_budget_count else []),
         ]
     )
     fallback_provider_used = bool(yfinance_fallback_used or static_basket_fallback_used)
@@ -851,6 +1103,13 @@ def _provider_activation_diagnostics(
         fulfilled_windows=fulfilled_windows,
         missing_windows=missing_windows,
         provider_failure_reasons=provider_failure_reasons,
+        activation_scope=activation_scope,
+        minimum_activation_coverage_met=minimum_activation_coverage_met,
+        provider_budget_exceeded=provider_budget_exceeded,
+        timeout_symbol_count=timeout_symbol_count,
+        skipped_due_to_budget_count=skipped_due_to_budget_count,
+        probe_symbol_count=probe_symbol_count,
+        full_universe_symbol_count=full_universe_symbol_count,
     )
     return {
         "configuredProviderAttempted": bool(configured_attempt.metadata.get("configuredProviderAttempted", True)),
@@ -887,6 +1146,29 @@ def _provider_activation_diagnostics(
         "configuredProviderFulfilledWindows": fulfilled_windows,
         "configuredProviderMissingWindows": missing_windows,
         "requestWindowResults": request_window_results,
+        "maxSymbolsPerWindow": _non_negative_int(
+            configured_attempt.metadata.get("maxSymbolsPerWindow"),
+            int(_ALPACA_MAX_SYMBOLS_PER_WINDOW),
+        ),
+        "maxProbeSymbols": _non_negative_int(
+            configured_attempt.metadata.get("maxProbeSymbols"),
+            int(_ALPACA_MAX_PROBE_SYMBOLS),
+        ),
+        "perWindowTimeout": _non_negative_float(
+            configured_attempt.metadata.get("perWindowTimeout"),
+            float(_ALPACA_PER_WINDOW_TIMEOUT_SECONDS),
+        ),
+        "totalProviderBudget": _non_negative_float(
+            configured_attempt.metadata.get("totalProviderBudget"),
+            float(_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS),
+        ),
+        "probeSymbolCount": probe_symbol_count,
+        "fullUniverseSymbolCount": full_universe_symbol_count,
+        "providerBudgetExceeded": provider_budget_exceeded,
+        "timeoutSymbolCount": timeout_symbol_count,
+        "skippedDueToBudgetCount": skipped_due_to_budget_count,
+        "activationScope": activation_scope,
+        "minimumActivationCoverageMet": minimum_activation_coverage_met,
         "symbolSuccessCount": len(quotes),
         "symbolFailureCount": len(failed_symbol_reasons),
         "symbolFailureSamples": _sanitize_symbol_failure_samples(
@@ -904,6 +1186,8 @@ def _provider_activation_diagnostics(
             yfinance_fallback_used=yfinance_fallback_used,
             static_basket_fallback_used=static_basket_fallback_used,
             activation_blocker=activation_blocker,
+            activation_scope=activation_scope,
+            minimum_activation_coverage_met=minimum_activation_coverage_met,
         ),
         "activationBlocker": activation_blocker,
         "fallbackProviderUsed": fallback_provider_used,
@@ -926,6 +1210,25 @@ def _provider_activation_diagnostics(
 def _safe_credential_source(value: Any) -> str:
     source = str(value or "").strip()
     return source if source in _CREDENTIAL_SOURCE_VALUES else "unknown"
+
+
+def _activation_scope(value: Any) -> str:
+    scope = str(value or "").strip()
+    return scope if scope in {"probe_only", "partial_universe", "full_universe"} else "probe_only"
+
+
+def _non_negative_int(value: Any, default: int = 0) -> int:
+    try:
+        return max(0, int(value))
+    except Exception:
+        return max(0, int(default or 0))
+
+
+def _non_negative_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return max(0.0, float(value))
+    except Exception:
+        return max(0.0, float(default or 0.0))
 
 
 def _provider_trust_level(
@@ -963,16 +1266,20 @@ def _live_activation_status(
     yfinance_fallback_used: bool,
     static_basket_fallback_used: bool,
     activation_blocker: Optional[str],
+    activation_scope: str,
+    minimum_activation_coverage_met: bool,
 ) -> str:
     if static_basket_fallback_used:
         return "unavailable"
     if activation_blocker == "timeout":
+        if minimum_activation_coverage_met and fulfilled_windows:
+            return "partial"
         return "unavailable"
     if not credentials_present:
         return "not_active"
     if not provider_constructed:
         return "unavailable" if activation_blocker in {"provider_error", "unknown"} else "not_active"
-    if fulfilled_windows and not missing_windows and not yfinance_fallback_used:
+    if fulfilled_windows and not missing_windows and not yfinance_fallback_used and activation_scope == "full_universe":
         return "active"
     if fulfilled_windows:
         return "partial"
@@ -1142,6 +1449,13 @@ def _activation_hint(
     fulfilled_windows: Sequence[str],
     missing_windows: Sequence[str],
     provider_failure_reasons: Sequence[str],
+    activation_scope: str,
+    minimum_activation_coverage_met: bool,
+    provider_budget_exceeded: bool,
+    timeout_symbol_count: int,
+    skipped_due_to_budget_count: int,
+    probe_symbol_count: int,
+    full_universe_symbol_count: int,
 ) -> str:
     primary = _primary_failure_class(provider_failure_reasons) or "unknown"
     if not credentials_present:
@@ -1154,11 +1468,41 @@ def _activation_hint(
             f"but no configured windows were fulfilled: {primary}."
         )
     if fulfilled_windows and missing_windows:
+        if minimum_activation_coverage_met and (
+            activation_scope != "full_universe"
+            or provider_budget_exceeded
+            or timeout_symbol_count
+            or skipped_due_to_budget_count
+        ):
+            remaining = max(full_universe_symbol_count - probe_symbol_count, 0)
+            if remaining > 0:
+                return (
+                    f"Alpaca probe succeeded for {probe_symbol_count} symbols; "
+                    f"remaining {remaining} symbols were limited by budget or timeout, "
+                    f"so activation is partial and missing {'/'.join(missing_windows)} windows: {primary}."
+                )
+            return (
+                f"Alpaca probe succeeded for {probe_symbol_count} symbols; "
+                f"activation is partial and missing {'/'.join(missing_windows)} windows: {primary}."
+            )
         return (
             "Alpaca provider is active but missing "
             f"{'/'.join(missing_windows)} windows: {primary}."
         )
     if fulfilled_windows:
+        if activation_scope == "full_universe" and not provider_budget_exceeded and not timeout_symbol_count and not skipped_due_to_budget_count:
+            return "Alpaca feed active for requested 5m/15m/60m/1d windows."
+        if minimum_activation_coverage_met:
+            remaining = max(full_universe_symbol_count - probe_symbol_count, 0)
+            if remaining > 0 and (provider_budget_exceeded or timeout_symbol_count or skipped_due_to_budget_count):
+                return (
+                    f"Alpaca probe succeeded for {probe_symbol_count} symbols; "
+                    f"remaining {remaining} symbols were limited by budget or timeout, so activation is partial."
+                )
+            return (
+                f"Alpaca probe succeeded for {probe_symbol_count} symbols; "
+                "activation remains partial until the full universe is covered."
+            )
         return "Alpaca feed active for requested 5m/15m/60m/1d windows."
     return f"Alpaca provider did not report window coverage: {primary}."
 
