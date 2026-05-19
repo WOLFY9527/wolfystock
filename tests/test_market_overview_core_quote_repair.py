@@ -734,6 +734,102 @@ def test_fred_dgs10_and_dgs30_overlays_replace_proxy_when_fresh_enough_without_c
         assert item["officialOverlayFailureReason"] == "not_configured"
 
 
+def test_treasury_timeout_then_stale_fred_rate_overlay_keeps_proxy_with_provider_attempt_details() -> None:
+    service = MarketOverviewService()
+    stale_date = (datetime.now(CN_TZ) - timedelta(days=10)).date().isoformat()
+    previous_date = (datetime.now(CN_TZ) - timedelta(days=11)).date().isoformat()
+    proxy_as_of = datetime.now(CN_TZ).isoformat(timespec="seconds")
+    calls: list[str] = []
+    proxy_items = [
+        {
+            "symbol": "US10Y",
+            "label": "10Y yield",
+            "value": 4.5,
+            "price": 4.5,
+            "unit": "%",
+            "change_pct": 0.0,
+            "changePercent": 0.0,
+            "risk_direction": "neutral",
+            "trend": [4.48, 4.5],
+            "source": "yfinance",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_proxy",
+            "asOf": proxy_as_of,
+        },
+        {
+            "symbol": "US30Y",
+            "label": "30Y yield",
+            "value": 4.9,
+            "price": 4.9,
+            "unit": "%",
+            "change_pct": 0.0,
+            "changePercent": 0.0,
+            "risk_direction": "neutral",
+            "trend": [4.88, 4.9],
+            "source": "yfinance",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_proxy",
+            "asOf": proxy_as_of,
+        },
+    ]
+
+    def timeout_treasury_points(*, limit: int = 2, timeout: float | None = None) -> dict:
+        calls.append("treasury")
+        time.sleep(float(timeout or 0.0) + 0.005)
+        raise OfficialMacroTransportError(
+            "timeout",
+            "treasury timed out token=SECRET",
+            diagnostics={
+                "providerName": "treasury",
+                "endpointHost": "home.treasury.gov",
+                "timeoutSeconds": timeout,
+                "exceptionClass": "TimeoutError",
+                "attemptedAt": "2026-05-19T00:00:00Z",
+                "caBundleSource": "certifi",
+            },
+        )
+
+    def stale_fred_points(series_id: str, **_: object) -> list[MacroObservation]:
+        calls.append(series_id)
+        if series_id in {"DGS10", "DGS30"}:
+            return [
+                MacroObservation(series_id, 4.42, stale_date, stale_date, f"fred:{series_id}", "official_public", "daily_rate"),
+                MacroObservation(series_id, 4.47, previous_date, previous_date, f"fred:{series_id}", "official_public", "daily_rate"),
+            ]
+        return []
+
+    log_patcher = _log_patch()
+    try:
+        with (
+            patch.object(service, "OFFICIAL_MACRO_AGGREGATE_BUDGET_SECONDS", 0.18),
+            patch.object(service, "OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS", 0.18),
+            patch.object(service, "_quote_items", return_value=proxy_items),
+            patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", side_effect=timeout_treasury_points),
+            patch("src.services.market_overview_service.fetch_fred_observation_points", side_effect=stale_fred_points),
+        ):
+            macro_payload = service.get_macro()
+    finally:
+        log_patcher.stop()
+
+    assert calls[:4] == ["VIXCLS", "treasury", "DGS10", "DGS30"]
+    us10y = _item(macro_payload, "US10Y")
+    assert us10y["source"] == "yfinance"
+    assert us10y["sourceType"] == "unofficial_proxy"
+    assert us10y["providerClass"] == "proxy"
+    assert us10y["officialOverlayAttempted"] is True
+    assert us10y["officialOverlayAvailable"] is False
+    assert us10y["officialOverlayFailureReason"] == "stale_official_row"
+    details = us10y["officialOverlayFailureDetails"]
+    attempts = details["providerAttemptDetails"]
+    assert [(attempt["providerName"], attempt["reason"]) for attempt in attempts] == [
+        ("treasury", "timeout"),
+        ("fred", "stale_official_row"),
+    ]
+    assert all(attempt["requestedSeries"] == "DGS10" for attempt in attempts)
+    assert "SECRET" not in str(details)
+    assert "api_key" not in str(details).lower()
+
+
 def test_cn00y_static_fallback_is_explicit_and_capped() -> None:
     service = MarketOverviewService()
 

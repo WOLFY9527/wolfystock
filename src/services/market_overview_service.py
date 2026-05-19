@@ -2746,6 +2746,7 @@ class MarketOverviewService:
         points: Dict[str, List[MacroObservation]] = {}
         diagnostics: Dict[str, str] = {}
         diagnostic_details: Dict[str, Dict[str, Any]] = {}
+        provider_attempt_details: Dict[str, List[Dict[str, Any]]] = {}
         fetched_at = time.monotonic()
         fred_series_ids = ["VIXCLS", "DGS10", "DGS30", "DGS2", "SOFR"]
         if include_policy_and_inflation:
@@ -2797,6 +2798,43 @@ class MarketOverviewService:
         fred_refresh_disabled_reason: str | None = None
         fred_refresh_disabled_details: Dict[str, Any] | None = None
 
+        def record_provider_attempt(
+            series_id: str,
+            reason: str,
+            *,
+            provider_name: str,
+            source_id: str,
+            attempted_at: str | None = None,
+            timeout_seconds: float | None = None,
+            exception: Exception | None = None,
+            transport_details: Any = None,
+        ) -> None:
+            details = self._official_macro_failure_details(
+                series_id,
+                reason,
+                provider_name=provider_name,
+                source_id=source_id,
+                attempted_at=attempted_at or _now_iso(),
+                timeout_seconds=timeout_seconds,
+                exception=exception,
+                transport_details=transport_details,
+            )
+            details["reason"] = str(reason or "").strip().lower()
+            safe_detail = self._sanitize_official_macro_provider_attempt_detail(details, series_id=series_id)
+            if safe_detail:
+                provider_attempt_details.setdefault(series_id, []).append(safe_detail)
+
+        def attach_provider_attempt_details() -> None:
+            for series_id, attempts in provider_attempt_details.items():
+                if series_id not in diagnostics or len(attempts) < 2:
+                    continue
+                details = dict(diagnostic_details.get(series_id) or {})
+                details["providerAttemptDetails"] = list(attempts)
+                diagnostic_details[series_id] = self._sanitize_official_macro_failure_details(
+                    details,
+                    series_id=series_id,
+                )
+
         def fetch_fred_series(series_id: str) -> None:
             nonlocal fred_refresh_disabled_reason, fred_refresh_disabled_details
             attempted_fred_series.add(series_id)
@@ -2840,6 +2878,16 @@ class MarketOverviewService:
                 if fred_error_reason in {"missing_api_key", "disabled_config"}:
                     fred_refresh_disabled_reason = fred_error_reason
                     fred_refresh_disabled_details = dict(fred_error_details or {})
+                record_provider_attempt(
+                    series_id,
+                    fred_error_reason,
+                    provider_name="fred",
+                    source_id=f"fred:{series_id}",
+                    attempted_at=_now_iso(),
+                    timeout_seconds=timeout,
+                    exception=exc,
+                    transport_details=fred_error_details,
+                )
                 self._record_official_macro_diagnostic(
                     diagnostics,
                     series_id,
@@ -2855,6 +2903,14 @@ class MarketOverviewService:
                     diagnostics.pop(series_id, None)
                     diagnostic_details.pop(series_id, None)
                 else:
+                    record_provider_attempt(
+                        series_id,
+                        freshness_reason,
+                        provider_name=self._provider_name_for_series(series_id, series_points[0].source_id if series_points else None),
+                        source_id=series_points[0].source_id if series_points else f"fred:{series_id}",
+                        attempted_at=_now_iso(),
+                        timeout_seconds=timeout,
+                    )
                     self._record_official_macro_diagnostic(
                         diagnostics,
                         series_id,
@@ -2869,6 +2925,14 @@ class MarketOverviewService:
                         ),
                     )
             elif fred_error_reason is None:
+                record_provider_attempt(
+                    series_id,
+                    "empty_response",
+                    provider_name="fred",
+                    source_id=f"fred:{series_id}",
+                    attempted_at=_now_iso(),
+                    timeout_seconds=timeout,
+                )
                 self._record_official_macro_diagnostic(
                     diagnostics,
                     series_id,
@@ -2890,7 +2954,13 @@ class MarketOverviewService:
         treasury_series_ids = {"DGS2", "DGS10", "DGS30"}
         missing_treasury_series_ids = {series_id for series_id in treasury_series_ids if series_id not in points}
         if missing_treasury_series_ids:
-            timeout = self._deadline_timeout(deadline, self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
+            treasury_timeout_cap = self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS
+            if {"DGS10", "DGS30"} & missing_treasury_series_ids:
+                treasury_timeout_cap = min(
+                    float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
+                    self._deadline_remaining(deadline) / 2.0,
+                )
+            timeout = self._deadline_timeout(deadline, treasury_timeout_cap)
         else:
             timeout = None
         if timeout is not None:
@@ -2921,6 +2991,14 @@ class MarketOverviewService:
                         diagnostics.pop(series_id, None)
                         diagnostic_details.pop(series_id, None)
                     else:
+                        record_provider_attempt(
+                            series_id,
+                            freshness_reason,
+                            provider_name="treasury",
+                            source_id=series_points[0].source_id if series_points else "treasury:daily_treasury_yield_curve",
+                            attempted_at=_now_iso(),
+                            timeout_seconds=timeout,
+                        )
                         self._record_official_macro_diagnostic(
                             diagnostics,
                             series_id,
@@ -2935,6 +3013,14 @@ class MarketOverviewService:
                             ),
                         )
                 elif series_id in treasury_points:
+                    record_provider_attempt(
+                        series_id,
+                        "empty_response",
+                        provider_name="treasury",
+                        source_id="treasury:daily_treasury_yield_curve",
+                        attempted_at=_now_iso(),
+                        timeout_seconds=timeout,
+                    )
                     self._record_official_macro_diagnostic(
                         diagnostics,
                         series_id,
@@ -2950,6 +3036,15 @@ class MarketOverviewService:
                         ),
                     )
                 elif treasury_error_reason is not None:
+                    record_provider_attempt(
+                        series_id,
+                        treasury_error_reason,
+                        provider_name="treasury",
+                        source_id="treasury:daily_treasury_yield_curve",
+                        attempted_at=_now_iso(),
+                        timeout_seconds=timeout,
+                        transport_details=treasury_error_details,
+                    )
                     self._record_official_macro_diagnostic(
                         diagnostics,
                         series_id,
@@ -2966,6 +3061,14 @@ class MarketOverviewService:
                         ),
                     )
                 else:
+                    record_provider_attempt(
+                        series_id,
+                        "missing_series",
+                        provider_name="treasury",
+                        source_id="treasury:daily_treasury_yield_curve",
+                        attempted_at=_now_iso(),
+                        timeout_seconds=timeout,
+                    )
                     self._record_official_macro_diagnostic(
                         diagnostics,
                         series_id,
@@ -3013,6 +3116,7 @@ class MarketOverviewService:
                         ),
                     )
             self._official_macro_overlay_diagnostics = diagnostics
+            attach_provider_attempt_details()
             self._official_macro_overlay_diagnostic_details = diagnostic_details
             return points
         for index, series_id in enumerate(fred_series_ids):
@@ -3057,6 +3161,7 @@ class MarketOverviewService:
                             ),
                         )
                 break
+        attach_provider_attempt_details()
         self._official_macro_overlay_diagnostics = diagnostics
         self._official_macro_overlay_diagnostic_details = diagnostic_details
         return points
@@ -3183,6 +3288,7 @@ class MarketOverviewService:
             "exceptionChain",
             "requestedSeries",
             "attemptedAt",
+            "providerAttemptDetails",
         ):
             if key not in details:
                 continue
@@ -3207,11 +3313,100 @@ class MarketOverviewService:
                 chain = MarketOverviewService._sanitize_exception_chain(value)
                 if chain:
                     safe[key] = chain
+            elif key == "providerAttemptDetails":
+                attempts = MarketOverviewService._sanitize_official_macro_provider_attempt_details(
+                    value,
+                    series_id=series_id,
+                )
+                if attempts:
+                    safe[key] = attempts
             else:
                 text = str(value or "").strip()
                 if text:
                     safe[key] = text
         safe["requestedSeries"] = str(series_id)
+        return safe
+
+    @staticmethod
+    def _sanitize_official_macro_provider_attempt_details(
+        value: Any,
+        *,
+        series_id: str,
+    ) -> List[Dict[str, Any]]:
+        if not isinstance(value, (list, tuple)):
+            return []
+        attempts: List[Dict[str, Any]] = []
+        for item in value:
+            attempt = MarketOverviewService._sanitize_official_macro_provider_attempt_detail(
+                item,
+                series_id=series_id,
+            )
+            if attempt:
+                attempts.append(attempt)
+        return attempts
+
+    @staticmethod
+    def _sanitize_official_macro_provider_attempt_detail(
+        details: Any,
+        *,
+        series_id: str,
+    ) -> Dict[str, Any]:
+        if not isinstance(details, dict):
+            return {}
+        safe: Dict[str, Any] = {}
+        for key in (
+            "providerName",
+            "requestedSeries",
+            "reason",
+            "endpointHost",
+            "caBundleSource",
+            "httpStatus",
+            "timeoutSeconds",
+            "exceptionClass",
+            "exceptionChain",
+            "attemptedAt",
+            "configPresent",
+            "apiKeyPresent",
+        ):
+            if key not in details:
+                continue
+            value = details.get(key)
+            if key in {"configPresent", "apiKeyPresent"}:
+                safe[key] = bool(value)
+            elif key == "httpStatus":
+                try:
+                    safe[key] = int(value)
+                except (TypeError, ValueError):
+                    continue
+            elif key == "timeoutSeconds":
+                try:
+                    safe[key] = round(float(value), 3)
+                except (TypeError, ValueError):
+                    continue
+            elif key == "caBundleSource":
+                source = str(value or "").strip().lower()
+                if source in {"env", "certifi", "system"}:
+                    safe[key] = source
+            elif key == "exceptionChain":
+                chain = MarketOverviewService._sanitize_exception_chain(value)
+                if chain:
+                    safe[key] = chain
+            elif key == "reason":
+                reason = str(value or "").strip().lower()
+                safe[key] = (
+                    reason
+                    if reason == "success" or reason in OFFICIAL_OVERLAY_FAILURE_REASONS
+                    else "transport_error"
+                )
+            else:
+                text = str(value or "").strip()
+                if text:
+                    safe[key] = text
+        safe["requestedSeries"] = str(series_id)
+        provider_name = str(safe.get("providerName") or "").strip()
+        reason = str(safe.get("reason") or "").strip()
+        if not provider_name or not reason:
+            return {}
         return safe
 
     @staticmethod
