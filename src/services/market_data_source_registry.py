@@ -21,6 +21,7 @@ CANONICAL_SOURCE_TYPES = {
 }
 
 SOURCE_TYPE_BY_SOURCE = {
+    "akshare": "public_proxy",
     "aksharefetcher": "public_proxy",
     "alternative": "official_public",
     "alternative_me": "official_public",
@@ -101,6 +102,7 @@ SOURCE_TYPE_ALIASES = {
 }
 
 SOURCE_LABEL_BY_SOURCE = {
+    "akshare": "AkShare",
     "aksharefetcher": "AkShare",
     "alternative": "Alternative.me",
     "alternative_me": "Alternative.me",

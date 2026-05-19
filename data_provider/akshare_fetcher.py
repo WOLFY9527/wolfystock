@@ -28,7 +28,9 @@ import os
 import random
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
+from queue import Empty, Queue
+from threading import Thread
 from typing import Optional, Dict, Any, List, Tuple
 
 import pandas as pd
@@ -43,6 +45,8 @@ from tenacity import (
 
 from patch.eastmoney_patch import eastmoney_patch
 from src.config import get_config
+from src.contracts.source_confidence import evaluate_market_intelligence_trust
+from src.services.market_data_source_registry import project_source_provenance
 from .base import BaseFetcher, DataFetchError, RateLimitError, STANDARD_COLUMNS, is_bse_code, is_st_stock, is_kc_cy_stock, normalize_stock_code
 from .realtime_types import (
     UnifiedRealtimeQuote, ChipDistribution, RealtimeSource,
@@ -266,6 +270,26 @@ class AkshareFetcher(BaseFetcher):
     
     name = "AkshareFetcher"
     priority = int(os.getenv("AKSHARE_PRIORITY", "1"))
+    SUPPORTED_CAPABILITIES = (
+        "cn_stock_list",
+        "cn_realtime_snapshot",
+        "cn_realtime_quote",
+        "cn_history_daily",
+        "cn_index_quote",
+        "cn_market_stats",
+        "cn_sector_rankings",
+        "cn_etf_realtime_quote",
+        "cn_etf_history_daily",
+        "hk_realtime_quote",
+        "hk_history_daily",
+        "chip_distribution",
+    )
+    UNSUPPORTED_CAPABILITIES = (
+        "us_realtime_quote",
+        "us_history_daily",
+        "hk_index_quote",
+    )
+    FRESHNESS_EXPECTATION = "best_effort_public_web_quote_snapshot_and_daily_history"
     
     def __init__(self, sleep_min: float = 2.0, sleep_max: float = 5.0):
         """
@@ -281,6 +305,120 @@ class AkshareFetcher(BaseFetcher):
         # 东财补丁开启才执行打补丁操作
         if get_config().enable_eastmoney_patch:
             eastmoney_patch()
+
+    def _get_akshare(self):
+        """Lazily import akshare so probe and runtime remain optional-dependency safe."""
+        try:
+            import akshare as ak
+            return ak
+        except ImportError:
+            logger.warning("akshare 未安装，请运行: pip install akshare")
+            return None
+
+    def _normalize_probe_timeout(self, timeout_seconds: float) -> float:
+        try:
+            timeout = float(timeout_seconds)
+        except (TypeError, ValueError):
+            timeout = 5.0
+        return timeout if timeout > 0 else 5.0
+
+    def _run_probe_callable_with_timeout(self, callable_obj, timeout_seconds: float):
+        result_queue: Queue[tuple[str, Any]] = Queue(maxsize=1)
+
+        def _runner() -> None:
+            try:
+                result_queue.put(("result", callable_obj()))
+            except Exception as exc:
+                result_queue.put(("error", exc))
+
+        thread = Thread(target=_runner, daemon=True)
+        thread.start()
+        thread.join(timeout_seconds)
+
+        if thread.is_alive():
+            raise TimeoutError("akshare capability probe timed out")
+
+        try:
+            result_type, payload = result_queue.get_nowait()
+        except Empty as exc:
+            raise RuntimeError("akshare capability probe returned no result") from exc
+
+        if result_type == "error":
+            raise payload
+        return payload
+
+    def _probe_interface_health(self, timeout_seconds: float) -> tuple[bool | None, str, str | None]:
+        ak = self._get_akshare()
+        if ak is None:
+            return None, "missing_dependency", "akshare_not_installed"
+
+        probe_callable = getattr(ak, "stock_info_a_code_name", None)
+        if not callable(probe_callable):
+            return False, "missing_probe_interface", "akshare_probe_interface_missing"
+
+        try:
+            result = self._run_probe_callable_with_timeout(probe_callable, timeout_seconds)
+        except TimeoutError:
+            return False, "timeout", "akshare_probe_timeout"
+        except Exception as exc:
+            logger.debug(f"AKShare capability probe failed: {exc}")
+            return False, "error", "akshare_probe_failed"
+
+        if result is None:
+            return False, "empty_response", "akshare_probe_empty_response"
+        if hasattr(result, "empty") and bool(getattr(result, "empty")):
+            return False, "empty_response", "akshare_probe_empty_response"
+        return True, "ok", None
+
+    def probe_capabilities(self, timeout_seconds: float = 5.0) -> dict:
+        """Return additive AKShare capability metadata without changing fetch behavior."""
+        timeout = self._normalize_probe_timeout(timeout_seconds)
+        attempted_at: str | None = None
+        provenance = project_source_provenance(
+            source="akshare",
+            freshness="delayed",
+        )
+        interface_available, interface_health, degradation_reason = self._probe_interface_health(timeout)
+        dependency_installed = interface_health != "missing_dependency"
+        provider_available = bool(dependency_installed and interface_available)
+        if dependency_installed:
+            attempted_at = datetime.now(timezone.utc).isoformat()
+
+        trust = evaluate_market_intelligence_trust(
+            source="akshare",
+            sourceType=provenance["sourceType"],
+            sourceTier="unofficial_public_api",
+            freshness="delayed" if provider_available else "unavailable",
+            confidenceWeight=0.45,
+            degradationReason=degradation_reason,
+        )
+
+        missing_provider_reason = None
+        if not provider_available:
+            missing_provider_reason = degradation_reason or "akshare_provider_unavailable"
+
+        return {
+            "providerName": "akshare",
+            "providerId": "akshare",
+            "source": "akshare",
+            "sourceType": provenance["sourceType"],
+            "sourceLabel": provenance["sourceLabel"],
+            "dependencyInstalled": dependency_installed,
+            "providerAvailable": provider_available,
+            "interfaceHealth": interface_health,
+            "supportedCapabilities": list(self.SUPPORTED_CAPABILITIES),
+            "unsupportedCapabilities": list(self.UNSUPPORTED_CAPABILITIES),
+            "sourceTier": trust["sourceTier"],
+            "trustLevel": trust["trustLevel"],
+            "freshness": trust["freshness"],
+            "freshnessExpectation": self.FRESHNESS_EXPECTATION,
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "degradationReason": degradation_reason,
+            "missingProviderReason": missing_provider_reason,
+            "timeoutSeconds": timeout_seconds,
+            "attemptedAt": attempted_at,
+        }
 
     def get_stock_list(self) -> Optional[pd.DataFrame]:
         """
@@ -317,7 +455,6 @@ class AkshareFetcher(BaseFetcher):
         这是关键的反爬策略之一
         """
         try:
-            import akshare as ak
             # akshare 内部使用 requests，我们通过环境变量或直接设置来影响
             # 实际上 akshare 可能不直接暴露 session，这里通过 fake_useragent 作为补充
             random_ua = random.choice(USER_AGENTS)
