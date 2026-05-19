@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
+from src.config import Config
 from src.services.market_cache import market_cache
 from src.services.market_overview_service import MarketOverviewService
 from src.services.official_macro_transport import MacroObservation, OfficialMacroTransportError
@@ -387,6 +388,74 @@ def test_vix_fred_missing_api_key_reason_is_propagated_to_proxy_item() -> None:
     assert vix["officialOverlayAvailable"] is False
     assert vix["officialOverlayFailureReason"] == "missing_api_key"
     assert vix["activationHint"] == "official_overlay_unavailable_using_proxy"
+
+
+def test_vix_fred_missing_runtime_config_uses_config_probe_without_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = MarketOverviewService()
+    as_of = datetime.now(CN_TZ)
+    monkeypatch.setenv("FRED_API_KEY", "")
+    Config.reset_instance()
+
+    def history(ticker: str) -> _HistoryFrame:
+        if ticker == "^VIX":
+            return _HistoryFrame([18.0, 15.0], as_of=as_of, volumes=[1_000_000, 1_100_000])
+        raise RuntimeError(f"{ticker} fixture unavailable")
+
+    log_patcher = _log_patch()
+    try:
+        with (
+            patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", side_effect=history),
+            patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", return_value={}),
+            patch("src.services.official_macro_transport.urlopen", side_effect=AssertionError("network should not be called")),
+            patch.object(service, "_atr_item", return_value=None),
+        ):
+            payload = service.get_volatility()
+    finally:
+        log_patcher.stop()
+        Config.reset_instance()
+
+    vix = _item(payload, "VIX")
+    assert vix["officialOverlayFailureReason"] == "missing_api_key"
+    diagnostics = vix["officialOverlayFailureDetails"]
+    assert diagnostics["providerName"] == "fred"
+    assert diagnostics["endpointHost"] == "api.stlouisfed.org"
+    assert diagnostics["requestedSeries"] == "VIXCLS"
+    assert diagnostics["configPresent"] is True
+    assert diagnostics["apiKeyPresent"] is False
+    assert "api_key" not in str(diagnostics)
+
+
+def test_vix_runtime_timeout_exception_is_not_collapsed_to_transport_error() -> None:
+    service = MarketOverviewService()
+    as_of = datetime.now(CN_TZ)
+
+    def history(ticker: str) -> _HistoryFrame:
+        if ticker == "^VIX":
+            return _HistoryFrame([18.0, 15.0], as_of=as_of, volumes=[1_000_000, 1_100_000])
+        raise RuntimeError(f"{ticker} fixture unavailable")
+
+    log_patcher = _log_patch()
+    try:
+        with (
+            patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", side_effect=history),
+            patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", return_value={}),
+            patch(
+                "src.services.market_overview_service.fetch_fred_observation_points",
+                side_effect=RuntimeError("read timed out token=SECRET"),
+            ),
+            patch.object(service, "_atr_item", return_value=None),
+        ):
+            payload = service.get_volatility()
+    finally:
+        log_patcher.stop()
+
+    vix = _item(payload, "VIX")
+    assert vix["officialOverlayFailureReason"] == "timeout"
+    diagnostics = vix["officialOverlayFailureDetails"]
+    assert diagnostics["providerName"] == "fred"
+    assert diagnostics["requestedSeries"] == "VIXCLS"
+    assert diagnostics["exceptionClass"] == "RuntimeError"
+    assert "SECRET" not in str(diagnostics)
 
 
 def test_fred_vix_priority_preserves_overlay_when_lower_priority_sources_exhaust_budget() -> None:

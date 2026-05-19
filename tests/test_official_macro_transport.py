@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import ast
 import json
+import socket
 from pathlib import Path
 from unittest.mock import patch
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 import pytest
 
@@ -142,6 +143,13 @@ def test_fetch_fred_observation_points_reports_missing_api_key_without_network_c
 
     assert exc_info.value.reason == "missing_api_key"
     assert "api key" in str(exc_info.value).lower()
+    diagnostics = exc_info.value.diagnostics
+    assert diagnostics["providerName"] == "fred"
+    assert diagnostics["endpointHost"] == "api.stlouisfed.org"
+    assert diagnostics["requestedSeries"] == "VIXCLS"
+    assert diagnostics["configPresent"] is True
+    assert diagnostics["apiKeyPresent"] is False
+    assert "api_key" not in json.dumps(diagnostics)
 
 
 def test_fetch_fred_observation_points_reports_non_2xx_http_response() -> None:
@@ -167,6 +175,26 @@ def test_fetch_fred_observation_points_reports_timeout() -> None:
             fetch_fred_observation_points("DGS30", api_key="fred-test-key", limit=1)
 
     assert exc_info.value.reason == "timeout"
+
+
+def test_fetch_fred_observation_points_reports_urlerror_timeout_with_safe_diagnostics() -> None:
+    with patch(
+        "src.services.official_macro_transport.urlopen",
+        side_effect=URLError(socket.timeout("timed out token=SECRET")),
+    ):
+        with pytest.raises(OfficialMacroTransportError) as exc_info:
+            fetch_fred_observation_points("DGS10", api_key="fred-test-key", limit=1, timeout=1.25)
+
+    assert exc_info.value.reason == "timeout"
+    diagnostics = exc_info.value.diagnostics
+    assert diagnostics["providerName"] == "fred"
+    assert diagnostics["endpointHost"] == "api.stlouisfed.org"
+    assert diagnostics["requestedSeries"] == "DGS10"
+    assert diagnostics["apiKeyPresent"] is True
+    assert diagnostics["timeoutSeconds"] == 1.25
+    assert diagnostics["exceptionClass"] == "TimeoutError"
+    assert "SECRET" not in json.dumps(diagnostics)
+    assert "fred-test-key" not in json.dumps(diagnostics)
 
 
 def test_fetch_fred_observation_points_reports_empty_transport_body() -> None:

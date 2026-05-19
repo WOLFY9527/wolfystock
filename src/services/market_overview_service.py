@@ -4,16 +4,12 @@
 from __future__ import annotations
 
 import copy
-import csv
 import math
 import os
-import socket
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
-from json import JSONDecodeError
 from typing import Any, Callable, Dict, List, Optional
-from urllib.error import HTTPError, URLError
 
 from src.contracts.source_confidence import coerce_source_confidence_contract
 from src.services.execution_log_service import ExecutionLogService
@@ -25,8 +21,10 @@ from src.services.official_macro_source_registry import get_official_macro_sourc
 from src.services.official_macro_transport import (
     MacroObservation,
     OfficialMacroTransportError,
+    classify_official_macro_exception,
     fetch_fred_observation_points,
     fetch_treasury_daily_rate_observation_points,
+    fred_runtime_config_probe,
 )
 from src.services.market_overview_binance_transport import (
     fetch_binance_funding_row,
@@ -419,6 +417,7 @@ class MarketOverviewService:
     def __init__(self) -> None:
         self._official_macro_micro_cache: Dict[str, tuple[float, List[MacroObservation]]] = {}
         self._official_macro_overlay_diagnostics: Dict[str, str] = {}
+        self._official_macro_overlay_diagnostic_details: Dict[str, Dict[str, Any]] = {}
         self._quote_request_memo: Optional[Dict[str, tuple[bool, Any]]] = None
 
     INDEX_SYMBOLS = {
@@ -2746,6 +2745,7 @@ class MarketOverviewService:
     ) -> Dict[str, List[MacroObservation]]:
         points: Dict[str, List[MacroObservation]] = {}
         diagnostics: Dict[str, str] = {}
+        diagnostic_details: Dict[str, Dict[str, Any]] = {}
         fetched_at = time.monotonic()
         fred_series_ids = ["VIXCLS", "DGS2", "DGS10", "DGS30", "SOFR"]
         if include_policy_and_inflation:
@@ -2759,9 +2759,34 @@ class MarketOverviewService:
                 if freshness_reason is None:
                     points[series_id] = cached_points
                 else:
-                    diagnostics[series_id] = freshness_reason
+                    self._record_official_macro_diagnostic(
+                        diagnostics,
+                        series_id,
+                        freshness_reason,
+                        diagnostic_details=diagnostic_details,
+                        details=self._official_macro_failure_details(
+                            series_id,
+                            freshness_reason,
+                            provider_name=self._provider_name_for_series(series_id),
+                            source_id=self._source_id_for_series(series_id),
+                            attempted_at=_now_iso(),
+                            timeout_seconds=self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS,
+                        ),
+                    )
             else:
-                diagnostics[series_id] = "cache_miss"
+                self._record_official_macro_diagnostic(
+                    diagnostics,
+                    series_id,
+                    "cache_miss",
+                    diagnostic_details=diagnostic_details,
+                    details=self._official_macro_failure_details(
+                        series_id,
+                        "cache_miss",
+                        provider_name=self._provider_name_for_series(series_id),
+                        source_id=self._source_id_for_series(series_id),
+                        attempted_at=_now_iso(),
+                    ),
+                )
 
         deadline = self._deadline_after(
             self.OFFICIAL_MACRO_AGGREGATE_BUDGET_SECONDS
@@ -2770,15 +2795,29 @@ class MarketOverviewService:
         )
         attempted_fred_series: set[str] = set()
         fred_refresh_disabled_reason: str | None = None
+        fred_refresh_disabled_details: Dict[str, Any] | None = None
 
         def fetch_fred_series(series_id: str) -> None:
-            nonlocal fred_refresh_disabled_reason
+            nonlocal fred_refresh_disabled_reason, fred_refresh_disabled_details
             attempted_fred_series.add(series_id)
             timeout = self._deadline_timeout(deadline, self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
             if timeout is None:
-                self._record_official_macro_diagnostic(diagnostics, series_id, "budget_exhausted")
+                self._record_official_macro_diagnostic(
+                    diagnostics,
+                    series_id,
+                    "budget_exhausted",
+                    diagnostic_details=diagnostic_details,
+                    details=self._official_macro_failure_details(
+                        series_id,
+                        "budget_exhausted",
+                        provider_name="fred",
+                        source_id=f"fred:{series_id}",
+                        attempted_at=_now_iso(),
+                    ),
+                )
                 return
             fred_error_reason: str | None = None
+            fred_error_details: Dict[str, Any] | None = None
             try:
                 series_points = fetch_fred_observation_points(
                     series_id,
@@ -2788,19 +2827,62 @@ class MarketOverviewService:
             except Exception as exc:
                 series_points = []
                 fred_error_reason = self._official_macro_exception_reason(exc)
+                fred_error_details = self._official_macro_failure_details(
+                    series_id,
+                    fred_error_reason,
+                    provider_name="fred",
+                    source_id=f"fred:{series_id}",
+                    attempted_at=_now_iso(),
+                    timeout_seconds=timeout,
+                    exception=exc,
+                    transport_details=getattr(exc, "diagnostics", None),
+                )
                 if fred_error_reason in {"missing_api_key", "disabled_config"}:
                     fred_refresh_disabled_reason = fred_error_reason
-                self._record_official_macro_diagnostic(diagnostics, series_id, fred_error_reason)
+                    fred_refresh_disabled_details = dict(fred_error_details or {})
+                self._record_official_macro_diagnostic(
+                    diagnostics,
+                    series_id,
+                    fred_error_reason,
+                    diagnostic_details=diagnostic_details,
+                    details=fred_error_details,
+                )
             if series_points:
                 freshness_reason = self._official_macro_row_failure_reason(series_id, series_points)
                 if freshness_reason is None:
                     self._store_official_macro_points({series_id: series_points}, fetched_at)
                     points[series_id] = series_points
                     diagnostics.pop(series_id, None)
+                    diagnostic_details.pop(series_id, None)
                 else:
-                    self._record_official_macro_diagnostic(diagnostics, series_id, freshness_reason)
+                    self._record_official_macro_diagnostic(
+                        diagnostics,
+                        series_id,
+                        freshness_reason,
+                        diagnostic_details=diagnostic_details,
+                        details=self._official_macro_failure_details(
+                            series_id,
+                            freshness_reason,
+                            provider_name=self._provider_name_for_series(series_id, series_points[0].source_id if series_points else None),
+                            source_id=series_points[0].source_id if series_points else f"fred:{series_id}",
+                            attempted_at=_now_iso(),
+                        ),
+                    )
             elif fred_error_reason is None:
-                self._record_official_macro_diagnostic(diagnostics, series_id, "empty_response")
+                self._record_official_macro_diagnostic(
+                    diagnostics,
+                    series_id,
+                    "empty_response",
+                    diagnostic_details=diagnostic_details,
+                    details=self._official_macro_failure_details(
+                        series_id,
+                        "empty_response",
+                        provider_name="fred",
+                        source_id=f"fred:{series_id}",
+                        attempted_at=_now_iso(),
+                        timeout_seconds=timeout,
+                    ),
+                )
 
         if "VIXCLS" not in points:
             fetch_fred_series("VIXCLS")
@@ -2813,11 +2895,22 @@ class MarketOverviewService:
             timeout = None
         if timeout is not None:
             treasury_error_reason: str | None = None
+            treasury_error_details: Dict[str, Any] | None = None
             try:
                 treasury_points = fetch_treasury_daily_rate_observation_points(limit=2, timeout=timeout)
             except Exception as exc:
                 treasury_points = {}
                 treasury_error_reason = self._official_macro_exception_reason(exc)
+                treasury_error_details = self._official_macro_failure_details(
+                    "DGS10",
+                    treasury_error_reason,
+                    provider_name="treasury",
+                    source_id="treasury:daily_treasury_yield_curve",
+                    attempted_at=_now_iso(),
+                    timeout_seconds=timeout,
+                    exception=exc,
+                    transport_details=getattr(exc, "diagnostics", None),
+                )
             self._store_official_macro_points(treasury_points, fetched_at)
             for series_id in treasury_series_ids:
                 series_points = treasury_points.get(series_id, [])
@@ -2826,22 +2919,101 @@ class MarketOverviewService:
                     if freshness_reason is None:
                         points[series_id] = list(series_points)
                         diagnostics.pop(series_id, None)
+                        diagnostic_details.pop(series_id, None)
                     else:
-                        self._record_official_macro_diagnostic(diagnostics, series_id, freshness_reason)
+                        self._record_official_macro_diagnostic(
+                            diagnostics,
+                            series_id,
+                            freshness_reason,
+                            diagnostic_details=diagnostic_details,
+                            details=self._official_macro_failure_details(
+                                series_id,
+                                freshness_reason,
+                                provider_name="treasury",
+                                source_id=series_points[0].source_id if series_points else "treasury:daily_treasury_yield_curve",
+                                attempted_at=_now_iso(),
+                            ),
+                        )
                 elif series_id in treasury_points:
-                    self._record_official_macro_diagnostic(diagnostics, series_id, "empty_response")
+                    self._record_official_macro_diagnostic(
+                        diagnostics,
+                        series_id,
+                        "empty_response",
+                        diagnostic_details=diagnostic_details,
+                        details=self._official_macro_failure_details(
+                            series_id,
+                            "empty_response",
+                            provider_name="treasury",
+                            source_id="treasury:daily_treasury_yield_curve",
+                            attempted_at=_now_iso(),
+                            timeout_seconds=timeout,
+                        ),
+                    )
                 elif treasury_error_reason is not None:
-                    self._record_official_macro_diagnostic(diagnostics, series_id, treasury_error_reason)
+                    self._record_official_macro_diagnostic(
+                        diagnostics,
+                        series_id,
+                        treasury_error_reason,
+                        diagnostic_details=diagnostic_details,
+                        details=self._official_macro_failure_details(
+                            series_id,
+                            treasury_error_reason,
+                            provider_name="treasury",
+                            source_id="treasury:daily_treasury_yield_curve",
+                            attempted_at=_now_iso(),
+                            timeout_seconds=timeout,
+                            transport_details=treasury_error_details,
+                        ),
+                    )
                 else:
-                    self._record_official_macro_diagnostic(diagnostics, series_id, "missing_series")
+                    self._record_official_macro_diagnostic(
+                        diagnostics,
+                        series_id,
+                        "missing_series",
+                        diagnostic_details=diagnostic_details,
+                        details=self._official_macro_failure_details(
+                            series_id,
+                            "missing_series",
+                            provider_name="treasury",
+                            source_id="treasury:daily_treasury_yield_curve",
+                            attempted_at=_now_iso(),
+                            timeout_seconds=timeout,
+                        ),
+                    )
         else:
             for series_id in missing_treasury_series_ids:
-                self._record_official_macro_diagnostic(diagnostics, series_id, "budget_exhausted")
+                self._record_official_macro_diagnostic(
+                    diagnostics,
+                    series_id,
+                    "budget_exhausted",
+                    diagnostic_details=diagnostic_details,
+                    details=self._official_macro_failure_details(
+                        series_id,
+                        "budget_exhausted",
+                        provider_name="treasury",
+                        source_id="treasury:daily_treasury_yield_curve",
+                        attempted_at=_now_iso(),
+                    ),
+                )
         if fred_refresh_disabled_reason is not None:
             for series_id in fred_series_ids:
                 if series_id not in points:
-                    self._record_official_macro_diagnostic(diagnostics, series_id, fred_refresh_disabled_reason)
+                    self._record_official_macro_diagnostic(
+                        diagnostics,
+                        series_id,
+                        fred_refresh_disabled_reason,
+                        diagnostic_details=diagnostic_details,
+                        details=self._official_macro_failure_details(
+                            series_id,
+                            fred_refresh_disabled_reason,
+                            provider_name="fred",
+                            source_id=f"fred:{series_id}",
+                            attempted_at=_now_iso(),
+                            transport_details=fred_refresh_disabled_details,
+                        ),
+                    )
             self._official_macro_overlay_diagnostics = diagnostics
+            self._official_macro_overlay_diagnostic_details = diagnostic_details
             return points
         for index, series_id in enumerate(fred_series_ids):
             if series_id in points and points[series_id]:
@@ -2856,6 +3028,14 @@ class MarketOverviewService:
                             diagnostics,
                             remaining_series_id,
                             "budget_exhausted",
+                            diagnostic_details=diagnostic_details,
+                            details=self._official_macro_failure_details(
+                                remaining_series_id,
+                                "budget_exhausted",
+                                provider_name="fred",
+                                source_id=f"fred:{remaining_series_id}",
+                                attempted_at=_now_iso(),
+                            ),
                         )
                 break
             fetch_fred_series(series_id)
@@ -2866,9 +3046,19 @@ class MarketOverviewService:
                             diagnostics,
                             remaining_series_id,
                             fred_refresh_disabled_reason,
+                            diagnostic_details=diagnostic_details,
+                            details=self._official_macro_failure_details(
+                                remaining_series_id,
+                                fred_refresh_disabled_reason,
+                                provider_name="fred",
+                                source_id=f"fred:{remaining_series_id}",
+                                attempted_at=_now_iso(),
+                                transport_details=fred_refresh_disabled_details,
+                            ),
                         )
                 break
         self._official_macro_overlay_diagnostics = diagnostics
+        self._official_macro_overlay_diagnostic_details = diagnostic_details
         return points
 
     @staticmethod
@@ -2894,20 +3084,122 @@ class MarketOverviewService:
 
     @staticmethod
     def _official_macro_exception_reason(exc: Exception) -> str:
+        return classify_official_macro_exception(exc)
+
+    def _official_macro_failure_details(
+        self,
+        series_id: str,
+        reason: str,
+        *,
+        provider_name: str | None = None,
+        source_id: str | None = None,
+        attempted_at: str | None = None,
+        timeout_seconds: float | None = None,
+        exception: Exception | None = None,
+        transport_details: Any = None,
+    ) -> Dict[str, Any]:
+        details = self._sanitize_official_macro_failure_details(transport_details, series_id=series_id)
+        resolved_provider = provider_name or details.get("providerName") or self._provider_name_for_series(series_id, source_id)
+        details["providerName"] = str(resolved_provider)
+        details["requestedSeries"] = str(series_id)
+        details.setdefault("attemptedAt", attempted_at or _now_iso())
+        endpoint_host = self._official_macro_endpoint_host(str(details.get("providerName") or ""))
+        if endpoint_host:
+            details.setdefault("endpointHost", endpoint_host)
+        if str(details.get("providerName") or "") == "fred":
+            config_probe = fred_runtime_config_probe()
+            details.setdefault("configPresent", bool(config_probe["configPresent"]))
+            details.setdefault("apiKeyPresent", bool(config_probe["apiKeyPresent"]))
+        if timeout_seconds is not None:
+            try:
+                details.setdefault("timeoutSeconds", round(float(timeout_seconds), 3))
+            except (TypeError, ValueError):
+                pass
+        if exception is not None:
+            status_code = getattr(exception, "status_code", None) or getattr(exception, "code", None)
+            if status_code is not None:
+                try:
+                    details.setdefault("httpStatus", int(status_code))
+                except (TypeError, ValueError):
+                    pass
+            exception_class = self._official_macro_exception_class(exception)
+            if exception_class:
+                details.setdefault("exceptionClass", exception_class)
+        return self._sanitize_official_macro_failure_details(details, series_id=series_id)
+
+    @staticmethod
+    def _provider_name_for_series(series_id: str, source_id: str | None = None) -> str:
+        source_prefix = str(source_id or "").split(":", 1)[0].strip().lower()
+        if source_prefix:
+            return source_prefix
+        if str(series_id or "").upper() in {"DGS2", "DGS10", "DGS30"}:
+            return "fred"
+        return "fred"
+
+    @staticmethod
+    def _source_id_for_series(series_id: str) -> str:
+        return f"fred:{str(series_id or '').upper()}"
+
+    @staticmethod
+    def _official_macro_endpoint_host(provider_name: str) -> str | None:
+        normalized = str(provider_name or "").strip().lower()
+        if normalized == "fred":
+            return "api.stlouisfed.org"
+        if normalized == "treasury":
+            return "home.treasury.gov"
+        return None
+
+    @staticmethod
+    def _official_macro_exception_class(exc: Exception) -> str | None:
         if isinstance(exc, OfficialMacroTransportError):
-            return exc.reason
-        if isinstance(exc, (TimeoutError, socket.timeout)):
-            return "timeout"
-        if isinstance(exc, HTTPError):
-            return "http_error"
-        if isinstance(exc, URLError):
-            reason = str(getattr(exc, "reason", "") or "")
-            if "timeout" in reason.lower() or "timed out" in reason.lower():
-                return "timeout"
-            return "transport_error"
-        if isinstance(exc, (JSONDecodeError, UnicodeDecodeError, csv.Error)):
-            return "parse_error"
-        return "transport_error"
+            diagnostic_class = str(exc.diagnostics.get("exceptionClass") or "").strip()
+            if diagnostic_class:
+                return diagnostic_class
+            if exc.__cause__ is None:
+                return None
+            exc = exc.__cause__  # type: ignore[assignment]
+        reason = getattr(exc, "reason", None)
+        if reason is not None and not isinstance(reason, str):
+            return type(reason).__name__
+        return type(exc).__name__
+
+    @staticmethod
+    def _sanitize_official_macro_failure_details(details: Any, *, series_id: str) -> Dict[str, Any]:
+        if not isinstance(details, dict):
+            details = {}
+        safe: Dict[str, Any] = {}
+        for key in (
+            "configPresent",
+            "apiKeyPresent",
+            "endpointHost",
+            "providerName",
+            "httpStatus",
+            "timeoutSeconds",
+            "exceptionClass",
+            "requestedSeries",
+            "attemptedAt",
+        ):
+            if key not in details:
+                continue
+            value = details.get(key)
+            if key in {"configPresent", "apiKeyPresent"}:
+                safe[key] = bool(value)
+            elif key == "httpStatus":
+                try:
+                    safe[key] = int(value)
+                except (TypeError, ValueError):
+                    continue
+            elif key == "timeoutSeconds":
+                try:
+                    safe[key] = round(float(value), 3)
+                except (TypeError, ValueError):
+                    continue
+            else:
+                text = str(value or "").strip()
+                if text:
+                    safe[key] = text
+        safe["requestedSeries"] = str(series_id)
+        return safe
 
     def _official_macro_row_failure_reason(self, series_id: str, observations: List[MacroObservation]) -> Optional[str]:
         if not observations:
@@ -2928,8 +3220,15 @@ class MarketOverviewService:
             return self._official_macro_overlay_diagnostics.get(series_id) or "empty_response"
         return None
 
-    @staticmethod
-    def _record_official_macro_diagnostic(diagnostics: Dict[str, str], series_id: str, reason: str) -> None:
+    def _record_official_macro_diagnostic(
+        self,
+        diagnostics: Dict[str, str],
+        series_id: str,
+        reason: str,
+        *,
+        diagnostic_details: Dict[str, Dict[str, Any]] | None = None,
+        details: Any = None,
+    ) -> None:
         normalized_reason = str(reason or "").strip().lower()
         if not normalized_reason:
             return
@@ -2952,6 +3251,10 @@ class MarketOverviewService:
         }
         if normalized_reason == "stale_official_row" or current_reason in replaceable_reasons:
             diagnostics[series_id] = normalized_reason
+            if diagnostic_details is not None:
+                safe_details = self._sanitize_official_macro_failure_details(details, series_id=series_id)
+                if safe_details:
+                    diagnostic_details[series_id] = safe_details
 
     def _official_macro_item(
         self,
@@ -3054,12 +3357,26 @@ class MarketOverviewService:
             if failure_reason in {"official_overlay_stale", "stale_official_row"}
             else f"official_overlay_unavailable_using_{fallback_suffix}"
         )
+        failure_details = (
+            self._official_macro_overlay_diagnostic_details.get(series_id)
+            if series_id
+            else None
+        )
+        if series_id and not failure_details:
+            failure_details = self._official_macro_failure_details(
+                series_id,
+                failure_reason,
+                provider_name=self._provider_name_for_series(series_id),
+                source_id=f"fred:{series_id}",
+                attempted_at=_now_iso(),
+            )
         return {
             **item,
             "officialOverlayAttempted": True,
             "officialOverlayAvailable": False,
             "officialOverlayFailureReason": failure_reason,
             **({"officialOverlaySeriesId": series_id, "officialOverlaySourceId": f"fred:{series_id}"} if series_id else {}),
+            **({"officialOverlayFailureDetails": failure_details} if failure_details else {}),
             "activationHint": activation_hint,
         }
 

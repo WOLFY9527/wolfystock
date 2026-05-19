@@ -5,12 +5,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import csv
-from datetime import datetime
+from datetime import datetime, timezone
 from io import StringIO
 import json
 import socket
 from typing import Any, Iterable, Mapping, Sequence
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -58,10 +58,18 @@ DEFAULT_TRANSPORT_TIMEOUT_SECONDS = 4.0
 class OfficialMacroTransportError(RuntimeError):
     """Sanitized official macro transport failure with a stable reason bucket."""
 
-    def __init__(self, reason: str, message: str, *, status_code: int | None = None) -> None:
+    def __init__(
+        self,
+        reason: str,
+        message: str,
+        *,
+        status_code: int | None = None,
+        diagnostics: Mapping[str, Any] | None = None,
+    ) -> None:
         super().__init__(message)
         self.reason = reason
         self.status_code = status_code
+        self.diagnostics = dict(diagnostics or {})
 
 
 @dataclass(frozen=True)
@@ -327,7 +335,16 @@ def fetch_fred_observation_points(
     timeout: float = DEFAULT_TRANSPORT_TIMEOUT_SECONDS,
 ) -> list[MacroObservation]:
     request = build_fred_observations_request(series_id, api_key=api_key, limit=limit)
-    payload = json.loads(_fetch_transport_bytes(request, timeout=timeout).decode("utf-8"))
+    try:
+        payload = json.loads(_fetch_transport_bytes(request, timeout=timeout).decode("utf-8"))
+    except OfficialMacroTransportError:
+        raise
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise OfficialMacroTransportError(
+            "parse_error",
+            f"{request.source_id or 'official macro'} response could not be parsed",
+            diagnostics=_transport_diagnostics(request, timeout=timeout, exception=exc),
+        ) from exc
     return parse_fred_observation_points_payload(series_id, payload, limit=limit)
 
 
@@ -337,15 +354,26 @@ def fetch_treasury_daily_rate_observation_points(
     timeout: float = DEFAULT_TRANSPORT_TIMEOUT_SECONDS,
 ) -> dict[str, list[MacroObservation]]:
     request = build_treasury_daily_rates_request()
-    text = _fetch_transport_bytes(request, timeout=timeout).decode("utf-8-sig")
-    return parse_treasury_daily_rate_observation_points_csv(text, limit=limit)
+    try:
+        text = _fetch_transport_bytes(request, timeout=timeout).decode("utf-8-sig")
+        return parse_treasury_daily_rate_observation_points_csv(text, limit=limit)
+    except OfficialMacroTransportError:
+        raise
+    except (UnicodeDecodeError, csv.Error) as exc:
+        raise OfficialMacroTransportError(
+            "parse_error",
+            f"{request.source_id or 'official macro'} response could not be parsed",
+            diagnostics=_transport_diagnostics(request, timeout=timeout, exception=exc),
+        ) from exc
 
 
 def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) -> bytes:
+    base_diagnostics = _transport_diagnostics(request, timeout=timeout)
     if request.requires_api_key and not _text(request.params.get("api_key")):
         raise OfficialMacroTransportError(
             "missing_api_key",
             f"{request.source_id or 'official macro'} API key is not configured",
+            diagnostics=base_diagnostics,
         )
     query = urlencode(request.params)
     url = f"{request.url}?{query}" if query else request.url
@@ -358,6 +386,7 @@ def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) ->
                     "http_error",
                     f"{request.source_id or 'official macro'} returned HTTP {status_code}",
                     status_code=status_code,
+                    diagnostics=_transport_diagnostics(request, timeout=timeout, status_code=status_code),
                 )
             body = response.read()
     except OfficialMacroTransportError:
@@ -367,24 +396,47 @@ def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) ->
             "http_error",
             f"{request.source_id or 'official macro'} returned HTTP {exc.code}",
             status_code=exc.code,
+            diagnostics=_transport_diagnostics(request, timeout=timeout, exception=exc, status_code=exc.code),
         ) from exc
     except (TimeoutError, socket.timeout) as exc:
         raise OfficialMacroTransportError(
             "timeout",
             f"{request.source_id or 'official macro'} request timed out",
+            diagnostics=_transport_diagnostics(request, timeout=timeout, exception=exc),
         ) from exc
     except URLError as exc:
-        reason = "timeout" if _is_url_timeout(exc.reason) else "transport_error"
+        reason = classify_official_macro_exception(exc)
         raise OfficialMacroTransportError(
             reason,
             f"{request.source_id or 'official macro'} transport failed",
+            diagnostics=_transport_diagnostics(request, timeout=timeout, exception=exc),
         ) from exc
     if not body:
         raise OfficialMacroTransportError(
             "empty_response",
             f"{request.source_id or 'official macro'} returned an empty response",
+            diagnostics=base_diagnostics,
         )
     return body
+
+
+def classify_official_macro_exception(exc: Exception) -> str:
+    """Map runtime transport/parser exceptions to safe public reason buckets."""
+    if isinstance(exc, OfficialMacroTransportError):
+        return exc.reason
+    if isinstance(exc, (TimeoutError, socket.timeout)):
+        return "timeout"
+    if isinstance(exc, HTTPError):
+        return "http_error"
+    if isinstance(exc, URLError):
+        if _is_url_timeout(getattr(exc, "reason", None)):
+            return "timeout"
+        return "transport_error"
+    if isinstance(exc, (json.JSONDecodeError, UnicodeDecodeError, csv.Error)):
+        return "parse_error"
+    if _looks_like_timeout(exc):
+        return "timeout"
+    return "transport_error"
 
 
 def _response_status_code(response: Any) -> int:
@@ -399,6 +451,77 @@ def _is_url_timeout(reason: Any) -> bool:
     if isinstance(reason, (TimeoutError, socket.timeout)):
         return True
     return "timed out" in str(reason or "").lower() or "timeout" in str(reason or "").lower()
+
+
+def _looks_like_timeout(exc: Exception) -> bool:
+    text = str(exc or "").lower()
+    return "timed out" in text or "timeout" in text or "time out" in text
+
+
+def _transport_diagnostics(
+    request: MacroTransportRequest,
+    *,
+    timeout: float,
+    exception: Exception | None = None,
+    status_code: int | None = None,
+) -> dict[str, Any]:
+    diagnostics: dict[str, Any] = {
+        "providerName": _provider_name(request.source_id),
+        "endpointHost": urlparse(request.url).netloc,
+        "requestedSeries": _requested_series(request),
+        "attemptedAt": _utc_now_iso(),
+    }
+    try:
+        diagnostics["timeoutSeconds"] = round(float(timeout), 3)
+    except (TypeError, ValueError):
+        pass
+    if request.requires_api_key or diagnostics["providerName"] == "fred":
+        config_probe = fred_runtime_config_probe()
+        diagnostics["configPresent"] = bool(config_probe["configPresent"])
+        diagnostics["apiKeyPresent"] = bool(_text(request.params.get("api_key")) or config_probe["apiKeyPresent"])
+    if status_code is not None:
+        diagnostics["httpStatus"] = int(status_code)
+    if exception is not None:
+        diagnostics["exceptionClass"] = _exception_class(exception)
+    return {key: value for key, value in diagnostics.items() if value not in (None, "")}
+
+
+def fred_runtime_config_probe() -> dict[str, bool]:
+    """Return no-secret FRED config presence metadata for diagnostics."""
+    try:
+        from src.config import Config
+
+        config = Config.get_instance()
+        return {
+            "configPresent": config is not None,
+            "apiKeyPresent": bool(_text(getattr(config, "fred_api_key", None))),
+        }
+    except Exception:
+        return {"configPresent": False, "apiKeyPresent": False}
+
+
+def _provider_name(source_id: str | None) -> str:
+    prefix = _text(source_id).split(":", 1)[0].lower()
+    if prefix:
+        return prefix
+    return "official_macro"
+
+
+def _requested_series(request: MacroTransportRequest) -> str | None:
+    series_id = _text(request.params.get("series_id"))
+    if series_id:
+        return series_id
+    return None
+
+
+def _exception_class(exc: Exception) -> str:
+    if isinstance(exc, URLError) and getattr(exc, "reason", None) is not None:
+        return type(exc.reason).__name__
+    return type(exc).__name__
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _resolve_fred_api_key(explicit_api_key: str | None) -> str | None:
