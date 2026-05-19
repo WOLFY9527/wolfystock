@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 FreshnessLabel = Literal["live", "delayed", "cached", "stale", "fallback", "mock", "error"]
+RankingLane = Literal["headline", "observation", "taxonomy"]
 RotationStage = Literal[
     "early_watch",
     "confirmed_rotation",
@@ -112,6 +113,7 @@ class RotationRadarThemeModel(BaseModel):
     taxonomyOnly: bool = False
     observationOnly: bool = False
     headlineEligible: bool = False
+    rankingLane: RankingLane = "observation"
     scoreContributionAllowed: bool = False
     sourceTier: Optional[str] = None
     trustLevel: Optional[str] = None
@@ -174,6 +176,7 @@ class RotationRadarSummaryItemModel(BaseModel):
     taxonomyOnly: bool = False
     observationOnly: bool = False
     headlineEligible: bool = False
+    rankingLane: RankingLane = "observation"
     scoreContributionAllowed: bool = False
     sourceTier: Optional[str] = None
     trustLevel: Optional[str] = None
@@ -185,9 +188,11 @@ class RotationRadarSummaryModel(BaseModel):
     fadingThemes: List[RotationRadarSummaryItemModel] = Field(default_factory=list)
     observationThemes: List[RotationRadarSummaryItemModel] = Field(default_factory=list)
     taxonomyThemes: List[RotationRadarSummaryItemModel] = Field(default_factory=list)
+    eligibleThemeCount: int = 0
     headlineEligibleThemeCount: int = 0
     observationThemeCount: int = 0
     headlineWarning: Optional[str] = None
+    noHeadlineReason: Optional[str] = None
     rankingPolicy: Optional[str] = None
     watchlistSortingExplanation: Optional[str] = None
     safeWording: List[str] = Field(default_factory=list)

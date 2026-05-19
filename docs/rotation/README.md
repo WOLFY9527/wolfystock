@@ -21,6 +21,14 @@ fund-flow interpretation, or rotation evidence disclosure.
 - Fallback/static, synthetic, unavailable, and taxonomy-only Rotation Radar
   themes remain visible for observation, but are not eligible for headline or
   strongest-theme ranking.
+- Rotation Radar API clients must consume `summary.strongestThemes` and
+  `summary.acceleratingThemes` as headline lanes only when summary items expose
+  `rankEligible: true`, `headlineEligible: true`, and
+  `rankingLane: "headline"`. Fallback/static/taxonomy-only themes stay in
+  observation or taxonomy lanes (`summary.observationThemes`,
+  `summary.taxonomyThemes`, and the full `themes` list) with
+  `summary.noHeadlineReason` populated when no real-data theme is headline
+  eligible.
 - Theme Registry v2 metadata should keep constituent definitions, inclusion
   notes, ETF proxy coverage, and index/asset proxy concepts explicit. ETF
   proxies are relative-strength and participation proxies only, not real

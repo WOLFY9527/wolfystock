@@ -75,6 +75,28 @@ def _shared_cache_quote(symbol: str, index: int, *, freshness: str = "delayed") 
     }
 
 
+def _headline_quote(
+    symbol: str,
+    index: int,
+    *,
+    change: float | None = None,
+    volume_ratio: float = 1.35,
+    freshness: str = "cached",
+) -> dict:
+    quote = _shared_cache_quote(symbol, index, freshness=freshness)
+    if change is not None:
+        quote["changePercent"] = change
+        quote["volumeRatio"] = volume_ratio
+        quote["volume"] = 1_000_000 * volume_ratio
+        quote["timeWindows"]["1d"]["changePercent"] = change
+        quote["timeWindows"]["1d"]["relativeVolume"] = volume_ratio
+    quote["source"] = "cache"
+    quote["sourceLabel"] = "Cache Snapshot"
+    quote["sourceType"] = "cache_snapshot"
+    quote["sourceTier"] = "snapshot"
+    return quote
+
+
 def _install_counting_default_provider(
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -166,6 +188,10 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
         assert payload["summary"]["strongestThemes"] == []
         assert payload["summary"]["acceleratingThemes"] == []
         assert payload["summary"]["observationThemes"]
+        assert payload["summary"]["eligibleThemeCount"] == 0
+        assert payload["summary"]["headlineEligibleThemeCount"] == 0
+        assert payload["summary"]["observationThemeCount"] == len(payload["themes"])
+        assert payload["summary"]["noHeadlineReason"]
         assert "fallback/static" in payload["summary"]["headlineWarning"]
         assert all("missingProxySymbols" in theme for theme in payload["themes"])
         assert all("missingConstituentSymbols" in theme for theme in payload["themes"])
@@ -176,6 +202,7 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
         assert all(theme["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["freshness"] == "fallback" for theme in payload["themes"])
         assert all(theme["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["isFallback"] is True for theme in payload["themes"])
         assert all(theme["proxyQuality"]["coveragePercent"] <= 100 for theme in payload["themes"])
+        assert all(theme["rankingLane"] == "observation" for theme in payload["themes"])
         semis = next(theme for theme in payload["themes"] if theme["id"] == "semiconductors")
         assert "SOX" in semis["themeDefinition"]["proxyIndices"]
         assert "SOX" not in semis["themeDefinition"]["proxyEtfs"]
@@ -244,8 +271,12 @@ def test_market_rotation_radar_market_query_switches_theme_universe(monkeypatch:
         assert all(theme["observationOnly"] is True for theme in cn_payload["themes"])
         assert all(theme["rankEligible"] is False for theme in cn_payload["themes"])
         assert all(theme["headlineEligible"] is False for theme in cn_payload["themes"])
+        assert all(theme["rankingLane"] == "taxonomy" for theme in cn_payload["themes"])
         assert cn_payload["summary"]["strongestThemes"] == []
         assert cn_payload["summary"]["taxonomyThemes"]
+        assert cn_payload["summary"]["eligibleThemeCount"] == 0
+        assert cn_payload["summary"]["headlineEligibleThemeCount"] == 0
+        assert cn_payload["summary"]["noHeadlineReason"]
         assert all(theme["rotationStateEvidence"]["state"] == "insufficient_evidence" for theme in cn_payload["themes"])
         assert all(theme["rotationStateEvidence"]["flowEvidenceType"] == "none" for theme in cn_payload["themes"])
         assert cn_payload["metadata"]["observedEvidence"]["present"] is False
@@ -466,6 +497,68 @@ def test_market_rotation_radar_default_us_route_uses_injected_quote_provider_whe
         assert payload["metadata"]["quoteProvider"]["coverage"]["usableSymbolCount"] > 0
         assert payload["source"] == "computed"
         assert any(theme["id"] == "ai_applications" and theme["source"] != "fallback" for theme in payload["themes"])
+    finally:
+        client.close()
+
+
+def test_market_rotation_radar_route_separates_headline_and_observation_lanes_when_headline_data_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    quotes = {
+        "QQQ": _headline_quote("QQQ", 0, change=0.4, volume_ratio=1.0),
+        "SPY": _headline_quote("SPY", 1, change=0.2, volume_ratio=1.0),
+        "IWM": _headline_quote("IWM", 2, change=0.1, volume_ratio=1.0),
+        "IGV": _headline_quote("IGV", 3, change=0.8, volume_ratio=1.3),
+        "APP": _headline_quote("APP", 4, change=4.2, volume_ratio=1.8),
+        "PLTR": _headline_quote("PLTR", 5, change=3.8, volume_ratio=1.7),
+        "CRM": _headline_quote("CRM", 6, change=3.2, volume_ratio=1.6),
+        "SNOW": _headline_quote("SNOW", 7, change=2.8, volume_ratio=1.5),
+        "ADBE": _headline_quote("ADBE", 8, change=2.6, volume_ratio=1.45),
+        "NOW": _headline_quote("NOW", 9, change=2.4, volume_ratio=1.4),
+        "DUOL": _headline_quote("DUOL", 10, change=2.2, volume_ratio=1.35),
+        "MDB": _headline_quote("MDB", 11, change=2.0, volume_ratio=1.35),
+        "TEAM": _headline_quote("TEAM", 12, change=1.8, volume_ratio=1.3),
+        "WDAY": _headline_quote("WDAY", 13, change=1.6, volume_ratio=1.3),
+    }
+
+    def provider_factory():
+        def provider(symbols):
+            return {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "proxy",
+                    "sourceType": "cache_snapshot",
+                    "freshness": "cached",
+                    "asOf": "2026-05-13T09:30:00+00:00",
+                    "noExternalCalls": True,
+                },
+            }
+
+        return provider
+
+    client = _client(monkeypatch, provider_factory=provider_factory)
+    try:
+        response = client.get("/api/v1/market/rotation-radar")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["summary"]["eligibleThemeCount"] == payload["summary"]["headlineEligibleThemeCount"]
+        assert payload["summary"]["eligibleThemeCount"] > 0
+        assert payload["summary"]["noHeadlineReason"] is None
+        assert payload["summary"]["strongestThemes"]
+        assert payload["summary"]["acceleratingThemes"]
+        assert all(theme["rankEligible"] is True for theme in payload["summary"]["strongestThemes"])
+        assert all(theme["headlineEligible"] is True for theme in payload["summary"]["strongestThemes"])
+        assert all(theme["rankingLane"] == "headline" for theme in payload["summary"]["strongestThemes"])
+        assert all(theme["rankEligible"] is True for theme in payload["summary"]["acceleratingThemes"])
+        assert all(theme["headlineEligible"] is True for theme in payload["summary"]["acceleratingThemes"])
+        assert all(theme["rankingLane"] == "headline" for theme in payload["summary"]["acceleratingThemes"])
+        assert all(theme["rankEligible"] is False for theme in payload["summary"]["observationThemes"])
+        assert all(theme["headlineEligible"] is False for theme in payload["summary"]["observationThemes"])
+        assert all(theme["rankingLane"] == "observation" for theme in payload["summary"]["observationThemes"])
+        assert any(theme["id"] == "ai_applications" for theme in payload["summary"]["strongestThemes"])
+        assert payload["metadata"]["quoteProvider"]["sourceType"] == "cache_snapshot"
+        assert payload["metadata"]["quoteProvider"]["freshness"] == "cached"
     finally:
         client.close()
 

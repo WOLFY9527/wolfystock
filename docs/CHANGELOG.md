@@ -1,5 +1,15 @@
 ## 2026-05-19
 
+- **Rotation Radar headline lane contract hardening** - Rotation Radar now
+  emits explicit `rankingLane`, `eligibleThemeCount`, and
+  `noHeadlineReason` contract fields so clients can distinguish headline
+  ranking themes from observation/taxonomy themes without inferring from labels.
+  `summary.strongestThemes` and `summary.acceleratingThemes` only include
+  themes that are both `rankEligible` and `headlineEligible`; fallback/static,
+  synthetic, unavailable, and taxonomy-only themes remain available in the full
+  theme list and observation/taxonomy lanes. Provider order, data providers,
+  frontend, database schema, score formulas, and freshness/trust semantics are
+  unchanged.
 - **Rotation Radar fallback ranking quarantine** - Rotation Radar now marks
   fallback/static, synthetic, unavailable, and taxonomy-only themes with
   additive rank eligibility metadata and keeps them visible as observation-only

@@ -103,6 +103,15 @@ def _quote(
     }
 
 
+def _assert_rotation_headline_lists_are_eligible(payload: dict) -> None:
+    summary = payload["summary"]
+    for list_name in ("strongestThemes", "acceleratingThemes"):
+        for theme in summary[list_name]:
+            assert theme["rankEligible"] is True, f"{list_name} contains rank-ineligible {theme['id']}"
+            assert theme["headlineEligible"] is True, f"{list_name} contains headline-ineligible {theme['id']}"
+            assert theme["rankingLane"] == "headline", f"{list_name} contains non-headline lane {theme['id']}"
+
+
 class _FrameColumn:
     def __init__(self, values: list[float]) -> None:
         self._values = values
@@ -365,6 +374,7 @@ def test_rotation_radar_and_sector_rotation_projection_keep_evidence_non_live_wh
     assert radar_payload["source"] == "computed"
     assert radar_payload["freshness"] == "delayed"
     assert radar_payload["freshness"] != "live"
+    _assert_rotation_headline_lists_are_eligible(radar_payload)
     assert radar_payload["metadata"]["quoteProvider"]["present"] is True
     assert radar_payload["metadata"]["quoteProvider"]["sourceType"] == "cache_snapshot"
     top_theme = radar_payload["themes"][0]
@@ -398,9 +408,13 @@ def test_rotation_radar_and_sector_rotation_projection_keep_evidence_non_live_wh
     assert fallback_radar["metadata"]["quoteProvider"]["status"] == "absent"
     assert fallback_radar["summary"]["strongestThemes"] == []
     assert fallback_radar["summary"]["acceleratingThemes"] == []
+    _assert_rotation_headline_lists_are_eligible(fallback_radar)
+    assert fallback_radar["summary"]["eligibleThemeCount"] == 0
+    assert "没有可用于头部排名" in fallback_radar["summary"]["noHeadlineReason"]
     assert "fallback/static" in fallback_radar["summary"]["headlineWarning"]
     assert all(theme["rankEligible"] is False for theme in fallback_radar["themes"])
     assert all(theme["headlineEligible"] is False for theme in fallback_radar["themes"])
     assert all(theme["scoreContributionAllowed"] is False for theme in fallback_radar["themes"])
+    assert all(theme["rankingLane"] == "observation" for theme in fallback_radar["themes"])
     assert all(theme["scoreBreakdown"] for theme in fallback_radar["themes"])
     assert fallback_radar["themes"][0]["rotationStateEvidence"]["state"] == "insufficient_evidence"

@@ -391,9 +391,11 @@ class MarketRotationRadarService:
                 "fadingThemes": [self._summary_item(theme) for theme in themes[:3]],
                 "observationThemes": [self._summary_item(theme) for theme in themes[:5]],
                 "taxonomyThemes": [self._summary_item(theme) for theme in themes[:5]],
+                "eligibleThemeCount": 0,
                 "headlineEligibleThemeCount": 0,
                 "observationThemeCount": len(themes),
                 "headlineWarning": _HEADLINE_RANKING_WARNING,
+                "noHeadlineReason": _HEADLINE_RANKING_WARNING,
                 "rankingPolicy": (
                     "fallback/static/taxonomy-only/synthetic/unavailable evidence remains visible "
                     "but is excluded from headline ranking and strong conclusion lists."
@@ -1862,11 +1864,13 @@ class MarketRotationRadarService:
         if isinstance(score_breakdown, dict):
             score_breakdown["rankEligible"] = ranking["rankEligible"]
             score_breakdown["headlineEligible"] = ranking["headlineEligible"]
+            score_breakdown["rankingLane"] = ranking["rankingLane"]
             score_breakdown["scoreContributionAllowed"] = ranking["scoreContributionAllowed"]
             score_breakdown["rankExclusionReason"] = ranking["rankExclusionReason"]
         theme_detail = theme.get("themeDetail")
         if isinstance(theme_detail, dict):
             theme_detail["headlineEligible"] = ranking["headlineEligible"]
+            theme_detail["rankingLane"] = ranking["rankingLane"]
             theme_detail["rankExclusionReason"] = ranking["rankExclusionReason"]
         return theme
 
@@ -1883,12 +1887,14 @@ class MarketRotationRadarService:
         rank_eligible = exclusion_reason is None
         headline_eligible = rank_eligible and bool(trust.get("conclusionAllowed"))
         score_contribution_allowed = headline_eligible
+        ranking_lane = "taxonomy" if taxonomy_only else "headline" if headline_eligible else "observation"
         return {
             "rankEligible": rank_eligible,
             "rankExclusionReason": exclusion_reason,
             "taxonomyOnly": taxonomy_only,
             "observationOnly": not headline_eligible,
             "headlineEligible": headline_eligible,
+            "rankingLane": ranking_lane,
             "scoreContributionAllowed": score_contribution_allowed,
             "sourceTier": source_tier,
             "trustLevel": trust_level,
@@ -2562,7 +2568,7 @@ class MarketRotationRadarService:
         return items
 
     def _build_summary(self, themes: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
-        headline_themes = [theme for theme in themes if theme.get("headlineEligible")]
+        headline_themes = [theme for theme in themes if self._is_headline_ranked_theme(theme)]
         observation_themes = [theme for theme in themes if theme.get("observationOnly")]
         taxonomy_themes = [theme for theme in themes if theme.get("taxonomyOnly")]
         strongest = [self._summary_item(theme) for theme in headline_themes[:3]]
@@ -2587,9 +2593,11 @@ class MarketRotationRadarService:
             "fadingThemes": fading,
             "observationThemes": [self._summary_item(theme) for theme in observation_themes[:5]],
             "taxonomyThemes": [self._summary_item(theme) for theme in taxonomy_themes[:5]],
+            "eligibleThemeCount": len(headline_themes),
             "headlineEligibleThemeCount": len(headline_themes),
             "observationThemeCount": len(observation_themes),
             "headlineWarning": None if headline_themes else _HEADLINE_RANKING_WARNING,
+            "noHeadlineReason": None if headline_themes else _HEADLINE_RANKING_WARNING,
             "rankingPolicy": (
                 "fallback/static/taxonomy-only/synthetic/unavailable evidence remains visible "
                 "but is excluded from headline ranking and strong conclusion lists."
@@ -2609,6 +2617,14 @@ class MarketRotationRadarService:
         }
 
     @staticmethod
+    def _is_headline_ranked_theme(theme: Mapping[str, Any]) -> bool:
+        return (
+            bool(theme.get("rankEligible"))
+            and bool(theme.get("headlineEligible"))
+            and str(theme.get("rankingLane") or "headline") == "headline"
+        )
+
+    @staticmethod
     def _summary_item(theme: Mapping[str, Any]) -> Dict[str, Any]:
         return {
             "id": theme["id"],
@@ -2624,6 +2640,7 @@ class MarketRotationRadarService:
             "taxonomyOnly": bool(theme.get("taxonomyOnly")),
             "observationOnly": bool(theme.get("observationOnly")),
             "headlineEligible": bool(theme.get("headlineEligible")),
+            "rankingLane": str(theme.get("rankingLane") or "observation"),
             "scoreContributionAllowed": bool(theme.get("scoreContributionAllowed")),
             "sourceTier": theme.get("sourceTier"),
             "trustLevel": theme.get("trustLevel"),
