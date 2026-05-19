@@ -12,6 +12,8 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Mapping, Optional
 
+from src.services.source_confidence_contract import ProviderCapabilitySupportContract
+
 
 class ProviderDomain(str, Enum):
     QUOTE = "quote"
@@ -430,12 +432,176 @@ _CAPABILITIES = (
 _CAPABILITIES_BY_ID = {capability.provider_id: capability for capability in _CAPABILITIES}
 
 
+def _capability_support_entry(
+    provider_id: str,
+    capability: str,
+    *,
+    trust_level: str,
+    freshness_expectation: str,
+    degradation_reason: str,
+    missing_provider_reason: str,
+) -> ProviderCapabilitySupportContract:
+    return ProviderCapabilitySupportContract(
+        provider_name=provider_id,
+        provider_id=provider_id,
+        capability=capability,
+        source_type="public_proxy",
+        source_tier="unofficial_public_api",
+        trust_level=trust_level,
+        freshness_expectation=freshness_expectation,
+        observation_only=True,
+        score_contribution_allowed=False,
+        paid_data_likely_required=False,
+        degradation_reason=degradation_reason,
+        missing_provider_reason=missing_provider_reason,
+    )
+
+
+_PROVIDER_CAPABILITY_SUPPORT_CONTRACTS = (
+    _capability_support_entry(
+        "pytdx",
+        "cn_history_daily",
+        trust_level="usable_with_caution",
+        freshness_expectation="best_effort_realtime_quote_and_daily_history",
+        degradation_reason="pytdx_provider_unavailable",
+        missing_provider_reason="pytdx_not_installed",
+    ),
+    _capability_support_entry(
+        "pytdx",
+        "cn_name_lookup",
+        trust_level="usable_with_caution",
+        freshness_expectation="best_effort_realtime_quote_and_daily_history",
+        degradation_reason="pytdx_provider_unavailable",
+        missing_provider_reason="pytdx_not_installed",
+    ),
+    _capability_support_entry(
+        "pytdx",
+        "cn_quote",
+        trust_level="usable_with_caution",
+        freshness_expectation="best_effort_realtime_quote_and_daily_history",
+        degradation_reason="pytdx_provider_unavailable",
+        missing_provider_reason="pytdx_not_installed",
+    ),
+    _capability_support_entry(
+        "pytdx",
+        "cn_realtime_quote",
+        trust_level="usable_with_caution",
+        freshness_expectation="best_effort_realtime_quote_and_daily_history",
+        degradation_reason="pytdx_provider_unavailable",
+        missing_provider_reason="pytdx_not_installed",
+    ),
+    _capability_support_entry(
+        "akshare",
+        "chip_distribution",
+        trust_level="weak",
+        freshness_expectation="best_effort_public_web_quote_snapshot_and_daily_history",
+        degradation_reason="akshare_provider_unavailable",
+        missing_provider_reason="akshare_not_installed",
+    ),
+    _capability_support_entry(
+        "akshare",
+        "cn_etf_history_daily",
+        trust_level="weak",
+        freshness_expectation="best_effort_public_web_quote_snapshot_and_daily_history",
+        degradation_reason="akshare_provider_unavailable",
+        missing_provider_reason="akshare_not_installed",
+    ),
+    _capability_support_entry(
+        "akshare",
+        "cn_etf_realtime_quote",
+        trust_level="weak",
+        freshness_expectation="best_effort_public_web_quote_snapshot_and_daily_history",
+        degradation_reason="akshare_provider_unavailable",
+        missing_provider_reason="akshare_not_installed",
+    ),
+    _capability_support_entry(
+        "akshare",
+        "cn_history_daily",
+        trust_level="weak",
+        freshness_expectation="best_effort_public_web_quote_snapshot_and_daily_history",
+        degradation_reason="akshare_provider_unavailable",
+        missing_provider_reason="akshare_not_installed",
+    ),
+    _capability_support_entry(
+        "akshare",
+        "cn_index_quote",
+        trust_level="weak",
+        freshness_expectation="best_effort_public_web_quote_snapshot_and_daily_history",
+        degradation_reason="akshare_provider_unavailable",
+        missing_provider_reason="akshare_not_installed",
+    ),
+    _capability_support_entry(
+        "akshare",
+        "cn_market_stats",
+        trust_level="weak",
+        freshness_expectation="best_effort_public_web_quote_snapshot_and_daily_history",
+        degradation_reason="akshare_provider_unavailable",
+        missing_provider_reason="akshare_not_installed",
+    ),
+    _capability_support_entry(
+        "akshare",
+        "cn_realtime_quote",
+        trust_level="weak",
+        freshness_expectation="best_effort_public_web_quote_snapshot_and_daily_history",
+        degradation_reason="akshare_provider_unavailable",
+        missing_provider_reason="akshare_not_installed",
+    ),
+    _capability_support_entry(
+        "akshare",
+        "cn_realtime_snapshot",
+        trust_level="weak",
+        freshness_expectation="best_effort_public_web_quote_snapshot_and_daily_history",
+        degradation_reason="akshare_provider_unavailable",
+        missing_provider_reason="akshare_not_installed",
+    ),
+    _capability_support_entry(
+        "akshare",
+        "cn_sector_rankings",
+        trust_level="weak",
+        freshness_expectation="best_effort_public_web_quote_snapshot_and_daily_history",
+        degradation_reason="akshare_provider_unavailable",
+        missing_provider_reason="akshare_not_installed",
+    ),
+    _capability_support_entry(
+        "akshare",
+        "cn_stock_list",
+        trust_level="weak",
+        freshness_expectation="best_effort_public_web_quote_snapshot_and_daily_history",
+        degradation_reason="akshare_provider_unavailable",
+        missing_provider_reason="akshare_not_installed",
+    ),
+    _capability_support_entry(
+        "akshare",
+        "hk_history_daily",
+        trust_level="weak",
+        freshness_expectation="best_effort_public_web_quote_snapshot_and_daily_history",
+        degradation_reason="akshare_provider_unavailable",
+        missing_provider_reason="akshare_not_installed",
+    ),
+    _capability_support_entry(
+        "akshare",
+        "hk_realtime_quote",
+        trust_level="weak",
+        freshness_expectation="best_effort_public_web_quote_snapshot_and_daily_history",
+        degradation_reason="akshare_provider_unavailable",
+        missing_provider_reason="akshare_not_installed",
+    ),
+)
+_PROVIDER_CAPABILITY_SUPPORT_BY_KEY = {
+    (item.provider_id, item.capability): item for item in _PROVIDER_CAPABILITY_SUPPORT_CONTRACTS
+}
+
+
 def _normalize_provider_id(provider_id: str) -> str:
     return str(provider_id or "").strip().lower().replace("-", "_")
 
 
 def _normalize_domain(domain: ProviderDomain | str) -> str:
     return domain.value if isinstance(domain, ProviderDomain) else str(domain or "").strip().lower()
+
+
+def _normalize_capability(capability: str) -> str:
+    return str(capability or "").strip().lower()
 
 
 def list_provider_capabilities() -> tuple[ProviderCapability, ...]:
@@ -448,6 +614,33 @@ def get_provider_capability(provider_id: str) -> Optional[ProviderCapability]:
     """Return metadata for a provider id, or ``None`` when unknown."""
 
     return _CAPABILITIES_BY_ID.get(_normalize_provider_id(provider_id))
+
+
+def list_provider_capability_support_contracts(
+    provider_id: str | None = None,
+) -> tuple[ProviderCapabilitySupportContract, ...]:
+    """Return deterministic provider/capability support metadata for CN observation providers."""
+
+    if provider_id is None:
+        return tuple(_PROVIDER_CAPABILITY_SUPPORT_CONTRACTS)
+
+    normalized_provider = _normalize_provider_id(provider_id)
+    return tuple(
+        item
+        for item in _PROVIDER_CAPABILITY_SUPPORT_CONTRACTS
+        if item.provider_id == normalized_provider
+    )
+
+
+def get_provider_capability_support_contract(
+    provider_id: str,
+    capability: str,
+) -> Optional[ProviderCapabilitySupportContract]:
+    """Return provider/capability support metadata, or ``None`` when unsupported."""
+
+    return _PROVIDER_CAPABILITY_SUPPORT_BY_KEY.get(
+        (_normalize_provider_id(provider_id), _normalize_capability(capability))
+    )
 
 
 def providers_for_domain(domain: ProviderDomain | str) -> tuple[ProviderCapability, ...]:
@@ -491,3 +684,23 @@ def recommended_ttl(provider_id: str, domain: ProviderDomain | str) -> Optional[
     if capability is None:
         return None
     return capability.recommended_ttl_seconds_by_domain.get(_normalize_domain(domain))
+
+
+__all__ = [
+    "BacktestUsage",
+    "FreshnessClass",
+    "ProviderCapability",
+    "ProviderCapabilitySupportContract",
+    "ProviderDomain",
+    "ProviderMarket",
+    "ProviderQuotaClass",
+    "ScannerUsage",
+    "get_provider_capability",
+    "get_provider_capability_support_contract",
+    "is_provider_allowed_for_backtest",
+    "is_provider_allowed_for_scanner",
+    "list_provider_capability_support_contracts",
+    "list_provider_capabilities",
+    "providers_for_domain",
+    "recommended_ttl",
+]

@@ -150,6 +150,62 @@ class ProviderCapabilityContract:
 
 
 @dataclass(frozen=True, slots=True)
+class ProviderCapabilitySupportContract:
+    provider_name: str
+    provider_id: str
+    capability: str
+    source_type: str
+    source_tier: str
+    trust_level: str
+    freshness_expectation: str
+    observation_only: bool = False
+    score_contribution_allowed: bool = False
+    paid_data_likely_required: bool = False
+    degradation_reason: str | None = None
+    missing_provider_reason: str | None = None
+
+    @classmethod
+    def from_dict(cls, value: Any) -> "ProviderCapabilitySupportContract":
+        payload = _coerce_mapping(value)
+        return cls(
+            provider_name=_text(_get(payload, "provider_name", "providerName")),
+            provider_id=_text(_get(payload, "provider_id", "providerId")),
+            capability=_text(_get(payload, "capability")),
+            source_type=_text(_get(payload, "source_type", "sourceType")),
+            source_tier=_text(_get(payload, "source_tier", "sourceTier")),
+            trust_level=_text(_get(payload, "trust_level", "trustLevel")),
+            freshness_expectation=_text(_get(payload, "freshness_expectation", "freshnessExpectation")),
+            observation_only=_bool(_get(payload, "observation_only", "observationOnly")),
+            score_contribution_allowed=_bool(
+                _get(payload, "score_contribution_allowed", "scoreContributionAllowed")
+            ),
+            paid_data_likely_required=_bool(
+                _get(payload, "paid_data_likely_required", "paidDataLikelyRequired")
+            ),
+            degradation_reason=_optional_text(_get(payload, "degradation_reason", "degradationReason")),
+            missing_provider_reason=_optional_text(
+                _get(payload, "missing_provider_reason", "missingProviderReason")
+            ),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "providerName": self.provider_name,
+            "providerId": self.provider_id,
+            "capability": self.capability,
+            "sourceType": self.source_type,
+            "sourceTier": self.source_tier,
+            "trustLevel": self.trust_level,
+            "freshnessExpectation": self.freshness_expectation,
+            "observationOnly": self.observation_only,
+            "scoreContributionAllowed": self.score_contribution_allowed,
+            "paidDataLikelyRequired": self.paid_data_likely_required,
+            "degradationReason": self.degradation_reason,
+            "missingProviderReason": self.missing_provider_reason,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class SourceConfidenceValidationIssue:
     code: str
     message: str
@@ -191,6 +247,18 @@ def coerce_provider_capability_contract(
     """Return a provider capability DTO from a mapping without side effects."""
 
     return value if isinstance(value, ProviderCapabilityContract) else ProviderCapabilityContract.from_dict(value)
+
+
+def coerce_provider_capability_support_contract(
+    value: ProviderCapabilitySupportContract | Mapping[str, Any],
+) -> ProviderCapabilitySupportContract:
+    """Return provider/capability metadata DTOs from mappings without side effects."""
+
+    return (
+        value
+        if isinstance(value, ProviderCapabilitySupportContract)
+        else ProviderCapabilitySupportContract.from_dict(value)
+    )
 
 
 def apply_source_confidence_caps(contract: SourceConfidenceContract) -> SourceConfidenceContract:
@@ -396,6 +464,7 @@ __all__ = [
     "SOURCE_CONFIDENCE_CONTRACT_VERSION",
     "STRONG_FRESHNESS_VALUES",
     "ProviderCapabilityContract",
+    "ProviderCapabilitySupportContract",
     "SourceConfidenceContract",
     "SourceConfidenceValidationIssue",
     "SourceConfidenceValidationResult",
@@ -403,6 +472,7 @@ __all__ = [
     "SupportsSourceConfidence",
     "apply_source_confidence_caps",
     "coerce_provider_capability_contract",
+    "coerce_provider_capability_support_contract",
     "coerce_source_confidence_contract",
     "validate_source_confidence_contract",
 ]
