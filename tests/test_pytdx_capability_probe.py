@@ -41,6 +41,7 @@ class _UnreachableApi:
 
 def test_pytdx_capability_probe_degrades_cleanly_when_dependency_is_missing() -> None:
     fetcher = PytdxFetcher(hosts=[("1.2.3.4", 7709)])
+    fetcher._get_pytdx = lambda: None
     probe = fetcher.probe_capabilities(timeout_seconds=2.5)
 
     assert probe == {
