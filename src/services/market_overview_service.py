@@ -13,6 +13,7 @@ from typing import Any, Callable, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 from src.contracts.source_confidence import coerce_source_confidence_contract
+from src.services.cn_provider_health_service import CNProviderHealthService
 from src.services.execution_log_service import ExecutionLogService
 from src.services.fx_commodities_contracts import FX_COMMODITY_DELAYED_PROXY_SYMBOLS
 from src.services.futures_contracts import list_futures_contracts
@@ -186,6 +187,7 @@ PROVIDER_HEALTH_STATUSES = {
     "error",
     "refreshing",
 }
+CN_INDICES_OBSERVATION_PROVIDER_TIMEOUT_SECONDS = 1.0
 
 
 def _has_valid_market_value(meta: Dict[str, Any]) -> bool:
@@ -1052,6 +1054,8 @@ class MarketOverviewService:
         snapshot = self._with_market_meta(snapshot, self._category_for_cache_key(cache_key))
         snapshot["items"] = [self._with_item_meta(item, self._category_for_cache_key(cache_key), snapshot) for item in snapshot.get("items", [])]
         snapshot["providerHealth"] = self._provider_health(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message)
+        if cache_key == "cn_indices":
+            snapshot["providerHealth"]["observationProviders"] = self._cn_indices_observation_provider_health()
         snapshot = self._with_evidence_snapshot(snapshot, self._category_for_cache_key(cache_key))
         raw_response.update(self._provider_log_meta(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message))
         log_session_id = ExecutionLogService().record_market_overview_fetch(
@@ -1065,6 +1069,14 @@ class MarketOverviewService:
         )
         snapshot["logSessionId"] = log_session_id
         return snapshot
+
+    def _cn_indices_observation_provider_health(self) -> List[Dict[str, Any]]:
+        return [
+            entry.to_dict()
+            for entry in CNProviderHealthService().get_snapshot(
+                timeout_seconds=CN_INDICES_OBSERVATION_PROVIDER_TIMEOUT_SECONDS
+            )
+        ]
 
     def _cached_payload(
         self,

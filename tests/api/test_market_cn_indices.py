@@ -22,12 +22,42 @@ except ModuleNotFoundError:
 import src.auth as auth
 from api.app import create_app
 from api.v1.endpoints import market
+from src.services.cn_provider_health_service import CNProviderHealthSnapshotEntry
 from src.config import Config
 from src.services.market_overview_service import MarketOverviewService, get_freshness_status
 from src.storage import DatabaseManager
 
 
 CN_TZ = timezone(timedelta(hours=8))
+EXPECTED_CN_PROVIDER_HEALTH_ENTRY_FIELDS = {
+    "providerName",
+    "providerId",
+    "sourceType",
+    "sourceTier",
+    "trustLevel",
+    "freshnessExpectation",
+    "observationOnly",
+    "scoreContributionAllowed",
+    "dependencyInstalled",
+    "providerAvailable",
+    "healthStatus",
+    "supportedCapabilities",
+    "unsupportedCapabilities",
+    "contractCapabilities",
+    "degradationReason",
+    "missingProviderReason",
+    "attemptedAt",
+    "timeoutSeconds",
+}
+FORBIDDEN_CN_PROVIDER_HEALTH_FIELDS = {
+    "quote",
+    "quotes",
+    "kline",
+    "klines",
+    "rawPayload",
+    "score",
+    "scoreContribution",
+}
 
 
 def _fresh_sina_as_of() -> str:
@@ -241,6 +271,141 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         self.assertFalse(live_item["isFallback"])
         self.assertEqual(fallback_item["source"], "fallback")
         self.assertTrue(fallback_item["isFallback"])
+
+    def test_cn_indices_adds_observation_only_cn_provider_health_metadata(self) -> None:
+        service = MarketOverviewService()
+        now = _fresh_sina_as_of()
+        quotes = {
+            "000001.SH": {
+                "name": "上证指数",
+                "symbol": "000001.SH",
+                "value": 4107.51,
+                "change": 28.88,
+                "changePercent": 0.71,
+                "sparkline": [4078.63, 4107.51],
+                "asOf": now,
+            }
+        }
+        observation_providers = (
+            CNProviderHealthSnapshotEntry(
+                provider_name="pytdx",
+                provider_id="pytdx",
+                source_type="public_proxy",
+                source_tier="unofficial_public_api",
+                trust_level="usable_with_caution",
+                freshness_expectation="best_effort_public_broker_quote_snapshot",
+                observation_only=True,
+                score_contribution_allowed=False,
+                dependency_installed=True,
+                provider_available=True,
+                health_status="healthy",
+                supported_capabilities=("cn_history_daily", "cn_name_lookup", "cn_quote", "cn_realtime_quote"),
+                unsupported_capabilities=("hk_history_daily",),
+                contract_capabilities=("cn_history_daily", "cn_name_lookup", "cn_quote", "cn_realtime_quote"),
+                degradation_reason=None,
+                missing_provider_reason=None,
+                attempted_at="2026-05-19T02:03:04+00:00",
+                timeout_seconds=1.0,
+            ),
+            CNProviderHealthSnapshotEntry(
+                provider_name="akshare",
+                provider_id="akshare",
+                source_type="public_proxy",
+                source_tier="unofficial_public_api",
+                trust_level="weak",
+                freshness_expectation="best_effort_public_web_quote_snapshot_and_daily_history",
+                observation_only=True,
+                score_contribution_allowed=False,
+                dependency_installed=False,
+                provider_available=False,
+                health_status="missing_dependency",
+                supported_capabilities=("cn_stock_list",),
+                unsupported_capabilities=("hk_index_quote",),
+                contract_capabilities=("cn_stock_list", "cn_market_stats"),
+                degradation_reason="akshare_not_installed",
+                missing_provider_reason="akshare_not_installed",
+                attempted_at=None,
+                timeout_seconds=1.0,
+            ),
+        )
+
+        with (
+            patch.object(service, "_fetch_sina_cn_index_quotes", return_value=quotes),
+            patch("src.services.cn_provider_health_service.CNProviderHealthService.get_snapshot", return_value=observation_providers),
+        ):
+            payload = service.get_cn_indices()
+
+        provider_health = payload["providerHealth"]
+        self.assertIn("observationProviders", provider_health)
+        self.assertEqual([item["providerId"] for item in provider_health["observationProviders"]], ["pytdx", "akshare"])
+        self.assertTrue(all(set(item) == EXPECTED_CN_PROVIDER_HEALTH_ENTRY_FIELDS for item in provider_health["observationProviders"]))
+        self.assertTrue(all(not FORBIDDEN_CN_PROVIDER_HEALTH_FIELDS.intersection(item) for item in provider_health["observationProviders"]))
+        self.assertTrue(all(item["observationOnly"] is True for item in provider_health["observationProviders"]))
+        self.assertTrue(all(item["scoreContributionAllowed"] is False for item in provider_health["observationProviders"]))
+        self.assertEqual(provider_health["observationProviders"][0]["trustLevel"], "usable_with_caution")
+        self.assertEqual(provider_health["observationProviders"][1]["trustLevel"], "weak")
+        self.assertEqual(provider_health["observationProviders"][0]["sourceTier"], "unofficial_public_api")
+        self.assertEqual(provider_health["observationProviders"][1]["sourceTier"], "unofficial_public_api")
+        self.assertEqual(provider_health["observationProviders"][1]["healthStatus"], "missing_dependency")
+        self.assertEqual(payload["items"][0]["source"], "sina")
+
+    def test_cn_indices_keeps_existing_fallback_when_observation_providers_are_degraded(self) -> None:
+        service = MarketOverviewService()
+        observation_providers = (
+            CNProviderHealthSnapshotEntry(
+                provider_name="pytdx",
+                provider_id="pytdx",
+                source_type="public_proxy",
+                source_tier="unofficial_public_api",
+                trust_level="usable_with_caution",
+                freshness_expectation="best_effort_public_broker_quote_snapshot",
+                observation_only=True,
+                score_contribution_allowed=False,
+                dependency_installed=False,
+                provider_available=False,
+                health_status="missing_dependency",
+                supported_capabilities=("cn_history_daily",),
+                unsupported_capabilities=("hk_history_daily",),
+                contract_capabilities=("cn_history_daily",),
+                degradation_reason="pytdx_not_installed",
+                missing_provider_reason="pytdx_not_installed",
+                attempted_at=None,
+                timeout_seconds=1.0,
+            ),
+            CNProviderHealthSnapshotEntry(
+                provider_name="akshare",
+                provider_id="akshare",
+                source_type="public_proxy",
+                source_tier="unofficial_public_api",
+                trust_level="weak",
+                freshness_expectation="best_effort_public_web_quote_snapshot_and_daily_history",
+                observation_only=True,
+                score_contribution_allowed=False,
+                dependency_installed=True,
+                provider_available=False,
+                health_status="probe_failure",
+                supported_capabilities=("cn_market_stats",),
+                unsupported_capabilities=("hk_index_quote",),
+                contract_capabilities=("cn_market_stats",),
+                degradation_reason="akshare_probe_failed",
+                missing_provider_reason="akshare_probe_failed",
+                attempted_at="2026-05-19T02:03:05+00:00",
+                timeout_seconds=1.0,
+            ),
+        )
+
+        with (
+            patch.object(service, "_fetch_sina_cn_index_quotes", side_effect=RuntimeError("provider down")),
+            patch("src.services.cn_provider_health_service.CNProviderHealthService.get_snapshot", return_value=observation_providers),
+        ):
+            payload = service.get_cn_indices()
+
+        self.assertEqual(payload["source"], "fallback")
+        self.assertTrue(payload["items"])
+        self.assertTrue(all(item["isFallback"] for item in payload["items"]))
+        self.assertEqual([item["healthStatus"] for item in payload["providerHealth"]["observationProviders"]], ["missing_dependency", "probe_failure"])
+        self.assertTrue(all(item["observationOnly"] is True for item in payload["providerHealth"]["observationProviders"]))
+        self.assertTrue(all(item["scoreContributionAllowed"] is False for item in payload["providerHealth"]["observationProviders"]))
 
     def test_cn_indices_uses_cache_within_ttl(self) -> None:
         calls = 0
