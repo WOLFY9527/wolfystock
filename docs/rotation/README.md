@@ -44,10 +44,13 @@ fund-flow interpretation, or rotation evidence disclosure.
   expose credential presence, safely inferable credential source, missing env
   credential field names, configured feed, construction status, per-window
   `requestWindowResults` for 5m/15m/60m/1d, sanitized failure classes
-  (`missing_credentials`, `entitlement_denied`, `auth_failed`, `rate_limited`,
-  `timeout`, `empty_response`, `symbol_not_found`, `provider_error`,
-  `unknown`), capped `symbolFailureSamples`, fallback usage, recommended
-  activation action/hint, and final trust/source-tier classification without
-  exposing raw credential values.
+  (`missing_credentials`, `entitlement_denied`, `auth_failed`,
+  `interval_mapping`, `market_session`, `calendar`, `rate_limited`, `timeout`,
+  `empty_response`, `symbol_not_found`, `provider_error`, `unknown`), capped
+  `symbolFailureSamples`, configured-provider fulfilled/missing window aliases,
+  yfinance fallback usage kept separate from Alpaca fulfillment,
+  `liveActivationStatus`, `activationBlocker`, recommended activation
+  action/hint, and final trust/source-tier classification without exposing raw
+  credential values.
 - Rotation UI changes must not alter score, ranking, provider, or evidence
   semantics unless explicitly scoped.

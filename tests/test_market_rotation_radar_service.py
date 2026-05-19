@@ -794,6 +794,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(metadata["failedSymbolReasons"], {})
         diagnostics = metadata["providerDiagnostics"]
         self.assertTrue(diagnostics["configuredProviderAttempted"])
+        self.assertTrue(diagnostics["providerAttempted"])
         self.assertEqual(diagnostics["configuredProviderName"], "alpaca")
         self.assertTrue(diagnostics["credentialsPresent"])
         self.assertEqual(diagnostics["credentialFieldsMissing"], [])
@@ -802,6 +803,10 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["requestedWindows"], ["5m", "15m", "60m", "1d"])
         self.assertEqual(diagnostics["fulfilledWindows"], ["5m", "15m", "60m", "1d"])
         self.assertEqual(diagnostics["missingWindows"], [])
+        self.assertEqual(diagnostics["configuredProviderFulfilledWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(diagnostics["configuredProviderMissingWindows"], [])
+        self.assertEqual(diagnostics["liveActivationStatus"], "active")
+        self.assertIsNone(diagnostics["activationBlocker"])
         self.assertEqual(diagnostics["recommendedAction"], "none")
         self.assertEqual(
             diagnostics["activationHint"],
@@ -850,6 +855,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["providerFailureReasons"], [])
         self.assertFalse(diagnostics["fallbackProviderUsed"])
         self.assertFalse(diagnostics["yfinanceFallbackUsed"])
+        self.assertFalse(diagnostics["fallbackYfinanceUsed"])
         self.assertFalse(diagnostics["staticBasketFallbackUsed"])
         self.assertEqual(diagnostics["finalSourceTier"], "broker_authorized")
         self.assertEqual(diagnostics["trustLevel"], "active")
@@ -1097,6 +1103,10 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(metadata["windowCoverage"]["5m"]["usableSymbolCount"], 0)
         self.assertEqual(diagnostics["fulfilledWindows"], ["1d"])
         self.assertEqual(diagnostics["missingWindows"], ["5m", "15m", "60m"])
+        self.assertEqual(diagnostics["configuredProviderFulfilledWindows"], ["1d"])
+        self.assertEqual(diagnostics["configuredProviderMissingWindows"], ["5m", "15m", "60m"])
+        self.assertEqual(diagnostics["liveActivationStatus"], "partial")
+        self.assertEqual(diagnostics["activationBlocker"], "entitlement")
         self.assertTrue(diagnostics["providerConstructed"])
         self.assertEqual(diagnostics["feedEntitlementStatus"], "entitlement_denied")
         self.assertEqual(diagnostics["recommendedAction"], "enable_feed_entitlement_or_switch_feed")
@@ -1114,6 +1124,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["providerFailureReasons"], ["entitlement_denied"])
         self.assertFalse(diagnostics["fallbackProviderUsed"])
         self.assertFalse(diagnostics["yfinanceFallbackUsed"])
+        self.assertFalse(diagnostics["fallbackYfinanceUsed"])
         self.assertEqual(diagnostics["finalSourceTier"], "broker_authorized")
         self.assertEqual(diagnostics["trustLevel"], "partial")
 
@@ -1147,6 +1158,10 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(diagnostics["providerConstructed"])
         self.assertEqual(diagnostics["fulfilledWindows"], [])
         self.assertEqual(diagnostics["missingWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(diagnostics["configuredProviderFulfilledWindows"], [])
+        self.assertEqual(diagnostics["configuredProviderMissingWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(diagnostics["liveActivationStatus"], "not_active")
+        self.assertEqual(diagnostics["activationBlocker"], "auth")
         self.assertEqual(diagnostics["providerFailureReason"], "auth_failed")
         self.assertEqual(diagnostics["providerFailureReasons"], ["auth_failed"])
         self.assertEqual(diagnostics["feedEntitlementStatus"], "auth_failed")
@@ -1157,6 +1172,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         )
         self.assertTrue(diagnostics["fallbackProviderUsed"])
         self.assertTrue(diagnostics["yfinanceFallbackUsed"])
+        self.assertTrue(diagnostics["fallbackYfinanceUsed"])
         self.assertEqual(diagnostics["trustLevel"], "degraded")
         for window in ("5m", "15m", "60m", "1d"):
             self.assertEqual(
@@ -1207,6 +1223,10 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(diagnostics["providerConstructed"])
         self.assertEqual(diagnostics["fulfilledWindows"], [])
         self.assertEqual(diagnostics["missingWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(diagnostics["configuredProviderFulfilledWindows"], [])
+        self.assertEqual(diagnostics["configuredProviderMissingWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(diagnostics["liveActivationStatus"], "not_active")
+        self.assertEqual(diagnostics["activationBlocker"], "empty_response")
         self.assertEqual(diagnostics["providerFailureReason"], "empty_response")
         self.assertEqual(diagnostics["providerFailureReasons"], ["empty_response"])
         self.assertEqual(diagnostics["recommendedAction"], "verify_symbol_coverage")
@@ -1221,6 +1241,80 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             self.assertEqual(diagnostics["requestWindowResults"][window]["failureClasses"], {"empty_response": 2})
             self.assertFalse(diagnostics["requestWindowResults"][window]["fulfilled"])
         self.assertLessEqual(len(diagnostics["symbolFailureSamples"]), 8)
+        self.assertTrue(diagnostics["fallbackYfinanceUsed"])
+
+    def test_configured_provider_interval_mapping_failure_is_first_class_activation_blocker(self) -> None:
+        class UnsupportedIntervalAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                raise RuntimeError(f"unsupported timeframe {timeframe}")
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="iex"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            UnsupportedIntervalAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=_yfinance_frame(),
+        ):
+            payload = load_rotation_radar_quotes(["APP"])
+
+        diagnostics = payload["metadata"]["providerDiagnostics"]
+        self.assertEqual(diagnostics["fulfilledWindows"], [])
+        self.assertEqual(diagnostics["configuredProviderFulfilledWindows"], [])
+        self.assertEqual(diagnostics["configuredProviderMissingWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(diagnostics["liveActivationStatus"], "not_active")
+        self.assertEqual(diagnostics["activationBlocker"], "interval_mapping")
+        self.assertEqual(diagnostics["providerFailureReason"], "interval_mapping")
+        self.assertEqual(diagnostics["providerFailureReasons"], ["interval_mapping"])
+        self.assertTrue(diagnostics["fallbackYfinanceUsed"])
+        for window in ("5m", "15m", "60m", "1d"):
+            self.assertEqual(diagnostics["requestWindowResults"][window]["failureClasses"], {"interval_mapping": 1})
+            self.assertEqual(diagnostics["requestWindowResults"][window]["dominantFailureClass"], "interval_mapping")
+
+    def test_configured_provider_calendar_and_market_session_empty_bars_are_activation_blockers(self) -> None:
+        cases = (
+            ("market_session", {"bars": [], "message": "market is closed for the requested session"}),
+            ("calendar", {"bars": [], "message": "calendar has no trading sessions for the requested range"}),
+        )
+        for expected_blocker, empty_payload in cases:
+            class EmptyCalendarAlpacaFetcher:
+                def __init__(self, **kwargs) -> None:
+                    pass
+
+                def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> dict:
+                    return empty_payload
+
+            with self.subTest(expected_blocker=expected_blocker), patch(
+                "src.services.rotation_radar_quote_provider.get_provider_credentials",
+                return_value=_alpaca_credentials(feed="iex"),
+                create=True,
+            ), patch(
+                "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+                EmptyCalendarAlpacaFetcher,
+                create=True,
+            ), patch(
+                "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+                return_value=_yfinance_frame(),
+            ):
+                payload = load_rotation_radar_quotes(["APP"])
+
+            diagnostics = payload["metadata"]["providerDiagnostics"]
+            self.assertEqual(diagnostics["liveActivationStatus"], "not_active")
+            self.assertEqual(diagnostics["activationBlocker"], expected_blocker)
+            self.assertEqual(diagnostics["providerFailureReason"], expected_blocker)
+            self.assertEqual(diagnostics["providerFailureReasons"], [expected_blocker])
+            self.assertEqual(diagnostics["configuredProviderFulfilledWindows"], [])
+            self.assertEqual(diagnostics["configuredProviderMissingWindows"], ["5m", "15m", "60m", "1d"])
+            for window in ("5m", "15m", "60m", "1d"):
+                self.assertEqual(diagnostics["requestWindowResults"][window]["failureClasses"], {expected_blocker: 1})
+                self.assertEqual(diagnostics["requestWindowResults"][window]["dominantFailureClass"], expected_blocker)
 
     def test_configured_provider_symbol_failures_reduce_coverage_and_confidence(self) -> None:
         class FakeAlpacaFetcher:

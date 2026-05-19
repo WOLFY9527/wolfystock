@@ -48,6 +48,9 @@ _CONFIGURED_FAILURE_CLASSES = {
     "missing_credentials",
     "entitlement_denied",
     "auth_failed",
+    "interval_mapping",
+    "market_session",
+    "calendar",
     "rate_limited",
     "timeout",
     "empty_response",
@@ -58,6 +61,9 @@ _CONFIGURED_FAILURE_CLASSES = {
 _CONFIGURED_FAILURE_PRIORITY = (
     "auth_failed",
     "entitlement_denied",
+    "interval_mapping",
+    "market_session",
+    "calendar",
     "rate_limited",
     "timeout",
     "empty_response",
@@ -66,6 +72,19 @@ _CONFIGURED_FAILURE_PRIORITY = (
     "missing_credentials",
     "unknown",
 )
+_ACTIVATION_BLOCKERS = {
+    "credentials",
+    "auth",
+    "entitlement",
+    "interval_mapping",
+    "market_session",
+    "calendar",
+    "timeout",
+    "empty_response",
+    "symbol_coverage",
+    "provider_error",
+    "unknown",
+}
 _ALPACA_CREDENTIAL_ENV_NAMES = {
     "key_id": "ALPACA_API_KEY_ID",
     "secret_key": "ALPACA_API_SECRET_KEY",
@@ -274,6 +293,8 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
             "symbolFailureSamples": symbol_failure_samples[:_FAILED_SYMBOL_LIST_LIMIT],
             "configuredFulfilledWindows": configured_fulfilled_windows,
             "configuredMissingWindows": configured_missing_windows,
+            "configuredProviderFulfilledWindows": configured_fulfilled_windows,
+            "configuredProviderMissingWindows": configured_missing_windows,
         },
     )
 
@@ -295,6 +316,7 @@ def _configured_provider_base_metadata(credentials: ProviderCredentialBundle) ->
         "configuredProvider": _CONFIGURED_PROVIDER_ID,
         "configuredProviderStatus": configured_status,
         "configuredProviderAttempted": True,
+        "providerAttempted": True,
         "configuredProviderName": _CONFIGURED_PROVIDER_ID,
         "credentialsPresent": bool(credentials.is_configured),
         "credentialFieldsMissing": missing_fields,
@@ -332,6 +354,8 @@ def _with_request_window_diagnostics(
         "symbolFailureSamples": symbol_failure_samples[:_FAILED_SYMBOL_LIST_LIMIT],
         "configuredFulfilledWindows": _fulfilled_windows_from_request_results(finalized_results),
         "configuredMissingWindows": _missing_windows_from_request_results(finalized_results),
+        "configuredProviderFulfilledWindows": _fulfilled_windows_from_request_results(finalized_results),
+        "configuredProviderMissingWindows": _missing_windows_from_request_results(finalized_results),
         "providerFailureReasons": provider_failure_reasons,
     }
 
@@ -805,6 +829,15 @@ def _provider_activation_diagnostics(
         fulfilled_windows=fulfilled_windows,
         missing_windows=missing_windows,
     )
+    activation_blocker = _activation_blocker(
+        credentials_present=bool(configured_attempt.metadata.get("credentialsPresent")),
+        provider_constructed=provider_constructed,
+        provider_failure_reasons=provider_failure_reasons,
+        fulfilled_windows=fulfilled_windows,
+        missing_windows=missing_windows,
+        yfinance_fallback_used=yfinance_fallback_used,
+        static_basket_fallback_used=static_basket_fallback_used,
+    )
     recommended_action = _recommended_action(
         credentials_present=bool(configured_attempt.metadata.get("credentialsPresent")),
         provider_constructed=provider_constructed,
@@ -821,6 +854,7 @@ def _provider_activation_diagnostics(
     )
     return {
         "configuredProviderAttempted": bool(configured_attempt.metadata.get("configuredProviderAttempted", True)),
+        "providerAttempted": bool(configured_attempt.metadata.get("providerAttempted", True)),
         "configuredProviderName": str(
             configured_attempt.metadata.get("configuredProviderName")
             or configured_attempt.metadata.get("configuredProvider")
@@ -850,6 +884,8 @@ def _provider_activation_diagnostics(
         "requestedWindows": requested_windows,
         "fulfilledWindows": fulfilled_windows,
         "missingWindows": missing_windows,
+        "configuredProviderFulfilledWindows": fulfilled_windows,
+        "configuredProviderMissingWindows": missing_windows,
         "requestWindowResults": request_window_results,
         "symbolSuccessCount": len(quotes),
         "symbolFailureCount": len(failed_symbol_reasons),
@@ -859,8 +895,20 @@ def _provider_activation_diagnostics(
         "providerFailureReasons": provider_failure_reasons,
         "recommendedAction": recommended_action,
         "activationHint": activation_hint,
+        "liveActivationStatus": _live_activation_status(
+            credentials_present=bool(configured_attempt.metadata.get("credentialsPresent")),
+            provider_constructed=provider_constructed,
+            fulfilled_windows=fulfilled_windows,
+            missing_windows=missing_windows,
+            provider_failure_reasons=provider_failure_reasons,
+            yfinance_fallback_used=yfinance_fallback_used,
+            static_basket_fallback_used=static_basket_fallback_used,
+            activation_blocker=activation_blocker,
+        ),
+        "activationBlocker": activation_blocker,
         "fallbackProviderUsed": fallback_provider_used,
         "yfinanceFallbackUsed": yfinance_fallback_used,
+        "fallbackYfinanceUsed": yfinance_fallback_used,
         "staticBasketFallbackUsed": static_basket_fallback_used,
         "finalSourceTier": final_source_tier,
         "trustLevel": _provider_trust_level(
@@ -903,6 +951,87 @@ def _provider_trust_level(
     if fulfilled_windows and not missing_windows and symbol_failure_count == 0:
         return "active"
     return "partial" if fulfilled_windows else "degraded"
+
+
+def _live_activation_status(
+    *,
+    credentials_present: bool,
+    provider_constructed: bool,
+    fulfilled_windows: Sequence[str],
+    missing_windows: Sequence[str],
+    provider_failure_reasons: Sequence[str],
+    yfinance_fallback_used: bool,
+    static_basket_fallback_used: bool,
+    activation_blocker: Optional[str],
+) -> str:
+    if static_basket_fallback_used:
+        return "unavailable"
+    if activation_blocker == "timeout":
+        return "unavailable"
+    if not credentials_present:
+        return "not_active"
+    if not provider_constructed:
+        return "unavailable" if activation_blocker in {"provider_error", "unknown"} else "not_active"
+    if fulfilled_windows and not missing_windows and not yfinance_fallback_used:
+        return "active"
+    if fulfilled_windows:
+        return "partial"
+    if activation_blocker in {"provider_error", "unknown"} and provider_failure_reasons:
+        return "unavailable"
+    return "not_active"
+
+
+def _activation_blocker(
+    *,
+    credentials_present: bool,
+    provider_constructed: bool,
+    provider_failure_reasons: Sequence[str],
+    fulfilled_windows: Sequence[str],
+    missing_windows: Sequence[str],
+    yfinance_fallback_used: bool,
+    static_basket_fallback_used: bool,
+) -> Optional[str]:
+    if fulfilled_windows and not missing_windows and not yfinance_fallback_used and not static_basket_fallback_used:
+        return None
+    if not credentials_present:
+        return "credentials"
+    raw_reasons = {
+        str(reason or "").strip().lower()
+        for reason in provider_failure_reasons
+        if str(reason or "").strip()
+    }
+    normalized_reasons = {
+        _normalize_configured_failure_class(reason)
+        for reason in raw_reasons
+        if str(reason or "").strip()
+    }
+    if "auth_failed" in normalized_reasons:
+        return "auth"
+    if "entitlement_denied" in normalized_reasons:
+        return "entitlement"
+    if "interval_mapping" in normalized_reasons:
+        return "interval_mapping"
+    if "market_session" in normalized_reasons:
+        return "market_session"
+    if "calendar" in normalized_reasons:
+        return "calendar"
+    if "timeout" in normalized_reasons or "quote_fetch_failed" in raw_reasons:
+        return "timeout"
+    if "empty_response" in normalized_reasons:
+        return "empty_response"
+    if "symbol_not_found" in normalized_reasons:
+        return "symbol_coverage"
+    if (
+        "provider_error" in normalized_reasons
+        or "provider_unavailable" in raw_reasons
+        or "rate_limited" in normalized_reasons
+    ):
+        return "provider_error"
+    if not provider_constructed:
+        return "provider_error"
+    if missing_windows:
+        return "unknown"
+    return None
 
 
 def _diagnostic_request_window_results(
@@ -957,6 +1086,8 @@ def _feed_entitlement_status(
         return "rate_limited"
     if "timeout" in reason_set:
         return "timeout"
+    if reason_set.intersection({"interval_mapping", "market_session", "calendar"}):
+        return "not_inferable"
     if "empty_response" in reason_set or "symbol_not_found" in reason_set:
         return "not_inferable" if not fulfilled_windows else "partial"
     if "missing_credentials" in reason_set:
@@ -983,6 +1114,12 @@ def _recommended_action(
         return "verify_alpaca_credentials"
     if primary == "entitlement_denied":
         return "enable_feed_entitlement_or_switch_feed"
+    if primary == "interval_mapping":
+        return "verify_alpaca_interval_mapping"
+    if primary == "market_session":
+        return "retry_when_market_session_is_open"
+    if primary == "calendar":
+        return "check_market_calendar"
     if primary == "rate_limited":
         return "retry_after_rate_limit"
     if primary == "timeout":
@@ -1130,10 +1267,11 @@ def _quote_from_alpaca_fetcher(fetcher: AlpacaFetcher, symbol: str, data_feed: s
         except Exception as exc:
             window_failure_reasons[window] = _classify_configured_failure(str(exc))
             continue
-        if not _materialize_bars(bars):
-            window_failure_reasons[window] = "empty_response"
+        materialized_bars = _materialize_bars(bars)
+        if not materialized_bars:
+            window_failure_reasons[window] = _empty_bars_failure_class(bars)
             continue
-        slot = _window_from_alpaca_bars(symbol, window, bars, data_feed=data_feed)
+        slot = _window_from_alpaca_bars(symbol, window, materialized_bars, data_feed=data_feed)
         if slot is not None:
             windows[window] = slot
             window_sources[window] = {
@@ -1264,6 +1402,39 @@ def _materialize_bars(bars: Any) -> list[Any]:
     if isinstance(bars, Sequence) and not isinstance(bars, (str, bytes)):
         return list(bars)
     return []
+
+
+def _empty_bars_failure_class(bars: Any) -> str:
+    classified = _classify_configured_failure(_empty_bars_reason_text(bars))
+    if classified in {"interval_mapping", "market_session", "calendar"}:
+        return classified
+    return "empty_response"
+
+
+def _empty_bars_reason_text(bars: Any) -> str:
+    if not isinstance(bars, Mapping):
+        return ""
+    values: list[str] = []
+    for key in (
+        "message",
+        "error",
+        "error_message",
+        "reason",
+        "detail",
+        "code",
+        "status",
+    ):
+        value = bars.get(key)
+        if value is not None and str(value).strip():
+            values.append(str(value))
+    for nested_key in ("meta", "metadata"):
+        nested = bars.get(nested_key)
+        if not isinstance(nested, Mapping):
+            continue
+        for value in nested.values():
+            if value is not None and str(value).strip():
+                values.append(str(value))
+    return " ".join(values)
 
 
 def _last_bar(bars: Any) -> Optional[Any]:
@@ -1647,6 +1818,37 @@ def _classify_configured_failure(raw_reason: Any) -> str:
         or "subscription" in normalized
     ):
         return "entitlement_denied"
+    if (
+        "unsupported timeframe" in normalized
+        or "unsupported time frame" in normalized
+        or "unsupported interval" in normalized
+        or "invalid timeframe" in normalized
+        or "invalid time frame" in normalized
+        or "invalid interval" in normalized
+        or "timeframe is not supported" in normalized
+        or "time frame is not supported" in normalized
+        or "interval is not supported" in normalized
+    ):
+        return "interval_mapping"
+    if (
+        "calendar" in normalized
+        or "market holiday" in normalized
+        or "trading holiday" in normalized
+        or "non-trading day" in normalized
+        or "non trading day" in normalized
+        or "no trading sessions" in normalized
+        or "no trading days" in normalized
+    ):
+        return "calendar"
+    if (
+        "market closed" in normalized
+        or "market is closed" in normalized
+        or "outside market hours" in normalized
+        or "trading session" in normalized
+        or "no active session" in normalized
+        or "session closed" in normalized
+    ):
+        return "market_session"
     if "429" in normalized or "rate limit" in normalized or "too many requests" in normalized:
         return "rate_limited"
     if "timeout" in normalized or "timed out" in normalized:
@@ -1674,7 +1876,16 @@ def _legacy_symbol_failure_reason(failure_classes: Iterable[Any]) -> str:
         return "symbol_unavailable"
     if primary == "timeout":
         return "quote_fetch_failed"
-    if primary in {"auth_failed", "entitlement_denied", "rate_limited", "empty_response", "provider_error"}:
+    if primary in {
+        "auth_failed",
+        "entitlement_denied",
+        "interval_mapping",
+        "market_session",
+        "calendar",
+        "rate_limited",
+        "empty_response",
+        "provider_error",
+    }:
         return "quote_unavailable"
     return "quote_unavailable"
 
