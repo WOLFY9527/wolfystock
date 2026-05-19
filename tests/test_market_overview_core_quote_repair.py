@@ -12,7 +12,7 @@ import pytest
 
 from src.config import Config
 from src.services.market_cache import market_cache
-from src.services.market_overview_service import MarketOverviewService
+from src.services.market_overview_service import MarketOverviewService, get_freshness_status
 from src.services.official_macro_transport import MacroObservation, OfficialMacroTransportError
 from src.storage import DatabaseManager
 
@@ -68,6 +68,50 @@ def _log_patch():
 
 def _item(payload: dict, symbol: str) -> dict:
     return next(item for item in payload["items"] if item["symbol"] == symbol)
+
+
+def test_official_daily_rows_use_series_lag_policy_not_intraday_threshold() -> None:
+    now = datetime(2026, 5, 19, 10, 0, tzinfo=CN_TZ)
+
+    vix_freshness = get_freshness_status(
+        "2026-05-15",
+        "macro_rate",
+        "fred",
+        False,
+        source_type="official_public",
+        series_id="VIXCLS",
+        now=now,
+    )
+    assert vix_freshness["freshness"] == "delayed"
+    assert vix_freshness["freshnessPolicy"] == "official_daily_us_weekday_t_plus_1"
+    assert vix_freshness["officialObservationDate"] == "2026-05-15"
+    assert vix_freshness["maxAcceptedLagDays"] == 4
+    assert vix_freshness["calendarAssumption"] == "US/Eastern weekdays; holidays not modeled"
+
+    stale_dgs30 = get_freshness_status(
+        "2026-05-08",
+        "macro_rate",
+        "fred",
+        False,
+        source_type="official_public",
+        series_id="DGS30",
+        now=now,
+    )
+    assert stale_dgs30["freshness"] == "stale"
+    assert stale_dgs30["freshnessDecision"] == "stale_official_row"
+    assert stale_dgs30["staleReason"]
+
+    proxy_freshness = get_freshness_status(
+        "2026-05-15",
+        "macro_rate",
+        "yfinance",
+        False,
+        source_type="unofficial_proxy",
+        series_id="DGS30",
+        now=now,
+    )
+    assert proxy_freshness["freshness"] == "stale"
+    assert "freshnessPolicy" not in proxy_freshness
 
 
 def test_spx_configured_quote_carries_delayed_source_and_trust_metadata() -> None:
@@ -812,22 +856,29 @@ def test_treasury_timeout_then_stale_fred_rate_overlay_keeps_proxy_with_provider
         log_patcher.stop()
 
     assert calls[:4] == ["VIXCLS", "treasury", "DGS10", "DGS30"]
-    us10y = _item(macro_payload, "US10Y")
-    assert us10y["source"] == "yfinance"
-    assert us10y["sourceType"] == "unofficial_proxy"
-    assert us10y["providerClass"] == "proxy"
-    assert us10y["officialOverlayAttempted"] is True
-    assert us10y["officialOverlayAvailable"] is False
-    assert us10y["officialOverlayFailureReason"] == "stale_official_row"
-    details = us10y["officialOverlayFailureDetails"]
-    attempts = details["providerAttemptDetails"]
-    assert [(attempt["providerName"], attempt["reason"]) for attempt in attempts] == [
-        ("treasury", "timeout"),
-        ("fred", "stale_official_row"),
-    ]
-    assert all(attempt["requestedSeries"] == "DGS10" for attempt in attempts)
-    assert "SECRET" not in str(details)
-    assert "api_key" not in str(details).lower()
+    for symbol, series_id in (("US10Y", "DGS10"), ("US30Y", "DGS30")):
+        item = _item(macro_payload, symbol)
+        assert item["source"] == "yfinance"
+        assert item["sourceType"] == "unofficial_proxy"
+        assert item["providerClass"] == "proxy"
+        assert item["officialOverlayAttempted"] is True
+        assert item["officialOverlayAvailable"] is False
+        assert item["officialOverlayFailureReason"] == "stale_official_row"
+        details = item["officialOverlayFailureDetails"]
+        assert details["officialObservationDate"] == stale_date
+        assert details["freshnessPolicy"] == "official_daily_us_weekday_t_plus_1"
+        assert details["freshnessDecision"] == "stale_official_row"
+        assert details["staleReason"]
+        attempts = details["providerAttemptDetails"]
+        assert [(attempt["providerName"], attempt["reason"]) for attempt in attempts] == [
+            ("treasury", "timeout"),
+            ("fred", "stale_official_row"),
+        ]
+        assert attempts[1]["officialObservationDate"] == stale_date
+        assert attempts[1]["freshnessPolicy"] == "official_daily_us_weekday_t_plus_1"
+        assert all(attempt["requestedSeries"] == series_id for attempt in attempts)
+        assert "SECRET" not in str(details)
+        assert "api_key" not in str(details).lower()
 
 
 def test_cn00y_static_fallback_is_explicit_and_capped() -> None:

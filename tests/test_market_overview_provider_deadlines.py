@@ -40,6 +40,7 @@ def test_yfinance_history_transport_enforces_explicit_deadline() -> None:
 def test_official_macro_points_stop_when_aggregate_deadline_is_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:
     service = MarketOverviewService()
     calls: list[tuple[str, float | None]] = []
+    stale_date = (datetime.now(timezone.utc).date() - timedelta(days=10)).isoformat()
 
     def slow_treasury_points(*, limit: int = 2, timeout: float | None = None) -> dict:
         calls.append(("treasury", timeout))
@@ -49,7 +50,7 @@ def test_official_macro_points_stop_when_aggregate_deadline_is_exhausted(monkeyp
         calls.append((series_id, timeout))
         time.sleep(0.03)
         return [
-            MacroObservation(series_id, 18.0, "2026-05-15", "2026-05-15", f"fred:{series_id}", "official_public", "daily_close")
+            MacroObservation(series_id, 18.0, stale_date, stale_date, f"fred:{series_id}", "official_public", "daily_close")
         ]
 
     monkeypatch.setattr(service, "OFFICIAL_MACRO_AGGREGATE_BUDGET_SECONDS", 0.01, raising=False)
@@ -111,6 +112,8 @@ def test_official_macro_points_attempt_fred_dgs10_dgs30_after_treasury_timeout(m
 
     def fred_points(series_id: str, *, limit: int = 2, timeout: float | None = None) -> list[MacroObservation]:
         calls.append(series_id)
+        if series_id == "DGS10":
+            time.sleep(float(timeout or 0.0) + 0.005)
         if series_id in {"DGS10", "DGS30"}:
             return [
                 MacroObservation(series_id, 4.5, latest, latest, f"fred:{series_id}", "official_public", "daily_rate"),

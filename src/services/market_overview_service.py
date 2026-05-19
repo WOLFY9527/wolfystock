@@ -10,6 +10,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 from src.contracts.source_confidence import coerce_source_confidence_contract
 from src.services.execution_log_service import ExecutionLogService
@@ -55,9 +56,43 @@ from src.storage import DatabaseManager
 
 PanelPayload = Dict[str, Any]
 CN_TZ = timezone(timedelta(hours=8))
+US_EASTERN_TZ = ZoneInfo("America/New_York")
 FALLBACK_WARNING = "备用示例数据，不代表当前行情"
 INSUFFICIENT_MARKET_DATA_WARNING = "当前真实数据不足，市场温度仅供界面演示"
 OFFICIAL_MACRO_UNAVAILABLE_WARNING = "部分官方宏观指标暂不可用"
+OFFICIAL_DAILY_FRESHNESS_POLICY_ID = "official_daily_us_weekday_t_plus_1"
+OFFICIAL_DAILY_FRESHNESS_DETAIL_KEYS = (
+    "officialObservationDate",
+    "officialAsOf",
+    "freshnessPolicy",
+    "calendarAssumption",
+    "maxAcceptedLagDays",
+    "maxAcceptedBusinessLagDays",
+    "calendarLagDays",
+    "businessLagDays",
+    "freshnessDecision",
+    "staleReason",
+)
+OFFICIAL_DAILY_FRESHNESS_POLICIES = {
+    "VIXCLS": {
+        "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
+        "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
+        "maxAcceptedLagDays": 4,
+        "maxAcceptedBusinessLagDays": 2,
+    },
+    "DGS10": {
+        "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
+        "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
+        "maxAcceptedLagDays": 4,
+        "maxAcceptedBusinessLagDays": 2,
+    },
+    "DGS30": {
+        "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
+        "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
+        "maxAcceptedLagDays": 4,
+        "maxAcceptedBusinessLagDays": 2,
+    },
+}
 OFFICIAL_OVERLAY_FAILURE_REASONS = {
     "not_configured",
     "cache_miss",
@@ -296,6 +331,101 @@ def _parse_market_time(value: Any) -> Optional[datetime]:
     return parsed.astimezone(CN_TZ)
 
 
+def _normalize_official_series_id(value: Any) -> str:
+    text = str(value or "").strip()
+    if ":" in text:
+        text = text.rsplit(":", 1)[-1]
+    return text.upper()
+
+
+def _parse_official_observation_date(value: Any) -> Optional[Any]:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except Exception:
+            try:
+                return datetime.strptime(text[:10], "%Y-%m-%d").date()
+            except Exception:
+                return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(US_EASTERN_TZ).date()
+    return parsed.date()
+
+
+def _us_weekday_lag_days(observation_date: Any, current_date: Any) -> int:
+    if current_date <= observation_date:
+        return 0
+    cursor = observation_date
+    lag = 0
+    while cursor < current_date:
+        cursor = cursor + timedelta(days=1)
+        if cursor.weekday() < 5:
+            lag += 1
+    return lag
+
+
+def _official_daily_freshness_details(
+    series_id: Any,
+    as_of: Any,
+    *,
+    official_observation_date: Any = None,
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    normalized_series = _normalize_official_series_id(series_id)
+    policy = OFFICIAL_DAILY_FRESHNESS_POLICIES.get(normalized_series)
+    if not policy:
+        return {}
+    observation_date = (
+        _parse_official_observation_date(official_observation_date)
+        or _parse_official_observation_date(as_of)
+    )
+    if observation_date is None:
+        return {}
+    current = (now or datetime.now(CN_TZ)).astimezone(US_EASTERN_TZ)
+    current_date = current.date()
+    calendar_lag_days = max(0, (current_date - observation_date).days)
+    business_lag_days = _us_weekday_lag_days(observation_date, current_date)
+    max_calendar_lag = int(policy["maxAcceptedLagDays"])
+    max_business_lag = int(policy["maxAcceptedBusinessLagDays"])
+    accepted = calendar_lag_days <= max_calendar_lag and business_lag_days <= max_business_lag
+    details: Dict[str, Any] = {
+        "officialObservationDate": observation_date.isoformat(),
+        "freshnessPolicy": str(policy["freshnessPolicy"]),
+        "calendarAssumption": str(policy["calendarAssumption"]),
+        "maxAcceptedLagDays": max_calendar_lag,
+        "maxAcceptedBusinessLagDays": max_business_lag,
+        "calendarLagDays": calendar_lag_days,
+        "businessLagDays": business_lag_days,
+        "freshnessDecision": "accepted" if accepted else "stale_official_row",
+    }
+    if as_of:
+        details["officialAsOf"] = str(as_of)
+    if not accepted:
+        details["staleReason"] = (
+            f"official row lag {calendar_lag_days} calendar days and "
+            f"{business_lag_days} US weekdays exceeded "
+            f"{max_calendar_lag} calendar day / {max_business_lag} US weekday policy"
+        )
+    return details
+
+
+def _official_daily_detail_payload(value: Any) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        key: value[key]
+        for key in OFFICIAL_DAILY_FRESHNESS_DETAIL_KEYS
+        if key in value and value[key] not in {None, ""}
+    }
+
+
 def get_freshness_status(
     as_of: Any,
     category: str,
@@ -303,6 +433,8 @@ def get_freshness_status(
     is_fallback: bool,
     *,
     source_type: str = "",
+    series_id: Any = None,
+    official_observation_date: Any = None,
     now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """Return normalized market data freshness metadata for UI trust labeling."""
@@ -352,9 +484,21 @@ def get_freshness_status(
         "public_proxy",
         "proxy_public",
     }
+    official_daily_details = (
+        _official_daily_freshness_details(
+            series_id,
+            as_of,
+            official_observation_date=official_observation_date,
+            now=current,
+        )
+        if category_key == "macro_rate" and source_type_key == "official_public"
+        else {}
+    )
 
     daily_categories = {"equity_index", "breadth", "flows", "sentiment"}
-    if category_key == "macro_rate" and source_type_key == "official_public":
+    if official_daily_details and category_key == "macro_rate" and source_type_key == "official_public":
+        freshness = "delayed" if official_daily_details["freshnessDecision"] == "accepted" else "stale"
+    elif category_key == "macro_rate" and source_type_key == "official_public":
         days_old = (current.date() - parsed_as_of.date()).days
         freshness = "delayed" if days_old <= 3 else "stale"
     elif delayed_public_quote_source and category_key in daily_categories:
@@ -385,13 +529,16 @@ def get_freshness_status(
         live_after = live_minutes.get(category_key, 15)
         freshness = "live" if delay_minutes <= live_after else "stale" if delay_minutes > stale_after else "delayed"
 
-    return {
+    result = {
         "freshness": freshness,
         "isFallback": False,
         "isStale": freshness == "stale",
         "delayMinutes": delay_minutes,
         "warning": "数据可能已过期，请以交易所/券商行情为准" if freshness == "stale" else None,
     }
+    if official_daily_details:
+        result.update(official_daily_details)
+    return result
 
 
 class MarketOverviewService:
@@ -1795,7 +1942,20 @@ class MarketOverviewService:
         is_fallback = bool(item.get("isFallback") or item.get("fallbackUsed") or source.lower() in {"fallback", "mock"})
         as_of = item.get("asOf") or item.get("last_update") or item.get("updatedAt") or panel.get("asOf") or panel.get("updatedAt")
         updated_at = item.get("updatedAt") or panel.get("updatedAt") or _now_iso()
-        freshness = get_freshness_status(as_of, category, source, is_fallback, source_type=item.get("sourceType") or panel.get("sourceType") or "")
+        official_series_id = (
+            item.get("officialOverlaySeriesId")
+            or item.get("officialSeriesId")
+            or item.get("sourceId")
+        )
+        freshness = get_freshness_status(
+            as_of,
+            category,
+            source,
+            is_fallback,
+            source_type=item.get("sourceType") or panel.get("sourceType") or "",
+            series_id=official_series_id,
+            official_observation_date=item.get("officialObservationDate") or item.get("officialAsOf"),
+        )
         preserved_freshness = self._preserved_freshness_meta(item)
         if preserved_freshness:
             freshness = self._apply_preserved_freshness(freshness, preserved_freshness)
@@ -1826,6 +1986,27 @@ class MarketOverviewService:
             "warning": item.get("warning") or freshness["warning"],
             "isFromSnapshot": bool(item.get("isFromSnapshot") or panel.get("isFromSnapshot")),
         }
+        official_freshness_details = (
+            _official_daily_detail_payload(freshness)
+            or _official_daily_detail_payload(item.get("officialFreshnessDetails"))
+        )
+        if official_freshness_details:
+            normalized["officialFreshnessDetails"] = official_freshness_details
+            for key, value in official_freshness_details.items():
+                normalized.setdefault(key, value)
+            source_evidence = dict(normalized.get("sourceFreshnessEvidence") or {})
+            source_evidence.update({
+                "source": normalized.get("source"),
+                "sourceLabel": normalized.get("sourceLabel"),
+                "asOf": normalized.get("asOf"),
+                "freshness": normalized.get("freshness"),
+                "isFallback": bool(normalized.get("isFallback")),
+                "isStale": bool(normalized.get("isStale")),
+                "isPartial": bool(normalized.get("isPartial")),
+                "isUnavailable": bool(normalized.get("isUnavailable")),
+                **official_freshness_details,
+            })
+            normalized["sourceFreshnessEvidence"] = source_evidence
         normalized = normalize_vix_quote_metadata(normalized)
         normalized = {**normalized, **self._source_trust_meta(normalized)}
         return {**normalized, **self._source_activation_meta(normalized)}
@@ -2772,6 +2953,7 @@ class MarketOverviewService:
                             source_id=self._source_id_for_series(series_id),
                             attempted_at=_now_iso(),
                             timeout_seconds=self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS,
+                            freshness_details=self._official_macro_freshness_details(series_id, cached_points),
                         ),
                     )
             else:
@@ -2808,6 +2990,7 @@ class MarketOverviewService:
             timeout_seconds: float | None = None,
             exception: Exception | None = None,
             transport_details: Any = None,
+            freshness_details: Any = None,
         ) -> None:
             details = self._official_macro_failure_details(
                 series_id,
@@ -2818,6 +3001,7 @@ class MarketOverviewService:
                 timeout_seconds=timeout_seconds,
                 exception=exception,
                 transport_details=transport_details,
+                freshness_details=freshness_details,
             )
             details["reason"] = str(reason or "").strip().lower()
             safe_detail = self._sanitize_official_macro_provider_attempt_detail(details, series_id=series_id)
@@ -2835,10 +3019,13 @@ class MarketOverviewService:
                     series_id=series_id,
                 )
 
-        def fetch_fred_series(series_id: str) -> None:
+        def fetch_fred_series(series_id: str, *, timeout_cap: float | None = None) -> None:
             nonlocal fred_refresh_disabled_reason, fred_refresh_disabled_details
             attempted_fred_series.add(series_id)
-            timeout = self._deadline_timeout(deadline, self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
+            timeout = self._deadline_timeout(
+                deadline,
+                self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS if timeout_cap is None else timeout_cap,
+            )
             if timeout is None:
                 self._record_official_macro_diagnostic(
                     diagnostics,
@@ -2910,6 +3097,7 @@ class MarketOverviewService:
                         source_id=series_points[0].source_id if series_points else f"fred:{series_id}",
                         attempted_at=_now_iso(),
                         timeout_seconds=timeout,
+                        freshness_details=self._official_macro_freshness_details(series_id, series_points),
                     )
                     self._record_official_macro_diagnostic(
                         diagnostics,
@@ -2922,6 +3110,7 @@ class MarketOverviewService:
                             provider_name=self._provider_name_for_series(series_id, series_points[0].source_id if series_points else None),
                             source_id=series_points[0].source_id if series_points else f"fred:{series_id}",
                             attempted_at=_now_iso(),
+                            freshness_details=self._official_macro_freshness_details(series_id, series_points),
                         ),
                     )
             elif fred_error_reason is None:
@@ -2998,6 +3187,7 @@ class MarketOverviewService:
                             source_id=series_points[0].source_id if series_points else "treasury:daily_treasury_yield_curve",
                             attempted_at=_now_iso(),
                             timeout_seconds=timeout,
+                            freshness_details=self._official_macro_freshness_details(series_id, series_points),
                         )
                         self._record_official_macro_diagnostic(
                             diagnostics,
@@ -3010,6 +3200,7 @@ class MarketOverviewService:
                                 provider_name="treasury",
                                 source_id=series_points[0].source_id if series_points else "treasury:daily_treasury_yield_curve",
                                 attempted_at=_now_iso(),
+                                freshness_details=self._official_macro_freshness_details(series_id, series_points),
                             ),
                         )
                 elif series_id in treasury_points:
@@ -3119,12 +3310,32 @@ class MarketOverviewService:
             attach_provider_attempt_details()
             self._official_macro_overlay_diagnostic_details = diagnostic_details
             return points
+
+        def fred_timeout_cap_for_series(series_id: str) -> float:
+            if series_id not in {"DGS10", "DGS30"}:
+                return float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
+            remaining_critical = [
+                critical_series_id
+                for critical_series_id in ("DGS10", "DGS30")
+                if critical_series_id not in points and critical_series_id not in attempted_fred_series
+            ]
+            if len(remaining_critical) <= 1:
+                return float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
+            remaining_budget = self._deadline_remaining(deadline)
+            if remaining_budget <= 0:
+                return float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
+            return min(
+                float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
+                remaining_budget / float(len(remaining_critical)),
+            )
+
         for index, series_id in enumerate(fred_series_ids):
             if series_id in points and points[series_id]:
                 continue
             if series_id in attempted_fred_series:
                 continue
-            timeout = self._deadline_timeout(deadline, self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
+            timeout_cap = fred_timeout_cap_for_series(series_id)
+            timeout = self._deadline_timeout(deadline, timeout_cap)
             if timeout is None:
                 for remaining_series_id in fred_series_ids[index:]:
                     if remaining_series_id not in points and remaining_series_id not in attempted_fred_series:
@@ -3142,7 +3353,7 @@ class MarketOverviewService:
                             ),
                         )
                 break
-            fetch_fred_series(series_id)
+            fetch_fred_series(series_id, timeout_cap=timeout_cap)
             if fred_refresh_disabled_reason is not None:
                 for remaining_series_id in fred_series_ids[index + 1:]:
                     if remaining_series_id not in points:
@@ -3202,8 +3413,10 @@ class MarketOverviewService:
         timeout_seconds: float | None = None,
         exception: Exception | None = None,
         transport_details: Any = None,
+        freshness_details: Any = None,
     ) -> Dict[str, Any]:
         details = self._sanitize_official_macro_failure_details(transport_details, series_id=series_id)
+        details.update(_official_daily_detail_payload(freshness_details))
         resolved_provider = provider_name or details.get("providerName") or self._provider_name_for_series(series_id, source_id)
         details["providerName"] = str(resolved_provider)
         details["requestedSeries"] = str(series_id)
@@ -3289,6 +3502,16 @@ class MarketOverviewService:
             "requestedSeries",
             "attemptedAt",
             "providerAttemptDetails",
+            "officialObservationDate",
+            "officialAsOf",
+            "freshnessPolicy",
+            "calendarAssumption",
+            "maxAcceptedLagDays",
+            "maxAcceptedBusinessLagDays",
+            "calendarLagDays",
+            "businessLagDays",
+            "freshnessDecision",
+            "staleReason",
         ):
             if key not in details:
                 continue
@@ -3303,6 +3526,11 @@ class MarketOverviewService:
             elif key == "timeoutSeconds":
                 try:
                     safe[key] = round(float(value), 3)
+                except (TypeError, ValueError):
+                    continue
+            elif key in {"maxAcceptedLagDays", "maxAcceptedBusinessLagDays", "calendarLagDays", "businessLagDays"}:
+                try:
+                    safe[key] = int(value)
                 except (TypeError, ValueError):
                     continue
             elif key == "caBundleSource":
@@ -3367,6 +3595,16 @@ class MarketOverviewService:
             "attemptedAt",
             "configPresent",
             "apiKeyPresent",
+            "officialObservationDate",
+            "officialAsOf",
+            "freshnessPolicy",
+            "calendarAssumption",
+            "maxAcceptedLagDays",
+            "maxAcceptedBusinessLagDays",
+            "calendarLagDays",
+            "businessLagDays",
+            "freshnessDecision",
+            "staleReason",
         ):
             if key not in details:
                 continue
@@ -3381,6 +3619,11 @@ class MarketOverviewService:
             elif key == "timeoutSeconds":
                 try:
                     safe[key] = round(float(value), 3)
+                except (TypeError, ValueError):
+                    continue
+            elif key in {"maxAcceptedLagDays", "maxAcceptedBusinessLagDays", "calendarLagDays", "businessLagDays"}:
+                try:
+                    safe[key] = int(value)
                 except (TypeError, ValueError):
                     continue
             elif key == "caBundleSource":
@@ -3463,6 +3706,20 @@ class MarketOverviewService:
             current = next_exc
         return chain
 
+    @staticmethod
+    def _official_macro_freshness_details(
+        series_id: str,
+        observations: List[MacroObservation],
+    ) -> Dict[str, Any]:
+        latest = observations[0] if observations else None
+        if latest is None:
+            return {}
+        return _official_daily_freshness_details(
+            series_id,
+            latest.as_of or latest.date,
+            official_observation_date=latest.date,
+        )
+
     def _official_macro_row_failure_reason(self, series_id: str, observations: List[MacroObservation]) -> Optional[str]:
         if not observations:
             return self._official_macro_overlay_diagnostics.get(series_id)
@@ -3475,6 +3732,8 @@ class MarketOverviewService:
             str(latest.source_id or "").split(":", 1)[0],
             False,
             source_type=str(latest.source_type or ""),
+            series_id=series_id,
+            official_observation_date=latest.date,
         )
         if freshness["freshness"] == "stale":
             return "stale_official_row"
@@ -3585,8 +3844,26 @@ class MarketOverviewService:
             str(item.get("source") or ""),
             False,
             source_type=str(item.get("sourceType") or ""),
+            series_id=series_id,
+            official_observation_date=item.get("officialObservationDate") or item.get("officialAsOf"),
         )
         if freshness["freshness"] in {"stale", "fallback", "mock", "unavailable", "error"}:
+            freshness_details = (
+                _official_daily_detail_payload(freshness)
+                or _official_daily_detail_payload(item.get("officialFreshnessDetails"))
+            )
+            self._official_macro_overlay_diagnostics.setdefault(series_id, "stale_official_row")
+            self._official_macro_overlay_diagnostic_details.setdefault(
+                series_id,
+                self._official_macro_failure_details(
+                    series_id,
+                    "stale_official_row",
+                    provider_name=self._provider_name_for_series(series_id, item.get("sourceId")),
+                    source_id=str(item.get("sourceId") or f"fred:{series_id}"),
+                    attempted_at=_now_iso(),
+                    freshness_details=freshness_details,
+                ),
+            )
             return None, "stale_official_row"
         item.update({
             "providerAttempted": True,
@@ -3730,6 +4007,11 @@ class MarketOverviewService:
         trend: List[float],
     ) -> Dict[str, Any]:
         source_label = self._official_source_label(latest.source_id)
+        freshness_details = _official_daily_freshness_details(
+            latest.symbol,
+            latest.as_of or latest.date,
+            official_observation_date=latest.date,
+        )
         item: Dict[str, Any] = {
             "name": label,
             "label": label,
@@ -3748,10 +4030,18 @@ class MarketOverviewService:
             "sourceLabel": source_label,
             "asOf": latest.as_of,
             "updatedAt": latest.as_of,
+            "officialObservationDate": latest.date,
+            "officialAsOf": latest.as_of,
             "isFallback": False,
             "risk_direction": self._risk_direction(change_percent),
             "hover_details": [source_label, f"Official as of {latest.as_of}"] if latest.as_of else [source_label],
         }
+        if freshness_details:
+            item["officialFreshnessDetails"] = freshness_details
+            item["freshnessPolicy"] = freshness_details.get("freshnessPolicy")
+            item["maxAcceptedLagDays"] = freshness_details.get("maxAcceptedLagDays")
+            item["maxAcceptedBusinessLagDays"] = freshness_details.get("maxAcceptedBusinessLagDays")
+            item["calendarAssumption"] = freshness_details.get("calendarAssumption")
         if market:
             item["market"] = market
         return item
