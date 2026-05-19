@@ -1032,6 +1032,43 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByText(/复制摘要|已复制摘要/)).toBeInTheDocument();
   });
 
+  it('uses metric aliases for executive summary cards instead of rendering N/A for explicit backend values', async () => {
+    const basePanels = localSnapshotPayload().payload;
+    renderMarketOverviewWorkbenchWithProps({
+      panels: {
+        ...basePanels,
+        indices: denseQuotePanel('IndexTrendsCard', [
+          quoteItem('^GSPC', 'S&P 500', 5120.25, 0.42),
+        ]),
+        cnIndices: denseQuotePanel('ChinaIndicesCard', [
+          quoteItem('000300.SS', 'CSI 300', 3588.12, 0.44, 'sina'),
+        ], 'sina'),
+        rates: denseQuotePanel('RatesCard', [
+          quoteItem('10Y YIELD', 'US 10Y', 4.62, -0.14),
+        ]),
+        fxCommodities: denseQuotePanel('FxCommoditiesCard', [
+          quoteItem('US DOLLAR INDEX', 'US Dollar Index', 106.2, 0.2),
+        ]),
+        crypto: denseQuotePanel('CryptoCard', [
+          quoteItem('BITCOIN', 'Bitcoin', 67000, 1.5, 'binance'),
+        ], 'binance'),
+      },
+    });
+
+    const usGroup = await screen.findByTestId('market-overview-secondary-group-us');
+    const cnGroup = screen.getByTestId('market-overview-secondary-group-cn');
+    const macroGroup = screen.getByTestId('market-overview-secondary-group-macro');
+    const cryptoGroup = screen.getByTestId('market-overview-secondary-group-crypto');
+
+    expect(usGroup).toHaveTextContent('5,120.25');
+    expect(cnGroup).toHaveTextContent('3,588.12');
+    expect(macroGroup).toHaveTextContent('4.62');
+    expect(cryptoGroup).toHaveTextContent('67,000');
+    [usGroup, cnGroup, macroGroup, cryptoGroup].forEach((group) => {
+      expect(group).not.toHaveTextContent('N/A');
+    });
+  });
+
   it('renders stable main grid with primary and side rails', async () => {
     vi.mocked(marketApi.getCnIndices).mockResolvedValueOnce({
       ...snapshotPanel('ChinaIndicesCard', 'CSI300', '沪深300'),

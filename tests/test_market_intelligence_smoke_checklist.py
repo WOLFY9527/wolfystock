@@ -105,11 +105,37 @@ def _quote(
 
 def _assert_rotation_headline_lists_are_eligible(payload: dict) -> None:
     summary = payload["summary"]
+    headline_ids: set[str] = set()
     for list_name in ("strongestThemes", "acceleratingThemes"):
         for theme in summary[list_name]:
             assert theme["rankEligible"] is True, f"{list_name} contains rank-ineligible {theme['id']}"
             assert theme["headlineEligible"] is True, f"{list_name} contains headline-ineligible {theme['id']}"
             assert theme["rankingLane"] == "headline", f"{list_name} contains non-headline lane {theme['id']}"
+            assert theme.get("observationOnly") is False, f"{list_name} contains observation-only {theme['id']}"
+            assert theme.get("taxonomyOnly") is False, f"{list_name} contains taxonomy-only {theme['id']}"
+            headline_ids.add(theme["id"])
+    observation_ids = {theme["id"] for theme in summary.get("observationThemes", [])}
+    taxonomy_ids = {theme["id"] for theme in summary.get("taxonomyThemes", [])}
+    assert headline_ids.isdisjoint(observation_ids), "headline lists overlap observation lane"
+    assert headline_ids.isdisjoint(taxonomy_ids), "headline lists overlap taxonomy lane"
+    assert all(theme["rankingLane"] == "observation" for theme in summary.get("observationThemes", []))
+    assert all(theme["rankingLane"] == "taxonomy" for theme in summary.get("taxonomyThemes", []))
+
+
+def _assert_market_overview_panel_has_display_contract(payload: dict) -> None:
+    for item in payload.get("items", []):
+        assert item.get("freshness"), f"{item.get('symbol')} missing freshness"
+        if item.get("value") is None:
+            assert item.get("freshness") not in {"live", "fresh"}, f"{item.get('symbol')} missing value marked live"
+            assert item.get("isUnavailable") or item.get("degradationReason"), (
+                f"{item.get('symbol')} missing unavailable/degradation evidence"
+            )
+            assert item.get("degradationReason"), f"{item.get('symbol')} missing degradationReason"
+            assert item.get("trustLevel") in {"unavailable", "weak"}, f"{item.get('symbol')} missing weak/unavailable trust"
+            continue
+        assert item.get("value") != "N/A", f"{item.get('symbol')} explicit value collapsed to N/A"
+        assert item.get("sourceTier"), f"{item.get('symbol')} missing sourceTier"
+        assert item.get("trustLevel"), f"{item.get('symbol')} missing trustLevel"
 
 
 class _FrameColumn:
@@ -171,6 +197,10 @@ def test_market_intelligence_checklist_captures_scope_and_validation_commands() 
     assert "sourceTier" in checklist
     assert "trustLevel" in checklist
     assert "N/A is allowed only with explicit unavailable evidence" in checklist
+    assert "Observation-only Rotation Radar themes must not appear in `summary.strongestThemes` or `summary.acceleratingThemes`." in checklist
+    assert "`summary.observationThemes` and `summary.taxonomyThemes` must remain separate from headline lists." in checklist
+    assert "Headline indicators must not render ambiguous N/A when a backend item has a numeric value." in checklist
+    assert "Missing headline indicator values must include `isUnavailable`, `degradationReason`, non-live `freshness`, and weak/unavailable trust metadata." in checklist
 
 
 def test_market_intelligence_smoke_aligns_proxy_vix_freshness_and_trust_metadata() -> None:
@@ -206,6 +236,7 @@ def test_market_intelligence_smoke_aligns_proxy_vix_freshness_and_trust_metadata
     assert market_vix["trustLevel"] == liquidity_vix["coverageDiagnostics"]["trustLevel"] == "usable_with_caution"
     assert market_vix["source"] in {"yfinance", "yfinance_proxy"}
     assert liquidity_vix["evidence"]["source"] == "yfinance_proxy"
+    _assert_market_overview_panel_has_display_contract(volatility_payload)
 
 
 def test_market_overview_liquidity_and_degraded_temperature_stay_truthful() -> None:
@@ -418,3 +449,10 @@ def test_rotation_radar_and_sector_rotation_projection_keep_evidence_non_live_wh
     assert all(theme["rankingLane"] == "observation" for theme in fallback_radar["themes"])
     assert all(theme["scoreBreakdown"] for theme in fallback_radar["themes"])
     assert fallback_radar["themes"][0]["rotationStateEvidence"]["state"] == "insufficient_evidence"
+
+    taxonomy_radar = MarketRotationRadarService().get_rotation_radar(market="CN")
+    assert taxonomy_radar["summary"]["strongestThemes"] == []
+    assert taxonomy_radar["summary"]["acceleratingThemes"] == []
+    _assert_rotation_headline_lists_are_eligible(taxonomy_radar)
+    assert taxonomy_radar["summary"]["taxonomyThemes"]
+    assert all(theme["rankingLane"] == "taxonomy" for theme in taxonomy_radar["summary"]["taxonomyThemes"])

@@ -373,7 +373,7 @@ describe('MarketRotationRadarPage', () => {
 
     const leaderList = screen.getByTestId('rotation-radar-leader-list');
     expect(leaderList).toHaveAttribute('data-linear-primitive', 'data-workbench-frame');
-    expect(within(leaderList).getAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(10);
+    expect(within(leaderList).getAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(3);
     expect(within(leaderList).getAllByTestId(/rotation-radar-laggard-row-/).length).toBeGreaterThan(0);
     expect(within(leaderList).getByText('AI 应用')).toBeInTheDocument();
     expect(within(leaderList).queryByText('AI算力')).not.toBeInTheDocument();
@@ -416,8 +416,9 @@ describe('MarketRotationRadarPage', () => {
 
     await waitFor(() => expect(marketRotationApi.getRotationRadar).toHaveBeenLastCalledWith('CN'));
     expect(screen.getByTestId('rotation-market-tab-CN')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('rotation-radar-leader-list')).toHaveTextContent('AI算力');
-    expect(screen.getByTestId('rotation-radar-leader-list')).toHaveTextContent('待行情确认');
+    expect(screen.getByTestId('rotation-radar-leader-list')).toHaveTextContent(/没有可用于头部排名|等待真实行情/);
+    expect(within(screen.getByTestId('rotation-radar-leader-list')).queryAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(0);
+    expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('AI算力');
     expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('主题库已载入');
     expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('待接入本地行情');
     expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('寒武纪');
@@ -425,11 +426,12 @@ describe('MarketRotationRadarPage', () => {
 
     fireEvent.click(screen.getByTestId('rotation-market-tab-HK'));
     await waitFor(() => expect(marketRotationApi.getRotationRadar).toHaveBeenLastCalledWith('HK'));
-    expect(screen.getByTestId('rotation-radar-leader-list')).toHaveTextContent('港股科技');
+    expect(within(screen.getByTestId('rotation-radar-leader-list')).queryAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(0);
+    expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('港股科技');
 
     fireEvent.click(screen.getByTestId('rotation-market-tab-CRYPTO'));
     await waitFor(() => expect(marketRotationApi.getRotationRadar).toHaveBeenLastCalledWith('CRYPTO'));
-    expect(screen.getByTestId('rotation-radar-leader-list')).toHaveTextContent('Layer 1');
+    expect(within(screen.getByTestId('rotation-radar-leader-list')).queryAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(0);
     expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('DeFi');
   });
 
@@ -439,12 +441,12 @@ describe('MarketRotationRadarPage', () => {
     await screen.findByTestId('market-rotation-radar-page');
     expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('AI 应用');
 
-    fireEvent.click(screen.getByTestId('rotation-radar-leader-row-theme_7'));
+    fireEvent.click(screen.getByTestId('rotation-radar-leader-row-theme_2'));
 
     const detail = screen.getByTestId('rotation-theme-detail-panel');
-    expect(detail).toHaveTextContent('机器人');
-    expect(detail).toHaveTextContent('Robotics');
-    expect(detail).toHaveTextContent('BOTZ');
+    expect(detail).toHaveTextContent('半导体设备');
+    expect(detail).toHaveTextContent('半导体设备 Cluster');
+    expect(detail).toHaveTextContent('US2');
     expect(detail).not.toHaveTextContent('AI 应用 当前以相对强弱');
   });
 
@@ -493,9 +495,14 @@ describe('MarketRotationRadarPage', () => {
     render(<MarketRotationRadarPage />);
 
     await waitFor(() => expect(screen.getByTestId('rotation-radar-freshness')).toHaveTextContent('备用'));
-    expect(screen.getByTestId('rotation-radar-leader-row-ai_applications')).toHaveTextContent('信号较弱');
-    expect(screen.getByTestId('rotation-radar-leader-row-ai_applications')).toHaveTextContent('备用');
-    expect(screen.getByTestId('rotation-radar-leader-row-ai_applications')).not.toHaveTextContent('实时');
+    const leaderList = screen.getByTestId('rotation-radar-leader-list');
+    expect(within(leaderList).queryAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(0);
+    expect(leaderList).toHaveTextContent(/没有可用于头部排名|等待真实行情/);
+    const detail = screen.getByTestId('rotation-theme-detail-panel');
+    expect(detail).toHaveTextContent('信号较弱');
+    expect(detail).toHaveTextContent('备用');
+    expect(within(detail).getByTestId('data-freshness-badge-fallback')).toBeInTheDocument();
+    expect(within(detail).queryByTestId('data-freshness-badge-live')).not.toBeInTheDocument();
     expect(screen.getByText('部分外部数据暂不可用').closest('[data-terminal-primitive="notice"]')).not.toBeNull();
   });
 

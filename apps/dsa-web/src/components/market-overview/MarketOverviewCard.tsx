@@ -23,14 +23,14 @@ function isFallbackOnlyPanel(panel?: MarketOverviewPanel): boolean {
   )));
 }
 
-function resolveMetaStatus(meta?: Pick<MarketOverviewPanel, 'providerHealth' | 'isRefreshing' | 'source' | 'freshness' | 'isFallback' | 'isStale'>): string {
+function resolveMetaStatus(meta?: Pick<MarketOverviewPanel, 'providerHealth' | 'isRefreshing' | 'source' | 'freshness' | 'isFallback' | 'isStale' | 'isUnavailable'>): string {
   if (meta?.providerHealth?.status) {
     return meta.providerHealth.status;
   }
   if (meta?.isRefreshing) {
     return 'refreshing';
   }
-  if (meta?.source === 'unavailable') {
+  if (meta?.isUnavailable || meta?.source === 'unavailable' || meta?.freshness === 'unavailable') {
     return 'unavailable';
   }
   if (meta?.freshness === 'error') {

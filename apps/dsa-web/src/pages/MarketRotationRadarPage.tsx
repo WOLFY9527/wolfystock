@@ -194,6 +194,13 @@ function deriveTopThemes(themes: MarketRotationTheme[], limit = TOP_THEME_LIMIT)
     .slice(0, limit);
 }
 
+function resolveSummaryThemes(themes: MarketRotationTheme[], summaryItems: MarketRotationSummaryItem[]): MarketRotationTheme[] {
+  const themeById = new Map(themes.map((theme) => [theme.id, theme]));
+  return summaryItems
+    .map((item) => themeById.get(item.id))
+    .filter((theme): theme is MarketRotationTheme => Boolean(theme));
+}
+
 function deriveWeakeningThemes(themes: MarketRotationTheme[]): MarketRotationTheme[] {
   return [...themes]
     .filter((theme) => theme.stage === 'cooling_watch' || theme.stage === 'weak_or_no_signal' || theme.rotationScore < 50)
@@ -372,12 +379,11 @@ const CommandBar: React.FC<{
 
 const SummaryBand: React.FC<{
   payload: MarketRotationRadarResponse;
-  rankedThemes: MarketRotationTheme[];
-}> = ({ payload, rankedThemes }) => {
+}> = ({ payload }) => {
   const items = [
     { key: 'market', label: '市场', value: marketLabel(payload.market || 'US') },
     { key: 'source', label: '来源', value: payload.sourceLabel || '待确认' },
-    { key: 'top', label: '领涨', value: summaryTitle(payload.summary.strongestThemes, rankedThemes[0]?.name || '等待真实行情') },
+    { key: 'top', label: '领涨', value: summaryTitle(payload.summary.strongestThemes, '等待真实行情') },
     { key: 'accelerating', label: '扩张', value: summaryTitle(payload.summary.acceleratingThemes, '暂无扩张确认') },
     { key: 'fading', label: '降温', value: summaryTitle(payload.summary.fadingThemes, '暂无降温列表') },
     { key: 'watch', label: '观察信号', value: String(payload.summary.watchlistSignals?.length ?? 0) },
@@ -818,7 +824,10 @@ const MarketRotationRadarPage: React.FC = () => {
     void loadRadar(selectedMarket);
   }, [loadRadar, selectedMarket]);
 
-  const rankedThemes = useMemo(() => deriveTopThemes(payload?.themes || []), [payload?.themes]);
+  const headlineThemes = useMemo(
+    () => resolveSummaryThemes(payload?.themes || [], payload?.summary.strongestThemes || []),
+    [payload?.themes, payload?.summary.strongestThemes],
+  );
   const weakeningThemes = useMemo(() => deriveWeakeningThemes(payload?.themes || []), [payload?.themes]);
   const filteredThemes = useMemo(
     () => (payload?.themes || []).filter((theme) => matchesSearch(theme, searchQuery)),
@@ -874,7 +883,7 @@ const MarketRotationRadarPage: React.FC = () => {
               onRefresh={() => void loadRadar()}
             />
 
-            <SummaryBand payload={payload} rankedThemes={rankedThemes} />
+            <SummaryBand payload={payload} />
 
             <TerminalGrid className="gap-4" data-workbench-split="8:4">
               <section className="min-w-0 space-y-4 xl:col-span-8" aria-label="今日轮动 Top-N">
@@ -882,27 +891,35 @@ const MarketRotationRadarPage: React.FC = () => {
                   <div className="grid min-w-0 gap-0 md:grid-cols-[minmax(0,1.55fr)_minmax(260px,0.65fr)]">
                     <section className="min-w-0 border-b border-white/[0.05] md:border-b-0 md:border-r md:border-white/[0.05]">
                       <div className="flex min-w-0 items-start justify-between gap-3 border-b border-white/[0.05] px-3 py-3">
-                        <TerminalSectionHeader eyebrow="主题板块榜单" title={`领涨 Top ${rankedThemes.length}`} />
+                        <TerminalSectionHeader eyebrow="主题板块榜单" title={headlineThemes.length ? `领涨 Top ${headlineThemes.length}` : '暂无头部排名'} />
                         <div className="hidden min-w-0 grid-cols-[4.75rem_4.75rem_4.5rem] gap-2 text-right text-[10px] font-semibold uppercase text-white/32 md:grid">
                           <span>相对</span>
                           <span>量能</span>
                           <span>广度</span>
                         </div>
                       </div>
-                      <DenseRows>
-                        {rankedThemes.map((theme, index) => (
-                          <LeaderRow
-                            key={theme.id}
-                            theme={theme}
-                            rank={index + 1}
-                            selected={selectedTheme?.id === theme.id}
-                            onSelect={() => {
-                              setSelectedThemeId(theme.id);
-                              setProxyDisclosureSeed((seed) => seed + 1);
-                            }}
-                          />
-                        ))}
-                      </DenseRows>
+                      {headlineThemes.length ? (
+                        <DenseRows>
+                          {headlineThemes.map((theme, index) => (
+                            <LeaderRow
+                              key={theme.id}
+                              theme={theme}
+                              rank={index + 1}
+                              selected={selectedTheme?.id === theme.id}
+                              onSelect={() => {
+                                setSelectedThemeId(theme.id);
+                                setProxyDisclosureSeed((seed) => seed + 1);
+                              }}
+                            />
+                          ))}
+                        </DenseRows>
+                      ) : (
+                        <div className="p-3">
+                          <TerminalEmptyState className="min-h-[104px] justify-start text-sm text-white/42">
+                            {payload.summary.noHeadlineReason || '没有可用于头部排名'}
+                          </TerminalEmptyState>
+                        </div>
+                      )}
                     </section>
 
                     <aside className="min-w-0">
@@ -984,7 +1001,7 @@ const MarketRotationRadarPage: React.FC = () => {
                   <TerminalChip>{marketLabel(payload.market || selectedMarket)}</TerminalChip>
                   <TerminalChip>{payload.sourceLabel || '待确认'}</TerminalChip>
                   <DataFreshnessBadge freshness={payload.freshness || 'fallback'} className="px-1.5 text-[9px]" />
-                  <TerminalChip>Top-N {rankedThemes.length}/{payload.themes.length}</TerminalChip>
+                  <TerminalChip>Top-N {headlineThemes.length}/{payload.themes.length}</TerminalChip>
                 </div>
                 <Gauge className="h-4 w-4 text-cyan-200/70" aria-hidden="true" />
                 <span>当前为静态主题库，本地行情覆盖后可计算轮动强度。</span>

@@ -75,6 +75,15 @@ export type MarketRotationSummaryItem = {
   isFallback: boolean;
   riskLabels: MarketRotationRiskLabel[];
   riskExplanations?: string[];
+  rankEligible?: boolean;
+  rankExclusionReason?: string | null;
+  taxonomyOnly?: boolean;
+  observationOnly?: boolean;
+  headlineEligible?: boolean;
+  rankingLane?: 'headline' | 'observation' | 'taxonomy';
+  scoreContributionAllowed?: boolean;
+  sourceTier?: string | null;
+  trustLevel?: string | null;
 };
 
 export type MarketRotationAlertCandidate = {
@@ -279,6 +288,14 @@ export type MarketRotationRadarResponse = {
     strongestThemes: MarketRotationSummaryItem[];
     acceleratingThemes: MarketRotationSummaryItem[];
     fadingThemes: MarketRotationSummaryItem[];
+    observationThemes?: MarketRotationSummaryItem[];
+    taxonomyThemes?: MarketRotationSummaryItem[];
+    eligibleThemeCount?: number;
+    headlineEligibleThemeCount?: number;
+    observationThemeCount?: number;
+    headlineWarning?: string | null;
+    noHeadlineReason?: string | null;
+    rankingPolicy?: string | null;
     watchlistSignals: MarketRotationAlertCandidate[];
     watchlistSortingExplanation?: string | null;
     safeWording: string[];

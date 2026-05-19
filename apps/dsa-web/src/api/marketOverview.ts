@@ -3,7 +3,7 @@ import { toCamelCase } from './utils';
 
 export type MarketRiskDirection = 'increasing' | 'decreasing' | 'neutral';
 export type MarketPanelStatus = 'success' | 'failure';
-export type MarketDataFreshness = 'live' | 'delayed' | 'cached' | 'stale' | 'fallback' | 'mock' | 'error';
+export type MarketDataFreshness = 'live' | 'delayed' | 'cached' | 'stale' | 'fallback' | 'mock' | 'error' | 'unavailable';
 export type MarketProviderHealthStatus = 'live' | 'cache' | 'stale' | 'fallback' | 'partial' | 'unavailable' | 'error' | 'refreshing';
 
 export interface MarketProviderHealth {
@@ -30,12 +30,18 @@ export interface MarketDataMeta {
   freshness: MarketDataFreshness;
   isFallback?: boolean;
   isStale?: boolean;
+  isPartial?: boolean;
+  isUnavailable?: boolean;
   isRefreshing?: boolean;
   isFromSnapshot?: boolean;
   lastSuccessfulAt?: string;
   refreshError?: string | null;
   lastError?: string | null;
   delayMinutes?: number;
+  sourceTier?: string;
+  trustLevel?: string;
+  degradationReason?: string | null;
+  degradationReasons?: string[];
   warning?: string | null;
 }
 
@@ -78,12 +84,18 @@ function normalizePanel(payload: Record<string, unknown>): MarketOverviewPanel {
     freshness: normalized.freshness,
     isFallback: normalized.isFallback,
     isStale: normalized.isStale,
+    isPartial: normalized.isPartial,
+    isUnavailable: normalized.isUnavailable,
     isRefreshing: normalized.isRefreshing,
     isFromSnapshot: normalized.isFromSnapshot,
     lastSuccessfulAt: normalized.lastSuccessfulAt,
     refreshError: normalized.refreshError,
     lastError: normalized.lastError,
     delayMinutes: normalized.delayMinutes,
+    sourceTier: normalized.sourceTier,
+    trustLevel: normalized.trustLevel,
+    degradationReason: normalized.degradationReason,
+    degradationReasons: normalized.degradationReasons,
     warning: normalized.warning,
     items: Array.isArray(normalized.items) ? normalized.items : [],
   };

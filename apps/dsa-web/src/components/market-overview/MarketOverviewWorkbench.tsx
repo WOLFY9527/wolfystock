@@ -101,7 +101,7 @@ type MetricRegistryEntry = {
   symbols: string[];
   panelKeys: CardKey[];
 };
-type FreshnessCountKey = 'live' | 'delayed' | 'cached' | 'stale' | 'fallback' | 'mock' | 'error';
+type FreshnessCountKey = 'live' | 'delayed' | 'cached' | 'stale' | 'fallback' | 'mock' | 'error' | 'unavailable';
 type DataQualitySummary = {
   status: string;
   counts: Record<FreshnessCountKey, number>;
@@ -317,7 +317,12 @@ function missingMetricItem(metricId: MarketOverviewPulseMetricId): MarketOvervie
     trend: [],
     source: 'unavailable',
     sourceLabel: '未接入',
-    freshness: 'cached',
+    freshness: 'unavailable',
+    isUnavailable: true,
+    sourceTier: 'unavailable',
+    trustLevel: 'unavailable',
+    degradationReason: 'metric_unavailable',
+    degradationReasons: ['metric_unavailable'],
     hoverDetails: ['等待数据'],
   };
 }
@@ -442,7 +447,7 @@ function buildHeroAnchors(panels: PanelState, metricIds: MarketOverviewPulseMetr
 
 function formatHeroValue(value: number | null | undefined): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return 'N/A';
+    return '待确认';
   }
   return new Intl.NumberFormat('en-US', {
     maximumFractionDigits: Math.abs(value) >= 100 ? 2 : 3,
@@ -451,7 +456,7 @@ function formatHeroValue(value: number | null | undefined): string {
 
 function formatHeroChange(value: number | null | undefined): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return 'N/A';
+    return '待确认';
   }
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
 }
@@ -711,7 +716,7 @@ function summarizeCardCoverage(panels: PanelState, cards: CardKey[]): Record<Car
 function collectFreshnessValues(panels: PanelState): FreshnessCountKey[] {
   const values: FreshnessCountKey[] = [];
   const push = (freshness?: string, isFallback?: boolean, isStale?: boolean) => {
-    if (freshness && ['live', 'delayed', 'cached', 'stale', 'fallback', 'mock', 'error'].includes(freshness)) {
+    if (freshness && ['live', 'delayed', 'cached', 'stale', 'fallback', 'mock', 'error', 'unavailable'].includes(freshness)) {
       values.push(freshness as FreshnessCountKey);
     } else if (isFallback) {
       values.push('fallback');
@@ -747,12 +752,13 @@ function summarizeDataQuality(panels: PanelState): DataQualitySummary {
     fallback: 0,
     mock: 0,
     error: 0,
+    unavailable: 0,
   };
   collectFreshnessValues(panels).forEach((freshness) => {
     counts[freshness] += 1;
   });
-  const status = counts.error > 0
-    ? '异常'
+  const status = counts.error + counts.unavailable > 0
+    ? '部分数据暂不可用'
     : counts.stale > 0
       ? '存在过期数据'
       : counts.fallback + counts.mock > 0
@@ -761,7 +767,7 @@ function summarizeDataQuality(panels: PanelState): DataQualitySummary {
   return {
     status,
     counts,
-    hasConcern: counts.fallback + counts.mock + counts.stale + counts.error > 0,
+    hasConcern: counts.fallback + counts.mock + counts.stale + counts.error + counts.unavailable > 0,
   };
 }
 
@@ -933,7 +939,7 @@ function resolveProviderStatus(meta?: Partial<MarketDataMeta>): MarketProviderHe
   if (meta?.isRefreshing) {
     return 'refreshing';
   }
-  if (meta?.source === 'unavailable') {
+  if (meta?.isUnavailable || meta?.source === 'unavailable' || meta?.freshness === 'unavailable') {
     return 'unavailable';
   }
   if (meta?.freshness === 'error') {
@@ -1690,7 +1696,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     availableCount: dataQuality.counts.live + dataQuality.counts.delayed + dataQuality.counts.cached,
     fallbackCount: dataQuality.counts.fallback,
     staleCount: dataQuality.counts.stale,
-    errorCount: dataQuality.counts.error,
+    errorCount: dataQuality.counts.error + dataQuality.counts.unavailable,
     hasConcern: dataQuality.hasConcern,
   };
   const signalWatchItems = MARKET_OVERVIEW_SIGNAL_WATCH[activeCategory].map<MarketOverviewSignalWatchRailItem>((metricId) => {
@@ -1712,10 +1718,10 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
           : '部分关键面板暂不可用，暂不生成强判断',
   };
   const executiveGroups: MarketOverviewExecutiveGroupView[] = [
-    { id: 'us', label: 'US', focus: 'SPX / VIX', cardKey: 'indices', item: findPanelItem(panels.indices, ['SPX']) },
-    { id: 'cn', label: 'CN/HK', focus: 'CSI300 / HSI', cardKey: 'cnIndices', item: findPanelItem(panels.cnIndices, ['CSI300', '000300.SH']) || findPanelItem(panels.cnIndices, ['HSI']) },
-    { id: 'macro', label: 'MACRO', focus: 'US10Y / DXY', cardKey: 'rates', item: findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.fxCommodities, ['DXY']) },
-    { id: 'crypto', label: 'CRYPTO', focus: 'BTC / ETH', cardKey: 'crypto', item: findPanelItem(panels.crypto, ['BTC']) },
+    { id: 'us', label: 'US', focus: 'SPX / VIX', cardKey: 'indices', item: findMetricItem(panels, 'SPX') },
+    { id: 'cn', label: 'CN/HK', focus: 'CSI300 / HSI', cardKey: 'cnIndices', item: findMetricItem(panels, 'CSI300') || findMetricItem(panels, 'HSI') },
+    { id: 'macro', label: 'MACRO', focus: 'US10Y / DXY', cardKey: 'rates', item: findMetricItem(panels, 'US10Y') || findMetricItem(panels, 'DXY') },
+    { id: 'crypto', label: 'CRYPTO', focus: 'BTC / ETH', cardKey: 'crypto', item: findMetricItem(panels, 'BTC') },
   ].map((group) => {
     const coverage = getCardCoverageKind(panels, group.cardKey as CardKey);
     return {

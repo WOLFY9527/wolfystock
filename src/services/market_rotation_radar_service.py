@@ -389,11 +389,11 @@ class MarketRotationRadarService:
                 "strongestThemes": [],
                 "acceleratingThemes": [],
                 "fadingThemes": [self._summary_item(theme) for theme in themes[:3]],
-                "observationThemes": [self._summary_item(theme) for theme in themes[:5]],
+                "observationThemes": [],
                 "taxonomyThemes": [self._summary_item(theme) for theme in themes[:5]],
                 "eligibleThemeCount": 0,
                 "headlineEligibleThemeCount": 0,
-                "observationThemeCount": len(themes),
+                "observationThemeCount": 0,
                 "headlineWarning": _HEADLINE_RANKING_WARNING,
                 "noHeadlineReason": _HEADLINE_RANKING_WARNING,
                 "rankingPolicy": (
@@ -2569,7 +2569,11 @@ class MarketRotationRadarService:
 
     def _build_summary(self, themes: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
         headline_themes = [theme for theme in themes if self._is_headline_ranked_theme(theme)]
-        observation_themes = [theme for theme in themes if theme.get("observationOnly")]
+        observation_themes = [
+            theme
+            for theme in themes
+            if theme.get("observationOnly") and not theme.get("taxonomyOnly")
+        ]
         taxonomy_themes = [theme for theme in themes if theme.get("taxonomyOnly")]
         strongest = [self._summary_item(theme) for theme in headline_themes[:3]]
         accelerating = [

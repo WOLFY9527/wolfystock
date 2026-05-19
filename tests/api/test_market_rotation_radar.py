@@ -547,12 +547,17 @@ def test_market_rotation_radar_route_separates_headline_and_observation_lanes_wh
         assert payload["summary"]["noHeadlineReason"] is None
         assert payload["summary"]["strongestThemes"]
         assert payload["summary"]["acceleratingThemes"]
-        assert all(theme["rankEligible"] is True for theme in payload["summary"]["strongestThemes"])
-        assert all(theme["headlineEligible"] is True for theme in payload["summary"]["strongestThemes"])
-        assert all(theme["rankingLane"] == "headline" for theme in payload["summary"]["strongestThemes"])
-        assert all(theme["rankEligible"] is True for theme in payload["summary"]["acceleratingThemes"])
-        assert all(theme["headlineEligible"] is True for theme in payload["summary"]["acceleratingThemes"])
-        assert all(theme["rankingLane"] == "headline" for theme in payload["summary"]["acceleratingThemes"])
+        headline_items = payload["summary"]["strongestThemes"] + payload["summary"]["acceleratingThemes"]
+        headline_ids = {theme["id"] for theme in headline_items}
+        observation_ids = {theme["id"] for theme in payload["summary"]["observationThemes"]}
+        taxonomy_ids = {theme["id"] for theme in payload["summary"]["taxonomyThemes"]}
+        assert headline_ids.isdisjoint(observation_ids)
+        assert headline_ids.isdisjoint(taxonomy_ids)
+        assert all(theme["rankEligible"] is True for theme in headline_items)
+        assert all(theme["headlineEligible"] is True for theme in headline_items)
+        assert all(theme["rankingLane"] == "headline" for theme in headline_items)
+        assert all(theme["observationOnly"] is False for theme in headline_items)
+        assert all(theme["taxonomyOnly"] is False for theme in headline_items)
         assert all(theme["rankEligible"] is False for theme in payload["summary"]["observationThemes"])
         assert all(theme["headlineEligible"] is False for theme in payload["summary"]["observationThemes"])
         assert all(theme["rankingLane"] == "observation" for theme in payload["summary"]["observationThemes"])

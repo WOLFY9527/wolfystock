@@ -20,6 +20,7 @@ const FRESHNESS_LABELS: Record<MarketDataFreshness, string> = {
   fallback: '备用',
   mock: '备用',
   error: '数据异常',
+  unavailable: '暂不可用',
 };
 
 const STATUS_LABELS: Record<MarketProviderHealthStatus, string> = {
@@ -105,7 +106,7 @@ function resolveProviderStatus(meta?: Partial<MarketDataMeta>): MarketProviderHe
   if (meta?.isRefreshing) {
     return 'refreshing';
   }
-  if (meta?.source === 'unavailable') {
+  if (meta?.isUnavailable || meta?.source === 'unavailable' || meta?.freshness === 'unavailable') {
     return 'unavailable';
   }
   if (meta?.freshness === 'error') {
@@ -136,6 +137,9 @@ function legacyFreshnessToStatus(freshness?: MarketDataFreshness): MarketProvide
   }
   if (freshness === 'fallback' || freshness === 'mock') {
     return 'fallback';
+  }
+  if (freshness === 'unavailable') {
+    return 'unavailable';
   }
   if (freshness === 'error') {
     return 'error';
