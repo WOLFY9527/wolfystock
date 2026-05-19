@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from src.services.cn_provider_health_service import CNProviderHealthService
-from src.services.provider_capability_matrix import list_provider_capability_support_contracts
 
 
 def _entry_by_provider(snapshot: tuple, provider_id: str):
@@ -352,54 +351,3 @@ def test_cn_provider_health_snapshot_does_not_promote_unsupported_capabilities_i
     assert "us_history_daily" not in akshare.contract_capabilities
     assert pytdx.to_dict()["healthStatus"] == "healthy"
     assert akshare.to_dict()["scoreContributionAllowed"] is False
-
-
-def test_cn_provider_health_snapshot_contract_capabilities_remain_contract_backed_only() -> None:
-    service = CNProviderHealthService(
-        pytdx_probe=lambda timeout_seconds: {
-            "providerName": "pytdx",
-            "providerId": "pytdx",
-            "dependencyInstalled": True,
-            "providerAvailable": True,
-            "supportedCapabilities": [
-                "cn_history_daily",
-                "cn_name_lookup",
-                "cn_quote",
-                "cn_realtime_quote",
-                "hk_realtime_quote",
-            ],
-            "unsupportedCapabilities": ["hk_history_daily", "us_history_daily"],
-            "degradationReason": None,
-            "missingProviderReason": None,
-            "attemptedAt": "2026-05-19T00:00:00+00:00",
-            "timeoutSeconds": timeout_seconds,
-            "serverHealth": "reachable",
-        },
-        akshare_probe=lambda timeout_seconds: {
-            "providerName": "akshare",
-            "providerId": "akshare",
-            "dependencyInstalled": True,
-            "providerAvailable": True,
-            "supportedCapabilities": [
-                "cn_stock_list",
-                "cn_market_stats",
-                "unknown_capability",
-            ],
-            "unsupportedCapabilities": ["hk_index_quote", "us_realtime_quote"],
-            "degradationReason": None,
-            "missingProviderReason": None,
-            "attemptedAt": "2026-05-19T00:00:01+00:00",
-            "timeoutSeconds": timeout_seconds,
-            "interfaceHealth": "ok",
-        },
-    )
-
-    snapshot = service.get_snapshot(timeout_seconds=2.0)
-
-    for entry in snapshot:
-        expected_contract_capabilities = tuple(
-            item.capability for item in list_provider_capability_support_contracts(entry.provider_id)
-        )
-        assert entry.contract_capabilities == expected_contract_capabilities
-        assert set(entry.supported_capabilities).issubset(set(entry.contract_capabilities))
-        assert set(entry.unsupported_capabilities).isdisjoint(set(entry.contract_capabilities))

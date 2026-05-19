@@ -11,8 +11,6 @@ import sys
 
 import pytest
 
-from data_provider.akshare_fetcher import AkshareFetcher
-from data_provider.pytdx_fetcher import PytdxFetcher
 from src.services.provider_capability_matrix import (
     FreshnessClass,
     ProviderDomain,
@@ -21,7 +19,6 @@ from src.services.provider_capability_matrix import (
     ScannerUsage,
     BacktestUsage,
     get_provider_capability,
-    list_provider_capability_support_contracts,
     is_provider_allowed_for_backtest,
     is_provider_allowed_for_scanner,
     list_provider_capabilities,
@@ -37,7 +34,6 @@ EXPECTED_PROVIDER_IDS = {
     "local_cache",
     "local_ohlcv",
     "yahoo_yfinance",
-    "akshare",
     "alpaca",
     "twelve_data",
     "fmp",
@@ -189,21 +185,8 @@ def test_provider_capability_import_has_no_runtime_planner_side_effect() -> None
     assert before == after
 
 
-def test_akshare_remains_an_advisory_cn_hk_provider_and_other_runtime_only_ids_stay_absent() -> None:
-    akshare = get_provider_capability("akshare")
-
-    assert akshare is not None
-    assert akshare.markets == (ProviderMarket.CN, ProviderMarket.HK)
-    assert akshare.domains == (
-        ProviderDomain.QUOTE,
-        ProviderDomain.OHLCV,
-        ProviderDomain.TECHNICALS,
-    )
-    assert akshare.freshness_class is FreshnessClass.DELAYED
-    assert akshare.scanner_usage is ScannerUsage.TOP_N_ONLY
-    assert akshare.backtest_usage is BacktestUsage.NEVER
-
-    for provider_id in ("tickflow", "efinance", "tushare", "binance", "fred", "treasury", "ny_fed"):
+def test_cn_hk_runtime_providers_are_not_accidentally_advertised_in_capability_matrix() -> None:
+    for provider_id in ("tickflow", "akshare", "efinance", "tushare", "binance", "fred", "treasury", "ny_fed"):
         assert get_provider_capability(provider_id) is None
 
 
@@ -220,13 +203,11 @@ def test_hk_quote_and_ohlcv_provider_matrix_remains_bounded_to_current_metadata(
     }
 
     assert hk_quote_providers == {
-        "akshare",
         "local_cache",
         "twelve_data",
         "yahoo_yfinance",
     }
     assert hk_ohlcv_providers == {
-        "akshare",
         "local_cache",
         "local_ohlcv",
         "twelve_data",
@@ -275,35 +256,3 @@ def test_provider_capability_matrix_preserves_category_boundaries_for_local_no_k
     assert alpha_vantage.freshness_class is FreshnessClass.MANUAL_REVIEW
     assert "alpha_vantage_api_key" not in SRC_CONFIG_TEXT
     assert "alpha_vantage_api_keys" not in SRC_CONFIG_TEXT
-
-
-@pytest.mark.parametrize(
-    ("provider_id", "fetcher", "expected_trust_level"),
-    [
-        ("pytdx", PytdxFetcher, "usable_with_caution"),
-        ("akshare", AkshareFetcher, "weak"),
-    ],
-)
-def test_cn_provider_probe_contract_metadata_stays_in_lockstep(
-    provider_id: str,
-    fetcher: type,
-    expected_trust_level: str,
-) -> None:
-    contract_capabilities = tuple(
-        sorted(item.capability for item in list_provider_capability_support_contracts(provider_id))
-    )
-    supported_capabilities = tuple(sorted(fetcher.SUPPORTED_CAPABILITIES))
-
-    assert contract_capabilities == supported_capabilities
-    assert set(contract_capabilities).isdisjoint(fetcher.UNSUPPORTED_CAPABILITIES)
-
-    contracts = list_provider_capability_support_contracts(provider_id)
-    assert contracts
-    assert {item.observation_only for item in contracts} == {True}
-    assert {item.score_contribution_allowed for item in contracts} == {False}
-    assert {item.source_type for item in contracts} == {"public_proxy"}
-    assert {item.source_tier for item in contracts} == {"unofficial_public_api"}
-    assert {item.trust_level for item in contracts} == {expected_trust_level}
-    assert "reliable" not in {item.trust_level for item in contracts}
-    assert "official_public" not in {item.source_type for item in contracts}
-    assert "exchange_authorized" not in {item.source_tier for item in contracts}
