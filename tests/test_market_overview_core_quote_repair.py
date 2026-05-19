@@ -172,7 +172,8 @@ def test_vix_yfinance_proxy_panel_and_item_cannot_claim_live_realtime() -> None:
     try:
         with (
             patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", side_effect=history),
-            patch.object(service, "_official_macro_points", return_value={}),
+            patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", return_value={}),
+            patch("src.services.market_overview_service.fetch_fred_observation_points", return_value=[]),
             patch.object(service, "_atr_item", return_value=None),
         ):
             payload = service.get_volatility()
@@ -192,7 +193,7 @@ def test_vix_yfinance_proxy_panel_and_item_cannot_claim_live_realtime() -> None:
     assert vix["providerClass"] == "proxy"
     assert vix["officialOverlayAttempted"] is True
     assert vix["officialOverlayAvailable"] is False
-    assert vix["officialOverlayFailureReason"] == "official_overlay_unavailable"
+    assert vix["officialOverlayFailureReason"] == "empty_response"
     assert vix["activationHint"] == "official_overlay_unavailable_using_proxy"
 
     assert payload["source"] == "yfinance"
@@ -242,7 +243,7 @@ def test_vix_stale_official_overlay_does_not_replace_delayed_proxy() -> None:
     assert vix["freshness"] == "delayed"
     assert vix["officialOverlayAttempted"] is True
     assert vix["officialOverlayAvailable"] is False
-    assert vix["officialOverlayFailureReason"] == "official_overlay_stale"
+    assert vix["officialOverlayFailureReason"] == "stale_official_row"
     assert vix["activationHint"] == "official_overlay_stale_using_proxy"
 
 
@@ -326,8 +327,9 @@ def test_us10y_dxy_and_btc_keep_truthful_source_freshness_metadata() -> None:
     log_patcher = _log_patch()
     try:
         with (
-            patch.object(service, "_official_macro_points", return_value={}),
             patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", side_effect=history),
+            patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", return_value={}),
+            patch("src.services.market_overview_service.fetch_fred_observation_points", return_value=[]),
             patch("src.services.market_overview_service.fetch_binance_ticker_snapshot", side_effect=ticker_snapshot),
             patch("src.services.market_overview_service.fetch_binance_kline_history_rows", side_effect=kline_rows),
             patch("src.services.market_overview_service.fetch_binance_funding_row", side_effect=RuntimeError("funding unavailable")),
@@ -348,7 +350,7 @@ def test_us10y_dxy_and_btc_keep_truthful_source_freshness_metadata() -> None:
     assert us10y["providerClass"] == "proxy"
     assert us10y["officialOverlayAttempted"] is True
     assert us10y["officialOverlayAvailable"] is False
-    assert us10y["officialOverlayFailureReason"] == "official_overlay_unavailable"
+    assert us10y["officialOverlayFailureReason"] == "empty_response"
     assert us10y["activationHint"] == "official_overlay_unavailable_using_proxy"
     assert dxy["source"] == "yfinance"
     assert dxy["freshness"] == "delayed"

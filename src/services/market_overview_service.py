@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import copy
+import csv
 import math
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
+from json import JSONDecodeError
 from typing import Any, Callable, Dict, List, Optional
 
 from src.contracts.source_confidence import coerce_source_confidence_contract
@@ -398,6 +400,7 @@ class MarketOverviewService:
 
     def __init__(self) -> None:
         self._official_macro_micro_cache: Dict[str, tuple[float, List[MacroObservation]]] = {}
+        self._official_macro_overlay_diagnostics: Dict[str, str] = {}
         self._quote_request_memo: Optional[Dict[str, tuple[bool, Any]]] = None
 
     INDEX_SYMBOLS = {
@@ -1651,7 +1654,7 @@ class MarketOverviewService:
         failure_reason = item.get("officialOverlayFailureReason")
         if failure_reason is None:
             if overlay_attempted and not overlay_available:
-                failure_reason = "official_overlay_unavailable"
+                failure_reason = "not_attempted"
             elif not overlay_attempted:
                 failure_reason = "not_configured"
         provider_attempted = (
@@ -1735,7 +1738,7 @@ class MarketOverviewService:
         if provider_class == "official_daily" and overlay_attempted and overlay_available:
             return "official_daily_overlay_active"
         if overlay_attempted and not overlay_available:
-            if failure_reason == "official_overlay_stale":
+            if failure_reason in {"official_overlay_stale", "stale_official_row"}:
                 return (
                     "official_overlay_stale_using_proxy"
                     if provider_class == "proxy"
@@ -1805,6 +1808,7 @@ class MarketOverviewService:
             "VIX",
             "VIX",
             self._official_macro_points().get("VIXCLS", []),
+            series_id="VIXCLS",
             unit="pts",
             change_scale=1.0,
         )
@@ -2174,7 +2178,14 @@ class MarketOverviewService:
             for item in self._quote_items(self.MACRO_SYMBOLS)
         }
         for panel_symbol, (series_id, label, unit, market) in self.OFFICIAL_RATE_SERIES.items():
-            official_item, official_failure = self._official_macro_overlay_item(panel_symbol, label, official_points.get(series_id, []), unit=unit, market=market)
+            official_item, official_failure = self._official_macro_overlay_item(
+                panel_symbol,
+                label,
+                official_points.get(series_id, []),
+                series_id=series_id,
+                unit=unit,
+                market=market,
+            )
             if official_item:
                 item_map[panel_symbol] = official_item
             elif panel_symbol in item_map and official_failure:
@@ -2182,7 +2193,14 @@ class MarketOverviewService:
         official_sofr = self._official_macro_item("SOFR", "SOFR", official_points.get("SOFR", []), unit="%", market="US")
         if official_sofr:
             item_map["SOFR"] = official_sofr
-        official_vix, official_vix_failure = self._official_macro_overlay_item("VIX", "VIX", official_points.get("VIXCLS", []), unit="pts", change_scale=1.0)
+        official_vix, official_vix_failure = self._official_macro_overlay_item(
+            "VIX",
+            "VIX",
+            official_points.get("VIXCLS", []),
+            series_id="VIXCLS",
+            unit="pts",
+            change_scale=1.0,
+        )
         if official_vix:
             item_map["VIX"] = official_vix
         elif "VIX" in item_map and official_vix_failure:
@@ -2491,7 +2509,14 @@ class MarketOverviewService:
         official_count = 0
         for symbol in ("US2Y", "US10Y", "US30Y"):
             series_id, label, unit, market = self.OFFICIAL_RATE_SERIES[symbol]
-            official_item, official_failure = self._official_macro_overlay_item(symbol, label, official_points.get(series_id, []), unit=unit, market=market)
+            official_item, official_failure = self._official_macro_overlay_item(
+                symbol,
+                label,
+                official_points.get(series_id, []),
+                series_id=series_id,
+                unit=unit,
+                market=market,
+            )
             if official_item:
                 items.append(official_item)
                 official_count += 1
@@ -2508,13 +2533,14 @@ class MarketOverviewService:
             if symbol in fallback_items:
                 items.append(fallback_items[symbol])
 
-        if official_count == 0 and not official_sofr:
-            return fallback
-
         return {
             **fallback,
-            "source": "mixed",
-            "sourceLabel": self._source_label("mixed"),
+            "source": "mixed" if official_count > 0 or official_sofr else fallback.get("source", "fallback"),
+            "sourceLabel": (
+                self._source_label("mixed")
+                if official_count > 0 or official_sofr
+                else fallback.get("sourceLabel", self._source_label("fallback"))
+            ),
             "items": items,
             "fallbackUsed": any(bool(item.get("isFallback")) for item in items),
             "isFallback": False,
@@ -2673,6 +2699,7 @@ class MarketOverviewService:
         budget_seconds: Optional[float] = None,
     ) -> Dict[str, List[MacroObservation]]:
         points: Dict[str, List[MacroObservation]] = {}
+        diagnostics: Dict[str, str] = {}
         fetched_at = time.monotonic()
         fred_series_ids = ["DGS2", "DGS10", "DGS30", "VIXCLS", "SOFR"]
         if include_policy_and_inflation:
@@ -2682,7 +2709,13 @@ class MarketOverviewService:
         for series_id in fred_series_ids:
             cached_points = self._cached_official_macro_series(series_id, fetched_at)
             if cached_points:
-                points[series_id] = cached_points
+                freshness_reason = self._official_macro_row_failure_reason(series_id, cached_points)
+                if freshness_reason is None:
+                    points[series_id] = cached_points
+                else:
+                    diagnostics[series_id] = freshness_reason
+            else:
+                diagnostics[series_id] = "cache_miss"
 
         deadline = self._deadline_after(
             self.OFFICIAL_MACRO_AGGREGATE_BUDGET_SECONDS
@@ -2695,32 +2728,60 @@ class MarketOverviewService:
         else:
             timeout = None
         if timeout is not None:
+            treasury_error_reason: str | None = None
             try:
                 treasury_points = fetch_treasury_daily_rate_observation_points(limit=2, timeout=timeout)
-            except Exception:
+            except Exception as exc:
                 treasury_points = {}
+                treasury_error_reason = self._official_macro_exception_reason(exc)
             self._store_official_macro_points(treasury_points, fetched_at)
             for series_id in treasury_series_ids:
                 series_points = treasury_points.get(series_id, [])
                 if series_points:
-                    points[series_id] = list(series_points)
+                    freshness_reason = self._official_macro_row_failure_reason(series_id, series_points)
+                    if freshness_reason is None:
+                        points[series_id] = list(series_points)
+                        diagnostics.pop(series_id, None)
+                    else:
+                        self._record_official_macro_diagnostic(diagnostics, series_id, freshness_reason)
+                elif series_id in treasury_points:
+                    self._record_official_macro_diagnostic(diagnostics, series_id, "empty_response")
+                elif treasury_error_reason is not None:
+                    self._record_official_macro_diagnostic(diagnostics, series_id, treasury_error_reason)
+                else:
+                    self._record_official_macro_diagnostic(diagnostics, series_id, "missing_series")
+        else:
+            for series_id in treasury_series_ids:
+                self._record_official_macro_diagnostic(diagnostics, series_id, "not_attempted")
         for series_id in fred_series_ids:
             if series_id in points and points[series_id]:
                 continue
             timeout = self._deadline_timeout(deadline, self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
             if timeout is None:
+                self._record_official_macro_diagnostic(diagnostics, series_id, "not_attempted")
                 break
+            fred_error_reason: str | None = None
             try:
                 series_points = fetch_fred_observation_points(
                     series_id,
                     limit=self._official_macro_history_limit(series_id),
                     timeout=timeout,
                 )
-            except Exception:
+            except Exception as exc:
                 series_points = []
+                fred_error_reason = self._official_macro_exception_reason(exc)
+                self._record_official_macro_diagnostic(diagnostics, series_id, fred_error_reason)
             if series_points:
-                self._store_official_macro_points({series_id: series_points}, fetched_at)
-                points[series_id] = series_points
+                freshness_reason = self._official_macro_row_failure_reason(series_id, series_points)
+                if freshness_reason is None:
+                    self._store_official_macro_points({series_id: series_points}, fetched_at)
+                    points[series_id] = series_points
+                    diagnostics.pop(series_id, None)
+                else:
+                    self._record_official_macro_diagnostic(diagnostics, series_id, freshness_reason)
+            elif fred_error_reason is None:
+                self._record_official_macro_diagnostic(diagnostics, series_id, "empty_response")
+        self._official_macro_overlay_diagnostics = diagnostics
         return points
 
     @staticmethod
@@ -2743,6 +2804,51 @@ class MarketOverviewService:
         for series_id, observations in points.items():
             if observations:
                 self._official_macro_micro_cache[series_id] = (fetched_at, list(observations))
+
+    @staticmethod
+    def _official_macro_exception_reason(exc: Exception) -> str:
+        if isinstance(exc, (JSONDecodeError, UnicodeDecodeError, csv.Error)):
+            return "parse_error"
+        return "transport_error"
+
+    def _official_macro_row_failure_reason(self, series_id: str, observations: List[MacroObservation]) -> Optional[str]:
+        if not observations:
+            return self._official_macro_overlay_diagnostics.get(series_id)
+        latest = observations[0]
+        if latest.value is None:
+            return self._official_macro_overlay_diagnostics.get(series_id) or "empty_response"
+        freshness = get_freshness_status(
+            latest.as_of or latest.date,
+            "macro_rate",
+            str(latest.source_id or "").split(":", 1)[0],
+            False,
+            source_type=str(latest.source_type or ""),
+        )
+        if freshness["freshness"] == "stale":
+            return "stale_official_row"
+        if freshness["freshness"] in {"fallback", "mock", "unavailable", "error"}:
+            return self._official_macro_overlay_diagnostics.get(series_id) or "empty_response"
+        return None
+
+    @staticmethod
+    def _record_official_macro_diagnostic(diagnostics: Dict[str, str], series_id: str, reason: str) -> None:
+        normalized_reason = str(reason or "").strip().lower()
+        if not normalized_reason:
+            return
+        current_reason = str(diagnostics.get(series_id) or "").strip().lower()
+        if current_reason == "stale_official_row":
+            return
+        replaceable_reasons = {
+            "",
+            "cache_miss",
+            "not_attempted",
+            "empty_response",
+            "missing_series",
+            "transport_error",
+            "parse_error",
+        }
+        if normalized_reason == "stale_official_row" or current_reason in replaceable_reasons:
+            diagnostics[series_id] = normalized_reason
 
     def _official_macro_item(
         self,
@@ -2785,6 +2891,7 @@ class MarketOverviewService:
         label: str,
         observations: List[MacroObservation],
         *,
+        series_id: str,
         unit: str,
         market: Optional[str] = None,
         value_scale: float = 1.0,
@@ -2800,7 +2907,8 @@ class MarketOverviewService:
             change_scale=change_scale,
         )
         if item is None:
-            return None, "official_overlay_unavailable"
+            failure_reason = self._official_macro_overlay_diagnostics.get(series_id) or "empty_response"
+            return None, failure_reason
         freshness = get_freshness_status(
             item.get("asOf"),
             "macro_rate",
@@ -2809,7 +2917,7 @@ class MarketOverviewService:
             source_type=str(item.get("sourceType") or ""),
         )
         if freshness["freshness"] in {"stale", "fallback", "mock", "unavailable", "error"}:
-            return None, "official_overlay_stale"
+            return None, "stale_official_row"
         item.update({
             "providerAttempted": True,
             "providerClass": "official_daily",
@@ -2822,7 +2930,7 @@ class MarketOverviewService:
 
     @staticmethod
     def _with_official_overlay_failure(item: Dict[str, Any], reason: str | None) -> Dict[str, Any]:
-        failure_reason = reason or "official_overlay_unavailable"
+        failure_reason = str(reason or "empty_response").strip().lower()
         fallback_item = bool(item.get("isFallback") or item.get("fallbackUsed")) or str(item.get("source") or "").lower() in {
             "fallback",
             "mock",
@@ -2831,7 +2939,7 @@ class MarketOverviewService:
         fallback_suffix = "static_fallback" if fallback_item else "proxy"
         activation_hint = (
             f"official_overlay_stale_using_{fallback_suffix}"
-            if failure_reason == "official_overlay_stale"
+            if failure_reason in {"official_overlay_stale", "stale_official_row"}
             else f"official_overlay_unavailable_using_{fallback_suffix}"
         )
         return {
