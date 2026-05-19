@@ -1,6 +1,7 @@
 # WolfyStock Codex Execution Policy
 
-> Canonical execution policy for Codex tasks in the WolfyStock repository.  
+> Condensed execution policy for Codex tasks in the WolfyStock repository.
+> `AGENTS.md` remains the single source of truth for repository AI collaboration rules.
 > Recommended location: `docs/codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md`
 
 ## 1. Purpose

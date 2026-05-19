@@ -33,6 +33,7 @@
 | Document | Description |
 |----------|-------------|
 | [Contributing Guide (EN)](CONTRIBUTING_EN.md) | How to report bugs, request features, and submit pull requests |
+| [WolfyStock Codex Execution Policy](codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md) | Condensed Codex task execution policy; `AGENTS.md` remains the source of truth |
 
 ## 📋 Reference
 
