@@ -830,7 +830,9 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             "Alpaca feed active for requested 5m/15m/60m/1d windows.",
         )
         self.assertEqual(diagnostics["minimumActivationSuccessRatio"], 0.75)
-        self.assertEqual(diagnostics["minimumActivationSuccessCount"], 2)
+        self.assertEqual(diagnostics["minimumActivationSuccessCount"], 1)
+        self.assertEqual(diagnostics["activationProbeSymbolCount"], 1)
+        self.assertEqual(diagnostics["diagnosticProbeSymbolCount"], 2)
         for window in ("5m", "15m", "60m", "1d"):
             result = diagnostics["requestWindowResults"][window]
             self.assertEqual(result["requestedSymbolCount"], 2)
@@ -936,7 +938,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         for window in ("5m", "15m", "60m", "1d"):
             self.assertEqual(diagnostics["requestWindowResults"][window]["successCount"], 6)
             self.assertIn("timeout", diagnostics["requestWindowResults"][window]["failureClasses"])
-            self.assertTrue(diagnostics["requestWindowResults"][window]["fulfilled"])
+            self.assertTrue(diagnostics["activationWindowResults"][window]["fulfilled"])
         self.assertGreater(len({symbol for symbol, _ in fetch_calls}), 6)
 
     def test_configured_alpaca_probe_success_with_full_universe_timeout_stays_partial(self) -> None:
@@ -1079,7 +1081,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertIn("reducing the symbol universe", diagnostics["activationHint"])
         self.assertEqual(diagnostics["minimumActivationCoverageMet"], True)
         self.assertEqual(diagnostics["minimumActivationSuccessRatio"], 0.75)
-        self.assertEqual(diagnostics["minimumActivationSuccessCount"], 9)
+        self.assertEqual(diagnostics["minimumActivationSuccessCount"], 4)
         self.assertTrue(diagnostics["yfinanceFallbackUsed"])
         self.assertEqual(metadata["windowCoverage"]["5m"]["usableSymbolCount"], 0)
         self.assertEqual(metadata["windowCoverage"]["60m"]["usableSymbolCount"], 9)
@@ -1134,7 +1136,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["fulfilledWindows"], [])
         self.assertEqual(diagnostics["missingWindows"], ["5m", "15m", "60m", "1d"])
         self.assertEqual(diagnostics["minimumActivationSuccessRatio"], 0.75)
-        self.assertEqual(diagnostics["minimumActivationSuccessCount"], 9)
+        self.assertEqual(diagnostics["minimumActivationSuccessCount"], 4)
         for window in ("5m", "15m", "60m", "1d"):
             result = diagnostics["requestWindowResults"][window]
             self.assertEqual(result["requestedSymbolCount"], 12)
@@ -1142,6 +1144,111 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             self.assertEqual(result["successRatio"], 0.0)
             self.assertEqual(result["minimumRequiredSuccessCount"], 9)
             self.assertFalse(result["fulfilled"])
+
+    def test_configured_alpaca_observed_data_below_activation_threshold_is_not_coverage_met(self) -> None:
+        symbols = ("QQQ", "SPY", "IWM", "SMH", "SOXX", "IGV")
+        successful_long_window_symbols = {"QQQ", "SPY"}
+
+        class SparseLongWindowAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                if symbol in successful_long_window_symbols and timeframe in {"1Hour", "1Day"}:
+                    return _alpaca_bars(end_close=102.0)
+                return []
+
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="iex"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            SparseLongWindowAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=pd.DataFrame(),
+        ):
+            payload = load_rotation_radar_quotes(symbols)
+
+        diagnostics = payload["metadata"]["providerDiagnostics"]
+        self.assertTrue(diagnostics["anyConfiguredProviderDataAvailable"])
+        self.assertFalse(diagnostics["configuredProviderWindowCoverageMet"])
+        self.assertFalse(diagnostics["partialActivationEligible"])
+        self.assertFalse(diagnostics["minimumActivationCoverageMet"])
+        self.assertEqual(diagnostics["configuredProviderFulfilledWindows"], [])
+        self.assertEqual(diagnostics["configuredProviderMissingWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(diagnostics["liveActivationStatus"], "unavailable")
+        self.assertEqual(diagnostics["activationWindowResults"]["60m"]["successCount"], 2)
+        self.assertFalse(diagnostics["activationWindowResults"]["60m"]["fulfilled"])
+
+    def test_configured_alpaca_activation_uses_stable_probe_and_reports_long_tail_failures(self) -> None:
+        symbols = (
+            "QQQ",
+            "SPY",
+            "IWM",
+            "SMH",
+            "SOXX",
+            "IGV",
+            "CLOU",
+            "CIBR",
+            "HACK",
+            "BLOK",
+            "BITQ",
+            "BITO",
+        )
+        stable_symbols = {"QQQ", "SPY", "IWM", "SMH", "SOXX", "IGV"}
+        timed_out_symbols = {"CLOU", "CIBR", "HACK"}
+
+        class MixedCoverageAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                if symbol in stable_symbols and timeframe in {"1Hour", "1Day"}:
+                    return _alpaca_bars(end_close=102.0)
+                if symbol in timed_out_symbols:
+                    raise RuntimeError("request timeout")
+                return []
+
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="iex"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            MixedCoverageAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=pd.DataFrame(),
+        ):
+            payload = load_rotation_radar_quotes(symbols)
+
+        diagnostics = payload["metadata"]["providerDiagnostics"]
+        self.assertEqual(diagnostics["activationProbeSymbolCount"], 6)
+        self.assertEqual(diagnostics["diagnosticProbeSymbolCount"], 12)
+        self.assertEqual(diagnostics["stableActivationProbeSymbols"], ["SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV"])
+        self.assertEqual(diagnostics["longTailProbeSymbols"], ["CLOU", "CIBR", "HACK", "BLOK", "BITQ", "BITO"])
+        self.assertTrue(diagnostics["anyConfiguredProviderDataAvailable"])
+        self.assertTrue(diagnostics["configuredProviderWindowCoverageMet"])
+        self.assertTrue(diagnostics["partialActivationEligible"])
+        self.assertTrue(diagnostics["minimumActivationCoverageMet"])
+        self.assertEqual(diagnostics["configuredProviderFulfilledWindows"], ["60m", "1d"])
+        self.assertEqual(diagnostics["configuredProviderMissingWindows"], ["5m", "15m"])
+        self.assertEqual(diagnostics["liveActivationStatus"], "partial")
+        self.assertEqual(diagnostics["activationBlocker"], "intraday_short_window_empty")
+        self.assertEqual(diagnostics["activationWindowResults"]["60m"]["requestedSymbolCount"], 6)
+        self.assertEqual(diagnostics["activationWindowResults"]["60m"]["successCount"], 6)
+        self.assertTrue(diagnostics["activationWindowResults"]["60m"]["fulfilled"])
+        self.assertEqual(diagnostics["requestWindowResults"]["60m"]["requestedSymbolCount"], 12)
+        self.assertEqual(diagnostics["requestWindowResults"]["60m"]["successCount"], 6)
+        self.assertFalse(diagnostics["requestWindowResults"]["60m"]["fulfilled"])
+        self.assertCountEqual(diagnostics["requestWindowResults"]["60m"]["timedOutSymbols"], ["CLOU", "CIBR", "HACK"])
+        self.assertCountEqual(diagnostics["requestWindowResults"]["60m"]["emptyResponseSymbols"], ["BLOK", "BITQ", "BITO"])
+        self.assertCountEqual(diagnostics["timedOutSymbolsByWindow"]["60m"], ["CLOU", "CIBR", "HACK"])
+        self.assertCountEqual(diagnostics["emptyResponseSymbolsByWindow"]["60m"], ["BLOK", "BITQ", "BITO"])
 
     def test_configured_alpaca_full_window_coverage_reports_active_activation(self) -> None:
         class FullCoverageAlpacaFetcher:
@@ -1170,7 +1277,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["fulfilledWindows"], ["5m", "15m", "60m", "1d"])
         self.assertEqual(diagnostics["missingWindows"], [])
         self.assertEqual(diagnostics["minimumActivationSuccessRatio"], 0.75)
-        self.assertEqual(diagnostics["minimumActivationSuccessCount"], 9)
+        self.assertEqual(diagnostics["minimumActivationSuccessCount"], 4)
         for window in ("5m", "15m", "60m", "1d"):
             result = diagnostics["requestWindowResults"][window]
             self.assertEqual(result["requestedSymbolCount"], 12)
