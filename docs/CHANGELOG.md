@@ -1,5 +1,11 @@
 ## 2026-05-19
 
+- **Market Overview source activation diagnostics** - Market Overview core
+  indicators now expose additive source activation diagnostics for official
+  overlay attempts and proxy/static fallback states. Fresh official FRED/Treasury
+  daily rows can replace proxy rows, stale or missing official overlays keep the
+  visible yfinance/static fallback capped and non-live, and SPX/DXY/CN00Y remain
+  explicit proxy/static evidence rather than exchange-grade or live data.
 - **Market Intelligence display contract smoke** - Hardened the Rotation Radar and
   Market Overview display contracts so headline ranking consumes
   `summary.strongestThemes`, taxonomy-only themes stay out of headline lanes,

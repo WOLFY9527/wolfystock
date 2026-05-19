@@ -255,6 +255,12 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
         self.assertEqual(rates_items["SOFR"]["sourceType"], "official_public")
         self.assertEqual(rates_items["SOFR"]["sourceId"], "fred:SOFR")
         self.assertFalse(rates_items["US10Y"]["isFallback"])
+        self.assertEqual(rates_items["US10Y"]["providerClass"], "official_daily")
+        self.assertTrue(rates_items["US10Y"]["providerAttempted"])
+        self.assertTrue(rates_items["US10Y"]["officialOverlayAttempted"])
+        self.assertTrue(rates_items["US10Y"]["officialOverlayAvailable"])
+        self.assertIsNone(rates_items["US10Y"]["officialOverlayFailureReason"])
+        self.assertEqual(rates_items["US10Y"]["activationHint"], "official_daily_overlay_active")
         self.assertTrue(rates_payload["fallbackUsed"])
         self.assertNotIn("CREDIT", rates_items)
         us10y_provenance = project_source_provenance(
@@ -269,6 +275,22 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
         macro_items = {item["symbol"]: item for item in macro_payload["items"]}
         self.assertEqual(macro_items["US2Y"]["sourceType"], "official_public")
         self.assertEqual(macro_items["US10Y"]["sourceId"], "treasury:daily_treasury_yield_curve")
+        self.assertEqual(macro_items["US10Y"]["sourceType"], rates_items["US10Y"]["sourceType"])
+        self.assertEqual(macro_items["US10Y"]["sourceLabel"], rates_items["US10Y"]["sourceLabel"])
+        self.assertEqual(macro_items["US10Y"]["sourceTier"], rates_items["US10Y"]["sourceTier"])
+        self.assertEqual(macro_items["US10Y"]["trustLevel"], rates_items["US10Y"]["trustLevel"])
+        self.assertEqual(macro_items["US10Y"]["freshness"], rates_items["US10Y"]["freshness"])
+        self.assertEqual(macro_items["US10Y"]["asOf"], rates_items["US10Y"]["asOf"])
+        self.assertEqual(macro_items["US10Y"]["providerClass"], rates_items["US10Y"]["providerClass"])
+        self.assertEqual(
+            macro_items["US10Y"]["officialOverlayAvailable"],
+            rates_items["US10Y"]["officialOverlayAvailable"],
+        )
+        self.assertEqual(
+            macro_items["US10Y"]["officialOverlayFailureReason"],
+            rates_items["US10Y"]["officialOverlayFailureReason"],
+        )
+        self.assertEqual(macro_items["US10Y"]["activationHint"], rates_items["US10Y"]["activationHint"])
         self.assertEqual(macro_items["VIX"]["sourceLabel"], "FRED CBOE VIX Close")
         self.assertEqual(macro_items["SOFR"]["sourceType"], "official_public")
         self.assertEqual(macro_items["SOFR"]["freshness"], "delayed")
