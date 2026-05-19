@@ -7,7 +7,7 @@ import copy
 import math
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 from zoneinfo import ZoneInfo
@@ -188,6 +188,7 @@ PROVIDER_HEALTH_STATUSES = {
     "refreshing",
 }
 CN_INDICES_OBSERVATION_PROVIDER_TIMEOUT_SECONDS = 1.0
+CN_INDICES_AKSHARE_OBSERVATION_TIMEOUT_SECONDS = 1.0
 
 
 def _has_valid_market_value(meta: Dict[str, Any]) -> bool:
@@ -654,6 +655,15 @@ class MarketOverviewService:
         "HSI": "rt_hkHSI",
         "HSTECH": "rt_hkHSTECH",
     }
+    AKSHARE_CN_INDEX_SYMBOLS = {
+        "sh000001": "000001.SH",
+        "sz399001": "399001.SZ",
+        "sz399006": "399006.SZ",
+        "sh000688": "000688.SH",
+        "sh000016": "000016.SH",
+        "sh000300": "000300.SH",
+    }
+    AKSHARE_CN_INDEX_EXPECTED_SYMBOLS = tuple(AKSHARE_CN_INDEX_SYMBOLS.values())
 
     def get_indices(self, actor: Optional[Dict[str, Any]] = None) -> PanelPayload:
         return self._with_request_quote_memo(
@@ -1056,6 +1066,9 @@ class MarketOverviewService:
         snapshot["providerHealth"] = self._provider_health(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message)
         if cache_key == "cn_indices":
             snapshot["providerHealth"]["observationProviders"] = self._cn_indices_observation_provider_health()
+            observation_coverage = snapshot.pop("observationCoverage", None)
+            if isinstance(observation_coverage, dict) and observation_coverage:
+                snapshot["providerHealth"]["observationCoverage"] = observation_coverage
         snapshot = self._with_evidence_snapshot(snapshot, self._category_for_cache_key(cache_key))
         raw_response.update(self._provider_log_meta(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message))
         log_session_id = ExecutionLogService().record_market_overview_fetch(
@@ -1077,6 +1090,134 @@ class MarketOverviewService:
                 timeout_seconds=CN_INDICES_OBSERVATION_PROVIDER_TIMEOUT_SECONDS
             )
         ]
+
+    def _normalize_akshare_cn_index_observation_records(
+        self,
+        rows: Any,
+        *,
+        attempted_at: str,
+    ) -> List[Dict[str, Any]]:
+        freshness = self._akshare_cn_index_observation_freshness(attempted_at)
+        normalized: List[Dict[str, Any]] = []
+        seen_symbols: set[str] = set()
+        for row in rows or []:
+            if not isinstance(row, dict):
+                continue
+            provider_symbol = str(row.get("code") or "").strip().lower()
+            canonical_symbol = self.AKSHARE_CN_INDEX_SYMBOLS.get(provider_symbol)
+            if not canonical_symbol or canonical_symbol in seen_symbols:
+                continue
+            seen_symbols.add(canonical_symbol)
+            normalized.append({
+                "providerName": "akshare",
+                "providerSymbol": provider_symbol,
+                "canonicalSymbol": canonical_symbol,
+                "sourceType": "public_proxy",
+                "sourceTier": "unofficial_public_api",
+                "trustLevel": "weak",
+                "observationOnly": True,
+                "scoreContributionAllowed": False,
+                "freshness": freshness,
+                "asOf": attempted_at,
+                "updatedAt": attempted_at,
+                "providerTimestampAvailable": False,
+            })
+        return normalized
+
+    def _akshare_cn_index_observation_freshness(self, attempted_at: str) -> str:
+        freshness = get_freshness_status(
+            attempted_at,
+            "equity_index",
+            "akshare",
+            False,
+            source_type="public_proxy",
+        )["freshness"]
+        if freshness in {"live", "fresh"}:
+            return "delayed"
+        if freshness == "cached":
+            parsed_attempted_at = _parse_market_time(attempted_at)
+            if parsed_attempted_at and parsed_attempted_at.date() == datetime.now(CN_TZ).date():
+                return "delayed"
+            return "stale"
+        if freshness in {"delayed", "stale", "unavailable"}:
+            return freshness
+        return "unavailable"
+
+    def _fetch_akshare_cn_index_observation_rows(self, timeout_seconds: float) -> Any:
+        from data_provider.akshare_fetcher import AkshareFetcher
+
+        fetcher = AkshareFetcher()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(fetcher.get_main_indices, "cn")
+            try:
+                return future.result(timeout=max(0.1, float(timeout_seconds)))
+            except FutureTimeoutError as exc:
+                future.cancel()
+                raise TimeoutError("akshare cn index observation timed out") from exc
+
+    def _build_akshare_cn_index_observation_coverage(self) -> Dict[str, Any]:
+        attempted_at = _now_iso()
+        expected_symbols = list(self.AKSHARE_CN_INDEX_EXPECTED_SYMBOLS)
+        base = {
+            "providerName": "akshare",
+            "sourceType": "public_proxy",
+            "sourceTier": "unofficial_public_api",
+            "trustLevel": "weak",
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "asOf": attempted_at,
+            "updatedAt": attempted_at,
+            "attemptedAt": attempted_at,
+            "coverageCount": 0,
+            "matchedCanonicalSymbols": [],
+            "missingExpectedSymbols": expected_symbols,
+            "partialCoverageReason": None,
+            "degradationReason": None,
+            "providerTimestampAvailable": False,
+        }
+        try:
+            rows = self._fetch_akshare_cn_index_observation_rows(
+                CN_INDICES_AKSHARE_OBSERVATION_TIMEOUT_SECONDS
+            )
+        except (ImportError, ModuleNotFoundError):
+            return {
+                **base,
+                "freshness": "unavailable",
+                "degradationReason": "akshare_not_installed",
+            }
+        except TimeoutError:
+            return {
+                **base,
+                "freshness": "unavailable",
+                "degradationReason": "akshare_fetch_timeout",
+            }
+        except Exception:
+            return {
+                **base,
+                "freshness": "unavailable",
+                "degradationReason": "akshare_fetch_failed",
+            }
+
+        records = self._normalize_akshare_cn_index_observation_records(rows, attempted_at=attempted_at)
+        if not records:
+            return {
+                **base,
+                "freshness": "unavailable",
+                "degradationReason": "empty_response",
+            }
+
+        matched_symbols = [record["canonicalSymbol"] for record in records]
+        missing_symbols = [symbol for symbol in self.AKSHARE_CN_INDEX_EXPECTED_SYMBOLS if symbol not in matched_symbols]
+        degradation_reason = "partial_coverage" if missing_symbols else None
+        return {
+            **base,
+            "freshness": records[0]["freshness"],
+            "coverageCount": len(matched_symbols),
+            "matchedCanonicalSymbols": matched_symbols,
+            "missingExpectedSymbols": missing_symbols,
+            "partialCoverageReason": degradation_reason,
+            "degradationReason": degradation_reason,
+        }
 
     def _cached_payload(
         self,
@@ -2476,6 +2617,8 @@ class MarketOverviewService:
 
     def _fetch_cn_indices_snapshot(self) -> Dict[str, Any]:
         fallback = self._fallback_cn_indices_snapshot()
+        observation_coverage = {"akshare": self._build_akshare_cn_index_observation_coverage()}
+        fallback["observationCoverage"] = observation_coverage
         try:
             live_quotes = self._fetch_sina_cn_index_quotes()
         except Exception:
@@ -2516,6 +2659,7 @@ class MarketOverviewService:
             "items": merged_items,
             "fallbackUsed": live_count != len(merged_items),
             "warning": FALLBACK_WARNING if live_count != len(merged_items) else None,
+            "observationCoverage": observation_coverage,
         }
 
     def _fetch_sina_cn_index_quotes(self) -> Dict[str, Dict[str, Any]]:

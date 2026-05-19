@@ -351,6 +351,82 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         self.assertEqual(provider_health["observationProviders"][1]["healthStatus"], "missing_dependency")
         self.assertEqual(payload["items"][0]["source"], "sina")
 
+    def test_normalize_akshare_cn_index_observation_records_maps_codes_and_dedupes(self) -> None:
+        service = MarketOverviewService()
+        attempted_at = "2026-05-19T09:30:00+08:00"
+
+        records = service._normalize_akshare_cn_index_observation_records(
+            [
+                {"code": "sh000001", "name": "上证指数", "current": 4107.51},
+                {"code": "sh000300", "name": "沪深300", "current": 3918.88},
+                {"code": "sh000001", "name": "上证指数", "current": 4108.00},
+                {"code": "unsupported", "name": "忽略", "current": 1.0},
+            ],
+            attempted_at=attempted_at,
+        )
+
+        self.assertEqual([record["canonicalSymbol"] for record in records], ["000001.SH", "000300.SH"])
+        self.assertTrue(all(record["providerName"] == "akshare" for record in records))
+        self.assertTrue(all(record["sourceType"] == "public_proxy" for record in records))
+        self.assertTrue(all(record["sourceTier"] == "unofficial_public_api" for record in records))
+        self.assertTrue(all(record["trustLevel"] == "weak" for record in records))
+        self.assertTrue(all(record["observationOnly"] is True for record in records))
+        self.assertTrue(all(record["scoreContributionAllowed"] is False for record in records))
+        self.assertTrue(all(record["freshness"] not in {"live", "fresh"} for record in records))
+        self.assertTrue(all(record["freshness"] in {"delayed", "stale", "unavailable"} for record in records))
+        self.assertTrue(all(record["asOf"] == attempted_at for record in records))
+        self.assertTrue(all(record["updatedAt"] == attempted_at for record in records))
+        self.assertTrue(all(record["providerTimestampAvailable"] is False for record in records))
+        self.assertTrue(all("current" not in record for record in records))
+
+    def test_cn_indices_projects_akshare_observation_coverage_without_appending_rows(self) -> None:
+        service = MarketOverviewService()
+        now = _fresh_sina_as_of()
+        quotes = {
+            "000001.SH": {
+                "name": "上证指数",
+                "symbol": "000001.SH",
+                "value": 4107.51,
+                "change": 28.88,
+                "changePercent": 0.71,
+                "sparkline": [4078.63, 4107.51],
+                "asOf": now,
+            }
+        }
+        akshare_rows = [
+            {"code": "sh000001", "name": "上证指数", "current": 4107.51},
+            {"code": "sh000300", "name": "沪深300", "current": 3918.88},
+        ]
+
+        with (
+            patch.object(service, "_fetch_sina_cn_index_quotes", return_value=quotes),
+            patch("data_provider.akshare_fetcher.AkshareFetcher.get_main_indices", return_value=akshare_rows),
+        ):
+            payload = service.get_cn_indices()
+
+        coverage = payload["providerHealth"]["observationCoverage"]["akshare"]
+        self.assertEqual(coverage["providerName"], "akshare")
+        self.assertEqual(coverage["sourceType"], "public_proxy")
+        self.assertEqual(coverage["sourceTier"], "unofficial_public_api")
+        self.assertEqual(coverage["trustLevel"], "weak")
+        self.assertTrue(coverage["observationOnly"])
+        self.assertFalse(coverage["scoreContributionAllowed"])
+        self.assertNotIn(coverage["freshness"], {"live", "fresh"})
+        self.assertIn(coverage["freshness"], {"delayed", "stale", "unavailable"})
+        self.assertEqual(coverage["coverageCount"], 2)
+        self.assertEqual(coverage["matchedCanonicalSymbols"], ["000001.SH", "000300.SH"])
+        self.assertEqual(
+            coverage["missingExpectedSymbols"],
+            ["399001.SZ", "399006.SZ", "000688.SH", "000016.SH"],
+        )
+        self.assertEqual(coverage["partialCoverageReason"], "partial_coverage")
+        self.assertEqual(coverage["degradationReason"], "partial_coverage")
+        self.assertFalse(coverage["providerTimestampAvailable"])
+        self.assertEqual(len(payload["items"]), len(service._fallback_cn_indices_snapshot()["items"]))
+        self.assertTrue(all(item["source"] != "akshare" for item in payload["items"]))
+        self.assertEqual(next(item for item in payload["items"] if item["symbol"] == "000001.SH")["source"], "sina")
+        self.assertEqual(next(item for item in payload["items"] if item["symbol"] == "000300.SH")["source"], "fallback")
+
     def test_cn_indices_keeps_existing_fallback_when_observation_providers_are_degraded(self) -> None:
         service = MarketOverviewService()
         observation_providers = (
