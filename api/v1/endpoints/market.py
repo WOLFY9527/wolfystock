@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 
 from api.deps import CurrentUser, get_optional_current_user
 from api.v1.schemas.market_rotation import MarketRotationRadarResponse
+from src.services.cn_provider_health_service import CNProviderHealthService
 from src.services.crypto_realtime_service import get_crypto_realtime_service
 from src.services.market_overview_service import MarketOverviewService
 from src.services.market_rotation_radar_service import MarketRotationRadarService
@@ -152,3 +153,8 @@ def get_futures(current_user: Optional[CurrentUser] = Depends(get_optional_curre
 @router.get("/cn-short-sentiment", summary="Get China short-term sentiment snapshot")
 def get_cn_short_sentiment(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
     return MarketOverviewService().get_cn_short_sentiment(actor=_actor(current_user))
+
+
+@router.get("/cn-provider-health", summary="Get read-only CN provider health snapshot")
+def get_cn_provider_health() -> list[dict[str, Any]]:
+    return [item.to_dict() for item in CNProviderHealthService().get_snapshot()]

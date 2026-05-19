@@ -168,6 +168,8 @@ def test_market_intelligence_checklist_captures_scope_and_validation_commands() 
     assert "tests/test_liquidity_monitor_service.py" in checklist
     assert "tests/test_rotation_theme_registry.py" in checklist
     assert "tests/test_market_rotation_radar_service.py" in checklist
+    assert "tests/test_cn_provider_health_service.py" in checklist
+    assert "tests/api/test_cn_provider_health.py" in checklist
     assert "tests/api/test_market_rotation_radar.py" in checklist
     assert "python3 -m py_compile" in checklist
     assert "git diff --check" in checklist
@@ -180,6 +182,7 @@ def test_market_intelligence_checklist_captures_scope_and_validation_commands() 
         "/api/v1/market/temperature",
         "/api/v1/market/market-briefing",
         "/api/v1/market/liquidity-monitor",
+        "/api/v1/market/cn-provider-health",
         "/api/v1/market/rotation-radar?market=US",
         "/api/v1/market/sector-rotation",
     ):
@@ -203,6 +206,17 @@ def test_market_intelligence_checklist_captures_scope_and_validation_commands() 
     assert "proxyObservationOnlyReason" in checklist
     assert "`scoreContribution=0`" in checklist
     assert "N/A is allowed only with explicit unavailable evidence" in checklist
+    assert "metadata-only" in checklist
+    assert "market quotes" in checklist
+    assert "K-lines" in checklist
+    assert "symbol universes" in checklist
+    assert "raw provider payloads" in checklist
+    assert "scoring output" in checklist
+    assert "observationOnly=true" in checklist
+    assert "scoreContributionAllowed=false" in checklist
+    assert "pytdx may be `usable_with_caution` when healthy" in checklist
+    assert "AKShare stays `weak`" in checklist
+    assert "missing dependency / probe failure states must degrade" in checklist
     assert "`temperatureAvailable=false`" in checklist
     assert "`disabledReason=insufficient_reliable_inputs`" in checklist
     assert "Observation-only Rotation Radar themes must not appear in `summary.strongestThemes` or `summary.acceleratingThemes`." in checklist

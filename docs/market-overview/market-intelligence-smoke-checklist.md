@@ -23,7 +23,9 @@ python3 -m pytest \
   tests/test_market_rotation_radar_service.py \
   tests/test_market_temperature_input_snapshot.py \
   tests/test_market_cache_fallback_contracts.py \
+  tests/test_cn_provider_health_service.py \
   tests/api/test_market_endpoint_provider_regressions.py \
+  tests/api/test_cn_provider_health.py \
   tests/api/test_market_macro_cards.py \
   tests/api/test_liquidity_monitor.py \
   tests/api/test_market_rotation_radar.py \
@@ -42,6 +44,7 @@ Manual backend endpoints to probe:
 - `GET /api/v1/market/temperature`
 - `GET /api/v1/market/market-briefing`
 - `GET /api/v1/market/liquidity-monitor`
+- `GET /api/v1/market/cn-provider-health`
 - `GET /api/v1/market/rotation-radar?market=US`
 - `GET /api/v1/market/sector-rotation`
 
@@ -86,6 +89,16 @@ Expected degraded-state semantics:
   flow, CN money-market fallback, and futures/premarket classes until a real
   audited provider is available; yfinance proxies remain visible diagnostics
   rather than score inputs.
+- CN provider health must remain metadata-only and return provider trust/
+  capability diagnostics only; it must not expose market quotes, K-lines,
+  symbol universes, raw provider payloads, or scoring output.
+- CN provider health must keep `observationOnly=true` and
+  `scoreContributionAllowed=false` for both pytdx and AKShare, even when the
+  provider health status is `healthy`.
+- pytdx and AKShare must remain conservative public/proxy diagnostics:
+  pytdx may be `usable_with_caution` when healthy, AKShare stays `weak`, and
+  missing dependency / probe failure states must degrade without promoting
+  either provider to official/reliable/scoring-eligible status.
 - Market Temperature and Market Briefing must degrade to insufficient-data posture when reliable inputs are missing; they must not emit strong bullish/bearish action language from fallback-only inputs.
 - Market Temperature and Market Briefing trust fields (`trustLevel`, `sourceTier`, `scoreCap`, `conclusionAllowed`, `degradationReasons`) must cap stale, fallback, unavailable, synthetic, mixed, or low-coverage evidence before strong conclusions are allowed.
 - Market Temperature disabled states must expose explicit `temperatureAvailable=false`, `disabledReason=insufficient_reliable_inputs`, `unavailableReason`, `insufficientReliableInputs`, and `requiredReliableInputCount` metadata instead of collapsing to ambiguous `N/A`.
