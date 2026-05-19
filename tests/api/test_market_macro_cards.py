@@ -7,9 +7,9 @@ from datetime import datetime, timedelta, timezone
 import unittest
 from unittest.mock import patch
 
-from api.v1.endpoints import market
+from api.v1.endpoints import market, market_overview
 from src.services.market_data_source_registry import project_source_provenance
-from src.services.official_macro_transport import MacroObservation
+from src.services.official_macro_transport import MacroObservation, OfficialMacroTransportError
 from src.services.market_overview_service import MarketOverviewService
 
 
@@ -183,6 +183,105 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
                 self.assertEqual(payload["source"], "fallback")
                 self.assertTrue(payload["fallbackUsed"])
                 self.assertTrue(payload["items"])
+
+    def test_volatility_api_payload_includes_safe_official_overlay_failure_details_for_vix(self) -> None:
+        failure = OfficialMacroTransportError(
+            "transport_error",
+            "FRED transport failed",
+            diagnostics={
+                "providerName": "fred",
+                "requestedSeries": "VIXCLS",
+                "apiKeyPresent": True,
+                "configPresent": True,
+                "endpointHost": "api.stlouisfed.org",
+                "timeoutSeconds": 0.5,
+                "exceptionClass": "SSLCertVerificationError",
+                "exceptionChain": ["URLError", "SSLCertVerificationError"],
+                "attemptedAt": "2026-05-19T00:00:00Z",
+                "caBundleSource": "certifi",
+            },
+        )
+        proxy_item = {
+            "symbol": "VIX",
+            "label": "VIX",
+            "value": 18.2,
+            "unit": "pts",
+            "change_pct": 0.0,
+            "changePercent": 0.0,
+            "risk_direction": "neutral",
+            "trend": [18.2],
+            "source": "yfinance",
+            "sourceType": "unofficial_proxy",
+            "asOf": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+
+        with (
+            patch.object(MarketOverviewService, "_cached_payload", side_effect=lambda _key, fetcher, _fallback: fetcher()),
+            patch.object(MarketOverviewService, "_quote_items", return_value=[proxy_item]),
+            patch.object(MarketOverviewService, "_atr_item", return_value=None),
+            patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", return_value={}),
+            patch("src.services.market_overview_service.fetch_fred_observation_points", side_effect=failure),
+            patch("src.services.market_overview_service.ExecutionLogService") as log_service,
+        ):
+            log_service.return_value.record_market_overview_fetch.return_value = "log-vix-api"
+            payload = market_overview.get_volatility()
+
+        vix = next(item for item in payload["items"] if item["symbol"] == "VIX")
+        self.assertEqual(vix["officialOverlayFailureReason"], "transport_error")
+        details = vix["officialOverlayFailureDetails"]
+        self.assertEqual(details["providerName"], "fred")
+        self.assertEqual(details["requestedSeries"], "VIXCLS")
+        self.assertEqual(details["endpointHost"], "api.stlouisfed.org")
+        self.assertTrue(details["apiKeyPresent"])
+        self.assertTrue(details["configPresent"])
+        self.assertEqual(details["exceptionClass"], "SSLCertVerificationError")
+        self.assertEqual(details["exceptionChain"], ["URLError", "SSLCertVerificationError"])
+        self.assertEqual(details["caBundleSource"], "certifi")
+        self.assertNotIn("api_key", str(details))
+        self.assertNotIn("SECRET", str(details))
+
+    def test_rates_api_payload_includes_safe_official_overlay_failure_details_for_dgs10(self) -> None:
+        failure = OfficialMacroTransportError(
+            "transport_error",
+            "FRED transport failed",
+            diagnostics={
+                "providerName": "fred",
+                "requestedSeries": "DGS10",
+                "apiKeyPresent": True,
+                "configPresent": True,
+                "endpointHost": "api.stlouisfed.org",
+                "timeoutSeconds": 0.75,
+                "exceptionClass": "SSLCertVerificationError",
+                "exceptionChain": ["URLError", "SSLCertVerificationError"],
+                "attemptedAt": "2026-05-19T00:00:00Z",
+                "caBundleSource": "certifi",
+            },
+        )
+
+        def fred_points(series_id: str, **_: object) -> list[MacroObservation]:
+            if series_id == "DGS10":
+                raise failure
+            return []
+
+        with (
+            patch.object(MarketOverviewService, "_cached_payload", side_effect=lambda _key, fetcher, _fallback: fetcher()),
+            patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", return_value={}),
+            patch("src.services.market_overview_service.fetch_fred_observation_points", side_effect=fred_points),
+            patch("src.services.market_overview_service.ExecutionLogService") as log_service,
+        ):
+            log_service.return_value.record_market_overview_fetch.return_value = "log-rates-api"
+            payload = market.get_rates()
+
+        us10y = next(item for item in payload["items"] if item["symbol"] == "US10Y")
+        self.assertEqual(us10y["officialOverlayFailureReason"], "transport_error")
+        details = us10y["officialOverlayFailureDetails"]
+        self.assertEqual(details["providerName"], "fred")
+        self.assertEqual(details["requestedSeries"], "DGS10")
+        self.assertEqual(details["exceptionClass"], "SSLCertVerificationError")
+        self.assertEqual(details["exceptionChain"], ["URLError", "SSLCertVerificationError"])
+        self.assertEqual(details["caBundleSource"], "certifi")
+        self.assertNotIn("api_key", str(details))
+        self.assertNotIn("SECRET", str(details))
 
     def test_rates_and_macro_panels_expose_official_macro_metadata_when_available(self) -> None:
         service = MarketOverviewService()

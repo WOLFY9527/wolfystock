@@ -2747,7 +2747,7 @@ class MarketOverviewService:
         diagnostics: Dict[str, str] = {}
         diagnostic_details: Dict[str, Dict[str, Any]] = {}
         fetched_at = time.monotonic()
-        fred_series_ids = ["VIXCLS", "DGS2", "DGS10", "DGS30", "SOFR"]
+        fred_series_ids = ["VIXCLS", "DGS10", "DGS30", "DGS2", "SOFR"]
         if include_policy_and_inflation:
             fred_series_ids.extend(["DFF", "CPIAUCSL", "PPIACO"])
         if include_credit_stress:
@@ -3125,6 +3125,9 @@ class MarketOverviewService:
             exception_class = self._official_macro_exception_class(exception)
             if exception_class:
                 details.setdefault("exceptionClass", exception_class)
+            exception_chain = self._official_macro_exception_chain(exception)
+            if exception_chain:
+                details.setdefault("exceptionChain", exception_chain)
         return self._sanitize_official_macro_failure_details(details, series_id=series_id)
 
     @staticmethod
@@ -3173,9 +3176,11 @@ class MarketOverviewService:
             "apiKeyPresent",
             "endpointHost",
             "providerName",
+            "caBundleSource",
             "httpStatus",
             "timeoutSeconds",
             "exceptionClass",
+            "exceptionChain",
             "requestedSeries",
             "attemptedAt",
         ):
@@ -3194,12 +3199,74 @@ class MarketOverviewService:
                     safe[key] = round(float(value), 3)
                 except (TypeError, ValueError):
                     continue
+            elif key == "caBundleSource":
+                source = str(value or "").strip().lower()
+                if source in {"env", "certifi", "system"}:
+                    safe[key] = source
+            elif key == "exceptionChain":
+                chain = MarketOverviewService._sanitize_exception_chain(value)
+                if chain:
+                    safe[key] = chain
             else:
                 text = str(value or "").strip()
                 if text:
                     safe[key] = text
         safe["requestedSeries"] = str(series_id)
         return safe
+
+    @staticmethod
+    def _sanitize_exception_chain(value: Any) -> List[str]:
+        if isinstance(value, (list, tuple)):
+            raw_values = [str(item or "").strip() for item in value]
+        else:
+            text = str(value or "").strip()
+            raw_values = [part.strip() for part in text.replace("->", ",").split(",")]
+        chain: List[str] = []
+        for item in raw_values:
+            if not item:
+                continue
+            token = item.split(":", 1)[0].strip()
+            if not token or not token[0].isalpha():
+                continue
+            if not all(char.isalnum() or char in {".", "_"} for char in token):
+                continue
+            if not (
+                "Error" in token
+                or "Exception" in token
+                or "Timeout" in token
+                or "Warning" in token
+                or token == "URLError"
+            ):
+                continue
+            if token not in chain:
+                chain.append(token)
+        return chain
+
+    @staticmethod
+    def _official_macro_exception_chain(exc: Exception) -> List[str]:
+        chain: List[str] = []
+        current: Exception | None = exc
+        while current is not None:
+            name = type(current).__name__
+            if not chain or chain[-1] != name:
+                chain.append(name)
+            next_exc: Exception | None = None
+            if isinstance(current, OfficialMacroTransportError):
+                cause = current.__cause__
+                if isinstance(cause, Exception):
+                    next_exc = cause
+            if next_exc is None:
+                cause = current.__cause__
+                if isinstance(cause, Exception):
+                    next_exc = cause
+            if next_exc is None:
+                context = current.__context__
+                if isinstance(context, Exception):
+                    next_exc = context
+            if next_exc is None and hasattr(current, "reason") and isinstance(getattr(current, "reason"), Exception):
+                next_exc = getattr(current, "reason")
+            current = next_exc
+        return chain
 
     def _official_macro_row_failure_reason(self, series_id: str, observations: List[MacroObservation]) -> Optional[str]:
         if not observations:

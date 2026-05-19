@@ -4,11 +4,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import importlib
 import csv
 from datetime import datetime, timezone
 from io import StringIO
+import os
 import json
 import socket
+import ssl
 from typing import Any, Iterable, Mapping, Sequence
 from urllib.parse import urlencode, urlparse
 from urllib.error import HTTPError, URLError
@@ -53,6 +56,7 @@ FRED_FRESHNESS_HINTS = {
 TREASURY_FRESHNESS_HINT = "daily_1530_et"
 NYFED_SOFR_UNSUPPORTED_REASON = "nyfed_sofr_shape_undocumented"
 DEFAULT_TRANSPORT_TIMEOUT_SECONDS = 4.0
+HTTPS_CA_BUNDLE_ENV_VARS = ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE")
 
 
 class OfficialMacroTransportError(RuntimeError):
@@ -368,7 +372,8 @@ def fetch_treasury_daily_rate_observation_points(
 
 
 def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) -> bytes:
-    base_diagnostics = _transport_diagnostics(request, timeout=timeout)
+    ca_bundle_source = _selected_https_ca_bundle_source()
+    base_diagnostics = _transport_diagnostics(request, timeout=timeout, ca_bundle_source=ca_bundle_source)
     if request.requires_api_key and not _text(request.params.get("api_key")):
         raise OfficialMacroTransportError(
             "missing_api_key",
@@ -379,14 +384,20 @@ def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) ->
     url = f"{request.url}?{query}" if query else request.url
     http_request = Request(url=url, headers=request.headers, method=request.method)
     try:
-        with urlopen(http_request, timeout=timeout) as response:
+        https_context, ca_bundle_source = _build_https_context()
+        with urlopen(http_request, timeout=timeout, context=https_context) as response:
             status_code = _response_status_code(response)
             if status_code >= 400:
                 raise OfficialMacroTransportError(
                     "http_error",
                     f"{request.source_id or 'official macro'} returned HTTP {status_code}",
                     status_code=status_code,
-                    diagnostics=_transport_diagnostics(request, timeout=timeout, status_code=status_code),
+                    diagnostics=_transport_diagnostics(
+                        request,
+                        timeout=timeout,
+                        status_code=status_code,
+                        ca_bundle_source=ca_bundle_source,
+                    ),
                 )
             body = response.read()
     except OfficialMacroTransportError:
@@ -396,20 +407,36 @@ def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) ->
             "http_error",
             f"{request.source_id or 'official macro'} returned HTTP {exc.code}",
             status_code=exc.code,
-            diagnostics=_transport_diagnostics(request, timeout=timeout, exception=exc, status_code=exc.code),
+            diagnostics=_transport_diagnostics(
+                request,
+                timeout=timeout,
+                exception=exc,
+                status_code=exc.code,
+                ca_bundle_source=ca_bundle_source,
+            ),
         ) from exc
     except (TimeoutError, socket.timeout) as exc:
         raise OfficialMacroTransportError(
             "timeout",
             f"{request.source_id or 'official macro'} request timed out",
-            diagnostics=_transport_diagnostics(request, timeout=timeout, exception=exc),
+            diagnostics=_transport_diagnostics(
+                request,
+                timeout=timeout,
+                exception=exc,
+                ca_bundle_source=ca_bundle_source,
+            ),
         ) from exc
     except URLError as exc:
         reason = classify_official_macro_exception(exc)
         raise OfficialMacroTransportError(
             reason,
             f"{request.source_id or 'official macro'} transport failed",
-            diagnostics=_transport_diagnostics(request, timeout=timeout, exception=exc),
+            diagnostics=_transport_diagnostics(
+                request,
+                timeout=timeout,
+                exception=exc,
+                ca_bundle_source=ca_bundle_source,
+            ),
         ) from exc
     if not body:
         raise OfficialMacroTransportError(
@@ -464,6 +491,7 @@ def _transport_diagnostics(
     timeout: float,
     exception: Exception | None = None,
     status_code: int | None = None,
+    ca_bundle_source: str | None = None,
 ) -> dict[str, Any]:
     diagnostics: dict[str, Any] = {
         "providerName": _provider_name(request.source_id),
@@ -471,6 +499,8 @@ def _transport_diagnostics(
         "requestedSeries": _requested_series(request),
         "attemptedAt": _utc_now_iso(),
     }
+    if ca_bundle_source:
+        diagnostics["caBundleSource"] = ca_bundle_source
     try:
         diagnostics["timeoutSeconds"] = round(float(timeout), 3)
     except (TypeError, ValueError):
@@ -483,7 +513,54 @@ def _transport_diagnostics(
         diagnostics["httpStatus"] = int(status_code)
     if exception is not None:
         diagnostics["exceptionClass"] = _exception_class(exception)
+        exception_chain = _exception_chain(exception)
+        if exception_chain:
+            diagnostics["exceptionChain"] = exception_chain
     return {key: value for key, value in diagnostics.items() if value not in (None, "")}
+
+
+def _selected_https_ca_bundle_source() -> str:
+    for source, _ in _https_ca_bundle_candidates():
+        return source
+    return "system"
+
+
+def _build_https_context() -> tuple[ssl.SSLContext, str]:
+    last_error: Exception | None = None
+    for source, cafile in _https_ca_bundle_candidates():
+        try:
+            if cafile:
+                return ssl.create_default_context(cafile=cafile), source
+            return ssl.create_default_context(), source
+        except Exception as exc:
+            last_error = exc
+    if last_error is not None:
+        try:
+            return ssl.create_default_context(), "system"
+        except Exception as system_exc:  # pragma: no cover - extremely rare
+            raise system_exc from last_error
+    return ssl.create_default_context(), "system"
+
+
+def _https_ca_bundle_candidates() -> list[tuple[str, str | None]]:
+    candidates: list[tuple[str, str | None]] = []
+    for env_var in HTTPS_CA_BUNDLE_ENV_VARS:
+        candidate = _text(os.environ.get(env_var))
+        if candidate and os.path.isfile(candidate):
+            candidates.append(("env", candidate))
+            break
+    try:
+        certifi = importlib.import_module("certifi")
+    except ModuleNotFoundError:
+        certifi = None
+    except Exception:
+        certifi = None
+    if certifi is not None:
+        candidate = _text(getattr(certifi, "where", lambda: "")())
+        if candidate and os.path.isfile(candidate):
+            candidates.append(("certifi", candidate))
+    candidates.append(("system", None))
+    return candidates
 
 
 def fred_runtime_config_probe() -> dict[str, bool]:
@@ -518,6 +595,26 @@ def _exception_class(exc: Exception) -> str:
     if isinstance(exc, URLError) and getattr(exc, "reason", None) is not None:
         return type(exc.reason).__name__
     return type(exc).__name__
+
+
+def _exception_chain(exc: Exception) -> list[str]:
+    chain: list[str] = []
+    current: Exception | None = exc
+    while current is not None:
+        name = type(current).__name__
+        if not chain or chain[-1] != name:
+            chain.append(name)
+        next_exc: Exception | None = None
+        if isinstance(current, URLError):
+            reason = getattr(current, "reason", None)
+            if isinstance(reason, Exception):
+                next_exc = reason
+        if next_exc is None:
+            next_exc = current.__cause__ if isinstance(current.__cause__, Exception) else None
+        if next_exc is None:
+            next_exc = current.__context__ if isinstance(current.__context__, Exception) else None
+        current = next_exc
+    return chain
 
 
 def _utc_now_iso() -> str:

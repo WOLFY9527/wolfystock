@@ -63,6 +63,39 @@ def test_official_macro_points_stop_when_aggregate_deadline_is_exhausted(monkeyp
     assert calls == [("VIXCLS", pytest.approx(0.01, abs=0.01))]
 
 
+def test_official_macro_points_prioritize_vixcls_then_fred_dgs10_dgs30_after_treasury_miss() -> None:
+    service = MarketOverviewService()
+    latest = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
+    previous = (datetime.now(timezone.utc).date() - timedelta(days=2)).isoformat()
+    calls: list[str] = []
+
+    def empty_treasury_points(*, limit: int = 2, timeout: float | None = None) -> dict:
+        calls.append("treasury")
+        return {}
+
+    def fred_points(series_id: str, *, limit: int = 2, timeout: float | None = None) -> list[MacroObservation]:
+        calls.append(series_id)
+        if series_id == "DGS2" and not {"DGS10", "DGS30"}.issubset(set(calls)):
+            raise AssertionError("DGS10/DGS30 should not wait behind lower-priority DGS2")
+        if series_id in {"VIXCLS", "DGS10", "DGS30"}:
+            return [
+                MacroObservation(series_id, 4.5, latest, latest, f"fred:{series_id}", "official_public", "daily_rate"),
+                MacroObservation(series_id, 4.4, previous, previous, f"fred:{series_id}", "official_public", "daily_rate"),
+            ]
+        return []
+
+    with (
+        patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", side_effect=empty_treasury_points),
+        patch("src.services.market_overview_service.fetch_fred_observation_points", side_effect=fred_points),
+    ):
+        points = service._official_macro_points()
+
+    assert calls[:4] == ["VIXCLS", "treasury", "DGS10", "DGS30"]
+    assert points["VIXCLS"]
+    assert points["DGS10"]
+    assert points["DGS30"]
+
+
 def test_rates_macro_and_volatility_reuse_official_macro_observations_within_micro_cache_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
     service = MarketOverviewService()
     monkeypatch.setattr(service, "OFFICIAL_MACRO_MICRO_CACHE_TTL_SECONDS", 60.0, raising=False)

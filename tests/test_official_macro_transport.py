@@ -6,6 +6,9 @@ from __future__ import annotations
 import ast
 import json
 import socket
+import ssl
+import sys
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
@@ -14,6 +17,7 @@ import pytest
 
 from src.config import Config
 from src.services.market_data_source_registry import project_source_provenance
+import src.services.official_macro_transport as official_macro_transport
 from src.services.official_macro_transport import (
     FRED_OBSERVATIONS_URL,
     NYFED_SOFR_UNSUPPORTED_REASON,
@@ -175,6 +179,119 @@ def test_fetch_fred_observation_points_reports_timeout() -> None:
             fetch_fred_observation_points("DGS30", api_key="fred-test-key", limit=1)
 
     assert exc_info.value.reason == "timeout"
+
+
+def test_fetch_fred_observation_points_uses_certifi_ca_bundle_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    certifi_cafile = tmp_path / "certifi-cacert.pem"
+    certifi_cafile.write_text("fixture", encoding="utf-8")
+    ssl_context = object()
+    created_contexts: list[str | None] = []
+    urlopen_contexts: list[object | None] = []
+
+    class Response:
+        status = 200
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"observations":[{"date":"2026-05-13","value":"4.45"}]}'
+
+    def fake_create_default_context(*, cafile: str | None = None) -> object:
+        created_contexts.append(cafile)
+        return ssl_context
+
+    def fake_urlopen(request: object, *, timeout: float, context: object | None = None) -> Response:
+        urlopen_contexts.append(context)
+        return Response()
+
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.delenv("REQUESTS_CA_BUNDLE", raising=False)
+    monkeypatch.setattr(ssl, "create_default_context", fake_create_default_context)
+    monkeypatch.setattr(official_macro_transport, "urlopen", fake_urlopen)
+    with patch.dict(sys.modules, {"certifi": SimpleNamespace(where=lambda: str(certifi_cafile))}):
+        points = fetch_fred_observation_points("DGS10", api_key="fred-test-key", limit=1)
+
+    assert [point.value for point in points] == [4.45]
+    assert created_contexts == [str(certifi_cafile)]
+    assert urlopen_contexts == [ssl_context]
+
+
+def test_fetch_fred_observation_points_falls_back_to_system_ca_when_certifi_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ssl_context = object()
+    created_contexts: list[str | None] = []
+
+    class Response:
+        status = 200
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"observations":[{"date":"2026-05-13","value":"4.45"}]}'
+
+    def fake_create_default_context(*, cafile: str | None = None) -> object:
+        created_contexts.append(cafile)
+        return ssl_context
+
+    def fake_urlopen(request: object, *, timeout: float, context: object | None = None) -> Response:
+        assert context is ssl_context
+        return Response()
+
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.delenv("REQUESTS_CA_BUNDLE", raising=False)
+    monkeypatch.setattr(ssl, "create_default_context", fake_create_default_context)
+    monkeypatch.setattr(official_macro_transport, "urlopen", fake_urlopen)
+    with patch.dict(sys.modules, {"certifi": None}):
+        points = fetch_fred_observation_points("DGS10", api_key="fred-test-key", limit=1)
+
+    assert [point.value for point in points] == [4.45]
+    assert created_contexts == [None]
+
+
+def test_fetch_fred_observation_points_reports_ssl_failure_ca_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    certifi_cafile = tmp_path / "certifi-cacert.pem"
+    certifi_cafile.write_text("fixture", encoding="utf-8")
+
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.delenv("REQUESTS_CA_BUNDLE", raising=False)
+    monkeypatch.setattr(ssl, "create_default_context", lambda *, cafile=None: object())
+    monkeypatch.setattr(
+        official_macro_transport,
+        "urlopen",
+        lambda *_, **__: (_ for _ in ()).throw(
+            URLError(ssl.SSLCertVerificationError("certificate verify failed token=SECRET"))
+        ),
+    )
+
+    with patch.dict(sys.modules, {"certifi": SimpleNamespace(where=lambda: str(certifi_cafile))}):
+        with pytest.raises(OfficialMacroTransportError) as exc_info:
+            fetch_fred_observation_points("DGS10", api_key="fred-test-key", limit=1, timeout=1.25)
+
+    assert exc_info.value.reason == "transport_error"
+    diagnostics = exc_info.value.diagnostics
+    assert diagnostics["providerName"] == "fred"
+    assert diagnostics["requestedSeries"] == "DGS10"
+    assert diagnostics["apiKeyPresent"] is True
+    assert diagnostics["caBundleSource"] == "certifi"
+    assert diagnostics["exceptionClass"] == "SSLCertVerificationError"
+    assert diagnostics["exceptionChain"] == ["URLError", "SSLCertVerificationError"]
+    assert "SECRET" not in json.dumps(diagnostics)
+    assert "fred-test-key" not in json.dumps(diagnostics)
 
 
 def test_fetch_fred_observation_points_reports_urlerror_timeout_with_safe_diagnostics() -> None:
