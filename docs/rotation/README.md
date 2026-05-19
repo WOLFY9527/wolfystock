@@ -36,9 +36,13 @@ fund-flow interpretation, or rotation evidence disclosure.
 - US Rotation Radar quote evidence uses the configured Alpaca market-data
   credentials (`ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`, and
   `ALPACA_DATA_FEED`) when present to populate bounded 5m/15m/60m/1d OHLCV
-  windows. If credentials, feed entitlement, or symbol data are unavailable,
-  the provider falls back to degraded yfinance daily/proxy evidence only and
-  must not synthesize intraday windows or mark fallback/static data live.
+  windows. Runtime activation probes a small high-value set first (market
+  benchmarks, ETF proxies, and representative constituents) before attempting
+  the larger theme universe under internal per-window, per-batch, and total
+  provider budgets. If credentials, feed entitlement, symbol data, or provider
+  budget are unavailable, the provider falls back to degraded yfinance
+  daily/proxy evidence only and must not synthesize intraday windows or mark
+  fallback/static data live.
 - Provider activation diagnostics live under
   `metadata.quoteProvider.providerDiagnostics` / quote-provider metadata. They
   expose credential presence, safely inferable credential source, missing env
@@ -48,7 +52,13 @@ fund-flow interpretation, or rotation evidence disclosure.
   `interval_mapping`, `market_session`, `calendar`, `rate_limited`, `timeout`,
   `empty_response`, `symbol_not_found`, `provider_error`, `unknown`), capped
   `symbolFailureSamples`, configured-provider fulfilled/missing window aliases,
-  yfinance fallback usage kept separate from Alpaca fulfillment,
+  staged activation limits (`maxSymbolsPerWindow`, `maxProbeSymbols`,
+  `perWindowTimeout`, `totalProviderBudget`), staged activation fields
+  (`probeSymbolCount`, `fullUniverseSymbolCount`,
+  `providerBudgetExceeded`, `timeoutSymbolCount`,
+  `skippedDueToBudgetCount`, `activationScope`,
+  `minimumActivationCoverageMet`), yfinance fallback usage kept separate from
+  Alpaca fulfillment,
   `liveActivationStatus`, `activationBlocker`, recommended activation
   action/hint, and final trust/source-tier classification without exposing raw
   credential values.

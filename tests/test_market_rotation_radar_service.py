@@ -870,6 +870,210 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(all(not window["isFallback"] for window in quote["timeWindows"].values()))
         self.assertTrue(all(window["source"] == "alpaca" for window in quote["timeWindows"].values()))
 
+    def test_configured_alpaca_activation_probes_large_universe_before_budgeted_expansion(self) -> None:
+        symbols = tuple(
+            dict.fromkeys(
+                (
+                    "QQQ",
+                    "SPY",
+                    "IWM",
+                    "IGV",
+                    "SMH",
+                    "APP",
+                    *(f"T{i:03d}" for i in range(197)),
+                )
+            )
+        )
+        fetch_calls: list[tuple[str, str]] = []
+        probe_symbols = {"QQQ", "SPY", "IWM", "IGV", "SMH", "APP"}
+
+        class ProbeOnlyAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                fetch_calls.append((symbol, timeframe))
+                if symbol not in probe_symbols:
+                    time.sleep(0.05)
+                return _alpaca_bars(end_close=102.0)
+
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            ProbeOnlyAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider._ALPACA_MAX_PROBE_SYMBOLS",
+            6,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider._ALPACA_MAX_SYMBOLS_PER_WINDOW",
+            10,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider._ALPACA_PER_WINDOW_TIMEOUT_SECONDS",
+            0.01,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider._ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS",
+            0.05,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=pd.DataFrame(),
+        ):
+            payload = load_rotation_radar_quotes(symbols)
+
+        diagnostics = payload["metadata"]["providerDiagnostics"]
+        self.assertEqual(diagnostics["fullUniverseSymbolCount"], 203)
+        self.assertEqual(diagnostics["probeSymbolCount"], 6)
+        self.assertEqual(diagnostics["activationScope"], "partial_universe")
+        self.assertTrue(diagnostics["providerBudgetExceeded"])
+        self.assertGreater(diagnostics["skippedDueToBudgetCount"], 0)
+        self.assertGreater(diagnostics["timeoutSymbolCount"], 0)
+        self.assertTrue(diagnostics["minimumActivationCoverageMet"])
+        self.assertEqual(diagnostics["liveActivationStatus"], "partial")
+        self.assertEqual(diagnostics["fulfilledWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertNotEqual(diagnostics["liveActivationStatus"], "unavailable")
+        for window in ("5m", "15m", "60m", "1d"):
+            self.assertEqual(diagnostics["requestWindowResults"][window]["successCount"], 6)
+            self.assertIn("timeout", diagnostics["requestWindowResults"][window]["failureClasses"])
+            self.assertTrue(diagnostics["requestWindowResults"][window]["fulfilled"])
+        self.assertGreater(len({symbol for symbol, _ in fetch_calls}), 6)
+
+    def test_configured_alpaca_probe_success_with_full_universe_timeout_stays_partial(self) -> None:
+        symbols = ("QQQ", "SPY", "IWM", "APP", "PLTR", "CRM", "SNOW", "ADBE")
+        probe_symbols = {"QQQ", "SPY", "IWM"}
+
+        class SlowExpansionAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                if symbol in probe_symbols:
+                    return _alpaca_bars(end_close=102.0)
+                time.sleep(0.05)
+                return _alpaca_bars(end_close=103.0)
+
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            SlowExpansionAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider._ALPACA_MAX_PROBE_SYMBOLS",
+            3,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider._ALPACA_MAX_SYMBOLS_PER_WINDOW",
+            8,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider._ALPACA_PER_WINDOW_TIMEOUT_SECONDS",
+            0.01,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider._ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS",
+            0.03,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=pd.DataFrame(),
+        ):
+            payload = load_rotation_radar_quotes(symbols)
+
+        diagnostics = payload["metadata"]["providerDiagnostics"]
+        self.assertEqual(diagnostics["activationScope"], "partial_universe")
+        self.assertEqual(diagnostics["liveActivationStatus"], "partial")
+        self.assertNotEqual(diagnostics["liveActivationStatus"], "unavailable")
+        self.assertTrue(diagnostics["minimumActivationCoverageMet"])
+        self.assertTrue(diagnostics["providerBudgetExceeded"])
+        self.assertGreaterEqual(diagnostics["timeoutSymbolCount"], 1)
+        self.assertEqual(diagnostics["activationBlocker"], "timeout")
+        self.assertIn("probe", diagnostics["activationHint"].lower())
+
+    def test_configured_alpaca_probe_timeout_reports_unavailable_timeout_blocker(self) -> None:
+        class TimeoutAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                time.sleep(0.05)
+                return _alpaca_bars(end_close=102.0)
+
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            TimeoutAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider._ALPACA_MAX_PROBE_SYMBOLS",
+            3,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider._ALPACA_PER_WINDOW_TIMEOUT_SECONDS",
+            0.01,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider._ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS",
+            0.02,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=pd.DataFrame(),
+        ):
+            payload = load_rotation_radar_quotes(["QQQ", "SPY", "IWM", "APP"])
+
+        diagnostics = payload["metadata"]["providerDiagnostics"]
+        self.assertEqual(diagnostics["activationScope"], "probe_only")
+        self.assertFalse(diagnostics["minimumActivationCoverageMet"])
+        self.assertEqual(diagnostics["fulfilledWindows"], [])
+        self.assertEqual(diagnostics["missingWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(diagnostics["activationBlocker"], "timeout")
+        self.assertEqual(diagnostics["liveActivationStatus"], "unavailable")
+        self.assertEqual(diagnostics["timeoutSymbolCount"], 3)
+
+    def test_yfinance_fallback_does_not_fulfill_configured_alpaca_windows(self) -> None:
+        class EmptyAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                return []
+
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            EmptyAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=_yfinance_frame(),
+        ):
+            payload = load_rotation_radar_quotes(["APP", "QQQ"])
+
+        diagnostics = payload["metadata"]["providerDiagnostics"]
+        self.assertEqual(sorted(payload["quotes"]), ["APP", "QQQ"])
+        self.assertEqual(payload["quotes"]["APP"]["source"], "yfinance_proxy")
+        self.assertTrue(diagnostics["yfinanceFallbackUsed"])
+        self.assertEqual(diagnostics["fulfilledWindows"], [])
+        self.assertEqual(diagnostics["configuredProviderFulfilledWindows"], [])
+        self.assertEqual(diagnostics["missingWindows"], ["5m", "15m", "60m", "1d"])
+        for window in ("5m", "15m", "60m", "1d"):
+            self.assertFalse(diagnostics["requestWindowResults"][window]["fulfilled"])
+
     def test_missing_alpaca_credentials_report_required_env_names(self) -> None:
         with patch.object(
             Config,
