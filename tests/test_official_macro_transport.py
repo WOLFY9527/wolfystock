@@ -7,6 +7,7 @@ import ast
 import json
 from pathlib import Path
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 import pytest
 
@@ -16,6 +17,7 @@ from src.services.official_macro_transport import (
     FRED_OBSERVATIONS_URL,
     NYFED_SOFR_UNSUPPORTED_REASON,
     TREASURY_DAILY_RATES_CSV_URL,
+    OfficialMacroTransportError,
     build_fred_observations_request,
     build_supported_fred_requests,
     build_treasury_daily_rates_request,
@@ -131,6 +133,60 @@ def test_fetch_fred_observation_points_uses_runtime_configured_fred_api_key_with
     assert captured_requests[0].params["api_key"] == "fred-secret-test-key"
     assert captured_requests[0].params["series_id"] == "DGS10"
     assert "fred-secret-test-key" not in json.dumps([point.to_dict() for point in points])
+
+
+def test_fetch_fred_observation_points_reports_missing_api_key_without_network_call() -> None:
+    with patch("src.services.official_macro_transport.urlopen", side_effect=AssertionError("network should not be called")):
+        with pytest.raises(OfficialMacroTransportError) as exc_info:
+            fetch_fred_observation_points("VIXCLS", limit=1)
+
+    assert exc_info.value.reason == "missing_api_key"
+    assert "api key" in str(exc_info.value).lower()
+
+
+def test_fetch_fred_observation_points_reports_non_2xx_http_response() -> None:
+    http_error = HTTPError(
+        url=FRED_OBSERVATIONS_URL,
+        code=403,
+        msg="Forbidden",
+        hdrs=None,
+        fp=None,
+    )
+
+    with patch("src.services.official_macro_transport.urlopen", side_effect=http_error):
+        with pytest.raises(OfficialMacroTransportError) as exc_info:
+            fetch_fred_observation_points("DGS10", api_key="fred-test-key", limit=1)
+
+    assert exc_info.value.reason == "http_error"
+    assert exc_info.value.status_code == 403
+
+
+def test_fetch_fred_observation_points_reports_timeout() -> None:
+    with patch("src.services.official_macro_transport.urlopen", side_effect=TimeoutError("timed out")):
+        with pytest.raises(OfficialMacroTransportError) as exc_info:
+            fetch_fred_observation_points("DGS30", api_key="fred-test-key", limit=1)
+
+    assert exc_info.value.reason == "timeout"
+
+
+def test_fetch_fred_observation_points_reports_empty_transport_body() -> None:
+    class EmptyResponse:
+        status = 200
+
+        def __enter__(self) -> "EmptyResponse":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b""
+
+    with patch("src.services.official_macro_transport.urlopen", return_value=EmptyResponse()):
+        with pytest.raises(OfficialMacroTransportError) as exc_info:
+            fetch_fred_observation_points("DGS10", api_key="fred-test-key", limit=1)
+
+    assert exc_info.value.reason == "empty_response"
 
 
 def test_build_fred_observations_request_supports_credit_stress_series_without_expanding_runtime_default_set() -> None:

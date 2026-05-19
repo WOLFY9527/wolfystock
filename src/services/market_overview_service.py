@@ -7,11 +7,13 @@ import copy
 import csv
 import math
 import os
+import socket
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from json import JSONDecodeError
 from typing import Any, Callable, Dict, List, Optional
+from urllib.error import HTTPError, URLError
 
 from src.contracts.source_confidence import coerce_source_confidence_contract
 from src.services.execution_log_service import ExecutionLogService
@@ -22,6 +24,7 @@ from src.services.market_rotation_radar_service import MarketRotationRadarServic
 from src.services.official_macro_source_registry import get_official_macro_source_for_transport_source
 from src.services.official_macro_transport import (
     MacroObservation,
+    OfficialMacroTransportError,
     fetch_fred_observation_points,
     fetch_treasury_daily_rate_observation_points,
 )
@@ -61,11 +64,16 @@ OFFICIAL_OVERLAY_FAILURE_REASONS = {
     "not_configured",
     "cache_miss",
     "transport_error",
+    "http_error",
+    "timeout",
+    "missing_api_key",
+    "disabled_config",
     "empty_response",
     "stale_official_row",
     "parse_error",
     "missing_series",
     "refresh_not_attempted",
+    "budget_exhausted",
 }
 MARKET_TEMPERATURE_REQUIRED_RELIABLE_INPUT_COUNT = 5
 MARKET_TEMPERATURE_REQUIRED_RELIABLE_PANEL_COUNT = 3
@@ -2760,8 +2768,46 @@ class MarketOverviewService:
             if budget_seconds is None
             else budget_seconds
         )
+        attempted_fred_series: set[str] = set()
+        fred_refresh_disabled_reason: str | None = None
+
+        def fetch_fred_series(series_id: str) -> None:
+            nonlocal fred_refresh_disabled_reason
+            attempted_fred_series.add(series_id)
+            timeout = self._deadline_timeout(deadline, self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
+            if timeout is None:
+                self._record_official_macro_diagnostic(diagnostics, series_id, "budget_exhausted")
+                return
+            fred_error_reason: str | None = None
+            try:
+                series_points = fetch_fred_observation_points(
+                    series_id,
+                    limit=self._official_macro_history_limit(series_id),
+                    timeout=timeout,
+                )
+            except Exception as exc:
+                series_points = []
+                fred_error_reason = self._official_macro_exception_reason(exc)
+                if fred_error_reason in {"missing_api_key", "disabled_config"}:
+                    fred_refresh_disabled_reason = fred_error_reason
+                self._record_official_macro_diagnostic(diagnostics, series_id, fred_error_reason)
+            if series_points:
+                freshness_reason = self._official_macro_row_failure_reason(series_id, series_points)
+                if freshness_reason is None:
+                    self._store_official_macro_points({series_id: series_points}, fetched_at)
+                    points[series_id] = series_points
+                    diagnostics.pop(series_id, None)
+                else:
+                    self._record_official_macro_diagnostic(diagnostics, series_id, freshness_reason)
+            elif fred_error_reason is None:
+                self._record_official_macro_diagnostic(diagnostics, series_id, "empty_response")
+
+        if "VIXCLS" not in points:
+            fetch_fred_series("VIXCLS")
+
         treasury_series_ids = {"DGS2", "DGS10", "DGS30"}
-        if any(series_id not in points for series_id in treasury_series_ids):
+        missing_treasury_series_ids = {series_id for series_id in treasury_series_ids if series_id not in points}
+        if missing_treasury_series_ids:
             timeout = self._deadline_timeout(deadline, self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
         else:
             timeout = None
@@ -2789,42 +2835,39 @@ class MarketOverviewService:
                 else:
                     self._record_official_macro_diagnostic(diagnostics, series_id, "missing_series")
         else:
-            for series_id in treasury_series_ids:
-                self._record_official_macro_diagnostic(diagnostics, series_id, "refresh_not_attempted")
+            for series_id in missing_treasury_series_ids:
+                self._record_official_macro_diagnostic(diagnostics, series_id, "budget_exhausted")
+        if fred_refresh_disabled_reason is not None:
+            for series_id in fred_series_ids:
+                if series_id not in points:
+                    self._record_official_macro_diagnostic(diagnostics, series_id, fred_refresh_disabled_reason)
+            self._official_macro_overlay_diagnostics = diagnostics
+            return points
         for index, series_id in enumerate(fred_series_ids):
             if series_id in points and points[series_id]:
+                continue
+            if series_id in attempted_fred_series:
                 continue
             timeout = self._deadline_timeout(deadline, self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
             if timeout is None:
                 for remaining_series_id in fred_series_ids[index:]:
+                    if remaining_series_id not in points and remaining_series_id not in attempted_fred_series:
+                        self._record_official_macro_diagnostic(
+                            diagnostics,
+                            remaining_series_id,
+                            "budget_exhausted",
+                        )
+                break
+            fetch_fred_series(series_id)
+            if fred_refresh_disabled_reason is not None:
+                for remaining_series_id in fred_series_ids[index + 1:]:
                     if remaining_series_id not in points:
                         self._record_official_macro_diagnostic(
                             diagnostics,
                             remaining_series_id,
-                            "refresh_not_attempted",
+                            fred_refresh_disabled_reason,
                         )
                 break
-            fred_error_reason: str | None = None
-            try:
-                series_points = fetch_fred_observation_points(
-                    series_id,
-                    limit=self._official_macro_history_limit(series_id),
-                    timeout=timeout,
-                )
-            except Exception as exc:
-                series_points = []
-                fred_error_reason = self._official_macro_exception_reason(exc)
-                self._record_official_macro_diagnostic(diagnostics, series_id, fred_error_reason)
-            if series_points:
-                freshness_reason = self._official_macro_row_failure_reason(series_id, series_points)
-                if freshness_reason is None:
-                    self._store_official_macro_points({series_id: series_points}, fetched_at)
-                    points[series_id] = series_points
-                    diagnostics.pop(series_id, None)
-                else:
-                    self._record_official_macro_diagnostic(diagnostics, series_id, freshness_reason)
-            elif fred_error_reason is None:
-                self._record_official_macro_diagnostic(diagnostics, series_id, "empty_response")
         self._official_macro_overlay_diagnostics = diagnostics
         return points
 
@@ -2851,6 +2894,17 @@ class MarketOverviewService:
 
     @staticmethod
     def _official_macro_exception_reason(exc: Exception) -> str:
+        if isinstance(exc, OfficialMacroTransportError):
+            return exc.reason
+        if isinstance(exc, (TimeoutError, socket.timeout)):
+            return "timeout"
+        if isinstance(exc, HTTPError):
+            return "http_error"
+        if isinstance(exc, URLError):
+            reason = str(getattr(exc, "reason", "") or "")
+            if "timeout" in reason.lower() or "timed out" in reason.lower():
+                return "timeout"
+            return "transport_error"
         if isinstance(exc, (JSONDecodeError, UnicodeDecodeError, csv.Error)):
             return "parse_error"
         return "transport_error"
@@ -2890,6 +2944,7 @@ class MarketOverviewService:
             "",
             "cache_miss",
             "refresh_not_attempted",
+            "budget_exhausted",
             "empty_response",
             "missing_series",
             "transport_error",

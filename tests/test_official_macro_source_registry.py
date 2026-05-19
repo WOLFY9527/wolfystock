@@ -45,7 +45,7 @@ def test_every_contract_uses_existing_official_public_terminology_and_non_live_b
         assert contract.cadence
         assert contract.expected_freshness_window
         assert contract.series_codes == EXPECTED_SOURCE_SERIES[contract.source_id]
-        assert contract.requires_api_key_or_config is False
+        assert contract.requires_api_key_or_config is contract.source_id.startswith("FRED_")
         assert contract.live_eligible is False
         assert contract.delayed_eligible or contract.observation_only
         assert contract.notes

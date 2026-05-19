@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -11,7 +12,7 @@ import pytest
 
 from src.services.market_cache import market_cache
 from src.services.market_overview_service import MarketOverviewService
-from src.services.official_macro_transport import MacroObservation
+from src.services.official_macro_transport import MacroObservation, OfficialMacroTransportError
 from src.storage import DatabaseManager
 
 
@@ -319,7 +320,7 @@ def test_vix_fred_cache_miss_reason_is_propagated_to_proxy_item() -> None:
     assert vix["activationHint"] == "official_overlay_unavailable_using_proxy"
 
 
-def test_vix_official_refresh_not_attempted_when_budget_exhausted() -> None:
+def test_vix_official_budget_exhausted_reason_is_reported_when_refresh_cannot_start() -> None:
     service = MarketOverviewService()
     as_of = datetime.now(CN_TZ)
 
@@ -350,8 +351,71 @@ def test_vix_official_refresh_not_attempted_when_budget_exhausted() -> None:
     assert vix["providerClass"] == "proxy"
     assert vix["officialOverlayAttempted"] is True
     assert vix["officialOverlayAvailable"] is False
-    assert vix["officialOverlayFailureReason"] == "refresh_not_attempted"
+    assert vix["officialOverlayFailureReason"] == "budget_exhausted"
     assert vix["activationHint"] == "official_overlay_unavailable_using_proxy"
+
+
+def test_vix_fred_missing_api_key_reason_is_propagated_to_proxy_item() -> None:
+    service = MarketOverviewService()
+    as_of = datetime.now(CN_TZ)
+
+    def history(ticker: str) -> _HistoryFrame:
+        if ticker == "^VIX":
+            return _HistoryFrame([18.0, 15.0], as_of=as_of, volumes=[1_000_000, 1_100_000])
+        raise RuntimeError(f"{ticker} fixture unavailable")
+
+    log_patcher = _log_patch()
+    try:
+        with (
+            patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", side_effect=history),
+            patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", return_value={}),
+            patch(
+                "src.services.market_overview_service.fetch_fred_observation_points",
+                side_effect=OfficialMacroTransportError("missing_api_key", "FRED API key not configured"),
+            ),
+            patch.object(service, "_atr_item", return_value=None),
+        ):
+            payload = service.get_volatility()
+    finally:
+        log_patcher.stop()
+
+    vix = _item(payload, "VIX")
+    assert vix["value"] == 15.0
+    assert vix["sourceType"] == "unofficial_proxy"
+    assert vix["providerClass"] == "proxy"
+    assert vix["officialOverlayAttempted"] is True
+    assert vix["officialOverlayAvailable"] is False
+    assert vix["officialOverlayFailureReason"] == "missing_api_key"
+    assert vix["activationHint"] == "official_overlay_unavailable_using_proxy"
+
+
+def test_fred_vix_priority_preserves_overlay_when_lower_priority_sources_exhaust_budget() -> None:
+    service = MarketOverviewService()
+    latest_date = (datetime.now(CN_TZ) - timedelta(days=1)).date().isoformat()
+    previous_date = (datetime.now(CN_TZ) - timedelta(days=2)).date().isoformat()
+    calls: list[str] = []
+
+    def slow_vix_points(series_id: str, **_: object) -> list[MacroObservation]:
+        calls.append(series_id)
+        time.sleep(0.02)
+        if series_id == "VIXCLS":
+            return [
+                MacroObservation("VIXCLS", 16.8, latest_date, latest_date, "fred:VIXCLS", "official_public", "daily_close"),
+                MacroObservation("VIXCLS", 17.2, previous_date, previous_date, "fred:VIXCLS", "official_public", "daily_close"),
+            ]
+        return []
+
+    def fail_if_called(*args: object, **kwargs: object) -> object:
+        raise AssertionError(f"lower-priority official transport should not run before VIXCLS: {args} {kwargs}")
+
+    with (
+        patch("src.services.market_overview_service.fetch_fred_observation_points", side_effect=slow_vix_points),
+        patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", side_effect=fail_if_called),
+    ):
+        points = service._official_macro_points(budget_seconds=0.01)
+
+    assert calls == ["VIXCLS"]
+    assert [point.value for point in points["VIXCLS"]] == [16.8, 17.2]
 
 
 def test_hsi_sina_proxy_quote_uses_dashboard_symbol_and_truthful_metadata() -> None:
@@ -473,6 +537,132 @@ def test_us10y_dxy_and_btc_keep_truthful_source_freshness_metadata() -> None:
     assert btc["sourceTier"] == "exchange_public"
     assert btc["freshness"] == "live"
     assert btc.get("degradationReason") is None
+
+
+def test_fred_dgs10_and_dgs30_overlays_replace_proxy_when_fresh_enough_without_configuring_fx_commodity_overlays() -> None:
+    service = MarketOverviewService()
+    latest_date = (datetime.now(CN_TZ) - timedelta(days=1)).date().isoformat()
+    previous_date = (datetime.now(CN_TZ) - timedelta(days=2)).date().isoformat()
+    proxy_as_of = datetime.now(CN_TZ).isoformat(timespec="seconds")
+    proxy_items = [
+        {
+            "symbol": "US10Y",
+            "label": "10Y yield",
+            "value": 4.5,
+            "price": 4.5,
+            "unit": "%",
+            "change_pct": 0.0,
+            "changePercent": 0.0,
+            "risk_direction": "neutral",
+            "trend": [4.48, 4.5],
+            "source": "yfinance",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_proxy",
+            "asOf": proxy_as_of,
+        },
+        {
+            "symbol": "US30Y",
+            "label": "30Y yield",
+            "value": 4.9,
+            "price": 4.9,
+            "unit": "%",
+            "change_pct": 0.0,
+            "changePercent": 0.0,
+            "risk_direction": "neutral",
+            "trend": [4.88, 4.9],
+            "source": "yfinance",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_proxy",
+            "asOf": proxy_as_of,
+        },
+        {
+            "symbol": "DXY",
+            "label": "US Dollar Index",
+            "value": 105.2,
+            "price": 105.2,
+            "unit": "idx",
+            "change_pct": 0.1,
+            "changePercent": 0.1,
+            "risk_direction": "decreasing",
+            "trend": [105.0, 105.2],
+            "source": "yfinance",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_proxy",
+            "asOf": proxy_as_of,
+        },
+        {
+            "symbol": "GOLD",
+            "label": "Gold futures",
+            "value": 2400.0,
+            "price": 2400.0,
+            "unit": "USD",
+            "change_pct": -0.2,
+            "changePercent": -0.2,
+            "risk_direction": "increasing",
+            "trend": [2405.0, 2400.0],
+            "source": "yfinance",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_proxy",
+            "asOf": proxy_as_of,
+        },
+        {
+            "symbol": "OIL",
+            "label": "WTI crude",
+            "value": 78.0,
+            "price": 78.0,
+            "unit": "USD",
+            "change_pct": 0.4,
+            "changePercent": 0.4,
+            "risk_direction": "decreasing",
+            "trend": [77.7, 78.0],
+            "source": "yfinance",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_proxy",
+            "asOf": proxy_as_of,
+        },
+    ]
+
+    def fred_points(series_id: str, **_: object) -> list[MacroObservation]:
+        return {
+            "DGS10": [
+                MacroObservation("DGS10", 4.42, latest_date, latest_date, "fred:DGS10", "official_public", "daily_rate"),
+                MacroObservation("DGS10", 4.47, previous_date, previous_date, "fred:DGS10", "official_public", "daily_rate"),
+            ],
+            "DGS30": [
+                MacroObservation("DGS30", 4.88, latest_date, latest_date, "fred:DGS30", "official_public", "daily_rate"),
+                MacroObservation("DGS30", 4.93, previous_date, previous_date, "fred:DGS30", "official_public", "daily_rate"),
+            ],
+        }.get(series_id, [])
+
+    log_patcher = _log_patch()
+    try:
+        with (
+            patch.object(service, "_quote_items", return_value=proxy_items),
+            patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", return_value={}),
+            patch("src.services.market_overview_service.fetch_fred_observation_points", side_effect=fred_points),
+        ):
+            macro_payload = service.get_macro()
+    finally:
+        log_patcher.stop()
+
+    us10y = _item(macro_payload, "US10Y")
+    us30y = _item(macro_payload, "US30Y")
+    for item, source_id in ((us10y, "fred:DGS10"), (us30y, "fred:DGS30")):
+        assert item["source"] == "fred"
+        assert item["sourceId"] == source_id
+        assert item["sourceType"] == "official_public"
+        assert item["providerClass"] == "official_daily"
+        assert item["officialOverlayAttempted"] is True
+        assert item["officialOverlayAvailable"] is True
+        assert item["officialOverlayFailureReason"] is None
+        assert item["freshness"] not in {"live", "fresh"}
+
+    for symbol in ("DXY", "GOLD", "OIL"):
+        item = _item(macro_payload, symbol)
+        assert item["sourceType"] == "unofficial_proxy"
+        assert item["officialOverlayAttempted"] is False
+        assert item["officialOverlayAvailable"] is False
+        assert item["officialOverlayFailureReason"] == "not_configured"
 
 
 def test_cn00y_static_fallback_is_explicit_and_capped() -> None:

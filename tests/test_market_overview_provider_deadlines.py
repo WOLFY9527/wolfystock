@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -42,12 +43,14 @@ def test_official_macro_points_stop_when_aggregate_deadline_is_exhausted(monkeyp
 
     def slow_treasury_points(*, limit: int = 2, timeout: float | None = None) -> dict:
         calls.append(("treasury", timeout))
-        time.sleep(0.03)
-        return {}
+        raise AssertionError("VIXCLS should consume the official macro budget before Treasury")
 
     def fred_points(series_id: str, *, limit: int = 2, timeout: float | None = None) -> list:
         calls.append((series_id, timeout))
-        return []
+        time.sleep(0.03)
+        return [
+            MacroObservation(series_id, 18.0, "2026-05-15", "2026-05-15", f"fred:{series_id}", "official_public", "daily_close")
+        ]
 
     monkeypatch.setattr(service, "OFFICIAL_MACRO_AGGREGATE_BUDGET_SECONDS", 0.01, raising=False)
     with (
@@ -57,14 +60,15 @@ def test_official_macro_points_stop_when_aggregate_deadline_is_exhausted(monkeyp
         points = service._official_macro_points()
 
     assert points == {}
-    assert calls == [("treasury", pytest.approx(0.01, abs=0.01))]
+    assert calls == [("VIXCLS", pytest.approx(0.01, abs=0.01))]
 
 
 def test_rates_macro_and_volatility_reuse_official_macro_observations_within_micro_cache_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
     service = MarketOverviewService()
     monkeypatch.setattr(service, "OFFICIAL_MACRO_MICRO_CACHE_TTL_SECONDS", 60.0, raising=False)
-    latest = "2026-05-15"
-    previous = "2026-05-14"
+    latest_date = datetime.now(timezone.utc).date() - timedelta(days=1)
+    latest = latest_date.isoformat()
+    previous = (latest_date - timedelta(days=1)).isoformat()
     calls: list[str] = []
     treasury_points = {
         "DGS2": [
@@ -134,7 +138,7 @@ def test_rates_macro_and_volatility_reuse_official_macro_observations_within_mic
     assert rates_payload["items"]
     assert macro_payload["items"]
     assert volatility_payload["items"]
-    assert calls == ["treasury", "VIXCLS", "SOFR", "DFF", "CPIAUCSL", "PPIACO", "BAMLH0A0HYM2"]
+    assert calls == ["VIXCLS", "treasury", "SOFR", "DFF", "CPIAUCSL", "PPIACO", "BAMLH0A0HYM2"]
 
 
 def test_sentiment_deadline_skips_secondary_provider_and_fallback_is_not_live(monkeypatch: pytest.MonkeyPatch) -> None:

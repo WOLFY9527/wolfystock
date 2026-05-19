@@ -8,8 +8,10 @@ import csv
 from datetime import datetime
 from io import StringIO
 import json
+import socket
 from typing import Any, Iterable, Mapping, Sequence
 from urllib.parse import urlencode
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
@@ -51,6 +53,15 @@ FRED_FRESHNESS_HINTS = {
 TREASURY_FRESHNESS_HINT = "daily_1530_et"
 NYFED_SOFR_UNSUPPORTED_REASON = "nyfed_sofr_shape_undocumented"
 DEFAULT_TRANSPORT_TIMEOUT_SECONDS = 4.0
+
+
+class OfficialMacroTransportError(RuntimeError):
+    """Sanitized official macro transport failure with a stable reason bucket."""
+
+    def __init__(self, reason: str, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.reason = reason
+        self.status_code = status_code
 
 
 @dataclass(frozen=True)
@@ -331,11 +342,63 @@ def fetch_treasury_daily_rate_observation_points(
 
 
 def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) -> bytes:
+    if request.requires_api_key and not _text(request.params.get("api_key")):
+        raise OfficialMacroTransportError(
+            "missing_api_key",
+            f"{request.source_id or 'official macro'} API key is not configured",
+        )
     query = urlencode(request.params)
     url = f"{request.url}?{query}" if query else request.url
     http_request = Request(url=url, headers=request.headers, method=request.method)
-    with urlopen(http_request, timeout=timeout) as response:
-        return response.read()
+    try:
+        with urlopen(http_request, timeout=timeout) as response:
+            status_code = _response_status_code(response)
+            if status_code >= 400:
+                raise OfficialMacroTransportError(
+                    "http_error",
+                    f"{request.source_id or 'official macro'} returned HTTP {status_code}",
+                    status_code=status_code,
+                )
+            body = response.read()
+    except OfficialMacroTransportError:
+        raise
+    except HTTPError as exc:
+        raise OfficialMacroTransportError(
+            "http_error",
+            f"{request.source_id or 'official macro'} returned HTTP {exc.code}",
+            status_code=exc.code,
+        ) from exc
+    except (TimeoutError, socket.timeout) as exc:
+        raise OfficialMacroTransportError(
+            "timeout",
+            f"{request.source_id or 'official macro'} request timed out",
+        ) from exc
+    except URLError as exc:
+        reason = "timeout" if _is_url_timeout(exc.reason) else "transport_error"
+        raise OfficialMacroTransportError(
+            reason,
+            f"{request.source_id or 'official macro'} transport failed",
+        ) from exc
+    if not body:
+        raise OfficialMacroTransportError(
+            "empty_response",
+            f"{request.source_id or 'official macro'} returned an empty response",
+        )
+    return body
+
+
+def _response_status_code(response: Any) -> int:
+    raw_status = getattr(response, "status", getattr(response, "code", 200))
+    try:
+        return int(raw_status)
+    except (TypeError, ValueError):
+        return 200
+
+
+def _is_url_timeout(reason: Any) -> bool:
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return True
+    return "timed out" in str(reason or "").lower() or "timeout" in str(reason or "").lower()
 
 
 def _resolve_fred_api_key(explicit_api_key: str | None) -> str | None:
