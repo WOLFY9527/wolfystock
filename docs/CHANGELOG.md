@@ -1,5 +1,12 @@
 ## 2026-05-19
 
+- **Market Intelligence display contract smoke** - Hardened the Rotation Radar and
+  Market Overview display contracts so headline ranking consumes
+  `summary.strongestThemes`, taxonomy-only themes stay out of headline lanes,
+  and explicit backend values no longer fall back to ambiguous `N/A` when the
+  frontend has a usable alias. Missing values now carry explicit unavailable
+  metadata in the smoke contract; provider order, scoring formulas, MarketCache
+  behavior, and protected backend domains remain unchanged.
 - **Rotation Radar headline lane contract hardening** - Rotation Radar now
   emits explicit `rankingLane`, `eligibleThemeCount`, and
   `noHeadlineReason` contract fields so clients can distinguish headline
