@@ -834,8 +834,29 @@ class MarketRotationRadarService:
             or static_basket_fallback_used
             or quote_result.provider_status == "partial"
         )
+        activation_blocker = diagnostics.get("activationBlocker") or self._diagnostic_activation_blocker(
+            credentials_present=bool(diagnostics.get("credentialsPresent", False)),
+            provider_constructed=bool(diagnostics.get("providerConstructed", False)),
+            provider_failure_reason=provider_failure_reason,
+            provider_failure_reasons=provider_failure_reasons,
+            fulfilled_windows=fulfilled_windows,
+            missing_windows=missing_windows,
+            yfinance_fallback_used=bool(diagnostics.get("yfinanceFallbackUsed", False)),
+            static_basket_fallback_used=static_basket_fallback_used,
+        )
+        live_activation_status = diagnostics.get("liveActivationStatus") or self._diagnostic_live_activation_status(
+            credentials_present=bool(diagnostics.get("credentialsPresent", False)),
+            provider_constructed=bool(diagnostics.get("providerConstructed", False)),
+            fulfilled_windows=fulfilled_windows,
+            missing_windows=missing_windows,
+            provider_failure_reasons=provider_failure_reasons,
+            yfinance_fallback_used=bool(diagnostics.get("yfinanceFallbackUsed", False)),
+            static_basket_fallback_used=static_basket_fallback_used,
+            activation_blocker=activation_blocker,
+        )
         diagnostics.update({
             "configuredProviderAttempted": bool(diagnostics.get("configuredProviderAttempted", False)),
+            "providerAttempted": bool(diagnostics.get("providerAttempted", diagnostics.get("configuredProviderAttempted", False))),
             "configuredProviderName": diagnostics.get("configuredProviderName"),
             "credentialsPresent": bool(diagnostics.get("credentialsPresent", False)),
             "credentialSource": credential_source,
@@ -848,13 +869,22 @@ class MarketRotationRadarService:
             "requestedWindows": requested_windows,
             "fulfilledWindows": fulfilled_windows,
             "missingWindows": missing_windows,
+            "configuredProviderFulfilledWindows": self._string_list(
+                diagnostics.get("configuredProviderFulfilledWindows") or fulfilled_windows
+            ),
+            "configuredProviderMissingWindows": self._string_list(
+                diagnostics.get("configuredProviderMissingWindows") or missing_windows
+            ),
             "symbolSuccessCount": int(diagnostics.get("symbolSuccessCount", usable_symbol_count) or 0),
             "symbolFailureCount": int(diagnostics.get("symbolFailureCount", failed_symbol_count) or 0),
             "providerFailureReasons": provider_failure_reasons,
             "fallbackProviderUsed": fallback_provider_used,
             "yfinanceFallbackUsed": bool(diagnostics.get("yfinanceFallbackUsed", False)),
+            "fallbackYfinanceUsed": bool(diagnostics.get("fallbackYfinanceUsed", diagnostics.get("yfinanceFallbackUsed", False))),
             "staticBasketFallbackUsed": static_basket_fallback_used,
             "finalSourceTier": final_source_tier,
+            "liveActivationStatus": str(live_activation_status),
+            "activationBlocker": activation_blocker,
             "trustLevel": str(
                 diagnostics.get("trustLevel")
                 or self._diagnostic_trust_level(
@@ -919,6 +949,81 @@ class MarketRotationRadarService:
         if final_source_tier in {"official_public", "broker_authorized"}:
             return "active"
         return "degraded"
+
+    def _diagnostic_live_activation_status(
+        self,
+        *,
+        credentials_present: bool,
+        provider_constructed: bool,
+        fulfilled_windows: Sequence[str],
+        missing_windows: Sequence[str],
+        provider_failure_reasons: Sequence[str],
+        yfinance_fallback_used: bool,
+        static_basket_fallback_used: bool,
+        activation_blocker: Any,
+    ) -> str:
+        blocker = str(activation_blocker or "").strip()
+        if static_basket_fallback_used or blocker == "timeout":
+            return "unavailable"
+        if not credentials_present:
+            return "not_active"
+        if not provider_constructed:
+            return "unavailable" if blocker in {"provider_error", "unknown"} else "not_active"
+        if fulfilled_windows and not missing_windows and not yfinance_fallback_used:
+            return "active"
+        if fulfilled_windows:
+            return "partial"
+        if blocker in {"provider_error", "unknown"} and provider_failure_reasons:
+            return "unavailable"
+        return "not_active"
+
+    def _diagnostic_activation_blocker(
+        self,
+        *,
+        credentials_present: bool,
+        provider_constructed: bool,
+        provider_failure_reason: Any,
+        provider_failure_reasons: Sequence[str],
+        fulfilled_windows: Sequence[str],
+        missing_windows: Sequence[str],
+        yfinance_fallback_used: bool,
+        static_basket_fallback_used: bool,
+    ) -> Optional[str]:
+        if fulfilled_windows and not missing_windows and not yfinance_fallback_used and not static_basket_fallback_used:
+            return None
+        if not credentials_present:
+            return "credentials"
+        raw_reasons = {
+            str(reason or "").strip().lower()
+            for reason in provider_failure_reasons
+            if str(reason or "").strip()
+        }
+        primary = str(provider_failure_reason or "").strip().lower()
+        if primary:
+            raw_reasons.add(primary)
+        if "auth_failed" in raw_reasons:
+            return "auth"
+        if "entitlement_denied" in raw_reasons:
+            return "entitlement"
+        if "interval_mapping" in raw_reasons:
+            return "interval_mapping"
+        if "market_session" in raw_reasons:
+            return "market_session"
+        if "calendar" in raw_reasons:
+            return "calendar"
+        if "timeout" in raw_reasons or "quote_fetch_failed" in raw_reasons:
+            return "timeout"
+        if "empty_response" in raw_reasons:
+            return "empty_response"
+        if "symbol_not_found" in raw_reasons:
+            return "symbol_coverage"
+        if "provider_error" in raw_reasons or "provider_unavailable" in raw_reasons or "rate_limited" in raw_reasons:
+            return "provider_error"
+        if not provider_constructed:
+            return "provider_error"
+        if missing_windows:
+            return "unknown"
+        return None
 
     def _string_list(self, value: Any) -> List[str]:
         if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):

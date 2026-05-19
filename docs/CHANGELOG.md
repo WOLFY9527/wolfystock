@@ -1,5 +1,15 @@
 ## 2026-05-19
 
+- **Rotation Radar provider activation verification** - Rotation Radar provider
+  diagnostics now expose additive activation verification fields for the
+  configured Alpaca provider, including `providerAttempted`,
+  `configuredProviderFulfilledWindows`, `configuredProviderMissingWindows`,
+  `fallbackYfinanceUsed`, `liveActivationStatus`, and sanitized
+  `activationBlocker` codes for credentials, auth, entitlement, interval
+  mapping, market session/calendar ambiguity, timeout, empty response, symbol
+  coverage, provider error, and unknown blockers. Alpaca-owned
+  `requestWindowResults` remain separate from yfinance fallback coverage, so a
+  degraded yfinance daily quote cannot fulfill configured Alpaca windows.
 - **Market Intelligence display contract smoke** - Hardened the Rotation Radar and
   Market Overview display contracts so headline ranking consumes
   `summary.strongestThemes`, taxonomy-only themes stay out of headline lanes,
