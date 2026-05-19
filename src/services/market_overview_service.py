@@ -491,12 +491,12 @@ def get_freshness_status(
             official_observation_date=official_observation_date,
             now=current,
         )
-        if category_key == "macro_rate" and source_type_key == "official_public"
+        if source_type_key == "official_public"
         else {}
     )
 
     daily_categories = {"equity_index", "breadth", "flows", "sentiment"}
-    if official_daily_details and category_key == "macro_rate" and source_type_key == "official_public":
+    if official_daily_details and source_type_key == "official_public":
         freshness = "delayed" if official_daily_details["freshnessDecision"] == "accepted" else "stale"
     elif category_key == "macro_rate" and source_type_key == "official_public":
         days_old = (current.date() - parsed_as_of.date()).days
@@ -549,6 +549,7 @@ class MarketOverviewService:
     YFINANCE_PROXY_AGGREGATE_BUDGET_SECONDS = 1.8
     OFFICIAL_MACRO_AGGREGATE_BUDGET_SECONDS = 1.8
     OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS = 0.9
+    OFFICIAL_MACRO_CRITICAL_FRED_TIMEOUT_FLOOR_SECONDS = 0.2
     OFFICIAL_MACRO_MICRO_CACHE_TTL_SECONDS = 15.0
     SENTIMENT_AGGREGATE_BUDGET_SECONDS = 1.8
     MARKET_TEMPERATURE_INPUT_BUDGET_SECONDS = 3.0
@@ -615,6 +616,7 @@ class MarketOverviewService:
         "US10Y": "DGS10",
         "US30Y": "DGS30",
     }
+    OFFICIAL_MACRO_CRITICAL_FRED_SERIES_IDS = ("DGS10", "DGS30")
     STATIC_FALLBACK_ACTIVATION_SYMBOLS = {"CN00Y"}
     OFFICIAL_MACRO_SERIES = {
         "FEDFUNDS": ("DFF", "Fed Funds", "%", "US"),
@@ -2979,6 +2981,20 @@ class MarketOverviewService:
         attempted_fred_series: set[str] = set()
         fred_refresh_disabled_reason: str | None = None
         fred_refresh_disabled_details: Dict[str, Any] | None = None
+        critical_fred_series_ids = set(self.OFFICIAL_MACRO_CRITICAL_FRED_SERIES_IDS)
+
+        def critical_fred_timeout_floor() -> float:
+            return min(
+                float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
+                float(self.OFFICIAL_MACRO_CRITICAL_FRED_TIMEOUT_FLOOR_SECONDS),
+            )
+
+        def pending_critical_fred_count() -> int:
+            return sum(
+                1
+                for critical_series_id in self.OFFICIAL_MACRO_CRITICAL_FRED_SERIES_IDS
+                if critical_series_id not in points and critical_series_id not in attempted_fred_series
+            )
 
         def record_provider_attempt(
             series_id: str,
@@ -3144,10 +3160,23 @@ class MarketOverviewService:
         missing_treasury_series_ids = {series_id for series_id in treasury_series_ids if series_id not in points}
         if missing_treasury_series_ids:
             treasury_timeout_cap = self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS
-            if {"DGS10", "DGS30"} & missing_treasury_series_ids:
+            if critical_fred_series_ids & missing_treasury_series_ids:
+                remaining_budget = self._deadline_remaining(deadline)
+                fallback_reserve = critical_fred_timeout_floor() * pending_critical_fred_count()
+                if fallback_reserve > 0 and remaining_budget > fallback_reserve:
+                    treasury_timeout_cap = min(
+                        float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
+                        max(0.001, remaining_budget - fallback_reserve),
+                    )
+                else:
+                    treasury_timeout_cap = min(
+                        float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
+                        remaining_budget / 2.0,
+                    )
+            elif missing_treasury_series_ids:
                 treasury_timeout_cap = min(
                     float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
-                    self._deadline_remaining(deadline) / 2.0,
+                    self._deadline_remaining(deadline),
                 )
             timeout = self._deadline_timeout(deadline, treasury_timeout_cap)
         else:
@@ -3312,11 +3341,11 @@ class MarketOverviewService:
             return points
 
         def fred_timeout_cap_for_series(series_id: str) -> float:
-            if series_id not in {"DGS10", "DGS30"}:
+            if series_id not in critical_fred_series_ids:
                 return float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
             remaining_critical = [
                 critical_series_id
-                for critical_series_id in ("DGS10", "DGS30")
+                for critical_series_id in self.OFFICIAL_MACRO_CRITICAL_FRED_SERIES_IDS
                 if critical_series_id not in points and critical_series_id not in attempted_fred_series
             ]
             if len(remaining_critical) <= 1:
@@ -3324,9 +3353,16 @@ class MarketOverviewService:
             remaining_budget = self._deadline_remaining(deadline)
             if remaining_budget <= 0:
                 return float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
+            fair_share = remaining_budget / float(len(remaining_critical))
+            floor = critical_fred_timeout_floor()
+            if floor > 0 and remaining_budget >= floor:
+                return min(
+                    float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
+                    max(floor, fair_share),
+                )
             return min(
                 float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
-                remaining_budget / float(len(remaining_critical)),
+                fair_share,
             )
 
         for index, series_id in enumerate(fred_series_ids):

@@ -88,6 +88,19 @@ def test_official_daily_rows_use_series_lag_policy_not_intraday_threshold() -> N
     assert vix_freshness["maxAcceptedLagDays"] == 4
     assert vix_freshness["calendarAssumption"] == "US/Eastern weekdays; holidays not modeled"
 
+    vix_volatility_freshness = get_freshness_status(
+        "2026-05-15",
+        "futures",
+        "fred",
+        False,
+        source_type="official_public",
+        series_id="VIXCLS",
+        now=now,
+    )
+    assert vix_volatility_freshness["freshness"] == "delayed"
+    assert vix_volatility_freshness["isStale"] is False
+    assert vix_volatility_freshness["freshnessDecision"] == "accepted"
+
     stale_dgs30 = get_freshness_status(
         "2026-05-08",
         "macro_rate",
@@ -245,7 +258,9 @@ def test_vix_fred_transport_overlay_is_consumed_when_fresh_enough() -> None:
     assert vix["officialOverlayAttempted"] is True
     assert vix["officialOverlayAvailable"] is True
     assert vix["officialOverlayFailureReason"] is None
-    assert vix["freshness"] not in {"live", "fresh"}
+    assert vix["freshness"] == "delayed"
+    assert vix["isStale"] is False
+    assert vix["sourceFreshnessEvidence"]["freshness"] == "delayed"
 
 
 def test_vix_yfinance_proxy_panel_and_item_cannot_claim_live_realtime() -> None:

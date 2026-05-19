@@ -136,6 +136,47 @@ def test_official_macro_points_attempt_fred_dgs10_dgs30_after_treasury_timeout(m
     assert points["DGS30"][0].source_id == "fred:DGS30"
 
 
+def test_official_macro_points_reserve_usable_fred_rate_timeout_after_treasury_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = MarketOverviewService()
+    latest = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
+    previous = (datetime.now(timezone.utc).date() - timedelta(days=2)).isoformat()
+    treasury_timeouts: list[float | None] = []
+    fred_timeouts: dict[str, float | None] = {}
+
+    def timeout_treasury_points(*, limit: int = 2, timeout: float | None = None) -> dict:
+        treasury_timeouts.append(timeout)
+        time.sleep(float(timeout or 0.0))
+        raise TimeoutError("treasury timeout")
+
+    def fred_points(series_id: str, *, limit: int = 2, timeout: float | None = None) -> list[MacroObservation]:
+        if series_id in {"DGS10", "DGS30"}:
+            fred_timeouts[series_id] = timeout
+            return [
+                MacroObservation(series_id, 4.5, latest, latest, f"fred:{series_id}", "official_public", "daily_rate"),
+                MacroObservation(series_id, 4.4, previous, previous, f"fred:{series_id}", "official_public", "daily_rate"),
+            ]
+        return []
+
+    monkeypatch.setattr(service, "OFFICIAL_MACRO_AGGREGATE_BUDGET_SECONDS", 0.6, raising=False)
+    monkeypatch.setattr(service, "OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS", 0.6, raising=False)
+    with (
+        patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", side_effect=timeout_treasury_points),
+        patch("src.services.market_overview_service.fetch_fred_observation_points", side_effect=fred_points),
+    ):
+        points = service._official_macro_points()
+
+    assert treasury_timeouts and treasury_timeouts[0] is not None
+    assert treasury_timeouts[0] <= 0.25
+    assert fred_timeouts["DGS10"] is not None
+    assert fred_timeouts["DGS10"] >= 0.2
+    assert fred_timeouts["DGS30"] is not None
+    assert fred_timeouts["DGS30"] >= 0.2
+    assert points["DGS10"][0].source_id == "fred:DGS10"
+    assert points["DGS30"][0].source_id == "fred:DGS30"
+
+
 def test_rates_macro_and_volatility_reuse_official_macro_observations_within_micro_cache_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
     service = MarketOverviewService()
     monkeypatch.setattr(service, "OFFICIAL_MACRO_MICRO_CACHE_TTL_SECONDS", 60.0, raising=False)
