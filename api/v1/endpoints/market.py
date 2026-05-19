@@ -156,5 +156,7 @@ def get_cn_short_sentiment(current_user: Optional[CurrentUser] = Depends(get_opt
 
 
 @router.get("/cn-provider-health", summary="Get read-only CN provider health snapshot")
-def get_cn_provider_health() -> list[dict[str, Any]]:
-    return [item.to_dict() for item in CNProviderHealthService().get_snapshot()]
+def get_cn_provider_health(
+    force_refresh: bool = Query(default=False, alias="forceRefresh"),
+) -> list[dict[str, Any]]:
+    return [item.to_dict() for item in CNProviderHealthService().get_snapshot(force_refresh=force_refresh)]

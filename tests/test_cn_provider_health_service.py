@@ -11,6 +11,102 @@ def _entry_by_provider(snapshot: tuple, provider_id: str):
     return next(item for item in snapshot if item.provider_id == provider_id)
 
 
+def test_cn_provider_health_snapshot_reuses_recent_cached_timeout_state_without_reprobing() -> None:
+    CNProviderHealthService.clear_snapshot_cache()
+    calls = {"pytdx": 0, "akshare": 0}
+
+    def pytdx_probe(timeout_seconds: float) -> dict:
+        calls["pytdx"] += 1
+        raise TimeoutError("pytdx probe timed out")
+
+    def akshare_probe(timeout_seconds: float) -> dict:
+        calls["akshare"] += 1
+        return {
+            "providerName": "akshare",
+            "providerId": "akshare",
+            "dependencyInstalled": True,
+            "providerAvailable": True,
+            "supportedCapabilities": ["cn_stock_list", "cn_market_stats"],
+            "unsupportedCapabilities": ["hk_index_quote"],
+            "degradationReason": None,
+            "missingProviderReason": None,
+            "attemptedAt": "2026-05-19T00:00:01+00:00",
+            "timeoutSeconds": timeout_seconds,
+            "interfaceHealth": "ok",
+        }
+
+    service = CNProviderHealthService(
+        pytdx_probe=pytdx_probe,
+        akshare_probe=akshare_probe,
+    )
+
+    first = service.get_snapshot(timeout_seconds=1.0)
+    second = service.get_snapshot(timeout_seconds=1.0)
+
+    assert calls == {"pytdx": 1, "akshare": 1}
+    assert _entry_by_provider(first, "pytdx").health_status == "timeout"
+    assert _entry_by_provider(first, "pytdx").degradation_reason == "pytdx_probe_timeout"
+    assert _entry_by_provider(second, "pytdx").health_status == "timeout"
+    assert _entry_by_provider(second, "pytdx").degradation_reason == "pytdx_probe_timeout"
+    assert _entry_by_provider(second, "akshare").attempted_at == "2026-05-19T00:00:01+00:00"
+
+
+def test_cn_provider_health_snapshot_force_refresh_bypasses_recent_cache() -> None:
+    CNProviderHealthService.clear_snapshot_cache()
+    calls = {"pytdx": 0, "akshare": 0}
+
+    def pytdx_probe(timeout_seconds: float) -> dict:
+        calls["pytdx"] += 1
+        return {
+            "providerName": "pytdx",
+            "providerId": "pytdx",
+            "dependencyInstalled": True,
+            "providerAvailable": True,
+            "supportedCapabilities": [
+                "cn_history_daily",
+                "cn_name_lookup",
+                "cn_quote",
+                "cn_realtime_quote",
+            ],
+            "unsupportedCapabilities": ["hk_history_daily"],
+            "degradationReason": None,
+            "missingProviderReason": None,
+            "attemptedAt": f"2026-05-19T00:00:0{calls['pytdx']}+00:00",
+            "timeoutSeconds": timeout_seconds,
+            "serverHealth": "reachable",
+        }
+
+    def akshare_probe(timeout_seconds: float) -> dict:
+        calls["akshare"] += 1
+        return {
+            "providerName": "akshare",
+            "providerId": "akshare",
+            "dependencyInstalled": True,
+            "providerAvailable": True,
+            "supportedCapabilities": ["cn_stock_list", "cn_market_stats"],
+            "unsupportedCapabilities": ["hk_index_quote"],
+            "degradationReason": None,
+            "missingProviderReason": None,
+            "attemptedAt": f"2026-05-19T00:00:1{calls['akshare']}+00:00",
+            "timeoutSeconds": timeout_seconds,
+            "interfaceHealth": "ok",
+        }
+
+    service = CNProviderHealthService(
+        pytdx_probe=pytdx_probe,
+        akshare_probe=akshare_probe,
+    )
+
+    first = service.get_snapshot(timeout_seconds=1.0)
+    refreshed = service.get_snapshot(timeout_seconds=1.0, force_refresh=True)
+
+    assert calls == {"pytdx": 2, "akshare": 2}
+    assert _entry_by_provider(first, "pytdx").attempted_at == "2026-05-19T00:00:01+00:00"
+    assert _entry_by_provider(refreshed, "pytdx").attempted_at == "2026-05-19T00:00:02+00:00"
+    assert _entry_by_provider(first, "akshare").attempted_at == "2026-05-19T00:00:11+00:00"
+    assert _entry_by_provider(refreshed, "akshare").attempted_at == "2026-05-19T00:00:12+00:00"
+
+
 def test_cn_provider_health_snapshot_degrades_cleanly_when_both_providers_are_missing() -> None:
     service = CNProviderHealthService(
         pytdx_probe=lambda timeout_seconds: {

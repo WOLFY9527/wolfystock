@@ -177,3 +177,66 @@ def test_cn_provider_health_route_degrades_cleanly_when_dependency_missing_or_pr
     assert akshare["trustLevel"] == "weak"
     assert akshare["observationOnly"] is True
     assert akshare["scoreContributionAllowed"] is False
+
+
+def test_cn_provider_health_route_reuses_cached_snapshot_by_default_and_supports_force_refresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    health_service_module.CNProviderHealthService.clear_snapshot_cache()
+    calls = {"pytdx": 0, "akshare": 0}
+
+    def pytdx_probe(timeout_seconds: float) -> dict:
+        calls["pytdx"] += 1
+        return {
+            "providerName": "pytdx",
+            "providerId": "pytdx",
+            "dependencyInstalled": True,
+            "providerAvailable": True,
+            "supportedCapabilities": [
+                "cn_history_daily",
+                "cn_name_lookup",
+                "cn_quote",
+                "cn_realtime_quote",
+            ],
+            "unsupportedCapabilities": [],
+            "degradationReason": None,
+            "missingProviderReason": None,
+            "attemptedAt": f"2026-05-19T02:03:0{calls['pytdx']}+00:00",
+            "timeoutSeconds": timeout_seconds,
+            "serverHealth": "reachable",
+        }
+
+    def akshare_probe(timeout_seconds: float) -> dict:
+        calls["akshare"] += 1
+        return {
+            "providerName": "akshare",
+            "providerId": "akshare",
+            "dependencyInstalled": True,
+            "providerAvailable": False,
+            "supportedCapabilities": ["cn_stock_list"],
+            "unsupportedCapabilities": ["hk_index_quote"],
+            "degradationReason": "akshare_provider_unavailable",
+            "missingProviderReason": "akshare_provider_unavailable",
+            "attemptedAt": f"2026-05-19T02:03:1{calls['akshare']}+00:00",
+            "timeoutSeconds": timeout_seconds,
+            "interfaceHealth": "unavailable",
+        }
+
+    client = _client(monkeypatch, pytdx_probe=pytdx_probe, akshare_probe=akshare_probe)
+
+    first = {item["providerId"]: item for item in client.get("/api/v1/market/cn-provider-health").json()}
+    second = {item["providerId"]: item for item in client.get("/api/v1/market/cn-provider-health").json()}
+    refreshed = {
+        item["providerId"]: item
+        for item in client.get("/api/v1/market/cn-provider-health", params={"forceRefresh": "true"}).json()
+    }
+
+    assert calls == {"pytdx": 2, "akshare": 2}
+    assert first["pytdx"]["attemptedAt"] == "2026-05-19T02:03:01+00:00"
+    assert second["pytdx"]["attemptedAt"] == "2026-05-19T02:03:01+00:00"
+    assert refreshed["pytdx"]["attemptedAt"] == "2026-05-19T02:03:02+00:00"
+    assert first["akshare"]["healthStatus"] == "unavailable_provider"
+    assert second["akshare"]["healthStatus"] == "unavailable_provider"
+    assert refreshed["akshare"]["healthStatus"] == "unavailable_provider"
+    assert first["akshare"]["scoreContributionAllowed"] is False
+    assert refreshed["akshare"]["scoreContributionAllowed"] is False

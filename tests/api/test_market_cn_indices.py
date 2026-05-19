@@ -22,6 +22,7 @@ except ModuleNotFoundError:
 import src.auth as auth
 from api.app import create_app
 from api.v1.endpoints import market
+from src.services import cn_provider_health_service as health_service_module
 from src.services.cn_provider_health_service import CNProviderHealthSnapshotEntry
 from src.config import Config
 from src.services.market_overview_service import MarketOverviewService, get_freshness_status
@@ -76,6 +77,7 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
     def setUp(self) -> None:
         MarketOverviewService._market_cache.clear()
         MarketOverviewService._market_data_cache.clear()
+        health_service_module.CNProviderHealthService.clear_snapshot_cache()
 
     def test_cn_indices_endpoint_returns_stable_contract(self) -> None:
         payload = market.get_cn_indices()
@@ -406,6 +408,70 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         self.assertEqual([item["healthStatus"] for item in payload["providerHealth"]["observationProviders"]], ["missing_dependency", "probe_failure"])
         self.assertTrue(all(item["observationOnly"] is True for item in payload["providerHealth"]["observationProviders"]))
         self.assertTrue(all(item["scoreContributionAllowed"] is False for item in payload["providerHealth"]["observationProviders"]))
+
+    def test_cn_indices_reuses_cached_observation_provider_health_by_default(self) -> None:
+        service = MarketOverviewService()
+        now = _fresh_sina_as_of()
+        quotes = {
+            "000001.SH": {
+                "name": "上证指数",
+                "symbol": "000001.SH",
+                "value": 4107.51,
+                "change": 28.88,
+                "changePercent": 0.71,
+                "sparkline": [4078.63, 4107.51],
+                "asOf": now,
+            }
+        }
+        calls = {"pytdx": 0, "akshare": 0}
+
+        def pytdx_probe(timeout_seconds: float) -> dict:
+            calls["pytdx"] += 1
+            return {
+                "providerName": "pytdx",
+                "providerId": "pytdx",
+                "dependencyInstalled": True,
+                "providerAvailable": True,
+                "supportedCapabilities": [
+                    "cn_history_daily",
+                    "cn_name_lookup",
+                    "cn_quote",
+                    "cn_realtime_quote",
+                ],
+                "unsupportedCapabilities": ["hk_history_daily"],
+                "degradationReason": None,
+                "missingProviderReason": None,
+                "attemptedAt": f"2026-05-19T02:03:0{calls['pytdx']}+00:00",
+                "timeoutSeconds": timeout_seconds,
+                "serverHealth": "reachable",
+            }
+
+        def akshare_probe(timeout_seconds: float) -> dict:
+            calls["akshare"] += 1
+            raise TimeoutError("AKShare probe timed out")
+
+        with (
+            patch.object(service, "_fetch_sina_cn_index_quotes", return_value=quotes),
+            patch(
+                "src.services.market_overview_service.CNProviderHealthService",
+                side_effect=lambda: health_service_module.CNProviderHealthService(
+                    pytdx_probe=pytdx_probe,
+                    akshare_probe=akshare_probe,
+                ),
+            ),
+        ):
+            first = service.get_cn_indices()
+            second = service.get_cn_indices()
+
+        self.assertEqual(calls, {"pytdx": 1, "akshare": 1})
+        first_observation = {item["providerId"]: item for item in first["providerHealth"]["observationProviders"]}
+        second_observation = {item["providerId"]: item for item in second["providerHealth"]["observationProviders"]}
+        self.assertEqual(first_observation["pytdx"]["attemptedAt"], "2026-05-19T02:03:01+00:00")
+        self.assertEqual(second_observation["pytdx"]["attemptedAt"], "2026-05-19T02:03:01+00:00")
+        self.assertEqual(first_observation["akshare"]["healthStatus"], "timeout")
+        self.assertEqual(second_observation["akshare"]["healthStatus"], "timeout")
+        self.assertEqual(first_observation["akshare"]["degradationReason"], "akshare_probe_timeout")
+        self.assertEqual(second_observation["akshare"]["degradationReason"], "akshare_probe_timeout")
 
     def test_cn_indices_uses_cache_within_ttl(self) -> None:
         calls = 0
