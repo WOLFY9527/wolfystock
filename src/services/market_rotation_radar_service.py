@@ -1024,16 +1024,14 @@ class MarketRotationRadarService:
                 return "partial"
             return "unavailable"
         if not credentials_present:
-            return "not_active"
+            return "unavailable"
         if not provider_constructed:
-            return "unavailable" if blocker in {"provider_error", "unknown"} else "not_active"
+            return "unavailable"
         if fulfilled_windows and not missing_windows and not yfinance_fallback_used and activation_scope == "full_universe":
             return "active"
         if fulfilled_windows:
             return "partial"
-        if blocker in {"provider_error", "unknown"} and provider_failure_reasons:
-            return "unavailable"
-        return "not_active"
+        return "unavailable"
 
     def _diagnostic_activation_blocker(
         self,
