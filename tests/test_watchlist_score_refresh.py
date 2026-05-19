@@ -8,9 +8,10 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from src.config import Config
-from src.storage import DatabaseManager, MarketScannerCandidate, MarketScannerRun
+from src.storage import DatabaseManager, MarketScannerCandidate, MarketScannerRun, UserWatchlistItem
 from src.services.watchlist_service import WatchlistService
 
 
@@ -62,6 +63,7 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         with self.db.get_session() as session:
             session.add(run)
             session.flush()
+            run_id = run.id
             candidate.run_id = run.id
             session.add(candidate)
             session.commit()
@@ -148,6 +150,78 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         self.assertEqual(user_two_item["scanner_rank"], 9)
         self.assertIsNone(user_two_item["score_source"])
         self.assertIsNone(user_two_item["last_scored_at"])
+
+    def test_refresh_legacy_rows_reuses_persisted_scores_without_provider_fanout(self) -> None:
+        with self.db.get_session() as session:
+            session.add(
+                UserWatchlistItem(
+                    owner_id="user-1",
+                    symbol="600001",
+                    market="cn",
+                    source="scanner",
+                    scanner_run_id=5,
+                    scanner_rank=7,
+                    scanner_score=61.0,
+                    notes="legacy row",
+                )
+            )
+            session.commit()
+
+        now = datetime.now()
+        run = MarketScannerRun(
+            market="cn",
+            profile="cn_preopen_v1",
+            universe_name="cn_watchlist",
+            status="completed",
+            run_at=now - timedelta(minutes=5),
+            completed_at=now - timedelta(minutes=4),
+            shortlist_size=1,
+            universe_size=1,
+            preselected_size=1,
+            evaluated_size=1,
+        )
+        candidate = MarketScannerCandidate(
+            symbol="600001",
+            name="平安银行",
+            rank=2,
+            score=78.4,
+            reason_summary="Persisted scanner score only.",
+            diagnostics_json=(
+                '{"cn_provider_observation":{"observationOnly":true,"scoreContributionAllowed":false,'
+                '"entries":[{"providerName":"akshare"},{"providerName":"pytdx"}]}}'
+            ),
+            created_at=now,
+        )
+        with self.db.get_session() as session:
+            session.add(run)
+            session.flush()
+            run_id = int(run.id)
+            candidate.run_id = run.id
+            session.add(candidate)
+            session.commit()
+
+        with (
+            patch("data_provider.base.DataFetcherManager.get_daily_data", side_effect=AssertionError("watchlist refresh should not fetch provider history")) as get_daily_data,
+            patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=AssertionError("watchlist refresh should not fetch provider quotes")) as get_realtime_quote,
+        ):
+            result = self.service.refresh_scores(owner_id="user-1", market="cn")
+
+        self.assertEqual(result["updated_count"], 1)
+        self.assertEqual(result["failed_count"], 0)
+        self.assertEqual(result["results"][0]["status"], "fresh")
+        get_daily_data.assert_not_called()
+        get_realtime_quote.assert_not_called()
+
+        item = self.service.list_items(owner_id="user-1")[0]
+        self.assertEqual(item["scanner_run_id"], run_id)
+        self.assertEqual(item["scanner_score"], 78.4)
+        self.assertEqual(item["scanner_rank"], 2)
+        self.assertEqual(item["score_source"], "scanner_run")
+        self.assertEqual(item["score_profile"], "cn_preopen_v1")
+        self.assertEqual(item["score_reason"], "Persisted scanner score only.")
+        self.assertEqual(item["score_status"], "fresh")
+        self.assertNotIn("providerObservation", item)
+        self.assertNotIn("providerObservation", item["intelligence"]["scanner"])
 
     def test_refresh_does_not_overlap_existing_refresh(self) -> None:
         locked = WatchlistService._refresh_lock.acquire(blocking=False)

@@ -174,6 +174,7 @@ def _make_run_payload(
             "weakest_symbol": "600002",
             "weakest_return_pct": -1.2,
         },
+        "candidates": [],
         "shortlist": [
             _make_candidate(primary_symbol, 1, benchmark_code=benchmark_code),
             _make_candidate(secondary_symbol, 2, benchmark_code=benchmark_code),
@@ -344,6 +345,78 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             symbols=[],
             request_source="api",
             notify=False,
+        )
+
+    def test_run_market_scan_preserves_provider_observation_metadata_in_response_model(self) -> None:
+        service = MagicMock()
+        payload = _make_run_payload()
+        provider_observation = {
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "entries": [
+                {
+                    "stage": "snapshot",
+                    "capability": "cn_realtime_quote",
+                    "providerName": "akshare",
+                    "sourceTier": "unofficial_public_api",
+                    "trustLevel": "weak",
+                    "freshnessExpectation": "best_effort_realtime_quote_and_daily_history",
+                    "observationOnly": True,
+                    "scoreContributionAllowed": False,
+                    "degradationReason": None,
+                    "asOf": "2026-05-19T08:40:00+08:00",
+                    "updatedAt": "2026-05-19T08:40:00+08:00",
+                }
+            ],
+        }
+        payload["shortlist"][0]["diagnostics"]["cn_provider_observation"] = provider_observation
+        payload["shortlist"][0]["diagnostics"]["evidence_packet"] = {
+            "symbol": "600001",
+            "providerObservation": provider_observation,
+        }
+        payload["candidates"] = [
+            {
+                "symbol": "600001",
+                "name": "股票600001",
+                "rank": 1,
+                "status": "selected",
+                "score": 79.0,
+                "provider": "akshare",
+                "reason": "passed",
+                "failed_rules": [],
+                "missing_fields": [],
+                "metrics": {},
+                "cn_provider_observation": provider_observation,
+            }
+        ]
+        service.run_manual_scan.return_value = payload
+
+        request = ScannerRunRequest(
+            market="cn",
+            profile="cn_preopen_v1",
+            shortlist_size=5,
+            universe_limit=300,
+            detail_limit=60,
+        )
+
+        with patch("api.v1.endpoints.scanner.MarketScannerOperationsService", return_value=service):
+            response = run_market_scan(request, db_manager=MagicMock())
+
+        serialized = response.model_dump()
+        self.assertTrue(response.shortlist[0].diagnostics["cn_provider_observation"]["observationOnly"])
+        self.assertEqual(
+            response.shortlist[0].diagnostics["evidence_packet"]["providerObservation"]["entries"][0]["providerName"],
+            "akshare",
+        )
+        self.assertEqual(response.candidates[0].cn_provider_observation["entries"][0]["providerName"], "akshare")
+        self.assertTrue(serialized["shortlist"][0]["diagnostics"]["cn_provider_observation"]["observationOnly"])
+        self.assertEqual(
+            serialized["shortlist"][0]["diagnostics"]["evidence_packet"]["providerObservation"]["entries"][0]["providerName"],
+            "akshare",
+        )
+        self.assertEqual(
+            serialized["candidates"][0]["cn_provider_observation"]["entries"][0]["providerName"],
+            "akshare",
         )
 
     def test_get_scanner_themes_returns_registry_items(self) -> None:

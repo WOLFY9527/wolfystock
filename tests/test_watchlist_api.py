@@ -15,7 +15,7 @@ from api.app import create_app
 from api.deps import CurrentUser, get_current_user
 import src.auth as auth
 from src.config import Config
-from src.storage import DatabaseManager, MarketScannerCandidate, MarketScannerRun, RuleBacktestRun
+from src.storage import DatabaseManager, MarketScannerCandidate, MarketScannerRun, RuleBacktestRun, UserWatchlistItem
 
 
 def _reset_auth_globals() -> None:
@@ -358,6 +358,38 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(intelligence["backtest"]["max_drawdown_pct"], -8.2)
         self.assertEqual(intelligence["backtest"]["sharpe"], 1.34)
         self.assertEqual(intelligence["backtest"]["trade_count"], 6)
+
+    def test_watchlist_items_remain_compatible_with_legacy_scalar_only_rows(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        with self.db.get_session() as session:
+            session.add(
+                UserWatchlistItem(
+                    owner_id="user-1",
+                    symbol="600001",
+                    market="cn",
+                    name="平安银行",
+                    source="scanner",
+                    scanner_run_id=8,
+                    scanner_rank=2,
+                    scanner_score=77.5,
+                    notes="legacy row without provider observation metadata",
+                )
+            )
+            session.commit()
+
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        item = list_resp.json()["items"][0]
+        self.assertEqual(item["symbol"], "600001")
+        self.assertEqual(item["scanner_run_id"], 8)
+        self.assertEqual(item["scanner_rank"], 2)
+        self.assertEqual(item["scanner_score"], 77.5)
+        self.assertNotIn("providerObservation", item)
+        self.assertNotIn("providerObservation", item["intelligence"]["scanner"])
+        self.assertEqual(item["intelligence"]["scanner"]["last_score"], 77.5)
+        self.assertEqual(item["intelligence"]["scanner"]["last_rank"], 2)
+        self.assertEqual(item["intelligence"]["scanner"]["reason"], "legacy row without provider observation metadata")
 
     def test_watchlist_items_without_records_return_null_safe_intelligence(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")

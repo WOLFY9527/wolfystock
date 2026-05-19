@@ -254,6 +254,7 @@ class ScannerCandidateDiagnosticsResponse(BaseModel):
     failed_rules: List[str] = Field(default_factory=list)
     missing_fields: List[str] = Field(default_factory=list)
     metrics: Dict[str, Any] = Field(default_factory=dict)
+    cn_provider_observation: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ScannerRunDetailResponse(BaseModel):
