@@ -82,6 +82,9 @@ class LiquidityMonitorCoverageDiagnostics(BaseModel):
     proxyOnly: bool = False
     observationOnly: bool = False
     scoreContributionAllowed: bool = False
+    scoreExclusionReason: Optional[str] = None
+    requiredRealSourceForScore: bool = False
+    proxyObservationOnlyReason: Optional[str] = None
     missingProviderReason: Optional[str] = None
     paidDataLikelyRequired: bool = False
     sourceTier: SourceTierLabel

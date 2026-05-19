@@ -75,13 +75,17 @@ Expected degraded-state semantics:
 - Liquidity Monitor provider activation diagnostics must include
   `requiredProviderClass`, `configuredProviderAvailable`,
   `realSourceAvailable`, `proxyOnly`, `observationOnly`,
-  `scoreContributionAllowed`, `missingProviderReason`, and
-  `paidDataLikelyRequired` so weak or proxy-only inputs cannot silently count
-  as strong liquidity evidence.
+  `scoreContributionAllowed`, `scoreExclusionReason`,
+  `requiredRealSourceForScore`, `proxyObservationOnlyReason`,
+  `missingProviderReason`, and `paidDataLikelyRequired` so weak or proxy-only
+  inputs cannot silently count as strong liquidity evidence.
+- Liquidity Monitor proxy-only indicators with `realSourceAvailable=false`
+  must remain observation-only with `scoreContribution=0` unless an explicit
+  reviewed allowlist path and tests make that proxy score-eligible.
 - Liquidity Monitor score contribution stays blocked for the CN/HK connect
   flow, CN money-market fallback, and futures/premarket classes until a real
-  audited provider is available; yfinance proxies remain capped rather than
-  live.
+  audited provider is available; yfinance proxies remain visible diagnostics
+  rather than score inputs.
 - Market Temperature and Market Briefing must degrade to insufficient-data posture when reliable inputs are missing; they must not emit strong bullish/bearish action language from fallback-only inputs.
 - Market Temperature and Market Briefing trust fields (`trustLevel`, `sourceTier`, `scoreCap`, `conclusionAllowed`, `degradationReasons`) must cap stale, fallback, unavailable, synthetic, mixed, or low-coverage evidence before strong conclusions are allowed.
 - Market Temperature disabled states must expose explicit `temperatureAvailable=false`, `disabledReason=insufficient_reliable_inputs`, `unavailableReason`, `insufficientReliableInputs`, and `requiredReliableInputCount` metadata instead of collapsing to ambiguous `N/A`.

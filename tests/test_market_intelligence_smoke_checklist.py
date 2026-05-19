@@ -198,6 +198,10 @@ def test_market_intelligence_checklist_captures_scope_and_validation_commands() 
     assert "trustLevel" in checklist
     assert "requiredProviderClass" in checklist
     assert "scoreContributionAllowed" in checklist
+    assert "scoreExclusionReason" in checklist
+    assert "requiredRealSourceForScore" in checklist
+    assert "proxyObservationOnlyReason" in checklist
+    assert "`scoreContribution=0`" in checklist
     assert "N/A is allowed only with explicit unavailable evidence" in checklist
     assert "`temperatureAvailable=false`" in checklist
     assert "`disabledReason=insufficient_reliable_inputs`" in checklist
@@ -240,6 +244,12 @@ def test_market_intelligence_smoke_aligns_proxy_vix_freshness_and_trust_metadata
     assert market_vix["trustLevel"] == liquidity_vix["coverageDiagnostics"]["trustLevel"] == "usable_with_caution"
     assert market_vix["source"] in {"yfinance", "yfinance_proxy"}
     assert liquidity_vix["evidence"]["source"] == "yfinance_proxy"
+    assert liquidity_vix["includedInScore"] is False
+    assert liquidity_vix["scoreContribution"] == 0
+    assert liquidity_vix["coverageDiagnostics"]["scoreContributionAllowed"] is False
+    assert liquidity_vix["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
+    assert liquidity_vix["coverageDiagnostics"]["requiredRealSourceForScore"] is True
+    assert liquidity_vix["coverageDiagnostics"]["proxyObservationOnlyReason"] == "proxy_only_missing_real_source"
     _assert_market_overview_panel_has_display_contract(volatility_payload)
 
 

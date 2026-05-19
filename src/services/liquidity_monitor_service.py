@@ -108,6 +108,7 @@ LIQUIDITY_INDICATOR_PROVIDER_ACTIVATION = {
         "observationOnly": False,
         "proxyOnly": True,
         "scoreContributionAllowed": True,
+        "requiresRealSourceForScore": True,
     },
     "usd_pressure": {
         "requiredProviderClass": "official_or_authorized.fx_dxy",
@@ -115,6 +116,7 @@ LIQUIDITY_INDICATOR_PROVIDER_ACTIVATION = {
         "observationOnly": False,
         "proxyOnly": True,
         "scoreContributionAllowed": True,
+        "requiresRealSourceForScore": True,
     },
     "us_rates_pressure": {
         "requiredProviderClass": "official_public.us_treasury_curve",
@@ -122,6 +124,7 @@ LIQUIDITY_INDICATOR_PROVIDER_ACTIVATION = {
         "observationOnly": False,
         "proxyOnly": True,
         "scoreContributionAllowed": True,
+        "requiresRealSourceForScore": True,
     },
     "us_etf_flow_proxy": {
         "requiredProviderClass": "authorized.us_etf_flow",
@@ -129,6 +132,7 @@ LIQUIDITY_INDICATOR_PROVIDER_ACTIVATION = {
         "observationOnly": False,
         "proxyOnly": True,
         "scoreContributionAllowed": True,
+        "requiresRealSourceForScore": True,
     },
     "us_breadth_proxy": {
         "requiredProviderClass": "official_or_authorized.us_market_breadth",
@@ -136,6 +140,7 @@ LIQUIDITY_INDICATOR_PROVIDER_ACTIVATION = {
         "observationOnly": False,
         "proxyOnly": True,
         "scoreContributionAllowed": True,
+        "requiresRealSourceForScore": True,
     },
     "cn_hk_index_context": {
         "requiredProviderClass": "official_public.cn_hk_index_snapshot",
@@ -1982,6 +1987,9 @@ class LiquidityMonitorService:
             "proxyOnly": activation["proxyOnly"],
             "observationOnly": activation["observationOnly"],
             "scoreContributionAllowed": activation["scoreContributionAllowed"],
+            "scoreExclusionReason": activation["scoreExclusionReason"],
+            "requiredRealSourceForScore": activation["requiredRealSourceForScore"],
+            "proxyObservationOnlyReason": activation["proxyObservationOnlyReason"],
             "missingProviderReason": activation["missingProviderReason"],
             "paidDataLikelyRequired": activation["paidDataLikelyRequired"],
             "sourceTier": trust["sourceTier"],
@@ -2008,10 +2016,21 @@ class LiquidityMonitorService:
         real_source_available = self._indicator_real_source_available(key, panel, evidence, trust)
         proxy_only = bool(policy.get("proxyOnly")) and not real_source_available and self._indicator_has_proxy_input(panel, evidence)
         observation_only = bool(policy.get("observationOnly"))
+        required_real_source_for_score = bool(policy.get("requiresRealSourceForScore"))
+        proxy_score_allowlisted = bool(policy.get("allowProxyScoreContribution"))
+        proxy_observation_only_reason = "proxy_only_missing_real_source" if proxy_only and not real_source_available else None
+        score_exclusion_reason = None
+        if observation_only:
+            score_exclusion_reason = "observation_only"
+        elif required_real_source_for_score and proxy_only and not proxy_score_allowlisted:
+            score_exclusion_reason = "proxy_only_missing_real_source"
+        elif not bool(trust.get("conclusionAllowed")):
+            score_exclusion_reason = "trust_gate_blocked"
         score_contribution_allowed = bool(
             policy.get("scoreContributionAllowed", True)
             and not observation_only
             and bool(trust.get("conclusionAllowed"))
+            and score_exclusion_reason is None
         )
         missing_provider_reason = None
         if required_provider_class and not real_source_available:
@@ -2023,6 +2042,9 @@ class LiquidityMonitorService:
             "proxyOnly": proxy_only,
             "observationOnly": observation_only,
             "scoreContributionAllowed": score_contribution_allowed,
+            "scoreExclusionReason": score_exclusion_reason,
+            "requiredRealSourceForScore": required_real_source_for_score,
+            "proxyObservationOnlyReason": proxy_observation_only_reason,
             "missingProviderReason": missing_provider_reason,
             "paidDataLikelyRequired": bool(policy.get("paidDataLikelyRequired")),
         }
@@ -2058,13 +2080,12 @@ class LiquidityMonitorService:
     def _indicator_has_proxy_input(panel: PanelState, evidence: Dict[str, Any]) -> bool:
         proxy_sources = {"yahoo", "yfinance", "yfinance_proxy"}
         proxy_source_types = {"public_proxy", "proxy_public", "unofficial_proxy", "unofficial_public_api"}
-        sources = {str(panel.source or "").lower()}
-        source_types = {str(panel.payload.get("sourceType") or "").lower()}
-        for item in evidence.get("inputs", []):
-            if not isinstance(item, dict):
-                continue
-            sources.add(str(item.get("source") or "").lower())
-            source_types.add(str(item.get("sourceType") or "").lower())
+        inputs = [item for item in evidence.get("inputs", []) if isinstance(item, dict)]
+        sources = {str(item.get("source") or "").lower() for item in inputs}
+        source_types = {str(item.get("sourceType") or "").lower() for item in inputs}
+        if not inputs:
+            sources.add(str(panel.source or "").lower())
+            source_types.add(str(panel.payload.get("sourceType") or "").lower())
         return bool((sources & proxy_sources) or (source_types & proxy_source_types))
 
     @staticmethod
@@ -2159,6 +2180,12 @@ class LiquidityMonitorService:
             parts.append(f"missingProviderReason={activation['missingProviderReason']}")
         if activation.get("paidDataLikelyRequired"):
             parts.append("paidDataLikelyRequired=True")
+        if activation.get("requiredRealSourceForScore"):
+            parts.append("requiredRealSourceForScore=True")
+        if activation.get("scoreExclusionReason"):
+            parts.append(f"scoreExclusionReason={activation['scoreExclusionReason']}")
+        if activation.get("proxyObservationOnlyReason"):
+            parts.append(f"proxyObservationOnlyReason={activation['proxyObservationOnlyReason']}")
         if trust["trustLevel"] in {"weak", "unavailable"}:
             parts.append(f"trust gate={trust['trustLevel']} / {trust['sourceTier']}")
         if missing_inputs:

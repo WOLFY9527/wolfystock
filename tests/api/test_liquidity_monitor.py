@@ -99,6 +99,9 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
                     "proxyOnly": False,
                     "observationOnly": False,
                     "scoreContributionAllowed": True,
+                    "scoreExclusionReason": None,
+                    "requiredRealSourceForScore": True,
+                    "proxyObservationOnlyReason": None,
                     "missingProviderReason": None,
                     "paidDataLikelyRequired": False,
                     "sourceTier": "official_public",
@@ -227,8 +230,8 @@ def test_liquidity_monitor_route_preserves_explicit_non_live_indicator_contracts
                 "label": "VIX / 波动率压力",
                 "status": "partial",
                 "freshness": "delayed",
-                "includedInScore": True,
-                "scoreContribution": 8,
+                "includedInScore": False,
+                "scoreContribution": 0,
                 "evidence": {
                     "contractVersion": "source_confidence_contract_v1",
                     "source": "yfinance_proxy",
@@ -272,14 +275,17 @@ def test_liquidity_monitor_route_preserves_explicit_non_live_indicator_contracts
                     "realSourceAvailable": False,
                     "proxyOnly": True,
                     "observationOnly": False,
-                    "scoreContributionAllowed": True,
+                    "scoreContributionAllowed": False,
+                    "scoreExclusionReason": "proxy_only_missing_real_source",
+                    "requiredRealSourceForScore": True,
+                    "proxyObservationOnlyReason": "proxy_only_missing_real_source",
                     "missingProviderReason": "requires_official_public.vix_or_volatility",
                     "paidDataLikelyRequired": False,
                     "sourceTier": "unofficial_public_api",
                     "freshness": "partial",
                     "trustLevel": "usable_with_caution",
-                    "contributesToScore": True,
-                    "scoreContribution": 6,
+                    "contributesToScore": False,
+                    "scoreContribution": 0,
                     "capReason": "partial_coverage",
                     "degradationReason": "partial_coverage",
                     "activationHint": "proxy capped",
@@ -308,10 +314,13 @@ def test_liquidity_monitor_route_preserves_explicit_non_live_indicator_contracts
     assert indicators["cn_hk_flows"]["coverageDiagnostics"]["scoreContributionAllowed"] is False
     assert indicators["vix_pressure"]["status"] == "partial"
     assert indicators["vix_pressure"]["freshness"] == "delayed"
-    assert indicators["vix_pressure"]["includedInScore"] is True
+    assert indicators["vix_pressure"]["includedInScore"] is False
+    assert indicators["vix_pressure"]["scoreContribution"] == 0
     assert indicators["vix_pressure"]["evidence"]["isPartial"] is True
     assert indicators["vix_pressure"]["coverageDiagnostics"]["proxyOnly"] is True
     assert indicators["vix_pressure"]["coverageDiagnostics"]["realSourceAvailable"] is False
+    assert indicators["vix_pressure"]["coverageDiagnostics"]["scoreContributionAllowed"] is False
+    assert indicators["vix_pressure"]["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
 
 
 def test_liquidity_monitor_route_accepts_all_golden_fixture_payloads() -> None:
