@@ -17,8 +17,10 @@ BaostockFetcher - 备用数据源 2 (Priority 3)
 import logging
 import re
 from contextlib import contextmanager
-from datetime import datetime
-from typing import Optional, Generator
+from datetime import datetime, timezone
+from queue import Empty, Queue
+from threading import Thread
+from typing import Any, Optional, Generator
 
 import pandas as pd
 from tenacity import (
@@ -28,6 +30,9 @@ from tenacity import (
     retry_if_exception_type,
     before_sleep_log,
 )
+
+from src.contracts.source_confidence import evaluate_market_intelligence_trust
+from src.services.market_data_source_registry import project_source_provenance
 
 from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS, is_bse_code, _is_hk_market
 import os
@@ -67,6 +72,21 @@ class BaostockFetcher(BaseFetcher):
     
     name = "BaostockFetcher"
     priority = int(os.getenv("BAOSTOCK_PRIORITY", "3"))
+    SUPPORTED_CAPABILITIES = (
+        "cn_history_daily",
+        "cn_adjust_factor",
+        "cn_basic_financials",
+        "cn_index_history_daily",
+    )
+    UNSUPPORTED_CAPABILITIES = (
+        "cn_realtime_quote",
+        "cn_quote",
+        "hk_history_daily",
+        "hk_quote",
+        "us_history_daily",
+        "us_quote",
+    )
+    FRESHNESS_EXPECTATION = "t_plus_1_or_delayed"
     
     def __init__(self):
         """初始化 BaostockFetcher"""
@@ -79,9 +99,146 @@ class BaostockFetcher(BaseFetcher):
         只在首次使用时导入，避免未安装时报错
         """
         if self._bs_module is None:
-            import baostock as bs
+            try:
+                import baostock as bs
+            except ImportError:
+                logger.warning("baostock 未安装，请运行: pip install baostock")
+                return None
             self._bs_module = bs
         return self._bs_module
+
+    def _normalize_probe_timeout(self, timeout_seconds: float) -> float:
+        try:
+            timeout = float(timeout_seconds)
+        except (TypeError, ValueError):
+            timeout = 5.0
+        return timeout if timeout > 0 else 5.0
+
+    def _run_probe_callable_with_timeout(self, callable_obj, timeout_seconds: float) -> Any:
+        result_queue: Queue[tuple[str, Any]] = Queue(maxsize=1)
+
+        def _runner() -> None:
+            try:
+                result_queue.put(("result", callable_obj()))
+            except Exception as exc:
+                result_queue.put(("error", exc))
+
+        thread = Thread(target=_runner, daemon=True)
+        thread.start()
+        thread.join(timeout_seconds)
+
+        if thread.is_alive():
+            raise TimeoutError("baostock capability probe timed out")
+
+        try:
+            result_type, payload = result_queue.get_nowait()
+        except Empty as exc:
+            raise RuntimeError("baostock capability probe returned no result") from exc
+
+        if result_type == "error":
+            raise payload
+        return payload
+
+    def _probe_server_health(
+        self,
+        timeout_seconds: float,
+        *,
+        live_probe_enabled: bool,
+    ) -> tuple[bool, bool, str, str, str | None]:
+        bs = self._get_baostock()
+        if bs is None:
+            return False, False, "missing_dependency", "missing_dependency", "baostock_not_installed"
+
+        if not live_probe_enabled:
+            return True, False, "ready", "probe_disabled", "baostock_live_probe_disabled"
+
+        login_callable = getattr(bs, "login", None)
+        logout_callable = getattr(bs, "logout", None)
+        if not callable(login_callable) or not callable(logout_callable):
+            return True, False, "missing_probe_interface", "not_checked", "baostock_probe_interface_missing"
+
+        def _login_roundtrip() -> None:
+            login_result = login_callable()
+            if getattr(login_result, "error_code", None) != "0":
+                raise DataFetchError(
+                    f"Baostock 登录失败: {getattr(login_result, 'error_msg', '')}"
+                )
+
+            logout_result = logout_callable()
+            if getattr(logout_result, "error_code", None) != "0":
+                raise DataFetchError(
+                    f"Baostock 登出失败: {getattr(logout_result, 'error_msg', '')}"
+                )
+
+        try:
+            self._run_probe_callable_with_timeout(_login_roundtrip, timeout_seconds)
+        except TimeoutError:
+            return True, False, "ok", "timeout", "baostock_probe_timeout"
+        except Exception as exc:
+            logger.debug(f"BaoStock capability probe failed: {exc}")
+            return True, False, "ok", "error", "baostock_probe_failed"
+
+        return True, True, "ok", "reachable", None
+
+    def probe_capabilities(
+        self,
+        timeout_seconds: float = 5.0,
+        *,
+        live_probe_enabled: bool = False,
+    ) -> dict:
+        """Return additive BaoStock capability metadata without changing fetch behavior."""
+        timeout = self._normalize_probe_timeout(timeout_seconds)
+        attempted_at: str | None = None
+        provenance = project_source_provenance(
+            source="baostock",
+            freshness="delayed",
+        )
+        dependency_installed, provider_available, interface_health, server_health, degradation_reason = (
+            self._probe_server_health(timeout, live_probe_enabled=live_probe_enabled)
+        )
+        if dependency_installed and live_probe_enabled:
+            attempted_at = datetime.now(timezone.utc).isoformat()
+
+        trust = evaluate_market_intelligence_trust(
+            source="baostock",
+            sourceType=provenance["sourceType"],
+            sourceTier="third_party_free_api",
+            freshness="delayed" if provider_available else "unavailable",
+            confidenceWeight=0.55,
+            degradationReason=degradation_reason,
+        )
+
+        missing_provider_reason = None
+        if not provider_available:
+            missing_provider_reason = degradation_reason or "baostock_provider_unavailable"
+
+        return {
+            "providerName": "baostock",
+            "providerId": "baostock",
+            "source": "baostock",
+            "sourceType": provenance["sourceType"],
+            "sourceTier": "third_party_free_api",
+            "sourceLabel": provenance["sourceLabel"],
+            "dependencyInstalled": dependency_installed,
+            "providerAvailable": provider_available,
+            "interfaceHealth": interface_health,
+            "serverHealth": server_health,
+            "supportedCapabilities": list(self.SUPPORTED_CAPABILITIES),
+            "unsupportedCapabilities": list(self.UNSUPPORTED_CAPABILITIES),
+            "trustLevel": trust["trustLevel"],
+            "freshness": trust["freshness"],
+            "freshnessExpectation": self.FRESHNESS_EXPECTATION,
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "paidDataLikelyRequired": False,
+            "keyRequired": False,
+            "cacheRequired": True,
+            "backgroundRefreshRecommended": True,
+            "degradationReason": degradation_reason,
+            "missingProviderReason": missing_provider_reason,
+            "attemptedAt": attempted_at,
+            "timeoutSeconds": timeout_seconds,
+        }
     
     @contextmanager
     def _baostock_session(self) -> Generator:
@@ -98,6 +255,8 @@ class BaostockFetcher(BaseFetcher):
                 # 在这里执行数据查询
         """
         bs = self._get_baostock()
+        if bs is None:
+            raise DataFetchError("baostock 未安装，请运行: pip install baostock")
         login_result = None
         
         try:
