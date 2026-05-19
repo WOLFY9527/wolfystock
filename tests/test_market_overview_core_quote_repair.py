@@ -11,6 +11,7 @@ import pytest
 
 from src.services.market_cache import market_cache
 from src.services.market_overview_service import MarketOverviewService
+from src.services.official_macro_transport import MacroObservation
 from src.storage import DatabaseManager
 
 
@@ -124,8 +125,6 @@ def test_vix_official_quote_keeps_delayed_macro_semantics() -> None:
     }
 
     def official_points(*args: object, **kwargs: object) -> dict:
-        from src.services.official_macro_transport import MacroObservation
-
         return {
             key: [MacroObservation(*row) for row in rows]
             for key, rows in points.items()
@@ -157,6 +156,50 @@ def test_vix_official_quote_keeps_delayed_macro_semantics() -> None:
     assert vix["officialOverlayAvailable"] is True
     assert vix["officialOverlayFailureReason"] is None
     assert vix["activationHint"] == "official_daily_overlay_active"
+
+
+def test_vix_fred_transport_overlay_is_consumed_when_fresh_enough() -> None:
+    service = MarketOverviewService()
+    proxy_as_of = datetime.now(CN_TZ)
+    latest_date = (datetime.now(CN_TZ) - timedelta(days=1)).date().isoformat()
+    previous_date = (datetime.now(CN_TZ) - timedelta(days=2)).date().isoformat()
+
+    def history(ticker: str) -> _HistoryFrame:
+        if ticker == "^VIX":
+            return _HistoryFrame([19.0, 17.5], as_of=proxy_as_of, volumes=[1_000_000, 1_100_000])
+        raise RuntimeError(f"{ticker} fixture unavailable")
+
+    def fred_points(series_id: str, **_: object) -> list[MacroObservation]:
+        if series_id == "VIXCLS":
+            return [
+                MacroObservation("VIXCLS", 16.8, latest_date, latest_date, "fred:VIXCLS", "official_public", "daily_close"),
+                MacroObservation("VIXCLS", 17.2, previous_date, previous_date, "fred:VIXCLS", "official_public", "daily_close"),
+            ]
+        return []
+
+    log_patcher = _log_patch()
+    try:
+        with (
+            patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", side_effect=history),
+            patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", return_value={}),
+            patch("src.services.market_overview_service.fetch_fred_observation_points", side_effect=fred_points) as fred_fetch,
+            patch.object(service, "_atr_item", return_value=None),
+        ):
+            payload = service.get_volatility()
+    finally:
+        log_patcher.stop()
+
+    vix = _item(payload, "VIX")
+    assert "VIXCLS" in [call.args[0] for call in fred_fetch.call_args_list]
+    assert vix["value"] == 16.8
+    assert vix["source"] == "fred"
+    assert vix["sourceId"] == "fred:VIXCLS"
+    assert vix["sourceType"] == "official_public"
+    assert vix["providerClass"] == "official_daily"
+    assert vix["officialOverlayAttempted"] is True
+    assert vix["officialOverlayAvailable"] is True
+    assert vix["officialOverlayFailureReason"] is None
+    assert vix["freshness"] not in {"live", "fresh"}
 
 
 def test_vix_yfinance_proxy_panel_and_item_cannot_claim_live_realtime() -> None:
@@ -215,8 +258,6 @@ def test_vix_stale_official_overlay_does_not_replace_delayed_proxy() -> None:
         raise RuntimeError(f"{ticker} fixture unavailable")
 
     def official_points(*args: object, **kwargs: object) -> dict:
-        from src.services.official_macro_transport import MacroObservation
-
         return {
             "VIXCLS": [
                 MacroObservation("VIXCLS", 21.5, stale_date, stale_date, "fred:VIXCLS", "official_public", "daily_close"),
@@ -245,6 +286,72 @@ def test_vix_stale_official_overlay_does_not_replace_delayed_proxy() -> None:
     assert vix["officialOverlayAvailable"] is False
     assert vix["officialOverlayFailureReason"] == "stale_official_row"
     assert vix["activationHint"] == "official_overlay_stale_using_proxy"
+
+
+def test_vix_fred_cache_miss_reason_is_propagated_to_proxy_item() -> None:
+    service = MarketOverviewService()
+    as_of = datetime.now(CN_TZ)
+    service._official_macro_overlay_diagnostics["VIXCLS"] = "cache_miss"
+
+    def history(ticker: str) -> _HistoryFrame:
+        if ticker == "^VIX":
+            return _HistoryFrame([18.0, 15.0], as_of=as_of, volumes=[1_000_000, 1_100_000])
+        raise RuntimeError(f"{ticker} fixture unavailable")
+
+    log_patcher = _log_patch()
+    try:
+        with (
+            patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", side_effect=history),
+            patch.object(service, "_official_macro_points", return_value={}),
+            patch.object(service, "_atr_item", return_value=None),
+        ):
+            payload = service.get_volatility()
+    finally:
+        log_patcher.stop()
+
+    vix = _item(payload, "VIX")
+    assert vix["value"] == 15.0
+    assert vix["sourceType"] == "unofficial_proxy"
+    assert vix["providerClass"] == "proxy"
+    assert vix["officialOverlayAttempted"] is True
+    assert vix["officialOverlayAvailable"] is False
+    assert vix["officialOverlayFailureReason"] == "cache_miss"
+    assert vix["activationHint"] == "official_overlay_unavailable_using_proxy"
+
+
+def test_vix_official_refresh_not_attempted_when_budget_exhausted() -> None:
+    service = MarketOverviewService()
+    as_of = datetime.now(CN_TZ)
+
+    def history(ticker: str) -> _HistoryFrame:
+        if ticker == "^VIX":
+            return _HistoryFrame([18.0, 15.0], as_of=as_of, volumes=[1_000_000, 1_100_000])
+        raise RuntimeError(f"{ticker} fixture unavailable")
+
+    def fail_if_called(*args: object, **kwargs: object) -> object:
+        raise AssertionError(f"official macro transport should not be called: {args} {kwargs}")
+
+    log_patcher = _log_patch()
+    try:
+        with (
+            patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", side_effect=history),
+            patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", side_effect=fail_if_called),
+            patch("src.services.market_overview_service.fetch_fred_observation_points", side_effect=fail_if_called),
+            patch.object(service, "OFFICIAL_MACRO_AGGREGATE_BUDGET_SECONDS", 0.0),
+            patch.object(service, "_atr_item", return_value=None),
+        ):
+            payload = service.get_volatility()
+    finally:
+        log_patcher.stop()
+
+    vix = _item(payload, "VIX")
+    assert vix["value"] == 15.0
+    assert vix["sourceType"] == "unofficial_proxy"
+    assert vix["providerClass"] == "proxy"
+    assert vix["officialOverlayAttempted"] is True
+    assert vix["officialOverlayAvailable"] is False
+    assert vix["officialOverlayFailureReason"] == "refresh_not_attempted"
+    assert vix["activationHint"] == "official_overlay_unavailable_using_proxy"
 
 
 def test_hsi_sina_proxy_quote_uses_dashboard_symbol_and_truthful_metadata() -> None:

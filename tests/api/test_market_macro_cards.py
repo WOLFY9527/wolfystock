@@ -327,6 +327,84 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
         )
         self.assertEqual(credit_provenance["sourceType"], "official_public")
 
+    def test_fred_dgs10_overlay_metadata_is_consistent_when_treasury_row_is_missing(self) -> None:
+        service = MarketOverviewService()
+        latest_date = datetime.now(timezone.utc).date()
+        latest_date_text = latest_date.isoformat()
+        previous_date_text = (latest_date - timedelta(days=1)).isoformat()
+        fred_points = {
+            "DGS10": [
+                MacroObservation("DGS10", 4.42, latest_date_text, latest_date_text, "fred:DGS10", "official_public", "daily_rate"),
+                MacroObservation("DGS10", 4.47, previous_date_text, previous_date_text, "fred:DGS10", "official_public", "daily_rate"),
+            ],
+        }
+        proxy_as_of = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        proxy_items = [
+            {
+                "symbol": "US10Y",
+                "label": "10Y yield",
+                "value": 4.5,
+                "unit": "%",
+                "change_pct": 0.0,
+                "changePercent": 0.0,
+                "risk_direction": "neutral",
+                "trend": [4.48, 4.5],
+                "source": "yfinance",
+                "sourceLabel": "Yahoo Finance",
+                "sourceType": "unofficial_proxy",
+                "asOf": proxy_as_of,
+            },
+            {
+                "symbol": "DXY",
+                "label": "US Dollar Index",
+                "value": 105.2,
+                "unit": "idx",
+                "change_pct": 0.1,
+                "changePercent": 0.1,
+                "risk_direction": "decreasing",
+                "trend": [105.0, 105.2],
+                "source": "yfinance",
+                "sourceLabel": "Yahoo Finance",
+                "sourceType": "unofficial_proxy",
+                "asOf": proxy_as_of,
+            },
+        ]
+
+        with patch.object(service, "_cached_payload", side_effect=lambda _key, fetcher, _fallback: fetcher()):
+            with patch.object(service, "_quote_items", return_value=proxy_items), patch(
+                "src.services.market_overview_service.fetch_treasury_daily_rate_observation_points",
+                return_value={},
+                create=True,
+            ), patch(
+                "src.services.market_overview_service.fetch_fred_observation_points",
+                side_effect=lambda series_id, **_: fred_points.get(series_id, []),
+                create=True,
+            ):
+                rates_payload = service.get_rates()
+                macro_payload = service.get_macro()
+
+        rates_items = {item["symbol"]: item for item in rates_payload["items"]}
+        macro_items = {item["symbol"]: item for item in macro_payload["items"]}
+        for item in (rates_items["US10Y"], macro_items["US10Y"]):
+            self.assertEqual(item["source"], "fred")
+            self.assertEqual(item["sourceId"], "fred:DGS10")
+            self.assertEqual(item["sourceType"], "official_public")
+            self.assertEqual(item["sourceLabel"], "FRED US Treasury 10Y Constant Maturity")
+            self.assertEqual(item["providerClass"], "official_daily")
+            self.assertTrue(item["providerAttempted"])
+            self.assertTrue(item["officialOverlayAttempted"])
+            self.assertTrue(item["officialOverlayAvailable"])
+            self.assertIsNone(item["officialOverlayFailureReason"])
+            self.assertEqual(item["activationHint"], "official_daily_overlay_active")
+            self.assertNotIn(item["freshness"], {"live", "fresh"})
+
+        self.assertEqual(macro_items["US10Y"]["freshness"], rates_items["US10Y"]["freshness"])
+        self.assertEqual(macro_items["US10Y"]["asOf"], rates_items["US10Y"]["asOf"])
+        self.assertEqual(macro_items["DXY"]["sourceType"], "unofficial_proxy")
+        self.assertFalse(macro_items["DXY"]["officialOverlayAttempted"])
+        self.assertFalse(macro_items["DXY"]["officialOverlayAvailable"])
+        self.assertEqual(macro_items["DXY"]["officialOverlayFailureReason"], "not_configured")
+
     def test_macro_panel_marks_monthly_official_series_unavailable_without_live_masquerade_when_history_is_insufficient(self) -> None:
         service = MarketOverviewService()
         latest_date_text = datetime.now(timezone.utc).date().isoformat()

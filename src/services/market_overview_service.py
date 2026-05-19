@@ -57,6 +57,16 @@ CN_TZ = timezone(timedelta(hours=8))
 FALLBACK_WARNING = "备用示例数据，不代表当前行情"
 INSUFFICIENT_MARKET_DATA_WARNING = "当前真实数据不足，市场温度仅供界面演示"
 OFFICIAL_MACRO_UNAVAILABLE_WARNING = "部分官方宏观指标暂不可用"
+OFFICIAL_OVERLAY_FAILURE_REASONS = {
+    "not_configured",
+    "cache_miss",
+    "transport_error",
+    "empty_response",
+    "stale_official_row",
+    "parse_error",
+    "missing_series",
+    "refresh_not_attempted",
+}
 MARKET_TEMPERATURE_REQUIRED_RELIABLE_INPUT_COUNT = 5
 MARKET_TEMPERATURE_REQUIRED_RELIABLE_PANEL_COUNT = 3
 MARKET_TEMPERATURE_MIN_COVERAGE = 0.25
@@ -1651,10 +1661,10 @@ class MarketOverviewService:
             else bool(overlay_attempted and source_type == "official_public" and not is_unavailable)
         )
         provider_class = str(item.get("providerClass") or self._provider_class_for_item(item)).strip()
-        failure_reason = item.get("officialOverlayFailureReason")
+        failure_reason = self._normalize_official_overlay_failure_reason(item.get("officialOverlayFailureReason"))
         if failure_reason is None:
             if overlay_attempted and not overlay_available:
-                failure_reason = "not_attempted"
+                failure_reason = "refresh_not_attempted"
             elif not overlay_attempted:
                 failure_reason = "not_configured"
         provider_attempted = (
@@ -1684,6 +1694,20 @@ class MarketOverviewService:
             "providerClass": provider_class,
             "activationHint": activation_hint,
         }
+
+    @staticmethod
+    def _normalize_official_overlay_failure_reason(reason: Any) -> Optional[str]:
+        normalized = str(reason or "").strip().lower()
+        if not normalized:
+            return None
+        aliases = {
+            "not_attempted": "refresh_not_attempted",
+            "official_overlay_stale": "stale_official_row",
+        }
+        normalized = aliases.get(normalized, normalized)
+        if normalized in OFFICIAL_OVERLAY_FAILURE_REASONS:
+            return normalized
+        return "transport_error"
 
     def _provider_class_for_item(self, item: Dict[str, Any]) -> str:
         source = str(item.get("source") or "").lower()
@@ -1826,7 +1850,7 @@ class MarketOverviewService:
             items = next_items
         elif official_vix_failure:
             items = [
-                self._with_official_overlay_failure(item, official_vix_failure)
+                self._with_official_overlay_failure(item, official_vix_failure, series_id="VIXCLS")
                 if str(item.get("symbol") or "") == "VIX"
                 else item
                 for item in items
@@ -2189,7 +2213,11 @@ class MarketOverviewService:
             if official_item:
                 item_map[panel_symbol] = official_item
             elif panel_symbol in item_map and official_failure:
-                item_map[panel_symbol] = self._with_official_overlay_failure(item_map[panel_symbol], official_failure)
+                item_map[panel_symbol] = self._with_official_overlay_failure(
+                    item_map[panel_symbol],
+                    official_failure,
+                    series_id=series_id,
+                )
         official_sofr = self._official_macro_item("SOFR", "SOFR", official_points.get("SOFR", []), unit="%", market="US")
         if official_sofr:
             item_map["SOFR"] = official_sofr
@@ -2204,7 +2232,11 @@ class MarketOverviewService:
         if official_vix:
             item_map["VIX"] = official_vix
         elif "VIX" in item_map and official_vix_failure:
-            item_map["VIX"] = self._with_official_overlay_failure(item_map["VIX"], official_vix_failure)
+            item_map["VIX"] = self._with_official_overlay_failure(
+                item_map["VIX"],
+                official_vix_failure,
+                series_id="VIXCLS",
+            )
         official_credit = self._official_macro_item(
             "CREDIT",
             "Credit spreads",
@@ -2521,7 +2553,13 @@ class MarketOverviewService:
                 items.append(official_item)
                 official_count += 1
             elif symbol in fallback_items:
-                items.append(self._with_official_overlay_failure(fallback_items[symbol], official_failure))
+                items.append(
+                    self._with_official_overlay_failure(
+                        fallback_items[symbol],
+                        official_failure,
+                        series_id=series_id,
+                    )
+                )
         if "US10Y2Y" in fallback_items:
             items.append(fallback_items["US10Y2Y"])
         if "US10Y3M" in fallback_items:
@@ -2701,7 +2739,7 @@ class MarketOverviewService:
         points: Dict[str, List[MacroObservation]] = {}
         diagnostics: Dict[str, str] = {}
         fetched_at = time.monotonic()
-        fred_series_ids = ["DGS2", "DGS10", "DGS30", "VIXCLS", "SOFR"]
+        fred_series_ids = ["VIXCLS", "DGS2", "DGS10", "DGS30", "SOFR"]
         if include_policy_and_inflation:
             fred_series_ids.extend(["DFF", "CPIAUCSL", "PPIACO"])
         if include_credit_stress:
@@ -2752,13 +2790,19 @@ class MarketOverviewService:
                     self._record_official_macro_diagnostic(diagnostics, series_id, "missing_series")
         else:
             for series_id in treasury_series_ids:
-                self._record_official_macro_diagnostic(diagnostics, series_id, "not_attempted")
-        for series_id in fred_series_ids:
+                self._record_official_macro_diagnostic(diagnostics, series_id, "refresh_not_attempted")
+        for index, series_id in enumerate(fred_series_ids):
             if series_id in points and points[series_id]:
                 continue
             timeout = self._deadline_timeout(deadline, self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
             if timeout is None:
-                self._record_official_macro_diagnostic(diagnostics, series_id, "not_attempted")
+                for remaining_series_id in fred_series_ids[index:]:
+                    if remaining_series_id not in points:
+                        self._record_official_macro_diagnostic(
+                            diagnostics,
+                            remaining_series_id,
+                            "refresh_not_attempted",
+                        )
                 break
             fred_error_reason: str | None = None
             try:
@@ -2835,13 +2879,17 @@ class MarketOverviewService:
         normalized_reason = str(reason or "").strip().lower()
         if not normalized_reason:
             return
+        if normalized_reason == "not_attempted":
+            normalized_reason = "refresh_not_attempted"
         current_reason = str(diagnostics.get(series_id) or "").strip().lower()
+        if current_reason == "not_attempted":
+            current_reason = "refresh_not_attempted"
         if current_reason == "stale_official_row":
             return
         replaceable_reasons = {
             "",
             "cache_miss",
-            "not_attempted",
+            "refresh_not_attempted",
             "empty_response",
             "missing_series",
             "transport_error",
@@ -2907,7 +2955,9 @@ class MarketOverviewService:
             change_scale=change_scale,
         )
         if item is None:
-            failure_reason = self._official_macro_overlay_diagnostics.get(series_id) or "empty_response"
+            failure_reason = self._normalize_official_overlay_failure_reason(
+                self._official_macro_overlay_diagnostics.get(series_id)
+            ) or "empty_response"
             return None, failure_reason
         freshness = get_freshness_status(
             item.get("asOf"),
@@ -2924,13 +2974,20 @@ class MarketOverviewService:
             "officialOverlayAttempted": True,
             "officialOverlayAvailable": True,
             "officialOverlayFailureReason": None,
+            "officialOverlaySeriesId": series_id,
+            "officialOverlaySourceId": item.get("sourceId"),
             "activationHint": "official_daily_overlay_active",
         })
         return item, None
 
-    @staticmethod
-    def _with_official_overlay_failure(item: Dict[str, Any], reason: str | None) -> Dict[str, Any]:
-        failure_reason = str(reason or "empty_response").strip().lower()
+    def _with_official_overlay_failure(
+        self,
+        item: Dict[str, Any],
+        reason: str | None,
+        *,
+        series_id: str | None = None,
+    ) -> Dict[str, Any]:
+        failure_reason = self._normalize_official_overlay_failure_reason(reason) or "empty_response"
         fallback_item = bool(item.get("isFallback") or item.get("fallbackUsed")) or str(item.get("source") or "").lower() in {
             "fallback",
             "mock",
@@ -2947,6 +3004,7 @@ class MarketOverviewService:
             "officialOverlayAttempted": True,
             "officialOverlayAvailable": False,
             "officialOverlayFailureReason": failure_reason,
+            **({"officialOverlaySeriesId": series_id, "officialOverlaySourceId": f"fred:{series_id}"} if series_id else {}),
             "activationHint": activation_hint,
         }
 
