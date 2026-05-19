@@ -460,9 +460,19 @@ const temperaturePayload = () => ({
   isStale: false,
   confidence: 0.82,
   reliableInputCount: 12,
+  requiredReliableInputCount: 5,
+  reliablePanelCount: 5,
+  requiredReliablePanelCount: 3,
   fallbackInputCount: 2,
   excludedInputCount: 2,
   isReliable: true,
+  temperatureAvailable: true,
+  disabledReason: null,
+  unavailableReason: null,
+  insufficientReliableInputs: false,
+  trustLevel: 'reliable',
+  sourceTier: 'unofficial_public_api',
+  conclusionAllowed: true,
   scores: {
     overall: { value: 62, label: '偏暖', trend: 'improving' as const, description: '风险偏好改善，但宏观压力仍需关注。' },
     usRiskAppetite: { value: 68, label: '偏暖', trend: 'improving' as const, description: '美股指数与风险情绪同步改善。' },
@@ -502,9 +512,19 @@ const unreliableTemperaturePayload = () => ({
   warning: '当前真实数据不足，市场温度仅供界面演示',
   confidence: 0,
   reliableInputCount: 0,
+  requiredReliableInputCount: 5,
+  reliablePanelCount: 0,
+  requiredReliablePanelCount: 3,
   fallbackInputCount: 18,
   excludedInputCount: 18,
   isReliable: false,
+  temperatureAvailable: false,
+  disabledReason: 'insufficient_reliable_inputs',
+  unavailableReason: 'insufficient_reliable_inputs',
+  insufficientReliableInputs: true,
+  trustLevel: 'unavailable',
+  sourceTier: 'static_fallback',
+  conclusionAllowed: false,
   scores: {
     overall: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前真实数据不足，市场温度仅供界面演示。' },
     usRiskAppetite: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前真实数据不足，市场温度仅供界面演示。' },
@@ -522,8 +542,11 @@ const limitedRealTemperaturePayload = () => ({
   isFallback: false,
   confidence: 0.32,
   reliableInputCount: 2,
+  reliablePanelCount: 2,
   fallbackInputCount: 10,
   excludedInputCount: 10,
+  trustLevel: 'weak',
+  sourceTier: 'unofficial_public_api',
 });
 
 const unreliableBriefingPayload = () => ({
@@ -1587,8 +1610,15 @@ describe('MarketOverviewPage', () => {
 
     render(<MarketOverviewPage />);
 
-    expect(await screen.findByTestId('market-temperature-unreliable-summary')).toHaveTextContent('真实输入不足，暂不生成综合判断');
-    expect(screen.getByText(/真实输入不足，暂不生成综合判断/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('market-overview-temperature-summary')).toHaveTextContent('可靠输入不足');
+    });
+    const temperatureSummary = screen.getByTestId('market-overview-temperature-summary');
+    expect(temperatureSummary).toHaveTextContent('可靠输入不足');
+    expect(temperatureSummary).toHaveTextContent('暂不判定');
+    expect(temperatureSummary).not.toHaveTextContent('N/A');
+    expect(screen.getByTestId('market-temperature-unreliable-summary')).toHaveTextContent('可靠输入不足，暂不生成综合判断');
+    expect(screen.getByText(/可靠输入不足，暂不生成综合判断/i)).toBeInTheDocument();
     expect(screen.getByText(/信号可信：数据不足/i)).toBeInTheDocument();
     expect(screen.queryByText(/综合市场温度/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('market-overview-rail-action-hint')).toHaveTextContent(/优先观察已验证信号，暂不生成强判断|等待刷新完成后再生成强判断|部分关键面板暂不可用，暂不生成强判断/i);
@@ -1607,9 +1637,19 @@ describe('MarketOverviewPage', () => {
       isFallback: false,
       confidence: 0.18,
       reliableInputCount: 1,
+      requiredReliableInputCount: 5,
+      reliablePanelCount: 1,
+      requiredReliablePanelCount: 3,
       fallbackInputCount: 3,
       excludedInputCount: 2,
       isReliable: false,
+      temperatureAvailable: false,
+      disabledReason: 'insufficient_reliable_inputs',
+      unavailableReason: 'insufficient_reliable_inputs',
+      insufficientReliableInputs: true,
+      trustLevel: 'weak',
+      sourceTier: 'unofficial_public_api',
+      conclusionAllowed: false,
       scores: {
         liquidity: { value: 51, label: '中性', trend: 'stable', description: '流动性输入部分可用。' },
       },
@@ -1618,8 +1658,9 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     expect(await screen.findByTestId('market-overview-shell')).toBeInTheDocument();
-    expect(screen.getByTestId('market-temperature-unreliable-summary')).toHaveTextContent('真实输入不足，暂不生成综合判断');
-    expect(screen.getByTestId('market-overview-temperature-summary')).toHaveTextContent(/数据不足/);
+    expect(screen.getByTestId('market-temperature-unreliable-summary')).toHaveTextContent('可靠输入不足，暂不生成综合判断');
+    expect(screen.getByTestId('market-overview-temperature-summary')).toHaveTextContent(/可靠输入不足|暂不判定/);
+    expect(screen.getByTestId('market-overview-temperature-summary')).not.toHaveTextContent('N/A');
     expect(screen.getByTestId('market-decision-text')).toHaveTextContent(/数据可用：存在延迟源|数据可用：存在延迟\/代理源/);
     expect(screen.queryByText(/raw|payload/i)).not.toBeInTheDocument();
   });
@@ -1630,9 +1671,9 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     const summary = await screen.findByTestId('market-temperature-unreliable-summary');
-    expect(summary).toHaveTextContent('真实输入不足，暂不生成综合判断');
+    expect(summary).toHaveTextContent('可靠输入不足，暂不生成综合判断');
     await waitFor(() => {
-      expect(summary).toHaveTextContent('真实输入不足，暂不生成综合判断');
+      expect(summary).toHaveTextContent('可靠输入不足，暂不生成综合判断');
       expect(screen.getByTestId('market-temperature-strip')).toHaveTextContent(/真实 2.*备用 10.*排除 10/i);
     });
     expect(screen.queryByText(/R 0/i)).not.toBeInTheDocument();

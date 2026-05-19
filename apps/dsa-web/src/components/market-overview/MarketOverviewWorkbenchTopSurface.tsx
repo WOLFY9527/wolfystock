@@ -178,7 +178,11 @@ const MarketTemperatureCompactSummary: React.FC<{ summary: MarketOverviewTempera
         <span className="font-mono tabular-nums">
           真实 {summary.reliableInputCount} · 备用 {summary.fallbackInputCount} · 排除 {summary.excludedInputCount}
         </span>
-        {!summary.reliable ? <span data-testid="market-temperature-unreliable-summary">真实输入不足，暂不生成综合判断</span> : null}
+        {!summary.reliable ? (
+          <span data-testid="market-temperature-unreliable-summary">
+            {summary.label === '可靠输入不足' ? '可靠输入不足，暂不生成综合判断' : '暂不判定，暂不生成综合判断'}
+          </span>
+        ) : null}
       </div>
     )}
   />
@@ -341,7 +345,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
   heroAnchors,
 }) => {
   const regimeStripItems = [
-    { key: 'regime', label: '状态', value: decisionReliable ? temperatureSummary.label : '数据不足' },
+    { key: 'regime', label: '状态', value: temperatureSummary.label },
     { key: 'temperature', label: '温度', value: temperatureSummary.valueText },
     { key: 'confidence', label: '可信度', value: temperatureSummary.confidenceLabel },
     {

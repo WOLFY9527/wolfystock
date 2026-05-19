@@ -69,6 +69,7 @@ Expected degraded-state semantics:
 - Missing headline indicator values must include `isUnavailable`, `degradationReason`, non-live `freshness`, and weak/unavailable trust metadata.
 - Market Temperature and Market Briefing must degrade to insufficient-data posture when reliable inputs are missing; they must not emit strong bullish/bearish action language from fallback-only inputs.
 - Market Temperature and Market Briefing trust fields (`trustLevel`, `sourceTier`, `scoreCap`, `conclusionAllowed`, `degradationReasons`) must cap stale, fallback, unavailable, synthetic, mixed, or low-coverage evidence before strong conclusions are allowed.
+- Market Temperature disabled states must expose explicit `temperatureAvailable=false`, `disabledReason=insufficient_reliable_inputs`, `unavailableReason`, `insufficientReliableInputs`, and `requiredReliableInputCount` metadata instead of collapsing to ambiguous `N/A`.
 
 Backend-only:
 - This checklist is backend-only.

@@ -642,10 +642,26 @@ function confidenceLabel(confidence?: number): string {
 
 function isTemperatureReliable(data: MarketTemperatureResponse): boolean {
   return Boolean(
-    data.isReliable !== false
+    data.temperatureAvailable !== false
+    && data.conclusionAllowed !== false
+    && data.isReliable !== false
     && (data.confidence == null || data.confidence >= 0.45)
     && (data.reliableInputCount == null || data.reliableInputCount >= 3),
   );
+}
+
+function temperatureDisabledStateLabel(data: MarketTemperatureResponse): string {
+  if (data.temperatureAvailable === false || data.conclusionAllowed === false || data.isReliable === false) {
+    if (
+      data.insufficientReliableInputs
+      || data.disabledReason === 'insufficient_reliable_inputs'
+      || data.unavailableReason === 'insufficient_reliable_inputs'
+    ) {
+      return '可靠输入不足';
+    }
+    return '暂不判定';
+  }
+  return data.scores.overall.label || '数据不足';
 }
 
 function isFallbackOnlyMeta(meta: {
@@ -894,8 +910,9 @@ function buildMarketDecision(params: {
       ? '观察中'
       : '数据不足';
   const riskLabel = reliable ? scoreStateLabel(temperature.scores.overall) : fallbackRiskLabel;
-  const liquidityLabel = reliable ? scoreStateLabel(temperature.scores.liquidity) : topLevelDataStatus.hasUsableData ? '部分可用' : 'N/A';
-  const breadthLabel = reliable ? scoreStateLabel(temperature.scores.cnMoneyEffect) : topLevelDataStatus.hasUsableData ? '部分可用' : 'N/A';
+  const disabledLabel = temperatureDisabledStateLabel(temperature);
+  const liquidityLabel = reliable ? scoreStateLabel(temperature.scores.liquidity) : topLevelDataStatus.hasUsableData ? '部分可用' : disabledLabel;
+  const breadthLabel = reliable ? scoreStateLabel(temperature.scores.cnMoneyEffect) : topLevelDataStatus.hasUsableData ? '部分可用' : disabledLabel;
   const watchSignals = MARKET_OVERVIEW_SIGNAL_WATCH[activeCategory]
     .map((metricId) => findMetricItem(panels, metricId)?.symbol || metricId)
     .slice(0, 3)
@@ -1636,6 +1653,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
   }), [activeCategory, coverageSummary, loading, panels, refreshingPanel]);
   const marketDecision = buildMarketDecision({ activeCategory, panels, dataQuality, topLevelDataStatus });
   const decisionReliable = isTemperatureReliable(panels.temperature);
+  const disabledLabel = temperatureDisabledStateLabel(panels.temperature);
   const dataStateStatuses = collectDataStateMeta(panels).map(resolveProviderStatus);
   const fallbackCount = dataQuality.counts.fallback + dataQuality.counts.mock;
   const unavailableCount = dataStateStatuses.filter((status) => status === 'partial' || status === 'unavailable' || status === 'error').length + refreshErrorCount;
@@ -1657,9 +1675,9 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
   };
   const temperatureSummary: MarketOverviewTemperatureSummaryView = {
     reliable: decisionReliable,
-    valueText: decisionReliable ? formatNumber(panels.temperature.scores.overall.value, 0) : 'N/A',
+    valueText: decisionReliable ? formatNumber(panels.temperature.scores.overall.value, 0) : '暂不判定',
     toneClass: decisionReliable ? scoreTone(panels.temperature.scores.overall) : 'text-white/45',
-    label: decisionReliable ? panels.temperature.scores.overall.label : '数据不足',
+    label: decisionReliable ? panels.temperature.scores.overall.label : disabledLabel,
     confidenceLabel: confidenceLabel(panels.temperature.confidence),
     reliableInputCount: panels.temperature.reliableInputCount ?? 0,
     fallbackInputCount: panels.temperature.fallbackInputCount ?? 0,

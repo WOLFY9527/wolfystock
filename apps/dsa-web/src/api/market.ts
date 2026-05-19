@@ -195,9 +195,21 @@ export type MarketTemperatureResponse = {
   warning?: string | null;
   confidence?: number;
   reliableInputCount?: number;
+  requiredReliableInputCount?: number;
+  reliablePanelCount?: number;
+  requiredReliablePanelCount?: number;
   fallbackInputCount?: number;
   excludedInputCount?: number;
   isReliable?: boolean;
+  temperatureAvailable?: boolean;
+  disabledReason?: string | null;
+  unavailableReason?: string | null;
+  insufficientReliableInputs?: boolean;
+  trustLevel?: string;
+  sourceTier?: string;
+  scoreCap?: number;
+  degradationReasons?: string[];
+  conclusionAllowed?: boolean;
   scores: {
     overall: MarketTemperatureScore;
     usRiskAppetite: MarketTemperatureScore;
@@ -235,6 +247,17 @@ export function normalizeMarketTemperatureResponse(
   const inferredReliable = payload?.confidence != null
     ? payload.confidence >= 0.45 && (payload.reliableInputCount == null || payload.reliableInputCount >= 3)
     : false;
+  const temperatureAvailable = payload?.temperatureAvailable ?? payload?.isReliable ?? inferredReliable;
+  const conclusionAllowed = payload?.conclusionAllowed ?? temperatureAvailable;
+  const isReliable = (
+    payload?.isReliable === false
+    || temperatureAvailable === false
+    || conclusionAllowed === false
+  )
+    ? false
+    : hasCompleteScores
+      ? payload?.isReliable ?? inferredReliable
+      : false;
 
   return {
     source: payload?.source || 'fallback',
@@ -250,13 +273,21 @@ export function normalizeMarketTemperatureResponse(
     warning: payload?.warning,
     confidence: payload?.confidence,
     reliableInputCount: payload?.reliableInputCount,
+    requiredReliableInputCount: payload?.requiredReliableInputCount,
+    reliablePanelCount: payload?.reliablePanelCount,
+    requiredReliablePanelCount: payload?.requiredReliablePanelCount,
     fallbackInputCount: payload?.fallbackInputCount,
     excludedInputCount: payload?.excludedInputCount,
-    isReliable: payload?.isReliable === false
-      ? false
-      : hasCompleteScores
-        ? payload?.isReliable ?? inferredReliable
-        : false,
+    isReliable,
+    temperatureAvailable,
+    disabledReason: payload?.disabledReason,
+    unavailableReason: payload?.unavailableReason,
+    insufficientReliableInputs: payload?.insufficientReliableInputs,
+    trustLevel: payload?.trustLevel,
+    sourceTier: payload?.sourceTier,
+    scoreCap: payload?.scoreCap,
+    degradationReasons: payload?.degradationReasons,
+    conclusionAllowed,
     scores: {
       overall: normalizeMarketTemperatureScore(scores.overall),
       usRiskAppetite: normalizeMarketTemperatureScore(scores.usRiskAppetite),

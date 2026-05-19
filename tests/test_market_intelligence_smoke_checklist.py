@@ -197,6 +197,8 @@ def test_market_intelligence_checklist_captures_scope_and_validation_commands() 
     assert "sourceTier" in checklist
     assert "trustLevel" in checklist
     assert "N/A is allowed only with explicit unavailable evidence" in checklist
+    assert "`temperatureAvailable=false`" in checklist
+    assert "`disabledReason=insufficient_reliable_inputs`" in checklist
     assert "Observation-only Rotation Radar themes must not appear in `summary.strongestThemes` or `summary.acceleratingThemes`." in checklist
     assert "`summary.observationThemes` and `summary.taxonomyThemes` must remain separate from headline lists." in checklist
     assert "Headline indicators must not render ambiguous N/A when a backend item has a numeric value." in checklist
@@ -290,6 +292,11 @@ def test_market_overview_liquidity_and_degraded_temperature_stay_truthful() -> N
     assert temperature_payload["freshness"] != "live"
     assert temperature_payload["isFallback"] is True
     assert temperature_payload["isReliable"] is False
+    assert temperature_payload["temperatureAvailable"] is False
+    assert temperature_payload["insufficientReliableInputs"] is True
+    assert temperature_payload["disabledReason"] == "insufficient_reliable_inputs"
+    assert temperature_payload["unavailableReason"] == "insufficient_reliable_inputs"
+    assert temperature_payload["requiredReliableInputCount"] == 5
     assert temperature_payload["conclusionAllowed"] is False
     assert temperature_payload["trustLevel"] in {"weak", "unavailable"}
     assert temperature_payload["scoreCap"] <= 0.4
@@ -324,9 +331,16 @@ def test_market_overview_liquidity_and_degraded_temperature_stay_truthful() -> N
     assert degraded_temperature_payload["isFallback"] is False
     assert degraded_temperature_payload["fallbackUsed"] is True
     assert degraded_temperature_payload["isReliable"] is False
+    assert degraded_temperature_payload["temperatureAvailable"] is False
+    assert degraded_temperature_payload["insufficientReliableInputs"] is True
+    assert degraded_temperature_payload["disabledReason"] == "insufficient_reliable_inputs"
+    assert degraded_temperature_payload["unavailableReason"] == "insufficient_reliable_inputs"
+    assert degraded_temperature_payload["requiredReliableInputCount"] == 5
     assert degraded_temperature_payload["conclusionAllowed"] is False
     assert degraded_temperature_payload["trustLevel"] == "weak"
     assert degraded_temperature_payload["scoreCap"] <= 0.4
+    assert degraded_temperature_payload["freshness"] == "partial"
+    assert degraded_temperature_payload["providerHealth"]["status"] == "partial"
     assert "low_coverage" in degraded_temperature_payload["degradationReasons"]
     assert degraded_temperature_payload["confidence"] < 0.25
     assert degraded_temperature_payload["evidenceSnapshot"]["coverage"] < 0.25
@@ -369,9 +383,12 @@ def test_market_overview_liquidity_and_degraded_temperature_stay_truthful() -> N
         briefing_payload = service.get_market_briefing()
 
     assert briefing_payload["source"] == "mixed"
-    assert briefing_payload["freshness"] == "live"
+    assert briefing_payload["freshness"] == "partial"
     assert briefing_payload["isFallback"] is False
     assert briefing_payload["fallbackUsed"] is True
+    assert briefing_payload["temperatureAvailable"] is False
+    assert briefing_payload["disabledReason"] == "insufficient_reliable_inputs"
+    assert briefing_payload["conclusionAllowed"] is False
     assert briefing_payload["isReliable"] is False
     assert all(item["category"] == "risk" for item in briefing_payload["items"])
     assert all(item["severity"] in {"warning", "neutral"} for item in briefing_payload["items"])

@@ -7,6 +7,14 @@
   frontend has a usable alias. Missing values now carry explicit unavailable
   metadata in the smoke contract; provider order, scoring formulas, MarketCache
   behavior, and protected backend domains remain unchanged.
+- **Market Temperature disabled-state contract** - Market Temperature and the
+  top Market Overview summary now surface explicit disabled metadata when
+  reliable coverage is insufficient, including `temperatureAvailable`,
+  `disabledReason`, `unavailableReason`, `insufficientReliableInputs`,
+  `requiredReliableInputCount`, and `conclusionAllowed`. The frontend now shows
+  explicit disabled-state copy such as `可靠输入不足` / `暂不判定` instead of
+  ambiguous `N/A`, while fallback/proxy/stale evidence remains non-live and the
+  scoring surface stays unchanged.
 - **Rotation Radar headline lane contract hardening** - Rotation Radar now
   emits explicit `rankingLane`, `eligibleThemeCount`, and
   `noHeadlineReason` contract fields so clients can distinguish headline

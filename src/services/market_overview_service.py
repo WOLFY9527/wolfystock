@@ -55,6 +55,9 @@ CN_TZ = timezone(timedelta(hours=8))
 FALLBACK_WARNING = "备用示例数据，不代表当前行情"
 INSUFFICIENT_MARKET_DATA_WARNING = "当前真实数据不足，市场温度仅供界面演示"
 OFFICIAL_MACRO_UNAVAILABLE_WARNING = "部分官方宏观指标暂不可用"
+MARKET_TEMPERATURE_REQUIRED_RELIABLE_INPUT_COUNT = 5
+MARKET_TEMPERATURE_REQUIRED_RELIABLE_PANEL_COUNT = 3
+MARKET_TEMPERATURE_MIN_COVERAGE = 0.25
 
 CONFIDENCE_BY_FRESHNESS = {
     "live": 1.0,
@@ -621,6 +624,7 @@ class MarketOverviewService:
                 payload["fallbackUsed"] = True
                 payload["isFallback"] = trust["reliableInputCount"] == 0
                 payload["freshness"] = "fallback" if trust["reliableInputCount"] == 0 else "stale"
+                payload.update(self._market_temperature_disabled_state_meta(trust))
             elif trust["fallbackInputCount"]:
                 payload["warning"] = "部分指标来自备用数据，评分仅使用真实数据。"
                 payload["fallbackUsed"] = True
@@ -641,6 +645,7 @@ class MarketOverviewService:
                 "isFallback": True,
                 "freshness": "fallback",
                 **trust,
+                **self._market_temperature_disabled_state_meta(trust),
             }
 
         started_at = time.monotonic()
@@ -671,6 +676,7 @@ class MarketOverviewService:
                 payload["fallbackUsed"] = True
                 payload["isFallback"] = trust["reliableInputCount"] == 0
                 payload["freshness"] = "fallback" if trust["reliableInputCount"] == 0 else "stale"
+                payload.update(self._market_temperature_disabled_state_meta(briefing_trust))
             elif trust["fallbackInputCount"]:
                 payload["warning"] = "部分解读已排除备用数据。"
                 payload["fallbackUsed"] = True
@@ -678,7 +684,10 @@ class MarketOverviewService:
 
         def fallback_factory() -> Dict[str, Any]:
             inputs = self._fallback_market_temperature_inputs()
-            trust = self._summarize_market_temperature_confidence(inputs)
+            trust = self._market_briefing_trust(
+                inputs,
+                self._summarize_market_temperature_confidence(inputs),
+            )
             scores = self._insufficient_market_temperature_scores()
             return {
                 "source": "fallback",
@@ -689,6 +698,7 @@ class MarketOverviewService:
                 "isFallback": True,
                 "freshness": "fallback",
                 **trust,
+                **self._market_temperature_disabled_state_meta(trust),
             }
 
         started_at = time.monotonic()
@@ -1307,6 +1317,8 @@ class MarketOverviewService:
         if payload.get("isFallback") or freshness in {"fallback", "mock"} or source in {"fallback", "mock"}:
             return "fallback"
         if payload.get("fallbackUsed") and real_items:
+            return "partial"
+        if payload.get("isPartial") or freshness == "partial":
             return "partial"
         if payload.get("isStale") or freshness == "stale":
             return "stale"
@@ -3458,25 +3470,67 @@ class MarketOverviewService:
         item_factor = min(1.0, reliable_count / 5.0) if reliable_count else 0.0
         raw_confidence = float(trust.get("confidence") or 0.0)
         trust_gate_coverage = raw_coverage
-        if reliable_count >= 5 and reliable_panel_count >= 3 and raw_confidence > 0.25:
+        if (
+            reliable_count >= MARKET_TEMPERATURE_REQUIRED_RELIABLE_INPUT_COUNT
+            and reliable_panel_count >= MARKET_TEMPERATURE_REQUIRED_RELIABLE_PANEL_COUNT
+            and raw_confidence > MARKET_TEMPERATURE_MIN_COVERAGE
+        ):
             trust_gate_coverage = max(trust_gate_coverage, min(panel_factor, item_factor))
         confidence = round(min(raw_confidence, raw_coverage, panel_factor, item_factor), 2)
-        is_reliable = bool(
+        has_required_reliable_inputs = bool(
             trust.get("isReliable")
-            and reliable_count >= 5
-            and reliable_panel_count >= 3
-            and raw_coverage >= 0.25
+            and reliable_count >= MARKET_TEMPERATURE_REQUIRED_RELIABLE_INPUT_COUNT
+            and reliable_panel_count >= MARKET_TEMPERATURE_REQUIRED_RELIABLE_PANEL_COUNT
+            and raw_coverage >= MARKET_TEMPERATURE_MIN_COVERAGE
         )
         trust_gate = self._market_intelligence_trust_gate(inputs, coverage=trust_gate_coverage)
+        temperature_available = bool(has_required_reliable_inputs and trust_gate["isReliable"])
+        conclusion_allowed = bool(temperature_available and trust_gate["conclusionAllowed"])
+        insufficient_reliable_inputs = not has_required_reliable_inputs
+        disabled_reason = None
+        if not temperature_available:
+            if insufficient_reliable_inputs:
+                disabled_reason = "insufficient_reliable_inputs"
+            elif not trust_gate["conclusionAllowed"]:
+                disabled_reason = "strong_conclusion_blocked"
+            else:
+                disabled_reason = "trust_gate_capped"
         return {
             **trust,
             "confidence": round(min(confidence, float(trust_gate["scoreCap"])), 2),
-            "isReliable": bool(is_reliable and trust_gate["isReliable"]),
+            "isReliable": temperature_available,
+            "temperatureAvailable": temperature_available,
+            "insufficientReliableInputs": insufficient_reliable_inputs,
+            "reliablePanelCount": reliable_panel_count,
+            "requiredReliablePanelCount": MARKET_TEMPERATURE_REQUIRED_RELIABLE_PANEL_COUNT,
+            "requiredReliableInputCount": MARKET_TEMPERATURE_REQUIRED_RELIABLE_INPUT_COUNT,
+            "disabledReason": disabled_reason,
+            "unavailableReason": disabled_reason,
             "trustLevel": trust_gate["trustLevel"],
             "sourceTier": trust_gate["sourceTier"],
             "degradationReasons": trust_gate["degradationReasons"],
             "scoreCap": trust_gate["scoreCap"],
-            "conclusionAllowed": trust_gate["conclusionAllowed"],
+            "conclusionAllowed": conclusion_allowed,
+        }
+
+    @staticmethod
+    def _market_temperature_disabled_state_meta(trust: Dict[str, Any]) -> Dict[str, Any]:
+        if trust.get("temperatureAvailable"):
+            return {}
+        reliable_count = int(trust.get("reliableInputCount") or 0)
+        freshness = "fallback" if reliable_count <= 0 else "partial"
+        disabled_reason = trust.get("disabledReason") or "insufficient_reliable_inputs"
+        return {
+            "temperatureAvailable": False,
+            "disabledReason": disabled_reason,
+            "unavailableReason": trust.get("unavailableReason") or disabled_reason,
+            "insufficientReliableInputs": bool(trust.get("insufficientReliableInputs", True)),
+            "sourceFreshnessEvidence": {
+                "freshness": freshness,
+                "isFallback": reliable_count <= 0,
+                "isPartial": reliable_count > 0,
+                "warning": INSUFFICIENT_MARKET_DATA_WARNING,
+            },
         }
 
     def _market_intelligence_trust_gate(self, inputs: Dict[str, Any], *, coverage: float) -> Dict[str, Any]:
