@@ -12,7 +12,11 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Mapping, Optional
 
-from src.services.source_confidence_contract import ProviderCapabilitySupportContract
+from src.services.source_confidence_contract import (
+    ProviderCapabilitySupportContract,
+    ProviderDryRunProbeContract,
+    ProviderFitMetadataContract,
+)
 
 
 class ProviderDomain(str, Enum):
@@ -592,6 +596,464 @@ _PROVIDER_CAPABILITY_SUPPORT_BY_KEY = {
 }
 
 
+def _provider_fit_entry(
+    provider_id: str,
+    provider_name: str,
+    *,
+    provider_category: str,
+    source_tier: str,
+    trust_level: str,
+    freshness_expectation: str,
+    paid_data_likely_required: bool,
+    key_required: bool,
+    cache_required: bool,
+    background_refresh_recommended: bool,
+    best_use_cases: tuple[str, ...],
+    rejected_for: tuple[str, ...],
+    not_recommended_for: tuple[str, ...],
+    missing_provider_reason: str | None = None,
+    plan_dependent: bool = False,
+) -> ProviderFitMetadataContract:
+    return ProviderFitMetadataContract(
+        provider_name=provider_name,
+        provider_id=provider_id,
+        provider_category=provider_category,
+        source_tier=source_tier,
+        trust_level=trust_level,
+        freshness_expectation=freshness_expectation,
+        observation_only=True,
+        score_contribution_allowed=False,
+        paid_data_likely_required=paid_data_likely_required,
+        key_required=key_required,
+        live_tests_avoided=True,
+        cache_required=cache_required,
+        background_refresh_recommended=background_refresh_recommended,
+        enabled_by_default=False,
+        missing_provider_reason=missing_provider_reason,
+        degradation_reason="provider_fit_metadata_only",
+        plan_dependent=plan_dependent,
+        best_use_cases=best_use_cases,
+        rejected_for=rejected_for,
+        not_recommended_for=not_recommended_for,
+    )
+
+
+_PROVIDER_FIT_METADATA = (
+    _provider_fit_entry(
+        "akshare_existing_baseline",
+        "AkShare Existing Baseline",
+        provider_category="cn_hk_existing_baseline",
+        source_tier="unofficial_public_api",
+        trust_level="weak",
+        freshness_expectation="best_effort_public_web_quote_snapshot_and_daily_history",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("cn_hk_observation_backfill", "delayed_market_observation"),
+        rejected_for=("official_provenance", "score_inputs"),
+        not_recommended_for=("live_quotes", "headline_indices"),
+    ),
+    _provider_fit_entry(
+        "alpha_vantage",
+        "Alpha Vantage",
+        provider_category="market_data_api",
+        source_tier="gated_public_api",
+        trust_level="usable_with_caution",
+        freshness_expectation="plan_dependent_delayed_or_daily",
+        paid_data_likely_required=True,
+        key_required=True,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("bounded_fundamentals_lookup", "manual_technical_reference"),
+        rejected_for=("scanner_scoring", "live_quotes"),
+        not_recommended_for=("high_fanout_requests", "intraday_decisions"),
+        missing_provider_reason="alpha_vantage_key_not_configured",
+        plan_dependent=True,
+    ),
+    _provider_fit_entry(
+        "ashare",
+        "Ashare",
+        provider_category="cn_hk_observation",
+        source_tier="unofficial_public_api",
+        trust_level="weak",
+        freshness_expectation="delayed_public_proxy",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=False,
+        best_use_cases=("cn_market_observation", "research_backfill"),
+        rejected_for=("official_quotes", "score_inputs"),
+        not_recommended_for=("live_panels", "hkex_grade_quotes"),
+    ),
+    _provider_fit_entry(
+        "baostock",
+        "BaoStock",
+        provider_category="cn_delayed_observation",
+        source_tier="third_party_free_api",
+        trust_level="usable_with_caution",
+        freshness_expectation="t_plus_1_or_delayed",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("a_share_delayed_history", "cn_observation_cache_fill"),
+        rejected_for=("live_quotes", "score_inputs"),
+        not_recommended_for=("premarket", "cn_hk_flows"),
+    ),
+    _provider_fit_entry(
+        "binance_public",
+        "Binance",
+        provider_category="exchange_reference",
+        source_tier="exchange_public",
+        trust_level="usable_with_caution",
+        freshness_expectation="near_real_time_venue_scoped",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("crypto_venue_redundancy", "venue_scoped_observation"),
+        rejected_for=("cross_venue_price_truth", "score_inputs"),
+        not_recommended_for=("macro_conclusions", "fx_reference"),
+    ),
+    _provider_fit_entry(
+        "coinbase_public",
+        "Coinbase",
+        provider_category="exchange_reference",
+        source_tier="exchange_public",
+        trust_level="usable_with_caution",
+        freshness_expectation="near_real_time_venue_scoped",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("crypto_venue_redundancy", "venue_scoped_observation"),
+        rejected_for=("cross_venue_price_truth", "score_inputs"),
+        not_recommended_for=("macro_conclusions", "fx_reference"),
+    ),
+    _provider_fit_entry(
+        "efinance",
+        "Efinance",
+        provider_category="cn_hk_observation",
+        source_tier="public_proxy",
+        trust_level="weak",
+        freshness_expectation="delayed_public_proxy",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=False,
+        best_use_cases=("cn_snapshot_observation", "public_web_backfill"),
+        rejected_for=("official_quotes", "score_inputs"),
+        not_recommended_for=("live_headlines", "hkex_grade_quotes"),
+    ),
+    _provider_fit_entry(
+        "finnhub",
+        "Finnhub",
+        provider_category="market_data_api",
+        source_tier="gated_public_api",
+        trust_level="usable_with_caution",
+        freshness_expectation="plan_dependent_delayed_or_daily",
+        paid_data_likely_required=True,
+        key_required=True,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("bounded_quote_enrichment", "company_news_reference"),
+        rejected_for=("score_inputs", "provider_order_changes"),
+        not_recommended_for=("scanner_fanout", "live_market_overview"),
+        missing_provider_reason="finnhub_key_not_configured",
+        plan_dependent=True,
+    ),
+    _provider_fit_entry(
+        "fred_existing_baseline",
+        "FRED Existing Baseline",
+        provider_category="macro_baseline",
+        source_tier="official_public",
+        trust_level="usable_with_caution",
+        freshness_expectation="daily_or_public_release",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("macro_reference_expansion", "official_public_baseline"),
+        rejected_for=("intraday_scoring", "live_quotes"),
+        not_recommended_for=("premarket", "tick_level_refresh"),
+    ),
+    _provider_fit_entry(
+        "marketstack",
+        "Marketstack",
+        provider_category="market_data_api",
+        source_tier="gated_public_api",
+        trust_level="usable_with_caution",
+        freshness_expectation="plan_dependent_delayed_or_daily",
+        paid_data_likely_required=True,
+        key_required=True,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("bounded_quote_reference", "historical_observation_cache"),
+        rejected_for=("score_inputs", "live_quotes"),
+        not_recommended_for=("scanner_fanout", "broad_market_panels"),
+        missing_provider_reason="marketstack_key_not_configured",
+        plan_dependent=True,
+    ),
+    _provider_fit_entry(
+        "nasdaq_data_link",
+        "Nasdaq Data Link",
+        provider_category="reference_dataset_api",
+        source_tier="gated_public_api",
+        trust_level="usable_with_caution",
+        freshness_expectation="plan_dependent_dataset_release",
+        paid_data_likely_required=True,
+        key_required=True,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("dataset_reference", "scheduled_cache_refresh"),
+        rejected_for=("live_quotes", "score_inputs"),
+        not_recommended_for=("premarket", "intraday_panels"),
+        missing_provider_reason="nasdaq_data_link_key_not_configured",
+        plan_dependent=True,
+    ),
+    _provider_fit_entry(
+        "openbb_reference_only",
+        "OpenBB",
+        provider_category="integration_reference",
+        source_tier="reference_wrapper",
+        trust_level="reference_only",
+        freshness_expectation="plan_dependent_reference_only",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=False,
+        background_refresh_recommended=False,
+        best_use_cases=("integration_planning", "provider_discovery_reference"),
+        rejected_for=("source_of_truth", "score_inputs"),
+        not_recommended_for=("official_provenance", "quote_freshness"),
+        plan_dependent=True,
+    ),
+    _provider_fit_entry(
+        "pandas_datareader_fred",
+        "pandas-datareader FRED",
+        provider_category="macro_reference",
+        source_tier="official_public",
+        trust_level="usable_with_caution",
+        freshness_expectation="daily_or_public_release",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("macro_reference_expansion", "scheduled_release_backfill"),
+        rejected_for=("live_quotes", "score_inputs"),
+        not_recommended_for=("intraday_macro", "premarket"),
+    ),
+    _provider_fit_entry(
+        "pandas_datareader_oecd",
+        "pandas-datareader OECD",
+        provider_category="macro_reference",
+        source_tier="official_public",
+        trust_level="usable_with_caution",
+        freshness_expectation="daily_or_public_release",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("macro_reference_expansion", "cross_country_research"),
+        rejected_for=("live_quotes", "score_inputs"),
+        not_recommended_for=("intraday_macro", "headline_panels"),
+    ),
+    _provider_fit_entry(
+        "pandas_datareader_stooq",
+        "pandas-datareader Stooq",
+        provider_category="public_market_proxy",
+        source_tier="public_proxy",
+        trust_level="weak",
+        freshness_expectation="delayed_public_proxy",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=False,
+        best_use_cases=("delayed_history_reference", "research_cross_check"),
+        rejected_for=("official_quotes", "score_inputs"),
+        not_recommended_for=("live_panels", "fx_reference"),
+    ),
+    _provider_fit_entry(
+        "pandas_datareader_world_bank",
+        "pandas-datareader World Bank",
+        provider_category="macro_reference",
+        source_tier="official_public",
+        trust_level="usable_with_caution",
+        freshness_expectation="daily_or_public_release",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("macro_reference_expansion", "structural_country_context"),
+        rejected_for=("live_quotes", "score_inputs"),
+        not_recommended_for=("intraday_macro", "headline_panels"),
+    ),
+    _provider_fit_entry(
+        "pytdx_existing_baseline",
+        "pytdx Existing Baseline",
+        provider_category="cn_hk_existing_baseline",
+        source_tier="unofficial_public_api",
+        trust_level="usable_with_caution",
+        freshness_expectation="best_effort_realtime_quote_and_daily_history",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("cn_quote_observation", "baseline_health_reference"),
+        rejected_for=("official_quotes", "score_inputs"),
+        not_recommended_for=("headline_panels", "hkex_grade_quotes"),
+    ),
+    _provider_fit_entry(
+        "qstock",
+        "QStock",
+        provider_category="cn_hk_observation",
+        source_tier="public_proxy",
+        trust_level="weak",
+        freshness_expectation="delayed_public_proxy",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=False,
+        best_use_cases=("cn_market_observation", "research_backfill"),
+        rejected_for=("official_quotes", "score_inputs"),
+        not_recommended_for=("live_panels", "cn_hk_flows"),
+    ),
+    _provider_fit_entry(
+        "sec_edgar",
+        "SEC EDGAR",
+        provider_category="filings_reference",
+        source_tier="official_public",
+        trust_level="reliable_for_filings_metadata",
+        freshness_expectation="filing_or_daily",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("filings_metadata", "company_facts_reference"),
+        rejected_for=("live_quotes", "score_inputs"),
+        not_recommended_for=("premarket_quotes", "intraday_panels"),
+    ),
+    _provider_fit_entry(
+        "treasury_existing_baseline",
+        "US Treasury Existing Baseline",
+        provider_category="macro_baseline",
+        source_tier="official_public",
+        trust_level="usable_with_caution",
+        freshness_expectation="daily_or_public_release",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("official_rate_reference", "macro_baseline_cross_check"),
+        rejected_for=("live_quotes", "score_inputs"),
+        not_recommended_for=("intraday_rates", "premarket"),
+    ),
+    _provider_fit_entry(
+        "tushare_pro",
+        "Tushare Pro",
+        provider_category="market_data_api",
+        source_tier="gated_public_api",
+        trust_level="usable_with_caution",
+        freshness_expectation="plan_dependent_delayed_or_daily",
+        paid_data_likely_required=True,
+        key_required=True,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("a_share_delayed_observation", "cn_reference_enrichment"),
+        rejected_for=("score_inputs", "provider_order_changes"),
+        not_recommended_for=("live_panels", "cn_hk_flows"),
+        missing_provider_reason="tushare_pro_key_not_configured",
+        plan_dependent=True,
+    ),
+    _provider_fit_entry(
+        "twelve_data",
+        "Twelve Data",
+        provider_category="market_data_api",
+        source_tier="gated_public_api",
+        trust_level="usable_with_caution",
+        freshness_expectation="plan_dependent_delayed_or_daily",
+        paid_data_likely_required=True,
+        key_required=True,
+        cache_required=True,
+        background_refresh_recommended=True,
+        best_use_cases=("bounded_quote_reference", "fx_crypto_cross_check"),
+        rejected_for=("score_inputs", "live_quotes"),
+        not_recommended_for=("scanner_fanout", "market_overview_runtime"),
+        missing_provider_reason="twelve_data_key_not_configured",
+        plan_dependent=True,
+    ),
+    _provider_fit_entry(
+        "yahooquery",
+        "Yahooquery",
+        provider_category="baseline_proxy_observation",
+        source_tier="unofficial_public_api",
+        trust_level="weak",
+        freshness_expectation="delayed_public_proxy",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=False,
+        best_use_cases=("research_backfill", "delayed_observation_cross_check"),
+        rejected_for=("official_quotes", "score_inputs"),
+        not_recommended_for=("live_panels", "headline_indices"),
+    ),
+    _provider_fit_entry(
+        "yfinance_current_baseline",
+        "yfinance Current Baseline",
+        provider_category="baseline_proxy_observation",
+        source_tier="unofficial_public_api",
+        trust_level="weak",
+        freshness_expectation="delayed_public_proxy",
+        paid_data_likely_required=False,
+        key_required=False,
+        cache_required=True,
+        background_refresh_recommended=False,
+        best_use_cases=("baseline_cross_check", "delayed_market_observation"),
+        rejected_for=("official_quotes", "score_inputs"),
+        not_recommended_for=("live_panels", "headline_indices"),
+    ),
+)
+_PROVIDER_FIT_METADATA_BY_ID = {item.provider_id: item for item in _PROVIDER_FIT_METADATA}
+
+
+def _build_provider_dry_run_probe_contract(
+    entry: ProviderFitMetadataContract,
+) -> ProviderDryRunProbeContract:
+    missing_provider_reason = entry.missing_provider_reason if entry.key_required else None
+    return ProviderDryRunProbeContract(
+        provider_name=entry.provider_name,
+        provider_id=entry.provider_id,
+        enabled_by_default=False,
+        reason_code="provider_fit_metadata_only",
+        network_call_executed=False,
+        no_default_live_http_calls=True,
+        http_method="NONE",
+        key_required=entry.key_required,
+        required_credential_count=1 if entry.key_required else 0,
+        configured_credential_count=0,
+        requires_credential_presence_only=entry.key_required,
+        live_tests_avoided=entry.live_tests_avoided,
+        cache_required=entry.cache_required,
+        background_refresh_recommended=entry.background_refresh_recommended,
+        observation_only=entry.observation_only,
+        score_contribution_allowed=entry.score_contribution_allowed,
+        raw_credential_values_included=False,
+        provider_payload_values_included=False,
+        response_bodies_included=False,
+        missing_provider_reason=missing_provider_reason,
+        degradation_reason=entry.degradation_reason,
+    )
+
+
+_PROVIDER_DRY_RUN_PROBE_CONTRACTS = tuple(
+    _build_provider_dry_run_probe_contract(item)
+    for item in sorted(_PROVIDER_FIT_METADATA, key=lambda item: item.provider_id)
+)
+_PROVIDER_DRY_RUN_PROBE_BY_ID = {
+    item.provider_id: item for item in _PROVIDER_DRY_RUN_PROBE_CONTRACTS
+}
+
+
 def _normalize_provider_id(provider_id: str) -> str:
     return str(provider_id or "").strip().lower().replace("-", "_")
 
@@ -643,6 +1105,44 @@ def get_provider_capability_support_contract(
     )
 
 
+def list_provider_fit_metadata(
+    provider_id: str | None = None,
+) -> tuple[ProviderFitMetadataContract, ...]:
+    """Return inert provider-fit metadata for audited but unwired provider candidates."""
+
+    if provider_id is None:
+        return tuple(_PROVIDER_FIT_METADATA_BY_ID[key] for key in sorted(_PROVIDER_FIT_METADATA_BY_ID))
+
+    item = get_provider_fit_metadata(provider_id)
+    return (item,) if item is not None else ()
+
+
+def get_provider_fit_metadata(provider_id: str) -> Optional[ProviderFitMetadataContract]:
+    """Return inert provider-fit metadata, or ``None`` when unknown."""
+
+    return _PROVIDER_FIT_METADATA_BY_ID.get(_normalize_provider_id(provider_id))
+
+
+def list_provider_dry_run_probe_contracts(
+    provider_id: str | None = None,
+) -> tuple[ProviderDryRunProbeContract, ...]:
+    """Return metadata-only dry-run probe contracts for audited provider candidates."""
+
+    if provider_id is None:
+        return tuple(_PROVIDER_DRY_RUN_PROBE_CONTRACTS)
+
+    item = get_provider_dry_run_probe_contract(provider_id)
+    return (item,) if item is not None else ()
+
+
+def get_provider_dry_run_probe_contract(
+    provider_id: str,
+) -> Optional[ProviderDryRunProbeContract]:
+    """Return a metadata-only dry-run probe contract, or ``None`` when unknown."""
+
+    return _PROVIDER_DRY_RUN_PROBE_BY_ID.get(_normalize_provider_id(provider_id))
+
+
 def providers_for_domain(domain: ProviderDomain | str) -> tuple[ProviderCapability, ...]:
     """Return providers declaring a domain, sorted by domain priority hint."""
 
@@ -691,16 +1191,22 @@ __all__ = [
     "FreshnessClass",
     "ProviderCapability",
     "ProviderCapabilitySupportContract",
+    "ProviderDryRunProbeContract",
     "ProviderDomain",
+    "ProviderFitMetadataContract",
     "ProviderMarket",
     "ProviderQuotaClass",
     "ScannerUsage",
+    "get_provider_dry_run_probe_contract",
     "get_provider_capability",
     "get_provider_capability_support_contract",
+    "get_provider_fit_metadata",
     "is_provider_allowed_for_backtest",
     "is_provider_allowed_for_scanner",
     "list_provider_capability_support_contracts",
+    "list_provider_dry_run_probe_contracts",
     "list_provider_capabilities",
+    "list_provider_fit_metadata",
     "providers_for_domain",
     "recommended_ttl",
 ]

@@ -140,6 +140,31 @@ def test_missing_source_defaults_to_missing_labels() -> None:
     assert resolve_freshness_label("unavailable") == "不可用"
 
 
+def test_provider_fit_source_aliases_are_additive_and_truthful_for_new_audited_ids() -> None:
+    expected = {
+        "sec_edgar": ("official_public", "SEC EDGAR"),
+        "pandas_datareader_fred": ("official_public", "FRED"),
+        "pandas_datareader_oecd": ("official_public", "OECD"),
+        "pandas_datareader_world_bank": ("official_public", "World Bank"),
+        "treasury_existing_baseline": ("official_public", "US Treasury"),
+        "binance_public": ("exchange_public", "Binance"),
+        "coinbase_public": ("exchange_public", "Coinbase"),
+        "finnhub": ("public_proxy", "Finnhub"),
+        "marketstack": ("public_proxy", "Marketstack"),
+        "tushare_pro": ("public_proxy", "Tushare Pro"),
+        "yahooquery": ("unofficial_proxy", "Yahoo Finance"),
+        "yfinance_current_baseline": ("unofficial_proxy", "Yahoo Finance"),
+        "openbb_reference_only": ("public_proxy", "OpenBB"),
+        "pytdx_existing_baseline": ("public_proxy", "pytdx / 通达信"),
+        "akshare_existing_baseline": ("public_proxy", "AkShare"),
+    }
+
+    for source, (source_type, source_label) in expected.items():
+        provenance = project_source_provenance(source=source, freshness="delayed")
+        assert provenance["sourceType"] == source_type
+        assert provenance["sourceLabel"] == source_label
+
+
 def test_scanner_local_sources_keep_specific_cache_labels() -> None:
     expected = {
         "local_universe_cache": ("cache_snapshot", "本地候选缓存"),

@@ -206,6 +206,183 @@ class ProviderCapabilitySupportContract:
 
 
 @dataclass(frozen=True, slots=True)
+class ProviderFitMetadataContract:
+    provider_name: str
+    provider_id: str
+    provider_category: str
+    source_tier: str
+    trust_level: str
+    freshness_expectation: str
+    observation_only: bool = False
+    score_contribution_allowed: bool = False
+    paid_data_likely_required: bool = False
+    key_required: bool = False
+    live_tests_avoided: bool = True
+    cache_required: bool = False
+    background_refresh_recommended: bool = False
+    enabled_by_default: bool = False
+    missing_provider_reason: str | None = None
+    degradation_reason: str | None = None
+    plan_dependent: bool = False
+    best_use_cases: tuple[str, ...] = ()
+    rejected_for: tuple[str, ...] = ()
+    not_recommended_for: tuple[str, ...] = ()
+
+    @classmethod
+    def from_dict(cls, value: Any) -> "ProviderFitMetadataContract":
+        payload = _coerce_mapping(value)
+        return cls(
+            provider_name=_text(_get(payload, "provider_name", "providerName")),
+            provider_id=_text(_get(payload, "provider_id", "providerId")),
+            provider_category=_text(_get(payload, "provider_category", "providerCategory")),
+            source_tier=_text(_get(payload, "source_tier", "sourceTier")),
+            trust_level=_text(_get(payload, "trust_level", "trustLevel")),
+            freshness_expectation=_text(_get(payload, "freshness_expectation", "freshnessExpectation")),
+            observation_only=_bool(_get(payload, "observation_only", "observationOnly")),
+            score_contribution_allowed=_bool(
+                _get(payload, "score_contribution_allowed", "scoreContributionAllowed")
+            ),
+            paid_data_likely_required=_bool(
+                _get(payload, "paid_data_likely_required", "paidDataLikelyRequired")
+            ),
+            key_required=_bool(_get(payload, "key_required", "keyRequired")),
+            live_tests_avoided=_bool(_get(payload, "live_tests_avoided", "liveTestsAvoided")),
+            cache_required=_bool(_get(payload, "cache_required", "cacheRequired")),
+            background_refresh_recommended=_bool(
+                _get(payload, "background_refresh_recommended", "backgroundRefreshRecommended")
+            ),
+            enabled_by_default=_bool(_get(payload, "enabled_by_default", "enabledByDefault")),
+            missing_provider_reason=_optional_text(
+                _get(payload, "missing_provider_reason", "missingProviderReason")
+            ),
+            degradation_reason=_optional_text(_get(payload, "degradation_reason", "degradationReason")),
+            plan_dependent=_bool(_get(payload, "plan_dependent", "planDependent")),
+            best_use_cases=_string_tuple(_get(payload, "best_use_cases", "bestUseCases")),
+            rejected_for=_string_tuple(_get(payload, "rejected_for", "rejectedFor")),
+            not_recommended_for=_string_tuple(
+                _get(payload, "not_recommended_for", "notRecommendedFor")
+            ),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "providerName": self.provider_name,
+            "providerId": self.provider_id,
+            "providerCategory": self.provider_category,
+            "sourceTier": self.source_tier,
+            "trustLevel": self.trust_level,
+            "freshnessExpectation": self.freshness_expectation,
+            "observationOnly": self.observation_only,
+            "scoreContributionAllowed": self.score_contribution_allowed,
+            "paidDataLikelyRequired": self.paid_data_likely_required,
+            "keyRequired": self.key_required,
+            "liveTestsAvoided": self.live_tests_avoided,
+            "cacheRequired": self.cache_required,
+            "backgroundRefreshRecommended": self.background_refresh_recommended,
+            "enabledByDefault": self.enabled_by_default,
+            "missingProviderReason": self.missing_provider_reason,
+            "degradationReason": self.degradation_reason,
+            "planDependent": self.plan_dependent,
+            "bestUseCases": list(self.best_use_cases),
+            "rejectedFor": list(self.rejected_for),
+            "notRecommendedFor": list(self.not_recommended_for),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderDryRunProbeContract:
+    provider_name: str
+    provider_id: str
+    enabled_by_default: bool = False
+    reason_code: str = "provider_fit_metadata_only"
+    network_call_executed: bool = False
+    no_default_live_http_calls: bool = True
+    http_method: str = "NONE"
+    key_required: bool = False
+    required_credential_count: int = 0
+    configured_credential_count: int = 0
+    requires_credential_presence_only: bool = False
+    live_tests_avoided: bool = True
+    cache_required: bool = False
+    background_refresh_recommended: bool = False
+    observation_only: bool = True
+    score_contribution_allowed: bool = False
+    raw_credential_values_included: bool = False
+    provider_payload_values_included: bool = False
+    response_bodies_included: bool = False
+    missing_provider_reason: str | None = None
+    degradation_reason: str | None = None
+
+    @classmethod
+    def from_dict(cls, value: Any) -> "ProviderDryRunProbeContract":
+        payload = _coerce_mapping(value)
+        return cls(
+            provider_name=_text(_get(payload, "provider_name", "providerName")),
+            provider_id=_text(_get(payload, "provider_id", "providerId")),
+            enabled_by_default=_bool(_get(payload, "enabled_by_default", "enabledByDefault")),
+            reason_code=_text(_get(payload, "reason_code", "reasonCode")) or "provider_fit_metadata_only",
+            network_call_executed=_bool(_get(payload, "network_call_executed", "networkCallExecuted")),
+            no_default_live_http_calls=_bool(
+                _get(payload, "no_default_live_http_calls", "noDefaultLiveHttpCalls")
+            ),
+            http_method=_text(_get(payload, "http_method", "httpMethod")) or "NONE",
+            key_required=_bool(_get(payload, "key_required", "keyRequired")),
+            required_credential_count=int(_float(_get(payload, "required_credential_count", "requiredCredentialCount"), default=0.0)),
+            configured_credential_count=int(
+                _float(_get(payload, "configured_credential_count", "configuredCredentialCount"), default=0.0)
+            ),
+            requires_credential_presence_only=_bool(
+                _get(payload, "requires_credential_presence_only", "requiresCredentialPresenceOnly")
+            ),
+            live_tests_avoided=_bool(_get(payload, "live_tests_avoided", "liveTestsAvoided")),
+            cache_required=_bool(_get(payload, "cache_required", "cacheRequired")),
+            background_refresh_recommended=_bool(
+                _get(payload, "background_refresh_recommended", "backgroundRefreshRecommended")
+            ),
+            observation_only=_bool(_get(payload, "observation_only", "observationOnly")),
+            score_contribution_allowed=_bool(
+                _get(payload, "score_contribution_allowed", "scoreContributionAllowed")
+            ),
+            raw_credential_values_included=_bool(
+                _get(payload, "raw_credential_values_included", "rawCredentialValuesIncluded")
+            ),
+            provider_payload_values_included=_bool(
+                _get(payload, "provider_payload_values_included", "providerPayloadValuesIncluded")
+            ),
+            response_bodies_included=_bool(_get(payload, "response_bodies_included", "responseBodiesIncluded")),
+            missing_provider_reason=_optional_text(
+                _get(payload, "missing_provider_reason", "missingProviderReason")
+            ),
+            degradation_reason=_optional_text(_get(payload, "degradation_reason", "degradationReason")),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "providerName": self.provider_name,
+            "providerId": self.provider_id,
+            "enabledByDefault": self.enabled_by_default,
+            "reasonCode": self.reason_code,
+            "networkCallExecuted": self.network_call_executed,
+            "noDefaultLiveHttpCalls": self.no_default_live_http_calls,
+            "httpMethod": self.http_method,
+            "keyRequired": self.key_required,
+            "requiredCredentialCount": self.required_credential_count,
+            "configuredCredentialCount": self.configured_credential_count,
+            "requiresCredentialPresenceOnly": self.requires_credential_presence_only,
+            "liveTestsAvoided": self.live_tests_avoided,
+            "cacheRequired": self.cache_required,
+            "backgroundRefreshRecommended": self.background_refresh_recommended,
+            "observationOnly": self.observation_only,
+            "scoreContributionAllowed": self.score_contribution_allowed,
+            "rawCredentialValuesIncluded": self.raw_credential_values_included,
+            "providerPayloadValuesIncluded": self.provider_payload_values_included,
+            "responseBodiesIncluded": self.response_bodies_included,
+            "missingProviderReason": self.missing_provider_reason,
+            "degradationReason": self.degradation_reason,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class SourceConfidenceValidationIssue:
     code: str
     message: str
@@ -258,6 +435,30 @@ def coerce_provider_capability_support_contract(
         value
         if isinstance(value, ProviderCapabilitySupportContract)
         else ProviderCapabilitySupportContract.from_dict(value)
+    )
+
+
+def coerce_provider_fit_metadata_contract(
+    value: ProviderFitMetadataContract | Mapping[str, Any],
+) -> ProviderFitMetadataContract:
+    """Return provider-fit metadata DTOs from mappings without side effects."""
+
+    return (
+        value
+        if isinstance(value, ProviderFitMetadataContract)
+        else ProviderFitMetadataContract.from_dict(value)
+    )
+
+
+def coerce_provider_dry_run_probe_contract(
+    value: ProviderDryRunProbeContract | Mapping[str, Any],
+) -> ProviderDryRunProbeContract:
+    """Return provider dry-run probe DTOs from mappings without side effects."""
+
+    return (
+        value
+        if isinstance(value, ProviderDryRunProbeContract)
+        else ProviderDryRunProbeContract.from_dict(value)
     )
 
 
@@ -464,6 +665,8 @@ __all__ = [
     "SOURCE_CONFIDENCE_CONTRACT_VERSION",
     "STRONG_FRESHNESS_VALUES",
     "ProviderCapabilityContract",
+    "ProviderDryRunProbeContract",
+    "ProviderFitMetadataContract",
     "ProviderCapabilitySupportContract",
     "SourceConfidenceContract",
     "SourceConfidenceValidationIssue",
@@ -472,6 +675,8 @@ __all__ = [
     "SupportsSourceConfidence",
     "apply_source_confidence_caps",
     "coerce_provider_capability_contract",
+    "coerce_provider_dry_run_probe_contract",
+    "coerce_provider_fit_metadata_contract",
     "coerce_provider_capability_support_contract",
     "coerce_source_confidence_contract",
     "validate_source_confidence_contract",

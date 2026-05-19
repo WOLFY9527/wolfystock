@@ -15,8 +15,12 @@ import pytest
 
 from src.contracts.source_confidence import (
     ProviderCapabilityContract,
+    ProviderDryRunProbeContract,
+    ProviderFitMetadataContract,
     SourceConfidenceContract,
     SourceFreshness,
+    coerce_provider_dry_run_probe_contract,
+    coerce_provider_fit_metadata_contract,
     coerce_source_confidence_contract,
     validate_source_confidence_contract,
 )
@@ -184,6 +188,106 @@ def test_provider_capability_contract_documents_caps_without_runtime_ordering() 
         "confidenceWeightCap": 0.75,
         "coverage": 0.8,
         "capReason": "unofficial_delayed_proxy",
+    }
+
+
+def test_provider_fit_metadata_contract_projects_required_camel_case_fields() -> None:
+    contract = coerce_provider_fit_metadata_contract(
+        {
+            "providerName": "SEC EDGAR",
+            "providerId": "sec_edgar",
+            "providerCategory": "filings_reference",
+            "sourceTier": "official_public",
+            "trustLevel": "reliable_for_filings_metadata",
+            "freshnessExpectation": "filing_or_daily",
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "paidDataLikelyRequired": False,
+            "keyRequired": False,
+            "liveTestsAvoided": True,
+            "cacheRequired": True,
+            "backgroundRefreshRecommended": True,
+            "enabledByDefault": False,
+            "degradationReason": "provider_fit_metadata_only",
+            "bestUseCases": ["filings_metadata", "company_facts_reference"],
+            "rejectedFor": ["live_quotes", "scoring_inputs"],
+            "notRecommendedFor": ["premarket_quotes"],
+        }
+    )
+
+    assert contract.to_dict() == {
+        "providerName": "SEC EDGAR",
+        "providerId": "sec_edgar",
+        "providerCategory": "filings_reference",
+        "sourceTier": "official_public",
+        "trustLevel": "reliable_for_filings_metadata",
+        "freshnessExpectation": "filing_or_daily",
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "paidDataLikelyRequired": False,
+        "keyRequired": False,
+        "liveTestsAvoided": True,
+        "cacheRequired": True,
+        "backgroundRefreshRecommended": True,
+        "enabledByDefault": False,
+        "missingProviderReason": None,
+        "degradationReason": "provider_fit_metadata_only",
+        "planDependent": False,
+        "bestUseCases": ["filings_metadata", "company_facts_reference"],
+        "rejectedFor": ["live_quotes", "scoring_inputs"],
+        "notRecommendedFor": ["premarket_quotes"],
+    }
+
+
+def test_provider_dry_run_probe_contract_stays_metadata_only_and_secret_safe() -> None:
+    contract = coerce_provider_dry_run_probe_contract(
+        {
+            "providerName": "Finnhub",
+            "providerId": "finnhub",
+            "enabledByDefault": False,
+            "reasonCode": "provider_fit_metadata_only",
+            "networkCallExecuted": False,
+            "noDefaultLiveHttpCalls": True,
+            "httpMethod": "NONE",
+            "keyRequired": True,
+            "requiredCredentialCount": 1,
+            "configuredCredentialCount": 0,
+            "requiresCredentialPresenceOnly": True,
+            "liveTestsAvoided": True,
+            "cacheRequired": True,
+            "backgroundRefreshRecommended": True,
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "rawCredentialValuesIncluded": False,
+            "providerPayloadValuesIncluded": False,
+            "responseBodiesIncluded": False,
+            "degradationReason": "provider_fit_metadata_only",
+        }
+    )
+
+    assert isinstance(contract, ProviderDryRunProbeContract)
+    assert contract.to_dict() == {
+        "providerName": "Finnhub",
+        "providerId": "finnhub",
+        "enabledByDefault": False,
+        "reasonCode": "provider_fit_metadata_only",
+        "networkCallExecuted": False,
+        "noDefaultLiveHttpCalls": True,
+        "httpMethod": "NONE",
+        "keyRequired": True,
+        "requiredCredentialCount": 1,
+        "configuredCredentialCount": 0,
+        "requiresCredentialPresenceOnly": True,
+        "liveTestsAvoided": True,
+        "cacheRequired": True,
+        "backgroundRefreshRecommended": True,
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "rawCredentialValuesIncluded": False,
+        "providerPayloadValuesIncluded": False,
+        "responseBodiesIncluded": False,
+        "missingProviderReason": None,
+        "degradationReason": "provider_fit_metadata_only",
     }
 
 

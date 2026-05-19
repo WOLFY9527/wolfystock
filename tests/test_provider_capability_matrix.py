@@ -20,8 +20,12 @@ from src.services.provider_capability_matrix import (
     ProviderQuotaClass,
     ScannerUsage,
     BacktestUsage,
+    get_provider_dry_run_probe_contract,
     get_provider_capability,
+    get_provider_fit_metadata,
     list_provider_capability_support_contracts,
+    list_provider_dry_run_probe_contracts,
+    list_provider_fit_metadata,
     is_provider_allowed_for_backtest,
     is_provider_allowed_for_scanner,
     list_provider_capabilities,
@@ -307,3 +311,18 @@ def test_cn_provider_probe_contract_metadata_stays_in_lockstep(
     assert "reliable" not in {item.trust_level for item in contracts}
     assert "official_public" not in {item.source_type for item in contracts}
     assert "exchange_authorized" not in {item.source_tier for item in contracts}
+
+
+def test_provider_fit_metadata_helpers_are_deterministic_and_do_not_modify_runtime_capability_ids() -> None:
+    first = list_provider_fit_metadata()
+    second = list_provider_fit_metadata()
+
+    assert first == second
+    assert first is not second
+    assert get_provider_fit_metadata("SEC_EDGAR") == get_provider_fit_metadata("sec_edgar")
+    assert get_provider_fit_metadata("sec_edgar") is not None
+    assert get_provider_dry_run_probe_contract("coinbase_public") is not None
+    assert get_provider_dry_run_probe_contract("missing") is None
+    assert len(list_provider_dry_run_probe_contracts()) == len(first)
+    assert get_provider_capability("sec_edgar") is None
+    assert get_provider_capability("coinbase_public") is None
