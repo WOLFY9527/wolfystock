@@ -211,6 +211,63 @@ def test_coinbase_public_remains_crypto_venue_sidecar_only() -> None:
     assert "scoring_not_allowed" in market_temperature_plan.reason_codes["coinbase_public"]
 
 
+def test_market_overview_observation_routes_keep_coinbase_pytdx_and_akshare_non_scoring() -> None:
+    coinbase_plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="crypto",
+            asset_type="crypto",
+            use_case="venue_observation",
+            capability="venue_ticker",
+            freshness_need="delayed",
+            scoring_allowed=False,
+            product_id="BTC-USD",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+    pytdx_plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="CN",
+            asset_type="equity",
+            use_case="market_observation",
+            capability="cn_realtime_quote",
+            freshness_need="delayed",
+            scoring_allowed=False,
+            symbol="000001.SZ",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+    akshare_plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="CN",
+            asset_type="equity",
+            use_case="market_observation",
+            capability="cn_market_stats",
+            freshness_need="delayed",
+            scoring_allowed=False,
+            symbol="000001.SZ",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+
+    assert _ids(coinbase_plan.primary_candidates) == set()
+    assert _ids(coinbase_plan.observation_candidates) == {"coinbase_public"}
+    assert coinbase_plan.cache_required is True
+    assert coinbase_plan.score_contribution_allowed is False
+
+    assert _ids(pytdx_plan.primary_candidates) == set()
+    assert _ids(pytdx_plan.observation_candidates) == {"pytdx"}
+    assert pytdx_plan.cache_required is True
+    assert pytdx_plan.score_contribution_allowed is False
+
+    assert _ids(akshare_plan.primary_candidates) == set()
+    assert _ids(akshare_plan.observation_candidates) == {"akshare"}
+    assert akshare_plan.cache_required is True
+    assert akshare_plan.score_contribution_allowed is False
+
+
 def test_liquidity_score_grade_crypto_quote_rejects_coinbase_public_as_scoring_provider() -> None:
     liquidity_plan = DataSourceRouter.resolve(
         DataSourceRouteRequest(

@@ -417,10 +417,73 @@ class MarketCryptoApiTestCase(unittest.TestCase):
         self.assertEqual(sidecar["asOf"], "2026-05-19T10:15:30.123456Z")
         self.assertEqual(sidecar["updatedAt"], "2026-05-19T10:15:30.123456Z")
         self.assertEqual(sidecar["sourceRef"], "tests/fixtures/coinbase_public/ticker_sample.json")
-        self.assertIn(sidecar["freshness"], {"live", "delayed", "cached", "stale"})
+        self.assertIn(sidecar["freshness"], {"delayed", "cached", "stale"})
         self.assertEqual(len(sidecar["records"]), 1)
         self.assertTrue(sidecar["records"][0]["observationOnly"])
         self.assertFalse(sidecar["records"][0]["scoreContributionAllowed"])
+
+    def test_get_crypto_rejects_coinbase_sidecar_that_claims_scoring_or_live_authority(self) -> None:
+        service = MarketOverviewService()
+        updated_at = datetime.now(CN_TZ).isoformat(timespec="seconds")
+        snapshot = {
+            "items": [
+                {
+                    "symbol": "BTC",
+                    "label": "Bitcoin",
+                    "price": 71000.0,
+                    "value": 71000.0,
+                    "change": 1.5,
+                    "changePercent": 1.5,
+                    "trend": [70000.0, 71000.0],
+                    "source": "binance",
+                    "last_update": updated_at,
+                }
+            ],
+            "last_update": updated_at,
+            "updatedAt": updated_at,
+            "asOf": updated_at,
+            "fallback_used": False,
+            "fallbackUsed": False,
+            "source": "binance",
+        }
+        coinbase_records = [
+            {
+                "providerName": "Coinbase Public",
+                "providerId": "coinbase_public",
+                "source": "coinbase_public",
+                "venue": "coinbase",
+                "sourceTier": "exchange_public",
+                "trustLevel": "usable_with_caution",
+                "observationOnly": False,
+                "scoreContributionAllowed": True,
+                "productId": "BTC-USD",
+                "symbol": "BTC-USD",
+                "baseCurrency": "BTC",
+                "quoteCurrency": "USD",
+                "asOf": "2026-05-20T10:15:30.123456Z",
+                "updatedAt": "2026-05-20T10:15:30.123456Z",
+                "freshness": "live",
+                "sourceRef": "tests/fixtures/coinbase_public/ticker_sample.json",
+            }
+        ]
+
+        with (
+            patch.object(service, "_fetch_crypto_market_snapshot", return_value=snapshot),
+            patch.object(service, "_coinbase_venue_observation_records", return_value=coinbase_records),
+        ):
+            payload = service.get_crypto()
+
+        sidecar = payload["providerHealth"]["venueObservations"]["coinbase"]
+        self.assertEqual([item["symbol"] for item in payload["items"]], ["BTC"])
+        self.assertEqual(sidecar["providerId"], "coinbase_public")
+        self.assertEqual(sidecar["source"], "coinbase_public")
+        self.assertEqual(sidecar["freshness"], "unavailable")
+        self.assertTrue(sidecar["observationOnly"])
+        self.assertFalse(sidecar["scoreContributionAllowed"])
+        self.assertEqual(sidecar["degradationReason"], "market_overview_observation_authority_claim_rejected")
+        self.assertIn("scoring_authority_claim", sidecar["routeRejectedReasonCodes"])
+        self.assertIn("live_authority_claim", sidecar["routeRejectedReasonCodes"])
+        self.assertEqual(sidecar["records"], [])
 
     def test_get_crypto_marks_coinbase_sidecar_unavailable_when_no_observation_exists(self) -> None:
         service = MarketOverviewService()

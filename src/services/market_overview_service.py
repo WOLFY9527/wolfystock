@@ -9,7 +9,7 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError, as_completed
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
 
 from data_provider.coinbase_public_provider import (
@@ -21,6 +21,7 @@ from data_provider.coinbase_public_provider import (
 )
 from src.contracts.source_confidence import coerce_source_confidence_contract
 from src.services.cn_provider_health_service import CNProviderHealthService
+from src.services.data_source_router import CapabilityResolver, DataSourceRouteRequest, DataSourceRouter
 from src.services.execution_log_service import ExecutionLogService
 from src.services.fx_commodities_contracts import FX_COMMODITY_DELAYED_PROXY_SYMBOLS
 from src.services.futures_contracts import list_futures_contracts
@@ -196,6 +197,21 @@ PROVIDER_HEALTH_STATUSES = {
 }
 CN_INDICES_OBSERVATION_PROVIDER_TIMEOUT_SECONDS = 1.0
 CN_INDICES_AKSHARE_OBSERVATION_TIMEOUT_SECONDS = 1.0
+MARKET_OVERVIEW_OBSERVATION_ROUTE_REJECTED_REASON = "market_overview_observation_route_rejected"
+MARKET_OVERVIEW_OBSERVATION_AUTHORITY_REJECTED_REASON = "market_overview_observation_authority_claim_rejected"
+MARKET_OVERVIEW_OBSERVATION_METADATA_MISSING_REASON = "market_overview_observation_metadata_missing"
+MARKET_OVERVIEW_OBSERVATION_INVALID_METADATA_REASON = "market_overview_observation_invalid_metadata"
+MARKET_OVERVIEW_OBSERVATION_ALLOWED_FRESHNESS = frozenset({"delayed", "cached", "stale", "unavailable", "t_plus_1_or_delayed"})
+MARKET_OVERVIEW_OBSERVATION_AUTHORITY_FRESHNESS = frozenset({"fresh", "live", "realtime"})
+MARKET_OVERVIEW_OBSERVATION_AUTHORITY_TRUST_LEVELS = frozenset(
+    {
+        "reliable",
+        "reliable_realtime",
+        "score_grade",
+        "decision_grade",
+        "reliable_for_filings_metadata",
+    }
+)
 
 
 def _has_valid_market_value(meta: Dict[str, Any]) -> bool:
@@ -1097,13 +1113,105 @@ class MarketOverviewService:
             "coinbase": self._coinbase_venue_observation_sidecar(snapshot),
         }
 
+    @staticmethod
+    def _build_market_overview_observation_route_request(
+        *,
+        market: str,
+        asset_type: str,
+        use_case: str,
+        capability: str,
+        symbol: Optional[str] = None,
+        product_id: Optional[str] = None,
+    ) -> DataSourceRouteRequest:
+        return DataSourceRouteRequest(
+            market=market,
+            asset_type=asset_type,
+            use_case=use_case,
+            capability=capability,
+            freshness_need="delayed",
+            scoring_allowed=False,
+            symbol=symbol,
+            product_id=product_id,
+            allow_network=False,
+            reproducibility_required=False,
+        )
+
+    @staticmethod
+    def _market_overview_observation_authority_claim_reason_codes(raw_payload: Mapping[str, Any]) -> tuple[str, ...]:
+        reason_codes: List[str] = []
+        if raw_payload.get("observationOnly") is False or raw_payload.get("scoreContributionAllowed") is True:
+            reason_codes.append("scoring_authority_claim")
+        freshness = str(raw_payload.get("freshness") or "").strip().lower()
+        if freshness in MARKET_OVERVIEW_OBSERVATION_AUTHORITY_FRESHNESS:
+            reason_codes.append("live_authority_claim")
+        trust_level = str(raw_payload.get("trustLevel") or "").strip().lower()
+        if trust_level in MARKET_OVERVIEW_OBSERVATION_AUTHORITY_TRUST_LEVELS:
+            reason_codes.append("trust_authority_claim")
+        return tuple(dict.fromkeys(reason_codes))
+
+    @staticmethod
+    def _market_overview_observation_route_reason_codes(
+        *,
+        raw_payload: Mapping[str, Any],
+        candidate,
+        allowed_freshness: Optional[Sequence[str]] = None,
+    ) -> tuple[str, ...]:
+        reason_codes = list(MarketOverviewService._market_overview_observation_authority_claim_reason_codes(raw_payload))
+        if raw_payload.get("providerId") not in {None, "", candidate.provider_id}:
+            reason_codes.append("provider_id_mismatch")
+        if raw_payload.get("source") not in {None, "", candidate.provider_id}:
+            reason_codes.append("source_mismatch")
+        source_type = str(raw_payload.get("sourceType") or "").strip().lower()
+        if source_type and source_type != str(candidate.source_type).strip().lower():
+            reason_codes.append("source_type_mismatch")
+        source_tier = str(raw_payload.get("sourceTier") or "").strip().lower()
+        if source_tier and source_tier != str(candidate.source_tier).strip().lower():
+            reason_codes.append("source_tier_mismatch")
+        trust_level = str(raw_payload.get("trustLevel") or "").strip().lower()
+        if trust_level and trust_level != str(candidate.trust_level).strip().lower():
+            reason_codes.append("trust_level_mismatch")
+        if allowed_freshness is not None:
+            freshness = str(raw_payload.get("freshness") or "").strip().lower()
+            if freshness and freshness not in {item.lower() for item in allowed_freshness}:
+                reason_codes.append("invalid_freshness")
+        return tuple(dict.fromkeys(reason_codes))
+
+    @staticmethod
+    def _market_overview_observation_candidate(
+        provider_id: str,
+        capability: str,
+    ):
+        return (
+            CapabilityResolver.route_candidate(provider_id, capability)
+            or CapabilityResolver.route_candidate(provider_id, "quote")
+            or CapabilityResolver.route_candidate(provider_id, "companyfacts")
+        )
+
     def _coinbase_venue_observation_sidecar(self, snapshot: Dict[str, Any]) -> Dict[str, Any]:
-        records = [
-            self._normalize_coinbase_venue_observation_record(record)
+        route_request = self._build_market_overview_observation_route_request(
+            market="crypto",
+            asset_type="crypto",
+            use_case="venue_observation",
+            capability="venue_ticker",
+            product_id="BTC-USD",
+        )
+        route_plan = DataSourceRouter.resolve(route_request)
+        eligible_provider_ids = {candidate.provider_id for candidate in route_plan.observation_candidates}
+        candidate = self._market_overview_observation_candidate("coinbase_public", "venue_ticker")
+        if candidate is None or "coinbase_public" not in eligible_provider_ids:
+            reason_codes = route_plan.reason_codes.get("coinbase_public") or ("provider_not_eligible_for_observation_route",)
+            return self._rejected_coinbase_venue_observation_sidecar(
+                snapshot=snapshot,
+                reason=MARKET_OVERVIEW_OBSERVATION_ROUTE_REJECTED_REASON,
+                reason_codes=reason_codes,
+            )
+
+        raw_records = [
+            record
             for record in self._coinbase_venue_observation_records()
             if isinstance(record, dict)
         ]
-        if not records:
+        if not raw_records:
             return {
                 "providerName": COINBASE_PUBLIC_PROVIDER_NAME,
                 "providerId": COINBASE_PUBLIC_PROVIDER_ID,
@@ -1125,7 +1233,33 @@ class MarketOverviewService:
                 "records": [],
             }
 
-        primary = records[0]
+        accepted_records = []
+        rejected_reason_codes: List[str] = []
+        for record in raw_records:
+            normalized_record = self._normalize_coinbase_venue_observation_record(record)
+            validation_payload = {
+                **normalized_record,
+                **record,
+            }
+            record_reason_codes = self._market_overview_observation_route_reason_codes(
+                raw_payload=validation_payload,
+                candidate=candidate,
+                allowed_freshness=MARKET_OVERVIEW_OBSERVATION_ALLOWED_FRESHNESS,
+            )
+            if record_reason_codes:
+                rejected_reason_codes.extend(record_reason_codes)
+                continue
+            accepted_records.append(normalized_record)
+
+        if not accepted_records:
+            return self._rejected_coinbase_venue_observation_sidecar(
+                snapshot=snapshot,
+                reason=MARKET_OVERVIEW_OBSERVATION_AUTHORITY_REJECTED_REASON if rejected_reason_codes else MARKET_OVERVIEW_OBSERVATION_INVALID_METADATA_REASON,
+                reason_codes=tuple(dict.fromkeys(rejected_reason_codes)) or ("observation_metadata_missing",),
+                raw_payload=raw_records[0],
+            )
+
+        primary = accepted_records[0]
         as_of = primary.get("asOf") or primary.get("updatedAt")
         freshness = str(primary.get("freshness") or "").strip().lower()
         if not freshness:
@@ -1136,6 +1270,13 @@ class MarketOverviewService:
                 False,
                 source_type=COINBASE_PUBLIC_SOURCE_TIER,
             )["freshness"]
+        if freshness not in MARKET_OVERVIEW_OBSERVATION_ALLOWED_FRESHNESS:
+            return self._rejected_coinbase_venue_observation_sidecar(
+                snapshot=snapshot,
+                reason=MARKET_OVERVIEW_OBSERVATION_AUTHORITY_REJECTED_REASON,
+                reason_codes=("invalid_freshness", "live_authority_claim"),
+                raw_payload=primary,
+            )
         return {
             "providerName": primary.get("providerName") or COINBASE_PUBLIC_PROVIDER_NAME,
             "providerId": primary.get("providerId") or COINBASE_PUBLIC_PROVIDER_ID,
@@ -1154,7 +1295,38 @@ class MarketOverviewService:
             "updatedAt": primary.get("updatedAt") or as_of or snapshot.get("updatedAt") or snapshot.get("last_update") or _now_iso(),
             "degradationReason": primary.get("degradationReason"),
             "sourceRef": primary.get("sourceRef") or f"{COINBASE_PUBLIC_PROVIDER_ID}:fixture_only",
-            "records": records,
+            "records": accepted_records,
+        }
+
+    def _rejected_coinbase_venue_observation_sidecar(
+        self,
+        *,
+        snapshot: Dict[str, Any],
+        reason: str,
+        reason_codes: Sequence[str],
+        raw_payload: Optional[Mapping[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        raw = dict(raw_payload or {})
+        return {
+            "providerName": COINBASE_PUBLIC_PROVIDER_NAME,
+            "providerId": COINBASE_PUBLIC_PROVIDER_ID,
+            "source": COINBASE_PUBLIC_PROVIDER_ID,
+            "venue": COINBASE_PUBLIC_VENUE,
+            "sourceTier": COINBASE_PUBLIC_SOURCE_TIER,
+            "trustLevel": COINBASE_PUBLIC_TRUST_LEVEL,
+            "freshness": "unavailable",
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "productId": raw.get("productId"),
+            "symbol": raw.get("symbol"),
+            "baseCurrency": raw.get("baseCurrency"),
+            "quoteCurrency": raw.get("quoteCurrency"),
+            "asOf": raw.get("asOf"),
+            "updatedAt": raw.get("updatedAt") or snapshot.get("updatedAt") or snapshot.get("last_update") or _now_iso(),
+            "degradationReason": reason,
+            "routeRejectedReasonCodes": list(dict.fromkeys(reason_codes)),
+            "sourceRef": raw.get("sourceRef") or f"{COINBASE_PUBLIC_PROVIDER_ID}:fixture_only",
+            "records": [],
         }
 
     def _normalize_coinbase_venue_observation_record(self, record: Dict[str, Any]) -> Dict[str, Any]:
@@ -1175,12 +1347,100 @@ class MarketOverviewService:
         return []
 
     def _cn_indices_observation_provider_health(self) -> List[Dict[str, Any]]:
-        return [
-            entry.to_dict()
-            for entry in CNProviderHealthService().get_snapshot(
-                timeout_seconds=CN_INDICES_OBSERVATION_PROVIDER_TIMEOUT_SECONDS
+        routed: List[Dict[str, Any]] = []
+        for entry in CNProviderHealthService().get_snapshot(
+            timeout_seconds=CN_INDICES_OBSERVATION_PROVIDER_TIMEOUT_SECONDS
+        ):
+            routed.append(self._guard_cn_indices_observation_provider_entry(entry.to_dict()))
+        return routed
+
+    def _guard_cn_indices_observation_provider_entry(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        provider_id = str(payload.get("providerId") or "").strip().lower()
+        provider_route = {
+            "pytdx": ("cn_realtime_quote", "usable_with_caution", "unofficial_public_api"),
+            "akshare": ("cn_market_stats", "weak", "unofficial_public_api"),
+            "baostock": ("cn_history_daily", "usable_with_caution", "third_party_free_api"),
+        }.get(provider_id)
+        if provider_route is None:
+            return payload
+
+        capability, expected_trust_level, expected_source_tier = provider_route
+        route_request = self._build_market_overview_observation_route_request(
+            market="CN",
+            asset_type="equity",
+            use_case="market_observation",
+            capability=capability,
+            symbol="000001.SZ",
+        )
+        route_plan = DataSourceRouter.resolve(route_request)
+        eligible_provider_ids = {candidate.provider_id for candidate in route_plan.observation_candidates}
+        candidate = self._market_overview_observation_candidate(provider_id, capability)
+        provider_reason_codes = route_plan.reason_codes.get(provider_id) or ("provider_not_eligible_for_observation_route",)
+        if candidate is None or provider_id not in eligible_provider_ids:
+            return self._rejected_cn_indices_observation_provider_entry(
+                payload,
+                candidate=candidate,
+                route_plan=route_plan,
+                reason=MARKET_OVERVIEW_OBSERVATION_ROUTE_REJECTED_REASON,
+                reason_codes=provider_reason_codes,
             )
-        ]
+
+        reason_codes = list(self._market_overview_observation_authority_claim_reason_codes(payload))
+        if str(payload.get("sourceType") or "").strip().lower() != "public_proxy":
+            reason_codes.append("source_type_mismatch")
+        if str(payload.get("sourceTier") or "").strip().lower() != expected_source_tier:
+            reason_codes.append("source_tier_mismatch")
+        if str(payload.get("trustLevel") or "").strip().lower() != expected_trust_level:
+            reason_codes.append("trust_level_mismatch")
+        if provider_id == "baostock":
+            freshness_expectation = str(payload.get("freshnessExpectation") or "").strip().lower()
+            if freshness_expectation not in {"t_plus_1_or_delayed", "t+1_or_delayed"}:
+                reason_codes.append("invalid_freshness_expectation")
+        if reason_codes:
+            return self._rejected_cn_indices_observation_provider_entry(
+                payload,
+                candidate=candidate,
+                route_plan=route_plan,
+                reason=MARKET_OVERVIEW_OBSERVATION_AUTHORITY_REJECTED_REASON,
+                reason_codes=tuple(dict.fromkeys(reason_codes)),
+            )
+
+        normalized = dict(payload)
+        normalized["sourceType"] = "public_proxy"
+        normalized["sourceTier"] = expected_source_tier
+        normalized["trustLevel"] = expected_trust_level
+        normalized["observationOnly"] = True
+        normalized["scoreContributionAllowed"] = False
+        return normalized
+
+    def _rejected_cn_indices_observation_provider_entry(
+        self,
+        payload: Dict[str, Any],
+        *,
+        candidate,
+        route_plan,
+        reason: str,
+        reason_codes: Sequence[str],
+    ) -> Dict[str, Any]:
+        normalized = dict(payload)
+        if candidate is not None:
+            normalized["sourceType"] = candidate.source_type
+            normalized["sourceTier"] = candidate.source_tier
+            normalized["trustLevel"] = candidate.trust_level
+            normalized["freshnessExpectation"] = candidate.freshness_expectation
+        normalized["observationOnly"] = True
+        normalized["scoreContributionAllowed"] = False
+        normalized["providerAvailable"] = False
+        normalized["healthStatus"] = "rejected"
+        normalized["cacheRequired"] = bool(route_plan.cache_required)
+        normalized["backgroundRefreshRecommended"] = bool(route_plan.background_refresh_required)
+        normalized["degradationReason"] = reason
+        normalized["missingProviderReason"] = (
+            f"{reason}:{'|'.join(dict.fromkeys(reason_codes))}"
+            if reason_codes
+            else reason
+        )
+        return normalized
 
     def _normalize_akshare_cn_index_observation_records(
         self,
@@ -1300,7 +1560,7 @@ class MarketOverviewService:
         matched_symbols = [record["canonicalSymbol"] for record in records]
         missing_symbols = [symbol for symbol in self.AKSHARE_CN_INDEX_EXPECTED_SYMBOLS if symbol not in matched_symbols]
         degradation_reason = "partial_coverage" if missing_symbols else None
-        return {
+        coverage = {
             **base,
             "freshness": records[0]["freshness"],
             "coverageCount": len(matched_symbols),
@@ -1308,6 +1568,73 @@ class MarketOverviewService:
             "missingExpectedSymbols": missing_symbols,
             "partialCoverageReason": degradation_reason,
             "degradationReason": degradation_reason,
+        }
+        return self._guard_akshare_cn_index_observation_coverage(coverage)
+
+    def _guard_akshare_cn_index_observation_coverage(self, coverage: Dict[str, Any]) -> Dict[str, Any]:
+        route_request = self._build_market_overview_observation_route_request(
+            market="CN",
+            asset_type="equity",
+            use_case="market_observation",
+            capability="cn_market_stats",
+            symbol="000001.SZ",
+        )
+        route_plan = DataSourceRouter.resolve(route_request)
+        eligible_provider_ids = {candidate.provider_id for candidate in route_plan.observation_candidates}
+        candidate = self._market_overview_observation_candidate("akshare", "cn_market_stats")
+        if candidate is None or "akshare" not in eligible_provider_ids:
+            reason_codes = route_plan.reason_codes.get("akshare") or ("provider_not_eligible_for_observation_route",)
+            return self._rejected_akshare_cn_index_observation_coverage(
+                coverage,
+                reason=MARKET_OVERVIEW_OBSERVATION_ROUTE_REJECTED_REASON,
+                reason_codes=reason_codes,
+            )
+
+        reason_codes = self._market_overview_observation_route_reason_codes(
+            raw_payload=coverage,
+            candidate=candidate,
+            allowed_freshness=MARKET_OVERVIEW_OBSERVATION_ALLOWED_FRESHNESS,
+        )
+        if reason_codes:
+            return self._rejected_akshare_cn_index_observation_coverage(
+                coverage,
+                reason=MARKET_OVERVIEW_OBSERVATION_AUTHORITY_REJECTED_REASON,
+                reason_codes=reason_codes,
+            )
+        normalized = dict(coverage)
+        normalized["sourceType"] = "public_proxy"
+        normalized["sourceTier"] = "unofficial_public_api"
+        normalized["trustLevel"] = "weak"
+        normalized["observationOnly"] = True
+        normalized["scoreContributionAllowed"] = False
+        return normalized
+
+    def _rejected_akshare_cn_index_observation_coverage(
+        self,
+        coverage: Dict[str, Any],
+        *,
+        reason: str,
+        reason_codes: Sequence[str],
+    ) -> Dict[str, Any]:
+        attempted_at = str(coverage.get("attemptedAt") or coverage.get("updatedAt") or coverage.get("asOf") or _now_iso())
+        return {
+            "providerName": "akshare",
+            "sourceType": "public_proxy",
+            "sourceTier": "unofficial_public_api",
+            "trustLevel": "weak",
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "asOf": coverage.get("asOf") or attempted_at,
+            "updatedAt": coverage.get("updatedAt") or attempted_at,
+            "attemptedAt": attempted_at,
+            "freshness": "unavailable",
+            "coverageCount": 0,
+            "matchedCanonicalSymbols": [],
+            "missingExpectedSymbols": list(self.AKSHARE_CN_INDEX_EXPECTED_SYMBOLS),
+            "partialCoverageReason": reason,
+            "degradationReason": reason,
+            "providerTimestampAvailable": False,
+            "routeRejectedReasonCodes": list(dict.fromkeys(reason_codes)),
         }
 
     def _cached_payload(

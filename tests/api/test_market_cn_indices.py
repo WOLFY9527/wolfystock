@@ -399,6 +399,65 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         self.assertEqual(provider_health["observationProviders"][2]["healthStatus"], "probe_disabled")
         self.assertEqual(payload["items"][0]["source"], "sina")
 
+    def test_cn_indices_rejects_observation_provider_entries_that_claim_scoring_authority(self) -> None:
+        service = MarketOverviewService()
+        now = _fresh_sina_as_of()
+        quotes = {
+            "000001.SH": {
+                "name": "上证指数",
+                "symbol": "000001.SH",
+                "value": 4107.51,
+                "change": 28.88,
+                "changePercent": 0.71,
+                "sparkline": [4078.63, 4107.51],
+                "asOf": now,
+            }
+        }
+        observation_providers = (
+            CNProviderHealthSnapshotEntry(
+                provider_name="pytdx",
+                provider_id="pytdx",
+                source_type="public_proxy",
+                source_tier="unofficial_public_api",
+                trust_level="usable_with_caution",
+                freshness_expectation="best_effort_public_broker_quote_snapshot",
+                observation_only=False,
+                score_contribution_allowed=True,
+                dependency_installed=True,
+                provider_available=True,
+                health_status="healthy",
+                supported_capabilities=("cn_realtime_quote",),
+                unsupported_capabilities=(),
+                contract_capabilities=("cn_realtime_quote",),
+                key_required=False,
+                cache_required=True,
+                background_refresh_recommended=True,
+                degradation_reason=None,
+                missing_provider_reason=None,
+                attempted_at="2026-05-19T02:03:04+00:00",
+                timeout_seconds=1.0,
+            ),
+        )
+
+        with (
+            patch.object(service, "_fetch_sina_cn_index_quotes", return_value=quotes),
+            patch("src.services.cn_provider_health_service.CNProviderHealthService.get_snapshot", return_value=observation_providers),
+        ):
+            payload = service.get_cn_indices()
+
+        entry = payload["providerHealth"]["observationProviders"][0]
+        self.assertEqual(entry["providerId"], "pytdx")
+        self.assertEqual(entry["sourceType"], "public_proxy")
+        self.assertEqual(entry["sourceTier"], "unofficial_public_api")
+        self.assertEqual(entry["trustLevel"], "usable_with_caution")
+        self.assertTrue(entry["observationOnly"])
+        self.assertFalse(entry["scoreContributionAllowed"])
+        self.assertFalse(entry["providerAvailable"])
+        self.assertEqual(entry["healthStatus"], "rejected")
+        self.assertEqual(entry["degradationReason"], "market_overview_observation_authority_claim_rejected")
+        self.assertIn("scoring_authority_claim", entry["missingProviderReason"])
+        self.assertEqual(payload["items"][0]["source"], "sina")
+
     def test_normalize_akshare_cn_index_observation_records_maps_codes_and_dedupes(self) -> None:
         service = MarketOverviewService()
         attempted_at = "2026-05-19T09:30:00+08:00"
@@ -474,6 +533,75 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         self.assertTrue(all(item["source"] != "akshare" for item in payload["items"]))
         self.assertEqual(next(item for item in payload["items"] if item["symbol"] == "000001.SH")["source"], "sina")
         self.assertEqual(next(item for item in payload["items"] if item["symbol"] == "000300.SH")["source"], "fallback")
+
+    def test_cn_indices_rejects_akshare_observation_coverage_that_claims_live_authority(self) -> None:
+        service = MarketOverviewService()
+        now = _fresh_sina_as_of()
+        quotes = {
+            "000001.SH": {
+                "name": "上证指数",
+                "symbol": "000001.SH",
+                "value": 4107.51,
+                "change": 28.88,
+                "changePercent": 0.71,
+                "sparkline": [4078.63, 4107.51],
+                "asOf": now,
+            }
+        }
+
+        with (
+            patch.object(service, "_fetch_sina_cn_index_quotes", return_value=quotes),
+            patch.object(
+                service,
+                "_fetch_akshare_cn_index_observation_rows",
+                return_value=[{"code": "sh000001"}, {"code": "sh000300"}],
+            ),
+            patch.object(
+                service,
+                "_normalize_akshare_cn_index_observation_records",
+                return_value=[
+                    {
+                        "providerName": "akshare",
+                        "providerSymbol": "sh000001",
+                        "canonicalSymbol": "000001.SH",
+                        "sourceType": "public_proxy",
+                        "sourceTier": "unofficial_public_api",
+                        "trustLevel": "weak",
+                        "observationOnly": True,
+                        "scoreContributionAllowed": False,
+                        "freshness": "live",
+                        "asOf": now,
+                        "updatedAt": now,
+                        "providerTimestampAvailable": False,
+                    },
+                    {
+                        "providerName": "akshare",
+                        "providerSymbol": "sh000300",
+                        "canonicalSymbol": "000300.SH",
+                        "sourceType": "public_proxy",
+                        "sourceTier": "unofficial_public_api",
+                        "trustLevel": "weak",
+                        "observationOnly": True,
+                        "scoreContributionAllowed": False,
+                        "freshness": "live",
+                        "asOf": now,
+                        "updatedAt": now,
+                        "providerTimestampAvailable": False,
+                    },
+                ],
+            ),
+        ):
+            payload = service.get_cn_indices()
+
+        coverage = payload["providerHealth"]["observationCoverage"]["akshare"]
+        self.assertEqual(coverage["freshness"], "unavailable")
+        self.assertTrue(coverage["observationOnly"])
+        self.assertFalse(coverage["scoreContributionAllowed"])
+        self.assertEqual(coverage["coverageCount"], 0)
+        self.assertEqual(coverage["matchedCanonicalSymbols"], [])
+        self.assertEqual(coverage["degradationReason"], "market_overview_observation_authority_claim_rejected")
+        self.assertIn("live_authority_claim", coverage["routeRejectedReasonCodes"])
+        self.assertEqual(next(item for item in payload["items"] if item["symbol"] == "000001.SH")["source"], "sina")
 
     def test_cn_indices_keeps_existing_fallback_when_observation_providers_are_degraded(self) -> None:
         service = MarketOverviewService()
