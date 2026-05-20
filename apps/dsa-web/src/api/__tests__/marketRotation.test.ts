@@ -65,6 +65,38 @@ describe('marketRotationApi', () => {
           ],
           accelerating_themes: [],
           fading_themes: [],
+          observation_themes: [
+            {
+              id: 'robotics',
+              name: '机器人',
+              rotation_score: 41,
+              confidence: 0.38,
+              stage: 'early_watch',
+              freshness: 'fallback',
+              is_fallback: true,
+              risk_labels: ['stale_or_incomplete_windows'],
+              signal_type: 'observation_only',
+            },
+          ],
+          taxonomy_themes: [
+            {
+              id: 'local_taxonomy',
+              name: '本地主题观察',
+              rotation_score: 18,
+              confidence: 0.12,
+              stage: 'weak_or_no_signal',
+              freshness: 'fallback',
+              is_fallback: true,
+              risk_labels: ['stale_or_incomplete_windows'],
+              signal_type: 'taxonomy_fallback',
+            },
+          ],
+          eligible_theme_count: 3,
+          headline_eligible_theme_count: 1,
+          observation_theme_count: 1,
+          headline_warning: '当前头部主题仅满足代理证据，不代表真实资金流。',
+          no_headline_reason: '等待真实行情覆盖后再生成头部排名。',
+          ranking_policy: '仅 headlineEligible 主题参与头部排序；observation/taxonomy 仅作说明。',
           watchlist_signals: [
             { theme_id: 'ai_applications', symbol: 'APP', label: '关注候选', signal: 'confirmed_rotation', signal_label: '确认轮动', read_only: true, delivery_enabled: false },
           ],
@@ -178,6 +210,16 @@ describe('marketRotationApi', () => {
     expect(payload.metadata.proxyQualityRequired).toBe(true);
     expect(payload.summary.strongestThemes[0].rotationScore).toBe(78);
     expect(payload.summary.strongestThemes[0].signalType).toBe('relative_strength');
+    expect(payload.summary.observationThemes).toHaveLength(1);
+    expect(payload.summary.observationThemes?.[0].signalType).toBe('observation_only');
+    expect(payload.summary.taxonomyThemes).toHaveLength(1);
+    expect(payload.summary.taxonomyThemes?.[0].signalType).toBe('taxonomy_fallback');
+    expect(payload.summary.eligibleThemeCount).toBe(3);
+    expect(payload.summary.headlineEligibleThemeCount).toBe(1);
+    expect(payload.summary.observationThemeCount).toBe(1);
+    expect(payload.summary.headlineWarning).toBe('当前头部主题仅满足代理证据，不代表真实资金流。');
+    expect(payload.summary.noHeadlineReason).toBe('等待真实行情覆盖后再生成头部排名。');
+    expect(payload.summary.rankingPolicy).toBe('仅 headlineEligible 主题参与头部排序；observation/taxonomy 仅作说明。');
     expect(payload.themes[0].englishName).toBe('AI Applications');
     expect(payload.themes[0].newslessRotation).toBe(true);
     expect(payload.themes[0].flowEvidenceType).toBe('proxy_only');
@@ -277,6 +319,14 @@ describe('marketRotationApi', () => {
     expect(apiClient.get).toHaveBeenCalledWith('/api/v1/market/rotation-radar', { params: { market: 'CN' } });
     expect(payload.market).toBe('CN');
     expect(payload.supportedMarkets).toEqual(['US', 'CN', 'HK', 'CRYPTO']);
+    expect(payload.summary.observationThemes).toBeUndefined();
+    expect(payload.summary.taxonomyThemes).toBeUndefined();
+    expect(payload.summary.eligibleThemeCount).toBeUndefined();
+    expect(payload.summary.headlineEligibleThemeCount).toBeUndefined();
+    expect(payload.summary.observationThemeCount).toBeUndefined();
+    expect(payload.summary.headlineWarning).toBeUndefined();
+    expect(payload.summary.noHeadlineReason).toBeUndefined();
+    expect(payload.summary.rankingPolicy).toBeUndefined();
     expect(payload.themes[0].staticThemeOnly).toBe(true);
     expect(payload.themes[0].dataQuality).toBe('taxonomy_only');
     expect(payload.themes[0].confidenceLabel).toBe('待行情确认');
