@@ -24,7 +24,17 @@ import {
 } from '../components/terminal/TerminalPrimitives';
 import { WideWorkspacePageShell } from '../components/layout/WideWorkspaceShell';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { marketRotationApi, type MarketRotationRadarResponse, type MarketRotationRiskLabel, type MarketRotationStage, type MarketRotationSummaryItem, type MarketRotationTheme, type MarketRotationTimeWindow } from '../api/marketRotation';
+import {
+  marketRotationApi,
+  type MarketRotationEvidenceQuality,
+  type MarketRotationRadarResponse,
+  type MarketRotationRiskLabel,
+  type MarketRotationSignalType,
+  type MarketRotationStage,
+  type MarketRotationSummaryItem,
+  type MarketRotationTheme,
+  type MarketRotationTimeWindow,
+} from '../api/marketRotation';
 import { cn } from '../utils/cn';
 import { normalizeRotationEvidence } from '../utils/evidenceDisplay';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
@@ -53,6 +63,72 @@ const RISK_LABELS: Record<MarketRotationRiskLabel, string> = {
 };
 
 const TAXONOMY_PLACEHOLDERS = ['主题', '行业', '概念', 'ETF代理'];
+const REAL_FLOW_EVIDENCE_TYPES = new Set(['real_flow', 'mixed_real_and_proxy']);
+
+type SignalLaneMeta = {
+  label: string;
+  description: string;
+  variant: 'success' | 'info' | 'caution' | 'neutral' | 'danger';
+  tone: string;
+};
+
+const SIGNAL_LANE_META: Record<MarketRotationSignalType, SignalLaneMeta> = {
+  real_flow: {
+    label: 'True Flow',
+    description: '具备真实资金流证据，可使用资金流向语言。',
+    variant: 'success',
+    tone: 'text-emerald-200',
+  },
+  relative_strength: {
+    label: 'Relative Strength',
+    description: '报价支持的相对强弱，不等同于真实资金流。',
+    variant: 'info',
+    tone: 'text-cyan-100',
+  },
+  momentum_proxy: {
+    label: 'Momentum Proxy',
+    description: '量能、广度与同步性等代理强度，不等同于真实资金流。',
+    variant: 'info',
+    tone: 'text-cyan-100',
+  },
+  observation_only: {
+    label: 'Observation Only',
+    description: '仅保留观察信号，不能放大为流向结论。',
+    variant: 'neutral',
+    tone: 'text-white/72',
+  },
+  taxonomy_fallback: {
+    label: 'Taxonomy Fallback',
+    description: '当前仅有主题分类，缺少可排名的行情证据。',
+    variant: 'caution',
+    tone: 'text-amber-200',
+  },
+  insufficient_evidence: {
+    label: 'Insufficient Evidence',
+    description: '证据不足，不能放大解释为轮动或流向。',
+    variant: 'danger',
+    tone: 'text-rose-200',
+  },
+};
+
+const EVIDENCE_QUALITY_META: Record<MarketRotationEvidenceQuality, { label: string; variant: SignalLaneMeta['variant'] }> = {
+  score_grade_real_flow: { label: 'Real-Flow Grade', variant: 'success' },
+  score_grade_proxy: { label: 'Quote-Backed Proxy', variant: 'info' },
+  degraded_proxy: { label: 'Degraded Proxy', variant: 'caution' },
+  observation_only: { label: 'Observation-Only', variant: 'neutral' },
+  taxonomy_only: { label: 'Taxonomy-Only', variant: 'caution' },
+  insufficient: { label: 'Insufficient', variant: 'danger' },
+};
+
+const DATA_GAP_LABELS: Record<string, string> = {
+  true_flow_data_missing: '缺少真实资金流数据',
+  flow_methodology_missing: '缺少流向方法学',
+  source_authority_rejected: '来源权威性不足',
+  stale_quote_window: '行情窗口过期',
+  benchmark_proxy_missing: '基准代理缺失',
+  proxy_coverage_incomplete: '代理覆盖不完整',
+  taxonomy_only: '仅有分类主题',
+};
 
 type Bucket = {
   id: string;
@@ -102,8 +178,184 @@ function ratio(value?: number | null): string {
   return `${value.toFixed(2)}x`;
 }
 
+function hasMomentumProxyInputs(theme: MarketRotationTheme): boolean {
+  return [
+    theme.volume?.averageRelativeVolume,
+    theme.breadth?.percentUp,
+    theme.breadth?.percentOutperformingBenchmark,
+    theme.synchronization?.sameDirectionPercent,
+    theme.synchronization?.aboveVwapPercent,
+    theme.persistenceEvidence?.score,
+    theme.leadership?.topMembers?.length,
+  ].some((value) => value !== null && value !== undefined && Number.isFinite(Number(value)) && Number(value) > 0);
+}
+
 function isTaxonomyOnlyTheme(theme?: MarketRotationTheme): boolean {
   return Boolean(theme?.staticThemeOnly || theme?.dataQuality === 'taxonomy_only');
+}
+
+function normalizeSignalType(value?: string | null): MarketRotationSignalType | null {
+  switch (value) {
+    case 'real_flow':
+    case 'relative_strength':
+    case 'momentum_proxy':
+    case 'observation_only':
+    case 'taxonomy_fallback':
+    case 'insufficient_evidence':
+      return value;
+    default:
+      return null;
+  }
+}
+
+function resolveSignalType(theme: MarketRotationTheme): MarketRotationSignalType {
+  const direct = normalizeSignalType(theme.signalType);
+  if (direct) {
+    return direct;
+  }
+  const flowEvidenceType = String(
+    theme.flowEvidenceType
+      || (theme.rotationStateEvidence as Record<string, unknown> | undefined)?.flowEvidenceType
+      || 'none',
+  ).trim();
+  if (isTaxonomyOnlyTheme(theme) || theme.source === 'local_taxonomy' || theme.taxonomyOnly) {
+    return 'taxonomy_fallback';
+  }
+  if (REAL_FLOW_EVIDENCE_TYPES.has(flowEvidenceType) && theme.flowLanguageAllowed) {
+    return 'real_flow';
+  }
+  if (Number.isFinite(Number(theme.relativeStrength?.averageRelativeStrengthPercent))) {
+    return 'relative_strength';
+  }
+  if (hasMomentumProxyInputs(theme)) {
+    return 'momentum_proxy';
+  }
+  if (theme.observationOnly) {
+    return 'observation_only';
+  }
+  return 'insufficient_evidence';
+}
+
+function laneMeta(theme: MarketRotationTheme): SignalLaneMeta {
+  return SIGNAL_LANE_META[resolveSignalType(theme)];
+}
+
+function normalizeEvidenceQuality(value?: string | null): MarketRotationEvidenceQuality | null {
+  switch (value) {
+    case 'score_grade_real_flow':
+    case 'score_grade_proxy':
+    case 'degraded_proxy':
+    case 'observation_only':
+    case 'taxonomy_only':
+    case 'insufficient':
+      return value;
+    default:
+      return null;
+  }
+}
+
+function resolveEvidenceQuality(theme: MarketRotationTheme): MarketRotationEvidenceQuality {
+  const direct = normalizeEvidenceQuality(theme.evidenceQuality);
+  if (direct) {
+    return direct;
+  }
+  switch (resolveSignalType(theme)) {
+    case 'real_flow':
+      return 'score_grade_real_flow';
+    case 'relative_strength':
+    case 'momentum_proxy':
+      return theme.sourceAuthorityAllowed ? 'score_grade_proxy' : 'degraded_proxy';
+    case 'observation_only':
+      return 'observation_only';
+    case 'taxonomy_fallback':
+      return 'taxonomy_only';
+    default:
+      return 'insufficient';
+  }
+}
+
+function qualityMeta(theme: MarketRotationTheme) {
+  return EVIDENCE_QUALITY_META[resolveEvidenceQuality(theme)];
+}
+
+function formatGapLabel(value?: string | null): string {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    return '数据缺口待补齐';
+  }
+  return DATA_GAP_LABELS[normalized] || sanitizeRotationText(normalized.replaceAll('_', ' '), '数据缺口待补齐');
+}
+
+function themeDataGaps(theme: MarketRotationTheme): string[] {
+  const gaps = Array.isArray(theme.dataGaps) ? theme.dataGaps : [];
+  return gaps
+    .map((gap) => String(gap || '').trim())
+    .filter((gap, index, array) => gap && array.indexOf(gap) === index);
+}
+
+function summarizeLane(themes: MarketRotationTheme[]): SignalLaneMeta {
+  if (!themes.length) {
+    return SIGNAL_LANE_META.insufficient_evidence;
+  }
+  const counts = themes.reduce<Record<MarketRotationSignalType, number>>((acc, theme) => {
+    const key = resolveSignalType(theme);
+    acc[key] += 1;
+    return acc;
+  }, {
+    real_flow: 0,
+    relative_strength: 0,
+    momentum_proxy: 0,
+    observation_only: 0,
+    taxonomy_fallback: 0,
+    insufficient_evidence: 0,
+  });
+  const dominant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] as MarketRotationSignalType | undefined;
+  return dominant ? SIGNAL_LANE_META[dominant] : SIGNAL_LANE_META.insufficient_evidence;
+}
+
+function summarizeEvidenceQuality(themes: MarketRotationTheme[]): string {
+  if (!themes.length) {
+    return '待补齐';
+  }
+  const counts = themes.reduce<Record<string, number>>((acc, theme) => {
+    const key = resolveEvidenceQuality(theme);
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  const dominant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
+  return dominant ? EVIDENCE_QUALITY_META[dominant as MarketRotationEvidenceQuality].label : '待补齐';
+}
+
+function summarizeGap(themes: MarketRotationTheme[]): string {
+  const counts = themes.reduce<Record<string, number>>((acc, theme) => {
+    themeDataGaps(theme).forEach((gap) => {
+      acc[gap] = (acc[gap] || 0) + 1;
+    });
+    return acc;
+  }, {});
+  const dominant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
+  return dominant ? formatGapLabel(dominant) : '暂无高亮缺口';
+}
+
+function shouldAllowMoneyFlowLanguage(theme?: MarketRotationTheme | null): boolean {
+  if (!theme) return false;
+  return resolveSignalType(theme) === 'real_flow' && Boolean(theme.flowLanguageAllowed);
+}
+
+function conservativeFlowCopy(value?: string | null, allowMoneyFlowLanguage = false): string {
+  const fallback = '仅用于观察主题轮动与相对强弱，非买卖建议。';
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  if (allowMoneyFlowLanguage) {
+    return sanitizeRotationText(text, fallback);
+  }
+  return sanitizeRotationText(
+    text
+      .replaceAll('资金流向', '主题强弱')
+      .replaceAll('资金轮动', '主题轮动')
+      .replaceAll('资金流', '流向'),
+    fallback,
+  );
 }
 
 function compactConfidence(value?: number | null): string {
@@ -282,6 +534,18 @@ const RiskChip: React.FC<{ risk: MarketRotationRiskLabel }> = ({ risk }) => (
   </TerminalChip>
 );
 
+const SignalLaneChip: React.FC<{ theme: MarketRotationTheme; className?: string }> = ({ theme, className }) => (
+  <TerminalChip variant={laneMeta(theme).variant} className={className}>
+    {laneMeta(theme).label}
+  </TerminalChip>
+);
+
+const EvidenceQualityChip: React.FC<{ theme: MarketRotationTheme; className?: string }> = ({ theme, className }) => (
+  <TerminalChip variant={qualityMeta(theme).variant} className={className}>
+    {qualityMeta(theme).label}
+  </TerminalChip>
+);
+
 const CommandBar: React.FC<{
   selectedMarket: string;
   supportedMarkets: string[];
@@ -334,7 +598,7 @@ const CommandBar: React.FC<{
           className="h-10 w-10 rounded-xl px-0 py-0 text-white/50 disabled:cursor-wait disabled:text-white/30"
           onClick={onRefresh}
           disabled={loading}
-          aria-label="刷新资金轮动雷达"
+          aria-label="刷新主题轮动雷达"
         >
           <RefreshCcw className={cn('h-4 w-4', loading ? 'animate-spin' : '')} aria-hidden="true" />
         </TerminalButton>
@@ -380,12 +644,16 @@ const CommandBar: React.FC<{
 const SummaryBand: React.FC<{
   payload: MarketRotationRadarResponse;
 }> = ({ payload }) => {
+  const scopeThemes = resolveSummaryThemes(payload.themes || [], payload.summary.strongestThemes || []);
+  const summaryThemes = scopeThemes.length ? scopeThemes : payload.themes || [];
+  const dominantLane = summarizeLane(summaryThemes);
   const items = [
     { key: 'market', label: '市场', value: marketLabel(payload.market || 'US') },
     { key: 'source', label: '来源', value: payload.sourceLabel || '待确认' },
     { key: 'top', label: '领涨', value: summaryTitle(payload.summary.strongestThemes, '等待真实行情') },
-    { key: 'accelerating', label: '扩张', value: summaryTitle(payload.summary.acceleratingThemes, '暂无扩张确认') },
-    { key: 'fading', label: '降温', value: summaryTitle(payload.summary.fadingThemes, '暂无降温列表') },
+    { key: 'lane', label: '证据分层', value: dominantLane.label },
+    { key: 'quality', label: '证据质量', value: summarizeEvidenceQuality(summaryThemes) },
+    { key: 'gaps', label: '主要缺口', value: summarizeGap(summaryThemes) },
     { key: 'watch', label: '观察信号', value: String(payload.summary.watchlistSignals?.length ?? 0) },
   ];
 
@@ -393,7 +661,7 @@ const SummaryBand: React.FC<{
     <TerminalPanel data-testid="rotation-radar-summary-band" dense className="min-h-[104px] gap-0 overflow-visible p-0 sm:min-h-[76px]">
       <div className="flex min-w-0 items-center gap-2 border-b border-[color:var(--wolfy-divider)] px-3 py-2 text-[10px] font-bold uppercase text-white/35">
         <Signal className="h-3.5 w-3.5 text-cyan-200/70" aria-hidden="true" />
-        轮动状态
+        主题分层
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2 text-xs">
         {items.map((item, index) => (
@@ -413,6 +681,41 @@ const SummaryBand: React.FC<{
   );
 };
 
+const LaneBand: React.FC<{ themes: MarketRotationTheme[] }> = ({ themes }) => {
+  const counts = themes.reduce<Record<MarketRotationSignalType, number>>((acc, theme) => {
+    const key = resolveSignalType(theme);
+    acc[key] += 1;
+    return acc;
+  }, {
+    real_flow: 0,
+    relative_strength: 0,
+    momentum_proxy: 0,
+    observation_only: 0,
+    taxonomy_fallback: 0,
+    insufficient_evidence: 0,
+  });
+  const dominant = summarizeLane(themes);
+
+  return (
+    <DataWorkbenchFrame data-testid="rotation-radar-lane-band">
+      <div className="flex min-w-0 flex-col gap-3 px-3 py-3">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+          <TerminalSectionHeader eyebrow="Signal Taxonomy" title="True Flow 与代理强度边界" />
+          <span className={cn('text-xs font-semibold', dominant.tone)}>{dominant.label}</span>
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-2">
+          {(Object.keys(SIGNAL_LANE_META) as MarketRotationSignalType[]).map((key) => (
+            <TerminalChip key={key} variant={SIGNAL_LANE_META[key].variant} className="px-2 py-1 text-[11px]">
+              {SIGNAL_LANE_META[key].label} · {counts[key]}
+            </TerminalChip>
+          ))}
+        </div>
+        <p className="text-[11px] leading-5 text-white/52">{dominant.description}</p>
+      </div>
+    </DataWorkbenchFrame>
+  );
+};
+
 const LeaderRow: React.FC<{
   theme: MarketRotationTheme;
   rank: number;
@@ -421,6 +724,7 @@ const LeaderRow: React.FC<{
 }> = ({ theme, rank, selected, onSelect }) => {
   const taxonomyOnly = isTaxonomyOnlyTheme(theme);
   const evidenceSummary = rotationEvidenceSummary(theme);
+  const gaps = themeDataGaps(theme);
   return (
     <button
       type="button"
@@ -438,7 +742,12 @@ const LeaderRow: React.FC<{
           <DataFreshnessBadge freshness={theme.freshness} className="hidden px-1.5 text-[9px] sm:inline-flex" />
         </span>
         <span className="mt-1 block truncate text-[11px] text-white/38">
-          {taxonomyOnly ? '主题库已载入 · 待行情确认' : `${formatThemeStage(theme.stage)} · ${mapDataStateLabel(theme)}`}
+          {taxonomyOnly ? '主题库已载入 · 待行情确认' : `${laneMeta(theme).label} · ${mapDataStateLabel(theme)}`}
+        </span>
+        <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+          <SignalLaneChip theme={theme} className="px-1.5 py-0.5 text-[10px]" />
+          <EvidenceQualityChip theme={theme} className="px-1.5 py-0.5 text-[10px]" />
+          {gaps.length ? <TerminalChip className="px-1.5 py-0.5 text-[10px]">{`Gap ${gaps.length}`}</TerminalChip> : null}
         </span>
         {evidenceSummary ? (
           <EvidenceChips summary={evidenceSummary} maxLabels={2} className="mt-1 hidden sm:flex" />
@@ -475,7 +784,7 @@ const LaggardRow: React.FC<{
     <span className="min-w-0">
       <span className="block truncate text-sm font-semibold text-white/78">{theme.name}</span>
       <span className="mt-1 block truncate text-[11px] text-white/38">
-        {isTaxonomyOnlyTheme(theme) ? '分类观察' : `${formatThemeStage(theme.stage)} · ${mapDataStateLabel(theme)}`}
+        {isTaxonomyOnlyTheme(theme) ? 'Taxonomy Fallback' : `${laneMeta(theme).label} · ${mapDataStateLabel(theme)}`}
       </span>
     </span>
     <span className={cn('text-right font-mono text-sm font-semibold tabular-nums', isTaxonomyOnlyTheme(theme) ? 'text-white/44' : scoreTone(theme.rotationScore))}>
@@ -505,7 +814,7 @@ const CompactThemeRow: React.FC<{
     <span className={cn('text-right font-mono font-semibold tabular-nums', isTaxonomyOnlyTheme(theme) ? 'text-white/44' : scoreTone(theme.rotationScore))}>
       {isTaxonomyOnlyTheme(theme) ? '主题库' : theme.rotationScore}
     </span>
-    <span className="text-right text-[11px] text-white/42">{isTaxonomyOnlyTheme(theme) ? '分类观察' : formatThemeStage(theme.stage)}</span>
+    <span className="text-right text-[11px] text-white/42">{laneMeta(theme).label}</span>
   </button>
 );
 
@@ -579,9 +888,22 @@ const ThemeDetailPanel: React.FC<{
   const evidenceNotes = sanitizeRotationNotes(theme.evidence);
   const riskExplanationNotes = sanitizeRotationNotes(theme.riskExplanations);
   const evidenceSummary = rotationEvidenceSummary(theme);
+  const lane = resolveSignalType(theme);
+  const laneDefinition = SIGNAL_LANE_META[lane];
+  const gaps = themeDataGaps(theme);
   const explanation = sanitizeRotationText(
     theme.stageExplanation,
-    `${theme.name} 当前以轮动强度、相对强弱、成交额扩张、广度和同步性作为观察依据。`,
+    lane === 'real_flow'
+      ? `${theme.name} 当前具备真实资金流证据，但仍需结合风险与新鲜度解读。`
+      : lane === 'relative_strength'
+        ? `${theme.name} 当前以报价支持的相对强弱为主，不能等同于真实资金流。`
+        : lane === 'momentum_proxy'
+          ? `${theme.name} 当前以量能、广度与同步性等动量代理为主，不能等同于真实资金流。`
+          : lane === 'observation_only'
+            ? `${theme.name} 当前仅保留观察信号，不能放大为流向结论。`
+            : lane === 'taxonomy_fallback'
+              ? `${theme.name} 当前仍是主题分类观察，本地行情覆盖后才能形成强弱结论。`
+              : `${theme.name} 当前证据不足，只能作为待补齐的观察线索。`,
   );
 
   return (
@@ -597,14 +919,20 @@ const ThemeDetailPanel: React.FC<{
             <p className={cn('font-mono text-4xl font-semibold leading-none tabular-nums', taxonomyOnly ? 'text-white/44' : scoreTone(theme.rotationScore))}>
               {taxonomyOnly ? '主题库' : theme.rotationScore}
             </p>
-            <p className="mt-1 text-[10px] font-bold uppercase text-white/35">{taxonomyOnly ? '分类状态' : '轮动强度'}</p>
+            <p className="mt-1 text-[10px] font-bold uppercase text-white/35">{taxonomyOnly ? '分类状态' : '强弱评分'}</p>
           </div>
         </div>
 
         <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
+          <SignalLaneChip theme={theme} />
+          <EvidenceQualityChip theme={theme} />
           <TerminalChip variant="info">{formatThemeStage(theme.stage)}</TerminalChip>
           <TerminalChip>{taxonomyOnly ? theme.confidenceLabel || '待行情确认' : `置信度 ${compactConfidence(theme.confidence)}`}</TerminalChip>
           <TerminalChip variant={dataWarning ? 'caution' : 'success'}>{mapDataStateLabel(theme)}</TerminalChip>
+          <TerminalChip variant={theme.sourceAuthorityAllowed ? 'success' : 'neutral'}>
+            {theme.sourceAuthorityAllowed ? 'Authority OK' : 'Authority Limited'}
+          </TerminalChip>
+          {gaps.length ? <TerminalChip variant="caution">{`Data Gaps ${gaps.length}`}</TerminalChip> : null}
           {!taxonomyOnly ? <DataFreshnessBadge freshness={theme.freshness} className="px-1.5 text-[9px]" /> : null}
         </div>
         {evidenceSummary ? (
@@ -624,9 +952,26 @@ const ThemeDetailPanel: React.FC<{
           </TerminalNotice>
         ) : null}
 
+        <TerminalNotice
+          variant={laneDefinition.variant === 'danger' ? 'caution' : laneDefinition.variant === 'success' ? 'info' : laneDefinition.variant}
+          className="mt-3 text-[12px] leading-5 text-white/58"
+        >
+          {`${laneDefinition.label}: ${laneDefinition.description}`}
+        </TerminalNotice>
         <TerminalNotice variant="neutral" className="mt-3 text-[12px] leading-5 text-white/58">
           {explanation}
         </TerminalNotice>
+      </div>
+
+      <div className="min-w-0 px-1 py-3">
+        <p className="text-[10px] font-bold uppercase text-white/35">数据缺口</p>
+        <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+          {(gaps.length ? gaps : ['no_material_gap']).slice(0, 5).map((gap) => (
+            <TerminalChip key={gap} variant={gap === 'no_material_gap' ? 'success' : 'caution'}>
+              {gap === 'no_material_gap' ? '暂无高亮缺口' : formatGapLabel(gap)}
+            </TerminalChip>
+          ))}
+        </div>
       </div>
 
       {taxonomyOnly ? (
@@ -787,10 +1132,10 @@ const ThemeDetailPanel: React.FC<{
 };
 
 const LoadingPanel: React.FC = () => (
-  <TerminalPanel as="section" role="status" aria-label="正在读取资金轮动雷达">
+  <TerminalPanel as="section" role="status" aria-label="正在读取主题轮动 / 相对强弱雷达">
     <div className="flex items-center gap-3 text-white/60">
       <RefreshCcw className="h-4 w-4 animate-spin" aria-hidden="true" />
-      <span className="text-sm">正在读取资金轮动雷达...</span>
+      <span className="text-sm">正在读取主题轮动 / 相对强弱雷达...</span>
     </div>
   </TerminalPanel>
 );
@@ -814,7 +1159,7 @@ const MarketRotationRadarPage: React.FC = () => {
       setSearchQuery('');
       setProxyDisclosureSeed((seed) => seed + 1);
     } catch (nextError) {
-      setError({ ...getParsedApiError(nextError), title: '读取资金轮动雷达失败' });
+      setError({ ...getParsedApiError(nextError), title: '读取主题轮动雷达失败' });
     } finally {
       setLoading(false);
     }
@@ -839,6 +1184,7 @@ const MarketRotationRadarPage: React.FC = () => {
     () => payload?.themes.find((theme) => theme.id === selectedThemeId) || payload?.themes[0],
     [payload, selectedThemeId],
   );
+  const pageLane = useMemo(() => summarizeLane(payload?.themes || []), [payload?.themes]);
 
   return (
     <div
@@ -849,9 +1195,9 @@ const MarketRotationRadarPage: React.FC = () => {
       <WideWorkspacePageShell className="flex min-h-0 flex-1 py-5 md:py-6">
         <TerminalPanel as="section" dense className="relative shrink-0 overflow-hidden">
           <TerminalPageHeading
-            eyebrow="资金轮动 / Rotation Radar"
-            title="资金轮动雷达"
-            action={<TerminalChip variant="info">RotationMonitor</TerminalChip>}
+            eyebrow="主题轮动 / Relative Strength Radar"
+            title="主题轮动 / 相对强弱雷达"
+            action={<TerminalChip variant={pageLane.variant}>{pageLane.label}</TerminalChip>}
           />
         </TerminalPanel>
 
@@ -885,13 +1231,15 @@ const MarketRotationRadarPage: React.FC = () => {
 
             <SummaryBand payload={payload} />
 
+            <LaneBand themes={payload.themes || []} />
+
             <TerminalGrid className="gap-4" data-workbench-split="8:4">
-              <section className="min-w-0 space-y-4 xl:col-span-8" aria-label="今日轮动 Top-N">
+              <section className="min-w-0 space-y-4 xl:col-span-8" aria-label="今日主题强弱 Top-N">
                 <DataWorkbenchFrame data-testid="rotation-radar-leader-list">
                   <div className="grid min-w-0 gap-0 md:grid-cols-[minmax(0,1.55fr)_minmax(260px,0.65fr)]">
                     <section className="min-w-0 border-b border-white/[0.05] md:border-b-0 md:border-r md:border-white/[0.05]">
                       <div className="flex min-w-0 items-start justify-between gap-3 border-b border-white/[0.05] px-3 py-3">
-                        <TerminalSectionHeader eyebrow="主题板块榜单" title={headlineThemes.length ? `领涨 Top ${headlineThemes.length}` : '暂无头部排名'} />
+                        <TerminalSectionHeader eyebrow="领先主题" title={headlineThemes.length ? `Top ${headlineThemes.length} 主题强弱` : '暂无头部排名'} />
                         <div className="hidden min-w-0 grid-cols-[4.75rem_4.75rem_4.5rem] gap-2 text-right text-[10px] font-semibold uppercase text-white/32 md:grid">
                           <span>相对</span>
                           <span>量能</span>
@@ -992,7 +1340,7 @@ const MarketRotationRadarPage: React.FC = () => {
 
             <TerminalDisclosure
               data-testid="rotation-radar-mechanics-details"
-              title="新鲜度 / 来源说明"
+              title="证据边界 / 来源说明"
               summary="默认折叠"
               className="rounded-2xl p-4 text-sm text-white/55"
             >
@@ -1004,11 +1352,11 @@ const MarketRotationRadarPage: React.FC = () => {
                   <TerminalChip>Top-N {headlineThemes.length}/{payload.themes.length}</TerminalChip>
                 </div>
                 <Gauge className="h-4 w-4 text-cyan-200/70" aria-hidden="true" />
-                <span>当前为静态主题库，本地行情覆盖后可计算轮动强度。</span>
+                <span>当前页面优先解释主题轮动、相对强弱与代理证据边界，不自动放大为真实资金流结论。</span>
                 <Signal className="ml-2 h-4 w-4 text-emerald-200/70" aria-hidden="true" />
                 <span>不代表实时买卖信号，不触发交易、通知、组合或新的外部数据请求。</span>
                 <Waves className="ml-2 h-4 w-4 text-white/40" aria-hidden="true" />
-                <span>{payload.noAdviceDisclosure}</span>
+                <span>{conservativeFlowCopy(payload.noAdviceDisclosure, shouldAllowMoneyFlowLanguage(selectedTheme))}</span>
               </div>
             </TerminalDisclosure>
           </>

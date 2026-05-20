@@ -9,6 +9,22 @@ export type MarketRotationStage =
   | 'cooling_watch'
   | 'weak_or_no_signal';
 
+export type MarketRotationSignalType =
+  | 'real_flow'
+  | 'relative_strength'
+  | 'momentum_proxy'
+  | 'observation_only'
+  | 'taxonomy_fallback'
+  | 'insufficient_evidence';
+
+export type MarketRotationEvidenceQuality =
+  | 'score_grade_proxy'
+  | 'degraded_proxy'
+  | 'observation_only'
+  | 'taxonomy_only'
+  | 'insufficient'
+  | 'score_grade_real_flow';
+
 export type MarketRotationRiskLabel =
   | 'gap_fade_risk'
   | 'thin_breadth'
@@ -82,6 +98,12 @@ export type MarketRotationSummaryItem = {
   headlineEligible?: boolean;
   rankingLane?: 'headline' | 'observation' | 'taxonomy';
   scoreContributionAllowed?: boolean;
+  signalType?: MarketRotationSignalType;
+  flowEvidenceType?: string;
+  flowLanguageAllowed?: boolean;
+  sourceAuthorityAllowed?: boolean;
+  evidenceQuality?: MarketRotationEvidenceQuality | string;
+  dataGaps?: string[];
   sourceTier?: string | null;
   trustLevel?: string | null;
 };

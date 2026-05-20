@@ -46,7 +46,22 @@ describe('marketRotationApi', () => {
         },
         summary: {
           strongest_themes: [
-            { id: 'ai_applications', name: 'AI 应用', rotation_score: 78, confidence: 0.72, stage: 'confirmed_rotation', freshness: 'delayed', is_fallback: false, risk_labels: [] },
+            {
+              id: 'ai_applications',
+              name: 'AI 应用',
+              rotation_score: 78,
+              confidence: 0.72,
+              stage: 'confirmed_rotation',
+              freshness: 'delayed',
+              is_fallback: false,
+              risk_labels: [],
+              signal_type: 'relative_strength',
+              flow_evidence_type: 'proxy_only',
+              flow_language_allowed: false,
+              source_authority_allowed: true,
+              evidence_quality: 'degraded_proxy',
+              data_gaps: ['true_flow_data_missing', 'flow_methodology_missing'],
+            },
           ],
           accelerating_themes: [],
           fading_themes: [],
@@ -96,6 +111,12 @@ describe('marketRotationApi', () => {
             freshness: 'delayed',
             is_fallback: false,
             is_stale: false,
+            signal_type: 'relative_strength',
+            flow_evidence_type: 'proxy_only',
+            flow_language_allowed: false,
+            source_authority_allowed: true,
+            evidence_quality: 'degraded_proxy',
+            data_gaps: ['true_flow_data_missing', 'flow_methodology_missing'],
             evidence: ['无明显新闻的同步异动'],
             relative_strength: { average_relative_strength_percent: 2.6 },
             proxy_quality: {
@@ -156,8 +177,14 @@ describe('marketRotationApi', () => {
     expect(payload.metadata.noExternalCalls).toBe(true);
     expect(payload.metadata.proxyQualityRequired).toBe(true);
     expect(payload.summary.strongestThemes[0].rotationScore).toBe(78);
+    expect(payload.summary.strongestThemes[0].signalType).toBe('relative_strength');
     expect(payload.themes[0].englishName).toBe('AI Applications');
     expect(payload.themes[0].newslessRotation).toBe(true);
+    expect(payload.themes[0].flowEvidenceType).toBe('proxy_only');
+    expect(payload.themes[0].flowLanguageAllowed).toBe(false);
+    expect(payload.themes[0].sourceAuthorityAllowed).toBe(true);
+    expect(payload.themes[0].evidenceQuality).toBe('degraded_proxy');
+    expect(payload.themes[0].dataGaps).toContain('true_flow_data_missing');
     expect(payload.themes[0].persistenceEvidence?.label).toBe('跨时窗延续');
     expect(payload.themes[0].alertCandidates?.[0].readOnly).toBe(true);
     expect(payload.themes[0].alertCandidates?.[0].sortExplanation).toContain('非买卖建议');
@@ -211,6 +238,12 @@ describe('marketRotationApi', () => {
             confidence_label: '待行情确认',
             data_quality: 'taxonomy_only',
             static_theme_only: true,
+            signal_type: 'taxonomy_fallback',
+            flow_evidence_type: 'none',
+            flow_language_allowed: false,
+            source_authority_allowed: false,
+            evidence_quality: 'taxonomy_only',
+            data_gaps: ['taxonomy_only', 'true_flow_data_missing'],
             stage: 'weak_or_no_signal',
             stage_explanation: '主题库已载入，行情评分待本地数据覆盖，仅作分类观察。',
             risk_labels: ['stale_or_incomplete_windows'],
@@ -247,6 +280,9 @@ describe('marketRotationApi', () => {
     expect(payload.themes[0].staticThemeOnly).toBe(true);
     expect(payload.themes[0].dataQuality).toBe('taxonomy_only');
     expect(payload.themes[0].confidenceLabel).toBe('待行情确认');
+    expect(payload.themes[0].signalType).toBe('taxonomy_fallback');
+    expect(payload.themes[0].evidenceQuality).toBe('taxonomy_only');
+    expect(payload.themes[0].dataGaps).toContain('taxonomy_only');
     expect(payload.themes[0].themeDetail?.mappedConcepts).toContain('算力租赁');
   });
 });

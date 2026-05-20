@@ -41,13 +41,58 @@ const radarFixture = (): MarketRotationRadarResponse => ({
   },
   summary: {
     strongestThemes: [
-      { id: 'ai_applications', name: 'AI 应用', rotationScore: 78, confidence: 0.72, stage: 'confirmed_rotation', freshness: 'delayed', isFallback: false, riskLabels: [] },
+      {
+        id: 'ai_applications',
+        name: 'AI 应用',
+        rotationScore: 78,
+        confidence: 0.72,
+        stage: 'confirmed_rotation',
+        freshness: 'delayed',
+        isFallback: false,
+        riskLabels: [],
+        signalType: 'relative_strength',
+        flowEvidenceType: 'proxy_only',
+        flowLanguageAllowed: false,
+        sourceAuthorityAllowed: true,
+        evidenceQuality: 'degraded_proxy',
+        dataGaps: ['true_flow_data_missing', 'flow_methodology_missing'],
+      },
     ],
     acceleratingThemes: [
-      { id: 'ai_applications', name: 'AI 应用', rotationScore: 78, confidence: 0.72, stage: 'confirmed_rotation', freshness: 'delayed', isFallback: false, riskLabels: [] },
+      {
+        id: 'ai_applications',
+        name: 'AI 应用',
+        rotationScore: 78,
+        confidence: 0.72,
+        stage: 'confirmed_rotation',
+        freshness: 'delayed',
+        isFallback: false,
+        riskLabels: [],
+        signalType: 'relative_strength',
+        flowEvidenceType: 'proxy_only',
+        flowLanguageAllowed: false,
+        sourceAuthorityAllowed: true,
+        evidenceQuality: 'degraded_proxy',
+        dataGaps: ['true_flow_data_missing'],
+      },
     ],
     fadingThemes: [
-      { id: 'robotics', name: '机器人', rotationScore: 38, confidence: 0.31, stage: 'weak_or_no_signal', freshness: 'fallback', isFallback: true, riskLabels: ['stale_or_incomplete_windows'] },
+      {
+        id: 'robotics',
+        name: '机器人',
+        rotationScore: 38,
+        confidence: 0.31,
+        stage: 'weak_or_no_signal',
+        freshness: 'fallback',
+        isFallback: true,
+        riskLabels: ['stale_or_incomplete_windows'],
+        signalType: 'insufficient_evidence',
+        flowEvidenceType: 'none',
+        flowLanguageAllowed: false,
+        sourceAuthorityAllowed: false,
+        evidenceQuality: 'insufficient',
+        dataGaps: ['true_flow_data_missing', 'source_authority_rejected'],
+      },
     ],
     watchlistSignals: [
       { themeId: 'ai_applications', themeName: 'AI 应用', symbol: 'APP', label: '关注候选', signal: 'confirmed_rotation', signalLabel: '确认轮动', confidence: 0.72, persistenceScore: 0.86, readOnly: true, deliveryEnabled: false, reasons: ['AI 应用：确认轮动'], sortExplanation: '按主题轮动强度、置信度、跨时窗持续证据、成员相对强弱和量能扩张排序；仅用于观察信号排队，非买卖建议。' },
@@ -66,6 +111,12 @@ const radarFixture = (): MarketRotationRadarResponse => ({
       membersConfigured: ['APP', 'PLTR', 'CRM'],
       rotationScore: 78,
       confidence: 0.72,
+      signalType: 'relative_strength',
+      flowEvidenceType: 'proxy_only',
+      flowLanguageAllowed: false,
+      sourceAuthorityAllowed: true,
+      evidenceQuality: 'degraded_proxy',
+      dataGaps: ['true_flow_data_missing', 'flow_methodology_missing', 'benchmark_proxy_missing'],
       stage: 'confirmed_rotation',
       stageExplanation: '价格、量能、广度和同步性同时满足阈值。置信度 72%，3 个分钟级时窗可用。',
       riskLabels: ['gap_fade_risk'],
@@ -305,6 +356,12 @@ function taxonomyMarketFixture(market: 'CN' | 'HK' | 'CRYPTO'): MarketRotationRa
     dataCoverage: 'taxonomy_only',
     staticThemeOnly: true,
     taxonomyType: 'theme_cluster',
+    signalType: 'taxonomy_fallback',
+    flowEvidenceType: 'none',
+    flowLanguageAllowed: false,
+    sourceAuthorityAllowed: false,
+    evidenceQuality: 'taxonomy_only',
+    dataGaps: ['taxonomy_only', 'true_flow_data_missing'],
     stage: 'weak_or_no_signal',
     stageExplanation: '主题库已载入，行情评分待本地数据覆盖，仅作分类观察。',
     riskLabels: ['stale_or_incomplete_windows'],
@@ -360,16 +417,22 @@ describe('MarketRotationRadarPage', () => {
     render(<MarketRotationRadarPage />);
 
     const page = await screen.findByTestId('market-rotation-radar-page');
-    expect(page).toHaveTextContent('资金轮动雷达');
+    expect(page).toHaveTextContent('主题轮动 / 相对强弱雷达');
     expect(page.className).not.toContain('bg-[#030303]');
     expect(page.querySelector('[data-terminal-primitive="page-shell"]')).not.toBeNull();
     expect(screen.getByTestId('rotation-radar-summary-band')).toHaveAttribute('data-terminal-primitive', 'panel');
     expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('观察信号');
+    expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('证据分层');
+    expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('证据质量');
+    expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('主要缺口');
     expect(screen.getByTestId('rotation-radar-mode-controls')).toHaveTextContent('US');
     expect(screen.getByTestId('rotation-radar-mode-controls')).toHaveAttribute('data-linear-primitive', 'command-bar');
     expect(screen.getByTestId('rotation-market-tab-US')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: '刷新资金轮动雷达' })).toHaveAttribute('data-terminal-primitive', 'button');
+    expect(screen.getByRole('button', { name: '刷新主题轮动雷达' })).toHaveAttribute('data-terminal-primitive', 'button');
     expect(screen.getByTestId('rotation-radar-freshness')).toHaveAttribute('data-terminal-primitive', 'nested-block');
+    expect(screen.getByTestId('rotation-radar-lane-band')).toHaveTextContent('True Flow');
+    expect(screen.getByTestId('rotation-radar-lane-band')).toHaveTextContent('Relative Strength');
+    expect(screen.getByTestId('rotation-radar-lane-band')).toHaveTextContent('Taxonomy Fallback');
 
     const leaderList = screen.getByTestId('rotation-radar-leader-list');
     expect(leaderList).toHaveAttribute('data-linear-primitive', 'data-workbench-frame');
@@ -384,6 +447,8 @@ describe('MarketRotationRadarPage', () => {
     const detail = screen.getByTestId('rotation-theme-detail-panel');
     expect(detail).toHaveAttribute('data-linear-primitive', 'context-rail');
     expect(detail).toHaveTextContent('AI 应用');
+    expect(within(detail).getByText('Relative Strength')).toHaveAttribute('data-terminal-primitive', 'chip');
+    expect(within(detail).getAllByText('Degraded Proxy')[0]).toHaveAttribute('data-terminal-primitive', 'chip');
     expect(within(detail).getByText('确认轮动')).toHaveAttribute('data-terminal-primitive', 'chip');
     expect(within(detail).getByText(/^置信度 \d+%$/)).toHaveAttribute('data-terminal-primitive', 'chip');
     expect(within(detail).getByText('延迟可用')).toHaveAttribute('data-terminal-primitive', 'chip');
@@ -513,6 +578,8 @@ describe('MarketRotationRadarPage', () => {
     expect(within(detail).getByText('轮动代理证据')).toBeInTheDocument();
     expect(within(detail).getByText('分类观察')).toBeInTheDocument();
     expect(within(detail).getByText('真实资金流暂缺')).toBeInTheDocument();
+    expect(within(detail).getByText('Relative Strength')).toBeInTheDocument();
+    expect(within(detail).getAllByText('Degraded Proxy').length).toBeGreaterThan(0);
     expect(detail.textContent || '').not.toMatch(/真实资金流确认|资金流入确认/);
 
     const evidenceDetails = within(detail).getByTestId('rotation-theme-evidence-details-ai_applications');
@@ -621,10 +688,10 @@ describe('MarketRotationRadarPage', () => {
 
     const mechanics = screen.getByTestId('rotation-radar-mechanics-details');
     expect(mechanics).toHaveAttribute('data-terminal-primitive', 'disclosure');
-    expect(mechanics).toHaveTextContent('新鲜度 / 来源说明');
+    expect(mechanics).toHaveTextContent('证据边界 / 来源说明');
     expect(mechanics).not.toHaveAttribute('open');
     expect(screen.queryByText('不代表实时买卖信号，不触发交易、通知、组合或新的外部数据请求。')).not.toBeInTheDocument();
-    fireEvent.click(within(mechanics).getByRole('button', { name: '展开 新鲜度 / 来源说明' }));
+    fireEvent.click(within(mechanics).getByRole('button', { name: '展开 证据边界 / 来源说明' }));
     expect(screen.getByText('不代表实时买卖信号，不触发交易、通知、组合或新的外部数据请求。')).toBeInTheDocument();
     expect(mechanics).not.toHaveTextContent('schemaVersion');
   });
