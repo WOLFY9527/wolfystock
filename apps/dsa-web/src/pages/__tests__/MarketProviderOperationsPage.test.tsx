@@ -6,9 +6,19 @@ const { getOperations } = vi.hoisted(() => ({
   getOperations: vi.fn(),
 }));
 
+const { getDataReadiness } = vi.hoisted(() => ({
+  getDataReadiness: vi.fn(),
+}));
+
 vi.mock('../../api/marketProviderOperations', () => ({
   marketProviderOperationsApi: {
     getOperations,
+  },
+}));
+
+vi.mock('../../api/market', () => ({
+  marketApi: {
+    getDataReadiness,
   },
 }));
 
@@ -181,9 +191,42 @@ const populatedPayload = {
   },
 };
 
+const readinessPayload = {
+  readinessStatus: 'partial',
+  diagnosticOnly: true,
+  providerRuntimeCalled: false,
+  networkCallsEnabled: false,
+  representativeSymbols: ['AAPL', 'SPY', 'BTC-USD'],
+  checks: [
+    {
+      id: 'tushare_token',
+      status: 'missing',
+      severity: 'warning',
+      userFacingMessage: 'Tushare token is not configured.',
+      remediationHint: 'Set TUSHARE_TOKEN when local operators need Tushare-backed CN/HK market intelligence inputs.',
+      affectsSurfaces: ['market_overview', 'liquidity_monitor'],
+      secretConfigured: false,
+    },
+    {
+      id: 'local_us_parquet_representative_files',
+      status: 'partial',
+      severity: 'warning',
+      userFacingMessage: 'Representative US parquet files are missing for part of the requested symbol set.',
+      remediationHint: 'Sync the missing parquet files or reduce the representative symbol list to locally available coverage.',
+      affectsSurfaces: ['stock_history'],
+      details: {
+        representativeSymbols: ['AAPL', 'SPY', 'BTC-USD'],
+        missingSymbols: ['BTC-USD'],
+        existingCount: 2,
+      },
+    },
+  ],
+};
+
 describe('MarketProviderOperationsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getDataReadiness.mockResolvedValue(readinessPayload);
   });
 
   afterEach(() => {
@@ -225,6 +268,16 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getByText('只读')).toBeInTheDocument();
     expect(screen.getByText('外部调用关闭')).toBeInTheDocument();
     expect(screen.getByText('缓存不变更')).toBeInTheDocument();
+    expect(screen.getByText('本地行情就绪诊断')).toBeInTheDocument();
+    expect(screen.getByText('diagnosticOnly')).toBeInTheDocument();
+    expect(screen.getByText('providerRuntimeCalled')).toBeInTheDocument();
+    expect(screen.getByText('networkCallsEnabled')).toBeInTheDocument();
+    expect(screen.getByText('未配置')).toBeInTheDocument();
+    expect(screen.getByText('AAPL')).toBeInTheDocument();
+    expect(screen.getByText('BTC-USD')).toBeInTheDocument();
+    expect(screen.getByText('Tushare token is not configured.')).toBeInTheDocument();
+    expect(screen.getByText('Set TUSHARE_TOKEN when local operators need Tushare-backed CN/HK market intelligence inputs.')).toBeInTheDocument();
+    expect(screen.getByText('Representative US parquet files are missing for part of the requested symbol set.')).toBeInTheDocument();
     expect(screen.getByText('限制与快照摘要')).toBeInTheDocument();
     expect(screen.getAllByText('缓存状态').length).toBeGreaterThan(0);
     expect(screen.getAllByText('最近异常').length).toBeGreaterThan(0);
@@ -247,6 +300,21 @@ describe('MarketProviderOperationsPage', () => {
     expect(diagnosticsDisclosure).toHaveAttribute('open');
     expect(screen.getByRole('button', { name: '收起 二级细节：限制代码、快照摘要、追踪标识' })).toBeInTheDocument();
     expect(screen.getByText('cache_metadata_unavailable:rates')).toBeVisible();
+  });
+
+  it('supports a compact representative symbol override for readiness checks', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+    getDataReadiness.mockResolvedValue(readinessPayload);
+
+    render(<MarketProviderOperationsPage />);
+
+    expect(await screen.findByText('本地行情就绪诊断')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('代表符号'), { target: { value: 'msft, qqq, nvda' } });
+    fireEvent.click(screen.getByRole('button', { name: '更新样本' }));
+
+    await waitFor(() => {
+      expect(getDataReadiness).toHaveBeenLastCalledWith({ symbols: 'msft, qqq, nvda' });
+    });
   });
 
   it('normalizes missing metrics without rendering NaN or raising React warnings', async () => {

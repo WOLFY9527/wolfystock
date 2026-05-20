@@ -134,6 +134,66 @@ async function getPanel(path: string, panelName: string): Promise<MarketOverview
 
 const MARKET_API_BASE_PATH = '/api/v1/market';
 
+export type MarketDataReadinessStatus = 'ready' | 'partial' | 'missing' | 'misconfigured' | string;
+export type MarketDataReadinessSeverity = 'error' | 'warning' | 'info' | string;
+
+export type MarketDataReadinessCheck = {
+  id: string;
+  status: MarketDataReadinessStatus;
+  severity: MarketDataReadinessSeverity;
+  userFacingMessage: string;
+  remediationHint?: string | null;
+  affectsSurfaces: string[];
+  secretConfigured?: boolean;
+  details?: Record<string, unknown>;
+};
+
+export type MarketDataReadinessResponse = {
+  readinessStatus: MarketDataReadinessStatus;
+  diagnosticOnly: boolean;
+  providerRuntimeCalled: boolean;
+  networkCallsEnabled: boolean;
+  representativeSymbols: string[];
+  checks: MarketDataReadinessCheck[];
+};
+
+function normalizeReadinessSymbols(symbols?: string[] | string | null): string | undefined {
+  if (Array.isArray(symbols)) {
+    const sanitized = symbols.map((symbol) => String(symbol || '').trim()).filter(Boolean);
+    return sanitized.length ? sanitized.join(',') : undefined;
+  }
+  if (typeof symbols !== 'string') {
+    return undefined;
+  }
+  const sanitized = symbols
+    .split(',')
+    .map((symbol) => symbol.trim())
+    .filter(Boolean)
+    .join(',');
+  return sanitized || undefined;
+}
+
+function normalizeMarketDataReadinessPayload(rawPayload: Record<string, unknown>): MarketDataReadinessResponse {
+  const payload = toCamelCase<MarketDataReadinessResponse>(rawPayload);
+  return {
+    readinessStatus: payload.readinessStatus || 'missing',
+    diagnosticOnly: payload.diagnosticOnly !== false,
+    providerRuntimeCalled: payload.providerRuntimeCalled === true,
+    networkCallsEnabled: payload.networkCallsEnabled === true,
+    representativeSymbols: Array.isArray(payload.representativeSymbols) ? payload.representativeSymbols : [],
+    checks: Array.isArray(payload.checks) ? payload.checks.map((check) => ({
+      id: check.id,
+      status: check.status || 'missing',
+      severity: check.severity || 'warning',
+      userFacingMessage: check.userFacingMessage || '',
+      remediationHint: check.remediationHint || null,
+      affectsSurfaces: Array.isArray(check.affectsSurfaces) ? check.affectsSurfaces : [],
+      ...(typeof check.secretConfigured === 'boolean' ? { secretConfigured: check.secretConfigured } : {}),
+      ...(check.details && typeof check.details === 'object' ? { details: check.details } : {}),
+    })) : [],
+  };
+}
+
 export function buildMarketApiPath(path: string): string {
   return joinApiPath(MARKET_API_BASE_PATH, path);
 }
@@ -169,6 +229,13 @@ export const marketApi = {
   getCnShortSentiment: async (): Promise<CnShortSentimentResponse> => {
     const response = await apiClient.get<Record<string, unknown>>(buildMarketApiPath('cn-short-sentiment'));
     return toCamelCase<CnShortSentimentResponse>(response.data);
+  },
+  getDataReadiness: async (options?: { symbols?: string[] | string | null }): Promise<MarketDataReadinessResponse> => {
+    const params = normalizeReadinessSymbols(options?.symbols);
+    const response = await apiClient.get<Record<string, unknown>>(buildMarketApiPath('data-readiness'), {
+      ...(params ? { params: { symbols: params } } : {}),
+    });
+    return normalizeMarketDataReadinessPayload(response.data);
   },
 };
 

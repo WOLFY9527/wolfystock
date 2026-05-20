@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, ExternalLink } from 'lucide-react';
+import { marketApi, type MarketDataReadinessCheck, type MarketDataReadinessResponse } from '../api/market';
 import {
   marketProviderOperationsApi,
   type AdminLogDrillThrough,
@@ -58,6 +59,7 @@ const SENSITIVE_KEYWORD_PATTERN = /(token|secret|cookie|session|password|authori
 const EMPTY_PROVIDER_ITEMS: MarketProviderOperationItem[] = [];
 const EMPTY_PROVIDER_CACHE_STATES: MarketProviderCacheState[] = [];
 const EMPTY_PROVIDER_EVENT_ROLLUPS: MarketProviderEventRollup[] = [];
+const EMPTY_READINESS_CHECKS: MarketDataReadinessCheck[] = [];
 const SUMMARY_DEFAULTS: MarketProviderOperationsSummary = {
   totalItems: 0,
   liveCount: 0,
@@ -160,6 +162,88 @@ function providerLabel(item: Pick<MarketProviderOperationItem, 'provider' | 'sou
 
 function providerKey(item: Pick<MarketProviderOperationItem, 'provider' | 'cacheKey' | 'endpoint'>): string {
   return `${item.provider}::${item.cacheKey}::${item.endpoint}`;
+}
+
+function readinessStatusLabel(status: string): string {
+  return {
+    ready: 'ready',
+    partial: 'partial',
+    missing: 'missing',
+    misconfigured: 'misconfigured',
+  }[status] || status;
+}
+
+function readinessStatusVariant(status: string): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
+  if (status === 'ready') return 'success';
+  if (status === 'partial') return 'info';
+  if (status === 'missing') return 'caution';
+  if (status === 'misconfigured') return 'danger';
+  return 'neutral';
+}
+
+function readinessSeverityLabel(severity: string): string {
+  return {
+    error: 'error',
+    warning: 'warning',
+    info: 'info',
+  }[severity] || severity;
+}
+
+function readinessSeverityVariant(severity: string): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
+  if (severity === 'error') return 'danger';
+  if (severity === 'warning') return 'caution';
+  if (severity === 'info') return 'info';
+  return 'neutral';
+}
+
+function surfaceLabel(surface: string): string {
+  return {
+    market_overview: 'Market Overview',
+    liquidity_monitor: 'Liquidity Monitor',
+    rotation_radar: 'Rotation Radar',
+    stock_history: 'US parquet history',
+  }[surface] || surface.replace(/_/g, ' ');
+}
+
+function summarizeReadinessFacts(check: MarketDataReadinessCheck): string[] {
+  if (typeof check.secretConfigured === 'boolean') {
+    return [];
+  }
+  const details = check.details;
+  if (!details || typeof details !== 'object') {
+    return [];
+  }
+
+  const facts: string[] = [];
+  const envKeys = Array.isArray(details.envKeys) ? details.envKeys.map((key) => String(key)).filter(Boolean) : [];
+  const envKey = typeof details.envKey === 'string' ? details.envKey.trim() : '';
+  const availableModules = Array.isArray(details.availableModules) ? details.availableModules.map((name) => String(name)).filter(Boolean) : [];
+  const missingModules = Array.isArray(details.missingModules) ? details.missingModules.map((name) => String(name)).filter(Boolean) : [];
+  const representativeSymbols = Array.isArray(details.representativeSymbols) ? details.representativeSymbols.map((symbol) => String(symbol)).filter(Boolean) : [];
+  const missingSymbols = Array.isArray(details.missingSymbols) ? details.missingSymbols.map((symbol) => String(symbol)).filter(Boolean) : [];
+  const existingCount = typeof details.existingCount === 'number' ? details.existingCount : null;
+
+  if (envKeys.length) {
+    facts.push(`env: ${envKeys.join(', ')}`);
+  } else if (envKey) {
+    facts.push(`env: ${envKey}`);
+  }
+  if (availableModules.length) {
+    facts.push(`available: ${availableModules.join(', ')}`);
+  }
+  if (missingModules.length) {
+    facts.push(`missing: ${missingModules.join(', ')}`);
+  }
+  if (representativeSymbols.length) {
+    facts.push(`symbols: ${representativeSymbols.join(', ')}`);
+  }
+  if (missingSymbols.length) {
+    facts.push(`missing symbols: ${missingSymbols.join(', ')}`);
+  }
+  if (existingCount != null) {
+    facts.push(`existing: ${formatNumber(existingCount, 0)}`);
+  }
+  return facts;
 }
 
 function sanitizeOperatorText(value?: string | number | null, fallback = '暂无数据'): string {
@@ -612,6 +696,132 @@ const DiagnosticsPanel: React.FC<{
   );
 };
 
+const MarketDataReadinessPanel: React.FC<{
+  data: MarketDataReadinessResponse | null;
+  isLoading: boolean;
+  error: ParsedApiError | null;
+  symbolInput: string;
+  onSymbolInputChange: (value: string) => void;
+  onSymbolSubmit: () => void;
+}> = ({ data, isLoading, error, symbolInput, onSymbolInputChange, onSymbolSubmit }) => {
+  const checks = data?.checks ?? EMPTY_READINESS_CHECKS;
+  const groupedChecks = useMemo(() => {
+    const order = ['error', 'warning', 'info'];
+    return order
+      .map((severity) => ({
+        severity,
+        items: checks
+          .filter((check) => check.severity === severity)
+          .sort((left, right) => left.status.localeCompare(right.status) || left.id.localeCompare(right.id)),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [checks]);
+
+  return (
+    <TerminalPanel as="section" className="col-span-12">
+      <TerminalSectionHeader
+        eyebrow="本地只读诊断"
+        title="本地行情就绪诊断"
+        action={data ? <TerminalChip variant={readinessStatusVariant(data.readinessStatus)}>{readinessStatusLabel(data.readinessStatus)}</TerminalChip> : <TerminalChip variant="neutral">待读取</TerminalChip>}
+      />
+      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <TerminalNestedBlock className="px-3 py-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-widest text-white/35">representative symbols</p>
+              <p className="mt-1 text-sm font-semibold text-white">代表样本</p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {data?.representativeSymbols?.length ? data.representativeSymbols.map((symbol) => (
+                <TerminalChip key={symbol} variant="neutral">{symbol}</TerminalChip>
+              )) : <TerminalChip variant="neutral">未提供</TerminalChip>}
+            </div>
+          </div>
+          <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-end">
+            <label className="min-w-0 flex-1">
+              <span className="mb-1.5 block text-[11px] text-white/42">代表符号</span>
+              <input
+                aria-label="代表符号"
+                type="text"
+                value={symbolInput}
+                onChange={(event) => onSymbolInputChange(event.target.value)}
+                placeholder="AAPL, SPY, BTC-USD"
+                className="h-10 w-full rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--wolfy-divider)]"
+              />
+            </label>
+            <TerminalButton variant="secondary" className="min-h-10 md:min-w-28" onClick={onSymbolSubmit} disabled={isLoading}>
+              更新样本
+            </TerminalButton>
+          </div>
+          <p className="mt-2 text-[11px] leading-5 text-white/42">只发送可选 symbol query 到 `/api/v1/market/data-readiness`，不触发 provider runtime，也不读取 secret 值。</p>
+        </TerminalNestedBlock>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <TerminalMetric label="diagnosticOnly" value={String(data?.diagnosticOnly ?? true)} valueClassName="text-sm" />
+          <TerminalMetric label="providerRuntimeCalled" value={String(data?.providerRuntimeCalled ?? false)} valueClassName="text-sm" />
+          <TerminalMetric label="networkCallsEnabled" value={String(data?.networkCallsEnabled ?? false)} valueClassName="text-sm" />
+        </div>
+      </div>
+
+      <TerminalNotice variant="info" className="mt-4">
+        这个面板只解释本地 readiness 与缺口来源，不改写 Market Overview、Liquidity Monitor 或 Rotation Radar 的既有结论。
+      </TerminalNotice>
+
+      {error ? <ApiErrorAlert error={error} className="mt-4" /> : null}
+
+      {isLoading && !data ? (
+        <div className="mt-4">
+          <TerminalEmptyState title="正在读取 readiness">保持只读；不会触发外部数据源调用。</TerminalEmptyState>
+        </div>
+      ) : null}
+
+      {!isLoading && !error ? (
+        <div className="mt-4 space-y-4">
+          {!groupedChecks.length ? (
+            <TerminalEmptyState title="暂无 readiness 检查项">接口未返回检查项时，不前端推断环境健康度。</TerminalEmptyState>
+          ) : groupedChecks.map((group) => (
+            <div key={group.severity}>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <TerminalChip variant={readinessSeverityVariant(group.severity)}>{readinessSeverityLabel(group.severity)}</TerminalChip>
+                <span className="text-[11px] text-white/42">{formatNumber(group.items.length, 0)} checks</span>
+              </div>
+              <TerminalDenseList>
+                {group.items.map((check) => {
+                  const facts = summarizeReadinessFacts(check);
+                  return (
+                    <TerminalNestedBlock key={check.id} className="px-3 py-2.5">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-mono text-[11px] text-white/48">{check.id}</p>
+                          <p className="mt-1 text-sm font-semibold text-white">{check.userFacingMessage}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <TerminalChip variant={readinessStatusVariant(check.status)}>{readinessStatusLabel(check.status)}</TerminalChip>
+                          {typeof check.secretConfigured === 'boolean' ? (
+                            <TerminalChip variant={check.secretConfigured ? 'success' : 'caution'}>
+                              {check.secretConfigured ? '已配置' : '未配置'}
+                            </TerminalChip>
+                          ) : null}
+                        </div>
+                      </div>
+                      {check.remediationHint ? <p className="mt-2 text-[11px] leading-5 text-white/62">{check.remediationHint}</p> : null}
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {check.affectsSurfaces.map((surface) => (
+                          <TerminalChip key={`${check.id}-${surface}`} variant="neutral">{surfaceLabel(surface)}</TerminalChip>
+                        ))}
+                      </div>
+                      {facts.length ? <p className="mt-2 font-mono text-[11px] leading-5 text-white/42">{facts.join(' · ')}</p> : null}
+                    </TerminalNestedBlock>
+                  );
+                })}
+              </TerminalDenseList>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </TerminalPanel>
+  );
+};
+
 const LoadingOperationsState: React.FC = () => (
   <TerminalPanel as="section" role="status" aria-label="正在读取市场数据源运维快照">
     <div className="flex items-center gap-3">
@@ -641,9 +851,14 @@ const EmptyErrorState: React.FC = () => (
 const MarketProviderOperationsPage: React.FC = () => {
   const { language } = useI18n();
   const [response, setResponse] = useState<MarketProviderOperationsResponse | null>(null);
+  const [readiness, setReadiness] = useState<MarketDataReadinessResponse | null>(null);
   const [selectedProviderKey, setSelectedProviderKey] = useState<string | null>(null);
+  const [readinessSymbolsInput, setReadinessSymbolsInput] = useState('');
+  const [submittedReadinessSymbols, setSubmittedReadinessSymbols] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isReadinessLoading, setIsReadinessLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
+  const [readinessError, setReadinessError] = useState<ParsedApiError | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -664,6 +879,32 @@ const MarketProviderOperationsPage: React.FC = () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    marketApi.getDataReadiness(submittedReadinessSymbols ? { symbols: submittedReadinessSymbols } : undefined)
+      .then((payload) => {
+        if (!cancelled) setReadiness(payload);
+      })
+      .catch((apiError) => {
+        if (!cancelled) {
+          const parsed = getParsedApiError(apiError);
+          setReadinessError({ ...parsed, title: '读取本地行情 readiness 失败' });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsReadinessLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [submittedReadinessSymbols]);
+
+  const submitReadinessSymbols = () => {
+    setReadinessError(null);
+    setIsReadinessLoading(true);
+    setSubmittedReadinessSymbols(readinessSymbolsInput.trim());
+  };
 
   const items = response?.items ?? EMPTY_PROVIDER_ITEMS;
   const cacheStates = response?.cacheStates ?? EMPTY_PROVIDER_CACHE_STATES;
@@ -750,16 +991,26 @@ const MarketProviderOperationsPage: React.FC = () => {
 
         {isLoading && !response && !error ? <LoadingOperationsState /> : null}
         {error && !response && !isLoading ? <EmptyErrorState /> : null}
-        {!isLoading && (response || !error) ? (
-          <>
-            <TerminalGrid>
-              <ProviderOperationsTable items={items} selectedKey={effectiveSelectedProviderKey} onSelect={setSelectedProviderKey} />
-              <ProviderDetailsPanel item={selectedItem} />
-              <EventRollupsPanel eventRollups={eventRollups} />
-              <CacheStatesPanel cacheStates={cacheStates} />
-              {response ? <DiagnosticsPanel response={response} selectedItem={selectedItem} /> : null}
-            </TerminalGrid>
-          </>
+        {!isLoading ? (
+          <TerminalGrid>
+            {response ? (
+              <>
+                <ProviderOperationsTable items={items} selectedKey={effectiveSelectedProviderKey} onSelect={setSelectedProviderKey} />
+                <ProviderDetailsPanel item={selectedItem} />
+                <EventRollupsPanel eventRollups={eventRollups} />
+                <CacheStatesPanel cacheStates={cacheStates} />
+              </>
+            ) : null}
+            <MarketDataReadinessPanel
+              data={readiness}
+              isLoading={isReadinessLoading}
+              error={readinessError}
+              symbolInput={readinessSymbolsInput}
+              onSymbolInputChange={setReadinessSymbolsInput}
+              onSymbolSubmit={submitReadinessSymbols}
+            />
+            {response ? <DiagnosticsPanel response={response} selectedItem={selectedItem} /> : null}
+          </TerminalGrid>
         ) : null}
       </TerminalPageShell>
       <span className="sr-only">{language === 'zh' ? '市场数据源运维只读页面' : 'Market provider operations read-only page'}</span>
