@@ -211,6 +211,27 @@ def test_coinbase_public_remains_crypto_venue_sidecar_only() -> None:
     assert "scoring_not_allowed" in market_temperature_plan.reason_codes["coinbase_public"]
 
 
+def test_market_temperature_route_rejects_akshare_and_pytdx_as_scoring_authorities() -> None:
+    plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="CN",
+            asset_type="equity_index",
+            use_case="market_temperature",
+            capability="quote",
+            freshness_need="live",
+            scoring_allowed=True,
+            symbol="000001.SH",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+
+    assert "akshare" in _ids(plan.forbidden_providers)
+    assert "pytdx_existing_baseline" in _ids(plan.forbidden_providers)
+    assert "provider_forbidden_for_use_case" in plan.reason_codes["akshare"]
+    assert "provider_forbidden_for_use_case" in plan.reason_codes["pytdx_existing_baseline"]
+
+
 def test_market_overview_observation_routes_keep_coinbase_pytdx_and_akshare_non_scoring() -> None:
     coinbase_plan = DataSourceRouter.resolve(
         DataSourceRouteRequest(

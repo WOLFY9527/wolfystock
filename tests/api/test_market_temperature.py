@@ -391,3 +391,100 @@ def test_temperature_confidence_excludes_legacy_sentiment_panel_family() -> None
     assert trust["fallbackInputCount"] >= 1
     assert trust["excludedInputCount"] >= 1
     assert trust["isReliable"] is False
+
+
+def test_temperature_scores_ignore_source_authority_rejected_inputs() -> None:
+    service = MarketOverviewService()
+    base_inputs = {
+        "indices": {
+            "items": [
+                {"symbol": "000001.SH", "value": 4100.0, "changePercent": 0.7, "source": "sina", "freshness": "live", "isFallback": False}
+            ]
+        },
+        "breadth": {
+            "items": [
+                {"symbol": "ADV_RATIO", "value": 61.0, "change": 1.0, "source": "tickflow", "freshness": "live", "isFallback": False},
+                {"symbol": "LIMIT_UP", "value": 48.0, "change": 2.0, "source": "tickflow", "freshness": "live", "isFallback": False},
+                {"symbol": "LIMIT_DOWN", "value": 21.0, "change": -1.0, "source": "tickflow", "freshness": "live", "isFallback": False},
+            ]
+        },
+        "flows": {
+            "items": [
+                {"symbol": "CN_ETF", "value": 15.0, "changePercent": 0.3, "source": "eastmoney", "freshness": "live", "isFallback": False},
+                {"symbol": "NORTHBOUND", "value": 12.0, "changePercent": 0.1, "source": "eastmoney", "freshness": "live", "isFallback": False},
+            ]
+        },
+        "sectors": {
+            "items": [
+                {"symbol": "TECH", "value": 1.0, "changePercent": 0.5, "source": "yahoo", "freshness": "delayed", "isFallback": False},
+                {"symbol": "AI", "value": 1.0, "changePercent": 0.4, "source": "yahoo", "freshness": "delayed", "isFallback": False},
+                {"symbol": "CHIP", "value": 1.0, "changePercent": 0.2, "source": "yahoo", "freshness": "delayed", "isFallback": False},
+            ]
+        },
+        "rates": {
+            "items": [
+                {"symbol": "US10Y", "value": 4.2, "changePercent": -0.2, "source": "treasury", "sourceType": "official_public", "freshness": "cached", "isFallback": False},
+                {"symbol": "VIX", "value": 16.2, "changePercent": -1.1, "source": "fred", "sourceType": "official_public", "freshness": "cached", "isFallback": False},
+                {"symbol": "DR007", "value": 1.7, "changePercent": -0.1, "source": "eastmoney", "freshness": "live", "isFallback": False},
+                {"symbol": "SHIBOR", "value": 1.8, "changePercent": -0.05, "source": "eastmoney", "freshness": "live", "isFallback": False},
+            ]
+        },
+        "fx": {
+            "items": [
+                {"symbol": "DXY", "value": 104.3, "changePercent": -0.4, "source": "yahoo", "freshness": "delayed", "isFallback": False},
+                {"symbol": "USDCNH", "value": 7.2, "changePercent": -0.2, "source": "yahoo", "freshness": "delayed", "isFallback": False},
+                {"symbol": "WTI", "value": 78.0, "changePercent": 0.8, "source": "yahoo", "freshness": "delayed", "isFallback": False},
+                {"symbol": "GOLD", "value": 2360.0, "changePercent": 1.6, "source": "yahoo", "freshness": "delayed", "isFallback": False},
+            ]
+        },
+        "futures": {
+            "items": [
+                {"symbol": "ES", "value": 5238.0, "changePercent": 0.2, "source": "yahoo", "freshness": "delayed", "isFallback": False},
+                {"symbol": "NQ", "value": 18320.0, "changePercent": 0.4, "source": "yahoo", "freshness": "delayed", "isFallback": False},
+                {"symbol": "YM", "value": 39000.0, "changePercent": -0.1, "source": "yahoo", "freshness": "delayed", "isFallback": False},
+            ]
+        },
+        "sentiment": {
+            "items": [
+                {"symbol": "FGI", "value": 60, "change": 1.0, "source": "cnn", "freshness": "cached", "isFallback": False}
+            ]
+        },
+        "crypto": {
+            "items": [
+                {"symbol": "BTC", "value": 87000.0, "changePercent": 1.4, "source": "binance", "freshness": "live", "isFallback": False},
+                {"symbol": "ETH", "value": 3200.0, "changePercent": 1.1, "source": "binance", "freshness": "live", "isFallback": False},
+                {"symbol": "BNB", "value": 610.0, "changePercent": 0.7, "source": "binance", "freshness": "live", "isFallback": False},
+            ]
+        },
+        "fallback_notice": True,
+    }
+    rejected_inputs = copy.deepcopy(base_inputs)
+    rejected_inputs["crypto"]["items"].append(
+        {
+            "symbol": "BTC",
+            "value": 99000.0,
+            "changePercent": 25.0,
+            "source": "coinbase_public",
+            "sourceType": "exchange_public",
+            "freshness": "live",
+            "isFallback": False,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "sourceAuthorityRouteRejected": True,
+            "sourceAuthorityReason": "source_authority_router_rejected",
+            "routeRejectedReasonCodes": [
+                "provider_forbidden_for_use_case",
+                "provider_observation_only",
+                "scoring_not_allowed",
+            ],
+        }
+    )
+
+    baseline_scores = service._compute_market_temperature_scores(
+        service._real_market_temperature_inputs(base_inputs)
+    )
+    rejected_scores = service._compute_market_temperature_scores(
+        service._real_market_temperature_inputs(rejected_inputs)
+    )
+
+    assert rejected_scores == baseline_scores

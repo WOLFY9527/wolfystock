@@ -334,6 +334,61 @@ def test_temperature_input_builder_uses_internal_snapshots_without_public_wrappe
     assert inputs["crypto"]["isFallback"] is True
 
 
+def test_temperature_score_inputs_add_source_authority_diagnostics() -> None:
+    service = MarketOverviewService()
+
+    coinbase_item = service._guard_market_temperature_score_input(
+        {
+            "symbol": "BTC",
+            "value": 87000.0,
+            "changePercent": 1.4,
+            "source": "coinbase_public",
+            "sourceType": "exchange_public",
+            "freshness": "live",
+            "isFallback": False,
+            "isReliable": True,
+            "excluded": False,
+            "confidenceWeight": 1.0,
+        },
+        panel_key="crypto",
+    )
+    proxy_item = service._guard_market_temperature_score_input(
+        {
+            "symbol": "ES",
+            "value": 5238.0,
+            "changePercent": 0.2,
+            "source": "yahoo",
+            "sourceType": "unofficial_public_api",
+            "freshness": "delayed",
+            "isFallback": False,
+            "isReliable": True,
+            "excluded": False,
+            "confidenceWeight": 0.7,
+        },
+        panel_key="futures",
+    )
+
+    assert coinbase_item["sourceAuthorityAllowed"] is False
+    assert coinbase_item["scoreContributionAllowed"] is False
+    assert coinbase_item["sourceAuthorityRouteRejected"] is True
+    assert coinbase_item["sourceAuthorityReason"] == "source_authority_router_rejected"
+    assert "provider_forbidden_for_use_case" in coinbase_item["routeRejectedReasonCodes"]
+    assert coinbase_item["excluded"] is True
+    assert coinbase_item["confidenceWeight"] == 0.0
+    assert coinbase_item["sourceAuthorityRouter"]["diagnosticOnly"] is True
+    assert coinbase_item["sourceAuthorityRouter"]["providerRuntimeCalled"] is False
+    assert coinbase_item["sourceAuthorityRouter"]["networkCallsEnabled"] is False
+    assert coinbase_item["sourceAuthorityRouter"]["request"]["useCase"] == "market_temperature"
+    assert coinbase_item["sourceAuthorityRouter"]["request"]["capability"] == "crypto_ticker"
+    assert coinbase_item["sourceAuthorityRouter"]["request"]["allowNetwork"] is False
+
+    assert proxy_item["sourceAuthorityAllowed"] is False
+    assert proxy_item["scoreContributionAllowed"] is True
+    assert proxy_item["sourceAuthorityRouteRejected"] is False
+    assert proxy_item["sourceAuthorityReason"] == "proxy_context_only"
+    assert proxy_item["routeRejectedReasonCodes"] == []
+
+
 def test_public_rates_method_keeps_public_wrapper_shape() -> None:
     service = MarketOverviewService()
 

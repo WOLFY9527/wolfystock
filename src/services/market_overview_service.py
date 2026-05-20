@@ -22,6 +22,7 @@ from data_provider.coinbase_public_provider import (
 from src.contracts.source_confidence import coerce_source_confidence_contract
 from src.services.cn_provider_health_service import CNProviderHealthService
 from src.services.data_source_router import CapabilityResolver, DataSourceRouteRequest, DataSourceRouter
+from src.services.data_source_router_diagnostics import build_data_source_route_diagnostic_snapshot
 from src.services.execution_log_service import ExecutionLogService
 from src.services.fx_commodities_contracts import FX_COMMODITY_DELAYED_PROXY_SYMBOLS
 from src.services.futures_contracts import list_futures_contracts
@@ -212,6 +213,30 @@ MARKET_OVERVIEW_OBSERVATION_AUTHORITY_TRUST_LEVELS = frozenset(
         "reliable_for_filings_metadata",
     }
 )
+MARKET_TEMPERATURE_SOURCE_AUTHORITY_REJECTED_REASON = "source_authority_router_rejected"
+MARKET_TEMPERATURE_PROXY_CONTEXT_REASON = "proxy_context_only"
+MARKET_TEMPERATURE_PROVIDER_ABSENT_REASON = "provider_absent"
+MARKET_TEMPERATURE_PROXY_CONTEXT_SOURCES = frozenset(
+    {
+        "yahoo",
+        "yfinance",
+        "yfinance_proxy",
+        "yfinance_current_baseline",
+        "yahooquery",
+    }
+)
+MARKET_TEMPERATURE_PROXY_CONTEXT_SOURCE_TYPES = frozenset({"public_proxy", "proxy_public", "unofficial_proxy"})
+MARKET_TEMPERATURE_HK_INDEX_SYMBOLS = frozenset({"HSI", "HSTECH", "HSI.HK", "HSTECH.HK"})
+MARKET_TEMPERATURE_SCORE_DRIVING_SYMBOLS = {
+    "indices": frozenset({"000001.SH", "399001.SZ", "399006.SZ", "000300.SH", "HSI", "HSTECH", "HSI.HK", "HSTECH.HK"}),
+    "breadth": frozenset({"ADV_RATIO", "LIMIT_UP", "LIMIT_DOWN"}),
+    "flows": frozenset({"CN_ETF", "NORTHBOUND"}),
+    "rates": frozenset({"VIX", "US10Y", "DR007", "SHIBOR"}),
+    "fx": frozenset({"DXY", "USDCNH", "WTI", "GOLD"}),
+    "futures": frozenset({"ES", "NQ", "YM", "RTY"}),
+    "sentiment": frozenset({"FGI"}),
+    "crypto": frozenset({"BTC", "ETH", "BNB"}),
+}
 
 
 def _has_valid_market_value(meta: Dict[str, Any]) -> bool:
@@ -5283,7 +5308,10 @@ class MarketOverviewService:
         category = self._category_for_cache_key(key)
         panel = self._with_market_meta(dict(panel), category)
         panel["items"] = [
-            self._with_temperature_input_meta(self._with_item_meta(item, category, panel), category)
+            self._guard_market_temperature_score_input(
+                self._with_temperature_input_meta(self._with_item_meta(item, category, panel), category),
+                panel_key=key,
+            )
             for item in panel.get("items", [])
             if isinstance(item, dict)
         ]
@@ -5301,6 +5329,154 @@ class MarketOverviewService:
             "sourceType": meta.get("sourceType") or reliability.get("sourceType"),
         }
 
+    def _guard_market_temperature_score_input(
+        self,
+        item: Dict[str, Any],
+        *,
+        panel_key: str,
+    ) -> Dict[str, Any]:
+        if not self._is_market_temperature_score_input(panel_key, item):
+            return item
+
+        route_request = self._build_market_temperature_route_request(panel_key, item)
+        route_snapshot = build_data_source_route_diagnostic_snapshot(route_request).to_dict()
+        source = str(item.get("source") or "").strip().lower()
+        source_type = str(item.get("sourceType") or _infer_source_type(source)).strip().lower()
+        source_authority_allowed = bool(source) and source not in {"fallback", "mock", "missing", "unavailable"}
+        source_authority_allowed = bool(source_authority_allowed and not item.get("isFallback") and not item.get("isUnavailable"))
+        source_authority_route_rejected = False
+        source_authority_reason: Optional[str] = None
+        route_rejected_reason_codes: List[str] = []
+        score_contribution_allowed = bool(not item.get("excluded") and float(item.get("confidenceWeight") or 0.0) > 0)
+
+        if not source_authority_allowed:
+            score_contribution_allowed = False
+            source_authority_reason = MARKET_TEMPERATURE_PROVIDER_ABSENT_REASON
+        elif (
+            source in MARKET_TEMPERATURE_PROXY_CONTEXT_SOURCES
+            or source_type in MARKET_TEMPERATURE_PROXY_CONTEXT_SOURCE_TYPES
+        ):
+            source_authority_allowed = False
+            source_authority_reason = MARKET_TEMPERATURE_PROXY_CONTEXT_REASON
+        else:
+            provider_key = self._market_temperature_route_provider_key(source)
+            forbidden_provider_ids = {
+                str(provider.get("providerId") or "").strip().lower()
+                for provider in route_snapshot.get("forbiddenProviders", [])
+                if isinstance(provider, dict)
+            }
+            if provider_key and provider_key in forbidden_provider_ids:
+                source_authority_allowed = False
+                score_contribution_allowed = False
+                source_authority_route_rejected = True
+                source_authority_reason = MARKET_TEMPERATURE_SOURCE_AUTHORITY_REJECTED_REASON
+                route_rejected_reason_codes = list(
+                    route_snapshot.get("reasonCodes", {}).get(provider_key)
+                    or ("provider_not_eligible_for_scoring_route",)
+                )
+
+        normalized = {
+            **item,
+            "sourceAuthorityAllowed": bool(source_authority_allowed),
+            "scoreContributionAllowed": bool(score_contribution_allowed),
+            "sourceAuthorityRouteRejected": bool(source_authority_route_rejected),
+            "sourceAuthorityReason": source_authority_reason,
+            "routeRejectedReasonCodes": list(dict.fromkeys(route_rejected_reason_codes)),
+            "sourceAuthorityRouter": route_snapshot,
+        }
+        if source_authority_route_rejected:
+            normalized["isReliable"] = False
+            normalized["excluded"] = True
+            normalized["excludeReason"] = MARKET_TEMPERATURE_SOURCE_AUTHORITY_REJECTED_REASON
+            normalized["confidenceWeight"] = 0.0
+        return normalized
+
+    @staticmethod
+    def _is_market_temperature_score_input(panel_key: str, item: Mapping[str, Any]) -> bool:
+        if panel_key == "sectors":
+            return _has_valid_market_value(dict(item))
+        score_symbols = MARKET_TEMPERATURE_SCORE_DRIVING_SYMBOLS.get(panel_key)
+        if not score_symbols:
+            return False
+        symbol = str(item.get("symbol") or item.get("key") or "").strip().upper()
+        return symbol in score_symbols
+
+    def _build_market_temperature_route_request(
+        self,
+        panel_key: str,
+        item: Mapping[str, Any],
+    ) -> DataSourceRouteRequest:
+        symbol = str(item.get("symbol") or item.get("key") or "").strip() or None
+        freshness_need = str(item.get("freshness") or "").strip().lower() or "live"
+        market = "US"
+        asset_type = "equity"
+        capability = "quote"
+        product_id = None
+
+        if panel_key == "indices":
+            market = "HK" if symbol in MARKET_TEMPERATURE_HK_INDEX_SYMBOLS else "CN"
+            asset_type = "equity_index"
+        elif panel_key in {"breadth", "flows"}:
+            market = "CN"
+            asset_type = "equity"
+            capability = "breadth"
+        elif panel_key == "rates":
+            if symbol == "VIX":
+                asset_type = "volatility"
+                capability = "volatility"
+            elif symbol in {"DR007", "SHIBOR"}:
+                market = "CN"
+                asset_type = "macro_rate"
+                capability = "macro_rate"
+            else:
+                asset_type = "macro_rate"
+                capability = "macro_rate"
+        elif panel_key == "fx":
+            if symbol in {"DXY", "USDCNH"}:
+                market = "forex"
+                asset_type = "forex"
+            else:
+                market = "global"
+                asset_type = "commodity"
+        elif panel_key == "futures":
+            asset_type = "equity_index"
+        elif panel_key == "sentiment":
+            asset_type = "sentiment"
+            capability = "sentiment"
+        elif panel_key == "crypto":
+            market = "crypto"
+            asset_type = "crypto"
+            capability = "crypto_ticker"
+            product_id = f"{symbol}-USD" if symbol else None
+
+        return DataSourceRouteRequest(
+            market=market,
+            asset_type=asset_type,
+            use_case="market_temperature",
+            capability=capability,
+            freshness_need=freshness_need,
+            scoring_allowed=True,
+            symbol=symbol,
+            product_id=product_id,
+            allow_network=False,
+            reproducibility_required=False,
+        )
+
+    @staticmethod
+    def _market_temperature_route_provider_key(source: str) -> Optional[str]:
+        if source in {"akshare", "akshare_existing_baseline"}:
+            return "akshare"
+        if source in {"pytdx", "pytdx_existing_baseline"}:
+            return "pytdx_existing_baseline"
+        return source or None
+
+    def _market_temperature_input_confidence(self, meta: Dict[str, Any], category: str = "") -> float:
+        if bool(meta.get("sourceAuthorityRouteRejected")):
+            return 0.0
+        if meta.get("sourceAuthorityAllowed") is False and meta.get("scoreContributionAllowed") is False:
+            return 0.0
+        return self._market_data_confidence(meta, category)
+
     def _summarize_market_temperature_confidence(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         confidences: List[float] = []
         reliable_count = 0
@@ -5315,7 +5491,10 @@ class MarketOverviewService:
                 panel_items = []
             if panel_items:
                 for item in panel_items:
-                    confidence = self._market_data_confidence(item if isinstance(item, dict) else {}, self._category_for_cache_key(key))
+                    confidence = self._market_temperature_input_confidence(
+                        item if isinstance(item, dict) else {},
+                        self._category_for_cache_key(key),
+                    )
                     confidences.append(confidence)
                     if confidence > 0:
                         reliable_count += 1
@@ -5324,7 +5503,10 @@ class MarketOverviewService:
                         excluded_count += 1
                 continue
             if isinstance(panel, dict):
-                confidence = self._market_data_confidence(panel, self._category_for_cache_key(key))
+                confidence = self._market_temperature_input_confidence(
+                    panel,
+                    self._category_for_cache_key(key),
+                )
                 confidences.append(confidence)
                 if confidence > 0:
                     reliable_count += 1
@@ -5359,12 +5541,12 @@ class MarketOverviewService:
             category = self._category_for_cache_key(key)
             if panel_items:
                 if any(
-                    isinstance(item, dict) and self._market_data_confidence(item, category) > 0
+                    isinstance(item, dict) and self._market_temperature_input_confidence(item, category) > 0
                     for item in panel_items
                 ):
                     reliable_panel_count += 1
                 continue
-            if self._market_data_confidence(panel, category) > 0:
+            if self._market_temperature_input_confidence(panel, category) > 0:
                 reliable_panel_count += 1
 
         reliable_count = int(trust.get("reliableInputCount") or 0)
@@ -5454,14 +5636,14 @@ class MarketOverviewService:
                         continue
                     if self._is_trust_gate_stale_input(item):
                         degradation_reasons.append("stale_source")
-                    if self._market_data_confidence(item, category) > 0:
+                    if self._market_temperature_input_confidence(item, category) > 0:
                         source_payloads.append(dict(item))
                     else:
                         degraded_payloads.append(dict(item))
                 continue
             if self._is_trust_gate_stale_input(panel):
                 degradation_reasons.append("stale_source")
-            if self._market_data_confidence(panel, category) > 0:
+            if self._market_temperature_input_confidence(panel, category) > 0:
                 source_payloads.append(dict(panel))
             else:
                 degraded_payloads.append(dict(panel))
@@ -5487,7 +5669,10 @@ class MarketOverviewService:
             items = panel.get("items") if isinstance(panel.get("items"), list) else []
             next_panel["items"] = [
                 item for item in items
-                if isinstance(item, dict) and self._market_data_confidence(item, self._category_for_cache_key(key)) > 0
+                if isinstance(item, dict) and self._market_temperature_input_confidence(
+                    item,
+                    self._category_for_cache_key(key),
+                ) > 0
             ]
             filtered[key] = next_panel
         return filtered
