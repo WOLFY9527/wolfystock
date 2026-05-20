@@ -66,7 +66,15 @@ describe('liquidityMonitorApi', () => {
               signal: 0.63,
               impact: 0.58,
               source: 'treasury',
+              source_tier: 'official_public',
+              trust_level: 'reliable',
+              freshness: 'delayed',
+              observation_only: false,
               score_contribution_allowed: true,
+              included_in_score: true,
+              proxy_only: false,
+              discount_reasons: ['stale', ''],
+              degradation_reason: 'delayed_source',
             },
           ],
           counter_evidence: [
@@ -106,7 +114,19 @@ describe('liquidityMonitorApi', () => {
     expect(payload.indicators[0].includedInScore).toBe(true);
     expect(payload.liquidityImpulseSynthesis?.liquidityImpulse).toBe('contracting_liquidity');
     expect(payload.liquidityImpulseSynthesis?.dominantDrivers[0].source).toBe('treasury');
+    expect(payload.liquidityImpulseSynthesis?.dominantDrivers[0]).toMatchObject({
+      sourceTier: 'official_public',
+      trustLevel: 'reliable',
+      freshness: 'delayed',
+      observationOnly: false,
+      scoreContributionAllowed: true,
+      includedInScore: true,
+      proxyOnly: false,
+      discountReasons: ['stale'],
+      degradationReason: 'delayed_source',
+    });
     expect(payload.liquidityImpulseSynthesis?.counterEvidence[0].reason).toBe('conflicts_with_primary_regime');
+    expect(payload.liquidityImpulseSynthesis?.counterEvidence[0].scoreContributionAllowed).toBeUndefined();
     expect(payload.sourceMetadata.externalProviderCalls).toBe(false);
   });
 });

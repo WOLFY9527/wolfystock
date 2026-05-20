@@ -3,6 +3,7 @@ import type { MarketDataMeta, MarketOverviewPanel, MarketOverviewItem, MarketPro
 import { toCamelCase } from './utils';
 import { API_BASE_URL } from '../utils/constants';
 import { buildAbsoluteApiUrl, joinApiPath } from './path';
+import { normalizeMarketIntelligenceEvidenceItem } from './marketIntelligenceEvidence';
 
 type MarketSnapshotItem = {
   symbol?: string;
@@ -347,28 +348,7 @@ function normalizeMarketTemperatureScore(score?: Partial<MarketTemperatureScore>
 function normalizeMarketRegimeEvidenceItem(
   item?: Partial<MarketRegimeSynthesisEvidenceItem> | null,
 ): MarketRegimeSynthesisEvidenceItem | null {
-  if (!item?.key || !item?.label) {
-    return null;
-  }
-  return {
-    key: item.key,
-    label: item.label,
-    pillar: item.pillar,
-    direction: item.direction,
-    signal: item.signal,
-    weight: item.weight,
-    impact: item.impact,
-    expectedDirection: item.expectedDirection,
-    reason: item.reason,
-    source: item.source,
-    sourceTier: item.sourceTier,
-    trustLevel: item.trustLevel,
-    freshness: item.freshness,
-    observationOnly: item.observationOnly,
-    scoreContributionAllowed: item.scoreContributionAllowed,
-    discountReasons: Array.isArray(item.discountReasons) ? item.discountReasons.filter(Boolean) : [],
-    degradationReason: item.degradationReason,
-  };
+  return normalizeMarketIntelligenceEvidenceItem<MarketRegimeSynthesisEvidenceItem>(item, { requireLabel: true });
 }
 
 function normalizeMarketRegimeSynthesis(

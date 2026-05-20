@@ -1,4 +1,5 @@
 import apiClient from './index';
+import { normalizeMarketIntelligenceEvidenceItem } from './marketIntelligenceEvidence';
 import { toCamelCase } from './utils';
 
 export type LiquidityMonitorFreshness = 'live' | 'cached' | 'delayed' | 'stale' | 'fallback' | 'mock' | 'error' | 'unavailable';
@@ -90,31 +91,12 @@ export interface LiquidityMonitorResponse {
 function normalizeLiquidityImpulseEvidenceItem(
   item?: Partial<LiquidityImpulseSynthesisEvidenceItem> | null,
 ): LiquidityImpulseSynthesisEvidenceItem | null {
-  if (!item?.key) {
-    return null;
-  }
-
-  return {
-    key: item.key,
-    label: item.label,
-    pillar: item.pillar,
-    direction: item.direction,
-    signal: item.signal,
-    weight: item.weight,
-    impact: item.impact,
-    expectedDirection: item.expectedDirection,
-    reason: item.reason,
-    source: item.source,
-    sourceTier: item.sourceTier,
-    trustLevel: item.trustLevel,
-    freshness: item.freshness,
-    observationOnly: item.observationOnly,
-    scoreContributionAllowed: item.scoreContributionAllowed,
-    includedInScore: item.includedInScore,
-    proxyOnly: item.proxyOnly,
-    discountReasons: Array.isArray(item.discountReasons) ? item.discountReasons.filter(Boolean) : [],
-    degradationReason: item.degradationReason,
-  };
+  return normalizeMarketIntelligenceEvidenceItem<LiquidityImpulseSynthesisEvidenceItem>(item, {
+    additionalFields: (evidenceItem) => ({
+      includedInScore: evidenceItem.includedInScore,
+      proxyOnly: evidenceItem.proxyOnly,
+    }),
+  });
 }
 
 function normalizeLiquidityImpulseSynthesis(
