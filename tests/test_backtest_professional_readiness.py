@@ -86,6 +86,113 @@ class BacktestProfessionalReadinessTestCase(unittest.TestCase):
         self.assertIn("cost_model", readiness["categories"])
         self.assertIn("reproducibility", readiness["categories"])
 
+    def test_missing_adjusted_data_evidence_blocks_professional_readiness(self) -> None:
+        readiness = build_backtest_professional_readiness(
+            data_quality={
+                "authority_status": "allowed",
+                "authority_source_type": "cache_snapshot",
+                "adjustment_mode": "unknown",
+                "dividends_handled": "handled",
+                "splits_handled": "handled",
+            }
+        ).to_dict()
+
+        adjusted = readiness["categories"]["adjusted_data"]
+        self.assertFalse(readiness["professional_quant_ready"])
+        self.assertEqual(readiness["adjusted_data_state"], "unknown_or_mixed")
+        self.assertFalse(adjusted["ready"])
+        self.assertIn("adjusted_ohlc_unavailable", adjusted["blockers"])
+
+    def test_missing_corporate_action_evidence_blocks_professional_readiness(self) -> None:
+        readiness = build_backtest_professional_readiness(
+            data_quality={
+                "authority_status": "allowed",
+                "authority_source_type": "cache_snapshot",
+                "adjustment_mode": "adjusted_ohlc",
+                "return_basis": "adjusted_total_return",
+                "dividends_handled": "unknown",
+                "splits_handled": "unknown",
+            }
+        ).to_dict()
+
+        corporate = readiness["categories"]["corporate_actions"]
+        self.assertFalse(readiness["professional_quant_ready"])
+        self.assertEqual(readiness["corporate_action_state"], "not_ready")
+        self.assertFalse(corporate["ready"])
+        self.assertIn("split_policy_unverified", corporate["blockers"])
+        self.assertIn("dividend_policy_unverified", corporate["blockers"])
+
+    def test_missing_calendar_and_execution_realism_evidence_blocks_readiness(self) -> None:
+        readiness = build_backtest_professional_readiness(
+            execution_assumptions={
+                "fill_timing": "next_bar_open",
+                "fill_price": "open",
+                "volume_participation_limit": None,
+                "limit_up_down_handling": "not_modeled",
+                "halt_handling": "not_modeled",
+            }
+        ).to_dict()
+
+        calendar = readiness["categories"]["trading_calendar"]
+        fill_model = readiness["categories"]["fill_model"]
+        self.assertFalse(readiness["professional_quant_ready"])
+        self.assertEqual(readiness["trading_calendar_state"], "available_bars_only")
+        self.assertFalse(calendar["ready"])
+        self.assertIn("holiday_calendar_not_modelled", calendar["blockers"])
+        self.assertFalse(fill_model["ready"])
+        self.assertIn("partial_fill_model_missing", fill_model["blockers"])
+        self.assertIn("limit_halt_handling_not_modelled", fill_model["blockers"])
+
+    def test_proxy_or_degraded_source_blocks_reproducibility_readiness(self) -> None:
+        readiness = build_backtest_professional_readiness(
+            data_quality={
+                "source": "yfinance",
+                "authority_status": "degraded_fill_only",
+                "authority_source_type": "unofficial_proxy",
+                "authority_reason_codes": ["proxy_source_not_reproducible"],
+            }
+        ).to_dict()
+
+        reproducibility = readiness["categories"]["reproducibility"]
+        self.assertFalse(readiness["professional_quant_ready"])
+        self.assertEqual(readiness["reproducibility_state"], "degraded_source_authority")
+        self.assertFalse(reproducibility["ready"])
+        self.assertIn("proxy_source_not_reproducible", reproducibility["blockers"])
+
+    def test_explicit_positive_evidence_improves_individual_labels_without_final_ready(self) -> None:
+        readiness = build_backtest_professional_readiness(
+            data_quality={
+                "authority_status": "allowed",
+                "authority_source_type": "cache_snapshot",
+                "authority_reason_codes": [],
+                "adjustment_mode": "adjusted_ohlc",
+                "return_basis": "adjusted_total_return",
+                "dividends_handled": "handled",
+                "splits_handled": "handled",
+            },
+            execution_assumptions={
+                "trading_calendar": "XNYS",
+                "holiday_calendar": "modeled",
+                "half_day_policy": "modeled",
+                "volume_participation_limit": 0.1,
+                "partial_fill_supported": True,
+                "no_fill_supported": True,
+                "limit_up_down_handling": "modeled",
+                "halt_handling": "modeled",
+            },
+        ).to_dict()
+
+        self.assertFalse(readiness["professional_quant_ready"])
+        self.assertEqual(readiness["adjusted_data_state"], "adjusted_ohlc")
+        self.assertTrue(readiness["categories"]["adjusted_data"]["ready"])
+        self.assertEqual(readiness["corporate_action_state"], "explicit")
+        self.assertTrue(readiness["categories"]["corporate_actions"]["ready"])
+        self.assertEqual(readiness["trading_calendar_state"], "explicit_market_calendar")
+        self.assertTrue(readiness["categories"]["trading_calendar"]["ready"])
+        self.assertEqual(readiness["fill_model"], "explicit_capacity_and_fallback_controls")
+        self.assertTrue(readiness["categories"]["fill_model"]["ready"])
+        self.assertFalse(readiness["categories"]["cost_model"]["ready"])
+
     def test_single_symbol_run_and_readback_expose_additive_readiness_without_metric_changes(self) -> None:
         service = RuleBacktestService(self.db)
 
@@ -125,6 +232,8 @@ class BacktestProfessionalReadinessTestCase(unittest.TestCase):
         self.assertEqual(response["antiLeakageState"], "basic_bar_close_to_next_open")
         self.assertEqual(response["reproducibilityState"], "partial_without_dataset_lineage")
         self.assertEqual(response["universeBiasState"], "not_applicable_single_symbol")
+        self.assertIn("adjusted_ohlc_unavailable", response["professionalReadiness"]["categories"]["adjusted_data"]["blockers"])
+        self.assertIn("same_dataset_lineage_unverified", response["professionalReadiness"]["categories"]["anti_leakage"]["blockers"])
         self.assertEqual(detail["professionalReadiness"]["overall_state"], "research_prototype")
         self.assertFalse(detail["professionalReadiness"]["professional_quant_ready"])
         self.assertEqual(status["professionalReadiness"]["overall_state"], "research_prototype")

@@ -1046,6 +1046,11 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(data_quality["authority_source_type"], "unofficial_proxy")
         self.assertIn("proxy_source_not_reproducible", data_quality["authority_reason_codes"])
         self.assertTrue(any(warning["code"] == "backtest_authority_degraded" for warning in data_quality["warnings"]))
+        self.assertEqual(response["professionalReadiness"]["reproducibility_state"], "degraded_source_authority")
+        self.assertIn(
+            "proxy_source_not_reproducible",
+            response["professionalReadiness"]["categories"]["reproducibility"]["blockers"],
+        )
 
     def test_rule_backtest_data_quality_reports_missing_bars_and_anomalies(self) -> None:
         service = RuleBacktestService(self.db)

@@ -983,7 +983,15 @@ class RuleBacktestService:
             artifact_availability=artifact_availability,
             trade_rows_present=bool(trade_run_ids),
         )
-        readiness_payload = self._build_single_symbol_professional_readiness_payload()
+        readiness_payload = self._build_single_symbol_professional_readiness_payload(
+            data_quality=summary.get("data_quality") if isinstance(summary.get("data_quality"), dict) else None,
+            execution_assumptions=(
+                summary.get("execution_assumptions")
+                if isinstance(summary.get("execution_assumptions"), dict)
+                else None
+            ),
+            execution_model=summary.get("execution_model") if isinstance(summary.get("execution_model"), dict) else None,
+        )
         return self._build_run_status_payload(
             row=row,
             summary=summary,
@@ -1677,8 +1685,23 @@ class RuleBacktestService:
         return "unknown"
 
     @staticmethod
-    def _build_single_symbol_professional_readiness_payload() -> Dict[str, Any]:
-        return build_backtest_professional_readiness().to_dict()
+    def _build_single_symbol_professional_readiness_payload(
+        *,
+        data_quality: Optional[Dict[str, Any]] = None,
+        execution_assumptions: Optional[Dict[str, Any]] = None,
+        execution_model: Optional[Dict[str, Any]] = None,
+        result_authority: Optional[Dict[str, Any]] = None,
+        cost_capacity_diagnostics: Optional[Dict[str, Any]] = None,
+        dataset_version: str = "unknown",
+    ) -> Dict[str, Any]:
+        return build_backtest_professional_readiness(
+            data_quality=data_quality,
+            execution_assumptions=execution_assumptions,
+            execution_model=execution_model,
+            result_authority=result_authority,
+            cost_capacity_diagnostics=cost_capacity_diagnostics,
+            dataset_version=dataset_version,
+        ).to_dict()
 
     @staticmethod
     def _build_universe_professional_readiness_payload(
@@ -10303,7 +10326,12 @@ class RuleBacktestService:
             trade_rows_present=bool(trade_rows_present),
         )
         summary["readback_integrity"] = dict(readback_integrity)
-        professional_readiness = self._build_single_symbol_professional_readiness_payload()
+        professional_readiness = self._build_single_symbol_professional_readiness_payload(
+            data_quality=data_quality,
+            execution_assumptions=execution_assumptions,
+            execution_model=execution_model,
+            result_authority=result_authority,
+        )
         return {
             "id": row.id,
             "code": row.code,
