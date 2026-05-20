@@ -328,6 +328,9 @@ def test_market_overview_liquidity_and_degraded_temperature_stay_truthful() -> N
     assert temperature_payload["scoreCap"] <= 0.4
     assert temperature_payload["scores"]["overall"]["label"] == "数据不足"
     assert temperature_payload["evidenceSnapshot"]["degradationReason"] == "provider_unavailable"
+    assert temperature_payload["marketRegimeSynthesis"]["primaryRegime"] == "data_insufficient"
+    assert temperature_payload["marketRegimeSynthesis"]["confidenceLabel"] == "insufficient"
+    assert temperature_payload["marketRegimeSynthesis"]["dataGaps"]
 
     market_cache.clear()
     MarketOverviewService._market_cache.clear()
@@ -372,6 +375,9 @@ def test_market_overview_liquidity_and_degraded_temperature_stay_truthful() -> N
     assert degraded_temperature_payload["evidenceSnapshot"]["coverage"] < 0.25
     assert degraded_temperature_payload["evidenceSnapshot"]["degradationReason"] == "partial_coverage"
     assert degraded_temperature_payload["scores"]["overall"]["label"] == "数据不足"
+    assert degraded_temperature_payload["marketRegimeSynthesis"]["primaryRegime"] == "data_insufficient"
+    assert degraded_temperature_payload["marketRegimeSynthesis"]["confidence"] <= 0.4
+    assert degraded_temperature_payload["marketRegimeSynthesis"]["dataGaps"]
 
     market_cache.clear()
     MarketOverviewService._market_cache.clear()

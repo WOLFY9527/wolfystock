@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
@@ -16,6 +17,156 @@ from src.services.market_overview_service import (
     classify_market_payload_reliability,
     get_freshness_status,
 )
+
+
+def _regime_ready_temperature_inputs(*, proxy_dxy: bool = True, observation_only_btc: bool = True) -> dict:
+    dxy_source_type = "unofficial_proxy" if proxy_dxy else "official_public"
+    dxy_trust_level = "usable_with_caution" if proxy_dxy else "high"
+    dxy_freshness = "stale" if proxy_dxy else "live"
+    dxy_source = "yfinance_proxy" if proxy_dxy else "fred"
+    dxy_reason = "proxy_context_only" if proxy_dxy else None
+    btc_score_allowed = not observation_only_btc
+    btc_observation_only = observation_only_btc
+    btc_reason = "source_authority_router_rejected" if observation_only_btc else None
+
+    return {
+        "indices": {
+            "items": [
+                {
+                    "symbol": "HSI",
+                    "label": "Hang Seng",
+                    "value": 17820.0,
+                    "changePercent": -1.2,
+                    "source": "sina",
+                    "sourceType": "official_public",
+                    "trustLevel": "high",
+                    "freshness": "live",
+                    "scoreContributionAllowed": True,
+                }
+            ]
+        },
+        "breadth": {
+            "items": [
+                {
+                    "symbol": "ADV_RATIO",
+                    "label": "Advance Ratio",
+                    "value": 38.0,
+                    "source": "tickflow",
+                    "sourceType": "official_public",
+                    "trustLevel": "high",
+                    "freshness": "live",
+                    "scoreContributionAllowed": True,
+                }
+            ]
+        },
+        "rates": {
+            "items": [
+                {
+                    "symbol": "US10Y",
+                    "label": "US 10Y",
+                    "value": 4.42,
+                    "changePercent": 0.8,
+                    "source": "treasury",
+                    "sourceType": "official_public",
+                    "trustLevel": "high",
+                    "freshness": "cached",
+                    "scoreContributionAllowed": True,
+                },
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 21.3,
+                    "changePercent": 5.2,
+                    "source": "fred",
+                    "sourceType": "official_public",
+                    "trustLevel": "high",
+                    "freshness": "cached",
+                    "scoreContributionAllowed": True,
+                },
+            ]
+        },
+        "fx": {
+            "items": [
+                {
+                    "symbol": "DXY",
+                    "label": "DXY",
+                    "value": 105.4,
+                    "changePercent": 0.6,
+                    "source": dxy_source,
+                    "sourceType": dxy_source_type,
+                    "trustLevel": dxy_trust_level,
+                    "freshness": dxy_freshness,
+                    "scoreContributionAllowed": True,
+                    "degradationReason": dxy_reason,
+                }
+            ]
+        },
+        "futures": {
+            "items": [
+                {
+                    "symbol": "ES",
+                    "label": "E-mini S&P",
+                    "value": 5250.0,
+                    "changePercent": -0.9,
+                    "source": "cme",
+                    "sourceType": "exchange_public",
+                    "trustLevel": "high",
+                    "freshness": "live",
+                    "scoreContributionAllowed": True,
+                },
+                {
+                    "symbol": "NQ",
+                    "label": "Nasdaq Futures",
+                    "value": 18250.0,
+                    "changePercent": -1.2,
+                    "source": "cme",
+                    "sourceType": "exchange_public",
+                    "trustLevel": "high",
+                    "freshness": "live",
+                    "scoreContributionAllowed": True,
+                },
+                {
+                    "symbol": "RTY",
+                    "label": "Russell Futures",
+                    "value": 2060.0,
+                    "changePercent": -1.5,
+                    "source": "cme",
+                    "sourceType": "exchange_public",
+                    "trustLevel": "high",
+                    "freshness": "live",
+                    "scoreContributionAllowed": True,
+                },
+            ]
+        },
+        "crypto": {
+            "items": [
+                {
+                    "symbol": "BTC",
+                    "label": "Bitcoin",
+                    "value": 64000.0,
+                    "changePercent": -3.1,
+                    "source": "coinbase_public" if observation_only_btc else "binance",
+                    "sourceType": "exchange_public",
+                    "trustLevel": "high",
+                    "freshness": "live",
+                    "observationOnly": btc_observation_only,
+                    "scoreContributionAllowed": btc_score_allowed,
+                    "degradationReason": btc_reason,
+                },
+                {
+                    "symbol": "ETH",
+                    "label": "Ethereum",
+                    "value": 3150.0,
+                    "changePercent": -2.6,
+                    "source": "binance",
+                    "sourceType": "exchange_public",
+                    "trustLevel": "high",
+                    "freshness": "live",
+                    "scoreContributionAllowed": True,
+                },
+            ]
+        },
+    }
 
 
 class MarketTemperatureApiTestCase(unittest.TestCase):
@@ -35,6 +186,28 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
                 "macroPressure": {"value": 58, "label": "中性偏高", "trend": "rising", "description": "利率压力。"},
                 "liquidity": {"value": 52, "label": "中性", "trend": "stable", "description": "资金平稳。"},
             },
+            "marketRegimeSynthesis": {
+                "primaryRegime": "risk_on_liquidity_expansion",
+                "secondaryRegimes": ["soft_landing_disinflation"],
+                "regimeScores": {"risk_on_liquidity_expansion": 0.72},
+                "riskAppetite": 0.6,
+                "ratesPressure": -0.1,
+                "dollarPressure": -0.2,
+                "volatilityStress": -0.4,
+                "liquidityImpulse": 0.3,
+                "cryptoRiskBeta": 0.5,
+                "breadthHealth": 0.2,
+                "chinaRiskAppetite": 0.1,
+                "rotationQuality": 0.0,
+                "confidence": 0.66,
+                "confidenceLabel": "medium",
+                "topDrivers": [],
+                "counterEvidence": [],
+                "dataGaps": [],
+                "narrativeBullets": ["Risk appetite improving."],
+                "evidenceQuality": {"discountedEvidenceCount": 0},
+                "notInvestmentAdvice": True,
+            },
         }
 
         with patch("api.v1.endpoints.market.MarketOverviewService", return_value=service):
@@ -43,6 +216,8 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertEqual(payload["source"], "computed")
         self.assertTrue(payload["updatedAt"])
         self.assertEqual(set(payload["scores"].keys()), {"overall", "usRiskAppetite", "cnMoneyEffect", "macroPressure", "liquidity"})
+        self.assertIn("marketRegimeSynthesis", payload)
+        self.assertEqual(payload["marketRegimeSynthesis"]["primaryRegime"], "risk_on_liquidity_expansion")
         for score in payload["scores"].values():
             self.assertGreaterEqual(score["value"], 0)
             self.assertLessEqual(score["value"], 100)
@@ -85,6 +260,118 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertFalse(payload["isReliable"])
         self.assertEqual(payload["scores"]["overall"]["label"], "数据不足")
         self.assertNotIn(payload["scores"]["overall"]["label"], {"偏暖", "过热"})
+
+    def test_market_temperature_exposes_additive_market_regime_synthesis_payload(self) -> None:
+        service = MarketOverviewService()
+
+        with patch.object(service, "_build_market_temperature_inputs", return_value=_regime_ready_temperature_inputs()):
+            payload = service.get_market_temperature()
+
+        self.assertIn("marketRegimeSynthesis", payload)
+        self.assertIn("scores", payload)
+        self.assertIn("source", payload)
+        self.assertIn("updatedAt", payload)
+        self.assertIn("providerHealth", payload)
+        self.assertIn("evidenceSnapshot", payload)
+        self.assertIn("overall", payload["scores"])
+        self.assertTrue(payload["scores"]["overall"]["label"])
+
+        synthesis = payload["marketRegimeSynthesis"]
+        self.assertEqual(
+            set(synthesis),
+            {
+                "primaryRegime",
+                "secondaryRegimes",
+                "regimeScores",
+                "liquidityImpulse",
+                "riskAppetite",
+                "ratesPressure",
+                "dollarPressure",
+                "volatilityStress",
+                "cryptoRiskBeta",
+                "breadthHealth",
+                "chinaRiskAppetite",
+                "rotationQuality",
+                "confidence",
+                "confidenceLabel",
+                "topDrivers",
+                "counterEvidence",
+                "dataGaps",
+                "narrativeBullets",
+                "evidenceQuality",
+                "notInvestmentAdvice",
+            },
+        )
+        self.assertIsInstance(synthesis["secondaryRegimes"], list)
+        self.assertIsInstance(synthesis["regimeScores"], dict)
+        self.assertIsInstance(synthesis["topDrivers"], list)
+        self.assertIsInstance(synthesis["counterEvidence"], list)
+        self.assertIsInstance(synthesis["dataGaps"], list)
+        self.assertIsInstance(synthesis["narrativeBullets"], list)
+        self.assertIsInstance(synthesis["evidenceQuality"], dict)
+
+        serialized = json.dumps(synthesis, ensure_ascii=False, sort_keys=True)
+        for forbidden in ("rawPayload", "providerPayload", "raw_payload", "provider_payload"):
+            self.assertNotIn(forbidden, serialized)
+
+    def test_low_coverage_temperature_synthesis_stays_data_insufficient(self) -> None:
+        service = MarketOverviewService()
+        inputs = copy.deepcopy(service._fallback_market_temperature_inputs())
+
+        for key, source in (("indices", "sina"), ("rates", "sina"), ("crypto", "binance")):
+            panel = inputs[key]
+            panel["source"] = source
+            panel["sourceLabel"] = "实时数据"
+            panel["fallbackUsed"] = False
+            panel["isFallback"] = False
+            panel["freshness"] = "live"
+            for idx, item in enumerate(panel.get("items", [])):
+                if idx != 0:
+                    continue
+                item["source"] = source
+                item["sourceLabel"] = "实时数据"
+                item["fallbackUsed"] = False
+                item["isFallback"] = False
+                item["freshness"] = "live"
+
+        with patch.object(service, "_build_market_temperature_inputs", return_value=inputs):
+            payload = service.get_market_temperature()
+
+        synthesis = payload["marketRegimeSynthesis"]
+        self.assertEqual(payload["scores"]["overall"]["label"], "数据不足")
+        self.assertLess(payload["confidence"], 0.25)
+        self.assertEqual(synthesis["primaryRegime"], "data_insufficient")
+        self.assertEqual(synthesis["confidenceLabel"], "insufficient")
+        self.assertTrue(synthesis["dataGaps"])
+        self.assertLessEqual(synthesis["confidence"], 0.4)
+
+    def test_proxy_stale_and_observation_only_inputs_stay_discounted_in_temperature_synthesis(self) -> None:
+        service = MarketOverviewService()
+
+        with patch.object(service, "_build_market_temperature_inputs", return_value=_regime_ready_temperature_inputs(proxy_dxy=False, observation_only_btc=False)):
+            official_payload = service.get_market_temperature()
+
+        MarketOverviewService._market_cache.clear()
+        MarketOverviewService._market_data_cache.clear()
+
+        with patch.object(service, "_build_market_temperature_inputs", return_value=_regime_ready_temperature_inputs(proxy_dxy=True, observation_only_btc=True)):
+            discounted_payload = service.get_market_temperature()
+
+        official_synthesis = official_payload["marketRegimeSynthesis"]
+        discounted_synthesis = discounted_payload["marketRegimeSynthesis"]
+
+        self.assertEqual(official_synthesis["primaryRegime"], discounted_synthesis["primaryRegime"])
+        self.assertLess(discounted_synthesis["confidence"], official_synthesis["confidence"])
+        self.assertGreater(
+            discounted_synthesis["evidenceQuality"]["discountedEvidenceCount"],
+            official_synthesis["evidenceQuality"]["discountedEvidenceCount"],
+        )
+        self.assertTrue(
+            any(gap["key"] == "crypto:BTC" for gap in discounted_synthesis["dataGaps"])
+        )
+        self.assertTrue(
+            all(driver["key"] != "crypto:BTC" for driver in discounted_synthesis["topDrivers"])
+        )
 
     def test_mixed_input_confidence_averages_item_level_sources(self) -> None:
         service = MarketOverviewService()

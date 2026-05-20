@@ -296,8 +296,10 @@ def test_public_temperature_and_briefing_shapes_do_not_leak_the_shared_input_sna
     assert build_inputs.call_count == 1
     assert "temperatureInputSnapshot" not in temperature_payload
     assert "temperatureInputSnapshot" not in briefing_payload
-    assert {"source", "updatedAt", "scores", "confidence", "isReliable", "fallbackUsed", "providerHealth", "evidenceSnapshot"}.issubset(temperature_payload)
+    assert {"source", "updatedAt", "scores", "marketRegimeSynthesis", "confidence", "isReliable", "fallbackUsed", "providerHealth", "evidenceSnapshot"}.issubset(temperature_payload)
     assert {"source", "updatedAt", "items", "confidence", "isReliable", "fallbackUsed", "providerHealth", "evidenceSnapshot"}.issubset(briefing_payload)
+    assert temperature_payload["marketRegimeSynthesis"]["notInvestmentAdvice"] is True
+    assert "primaryRegime" in temperature_payload["marketRegimeSynthesis"]
 
 
 def test_temperature_input_builder_uses_internal_snapshots_without_public_wrapper_side_effects() -> None:

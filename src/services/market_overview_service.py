@@ -854,6 +854,7 @@ class MarketOverviewService:
                 "source": source,
                 "updatedAt": _now_iso(),
                 "scores": scores,
+                "marketRegimeSynthesis": self._build_market_regime_synthesis_payload(inputs),
                 **trust,
             }
             if not trust["isReliable"]:
@@ -877,6 +878,7 @@ class MarketOverviewService:
                 "source": "fallback",
                 "updatedAt": _now_iso(),
                 "scores": self._insufficient_market_temperature_scores(),
+                "marketRegimeSynthesis": self._build_market_regime_synthesis_payload(inputs),
                 "warning": INSUFFICIENT_MARKET_DATA_WARNING,
                 "fallbackUsed": True,
                 "isFallback": True,
