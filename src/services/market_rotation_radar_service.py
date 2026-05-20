@@ -287,6 +287,13 @@ class MarketRotationRadarService:
             for theme in THEME_BASKETS
         ]
         themes = [self._annotate_ranking_quarantine(theme) for theme in themes]
+        themes = [
+            self._annotate_signal_taxonomy(
+                theme,
+                quote_source_authority_allowed=bool(quote_provider_metadata.get("sourceAuthorityAllowed")),
+            )
+            for theme in themes
+        ]
         themes.sort(key=lambda item: (item["rotationScore"], item["confidence"]), reverse=True)
         live_theme_count = sum(1 for theme in themes if not theme["isFallback"] and not theme["isStale"])
         fallback_theme_count = sum(1 for theme in themes if theme["isFallback"])
@@ -374,6 +381,10 @@ class MarketRotationRadarService:
             for index, entry in enumerate(entries)
         ]
         themes = [self._annotate_ranking_quarantine(theme) for theme in themes]
+        themes = [
+            self._annotate_signal_taxonomy(theme, quote_source_authority_allowed=False)
+            for theme in themes
+        ]
         return {
             "endpoint": RADAR_ENDPOINT,
             "market": market,
@@ -2100,6 +2111,168 @@ class MarketRotationRadarService:
             theme_detail["rankExclusionReason"] = ranking["rankExclusionReason"]
         return theme
 
+    def _annotate_signal_taxonomy(
+        self,
+        theme: Dict[str, Any],
+        *,
+        quote_source_authority_allowed: bool,
+    ) -> Dict[str, Any]:
+        signal_type = self._signal_type(theme)
+        rotation_state = theme.get("rotationStateEvidence")
+        rotation_state_evidence = dict(rotation_state) if isinstance(rotation_state, Mapping) else {}
+        flow_evidence_type = str(rotation_state_evidence.get("flowEvidenceType") or "none")
+        flow_language_allowed = bool(rotation_state_evidence.get("flowLanguageAllowed")) and signal_type == "real_flow"
+        source_authority_allowed = self._theme_source_authority_allowed(
+            theme,
+            quote_source_authority_allowed=quote_source_authority_allowed,
+        )
+        evidence_quality = self._evidence_quality(
+            theme,
+            signal_type=signal_type,
+            source_authority_allowed=source_authority_allowed,
+        )
+        data_gaps = self._data_gaps(
+            theme,
+            signal_type=signal_type,
+            source_authority_allowed=source_authority_allowed,
+        )
+        theme.update(
+            {
+                "signalType": signal_type,
+                "flowEvidenceType": flow_evidence_type,
+                "flowLanguageAllowed": flow_language_allowed,
+                "sourceAuthorityAllowed": source_authority_allowed,
+                "evidenceQuality": evidence_quality,
+                "dataGaps": data_gaps,
+            }
+        )
+        return theme
+
+    def _signal_type(self, theme: Mapping[str, Any]) -> str:
+        rotation_state = theme.get("rotationStateEvidence")
+        rotation_state_evidence = dict(rotation_state) if isinstance(rotation_state, Mapping) else {}
+        flow_evidence_type = str(rotation_state_evidence.get("flowEvidenceType") or "none")
+        if bool(theme.get("taxonomyOnly")) or str(theme.get("source") or "").strip() == "local_taxonomy":
+            return "taxonomy_fallback"
+        if flow_evidence_type in {"real_flow", "mixed_real_and_proxy"}:
+            return "real_flow"
+        if bool(theme.get("staticThemeOnly")):
+            return "insufficient_evidence"
+        relative_strength = self._number(
+            (theme.get("relativeStrength") or {}).get("averageRelativeStrengthPercent")
+            if isinstance(theme.get("relativeStrength"), Mapping)
+            else None
+        )
+        if relative_strength is not None:
+            return "relative_strength"
+        if self._has_momentum_proxy_inputs(theme):
+            return "momentum_proxy"
+        if bool(theme.get("observationOnly")):
+            return "observation_only"
+        return "insufficient_evidence"
+
+    def _has_momentum_proxy_inputs(self, theme: Mapping[str, Any]) -> bool:
+        volume = theme.get("volume")
+        breadth = theme.get("breadth")
+        synchronization = theme.get("synchronization")
+        persistence = theme.get("persistenceEvidence")
+        leadership = theme.get("leadership")
+        return any(
+            (
+                self._number((volume or {}).get("averageRelativeVolume") if isinstance(volume, Mapping) else None),
+                self._number((breadth or {}).get("percentUp") if isinstance(breadth, Mapping) else None),
+                self._number((breadth or {}).get("percentOutperformingBenchmark") if isinstance(breadth, Mapping) else None),
+                self._number((synchronization or {}).get("sameDirectionPercent") if isinstance(synchronization, Mapping) else None),
+                self._number((synchronization or {}).get("aboveVwapPercent") if isinstance(synchronization, Mapping) else None),
+                self._number((persistence or {}).get("score") if isinstance(persistence, Mapping) else None),
+                float(len(self._string_list((leadership or {}).get("topMembers"))))
+                if isinstance(leadership, Mapping)
+                else None,
+            )
+        )
+
+    def _theme_source_authority_allowed(
+        self,
+        theme: Mapping[str, Any],
+        *,
+        quote_source_authority_allowed: bool,
+    ) -> bool:
+        if bool(theme.get("taxonomyOnly")) or bool(theme.get("staticThemeOnly")):
+            return False
+        return bool(quote_source_authority_allowed)
+
+    def _evidence_quality(
+        self,
+        theme: Mapping[str, Any],
+        *,
+        signal_type: str,
+        source_authority_allowed: bool,
+    ) -> str:
+        if signal_type == "taxonomy_fallback":
+            return "taxonomy_only"
+        if signal_type == "insufficient_evidence":
+            return "insufficient"
+        if signal_type == "observation_only":
+            return "observation_only"
+        if signal_type == "real_flow":
+            return "score_grade_real_flow" if source_authority_allowed else "observation_only"
+        if (
+            not source_authority_allowed
+            or bool(theme.get("isFallback"))
+            or bool(theme.get("isStale"))
+            or bool(theme.get("isPartial"))
+        ):
+            return "degraded_proxy"
+        proxy_quality = theme.get("proxyQuality")
+        if isinstance(proxy_quality, Mapping) and bool(proxy_quality.get("hasMissingRequiredProxy")):
+            return "degraded_proxy"
+        return "score_grade_proxy"
+
+    def _data_gaps(
+        self,
+        theme: Mapping[str, Any],
+        *,
+        signal_type: str,
+        source_authority_allowed: bool,
+    ) -> List[str]:
+        gaps: List[str] = []
+        rotation_state = theme.get("rotationStateEvidence")
+        rotation_state_evidence = dict(rotation_state) if isinstance(rotation_state, Mapping) else {}
+        required_data = rotation_state_evidence.get("requiredDataStatus")
+        required_data_status = dict(required_data) if isinstance(required_data, Mapping) else {}
+        missing_reason_codes = {
+            code.strip()
+            for code in self._string_list(required_data_status.get("missingReasonCodes"))
+            if code.strip()
+        }
+        flow_evidence = theme.get("flowEvidence")
+        flow_evidence_payload = dict(flow_evidence) if isinstance(flow_evidence, Mapping) else {}
+
+        if signal_type == "taxonomy_fallback":
+            gaps.append("taxonomy_only")
+        if signal_type != "real_flow":
+            gaps.append("true_flow_data_missing")
+        if signal_type != "real_flow" and not str(flow_evidence_payload.get("methodology") or "").strip():
+            gaps.append("flow_methodology_missing")
+        if not source_authority_allowed:
+            gaps.append("source_authority_rejected")
+        if (
+            bool(theme.get("isStale"))
+            or str(theme.get("freshness") or "").strip().lower() == "stale"
+            or "stale_source" in self._string_list(theme.get("degradationReasons"))
+        ):
+            gaps.append("stale_quote_window")
+        if (
+            "proxy_coverage_incomplete" in missing_reason_codes
+            or bool(self._string_list(theme.get("missingProxySymbols")))
+            or (
+                isinstance(theme.get("proxyQuality"), Mapping)
+                and bool((theme.get("proxyQuality") or {}).get("hasMissingRequiredProxy"))
+            )
+        ):
+            gaps.append("benchmark_proxy_missing")
+        return list(dict.fromkeys(gaps))
+
     def _ranking_quarantine_metadata(self, theme: Mapping[str, Any]) -> Dict[str, Any]:
         taxonomy_only = self._taxonomy_only_for_ranking(theme)
         trust = self._ranking_trust(theme, taxonomy_only=taxonomy_only)
@@ -2874,6 +3047,12 @@ class MarketRotationRadarService:
             "scoreContributionAllowed": bool(theme.get("scoreContributionAllowed")),
             "sourceTier": theme.get("sourceTier"),
             "trustLevel": theme.get("trustLevel"),
+            "signalType": str(theme.get("signalType") or "insufficient_evidence"),
+            "flowEvidenceType": str(theme.get("flowEvidenceType") or "none"),
+            "flowLanguageAllowed": bool(theme.get("flowLanguageAllowed")),
+            "sourceAuthorityAllowed": bool(theme.get("sourceAuthorityAllowed")),
+            "evidenceQuality": str(theme.get("evidenceQuality") or "insufficient"),
+            "dataGaps": list(theme.get("dataGaps") or []),
         }
 
     def _benchmark_proxies(

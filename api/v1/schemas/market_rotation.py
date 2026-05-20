@@ -10,6 +10,22 @@ from pydantic import BaseModel, ConfigDict, Field
 
 FreshnessLabel = Literal["live", "delayed", "cached", "stale", "fallback", "mock", "error"]
 RankingLane = Literal["headline", "observation", "taxonomy"]
+RotationSignalType = Literal[
+    "real_flow",
+    "relative_strength",
+    "momentum_proxy",
+    "observation_only",
+    "taxonomy_fallback",
+    "insufficient_evidence",
+]
+RotationEvidenceQuality = Literal[
+    "score_grade_proxy",
+    "degraded_proxy",
+    "observation_only",
+    "taxonomy_only",
+    "insufficient",
+    "score_grade_real_flow",
+]
 RotationStage = Literal[
     "early_watch",
     "confirmed_rotation",
@@ -115,6 +131,12 @@ class RotationRadarThemeModel(BaseModel):
     headlineEligible: bool = False
     rankingLane: RankingLane = "observation"
     scoreContributionAllowed: bool = False
+    signalType: RotationSignalType = "insufficient_evidence"
+    flowEvidenceType: str = "none"
+    flowLanguageAllowed: bool = False
+    sourceAuthorityAllowed: bool = False
+    evidenceQuality: RotationEvidenceQuality = "insufficient"
+    dataGaps: List[str] = Field(default_factory=list)
     sourceTier: Optional[str] = None
     trustLevel: Optional[str] = None
     scoreCap: Optional[float] = None
@@ -178,6 +200,12 @@ class RotationRadarSummaryItemModel(BaseModel):
     headlineEligible: bool = False
     rankingLane: RankingLane = "observation"
     scoreContributionAllowed: bool = False
+    signalType: RotationSignalType = "insufficient_evidence"
+    flowEvidenceType: str = "none"
+    flowLanguageAllowed: bool = False
+    sourceAuthorityAllowed: bool = False
+    evidenceQuality: RotationEvidenceQuality = "insufficient"
+    dataGaps: List[str] = Field(default_factory=list)
     sourceTier: Optional[str] = None
     trustLevel: Optional[str] = None
 

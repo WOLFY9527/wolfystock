@@ -198,6 +198,18 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
         assert all("rotationStateEvidence" in theme for theme in payload["themes"])
         assert all(theme["rotationStateEvidence"]["schemaVersion"] == "rotation_state_evidence_v1" for theme in payload["themes"])
         assert all(theme["rotationStateEvidence"]["flowLanguageAllowed"] is False for theme in payload["themes"])
+        assert all("signalType" in theme for theme in payload["themes"])
+        assert all("flowEvidenceType" in theme for theme in payload["themes"])
+        assert all("flowLanguageAllowed" in theme for theme in payload["themes"])
+        assert all("sourceAuthorityAllowed" in theme for theme in payload["themes"])
+        assert all("evidenceQuality" in theme for theme in payload["themes"])
+        assert all("dataGaps" in theme for theme in payload["themes"])
+        assert all(theme["signalType"] == "insufficient_evidence" for theme in payload["themes"])
+        assert all(theme["flowEvidenceType"] == "none" for theme in payload["themes"])
+        assert all(theme["flowLanguageAllowed"] is False for theme in payload["themes"])
+        assert all(theme["sourceAuthorityAllowed"] is False for theme in payload["themes"])
+        assert all(theme["evidenceQuality"] == "insufficient" for theme in payload["themes"])
+        assert all("true_flow_data_missing" in theme["dataGaps"] for theme in payload["themes"])
         assert all(theme["rotationStateEvidence"]["evidenceSnapshot"]["contractVersion"] == "source_confidence_contract_v1" for theme in payload["themes"])
         assert all(theme["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["freshness"] == "fallback" for theme in payload["themes"])
         assert all(theme["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["isFallback"] is True for theme in payload["themes"])
@@ -279,6 +291,13 @@ def test_market_rotation_radar_market_query_switches_theme_universe(monkeypatch:
         assert cn_payload["summary"]["noHeadlineReason"]
         assert all(theme["rotationStateEvidence"]["state"] == "insufficient_evidence" for theme in cn_payload["themes"])
         assert all(theme["rotationStateEvidence"]["flowEvidenceType"] == "none" for theme in cn_payload["themes"])
+        assert all(theme["signalType"] == "taxonomy_fallback" for theme in cn_payload["themes"])
+        assert all(theme["flowEvidenceType"] == "none" for theme in cn_payload["themes"])
+        assert all(theme["flowLanguageAllowed"] is False for theme in cn_payload["themes"])
+        assert all(theme["sourceAuthorityAllowed"] is False for theme in cn_payload["themes"])
+        assert all(theme["evidenceQuality"] == "taxonomy_only" for theme in cn_payload["themes"])
+        assert all("taxonomy_only" in theme["dataGaps"] for theme in cn_payload["themes"])
+        assert all("true_flow_data_missing" in theme["dataGaps"] for theme in cn_payload["themes"])
         assert cn_payload["metadata"]["observedEvidence"]["present"] is False
         assert "静态主题库" in cn_payload["warning"]
     finally:

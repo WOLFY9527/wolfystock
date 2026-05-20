@@ -467,6 +467,12 @@ def test_rotation_radar_and_sector_rotation_projection_keep_evidence_non_live_wh
     assert top_theme["rotationStateEvidence"]["evidenceSnapshot"]["contractVersion"] == "source_confidence_contract_v1"
     assert top_theme["rotationStateEvidence"]["sourceConfidence"]["freshness"] in {"delayed", "partial"}
     assert top_theme["rotationStateEvidence"]["sourceConfidence"]["freshness"] != "live"
+    assert top_theme["signalType"] == "relative_strength"
+    assert top_theme["flowEvidenceType"] == "proxy_only"
+    assert top_theme["flowLanguageAllowed"] is False
+    assert top_theme["sourceAuthorityAllowed"] is True
+    assert top_theme["evidenceQuality"] == "degraded_proxy"
+    assert "true_flow_data_missing" in top_theme["dataGaps"]
 
     projected_payload = MarketOverviewService()._project_sector_rotation_snapshot(radar_payload)
     assert projected_payload["source"] == "computed"
@@ -498,6 +504,10 @@ def test_rotation_radar_and_sector_rotation_projection_keep_evidence_non_live_wh
     assert all(theme["rankingLane"] == "observation" for theme in fallback_radar["themes"])
     assert all(theme["scoreBreakdown"] for theme in fallback_radar["themes"])
     assert fallback_radar["themes"][0]["rotationStateEvidence"]["state"] == "insufficient_evidence"
+    assert all(theme["signalType"] == "insufficient_evidence" for theme in fallback_radar["themes"])
+    assert all(theme["flowLanguageAllowed"] is False for theme in fallback_radar["themes"])
+    assert all(theme["sourceAuthorityAllowed"] is False for theme in fallback_radar["themes"])
+    assert all("true_flow_data_missing" in theme["dataGaps"] for theme in fallback_radar["themes"])
 
     taxonomy_radar = MarketRotationRadarService().get_rotation_radar(market="CN")
     assert taxonomy_radar["summary"]["strongestThemes"] == []
@@ -505,3 +515,6 @@ def test_rotation_radar_and_sector_rotation_projection_keep_evidence_non_live_wh
     _assert_rotation_headline_lists_are_eligible(taxonomy_radar)
     assert taxonomy_radar["summary"]["taxonomyThemes"]
     assert all(theme["rankingLane"] == "taxonomy" for theme in taxonomy_radar["summary"]["taxonomyThemes"])
+    assert all(theme["signalType"] == "taxonomy_fallback" for theme in taxonomy_radar["themes"])
+    assert all(theme["flowLanguageAllowed"] is False for theme in taxonomy_radar["themes"])
+    assert all("taxonomy_only" in theme["dataGaps"] for theme in taxonomy_radar["themes"])
