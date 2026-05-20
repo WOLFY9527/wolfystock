@@ -6,10 +6,14 @@ from __future__ import annotations
 import json
 import math
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from src.repositories.analysis_repo import AnalysisRepository
 from src.repositories.stock_repo import StockRepository
+from src.services.sec_edgar_evidence_service import (
+    SecEdgarFilingEvidenceSidecar,
+    build_sec_filing_evidence_sidecar,
+)
 from src.services.stock_evidence_quote_adapter import StockEvidenceQuoteAdapter
 
 
@@ -122,6 +126,28 @@ def _find_field(fields: Any, aliases: Iterable[str]) -> Optional[float]:
     return None
 
 
+def _normalize_sec_filing_evidence_by_symbol(
+    sec_filing_evidence_by_symbol: Mapping[str, Any] | None,
+) -> Dict[str, Any]:
+    if not sec_filing_evidence_by_symbol:
+        return {}
+    normalized: Dict[str, Any] = {}
+    for symbol, injected in sec_filing_evidence_by_symbol.items():
+        normalized_symbol = _normalize_symbol(symbol)
+        if not normalized_symbol or normalized_symbol in normalized:
+            continue
+        normalized[normalized_symbol] = injected
+    return normalized
+
+
+def _serialize_sec_filing_evidence(injected: Any) -> Optional[EvidencePayload]:
+    if injected is None:
+        return None
+    if isinstance(injected, SecEdgarFilingEvidenceSidecar):
+        return injected.to_dict()
+    return build_sec_filing_evidence_sidecar(injected).to_dict()
+
+
 class StockEvidenceService:
     """Build a small, read-only evidence payload without scanner/backtest/LLM execution."""
 
@@ -138,21 +164,40 @@ class StockEvidenceService:
         self.stock_repo = stock_repo or StockRepository()
         self.analysis_repo = analysis_repo or AnalysisRepository(owner_id=owner_id)
 
-    def get_stock_evidence(self, symbols: List[str]) -> EvidencePayload:
+    def get_stock_evidence(
+        self,
+        symbols: List[str],
+        *,
+        sec_filing_evidence_by_symbol: Mapping[str, Any] | None = None,
+    ) -> EvidencePayload:
         normalized = []
         for symbol in symbols[:3]:
             value = _normalize_symbol(symbol)
             if value and value not in normalized:
                 normalized.append(value)
+        normalized_sec_filing_evidence = _normalize_sec_filing_evidence_by_symbol(
+            sec_filing_evidence_by_symbol
+        )
         return {
             "symbols": normalized,
-            "items": [self._build_item(symbol) for symbol in normalized],
+            "items": [
+                self._build_item(
+                    symbol,
+                    sec_filing_evidence=normalized_sec_filing_evidence.get(symbol),
+                )
+                for symbol in normalized
+            ],
             "meta": {"generatedAt": _now_iso(), "source": "read_only_evidence_v2"},
         }
 
-    def _build_item(self, symbol: str) -> EvidencePayload:
+    def _build_item(
+        self,
+        symbol: str,
+        *,
+        sec_filing_evidence: Any = None,
+    ) -> EvidencePayload:
         quote = self._quote(symbol)
-        return {
+        item = {
             "symbol": symbol,
             "market": _infer_market(symbol),
             "quote": quote,
@@ -160,6 +205,10 @@ class StockEvidenceService:
             "fundamental": self._fundamental(symbol, quote_payload=quote),
             "news": {"status": "unknown", "latestHeadline": None, "provider": None},
         }
+        sec_filing_evidence_payload = _serialize_sec_filing_evidence(sec_filing_evidence)
+        if sec_filing_evidence_payload is not None:
+            item["secFilingEvidence"] = sec_filing_evidence_payload
+        return item
 
     def _quote(self, symbol: str) -> EvidencePayload:
         try:
