@@ -15,6 +15,13 @@ if TYPE_CHECKING:
     from data_provider.sec_edgar_provider import SecEdgarCompanyFactsParseResult, SecEdgarFactRecord
 
 
+SEC_EDGAR_PROVIDER_NAME = "SEC EDGAR"
+SEC_EDGAR_PROVIDER_ID = "sec_edgar"
+SEC_EDGAR_SOURCE_TIER = "official_public"
+SEC_EDGAR_TRUST_LEVEL = "reliable_for_filings_metadata"
+SEC_EDGAR_FRESHNESS_EXPECTATION = "filing_or_daily"
+
+
 def _coerce_records(
     parsed_or_records: Any,
 ) -> tuple[Any, ...]:
@@ -38,6 +45,20 @@ def _is_incomplete(record: SecEdgarFactRecord) -> bool:
         record.updated_at,
     )
     return any(value is None for value in required_for_complete_projection)
+
+
+def _coerce_projected_records(
+    projected_or_parsed_or_records: Any | None,
+) -> tuple[SecEdgarCompanyFactEvidenceRecord, ...]:
+    if projected_or_parsed_or_records is None:
+        return ()
+
+    records = _coerce_records(projected_or_parsed_or_records)
+    if not records:
+        return ()
+    if hasattr(records[0], "evidence_type"):
+        return tuple(records)
+    return project_sec_edgar_companyfacts_evidence(records)
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +123,36 @@ class SecEdgarCompanyFactEvidenceRecord:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class SecEdgarFilingEvidenceSidecar:
+    status: str
+    provider_name: str
+    provider_id: str
+    source_tier: str
+    trust_level: str
+    freshness_expectation: str
+    observation_only: bool
+    score_contribution_allowed: bool
+    raw_payload_stored: bool
+    records: tuple[SecEdgarCompanyFactEvidenceRecord, ...]
+    degradation_reason: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "providerName": self.provider_name,
+            "providerId": self.provider_id,
+            "sourceTier": self.source_tier,
+            "trustLevel": self.trust_level,
+            "freshnessExpectation": self.freshness_expectation,
+            "observationOnly": self.observation_only,
+            "scoreContributionAllowed": self.score_contribution_allowed,
+            "rawPayloadStored": self.raw_payload_stored,
+            "records": [record.to_dict() for record in self.records],
+            "degradationReason": self.degradation_reason,
+        }
+
+
 def project_sec_edgar_companyfacts_evidence(
     parsed_or_records: Any,
 ) -> tuple[SecEdgarCompanyFactEvidenceRecord, ...]:
@@ -143,7 +194,46 @@ def project_sec_edgar_companyfacts_evidence(
     return tuple(evidence_records)
 
 
+def build_sec_filing_evidence_sidecar(
+    projected_or_parsed_or_records: Any | None,
+) -> SecEdgarFilingEvidenceSidecar:
+    """Build a pure SEC filing evidence sidecar from injected companyfacts records."""
+
+    records = _coerce_projected_records(projected_or_parsed_or_records)
+    if not records:
+        return SecEdgarFilingEvidenceSidecar(
+            status="missing",
+            provider_name=SEC_EDGAR_PROVIDER_NAME,
+            provider_id=SEC_EDGAR_PROVIDER_ID,
+            source_tier=SEC_EDGAR_SOURCE_TIER,
+            trust_level=SEC_EDGAR_TRUST_LEVEL,
+            freshness_expectation=SEC_EDGAR_FRESHNESS_EXPECTATION,
+            observation_only=True,
+            score_contribution_allowed=False,
+            raw_payload_stored=False,
+            records=(),
+            degradation_reason="sec_companyfacts_records_not_supplied",
+        )
+
+    first = records[0]
+    return SecEdgarFilingEvidenceSidecar(
+        status="available",
+        provider_name=first.provider_name,
+        provider_id=first.provider_id,
+        source_tier=first.source_tier,
+        trust_level=first.trust_level,
+        freshness_expectation=first.freshness_expectation,
+        observation_only=True,
+        score_contribution_allowed=False,
+        raw_payload_stored=False,
+        records=records,
+        degradation_reason=None,
+    )
+
+
 __all__ = [
+    "SecEdgarFilingEvidenceSidecar",
     "SecEdgarCompanyFactEvidenceRecord",
+    "build_sec_filing_evidence_sidecar",
     "project_sec_edgar_companyfacts_evidence",
 ]

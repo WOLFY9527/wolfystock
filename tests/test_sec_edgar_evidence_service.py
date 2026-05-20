@@ -9,7 +9,10 @@ import sys
 from pathlib import Path
 
 from data_provider.sec_edgar_provider import parse_companyfacts_payload
-from src.services.sec_edgar_evidence_service import project_sec_edgar_companyfacts_evidence
+from src.services.sec_edgar_evidence_service import (
+    build_sec_filing_evidence_sidecar,
+    project_sec_edgar_companyfacts_evidence,
+)
 
 
 FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "sec_edgar" / "companyfacts_sample.json"
@@ -138,6 +141,99 @@ def test_project_companyfacts_marks_incomplete_optional_metadata_as_degraded_wit
     assert evidence.fiscal_period is None
     assert evidence.updated_at is None
     assert evidence.degradation_reason == "incomplete_observation_metadata"
+
+
+def test_build_sec_filing_evidence_sidecar_wraps_projected_records_without_raw_payloads() -> None:
+    payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    parsed = parse_companyfacts_payload(payload)
+    projected = project_sec_edgar_companyfacts_evidence(parsed)
+
+    sidecar = build_sec_filing_evidence_sidecar(projected)
+
+    assert sidecar.status == "available"
+    assert sidecar.provider_name == "SEC EDGAR"
+    assert sidecar.provider_id == "sec_edgar"
+    assert sidecar.source_tier == "official_public"
+    assert sidecar.trust_level == "reliable_for_filings_metadata"
+    assert sidecar.freshness_expectation == "filing_or_daily"
+    assert sidecar.observation_only is True
+    assert sidecar.score_contribution_allowed is False
+    assert sidecar.raw_payload_stored is False
+    assert sidecar.degradation_reason is None
+    assert len(sidecar.records) == 4
+
+    first = sidecar.records[0]
+    assert first.evidence_type == "official_company_fact"
+    assert first.concept == "EntityCommonStockSharesOutstanding"
+    assert first.taxonomy == "dei"
+    assert first.unit == "shares"
+    assert first.value == 15204137000
+    assert first.accession_number == "0000320193-24-000123"
+    assert first.form == "10-K"
+    assert first.filed_at == "2024-11-01"
+    assert first.fiscal_year == 2024
+    assert first.fiscal_period == "FY"
+    assert first.period_end_date == "2024-09-28"
+    assert first.fiscal_end_date == "2024-09-28"
+    assert first.frame == "CY2024Q3I"
+    assert first.entity_name == "Apple Inc."
+    assert first.cik == "0000320193"
+    assert first.as_of == "2024-09-28"
+    assert first.updated_at == "2024-11-01T14:00:00Z"
+    assert (
+        first.source_ref
+        == "sec_edgar:companyfacts:0000320193:dei:EntityCommonStockSharesOutstanding:shares:0000320193-24-000123:2024-09-28:CY2024Q3I"
+    )
+    assert first.degradation_reason is None
+
+    payload_dict = sidecar.to_dict()
+    assert payload_dict["status"] == "available"
+    assert payload_dict["providerName"] == "SEC EDGAR"
+    assert payload_dict["providerId"] == "sec_edgar"
+    assert payload_dict["sourceTier"] == "official_public"
+    assert payload_dict["trustLevel"] == "reliable_for_filings_metadata"
+    assert payload_dict["freshnessExpectation"] == "filing_or_daily"
+    assert payload_dict["observationOnly"] is True
+    assert payload_dict["scoreContributionAllowed"] is False
+    assert payload_dict["rawPayloadStored"] is False
+    assert payload_dict["degradationReason"] is None
+    assert len(payload_dict["records"]) == 4
+    assert payload_dict["records"][0]["concept"] == "EntityCommonStockSharesOutstanding"
+    assert "rawPayload" not in payload_dict
+    assert "raw_payload" not in payload_dict
+    assert "facts" not in payload_dict
+    assert "headers" not in payload_dict
+
+
+def test_build_sec_filing_evidence_sidecar_returns_missing_metadata_when_no_records_are_supplied() -> None:
+    sidecar = build_sec_filing_evidence_sidecar(None)
+
+    assert sidecar.status == "missing"
+    assert sidecar.provider_name == "SEC EDGAR"
+    assert sidecar.provider_id == "sec_edgar"
+    assert sidecar.source_tier == "official_public"
+    assert sidecar.trust_level == "reliable_for_filings_metadata"
+    assert sidecar.freshness_expectation == "filing_or_daily"
+    assert sidecar.observation_only is True
+    assert sidecar.score_contribution_allowed is False
+    assert sidecar.raw_payload_stored is False
+    assert sidecar.records == ()
+    assert sidecar.degradation_reason == "sec_companyfacts_records_not_supplied"
+
+    payload_dict = sidecar.to_dict()
+    assert payload_dict == {
+        "status": "missing",
+        "providerName": "SEC EDGAR",
+        "providerId": "sec_edgar",
+        "sourceTier": "official_public",
+        "trustLevel": "reliable_for_filings_metadata",
+        "freshnessExpectation": "filing_or_daily",
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "rawPayloadStored": False,
+        "records": [],
+        "degradationReason": "sec_companyfacts_records_not_supplied",
+    }
 
 
 def test_sec_edgar_evidence_service_import_is_metadata_only() -> None:
