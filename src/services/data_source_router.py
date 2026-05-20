@@ -177,6 +177,30 @@ class _RoutePolicy:
 
 _ROUTE_POLICIES = MappingProxyType(
     {
+        ("stock_evidence", "companyfacts"): _RoutePolicy(
+            primary_provider_ids=("sec_edgar",),
+            forbidden_provider_ids=("baostock", "coinbase_public", "yfinance_current_baseline"),
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="use_cached_evidence_or_explicit_unavailable",
+            required_source_types=("official_public", "cache_snapshot"),
+            freshness_floor="daily",
+            trust_floor="filings_evidence",
+            plan_reason_codes=("cache_required",),
+        ),
+        ("stock_evidence", "filing"): _RoutePolicy(
+            primary_provider_ids=("sec_edgar",),
+            forbidden_provider_ids=("baostock", "coinbase_public", "yfinance_current_baseline"),
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="use_cached_evidence_or_explicit_unavailable",
+            required_source_types=("official_public", "cache_snapshot"),
+            freshness_floor="daily",
+            trust_floor="filings_evidence",
+            plan_reason_codes=("cache_required",),
+        ),
         ("filings_evidence", "companyfacts"): _RoutePolicy(
             primary_provider_ids=("sec_edgar",),
             forbidden_provider_ids=("baostock", "coinbase_public", "yfinance_current_baseline"),

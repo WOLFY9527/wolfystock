@@ -5,11 +5,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from data_provider.sec_edgar_provider import parse_companyfacts_payload
 from src.services.agent_stock_evidence_service import StockEvidenceService
+from src.services.data_source_router import DataSourceRoutePlan, ProviderRouteCandidate
 from src.services.sec_edgar_evidence_service import (
+    SecEdgarCompanyFactEvidenceRecord,
+    SecEdgarFilingEvidenceSidecar,
     build_sec_filing_evidence_sidecar,
     project_sec_edgar_companyfacts_evidence,
 )
@@ -101,6 +104,129 @@ def test_stock_evidence_accepts_injected_projected_sec_records_without_mutating_
     assert "rawPayload" not in item["secFilingEvidence"]
     assert "facts" not in item["secFilingEvidence"]
     assert "headers" not in item["secFilingEvidence"]
+
+
+def test_stock_evidence_routes_injected_sec_sidecar_through_router_without_network_or_cik_lookup() -> None:
+    service = _build_service()
+    fixture_payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    parsed = parse_companyfacts_payload(fixture_payload)
+    projected = project_sec_edgar_companyfacts_evidence(parsed)
+    route_plan = DataSourceRoutePlan(
+        primary_candidates=(
+            ProviderRouteCandidate(
+                provider_id="sec_edgar",
+                provider_name="SEC EDGAR",
+                capability="companyfacts",
+                source_type="official_public",
+                source_tier="official_public",
+                trust_level="reliable_for_filings_metadata",
+                freshness_expectation="filing_or_daily",
+                observation_only=True,
+                score_contribution_allowed=False,
+            ),
+        ),
+        observation_candidates=(),
+        forbidden_providers=(),
+        cache_required=True,
+        background_refresh_required=True,
+        score_contribution_allowed=False,
+        degradation_policy="use_cached_evidence_or_explicit_unavailable",
+        required_source_types=("official_public", "cache_snapshot"),
+        freshness_floor="daily",
+        trust_floor="filings_evidence",
+        reason_codes={"plan": ("cache_required",)},
+    )
+
+    with patch(
+        "src.services.agent_stock_evidence_service.DataSourceRouter.resolve",
+        return_value=route_plan,
+    ) as resolve:
+        payload = service.get_stock_evidence(
+            ["AAPL"],
+            sec_filing_evidence_by_symbol={"AAPL": projected},
+        )
+
+    assert payload["items"][0]["secFilingEvidence"]["providerId"] == "sec_edgar"
+    request = resolve.call_args.args[0]
+    assert request.market == "US"
+    assert request.asset_type == "stock"
+    assert request.use_case == "stock_evidence"
+    assert request.capability == "companyfacts"
+    assert request.freshness_need == "daily"
+    assert request.scoring_allowed is False
+    assert request.symbol == "AAPL"
+    assert request.cik is None
+    assert request.allow_network is False
+    assert request.reproducibility_required is False
+
+
+def test_stock_evidence_degrades_sec_sidecar_that_attempts_scoring_or_quote_authority() -> None:
+    service = _build_service()
+    sidecar = SecEdgarFilingEvidenceSidecar(
+        status="available",
+        provider_name="SEC EDGAR",
+        provider_id="sec_edgar",
+        source_tier="official_public",
+        trust_level="reliable_for_filings_metadata",
+        freshness_expectation="filing_or_daily",
+        observation_only=False,
+        score_contribution_allowed=True,
+        raw_payload_stored=False,
+        records=(
+            SecEdgarCompanyFactEvidenceRecord(
+                provider_name="SEC EDGAR",
+                provider_id="sec_edgar",
+                source="sec_edgar",
+                source_tier="official_public",
+                trust_level="reliable_for_filings_metadata",
+                freshness_expectation="filing_or_daily",
+                observation_only=False,
+                score_contribution_allowed=True,
+                evidence_type="quote_authority",
+                concept="EntityCommonStockSharesOutstanding",
+                taxonomy="dei",
+                unit="shares",
+                value=15204137000,
+                accession_number="0000320193-24-000123",
+                form="10-K",
+                filed_at="2024-11-01",
+                fiscal_year=2024,
+                fiscal_period="FY",
+                period_end_date="2024-09-28",
+                fiscal_end_date="2024-09-28",
+                frame="CY2024Q3I",
+                entity_name="Apple Inc.",
+                cik="0000320193",
+                as_of="2024-09-28",
+                updated_at="2024-11-01T14:00:00Z",
+                source_ref="sec_edgar:companyfacts:malicious",
+                degradation_reason=None,
+            ),
+        ),
+        degradation_reason=None,
+    )
+
+    payload = service.get_stock_evidence(
+        ["AAPL"],
+        sec_filing_evidence_by_symbol={"AAPL": sidecar},
+    )
+
+    item = payload["items"][0]
+    assert item["quote"] == {"status": "unknown", "provider": "realtime_quote"}
+    assert item["fundamental"]["provider"] == "realtime_quote"
+    assert item["secFilingEvidence"] == {
+        "status": "rejected",
+        "providerName": "SEC EDGAR",
+        "providerId": "sec_edgar",
+        "sourceTier": "official_public",
+        "trustLevel": "reliable_for_filings_metadata",
+        "freshnessExpectation": "filing_or_daily",
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "rawPayloadStored": False,
+        "records": [],
+        "degradationReason": "sec_sidecar_authority_not_allowed",
+    }
 
 
 def test_stock_evidence_accepts_injected_sec_filing_sidecar_instance() -> None:

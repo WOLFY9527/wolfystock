@@ -10,7 +10,13 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from src.repositories.analysis_repo import AnalysisRepository
 from src.repositories.stock_repo import StockRepository
+from src.services.data_source_router import DataSourceRouteRequest, DataSourceRouter
 from src.services.sec_edgar_evidence_service import (
+    SEC_EDGAR_FRESHNESS_EXPECTATION,
+    SEC_EDGAR_PROVIDER_ID,
+    SEC_EDGAR_PROVIDER_NAME,
+    SEC_EDGAR_SOURCE_TIER,
+    SEC_EDGAR_TRUST_LEVEL,
     SecEdgarFilingEvidenceSidecar,
     build_sec_filing_evidence_sidecar,
 )
@@ -18,6 +24,9 @@ from src.services.stock_evidence_quote_adapter import StockEvidenceQuoteAdapter
 
 
 EvidencePayload = Dict[str, Any]
+_SEC_STOCK_EVIDENCE_USE_CASE = "stock_evidence"
+_SEC_ALLOWED_EVIDENCE_CAPABILITIES = frozenset({"companyfacts", "filing"})
+_SEC_AUTHORITY_REJECTION_TOKENS = ("quote", "ohlcv", "score", "scoring", "fundamental_authority")
 
 
 def _now_iso() -> str:
@@ -148,6 +157,107 @@ def _serialize_sec_filing_evidence(injected: Any) -> Optional[EvidencePayload]:
     return build_sec_filing_evidence_sidecar(injected).to_dict()
 
 
+def _reject_sec_filing_evidence(reason: str) -> EvidencePayload:
+    return {
+        "status": "rejected",
+        "providerName": SEC_EDGAR_PROVIDER_NAME,
+        "providerId": SEC_EDGAR_PROVIDER_ID,
+        "sourceTier": SEC_EDGAR_SOURCE_TIER,
+        "trustLevel": SEC_EDGAR_TRUST_LEVEL,
+        "freshnessExpectation": SEC_EDGAR_FRESHNESS_EXPECTATION,
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "rawPayloadStored": False,
+        "records": [],
+        "degradationReason": reason,
+    }
+
+
+def _sec_record_capability(record_payload: Mapping[str, Any]) -> str | None:
+    evidence_type = str(record_payload.get("evidenceType") or "").strip().lower()
+    if not evidence_type:
+        return None
+    if any(token in evidence_type for token in _SEC_AUTHORITY_REJECTION_TOKENS):
+        return None
+    if "filing" in evidence_type:
+        return "filing"
+    if "company_fact" in evidence_type or "companyfacts" in evidence_type:
+        return "companyfacts"
+    return None
+
+
+def _sec_route_is_allowed(
+    *,
+    symbol: str,
+    capability: str,
+    route_plan: Any,
+) -> bool:
+    if _infer_market(symbol) != "US":
+        return False
+    if capability not in _SEC_ALLOWED_EVIDENCE_CAPABILITIES:
+        return False
+    primary_ids = {str(getattr(candidate, "provider_id", "")).strip().lower() for candidate in route_plan.primary_candidates}
+    if primary_ids != {SEC_EDGAR_PROVIDER_ID}:
+        return False
+    if route_plan.observation_candidates:
+        return False
+    if route_plan.score_contribution_allowed:
+        return False
+    return True
+
+
+def _guard_sec_filing_evidence(symbol: str, injected: Any) -> Optional[EvidencePayload]:
+    payload = _serialize_sec_filing_evidence(injected)
+    if payload is None:
+        return None
+    if str(payload.get("providerId") or "").strip().lower() != SEC_EDGAR_PROVIDER_ID:
+        return _reject_sec_filing_evidence("sec_provider_mismatch")
+    if payload.get("sourceTier") != SEC_EDGAR_SOURCE_TIER:
+        return _reject_sec_filing_evidence("sec_source_tier_not_official_public")
+    if payload.get("observationOnly") is not True:
+        return _reject_sec_filing_evidence("sec_sidecar_authority_not_allowed")
+    if payload.get("scoreContributionAllowed") is not False:
+        return _reject_sec_filing_evidence("sec_sidecar_authority_not_allowed")
+    if payload.get("rawPayloadStored") is not False:
+        return _reject_sec_filing_evidence("sec_raw_payload_not_allowed")
+
+    record_payloads = payload.get("records")
+    if not isinstance(record_payloads, list):
+        return _reject_sec_filing_evidence("sec_records_payload_invalid")
+
+    capabilities = {
+        capability
+        for capability in (
+            _sec_record_capability(record_payload)
+            for record_payload in record_payloads
+            if isinstance(record_payload, Mapping)
+        )
+        if capability is not None
+    }
+    if len(capabilities) > 1:
+        return _reject_sec_filing_evidence("sec_mixed_evidence_capabilities_not_allowed")
+    if record_payloads and not capabilities:
+        return _reject_sec_filing_evidence("sec_sidecar_authority_not_allowed")
+
+    capability = next(iter(capabilities), "companyfacts")
+    route_plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market=_infer_market(symbol),
+            asset_type="stock",
+            use_case=_SEC_STOCK_EVIDENCE_USE_CASE,
+            capability=capability,
+            freshness_need="daily",
+            scoring_allowed=False,
+            symbol=symbol,
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+    if not _sec_route_is_allowed(symbol=symbol, capability=capability, route_plan=route_plan):
+        return _reject_sec_filing_evidence("sec_stock_evidence_route_not_allowed")
+    return payload
+
+
 class StockEvidenceService:
     """Build a small, read-only evidence payload without scanner/backtest/LLM execution."""
 
@@ -205,7 +315,7 @@ class StockEvidenceService:
             "fundamental": self._fundamental(symbol, quote_payload=quote),
             "news": {"status": "unknown", "latestHeadline": None, "provider": None},
         }
-        sec_filing_evidence_payload = _serialize_sec_filing_evidence(sec_filing_evidence)
+        sec_filing_evidence_payload = _guard_sec_filing_evidence(symbol, sec_filing_evidence)
         if sec_filing_evidence_payload is not None:
             item["secFilingEvidence"] = sec_filing_evidence_payload
         return item

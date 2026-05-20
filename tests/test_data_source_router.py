@@ -53,6 +53,28 @@ def test_sec_edgar_only_plans_filing_and_companyfacts_evidence_routes() -> None:
     assert "provider_forbidden_for_use_case" in quote_plan.reason_codes["sec_edgar"]
 
 
+def test_stock_evidence_route_accepts_sec_edgar_only_as_non_scoring_sidecar() -> None:
+    plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="US",
+            asset_type="stock",
+            use_case="stock_evidence",
+            capability="companyfacts",
+            freshness_need="daily",
+            scoring_allowed=False,
+            symbol="AAPL",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+
+    assert _ids(plan.primary_candidates) == {"sec_edgar"}
+    assert _ids(plan.observation_candidates) == set()
+    assert plan.cache_required is True
+    assert plan.score_contribution_allowed is False
+    assert plan.degradation_policy == "use_cached_evidence_or_explicit_unavailable"
+
+
 def test_baostock_is_delayed_cn_history_observation_only_and_never_scoring() -> None:
     delayed_plan = DataSourceRouter.resolve(
         DataSourceRouteRequest(
