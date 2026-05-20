@@ -1,5 +1,14 @@
 ## 2026-05-20
 
+- **Market data readiness diagnostics endpoint** - Added additive
+  `GET /api/v1/market/data-readiness` as a backend-only, read-only operator
+  diagnostic surface for local market-data readiness checks. The endpoint
+  reuses the existing inert readiness helper to report sanitized parquet
+  directory, representative file presence, parquet-engine importability,
+  Tushare token configured-state, and optional dependency readiness without
+  returning secret values, calling provider runtimes, making network calls, or
+  reading parquet contents. Market Overview, Liquidity Monitor, Rotation
+  Radar, provider order, scoring, and frontend behavior remain unchanged.
 - **Market Temperature regime synthesis payload** - `/api/v1/market/temperature`
   now exposes additive `marketRegimeSynthesis` metadata built from the existing
   normalized Market Temperature input bundle. The new field reuses the

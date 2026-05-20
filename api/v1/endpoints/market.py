@@ -14,12 +14,15 @@ from api.deps import CurrentUser, get_optional_current_user
 from api.v1.schemas.market_rotation import MarketRotationRadarResponse
 from src.services.cn_provider_health_service import CNProviderHealthService
 from src.services.crypto_realtime_service import get_crypto_realtime_service
+from src.services.market_data_readiness_diagnostics import build_market_data_readiness_diagnostics
 from src.services.market_overview_service import MarketOverviewService
 from src.services.market_rotation_radar_service import MarketRotationRadarService
 from src.services.provider_fit_advisor_service import build_provider_fit_advisor_snapshot
 from src.services.rotation_radar_quote_provider import get_rotation_radar_quote_provider
 
 router = APIRouter()
+_MAX_DATA_READINESS_SYMBOLS = 8
+_MAX_DATA_READINESS_SYMBOL_LENGTH = 24
 
 
 def _actor(current_user: Optional[CurrentUser]) -> Optional[Dict[str, Any]]:
@@ -33,6 +36,27 @@ def _actor(current_user: Optional[CurrentUser]) -> Optional[Dict[str, Any]]:
         "actor_type": "admin" if current_user.is_admin else "user",
         "session_id": current_user.session_id,
     }
+
+
+def _parse_data_readiness_symbols(raw_symbols: Optional[str]) -> tuple[str, ...]:
+    if not raw_symbols:
+        return ()
+
+    allowed_punctuation = {".", "-", "_"}
+    normalized: list[str] = []
+    for raw_symbol in raw_symbols.split(","):
+        cleaned = "".join(
+            character
+            for character in raw_symbol.strip().upper()
+            if character.isalnum() or character in allowed_punctuation
+        )
+        if not cleaned:
+            continue
+        normalized.append(cleaned[:_MAX_DATA_READINESS_SYMBOL_LENGTH])
+        if len(normalized) >= _MAX_DATA_READINESS_SYMBOLS:
+            break
+
+    return tuple(dict.fromkeys(normalized))
 
 
 @router.get("/crypto", summary="Get realtime crypto market snapshot")
@@ -166,3 +190,15 @@ def get_cn_provider_health(
 @router.get("/provider-fit-advisor", summary="Get read-only provider-fit advisor snapshot")
 def get_provider_fit_advisor() -> dict[str, Any]:
     return build_provider_fit_advisor_snapshot().to_dict()
+
+
+@router.get("/data-readiness", summary="Get read-only local market data readiness diagnostics")
+def get_market_data_readiness(
+    symbols: Optional[str] = Query(
+        default=None,
+        description="Optional comma-separated representative symbols for local parquet file presence checks.",
+    ),
+) -> dict[str, Any]:
+    return build_market_data_readiness_diagnostics(
+        representative_symbols=_parse_data_readiness_symbols(symbols)
+    ).to_dict()

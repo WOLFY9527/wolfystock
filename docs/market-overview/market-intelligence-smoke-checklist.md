@@ -26,6 +26,7 @@ python3 -m pytest \
   tests/test_cn_provider_health_service.py \
   tests/api/test_market_endpoint_provider_regressions.py \
   tests/api/test_cn_provider_health.py \
+  tests/api/test_market_data_readiness.py \
   tests/api/test_market_macro_cards.py \
   tests/api/test_liquidity_monitor.py \
   tests/api/test_market_rotation_radar.py \
@@ -44,6 +45,7 @@ Manual backend endpoints to probe:
 - `GET /api/v1/market/temperature`
 - `GET /api/v1/market/market-briefing`
 - `GET /api/v1/market/liquidity-monitor`
+- `GET /api/v1/market/data-readiness`
 - `GET /api/v1/market/cn-provider-health`
 - `GET /api/v1/market/rotation-radar?market=US`
 - `GET /api/v1/market/sector-rotation`
@@ -92,6 +94,10 @@ Expected degraded-state semantics:
 - CN provider health must remain metadata-only and return provider trust/
   capability diagnostics only; it must not expose market quotes, K-lines,
   symbol universes, raw provider payloads, or scoring output.
+- Market data readiness diagnostics must remain local-only and diagnostic-only:
+  they must not return secret values, must not call providers or the network,
+  and must not read parquet contents while checking representative file
+  presence.
 - CN provider health must keep `observationOnly=true` and
   `scoreContributionAllowed=false` for both pytdx and AKShare, even when the
   provider health status is `healthy`.
