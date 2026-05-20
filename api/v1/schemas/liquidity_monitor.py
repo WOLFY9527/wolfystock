@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -126,11 +126,28 @@ class LiquidityMonitorSourceMetadata(BaseModel):
     marketCacheMutation: bool = False
 
 
+class LiquidityImpulseSynthesisPayload(BaseModel):
+    liquidityImpulse: str
+    impulseLabel: str
+    subtype: str
+    confidence: float = Field(ge=0, le=1)
+    confidenceLabel: str
+    pillarScores: dict[str, float] = Field(default_factory=dict)
+    directionScore: float = Field(ge=-1, le=1)
+    dominantDrivers: list[dict[str, Any]] = Field(default_factory=list)
+    counterEvidence: list[dict[str, Any]] = Field(default_factory=list)
+    dataGaps: list[dict[str, Any]] = Field(default_factory=list)
+    narrativeBullets: list[str] = Field(default_factory=list)
+    evidenceQuality: dict[str, Any] = Field(default_factory=dict)
+    notInvestmentAdvice: bool = True
+
+
 class LiquidityMonitorResponse(BaseModel):
     endpoint: str
     generatedAt: str
     score: LiquidityMonitorScore
     freshness: LiquidityMonitorFreshnessSummary
     indicators: list[LiquidityMonitorIndicator] = Field(default_factory=list)
+    liquidityImpulseSynthesis: LiquidityImpulseSynthesisPayload
     advisoryDisclosure: str
     sourceMetadata: LiquidityMonitorSourceMetadata

@@ -301,8 +301,10 @@ def test_market_overview_liquidity_and_degraded_temperature_stay_truthful() -> N
     assert official_liquidity["freshness"]["status"] in {"cached", "delayed", "stale"}
     assert official_liquidity["freshness"]["status"] != "live"
     assert any(indicator["evidence"]["inputs"] for indicator in official_liquidity["indicators"])
+    assert official_liquidity["liquidityImpulseSynthesis"]["notInvestmentAdvice"] is True
     assert degraded_liquidity["freshness"]["status"] in {"fallback", "stale", "delayed"}
     assert degraded_liquidity["freshness"]["status"] != "live"
+    assert degraded_liquidity["liquidityImpulseSynthesis"]["dataGaps"]
     assert any(
         indicator["evidence"]["isFallback"]
         or indicator["evidence"]["isUnavailable"]

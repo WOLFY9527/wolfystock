@@ -113,6 +113,25 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
                 },
             }
         ],
+        "liquidityImpulseSynthesis": {
+            "liquidityImpulse": "contracting_liquidity",
+            "impulseLabel": "Liquidity appears to be contracting",
+            "subtype": "rates_driven_tightening",
+            "confidence": 0.71,
+            "confidenceLabel": "high",
+            "pillarScores": {
+                "dollar_pressure": 0.42,
+                "rates_pressure": 0.63,
+                "volatility_stress": 0.51,
+            },
+            "directionScore": -0.58,
+            "dominantDrivers": [{"key": "liquidity_monitor:us_rates_pressure", "label": "US Rates / 利率压力"}],
+            "counterEvidence": [],
+            "dataGaps": [],
+            "narrativeBullets": ["Rates and dollar pressure are dominating the current liquidity signal."],
+            "evidenceQuality": {"scoringPillarCount": 3},
+            "notInvestmentAdvice": True,
+        },
         "advisoryDisclosure": "仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。",
         "sourceMetadata": {
             "externalProviderCalls": False,
@@ -127,11 +146,21 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"endpoint", "generatedAt", "score", "freshness", "indicators", "advisoryDisclosure", "sourceMetadata"}
+    assert set(body) == {
+        "endpoint",
+        "generatedAt",
+        "score",
+        "freshness",
+        "indicators",
+        "liquidityImpulseSynthesis",
+        "advisoryDisclosure",
+        "sourceMetadata",
+    }
     assert body["endpoint"] == "/api/v1/market/liquidity-monitor"
     assert body["score"]["regime"] == "supportive"
     assert set(body["sourceMetadata"]) == {"externalProviderCalls", "providerRuntimeChanged", "marketCacheMutation"}
     assert body["sourceMetadata"]["externalProviderCalls"] is False
+    assert body["liquidityImpulseSynthesis"]["liquidityImpulse"] == "contracting_liquidity"
     assert body["indicators"][0]["evidence"]["source"] == "fred"
     assert body["indicators"][0]["evidence"]["inputs"][0]["sourceType"] == "official_public"
     diagnostics = body["indicators"][0]["coverageDiagnostics"]
@@ -292,6 +321,25 @@ def test_liquidity_monitor_route_preserves_explicit_non_live_indicator_contracts
                 },
             },
         ],
+        "liquidityImpulseSynthesis": {
+            "liquidityImpulse": "data_insufficient",
+            "impulseLabel": "Data insufficient for a reliable liquidity call",
+            "subtype": "data_insufficient",
+            "confidence": 0.2,
+            "confidenceLabel": "insufficient",
+            "pillarScores": {
+                "dollar_pressure": 0.0,
+                "rates_pressure": 0.0,
+                "volatility_stress": 0.0,
+            },
+            "directionScore": 0.0,
+            "dominantDrivers": [],
+            "counterEvidence": [],
+            "dataGaps": [{"key": "liquidity_monitor:vix_pressure", "reason": "score_contribution_not_allowed"}],
+            "narrativeBullets": ["Available evidence is degraded or non-score-eligible."],
+            "evidenceQuality": {"dataGapCount": 1},
+            "notInvestmentAdvice": True,
+        },
         "advisoryDisclosure": "仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。",
         "sourceMetadata": {
             "externalProviderCalls": True,
@@ -305,7 +353,10 @@ def test_liquidity_monitor_route_preserves_explicit_non_live_indicator_contracts
         response = TestClient(app).get("/api/v1/market/liquidity-monitor")
 
     assert response.status_code == 200
-    indicators = {item["key"]: item for item in response.json()["indicators"]}
+    body = response.json()
+    assert body["liquidityImpulseSynthesis"]["liquidityImpulse"] == "data_insufficient"
+    assert body["liquidityImpulseSynthesis"]["dataGaps"]
+    indicators = {item["key"]: item for item in body["indicators"]}
     assert indicators["cn_hk_flows"]["status"] == "unavailable"
     assert indicators["cn_hk_flows"]["freshness"] == "fallback"
     assert indicators["cn_hk_flows"]["includedInScore"] is False

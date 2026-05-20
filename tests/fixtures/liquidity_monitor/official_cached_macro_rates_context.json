@@ -91,6 +91,9 @@
         "scoreContribution": 0,
         "capReason": "unavailable_source",
         "degradationReason": "fallback_source",
+        "sourceAuthorityRouteRejected": false,
+        "sourceAuthorityReason": null,
+        "routeRejectedReasonCodes": [],
         "activationHint": "Binance 现货输入 fresh 时可直接计分；缺少 BTC / ETH / BNB 时保持不可用。；requiredProviderClass=exchange_public.crypto_spot；missingProviderReason=requires_exchange_public.crypto_spot；scoreExclusionReason=trust_gate_blocked；trust gate=unavailable / unavailable；缺少: BTC, ETH, BNB；scoreContributionAllowed=False；cap=unavailable_source；score capped"
       }
     },
@@ -168,6 +171,9 @@
         "scoreContribution": 0,
         "capReason": "unavailable_source",
         "degradationReason": "fallback_source",
+        "sourceAuthorityRouteRejected": false,
+        "sourceAuthorityReason": null,
+        "routeRejectedReasonCodes": [],
         "activationHint": "仅在现有 Binance Futures funding 回填和 BTC / ETH 现货上下文可用时激活。；requiredProviderClass=exchange_public.crypto_funding；missingProviderReason=requires_exchange_public.crypto_funding；scoreExclusionReason=observation_only；trust gate=unavailable / unavailable；缺少: BTC_FUNDING, ETH_FUNDING；observationOnly=True；scoreContributionAllowed=False；cap=unavailable_source；score capped"
       }
     },
@@ -243,6 +249,9 @@
         "scoreContribution": 6,
         "capReason": "partial_coverage",
         "degradationReason": "partial_coverage",
+        "sourceAuthorityRouteRejected": false,
+        "sourceAuthorityReason": null,
+        "routeRejectedReasonCodes": [],
         "activationHint": "现有宏观 / 波动率快照可用时激活；yfinance proxy 会被 trust gate 限制为延迟或部分。；requiredProviderClass=official_public.vix_or_volatility；requiredRealSourceForScore=True；已激活: VIX；freshness=partial；cap=partial_coverage；score capped；source=mixed"
       }
     },
@@ -325,6 +334,9 @@
         "scoreContribution": 0,
         "capReason": "partial_coverage",
         "degradationReason": "partial_coverage",
+        "sourceAuthorityRouteRejected": false,
+        "sourceAuthorityReason": null,
+        "routeRejectedReasonCodes": [],
         "activationHint": "现有 FX / commodities 快照可用时激活；缺少 DXY 时可退化到 USD/CNH、USD/JPY、EUR/USD 代理。；requiredProviderClass=official_or_authorized.fx_dxy；missingProviderReason=requires_official_or_authorized.fx_dxy；paidDataLikelyRequired=True；requiredRealSourceForScore=True；scoreExclusionReason=proxy_only_missing_real_source；proxyObservationOnlyReason=proxy_only_missing_real_source；缺少: USDCNH, USDJPY, EURUSD；proxyOnly=True；scoreContributionAllowed=False；freshness=partial；cap=partial_coverage；score capped；source=yahoo"
       }
     },
@@ -462,6 +474,9 @@
         "scoreContribution": 4,
         "capReason": "partial_coverage",
         "degradationReason": "partial_coverage",
+        "sourceAuthorityRouteRejected": false,
+        "sourceAuthorityReason": null,
+        "routeRejectedReasonCodes": [],
         "activationHint": "官方利率快照优先；没有 US2Y / US10Y / US30Y / SOFR 时只能退化为代理或不可用。；requiredProviderClass=official_public.us_treasury_curve；requiredRealSourceForScore=True；缺少: US10Y2Y, US10Y3M；freshness=partial；cap=partial_coverage；score capped"
       }
     },
@@ -537,6 +552,9 @@
         "scoreContribution": 0,
         "capReason": "partial_coverage",
         "degradationReason": "partial_coverage",
+        "sourceAuthorityRouteRejected": false,
+        "sourceAuthorityReason": null,
+        "routeRejectedReasonCodes": [],
         "activationHint": "激活现有 `funds_flow` snapshot 或 Market Overview 的 SPY / QQQ / IWM proxy；缺少 ETF 条目时保持不可用。；requiredProviderClass=authorized.us_etf_flow；missingProviderReason=requires_authorized.us_etf_flow；paidDataLikelyRequired=True；requiredRealSourceForScore=True；scoreExclusionReason=proxy_only_missing_real_source；proxyObservationOnlyReason=proxy_only_missing_real_source；已激活: ETF；proxyOnly=True；scoreContributionAllowed=False；freshness=partial；cap=partial_coverage；score capped；source=yfinance_proxy"
       }
     },
@@ -638,6 +656,9 @@
         "scoreContribution": 0,
         "capReason": "partial_coverage",
         "degradationReason": "partial_coverage",
+        "sourceAuthorityRouteRejected": false,
+        "sourceAuthorityReason": null,
+        "routeRejectedReasonCodes": [],
         "activationHint": "激活现有 sector ETF breadth proxy；需要 SECTORS_UP、SECTORS_DOWN 和相对强弱代理。；requiredProviderClass=official_or_authorized.us_market_breadth；missingProviderReason=requires_official_or_authorized.us_market_breadth；paidDataLikelyRequired=True；requiredRealSourceForScore=True；scoreExclusionReason=proxy_only_missing_real_source；proxyObservationOnlyReason=proxy_only_missing_real_source；缺少: RSP_SPY, IWM_SPY, QQQ_SPY；proxyOnly=True；scoreContributionAllowed=False；freshness=partial；cap=partial_coverage；score capped；source=yfinance_proxy"
       }
     },
@@ -721,6 +742,9 @@
         "scoreContribution": 0,
         "capReason": "unavailable_source",
         "degradationReason": "fallback_source",
+        "sourceAuthorityRouteRejected": false,
+        "sourceAuthorityReason": null,
+        "routeRejectedReasonCodes": [],
         "activationHint": "CN / HK 指数上下文只能来自现有快照，缺少可用指数条目时保持不可用。；requiredProviderClass=official_public.cn_hk_index_snapshot；missingProviderReason=requires_official_public.cn_hk_index_snapshot；scoreExclusionReason=observation_only；trust gate=unavailable / unavailable；缺少: 000001.SH, 399001.SZ, HSI.HK, HSTECH.HK, CN00Y；observationOnly=True；scoreContributionAllowed=False；cap=unavailable_source；score capped"
       }
     },
@@ -804,6 +828,9 @@
         "scoreContribution": 0,
         "capReason": "unavailable_source",
         "degradationReason": "fallback_source",
+        "sourceAuthorityRouteRejected": false,
+        "sourceAuthorityReason": null,
+        "routeRejectedReasonCodes": [],
         "activationHint": "No audited CN/HK flow provider；只有非 fallback 的 `cn_flows` 快照才会参与评分。；requiredProviderClass=authorized.cn_hk_connect_flow；missingProviderReason=requires_authorized.cn_hk_connect_flow；paidDataLikelyRequired=True；scoreExclusionReason=observation_only；trust gate=unavailable / unavailable；缺少: NORTHBOUND, SOUTHBOUND, CN_ETF, MARGIN_BALANCE, MAINLAND_MAIN；observationOnly=True；scoreContributionAllowed=False；cap=unavailable_source；score capped"
       }
     },
@@ -881,6 +908,9 @@
         "scoreContribution": 0,
         "capReason": "unavailable_source",
         "degradationReason": "fallback_source",
+        "sourceAuthorityRouteRejected": false,
+        "sourceAuthorityReason": null,
+        "routeRejectedReasonCodes": [],
         "activationHint": "仅在 `rates` 或 `macro` 快照里有 DR007 / SHIBOR 时激活，缺失则保持观测态。；requiredProviderClass=official_public.cn_money_market_rates；missingProviderReason=requires_official_public.cn_money_market_rates；scoreExclusionReason=observation_only；trust gate=unavailable / unavailable；缺少: DR007, SHIBOR；observationOnly=True；scoreContributionAllowed=False；cap=unavailable_source；score capped"
       }
     },
@@ -962,10 +992,290 @@
         "scoreContribution": 0,
         "capReason": "unavailable_source",
         "degradationReason": "fallback_source",
+        "sourceAuthorityRouteRejected": false,
+        "sourceAuthorityReason": null,
+        "routeRejectedReasonCodes": [],
         "activationHint": "现有 futures snapshot 或延迟 proxy 可用时才激活；没有真实期货快照时保持不可用。；requiredProviderClass=exchange_or_broker_authorized.index_futures；missingProviderReason=requires_exchange_or_broker_authorized.index_futures；paidDataLikelyRequired=True；scoreExclusionReason=observation_only；trust gate=unavailable / unavailable；缺少: NQ, ES, YM, RTY；observationOnly=True；scoreContributionAllowed=False；cap=unavailable_source；score capped"
       }
     }
   ],
+  "liquidityImpulseSynthesis": {
+    "liquidityImpulse": "data_insufficient",
+    "impulseLabel": "Data insufficient for a reliable liquidity call",
+    "subtype": "data_insufficient",
+    "confidence": 0.256,
+    "confidenceLabel": "insufficient",
+    "pillarScores": {
+      "dollar_pressure": 0.0,
+      "rates_pressure": -0.079,
+      "volatility_stress": -1.0,
+      "crypto_liquidity_beta": 0.0,
+      "risk_asset_demand": 0.0,
+      "funding_stress": 0.0,
+      "equity_flow_proxy": 0.0,
+      "breadth_confirmation": 0.0,
+      "china_liquidity_context": 0.0
+    },
+    "directionScore": 0.539,
+    "dominantDrivers": [
+      {
+        "key": "liquidity_monitor:vix_pressure",
+        "label": "VIX / 波动率压力",
+        "pillar": "volatility_stress",
+        "direction": "supports_expansion",
+        "signal": -1.0,
+        "weight": 0.432,
+        "impact": 0.432,
+        "source": "fred",
+        "sourceTier": "official_public",
+        "trustLevel": "usable_with_caution",
+        "freshness": "partial",
+        "observationOnly": false,
+        "scoreContributionAllowed": true,
+        "includedInScore": true,
+        "proxyOnly": false,
+        "discountReasons": [
+          "freshness_discount"
+        ]
+      },
+      {
+        "key": "liquidity_monitor:us_rates_pressure",
+        "label": "US Rates / 利率压力",
+        "pillar": "rates_pressure",
+        "direction": "supports_expansion",
+        "signal": -0.079,
+        "weight": 0.432,
+        "impact": 0.034,
+        "source": "mixed",
+        "sourceTier": "official_public",
+        "trustLevel": "usable_with_caution",
+        "freshness": "partial",
+        "observationOnly": false,
+        "scoreContributionAllowed": true,
+        "includedInScore": true,
+        "proxyOnly": false,
+        "discountReasons": [
+          "freshness_discount"
+        ]
+      }
+    ],
+    "counterEvidence": [],
+    "dataGaps": [
+      {
+        "key": "liquidity_monitor:crypto_spot_momentum",
+        "label": "Crypto 现货动量",
+        "pillar": "crypto_liquidity_beta",
+        "reason": "missing_direction_or_magnitude",
+        "source": "unavailable",
+        "sourceTier": "unavailable",
+        "trustLevel": "unavailable",
+        "freshness": "unavailable",
+        "observationOnly": false,
+        "scoreContributionAllowed": false,
+        "includedInScore": false,
+        "proxyOnly": false,
+        "degradationReason": "fallback_source"
+      },
+      {
+        "key": "liquidity_monitor:crypto_funding",
+        "label": "Crypto Funding",
+        "pillar": "funding_stress",
+        "reason": "missing_direction_or_magnitude",
+        "source": "unavailable",
+        "sourceTier": "unavailable",
+        "trustLevel": "unavailable",
+        "freshness": "unavailable",
+        "observationOnly": true,
+        "scoreContributionAllowed": false,
+        "includedInScore": false,
+        "proxyOnly": false,
+        "degradationReason": "fallback_source"
+      },
+      {
+        "key": "liquidity_monitor:usd_pressure",
+        "label": "DXY / 美元压力",
+        "pillar": "dollar_pressure",
+        "reason": "score_contribution_not_allowed",
+        "source": "yahoo",
+        "sourceTier": "unofficial_public_api",
+        "trustLevel": "usable_with_caution",
+        "freshness": "partial",
+        "observationOnly": false,
+        "scoreContributionAllowed": false,
+        "includedInScore": false,
+        "proxyOnly": true,
+        "degradationReason": "partial_coverage"
+      },
+      {
+        "key": "liquidity_monitor:us_etf_flow_proxy",
+        "label": "US ETF 资金代理",
+        "pillar": "equity_flow_proxy",
+        "reason": "score_contribution_not_allowed",
+        "source": "yfinance_proxy",
+        "sourceTier": "unofficial_public_api",
+        "trustLevel": "usable_with_caution",
+        "freshness": "partial",
+        "observationOnly": false,
+        "scoreContributionAllowed": false,
+        "includedInScore": false,
+        "proxyOnly": true,
+        "degradationReason": "partial_coverage"
+      },
+      {
+        "key": "liquidity_monitor:us_breadth_proxy",
+        "label": "US 广度代理",
+        "pillar": "breadth_confirmation",
+        "reason": "score_contribution_not_allowed",
+        "source": "yfinance_proxy",
+        "sourceTier": "unofficial_public_api",
+        "trustLevel": "usable_with_caution",
+        "freshness": "partial",
+        "observationOnly": false,
+        "scoreContributionAllowed": false,
+        "includedInScore": false,
+        "proxyOnly": true,
+        "degradationReason": "partial_coverage"
+      },
+      {
+        "key": "liquidity_monitor:cn_hk_index_context",
+        "label": "CN/HK 指数环境",
+        "pillar": "china_liquidity_context",
+        "reason": "missing_direction_or_magnitude",
+        "source": "unavailable",
+        "sourceTier": "unavailable",
+        "trustLevel": "unavailable",
+        "freshness": "unavailable",
+        "observationOnly": true,
+        "scoreContributionAllowed": false,
+        "includedInScore": false,
+        "proxyOnly": false,
+        "degradationReason": "fallback_source"
+      },
+      {
+        "key": "liquidity_monitor:cn_hk_flows",
+        "label": "CN/HK 资金流",
+        "pillar": "china_liquidity_context",
+        "reason": "missing_direction_or_magnitude",
+        "source": "unavailable",
+        "sourceTier": "unavailable",
+        "trustLevel": "unavailable",
+        "freshness": "unavailable",
+        "observationOnly": true,
+        "scoreContributionAllowed": false,
+        "includedInScore": false,
+        "proxyOnly": false,
+        "degradationReason": "fallback_source"
+      },
+      {
+        "key": "liquidity_monitor:cn_money_market_rates",
+        "label": "CN 货币市场利率",
+        "pillar": "china_liquidity_context",
+        "reason": "missing_direction_or_magnitude",
+        "source": "unavailable",
+        "sourceTier": "unavailable",
+        "trustLevel": "unavailable",
+        "freshness": "unavailable",
+        "observationOnly": true,
+        "scoreContributionAllowed": false,
+        "includedInScore": false,
+        "proxyOnly": false,
+        "degradationReason": "fallback_source"
+      },
+      {
+        "key": "liquidity_monitor:futures_premarket",
+        "label": "期货 / 盘前方向",
+        "pillar": "risk_asset_demand",
+        "reason": "missing_direction_or_magnitude",
+        "source": "unavailable",
+        "sourceTier": "unavailable",
+        "trustLevel": "unavailable",
+        "freshness": "unavailable",
+        "observationOnly": true,
+        "scoreContributionAllowed": false,
+        "includedInScore": false,
+        "proxyOnly": false,
+        "degradationReason": "fallback_source"
+      },
+      {
+        "key": "missing:dollar_pressure",
+        "label": "Missing scoring evidence for dollar_pressure",
+        "pillar": "dollar_pressure",
+        "reason": "missing_scoring_evidence"
+      },
+      {
+        "key": "missing:crypto_liquidity_beta",
+        "label": "Missing scoring evidence for crypto_liquidity_beta",
+        "pillar": "crypto_liquidity_beta",
+        "reason": "missing_scoring_evidence"
+      },
+      {
+        "key": "missing:risk_asset_demand",
+        "label": "Missing scoring evidence for risk_asset_demand",
+        "pillar": "risk_asset_demand",
+        "reason": "missing_scoring_evidence"
+      },
+      {
+        "key": "missing:funding_stress",
+        "label": "Missing scoring evidence for funding_stress",
+        "pillar": "funding_stress",
+        "reason": "missing_scoring_evidence"
+      },
+      {
+        "key": "missing:equity_flow_proxy",
+        "label": "Missing scoring evidence for equity_flow_proxy",
+        "pillar": "equity_flow_proxy",
+        "reason": "missing_scoring_evidence"
+      },
+      {
+        "key": "missing:breadth_confirmation",
+        "label": "Missing scoring evidence for breadth_confirmation",
+        "pillar": "breadth_confirmation",
+        "reason": "missing_scoring_evidence"
+      },
+      {
+        "key": "missing:china_liquidity_context",
+        "label": "Missing scoring evidence for china_liquidity_context",
+        "pillar": "china_liquidity_context",
+        "reason": "missing_scoring_evidence"
+      }
+    ],
+    "narrativeBullets": [
+      "Liquidity impulse synthesis is unavailable because score-contributing coverage is below threshold or lacks real-source evidence.",
+      "Covered pillars: 2 of 9.",
+      "Unavailable, rejected, stale, proxy-only, and score-blocked inputs were not promoted into a false expansion or contraction call."
+    ],
+    "evidenceQuality": {
+      "version": "liquidity_impulse_synthesis_v1",
+      "inputCount": 11,
+      "scoringEvidenceCount": 2,
+      "scoringPillarCount": 2,
+      "coveredPillars": [
+        "rates_pressure",
+        "volatility_stress"
+      ],
+      "missingPillars": [
+        "dollar_pressure",
+        "crypto_liquidity_beta",
+        "risk_asset_demand",
+        "funding_stress",
+        "equity_flow_proxy",
+        "breadth_confirmation",
+        "china_liquidity_context"
+      ],
+      "coverageRatio": 0.222,
+      "scoreContributingWeight": 0.864,
+      "averageEvidenceWeight": 0.432,
+      "discountedEvidenceCount": 2,
+      "observationOnlyEvidenceCount": 5,
+      "scoreBlockedEvidenceCount": 9,
+      "proxyOnlyScoringCount": 0,
+      "realScoringEvidenceCount": 2,
+      "allScoringEvidenceProxyOnly": false,
+      "dataGapCount": 16,
+      "conflictPenalty": 0.0
+    },
+    "notInvestmentAdvice": true
+  },
   "advisoryDisclosure": "仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。",
   "sourceMetadata": {
     "externalProviderCalls": false,

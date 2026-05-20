@@ -13,6 +13,7 @@ from src.contracts.source_confidence import (
     coerce_source_confidence_contract,
     evaluate_market_intelligence_trust_from_sources,
 )
+from src.services.liquidity_impulse_synthesis_adapter import build_liquidity_impulse_synthesis_payload
 from src.services.data_source_router import DataSourceRouteRequest, DataSourceRouter
 from src.services.market_cache import MarketCache, market_cache
 from src.services.market_data_source_registry import project_source_provenance, resolve_source_type
@@ -302,6 +303,7 @@ class LiquidityMonitorService:
                 "latestAsOf": max(available_as_of) if available_as_of else None,
             },
             "indicators": indicators,
+            "liquidityImpulseSynthesis": self._build_liquidity_impulse_synthesis_payload(indicators),
             "advisoryDisclosure": ADVISORY_DISCLOSURE,
             "sourceMetadata": {
                 "externalProviderCalls": self._external_provider_calls_used,
@@ -309,6 +311,10 @@ class LiquidityMonitorService:
                 "marketCacheMutation": False,
             },
         }
+
+    @staticmethod
+    def _build_liquidity_impulse_synthesis_payload(indicators: List[Dict[str, Any]]) -> Dict[str, Any]:
+        return build_liquidity_impulse_synthesis_payload(indicators)
 
     def _read_panel(self, key: str) -> PanelState:
         cache_candidate = self._read_market_cache_candidate(key)
