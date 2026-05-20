@@ -10,7 +10,7 @@ import {
   DeepReportDrawer,
   type SignalTone,
 } from '../components/home-bento';
-import { HomeCandlestickChart, type HomeCandlestickChartContext } from '../components/home-bento/HomeCandlestickChart';
+import type { HomeCandlestickChartContext } from '../components/home-bento/HomeCandlestickChart';
 import {
   CompactFilterBar,
   FixedRegionGrid,
@@ -73,7 +73,73 @@ type HomeBentoDashboardPageProps = {
 };
 
 const LazyFullDecisionReportDrawer = lazy(() => import('../components/home-bento/FullDecisionReportDrawer'));
+const LazyHomeCandlestickChart = lazy(() =>
+  import('../components/home-bento/HomeCandlestickChart').then((module) => ({
+    default: module.HomeCandlestickChart,
+  })),
+);
 const DEFAULT_HOME_TICKER = 'ORCL';
+const HOME_CHART_FALLBACK_TIMEFRAMES = ['1D', '1W', '1M'];
+const HOME_CHART_FALLBACK_INDICATORS = ['MA5', 'MA10', 'MA20', 'MA60', 'VWAP'];
+const HOME_CHART_FALLBACK_GRID_ROWS = ['price-top', 'price-upper', 'price-mid', 'volume'];
+
+function HomeCandlestickChartFallback({
+  className,
+  style,
+}: {
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <div
+      className={cn(
+        'home-chart-well min-w-0 rounded-[14px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-3 py-2.5 shadow-[var(--wolfy-shadow-panel)]',
+        className,
+      )}
+      style={style}
+      data-testid="home-candlestick-chart-fallback"
+      aria-hidden="true"
+    >
+      <div className="mb-2.5 flex min-w-0 flex-col gap-2.5">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="flex items-center gap-0.5 rounded-full border border-[color:var(--wolfy-border-faint)] bg-white/[0.025] p-0.5">
+              {HOME_CHART_FALLBACK_TIMEFRAMES.map((label, index) => (
+                <span
+                  key={label}
+                  className={cn(
+                    'h-[22px] rounded-full px-2.5 py-1 text-[10px] font-medium',
+                    index === 0 ? 'bg-[var(--wolfy-accent-soft)] text-transparent' : 'text-transparent',
+                  )}
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+            <span className="hidden h-3 w-10 rounded-full bg-white/[0.04] sm:inline" />
+          </div>
+          <span className="h-3 w-24 rounded-full bg-white/[0.04]" />
+        </div>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          {HOME_CHART_FALLBACK_INDICATORS.map((label) => (
+            <span
+              key={label}
+              className="h-[24px] w-14 rounded-full border border-white/[0.05] bg-white/[0.012]"
+            />
+          ))}
+        </div>
+      </div>
+      <div className="relative h-[216px] min-w-[280px] overflow-hidden rounded-[12px] border border-[color:var(--wolfy-border-faint)] bg-[linear-gradient(180deg,rgba(17,22,38,0.92),rgba(13,18,32,0.98))] sm:h-[228px] xl:h-[242px]">
+        <div className="pointer-events-none absolute inset-x-4 top-6 h-px bg-gradient-to-r from-transparent via-white/14 to-transparent" />
+        <div className="absolute inset-x-4 bottom-5 top-10 grid grid-rows-4 gap-4">
+          {HOME_CHART_FALLBACK_GRID_ROWS.map((row) => (
+            <span key={row} className="border-t border-white/[0.045]" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function buildDecisionTraceFixtureReport(): AnalysisReport {
   return {
@@ -1155,14 +1221,23 @@ function LinearTechnicalStructure({
         )}
         data-testid="home-research-chart-workspace"
       >
-        <HomeCandlestickChart
-          ticker={ticker}
-          currentPrice={currentPrice}
-          isLocked={isGuest}
-          onContextChange={onChartContextChange}
-          className="rounded-none border-0 bg-transparent shadow-none"
-          style={{ background: 'transparent', borderColor: 'transparent', boxShadow: 'none' }}
-        />
+        <Suspense
+          fallback={(
+            <HomeCandlestickChartFallback
+              className="rounded-none border-0 bg-transparent shadow-none"
+              style={{ background: 'transparent', borderColor: 'transparent', boxShadow: 'none' }}
+            />
+          )}
+        >
+          <LazyHomeCandlestickChart
+            ticker={ticker}
+            currentPrice={currentPrice}
+            isLocked={isGuest}
+            onContextChange={onChartContextChange}
+            className="rounded-none border-0 bg-transparent shadow-none"
+            style={{ background: 'transparent', borderColor: 'transparent', boxShadow: 'none' }}
+          />
+        </Suspense>
         <div
           className="home-research-signal-rail hidden min-w-0 content-start overflow-hidden border-t border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] xl:border-l"
           data-testid="home-bento-decision-support-grid"

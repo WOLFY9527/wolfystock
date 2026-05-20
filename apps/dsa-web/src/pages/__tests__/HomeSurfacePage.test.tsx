@@ -283,6 +283,7 @@ describe('HomeSurfacePage', () => {
   it('renders the signed-in ResearchConsole route for authenticated users', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
+    expect(screen.getByTestId('home-research-chart-workspace')).toContainElement(screen.getByTestId('home-candlestick-chart-fallback'));
     await screen.findByText('Oracle Corporation');
     const root = screen.getByTestId('home-bento-dashboard');
     const main = screen.getByTestId('home-bento-main');
