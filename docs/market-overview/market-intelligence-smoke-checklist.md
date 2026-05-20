@@ -37,6 +37,23 @@ git diff --check
 ./scripts/release_secret_scan.sh
 ```
 
+Local operator preflight for market-data readiness:
+
+```bash
+./scripts/market_data_readiness_preflight.sh
+```
+
+Use this before manual local Market Intelligence or scanner/backtest checks when
+operator setup is uncertain. The helper verifies the repository root, `.venv`
+presence and activation command, `LOCAL_US_PARQUET_DIR` /
+`US_STOCK_PARQUET_DIR`, `pyarrow` / `fastparquet` import availability,
+representative `ORCL.parquet`, `AAPL.parquet`, and `SPY.parquet` file
+presence, and `TUSHARE_TOKEN` presence as a boolean only. It does not source
+the virtualenv, print secret values, install packages, modify environment
+variables, call providers, read parquet contents, or make external network
+calls. If a backend is already running on `127.0.0.1:8000`, it also performs a
+loopback-only probe of `GET /api/v1/market/data-readiness`.
+
 Manual backend endpoints to probe:
 - `GET /api/v1/market-overview/indices`
 - `GET /api/v1/market-overview/volatility`
