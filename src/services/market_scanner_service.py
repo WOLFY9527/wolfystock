@@ -25,6 +25,7 @@ from src.repositories.scanner_repo import ScannerRepository
 from src.repositories.stock_repo import StockRepository
 from src.contracts.source_confidence import coerce_source_confidence_contract
 from src.services.market_data_source_registry import resolve_source_label
+from src.services.data_source_router import CapabilityResolver, DataSourceRouteRequest, DataSourceRouter
 from src.services.scanner_ai_service import ScannerAiInterpretationService
 from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION, build_scanner_evidence_packet
 from src.services.scanner_factor_observations import attach_scanner_factor_observations
@@ -57,6 +58,22 @@ MAX_HK_SCANNER_SUPPLEMENT_TARGET = 60
 SCANNER_DETAIL_HISTORY_MAX_WORKERS = 4
 SCANNER_SCORE_CAP_FALLBACK_SOURCES = {"fallback", "history_only_us_scan", "history_only_hk_scan", "mock", "synthetic"}
 SCANNER_SCORE_CAP_PARTIAL_SOURCES = {"local_partial_fallback"}
+SCANNER_OBSERVATION_ROUTE_REJECTED_REASON = "scanner_observation_route_rejected"
+SCANNER_OBSERVATION_AUTHORITY_REJECTED_REASON = "scanner_observation_authority_claim_rejected"
+SCANNER_OBSERVATION_METADATA_MISSING_REASON = "scanner_observation_metadata_missing"
+SCANNER_OBSERVATION_INVALID_METADATA_REASON = "scanner_observation_invalid_metadata"
+SCANNER_OBSERVATION_ALLOWED_FRESHNESS = frozenset({"t_plus_1_or_delayed", "stale", "unavailable"})
+SCANNER_OBSERVATION_AUTHORITY_FRESHNESS = frozenset({"fresh", "live", "realtime"})
+SCANNER_OBSERVATION_AUTHORITY_SOURCE_TYPES = frozenset({"official_public", "exchange_public", "exchange_authorized"})
+SCANNER_OBSERVATION_AUTHORITY_TRUST_LEVELS = frozenset(
+    {
+        "reliable",
+        "reliable_realtime",
+        "score_grade",
+        "decision_grade",
+        "reliable_for_filings_metadata",
+    }
+)
 CURATED_US_LIQUID_SEED_SYMBOLS: Tuple[str, ...] = (
     "NVDA",
     "AAPL",
@@ -1101,6 +1118,125 @@ class MarketScannerService:
             payload.update(dict(extra_fields))
         return payload
 
+    @staticmethod
+    def _build_scanner_observation_route_request(
+        *,
+        symbol: str,
+        capability: str,
+    ) -> DataSourceRouteRequest:
+        return DataSourceRouteRequest(
+            market="CN",
+            asset_type="equity",
+            use_case="scanner_diagnostics",
+            capability=capability,
+            freshness_need="delayed",
+            scoring_allowed=False,
+            symbol=symbol,
+            allow_network=False,
+            reproducibility_required=False,
+        )
+
+    @staticmethod
+    def _scanner_observation_authority_claim_reason_codes(raw_payload: Mapping[str, Any]) -> Tuple[str, ...]:
+        reason_codes: List[str] = []
+        if raw_payload.get("observationOnly") is False or raw_payload.get("scoreContributionAllowed") is True:
+            reason_codes.append("scoring_authority_claim")
+        freshness = str(raw_payload.get("freshness") or "").strip().lower()
+        if freshness in SCANNER_OBSERVATION_AUTHORITY_FRESHNESS:
+            reason_codes.append("live_authority_claim")
+        source_type = str(raw_payload.get("sourceType") or "").strip().lower()
+        if source_type in SCANNER_OBSERVATION_AUTHORITY_SOURCE_TYPES:
+            reason_codes.append("source_authority_claim")
+        trust_level = str(raw_payload.get("trustLevel") or "").strip().lower()
+        if trust_level in SCANNER_OBSERVATION_AUTHORITY_TRUST_LEVELS:
+            reason_codes.append("trust_authority_claim")
+        return tuple(dict.fromkeys(reason_codes))
+
+    @staticmethod
+    def _build_rejected_scanner_observation_entry(
+        *,
+        provider_id: str,
+        capability: str,
+        stage: str,
+        route_plan,
+        reason: str,
+        reason_codes: Sequence[str],
+        as_of: Optional[str] = None,
+        updated_at: Optional[str] = None,
+        attempted_at: Optional[str] = None,
+        extra_fields: Optional[Mapping[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        candidate = (
+            CapabilityResolver.route_candidate(provider_id, capability)
+            or CapabilityResolver.route_candidate(provider_id, "quote")
+            or CapabilityResolver.route_candidate(provider_id, "companyfacts")
+        )
+        if candidate is None:
+            return None
+
+        payload: Dict[str, Any] = {
+            "providerName": candidate.provider_name,
+            "providerId": candidate.provider_id,
+            "source": candidate.provider_id,
+            "sourceType": candidate.source_type,
+            "sourceTier": candidate.source_tier,
+            "sourceLabel": resolve_source_label(candidate.provider_id, source_type=candidate.source_type),
+            "capability": capability,
+            "stage": stage,
+            "trustLevel": candidate.trust_level,
+            "freshness": "unavailable",
+            "freshnessExpectation": candidate.freshness_expectation,
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "keyRequired": False,
+            "cacheRequired": bool(route_plan.cache_required),
+            "backgroundRefreshRecommended": bool(route_plan.background_refresh_required),
+            "asOf": as_of,
+            "updatedAt": updated_at,
+            "attemptedAt": attempted_at,
+            "degradationReason": reason,
+            "missingProviderReason": reason,
+            "routeRejectedReasonCodes": list(reason_codes),
+        }
+        if extra_fields:
+            payload.update(dict(extra_fields))
+        return payload
+
+    def _build_routed_cn_provider_observation_entry(
+        self,
+        *,
+        symbol: str,
+        provider_id: str,
+        capability: str,
+        stage: str,
+        as_of: Optional[str] = None,
+        updated_at: Optional[str] = None,
+        degradation_reason: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        route_request = self._build_scanner_observation_route_request(symbol=symbol, capability=capability)
+        route_plan = DataSourceRouter.resolve(route_request)
+        provider_reason_codes = route_plan.reason_codes.get(provider_id) or ("provider_not_eligible_for_observation_route",)
+        eligible_provider_ids = {candidate.provider_id for candidate in route_plan.observation_candidates}
+        if provider_id not in eligible_provider_ids:
+            return self._build_rejected_scanner_observation_entry(
+                provider_id=provider_id,
+                capability=capability,
+                stage=stage,
+                route_plan=route_plan,
+                reason=SCANNER_OBSERVATION_ROUTE_REJECTED_REASON,
+                reason_codes=provider_reason_codes,
+                as_of=as_of,
+                updated_at=updated_at,
+            )
+        return self._build_cn_provider_observation_entry(
+            provider_id=provider_id,
+            capability=capability,
+            stage=stage,
+            as_of=as_of,
+            updated_at=updated_at,
+            degradation_reason=degradation_reason,
+        )
+
     def _resolve_baostock_cn_history_observation(
         self,
         *,
@@ -1127,17 +1263,88 @@ class MarketScannerService:
                     "missingProviderReason": "baostock_observation_resolver_failed",
                 }
 
+        route_request = self._build_scanner_observation_route_request(
+            symbol=str(candidate.get("symbol") or ""),
+            capability="cn_history_daily",
+        )
+        route_plan = DataSourceRouter.resolve(route_request)
+        eligible_provider_ids = {item.provider_id for item in route_plan.observation_candidates}
         if not isinstance(raw_payload, Mapping) or not raw_payload:
-            return None
+            if self.baostock_cn_history_observation_resolver is None:
+                return None
+            return self._build_rejected_scanner_observation_entry(
+                provider_id="baostock",
+                capability="cn_history_daily",
+                stage="scanner_diagnostics",
+                route_plan=route_plan,
+                reason=SCANNER_OBSERVATION_METADATA_MISSING_REASON,
+                reason_codes=("observation_metadata_missing",),
+                extra_fields={"adjustmentMethod": "baostock_adjustflag_2"},
+            )
 
         contract = get_provider_capability_support_contract("baostock", "cn_history_daily")
+        if contract is None or "baostock" not in eligible_provider_ids:
+            provider_reason_codes = route_plan.reason_codes.get("baostock") or ("provider_not_eligible_for_observation_route",)
+            return self._build_rejected_scanner_observation_entry(
+                provider_id="baostock",
+                capability="cn_history_daily",
+                stage="scanner_diagnostics",
+                route_plan=route_plan,
+                reason=SCANNER_OBSERVATION_ROUTE_REJECTED_REASON,
+                reason_codes=provider_reason_codes,
+                as_of=raw_payload.get("asOf"),
+                updated_at=raw_payload.get("updatedAt"),
+                attempted_at=raw_payload.get("attemptedAt"),
+                extra_fields={"adjustmentMethod": raw_payload.get("adjustmentMethod") or "baostock_adjustflag_2"},
+            )
+
+        authority_claim_codes = self._scanner_observation_authority_claim_reason_codes(raw_payload)
+        if authority_claim_codes:
+            return self._build_rejected_scanner_observation_entry(
+                provider_id="baostock",
+                capability="cn_history_daily",
+                stage="scanner_diagnostics",
+                route_plan=route_plan,
+                reason=SCANNER_OBSERVATION_AUTHORITY_REJECTED_REASON,
+                reason_codes=authority_claim_codes,
+                as_of=raw_payload.get("asOf"),
+                updated_at=raw_payload.get("updatedAt"),
+                attempted_at=raw_payload.get("attemptedAt"),
+                extra_fields={"adjustmentMethod": raw_payload.get("adjustmentMethod") or "baostock_adjustflag_2"},
+            )
+
+        if not str(raw_payload.get("freshness") or "").strip():
+            return self._build_rejected_scanner_observation_entry(
+                provider_id="baostock",
+                capability="cn_history_daily",
+                stage="scanner_diagnostics",
+                route_plan=route_plan,
+                reason=SCANNER_OBSERVATION_INVALID_METADATA_REASON,
+                reason_codes=("invalid_freshness",),
+                as_of=raw_payload.get("asOf"),
+                updated_at=raw_payload.get("updatedAt"),
+                attempted_at=raw_payload.get("attemptedAt"),
+                extra_fields={"adjustmentMethod": raw_payload.get("adjustmentMethod") or "baostock_adjustflag_2"},
+            )
+
         if contract is None:
             return None
 
         payload = contract.to_dict()
         freshness = str(raw_payload.get("freshness") or "").strip().lower()
-        if freshness not in {"t_plus_1_or_delayed", "stale", "unavailable"}:
-            freshness = "unavailable"
+        if freshness not in SCANNER_OBSERVATION_ALLOWED_FRESHNESS:
+            return self._build_rejected_scanner_observation_entry(
+                provider_id="baostock",
+                capability="cn_history_daily",
+                stage="scanner_diagnostics",
+                route_plan=route_plan,
+                reason=SCANNER_OBSERVATION_INVALID_METADATA_REASON,
+                reason_codes=("invalid_freshness",),
+                as_of=raw_payload.get("asOf"),
+                updated_at=raw_payload.get("updatedAt"),
+                attempted_at=raw_payload.get("attemptedAt"),
+                extra_fields={"adjustmentMethod": raw_payload.get("adjustmentMethod") or "baostock_adjustflag_2"},
+            )
         payload.update(
             {
                 "providerName": "baostock",
@@ -1195,7 +1402,8 @@ class MarketScannerService:
             dedupe_key = (stage, normalized_provider_id, capability)
             if dedupe_key in seen:
                 return
-            payload = self._build_cn_provider_observation_entry(
+            payload = self._build_routed_cn_provider_observation_entry(
+                symbol=str(candidate.get("symbol") or ""),
                 provider_id=normalized_provider_id,
                 capability=capability,
                 stage=stage,

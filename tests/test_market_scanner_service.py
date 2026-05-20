@@ -2306,6 +2306,95 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertTrue(history_entry["observationOnly"])
         self.assertFalse(history_entry["scoreContributionAllowed"])
 
+    def test_attach_cn_provider_observation_metadata_degrades_non_eligible_snapshot_provider_with_reason(self) -> None:
+        candidate = {
+            "symbol": "600001",
+            "name": "算力龙头",
+            "score": 82.4,
+            "raw_score": 82.4,
+            "final_score": 82.4,
+            "last_trade_date": "2026-04-30",
+            "_diagnostics": {
+                "history": {
+                    "source": "PytdxFetcher",
+                    "latest_trade_date": "2026-04-30",
+                }
+            },
+        }
+
+        self.service._attach_cn_provider_observation_metadata(
+            [candidate],
+            stock_list_source="AkshareFetcher",
+            snapshot_source="BaoStockFetcher",
+        )
+
+        self.assertEqual(candidate["score"], 82.4)
+        observation = candidate["_diagnostics"]["cn_provider_observation"]
+        self.assertEqual([item["providerId"] for item in observation["entries"]], ["akshare", "baostock", "pytdx"])
+        snapshot_entry = observation["entries"][1]
+        self.assertEqual(snapshot_entry["stage"], "snapshot")
+        self.assertEqual(snapshot_entry["capability"], "cn_realtime_snapshot")
+        self.assertEqual(snapshot_entry["freshness"], "unavailable")
+        self.assertEqual(snapshot_entry["degradationReason"], "scanner_observation_route_rejected")
+        self.assertEqual(snapshot_entry["missingProviderReason"], "scanner_observation_route_rejected")
+        self.assertIn("provider_forbidden_for_use_case", snapshot_entry["routeRejectedReasonCodes"])
+        self.assertIn("provider_not_capable", snapshot_entry["routeRejectedReasonCodes"])
+        self.assertTrue(snapshot_entry["observationOnly"])
+        self.assertFalse(snapshot_entry["scoreContributionAllowed"])
+
+    def test_attach_cn_provider_observation_metadata_rejects_baostock_authority_claim_without_mutating_score(self) -> None:
+        service = MarketScannerService(
+            self.db,
+            data_manager=self.data_manager,
+            baostock_cn_history_observation_resolver=lambda symbol, history_diag: {
+                **self._baostock_history_observation(
+                    freshness="live",
+                    as_of="2026-05-20T09:30:00+08:00",
+                    updated_at="2026-05-20T09:30:00+08:00",
+                    attempted_at="2026-05-20T09:30:00+08:00",
+                ),
+                "observationOnly": False,
+                "scoreContributionAllowed": True,
+                "trustLevel": "score_grade",
+                "sourceType": "exchange_public",
+            }
+            if str(symbol) == "600001"
+            else {},
+        )
+        candidate = {
+            "symbol": "600001",
+            "name": "算力龙头",
+            "score": 82.4,
+            "raw_score": 82.4,
+            "final_score": 82.4,
+            "last_trade_date": "2026-04-30",
+            "_diagnostics": {
+                "history": {
+                    "source": "PytdxFetcher",
+                    "latest_trade_date": "2026-04-30",
+                }
+            },
+        }
+
+        service._attach_cn_provider_observation_metadata(
+            [candidate],
+            stock_list_source="AkshareFetcher",
+            snapshot_source="AkshareFetcher",
+        )
+
+        self.assertEqual(candidate["score"], 82.4)
+        observation = candidate["_diagnostics"]["cn_provider_observation"]
+        self.assertEqual([item["providerId"] for item in observation["entries"]], ["akshare", "akshare", "pytdx", "baostock"])
+        baostock_entry = observation["entries"][3]
+        self.assertEqual(baostock_entry["stage"], "scanner_diagnostics")
+        self.assertEqual(baostock_entry["freshness"], "unavailable")
+        self.assertEqual(baostock_entry["degradationReason"], "scanner_observation_authority_claim_rejected")
+        self.assertEqual(baostock_entry["missingProviderReason"], "scanner_observation_authority_claim_rejected")
+        self.assertIn("live_authority_claim", baostock_entry["routeRejectedReasonCodes"])
+        self.assertIn("scoring_authority_claim", baostock_entry["routeRejectedReasonCodes"])
+        self.assertTrue(baostock_entry["observationOnly"])
+        self.assertFalse(baostock_entry["scoreContributionAllowed"])
+
     def test_scanner_runtime_source_tokens_keep_registry_backed_provenance_labels(self) -> None:
         detail = self.service.run_scan(
             market="cn",

@@ -112,6 +112,69 @@ def test_baostock_is_delayed_cn_history_observation_only_and_never_scoring() -> 
     assert "scoring_not_allowed" in realtime_score_plan.reason_codes["baostock"]
 
 
+def test_scanner_diagnostics_routes_cn_observation_sidecars_as_observation_only() -> None:
+    stock_list_plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="CN",
+            asset_type="equity",
+            use_case="scanner_diagnostics",
+            capability="cn_stock_list",
+            freshness_need="delayed",
+            scoring_allowed=False,
+            symbol="000001.SZ",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+    snapshot_plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="CN",
+            asset_type="equity",
+            use_case="scanner_diagnostics",
+            capability="cn_realtime_snapshot",
+            freshness_need="delayed",
+            scoring_allowed=False,
+            symbol="000001.SZ",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+    history_plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="CN",
+            asset_type="equity",
+            use_case="scanner_diagnostics",
+            capability="cn_history_daily",
+            freshness_need="delayed",
+            scoring_allowed=False,
+            symbol="000001.SZ",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+
+    assert _ids(stock_list_plan.primary_candidates) == set()
+    assert _ids(stock_list_plan.observation_candidates) == {"akshare"}
+    assert stock_list_plan.cache_required is True
+    assert stock_list_plan.score_contribution_allowed is False
+    assert all(candidate.observation_only is True for candidate in stock_list_plan.observation_candidates)
+    assert all(candidate.score_contribution_allowed is False for candidate in stock_list_plan.observation_candidates)
+
+    assert _ids(snapshot_plan.primary_candidates) == set()
+    assert _ids(snapshot_plan.observation_candidates) == {"akshare"}
+    assert snapshot_plan.cache_required is True
+    assert snapshot_plan.score_contribution_allowed is False
+    assert all(candidate.observation_only is True for candidate in snapshot_plan.observation_candidates)
+    assert all(candidate.score_contribution_allowed is False for candidate in snapshot_plan.observation_candidates)
+
+    assert _ids(history_plan.primary_candidates) == set()
+    assert _ids(history_plan.observation_candidates) == {"pytdx", "baostock"}
+    assert history_plan.cache_required is True
+    assert history_plan.score_contribution_allowed is False
+    assert all(candidate.observation_only is True for candidate in history_plan.observation_candidates)
+    assert all(candidate.score_contribution_allowed is False for candidate in history_plan.observation_candidates)
+
+
 def test_coinbase_public_remains_crypto_venue_sidecar_only() -> None:
     venue_plan = DataSourceRouter.resolve(
         DataSourceRouteRequest(
