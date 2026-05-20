@@ -15,6 +15,8 @@ import pandas as pd
 from data_provider.alpaca_fetcher import AlpacaFetcher
 from data_provider.provider_credentials import ProviderCredentialBundle, get_provider_credentials
 from src.services.market_overview_yfinance_transport import fetch_yfinance_quote_history_frame
+from src.services.data_source_router import DataSourceRouteRequest
+from src.services.data_source_router_diagnostics import build_data_source_route_diagnostic_snapshot
 from src.services.rotation_theme_registry import list_rotation_theme_definitions
 
 QuoteProvider = Callable[[Iterable[str]], Mapping[str, Any]]
@@ -102,6 +104,9 @@ _ALPACA_CREDENTIAL_ENV_NAMES = {
     "secret_key": "ALPACA_API_SECRET_KEY",
 }
 _CREDENTIAL_SOURCE_VALUES = {"env", "config", "control_plane", "unavailable", "unknown"}
+_SOURCE_AUTHORITY_REJECTED_REASON = "source_authority_router_rejected"
+_ROTATION_RADAR_PROXY_AUTHORITY_SOURCES = {"yahoo", "yahooquery", "yfinance", "yfinance_proxy"}
+_ROTATION_RADAR_PROXY_AUTHORITY_SOURCE_TYPES = {"unofficial_proxy", "unofficial_public_api"}
 
 
 @dataclass
@@ -1223,6 +1228,11 @@ def _quote_metadata(
         window_coverage=window_coverage,
         source_summary=source_summary,
     )
+    source_authority = _source_authority_diagnostics(
+        source_summary=source_summary,
+        provider_diagnostics=provider_diagnostics,
+        status=status,
+    )
     return {
         "status": status,
         "quoteMode": quote_mode,
@@ -1252,7 +1262,10 @@ def _quote_metadata(
             for symbol in _bounded_unique_symbols(list(configured_attempt.failed_symbol_reasons))
         },
         "yfinanceProviderStatus": yfinance_attempt.status,
-        "providerDiagnostics": provider_diagnostics,
+        "providerDiagnostics": {
+            **provider_diagnostics,
+            **source_authority,
+        },
         "noExternalCalls": False,
         "failedSymbols": _bounded_unique_symbols(list(failed_symbol_reasons)),
         "failedSymbolCount": failed_symbol_count,
@@ -1278,6 +1291,65 @@ def _quote_metadata(
         "sourceLabelCounts": source_label_counts,
         "sourceTierCounts": source_tier_counts,
         "freshnessCounts": freshness_counts,
+        **source_authority,
+    }
+
+
+def _rotation_radar_quote_route_request() -> DataSourceRouteRequest:
+    return DataSourceRouteRequest(
+        market="US",
+        asset_type="equity",
+        use_case="rotation_radar",
+        capability="quote",
+        freshness_need="live",
+        scoring_allowed=True,
+        allow_network=False,
+        reproducibility_required=False,
+    )
+
+
+def _source_authority_diagnostics(
+    *,
+    source_summary: Mapping[str, str],
+    provider_diagnostics: Mapping[str, Any],
+    status: str,
+) -> Dict[str, Any]:
+    route_snapshot = build_data_source_route_diagnostic_snapshot(
+        _rotation_radar_quote_route_request()
+    ).to_dict()
+    source = str(source_summary.get("source") or "").strip().lower()
+    source_type = str(source_summary.get("sourceType") or "").strip().lower()
+    yfinance_fallback_used = bool(provider_diagnostics.get("yfinanceFallbackUsed", False))
+    present = status not in {"fallback", "not_requested"}
+
+    route_rejected_reason_codes: list[str] = []
+    source_authority_allowed = present
+    source_authority_route_rejected = False
+    source_authority_reason = None
+
+    if (
+        yfinance_fallback_used
+        or source in _ROTATION_RADAR_PROXY_AUTHORITY_SOURCES
+        or source_type in _ROTATION_RADAR_PROXY_AUTHORITY_SOURCE_TYPES
+    ):
+        route_rejected_reason_codes = list(
+            route_snapshot.get("reasonCodes", {}).get("yfinance_current_baseline")
+            or ("provider_not_eligible_for_scoring_route",)
+        )
+        source_authority_allowed = False
+        source_authority_route_rejected = True
+        source_authority_reason = _SOURCE_AUTHORITY_REJECTED_REASON
+    elif not present:
+        source_authority_allowed = False
+        source_authority_reason = "provider_absent"
+
+    return {
+        "sourceAuthorityAllowed": bool(source_authority_allowed),
+        "scoreContributionAllowed": bool(source_authority_allowed),
+        "sourceAuthorityRouteRejected": bool(source_authority_route_rejected),
+        "sourceAuthorityReason": source_authority_reason,
+        "routeRejectedReasonCodes": route_rejected_reason_codes,
+        "sourceAuthorityRouter": route_snapshot,
     }
 
 

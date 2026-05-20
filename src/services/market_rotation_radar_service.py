@@ -22,6 +22,8 @@ from src.services.market_data_source_registry import (
     project_source_provenance,
     resolve_freshness_label,
 )
+from src.services.data_source_router import DataSourceRouteRequest
+from src.services.data_source_router_diagnostics import build_data_source_route_diagnostic_snapshot
 from src.services.market_intelligence_trust_gate import (
     evaluate_market_intelligence_trust,
     evaluate_market_intelligence_trust_from_sources,
@@ -79,6 +81,9 @@ _RANK_EXCLUDED_UNAVAILABLE_TIERS = {"unavailable"}
 _RANK_FALLBACK_MARKERS = {"fallback", "fallback_static", "static_fallback", "public_web_fallback"}
 _RANK_SYNTHETIC_MARKERS = {"synthetic", "synthetic_fixture", "mock", "fixture", "unit_fixture"}
 _RANK_UNAVAILABLE_MARKERS = {"unavailable", "missing", "disabled_live_stub", "malformed_fixture"}
+ROTATION_RADAR_SOURCE_AUTHORITY_REJECTED_REASON = "source_authority_router_rejected"
+_ROTATION_RADAR_PROXY_AUTHORITY_SOURCES = {"yahoo", "yahooquery", "yfinance", "yfinance_proxy"}
+_ROTATION_RADAR_PROXY_AUTHORITY_SOURCE_TYPES = {"unofficial_proxy", "unofficial_public_api"}
 
 
 @dataclass(frozen=True)
@@ -784,7 +789,67 @@ class MarketRotationRadarService:
             source_metadata=quote_result.provider_metadata,
         )
         metadata["providerDiagnostics"] = self._quote_provider_diagnostics(quote_result, metadata)
+        authority = self._quote_source_authority_diagnostics(metadata)
+        metadata.update(authority)
+        metadata["providerDiagnostics"].update(authority)
         return metadata
+
+    @staticmethod
+    def _build_rotation_radar_quote_route_request() -> DataSourceRouteRequest:
+        return DataSourceRouteRequest(
+            market="US",
+            asset_type="equity",
+            use_case="rotation_radar",
+            capability="quote",
+            freshness_need="live",
+            scoring_allowed=True,
+            allow_network=False,
+            reproducibility_required=False,
+        )
+
+    def _quote_source_authority_diagnostics(
+        self,
+        metadata: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        route_snapshot = build_data_source_route_diagnostic_snapshot(
+            self._build_rotation_radar_quote_route_request()
+        ).to_dict()
+        provider_diagnostics = metadata.get("providerDiagnostics")
+        diagnostics = dict(provider_diagnostics) if isinstance(provider_diagnostics, Mapping) else {}
+        source = str(metadata.get("source") or "").strip().lower()
+        source_type = str(metadata.get("sourceType") or "").strip().lower()
+        present = bool(metadata.get("present"))
+        yfinance_fallback_used = bool(diagnostics.get("yfinanceFallbackUsed", False))
+
+        route_rejected_reason_codes: list[str] = []
+        source_authority_allowed = present
+        source_authority_route_rejected = False
+        source_authority_reason = None
+
+        if (
+            yfinance_fallback_used
+            or source in _ROTATION_RADAR_PROXY_AUTHORITY_SOURCES
+            or source_type in _ROTATION_RADAR_PROXY_AUTHORITY_SOURCE_TYPES
+        ):
+            route_rejected_reason_codes = list(
+                route_snapshot.get("reasonCodes", {}).get("yfinance_current_baseline")
+                or ("provider_not_eligible_for_scoring_route",)
+            )
+            source_authority_allowed = False
+            source_authority_route_rejected = True
+            source_authority_reason = ROTATION_RADAR_SOURCE_AUTHORITY_REJECTED_REASON
+        elif not present:
+            source_authority_allowed = False
+            source_authority_reason = "provider_absent"
+
+        return {
+            "sourceAuthorityAllowed": bool(source_authority_allowed),
+            "scoreContributionAllowed": bool(source_authority_allowed),
+            "sourceAuthorityRouteRejected": bool(source_authority_route_rejected),
+            "sourceAuthorityReason": source_authority_reason,
+            "routeRejectedReasonCodes": route_rejected_reason_codes,
+            "sourceAuthorityRouter": route_snapshot,
+        }
 
     def _quote_provider_diagnostics(
         self,

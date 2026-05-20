@@ -809,6 +809,11 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(metadata["coverage"]["coveragePercent"], 100.0)
         self.assertGreaterEqual(metadata["confidenceWeight"], 0.8)
         self.assertEqual(metadata["failedSymbolReasons"], {})
+        self.assertTrue(metadata["sourceAuthorityAllowed"])
+        self.assertTrue(metadata["scoreContributionAllowed"])
+        self.assertFalse(metadata["sourceAuthorityRouteRejected"])
+        self.assertIsNone(metadata["sourceAuthorityReason"])
+        self.assertEqual(metadata["routeRejectedReasonCodes"], [])
         diagnostics = metadata["providerDiagnostics"]
         self.assertTrue(diagnostics["configuredProviderAttempted"])
         self.assertTrue(diagnostics["providerAttempted"])
@@ -856,6 +861,12 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertFalse(diagnostics["staticBasketFallbackUsed"])
         self.assertEqual(diagnostics["finalSourceTier"], "broker_authorized")
         self.assertEqual(diagnostics["trustLevel"], "active")
+        self.assertTrue(diagnostics["sourceAuthorityAllowed"])
+        self.assertTrue(diagnostics["scoreContributionAllowed"])
+        self.assertFalse(diagnostics["sourceAuthorityRouteRejected"])
+        self.assertIsNone(diagnostics["sourceAuthorityReason"])
+        self.assertEqual(diagnostics["routeRejectedReasonCodes"], [])
+        self.assertEqual(diagnostics["sourceAuthorityRouter"]["request"]["useCase"], "rotation_radar")
         self.assertEqual(sorted(payload["quotes"]), ["APP", "QQQ"])
         self.assertEqual(fetch_calls.count(("APP", "5Min")), 1)
         quote = payload["quotes"]["APP"]
@@ -1415,6 +1426,37 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertFalse(diagnostics["staticBasketFallbackUsed"])
         self.assertEqual(diagnostics["finalSourceTier"], "unofficial_public_api")
         self.assertEqual(diagnostics["trustLevel"], "degraded")
+        self.assertFalse(metadata["sourceAuthorityAllowed"])
+        self.assertFalse(metadata["scoreContributionAllowed"])
+        self.assertEqual(metadata["sourceAuthorityReason"], "source_authority_router_rejected")
+        self.assertEqual(metadata["routeRejectedReasonCodes"], diagnostics["routeRejectedReasonCodes"])
+        self.assertIn("provider_forbidden_for_use_case", metadata["routeRejectedReasonCodes"])
+        self.assertIn("score_inputs", metadata["routeRejectedReasonCodes"])
+        self.assertIn("provider_not_capable", metadata["routeRejectedReasonCodes"])
+        self.assertFalse(diagnostics["sourceAuthorityAllowed"])
+        self.assertFalse(diagnostics["scoreContributionAllowed"])
+        self.assertEqual(diagnostics["sourceAuthorityReason"], "source_authority_router_rejected")
+        self.assertEqual(diagnostics["routeRejectedReasonCodes"], metadata["routeRejectedReasonCodes"])
+        assert diagnostics["sourceAuthorityRouter"]["diagnosticOnly"] is True
+        assert diagnostics["sourceAuthorityRouter"]["providerRuntimeCalled"] is False
+        assert diagnostics["sourceAuthorityRouter"]["networkCallsEnabled"] is False
+        assert diagnostics["sourceAuthorityRouter"]["request"] == {
+            "market": "US",
+            "assetType": "equity",
+            "useCase": "rotation_radar",
+            "capability": "quote",
+            "freshnessNeed": "live",
+            "scoringAllowed": True,
+            "symbol": None,
+            "productId": None,
+            "cik": None,
+            "asOf": None,
+            "allowNetwork": False,
+            "reproducibilityRequired": False,
+        }
+        assert "yfinance_current_baseline" in {
+            item["providerId"] for item in diagnostics["sourceAuthorityRouter"]["forbiddenProviders"]
+        }
         self.assertEqual(set(quote["timeWindows"]), {"1d"})
         self.assertEqual(quote["freshness"], "delayed")
         self.assertEqual(quote["sourceTier"], "unofficial_public_api")

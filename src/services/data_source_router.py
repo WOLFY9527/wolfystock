@@ -331,6 +331,16 @@ _ROUTE_POLICIES = MappingProxyType(
             freshness_floor="live",
             trust_floor="score_grade",
         ),
+        ("rotation_radar", "quote"): _RoutePolicy(
+            forbidden_provider_ids=("sec_edgar", "baostock", "coinbase_public", "yfinance_current_baseline", "yahooquery"),
+            cache_required=False,
+            background_refresh_required=True,
+            score_contribution_allowed=True,
+            degradation_policy="require_live_score_grade_authority",
+            required_source_types=("official_public", "exchange_public", "cache_snapshot"),
+            freshness_floor="live",
+            trust_floor="score_grade",
+        ),
         ("scanner_price_scoring", "cn_realtime_quote"): _RoutePolicy(
             forbidden_provider_ids=("baostock", "sec_edgar", "coinbase_public", "yfinance_current_baseline"),
             cache_required=False,

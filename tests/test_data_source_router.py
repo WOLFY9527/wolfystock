@@ -309,6 +309,33 @@ def test_liquidity_score_grade_quote_rejects_akshare_as_scoring_provider() -> No
     assert liquidity_plan.score_contribution_allowed is True
 
 
+def test_rotation_radar_quote_route_rejects_yfinance_as_score_grade_authority() -> None:
+    plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="US",
+            asset_type="equity",
+            use_case="rotation_radar",
+            capability="quote",
+            freshness_need="live",
+            scoring_allowed=True,
+            symbol="QQQ",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+
+    assert "yfinance_current_baseline" in _ids(plan.forbidden_providers)
+    assert "provider_forbidden_for_use_case" in plan.reason_codes["yfinance_current_baseline"]
+    assert "score_inputs" in plan.reason_codes["yfinance_current_baseline"]
+    assert "provider_not_capable" in plan.reason_codes["yfinance_current_baseline"]
+    assert plan.required_source_types == ("official_public", "exchange_public", "cache_snapshot")
+    assert plan.freshness_floor == "live"
+    assert plan.trust_floor == "score_grade"
+    assert "live_network_forbidden" in plan.reason_codes["plan"]
+    assert plan.cache_required is True
+    assert plan.score_contribution_allowed is True
+
+
 def test_live_score_grade_routes_reject_yfinance_and_proxy_observations() -> None:
     plan = DataSourceRouter.resolve(
         DataSourceRouteRequest(
