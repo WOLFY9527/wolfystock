@@ -911,13 +911,24 @@ function isTemperatureReliable(data: MarketTemperatureResponse): boolean {
   );
 }
 
+function hasInsufficientReliableInputs(data: MarketTemperatureResponse): boolean {
+  const requiredReliableInputCount = data.requiredReliableInputCount ?? 3;
+  const requiredReliablePanelCount = data.requiredReliablePanelCount ?? 3;
+  const reliableInputShortfall = data.reliableInputCount != null && data.reliableInputCount < requiredReliableInputCount;
+  const reliablePanelShortfall = data.reliablePanelCount != null && data.reliablePanelCount < requiredReliablePanelCount;
+
+  return Boolean(
+    data.insufficientReliableInputs
+    || data.disabledReason === 'insufficient_reliable_inputs'
+    || data.unavailableReason === 'insufficient_reliable_inputs'
+    || reliableInputShortfall
+    || reliablePanelShortfall
+  );
+}
+
 function temperatureDisabledStateLabel(data: MarketTemperatureResponse): string {
   if (data.temperatureAvailable === false || data.conclusionAllowed === false || data.isReliable === false) {
-    if (
-      data.insufficientReliableInputs
-      || data.disabledReason === 'insufficient_reliable_inputs'
-      || data.unavailableReason === 'insufficient_reliable_inputs'
-    ) {
+    if (hasInsufficientReliableInputs(data)) {
       return '可靠输入不足';
     }
     return '暂不判定';

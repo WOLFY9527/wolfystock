@@ -1884,6 +1884,38 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByText(/raw|payload/i)).not.toBeInTheDocument();
   });
 
+  it('keeps the reliable-inputs fallback copy when additive flags are omitted but counts are still insufficient', async () => {
+    vi.mocked(marketApi.getTemperature).mockResolvedValueOnce({
+      source: 'computed',
+      sourceLabel: '系统计算',
+      updatedAt: '2026-04-29T10:00:00',
+      asOf: '2026-04-29T10:00:00',
+      freshness: 'cached',
+      isFallback: false,
+      confidence: 0.18,
+      reliableInputCount: 1,
+      requiredReliableInputCount: 5,
+      reliablePanelCount: 1,
+      requiredReliablePanelCount: 3,
+      fallbackInputCount: 3,
+      excludedInputCount: 2,
+      isReliable: false,
+      temperatureAvailable: false,
+      trustLevel: 'weak',
+      sourceTier: 'unofficial_public_api',
+      conclusionAllowed: false,
+      scores: {
+        liquidity: { value: 51, label: '中性', trend: 'stable', description: '流动性输入部分可用。' },
+      },
+    } as never);
+
+    render(<MarketOverviewPage />);
+
+    expect(await screen.findByTestId('market-overview-shell')).toBeInTheDocument();
+    expect(screen.getByTestId('market-temperature-unreliable-summary')).toHaveTextContent('可靠输入不足，暂不生成综合判断');
+    expect(screen.getByTestId('market-overview-temperature-summary')).not.toHaveTextContent('N/A');
+  });
+
   it('shows limited real temperature inputs instead of collapsing them to zero', async () => {
     vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(limitedRealTemperaturePayload());
 
