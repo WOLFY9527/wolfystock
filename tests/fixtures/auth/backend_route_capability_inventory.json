@@ -182,7 +182,7 @@
     },
     {
       "route_id": "admin.providers.read",
-      "path_pattern": "^/api/v1/admin/(?:providers/(?:circuits(?:/events)?|quota-windows|probe-events|sla-readiness)|provider-usage-ledger)$",
+      "path_pattern": "^/api/v1/admin/(?:providers/(?:circuits(?:/events)?|quota-windows|probe-events|sla-readiness|operations-matrix)|provider-usage-ledger)$",
       "methods": ["GET"],
       "surface": "admin_provider_observability",
       "auth_dependency_label": "admin_capability",

@@ -128,7 +128,7 @@ EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS = {
     "admin.notifications.read": 2,
     "admin.notifications.write": 5,
     "admin.cost.read": 4,
-    "admin.providers.read": 6,
+    "admin.providers.read": 7,
     "admin.market_providers.operations": 1,
     "system.config.read": 2,
     "system.config.validate": 1,

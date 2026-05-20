@@ -11,7 +11,33 @@ API v1 路由聚合
 
 from fastapi import APIRouter
 
-from api.v1.endpoints import analysis, auth, history, stocks, backtest, system_config, agent, usage, portfolio, admin_users, admin_portfolio, admin_security, admin_logs, admin_notifications, admin_cost, admin_provider_circuits, provider_usage_ledger, scanner, market_overview, market, market_provider_operations, watchlist, quant, options
+from api.v1.endpoints import (
+    admin_cost,
+    admin_logs,
+    admin_notifications,
+    admin_portfolio,
+    admin_provider_circuits,
+    admin_provider_operations_matrix,
+    admin_security,
+    admin_users,
+    agent,
+    analysis,
+    auth,
+    backtest,
+    history,
+    market,
+    market_overview,
+    market_provider_operations,
+    options,
+    portfolio,
+    provider_usage_ledger,
+    quant,
+    scanner,
+    stocks,
+    system_config,
+    usage,
+    watchlist,
+)
 import api.v1.endpoints.liquidity_monitor as liquidity_monitor
 
 # 创建 v1 版本主路由
@@ -75,6 +101,12 @@ router.include_router(
     admin_provider_circuits.router,
     prefix="/admin",
     tags=["AdminProviderCircuits"]
+)
+
+router.include_router(
+    admin_provider_operations_matrix.router,
+    prefix="/admin",
+    tags=["AdminProviderOperationsMatrix"]
 )
 
 router.include_router(
