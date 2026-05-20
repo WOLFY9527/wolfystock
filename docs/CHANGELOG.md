@@ -1,3 +1,15 @@
+## 2026-05-20
+
+- **Market Temperature regime synthesis payload** - `/api/v1/market/temperature`
+  now exposes additive `marketRegimeSynthesis` metadata built from the existing
+  normalized Market Temperature input bundle. The new field reuses the
+  deterministic T-223A/T-223C synthesis output, including regime labels,
+  pillar scores, confidence, drivers, counter-evidence, data gaps, narrative
+  bullets, and evidence quality. Existing Market Temperature score formulas,
+  labels, disabled-state semantics, freshness/trust gates, provider order, and
+  frontend behavior remain unchanged; stale, proxy, observation-only, and
+  rejected evidence stays discounted rather than upgraded.
+
 ## 2026-05-19
 
 - **Rotation Radar provider activation verification** - Rotation Radar provider
