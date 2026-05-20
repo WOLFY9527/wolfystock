@@ -6,10 +6,17 @@ import {
   liquidityMonitorApi,
   type LiquidityMonitorFreshness,
   type LiquidityMonitorIndicator,
+  type LiquidityImpulseSynthesis,
+  type LiquidityImpulseSynthesisEvidenceItem,
   type LiquidityMonitorRegime,
   type LiquidityMonitorResponse,
 } from '../api/liquidityMonitor';
 import { ApiErrorAlert } from '../components/common';
+import {
+  LiquidityImpulseSynthesisHeader,
+  type LiquidityImpulseHeaderEvidenceView,
+  type LiquidityImpulseSynthesisHeaderView,
+} from '../components/liquidity-monitor/LiquidityImpulseSynthesisHeader';
 import {
   TerminalButton,
   TerminalChip,
@@ -22,7 +29,7 @@ import {
   TerminalSectionHeader,
 } from '../components/terminal';
 import { WideWorkspacePageShell } from '../components/layout/WideWorkspaceShell';
-import { formatDateTime } from '../utils/format';
+import { formatDateTime, formatPercent, formatSignedNumber } from '../utils/format';
 import { cn } from '../utils/cn';
 
 const REGIME_LABELS: Record<LiquidityMonitorRegime, string> = {
@@ -106,6 +113,249 @@ function displayLabel(indicator: LiquidityMonitorIndicator): string {
   return INDICATOR_LABEL_OVERRIDES[indicator.key] || indicator.label;
 }
 
+const IMPULSE_LABELS: Record<string, string> = {
+  expanding_liquidity: '流动性扩张',
+  contracting_liquidity: '流动性收缩',
+  balanced_liquidity: '流动性均衡',
+  data_insufficient: '数据不足',
+};
+
+const SUBTYPE_LABELS: Record<string, string> = {
+  broad_liquidity_expansion: '广谱流动性扩张',
+  crypto_beta_expansion: 'Crypto Beta 扩张',
+  rates_driven_tightening: '利率驱动收紧',
+  dollar_driven_tightening: '美元驱动收紧',
+  risk_deleveraging: '风险去杠杆',
+  data_insufficient: '数据不足',
+};
+
+const CONFIDENCE_LABELS: Record<string, string> = {
+  high: '高',
+  medium: '中',
+  low: '低',
+  insufficient: '不足',
+};
+
+const PILLAR_LABELS: Record<string, string> = {
+  rates_pressure: '利率压力',
+  dollar_pressure: '美元压力',
+  volatility_stress: '波动率压力',
+  crypto_liquidity_beta: 'Crypto Beta',
+  risk_asset_demand: '风险资产需求',
+  funding_stress: '资金费率压力',
+  equity_flow_proxy: '权益流向代理',
+  breadth_confirmation: '市场宽度确认',
+  china_liquidity_context: '中国流动性环境',
+};
+
+const EVIDENCE_DIRECTION_LABELS: Record<string, string> = {
+  supports_expansion: '支持扩张',
+  supports_contraction: '支持收缩',
+  positive: '正向',
+  negative: '负向',
+  contradicts_expansion: '反向于扩张',
+  contradicts_contraction: '反向于收缩',
+};
+
+const EVIDENCE_REASON_LABELS: Record<string, string> = {
+  conflicts_with_primary_regime: '与主结论冲突',
+  missing_direction_or_magnitude: '缺少方向或幅度',
+  score_contribution_not_allowed: '当前不允许计分',
+  observation_only_discount: '仅观察，不升格结论',
+  freshness_discount: '时效折价',
+  source_tier_discount: '来源层级折价',
+  provider_unavailable: '数据源不可用',
+  fallback_source: '仅备用来源',
+};
+
+function titleCaseFromSnake(value?: string | null): string {
+  if (!value) return '待确认';
+  return value
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function impulseCodeLabel(value?: string | null): string {
+  if (!value) return '待确认';
+  return IMPULSE_LABELS[value] || titleCaseFromSnake(value);
+}
+
+function subtypeLabel(value?: string | null): string {
+  if (!value) return '待确认';
+  return SUBTYPE_LABELS[value] || titleCaseFromSnake(value);
+}
+
+function synthesisConfidenceLabel(label?: string | null, confidence?: number | null): string {
+  if (label && CONFIDENCE_LABELS[label]) {
+    return CONFIDENCE_LABELS[label];
+  }
+  if (typeof confidence === 'number') {
+    if (confidence >= 0.75) return '高';
+    if (confidence >= 0.45) return '中';
+    if (confidence > 0) return '低';
+  }
+  return '未返回';
+}
+
+function pillarLabel(value?: string | null): string {
+  if (!value) return '待确认';
+  return PILLAR_LABELS[value] || titleCaseFromSnake(value);
+}
+
+function evidenceDirectionLabel(value?: string | null): string | null {
+  if (!value) return null;
+  return EVIDENCE_DIRECTION_LABELS[value] || titleCaseFromSnake(value);
+}
+
+function evidenceReasonLabel(value?: string | null): string | null {
+  if (!value) return null;
+  return EVIDENCE_REASON_LABELS[value] || titleCaseFromSnake(value);
+}
+
+function evidenceItemDisplayLabel(item: LiquidityImpulseSynthesisEvidenceItem): string {
+  return item.label || pillarLabel(item.pillar) || titleCaseFromSnake(item.key);
+}
+
+function buildEvidenceMeta(
+  item: LiquidityImpulseSynthesisEvidenceItem,
+  kind: 'driver' | 'counter' | 'gap',
+): string {
+  const parts: string[] = [];
+  parts.push(pillarLabel(item.pillar));
+
+  if (kind === 'driver') {
+    const direction = evidenceDirectionLabel(item.direction);
+    if (direction) parts.push(direction);
+    if (typeof item.impact === 'number') parts.push(`影响 ${formatSignedNumber(item.impact, 2)}`);
+    if (typeof item.signal === 'number') parts.push(`信号 ${formatSignedNumber(item.signal, 2)}`);
+  } else if (kind === 'counter') {
+    const reason = evidenceReasonLabel(item.reason);
+    if (reason) parts.push(reason);
+    if (typeof item.signal === 'number') parts.push(`信号 ${formatSignedNumber(item.signal, 2)}`);
+  } else {
+    const reason = evidenceReasonLabel(item.reason);
+    if (reason) parts.push(reason);
+    if (item.degradationReason) parts.push(titleCaseFromSnake(item.degradationReason));
+  }
+
+  if (item.source) parts.push(item.source);
+  if (item.observationOnly) parts.push('观察-only');
+  if (item.proxyOnly) parts.push('proxy-only');
+  if (item.scoreContributionAllowed === false) parts.push('不计分');
+
+  return parts.filter(Boolean).join(' · ');
+}
+
+function buildEvidenceView(
+  items: LiquidityImpulseSynthesisEvidenceItem[],
+  kind: 'driver' | 'counter' | 'gap',
+  limit: number,
+): LiquidityImpulseHeaderEvidenceView[] {
+  return items.slice(0, limit).map((item) => ({
+    key: item.key,
+    label: evidenceItemDisplayLabel(item),
+    meta: buildEvidenceMeta(item, kind),
+  }));
+}
+
+function buildLiquidityImpulseSynthesisView(
+  synthesis: LiquidityImpulseSynthesis | undefined,
+): LiquidityImpulseSynthesisHeaderView {
+  if (!synthesis) {
+    return {
+      state: 'missing',
+      title: '流动性方向待返回',
+      summary: '当前流动性监测载荷未返回 liquidityImpulseSynthesis，不推断扩张或收缩。',
+      stateChipLabel: '载荷缺失',
+      stateChipVariant: 'neutral',
+      confidenceLabel: '未返回',
+      confidenceValueText: '',
+      dominantDrivers: [],
+      counterEvidence: [],
+      dataGaps: [],
+      notInvestmentAdvice: false,
+    };
+  }
+
+  const evidenceQuality = synthesis.evidenceQuality || {};
+  const scoringEvidenceCount = typeof evidenceQuality.scoringEvidenceCount === 'number'
+    ? evidenceQuality.scoringEvidenceCount
+    : synthesis.dominantDrivers.length;
+  const scoringPillarCount = typeof evidenceQuality.scoringPillarCount === 'number'
+    ? evidenceQuality.scoringPillarCount
+    : undefined;
+  const discountedEvidenceCount = typeof evidenceQuality.discountedEvidenceCount === 'number'
+    ? evidenceQuality.discountedEvidenceCount
+    : undefined;
+  const dataGapCount = typeof evidenceQuality.dataGapCount === 'number'
+    ? evidenceQuality.dataGapCount
+    : synthesis.dataGaps.length;
+  const realScoringEvidenceCount = typeof evidenceQuality.realScoringEvidenceCount === 'number'
+    ? evidenceQuality.realScoringEvidenceCount
+    : undefined;
+  const allScoringEvidenceProxyOnly = evidenceQuality.allScoringEvidenceProxyOnly === true;
+  const proxyOnlyScoringCount = typeof evidenceQuality.proxyOnlyScoringCount === 'number'
+    ? evidenceQuality.proxyOnlyScoringCount
+    : 0;
+  const lowConfidence = (
+    synthesis.liquidityImpulse === 'data_insufficient'
+    || synthesis.confidenceLabel === 'insufficient'
+    || synthesis.confidenceLabel === 'low'
+    || synthesis.confidence < 0.45
+  );
+  const proxyOnlyDecision = Boolean(
+    allScoringEvidenceProxyOnly
+    || (proxyOnlyScoringCount > 0 && (realScoringEvidenceCount == null || realScoringEvidenceCount <= 0))
+  );
+  const promotable = !lowConfidence && !proxyOnlyDecision;
+  const qualityFlags = [
+    `证据 ${scoringEvidenceCount}`,
+    scoringPillarCount != null ? `支柱 ${scoringPillarCount}` : '',
+    discountedEvidenceCount != null ? `折价 ${discountedEvidenceCount}` : '',
+    `缺口 ${dataGapCount}`,
+    proxyOnlyDecision ? 'proxy-only' : '',
+  ].filter(Boolean).join(' · ');
+  const contradictionCount = Math.min(synthesis.counterEvidence.length, 3);
+  const gapCount = Math.min(dataGapCount, 3);
+
+  return {
+    state: promotable ? 'ready' : 'insufficient',
+    title: promotable
+      ? impulseCodeLabel(synthesis.liquidityImpulse)
+      : synthesis.liquidityImpulse === 'data_insufficient'
+        ? '流动性方向数据不足'
+        : '流动性方向待确认',
+    summary: promotable
+      ? (synthesis.narrativeBullets[0]
+        || `主驱动 ${Math.min(synthesis.dominantDrivers.length, 3)} 项 · 反证 ${contradictionCount} 项 · 缺口 ${gapCount} 项`)
+      : proxyOnlyDecision
+        ? `后端返回“${synthesis.impulseLabel}”，但当前可计分证据为 proxy-only，前端不升级为真实扩张或收缩结论。`
+        : synthesis.liquidityImpulse === 'data_insufficient'
+          ? (synthesis.narrativeBullets[0] || '当前可用证据不足，只展示缺口与残余信号。')
+          : `后端返回“${synthesis.impulseLabel}”，但当前置信度不足，只展示支持证据、反证与数据缺口。`,
+    stateChipLabel: promotable
+      ? '主结论'
+      : synthesis.liquidityImpulse === 'data_insufficient'
+        ? '数据不足'
+        : proxyOnlyDecision
+          ? 'Proxy-only'
+          : '低置信度',
+    stateChipVariant: promotable ? 'success' : 'caution',
+    impulseLabel: synthesis.impulseLabel,
+    subtypeLabel: subtypeLabel(synthesis.subtype),
+    confidenceLabel: synthesisConfidenceLabel(synthesis.confidenceLabel, synthesis.confidence),
+    confidenceValueText: formatPercent(synthesis.confidence, { mode: 'ratio' }),
+    directionScoreText: formatSignedNumber(synthesis.directionScore, 2, { showZeroSign: true }),
+    qualityLine: qualityFlags,
+    dominantDrivers: buildEvidenceView(synthesis.dominantDrivers, 'driver', 3),
+    counterEvidence: buildEvidenceView(synthesis.counterEvidence, 'counter', 3),
+    dataGaps: buildEvidenceView(synthesis.dataGaps, 'gap', 3),
+    notInvestmentAdvice: Boolean(synthesis.notInvestmentAdvice),
+  };
+}
+
 const LiquidityMonitorPage: React.FC = () => {
   const [data, setData] = useState<LiquidityMonitorResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -144,6 +394,7 @@ const LiquidityMonitorPage: React.FC = () => {
 
   const indicators = data?.indicators || [];
   const selectedIndicator = indicators.find((item) => item.key === selectedKey) || indicators[0] || null;
+  const synthesisView = buildLiquidityImpulseSynthesisView(data?.liquidityImpulseSynthesis);
 
   return (
     <WideWorkspacePageShell className="flex min-h-0 flex-1 py-5 md:py-6">
@@ -172,6 +423,8 @@ const LiquidityMonitorPage: React.FC = () => {
       {data ? (
         <TerminalGrid>
           <div className="flex flex-col gap-4 xl:col-span-8">
+            <LiquidityImpulseSynthesisHeader view={synthesisView} />
+
             <TerminalPanel>
               <TerminalSectionHeader
                 eyebrow="环境刻度"
