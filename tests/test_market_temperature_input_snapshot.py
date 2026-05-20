@@ -385,10 +385,32 @@ def test_temperature_score_inputs_add_source_authority_diagnostics() -> None:
     assert coinbase_item["sourceAuthorityRouter"]["request"]["allowNetwork"] is False
 
     assert proxy_item["sourceAuthorityAllowed"] is False
-    assert proxy_item["scoreContributionAllowed"] is True
+    assert proxy_item["scoreContributionAllowed"] is False
     assert proxy_item["sourceAuthorityRouteRejected"] is False
     assert proxy_item["sourceAuthorityReason"] == "proxy_context_only"
     assert proxy_item["routeRejectedReasonCodes"] == []
+
+
+def test_temperature_score_helpers_skip_explicit_non_scoring_inputs() -> None:
+    service = MarketOverviewService()
+    items = [
+        {
+            "symbol": "ES",
+            "value": 5238.0,
+            "changePercent": 2.5,
+            "scoreContributionAllowed": False,
+        },
+        {
+            "symbol": "NQ",
+            "value": 18100.0,
+            "changePercent": 1.0,
+            "scoreContributionAllowed": True,
+        },
+    ]
+
+    assert service._avg_change(items, {"ES", "NQ"}) == 1.0
+    assert service._item_change(items, "ES") is None
+    assert service._item_value(items, "ES") is None
 
 
 def test_public_rates_method_keeps_public_wrapper_shape() -> None:

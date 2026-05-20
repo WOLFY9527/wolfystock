@@ -134,6 +134,35 @@ def test_unknown_catch_all_public_aliases_do_not_promote_to_official_or_live() -
     assert provenance["freshnessLabel"] == "不可用"
 
 
+def test_public_and_proxy_source_type_aliases_stay_conservative_across_contracts() -> None:
+    from src.services.market_intelligence_trust_gate import (
+        evaluate_market_intelligence_trust,
+        resolve_market_intelligence_source_tier,
+    )
+
+    expected_registry_types = {
+        "public_api": "public_proxy",
+        "proxy_public": "public_proxy",
+        "public_proxy": "public_proxy",
+        "unofficial_proxy": "unofficial_proxy",
+        "unofficial_public_api": "unofficial_proxy",
+    }
+
+    for source_type, expected_registry_type in expected_registry_types.items():
+        provenance = project_source_provenance(source_type=source_type, freshness="live")
+        tier = resolve_market_intelligence_source_tier(source_type=source_type, freshness="live")
+        trust = evaluate_market_intelligence_trust(
+            {"sourceType": source_type, "freshness": "live", "coverage": 1.0}
+        )
+
+        assert resolve_source_type(source_type=source_type) == expected_registry_type
+        assert provenance["sourceType"] == expected_registry_type
+        assert tier.value == "unofficial_public_api"
+        assert trust["sourceTier"] == "unofficial_public_api"
+        assert trust["sourceTier"] not in {"official_public", "exchange_public", "broker_authorized"}
+        assert trust["scoreCap"] < 1.0
+
+
 def test_missing_source_defaults_to_missing_labels() -> None:
     assert resolve_source_type(source=None, source_type=None) == "missing"
     assert resolve_source_label(source=None, source_type=None) == "未接入"

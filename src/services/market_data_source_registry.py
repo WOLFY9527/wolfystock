@@ -116,7 +116,7 @@ SOURCE_TYPE_ALIASES = {
     "official_public": "official_public",
     "proxy_public": "public_proxy",
     "public": "public_proxy",
-    "public_api": "official_public",
+    "public_api": "public_proxy",
     "public_or_live": "public_proxy",
     "public_proxy": "public_proxy",
     "snapshot": "cache_snapshot",

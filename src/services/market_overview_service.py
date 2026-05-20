@@ -226,7 +226,9 @@ MARKET_TEMPERATURE_PROXY_CONTEXT_SOURCES = frozenset(
         "yahooquery",
     }
 )
-MARKET_TEMPERATURE_PROXY_CONTEXT_SOURCE_TYPES = frozenset({"public_proxy", "proxy_public", "unofficial_proxy"})
+MARKET_TEMPERATURE_PROXY_CONTEXT_SOURCE_TYPES = frozenset(
+    {"public_api", "public_proxy", "proxy_public", "unofficial_proxy", "unofficial_public_api"}
+)
 MARKET_TEMPERATURE_HK_INDEX_SYMBOLS = frozenset({"HSI", "HSTECH", "HSI.HK", "HSTECH.HK"})
 MARKET_TEMPERATURE_SCORE_DRIVING_SYMBOLS = {
     "indices": frozenset({"000001.SH", "399001.SZ", "399006.SZ", "000300.SH", "HSI", "HSTECH", "HSI.HK", "HSTECH.HK"}),
@@ -5365,6 +5367,7 @@ class MarketOverviewService:
             or source_type in MARKET_TEMPERATURE_PROXY_CONTEXT_SOURCE_TYPES
         ):
             source_authority_allowed = False
+            score_contribution_allowed = False
             source_authority_reason = MARKET_TEMPERATURE_PROXY_CONTEXT_REASON
         else:
             provider_key = self._market_temperature_route_provider_key(source)
@@ -6059,6 +6062,8 @@ class MarketOverviewService:
     def _avg_change(self, items: List[Dict[str, Any]], symbols: Optional[set[str]]) -> Optional[float]:
         values = []
         for item in items:
+            if not self._temperature_score_contribution_allowed(item):
+                continue
             if symbols is not None and str(item.get("symbol")) not in symbols:
                 continue
             value = self._clean_number(item.get("changePercent", item.get("change_pct")))
@@ -6068,15 +6073,23 @@ class MarketOverviewService:
 
     def _item_value(self, items: List[Dict[str, Any]], symbol: str) -> Optional[float]:
         for item in items:
+            if not self._temperature_score_contribution_allowed(item):
+                continue
             if str(item.get("symbol")) == symbol:
                 return self._clean_number(item.get("value", item.get("price")))
         return None
 
     def _item_change(self, items: List[Dict[str, Any]], symbol: str) -> Optional[float]:
         for item in items:
+            if not self._temperature_score_contribution_allowed(item):
+                continue
             if str(item.get("symbol")) == symbol:
                 return self._clean_number(item.get("changePercent", item.get("change_pct", item.get("change"))))
         return None
+
+    @staticmethod
+    def _temperature_score_contribution_allowed(item: Mapping[str, Any]) -> bool:
+        return item.get("scoreContributionAllowed") is not False
 
     def _compute_cn_short_sentiment_score(self, metrics: Dict[str, Any]) -> int:
         score = 45
