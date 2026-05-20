@@ -161,6 +161,9 @@ class ProviderCapabilitySupportContract:
     observation_only: bool = False
     score_contribution_allowed: bool = False
     paid_data_likely_required: bool = False
+    key_required: bool = False
+    cache_required: bool = False
+    background_refresh_recommended: bool = False
     degradation_reason: str | None = None
     missing_provider_reason: str | None = None
 
@@ -182,6 +185,11 @@ class ProviderCapabilitySupportContract:
             paid_data_likely_required=_bool(
                 _get(payload, "paid_data_likely_required", "paidDataLikelyRequired")
             ),
+            key_required=_bool(_get(payload, "key_required", "keyRequired")),
+            cache_required=_bool(_get(payload, "cache_required", "cacheRequired")),
+            background_refresh_recommended=_bool(
+                _get(payload, "background_refresh_recommended", "backgroundRefreshRecommended")
+            ),
             degradation_reason=_optional_text(_get(payload, "degradation_reason", "degradationReason")),
             missing_provider_reason=_optional_text(
                 _get(payload, "missing_provider_reason", "missingProviderReason")
@@ -200,6 +208,9 @@ class ProviderCapabilitySupportContract:
             "observationOnly": self.observation_only,
             "scoreContributionAllowed": self.score_contribution_allowed,
             "paidDataLikelyRequired": self.paid_data_likely_required,
+            "keyRequired": self.key_required,
+            "cacheRequired": self.cache_required,
+            "backgroundRefreshRecommended": self.background_refresh_recommended,
             "degradationReason": self.degradation_reason,
             "missingProviderReason": self.missing_provider_reason,
         }

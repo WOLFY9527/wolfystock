@@ -13,12 +13,14 @@ from src.services.provider_capability_matrix import (
 
 
 @pytest.mark.parametrize(
-    ("provider_id", "capability", "expected_trust", "expected_missing_reason"),
+    ("provider_id", "capability", "expected_trust", "expected_missing_reason", "expected_source_tier"),
     [
-        ("pytdx", "cn_realtime_quote", "usable_with_caution", "pytdx_not_installed"),
-        ("pytdx", "cn_history_daily", "usable_with_caution", "pytdx_not_installed"),
-        ("akshare", "cn_realtime_snapshot", "weak", "akshare_not_installed"),
-        ("akshare", "hk_history_daily", "weak", "akshare_not_installed"),
+        ("pytdx", "cn_realtime_quote", "usable_with_caution", "pytdx_not_installed", "unofficial_public_api"),
+        ("pytdx", "cn_history_daily", "usable_with_caution", "pytdx_not_installed", "unofficial_public_api"),
+        ("akshare", "cn_realtime_snapshot", "weak", "akshare_not_installed", "unofficial_public_api"),
+        ("akshare", "hk_history_daily", "weak", "akshare_not_installed", "unofficial_public_api"),
+        ("baostock", "cn_history_daily", "usable_with_caution", "baostock_not_installed", "third_party_free_api"),
+        ("baostock", "cn_basic_financials", "usable_with_caution", "baostock_not_installed", "third_party_free_api"),
     ],
 )
 def test_cn_provider_capability_contract_resolves_supported_entries(
@@ -26,6 +28,7 @@ def test_cn_provider_capability_contract_resolves_supported_entries(
     capability: str,
     expected_trust: str,
     expected_missing_reason: str,
+    expected_source_tier: str,
 ) -> None:
     contract = get_provider_capability_support_contract(provider_id, capability)
 
@@ -34,11 +37,14 @@ def test_cn_provider_capability_contract_resolves_supported_entries(
     assert contract.provider_name == provider_id
     assert contract.capability == capability
     assert contract.source_type == "public_proxy"
-    assert contract.source_tier == "unofficial_public_api"
+    assert contract.source_tier == expected_source_tier
     assert contract.trust_level == expected_trust
     assert contract.observation_only is True
     assert contract.score_contribution_allowed is False
     assert contract.paid_data_likely_required is False
+    assert contract.key_required is False
+    assert contract.cache_required is True
+    assert contract.background_refresh_recommended is True
     assert contract.degradation_reason is not None
     assert contract.missing_provider_reason == expected_missing_reason
 
@@ -46,6 +52,7 @@ def test_cn_provider_capability_contract_resolves_supported_entries(
 def test_cn_provider_capability_contracts_cover_current_probe_declared_capabilities() -> None:
     pytdx_contracts = list_provider_capability_support_contracts("pytdx")
     akshare_contracts = list_provider_capability_support_contracts("akshare")
+    baostock_contracts = list_provider_capability_support_contracts("baostock")
 
     assert {item.capability for item in pytdx_contracts} == {
         "cn_history_daily",
@@ -67,6 +74,12 @@ def test_cn_provider_capability_contracts_cover_current_probe_declared_capabilit
         "hk_history_daily",
         "chip_distribution",
     }
+    assert {item.capability for item in baostock_contracts} == {
+        "cn_adjust_factor",
+        "cn_basic_financials",
+        "cn_history_daily",
+        "cn_index_history_daily",
+    }
 
 
 @pytest.mark.parametrize(
@@ -76,6 +89,8 @@ def test_cn_provider_capability_contracts_cover_current_probe_declared_capabilit
         ("pytdx", "chip_distribution"),
         ("akshare", "cn_quote"),
         ("akshare", "hk_index_quote"),
+        ("baostock", "cn_realtime_quote"),
+        ("baostock", "hk_history_daily"),
         ("missing", "cn_quote"),
     ],
 )
@@ -101,6 +116,9 @@ def test_cn_provider_capability_contract_projects_required_camel_case_fields() -
         "observationOnly": True,
         "scoreContributionAllowed": False,
         "paidDataLikelyRequired": False,
+        "keyRequired": False,
+        "cacheRequired": True,
+        "backgroundRefreshRecommended": True,
         "degradationReason": "akshare_provider_unavailable",
         "missingProviderReason": "akshare_not_installed",
     }

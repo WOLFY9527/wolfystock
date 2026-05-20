@@ -11,6 +11,7 @@ import sys
 
 import pytest
 
+from data_provider.baostock_fetcher import BaostockFetcher
 from data_provider.akshare_fetcher import AkshareFetcher
 from data_provider.pytdx_fetcher import PytdxFetcher
 from src.services.provider_capability_matrix import (
@@ -282,16 +283,18 @@ def test_provider_capability_matrix_preserves_category_boundaries_for_local_no_k
 
 
 @pytest.mark.parametrize(
-    ("provider_id", "fetcher", "expected_trust_level"),
+    ("provider_id", "fetcher", "expected_trust_level", "expected_source_tier"),
     [
-        ("pytdx", PytdxFetcher, "usable_with_caution"),
-        ("akshare", AkshareFetcher, "weak"),
+        ("pytdx", PytdxFetcher, "usable_with_caution", "unofficial_public_api"),
+        ("akshare", AkshareFetcher, "weak", "unofficial_public_api"),
+        ("baostock", BaostockFetcher, "usable_with_caution", "third_party_free_api"),
     ],
 )
 def test_cn_provider_probe_contract_metadata_stays_in_lockstep(
     provider_id: str,
     fetcher: type,
     expected_trust_level: str,
+    expected_source_tier: str,
 ) -> None:
     contract_capabilities = tuple(
         sorted(item.capability for item in list_provider_capability_support_contracts(provider_id))
@@ -305,8 +308,11 @@ def test_cn_provider_probe_contract_metadata_stays_in_lockstep(
     assert contracts
     assert {item.observation_only for item in contracts} == {True}
     assert {item.score_contribution_allowed for item in contracts} == {False}
+    assert {item.key_required for item in contracts} == {False}
+    assert {item.cache_required for item in contracts} == {True}
+    assert {item.background_refresh_recommended for item in contracts} == {True}
     assert {item.source_type for item in contracts} == {"public_proxy"}
-    assert {item.source_tier for item in contracts} == {"unofficial_public_api"}
+    assert {item.source_tier for item in contracts} == {expected_source_tier}
     assert {item.trust_level for item in contracts} == {expected_trust_level}
     assert "reliable" not in {item.trust_level for item in contracts}
     assert "official_public" not in {item.source_type for item in contracts}
