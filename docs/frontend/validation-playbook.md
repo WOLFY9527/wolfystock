@@ -24,6 +24,33 @@ git diff --check
 Run broader tests only when the changed surface, shared primitive, API contract,
 or release risk warrants it.
 
+## Standard Playwright Invocation
+
+When frontend E2E validation is needed, run Playwright through the app-local
+package script so `apps/dsa-web/playwright.config.ts` loads its `baseURL` and
+`webServer` settings:
+
+```bash
+DSA_WEB_PLAYWRIGHT_PORT=4181 npm --prefix apps/dsa-web run test:e2e -- e2e/market-research-surfaces.spec.ts --project=chromium
+```
+
+Equivalent app-local form:
+
+```bash
+cd apps/dsa-web
+DSA_WEB_PLAYWRIGHT_PORT=4181 npx playwright test e2e/market-research-surfaces.spec.ts --project=chromium
+```
+
+Do not use these command shapes for config-dependent frontend E2E validation:
+
+```bash
+npx playwright test apps/dsa-web/e2e/market-research-surfaces.spec.ts --project=chromium
+npx --prefix apps/dsa-web playwright test e2e/market-research-surfaces.spec.ts --project=chromium
+```
+
+Those forms can bypass the app-local Playwright config and cause relative
+`page.goto('/...')` navigations to fail with invalid URL errors.
+
 ## Fresh Evidence Rule
 
 Current UI evidence must come only from:
@@ -140,8 +167,7 @@ structured metrics for review.
 Run it with an isolated preview port:
 
 ```bash
-cd apps/dsa-web
-DSA_WEB_PLAYWRIGHT_PORT=<free-port> npx playwright test e2e/ux-density-audit.spec.ts --project=chromium
+DSA_WEB_PLAYWRIGHT_PORT=<free-port> npm --prefix apps/dsa-web run test:e2e -- e2e/ux-density-audit.spec.ts --project=chromium
 ```
 
 Default report path:
@@ -155,7 +181,7 @@ Optional output override:
 ```bash
 UX_DENSITY_AUDIT_OUTPUT=/tmp/wolfystock-ux-density-audit.json \
 DSA_WEB_PLAYWRIGHT_PORT=<free-port> \
-npx playwright test e2e/ux-density-audit.spec.ts --project=chromium
+npm --prefix apps/dsa-web run test:e2e -- e2e/ux-density-audit.spec.ts --project=chromium
 ```
 
 The report path is a test output or temporary path and should not be committed.

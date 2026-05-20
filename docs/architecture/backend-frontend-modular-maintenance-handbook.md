@@ -331,12 +331,15 @@ Use it to answer:
 ### Frontend
 
 ```bash
-cd apps/dsa-web
-npm run lint
-npm run test
-npm run build
-npx playwright test e2e/smoke.spec.ts --grep "login page renders password form"
+npm --prefix apps/dsa-web run lint
+npm --prefix apps/dsa-web run test
+npm --prefix apps/dsa-web run build
+DSA_WEB_PLAYWRIGHT_PORT=4181 npm --prefix apps/dsa-web run test:e2e -- e2e/smoke.spec.ts --project=chromium --grep "login page renders password form"
 ```
+
+Avoid repo-root `npx playwright test apps/dsa-web/e2e/...` and
+`npx --prefix apps/dsa-web playwright test ...` when the test depends on
+`apps/dsa-web/playwright.config.ts`.
 
 ### Backend
 

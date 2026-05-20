@@ -71,4 +71,4 @@ PREVIEW_PID=$!
 wait_for_url "${BACKEND_URL}/api/v1/auth/status" "backend smoke server"
 wait_for_url "${FRONTEND_URL}/" "frontend smoke preview"
 
-npx playwright test e2e/smoke.spec.ts "$@"
+npm run test:e2e -- e2e/smoke.spec.ts "$@"
