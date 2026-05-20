@@ -25,7 +25,9 @@ type LocalSnapshotEnvelope = {
 };
 
 const MARKET_OVERVIEW_LKG_STORAGE_KEY = 'wolfystock.marketOverview.lastKnownGood.v1';
-const AUTO_REFRESH_MS = 60_000;
+const FAST_POLL_INTERVAL_MS = 45_000;
+const MEDIUM_POLL_INTERVAL_MS = 120_000;
+const SLOW_POLL_INTERVAL_MS = 300_000;
 const PANEL_REQUEST_TIMEOUT_MS = 3_000;
 const FIRST_STAGE_PANEL_DELAY_MS = 250;
 const SECOND_STAGE_PANEL_DELAY_MS = 650;
@@ -36,6 +38,10 @@ const AUTO_REVALIDATE_MAX_ATTEMPTS = 3;
 type PanelRequest = readonly [PanelKey, () => Promise<PanelState[PanelKey]>];
 type StagedPanelRequestGroup = {
   delayMs: number;
+  requests: PanelRequest[];
+};
+type PollingPanelRequestGroup = {
+  intervalMs: number;
   requests: PanelRequest[];
 };
 
@@ -67,6 +73,41 @@ const MARKET_OVERVIEW_STAGED_REQUEST_GROUPS: StagedPanelRequestGroup[] = [
       ['cnFlows', marketApi.getCnFlows],
       ['sectorRotation', marketApi.getSectorRotation],
       ['futures', marketApi.getFutures],
+      ['cnShortSentiment', marketApi.getCnShortSentiment],
+    ],
+  },
+];
+
+const MARKET_OVERVIEW_POLLING_GROUPS: PollingPanelRequestGroup[] = [
+  {
+    intervalMs: FAST_POLL_INTERVAL_MS,
+    requests: [
+      ['indices', marketOverviewApi.getIndices],
+      ['volatility', marketOverviewApi.getVolatility],
+      ['crypto', marketApi.getCrypto],
+    ],
+  },
+  {
+    intervalMs: MEDIUM_POLL_INTERVAL_MS,
+    requests: [
+      ['futures', marketApi.getFutures],
+      ['cnIndices', marketApi.getCnIndices],
+      ['cnBreadth', marketApi.getCnBreadth],
+      ['usBreadth', marketApi.getUsBreadth],
+      ['fxCommodities', marketApi.getFxCommodities],
+      ['temperature', marketApi.getTemperature],
+      ['briefing', marketApi.getMarketBriefing],
+    ],
+  },
+  {
+    intervalMs: SLOW_POLL_INTERVAL_MS,
+    requests: [
+      ['fundsFlow', marketOverviewApi.getFundsFlow],
+      ['macro', marketOverviewApi.getMacro],
+      ['cnFlows', marketApi.getCnFlows],
+      ['sectorRotation', marketApi.getSectorRotation],
+      ['rates', marketApi.getRates],
+      ['sentiment', marketApi.getSentiment],
       ['cnShortSentiment', marketApi.getCnShortSentiment],
     ],
   },
@@ -763,6 +804,12 @@ const MarketOverviewPage = () => {
     }, delayMs);
   }, [refreshPanel, resetAutoRevalidatePanel]);
 
+  const refreshPollingGroup = useCallback((requests: PanelRequest[]) => {
+    requests.forEach(([panelKey, loadPanel]) => {
+      void refreshPanel(panelKey, loadPanel, { silent: true });
+    });
+  }, [refreshPanel]);
+
   useEffect(() => {
     const cancelledRef = { current: false };
 
@@ -801,14 +848,17 @@ const MarketOverviewPage = () => {
   }, [clearAutoRevalidateTimer]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      const cancelledRef = { current: false };
-      void loadPanels(cancelledRef);
-    }, AUTO_REFRESH_MS);
+    const timers = MARKET_OVERVIEW_POLLING_GROUPS.map((group) => (
+      window.setInterval(() => {
+        refreshPollingGroup(group.requests);
+      }, group.intervalMs)
+    ));
     return () => {
-      window.clearInterval(timer);
+      timers.forEach((timer) => {
+        window.clearInterval(timer);
+      });
     };
-  }, [loadPanels]);
+  }, [refreshPollingGroup]);
 
   useEffect(() => {
     return subscribeToCryptoStream(({ panel, status }) => {

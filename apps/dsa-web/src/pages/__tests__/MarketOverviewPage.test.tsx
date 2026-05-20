@@ -2861,20 +2861,47 @@ describe('MarketOverviewPage', () => {
     expect((await screen.findAllByText('深证成指')).length).toBeGreaterThan(0);
   });
 
-  it('polls market cards on the configured interval', async () => {
+  it('polls market cards in TTL-aware groups instead of one all-panel interval', async () => {
+    vi.useFakeTimers();
     const setIntervalSpy = vi.spyOn(window, 'setInterval');
     render(<MarketOverviewPage />);
 
-    await waitFor(() => expect(marketApi.getCrypto).toHaveBeenCalledTimes(1));
-
-    const pollCallback = setIntervalSpy.mock.calls[0]?.[0] as TimerHandler | undefined;
-    expect(typeof pollCallback).toBe('function');
-    (pollCallback as () => void)();
-
-    await waitFor(() => {
-      expect(marketApi.getCrypto).toHaveBeenCalledTimes(2);
-      expect(marketApi.getSentiment).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(650);
     });
+    expectMarketPanelRequestsCalledOnce(allMarketPanelRequests);
+
+    expect(setIntervalSpy).toHaveBeenCalledTimes(3);
+    const intervalByDelay = new Map(
+      setIntervalSpy.mock.calls.map(([callback, delay]) => [delay, callback as TimerHandler]),
+    );
+    const fastCallback = intervalByDelay.get(45_000);
+    const mediumCallback = intervalByDelay.get(120_000);
+    const slowCallback = intervalByDelay.get(300_000);
+    expect(typeof fastCallback).toBe('function');
+    expect(typeof mediumCallback).toBe('function');
+    expect(typeof slowCallback).toBe('function');
+
+    (fastCallback as () => void)();
+    expect(marketApi.getCrypto).toHaveBeenCalledTimes(2);
+    expect(marketOverviewApi.getIndices).toHaveBeenCalledTimes(2);
+    expect(marketOverviewApi.getVolatility).toHaveBeenCalledTimes(2);
+    expect(marketApi.getSentiment).toHaveBeenCalledTimes(1);
+    expect(marketApi.getCnIndices).toHaveBeenCalledTimes(1);
+    expect(marketApi.getFutures).toHaveBeenCalledTimes(1);
+
+    (mediumCallback as () => void)();
+    expect(marketApi.getCnIndices).toHaveBeenCalledTimes(2);
+    expect(marketApi.getCnBreadth).toHaveBeenCalledTimes(2);
+    expect(marketApi.getFutures).toHaveBeenCalledTimes(2);
+    expect(marketApi.getSentiment).toHaveBeenCalledTimes(1);
+    expect(marketApi.getCnFlows).toHaveBeenCalledTimes(1);
+
+    (slowCallback as () => void)();
+    expect(marketApi.getSentiment).toHaveBeenCalledTimes(2);
+    expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(2);
+    expect(marketApi.getCnFlows).toHaveBeenCalledTimes(2);
+    expect(marketApi.getRates).toHaveBeenCalledTimes(2);
     setIntervalSpy.mockRestore();
   });
 
