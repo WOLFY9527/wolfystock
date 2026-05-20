@@ -59,6 +59,7 @@ from src.services.market_intelligence_trust_gate import (
     evaluate_market_intelligence_trust,
     evaluate_market_intelligence_trust_from_sources,
 )
+from src.services.market_regime_synthesis_adapter import build_market_regime_synthesis_payload
 from src.services.rotation_state_evidence import build_rotation_state_evidence
 from src.services.rotation_radar_quote_provider import get_rotation_radar_quote_provider
 from src.services.vix_metadata import normalize_vix_panel_metadata, normalize_vix_quote_metadata
@@ -955,6 +956,9 @@ class MarketOverviewService:
             allow_stale=False,
             background_refresh=False,
         )
+
+    def _build_market_regime_synthesis_payload(self, inputs: Mapping[str, Any]) -> Dict[str, Any]:
+        return build_market_regime_synthesis_payload(inputs)
 
     def get_futures(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         started_at = time.monotonic()
