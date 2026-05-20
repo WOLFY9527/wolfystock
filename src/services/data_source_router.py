@@ -18,6 +18,7 @@ from src.services.provider_capability_matrix import (
     ProviderMarket,
     get_provider_capability,
     get_provider_capability_support_contract,
+    get_provider_dry_run_probe_contract,
     get_provider_fit_metadata,
     is_provider_allowed_for_backtest,
     providers_for_domain,
@@ -91,6 +92,15 @@ _MARKET_INTELLIGENCE_AUTHORITY_REQUIRED_SOURCE_TYPES = (
     "exchange_public",
     "cache_snapshot",
 )
+_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS = (
+    "binance_public",
+    "coinbase_public",
+    "yfinance_current_baseline",
+    "yahooquery",
+    "akshare",
+    "baostock",
+    "pytdx_existing_baseline",
+)
 
 
 def _text(value: str | None) -> str:
@@ -157,6 +167,11 @@ class ProviderRouteCandidate:
     freshness_expectation: str
     observation_only: bool
     score_contribution_allowed: bool
+    paid_data_likely_required: bool = False
+    key_required: bool = False
+    enabled_by_default: bool = False
+    no_default_live_http_calls: bool = True
+    missing_provider_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,6 +360,90 @@ _ROUTE_POLICIES = MappingProxyType(
             freshness_floor="live",
             trust_floor="score_grade",
         ),
+        ("market_overview", "us_etf_flow_daily"): _RoutePolicy(
+            primary_provider_ids=("authorized.us_etf_flow",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_flow_or_missing",
+            plan_reason_codes=("cache_required", "missing_provider_configuration"),
+        ),
+        ("market_overview", "us_market_breadth_constituents"): _RoutePolicy(
+            primary_provider_ids=("official_or_authorized.us_market_breadth",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_breadth_or_missing",
+            plan_reason_codes=("cache_required", "missing_provider_configuration"),
+        ),
+        ("market_regime", "us_etf_flow_daily"): _RoutePolicy(
+            primary_provider_ids=("authorized.us_etf_flow",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_flow_or_missing",
+            plan_reason_codes=("cache_required", "missing_provider_configuration"),
+        ),
+        ("market_regime", "us_market_breadth_constituents"): _RoutePolicy(
+            primary_provider_ids=("official_or_authorized.us_market_breadth",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_breadth_or_missing",
+            plan_reason_codes=("cache_required", "missing_provider_configuration"),
+        ),
+        ("liquidity_impulse", "us_etf_flow_daily"): _RoutePolicy(
+            primary_provider_ids=("authorized.us_etf_flow",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_flow_or_missing",
+            plan_reason_codes=("cache_required", "missing_provider_configuration"),
+        ),
+        ("liquidity_impulse", "us_etf_creation_redemption"): _RoutePolicy(
+            primary_provider_ids=("authorized.us_etf_flow",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_flow_or_missing",
+            plan_reason_codes=("cache_required", "missing_provider_configuration"),
+        ),
+        ("liquidity_impulse", "us_market_breadth_constituents"): _RoutePolicy(
+            primary_provider_ids=("official_or_authorized.us_market_breadth",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_breadth_or_missing",
+            plan_reason_codes=("cache_required", "missing_provider_configuration"),
+        ),
         ("rotation_radar", "quote"): _RoutePolicy(
             forbidden_provider_ids=("sec_edgar", "baostock", "coinbase_public", "yfinance_current_baseline", "yahooquery"),
             cache_required=False,
@@ -354,6 +453,18 @@ _ROUTE_POLICIES = MappingProxyType(
             required_source_types=("official_public", "exchange_public", "cache_snapshot"),
             freshness_floor="live",
             trust_floor="score_grade",
+        ),
+        ("rotation_radar", "us_sector_etf_flow"): _RoutePolicy(
+            primary_provider_ids=("authorized.us_etf_flow",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_flow_or_missing",
+            plan_reason_codes=("cache_required", "missing_provider_configuration"),
         ),
         ("scanner_price_scoring", "cn_realtime_quote"): _RoutePolicy(
             forbidden_provider_ids=("baostock", "sec_edgar", "coinbase_public", "yfinance_current_baseline"),
@@ -437,6 +548,7 @@ class CapabilityResolver:
         fit = get_provider_fit_metadata(normalized_provider)
 
         if support is not None:
+            probe = get_provider_dry_run_probe_contract(normalized_provider)
             return ProviderRouteCandidate(
                 provider_id=support.provider_id,
                 provider_name=support.provider_name,
@@ -447,9 +559,18 @@ class CapabilityResolver:
                 freshness_expectation=support.freshness_expectation,
                 observation_only=support.observation_only,
                 score_contribution_allowed=support.score_contribution_allowed,
+                paid_data_likely_required=support.paid_data_likely_required,
+                key_required=support.key_required,
+                enabled_by_default=False,
+                no_default_live_http_calls=probe.no_default_live_http_calls if probe is not None else True,
+                missing_provider_reason=(
+                    support.missing_provider_reason
+                    or (probe.missing_provider_reason if probe is not None else None)
+                ),
             )
 
         if fit is not None:
+            probe = get_provider_dry_run_probe_contract(normalized_provider)
             return ProviderRouteCandidate(
                 provider_id=fit.provider_id,
                 provider_name=fit.provider_name,
@@ -460,6 +581,11 @@ class CapabilityResolver:
                 freshness_expectation=fit.freshness_expectation,
                 observation_only=fit.observation_only,
                 score_contribution_allowed=fit.score_contribution_allowed,
+                paid_data_likely_required=fit.paid_data_likely_required,
+                key_required=fit.key_required,
+                enabled_by_default=fit.enabled_by_default,
+                no_default_live_http_calls=probe.no_default_live_http_calls if probe is not None else True,
+                missing_provider_reason=fit.missing_provider_reason,
             )
 
         capability_metadata = get_provider_capability(normalized_provider)
@@ -479,6 +605,11 @@ class CapabilityResolver:
             ),
             observation_only=False,
             score_contribution_allowed=True,
+            paid_data_likely_required=False,
+            key_required=False,
+            enabled_by_default=True,
+            no_default_live_http_calls=True,
+            missing_provider_reason=None,
         )
 
     @staticmethod
@@ -599,6 +730,11 @@ def _build_observation_candidates(
             freshness_expectation=candidate.freshness_expectation,
             observation_only=True,
             score_contribution_allowed=False,
+            paid_data_likely_required=candidate.paid_data_likely_required,
+            key_required=candidate.key_required,
+            enabled_by_default=candidate.enabled_by_default,
+            no_default_live_http_calls=candidate.no_default_live_http_calls,
+            missing_provider_reason=candidate.missing_provider_reason,
         )
         for candidate in filtered
     )
@@ -659,12 +795,25 @@ def _build_reason_codes(
 
 def _provider_is_not_capable(candidate: ProviderRouteCandidate, request: DataSourceRouteRequest) -> bool:
     support = get_provider_capability_support_contract(candidate.provider_id, request.capability)
+    normalized_capability = _normalize(request.capability)
     if support is None and candidate.provider_id == "baostock" and _normalize(request.capability) not in {
         "cn_adjust_factor",
         "cn_basic_financials",
         "cn_history_daily",
         "cn_index_history_daily",
     }:
+        return True
+    if (
+        normalized_capability
+        in {
+            "us_etf_flow_daily",
+            "us_etf_creation_redemption",
+            "us_sector_etf_flow",
+            "us_market_breadth_constituents",
+            "us_sector_breadth",
+        }
+        and candidate.source_type in _PROXY_SOURCE_TYPES
+    ):
         return True
     if _normalize(request.freshness_need) in _LIVE_FRESHNESS_VALUES and candidate.source_type in _PROXY_SOURCE_TYPES:
         return True

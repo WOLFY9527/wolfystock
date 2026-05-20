@@ -422,6 +422,131 @@ def test_live_score_grade_routes_reject_yfinance_and_proxy_observations() -> Non
     assert plan.trust_floor == "score_grade"
 
 
+def test_market_regime_and_liquidity_impulse_routes_surface_missing_authorized_us_flow_and_breadth() -> None:
+    flow_plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="US",
+            asset_type="equity",
+            use_case="market_regime",
+            capability="us_etf_flow_daily",
+            freshness_need="daily",
+            scoring_allowed=False,
+            symbol="SPY",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+    breadth_plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="US",
+            asset_type="equity",
+            use_case="liquidity_impulse",
+            capability="us_market_breadth_constituents",
+            freshness_need="daily",
+            scoring_allowed=False,
+            symbol="SPY",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+
+    assert _ids(flow_plan.primary_candidates) == {"authorized.us_etf_flow"}
+    assert _ids(flow_plan.observation_candidates) == set()
+    assert flow_plan.cache_required is True
+    assert flow_plan.score_contribution_allowed is False
+    assert flow_plan.degradation_policy == "require_authorized_feed_or_explicit_missing"
+    assert "missing_provider_configuration" in flow_plan.reason_codes["plan"]
+    assert {"yfinance_current_baseline", "yahooquery", "akshare", "baostock", "coinbase_public"}.issubset(
+        _ids(flow_plan.forbidden_providers)
+    )
+
+    flow_candidate = flow_plan.primary_candidates[0]
+    assert flow_candidate.missing_provider_reason == "authorized_us_etf_flow_feed_not_configured"
+    assert flow_candidate.paid_data_likely_required is True
+    assert flow_candidate.key_required is True
+    assert flow_candidate.no_default_live_http_calls is True
+
+    assert _ids(breadth_plan.primary_candidates) == {"official_or_authorized.us_market_breadth"}
+    assert _ids(breadth_plan.observation_candidates) == set()
+    assert breadth_plan.cache_required is True
+    assert breadth_plan.score_contribution_allowed is False
+    assert breadth_plan.degradation_policy == "require_authorized_feed_or_explicit_missing"
+    assert "missing_provider_configuration" in breadth_plan.reason_codes["plan"]
+    assert {
+        "yfinance_current_baseline",
+        "yahooquery",
+        "akshare",
+        "baostock",
+        "pytdx_existing_baseline",
+    }.issubset(_ids(breadth_plan.forbidden_providers))
+
+    breadth_candidate = breadth_plan.primary_candidates[0]
+    assert breadth_candidate.missing_provider_reason == "authorized_us_market_breadth_feed_not_configured"
+    assert breadth_candidate.paid_data_likely_required is True
+    assert breadth_candidate.key_required is True
+    assert breadth_candidate.no_default_live_http_calls is True
+
+
+def test_rotation_radar_true_flow_route_rejects_proxy_and_exchange_snapshot_replacements() -> None:
+    plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="US",
+            asset_type="equity",
+            use_case="rotation_radar",
+            capability="us_sector_etf_flow",
+            freshness_need="daily",
+            scoring_allowed=False,
+            symbol="XLK",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+
+    assert _ids(plan.primary_candidates) == {"authorized.us_etf_flow"}
+    assert plan.score_contribution_allowed is False
+    assert "yfinance_current_baseline" in _ids(plan.forbidden_providers)
+    assert "yahooquery" in _ids(plan.forbidden_providers)
+    assert "coinbase_public" in _ids(plan.forbidden_providers)
+    assert "provider_forbidden_for_use_case" in plan.reason_codes["yfinance_current_baseline"]
+    assert "provider_forbidden_for_use_case" in plan.reason_codes["coinbase_public"]
+    assert "provider_not_capable" in plan.reason_codes["yfinance_current_baseline"]
+
+
+def test_route_diagnostic_snapshot_serializes_missing_provider_fields_for_authorized_flow_contracts() -> None:
+    request = DataSourceRouteRequest(
+        market="US",
+        asset_type="equity",
+        use_case="liquidity_impulse",
+        capability="us_etf_creation_redemption",
+        freshness_need="daily",
+        scoring_allowed=False,
+        symbol="SPY",
+        allow_network=False,
+        reproducibility_required=False,
+    )
+
+    snapshot = build_data_source_route_diagnostic_snapshot(request).to_dict()
+
+    assert snapshot["primaryCandidates"] == [
+        {
+            "providerId": "authorized.us_etf_flow",
+            "providerName": "Authorized US ETF Flow",
+            "capability": "us_etf_creation_redemption",
+            "sourceType": "missing",
+            "sourceTier": "authorized_licensed_feed",
+            "trustLevel": "score_grade_when_configured",
+            "freshnessExpectation": "licensed_daily_or_delayed_fund_flow",
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "paidDataLikelyRequired": True,
+            "keyRequired": True,
+            "enabledByDefault": False,
+            "noDefaultLiveHttpCalls": True,
+            "missingProviderReason": "authorized_us_etf_flow_feed_not_configured",
+        }
+    ]
+
+
 def test_route_diagnostic_snapshot_serializes_required_fields_without_runtime_calls() -> None:
     request = DataSourceRouteRequest(
         market="US",
@@ -483,6 +608,11 @@ def test_route_diagnostic_snapshot_serializes_required_fields_without_runtime_ca
         "freshnessExpectation": "filing_or_daily",
         "observationOnly": True,
         "scoreContributionAllowed": False,
+        "paidDataLikelyRequired": False,
+        "keyRequired": False,
+        "enabledByDefault": False,
+        "noDefaultLiveHttpCalls": True,
+        "missingProviderReason": None,
     }
     assert snapshot["observationCandidates"] == []
     assert "baostock" in {item["providerId"] for item in snapshot["forbiddenProviders"]}

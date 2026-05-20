@@ -19,6 +19,7 @@ from src.services.provider_capability_matrix import (
 
 
 EXPECTED_PROVIDER_IDS = {
+    "authorized.us_etf_flow",
     "finnhub",
     "alpha_vantage",
     "twelve_data",
@@ -42,6 +43,7 @@ EXPECTED_PROVIDER_IDS = {
     "binance_public",
     "coinbase_public",
     "fred_existing_baseline",
+    "official_or_authorized.us_market_breadth",
     "treasury_existing_baseline",
 }
 
@@ -91,6 +93,17 @@ def test_provider_fit_metadata_covers_all_audited_candidates_and_stays_sorted() 
             },
         ),
         (
+            "authorized.us_etf_flow",
+            {
+                "providerCategory": "authorized_flow_dataset",
+                "sourceTier": "authorized_licensed_feed",
+                "trustLevel": "score_grade_when_configured",
+                "freshnessExpectation": "licensed_daily_or_delayed_fund_flow",
+                "paidDataLikelyRequired": True,
+                "keyRequired": True,
+            },
+        ),
+        (
             "baostock",
             {
                 "providerCategory": "cn_delayed_observation",
@@ -99,6 +112,17 @@ def test_provider_fit_metadata_covers_all_audited_candidates_and_stays_sorted() 
                 "freshnessExpectation": "t_plus_1_or_delayed",
                 "paidDataLikelyRequired": False,
                 "keyRequired": False,
+            },
+        ),
+        (
+            "official_or_authorized.us_market_breadth",
+            {
+                "providerCategory": "authorized_breadth_dataset",
+                "sourceTier": "official_or_authorized_licensed_feed",
+                "trustLevel": "score_grade_when_configured",
+                "freshnessExpectation": "licensed_daily_or_delayed_breadth_snapshot",
+                "paidDataLikelyRequired": True,
+                "keyRequired": True,
             },
         ),
         (
@@ -210,10 +234,9 @@ def test_provider_fit_dry_run_probe_contracts_stay_disabled_and_secret_safe() ->
         assert probe.provider_payload_values_included is False
         assert probe.response_bodies_included is False
         assert probe.degradation_reason == "provider_fit_metadata_only"
-        if entry.key_required:
-            assert probe.missing_provider_reason == f"{entry.provider_id}_key_not_configured"
-        else:
-            assert probe.missing_provider_reason is None
+        assert probe.missing_provider_reason == (
+            entry.missing_provider_reason if entry.key_required else None
+        )
 
 
 def test_provider_fit_imports_are_metadata_only() -> None:

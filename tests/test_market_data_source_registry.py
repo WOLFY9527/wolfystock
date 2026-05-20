@@ -142,6 +142,7 @@ def test_missing_source_defaults_to_missing_labels() -> None:
 
 def test_provider_fit_source_aliases_are_additive_and_truthful_for_new_audited_ids() -> None:
     expected = {
+        "authorized.us_etf_flow": ("missing", "未接入"),
         "sec_edgar": ("official_public", "SEC EDGAR"),
         "pandas_datareader_fred": ("official_public", "FRED"),
         "pandas_datareader_oecd": ("official_public", "OECD"),
@@ -151,6 +152,7 @@ def test_provider_fit_source_aliases_are_additive_and_truthful_for_new_audited_i
         "coinbase_public": ("exchange_public", "Coinbase"),
         "finnhub": ("public_proxy", "Finnhub"),
         "marketstack": ("public_proxy", "Marketstack"),
+        "official_or_authorized.us_market_breadth": ("missing", "未接入"),
         "tushare_pro": ("public_proxy", "Tushare Pro"),
         "yahooquery": ("unofficial_proxy", "Yahoo Finance"),
         "yfinance_current_baseline": ("unofficial_proxy", "Yahoo Finance"),
@@ -163,6 +165,19 @@ def test_provider_fit_source_aliases_are_additive_and_truthful_for_new_audited_i
         provenance = project_source_provenance(source=source, freshness="delayed")
         assert provenance["sourceType"] == source_type
         assert provenance["sourceLabel"] == source_label
+
+
+def test_future_authorized_us_flow_and_breadth_provider_classes_do_not_project_as_live_authority() -> None:
+    for source in ("authorized.us_etf_flow", "official_or_authorized.us_market_breadth"):
+        provenance = project_source_provenance(
+            source=source,
+            source_type="official_public",
+            freshness="live",
+        )
+
+        assert provenance["sourceType"] == "missing"
+        assert provenance["sourceLabel"] == "未接入"
+        assert provenance["freshnessLabel"] == "不可用"
 
 
 def test_scanner_local_sources_keep_specific_cache_labels() -> None:

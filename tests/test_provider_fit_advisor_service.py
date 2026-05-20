@@ -12,9 +12,11 @@ from src.services.provider_fit_advisor_service import (
     get_provider_fit_advisor_entry,
     list_provider_fit_advisor_entries,
 )
+from src.services.provider_capability_matrix import get_provider_fit_metadata
 
 
 EXPECTED_PROVIDER_IDS = {
+    "authorized.us_etf_flow",
     "finnhub",
     "alpha_vantage",
     "twelve_data",
@@ -38,6 +40,7 @@ EXPECTED_PROVIDER_IDS = {
     "binance_public",
     "coinbase_public",
     "fred_existing_baseline",
+    "official_or_authorized.us_market_breadth",
     "treasury_existing_baseline",
 }
 
@@ -71,25 +74,30 @@ def test_provider_fit_advisor_key_required_entries_remain_secret_safe() -> None:
     }
 
     assert key_required_ids == {
+        "authorized.us_etf_flow",
         "alpha_vantage",
         "finnhub",
         "marketstack",
         "nasdaq_data_link",
+        "official_or_authorized.us_market_breadth",
         "tushare_pro",
         "twelve_data",
     }
     assert all(
-        get_provider_fit_advisor_entry(provider_id).missing_provider_reason.endswith("_key_not_configured")
+        get_provider_fit_advisor_entry(provider_id).missing_provider_reason
+        == get_provider_fit_metadata(provider_id).missing_provider_reason
         for provider_id in key_required_ids
     )
 
 
 def test_provider_fit_advisor_paid_or_plan_dependent_entries_do_not_become_runtime_safe() -> None:
     for provider_id in (
+        "authorized.us_etf_flow",
         "alpha_vantage",
         "finnhub",
         "marketstack",
         "nasdaq_data_link",
+        "official_or_authorized.us_market_breadth",
         "tushare_pro",
         "twelve_data",
     ):
@@ -101,6 +109,24 @@ def test_provider_fit_advisor_paid_or_plan_dependent_entries_do_not_become_runti
         assert entry.recommended_next_step == "require_license_review"
         assert entry.score_contribution_allowed is False
         assert entry.enabled_by_default is False
+
+
+def test_provider_fit_advisor_future_authorized_flow_and_breadth_stay_license_gated() -> None:
+    expected = {
+        "authorized.us_etf_flow": "authorized_us_etf_flow_feed_not_configured",
+        "official_or_authorized.us_market_breadth": "authorized_us_market_breadth_feed_not_configured",
+    }
+
+    for provider_id, missing_reason in expected.items():
+        entry = get_provider_fit_advisor_entry(provider_id)
+
+        assert entry is not None
+        assert entry.paid_data_likely_required is True
+        assert entry.key_required is True
+        assert entry.no_default_live_http_calls is True
+        assert entry.adoption_status == "paid_required"
+        assert entry.recommended_next_step == "require_license_review"
+        assert entry.missing_provider_reason == missing_reason
 
 
 def test_provider_fit_advisor_openbb_stays_reference_only_not_source_of_truth() -> None:

@@ -15,10 +15,12 @@ import pytest
 
 from src.contracts.source_confidence import (
     ProviderCapabilityContract,
+    ProviderCapabilitySupportContract,
     ProviderDryRunProbeContract,
     ProviderFitMetadataContract,
     SourceConfidenceContract,
     SourceFreshness,
+    coerce_provider_capability_support_contract,
     coerce_provider_dry_run_probe_contract,
     coerce_provider_fit_metadata_contract,
     coerce_source_confidence_contract,
@@ -236,6 +238,47 @@ def test_provider_fit_metadata_contract_projects_required_camel_case_fields() ->
         "bestUseCases": ["filings_metadata", "company_facts_reference"],
         "rejectedFor": ["live_quotes", "scoring_inputs"],
         "notRecommendedFor": ["premarket_quotes"],
+    }
+
+
+def test_provider_capability_support_contract_projects_license_gated_missing_provider_fields() -> None:
+    contract = coerce_provider_capability_support_contract(
+        {
+            "providerName": "Authorized US ETF Flow",
+            "providerId": "authorized.us_etf_flow",
+            "capability": "us_etf_creation_redemption",
+            "sourceType": "missing",
+            "sourceTier": "authorized_licensed_feed",
+            "trustLevel": "score_grade_when_configured",
+            "freshnessExpectation": "licensed_daily_or_delayed_fund_flow",
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "paidDataLikelyRequired": True,
+            "keyRequired": True,
+            "cacheRequired": True,
+            "backgroundRefreshRecommended": True,
+            "degradationReason": "authorized_feed_not_configured",
+            "missingProviderReason": "authorized_us_etf_flow_feed_not_configured",
+        }
+    )
+
+    assert isinstance(contract, ProviderCapabilitySupportContract)
+    assert contract.to_dict() == {
+        "providerName": "Authorized US ETF Flow",
+        "providerId": "authorized.us_etf_flow",
+        "capability": "us_etf_creation_redemption",
+        "sourceType": "missing",
+        "sourceTier": "authorized_licensed_feed",
+        "trustLevel": "score_grade_when_configured",
+        "freshnessExpectation": "licensed_daily_or_delayed_fund_flow",
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "paidDataLikelyRequired": True,
+        "keyRequired": True,
+        "cacheRequired": True,
+        "backgroundRefreshRecommended": True,
+        "degradationReason": "authorized_feed_not_configured",
+        "missingProviderReason": "authorized_us_etf_flow_feed_not_configured",
     }
 
 

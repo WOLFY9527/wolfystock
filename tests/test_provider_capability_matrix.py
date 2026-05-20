@@ -23,6 +23,7 @@ from src.services.provider_capability_matrix import (
     BacktestUsage,
     get_provider_dry_run_probe_contract,
     get_provider_capability,
+    get_provider_capability_support_contract,
     get_provider_fit_metadata,
     list_provider_capability_support_contracts,
     list_provider_dry_run_probe_contracts,
@@ -53,6 +54,14 @@ EXPECTED_PROVIDER_IDS = {
     "tavily",
     "social_sentiment",
     "local_inference",
+}
+
+FUTURE_AUTHORIZED_SUPPORT_CONTRACTS = {
+    ("authorized.us_etf_flow", "us_etf_flow_daily"),
+    ("authorized.us_etf_flow", "us_etf_creation_redemption"),
+    ("authorized.us_etf_flow", "us_sector_etf_flow"),
+    ("official_or_authorized.us_market_breadth", "us_market_breadth_constituents"),
+    ("official_or_authorized.us_market_breadth", "us_sector_breadth"),
 }
 
 
@@ -155,6 +164,48 @@ def test_helper_functions_are_deterministic_and_do_not_expose_mutable_state() ->
     assert recommended_ttl("unknown", ProviderDomain.FUNDAMENTALS) is None
     assert get_provider_capability("missing") is None
     assert [item.provider_id for item in providers_for_domain(ProviderDomain.TECHNICALS)][0] == "local_ohlcv"
+
+
+def test_future_authorized_us_flow_and_breadth_contracts_stay_metadata_only_and_unwired() -> None:
+    expected_by_key = {
+        ("authorized.us_etf_flow", "us_etf_flow_daily"): "authorized_us_etf_flow_feed_not_configured",
+        ("authorized.us_etf_flow", "us_etf_creation_redemption"): "authorized_us_etf_flow_feed_not_configured",
+        ("authorized.us_etf_flow", "us_sector_etf_flow"): "authorized_us_etf_flow_feed_not_configured",
+        (
+            "official_or_authorized.us_market_breadth",
+            "us_market_breadth_constituents",
+        ): "authorized_us_market_breadth_feed_not_configured",
+        (
+            "official_or_authorized.us_market_breadth",
+            "us_sector_breadth",
+        ): "authorized_us_market_breadth_feed_not_configured",
+    }
+
+    assert get_provider_capability("authorized.us_etf_flow") is None
+    assert get_provider_capability("official_or_authorized.us_market_breadth") is None
+
+    for provider_id, capability in FUTURE_AUTHORIZED_SUPPORT_CONTRACTS:
+        contract = get_provider_capability_support_contract(provider_id, capability)
+
+        assert contract is not None
+        assert contract.provider_id == provider_id
+        assert contract.capability == capability
+        assert contract.observation_only is True
+        assert contract.score_contribution_allowed is False
+        assert contract.paid_data_likely_required is True
+        assert contract.key_required is True
+        assert contract.cache_required is True
+        assert contract.background_refresh_recommended is True
+        assert contract.missing_provider_reason == expected_by_key[(provider_id, capability)]
+
+    assert {
+        (item.provider_id, item.capability)
+        for item in list_provider_capability_support_contracts()
+        if item.provider_id in {
+            "authorized.us_etf_flow",
+            "official_or_authorized.us_market_breadth",
+        }
+    } == FUTURE_AUTHORIZED_SUPPORT_CONTRACTS
 
 
 def test_provider_capability_import_does_not_import_live_provider_clients() -> None:

@@ -30,6 +30,11 @@ def _candidate_to_dict(candidate: ProviderRouteCandidate) -> dict[str, Any]:
         "freshnessExpectation": candidate.freshness_expectation,
         "observationOnly": candidate.observation_only,
         "scoreContributionAllowed": candidate.score_contribution_allowed,
+        "paidDataLikelyRequired": candidate.paid_data_likely_required,
+        "keyRequired": candidate.key_required,
+        "enabledByDefault": candidate.enabled_by_default,
+        "noDefaultLiveHttpCalls": candidate.no_default_live_http_calls,
+        "missingProviderReason": candidate.missing_provider_reason,
     }
 
 
