@@ -1,13 +1,9 @@
 import type React from 'react';
-import { TerminalChip, TerminalDenseList, TerminalPanel } from '../terminal';
+import { TerminalChip, TerminalPanel } from '../terminal';
 import { cn } from '../../utils/cn';
+import { SynthesisEvidenceColumn, type SynthesisEvidenceItem } from '../common/SynthesisEvidenceColumn';
 
-export type MarketRegimeSynthesisEvidenceView = {
-  key: string;
-  label: string;
-  meta: string;
-  toneClass?: string;
-};
+export type MarketRegimeSynthesisEvidenceView = SynthesisEvidenceItem;
 
 export type MarketRegimeSynthesisHeaderView = {
   state: 'ready' | 'insufficient' | 'missing';
@@ -24,43 +20,6 @@ export type MarketRegimeSynthesisHeaderView = {
   dataGaps: MarketRegimeSynthesisEvidenceView[];
   notInvestmentAdvice?: boolean;
 };
-
-const EvidenceColumn: React.FC<{
-  testId: string;
-  title: string;
-  emptyLabel: string;
-  items: MarketRegimeSynthesisEvidenceView[];
-  accentClassName?: string;
-}> = ({ testId, title, emptyLabel, items, accentClassName = 'text-white/72' }) => (
-  <section
-    data-testid={testId}
-    className="min-w-0 rounded-xl border border-white/[0.06] bg-black/10 px-3 py-3"
-  >
-    <div className="flex min-w-0 items-center justify-between gap-2">
-      <p className="truncate text-[10px] font-bold uppercase tracking-[0.22em] text-white/38">
-        {title}
-      </p>
-      <span className="shrink-0 font-mono text-[10px] text-white/28">{items.length}</span>
-    </div>
-    {items.length > 0 ? (
-      <TerminalDenseList className="mt-3 space-y-2">
-        {items.map((item) => (
-          <div
-            key={item.key}
-            className="min-w-0 border-t border-white/[0.04] pt-2 first:border-t-0 first:pt-0"
-          >
-            <p className={cn('truncate text-sm font-semibold', accentClassName, item.toneClass)}>
-              {item.label}
-            </p>
-            <p className="truncate text-[11px] leading-5 text-white/42">{item.meta}</p>
-          </div>
-        ))}
-      </TerminalDenseList>
-    ) : (
-      <p className="mt-3 text-[11px] leading-5 text-white/38">{emptyLabel}</p>
-    )}
-  </section>
-);
 
 export const MarketRegimeSynthesisHeader: React.FC<{ view: MarketRegimeSynthesisHeaderView }> = ({ view }) => (
   <TerminalPanel
@@ -153,21 +112,21 @@ export const MarketRegimeSynthesisHeader: React.FC<{ view: MarketRegimeSynthesis
       </div>
 
       <div className="grid min-w-0 gap-3 md:grid-cols-3">
-        <EvidenceColumn
+        <SynthesisEvidenceColumn
           testId="market-regime-synthesis-top-drivers"
           title="正向驱动"
           emptyLabel="暂无可展示驱动"
           items={view.topDrivers}
           accentClassName="text-emerald-300"
         />
-        <EvidenceColumn
+        <SynthesisEvidenceColumn
           testId="market-regime-synthesis-counter-evidence"
           title="反证"
           emptyLabel="暂无显式反证"
           items={view.counterEvidence}
           accentClassName="text-amber-200"
         />
-        <EvidenceColumn
+        <SynthesisEvidenceColumn
           testId="market-regime-synthesis-data-gaps"
           title="数据缺口"
           emptyLabel="暂无显式缺口"
