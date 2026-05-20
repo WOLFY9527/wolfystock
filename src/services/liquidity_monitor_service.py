@@ -13,8 +13,9 @@ from src.contracts.source_confidence import (
     coerce_source_confidence_contract,
     evaluate_market_intelligence_trust_from_sources,
 )
+from src.services.data_source_router import DataSourceRouteRequest, DataSourceRouter
 from src.services.market_cache import MarketCache, market_cache
-from src.services.market_data_source_registry import project_source_provenance
+from src.services.market_data_source_registry import project_source_provenance, resolve_source_type
 from src.services.market_overview_binance_transport import fetch_binance_funding_row
 from src.services.market_overview_yfinance_transport import fetch_yfinance_quote_history_frame
 from src.services.vix_metadata import normalize_vix_quote_metadata
@@ -53,6 +54,57 @@ OFFICIAL_PANEL_REQUIRED_SYMBOL_GROUPS = {
     "volatility": ({"VIX", "VIXCLS"},),
     "rates": ({"US2Y"}, {"US10Y"}, {"US30Y"}),
     "macro": ({"VIX", "VIXCLS"}, {"US2Y"}, {"US10Y"}, {"US30Y"}),
+}
+LIQUIDITY_SCORE_ROUTE_REJECTED_REASON = "source_authority_router_rejected"
+LIQUIDITY_SCORE_ROUTE_PROVIDER_ALIASES = {
+    "pytdx": "pytdx_existing_baseline",
+    "yahoo": "yfinance_current_baseline",
+    "yfinance": "yfinance_current_baseline",
+    "yfinance_proxy": "yfinance_current_baseline",
+}
+LIQUIDITY_SCORE_ROUTE_REQUESTS = {
+    "crypto_spot_momentum": {
+        "market": "crypto",
+        "assetType": "crypto",
+        "capability": "crypto_ticker",
+        "freshnessNeed": "live",
+        "productId": "BTC-USD",
+    },
+    "vix_pressure": {
+        "market": "US",
+        "assetType": "index",
+        "capability": "quote",
+        "freshnessNeed": "delayed",
+        "symbol": "VIX",
+    },
+    "usd_pressure": {
+        "market": "forex",
+        "assetType": "forex",
+        "capability": "quote",
+        "freshnessNeed": "delayed",
+        "symbol": "DXY",
+    },
+    "us_rates_pressure": {
+        "market": "US",
+        "assetType": "rates",
+        "capability": "macro_rate",
+        "freshnessNeed": "delayed",
+        "symbol": "US10Y",
+    },
+    "us_etf_flow_proxy": {
+        "market": "US",
+        "assetType": "fund",
+        "capability": "etf_flow",
+        "freshnessNeed": "delayed",
+        "symbol": "ETF",
+    },
+    "us_breadth_proxy": {
+        "market": "US",
+        "assetType": "equity",
+        "capability": "breadth",
+        "freshnessNeed": "delayed",
+        "symbol": "SPY",
+    },
 }
 
 LIQUIDITY_INDICATOR_REQUIRED_INPUTS = {
@@ -1999,6 +2051,9 @@ class LiquidityMonitorService:
             "scoreContribution": final_contribution if contributes_to_score else 0,
             "capReason": cap_reason,
             "degradationReason": degradation_reason,
+            "sourceAuthorityRouteRejected": activation["sourceAuthorityRouteRejected"],
+            "sourceAuthorityReason": activation["sourceAuthorityReason"],
+            "routeRejectedReasonCodes": activation["routeRejectedReasonCodes"],
             "activationHint": activation_hint,
         }
 
@@ -2032,6 +2087,21 @@ class LiquidityMonitorService:
             and bool(trust.get("conclusionAllowed"))
             and score_exclusion_reason is None
         )
+        source_authority_route_rejected = False
+        source_authority_reason = None
+        route_rejected_reason_codes: list[str] = []
+        if score_contribution_allowed:
+            source_authority_route = self._liquidity_score_source_authority_route(
+                key,
+                panel=panel,
+                evidence=evidence,
+            )
+            source_authority_route_rejected = bool(source_authority_route["rejected"])
+            source_authority_reason = self._text(source_authority_route.get("reason")) or None
+            route_rejected_reason_codes = list(source_authority_route.get("reasonCodes") or [])
+            if source_authority_route_rejected:
+                score_contribution_allowed = False
+                score_exclusion_reason = score_exclusion_reason or LIQUIDITY_SCORE_ROUTE_REJECTED_REASON
         missing_provider_reason = None
         if required_provider_class and not real_source_available:
             missing_provider_reason = f"requires_{required_provider_class}"
@@ -2047,7 +2117,123 @@ class LiquidityMonitorService:
             "proxyObservationOnlyReason": proxy_observation_only_reason,
             "missingProviderReason": missing_provider_reason,
             "paidDataLikelyRequired": bool(policy.get("paidDataLikelyRequired")),
+            "sourceAuthorityRouteRejected": source_authority_route_rejected,
+            "sourceAuthorityReason": source_authority_reason,
+            "routeRejectedReasonCodes": route_rejected_reason_codes,
         }
+
+    def _liquidity_score_source_authority_route(
+        self,
+        key: str,
+        *,
+        panel: PanelState,
+        evidence: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        route_request = self._build_liquidity_score_route_request(key)
+        if route_request is None:
+            return {"rejected": False, "reason": None, "reasonCodes": []}
+
+        route_plan = DataSourceRouter.resolve(route_request)
+        allowed_source_types = {
+            self._text(source_type).lower()
+            for source_type in route_plan.required_source_types
+            if self._text(source_type)
+        }
+        rejected = False
+        reason_codes: list[str] = []
+
+        for authority in self._liquidity_score_route_authorities(panel, evidence):
+            provider_id = self._liquidity_score_route_provider_id(authority["source"])
+            if provider_id in route_plan.reason_codes:
+                rejected = True
+                reason_codes.extend(route_plan.reason_codes[provider_id])
+            if authority["sourceType"] and authority["sourceType"] not in allowed_source_types:
+                rejected = True
+                reason_codes.append("source_type_not_score_grade")
+
+        return {
+            "rejected": rejected,
+            "reason": LIQUIDITY_SCORE_ROUTE_REJECTED_REASON if rejected else None,
+            "reasonCodes": list(dict.fromkeys(reason_codes)),
+        }
+
+    @staticmethod
+    def _build_liquidity_score_route_request(key: str) -> DataSourceRouteRequest | None:
+        spec = LIQUIDITY_SCORE_ROUTE_REQUESTS.get(key)
+        if spec is None:
+            return None
+
+        return DataSourceRouteRequest(
+            market=str(spec["market"]),
+            asset_type=str(spec["assetType"]),
+            use_case="liquidity_score",
+            capability=str(spec["capability"]),
+            freshness_need=str(spec["freshnessNeed"]),
+            scoring_allowed=True,
+            symbol=str(spec["symbol"]) if spec.get("symbol") else None,
+            product_id=str(spec["productId"]) if spec.get("productId") else None,
+            allow_network=False,
+            reproducibility_required=False,
+        )
+
+    def _liquidity_score_route_authorities(
+        self,
+        panel: PanelState,
+        evidence: Dict[str, Any],
+    ) -> list[Dict[str, str]]:
+        inputs = [item for item in evidence.get("inputs", []) if isinstance(item, dict)]
+        authorities: list[Dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+
+        if not inputs:
+            source = self._text(panel.source).lower()
+            explicit_source_type = self._text(panel.payload.get("sourceType")).lower()
+            source_type = (
+                resolve_source_type(source_type=explicit_source_type)
+                if explicit_source_type
+                else project_source_provenance(
+                    source=panel.source,
+                    source_type=panel.payload.get("sourceType"),
+                    freshness=panel.freshness,
+                    is_fallback=panel.is_fallback,
+                    is_stale=panel.is_stale,
+                    is_from_snapshot=self._panel_from_snapshot(panel),
+                )["sourceType"]
+            )
+            source_type = self._text(source_type).lower()
+            if source:
+                authorities.append({"source": source, "sourceType": source_type})
+            return authorities
+
+        for item in inputs:
+            source = self._text(item.get("source") or panel.source).lower()
+            explicit_source_type = self._text(item.get("sourceType")).lower()
+            source_type = (
+                resolve_source_type(source_type=explicit_source_type)
+                if explicit_source_type
+                else project_source_provenance(
+                    source=item.get("source") or panel.source,
+                    source_type=item.get("sourceType"),
+                    freshness=item.get("freshness") or panel.freshness,
+                    is_fallback=bool(item.get("isFallback")),
+                    is_stale=bool(item.get("isStale")),
+                    is_from_snapshot=False,
+                )["sourceType"]
+            )
+            source_type = self._text(source_type).lower()
+            if not source:
+                continue
+            authority = (source, source_type)
+            if authority in seen:
+                continue
+            seen.add(authority)
+            authorities.append({"source": source, "sourceType": source_type})
+        return authorities
+
+    @staticmethod
+    def _liquidity_score_route_provider_id(source: str) -> str:
+        normalized = str(source or "").strip().lower()
+        return LIQUIDITY_SCORE_ROUTE_PROVIDER_ALIASES.get(normalized, normalized)
 
     @staticmethod
     def _indicator_configured_provider_available(panel: PanelState, evidence: Dict[str, Any]) -> bool:
@@ -2186,6 +2372,12 @@ class LiquidityMonitorService:
             parts.append(f"scoreExclusionReason={activation['scoreExclusionReason']}")
         if activation.get("proxyObservationOnlyReason"):
             parts.append(f"proxyObservationOnlyReason={activation['proxyObservationOnlyReason']}")
+        if activation.get("sourceAuthorityRouteRejected"):
+            parts.append(f"sourceAuthorityReason={activation['sourceAuthorityReason']}")
+        if activation.get("routeRejectedReasonCodes"):
+            parts.append(
+                "routeRejectedReasonCodes=" + ",".join(str(code) for code in activation["routeRejectedReasonCodes"])
+            )
         if trust["trustLevel"] in {"weak", "unavailable"}:
             parts.append(f"trust gate={trust['trustLevel']} / {trust['sourceTier']}")
         if missing_inputs:

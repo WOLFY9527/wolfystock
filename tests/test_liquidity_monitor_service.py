@@ -188,6 +188,9 @@ def _assert_activation_fields(diagnostics: Dict[str, Any]) -> None:
         "sourceTier",
         "trustLevel",
         "freshness",
+        "sourceAuthorityRouteRejected",
+        "sourceAuthorityReason",
+        "routeRejectedReasonCodes",
     ):
         assert field in diagnostics
 
@@ -2775,6 +2778,9 @@ def test_binance_crypto_activation_keeps_exchange_public_spot_scoring(
     assert spot_diagnostics["proxyOnly"] is False
     assert spot_diagnostics["observationOnly"] is False
     assert spot_diagnostics["scoreContributionAllowed"] is True
+    assert spot_diagnostics["sourceAuthorityRouteRejected"] is False
+    assert spot_diagnostics["sourceAuthorityReason"] is None
+    assert spot_diagnostics["routeRejectedReasonCodes"] == []
     assert spot_diagnostics["sourceTier"] == "exchange_public"
     assert spot_diagnostics["trustLevel"] == "reliable"
 
@@ -2789,6 +2795,64 @@ def test_binance_crypto_activation_keeps_exchange_public_spot_scoring(
     assert funding_diagnostics["observationOnly"] is True
     assert funding_diagnostics["scoreContributionAllowed"] is False
 
+
+def test_coinbase_crypto_inputs_cannot_claim_liquidity_score_authority(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "crypto",
+        _cache_entry(
+            source="coinbase_public",
+            freshness="live",
+            items=[
+                {
+                    "symbol": "BTC",
+                    "label": "BTC",
+                    "changePercent": 1.4,
+                    "value": 64000.0,
+                    "source": "coinbase_public",
+                    "sourceType": "exchange_public",
+                },
+                {
+                    "symbol": "ETH",
+                    "label": "ETH",
+                    "changePercent": 1.1,
+                    "value": 3300.0,
+                    "source": "coinbase_public",
+                    "sourceType": "exchange_public",
+                },
+                {
+                    "symbol": "BNB",
+                    "label": "BNB",
+                    "changePercent": 0.7,
+                    "value": 610.0,
+                    "source": "coinbase_public",
+                    "sourceType": "exchange_public",
+                },
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicators = _indicators_by_key(payload)
+
+    spot = indicators["crypto_spot_momentum"]
+    spot_diagnostics = spot["coverageDiagnostics"]
+    assert spot["includedInScore"] is False
+    assert spot["scoreContribution"] == 0
+    assert spot_diagnostics["realSourceAvailable"] is False
+    assert spot_diagnostics["scoreContributionAllowed"] is False
+    assert spot_diagnostics["scoreExclusionReason"] == "source_authority_router_rejected"
+    assert spot_diagnostics["sourceAuthorityRouteRejected"] is True
+    assert spot_diagnostics["sourceAuthorityReason"] == "source_authority_router_rejected"
+    assert "provider_forbidden_for_use_case" in spot_diagnostics["routeRejectedReasonCodes"]
+    assert "provider_observation_only" in spot_diagnostics["routeRejectedReasonCodes"]
+    assert "scoring_not_allowed" in spot_diagnostics["routeRejectedReasonCodes"]
 
 def test_vix_indicator_uses_yfinance_proxy_when_volatility_panel_is_unavailable(isolated_db: DatabaseManager) -> None:
     service = _make_service()

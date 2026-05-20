@@ -289,6 +289,26 @@ def test_liquidity_score_grade_crypto_quote_rejects_coinbase_public_as_scoring_p
     assert liquidity_plan.score_contribution_allowed is True
 
 
+def test_liquidity_score_grade_quote_rejects_akshare_as_scoring_provider() -> None:
+    liquidity_plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="US",
+            asset_type="equity",
+            use_case="liquidity_score",
+            capability="quote",
+            freshness_need="delayed",
+            scoring_allowed=True,
+            symbol="SPY",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+
+    assert "akshare" in _ids(liquidity_plan.forbidden_providers)
+    assert "provider_forbidden_for_use_case" in liquidity_plan.reason_codes["akshare"]
+    assert liquidity_plan.score_contribution_allowed is True
+
+
 def test_live_score_grade_routes_reject_yfinance_and_proxy_observations() -> None:
     plan = DataSourceRouter.resolve(
         DataSourceRouteRequest(

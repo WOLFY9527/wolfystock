@@ -352,7 +352,15 @@ _ROUTE_POLICIES = MappingProxyType(
             trust_floor="score_grade",
         ),
         ("liquidity_score", "quote"): _RoutePolicy(
-            forbidden_provider_ids=("coinbase_public", "baostock", "sec_edgar", "yfinance_current_baseline", "yahooquery"),
+            forbidden_provider_ids=(
+                "coinbase_public",
+                "akshare",
+                "baostock",
+                "pytdx_existing_baseline",
+                "sec_edgar",
+                "yfinance_current_baseline",
+                "yahooquery",
+            ),
             cache_required=False,
             background_refresh_required=True,
             score_contribution_allowed=True,

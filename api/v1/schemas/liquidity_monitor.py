@@ -94,6 +94,9 @@ class LiquidityMonitorCoverageDiagnostics(BaseModel):
     scoreContribution: int = 0
     capReason: Optional[str] = None
     degradationReason: Optional[str] = None
+    sourceAuthorityRouteRejected: bool = False
+    sourceAuthorityReason: Optional[str] = None
+    routeRejectedReasonCodes: list[str] = Field(default_factory=list)
     activationHint: Optional[str] = None
 
 
