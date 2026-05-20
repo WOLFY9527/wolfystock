@@ -29,7 +29,7 @@ def _build_service() -> StockEvidenceService:
     )
 
 
-def test_stock_evidence_output_is_unchanged_without_injected_sec_filing_evidence() -> None:
+def test_stock_evidence_base_fields_are_preserved_with_packet_without_sec_sidecar() -> None:
     service = _build_service()
 
     payload = service.get_stock_evidence(["AAPL"])
@@ -70,6 +70,59 @@ def test_stock_evidence_output_is_unchanged_without_injected_sec_filing_evidence
         "latestHeadline": None,
         "provider": None,
     }
+    packet = payload["items"][0]["stockEvidencePacket"]
+    assert packet["schemaVersion"] == "stock_evidence_packet_v1"
+    assert packet["symbol"] == "AAPL"
+    assert packet["dataGaps"]
+    assert "secFilingEvidence" not in payload["items"][0]
+
+
+def test_stock_evidence_packet_is_additive_and_sec_remains_observation_only() -> None:
+    service = _build_service()
+    fixture_payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    parsed = parse_companyfacts_payload(fixture_payload)
+    projected = project_sec_edgar_companyfacts_evidence(parsed)
+
+    payload = service.get_stock_evidence(
+        ["AAPL"],
+        sec_filing_evidence_by_symbol={"AAPL": projected},
+    )
+
+    item = payload["items"][0]
+    packet = item["stockEvidencePacket"]
+    assert item["secFilingEvidence"] == build_sec_filing_evidence_sidecar(projected).to_dict()
+    assert packet["symbol"] == "AAPL"
+    assert all(
+        evidence["evidenceClass"] != "sec_filing_evidence"
+        for evidence in packet["scoreEligibleEvidence"]
+    )
+    assert packet["observationOnlyEvidence"] == [
+        {
+            "evidenceClass": "sec_filing_evidence",
+            "sourceRefIds": ["sec_filing_evidence:sec_edgar"],
+            "reasonCodes": ["observation_only", "score_contribution_not_allowed"],
+        }
+    ]
+    serialized = json.dumps(packet, sort_keys=True)
+    for forbidden in ["rawPayload", "facts", "headers", "Authorization", "apiKey"]:
+        assert forbidden not in serialized
+
+
+def test_stock_evidence_omits_packet_when_projector_fails_without_breaking_payload() -> None:
+    service = _build_service()
+
+    with patch(
+        "src.services.agent_stock_evidence_service.project_stock_evidence_packet",
+        side_effect=RuntimeError("projector exploded"),
+    ):
+        payload = service.get_stock_evidence(["AAPL"])
+
+    item = payload["items"][0]
+    assert item["quote"] == {"status": "unknown", "provider": "realtime_quote"}
+    assert item["technical"] == {"status": "missing", "provider": "stock_daily"}
+    assert item["fundamental"]["status"] == "missing"
+    assert item["news"] == {"status": "unknown", "latestHeadline": None, "provider": None}
+    assert "stockEvidencePacket" not in item
 
 
 def test_stock_evidence_accepts_injected_projected_sec_records_without_mutating_other_fields() -> None:

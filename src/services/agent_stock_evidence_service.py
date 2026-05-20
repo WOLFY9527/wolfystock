@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Optional
@@ -20,10 +21,12 @@ from src.services.sec_edgar_evidence_service import (
     SecEdgarFilingEvidenceSidecar,
     build_sec_filing_evidence_sidecar,
 )
+from src.services.stock_evidence_packet import project_stock_evidence_packet
 from src.services.stock_evidence_quote_adapter import StockEvidenceQuoteAdapter
 
 
 EvidencePayload = Dict[str, Any]
+logger = logging.getLogger(__name__)
 _SEC_STOCK_EVIDENCE_USE_CASE = "stock_evidence"
 _SEC_ALLOWED_EVIDENCE_CAPABILITIES = frozenset({"companyfacts", "filing"})
 _SEC_AUTHORITY_REJECTION_TOKENS = ("quote", "ohlcv", "score", "scoring", "fundamental_authority")
@@ -288,7 +291,7 @@ class StockEvidenceService:
         normalized_sec_filing_evidence = _normalize_sec_filing_evidence_by_symbol(
             sec_filing_evidence_by_symbol
         )
-        return {
+        payload = {
             "symbols": normalized,
             "items": [
                 self._build_item(
@@ -299,6 +302,28 @@ class StockEvidenceService:
             ],
             "meta": {"generatedAt": _now_iso(), "source": "read_only_evidence_v2"},
         }
+        self._attach_stock_evidence_packets(payload)
+        return payload
+
+    def _attach_stock_evidence_packets(self, payload: EvidencePayload) -> None:
+        meta = payload.get("meta") if isinstance(payload.get("meta"), Mapping) else {}
+        items = payload.get("items")
+        if not isinstance(items, list):
+            return
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            try:
+                item["stockEvidencePacket"] = project_stock_evidence_packet(
+                    {"items": [item], "meta": meta}
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Stock evidence packet projection failed for %s: %s",
+                    item.get("symbol") or "unknown",
+                    exc,
+                    exc_info=True,
+                )
 
     def _build_item(
         self,

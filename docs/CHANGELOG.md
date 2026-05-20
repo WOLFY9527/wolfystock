@@ -1,5 +1,11 @@
 ## 2026-05-20
 
+- **Stock evidence packet API integration** - `GET /api/v1/agent/stock-evidence`
+  now includes additive per-item `stockEvidencePacket` metadata projected from
+  the existing stock evidence payload. The packet preserves SEC filing evidence
+  as observation-only and non-scoring, omits raw SEC/provider payloads and
+  secret-like fields, and does not change provider calls, DataFetcherManager
+  usage, LLM prompts, frontend behavior, scoring, or report generation.
 - **Market data readiness diagnostics endpoint** - Added additive
   `GET /api/v1/market/data-readiness` as a backend-only, read-only operator
   diagnostic surface for local market-data readiness checks. The endpoint
