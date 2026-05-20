@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Internal CN provider health snapshot service for pytdx and AKShare."""
+"""Internal CN provider health snapshot service for CN observation providers."""
 
 from __future__ import annotations
 
@@ -15,22 +15,26 @@ from src.services.source_confidence_contract import ProviderCapabilitySupportCon
 
 ProbeCallable = Callable[[float], Mapping[str, Any]]
 
-_SUPPORTED_PROVIDERS = ("pytdx", "akshare")
+_SUPPORTED_PROVIDERS = ("pytdx", "akshare", "baostock")
 _DEFAULT_MISSING_PROVIDER_REASONS = {
     "pytdx": "pytdx_not_installed",
     "akshare": "akshare_not_installed",
+    "baostock": "baostock_not_installed",
 }
 _DEFAULT_UNAVAILABLE_REASONS = {
     "pytdx": "pytdx_provider_unavailable",
     "akshare": "akshare_provider_unavailable",
+    "baostock": "baostock_provider_unavailable",
 }
 _DEFAULT_PROBE_FAILURE_REASONS = {
     "pytdx": "pytdx_probe_failed",
     "akshare": "akshare_probe_failed",
+    "baostock": "baostock_probe_failed",
 }
 _DEFAULT_TIMEOUT_REASONS = {
     "pytdx": "pytdx_probe_timeout",
     "akshare": "akshare_probe_timeout",
+    "baostock": "baostock_probe_timeout",
 }
 _DEFAULT_SNAPSHOT_CACHE_TTL_SECONDS = 30.0
 
@@ -55,6 +59,9 @@ class CNProviderHealthSnapshotEntry:
     missing_provider_reason: str | None
     attempted_at: str | None
     timeout_seconds: float
+    key_required: bool = False
+    cache_required: bool = False
+    background_refresh_recommended: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -72,6 +79,9 @@ class CNProviderHealthSnapshotEntry:
             "supportedCapabilities": list(self.supported_capabilities),
             "unsupportedCapabilities": list(self.unsupported_capabilities),
             "contractCapabilities": list(self.contract_capabilities),
+            "keyRequired": self.key_required,
+            "cacheRequired": self.cache_required,
+            "backgroundRefreshRecommended": self.background_refresh_recommended,
             "degradationReason": self.degradation_reason,
             "missingProviderReason": self.missing_provider_reason,
             "attemptedAt": self.attempted_at,
@@ -97,10 +107,12 @@ class CNProviderHealthService:
         *,
         pytdx_probe: ProbeCallable | None = None,
         akshare_probe: ProbeCallable | None = None,
+        baostock_probe: ProbeCallable | None = None,
     ) -> None:
         self._probe_by_provider: dict[str, ProbeCallable] = {
             "pytdx": pytdx_probe or self._default_pytdx_probe,
             "akshare": akshare_probe or self._default_akshare_probe,
+            "baostock": baostock_probe or self._default_baostock_probe,
         }
 
     @classmethod
@@ -186,6 +198,9 @@ class CNProviderHealthService:
             supported_capabilities=supported_capabilities,
             unsupported_capabilities=unsupported_capabilities,
             contract_capabilities=contract_capabilities,
+            key_required=static_metadata.key_required,
+            cache_required=static_metadata.cache_required,
+            background_refresh_recommended=static_metadata.background_refresh_recommended,
             degradation_reason=_optional_text(probe.get("degradationReason")),
             missing_provider_reason=_optional_text(probe.get("missingProviderReason")),
             attempted_at=_optional_text(probe.get("attemptedAt")),
@@ -257,6 +272,12 @@ class CNProviderHealthService:
 
         return AkshareFetcher().probe_capabilities(timeout_seconds=timeout_seconds)
 
+    @staticmethod
+    def _default_baostock_probe(timeout_seconds: float) -> Mapping[str, Any]:
+        from data_provider.baostock_fetcher import BaostockFetcher
+
+        return BaostockFetcher().probe_capabilities(timeout_seconds=timeout_seconds)
+
 
 def get_cn_provider_health_snapshot(timeout_seconds: float = 5.0) -> tuple[CNProviderHealthSnapshotEntry, ...]:
     """Return the current internal CN provider health snapshot."""
@@ -296,6 +317,8 @@ def _derive_health_status(probe: Mapping[str, Any]) -> str:
         return "probe_failure"
     if degradation_reason in _DEFAULT_TIMEOUT_REASONS.values():
         return "timeout"
+    if degradation_reason and degradation_reason.endswith("_live_probe_disabled"):
+        return "probe_disabled"
     return "unavailable_provider"
 
 

@@ -212,6 +212,18 @@ class BaostockFetcher(BaseFetcher):
         if not provider_available:
             missing_provider_reason = degradation_reason or "baostock_provider_unavailable"
 
+        health_status = "unavailable_provider"
+        if not dependency_installed:
+            health_status = "missing_dependency"
+        elif provider_available:
+            health_status = "healthy"
+        elif degradation_reason == "baostock_live_probe_disabled" or server_health == "probe_disabled":
+            health_status = "probe_disabled"
+        elif server_health == "timeout":
+            health_status = "timeout"
+        elif server_health == "error" or interface_health == "missing_probe_interface":
+            health_status = "probe_failure"
+
         return {
             "providerName": "baostock",
             "providerId": "baostock",
@@ -223,6 +235,7 @@ class BaostockFetcher(BaseFetcher):
             "providerAvailable": provider_available,
             "interfaceHealth": interface_health,
             "serverHealth": server_health,
+            "healthStatus": health_status,
             "supportedCapabilities": list(self.SUPPORTED_CAPABILITIES),
             "unsupportedCapabilities": list(self.UNSUPPORTED_CAPABILITIES),
             "trustLevel": trust["trustLevel"],

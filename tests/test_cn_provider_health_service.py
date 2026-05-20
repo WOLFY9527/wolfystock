@@ -13,7 +13,7 @@ def _entry_by_provider(snapshot: tuple, provider_id: str):
 
 def test_cn_provider_health_snapshot_reuses_recent_cached_timeout_state_without_reprobing() -> None:
     CNProviderHealthService.clear_snapshot_cache()
-    calls = {"pytdx": 0, "akshare": 0}
+    calls = {"pytdx": 0, "akshare": 0, "baostock": 0}
 
     def pytdx_probe(timeout_seconds: float) -> dict:
         calls["pytdx"] += 1
@@ -35,25 +35,52 @@ def test_cn_provider_health_snapshot_reuses_recent_cached_timeout_state_without_
             "interfaceHealth": "ok",
         }
 
+    def baostock_probe(timeout_seconds: float) -> dict:
+        calls["baostock"] += 1
+        return {
+            "providerName": "baostock",
+            "providerId": "baostock",
+            "dependencyInstalled": True,
+            "providerAvailable": False,
+            "supportedCapabilities": [
+                "cn_adjust_factor",
+                "cn_basic_financials",
+                "cn_history_daily",
+                "cn_index_history_daily",
+            ],
+            "unsupportedCapabilities": ["cn_quote"],
+            "degradationReason": "baostock_live_probe_disabled",
+            "missingProviderReason": "baostock_live_probe_disabled",
+            "attemptedAt": None,
+            "timeoutSeconds": timeout_seconds,
+            "interfaceHealth": "ready",
+            "serverHealth": "probe_disabled",
+            "healthStatus": "probe_disabled",
+        }
+
     service = CNProviderHealthService(
         pytdx_probe=pytdx_probe,
         akshare_probe=akshare_probe,
+        baostock_probe=baostock_probe,
     )
 
     first = service.get_snapshot(timeout_seconds=1.0)
     second = service.get_snapshot(timeout_seconds=1.0)
 
-    assert calls == {"pytdx": 1, "akshare": 1}
+    assert calls == {"pytdx": 1, "akshare": 1, "baostock": 1}
     assert _entry_by_provider(first, "pytdx").health_status == "timeout"
     assert _entry_by_provider(first, "pytdx").degradation_reason == "pytdx_probe_timeout"
     assert _entry_by_provider(second, "pytdx").health_status == "timeout"
     assert _entry_by_provider(second, "pytdx").degradation_reason == "pytdx_probe_timeout"
     assert _entry_by_provider(second, "akshare").attempted_at == "2026-05-19T00:00:01+00:00"
+    assert _entry_by_provider(second, "baostock").health_status == "probe_disabled"
+    assert _entry_by_provider(second, "baostock").degradation_reason == "baostock_live_probe_disabled"
+    assert _entry_by_provider(second, "baostock").attempted_at is None
 
 
 def test_cn_provider_health_snapshot_force_refresh_bypasses_recent_cache() -> None:
     CNProviderHealthService.clear_snapshot_cache()
-    calls = {"pytdx": 0, "akshare": 0}
+    calls = {"pytdx": 0, "akshare": 0, "baostock": 0}
 
     def pytdx_probe(timeout_seconds: float) -> dict:
         calls["pytdx"] += 1
@@ -92,22 +119,47 @@ def test_cn_provider_health_snapshot_force_refresh_bypasses_recent_cache() -> No
             "interfaceHealth": "ok",
         }
 
+    def baostock_probe(timeout_seconds: float) -> dict:
+        calls["baostock"] += 1
+        return {
+            "providerName": "baostock",
+            "providerId": "baostock",
+            "dependencyInstalled": False,
+            "providerAvailable": False,
+            "supportedCapabilities": [
+                "cn_adjust_factor",
+                "cn_basic_financials",
+                "cn_history_daily",
+                "cn_index_history_daily",
+            ],
+            "unsupportedCapabilities": ["cn_quote"],
+            "degradationReason": "baostock_not_installed",
+            "missingProviderReason": "baostock_not_installed",
+            "attemptedAt": None,
+            "timeoutSeconds": timeout_seconds,
+            "serverHealth": "missing_dependency",
+            "healthStatus": "missing_dependency",
+        }
+
     service = CNProviderHealthService(
         pytdx_probe=pytdx_probe,
         akshare_probe=akshare_probe,
+        baostock_probe=baostock_probe,
     )
 
     first = service.get_snapshot(timeout_seconds=1.0)
     refreshed = service.get_snapshot(timeout_seconds=1.0, force_refresh=True)
 
-    assert calls == {"pytdx": 2, "akshare": 2}
+    assert calls == {"pytdx": 2, "akshare": 2, "baostock": 2}
     assert _entry_by_provider(first, "pytdx").attempted_at == "2026-05-19T00:00:01+00:00"
     assert _entry_by_provider(refreshed, "pytdx").attempted_at == "2026-05-19T00:00:02+00:00"
     assert _entry_by_provider(first, "akshare").attempted_at == "2026-05-19T00:00:11+00:00"
     assert _entry_by_provider(refreshed, "akshare").attempted_at == "2026-05-19T00:00:12+00:00"
+    assert _entry_by_provider(first, "baostock").health_status == "missing_dependency"
+    assert _entry_by_provider(refreshed, "baostock").health_status == "missing_dependency"
 
 
-def test_cn_provider_health_snapshot_degrades_cleanly_when_both_providers_are_missing() -> None:
+def test_cn_provider_health_snapshot_degrades_cleanly_when_all_providers_are_missing() -> None:
     service = CNProviderHealthService(
         pytdx_probe=lambda timeout_seconds: {
             "providerName": "pytdx",
@@ -153,11 +205,30 @@ def test_cn_provider_health_snapshot_degrades_cleanly_when_both_providers_are_mi
             "timeoutSeconds": timeout_seconds,
             "interfaceHealth": "missing_dependency",
         },
+        baostock_probe=lambda timeout_seconds: {
+            "providerName": "baostock",
+            "providerId": "baostock",
+            "dependencyInstalled": False,
+            "providerAvailable": False,
+            "supportedCapabilities": [
+                "cn_adjust_factor",
+                "cn_basic_financials",
+                "cn_history_daily",
+                "cn_index_history_daily",
+            ],
+            "unsupportedCapabilities": ["cn_quote", "hk_history_daily"],
+            "degradationReason": "baostock_not_installed",
+            "missingProviderReason": "baostock_not_installed",
+            "attemptedAt": None,
+            "timeoutSeconds": timeout_seconds,
+            "serverHealth": "missing_dependency",
+            "healthStatus": "missing_dependency",
+        },
     )
 
     snapshot = service.get_snapshot(timeout_seconds=2.5)
 
-    assert [item.provider_id for item in snapshot] == ["pytdx", "akshare"]
+    assert [item.provider_id for item in snapshot] == ["pytdx", "akshare", "baostock"]
 
     pytdx = _entry_by_provider(snapshot, "pytdx")
     assert pytdx.trust_level == "usable_with_caution"
@@ -197,6 +268,24 @@ def test_cn_provider_health_snapshot_degrades_cleanly_when_both_providers_are_mi
         "hk_realtime_quote",
     )
 
+    baostock = _entry_by_provider(snapshot, "baostock")
+    assert baostock.trust_level == "usable_with_caution"
+    assert baostock.dependency_installed is False
+    assert baostock.provider_available is False
+    assert baostock.health_status == "missing_dependency"
+    assert baostock.missing_provider_reason == "baostock_not_installed"
+    assert baostock.observation_only is True
+    assert baostock.score_contribution_allowed is False
+    assert baostock.key_required is False
+    assert baostock.cache_required is True
+    assert baostock.background_refresh_recommended is True
+    assert baostock.contract_capabilities == (
+        "cn_adjust_factor",
+        "cn_basic_financials",
+        "cn_history_daily",
+        "cn_index_history_daily",
+    )
+
 
 def test_cn_provider_health_snapshot_supports_mixed_pytdx_healthy_akshare_missing_state() -> None:
     service = CNProviderHealthService(
@@ -231,6 +320,26 @@ def test_cn_provider_health_snapshot_supports_mixed_pytdx_healthy_akshare_missin
             "timeoutSeconds": timeout_seconds,
             "interfaceHealth": "missing_dependency",
         },
+        baostock_probe=lambda timeout_seconds: {
+            "providerName": "baostock",
+            "providerId": "baostock",
+            "dependencyInstalled": True,
+            "providerAvailable": False,
+            "supportedCapabilities": [
+                "cn_adjust_factor",
+                "cn_basic_financials",
+                "cn_history_daily",
+                "cn_index_history_daily",
+            ],
+            "unsupportedCapabilities": ["cn_quote"],
+            "degradationReason": "baostock_live_probe_disabled",
+            "missingProviderReason": "baostock_live_probe_disabled",
+            "attemptedAt": None,
+            "timeoutSeconds": timeout_seconds,
+            "interfaceHealth": "ready",
+            "serverHealth": "probe_disabled",
+            "healthStatus": "probe_disabled",
+        },
     )
 
     snapshot = service.get_snapshot(timeout_seconds=1.25)
@@ -252,6 +361,15 @@ def test_cn_provider_health_snapshot_supports_mixed_pytdx_healthy_akshare_missin
     assert akshare.provider_available is False
     assert akshare.attempted_at is None
     assert akshare.score_contribution_allowed is False
+
+    baostock = _entry_by_provider(snapshot, "baostock")
+    assert baostock.health_status == "probe_disabled"
+    assert baostock.provider_available is False
+    assert baostock.dependency_installed is True
+    assert baostock.attempted_at is None
+    assert baostock.key_required is False
+    assert baostock.cache_required is True
+    assert baostock.background_refresh_recommended is True
 
 
 def test_cn_provider_health_snapshot_degrades_cleanly_when_akshare_probe_fails() -> None:
@@ -275,6 +393,25 @@ def test_cn_provider_health_snapshot_degrades_cleanly_when_akshare_probe_fails()
             "serverHealth": "reachable",
         },
         akshare_probe=lambda timeout_seconds: (_ for _ in ()).throw(RuntimeError("upstream page changed")),
+        baostock_probe=lambda timeout_seconds: {
+            "providerName": "baostock",
+            "providerId": "baostock",
+            "dependencyInstalled": True,
+            "providerAvailable": False,
+            "supportedCapabilities": [
+                "cn_adjust_factor",
+                "cn_basic_financials",
+                "cn_history_daily",
+                "cn_index_history_daily",
+            ],
+            "unsupportedCapabilities": ["cn_quote"],
+            "degradationReason": "baostock_live_probe_disabled",
+            "missingProviderReason": "baostock_live_probe_disabled",
+            "attemptedAt": None,
+            "timeoutSeconds": timeout_seconds,
+            "serverHealth": "probe_disabled",
+            "healthStatus": "probe_disabled",
+        },
     )
 
     snapshot = service.get_snapshot(timeout_seconds=3.0)
@@ -300,6 +437,7 @@ def test_cn_provider_health_snapshot_degrades_cleanly_when_akshare_probe_fails()
         "hk_history_daily",
         "hk_realtime_quote",
     )
+    assert _entry_by_provider(snapshot, "baostock").health_status == "probe_disabled"
 
 
 def test_cn_provider_health_snapshot_reports_both_providers_healthy_without_promoting_scoring() -> None:
@@ -348,14 +486,39 @@ def test_cn_provider_health_snapshot_reports_both_providers_healthy_without_prom
             "timeoutSeconds": timeout_seconds,
             "interfaceHealth": "ok",
         },
+        baostock_probe=lambda timeout_seconds: {
+            "providerName": "baostock",
+            "providerId": "baostock",
+            "dependencyInstalled": True,
+            "providerAvailable": False,
+            "supportedCapabilities": [
+                "cn_adjust_factor",
+                "cn_basic_financials",
+                "cn_history_daily",
+                "cn_index_history_daily",
+            ],
+            "unsupportedCapabilities": ["cn_quote"],
+            "degradationReason": "baostock_live_probe_disabled",
+            "missingProviderReason": "baostock_live_probe_disabled",
+            "attemptedAt": None,
+            "timeoutSeconds": timeout_seconds,
+            "serverHealth": "probe_disabled",
+            "healthStatus": "probe_disabled",
+        },
     )
 
     snapshot = service.get_snapshot(timeout_seconds=4.0)
 
-    assert all(item.health_status == "healthy" for item in snapshot)
+    assert [item.health_status for item in snapshot] == ["healthy", "healthy", "probe_disabled"]
     assert all(item.observation_only is True for item in snapshot)
     assert all(item.score_contribution_allowed is False for item in snapshot)
     assert {item.trust_level for item in snapshot} == {"usable_with_caution", "weak"}
+    assert _entry_by_provider(snapshot, "baostock").contract_capabilities == (
+        "cn_adjust_factor",
+        "cn_basic_financials",
+        "cn_history_daily",
+        "cn_index_history_daily",
+    )
 
 
 def test_cn_provider_health_snapshot_aligns_probe_supported_capabilities_with_contract_capabilities() -> None:
@@ -392,12 +555,33 @@ def test_cn_provider_health_snapshot_aligns_probe_supported_capabilities_with_co
             "timeoutSeconds": timeout_seconds,
             "interfaceHealth": "ok",
         },
+        baostock_probe=lambda timeout_seconds: {
+            "providerName": "baostock",
+            "providerId": "baostock",
+            "dependencyInstalled": True,
+            "providerAvailable": False,
+            "supportedCapabilities": [
+                "cn_adjust_factor",
+                "cn_basic_financials",
+                "cn_history_daily",
+                "cn_index_history_daily",
+                "cn_quote",
+            ],
+            "unsupportedCapabilities": ["hk_history_daily"],
+            "degradationReason": "baostock_live_probe_disabled",
+            "missingProviderReason": "baostock_live_probe_disabled",
+            "attemptedAt": None,
+            "timeoutSeconds": timeout_seconds,
+            "serverHealth": "probe_disabled",
+            "healthStatus": "probe_disabled",
+        },
     )
 
     snapshot = service.get_snapshot(timeout_seconds=2.0)
 
     pytdx = _entry_by_provider(snapshot, "pytdx")
     akshare = _entry_by_provider(snapshot, "akshare")
+    baostock = _entry_by_provider(snapshot, "baostock")
 
     assert pytdx.supported_capabilities == (
         "cn_history_daily",
@@ -406,6 +590,12 @@ def test_cn_provider_health_snapshot_aligns_probe_supported_capabilities_with_co
         "cn_realtime_quote",
     )
     assert akshare.supported_capabilities == ("cn_stock_list",)
+    assert baostock.supported_capabilities == (
+        "cn_adjust_factor",
+        "cn_basic_financials",
+        "cn_history_daily",
+        "cn_index_history_daily",
+    )
     assert all(item in entry.contract_capabilities for entry in snapshot for item in entry.supported_capabilities)
 
 
@@ -437,17 +627,34 @@ def test_cn_provider_health_snapshot_does_not_promote_unsupported_capabilities_i
             "timeoutSeconds": timeout_seconds,
             "interfaceHealth": "ok",
         },
+        baostock_probe=lambda timeout_seconds: {
+            "providerName": "baostock",
+            "providerId": "baostock",
+            "dependencyInstalled": True,
+            "providerAvailable": False,
+            "supportedCapabilities": ["cn_history_daily"],
+            "unsupportedCapabilities": ["cn_quote", "hk_history_daily"],
+            "degradationReason": "baostock_live_probe_disabled",
+            "missingProviderReason": "baostock_live_probe_disabled",
+            "attemptedAt": None,
+            "timeoutSeconds": timeout_seconds,
+            "serverHealth": "probe_disabled",
+            "healthStatus": "probe_disabled",
+        },
     )
 
     snapshot = service.get_snapshot(timeout_seconds=2.0)
 
     pytdx = _entry_by_provider(snapshot, "pytdx")
     akshare = _entry_by_provider(snapshot, "akshare")
+    baostock = _entry_by_provider(snapshot, "baostock")
 
     assert "cn_sector_rankings" not in pytdx.contract_capabilities
     assert "us_history_daily" not in akshare.contract_capabilities
+    assert "cn_quote" not in baostock.contract_capabilities
     assert pytdx.to_dict()["healthStatus"] == "healthy"
     assert akshare.to_dict()["scoreContributionAllowed"] is False
+    assert baostock.to_dict()["cacheRequired"] is True
 
 
 def test_cn_provider_health_snapshot_contract_capabilities_remain_contract_backed_only() -> None:
@@ -487,6 +694,26 @@ def test_cn_provider_health_snapshot_contract_capabilities_remain_contract_backe
             "attemptedAt": "2026-05-19T00:00:01+00:00",
             "timeoutSeconds": timeout_seconds,
             "interfaceHealth": "ok",
+        },
+        baostock_probe=lambda timeout_seconds: {
+            "providerName": "baostock",
+            "providerId": "baostock",
+            "dependencyInstalled": True,
+            "providerAvailable": False,
+            "supportedCapabilities": [
+                "cn_adjust_factor",
+                "cn_basic_financials",
+                "cn_history_daily",
+                "cn_index_history_daily",
+                "cn_quote",
+            ],
+            "unsupportedCapabilities": ["hk_history_daily"],
+            "degradationReason": "baostock_live_probe_disabled",
+            "missingProviderReason": "baostock_live_probe_disabled",
+            "attemptedAt": None,
+            "timeoutSeconds": timeout_seconds,
+            "serverHealth": "probe_disabled",
+            "healthStatus": "probe_disabled",
         },
     )
 

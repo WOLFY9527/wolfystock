@@ -26,6 +26,9 @@ EXPECTED_ENTRY_FIELDS = {
     "supportedCapabilities",
     "unsupportedCapabilities",
     "contractCapabilities",
+    "keyRequired",
+    "cacheRequired",
+    "backgroundRefreshRecommended",
     "degradationReason",
     "missingProviderReason",
     "attemptedAt",
@@ -48,6 +51,7 @@ def _client(
     *,
     pytdx_probe,
     akshare_probe,
+    baostock_probe,
 ) -> TestClient:
     monkeypatch.setattr(
         market,
@@ -55,6 +59,7 @@ def _client(
         lambda: health_service_module.CNProviderHealthService(
             pytdx_probe=pytdx_probe,
             akshare_probe=akshare_probe,
+            baostock_probe=baostock_probe,
         ),
     )
     app = FastAPI()
@@ -128,6 +133,28 @@ def test_cn_provider_health_route_returns_metadata_only_snapshot(monkeypatch: py
             "rawPayload": {"market": "CN"},
             "kline": [{"close": 1.0}],
         },
+        baostock_probe=lambda timeout_seconds: {
+            "providerName": "BaoStock",
+            "providerId": "baostock",
+            "dependencyInstalled": True,
+            "providerAvailable": False,
+            "supportedCapabilities": [
+                "cn_adjust_factor",
+                "cn_basic_financials",
+                "cn_history_daily",
+                "cn_index_history_daily",
+            ],
+            "unsupportedCapabilities": ["cn_quote"],
+            "degradationReason": "baostock_live_probe_disabled",
+            "missingProviderReason": "baostock_live_probe_disabled",
+            "attemptedAt": None,
+            "timeoutSeconds": timeout_seconds,
+            "interfaceHealth": "ready",
+            "serverHealth": "probe_disabled",
+            "healthStatus": "probe_disabled",
+            "quotes": {"sh.000001": {"price": 12.34}},
+            "symbols": ["sh.000001"],
+        },
     )
 
     response = client.get("/api/v1/market/cn-provider-health")
@@ -135,15 +162,20 @@ def test_cn_provider_health_route_returns_metadata_only_snapshot(monkeypatch: py
     assert response.status_code == 200
     payload = response.json()
     assert isinstance(payload, list)
-    assert [item["providerId"] for item in payload] == ["pytdx", "akshare"]
+    assert [item["providerId"] for item in payload] == ["pytdx", "akshare", "baostock"]
     assert all(set(item) == EXPECTED_ENTRY_FIELDS for item in payload)
     assert all(not FORBIDDEN_PROVIDER_FIELDS.intersection(item) for item in payload)
     assert all(item["observationOnly"] is True for item in payload)
     assert all(item["scoreContributionAllowed"] is False for item in payload)
+    assert all(item["keyRequired"] is False for item in payload)
+    assert all(item["cacheRequired"] is True for item in payload)
+    assert all(item["backgroundRefreshRecommended"] is True for item in payload)
     assert next(item for item in payload if item["providerId"] == "pytdx")["trustLevel"] == "usable_with_caution"
     assert next(item for item in payload if item["providerId"] == "akshare")["trustLevel"] == "weak"
+    assert next(item for item in payload if item["providerId"] == "baostock")["trustLevel"] == "usable_with_caution"
     assert next(item for item in payload if item["providerId"] == "pytdx")["healthStatus"] == "healthy"
     assert next(item for item in payload if item["providerId"] == "akshare")["healthStatus"] == "healthy"
+    assert next(item for item in payload if item["providerId"] == "baostock")["healthStatus"] == "probe_disabled"
 
 
 def test_cn_provider_health_route_degrades_cleanly_when_dependency_missing_or_probe_fails(
@@ -153,6 +185,25 @@ def test_cn_provider_health_route_degrades_cleanly_when_dependency_missing_or_pr
         monkeypatch,
         pytdx_probe=lambda timeout_seconds: (_ for _ in ()).throw(ImportError("pytdx missing")),
         akshare_probe=lambda timeout_seconds: (_ for _ in ()).throw(RuntimeError("upstream page changed")),
+        baostock_probe=lambda timeout_seconds: {
+            "providerName": "baostock",
+            "providerId": "baostock",
+            "dependencyInstalled": False,
+            "providerAvailable": False,
+            "supportedCapabilities": [
+                "cn_adjust_factor",
+                "cn_basic_financials",
+                "cn_history_daily",
+                "cn_index_history_daily",
+            ],
+            "unsupportedCapabilities": ["cn_quote"],
+            "degradationReason": "baostock_not_installed",
+            "missingProviderReason": "baostock_not_installed",
+            "attemptedAt": None,
+            "timeoutSeconds": timeout_seconds,
+            "serverHealth": "missing_dependency",
+            "healthStatus": "missing_dependency",
+        },
     )
 
     response = client.get("/api/v1/market/cn-provider-health")
@@ -178,12 +229,22 @@ def test_cn_provider_health_route_degrades_cleanly_when_dependency_missing_or_pr
     assert akshare["observationOnly"] is True
     assert akshare["scoreContributionAllowed"] is False
 
+    baostock = payload["baostock"]
+    assert baostock["dependencyInstalled"] is False
+    assert baostock["providerAvailable"] is False
+    assert baostock["healthStatus"] == "missing_dependency"
+    assert baostock["degradationReason"] == "baostock_not_installed"
+    assert baostock["missingProviderReason"] == "baostock_not_installed"
+    assert baostock["observationOnly"] is True
+    assert baostock["scoreContributionAllowed"] is False
+    assert baostock["trustLevel"] == "usable_with_caution"
+
 
 def test_cn_provider_health_route_reuses_cached_snapshot_by_default_and_supports_force_refresh(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     health_service_module.CNProviderHealthService.clear_snapshot_cache()
-    calls = {"pytdx": 0, "akshare": 0}
+    calls = {"pytdx": 0, "akshare": 0, "baostock": 0}
 
     def pytdx_probe(timeout_seconds: float) -> dict:
         calls["pytdx"] += 1
@@ -222,7 +283,34 @@ def test_cn_provider_health_route_reuses_cached_snapshot_by_default_and_supports
             "interfaceHealth": "unavailable",
         }
 
-    client = _client(monkeypatch, pytdx_probe=pytdx_probe, akshare_probe=akshare_probe)
+    def baostock_probe(timeout_seconds: float) -> dict:
+        calls["baostock"] += 1
+        return {
+            "providerName": "baostock",
+            "providerId": "baostock",
+            "dependencyInstalled": True,
+            "providerAvailable": False,
+            "supportedCapabilities": [
+                "cn_adjust_factor",
+                "cn_basic_financials",
+                "cn_history_daily",
+                "cn_index_history_daily",
+            ],
+            "unsupportedCapabilities": ["cn_quote"],
+            "degradationReason": "baostock_live_probe_disabled",
+            "missingProviderReason": "baostock_live_probe_disabled",
+            "attemptedAt": None,
+            "timeoutSeconds": timeout_seconds,
+            "serverHealth": "probe_disabled",
+            "healthStatus": "probe_disabled",
+        }
+
+    client = _client(
+        monkeypatch,
+        pytdx_probe=pytdx_probe,
+        akshare_probe=akshare_probe,
+        baostock_probe=baostock_probe,
+    )
 
     first = {item["providerId"]: item for item in client.get("/api/v1/market/cn-provider-health").json()}
     second = {item["providerId"]: item for item in client.get("/api/v1/market/cn-provider-health").json()}
@@ -231,12 +319,16 @@ def test_cn_provider_health_route_reuses_cached_snapshot_by_default_and_supports
         for item in client.get("/api/v1/market/cn-provider-health", params={"forceRefresh": "true"}).json()
     }
 
-    assert calls == {"pytdx": 2, "akshare": 2}
+    assert calls == {"pytdx": 2, "akshare": 2, "baostock": 2}
     assert first["pytdx"]["attemptedAt"] == "2026-05-19T02:03:01+00:00"
     assert second["pytdx"]["attemptedAt"] == "2026-05-19T02:03:01+00:00"
     assert refreshed["pytdx"]["attemptedAt"] == "2026-05-19T02:03:02+00:00"
     assert first["akshare"]["healthStatus"] == "unavailable_provider"
     assert second["akshare"]["healthStatus"] == "unavailable_provider"
     assert refreshed["akshare"]["healthStatus"] == "unavailable_provider"
+    assert first["baostock"]["healthStatus"] == "probe_disabled"
+    assert second["baostock"]["healthStatus"] == "probe_disabled"
+    assert refreshed["baostock"]["healthStatus"] == "probe_disabled"
     assert first["akshare"]["scoreContributionAllowed"] is False
     assert refreshed["akshare"]["scoreContributionAllowed"] is False
+    assert first["baostock"]["scoreContributionAllowed"] is False

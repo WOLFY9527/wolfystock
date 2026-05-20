@@ -44,6 +44,7 @@ def test_baostock_capability_probe_degrades_cleanly_when_dependency_is_missing()
         "providerAvailable": False,
         "interfaceHealth": "missing_dependency",
         "serverHealth": "missing_dependency",
+        "healthStatus": "missing_dependency",
         "supportedCapabilities": [
             "cn_history_daily",
             "cn_adjust_factor",
@@ -91,6 +92,7 @@ def test_baostock_capability_probe_degrades_cleanly_when_live_probe_is_disabled(
     assert probe["providerAvailable"] is False
     assert probe["interfaceHealth"] == "ready"
     assert probe["serverHealth"] == "probe_disabled"
+    assert probe["healthStatus"] == "probe_disabled"
     assert probe["trustLevel"] == "unavailable"
     assert probe["freshness"] == "unavailable"
     assert probe["freshnessExpectation"] == "t_plus_1_or_delayed"
@@ -125,6 +127,7 @@ def test_baostock_capability_probe_reports_reachable_server_without_promoting_tr
     assert probe["providerAvailable"] is True
     assert probe["interfaceHealth"] == "ok"
     assert probe["serverHealth"] == "reachable"
+    assert probe["healthStatus"] == "healthy"
     assert probe["trustLevel"] == "usable_with_caution"
     assert probe["freshness"] == "delayed"
     assert probe["freshnessExpectation"] == "t_plus_1_or_delayed"

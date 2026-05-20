@@ -45,6 +45,9 @@ EXPECTED_CN_PROVIDER_HEALTH_ENTRY_FIELDS = {
     "supportedCapabilities",
     "unsupportedCapabilities",
     "contractCapabilities",
+    "keyRequired",
+    "cacheRequired",
+    "backgroundRefreshRecommended",
     "degradationReason",
     "missingProviderReason",
     "attemptedAt",
@@ -314,6 +317,9 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
                 supported_capabilities=("cn_history_daily", "cn_name_lookup", "cn_quote", "cn_realtime_quote"),
                 unsupported_capabilities=("hk_history_daily",),
                 contract_capabilities=("cn_history_daily", "cn_name_lookup", "cn_quote", "cn_realtime_quote"),
+                key_required=False,
+                cache_required=True,
+                background_refresh_recommended=True,
                 degradation_reason=None,
                 missing_provider_reason=None,
                 attempted_at="2026-05-19T02:03:04+00:00",
@@ -334,8 +340,34 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
                 supported_capabilities=("cn_stock_list",),
                 unsupported_capabilities=("hk_index_quote",),
                 contract_capabilities=("cn_stock_list", "cn_market_stats"),
+                key_required=False,
+                cache_required=True,
+                background_refresh_recommended=True,
                 degradation_reason="akshare_not_installed",
                 missing_provider_reason="akshare_not_installed",
+                attempted_at=None,
+                timeout_seconds=1.0,
+            ),
+            CNProviderHealthSnapshotEntry(
+                provider_name="baostock",
+                provider_id="baostock",
+                source_type="public_proxy",
+                source_tier="third_party_free_api",
+                trust_level="usable_with_caution",
+                freshness_expectation="t_plus_1_or_delayed",
+                observation_only=True,
+                score_contribution_allowed=False,
+                dependency_installed=True,
+                provider_available=False,
+                health_status="probe_disabled",
+                supported_capabilities=("cn_adjust_factor", "cn_basic_financials", "cn_history_daily", "cn_index_history_daily"),
+                unsupported_capabilities=("cn_quote",),
+                contract_capabilities=("cn_adjust_factor", "cn_basic_financials", "cn_history_daily", "cn_index_history_daily"),
+                key_required=False,
+                cache_required=True,
+                background_refresh_recommended=True,
+                degradation_reason="baostock_live_probe_disabled",
+                missing_provider_reason="baostock_live_probe_disabled",
                 attempted_at=None,
                 timeout_seconds=1.0,
             ),
@@ -349,16 +381,22 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
 
         provider_health = payload["providerHealth"]
         self.assertIn("observationProviders", provider_health)
-        self.assertEqual([item["providerId"] for item in provider_health["observationProviders"]], ["pytdx", "akshare"])
+        self.assertEqual([item["providerId"] for item in provider_health["observationProviders"]], ["pytdx", "akshare", "baostock"])
         self.assertTrue(all(set(item) == EXPECTED_CN_PROVIDER_HEALTH_ENTRY_FIELDS for item in provider_health["observationProviders"]))
         self.assertTrue(all(not FORBIDDEN_CN_PROVIDER_HEALTH_FIELDS.intersection(item) for item in provider_health["observationProviders"]))
         self.assertTrue(all(item["observationOnly"] is True for item in provider_health["observationProviders"]))
         self.assertTrue(all(item["scoreContributionAllowed"] is False for item in provider_health["observationProviders"]))
+        self.assertTrue(all(item["keyRequired"] is False for item in provider_health["observationProviders"]))
+        self.assertTrue(all(item["cacheRequired"] is True for item in provider_health["observationProviders"]))
+        self.assertTrue(all(item["backgroundRefreshRecommended"] is True for item in provider_health["observationProviders"]))
         self.assertEqual(provider_health["observationProviders"][0]["trustLevel"], "usable_with_caution")
         self.assertEqual(provider_health["observationProviders"][1]["trustLevel"], "weak")
+        self.assertEqual(provider_health["observationProviders"][2]["trustLevel"], "usable_with_caution")
         self.assertEqual(provider_health["observationProviders"][0]["sourceTier"], "unofficial_public_api")
         self.assertEqual(provider_health["observationProviders"][1]["sourceTier"], "unofficial_public_api")
+        self.assertEqual(provider_health["observationProviders"][2]["sourceTier"], "third_party_free_api")
         self.assertEqual(provider_health["observationProviders"][1]["healthStatus"], "missing_dependency")
+        self.assertEqual(provider_health["observationProviders"][2]["healthStatus"], "probe_disabled")
         self.assertEqual(payload["items"][0]["source"], "sina")
 
     def test_normalize_akshare_cn_index_observation_records_maps_codes_and_dedupes(self) -> None:
@@ -455,6 +493,9 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
                 supported_capabilities=("cn_history_daily",),
                 unsupported_capabilities=("hk_history_daily",),
                 contract_capabilities=("cn_history_daily",),
+                key_required=False,
+                cache_required=True,
+                background_refresh_recommended=True,
                 degradation_reason="pytdx_not_installed",
                 missing_provider_reason="pytdx_not_installed",
                 attempted_at=None,
@@ -475,9 +516,35 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
                 supported_capabilities=("cn_market_stats",),
                 unsupported_capabilities=("hk_index_quote",),
                 contract_capabilities=("cn_market_stats",),
+                key_required=False,
+                cache_required=True,
+                background_refresh_recommended=True,
                 degradation_reason="akshare_probe_failed",
                 missing_provider_reason="akshare_probe_failed",
                 attempted_at="2026-05-19T02:03:05+00:00",
+                timeout_seconds=1.0,
+            ),
+            CNProviderHealthSnapshotEntry(
+                provider_name="baostock",
+                provider_id="baostock",
+                source_type="public_proxy",
+                source_tier="third_party_free_api",
+                trust_level="usable_with_caution",
+                freshness_expectation="t_plus_1_or_delayed",
+                observation_only=True,
+                score_contribution_allowed=False,
+                dependency_installed=True,
+                provider_available=False,
+                health_status="probe_disabled",
+                supported_capabilities=("cn_history_daily",),
+                unsupported_capabilities=("cn_quote",),
+                contract_capabilities=("cn_adjust_factor", "cn_basic_financials", "cn_history_daily", "cn_index_history_daily"),
+                key_required=False,
+                cache_required=True,
+                background_refresh_recommended=True,
+                degradation_reason="baostock_live_probe_disabled",
+                missing_provider_reason="baostock_live_probe_disabled",
+                attempted_at=None,
                 timeout_seconds=1.0,
             ),
         )
@@ -491,7 +558,10 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         self.assertEqual(payload["source"], "fallback")
         self.assertTrue(payload["items"])
         self.assertTrue(all(item["isFallback"] for item in payload["items"]))
-        self.assertEqual([item["healthStatus"] for item in payload["providerHealth"]["observationProviders"]], ["missing_dependency", "probe_failure"])
+        self.assertEqual(
+            [item["healthStatus"] for item in payload["providerHealth"]["observationProviders"]],
+            ["missing_dependency", "probe_failure", "probe_disabled"],
+        )
         self.assertTrue(all(item["observationOnly"] is True for item in payload["providerHealth"]["observationProviders"]))
         self.assertTrue(all(item["scoreContributionAllowed"] is False for item in payload["providerHealth"]["observationProviders"]))
 
@@ -584,7 +654,7 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
                 "asOf": now,
             }
         }
-        calls = {"pytdx": 0, "akshare": 0}
+        calls = {"pytdx": 0, "akshare": 0, "baostock": 0}
 
         def pytdx_probe(timeout_seconds: float) -> dict:
             calls["pytdx"] += 1
@@ -611,6 +681,28 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
             calls["akshare"] += 1
             raise TimeoutError("AKShare probe timed out")
 
+        def baostock_probe(timeout_seconds: float) -> dict:
+            calls["baostock"] += 1
+            return {
+                "providerName": "baostock",
+                "providerId": "baostock",
+                "dependencyInstalled": True,
+                "providerAvailable": False,
+                "supportedCapabilities": [
+                    "cn_adjust_factor",
+                    "cn_basic_financials",
+                    "cn_history_daily",
+                    "cn_index_history_daily",
+                ],
+                "unsupportedCapabilities": ["cn_quote"],
+                "degradationReason": "baostock_live_probe_disabled",
+                "missingProviderReason": "baostock_live_probe_disabled",
+                "attemptedAt": None,
+                "timeoutSeconds": timeout_seconds,
+                "serverHealth": "probe_disabled",
+                "healthStatus": "probe_disabled",
+            }
+
         with (
             patch.object(service, "_fetch_sina_cn_index_quotes", return_value=quotes),
             patch(
@@ -618,13 +710,14 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
                 side_effect=lambda: health_service_module.CNProviderHealthService(
                     pytdx_probe=pytdx_probe,
                     akshare_probe=akshare_probe,
+                    baostock_probe=baostock_probe,
                 ),
             ),
         ):
             first = service.get_cn_indices()
             second = service.get_cn_indices()
 
-        self.assertEqual(calls, {"pytdx": 1, "akshare": 1})
+        self.assertEqual(calls, {"pytdx": 1, "akshare": 1, "baostock": 1})
         first_observation = {item["providerId"]: item for item in first["providerHealth"]["observationProviders"]}
         second_observation = {item["providerId"]: item for item in second["providerHealth"]["observationProviders"]}
         self.assertEqual(first_observation["pytdx"]["attemptedAt"], "2026-05-19T02:03:01+00:00")
@@ -633,6 +726,8 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         self.assertEqual(second_observation["akshare"]["healthStatus"], "timeout")
         self.assertEqual(first_observation["akshare"]["degradationReason"], "akshare_probe_timeout")
         self.assertEqual(second_observation["akshare"]["degradationReason"], "akshare_probe_timeout")
+        self.assertEqual(first_observation["baostock"]["healthStatus"], "probe_disabled")
+        self.assertEqual(second_observation["baostock"]["healthStatus"], "probe_disabled")
 
     def test_cn_indices_uses_cache_within_ttl(self) -> None:
         calls = 0
