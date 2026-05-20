@@ -108,11 +108,6 @@ EXPECTED_TRANSITIONAL_ADMIN_USER_ALLOWLIST = {
         "note_fragment": "admin activity feed",
         "routes": [("GET", "/api/v1/admin/activity")],
     },
-    "admin.market_providers.operations": {
-        "surface": "admin_market_provider_operations",
-        "note_fragment": "operational provider route",
-        "routes": [("GET", "/api/v1/admin/market-providers/operations")],
-    },
 }
 EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS = {
     "agent.admin_send": 1,
@@ -128,8 +123,7 @@ EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS = {
     "admin.notifications.read": 2,
     "admin.notifications.write": 5,
     "admin.cost.read": 4,
-    "admin.providers.read": 7,
-    "admin.market_providers.operations": 1,
+    "admin.providers.read": 8,
     "system.config.read": 2,
     "system.config.validate": 1,
     "system.config.write": 3,
@@ -385,23 +379,22 @@ def test_admin_observability_route_inventory_keeps_capabilities_and_transitional
 
     admin_logs_read = groups["admin.logs.read"]
     admin_logs_write = groups["admin.logs.write"]
-    market_provider_ops = groups["admin.market_providers.operations"]
+    provider_observability = groups["admin.providers.read"]
 
     assert admin_logs_read["auth_dependency_label"] == "admin_capability"
     assert admin_logs_read["capability_label"] == "ops:logs:read"
     assert admin_logs_write["auth_dependency_label"] == "admin_capability"
     assert admin_logs_write["capability_label"] == "ops:logs:write"
-    assert market_provider_ops["auth_dependency_label"] == "admin_user"
-    assert market_provider_ops["capability_label"] is None
-    assert "dedicated read capability" in market_provider_ops["transitional_note"].lower()
+    assert provider_observability["auth_dependency_label"] == "admin_capability"
+    assert provider_observability["capability_label"] == "ops:providers:read"
+    assert provider_observability["transitional_note"] is None
 
     admin_logs_source = ADMIN_LOGS_ENDPOINT_TS.read_text(encoding="utf-8")
     market_provider_source = MARKET_PROVIDER_OPERATIONS_ENDPOINT_TS.read_text(encoding="utf-8")
 
     assert 'require_admin_capability("ops:logs:read")' in admin_logs_source
     assert 'require_admin_capability("ops:logs:write")' in admin_logs_source
-    assert "require_admin_user" in market_provider_source
-    assert 'require_admin_capability(' not in market_provider_source
+    assert 'require_admin_capability("ops:providers:read")' in market_provider_source
 
 
 def test_remaining_require_admin_user_route_groups_are_explicitly_allowlisted() -> None:

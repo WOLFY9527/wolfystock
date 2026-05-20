@@ -187,13 +187,20 @@ def test_adjacent_admin_capabilities_do_not_unlock_cost_or_provider_routes(
     allowed_adjacent = client.get("/api/v1/admin/logs/storage/summary")
     denied_cost = client.get("/api/v1/admin/cost/llm-ledger-summary")
     denied_provider = client.get("/api/v1/admin/providers/circuits")
+    denied_market_provider_operations = client.get("/api/v1/admin/market-providers/operations")
 
     assert allowed_adjacent.status_code == 200
     assert denied_cost.status_code == 403
     assert denied_provider.status_code == 403
+    assert denied_market_provider_operations.status_code == 403
     assert denied_cost.json()["detail"]["error"] == "admin_capability_required"
     assert denied_provider.json()["detail"]["error"] == "admin_capability_required"
-    _assert_public_error_safe(denied_cost.json(), denied_provider.json())
+    assert denied_market_provider_operations.json()["detail"]["error"] == "admin_capability_required"
+    _assert_public_error_safe(
+        denied_cost.json(),
+        denied_provider.json(),
+        denied_market_provider_operations.json(),
+    )
 
 
 def test_auth_401_403_and_429_errors_and_logs_are_sanitized(

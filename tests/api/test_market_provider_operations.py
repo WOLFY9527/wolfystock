@@ -31,6 +31,21 @@ def _admin_user() -> CurrentUser:
         is_authenticated=True,
         transitional=False,
         auth_enabled=True,
+        admin_capabilities=("ops:providers:read",),
+    )
+
+
+def _admin_without_provider_read() -> CurrentUser:
+    return CurrentUser(
+        user_id="bootstrap-admin",
+        username="admin",
+        display_name="Admin",
+        role="admin",
+        is_admin=True,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+        admin_capabilities=("users:read",),
     )
 
 
@@ -78,7 +93,7 @@ def _service(events: Optional[List[Dict[str, Any]]] = None) -> MarketProviderOpe
     )
 
 
-def test_endpoint_requires_admin_auth_consistent_with_admin_apis() -> None:
+def test_endpoint_requires_admin_provider_read_capability_consistent_with_admin_provider_apis() -> None:
     app = FastAPI()
     app.include_router(market_provider_operations.router, prefix="/api/v1/admin")
 
@@ -87,6 +102,13 @@ def test_endpoint_requires_admin_auth_consistent_with_admin_apis() -> None:
     user_response = user_client.get("/api/v1/admin/market-providers/operations")
     assert user_response.status_code == 403
     assert user_response.json()["detail"]["error"] == "admin_required"
+
+    app.dependency_overrides[get_current_user] = _admin_without_provider_read
+    no_capability_client = TestClient(app)
+    no_capability_response = no_capability_client.get("/api/v1/admin/market-providers/operations")
+    assert no_capability_response.status_code == 403
+    assert no_capability_response.json()["detail"]["error"] == "admin_capability_required"
+    assert "ops:providers:read" not in no_capability_response.text
 
     app.dependency_overrides[get_current_user] = _admin_user
     admin_client = TestClient(app)

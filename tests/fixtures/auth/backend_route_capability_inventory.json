@@ -182,21 +182,12 @@
     },
     {
       "route_id": "admin.providers.read",
-      "path_pattern": "^/api/v1/admin/(?:providers/(?:circuits(?:/events)?|quota-windows|probe-events|sla-readiness|operations-matrix)|provider-usage-ledger)$",
+      "path_pattern": "^/api/v1/admin/(?:(?:providers/(?:circuits(?:/events)?|quota-windows|probe-events|sla-readiness|operations-matrix)|provider-usage-ledger)|market-providers/operations)$",
       "methods": ["GET"],
       "surface": "admin_provider_observability",
       "auth_dependency_label": "admin_capability",
       "capability_label": "ops:providers:read",
       "transitional_note": null
-    },
-    {
-      "route_id": "admin.market_providers.operations",
-      "path_pattern": "^/api/v1/admin/market-providers/operations$",
-      "methods": ["GET"],
-      "surface": "admin_market_provider_operations",
-      "auth_dependency_label": "admin_user",
-      "capability_label": null,
-      "transitional_note": "Operational provider route still uses require_admin_user instead of a dedicated read capability."
     },
     {
       "route_id": "system.config.read",
