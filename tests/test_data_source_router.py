@@ -232,6 +232,48 @@ def test_market_temperature_route_rejects_akshare_and_pytdx_as_scoring_authoriti
     assert "provider_forbidden_for_use_case" in plan.reason_codes["pytdx_existing_baseline"]
 
 
+def test_market_briefing_routes_keep_authority_checks_diagnostic_only() -> None:
+    crypto_plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="crypto",
+            asset_type="crypto",
+            use_case="market_briefing",
+            capability="crypto_ticker",
+            freshness_need="live",
+            scoring_allowed=False,
+            product_id="BTC-USD",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+    index_plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="CN",
+            asset_type="equity_index",
+            use_case="market_briefing",
+            capability="index_quote",
+            freshness_need="live",
+            scoring_allowed=False,
+            symbol="000001.SH",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+
+    assert crypto_plan.score_contribution_allowed is False
+    assert crypto_plan.required_source_types == ("official_public", "exchange_public", "cache_snapshot")
+    assert crypto_plan.freshness_floor == "live"
+    assert crypto_plan.trust_floor == "score_grade"
+    assert "live_network_forbidden" in crypto_plan.reason_codes["plan"]
+    assert "coinbase_public" in _ids(crypto_plan.forbidden_providers)
+    assert "provider_forbidden_for_use_case" in crypto_plan.reason_codes["coinbase_public"]
+
+    forbidden = _ids(index_plan.forbidden_providers)
+    assert {"akshare", "baostock", "pytdx_existing_baseline", "sec_edgar", "yfinance_current_baseline", "yahooquery"}.issubset(forbidden)
+    assert "provider_forbidden_for_use_case" in index_plan.reason_codes["akshare"]
+    assert "provider_forbidden_for_use_case" in index_plan.reason_codes["sec_edgar"]
+
+
 def test_market_overview_observation_routes_keep_coinbase_pytdx_and_akshare_non_scoring() -> None:
     coinbase_plan = DataSourceRouter.resolve(
         DataSourceRouteRequest(

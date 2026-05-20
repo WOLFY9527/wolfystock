@@ -163,6 +163,61 @@ class MarketBriefingApiTestCase(unittest.TestCase):
         self.assertEqual(payload["warning"], "部分解读已排除备用数据。")
         self.assertFalse(any(item["severity"] == "risk" for item in payload["items"][:-1]))
 
+    def test_get_market_briefing_adds_source_authority_diagnostics_for_non_authoritative_inputs(self) -> None:
+        service = MarketOverviewService()
+        inputs = copy.deepcopy(service._fallback_market_temperature_inputs())
+
+        inputs["indices"]["items"][0].update(
+            {
+                "source": "sec_edgar",
+                "sourceType": "official_public",
+                "freshness": "live",
+                "isFallback": False,
+            }
+        )
+        inputs["futures"]["items"][0].update(
+            {
+                "source": "yahooquery",
+                "sourceType": "unofficial_proxy",
+                "freshness": "delayed",
+                "isFallback": False,
+            }
+        )
+        inputs["crypto"]["items"][0].update(
+            {
+                "source": "coinbase_public",
+                "sourceType": "exchange_public",
+                "freshness": "live",
+                "isFallback": False,
+            }
+        )
+
+        with patch.object(service, "_build_market_temperature_inputs", return_value=inputs):
+            payload = service.get_market_briefing()
+
+        diagnostics = payload["sourceAuthorityDiagnostics"]
+        self.assertEqual(diagnostics["useCase"], "market_briefing")
+        self.assertGreaterEqual(diagnostics["nonAuthoritativeInputCount"], 3)
+
+        items_by_symbol = {item["symbol"]: item for item in diagnostics["items"]}
+
+        self.assertFalse(items_by_symbol["000001.SH"]["sourceAuthorityAllowed"])
+        self.assertTrue(items_by_symbol["000001.SH"]["sourceAuthorityRouteRejected"])
+        self.assertIn("provider_forbidden_for_use_case", items_by_symbol["000001.SH"]["routeRejectedReasonCodes"])
+        self.assertEqual(items_by_symbol["000001.SH"]["sourceAuthorityRouter"]["request"]["useCase"], "market_briefing")
+        self.assertEqual(items_by_symbol["000001.SH"]["sourceAuthorityRouter"]["request"]["capability"], "index_quote")
+
+        self.assertFalse(items_by_symbol["NQ"]["sourceAuthorityAllowed"])
+        self.assertFalse(items_by_symbol["NQ"]["sourceAuthorityRouteRejected"])
+        self.assertEqual(items_by_symbol["NQ"]["sourceAuthorityReason"], "proxy_context_only")
+        self.assertEqual(items_by_symbol["NQ"]["sourceAuthorityRouter"]["request"]["capability"], "futures")
+        self.assertFalse(items_by_symbol["NQ"]["sourceAuthorityRouter"]["request"]["allowNetwork"])
+
+        self.assertFalse(items_by_symbol["BTC"]["sourceAuthorityAllowed"])
+        self.assertTrue(items_by_symbol["BTC"]["sourceAuthorityRouteRejected"])
+        self.assertIn("provider_forbidden_for_use_case", items_by_symbol["BTC"]["routeRejectedReasonCodes"])
+        self.assertEqual(items_by_symbol["BTC"]["sourceAuthorityRouter"]["request"]["capability"], "crypto_ticker")
+
 
 if __name__ == "__main__":
     unittest.main()

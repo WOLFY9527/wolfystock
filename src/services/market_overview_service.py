@@ -905,6 +905,7 @@ class MarketOverviewService:
                 "source": source,
                 "updatedAt": _now_iso(),
                 "items": self._build_market_briefing_items(real_inputs if briefing_trust["isReliable"] else inputs, scores, source, briefing_trust),
+                "sourceAuthorityDiagnostics": self._build_market_briefing_source_authority_diagnostics(inputs),
                 **briefing_trust,
             }
             if not briefing_trust["isReliable"]:
@@ -929,6 +930,7 @@ class MarketOverviewService:
                 "source": "fallback",
                 "updatedAt": _now_iso(),
                 "items": self._build_market_briefing_items(inputs, scores, "fallback", trust),
+                "sourceAuthorityDiagnostics": self._build_market_briefing_source_authority_diagnostics(inputs),
                 "warning": "当前真实数据不足，暂不生成强市场判断。",
                 "fallbackUsed": True,
                 "isFallback": True,
@@ -5391,6 +5393,108 @@ class MarketOverviewService:
             normalized["confidenceWeight"] = 0.0
         return normalized
 
+    def _build_market_briefing_source_authority_diagnostics(self, inputs: Mapping[str, Any]) -> Dict[str, Any]:
+        diagnostics: List[Dict[str, Any]] = []
+        total_input_count = 0
+        authoritative_input_count = 0
+        route_rejected_input_count = 0
+
+        for panel_key in ("indices", "breadth", "flows", "sectors", "rates", "fx", "futures", "sentiment", "crypto"):
+            panel = inputs.get(panel_key)
+            if not isinstance(panel, Mapping):
+                continue
+            panel_items = panel.get("items") if isinstance(panel.get("items"), list) else []
+            for raw_item in panel_items:
+                if not isinstance(raw_item, dict):
+                    continue
+                total_input_count += 1
+                item = self._guard_market_briefing_evidence_input(dict(raw_item), panel_key=panel_key)
+                if item.get("sourceAuthorityAllowed"):
+                    authoritative_input_count += 1
+                    continue
+                if item.get("sourceAuthorityRouteRejected"):
+                    route_rejected_input_count += 1
+                diagnostics.append(
+                    {
+                        "panelKey": panel_key,
+                        "key": item.get("key") or item.get("symbol") or item.get("name"),
+                        "symbol": item.get("symbol"),
+                        "name": item.get("name"),
+                        "source": item.get("source"),
+                        "sourceType": item.get("sourceType"),
+                        "freshness": item.get("freshness"),
+                        "sourceAuthorityAllowed": bool(item.get("sourceAuthorityAllowed")),
+                        "scoreContributionAllowed": bool(item.get("scoreContributionAllowed")),
+                        "sourceAuthorityRouteRejected": bool(item.get("sourceAuthorityRouteRejected")),
+                        "sourceAuthorityReason": item.get("sourceAuthorityReason"),
+                        "routeRejectedReasonCodes": list(item.get("routeRejectedReasonCodes") or []),
+                        "sourceAuthorityRouter": item.get("sourceAuthorityRouter"),
+                    }
+                )
+
+        return {
+            "useCase": "market_briefing",
+            "totalInputCount": total_input_count,
+            "authoritativeInputCount": authoritative_input_count,
+            "nonAuthoritativeInputCount": total_input_count - authoritative_input_count,
+            "routeRejectedInputCount": route_rejected_input_count,
+            "items": diagnostics,
+        }
+
+    def _guard_market_briefing_evidence_input(
+        self,
+        item: Dict[str, Any],
+        *,
+        panel_key: str,
+    ) -> Dict[str, Any]:
+        route_request = self._build_market_briefing_route_request(panel_key, item)
+        route_snapshot = build_data_source_route_diagnostic_snapshot(route_request).to_dict()
+        source = str(item.get("source") or "").strip().lower()
+        source_type = str(item.get("sourceType") or _infer_source_type(source)).strip().lower()
+        source_authority_allowed = bool(source) and source not in {"fallback", "mock", "missing", "unavailable"}
+        source_authority_allowed = bool(source_authority_allowed and not item.get("isFallback") and not item.get("isUnavailable"))
+        source_authority_route_rejected = False
+        source_authority_reason: Optional[str] = None
+        route_rejected_reason_codes: List[str] = []
+        score_contribution_allowed = bool(item.get("scoreContributionAllowed"))
+
+        if not source_authority_allowed:
+            score_contribution_allowed = False
+            source_authority_reason = MARKET_TEMPERATURE_PROVIDER_ABSENT_REASON
+        elif (
+            source in MARKET_TEMPERATURE_PROXY_CONTEXT_SOURCES
+            or source_type in MARKET_TEMPERATURE_PROXY_CONTEXT_SOURCE_TYPES
+        ):
+            source_authority_allowed = False
+            score_contribution_allowed = False
+            source_authority_reason = MARKET_TEMPERATURE_PROXY_CONTEXT_REASON
+        else:
+            provider_key = self._market_temperature_route_provider_key(source)
+            forbidden_provider_ids = {
+                str(provider.get("providerId") or "").strip().lower()
+                for provider in route_snapshot.get("forbiddenProviders", [])
+                if isinstance(provider, dict)
+            }
+            if provider_key and provider_key in forbidden_provider_ids:
+                source_authority_allowed = False
+                score_contribution_allowed = False
+                source_authority_route_rejected = True
+                source_authority_reason = MARKET_TEMPERATURE_SOURCE_AUTHORITY_REJECTED_REASON
+                route_rejected_reason_codes = list(
+                    route_snapshot.get("reasonCodes", {}).get(provider_key)
+                    or ("provider_not_eligible_for_authority_route",)
+                )
+
+        return {
+            **item,
+            "sourceAuthorityAllowed": bool(source_authority_allowed),
+            "scoreContributionAllowed": bool(score_contribution_allowed),
+            "sourceAuthorityRouteRejected": bool(source_authority_route_rejected),
+            "sourceAuthorityReason": source_authority_reason,
+            "routeRejectedReasonCodes": list(dict.fromkeys(route_rejected_reason_codes)),
+            "sourceAuthorityRouter": route_snapshot,
+        }
+
     @staticmethod
     def _is_market_temperature_score_input(panel_key: str, item: Mapping[str, Any]) -> bool:
         if panel_key == "sectors":
@@ -5456,6 +5560,79 @@ class MarketOverviewService:
             capability=capability,
             freshness_need=freshness_need,
             scoring_allowed=True,
+            symbol=symbol,
+            product_id=product_id,
+            allow_network=False,
+            reproducibility_required=False,
+        )
+
+    def _build_market_briefing_route_request(
+        self,
+        panel_key: str,
+        item: Mapping[str, Any],
+    ) -> DataSourceRouteRequest:
+        symbol = str(item.get("symbol") or item.get("key") or "").strip() or None
+        freshness_need = str(item.get("freshness") or "").strip().lower() or "live"
+        market = "US"
+        asset_type = "equity"
+        capability = "quote"
+        product_id = None
+
+        if panel_key == "indices":
+            market = "HK" if symbol in MARKET_TEMPERATURE_HK_INDEX_SYMBOLS else "CN"
+            asset_type = "equity_index"
+            capability = "index_quote"
+        elif panel_key in {"breadth", "flows"}:
+            market = "CN"
+            asset_type = "equity"
+            capability = "breadth"
+        elif panel_key == "rates":
+            capability = "macro_rate"
+            if symbol == "VIX":
+                market = "US"
+                asset_type = "volatility"
+                capability = "volatility"
+            elif symbol in {"DR007", "SHIBOR", "LPR", "CN10Y"}:
+                market = "CN"
+                asset_type = "macro_rate"
+            else:
+                market = "US"
+                asset_type = "macro_rate"
+        elif panel_key == "fx":
+            capability = "fx"
+            if symbol in {"DXY", "USDCNH", "USDJPY", "EURUSD"}:
+                market = "forex"
+                asset_type = "forex"
+            else:
+                market = "global"
+                asset_type = "commodity"
+        elif panel_key == "futures":
+            capability = "futures"
+            asset_type = "equity_index"
+            if symbol in {"CN00Y"}:
+                market = "CN"
+            elif symbol in {"HSI_F"}:
+                market = "HK"
+            elif symbol in {"NQ", "ES", "YM", "RTY"}:
+                market = "US"
+            else:
+                market = "global"
+        elif panel_key == "sentiment":
+            asset_type = "sentiment"
+            capability = "sentiment"
+        elif panel_key == "crypto":
+            market = "crypto"
+            asset_type = "crypto"
+            capability = "crypto_ticker"
+            product_id = f"{symbol}-USD" if symbol else None
+
+        return DataSourceRouteRequest(
+            market=market,
+            asset_type=asset_type,
+            use_case="market_briefing",
+            capability=capability,
+            freshness_need=freshness_need,
+            scoring_allowed=False,
             symbol=symbol,
             product_id=product_id,
             allow_network=False,

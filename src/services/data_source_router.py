@@ -77,6 +77,20 @@ _BACKTEST_DOMAIN_BY_CAPABILITY = MappingProxyType(
         "sentiment": ProviderDomain.SENTIMENT,
     }
 )
+_MARKET_INTELLIGENCE_AUTHORITY_FORBIDDEN_PROVIDER_IDS = (
+    "coinbase_public",
+    "akshare",
+    "baostock",
+    "pytdx_existing_baseline",
+    "sec_edgar",
+    "yfinance_current_baseline",
+    "yahooquery",
+)
+_MARKET_INTELLIGENCE_AUTHORITY_REQUIRED_SOURCE_TYPES = (
+    "official_public",
+    "exchange_public",
+    "cache_snapshot",
+)
 
 
 def _text(value: str | None) -> str:
@@ -524,6 +538,17 @@ def _select_policy(request: DataSourceRouteRequest) -> _RoutePolicy:
 
     if _normalize(request.use_case) == "backtest":
         return _ROUTE_POLICIES[("backtest", "ohlcv")]
+    if _normalize(request.use_case) == "market_briefing":
+        return _RoutePolicy(
+            forbidden_provider_ids=_MARKET_INTELLIGENCE_AUTHORITY_FORBIDDEN_PROVIDER_IDS,
+            cache_required=False,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_live_score_grade_authority",
+            required_source_types=_MARKET_INTELLIGENCE_AUTHORITY_REQUIRED_SOURCE_TYPES,
+            freshness_floor="live",
+            trust_floor="score_grade",
+        )
     if request.scoring_allowed:
         return _ROUTE_POLICIES.get(
             (_normalize(request.use_case), "quote"),
@@ -532,7 +557,7 @@ def _select_policy(request: DataSourceRouteRequest) -> _RoutePolicy:
                 background_refresh_required=True,
                 score_contribution_allowed=True,
                 degradation_policy="require_live_score_grade_authority",
-                required_source_types=("official_public", "exchange_public", "cache_snapshot"),
+                required_source_types=_MARKET_INTELLIGENCE_AUTHORITY_REQUIRED_SOURCE_TYPES,
                 freshness_floor="live",
                 trust_floor="score_grade",
             ),
