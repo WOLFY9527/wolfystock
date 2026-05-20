@@ -181,6 +181,49 @@ export type MarketTemperatureScore = {
   description: string;
 };
 
+export type MarketRegimeSynthesisEvidenceItem = {
+  key: string;
+  label: string;
+  pillar?: string | null;
+  direction?: string | null;
+  signal?: number | null;
+  weight?: number | null;
+  impact?: number | null;
+  expectedDirection?: string | null;
+  reason?: string | null;
+  source?: string | null;
+  sourceTier?: string | null;
+  trustLevel?: string | null;
+  freshness?: string | null;
+  observationOnly?: boolean;
+  scoreContributionAllowed?: boolean;
+  discountReasons?: string[];
+  degradationReason?: string | null;
+};
+
+export type MarketRegimeSynthesis = {
+  primaryRegime: string;
+  secondaryRegimes: string[];
+  regimeScores: Record<string, number>;
+  liquidityImpulse?: number | null;
+  riskAppetite?: number | null;
+  ratesPressure?: number | null;
+  dollarPressure?: number | null;
+  volatilityStress?: number | null;
+  cryptoRiskBeta?: number | null;
+  breadthHealth?: number | null;
+  chinaRiskAppetite?: number | null;
+  rotationQuality?: number | null;
+  confidence?: number | null;
+  confidenceLabel?: string | null;
+  topDrivers: MarketRegimeSynthesisEvidenceItem[];
+  counterEvidence: MarketRegimeSynthesisEvidenceItem[];
+  dataGaps: MarketRegimeSynthesisEvidenceItem[];
+  narrativeBullets: string[];
+  evidenceQuality?: Record<string, unknown>;
+  notInvestmentAdvice?: boolean;
+};
+
 export type MarketTemperatureResponse = {
   source: 'computed' | 'fallback' | 'mixed' | string;
   sourceLabel?: string;
@@ -210,6 +253,7 @@ export type MarketTemperatureResponse = {
   scoreCap?: number;
   degradationReasons?: string[];
   conclusionAllowed?: boolean;
+  marketRegimeSynthesis?: MarketRegimeSynthesis;
   scores: {
     overall: MarketTemperatureScore;
     usRiskAppetite: MarketTemperatureScore;
@@ -230,6 +274,74 @@ function normalizeMarketTemperatureScore(score?: Partial<MarketTemperatureScore>
   return {
     ...DEFAULT_MARKET_TEMPERATURE_SCORE,
     ...score,
+  };
+}
+
+function normalizeMarketRegimeEvidenceItem(
+  item?: Partial<MarketRegimeSynthesisEvidenceItem> | null,
+): MarketRegimeSynthesisEvidenceItem | null {
+  if (!item?.key || !item?.label) {
+    return null;
+  }
+  return {
+    key: item.key,
+    label: item.label,
+    pillar: item.pillar,
+    direction: item.direction,
+    signal: item.signal,
+    weight: item.weight,
+    impact: item.impact,
+    expectedDirection: item.expectedDirection,
+    reason: item.reason,
+    source: item.source,
+    sourceTier: item.sourceTier,
+    trustLevel: item.trustLevel,
+    freshness: item.freshness,
+    observationOnly: item.observationOnly,
+    scoreContributionAllowed: item.scoreContributionAllowed,
+    discountReasons: Array.isArray(item.discountReasons) ? item.discountReasons.filter(Boolean) : [],
+    degradationReason: item.degradationReason,
+  };
+}
+
+function normalizeMarketRegimeSynthesis(
+  synthesis?: Partial<MarketRegimeSynthesis> | null,
+): MarketRegimeSynthesis | undefined {
+  if (!synthesis?.primaryRegime) {
+    return undefined;
+  }
+
+  const normalizeEvidenceList = (
+    items?: Array<Partial<MarketRegimeSynthesisEvidenceItem> | null>,
+  ): MarketRegimeSynthesisEvidenceItem[] => (
+    Array.isArray(items)
+      ? items
+        .map((item) => normalizeMarketRegimeEvidenceItem(item))
+        .filter((item): item is MarketRegimeSynthesisEvidenceItem => Boolean(item))
+      : []
+  );
+
+  return {
+    primaryRegime: synthesis.primaryRegime,
+    secondaryRegimes: Array.isArray(synthesis.secondaryRegimes) ? synthesis.secondaryRegimes.filter(Boolean) : [],
+    regimeScores: synthesis.regimeScores || {},
+    liquidityImpulse: synthesis.liquidityImpulse,
+    riskAppetite: synthesis.riskAppetite,
+    ratesPressure: synthesis.ratesPressure,
+    dollarPressure: synthesis.dollarPressure,
+    volatilityStress: synthesis.volatilityStress,
+    cryptoRiskBeta: synthesis.cryptoRiskBeta,
+    breadthHealth: synthesis.breadthHealth,
+    chinaRiskAppetite: synthesis.chinaRiskAppetite,
+    rotationQuality: synthesis.rotationQuality,
+    confidence: synthesis.confidence,
+    confidenceLabel: synthesis.confidenceLabel,
+    topDrivers: normalizeEvidenceList(synthesis.topDrivers),
+    counterEvidence: normalizeEvidenceList(synthesis.counterEvidence),
+    dataGaps: normalizeEvidenceList(synthesis.dataGaps),
+    narrativeBullets: Array.isArray(synthesis.narrativeBullets) ? synthesis.narrativeBullets.filter(Boolean) : [],
+    evidenceQuality: synthesis.evidenceQuality || {},
+    notInvestmentAdvice: synthesis.notInvestmentAdvice,
   };
 }
 
@@ -288,6 +400,7 @@ export function normalizeMarketTemperatureResponse(
     scoreCap: payload?.scoreCap,
     degradationReasons: payload?.degradationReasons,
     conclusionAllowed,
+    marketRegimeSynthesis: normalizeMarketRegimeSynthesis(payload?.marketRegimeSynthesis),
     scores: {
       overall: normalizeMarketTemperatureScore(scores.overall),
       usRiskAppetite: normalizeMarketTemperatureScore(scores.usRiskAppetite),

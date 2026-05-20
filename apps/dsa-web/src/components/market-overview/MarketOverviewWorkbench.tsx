@@ -4,6 +4,8 @@ import type { MarketDataMeta, MarketOverviewItem, MarketOverviewPanel, MarketPro
 import type {
   CnShortSentimentResponse,
   MarketBriefingResponse,
+  MarketRegimeSynthesis,
+  MarketRegimeSynthesisEvidenceItem,
   MarketFuturesResponse,
   MarketTemperatureResponse,
   MarketTemperatureScore,
@@ -34,6 +36,7 @@ import {
   type MarketOverviewHeroAnchorView,
   type MarketOverviewTemperatureSummaryView,
 } from './MarketOverviewWorkbenchTopSurface';
+import type { MarketRegimeSynthesisEvidenceView, MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
 import { resolveMarketOverviewDisplayLabel } from './marketOverviewLabels';
 import { formatMarketOverviewTimestamp } from './marketOverviewFormat';
 import {
@@ -539,6 +542,13 @@ function formatNumber(value: number | null | undefined, digits = 2): string {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: digits }).format(value);
 }
 
+function formatPercent(value?: number | null): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return '';
+  }
+  return `${Math.round(value * 100)}%`;
+}
+
 function scoreTone(score: MarketTemperatureScore, pressure = false): string {
   if (pressure) {
     return score.value >= 65 ? 'text-rose-400' : score.value >= 55 ? 'text-amber-300' : 'text-emerald-400';
@@ -638,6 +648,257 @@ function confidenceLabel(confidence?: number): string {
     return '中';
   }
   return '低';
+}
+
+function regimeConfidenceLabel(label?: string | null, confidence?: number | null): string {
+  const normalized = String(label || '').trim().toLowerCase();
+  if (normalized === 'high') {
+    return '高';
+  }
+  if (normalized === 'medium') {
+    return '中';
+  }
+  if (normalized === 'low') {
+    return '低';
+  }
+  if (normalized === 'insufficient') {
+    return '数据不足';
+  }
+  if (!normalized) {
+    return confidenceLabel(typeof confidence === 'number' ? confidence : undefined);
+  }
+  return label || confidenceLabel(typeof confidence === 'number' ? confidence : undefined);
+}
+
+function regimeLabel(regime?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  const labels = language === 'en'
+    ? {
+      risk_on_liquidity_expansion: 'Risk-on liquidity expansion',
+      risk_off_deleveraging: 'Risk-off deleveraging',
+      rates_shock_duration_pressure: 'Rates shock / duration pressure',
+      dollar_squeeze: 'Dollar squeeze',
+      credit_or_funding_stress: 'Credit or funding stress',
+      term_premium_or_inflation_scare: 'Term premium / inflation scare',
+      goldilocks_soft_landing: 'Goldilocks soft landing',
+      nacho_mega_cap_defensive_rotation: 'Mega-cap defensive rotation',
+      china_policy_divergence: 'China policy divergence',
+      data_insufficient: 'Insufficient data',
+    }
+    : {
+      risk_on_liquidity_expansion: '风险偏好修复 / 流动性扩张',
+      risk_off_deleveraging: '去杠杆式风险回避',
+      rates_shock_duration_pressure: '利率冲击 / 久期承压',
+      dollar_squeeze: '美元走强挤压风险资产',
+      credit_or_funding_stress: '信用 / 资金压力',
+      term_premium_or_inflation_scare: '期限溢价 / 再通胀担忧',
+      goldilocks_soft_landing: '软着陆 / 金发姑娘',
+      nacho_mega_cap_defensive_rotation: '大盘权重防御轮动',
+      china_policy_divergence: '中国政策分化',
+      data_insufficient: '数据不足',
+    };
+  if (!regime) {
+    return language === 'en' ? 'No synthesis conclusion' : '综合结论待返回';
+  }
+  return labels[regime as keyof typeof labels] || regime;
+}
+
+function regimePillarLabel(pillar?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  const labels = language === 'en'
+    ? {
+      risk_appetite: 'Risk appetite',
+      rates_pressure: 'Rates pressure',
+      dollar_pressure: 'Dollar pressure',
+      volatility_stress: 'Volatility stress',
+      liquidity_impulse: 'Liquidity impulse',
+      crypto_risk_beta: 'Crypto risk beta',
+      breadth_health: 'Breadth health',
+      china_risk_appetite: 'China risk appetite',
+      rotation_leadership: 'Rotation quality',
+    }
+    : {
+      risk_appetite: '风险偏好',
+      rates_pressure: '利率压力',
+      dollar_pressure: '美元压力',
+      volatility_stress: '波动压力',
+      liquidity_impulse: '流动性脉冲',
+      crypto_risk_beta: '加密风险偏好',
+      breadth_health: '市场宽度',
+      china_risk_appetite: '中国风险偏好',
+      rotation_leadership: '轮动质量',
+    };
+  if (!pillar) {
+    return language === 'en' ? 'Coverage' : '覆盖';
+  }
+  return labels[pillar as keyof typeof labels] || pillar;
+}
+
+function regimeGapReasonLabel(reason?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  const labels = language === 'en'
+    ? {
+      unknown_pillar: 'Unknown pillar',
+      missing_direction_or_magnitude: 'Missing direction or magnitude',
+      source_tier_discount: 'Discounted by source tier',
+      trust_discount: 'Discounted by trust level',
+      freshness_discount: 'Discounted by freshness',
+      observation_only_discount: 'Observation-only evidence',
+      unscorable_quality: 'Unscorable quality',
+      missing_scoring_evidence: 'Missing scoring evidence',
+      conflicts_with_primary_regime: 'Conflicts with primary regime',
+      provider_unavailable: 'Provider unavailable',
+      unavailable: 'Unavailable',
+    }
+    : {
+      unknown_pillar: '未识别支柱',
+      missing_direction_or_magnitude: '缺少方向或幅度',
+      source_tier_discount: '来源层级折价',
+      trust_discount: '信任级别折价',
+      freshness_discount: '时效折价',
+      observation_only_discount: '仅观察证据',
+      unscorable_quality: '不可评分质量',
+      missing_scoring_evidence: '缺少可评分证据',
+      conflicts_with_primary_regime: '与主结论相反',
+      provider_unavailable: '数据源暂不可用',
+      unavailable: '暂不可用',
+    };
+  if (!reason) {
+    return language === 'en' ? 'Explicit gap' : '显式缺口';
+  }
+  return labels[reason as keyof typeof labels] || reason;
+}
+
+function synthesisEvidenceMeta(
+  item: MarketRegimeSynthesisEvidenceItem,
+  kind: 'driver' | 'counter' | 'gap',
+  language: 'zh' | 'en',
+): string {
+  const pillar = regimePillarLabel(item.pillar, language);
+  if (kind === 'driver') {
+    const direction = item.direction === 'positive'
+      ? (language === 'en' ? 'supports' : '顺势')
+      : item.direction === 'negative'
+        ? (language === 'en' ? 'offsets' : '逆势')
+        : (language === 'en' ? 'signal' : '信号');
+    const discount = item.discountReasons?.[0]
+      ? regimeGapReasonLabel(item.discountReasons[0], language)
+      : '';
+    const signal = typeof item.signal === 'number'
+      ? `${language === 'en' ? 'signal' : '信号'} ${item.signal > 0 ? '+' : ''}${item.signal.toFixed(2)}`
+      : '';
+    return [pillar, direction, signal, discount].filter(Boolean).join(' · ');
+  }
+  if (kind === 'counter') {
+    const signal = typeof item.signal === 'number'
+      ? `${language === 'en' ? 'signal' : '信号'} ${item.signal > 0 ? '+' : ''}${item.signal.toFixed(2)}`
+      : '';
+    return [
+      pillar,
+      regimeGapReasonLabel(item.reason || 'conflicts_with_primary_regime', language),
+      signal,
+    ].filter(Boolean).join(' · ');
+  }
+  return [
+    pillar,
+    regimeGapReasonLabel(item.reason || item.degradationReason, language),
+  ].filter(Boolean).join(' · ');
+}
+
+function buildRegimeEvidenceView(
+  items: MarketRegimeSynthesisEvidenceItem[],
+  kind: 'driver' | 'counter' | 'gap',
+  limit: number,
+  language: 'zh' | 'en',
+): MarketRegimeSynthesisEvidenceView[] {
+  const displayLabelForItem = (item: MarketRegimeSynthesisEvidenceItem): string => {
+    const symbol = item.key.includes(':') ? item.key.split(':').pop() || item.key : item.key;
+    const display = resolveMarketOverviewDisplayLabel({
+      symbol,
+      label: item.label || symbol,
+    } as MarketOverviewItem, language);
+    return display.primary || item.label || symbol;
+  };
+
+  return items.slice(0, limit).map((item) => ({
+    key: item.key,
+    label: displayLabelForItem(item),
+    meta: synthesisEvidenceMeta(item, kind, language),
+  }));
+}
+
+function buildMarketRegimeSynthesisView(
+  synthesis: MarketRegimeSynthesis | undefined,
+  decisionReliable: boolean,
+  language: 'zh' | 'en',
+): MarketRegimeSynthesisHeaderView {
+  if (!synthesis) {
+    return {
+      state: 'missing',
+      title: language === 'en' ? 'No synthesis conclusion returned' : '综合结论待返回',
+      summary: language === 'en'
+        ? 'The market temperature payload did not return a synthesis conclusion, so no regime call is fabricated here.'
+        : '当前温度载荷未返回综合结论字段，不展示推断性市场结论。',
+      stateChipLabel: language === 'en' ? 'Payload Missing' : '载荷缺失',
+      stateChipVariant: 'neutral',
+      confidenceLabel: language === 'en' ? 'Unavailable' : '未返回',
+      confidenceValueText: '',
+      topDrivers: [],
+      counterEvidence: [],
+      dataGaps: [],
+      notInvestmentAdvice: false,
+    };
+  }
+
+  const confidenceValueText = formatPercent(synthesis.confidence);
+  const lowConfidence = (
+    synthesis.primaryRegime === 'data_insufficient'
+    || synthesis.confidenceLabel === 'insufficient'
+    || (typeof synthesis.confidence === 'number' && synthesis.confidence < 0.45)
+    || !decisionReliable
+  );
+  const evidenceQuality = synthesis.evidenceQuality || {};
+  const scoringEvidenceCount = typeof evidenceQuality.scoringEvidenceCount === 'number'
+    ? evidenceQuality.scoringEvidenceCount
+    : synthesis.topDrivers.length;
+  const scoringPillarCount = typeof evidenceQuality.scoringPillarCount === 'number'
+    ? evidenceQuality.scoringPillarCount
+    : undefined;
+  const discountedEvidenceCount = typeof evidenceQuality.discountedEvidenceCount === 'number'
+    ? evidenceQuality.discountedEvidenceCount
+    : undefined;
+  const dataGapCount = typeof evidenceQuality.dataGapCount === 'number'
+    ? evidenceQuality.dataGapCount
+    : synthesis.dataGaps.length;
+
+  return {
+    state: lowConfidence ? 'insufficient' : 'ready',
+    title: lowConfidence && synthesis.primaryRegime !== 'data_insufficient'
+      ? `${regimeLabel(synthesis.primaryRegime, language)}${language === 'en' ? ' (low confidence)' : '（待确认）'}`
+      : regimeLabel(synthesis.primaryRegime, language),
+    summary: lowConfidence
+      ? (language === 'en'
+        ? 'Coverage or confidence is below threshold. Show the explicit evidence, contradictions, and gaps without promoting a strong regime call.'
+        : '当前覆盖或置信度不足，只展示可验证驱动、反证和数据缺口，不升级为强结论。')
+      : (language === 'en'
+        ? `Top drivers ${Math.min(synthesis.topDrivers.length, 3)} · counter evidence ${Math.min(synthesis.counterEvidence.length, 3)} · data gaps ${Math.min(dataGapCount, 3)}`
+        : `主要驱动 ${Math.min(synthesis.topDrivers.length, 3)} 项 · 反证 ${Math.min(synthesis.counterEvidence.length, 3)} 项 · 数据缺口 ${Math.min(dataGapCount, 3)} 项`),
+    stateChipLabel: lowConfidence
+      ? (synthesis.primaryRegime === 'data_insufficient'
+        ? (language === 'en' ? 'Data Insufficient' : '数据不足')
+        : (language === 'en' ? 'Low Confidence' : '低置信度'))
+      : (language === 'en' ? 'Primary Regime' : '主市场状态'),
+    stateChipVariant: lowConfidence ? 'caution' : 'success',
+    primaryRegimeCode: synthesis.primaryRegime,
+    confidenceLabel: regimeConfidenceLabel(synthesis.confidenceLabel, synthesis.confidence),
+    confidenceValueText,
+    qualityLine: [
+      `${language === 'en' ? 'Evidence' : '证据'} ${scoringEvidenceCount}`,
+      scoringPillarCount != null ? `${language === 'en' ? 'Pillars' : '支柱'} ${scoringPillarCount}/9` : '',
+      discountedEvidenceCount != null ? `${language === 'en' ? 'Discounted' : '折价'} ${discountedEvidenceCount}` : '',
+    ].filter(Boolean).join(' · '),
+    topDrivers: buildRegimeEvidenceView(synthesis.topDrivers, 'driver', 3, language),
+    counterEvidence: buildRegimeEvidenceView(synthesis.counterEvidence, 'counter', 3, language),
+    dataGaps: buildRegimeEvidenceView(synthesis.dataGaps, 'gap', 3, language),
+    notInvestmentAdvice: Boolean(synthesis.notInvestmentAdvice),
+  };
 }
 
 function isTemperatureReliable(data: MarketTemperatureResponse): boolean {
@@ -1654,6 +1915,11 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
   const marketDecision = buildMarketDecision({ activeCategory, panels, dataQuality, topLevelDataStatus });
   const decisionReliable = isTemperatureReliable(panels.temperature);
   const disabledLabel = temperatureDisabledStateLabel(panels.temperature);
+  const regimeSynthesisView = buildMarketRegimeSynthesisView(
+    panels.temperature.marketRegimeSynthesis,
+    decisionReliable,
+    language,
+  );
   const dataStateStatuses = collectDataStateMeta(panels).map(resolveProviderStatus);
   const fallbackCount = dataQuality.counts.fallback + dataQuality.counts.mock;
   const unavailableCount = dataStateStatuses.filter((status) => status === 'partial' || status === 'unavailable' || status === 'error').length + refreshErrorCount;
@@ -1766,6 +2032,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
       <TerminalPageShell data-testid="market-overview-workbench" className="flex min-h-0 flex-1 py-5 md:py-6">
         <MarketOverviewWorkbenchTopSurface
           heading={heading}
+          regimeSynthesis={regimeSynthesisView}
           decisionText={marketDecision.text}
           decisionChips={marketDecision.chips}
           decisionReliable={decisionReliable}

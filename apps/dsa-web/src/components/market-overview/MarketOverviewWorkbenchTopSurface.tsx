@@ -7,6 +7,7 @@ import {
 } from '../linear';
 import { TerminalChip, TerminalDenseList, TerminalNotice, TerminalPanel, TerminalSectionHeader } from '../terminal';
 import { cn } from '../../utils/cn';
+import { MarketRegimeSynthesisHeader, type MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
 
 export type MarketOverviewDecisionChipView = {
   label: string;
@@ -61,6 +62,7 @@ export type MarketOverviewCategoryTabView = {
 
 type MarketOverviewWorkbenchTopSurfaceProps = {
   heading: React.ReactNode;
+  regimeSynthesis: MarketRegimeSynthesisHeaderView;
   decisionText: string;
   decisionChips: MarketOverviewDecisionChipView[];
   decisionReliable: boolean;
@@ -331,6 +333,7 @@ const MarketOverviewCategoryControls: React.FC<{
 
 export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbenchTopSurfaceProps> = ({
   heading,
+  regimeSynthesis,
   decisionText,
   decisionChips,
   decisionReliable,
@@ -370,6 +373,9 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
         />
         <ConsoleBoard data-testid="market-overview-primary-board">
           <div data-testid="market-overview-top-stack" className="flex w-full min-w-0 flex-col">
+            <div className="border-b border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4">
+              <MarketRegimeSynthesisHeader view={regimeSynthesis} />
+            </div>
             <MarketDecisionStrip text={decisionText} chips={decisionChips} reliable={decisionReliable} />
             <div className="border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4">
               <MarketOverviewCategoryControls

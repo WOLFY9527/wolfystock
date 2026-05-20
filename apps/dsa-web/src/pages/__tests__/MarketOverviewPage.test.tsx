@@ -473,6 +473,7 @@ const temperaturePayload = () => ({
   trustLevel: 'reliable',
   sourceTier: 'unofficial_public_api',
   conclusionAllowed: true,
+  marketRegimeSynthesis: regimeSynthesisPayload(),
   scores: {
     overall: { value: 62, label: '偏暖', trend: 'improving' as const, description: '风险偏好改善，但宏观压力仍需关注。' },
     usRiskAppetite: { value: 68, label: '偏暖', trend: 'improving' as const, description: '美股指数与风险情绪同步改善。' },
@@ -480,6 +481,130 @@ const temperaturePayload = () => ({
     macroPressure: { value: 58, label: '中性偏高', trend: 'rising' as const, description: '美元与利率走强。' },
     liquidity: { value: 52, label: '中性', trend: 'stable' as const, description: '资金环境整体平稳。' },
   },
+});
+
+const regimeSynthesisPayload = () => ({
+  primaryRegime: 'risk_on_liquidity_expansion',
+  secondaryRegimes: ['goldilocks_soft_landing'],
+  regimeScores: {
+    risk_on_liquidity_expansion: 0.72,
+    goldilocks_soft_landing: 0.44,
+  },
+  liquidityImpulse: 0.31,
+  riskAppetite: 0.58,
+  ratesPressure: -0.14,
+  dollarPressure: -0.18,
+  volatilityStress: -0.36,
+  cryptoRiskBeta: 0.42,
+  breadthHealth: 0.16,
+  chinaRiskAppetite: 0.08,
+  rotationQuality: 0.02,
+  confidence: 0.66,
+  confidenceLabel: 'medium',
+  topDrivers: [
+    {
+      key: 'indices:SPX',
+      label: '标普500',
+      pillar: 'risk_appetite',
+      direction: 'positive',
+      signal: 0.58,
+      weight: 0.94,
+      impact: 0.54,
+      source: 'sina',
+      sourceTier: 'official_public',
+      trustLevel: 'high',
+      freshness: 'cached',
+      observationOnly: false,
+      scoreContributionAllowed: true,
+      discountReasons: [],
+    },
+    {
+      key: 'volatility:VIX',
+      label: 'VIX',
+      pillar: 'volatility_stress',
+      direction: 'negative',
+      signal: -0.42,
+      weight: 0.91,
+      impact: 0.49,
+      source: 'fred',
+      sourceTier: 'official_public',
+      trustLevel: 'high',
+      freshness: 'cached',
+      observationOnly: false,
+      scoreContributionAllowed: true,
+      discountReasons: [],
+    },
+    {
+      key: 'crypto:BTC',
+      label: '比特币',
+      pillar: 'crypto_risk_beta',
+      direction: 'positive',
+      signal: 0.39,
+      weight: 0.67,
+      impact: 0.33,
+      source: 'binance',
+      sourceTier: 'exchange_public',
+      trustLevel: 'usable',
+      freshness: 'delayed',
+      observationOnly: false,
+      scoreContributionAllowed: true,
+      discountReasons: ['freshness_discount'],
+    },
+  ],
+  counterEvidence: [
+    {
+      key: 'rates:US10Y',
+      label: '美国10年期国债收益率',
+      pillar: 'rates_pressure',
+      signal: 0.24,
+      expectedDirection: 'negative',
+      reason: 'conflicts_with_primary_regime',
+    },
+    {
+      key: 'fx:DXY',
+      label: '美元指数',
+      pillar: 'dollar_pressure',
+      signal: 0.18,
+      expectedDirection: 'negative',
+      reason: 'conflicts_with_primary_regime',
+    },
+  ],
+  dataGaps: [
+    {
+      key: 'breadth:CN',
+      label: 'A股宽度',
+      pillar: 'breadth_health',
+      reason: 'missing_scoring_evidence',
+      source: 'unavailable',
+      sourceTier: 'unavailable',
+      trustLevel: 'unavailable',
+      freshness: 'unavailable',
+      observationOnly: false,
+      scoreContributionAllowed: false,
+      degradationReason: 'provider_unavailable',
+    },
+    {
+      key: 'rotation:small_caps',
+      label: '小盘股轮动',
+      pillar: 'rotation_leadership',
+      reason: 'freshness_discount',
+      source: 'snapshot',
+      sourceTier: 'cache_snapshot',
+      trustLevel: 'weak',
+      freshness: 'stale',
+      observationOnly: false,
+      scoreContributionAllowed: true,
+      degradationReason: 'stale',
+    },
+  ],
+  narrativeBullets: ['Risk appetite is improving but rates pressure remains a live contradiction.'],
+  evidenceQuality: {
+    scoringEvidenceCount: 6,
+    scoringPillarCount: 5,
+    discountedEvidenceCount: 1,
+    dataGapCount: 2,
+  },
+  notInvestmentAdvice: true,
 });
 
 const briefingPayload = () => ({
@@ -525,6 +650,77 @@ const unreliableTemperaturePayload = () => ({
   trustLevel: 'unavailable',
   sourceTier: 'static_fallback',
   conclusionAllowed: false,
+  marketRegimeSynthesis: {
+    primaryRegime: 'data_insufficient',
+    secondaryRegimes: [],
+    regimeScores: {},
+    liquidityImpulse: 0,
+    riskAppetite: 0,
+    ratesPressure: 0,
+    dollarPressure: 0,
+    volatilityStress: 0,
+    cryptoRiskBeta: 0,
+    breadthHealth: 0,
+    chinaRiskAppetite: 0,
+    rotationQuality: 0,
+    confidence: 0.22,
+    confidenceLabel: 'insufficient',
+    topDrivers: [
+      {
+        key: 'indices:SPX',
+        label: '标普500',
+        pillar: 'risk_appetite',
+        direction: 'positive',
+        signal: 0.18,
+        weight: 0.35,
+        impact: 0.08,
+        source: 'fallback',
+        sourceTier: 'static_fallback',
+        trustLevel: 'weak',
+        freshness: 'fallback',
+        observationOnly: false,
+        scoreContributionAllowed: false,
+        discountReasons: ['source_tier_discount'],
+      },
+    ],
+    counterEvidence: [],
+    dataGaps: [
+      {
+        key: 'breadth:CN',
+        label: 'A股宽度',
+        pillar: 'breadth_health',
+        reason: 'missing_scoring_evidence',
+        source: 'unavailable',
+        sourceTier: 'unavailable',
+        trustLevel: 'unavailable',
+        freshness: 'unavailable',
+        observationOnly: false,
+        scoreContributionAllowed: false,
+        degradationReason: 'provider_unavailable',
+      },
+      {
+        key: 'crypto:BTC',
+        label: '比特币',
+        pillar: 'crypto_risk_beta',
+        reason: 'observation_only_discount',
+        source: 'coinbase',
+        sourceTier: 'exchange_public',
+        trustLevel: 'usable',
+        freshness: 'delayed',
+        observationOnly: true,
+        scoreContributionAllowed: false,
+        degradationReason: 'observation_only',
+      },
+    ],
+    narrativeBullets: ['Coverage remains below scoring threshold.'],
+    evidenceQuality: {
+      scoringEvidenceCount: 2,
+      scoringPillarCount: 2,
+      discountedEvidenceCount: 2,
+      dataGapCount: 2,
+    },
+    notInvestmentAdvice: true,
+  },
   scores: {
     overall: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前真实数据不足，市场温度仅供界面演示。' },
     usRiskAppetite: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前真实数据不足，市场温度仅供界面演示。' },
@@ -1122,6 +1318,17 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-hero-ribbon')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-hero-ribbon')).toHaveAttribute('data-linear-primitive', 'key-level-strip');
     expect(await screen.findByText(/信号可信：高/i)).toBeInTheDocument();
+    expect(screen.getByTestId('market-regime-synthesis-header')).toBeInTheDocument();
+    expect(screen.getByTestId('market-regime-synthesis-title')).toHaveTextContent('风险偏好修复 / 流动性扩张');
+    expect(screen.getByTestId('market-regime-synthesis-summary')).toHaveTextContent('主要驱动 3 项 · 反证 2 项 · 数据缺口 2 项');
+    expect(screen.getByTestId('market-regime-synthesis-regime-chip')).toHaveTextContent('risk_on_liquidity_expansion');
+    expect(screen.getByTestId('market-regime-synthesis-confidence-chip')).toHaveTextContent('中 · 66%');
+    expect(screen.getByTestId('market-regime-synthesis-quality-line')).toHaveTextContent('证据 6 · 支柱 5/9 · 折价 1');
+    expect(screen.getByTestId('market-regime-synthesis-disclaimer')).toHaveTextContent('非投资建议');
+    expect(screen.getByTestId('market-regime-synthesis-top-drivers')).toHaveTextContent(/标普500/);
+    expect(screen.getByTestId('market-regime-synthesis-top-drivers')).toHaveTextContent(/比特币/);
+    expect(screen.getByTestId('market-regime-synthesis-counter-evidence')).toHaveTextContent(/美国10年期国债收益率/);
+    expect(screen.getByTestId('market-regime-synthesis-data-gaps')).toHaveTextContent(/A股宽度/);
     expect(screen.getByTestId('market-decision-strip')).toBeInTheDocument();
     expect(screen.getByTestId('market-decision-strip')).toHaveAttribute('data-terminal-primitive', 'panel');
     expect(screen.getByTestId('market-decision-strip')).toHaveAttribute('data-command-bar', 'market-state');
@@ -1184,7 +1391,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-export-summary')).toHaveTextContent('复制摘要');
     expect(screen.getByTestId('market-overview-category-tabs')).not.toHaveClass('sticky', 'top-0', 'z-20', '-mx-4');
     expect(screen.getByTestId('market-overview-top-stack')).toContainElement(screen.getByTestId('market-overview-category-tabs'));
-    expect(screen.getByTestId('market-overview-top-stack').firstElementChild).toBe(screen.getByTestId('market-decision-strip'));
+    expect(screen.getByTestId('market-overview-top-stack').firstElementChild).toContainElement(screen.getByTestId('market-regime-synthesis-header'));
     expect(screen.getByTestId('market-overview-category-tabs')).toHaveAttribute('data-selector-position', 'static-safe');
     expect(screen.getByTestId('market-overview-category-tabs').querySelector('.ui-scroll-x-quiet')).not.toBeNull();
     expect(shell).toContainElement(screen.getByTestId('market-overview-category-tabs'));
@@ -1356,6 +1563,7 @@ describe('MarketOverviewPage', () => {
     expect(await screen.findByTestId('market-overview-pulse-header')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-category-tabs')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-market-monitor')).toBeInTheDocument();
+    expect(screen.getByTestId('market-regime-synthesis-header')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-status-strip')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-summary-band')).toContainElement(screen.getByTestId('market-overview-status-strip'));
 
@@ -1395,7 +1603,8 @@ describe('MarketOverviewPage', () => {
     const orderedNodes = Array.from(workbench.querySelectorAll('[data-mobile-order]'))
       .map((node) => node.getAttribute('data-mobile-order'));
 
-    expect(orderedNodes).toEqual(['decision', 'controls', 'summary', 'cache-status', 'main', 'deep', 'rail']);
+    expect(orderedNodes).toEqual(['synthesis', 'decision', 'controls', 'summary', 'cache-status', 'main', 'deep', 'rail']);
+    expect(screen.getByTestId('market-regime-synthesis-header')).toHaveAttribute('data-mobile-order', 'synthesis');
     expect(screen.getByTestId('market-decision-strip')).toHaveAttribute('data-mobile-order', 'decision');
   });
 
@@ -1406,8 +1615,8 @@ describe('MarketOverviewPage', () => {
     const orderedNodes = Array.from(topStack.querySelectorAll('[data-market-research-flow]'))
       .map((node) => node.getAttribute('data-market-research-flow'));
 
-    expect(orderedNodes).toEqual(['state', 'controls', 'trust', 'pulse', 'cache']);
-    expect(topStack.firstElementChild).toBe(screen.getByTestId('market-decision-strip'));
+    expect(orderedNodes).toEqual(['regime-synthesis', 'state', 'controls', 'trust', 'pulse', 'cache']);
+    expect(topStack.firstElementChild).toContainElement(screen.getByTestId('market-regime-synthesis-header'));
     expect(screen.getByTestId('market-overview-main-grid').compareDocumentPosition(screen.getByTestId('market-decision-strip'))).toBe(Node.DOCUMENT_POSITION_PRECEDING);
   });
 
@@ -1621,13 +1830,18 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByText(/可靠输入不足，暂不生成综合判断/i)).toBeInTheDocument();
     expect(screen.getByText(/信号可信：数据不足/i)).toBeInTheDocument();
     expect(screen.queryByText(/综合市场温度/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId('market-regime-synthesis-title')).toHaveTextContent('数据不足');
+    expect(screen.getByTestId('market-regime-synthesis-state-chip')).toHaveTextContent('数据不足');
+    expect(screen.getByTestId('market-regime-synthesis-confidence-chip')).toHaveTextContent('数据不足 · 22%');
+    expect(screen.getByTestId('market-regime-synthesis-summary')).toHaveTextContent('当前覆盖或置信度不足');
+    expect(screen.getByTestId('market-regime-synthesis-data-gaps')).toHaveTextContent(/A股宽度/);
     expect(screen.getByTestId('market-overview-rail-action-hint')).toHaveTextContent(/优先观察已验证信号，暂不生成强判断|等待刷新完成后再生成强判断|部分关键面板暂不可用，暂不生成强判断/i);
     expect(screen.getByTestId('market-briefing-warning')).toHaveTextContent('当前真实数据不足，暂不生成强市场判断');
     expect(screen.getByTestId('market-decision-text')).toHaveTextContent(/等待实时源|部分数据暂不可用/);
     expect(screen.getByTestId('market-command-safe-state')).toHaveTextContent(/当前不生成强判断/);
   });
 
-  it('renders a degraded market temperature state when the temperature payload is partial', async () => {
+  it('shows a missing synthesis fallback when the temperature payload omits the additive field', async () => {
     vi.mocked(marketApi.getTemperature).mockResolvedValueOnce({
       source: 'computed',
       sourceLabel: '系统计算',
@@ -1662,6 +1876,11 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-temperature-summary')).toHaveTextContent(/可靠输入不足|暂不判定/);
     expect(screen.getByTestId('market-overview-temperature-summary')).not.toHaveTextContent('N/A');
     expect(screen.getByTestId('market-decision-text')).toHaveTextContent(/数据可用：存在延迟源|数据可用：存在延迟\/代理源/);
+    expect(screen.getByTestId('market-regime-synthesis-title')).toHaveTextContent('综合结论待返回');
+    expect(screen.getByTestId('market-regime-synthesis-state-chip')).toHaveTextContent('载荷缺失');
+    expect(screen.getByTestId('market-regime-synthesis-confidence-chip')).toHaveTextContent('未返回');
+    expect(screen.queryByTestId('market-regime-synthesis-regime-chip')).not.toBeInTheDocument();
+    expect(screen.getByTestId('market-regime-synthesis-top-drivers')).toHaveTextContent('暂无可展示驱动');
     expect(screen.queryByText(/raw|payload/i)).not.toBeInTheDocument();
   });
 
