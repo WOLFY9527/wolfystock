@@ -696,6 +696,42 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             },
         }
 
+    @staticmethod
+    def _baostock_history_observation(
+        *,
+        freshness: str,
+        as_of: str | None,
+        updated_at: str | None,
+        attempted_at: str | None = None,
+        degradation_reason: str | None = None,
+        missing_provider_reason: str | None = None,
+        adjustment_method: str = "baostock_adjustflag_2",
+    ) -> dict:
+        return {
+            "providerName": "baostock",
+            "providerId": "baostock",
+            "source": "baostock",
+            "sourceType": "public_proxy",
+            "sourceTier": "third_party_free_api",
+            "sourceLabel": "BaoStock",
+            "trustLevel": "usable_with_caution",
+            "freshness": freshness,
+            "freshnessExpectation": "t_plus_1_or_delayed",
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "keyRequired": False,
+            "cacheRequired": True,
+            "backgroundRefreshRecommended": True,
+            "capability": "cn_history_daily",
+            "stage": "scanner_diagnostics",
+            "asOf": as_of,
+            "updatedAt": updated_at,
+            "attemptedAt": attempted_at,
+            "degradationReason": degradation_reason,
+            "missingProviderReason": missing_provider_reason,
+            "adjustmentMethod": adjustment_method,
+        }
+
     def _seed_review_watchlists(self) -> tuple[int, int]:
         rows_600001 = [
             ("2026-04-09", 10.0, 10.2, 9.8),
@@ -2089,6 +2125,152 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             self.assertEqual(entries[1]["trustLevel"], "weak")
             self.assertIsNotNone(candidate["diagnostics"]["evidence_packet"]["providerObservation"])
             self.assertTrue(candidate["diagnostics"]["evidence_packet"]["providerObservation"]["observationOnly"])
+
+    def test_run_scan_attaches_baostock_scanner_diagnostics_sidecar_without_changing_scores_or_ranks(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            baseline_cache = Path(temp_dir) / "baseline-baostock-cache.csv"
+            observed_cache = Path(temp_dir) / "observed-baostock-cache.csv"
+            baseline_db = DatabaseManager(db_url="sqlite:///:memory:")
+            observed_db = DatabaseManager(db_url="sqlite:///:memory:")
+            baseline_service = MarketScannerService(
+                baseline_db,
+                data_manager=ObservationScannerDataManager(),
+                local_universe_cache_path=str(baseline_cache),
+            )
+            baseline = baseline_service.run_scan(
+                market="cn",
+                profile="cn_preopen_v1",
+                shortlist_size=2,
+                universe_limit=50,
+                detail_limit=10,
+            )
+
+            baostock_by_symbol = {
+                "600001": self._baostock_history_observation(
+                    freshness="stale",
+                    as_of="2026-04-29",
+                    updated_at="2026-04-30T06:00:00+08:00",
+                    attempted_at="2026-04-30T06:00:00+08:00",
+                    degradation_reason="cache_stale",
+                    missing_provider_reason=None,
+                ),
+                "600002": self._baostock_history_observation(
+                    freshness="t_plus_1_or_delayed",
+                    as_of="2026-04-30",
+                    updated_at="2026-04-30T06:00:00+08:00",
+                    attempted_at="2026-04-30T06:00:00+08:00",
+                ),
+            }
+            observed_service = MarketScannerService(
+                observed_db,
+                data_manager=ObservationScannerDataManager(),
+                local_universe_cache_path=str(observed_cache),
+                baostock_cn_history_observation_resolver=lambda symbol, history_diag: dict(
+                    baostock_by_symbol.get(str(symbol), {})
+                ),
+            )
+            observed = observed_service.run_scan(
+                market="cn",
+                profile="cn_preopen_v1",
+                shortlist_size=2,
+                universe_limit=50,
+                detail_limit=10,
+            )
+
+            baseline_shortlist = [
+                (item["symbol"], item["rank"], item["score"], item["raw_score"], item["final_score"])
+                for item in baseline["shortlist"]
+            ]
+            observed_shortlist = [
+                (item["symbol"], item["rank"], item["score"], item["raw_score"], item["final_score"])
+                for item in observed["shortlist"]
+            ]
+            self.assertEqual(observed_shortlist, baseline_shortlist)
+
+            candidate = observed["shortlist"][0]
+            observation = candidate["diagnostics"].get("cn_provider_observation")
+            self.assertIsInstance(observation, dict)
+            self.assertTrue(observation["observationOnly"])
+            self.assertFalse(observation["scoreContributionAllowed"])
+            self.assertEqual(
+                [item["stage"] for item in observation["entries"]],
+                ["universe", "snapshot", "scanner_diagnostics"],
+            )
+            self.assertEqual(
+                [item["providerName"] for item in observation["entries"]],
+                ["akshare", "akshare", "baostock"],
+            )
+            baostock_entry = observation["entries"][2]
+            self.assertEqual(baostock_entry["capability"], "cn_history_daily")
+            self.assertEqual(baostock_entry["freshness"], "stale")
+            self.assertEqual(baostock_entry["freshnessExpectation"], "t_plus_1_or_delayed")
+            self.assertEqual(baostock_entry["sourceType"], "public_proxy")
+            self.assertEqual(baostock_entry["sourceTier"], "third_party_free_api")
+            self.assertEqual(baostock_entry["trustLevel"], "usable_with_caution")
+            self.assertEqual(baostock_entry["asOf"], "2026-04-29")
+            self.assertEqual(baostock_entry["updatedAt"], "2026-04-30T06:00:00+08:00")
+            self.assertEqual(baostock_entry["attemptedAt"], "2026-04-30T06:00:00+08:00")
+            self.assertEqual(baostock_entry["degradationReason"], "cache_stale")
+            self.assertIsNone(baostock_entry["missingProviderReason"])
+            self.assertEqual(baostock_entry["adjustmentMethod"], "baostock_adjustflag_2")
+            self.assertTrue(baostock_entry["observationOnly"])
+            self.assertFalse(baostock_entry["scoreContributionAllowed"])
+
+            evidence_observation = candidate["diagnostics"]["evidence_packet"]["providerObservation"]
+            self.assertIsInstance(evidence_observation, dict)
+            self.assertEqual(evidence_observation["entries"][2]["providerName"], "baostock")
+            self.assertEqual(evidence_observation["entries"][2]["freshness"], "stale")
+
+    def test_attach_cn_provider_observation_metadata_projects_unavailable_baostock_cache_without_mutating_score(self) -> None:
+        service = MarketScannerService(
+            self.db,
+            data_manager=self.data_manager,
+            baostock_cn_history_observation_resolver=lambda symbol, history_diag: self._baostock_history_observation(
+                freshness="unavailable",
+                as_of=None,
+                updated_at=None,
+                attempted_at="2026-05-20T09:30:00+08:00",
+                degradation_reason="baostock_cache_missing",
+                missing_provider_reason="baostock_cache_missing",
+            )
+            if str(symbol) == "600001"
+            else {},
+        )
+        candidate = {
+            "symbol": "600001",
+            "name": "算力龙头",
+            "score": 82.4,
+            "raw_score": 82.4,
+            "final_score": 82.4,
+            "last_trade_date": "2026-04-30",
+            "_diagnostics": {
+                "history": {
+                    "source": "PytdxFetcher",
+                    "latest_trade_date": "2026-04-30",
+                }
+            },
+        }
+
+        service._attach_cn_provider_observation_metadata(
+            [candidate],
+            stock_list_source="AkshareFetcher",
+            snapshot_source="AkshareFetcher",
+        )
+
+        self.assertEqual(candidate["score"], 82.4)
+        observation = candidate["_diagnostics"]["cn_provider_observation"]
+        self.assertEqual([item["providerName"] for item in observation["entries"]], ["akshare", "akshare", "pytdx", "baostock"])
+        baostock_entry = observation["entries"][3]
+        self.assertEqual(baostock_entry["stage"], "scanner_diagnostics")
+        self.assertEqual(baostock_entry["freshness"], "unavailable")
+        self.assertIsNone(baostock_entry["asOf"])
+        self.assertIsNone(baostock_entry["updatedAt"])
+        self.assertEqual(baostock_entry["attemptedAt"], "2026-05-20T09:30:00+08:00")
+        self.assertEqual(baostock_entry["degradationReason"], "baostock_cache_missing")
+        self.assertEqual(baostock_entry["missingProviderReason"], "baostock_cache_missing")
+        self.assertEqual(baostock_entry["adjustmentMethod"], "baostock_adjustflag_2")
+        self.assertTrue(baostock_entry["cacheRequired"])
+        self.assertTrue(baostock_entry["backgroundRefreshRecommended"])
 
     def test_attach_cn_provider_observation_metadata_adds_pytdx_history_without_mutating_score(self) -> None:
         candidate = {

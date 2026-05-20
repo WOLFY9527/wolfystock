@@ -210,3 +210,66 @@ def test_build_scanner_evidence_packet_keeps_additive_provider_observation_metad
     assert packet["providerObservation"]["scoreContributionAllowed"] is False
     assert packet["providerObservation"]["entries"][0]["providerName"] == "pytdx"
     assert packet["providerObservation"]["entries"][0]["trustLevel"] == "usable_with_caution"
+
+
+def test_build_scanner_evidence_packet_preserves_baostock_scanner_diagnostics_sidecar_fields() -> None:
+    candidate = _candidate_fixture()
+    candidate["_diagnostics"]["cn_provider_observation"] = {
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "entries": [
+            {
+                "stage": "scanner_diagnostics",
+                "capability": "cn_history_daily",
+                "providerName": "baostock",
+                "providerId": "baostock",
+                "source": "baostock",
+                "sourceType": "public_proxy",
+                "sourceTier": "third_party_free_api",
+                "sourceLabel": "BaoStock",
+                "trustLevel": "usable_with_caution",
+                "freshness": "stale",
+                "freshnessExpectation": "t_plus_1_or_delayed",
+                "observationOnly": True,
+                "scoreContributionAllowed": False,
+                "keyRequired": False,
+                "cacheRequired": True,
+                "backgroundRefreshRecommended": True,
+                "asOf": "2026-05-08",
+                "updatedAt": "2026-05-09T06:00:00+08:00",
+                "attemptedAt": "2026-05-09T06:00:00+08:00",
+                "degradationReason": "cache_stale",
+                "missingProviderReason": None,
+                "adjustmentMethod": "baostock_adjustflag_2",
+            }
+        ],
+    }
+
+    packet = build_scanner_evidence_packet(
+        candidate,
+        {
+            "market": "cn",
+            "run_id": 9,
+            "evidence_version": "scanner_evidence_v1",
+            "score_explainability": {
+                "raw_score": 81.6,
+                "final_score": 40.0,
+                "cap_reason": "fallback_source",
+                "degradation_reason": "fallback_source",
+                "score_confidence": 0.4,
+                "evidence_coverage": 1.0,
+            },
+        },
+    )
+
+    entry = packet["providerObservation"]["entries"][0]
+    assert entry["providerName"] == "baostock"
+    assert entry["stage"] == "scanner_diagnostics"
+    assert entry["freshness"] == "stale"
+    assert entry["freshnessExpectation"] == "t_plus_1_or_delayed"
+    assert entry["attemptedAt"] == "2026-05-09T06:00:00+08:00"
+    assert entry["degradationReason"] == "cache_stale"
+    assert entry["missingProviderReason"] is None
+    assert entry["adjustmentMethod"] == "baostock_adjustflag_2"
+    assert entry["cacheRequired"] is True
+    assert entry["backgroundRefreshRecommended"] is True

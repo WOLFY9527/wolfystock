@@ -8,7 +8,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -24,6 +24,7 @@ from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER, normali
 from src.repositories.scanner_repo import ScannerRepository
 from src.repositories.stock_repo import StockRepository
 from src.contracts.source_confidence import coerce_source_confidence_contract
+from src.services.market_data_source_registry import resolve_source_label
 from src.services.scanner_ai_service import ScannerAiInterpretationService
 from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION, build_scanner_evidence_packet
 from src.services.scanner_factor_observations import attach_scanner_factor_observations
@@ -43,6 +44,8 @@ from src.utils.symbol_classification import (
 from src.utils.symbol_normalization import normalize_stock_code
 
 logger = logging.getLogger(__name__)
+
+BaoStockHistoryObservationResolver = Callable[[str, Mapping[str, Any]], Optional[Mapping[str, Any]]]
 
 DEFAULT_SCANNER_REVIEW_WINDOW_DAYS = 3
 DEFAULT_SCANNER_BENCHMARK_CODE = "000300"
@@ -389,6 +392,8 @@ def _normalize_cn_provider_id(value: Any) -> Optional[str]:
     if not text:
         return None
     compact = text.replace("_", "").replace("-", "")
+    if "baostock" in compact:
+        return "baostock"
     if "akshare" in compact:
         return "akshare"
     if "pytdx" in compact:
@@ -405,6 +410,7 @@ class MarketScannerService:
         data_manager: Optional[DataFetcherManager] = None,
         local_universe_cache_path: Optional[str] = None,
         ai_interpretation_service: Optional[ScannerAiInterpretationService] = None,
+        baostock_cn_history_observation_resolver: Optional[BaoStockHistoryObservationResolver] = None,
         *,
         owner_id: Optional[str] = None,
         include_all_owners: bool = False,
@@ -416,6 +422,7 @@ class MarketScannerService:
         self.owner_id = owner_id
         self.ai_service = ai_interpretation_service or ScannerAiInterpretationService(owner_user_id=owner_id)
         self.include_all_owners = bool(include_all_owners)
+        self.baostock_cn_history_observation_resolver = baostock_cn_history_observation_resolver
         configured_path = local_universe_cache_path or getattr(
             get_config(),
             "scanner_local_universe_path",
@@ -1079,6 +1086,7 @@ class MarketScannerService:
         as_of: Optional[str] = None,
         updated_at: Optional[str] = None,
         degradation_reason: Optional[str] = None,
+        extra_fields: Optional[Mapping[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         contract = get_provider_capability_support_contract(provider_id, capability)
         if contract is None:
@@ -1089,6 +1097,73 @@ class MarketScannerService:
         payload["degradationReason"] = degradation_reason
         payload["asOf"] = as_of
         payload["updatedAt"] = updated_at
+        if extra_fields:
+            payload.update(dict(extra_fields))
+        return payload
+
+    def _resolve_baostock_cn_history_observation(
+        self,
+        *,
+        candidate: Dict[str, Any],
+        history_diag: Mapping[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        diagnostics = dict(candidate.get("_diagnostics") or {})
+        raw_payload = diagnostics.get("baostock_cn_history_observation")
+        if not isinstance(raw_payload, Mapping) and self.baostock_cn_history_observation_resolver is not None:
+            try:
+                raw_payload = self.baostock_cn_history_observation_resolver(
+                    str(candidate.get("symbol") or ""),
+                    dict(history_diag or {}),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "BaoStock scanner diagnostics observation resolver failed for %s: %s",
+                    candidate.get("symbol"),
+                    exc,
+                )
+                raw_payload = {
+                    "freshness": "unavailable",
+                    "degradationReason": "baostock_observation_resolver_failed",
+                    "missingProviderReason": "baostock_observation_resolver_failed",
+                }
+
+        if not isinstance(raw_payload, Mapping) or not raw_payload:
+            return None
+
+        contract = get_provider_capability_support_contract("baostock", "cn_history_daily")
+        if contract is None:
+            return None
+
+        payload = contract.to_dict()
+        freshness = str(raw_payload.get("freshness") or "").strip().lower()
+        if freshness not in {"t_plus_1_or_delayed", "stale", "unavailable"}:
+            freshness = "unavailable"
+        payload.update(
+            {
+                "providerName": "baostock",
+                "providerId": "baostock",
+                "source": "baostock",
+                "sourceType": "public_proxy",
+                "sourceTier": "third_party_free_api",
+                "sourceLabel": resolve_source_label("baostock", source_type="public_proxy"),
+                "capability": "cn_history_daily",
+                "stage": "scanner_diagnostics",
+                "trustLevel": contract.trust_level,
+                "freshness": freshness,
+                "freshnessExpectation": contract.freshness_expectation,
+                "observationOnly": contract.observation_only,
+                "scoreContributionAllowed": contract.score_contribution_allowed,
+                "keyRequired": contract.key_required,
+                "cacheRequired": contract.cache_required,
+                "backgroundRefreshRecommended": contract.background_refresh_recommended,
+                "asOf": raw_payload.get("asOf"),
+                "updatedAt": raw_payload.get("updatedAt"),
+                "attemptedAt": raw_payload.get("attemptedAt"),
+                "degradationReason": raw_payload.get("degradationReason"),
+                "missingProviderReason": raw_payload.get("missingProviderReason"),
+                "adjustmentMethod": raw_payload.get("adjustmentMethod") or "baostock_adjustflag_2",
+            }
+        )
         return payload
 
     def _build_cn_provider_observation(
@@ -1150,6 +1225,19 @@ class MarketScannerService:
             as_of=history_as_of,
             updated_at=history_as_of,
         )
+        baostock_entry = self._resolve_baostock_cn_history_observation(
+            candidate=candidate,
+            history_diag=history_diag,
+        )
+        if baostock_entry is not None:
+            dedupe_key = (
+                str(baostock_entry.get("stage") or "scanner_diagnostics"),
+                "baostock",
+                "cn_history_daily",
+            )
+            if dedupe_key not in seen:
+                seen.add(dedupe_key)
+                entries.append(baostock_entry)
         if not entries:
             return None
 
