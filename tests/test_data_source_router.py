@@ -11,6 +11,7 @@ from src.services.data_source_router import (
     DataSourceRouteRequest,
     DataSourceRouter,
 )
+from src.services.data_source_router_diagnostics import build_data_source_route_diagnostic_snapshot
 
 
 def _ids(candidates: tuple[object, ...]) -> set[str]:
@@ -47,6 +48,7 @@ def test_sec_edgar_only_plans_filing_and_companyfacts_evidence_routes() -> None:
 
     assert _ids(filings_plan.primary_candidates) == {"sec_edgar"}
     assert _ids(quote_plan.primary_candidates) == set()
+    assert _ids(quote_plan.observation_candidates) == set()
     assert "sec_edgar" in _ids(quote_plan.forbidden_providers)
     assert "provider_forbidden_for_use_case" in quote_plan.reason_codes["sec_edgar"]
 
@@ -124,6 +126,27 @@ def test_coinbase_public_remains_crypto_venue_sidecar_only() -> None:
     assert "scoring_not_allowed" in market_temperature_plan.reason_codes["coinbase_public"]
 
 
+def test_liquidity_score_grade_crypto_quote_rejects_coinbase_public_as_scoring_provider() -> None:
+    liquidity_plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="crypto",
+            asset_type="crypto",
+            use_case="liquidity_score",
+            capability="quote",
+            freshness_need="live",
+            scoring_allowed=True,
+            product_id="BTC-USD",
+            allow_network=True,
+            reproducibility_required=False,
+        )
+    )
+
+    assert "coinbase_public" in _ids(liquidity_plan.forbidden_providers)
+    assert "provider_observation_only" in liquidity_plan.reason_codes["coinbase_public"]
+    assert "scoring_not_allowed" in liquidity_plan.reason_codes["coinbase_public"]
+    assert liquidity_plan.score_contribution_allowed is True
+
+
 def test_live_score_grade_routes_reject_yfinance_and_proxy_observations() -> None:
     plan = DataSourceRouter.resolve(
         DataSourceRouteRequest(
@@ -145,6 +168,80 @@ def test_live_score_grade_routes_reject_yfinance_and_proxy_observations() -> Non
     assert plan.required_source_types == ("official_public", "exchange_public", "cache_snapshot")
     assert plan.freshness_floor == "live"
     assert plan.trust_floor == "score_grade"
+
+
+def test_route_diagnostic_snapshot_serializes_required_fields_without_runtime_calls() -> None:
+    request = DataSourceRouteRequest(
+        market="US",
+        asset_type="equity",
+        use_case="filings_evidence",
+        capability="companyfacts",
+        freshness_need="daily",
+        scoring_allowed=False,
+        cik="0000320193",
+        allow_network=False,
+        reproducibility_required=False,
+    )
+
+    snapshot = build_data_source_route_diagnostic_snapshot(request).to_dict()
+
+    assert snapshot["diagnosticOnly"] is True
+    assert snapshot["providerRuntimeCalled"] is False
+    assert snapshot["networkCallsEnabled"] is False
+    assert set(snapshot) == {
+        "diagnosticOnly",
+        "providerRuntimeCalled",
+        "networkCallsEnabled",
+        "request",
+        "primaryCandidates",
+        "observationCandidates",
+        "forbiddenProviders",
+        "cacheRequired",
+        "backgroundRefreshRequired",
+        "scoreContributionAllowed",
+        "degradationPolicy",
+        "requiredSourceTypes",
+        "freshnessFloor",
+        "trustFloor",
+        "reasonCodes",
+    }
+
+    assert snapshot["request"] == {
+        "market": "US",
+        "assetType": "equity",
+        "useCase": "filings_evidence",
+        "capability": "companyfacts",
+        "freshnessNeed": "daily",
+        "scoringAllowed": False,
+        "symbol": None,
+        "productId": None,
+        "cik": "0000320193",
+        "asOf": None,
+        "allowNetwork": False,
+        "reproducibilityRequired": False,
+    }
+    assert len(snapshot["primaryCandidates"]) == 1
+    assert snapshot["primaryCandidates"][0] == {
+        "providerId": "sec_edgar",
+        "providerName": "SEC EDGAR",
+        "capability": "companyfacts",
+        "sourceType": "official_public",
+        "sourceTier": "official_public",
+        "trustLevel": "reliable_for_filings_metadata",
+        "freshnessExpectation": "filing_or_daily",
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+    }
+    assert snapshot["observationCandidates"] == []
+    assert "baostock" in {item["providerId"] for item in snapshot["forbiddenProviders"]}
+    assert snapshot["cacheRequired"] is True
+    assert snapshot["backgroundRefreshRequired"] is True
+    assert snapshot["scoreContributionAllowed"] is False
+    assert snapshot["degradationPolicy"] == "use_cached_evidence_or_explicit_unavailable"
+    assert snapshot["requiredSourceTypes"] == ["official_public", "cache_snapshot"]
+    assert snapshot["freshnessFloor"] == "daily"
+    assert snapshot["trustFloor"] == "filings_evidence"
+    assert snapshot["reasonCodes"]["plan"] == ["cache_required"]
 
 
 def test_backtest_requires_reproducible_local_or_stored_data() -> None:
