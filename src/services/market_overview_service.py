@@ -12,6 +12,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
+from data_provider.coinbase_public_provider import (
+    COINBASE_PUBLIC_PROVIDER_ID,
+    COINBASE_PUBLIC_PROVIDER_NAME,
+    COINBASE_PUBLIC_SOURCE_TIER,
+    COINBASE_PUBLIC_TRUST_LEVEL,
+    COINBASE_PUBLIC_VENUE,
+)
 from src.contracts.source_confidence import coerce_source_confidence_contract
 from src.services.cn_provider_health_service import CNProviderHealthService
 from src.services.execution_log_service import ExecutionLogService
@@ -1020,6 +1027,8 @@ class MarketOverviewService:
         snapshot = self._with_market_meta(snapshot, self._category_for_cache_key(cache_key))
         snapshot["items"] = [self._with_item_meta(item, self._category_for_cache_key(cache_key), snapshot) for item in snapshot.get("items", [])]
         snapshot["providerHealth"] = self._provider_health(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message)
+        if cache_key == "crypto":
+            snapshot["providerHealth"]["venueObservations"] = self._crypto_venue_observations(snapshot)
         snapshot = self._with_evidence_snapshot(snapshot, self._category_for_cache_key(cache_key))
         raw_response.update(self._provider_log_meta(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message))
         log_session_id = ExecutionLogService().record_market_overview_fetch(
@@ -1082,6 +1091,88 @@ class MarketOverviewService:
         )
         snapshot["logSessionId"] = log_session_id
         return snapshot
+
+    def _crypto_venue_observations(self, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "coinbase": self._coinbase_venue_observation_sidecar(snapshot),
+        }
+
+    def _coinbase_venue_observation_sidecar(self, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        records = [
+            self._normalize_coinbase_venue_observation_record(record)
+            for record in self._coinbase_venue_observation_records()
+            if isinstance(record, dict)
+        ]
+        if not records:
+            return {
+                "providerName": COINBASE_PUBLIC_PROVIDER_NAME,
+                "providerId": COINBASE_PUBLIC_PROVIDER_ID,
+                "source": COINBASE_PUBLIC_PROVIDER_ID,
+                "venue": COINBASE_PUBLIC_VENUE,
+                "sourceTier": COINBASE_PUBLIC_SOURCE_TIER,
+                "trustLevel": COINBASE_PUBLIC_TRUST_LEVEL,
+                "freshness": "unavailable",
+                "observationOnly": True,
+                "scoreContributionAllowed": False,
+                "productId": None,
+                "symbol": None,
+                "baseCurrency": None,
+                "quoteCurrency": None,
+                "asOf": None,
+                "updatedAt": snapshot.get("updatedAt") or snapshot.get("last_update") or _now_iso(),
+                "degradationReason": "observation_unavailable",
+                "sourceRef": f"{COINBASE_PUBLIC_PROVIDER_ID}:fixture_only",
+                "records": [],
+            }
+
+        primary = records[0]
+        as_of = primary.get("asOf") or primary.get("updatedAt")
+        freshness = str(primary.get("freshness") or "").strip().lower()
+        if not freshness:
+            freshness = get_freshness_status(
+                as_of or primary.get("updatedAt"),
+                "crypto",
+                COINBASE_PUBLIC_PROVIDER_ID,
+                False,
+                source_type=COINBASE_PUBLIC_SOURCE_TIER,
+            )["freshness"]
+        return {
+            "providerName": primary.get("providerName") or COINBASE_PUBLIC_PROVIDER_NAME,
+            "providerId": primary.get("providerId") or COINBASE_PUBLIC_PROVIDER_ID,
+            "source": primary.get("source") or COINBASE_PUBLIC_PROVIDER_ID,
+            "venue": primary.get("venue") or COINBASE_PUBLIC_VENUE,
+            "sourceTier": primary.get("sourceTier") or COINBASE_PUBLIC_SOURCE_TIER,
+            "trustLevel": primary.get("trustLevel") or COINBASE_PUBLIC_TRUST_LEVEL,
+            "freshness": freshness,
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "productId": primary.get("productId"),
+            "symbol": primary.get("symbol"),
+            "baseCurrency": primary.get("baseCurrency"),
+            "quoteCurrency": primary.get("quoteCurrency"),
+            "asOf": as_of,
+            "updatedAt": primary.get("updatedAt") or as_of or snapshot.get("updatedAt") or snapshot.get("last_update") or _now_iso(),
+            "degradationReason": primary.get("degradationReason"),
+            "sourceRef": primary.get("sourceRef") or f"{COINBASE_PUBLIC_PROVIDER_ID}:fixture_only",
+            "records": records,
+        }
+
+    def _normalize_coinbase_venue_observation_record(self, record: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            **record,
+            "providerName": record.get("providerName") or COINBASE_PUBLIC_PROVIDER_NAME,
+            "providerId": record.get("providerId") or COINBASE_PUBLIC_PROVIDER_ID,
+            "source": record.get("source") or COINBASE_PUBLIC_PROVIDER_ID,
+            "venue": record.get("venue") or COINBASE_PUBLIC_VENUE,
+            "sourceTier": record.get("sourceTier") or COINBASE_PUBLIC_SOURCE_TIER,
+            "trustLevel": record.get("trustLevel") or COINBASE_PUBLIC_TRUST_LEVEL,
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+        }
+
+    def _coinbase_venue_observation_records(self) -> List[Dict[str, Any]]:
+        # Coinbase stays fixture-only until explicitly wired; tests may inject parsed records here.
+        return []
 
     def _cn_indices_observation_provider_health(self) -> List[Dict[str, Any]]:
         return [

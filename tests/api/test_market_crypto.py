@@ -7,14 +7,18 @@ import unittest
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from api.v1.endpoints import market
+from data_provider.coinbase_public_provider import parse_ticker_payload
 from src.services.market_data_source_registry import project_source_provenance
 from src.services.market_overview_service import MarketOverviewService
 
 
 CN_TZ = timezone(timedelta(hours=8))
+COINBASE_FIXTURE_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "coinbase_public" / "ticker_sample.json"
 
 
 class MarketCryptoApiTestCase(unittest.TestCase):
@@ -357,6 +361,113 @@ class MarketCryptoApiTestCase(unittest.TestCase):
         self.assertEqual(btc_item["sourceLabel"], "Binance")
         self.assertFalse(btc_item["isFallback"])
         self.assertTrue(btc_item["trend"])
+
+    def test_get_crypto_attaches_coinbase_sidecar_without_adding_coinbase_items(self) -> None:
+        service = MarketOverviewService()
+        updated_at = datetime.now(CN_TZ).isoformat(timespec="seconds")
+        snapshot = {
+            "items": [
+                {
+                    "symbol": "BTC",
+                    "label": "Bitcoin",
+                    "price": 71000.0,
+                    "value": 71000.0,
+                    "change": 1.5,
+                    "changePercent": 1.5,
+                    "trend": [70000.0, 71000.0],
+                    "source": "binance",
+                    "last_update": updated_at,
+                }
+            ],
+            "last_update": updated_at,
+            "updatedAt": updated_at,
+            "asOf": updated_at,
+            "fallback_used": False,
+            "fallbackUsed": False,
+            "source": "binance",
+        }
+        coinbase_records = [
+            record.to_dict()
+            for record in parse_ticker_payload(
+                json.loads(COINBASE_FIXTURE_PATH.read_text(encoding="utf-8"))
+            ).records
+        ]
+
+        with (
+            patch.object(service, "_fetch_crypto_market_snapshot", return_value=snapshot),
+            patch.object(service, "_coinbase_venue_observation_records", return_value=coinbase_records),
+        ):
+            payload = service.get_crypto()
+
+        self.assertEqual([item["symbol"] for item in payload["items"]], ["BTC"])
+        self.assertNotIn("BTC-USD", {item["symbol"] for item in payload["items"]})
+        sidecar = payload["providerHealth"]["venueObservations"]["coinbase"]
+        self.assertEqual(sidecar["providerName"], "Coinbase Public")
+        self.assertEqual(sidecar["providerId"], "coinbase_public")
+        self.assertEqual(sidecar["source"], "coinbase_public")
+        self.assertEqual(sidecar["venue"], "coinbase")
+        self.assertEqual(sidecar["sourceTier"], "exchange_public")
+        self.assertEqual(sidecar["trustLevel"], "usable_with_caution")
+        self.assertTrue(sidecar["observationOnly"])
+        self.assertFalse(sidecar["scoreContributionAllowed"])
+        self.assertEqual(sidecar["productId"], "BTC-USD")
+        self.assertEqual(sidecar["symbol"], "BTC-USD")
+        self.assertEqual(sidecar["baseCurrency"], "BTC")
+        self.assertEqual(sidecar["quoteCurrency"], "USD")
+        self.assertEqual(sidecar["asOf"], "2026-05-19T10:15:30.123456Z")
+        self.assertEqual(sidecar["updatedAt"], "2026-05-19T10:15:30.123456Z")
+        self.assertEqual(sidecar["sourceRef"], "tests/fixtures/coinbase_public/ticker_sample.json")
+        self.assertIn(sidecar["freshness"], {"live", "delayed", "cached", "stale"})
+        self.assertEqual(len(sidecar["records"]), 1)
+        self.assertTrue(sidecar["records"][0]["observationOnly"])
+        self.assertFalse(sidecar["records"][0]["scoreContributionAllowed"])
+
+    def test_get_crypto_marks_coinbase_sidecar_unavailable_when_no_observation_exists(self) -> None:
+        service = MarketOverviewService()
+        updated_at = datetime.now(CN_TZ).isoformat(timespec="seconds")
+        snapshot = {
+            "items": [
+                {
+                    "symbol": "BTC",
+                    "label": "Bitcoin",
+                    "price": 71000.0,
+                    "value": 71000.0,
+                    "change": 1.5,
+                    "changePercent": 1.5,
+                    "trend": [70000.0, 71000.0],
+                    "source": "binance",
+                    "last_update": updated_at,
+                }
+            ],
+            "last_update": updated_at,
+            "updatedAt": updated_at,
+            "asOf": updated_at,
+            "fallback_used": False,
+            "fallbackUsed": False,
+            "source": "binance",
+        }
+
+        with patch.object(service, "_fetch_crypto_market_snapshot", return_value=snapshot):
+            payload = service.get_crypto()
+
+        sidecar = payload["providerHealth"]["venueObservations"]["coinbase"]
+        self.assertEqual(sidecar["providerId"], "coinbase_public")
+        self.assertEqual(sidecar["source"], "coinbase_public")
+        self.assertEqual(sidecar["venue"], "coinbase")
+        self.assertEqual(sidecar["sourceTier"], "exchange_public")
+        self.assertEqual(sidecar["trustLevel"], "usable_with_caution")
+        self.assertEqual(sidecar["freshness"], "unavailable")
+        self.assertTrue(sidecar["observationOnly"])
+        self.assertFalse(sidecar["scoreContributionAllowed"])
+        self.assertIsNone(sidecar["productId"])
+        self.assertIsNone(sidecar["symbol"])
+        self.assertIsNone(sidecar["baseCurrency"])
+        self.assertIsNone(sidecar["quoteCurrency"])
+        self.assertIsNone(sidecar["asOf"])
+        self.assertEqual(sidecar["updatedAt"], updated_at)
+        self.assertEqual(sidecar["degradationReason"], "observation_unavailable")
+        self.assertEqual(sidecar["sourceRef"], "coinbase_public:fixture_only")
+        self.assertEqual(sidecar["records"], [])
 
 
 if __name__ == "__main__":
