@@ -485,6 +485,13 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(result.eval_status, "completed")
         self.assertEqual([row.date.isoformat() for row in daily_rows], ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"])
 
+        recent = service.get_recent_evaluations(code="AAPL", eval_window_days=3, limit=10, page=1)
+        data_quality = recent["items"][0]["data_quality"]
+        self.assertEqual(data_quality["source"], "local_us_parquet")
+        self.assertEqual(data_quality["authority_status"], "allowed")
+        self.assertEqual(data_quality["authority_source_type"], "cache_snapshot")
+        self.assertEqual(data_quality["authority_reason_codes"], [])
+
     def test_sample_status_reports_maturity_window_exclusion_for_recent_samples(self) -> None:
         recent_created_at = datetime.now() - timedelta(days=2)
         old_created_at = datetime.now() - timedelta(days=20)

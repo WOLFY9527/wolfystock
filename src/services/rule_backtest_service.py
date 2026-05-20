@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 
 from src.core.rule_backtest_engine import ExecutionModelConfig, ParsedStrategy, RuleBacktestEngine, RuleBacktestParser, _safe_float
 from src.repositories.rule_backtest_repo import RuleBacktestRepository
+from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
 from src.services.backtest_professional_readiness import build_backtest_professional_readiness
 from src.repositories.stock_repo import StockRepository
 from src.services.local_data_preflight_service import LocalDataPreflightService
@@ -2774,6 +2775,15 @@ class RuleBacktestService:
                 )
                 if df is None or df.empty:
                     return 0
+                authority = assess_backtest_data_source_eligibility(code=code, source=source)
+                if authority.rejected:
+                    logger.warning(
+                        "Rejected rule backtest date-range source for %s: %s (%s)",
+                        code,
+                        source,
+                        ",".join(authority.reason_codes),
+                    )
+                    return 0
                 return self.stock_repo.save_dataframe(df, code=code, data_source=source or "Unknown")
             except Exception as exc:
                 logger.warning("Failed to ensure date-range rule backtest history for %s: %s", code, exc)
@@ -2796,6 +2806,15 @@ class RuleBacktestService:
                 log_context="[rule-backtest history]",
             )
             if df is None or df.empty:
+                return 0
+            authority = assess_backtest_data_source_eligibility(code=code, source=source)
+            if authority.rejected:
+                logger.warning(
+                    "Rejected rule backtest history source for %s: %s (%s)",
+                    code,
+                    source,
+                    ",".join(authority.reason_codes),
+                )
                 return 0
             return self.stock_repo.save_dataframe(df, code=code, data_source=source or "Unknown")
         except Exception as exc:
@@ -2925,6 +2944,7 @@ class RuleBacktestService:
             if source and source not in source_values:
                 source_values.append(source)
         source = source_values[0] if source_values else "database_cache"
+        authority = assess_backtest_data_source_eligibility(code=code, source=source)
         expected_dates = (
             self._business_dates(requested_start, requested_end)
             if requested_start is not None and requested_end is not None
@@ -2957,6 +2977,18 @@ class RuleBacktestService:
         warnings.append(self._quality_warning("dividends_splits_unknown", "Dividend and split handling is unknown for this result."))
         if source in {"database_cache", "Unknown"}:
             warnings.append(self._quality_warning("source_metadata_incomplete", "Stored bars do not expose a concrete upstream provider.", "info"))
+        if authority.authority_status != "allowed":
+            warnings.append(
+                self._quality_warning(
+                    "backtest_authority_rejected" if authority.rejected else "backtest_authority_degraded",
+                    (
+                        f"Backtest authority source {source} is rejected for reproducible authority."
+                        if authority.rejected
+                        else f"Backtest authority source {source} is fill-only and not reproducible authority."
+                    ),
+                    "warning",
+                )
+            )
 
         quality_score = 1.0
         quality_score -= min(missing_bar_count, 10) * 0.03
@@ -2970,6 +3002,9 @@ class RuleBacktestService:
             "benchmark_symbol": benchmark_payload.get("code"),
             "provider": self._provider_label(source),
             "source": source,
+            "authority_status": authority.authority_status,
+            "authority_source_type": authority.source_type,
+            "authority_reason_codes": list(authority.reason_codes),
             "frequency": "1d",
             "requested_start": requested_start.isoformat() if requested_start else None,
             "requested_end": requested_end.isoformat() if requested_end else None,

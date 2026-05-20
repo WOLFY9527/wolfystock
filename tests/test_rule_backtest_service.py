@@ -1005,6 +1005,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertGreater(data_quality["bar_count"], 0)
         self.assertIn("actual_start", data_quality)
         self.assertIn("actual_end", data_quality)
+        self.assertEqual(data_quality["authority_status"], "allowed")
+        self.assertEqual(data_quality["authority_source_type"], "cache_snapshot")
+        self.assertEqual(data_quality["authority_reason_codes"], [])
         self.assertEqual(data_quality["adjustment_mode"], "unknown")
         self.assertEqual(data_quality["dividends_handled"], "unknown")
         self.assertEqual(data_quality["splits_handled"], "unknown")
@@ -1017,6 +1020,32 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(assumptions["fill_price"], "open")
         self.assertTrue(assumptions["allow_fractional_shares"])
         self.assertEqual(response["summary"]["data_quality"], data_quality)
+
+    def test_rule_backtest_data_quality_marks_proxy_history_as_degraded_fill_only(self) -> None:
+        service = RuleBacktestService(self.db)
+        with self.db.get_session() as session:
+            rows = session.query(StockDaily).filter(StockDaily.code == "600519").all()
+            for row in rows:
+                row.data_source = "yfinance"
+            session.commit()
+
+        with patch.object(service, "_ensure_market_history", return_value=0), patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                start_date="2024-01-05",
+                end_date="2024-01-20",
+                lookback_bars=20,
+                benchmark_mode="same_symbol_buy_and_hold",
+                confirmed=True,
+            )
+
+        data_quality = response["data_quality"]
+        self.assertEqual(data_quality["source"], "yfinance")
+        self.assertEqual(data_quality["authority_status"], "degraded_fill_only")
+        self.assertEqual(data_quality["authority_source_type"], "unofficial_proxy")
+        self.assertIn("proxy_source_not_reproducible", data_quality["authority_reason_codes"])
+        self.assertTrue(any(warning["code"] == "backtest_authority_degraded" for warning in data_quality["warnings"]))
 
     def test_rule_backtest_data_quality_reports_missing_bars_and_anomalies(self) -> None:
         service = RuleBacktestService(self.db)

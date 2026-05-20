@@ -15,6 +15,7 @@ from src.config import get_config
 from src.core.backtest_engine import OVERALL_SENTINEL_CODE, BacktestEngine, EvaluationConfig
 from src.repositories.backtest_repo import BacktestRepository
 from src.repositories.stock_repo import StockRepository
+from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
 from src.storage import AnalysisHistory, BacktestResult, BacktestRun, BacktestSummary, DatabaseManager, StockDaily
 
@@ -801,6 +802,7 @@ class BacktestService:
         market_data_sources: List[str],
     ) -> Dict[str, Any]:
         source = market_data_sources[0] if market_data_sources else "database_cache"
+        authority = assess_backtest_data_source_eligibility(code=code, source=source)
         requested_end = analysis_date + timedelta(days=max(eval_window_days * 2, eval_window_days)) if analysis_date else None
         warnings = [
             {
@@ -822,10 +824,25 @@ class BacktestService:
                     "message": "Stored bars do not expose a concrete upstream provider.",
                 }
             )
+        if authority.authority_status != "allowed":
+            warnings.append(
+                {
+                    "code": "backtest_authority_rejected" if authority.rejected else "backtest_authority_degraded",
+                    "severity": "warning",
+                    "message": (
+                        f"Backtest authority source {source} is rejected for reproducible authority."
+                        if authority.rejected
+                        else f"Backtest authority source {source} is fill-only and not reproducible authority."
+                    ),
+                }
+            )
         return {
             "symbol": code,
             "provider": source,
             "source": source,
+            "authority_status": authority.authority_status,
+            "authority_source_type": authority.source_type,
+            "authority_reason_codes": list(authority.reason_codes),
             "frequency": "1d",
             "requested_start": analysis_date.isoformat() if analysis_date else None,
             "requested_end": requested_end.isoformat() if requested_end else None,
@@ -850,6 +867,15 @@ class BacktestService:
                 log_context="[historical-eval fill]",
             )
             if df is None or df.empty:
+                return None
+            authority = assess_backtest_data_source_eligibility(code=code, source=source)
+            if authority.rejected:
+                logger.warning(
+                    "Rejected historical backtest fill source for %s: %s (%s)",
+                    code,
+                    source,
+                    ",".join(authority.reason_codes),
+                )
                 return None
             self.db.save_daily_data(df, code=code, data_source=source)
             return self._build_source_metadata_from_fetch_source(code=code, source=source)
@@ -890,6 +916,15 @@ class BacktestService:
                 log_context="[historical-eval warmup]",
             )
             if df is None or df.empty:
+                return 0, None
+            authority = assess_backtest_data_source_eligibility(code=code, source=source)
+            if authority.rejected:
+                logger.warning(
+                    "Rejected historical backtest warmup source for %s: %s (%s)",
+                    code,
+                    source,
+                    ",".join(authority.reason_codes),
+                )
                 return 0, None
             saved_count = self.db.save_daily_data(df, code=code, data_source=source)
             return saved_count, self._build_source_metadata_from_fetch_source(code=code, source=source)
