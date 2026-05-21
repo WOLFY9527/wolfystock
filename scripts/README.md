@@ -62,6 +62,20 @@ are not the main required CI gate:
 - Data/index utilities such as `generate_index_from_csv.py` and
   `generate_stock_index.py`: content/build helpers for generated index data.
 
+### Provider activation diagnostics
+
+These bounded diagnostics check whether specific optional live providers can be
+activated and whether their sanitized status summaries satisfy the expected
+freshness and source-metadata gates:
+
+- `python3 scripts/diagnose_official_macro_activation.py`
+- `python3 scripts/diagnose_rotation_alpaca_activation.py`
+
+They may call only their specific live providers during the probe and should
+print sanitized status summaries only. Passing either diagnostic is operator
+evidence for that provider activation path, not full release approval and not a
+substitute for the normal release or CI gates.
+
 ### Release/deploy/operator workflows
 
 These scripts support release review, secret scanning, packaging, staging, or
