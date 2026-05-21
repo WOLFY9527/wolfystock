@@ -41,12 +41,23 @@ class LiquidityMonitorEvidenceInput(BaseModel):
     source: str
     sourceLabel: Optional[str] = None
     sourceType: Optional[str] = None
+    sourceTier: Optional[str] = None
+    trustLevel: Optional[str] = None
     asOf: Optional[str] = None
     freshness: EvidenceFreshnessLabel
     isFallback: bool = False
     isStale: bool = False
     isPartial: bool = False
     isUnavailable: bool = False
+    observationOnly: Optional[bool] = None
+    sourceAuthorityAllowed: Optional[bool] = None
+    scoreContributionAllowed: Optional[bool] = None
+    sourceAuthorityReason: Optional[str] = None
+    sourceAuthorityRouteRejected: Optional[bool] = None
+    routeRejectedReasonCodes: Optional[list[str]] = None
+    officialSeriesId: Optional[str] = None
+    officialObservationDate: Optional[str] = None
+    officialAsOf: Optional[str] = None
     coverage: Optional[float] = Field(default=None, ge=0, le=1)
     confidenceWeight: float = Field(ge=0, le=1)
     degradationReason: Optional[str] = None

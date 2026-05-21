@@ -125,6 +125,19 @@ LIQUIDITY_INDICATOR_REQUIRED_INPUTS = {
 LIQUIDITY_INPUT_ALIASES = {
     "VIXCLS": "VIX",
 }
+EVIDENCE_INPUT_METADATA_FIELDS = (
+    "sourceTier",
+    "trustLevel",
+    "observationOnly",
+    "sourceAuthorityAllowed",
+    "scoreContributionAllowed",
+    "sourceAuthorityReason",
+    "sourceAuthorityRouteRejected",
+    "routeRejectedReasonCodes",
+    "officialSeriesId",
+    "officialObservationDate",
+    "officialAsOf",
+)
 
 LIQUIDITY_INDICATOR_ACTIVATION_HINTS = {
     "crypto_spot_momentum": "Binance 现货输入 fresh 时可直接计分；缺少 BTC / ETH / BNB 时保持不可用。",
@@ -856,10 +869,14 @@ class LiquidityMonitorService:
             evidence=self._indicator_evidence(
                 status=status,
                 freshness=freshness,
-                inputs=[
-                    self._source_confidence_input_from_component(component)
-                    for component in components
-                ],
+                inputs=(
+                    [self._source_confidence_input_from_component(component) for component in components]
+                    + (
+                        [self._source_confidence_input_from_component(credit_observation)]
+                        if credit_observation is not None
+                        else []
+                    )
+                ),
                 expected_input_count=max(2, len(yield_components)) if components else 2,
             ),
         )
@@ -1189,12 +1206,8 @@ class LiquidityMonitorService:
                     "label": label,
                     "change": change,
                     "signal": -change if invert else change,
-                    "freshness": self._item_freshness(item, panel),
                     "panel": panel,
-                    "source": item.get("source") or panel.source,
-                    "sourceLabel": item.get("sourceLabel") or panel.payload.get("sourceLabel"),
-                    "sourceType": item.get("sourceType") or panel.payload.get("sourceType"),
-                    "asOf": item.get("asOf") or item.get("updatedAt") or panel.as_of or panel.updated_at,
+                    **self._component_projection_meta(item, panel),
                 }
             )
         return items
@@ -1216,11 +1229,7 @@ class LiquidityMonitorService:
                     "kind": "yield",
                     "change": change,
                     "signal": -change,
-                    "freshness": self._item_freshness(item, panel),
-                    "source": item.get("source") or panel.source,
-                    "sourceLabel": item.get("sourceLabel") or panel.payload.get("sourceLabel"),
-                    "sourceType": item.get("sourceType") or panel.payload.get("sourceType"),
-                    "asOf": item.get("asOf") or item.get("updatedAt") or panel.as_of or panel.updated_at,
+                    **self._component_projection_meta(item, panel),
                 }
             )
         for symbol in ("SOFR",):
@@ -1237,11 +1246,7 @@ class LiquidityMonitorService:
                     "kind": "observation",
                     "value": value,
                     "unit": str(item.get("unit") or ""),
-                    "freshness": self._item_freshness(item, panel),
-                    "source": item.get("source") or panel.source,
-                    "sourceLabel": item.get("sourceLabel") or panel.payload.get("sourceLabel"),
-                    "sourceType": item.get("sourceType") or panel.payload.get("sourceType"),
-                    "asOf": item.get("asOf") or item.get("updatedAt") or panel.as_of or panel.updated_at,
+                    **self._component_projection_meta(item, panel),
                 }
             )
         for symbol in ("US10Y2Y", "US10Y3M"):
@@ -1258,11 +1263,7 @@ class LiquidityMonitorService:
                     "kind": "curve",
                     "value": value,
                     "unit": str(item.get("unit") or ""),
-                    "freshness": self._item_freshness(item, panel),
-                    "source": item.get("source") or panel.source,
-                    "sourceLabel": item.get("sourceLabel") or panel.payload.get("sourceLabel"),
-                    "sourceType": item.get("sourceType") or panel.payload.get("sourceType"),
-                    "asOf": item.get("asOf") or item.get("updatedAt") or panel.as_of or panel.updated_at,
+                    **self._component_projection_meta(item, panel),
                 }
             )
         return items
@@ -1280,8 +1281,12 @@ class LiquidityMonitorService:
         if value is None:
             return None
         return {
+            "symbol": "CREDIT",
+            "key": "CREDIT",
+            "label": str(item.get("label") or "Credit spreads"),
             "value": value,
             "unit": str(item.get("unit") or ""),
+            **self._component_projection_meta(item, panel),
         }
 
     def _extract_us_breadth_components(self, panel: PanelState) -> Optional[Dict[str, Any]]:
@@ -1321,15 +1326,7 @@ class LiquidityMonitorService:
                 negative_votes += 1
             freshness_values.append(self._item_freshness(item, panel))
             proxies.append({"symbol": symbol, "label": label, "value": value})
-            proxies[-1].update(
-                {
-                    "source": item.get("source") or panel.source,
-                    "sourceLabel": item.get("sourceLabel") or panel.payload.get("sourceLabel"),
-                    "sourceType": item.get("sourceType") or panel.payload.get("sourceType"),
-                    "asOf": item.get("asOf") or item.get("updatedAt") or panel.as_of or panel.updated_at,
-                    "freshness": self._item_freshness(item, panel),
-                }
-            )
+            proxies[-1].update(self._component_projection_meta(item, panel))
         if up_value is None or down_value is None:
             if not proxies:
                 return None
@@ -1372,15 +1369,7 @@ class LiquidityMonitorService:
                 negative_votes += 1
             freshness_values.append(self._item_freshness(item, panel))
             flows.append({"symbol": symbol, "label": flow_labels[symbol], "value": value})
-            flows[-1].update(
-                {
-                    "source": item.get("source") or panel.source,
-                    "sourceLabel": item.get("sourceLabel") or panel.payload.get("sourceLabel"),
-                    "sourceType": item.get("sourceType") or panel.payload.get("sourceType"),
-                    "asOf": item.get("asOf") or item.get("updatedAt") or panel.as_of or panel.updated_at,
-                    "freshness": self._item_freshness(item, panel),
-                }
-            )
+            flows[-1].update(self._component_projection_meta(item, panel))
         if not flows:
             return None
         breadth_summary = self._extract_cn_breadth_summary(breadth_panel)
@@ -1393,6 +1382,24 @@ class LiquidityMonitorService:
             "breadth_summary": breadth_summary["summary"] if breadth_summary is not None else None,
             "freshness": self._weakest_freshness(freshness_values),
         }
+
+    def _component_projection_meta(self, item: Dict[str, Any], panel: PanelState) -> Dict[str, Any]:
+        freshness = self._item_freshness(item, panel)
+        metadata = {
+            "source": item.get("source") or panel.source,
+            "sourceLabel": item.get("sourceLabel") or panel.payload.get("sourceLabel"),
+            "sourceType": item.get("sourceType") or panel.payload.get("sourceType"),
+            "asOf": item.get("asOf") or item.get("updatedAt") or panel.as_of or panel.updated_at,
+            "freshness": freshness,
+            "isFallback": bool(item.get("isFallback") or item.get("fallbackUsed") or panel.is_fallback),
+            "isStale": bool(item.get("isStale") or freshness == "stale" or panel.is_stale),
+            "isPartial": bool(item.get("isPartial")),
+            "isUnavailable": bool(item.get("isUnavailable")),
+        }
+        for field in EVIDENCE_INPUT_METADATA_FIELDS:
+            if field in item:
+                metadata[field] = copy.deepcopy(item.get(field))
+        return metadata
 
     def _extract_cn_breadth_summary(self, panel: PanelState) -> Optional[Dict[str, Any]]:
         symbol_map = self._reliable_symbol_map(panel, {"EFFECT", "ADV_RATIO"})
@@ -1851,6 +1858,12 @@ class LiquidityMonitorService:
             source_type=component.get("sourceType"),
             as_of=component.get("asOf"),
             freshness=str(component.get("freshness") or "unavailable"),
+            is_fallback=bool(component.get("isFallback")),
+            is_stale=bool(component.get("isStale")),
+            is_partial=bool(component.get("isPartial")),
+            is_unavailable=bool(component.get("isUnavailable")),
+            degradation_reason=self._text(component.get("degradationReason")),
+            metadata=component,
         )
 
     def _source_confidence_input_from_item(
@@ -1879,6 +1892,7 @@ class LiquidityMonitorService:
             coverage=coverage,
             is_unavailable=is_unavailable,
             degradation_reason=self._text(item.get("degradationReason")),
+            metadata=item,
         )
 
     def _source_confidence_input_from_panel(
@@ -1905,6 +1919,7 @@ class LiquidityMonitorService:
             is_partial=not is_unavailable and coverage < 1.0,
             is_unavailable=input_is_unavailable,
             degradation_reason=self._panel_unavailable_reason(panel, "liquidity_input_unavailable") if is_unavailable else None,
+            metadata=panel.payload,
         )
 
     def _source_confidence_input(
@@ -1923,6 +1938,7 @@ class LiquidityMonitorService:
         is_unavailable: bool = False,
         coverage: Optional[float] = None,
         degradation_reason: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         explicit_source_type = self._text(source_type)
         provenance = project_source_provenance(
@@ -1959,7 +1975,7 @@ class LiquidityMonitorService:
                 "degradationReason": degradation_reason,
             }
         ).to_dict()
-        return {
+        result = {
             "key": key,
             "label": label,
             "source": contract["source"],
@@ -1976,6 +1992,11 @@ class LiquidityMonitorService:
             "degradationReason": contract["degradationReason"],
             "capReason": contract["capReason"],
         }
+        if metadata:
+            for field in EVIDENCE_INPUT_METADATA_FIELDS:
+                if field in metadata:
+                    result[field] = copy.deepcopy(metadata.get(field))
+        return result
 
     def _indicator_coverage_diagnostics(
         self,

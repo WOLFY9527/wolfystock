@@ -255,7 +255,7 @@ def _cache_only_liquidity_service_payload(build_seed) -> dict[str, Any]:
             side_effect=RuntimeError("network disabled for golden fixtures"),
         ),
     ):
-        return LiquidityMonitorResponse(**service.get_liquidity_monitor()).model_dump()
+        return LiquidityMonitorResponse(**service.get_liquidity_monitor()).model_dump(exclude_none=True)
 
 
 def _seed_official_cached_macro_rates_context(
@@ -2147,6 +2147,237 @@ def test_liquidity_evidence_snapshot_marks_partial_inputs_without_claiming_live(
     assert all(item["confidenceWeight"] == 1.0 for item in evidence["inputs"])
 
 
+def test_liquidity_api_facing_evidence_preserves_official_macro_authority_metadata(
+    isolated_db: DatabaseManager,
+) -> None:
+    del isolated_db
+
+    def build_seed(service: LiquidityMonitorService, quote_map: dict[str, _FakeHistoryFrame]) -> None:
+        del quote_map
+        official_as_of = "2026-05-07T10:00:00+08:00"
+        official_observation_date = "2026-05-06"
+        service.cache.set(
+            "macro",
+            _cache_entry(
+                source="mixed",
+                freshness="cached",
+                items=[
+                    {
+                        "symbol": "VIX",
+                        "label": "VIX",
+                        "value": 18.22,
+                        "changePercent": -4.66,
+                        "source": "fred",
+                        "sourceId": "fred:VIXCLS",
+                        "sourceType": "official_public",
+                        "sourceLabel": "FRED VIXCLS",
+                        "sourceTier": "official_public",
+                        "trustLevel": "reliable",
+                        "freshness": "cached",
+                        "asOf": official_as_of,
+                        "updatedAt": official_as_of,
+                        "isFallback": False,
+                        "isUnavailable": False,
+                        "isPartial": False,
+                        "observationOnly": False,
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": True,
+                        "sourceAuthorityReason": None,
+                        "sourceAuthorityRouteRejected": False,
+                        "routeRejectedReasonCodes": [],
+                        "officialSeriesId": "VIXCLS",
+                        "officialObservationDate": official_observation_date,
+                        "officialAsOf": official_observation_date,
+                    },
+                    {
+                        "symbol": "US2Y",
+                        "label": "US 2Y",
+                        "value": 4.62,
+                        "changePercent": -0.22,
+                        "source": "treasury",
+                        "sourceId": "treasury:DGS2",
+                        "sourceType": "official_public",
+                        "sourceLabel": "US Treasury",
+                        "sourceTier": "official_public",
+                        "trustLevel": "reliable",
+                        "freshness": "cached",
+                        "unit": "%",
+                        "asOf": official_as_of,
+                        "updatedAt": official_as_of,
+                        "isFallback": False,
+                        "isUnavailable": False,
+                        "isPartial": False,
+                        "observationOnly": False,
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": True,
+                        "sourceAuthorityReason": None,
+                        "sourceAuthorityRouteRejected": False,
+                        "routeRejectedReasonCodes": [],
+                        "officialSeriesId": "DGS2",
+                        "officialObservationDate": official_observation_date,
+                        "officialAsOf": official_observation_date,
+                    },
+                    {
+                        "symbol": "US10Y",
+                        "label": "US 10Y",
+                        "value": 4.31,
+                        "changePercent": -0.31,
+                        "source": "treasury",
+                        "sourceId": "treasury:DGS10",
+                        "sourceType": "official_public",
+                        "sourceLabel": "US Treasury",
+                        "sourceTier": "official_public",
+                        "trustLevel": "reliable",
+                        "freshness": "cached",
+                        "unit": "%",
+                        "asOf": official_as_of,
+                        "updatedAt": official_as_of,
+                        "isFallback": False,
+                        "isUnavailable": False,
+                        "isPartial": False,
+                        "observationOnly": False,
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": True,
+                        "sourceAuthorityReason": None,
+                        "sourceAuthorityRouteRejected": False,
+                        "routeRejectedReasonCodes": [],
+                        "officialSeriesId": "DGS10",
+                        "officialObservationDate": official_observation_date,
+                        "officialAsOf": official_observation_date,
+                    },
+                    {
+                        "symbol": "US30Y",
+                        "label": "US 30Y",
+                        "value": 4.58,
+                        "changePercent": -0.18,
+                        "source": "treasury",
+                        "sourceId": "treasury:DGS30",
+                        "sourceType": "official_public",
+                        "sourceLabel": "US Treasury",
+                        "sourceTier": "official_public",
+                        "trustLevel": "reliable",
+                        "freshness": "cached",
+                        "unit": "%",
+                        "asOf": official_as_of,
+                        "updatedAt": official_as_of,
+                        "isFallback": False,
+                        "isUnavailable": False,
+                        "isPartial": False,
+                        "observationOnly": False,
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": True,
+                        "sourceAuthorityReason": None,
+                        "sourceAuthorityRouteRejected": False,
+                        "routeRejectedReasonCodes": [],
+                        "officialSeriesId": "DGS30",
+                        "officialObservationDate": official_observation_date,
+                        "officialAsOf": official_observation_date,
+                    },
+                    {
+                        "symbol": "SOFR",
+                        "label": "SOFR",
+                        "value": 5.31,
+                        "source": "fred",
+                        "sourceId": "fred:SOFR",
+                        "sourceType": "official_public",
+                        "sourceLabel": "FRED SOFR",
+                        "sourceTier": "official_public",
+                        "trustLevel": "reliable",
+                        "freshness": "cached",
+                        "unit": "%",
+                        "asOf": official_as_of,
+                        "updatedAt": official_as_of,
+                        "isFallback": False,
+                        "isUnavailable": False,
+                        "isPartial": False,
+                        "observationOnly": False,
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": True,
+                        "sourceAuthorityReason": None,
+                        "sourceAuthorityRouteRejected": False,
+                        "routeRejectedReasonCodes": [],
+                        "officialSeriesId": "SOFR",
+                        "officialObservationDate": official_observation_date,
+                        "officialAsOf": official_observation_date,
+                    },
+                    {
+                        "symbol": "CREDIT",
+                        "label": "Credit spreads",
+                        "value": 3.75,
+                        "source": "fred",
+                        "sourceId": "fred:BAMLH0A0HYM2",
+                        "sourceType": "official_public",
+                        "sourceLabel": "FRED BAMLH0A0HYM2",
+                        "sourceTier": "official_public",
+                        "trustLevel": "reliable",
+                        "freshness": "cached",
+                        "unit": "bps",
+                        "asOf": official_as_of,
+                        "updatedAt": official_as_of,
+                        "isFallback": False,
+                        "isUnavailable": False,
+                        "isPartial": False,
+                        "observationOnly": True,
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": False,
+                        "sourceAuthorityReason": None,
+                        "sourceAuthorityRouteRejected": False,
+                        "routeRejectedReasonCodes": [],
+                        "officialSeriesId": "BAMLH0A0HYM2",
+                        "officialObservationDate": official_observation_date,
+                        "officialAsOf": official_observation_date,
+                    },
+                ],
+                updated_at=official_as_of,
+                as_of=official_as_of,
+            ),
+            ttl_seconds=30,
+        )
+
+    payload = _cache_only_liquidity_service_payload(build_seed)
+    indicators = _indicators_by_key(payload)
+
+    vix_inputs = {item["key"]: item for item in indicators["vix_pressure"]["evidence"]["inputs"]}
+    rates_inputs = {item["key"]: item for item in indicators["us_rates_pressure"]["evidence"]["inputs"]}
+
+    assert vix_inputs["VIX"]["sourceAuthorityAllowed"] is True
+    assert vix_inputs["VIX"]["scoreContributionAllowed"] is True
+    assert vix_inputs["VIX"]["sourceAuthorityRouteRejected"] is False
+    assert vix_inputs["VIX"]["officialSeriesId"] == "VIXCLS"
+    assert vix_inputs["VIX"]["officialObservationDate"] == "2026-05-06"
+    assert vix_inputs["VIX"]["officialAsOf"] == "2026-05-06"
+    assert vix_inputs["VIX"]["sourceTier"] == "official_public"
+    assert vix_inputs["VIX"]["trustLevel"] == "reliable"
+    assert vix_inputs["VIX"]["observationOnly"] is False
+    assert vix_inputs["VIX"]["routeRejectedReasonCodes"] == []
+
+    for key, series_id in {
+        "US2Y": "DGS2",
+        "US10Y": "DGS10",
+        "US30Y": "DGS30",
+        "SOFR": "SOFR",
+    }.items():
+        assert rates_inputs[key]["sourceAuthorityAllowed"] is True
+        assert rates_inputs[key]["scoreContributionAllowed"] is True
+        assert rates_inputs[key]["officialSeriesId"] == series_id
+        assert rates_inputs[key]["officialObservationDate"] == "2026-05-06"
+        assert rates_inputs[key]["officialAsOf"] == "2026-05-06"
+        assert rates_inputs[key]["sourceTier"] == "official_public"
+        assert rates_inputs[key]["trustLevel"] == "reliable"
+        assert rates_inputs[key]["observationOnly"] is False
+        assert rates_inputs[key]["routeRejectedReasonCodes"] == []
+
+    assert rates_inputs["CREDIT"]["sourceAuthorityAllowed"] is True
+    assert rates_inputs["CREDIT"]["scoreContributionAllowed"] is False
+    assert rates_inputs["CREDIT"]["observationOnly"] is True
+    assert rates_inputs["CREDIT"]["officialSeriesId"] == "BAMLH0A0HYM2"
+    assert rates_inputs["CREDIT"]["officialObservationDate"] == "2026-05-06"
+    assert rates_inputs["CREDIT"]["officialAsOf"] == "2026-05-06"
+    assert rates_inputs["CREDIT"]["sourceTier"] == "official_public"
+    assert rates_inputs["CREDIT"]["trustLevel"] == "reliable"
+    assert rates_inputs["CREDIT"]["routeRejectedReasonCodes"] == []
+
+
 def test_liquidity_evidence_snapshot_marks_unavailable_inputs_without_coverage(
     isolated_db: DatabaseManager,
 ) -> None:
@@ -3767,7 +3998,7 @@ def test_liquidity_monitor_golden_fixtures_match_public_dto_contract(
     build_seed,
 ) -> None:
     del isolated_db
-    expected = LiquidityMonitorResponse(**_load_fixture(fixture_name)).model_dump()
+    expected = LiquidityMonitorResponse(**_load_fixture(fixture_name)).model_dump(exclude_none=True)
     actual = _cache_only_liquidity_service_payload(build_seed)
 
     assert actual == expected

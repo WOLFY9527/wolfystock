@@ -10,8 +10,11 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from api.v1.endpoints import market
+from api.v1.endpoints import market_overview
 from src.services.market_overview_service import (
     MarketOverviewService,
     classify_market_payload_reliability,
@@ -714,6 +717,96 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
             assert item["sourceTier"] == "official_public"
             assert item["sourceAuthorityReason"] is None
             assert item["routeRejectedReasonCodes"] == []
+
+    def test_market_overview_macro_api_preserves_official_authority_projection_fields(self) -> None:
+        app = FastAPI()
+        app.include_router(market_overview.router, prefix="/api/v1/market-overview")
+
+        payload = {
+            "panel_name": "MacroIndicatorsCard",
+            "last_refresh_at": "2026-05-21T10:00:00+08:00",
+            "status": "success",
+            "source": "mixed",
+            "sourceLabel": "多来源",
+            "updatedAt": "2026-05-21T10:00:05+08:00",
+            "asOf": "2026-05-21T10:00:00+08:00",
+            "freshness": "cached",
+            "isFallback": False,
+            "items": [
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 18.4,
+                    "source": "fred",
+                    "sourceLabel": "FRED VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "freshness": "cached",
+                    "asOf": "2026-05-21T10:00:00+08:00",
+                    "isFallback": False,
+                    "isUnavailable": False,
+                    "isPartial": False,
+                    "observationOnly": False,
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "sourceAuthorityReason": None,
+                    "sourceAuthorityRouteRejected": False,
+                    "routeRejectedReasonCodes": [],
+                    "officialSeriesId": "VIXCLS",
+                    "officialObservationDate": "2026-05-20",
+                    "officialAsOf": "2026-05-20",
+                },
+                {
+                    "symbol": "CREDIT",
+                    "label": "Credit spreads",
+                    "value": 3.75,
+                    "source": "fred",
+                    "sourceLabel": "FRED BAMLH0A0HYM2",
+                    "sourceType": "official_public",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "freshness": "cached",
+                    "asOf": "2026-05-21T10:00:00+08:00",
+                    "isFallback": False,
+                    "isUnavailable": False,
+                    "isPartial": False,
+                    "observationOnly": True,
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": False,
+                    "sourceAuthorityReason": None,
+                    "sourceAuthorityRouteRejected": False,
+                    "routeRejectedReasonCodes": [],
+                    "officialSeriesId": "BAMLH0A0HYM2",
+                    "officialObservationDate": "2026-05-20",
+                    "officialAsOf": "2026-05-20",
+                },
+            ],
+            "log_session_id": "log-macro-official",
+        }
+
+        with patch("api.v1.endpoints.market_overview.MarketOverviewService") as mock_service:
+            mock_service.return_value.get_macro.return_value = payload
+            response = TestClient(app).get("/api/v1/market-overview/macro")
+
+        assert response.status_code == 200
+        body = response.json()
+        items = {item["symbol"]: item for item in body["items"]}
+
+        assert items["VIX"]["sourceAuthorityAllowed"] is True
+        assert items["VIX"]["scoreContributionAllowed"] is True
+        assert items["VIX"]["officialSeriesId"] == "VIXCLS"
+        assert items["VIX"]["officialObservationDate"] == "2026-05-20"
+        assert items["VIX"]["officialAsOf"] == "2026-05-20"
+        assert items["VIX"]["sourceTier"] == "official_public"
+        assert items["VIX"]["trustLevel"] == "reliable"
+        assert items["VIX"]["routeRejectedReasonCodes"] == []
+
+        assert items["CREDIT"]["sourceAuthorityAllowed"] is True
+        assert items["CREDIT"]["scoreContributionAllowed"] is False
+        assert items["CREDIT"]["observationOnly"] is True
+        assert items["CREDIT"]["officialSeriesId"] == "BAMLH0A0HYM2"
+        assert items["CREDIT"]["routeRejectedReasonCodes"] == []
 
     def test_official_macro_daily_rates_remain_delayed_or_stale_not_live(self) -> None:
         delayed = get_freshness_status(

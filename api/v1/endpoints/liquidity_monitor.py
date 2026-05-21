@@ -12,6 +12,11 @@ from src.services.liquidity_monitor_service import LiquidityMonitorService
 router = APIRouter()
 
 
-@router.get("/liquidity-monitor", response_model=LiquidityMonitorResponse, summary="Get advisory liquidity monitor")
+@router.get(
+    "/liquidity-monitor",
+    response_model=LiquidityMonitorResponse,
+    response_model_exclude_none=True,
+    summary="Get advisory liquidity monitor",
+)
 def get_liquidity_monitor() -> LiquidityMonitorResponse:
     return LiquidityMonitorService().get_liquidity_monitor()

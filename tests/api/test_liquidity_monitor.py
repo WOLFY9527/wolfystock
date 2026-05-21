@@ -379,7 +379,7 @@ def test_liquidity_monitor_route_accepts_all_golden_fixture_payloads() -> None:
     app.include_router(liquidity_monitor.router, prefix="/api/v1/market")
 
     for fixture_name in FIXTURE_NAMES:
-        payload = LiquidityMonitorResponse(**_load_fixture(fixture_name)).model_dump()
+        payload = LiquidityMonitorResponse(**_load_fixture(fixture_name)).model_dump(exclude_none=True)
 
         with patch("api.v1.endpoints.liquidity_monitor.LiquidityMonitorService") as mock_service:
             mock_service.return_value.get_liquidity_monitor.return_value = payload
