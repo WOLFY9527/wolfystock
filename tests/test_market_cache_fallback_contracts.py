@@ -138,6 +138,71 @@ def test_refresh_failure_preserves_old_safe_snapshot_and_sanitized_metadata() ->
     assert cache.get("sentiment").data["value"] == 52
 
 
+def test_clear_invalidates_in_flight_refresh_from_prior_generation() -> None:
+    cache = MarketCache(max_workers=2)
+    cache.set("cn_indices", {"source": "stale", "value": 17680.3}, ttl_seconds=1)
+    entry = cache.get("cn_indices")
+    assert entry is not None
+    entry.expires_at = entry.fetched_at - timedelta(seconds=1)
+
+    started = threading.Event()
+    release_old_refresh = threading.Event()
+    old_refresh_finished = threading.Event()
+
+    def old_fetcher() -> dict:
+        started.set()
+        release_old_refresh.wait(2)
+        old_refresh_finished.set()
+        return {"source": "old_refresh", "value": 17680.3}
+
+    stale_payload = cache.get_or_refresh(
+        "cn_indices",
+        1,
+        old_fetcher,
+        allow_stale=True,
+        background_refresh=True,
+    )
+    assert stale_payload["value"] == 17680.3
+    assert stale_payload["isRefreshing"] is True
+    assert started.wait(1)
+
+    cache.clear()
+
+    release_new_refresh = threading.Event()
+    new_refresh_started = threading.Event()
+
+    def new_fetcher() -> dict:
+        new_refresh_started.set()
+        release_new_refresh.wait(2)
+        return {"source": "new_refresh", "value": 25675.182}
+
+    fresh_payload = cache.get_or_refresh(
+        "cn_indices",
+        30,
+        new_fetcher,
+        fallback_factory=lambda: {"source": "fallback", "value": 17680.3, "freshness": "fallback", "isFallback": True},
+        allow_stale=True,
+        background_refresh=True,
+        cold_start_timeout_seconds=0.05,
+    )
+    assert new_refresh_started.wait(1)
+    assert fresh_payload["value"] == 17680.3
+    assert fresh_payload["source"] == "fallback"
+    assert fresh_payload["isRefreshing"] is True
+
+    release_old_refresh.set()
+    assert old_refresh_finished.wait(1)
+    time.sleep(0.05)
+
+    current = cache.get("cn_indices")
+    assert current is not None
+    assert current.data["value"] == 17680.3
+    assert current.data["source"] == "fallback"
+
+    release_new_refresh.set()
+    assert cache.wait_for_refreshes(timeout=2)
+
+
 def test_market_briefing_degrades_instead_of_emitting_strong_narrative_from_legacy_sentiment_shape_only() -> None:
     service = MarketOverviewService()
     service._market_cache.clear()

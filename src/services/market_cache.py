@@ -75,6 +75,7 @@ class MarketCache:
         self._executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="market-cache")
         self._futures: set[Future] = set()
         self._refresh_stale_after_seconds = refresh_stale_after_seconds
+        self._refresh_generation_counter = 0
 
     def get(self, key: str) -> Optional[MarketCacheEntry]:
         with self._lock_for(key):
@@ -378,7 +379,9 @@ class MarketCache:
     def _mark_refresh_started(self, entry: MarketCacheEntry) -> int:
         entry.is_refreshing = True
         entry.refresh_started_at = time.monotonic()
-        entry.refresh_generation += 1
+        with self._global_lock:
+            self._refresh_generation_counter += 1
+            entry.refresh_generation = self._refresh_generation_counter
         return entry.refresh_generation
 
     @staticmethod
