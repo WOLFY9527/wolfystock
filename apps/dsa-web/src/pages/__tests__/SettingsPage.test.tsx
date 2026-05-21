@@ -35,6 +35,7 @@ const {
   useAuthMock,
   useSystemConfigMock,
   llmEditorModuleLoad,
+  dataSourceDrawerModuleLoad,
 } = vi.hoisted(() => ({
   load: vi.fn(),
   clearToast: vi.fn(),
@@ -63,6 +64,28 @@ const {
   buildDuckDBFactors: vi.fn(),
   useAuthMock: vi.fn(),
   useSystemConfigMock: vi.fn(),
+  dataSourceDrawerModuleLoad: (() => {
+    let resolve: (() => void) | null = null;
+    const state = {
+      loadCount: 0,
+      promise: Promise.resolve(),
+      reset() {
+        state.loadCount = 0;
+        state.promise = Promise.resolve();
+        resolve = null;
+      },
+      defer() {
+        state.loadCount = 0;
+        state.promise = new Promise<void>((nextResolve) => {
+          resolve = nextResolve;
+        });
+      },
+      resolve() {
+        resolve?.();
+      },
+    };
+    return state;
+  })(),
   llmEditorModuleLoad: (() => {
     let resolve: (() => void) | null = null;
     const state = {
@@ -157,6 +180,12 @@ vi.mock('../../components/settings/LLMChannelEditor', async () => {
       </div>
     ),
   };
+});
+
+vi.mock('../../components/settings/DataSourceLibraryDrawer', async (importOriginal) => {
+  dataSourceDrawerModuleLoad.loadCount += 1;
+  await dataSourceDrawerModuleLoad.promise;
+  return importOriginal<typeof import('../../components/settings/DataSourceLibraryDrawer')>();
 });
 
 vi.mock('../../components/settings', () => ({
@@ -871,6 +900,7 @@ describe('SettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     llmEditorModuleLoad.reset();
+    dataSourceDrawerModuleLoad.reset();
     window.history.replaceState({}, '', '/');
     window.innerWidth = 1280;
     window.dispatchEvent(new Event('resize'));
@@ -1942,6 +1972,32 @@ describe('SettingsPage', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'save llm channels' })).toBeInTheDocument();
+    });
+  });
+
+  it('lazy loads the data source library drawer only after it opens', async () => {
+    dataSourceDrawerModuleLoad.defer();
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({ activeCategory: 'data_source' }));
+
+    render(<SettingsPage />);
+
+    expect(dataSourceDrawerModuleLoad.loadCount).toBe(0);
+    expect(screen.queryByTestId('data-source-library-drawer-loading')).toBeNull();
+
+    const dataSection = screen.getByRole('heading', { name: '数据源配置' }).closest('section');
+    expect(dataSection).not.toBeNull();
+
+    fireEvent.click(within(dataSection as HTMLElement).getByRole('button', { name: '添加数据源' }));
+
+    expect(await screen.findByTestId('data-source-library-drawer-loading')).toBeInTheDocument();
+    expect(dataSourceDrawerModuleLoad.loadCount).toBe(1);
+    expect(screen.getByRole('dialog', { name: '注册数据源' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('显示名称')).toBeNull();
+
+    dataSourceDrawerModuleLoad.resolve();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('显示名称')).toBeInTheDocument();
     });
   });
 

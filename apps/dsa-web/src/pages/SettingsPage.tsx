@@ -8,7 +8,6 @@ import { PageBriefDrawer } from '../components/home-bento';
 import { useIsDesktopViewport } from '../components/layout/useIsDesktopViewport';
 import AIProviderConfig from '../components/settings/AIProviderConfig';
 import DataSourceConfig from '../components/settings/DataSourceConfig';
-import DataSourceLibraryDrawer from '../components/settings/DataSourceLibraryDrawer';
 import { NotificationChannelsConfig } from '../components/settings/NotificationChannelsConfig';
 import SystemControlPlane from '../components/settings/SystemControlPlane';
 import SystemLogsConfig from '../components/settings/SystemLogsConfig';
@@ -68,6 +67,7 @@ const LazyLLMChannelEditor = lazy(async () => {
   const module = await import('../components/settings/LLMChannelEditor');
   return { default: module.LLMChannelEditor };
 });
+const LazyDataSourceLibraryDrawer = lazy(() => import('../components/settings/DataSourceLibraryDrawer'));
 
 const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-white/10 bg-white/[0.02] p-1';
 const SEGMENT_BUTTON_CLASS = 'rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors';
@@ -78,6 +78,31 @@ const DRAWER_PANEL_CLASS = 'rounded-xl border border-white/5 bg-white/[0.02] px-
 const DRAWER_SECTION_CLASS = 'rounded-xl border border-white/5 bg-white/[0.015] px-4 py-4';
 const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-6 flex cursor-pointer list-none items-center gap-1.5 border-t border-white/5 pt-4 text-xs text-white/30 transition-colors hover:text-white [&::-webkit-details-marker]:hidden';
 const SETTINGS_DRAWER_GHOST_FORM_SCOPE_CLASS = '[&_.input-surface]:!rounded-lg [&_.input-surface]:!border-white/5 [&_.input-surface]:!bg-white/[0.02] [&_.input-surface]:!py-2 [&_.input-surface]:!text-sm [&_.input-surface]:!text-white [&_.input-surface]:!transition-all [&_.input-surface]:placeholder:!text-white/20 [&_.input-surface]:focus:!border-indigo-500/50 [&_.input-surface]:focus:!bg-white/[0.05] [&_.input-surface]:focus:!outline-none [&_.input-surface]:focus:!ring-1 [&_.input-surface]:focus:!ring-indigo-500/50 [&_.theme-field-label]:!mb-1.5 [&_.theme-field-label]:!block [&_.theme-field-label]:!text-[10px] [&_.theme-field-label]:!font-bold [&_.theme-field-label]:!uppercase [&_.theme-field-label]:!tracking-widest [&_.theme-field-label]:!text-white/40';
+
+const DataSourceLibraryDrawerFallback: React.FC<{
+  bodyClassName?: string;
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+}> = ({ bodyClassName, isOpen, onClose, title }) => (
+  <Drawer
+    isOpen={isOpen}
+    onClose={onClose}
+    title={title}
+    width="max-w-[min(100vw,44rem)]"
+    zIndex={81}
+    bodyClassName={bodyClassName}
+  >
+    <div
+      role="status"
+      aria-live="polite"
+      data-testid="data-source-library-drawer-loading"
+      className="space-y-4"
+    >
+      <SettingsLoading />
+    </div>
+  </Drawer>
+);
 
 type RoutingDraftState = {
   ai: {
@@ -759,6 +784,7 @@ const SettingsPage: React.FC = () => {
   const [quickProviderDrawerProvider, setQuickProviderDrawerProvider] = useState<QuickProviderKey | null>(null);
   const [aiAdvancedDrawerOpen, setAiAdvancedDrawerOpen] = useState(false);
   const [dataRoutingDrawerKey, setDataRoutingDrawerKey] = useState<DataRouteKey | null>(null);
+  const [shouldRenderDataSourceLibraryDrawer, setShouldRenderDataSourceLibraryDrawer] = useState(false);
   const [runtimeVisibilityDrawerOpen, setRuntimeVisibilityDrawerOpen] = useState(false);
   const [rawFieldsDrawerOpen, setRawFieldsDrawerOpen] = useState(false);
   const [adminActionDialog, setAdminActionDialog] = useState<'runtime_cache' | 'factory_reset' | null>(null);
@@ -935,6 +961,17 @@ const SettingsPage: React.FC = () => {
     prettySourceLabel,
     t,
   });
+  const dataSourceDrawerTitle = dataSourceEditorMode === 'create'
+    ? t('settings.dataSourceDrawerTitleCreate')
+    : dataSourceEditorEntry
+      ? t('settings.dataSourceDrawerTitleEdit', { source: dataSourceEditorEntry.label })
+      : t('settings.dataSourceDrawerTitleFallback');
+
+  useEffect(() => {
+    if (dataSourceLibraryDrawerOpen) {
+      setShouldRenderDataSourceLibraryDrawer(true);
+    }
+  }, [dataSourceLibraryDrawerOpen]);
 
   const modelsForGateway = useCallback((gateway: string): string[] => (
     getGatewayModelOptions(
@@ -3195,29 +3232,42 @@ const SettingsPage: React.FC = () => {
         </div>
       </Drawer>
 
-      <DataSourceLibraryDrawer
-        adminLocked={adminLocked}
-        isOpen={dataSourceLibraryDrawerOpen}
-        isSaving={isSaving}
-        language={language}
-        deleteTarget={dataSourceDeleteTarget}
-        draft={dataSourceEditorDraft}
-        entry={dataSourceEditorEntry}
-        mode={dataSourceEditorMode}
-        managedBuiltinDraft={managedBuiltinDataSourceDraft}
-        bodyClassName={SETTINGS_DRAWER_GHOST_FORM_SCOPE_CLASS}
-        onClose={closeDataSourceDrawer}
-        onDeleteTargetChange={setDataSourceDeleteTargetId}
-        onDraftChange={setDataSourceEditorDraft}
-        onManagedBuiltinDraftChange={setManagedBuiltinDataSourceDraft}
-        onSave={() => void saveDataSourceEditor()}
-        onValidate={(sourceId) => {
-          void validateDataSourceEntry(sourceId);
-        }}
-        onConfirmDelete={() => void deleteDataSourceEntry()}
-        t={t}
-        validationResult={dataSourceEditorValidationResult}
-      />
+      {shouldRenderDataSourceLibraryDrawer ? (
+        <Suspense
+          fallback={(
+            <DataSourceLibraryDrawerFallback
+              bodyClassName={SETTINGS_DRAWER_GHOST_FORM_SCOPE_CLASS}
+              isOpen={dataSourceLibraryDrawerOpen}
+              onClose={closeDataSourceDrawer}
+              title={dataSourceDrawerTitle}
+            />
+          )}
+        >
+          <LazyDataSourceLibraryDrawer
+            adminLocked={adminLocked}
+            isOpen={dataSourceLibraryDrawerOpen}
+            isSaving={isSaving}
+            language={language}
+            deleteTarget={dataSourceDeleteTarget}
+            draft={dataSourceEditorDraft}
+            entry={dataSourceEditorEntry}
+            mode={dataSourceEditorMode}
+            managedBuiltinDraft={managedBuiltinDataSourceDraft}
+            bodyClassName={SETTINGS_DRAWER_GHOST_FORM_SCOPE_CLASS}
+            onClose={closeDataSourceDrawer}
+            onDeleteTargetChange={setDataSourceDeleteTargetId}
+            onDraftChange={setDataSourceEditorDraft}
+            onManagedBuiltinDraftChange={setManagedBuiltinDataSourceDraft}
+            onSave={() => void saveDataSourceEditor()}
+            onValidate={(sourceId) => {
+              void validateDataSourceEntry(sourceId);
+            }}
+            onConfirmDelete={() => void deleteDataSourceEntry()}
+            t={t}
+            validationResult={dataSourceEditorValidationResult}
+          />
+        </Suspense>
+      ) : null}
 
       <ConfirmDialog
         isOpen={adminActionDialog !== null}
