@@ -121,6 +121,12 @@ def build_market_regime_synthesis_payload(inputs: Mapping[str, Any]) -> dict[str
     return synthesize_market_regime_from_temperature_inputs(inputs).to_dict()
 
 
+def build_liquidity_impulse_synthesis_payload(inputs: Mapping[str, Any]) -> dict[str, Any]:
+    """Project normalized temperature inputs into liquidity synthesis payload."""
+
+    return synthesize_liquidity_impulse(_projected_liquidity_evidence_items(inputs)).to_dict()
+
+
 def _change_driven_evidence(
     panel_key: str,
     panel: Mapping[str, Any],

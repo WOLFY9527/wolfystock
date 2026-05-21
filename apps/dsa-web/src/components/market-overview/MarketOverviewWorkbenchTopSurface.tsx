@@ -8,10 +8,8 @@ import {
 import { TerminalChip, TerminalDenseList, TerminalNotice, TerminalPanel, TerminalSectionHeader } from '../terminal';
 import { cn } from '../../utils/cn';
 import { MarketRegimeSynthesisHeader, type MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
-import {
-  OfficialMacroAuthorityDiagnostics,
-  type OfficialMacroAuthorityDiagnosticsView,
-} from '../common/OfficialMacroAuthorityDiagnostics';
+import { OfficialMacroAuthorityDiagnostics } from '../common/OfficialMacroAuthorityDiagnostics';
+import type { OfficialMacroAuthorityDiagnosticsView } from '../common/officialMacroAuthorityDiagnosticsData';
 
 export type MarketOverviewDecisionChipView = {
   label: string;
@@ -64,12 +62,42 @@ export type MarketOverviewCategoryTabView = {
   label: string;
 };
 
+export type MarketOverviewDecisionSemanticsLineView = {
+  key: string;
+  label: string;
+  meta?: string;
+};
+
+export type MarketOverviewDecisionSemanticsBoundaryView = {
+  key: string;
+  label: string;
+  allowed: boolean;
+  reasonCode?: string;
+};
+
+export type MarketOverviewDecisionSemanticsView = {
+  postureLabel: string;
+  confidenceLabel: string;
+  confidenceValueText: string;
+  exposureBiasLabel: string;
+  insufficient: boolean;
+  capReasons: string[];
+  styleTilts: MarketOverviewDecisionSemanticsLineView[];
+  confirmationSignals: MarketOverviewDecisionSemanticsLineView[];
+  invalidationTriggers: MarketOverviewDecisionSemanticsLineView[];
+  counterEvidence: MarketOverviewDecisionSemanticsLineView[];
+  dataGaps: MarketOverviewDecisionSemanticsLineView[];
+  claimBoundaries: MarketOverviewDecisionSemanticsBoundaryView[];
+  notInvestmentAdvice: boolean;
+};
+
 type MarketOverviewWorkbenchTopSurfaceProps = {
   heading: React.ReactNode;
   regimeSynthesis: MarketRegimeSynthesisHeaderView;
   decisionText: string;
   decisionChips: MarketOverviewDecisionChipView[];
   decisionReliable: boolean;
+  decisionSemantics?: MarketOverviewDecisionSemanticsView;
   dataState: MarketOverviewDataStateStripView;
   temperatureSummary: MarketOverviewTemperatureSummaryView;
   briefingSummary: MarketOverviewBriefingSummaryView;
@@ -147,6 +175,129 @@ const MarketDecisionStrip: React.FC<{
     </div>
   </TerminalPanel>
 );
+
+const MarketDecisionSemanticsList: React.FC<{
+  testId: string;
+  label: string;
+  emptyLabel: string;
+  items: MarketOverviewDecisionSemanticsLineView[];
+}> = ({ testId, label, emptyLabel, items }) => (
+  <div className="min-w-0">
+    <p className="text-[10px] font-bold uppercase tracking-widest text-white/36">{label}</p>
+    <div
+      data-testid={testId}
+      className="mt-1 flex max-h-28 min-w-0 flex-col gap-1 overflow-y-auto pr-1 text-[11px] leading-4 text-white/58 ui-scroll-y-quiet"
+    >
+      {items.length ? items.map((item) => (
+        <p key={item.key} className="min-w-0">
+          <span className="font-semibold text-white/72">{item.label}</span>
+          {item.meta ? <span className="text-white/42"> · {item.meta}</span> : null}
+        </p>
+      )) : <p className="text-white/34">{emptyLabel}</p>}
+    </div>
+  </div>
+);
+
+const MarketDecisionSemanticsStrip: React.FC<{
+  view?: MarketOverviewDecisionSemanticsView;
+}> = ({ view }) => {
+  if (!view) {
+    return null;
+  }
+
+  return (
+    <section
+      data-testid="market-decision-semantics-strip"
+      data-market-research-flow="decision-semantics"
+      className={cn(
+        'border-t border-[color:var(--wolfy-divider)] bg-white/[0.018] px-3 py-3 md:px-4',
+        view.insufficient ? 'opacity-85' : '',
+      )}
+    >
+      <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <TerminalChip
+              data-testid="market-decision-semantics-posture-chip"
+              variant={view.insufficient ? 'caution' : 'info'}
+              className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest"
+            >
+              {view.postureLabel}
+            </TerminalChip>
+            <TerminalChip variant="neutral" className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest">
+              {view.confidenceLabel}
+              {view.confidenceValueText ? <span className="font-mono normal-case tracking-normal">{view.confidenceValueText}</span> : null}
+            </TerminalChip>
+            <TerminalChip variant="neutral" className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest">
+              {view.exposureBiasLabel}
+            </TerminalChip>
+          </div>
+          <div className="mt-2 min-w-0 text-[11px] leading-4 text-white/48">
+            <p data-testid="market-decision-semantics-advice-boundary">
+              {view.notInvestmentAdvice ? '非投资建议' : '仅观察'} · {view.insufficient ? '可靠证据不足' : '观察姿态，仅作证据边界说明'}
+            </p>
+            {view.capReasons.length ? (
+              <p data-testid="market-decision-semantics-cap-reasons" className="mt-1 break-words font-mono text-white/44">
+                {view.capReasons.join(' · ')}
+              </p>
+            ) : null}
+            <div
+              data-testid="market-decision-semantics-claim-boundaries"
+              className="mt-2 flex min-w-0 flex-wrap gap-1.5"
+            >
+              {view.claimBoundaries.map((boundary) => (
+                <span
+                  key={boundary.key}
+                  className={cn(
+                    'rounded-md border px-2 py-1 text-[10px] font-semibold',
+                    boundary.allowed
+                      ? 'border-emerald-300/14 bg-emerald-300/[0.06] text-emerald-100/70'
+                      : 'border-amber-300/14 bg-amber-300/[0.06] text-amber-100/70',
+                  )}
+                >
+                  {boundary.label} · {boundary.allowed ? '允许' : '禁止'}
+                  {boundary.reasonCode ? ` · ${boundary.reasonCode}` : ''}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <MarketDecisionSemanticsList
+            testId="market-decision-semantics-style-tilts"
+            label="Style"
+            emptyLabel="无风格倾向"
+            items={view.styleTilts}
+          />
+          <MarketDecisionSemanticsList
+            testId="market-decision-semantics-confirmations"
+            label="Confirm"
+            emptyLabel="等待确认信号"
+            items={view.confirmationSignals}
+          />
+          <MarketDecisionSemanticsList
+            testId="market-decision-semantics-invalidations"
+            label="Invalidate"
+            emptyLabel="暂无失效条件"
+            items={view.invalidationTriggers}
+          />
+          <MarketDecisionSemanticsList
+            testId="market-decision-semantics-counter-evidence"
+            label="Counter"
+            emptyLabel="暂无反证"
+            items={view.counterEvidence}
+          />
+          <MarketDecisionSemanticsList
+            testId="market-decision-semantics-data-gaps"
+            label="Gaps"
+            emptyLabel="暂无显式缺口"
+            items={view.dataGaps}
+          />
+        </div>
+      </div>
+    </section>
+  );
+};
 
 const CompactStatusTile: React.FC<{
   testId: string;
@@ -342,6 +493,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
   decisionText,
   decisionChips,
   decisionReliable,
+  decisionSemantics,
   dataState,
   temperatureSummary,
   briefingSummary,
@@ -383,6 +535,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
               <MarketRegimeSynthesisHeader view={regimeSynthesis} />
             </div>
             <MarketDecisionStrip text={decisionText} chips={decisionChips} reliable={decisionReliable} />
+            <MarketDecisionSemanticsStrip view={decisionSemantics} />
             <div className="border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4">
               <MarketOverviewCategoryControls
                 categoryTabs={categoryTabs}

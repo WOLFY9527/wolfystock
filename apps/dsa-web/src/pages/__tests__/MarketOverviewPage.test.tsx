@@ -629,6 +629,7 @@ const temperaturePayload = () => ({
   sourceTier: 'unofficial_public_api',
   conclusionAllowed: true,
   marketRegimeSynthesis: regimeSynthesisPayload(),
+  marketDecisionSemantics: marketDecisionSemanticsPayload(),
   scores: {
     overall: { value: 62, label: '偏暖', trend: 'improving' as const, description: '风险偏好改善，但宏观压力仍需关注。' },
     usRiskAppetite: { value: 68, label: '偏暖', trend: 'improving' as const, description: '美股指数与风险情绪同步改善。' },
@@ -636,6 +637,63 @@ const temperaturePayload = () => ({
     macroPressure: { value: 58, label: '中性偏高', trend: 'rising' as const, description: '美元与利率走强。' },
     liquidity: { value: 52, label: '中性', trend: 'stable' as const, description: '资金环境整体平稳。' },
   },
+});
+
+const marketDecisionSemanticsPayload = () => ({
+  version: 'market_decision_semantics_v1',
+  posture: 'offensive',
+  postureConfidence: {
+    value: 64,
+    label: 'medium',
+    capReasons: ['counter_evidence_present'],
+  },
+  exposureBias: 'risk_on_watch',
+  styleTilts: [
+    { tilt: 'liquidity_beta_watch', label: 'Liquidity beta watch', detail: 'Risk-on regime and expanding liquidity align, but this remains watch-only.' },
+    { tilt: 'rotation_leadership_watch', label: 'Rotation leadership watch', detail: 'Score-grade rotation leadership is confirming the posture watch.' },
+  ],
+  confirmationSignals: [
+    { signal: 'regime_alignment', detail: 'Primary regime should remain score-grade.' },
+    { signal: 'liquidity_alignment', detail: 'Liquidity impulse should remain expanding.' },
+  ],
+  invalidationTriggers: [
+    { trigger: 'liquidity_stops_expanding', detail: 'Remove the risk-on watch if liquidity turns mixed or contracting.' },
+  ],
+  counterEvidence: [
+    { surface: 'market_regime_synthesis', key: 'rates:US10Y', label: 'US10Y', detail: 'Rates pressure remains a contradiction.' },
+  ],
+  dataGaps: [
+    { surface: 'liquidity_impulse_synthesis', key: 'official:fed_liquidity', label: 'Fed liquidity', reason: 'missing_scoring_evidence' },
+  ],
+  claimBoundaries: [
+    { claim: 'observational_posture_watch', allowed: true, reasonCode: 'watch_only_language', detail: 'Only observational posture watch language is allowed.' },
+    { claim: 'direct_trade_action', allowed: false, reasonCode: 'not_investment_advice', detail: 'No execution language.' },
+    { claim: 'position_size_guidance', allowed: false, reasonCode: 'not_investment_advice', detail: 'No sizing language.' },
+  ],
+  notInvestmentAdvice: true,
+});
+
+const insufficientMarketDecisionSemanticsPayload = () => ({
+  ...marketDecisionSemanticsPayload(),
+  posture: 'data_insufficient',
+  postureConfidence: {
+    value: 18,
+    label: 'insufficient',
+    capReasons: ['missing_scoring_pillars', 'proxy_or_observation_only_evidence'],
+  },
+  exposureBias: 'no_bias_data_insufficient',
+  styleTilts: [],
+  confirmationSignals: [],
+  invalidationTriggers: [],
+  counterEvidence: [],
+  dataGaps: [
+    { surface: 'market_regime_synthesis', key: 'crypto:BTC', label: 'BTC', reason: 'observation_only_discount' },
+  ],
+  claimBoundaries: [
+    { claim: 'observational_posture_watch', allowed: false, reasonCode: 'insufficient_score_grade_evidence', detail: 'No posture watch is supportable.' },
+    { claim: 'direct_trade_action', allowed: false, reasonCode: 'not_investment_advice', detail: 'No execution language.' },
+    { claim: 'position_size_guidance', allowed: false, reasonCode: 'not_investment_advice', detail: 'No sizing language.' },
+  ],
 });
 
 const regimeSynthesisPayload = () => ({
@@ -805,6 +863,7 @@ const unreliableTemperaturePayload = () => ({
   trustLevel: 'unavailable',
   sourceTier: 'static_fallback',
   conclusionAllowed: false,
+  marketDecisionSemantics: insufficientMarketDecisionSemanticsPayload(),
   marketRegimeSynthesis: {
     primaryRegime: 'data_insufficient',
     secondaryRegimes: [],
@@ -1770,7 +1829,12 @@ describe('MarketOverviewPage', () => {
     const orderedNodes = Array.from(topStack.querySelectorAll('[data-market-research-flow]'))
       .map((node) => node.getAttribute('data-market-research-flow'));
 
-    expect(orderedNodes).toEqual(['regime-synthesis', 'state', 'controls', 'trust', 'pulse', 'cache']);
+    expect(orderedNodes.filter((node) => node !== 'decision-semantics')).toEqual(['regime-synthesis', 'state', 'controls', 'trust', 'pulse', 'cache']);
+    const semanticsIndex = orderedNodes.indexOf('decision-semantics');
+    if (semanticsIndex >= 0) {
+      expect(semanticsIndex).toBeGreaterThan(orderedNodes.indexOf('state'));
+      expect(semanticsIndex).toBeLessThan(orderedNodes.indexOf('controls'));
+    }
     expect(topStack.firstElementChild).toContainElement(screen.getByTestId('market-regime-synthesis-header'));
     expect(screen.getByTestId('market-overview-main-grid').compareDocumentPosition(screen.getByTestId('market-decision-strip'))).toBe(Node.DOCUMENT_POSITION_PRECEDING);
   });
@@ -1994,6 +2058,40 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-briefing-warning')).toHaveTextContent('当前真实数据不足，暂不生成强市场判断');
     expect(screen.getByTestId('market-decision-text')).toHaveTextContent(/等待实时源|部分数据暂不可用/);
     expect(screen.getByTestId('market-command-safe-state')).toHaveTextContent(/当前不生成强判断/);
+  });
+
+  it('renders a compact observational posture panel from market decision semantics', async () => {
+    render(<MarketOverviewPage />);
+
+    const posturePanel = await screen.findByTestId('market-decision-semantics-strip');
+
+    expect(posturePanel).toHaveTextContent('风险偏好观察');
+    expect(posturePanel).toHaveTextContent('中');
+    expect(posturePanel).toHaveTextContent('64');
+    expect(posturePanel).toHaveTextContent('Liquidity beta watch');
+    expect(posturePanel).toHaveTextContent('liquidity_alignment');
+    expect(posturePanel).toHaveTextContent('liquidity_stops_expanding');
+    expect(posturePanel).toHaveTextContent('US10Y');
+    expect(posturePanel).toHaveTextContent('Fed liquidity');
+    expect(posturePanel).toHaveTextContent('counter_evidence_present');
+    expect(posturePanel).toHaveTextContent('非投资建议');
+    expect(posturePanel).toHaveTextContent('not_investment_advice');
+  });
+
+  it('keeps data-insufficient posture conservative without trading advice language', async () => {
+    vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(unreliableTemperaturePayload());
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
+
+    render(<MarketOverviewPage />);
+
+    const posturePanel = await screen.findByTestId('market-decision-semantics-strip');
+    const text = posturePanel.textContent || '';
+
+    expect(posturePanel).toHaveTextContent('证据不足');
+    expect(posturePanel).toHaveTextContent('可靠证据不足');
+    expect(posturePanel).toHaveTextContent('missing_scoring_pillars');
+    expect(posturePanel).toHaveTextContent('BTC');
+    expect(text).not.toMatch(/买入|卖出|加仓|减仓|仓位|看多|看空|bullish|bearish|buy|sell|add|reduce|position-size/i);
   });
 
   it('shows a missing synthesis fallback when the temperature payload omits the additive field', async () => {

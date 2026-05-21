@@ -3,6 +3,9 @@ import { Suspense, lazy, useCallback, useMemo, useState } from 'react';
 import type { MarketDataMeta, MarketOverviewItem, MarketOverviewPanel, MarketProviderHealthStatus } from '../../api/marketOverview';
 import type {
   CnShortSentimentResponse,
+  MarketDecisionSemantics,
+  MarketDecisionSemanticsClaimBoundary,
+  MarketDecisionSemanticsItem,
   MarketBriefingResponse,
   MarketRegimeSynthesis,
   MarketRegimeSynthesisEvidenceItem,
@@ -33,6 +36,9 @@ import {
   type MarketOverviewCategoryTabView,
   type MarketOverviewDataStateStripView,
   type MarketOverviewDecisionChipView,
+  type MarketOverviewDecisionSemanticsBoundaryView,
+  type MarketOverviewDecisionSemanticsLineView,
+  type MarketOverviewDecisionSemanticsView,
   type MarketOverviewHeroAnchorView,
   type MarketOverviewTemperatureSummaryView,
 } from './MarketOverviewWorkbenchTopSurface';
@@ -48,7 +54,7 @@ import {
 import { TerminalChip, TerminalGrid, TerminalPageShell, TerminalPanel } from '../terminal';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
-import { buildOfficialMacroAuthorityDiagnosticsView } from '../common/OfficialMacroAuthorityDiagnostics';
+import { buildOfficialMacroAuthorityDiagnosticsView } from '../common/officialMacroAuthorityDiagnosticsData';
 
 const MARKET_OVERVIEW_GRID_FALLBACK_MIN_MS = 120;
 
@@ -899,6 +905,131 @@ function buildMarketRegimeSynthesisView(
     counterEvidence: buildRegimeEvidenceView(synthesis.counterEvidence, 'counter', 3, language),
     dataGaps: buildRegimeEvidenceView(synthesis.dataGaps, 'gap', 3, language),
     notInvestmentAdvice: Boolean(synthesis.notInvestmentAdvice),
+  };
+}
+
+function marketDecisionSemanticsText(value: unknown): string {
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+}
+
+function marketDecisionPostureLabel(posture: string, language: 'zh' | 'en'): string {
+  const labels = language === 'en'
+    ? {
+      offensive: 'Risk appetite watch',
+      defensive: 'Risk-control watch',
+      neutral: 'Balanced watch',
+      data_insufficient: 'Insufficient evidence',
+    }
+    : {
+      offensive: '风险偏好观察',
+      defensive: '风险控制观察',
+      neutral: '均衡观察',
+      data_insufficient: '证据不足',
+    };
+  return labels[posture as keyof typeof labels] || posture;
+}
+
+function marketDecisionExposureLabel(exposureBias: string, language: 'zh' | 'en'): string {
+  const labels = language === 'en'
+    ? {
+      risk_on_watch: 'Risk-on watch',
+      risk_control_watch: 'Risk-control watch',
+      balanced_watch: 'Balanced watch',
+      no_bias_data_insufficient: 'No bias',
+    }
+    : {
+      risk_on_watch: '风险偏好观察',
+      risk_control_watch: '风险控制观察',
+      balanced_watch: '均衡观察',
+      no_bias_data_insufficient: '无观察偏向',
+    };
+  return labels[exposureBias as keyof typeof labels] || exposureBias;
+}
+
+function marketDecisionBoundaryLabel(claim: string, language: 'zh' | 'en'): string {
+  const labels = language === 'en'
+    ? {
+      observational_posture_watch: 'Posture boundary',
+      style_tilt_watch: 'Style boundary',
+      direct_trade_action: 'Execution boundary',
+      position_size_guidance: 'Sizing boundary',
+      personalized_suitability: 'Suitability boundary',
+    }
+    : {
+      observational_posture_watch: '姿态边界',
+      style_tilt_watch: '风格边界',
+      direct_trade_action: '交易动作边界',
+      position_size_guidance: '执行尺度边界',
+      personalized_suitability: '适配边界',
+    };
+  return labels[claim as keyof typeof labels] || claim;
+}
+
+function marketDecisionSemanticsLine(
+  item: MarketDecisionSemanticsItem,
+  index: number,
+  fallbackPrefix: string,
+): MarketOverviewDecisionSemanticsLineView {
+  const label = (
+    marketDecisionSemanticsText(item.label)
+    || marketDecisionSemanticsText(item.signal)
+    || marketDecisionSemanticsText(item.trigger)
+    || marketDecisionSemanticsText(item.tilt)
+    || marketDecisionSemanticsText(item.key)
+    || `${fallbackPrefix} ${index + 1}`
+  );
+  const meta = [
+    marketDecisionSemanticsText(item.reason || item.reasonCode),
+    marketDecisionSemanticsText(item.surface),
+    marketDecisionSemanticsText(item.detail),
+  ].filter(Boolean).join(' · ');
+  return {
+    key: `${fallbackPrefix}-${marketDecisionSemanticsText(item.key) || label}-${index}`,
+    label,
+    meta,
+  };
+}
+
+function marketDecisionBoundaryLine(
+  item: MarketDecisionSemanticsClaimBoundary,
+  index: number,
+  language: 'zh' | 'en',
+): MarketOverviewDecisionSemanticsBoundaryView {
+  const claim = marketDecisionSemanticsText(item.claim) || `boundary_${index + 1}`;
+  return {
+    key: `${claim}-${index}`,
+    label: marketDecisionBoundaryLabel(claim, language),
+    allowed: item.allowed === true,
+    reasonCode: marketDecisionSemanticsText(item.reasonCode),
+  };
+}
+
+function buildMarketDecisionSemanticsView(
+  semantics: MarketDecisionSemantics | undefined,
+  language: 'zh' | 'en',
+): MarketOverviewDecisionSemanticsView | undefined {
+  if (!semantics) {
+    return undefined;
+  }
+  const confidenceValue = semantics.postureConfidence.value;
+  const confidenceLabelText = regimeConfidenceLabel(
+    semantics.postureConfidence.label,
+    typeof confidenceValue === 'number' ? confidenceValue / 100 : undefined,
+  );
+  return {
+    postureLabel: marketDecisionPostureLabel(semantics.posture, language),
+    confidenceLabel: confidenceLabelText,
+    confidenceValueText: typeof confidenceValue === 'number' ? String(confidenceValue) : '',
+    exposureBiasLabel: marketDecisionExposureLabel(semantics.exposureBias, language),
+    insufficient: semantics.posture === 'data_insufficient' || semantics.postureConfidence.label === 'insufficient',
+    capReasons: semantics.postureConfidence.capReasons,
+    styleTilts: semantics.styleTilts.map((item, index) => marketDecisionSemanticsLine(item, index, 'style')),
+    confirmationSignals: semantics.confirmationSignals.map((item, index) => marketDecisionSemanticsLine(item, index, 'confirm')),
+    invalidationTriggers: semantics.invalidationTriggers.map((item, index) => marketDecisionSemanticsLine(item, index, 'invalidate')),
+    counterEvidence: semantics.counterEvidence.map((item, index) => marketDecisionSemanticsLine(item, index, 'counter')),
+    dataGaps: semantics.dataGaps.map((item, index) => marketDecisionSemanticsLine(item, index, 'gap')),
+    claimBoundaries: semantics.claimBoundaries.map((item, index) => marketDecisionBoundaryLine(item, index, language)),
+    notInvestmentAdvice: semantics.notInvestmentAdvice,
   };
 }
 
@@ -1932,6 +2063,10 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     decisionReliable,
     language,
   );
+  const decisionSemanticsView = buildMarketDecisionSemanticsView(
+    panels.temperature.marketDecisionSemantics,
+    language,
+  );
   const dataStateStatuses = collectDataStateMeta(panels).map(resolveProviderStatus);
   const fallbackCount = dataQuality.counts.fallback + dataQuality.counts.mock;
   const unavailableCount = dataStateStatuses.filter((status) => status === 'partial' || status === 'unavailable' || status === 'error').length + refreshErrorCount;
@@ -2071,6 +2206,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
           decisionText={marketDecision.text}
           decisionChips={marketDecision.chips}
           decisionReliable={decisionReliable}
+          decisionSemantics={decisionSemanticsView}
           dataState={dataStateView}
           temperatureSummary={temperatureSummary}
           briefingSummary={briefingSummary}

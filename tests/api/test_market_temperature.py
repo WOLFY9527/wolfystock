@@ -225,6 +225,30 @@ def _rotation_theme(
     }
 
 
+def _decision_semantics_ready_temperature_inputs() -> dict:
+    inputs = _regime_ready_temperature_inputs(proxy_dxy=False, observation_only_btc=False)
+    inputs["indices"]["items"][0]["changePercent"] = 1.1
+    inputs["breadth"]["items"][0]["value"] = 64.0
+    inputs["rates"]["items"][0]["changePercent"] = -0.8
+    inputs["rates"]["items"][1]["changePercent"] = -4.2
+    inputs["fx"]["items"][0]["changePercent"] = -0.7
+    for item in inputs["futures"]["items"]:
+        item["changePercent"] = 1.2
+    for item in inputs["crypto"]["items"]:
+        item["changePercent"] = 2.1
+    inputs["sectors"] = {
+        "items": [
+            _rotation_theme(
+                score_contribution_allowed=True,
+                source_authority_allowed=True,
+                rotation_score=76.0,
+                change_percent=2.4,
+            )
+        ]
+    }
+    return inputs
+
+
 class MarketTemperatureApiTestCase(unittest.TestCase):
     def setUp(self) -> None:
         MarketOverviewService._market_cache.clear()
@@ -369,6 +393,127 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         serialized = json.dumps(synthesis, ensure_ascii=False, sort_keys=True)
         for forbidden in ("rawPayload", "providerPayload", "raw_payload", "provider_payload"):
             self.assertNotIn(forbidden, serialized)
+
+    def test_market_temperature_exposes_additive_market_decision_semantics_payload(self) -> None:
+        service = MarketOverviewService()
+
+        with (
+            patch.object(service, "_build_market_temperature_inputs", return_value=_decision_semantics_ready_temperature_inputs()),
+            patch.object(service, "_cached_payload", side_effect=lambda _cache_key, fetcher, _fallback_factory: fetcher()),
+        ):
+            payload = service.get_market_temperature()
+
+        semantics = payload["marketDecisionSemantics"]
+        self.assertEqual(semantics["version"], "market_decision_semantics_v1")
+        self.assertIn(semantics["posture"], {"offensive", "neutral", "defensive"})
+        self.assertIn("postureConfidence", semantics)
+        self.assertNotEqual(semantics["postureConfidence"]["label"], "insufficient")
+        self.assertIn("exposureBias", semantics)
+        self.assertIsInstance(semantics["styleTilts"], list)
+        self.assertIsInstance(semantics["confirmationSignals"], list)
+        self.assertIsInstance(semantics["invalidationTriggers"], list)
+        self.assertIsInstance(semantics["counterEvidence"], list)
+        self.assertIsInstance(semantics["dataGaps"], list)
+        self.assertTrue(semantics["claimBoundaries"])
+        self.assertTrue(semantics["notInvestmentAdvice"])
+
+    def test_market_temperature_decision_semantics_fail_closed_for_proxy_only_inputs(self) -> None:
+        service = MarketOverviewService()
+        blocked_inputs = _regime_ready_temperature_inputs(proxy_dxy=True, observation_only_btc=True)
+        blocked_inputs["sectors"] = {
+            "items": [
+                _rotation_theme(
+                    score_contribution_allowed=False,
+                    source_authority_allowed=False,
+                    source="yfinance_proxy",
+                    source_type="unofficial_proxy",
+                    trust_level="usable_with_caution",
+                    freshness="delayed",
+                    source_authority_reason="proxy_context_only",
+                    rotation_score=76.0,
+                    change_percent=2.4,
+                )
+            ]
+        }
+        for panel in blocked_inputs.values():
+            if not isinstance(panel, dict):
+                continue
+            for item in panel.get("items", []):
+                if isinstance(item, dict):
+                    item["sourceAuthorityAllowed"] = False
+                    item["scoreContributionAllowed"] = False
+                    item["sourceAuthorityReason"] = item.get("sourceAuthorityReason") or "proxy_context_only"
+
+        with (
+            patch.object(service, "_build_market_temperature_inputs", return_value=blocked_inputs),
+            patch.object(service, "_cached_payload", side_effect=lambda _cache_key, fetcher, _fallback_factory: fetcher()),
+        ):
+            payload = service.get_market_temperature()
+
+        semantics = payload["marketDecisionSemantics"]
+        self.assertEqual(semantics["posture"], "data_insufficient")
+        self.assertEqual(semantics["postureConfidence"]["label"], "insufficient")
+        self.assertIn("proxy_or_observation_only_evidence", semantics["postureConfidence"]["capReasons"])
+        self.assertFalse(semantics["styleTilts"])
+        self.assertTrue(semantics["notInvestmentAdvice"])
+        self.assertTrue(any(boundary["claim"] == "direct_trade_action" and not boundary["allowed"] for boundary in semantics["claimBoundaries"]))
+
+    def test_market_temperature_decision_semantics_surfaces_conflicts_and_boundaries(self) -> None:
+        service = MarketOverviewService()
+        inputs = _decision_semantics_ready_temperature_inputs()
+        regime = {
+            **service._build_market_regime_synthesis_payload(inputs),
+            "primaryRegime": "risk_on_liquidity_expansion",
+            "confidence": 0.72,
+            "confidenceLabel": "medium",
+            "counterEvidence": [
+                {"key": "rates:US10Y", "label": "US10Y", "detail": "Rates pressure conflicts with the regime read."}
+            ],
+            "evidenceQuality": {
+                "scoringPillarCount": 4,
+                "scoringEvidenceCount": 5,
+                "conflictPenalty": 0.3,
+            },
+            "topDrivers": [
+                {"key": "futures:ES", "label": "ES", "sourceTier": "exchange_public", "freshness": "live", "scoreContributionAllowed": True},
+                {"key": "crypto:BTC", "label": "BTC", "sourceTier": "exchange_public", "freshness": "live", "scoreContributionAllowed": True},
+            ],
+        }
+        liquidity = {
+            **service._build_liquidity_impulse_synthesis_payload(inputs),
+            "liquidityImpulse": "contracting_liquidity",
+            "confidence": 0.7,
+            "confidenceLabel": "medium",
+            "counterEvidence": [
+                {"key": "crypto:BTC", "label": "BTC", "detail": "Crypto beta does not confirm liquidity contraction."}
+            ],
+            "evidenceQuality": {
+                "scoringPillarCount": 4,
+                "scoringEvidenceCount": 5,
+                "realScoringEvidenceCount": 4,
+                "conflictPenalty": 0.31,
+            },
+            "dominantDrivers": [
+                {"key": "rates:US10Y", "label": "US10Y", "sourceTier": "official_public", "freshness": "cached", "scoreContributionAllowed": True},
+                {"key": "fx:DXY", "label": "DXY", "sourceTier": "official_public", "freshness": "cached", "scoreContributionAllowed": True},
+            ],
+        }
+
+        with (
+            patch.object(service, "_build_market_temperature_inputs", return_value=inputs),
+            patch.object(service, "_cached_payload", side_effect=lambda _cache_key, fetcher, _fallback_factory: fetcher()),
+            patch.object(service, "_build_market_regime_synthesis_payload", return_value=regime),
+            patch.object(service, "_build_liquidity_impulse_synthesis_payload", return_value=liquidity),
+        ):
+            payload = service.get_market_temperature()
+
+        semantics = payload["marketDecisionSemantics"]
+        self.assertEqual(semantics["posture"], "neutral")
+        self.assertIn("conflicting_primary_pillars", semantics["postureConfidence"]["capReasons"])
+        self.assertIn("counter_evidence_present", semantics["postureConfidence"]["capReasons"])
+        self.assertTrue(semantics["counterEvidence"])
+        self.assertTrue(any(boundary["claim"] == "direct_trade_action" and not boundary["allowed"] for boundary in semantics["claimBoundaries"]))
+        self.assertTrue(semantics["notInvestmentAdvice"])
 
     def test_low_coverage_temperature_synthesis_stays_data_insufficient(self) -> None:
         service = MarketOverviewService()

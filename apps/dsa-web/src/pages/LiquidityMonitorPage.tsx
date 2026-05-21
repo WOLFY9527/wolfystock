@@ -29,10 +29,8 @@ import {
   TerminalSectionHeader,
 } from '../components/terminal';
 import { WideWorkspacePageShell } from '../components/layout/WideWorkspaceShell';
-import {
-  OfficialMacroAuthorityDiagnostics,
-  buildOfficialMacroAuthorityDiagnosticsView,
-} from '../components/common/OfficialMacroAuthorityDiagnostics';
+import { OfficialMacroAuthorityDiagnostics } from '../components/common/OfficialMacroAuthorityDiagnostics';
+import { buildOfficialMacroAuthorityDiagnosticsView } from '../components/common/officialMacroAuthorityDiagnosticsData';
 import { formatDateTime, formatPercent, formatSignedNumber } from '../utils/format';
 import { cn } from '../utils/cn';
 

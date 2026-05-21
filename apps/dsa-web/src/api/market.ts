@@ -292,6 +292,38 @@ export type MarketRegimeSynthesis = {
   notInvestmentAdvice?: boolean;
 };
 
+export type MarketDecisionSemanticsItem = Record<string, unknown> & {
+  key?: string;
+  label?: string;
+  detail?: string;
+  surface?: string;
+  reason?: string;
+  reasonCode?: string;
+};
+
+export type MarketDecisionSemanticsClaimBoundary = MarketDecisionSemanticsItem & {
+  claim?: string;
+  allowed?: boolean;
+};
+
+export type MarketDecisionSemantics = {
+  version?: string;
+  posture: string;
+  postureConfidence: {
+    value?: number | null;
+    label?: string | null;
+    capReasons: string[];
+  };
+  exposureBias: string;
+  styleTilts: MarketDecisionSemanticsItem[];
+  confirmationSignals: MarketDecisionSemanticsItem[];
+  invalidationTriggers: MarketDecisionSemanticsItem[];
+  counterEvidence: MarketDecisionSemanticsItem[];
+  dataGaps: MarketDecisionSemanticsItem[];
+  claimBoundaries: MarketDecisionSemanticsClaimBoundary[];
+  notInvestmentAdvice: boolean;
+};
+
 export type MarketTemperatureResponse = {
   source: 'computed' | 'fallback' | 'mixed' | string;
   sourceLabel?: string;
@@ -322,6 +354,7 @@ export type MarketTemperatureResponse = {
   degradationReasons?: string[];
   conclusionAllowed?: boolean;
   marketRegimeSynthesis?: MarketRegimeSynthesis;
+  marketDecisionSemantics?: MarketDecisionSemantics;
   scores: {
     overall: MarketTemperatureScore;
     usRiskAppetite: MarketTemperatureScore;
@@ -392,6 +425,43 @@ function normalizeMarketRegimeSynthesis(
   };
 }
 
+function normalizeMarketDecisionSemanticsList<T extends MarketDecisionSemanticsItem>(
+  items?: Array<T | null> | null,
+): T[] {
+  return Array.isArray(items)
+    ? items
+      .filter((item): item is T => Boolean(item && typeof item === 'object'))
+      .map((item) => ({ ...item }))
+    : [];
+}
+
+function normalizeMarketDecisionSemantics(
+  semantics?: Partial<MarketDecisionSemantics> | null,
+): MarketDecisionSemantics | undefined {
+  if (!semantics?.posture) {
+    return undefined;
+  }
+  return {
+    version: semantics.version,
+    posture: semantics.posture,
+    postureConfidence: {
+      value: semantics.postureConfidence?.value,
+      label: semantics.postureConfidence?.label,
+      capReasons: Array.isArray(semantics.postureConfidence?.capReasons)
+        ? semantics.postureConfidence.capReasons.filter(Boolean)
+        : [],
+    },
+    exposureBias: semantics.exposureBias || 'no_bias_data_insufficient',
+    styleTilts: normalizeMarketDecisionSemanticsList(semantics.styleTilts),
+    confirmationSignals: normalizeMarketDecisionSemanticsList(semantics.confirmationSignals),
+    invalidationTriggers: normalizeMarketDecisionSemanticsList(semantics.invalidationTriggers),
+    counterEvidence: normalizeMarketDecisionSemanticsList(semantics.counterEvidence),
+    dataGaps: normalizeMarketDecisionSemanticsList(semantics.dataGaps),
+    claimBoundaries: normalizeMarketDecisionSemanticsList(semantics.claimBoundaries),
+    notInvestmentAdvice: semantics.notInvestmentAdvice !== false,
+  };
+}
+
 export function normalizeMarketTemperatureResponse(
   payload?: Partial<MarketTemperatureResponse> | null,
 ): MarketTemperatureResponse {
@@ -448,6 +518,7 @@ export function normalizeMarketTemperatureResponse(
     degradationReasons: payload?.degradationReasons,
     conclusionAllowed,
     marketRegimeSynthesis: normalizeMarketRegimeSynthesis(payload?.marketRegimeSynthesis),
+    marketDecisionSemantics: normalizeMarketDecisionSemantics(payload?.marketDecisionSemantics),
     scores: {
       overall: normalizeMarketTemperatureScore(scores.overall),
       usRiskAppetite: normalizeMarketTemperatureScore(scores.usRiskAppetite),

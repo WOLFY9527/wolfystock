@@ -59,7 +59,11 @@ from src.services.market_intelligence_trust_gate import (
     evaluate_market_intelligence_trust,
     evaluate_market_intelligence_trust_from_sources,
 )
-from src.services.market_regime_synthesis_adapter import build_market_regime_synthesis_payload
+from src.services.market_decision_semantics import derive_market_decision_semantics
+from src.services.market_regime_synthesis_adapter import (
+    build_liquidity_impulse_synthesis_payload,
+    build_market_regime_synthesis_payload,
+)
 from src.services.rotation_state_evidence import build_rotation_state_evidence
 from src.services.rotation_radar_quote_provider import get_rotation_radar_quote_provider
 from src.services.vix_metadata import normalize_vix_panel_metadata, normalize_vix_quote_metadata
@@ -883,11 +887,18 @@ class MarketOverviewService:
                 if trust["isReliable"]
                 else self._insufficient_market_temperature_scores()
             )
+            market_regime_synthesis = self._build_market_regime_synthesis_payload(inputs)
+            liquidity_impulse_synthesis = self._build_liquidity_impulse_synthesis_payload(inputs)
             payload = {
                 "source": source,
                 "updatedAt": _now_iso(),
                 "scores": scores,
-                "marketRegimeSynthesis": self._build_market_regime_synthesis_payload(inputs),
+                "marketRegimeSynthesis": market_regime_synthesis,
+                "marketDecisionSemantics": self._build_market_decision_semantics_payload(
+                    market_regime_synthesis,
+                    liquidity_impulse_synthesis,
+                    inputs,
+                ),
                 **trust,
             }
             if not trust["isReliable"]:
@@ -907,11 +918,18 @@ class MarketOverviewService:
                 inputs,
                 self._summarize_market_temperature_confidence(inputs),
             )
+            market_regime_synthesis = self._build_market_regime_synthesis_payload(inputs)
+            liquidity_impulse_synthesis = self._build_liquidity_impulse_synthesis_payload(inputs)
             return {
                 "source": "fallback",
                 "updatedAt": _now_iso(),
                 "scores": self._insufficient_market_temperature_scores(),
-                "marketRegimeSynthesis": self._build_market_regime_synthesis_payload(inputs),
+                "marketRegimeSynthesis": market_regime_synthesis,
+                "marketDecisionSemantics": self._build_market_decision_semantics_payload(
+                    market_regime_synthesis,
+                    liquidity_impulse_synthesis,
+                    inputs,
+                ),
                 "warning": INSUFFICIENT_MARKET_DATA_WARNING,
                 "fallbackUsed": True,
                 "isFallback": True,
@@ -994,6 +1012,100 @@ class MarketOverviewService:
 
     def _build_market_regime_synthesis_payload(self, inputs: Mapping[str, Any]) -> Dict[str, Any]:
         return build_market_regime_synthesis_payload(inputs)
+
+    def _build_liquidity_impulse_synthesis_payload(self, inputs: Mapping[str, Any]) -> Dict[str, Any]:
+        return build_liquidity_impulse_synthesis_payload(inputs)
+
+    def _build_market_decision_semantics_payload(
+        self,
+        market_regime_synthesis: Mapping[str, Any],
+        liquidity_impulse_synthesis: Mapping[str, Any],
+        inputs: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        rotation_summary = self._build_market_decision_rotation_summary(inputs)
+        try:
+            return derive_market_decision_semantics(
+                market_regime_synthesis,
+                liquidity_impulse_synthesis,
+                rotation_summary,
+            ).to_dict()
+        except Exception:
+            payload = derive_market_decision_semantics({}, {}, None).to_dict()
+            payload["dataGaps"] = [
+                *payload.get("dataGaps", []),
+                {
+                    "surface": "market_decision_semantics",
+                    "key": "market_decision_semantics:projection",
+                    "label": "Market Decision Semantics",
+                    "reason": "semantic_projection_failed",
+                },
+            ]
+            return payload
+
+    def _build_market_decision_rotation_summary(self, inputs: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+        panel = inputs.get("sectors")
+        if not isinstance(panel, Mapping):
+            return None
+        items = panel.get("items")
+        if not isinstance(items, Sequence):
+            return None
+        candidates = [item for item in items if isinstance(item, Mapping) and (item.get("symbol") or item.get("label") or item.get("name"))]
+        if not candidates:
+            return None
+        allowed = [item for item in candidates if self._market_decision_rotation_item_allowed(item)]
+        selected = allowed[0] if allowed else candidates[0]
+        is_allowed = bool(allowed)
+        score = self._clean_number(selected.get("rotationScore"))
+        if score is None:
+            score = self._clean_number(selected.get("value"))
+        if score is None:
+            score = self._clean_number(selected.get("price"))
+        source_tier = selected.get("sourceTier") or selected.get("sourceType")
+        degradation_reasons = selected.get("degradationReasons")
+        data_gaps = [
+            {
+                "key": f"rotation:{selected.get('symbol') or selected.get('label') or selected.get('name')}",
+                "label": str(selected.get("label") or selected.get("name") or selected.get("symbol") or "Rotation"),
+                "reason": str(reason),
+            }
+            for reason in (degradation_reasons if isinstance(degradation_reasons, Sequence) and not isinstance(degradation_reasons, (str, bytes, bytearray)) else [])
+            if reason
+        ]
+        if not is_allowed and not data_gaps:
+            reason = selected.get("sourceAuthorityReason") or selected.get("rankExclusionReason") or selected.get("degradationReason") or "rotation_non_scoring"
+            data_gaps.append({
+                "key": f"rotation:{selected.get('symbol') or selected.get('label') or selected.get('name')}",
+                "label": str(selected.get("label") or selected.get("name") or selected.get("symbol") or "Rotation"),
+                "reason": str(reason),
+            })
+        return {
+            "id": selected.get("symbol") or selected.get("id") or selected.get("name"),
+            "label": selected.get("label") or selected.get("name") or selected.get("symbol"),
+            "rotationScore": score,
+            "confidence": self._clean_number(selected.get("confidence") or selected.get("scoreCap")),
+            "stage": selected.get("stage") or selected.get("rankingLane"),
+            "changePercent": self._clean_number(selected.get("changePercent") or selected.get("change")),
+            "source": selected.get("source") or panel.get("source"),
+            "sourceTier": source_tier,
+            "trustLevel": selected.get("trustLevel") or panel.get("trustLevel"),
+            "freshness": selected.get("freshness") or panel.get("freshness"),
+            "sourceAuthorityAllowed": selected.get("sourceAuthorityAllowed") is not False,
+            "scoreContributionAllowed": selected.get("scoreContributionAllowed") is not False,
+            "evidenceQuality": "score_grade" if is_allowed else "taxonomy_only" if selected.get("taxonomyOnly") else "degraded_proxy",
+            "dataGaps": data_gaps,
+        }
+
+    @staticmethod
+    def _market_decision_rotation_item_allowed(item: Mapping[str, Any]) -> bool:
+        if item.get("sourceAuthorityAllowed") is False:
+            return False
+        if item.get("scoreContributionAllowed") is False:
+            return False
+        if item.get("rankEligible") is False or item.get("headlineEligible") is False:
+            return False
+        if item.get("taxonomyOnly") is True or item.get("observationOnly") is True:
+            return False
+        return True
 
     def get_futures(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         started_at = time.monotonic()
