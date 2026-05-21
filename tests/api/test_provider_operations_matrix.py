@@ -234,6 +234,127 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
         "coverage_floor_required",
     }.issubset(set(cn_money["routerReasonCodes"]))
 
+    dxy = _row_by_id(payload, "official_or_authorized.fx_dxy")
+    assert dxy["sourceType"] == "missing"
+    assert dxy["sourceTier"] == "official_or_authorized_fx_feed"
+    assert dxy["runtimeState"] == "missing_provider_configuration"
+    assert dxy["credentialState"] == "missing"
+    assert dxy["dependencyState"] == "not_required"
+    assert dxy["missingProviderReason"] == "authorized_dxy_feed_not_configured"
+    assert dxy["paidDataLikelyRequired"] is True
+    assert dxy["keyRequired"] is True
+    assert dxy["scoreContributionAllowed"] is False
+    assert dxy["scoreEligible"] is False
+    assert dxy["supportedCapabilities"] == ["fx_dxy"]
+    assert dxy["contractCadences"] == ["continuous_session"]
+    assert dxy["contractFreshnessFloors"] == ["delayed"]
+    assert dxy["contractCoverageRatioFloor"] == 1.0
+    assert dxy["requiredSourceTiers"] == ["official_or_authorized_fx_feed"]
+    assert dxy["scoreEligibilityGates"] == [
+        "configured_official_or_authorized_dxy_authority_and_pair_context"
+    ]
+    assert dxy["contractCoverageUniverses"] == ["dxy_reference_pair_bundle"]
+    assert {"market_overview", "liquidity_impulse"}.issubset(set(dxy["affectedSurfaces"]))
+    assert {
+        "missing_provider_configuration",
+        "cache_required",
+        "authorization_required",
+        "session_market_hours_required",
+        "freshness_floor_required",
+        "coverage_floor_required",
+    }.issubset(set(dxy["routerReasonCodes"]))
+
+    cn_hk_flow = _row_by_id(payload, "authorized.cn_hk_connect_flow")
+    assert cn_hk_flow["sourceType"] == "missing"
+    assert cn_hk_flow["sourceTier"] == "authorized_licensed_feed"
+    assert cn_hk_flow["runtimeState"] == "missing_provider_configuration"
+    assert cn_hk_flow["credentialState"] == "missing"
+    assert cn_hk_flow["dependencyState"] == "not_required"
+    assert cn_hk_flow["missingProviderReason"] == "authorized_cn_hk_connect_flow_feed_not_configured"
+    assert cn_hk_flow["paidDataLikelyRequired"] is True
+    assert cn_hk_flow["keyRequired"] is True
+    assert cn_hk_flow["scoreContributionAllowed"] is False
+    assert cn_hk_flow["scoreEligible"] is False
+    assert cn_hk_flow["supportedCapabilities"] == ["cn_hk_connect_flow"]
+    assert cn_hk_flow["contractCadences"] == ["session_daily"]
+    assert cn_hk_flow["contractFreshnessFloors"] == ["delayed"]
+    assert cn_hk_flow["contractCoverageRatioFloor"] == 0.8
+    assert cn_hk_flow["requiredSourceTiers"] == ["authorized_licensed_feed"]
+    assert cn_hk_flow["scoreEligibilityGates"] == [
+        "configured_cn_hk_connect_bundle_and_session_freshness_and_min_coverage"
+    ]
+    assert cn_hk_flow["contractCoverageUniverses"] == [
+        "northbound_southbound_mainland_flow_bundle"
+    ]
+    assert {"market_overview", "liquidity_impulse"}.issubset(set(cn_hk_flow["affectedSurfaces"]))
+    assert {
+        "missing_provider_configuration",
+        "cache_required",
+        "authorization_required",
+        "session_calendar_required",
+        "coverage_floor_required",
+    }.issubset(set(cn_hk_flow["routerReasonCodes"]))
+
+    futures = _row_by_id(payload, "exchange_or_broker_authorized.index_futures")
+    assert futures["sourceType"] == "missing"
+    assert futures["sourceTier"] == "exchange_or_broker_authorized_feed"
+    assert futures["runtimeState"] == "missing_provider_configuration"
+    assert futures["credentialState"] == "missing"
+    assert futures["dependencyState"] == "not_required"
+    assert futures["missingProviderReason"] == "authorized_index_futures_feed_not_configured"
+    assert futures["paidDataLikelyRequired"] is True
+    assert futures["keyRequired"] is True
+    assert futures["scoreContributionAllowed"] is False
+    assert futures["scoreEligible"] is False
+    assert futures["supportedCapabilities"] == ["index_futures"]
+    assert futures["contractCadences"] == ["extended_hours"]
+    assert futures["contractFreshnessFloors"] == ["delayed"]
+    assert futures["contractCoverageRatioFloor"] == 1.0
+    assert futures["requiredSourceTiers"] == ["exchange_or_broker_authorized_feed"]
+    assert futures["scoreEligibilityGates"] == [
+        "configured_authorized_index_futures_bundle_and_extended_hours_freshness"
+    ]
+    assert futures["contractCoverageUniverses"] == ["nq_es_ym_rty_extended_hours_bundle"]
+    assert {"market_overview", "liquidity_impulse"}.issubset(set(futures["affectedSurfaces"]))
+    assert {
+        "missing_provider_configuration",
+        "cache_required",
+        "authorization_required",
+        "extended_hours_session_required",
+        "freshness_floor_required",
+        "coverage_floor_required",
+    }.issubset(set(futures["routerReasonCodes"]))
+
+    rotation_flow = _row_by_id(payload, "authorized.real_sector_theme_flow")
+    assert rotation_flow["sourceType"] == "missing"
+    assert rotation_flow["sourceTier"] == "authorized_licensed_feed"
+    assert rotation_flow["runtimeState"] == "missing_provider_configuration"
+    assert rotation_flow["credentialState"] == "missing"
+    assert rotation_flow["dependencyState"] == "not_required"
+    assert rotation_flow["missingProviderReason"] == "authorized_real_sector_theme_flow_not_configured"
+    assert rotation_flow["paidDataLikelyRequired"] is True
+    assert rotation_flow["keyRequired"] is True
+    assert rotation_flow["scoreContributionAllowed"] is False
+    assert rotation_flow["scoreEligible"] is False
+    assert rotation_flow["supportedCapabilities"] == ["real_sector_theme_flow_evidence"]
+    assert rotation_flow["contractCadences"] == ["daily_intraday"]
+    assert rotation_flow["contractFreshnessFloors"] == ["delayed"]
+    assert rotation_flow["contractCoverageRatioFloor"] == 0.7
+    assert rotation_flow["requiredSourceTiers"] == ["authorized_licensed_feed"]
+    assert rotation_flow["scoreEligibilityGates"] == [
+        "configured_sector_theme_flow_and_taxonomy_mapping_and_min_coverage"
+    ]
+    assert rotation_flow["contractCoverageUniverses"] == ["licensed_sector_theme_flow_universe"]
+    assert "rotation_radar" in rotation_flow["affectedSurfaces"]
+    assert {
+        "missing_provider_configuration",
+        "cache_required",
+        "authorization_required",
+        "taxonomy_to_real_flow_mapping_required",
+        "freshness_floor_required",
+        "coverage_floor_required",
+    }.issubset(set(rotation_flow["routerReasonCodes"]))
+
 
 def test_weak_and_proxy_providers_remain_non_score_grade() -> None:
     payload = ProviderOperationsMatrixService(env={}, spec_finder=lambda _: None).build_matrix()

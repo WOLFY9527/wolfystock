@@ -37,9 +37,13 @@ EXPECTED_PROVIDER_IDS = {
     "fred_existing_baseline",
     "treasury_existing_baseline",
     "authorized.us_etf_flow",
+    "authorized.cn_hk_connect_flow",
+    "authorized.real_sector_theme_flow",
+    "exchange_or_broker_authorized.index_futures",
     "official_or_authorized.us_market_breadth",
     "official_public.cn_money_market_rates",
     "official_public.fed_liquidity",
+    "official_or_authorized.fx_dxy",
 }
 EXPECTED_ENTRY_FIELDS = {
     "providerName",

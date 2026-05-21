@@ -70,9 +70,13 @@ _CREDENTIAL_ENV_KEYS_BY_PROVIDER = {
 }
 _MISSING_FEED_PROVIDER_IDS = frozenset(
     {
+        "authorized.cn_hk_connect_flow",
+        "authorized.real_sector_theme_flow",
         "authorized.us_etf_flow",
+        "exchange_or_broker_authorized.index_futures",
         "official_public.cn_money_market_rates",
         "official_public.fed_liquidity",
+        "official_or_authorized.fx_dxy",
         "official_or_authorized.us_market_breadth",
     }
 )
@@ -444,11 +448,18 @@ class ProviderOperationsMatrixService:
             ("venue_observation", "venue_ticker", "crypto", "crypto"),
             ("market_overview", "fed_liquidity", "US", "macro"),
             ("liquidity_impulse", "fed_liquidity", "US", "macro"),
+            ("market_overview", "fx_dxy", "forex", "forex"),
+            ("liquidity_impulse", "fx_dxy", "forex", "forex"),
             ("market_overview", "us_etf_flow_daily", "US", "etf"),
             ("liquidity_impulse", "us_etf_creation_redemption", "US", "etf"),
             ("market_overview", "cn_money_market_rates", "CN", "macro"),
             ("liquidity_impulse", "cn_money_market_rates", "CN", "macro"),
+            ("market_overview", "cn_hk_connect_flow", "CN", "equity"),
+            ("liquidity_impulse", "cn_hk_connect_flow", "CN", "equity"),
+            ("market_overview", "index_futures", "US", "futures"),
+            ("liquidity_impulse", "index_futures", "US", "futures"),
             ("rotation_radar", "us_sector_etf_flow", "US", "etf"),
+            ("rotation_radar", "real_sector_theme_flow_evidence", "US", "equity"),
             ("market_overview", "us_market_breadth_constituents", "US", "equity"),
             ("liquidity_impulse", "us_market_breadth_constituents", "US", "equity"),
         )

@@ -7,6 +7,8 @@ import json
 import subprocess
 import sys
 
+import pytest
+
 from src.services.data_source_router import (
     DataSourceRouteRequest,
     DataSourceRouter,
@@ -690,6 +692,124 @@ def test_cn_money_market_contract_routes_stay_missing_cache_required_and_non_sco
     assert candidate.observation_only is True
     assert candidate.score_contribution_allowed is False
     assert candidate.missing_provider_reason == "official_cn_money_market_rates_contract_not_configured"
+
+
+@pytest.mark.parametrize(
+    (
+        "use_case",
+        "market",
+        "asset_type",
+        "capability",
+        "expected_provider_id",
+        "expected_source_tier",
+        "expected_missing_reason",
+        "expected_reason_codes",
+    ),
+    [
+        (
+            "liquidity_impulse",
+            "forex",
+            "forex",
+            "fx_dxy",
+            "official_or_authorized.fx_dxy",
+            "official_or_authorized_fx_feed",
+            "authorized_dxy_feed_not_configured",
+            {
+                "cache_required",
+                "missing_provider_configuration",
+                "authorization_required",
+                "session_market_hours_required",
+                "freshness_floor_required",
+                "coverage_floor_required",
+            },
+        ),
+        (
+            "market_overview",
+            "CN",
+            "equity",
+            "cn_hk_connect_flow",
+            "authorized.cn_hk_connect_flow",
+            "authorized_licensed_feed",
+            "authorized_cn_hk_connect_flow_feed_not_configured",
+            {
+                "cache_required",
+                "missing_provider_configuration",
+                "authorization_required",
+                "session_calendar_required",
+                "coverage_floor_required",
+            },
+        ),
+        (
+            "liquidity_impulse",
+            "US",
+            "futures",
+            "index_futures",
+            "exchange_or_broker_authorized.index_futures",
+            "exchange_or_broker_authorized_feed",
+            "authorized_index_futures_feed_not_configured",
+            {
+                "cache_required",
+                "missing_provider_configuration",
+                "authorization_required",
+                "extended_hours_session_required",
+                "freshness_floor_required",
+                "coverage_floor_required",
+            },
+        ),
+        (
+            "rotation_radar",
+            "US",
+            "equity",
+            "real_sector_theme_flow_evidence",
+            "authorized.real_sector_theme_flow",
+            "authorized_licensed_feed",
+            "authorized_real_sector_theme_flow_not_configured",
+            {
+                "cache_required",
+                "missing_provider_configuration",
+                "authorization_required",
+                "taxonomy_to_real_flow_mapping_required",
+                "freshness_floor_required",
+                "coverage_floor_required",
+            },
+        ),
+    ],
+)
+def test_missing_market_intelligence_authority_contracts_route_as_explicit_non_scoring_gaps(
+    use_case: str,
+    market: str,
+    asset_type: str,
+    capability: str,
+    expected_provider_id: str,
+    expected_source_tier: str,
+    expected_missing_reason: str,
+    expected_reason_codes: set[str],
+) -> None:
+    plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market=market,
+            asset_type=asset_type,
+            use_case=use_case,
+            capability=capability,
+            freshness_need="daily",
+            scoring_allowed=False,
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+
+    assert _ids(plan.primary_candidates) == {expected_provider_id}
+    assert _ids(plan.observation_candidates) == set()
+    assert plan.cache_required is True
+    assert plan.score_contribution_allowed is False
+    assert expected_reason_codes.issubset(set(plan.reason_codes["plan"]))
+
+    candidate = plan.primary_candidates[0]
+    assert candidate.source_type == "missing"
+    assert candidate.source_tier == expected_source_tier
+    assert candidate.observation_only is True
+    assert candidate.score_contribution_allowed is False
+    assert candidate.missing_provider_reason == expected_missing_reason
 
 
 def test_route_diagnostic_snapshot_serializes_missing_provider_fields_for_authorized_flow_contracts() -> None:

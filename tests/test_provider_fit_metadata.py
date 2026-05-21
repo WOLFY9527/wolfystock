@@ -23,6 +23,8 @@ from src.services.provider_capability_matrix import (
 
 EXPECTED_PROVIDER_IDS = {
     "authorized.us_etf_flow",
+    "authorized.cn_hk_connect_flow",
+    "authorized.real_sector_theme_flow",
     "finnhub",
     "alpha_vantage",
     "twelve_data",
@@ -46,8 +48,10 @@ EXPECTED_PROVIDER_IDS = {
     "binance_public",
     "coinbase_public",
     "fred_existing_baseline",
+    "exchange_or_broker_authorized.index_futures",
     "official_public.cn_money_market_rates",
     "official_public.fed_liquidity",
+    "official_or_authorized.fx_dxy",
     "official_or_authorized.us_market_breadth",
     "treasury_existing_baseline",
 }
@@ -131,6 +135,17 @@ def test_provider_fit_metadata_covers_all_audited_candidates_and_stays_sorted() 
             },
         ),
         (
+            "official_or_authorized.fx_dxy",
+            {
+                "providerCategory": "authorized_fx_macro_dataset",
+                "sourceTier": "official_or_authorized_fx_feed",
+                "trustLevel": "score_grade_when_configured",
+                "freshnessExpectation": "continuous_session_or_delayed_fix_snapshot",
+                "paidDataLikelyRequired": True,
+                "keyRequired": True,
+            },
+        ),
+        (
             "baostock",
             {
                 "providerCategory": "cn_delayed_observation",
@@ -148,6 +163,39 @@ def test_provider_fit_metadata_covers_all_audited_candidates_and_stays_sorted() 
                 "sourceTier": "official_or_authorized_licensed_feed",
                 "trustLevel": "score_grade_when_configured",
                 "freshnessExpectation": "licensed_daily_or_delayed_breadth_snapshot",
+                "paidDataLikelyRequired": True,
+                "keyRequired": True,
+            },
+        ),
+        (
+            "authorized.cn_hk_connect_flow",
+            {
+                "providerCategory": "authorized_cross_border_flow_dataset",
+                "sourceTier": "authorized_licensed_feed",
+                "trustLevel": "score_grade_when_configured",
+                "freshnessExpectation": "session_delayed_cross_border_flow_snapshot",
+                "paidDataLikelyRequired": True,
+                "keyRequired": True,
+            },
+        ),
+        (
+            "exchange_or_broker_authorized.index_futures",
+            {
+                "providerCategory": "authorized_index_futures_dataset",
+                "sourceTier": "exchange_or_broker_authorized_feed",
+                "trustLevel": "score_grade_when_configured",
+                "freshnessExpectation": "extended_hours_delayed_or_realtime_index_futures",
+                "paidDataLikelyRequired": True,
+                "keyRequired": True,
+            },
+        ),
+        (
+            "authorized.real_sector_theme_flow",
+            {
+                "providerCategory": "authorized_rotation_flow_dataset",
+                "sourceTier": "authorized_licensed_feed",
+                "trustLevel": "score_grade_when_configured",
+                "freshnessExpectation": "daily_or_intraday_sector_theme_flow_snapshot",
                 "paidDataLikelyRequired": True,
                 "keyRequired": True,
             },
@@ -259,6 +307,7 @@ def test_authorized_us_flow_and_breadth_metadata_carry_coverage_and_score_gate_r
 def test_official_liquidity_contract_metadata_carries_release_and_session_gates() -> None:
     fed_entry = get_provider_fit_metadata("official_public.fed_liquidity")
     cn_entry = get_provider_fit_metadata("official_public.cn_money_market_rates")
+    dxy_entry = get_provider_fit_metadata("official_or_authorized.fx_dxy")
 
     assert fed_entry is not None
     assert {
@@ -287,6 +336,19 @@ def test_official_liquidity_contract_metadata_carries_release_and_session_gates(
         "coverage_unqualified",
     }.issubset(set(cn_entry.rejected_for))
     assert "score_inputs_without_full_official_cache" in cn_entry.not_recommended_for
+
+    assert dxy_entry is not None
+    assert {
+        "dxy_reference_authority",
+        "usd_macro_context_authority",
+        "major_fx_pair_crosscheck",
+    }.issubset(set(dxy_entry.best_use_cases))
+    assert {
+        "runtime_unconfigured",
+        "session_unqualified",
+        "coverage_unqualified",
+    }.issubset(set(dxy_entry.rejected_for))
+    assert "proxy_replacements" in dxy_entry.not_recommended_for
 
 
 def test_official_liquidity_contract_supports_and_scoring_gates_stay_missing_and_fail_closed() -> None:
@@ -326,6 +388,26 @@ def test_official_liquidity_contract_supports_and_scoring_gates_stay_missing_and
         assert scoring.freshness_floor == "delayed"
         assert scoring.coverage_ratio_floor == 1.0
         assert scoring.required_source_tier == "official_public"
+
+    dxy_support = get_provider_capability_support_contract("official_or_authorized.fx_dxy", "fx_dxy")
+    dxy_scoring = get_provider_scoring_contract("official_or_authorized.fx_dxy", "fx_dxy")
+    assert dxy_support is not None
+    assert dxy_support.source_type == "missing"
+    assert dxy_support.source_tier == "official_or_authorized_fx_feed"
+    assert dxy_support.observation_only is True
+    assert dxy_support.score_contribution_allowed is False
+    assert dxy_support.paid_data_likely_required is True
+    assert dxy_support.key_required is True
+    assert dxy_support.cache_required is True
+    assert dxy_support.background_refresh_recommended is True
+    assert dxy_support.missing_provider_reason == "authorized_dxy_feed_not_configured"
+
+    assert dxy_scoring is not None
+    assert dxy_scoring.coverage_universe == "dxy_reference_pair_bundle"
+    assert dxy_scoring.cadence == "continuous_session"
+    assert dxy_scoring.freshness_floor == "delayed"
+    assert dxy_scoring.coverage_ratio_floor == 1.0
+    assert dxy_scoring.required_source_tier == "official_or_authorized_fx_feed"
 
 
 def test_authorized_us_flow_and_breadth_support_contracts_cover_required_capabilities() -> None:
