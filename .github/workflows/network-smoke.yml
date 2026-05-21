@@ -34,6 +34,30 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
+          set +e
+          python -m pytest -m network --collect-only -q 2>&1 | tee pytest-network-collect.log
+          collect_status=${PIPESTATUS[0]}
+          set -e
+
+          if grep -Eq '(^|[^0-9])0 selected' pytest-network-collect.log || grep -q 'no tests collected' pytest-network-collect.log; then
+            echo "::error title=Empty network smoke pytest selection::python -m pytest -m network selected 0 tests during collect-only."
+            if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+              {
+                echo "### Network smoke pytest"
+                echo ""
+                echo ":x: \`python -m pytest -m network --collect-only -q\` selected 0 tests."
+                echo ""
+                echo "The pytest network phase is empty; add or restore network-marked tests before treating this smoke as covered."
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+            exit 1
+          fi
+
+          if [ "$collect_status" -ne 0 ]; then
+            echo "::error title=Network smoke pytest collection failed::Collect-only check failed before running network tests."
+            exit "$collect_status"
+          fi
+
           python -m pytest -m network -q | tee pytest-network.log
 
       - name: 🚀 Run quick smoke (non-blocking)
@@ -48,6 +72,7 @@ jobs:
         with:
           name: network-smoke-logs-${{ github.run_number }}
           path: |
+            pytest-network-collect.log
             pytest-network.log
             quick-smoke.log
           if-no-files-found: ignore
