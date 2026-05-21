@@ -8,6 +8,8 @@ import {
   type MarketProviderCacheState,
   type MarketProviderEventRollup,
   type MarketProviderOperationItem,
+  type ProviderOperationsMatrixResponse,
+  type ProviderOperationsMatrixRow,
   type MarketProviderOperationsResponse,
   type MarketProviderOperationsSummary,
 } from '../api/marketProviderOperations';
@@ -59,6 +61,7 @@ const SENSITIVE_KEYWORD_PATTERN = /(token|secret|cookie|session|password|authori
 const EMPTY_PROVIDER_ITEMS: MarketProviderOperationItem[] = [];
 const EMPTY_PROVIDER_CACHE_STATES: MarketProviderCacheState[] = [];
 const EMPTY_PROVIDER_EVENT_ROLLUPS: MarketProviderEventRollup[] = [];
+const EMPTY_PROVIDER_MATRIX_ROWS: ProviderOperationsMatrixRow[] = [];
 const EMPTY_READINESS_CHECKS: MarketDataReadinessCheck[] = [];
 const SUMMARY_DEFAULTS: MarketProviderOperationsSummary = {
   totalItems: 0,
@@ -75,6 +78,14 @@ const SUMMARY_DEFAULTS: MarketProviderOperationsSummary = {
   fallbackEventCount: 0,
   staleEventCount: 0,
   slowEventCount: 0,
+};
+const MATRIX_SUMMARY_DEFAULTS = {
+  totalRows: 0,
+  observationOnlyRows: 0,
+  inertMetadataOnlyRows: 0,
+  missingProviderRows: 0,
+  scoreEligibleRows: 0,
+  paidDataLikelyRequiredRows: 0,
 };
 
 function safeFiniteNumber(value: unknown): number | null {
@@ -255,6 +266,11 @@ function sanitizeOperatorText(value?: string | number | null, fallback = '暂无
   return redacted.slice(0, 120);
 }
 
+function sanitizeCodeLabel(value?: string | null, fallback = '暂无数据'): string {
+  if (!value) return fallback;
+  return sanitizeOperatorText(value, fallback);
+}
+
 function limitationLabel(value: string): string {
   if (value.startsWith('cache_metadata_unavailable:')) {
     const key = value.split(':').slice(1).join(':') || 'unknown';
@@ -294,6 +310,38 @@ function safeMetadataSummary(response: MarketProviderOperationsResponse): Record
       source: response.metadata.source,
     },
   };
+}
+
+function matrixStateVariant(value?: string | null): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'runtime_metadata' || normalized === 'present' || normalized === 'installed') return 'success';
+  if (normalized === 'credential_missing' || normalized === 'dependency_missing' || normalized === 'missing_provider_configuration') return 'caution';
+  if (normalized === 'missing') return 'caution';
+  if (normalized === 'observation_only') return 'info';
+  return 'neutral';
+}
+
+function matrixGateVariant(value: boolean | undefined): 'neutral' | 'success' | 'caution' {
+  if (value === true) return 'success';
+  if (value === false) return 'caution';
+  return 'neutral';
+}
+
+function matrixGateLabel(label: string, value: boolean): string {
+  return `${label}=${value ? 'true' : 'false'}`;
+}
+
+function matrixCacheRequired(row: ProviderOperationsMatrixRow): boolean {
+  return row.cacheRequired === true || (row.routerReasonCodes || []).includes('cache_required');
+}
+
+function matrixReasonCodes(row: ProviderOperationsMatrixRow): string[] {
+  const reasons = [
+    ...(row.routerReasonCodes || []),
+    row.missingProviderReason || null,
+    row.degradationReason || null,
+  ].filter((value, index, list): value is string => Boolean(value) && list.indexOf(value) === index);
+  return reasons.slice(0, 4);
 }
 
 function statusChipVariant(status: StatusTone): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
@@ -453,6 +501,120 @@ const ReadOnlyBadges: React.FC<{ response?: MarketProviderOperationsResponse | n
       </TerminalChip>
       <TerminalChip variant="neutral">窗口 {response?.window?.key || '24h'}</TerminalChip>
     </div>
+  );
+};
+
+const ProviderOperationsMatrixPanel: React.FC<{
+  response: ProviderOperationsMatrixResponse | null;
+  isLoading: boolean;
+  error: ParsedApiError | null;
+}> = ({ response, isLoading, error }) => {
+  const rows = response?.rows ?? EMPTY_PROVIDER_MATRIX_ROWS;
+  const summary = response?.summary ?? MATRIX_SUMMARY_DEFAULTS;
+
+  return (
+    <TerminalPanel as="section" className="col-span-12">
+      <TerminalSectionHeader
+        eyebrow="静态契约"
+        title="Provider operations matrix"
+        action={(
+          <div className="flex flex-wrap gap-1.5">
+            <TerminalChip variant="neutral">{formatNumber(summary.totalRows, 0)} rows</TerminalChip>
+            <TerminalChip variant="info">{formatNumber(summary.observationOnlyRows, 0)} observation-only</TerminalChip>
+            <TerminalChip variant="success">{formatNumber(summary.scoreEligibleRows, 0)} score-eligible</TerminalChip>
+          </div>
+        )}
+      />
+      <p className="mt-2 text-[11px] leading-5 text-white/42">
+        只显示 provider/source 标识、source type/tier、runtime/readiness code、cache/gate 标记与 reason code；不展示 secret、原始 URL、原始 payload 或本地路径。
+      </p>
+
+      {error ? <ApiErrorAlert error={error} className="mt-4" /> : null}
+
+      {isLoading && !response ? (
+        <div className="mt-4">
+          <TerminalEmptyState title="正在读取 provider matrix">保持只读，只请求 `/api/v1/admin/providers/operations-matrix`。</TerminalEmptyState>
+        </div>
+      ) : null}
+
+      {!isLoading && !error && !rows.length ? (
+        <div className="mt-4">
+          <TerminalEmptyState title="暂无 provider matrix 行">接口未返回 row 时，不前端推断 provider readiness 或 source 权限。</TerminalEmptyState>
+        </div>
+      ) : null}
+
+      {!isLoading && rows.length ? (
+        <div className="mt-4">
+          <TerminalDenseTable>
+            <table className="min-w-full table-fixed">
+              <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
+                <tr className="border-b border-white/5 text-left">
+                  <th className="px-3 py-3 font-medium">Provider</th>
+                  <th className="px-3 py-3 font-medium">Source</th>
+                  <th className="px-3 py-3 font-medium">Readiness</th>
+                  <th className="px-3 py-3 font-medium">Gates</th>
+                  <th className="px-3 py-3 font-medium">Reason codes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const reasonCodes = matrixReasonCodes(row);
+                  return (
+                    <tr key={row.providerId} className="border-b border-white/[0.04] align-top">
+                      <td className="px-3 py-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-white">{row.providerName || row.providerId}</p>
+                          <p className="mt-1 truncate font-mono text-[11px] text-white/42">{row.providerId}</p>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          {row.sourceType ? <TerminalChip variant="neutral">{sanitizeCodeLabel(row.sourceType)}</TerminalChip> : null}
+                          {row.sourceTier ? <TerminalChip variant="neutral">{sanitizeCodeLabel(row.sourceTier)}</TerminalChip> : null}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          {row.runtimeState ? <TerminalChip variant={matrixStateVariant(row.runtimeState)}>{sanitizeCodeLabel(row.runtimeState)}</TerminalChip> : null}
+                          {row.credentialState ? <TerminalChip variant={matrixStateVariant(row.credentialState)}>{sanitizeCodeLabel(row.credentialState)}</TerminalChip> : null}
+                          {row.dependencyState ? <TerminalChip variant={matrixStateVariant(row.dependencyState)}>{sanitizeCodeLabel(row.dependencyState)}</TerminalChip> : null}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          <TerminalChip variant={matrixCacheRequired(row) ? 'info' : 'neutral'}>
+                            {matrixCacheRequired(row) ? 'cache-required' : 'cache-optional'}
+                          </TerminalChip>
+                          <TerminalChip variant={matrixGateVariant(row.scoreContributionAllowed)}>
+                            {matrixGateLabel('score', row.scoreContributionAllowed === true)}
+                          </TerminalChip>
+                          {typeof row.sourceAuthorityAllowed === 'boolean' ? (
+                            <TerminalChip variant={matrixGateVariant(row.sourceAuthorityAllowed)}>
+                              {matrixGateLabel('sourceAuthority', row.sourceAuthorityAllowed)}
+                            </TerminalChip>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        {reasonCodes.length ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {reasonCodes.map((reason) => (
+                              <TerminalChip key={`${row.providerId}-${reason}`} variant="caution">{sanitizeCodeLabel(reason)}</TerminalChip>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-white/42">暂无数据</p>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </TerminalDenseTable>
+        </div>
+      ) : null}
+    </TerminalPanel>
   );
 };
 
@@ -851,13 +1013,16 @@ const EmptyErrorState: React.FC = () => (
 const MarketProviderOperationsPage: React.FC = () => {
   const { language } = useI18n();
   const [response, setResponse] = useState<MarketProviderOperationsResponse | null>(null);
+  const [matrixResponse, setMatrixResponse] = useState<ProviderOperationsMatrixResponse | null>(null);
   const [readiness, setReadiness] = useState<MarketDataReadinessResponse | null>(null);
   const [selectedProviderKey, setSelectedProviderKey] = useState<string | null>(null);
   const [readinessSymbolsInput, setReadinessSymbolsInput] = useState('');
   const [submittedReadinessSymbols, setSubmittedReadinessSymbols] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isMatrixLoading, setIsMatrixLoading] = useState(true);
   const [isReadinessLoading, setIsReadinessLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
+  const [matrixError, setMatrixError] = useState<ParsedApiError | null>(null);
   const [readinessError, setReadinessError] = useState<ParsedApiError | null>(null);
 
   useEffect(() => {
@@ -874,6 +1039,26 @@ const MarketProviderOperationsPage: React.FC = () => {
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    marketProviderOperationsApi.getOperationsMatrix()
+      .then((payload) => {
+        if (!cancelled) setMatrixResponse(payload);
+      })
+      .catch((apiError) => {
+        if (!cancelled) {
+          const parsed = getParsedApiError(apiError);
+          setMatrixError({ ...parsed, title: '读取 provider operations matrix 失败' });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsMatrixLoading(false);
       });
     return () => {
       cancelled = true;
@@ -993,6 +1178,7 @@ const MarketProviderOperationsPage: React.FC = () => {
         {error && !response && !isLoading ? <EmptyErrorState /> : null}
         {!isLoading ? (
           <TerminalGrid>
+            <ProviderOperationsMatrixPanel response={matrixResponse} isLoading={isMatrixLoading} error={matrixError} />
             {response ? (
               <>
                 <ProviderOperationsTable items={items} selectedKey={effectiveSelectedProviderKey} onSelect={setSelectedProviderKey} />

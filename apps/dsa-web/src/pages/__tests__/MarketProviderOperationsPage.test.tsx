@@ -6,6 +6,10 @@ const { getOperations } = vi.hoisted(() => ({
   getOperations: vi.fn(),
 }));
 
+const { getOperationsMatrix } = vi.hoisted(() => ({
+  getOperationsMatrix: vi.fn(),
+}));
+
 const { getDataReadiness } = vi.hoisted(() => ({
   getDataReadiness: vi.fn(),
 }));
@@ -13,6 +17,7 @@ const { getDataReadiness } = vi.hoisted(() => ({
 vi.mock('../../api/marketProviderOperations', () => ({
   marketProviderOperationsApi: {
     getOperations,
+    getOperationsMatrix,
   },
 }));
 
@@ -223,10 +228,103 @@ const readinessPayload = {
   ],
 };
 
+const operationsMatrixPayload = {
+  generatedAt: '2026-05-06T09:12:00+08:00',
+  diagnosticOnly: true,
+  rows: [
+    {
+      providerId: 'official_public.fed_liquidity',
+      providerName: 'Fed Liquidity',
+      providerCategory: 'capability_support_contract',
+      sourceType: 'missing',
+      sourceTier: 'official_public',
+      trustLevel: 'unknown',
+      freshnessExpectation: 'delayed',
+      runtimeState: 'missing_provider_configuration',
+      credentialState: 'not_required',
+      dependencyState: 'not_required',
+      enabledByDefault: false,
+      observationOnly: true,
+      scoreContributionAllowed: false,
+      sourceAuthorityAllowed: false,
+      scoreEligible: false,
+      inertMetadataOnly: true,
+      paidDataLikelyRequired: false,
+      keyRequired: false,
+      noDefaultLiveHttpCalls: true,
+      cacheRequired: true,
+      supportedCapabilities: ['fed_liquidity'],
+      affectedSurfaces: ['market_overview', 'liquidity_impulse'],
+      routerReasonCodes: ['cache_required', 'freshness_floor_required', 'missing_provider_configuration'],
+      missingProviderReason: 'official_fed_liquidity_contract_not_configured',
+      degradationReason: 'missing_provider_configuration',
+      remediationHint: 'Configure https://example.com/feed and read /var/tmp/provider before runtime.',
+      diagnosticOnly: true,
+    },
+    {
+      providerId: 'tushare_pro',
+      providerName: 'Tushare Pro',
+      providerCategory: 'runtime_capability',
+      sourceType: 'official_public',
+      sourceTier: 'runtime_metadata',
+      trustLevel: 'score_grade',
+      freshnessExpectation: 'daily',
+      runtimeState: 'credential_missing',
+      credentialState: 'missing',
+      dependencyState: 'installed',
+      enabledByDefault: true,
+      observationOnly: false,
+      scoreContributionAllowed: true,
+      sourceAuthorityAllowed: true,
+      scoreEligible: true,
+      inertMetadataOnly: false,
+      paidDataLikelyRequired: false,
+      keyRequired: true,
+      noDefaultLiveHttpCalls: true,
+      cacheRequired: false,
+      supportedCapabilities: ['cn_history_daily'],
+      affectedSurfaces: ['scanner'],
+      routerReasonCodes: ['credential_missing'],
+      missingProviderReason: null,
+      degradationReason: 'credential_missing',
+      remediationHint: 'TUSHARE_TOKEN=super-secret-token',
+      diagnosticOnly: true,
+    },
+  ],
+  summary: {
+    totalRows: 2,
+    observationOnlyRows: 1,
+    inertMetadataOnlyRows: 1,
+    missingProviderRows: 1,
+    scoreEligibleRows: 1,
+    paidDataLikelyRequiredRows: 0,
+  },
+  metadata: {
+    source: 'provider_fit_capability_readiness_router_contracts',
+    readOnly: true,
+    diagnosticOnly: true,
+    externalProviderCalls: false,
+    providerProbesForced: false,
+    networkCallsEnabled: false,
+    cacheMutation: false,
+    providerOrderChanged: false,
+    dataFetcherManagerChanged: false,
+    frontendChanged: false,
+    dbChanged: false,
+    secretValuesIncluded: false,
+    rawProviderPayloadsIncluded: false,
+    readinessStatus: 'partial',
+    rowCount: 2,
+    rawProviderUrl: 'https://secret-provider.example.com',
+    localConfigPath: '/Users/example/provider',
+  },
+};
+
 describe('MarketProviderOperationsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getDataReadiness.mockResolvedValue(readinessPayload);
+    getOperationsMatrix.mockResolvedValue(operationsMatrixPayload);
   });
 
   afterEach(() => {
@@ -279,6 +377,13 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getByText('Set TUSHARE_TOKEN when local operators need Tushare-backed CN/HK market intelligence inputs.')).toBeInTheDocument();
     expect(screen.getByText('Representative US parquet files are missing for part of the requested symbol set.')).toBeInTheDocument();
     expect(screen.getByText('限制与快照摘要')).toBeInTheDocument();
+    expect(screen.getByText('Provider operations matrix')).toBeInTheDocument();
+    expect(screen.getByText('official_public.fed_liquidity')).toBeInTheDocument();
+    expect(screen.getAllByText('missing_provider_configuration').length).toBeGreaterThan(0);
+    expect(screen.getByText('cache_required')).toBeInTheDocument();
+    expect(screen.getByText('sourceAuthority=false')).toBeInTheDocument();
+    expect(screen.getByText('score=false')).toBeInTheDocument();
+    expect(screen.getByText('cache-required')).toBeInTheDocument();
     expect(screen.getAllByText('缓存状态').length).toBeGreaterThan(0);
     expect(screen.getAllByText('最近异常').length).toBeGreaterThan(0);
     expect(screen.getAllByText('查看 Admin Logs').length).toBeGreaterThan(0);
@@ -290,7 +395,10 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getByText('权限拒绝')).toBeInTheDocument();
     expect(screen.queryByText('SECRET')).not.toBeInTheDocument();
     expect(screen.queryByText(/token=/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('TUSHARE_TOKEN=super-secret-token')).not.toBeInTheDocument();
     expect(screen.queryByText('tickflow_permission_unavailable')).not.toBeInTheDocument();
+    expect(screen.queryByText('https://secret-provider.example.com')).not.toBeInTheDocument();
+    expect(screen.queryByText('/Users/example/provider')).not.toBeInTheDocument();
 
     const diagnosticsDisclosure = screen.getByTestId('market-provider-diagnostics-disclosure');
     const disclosureToggle = screen.getByRole('button', { name: '展开 二级细节：限制代码、快照摘要、追踪标识' });
@@ -335,6 +443,41 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getAllByText('待统计').length).toBeGreaterThan(0);
     expect(screen.queryByText('NaN')).not.toBeInTheDocument();
     expect(consoleErrorSpy.mock.calls.some((call) => call.join(' ').includes('Received NaN'))).toBe(false);
+  });
+
+  it('shows a compact empty state when the operations matrix has no rows', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+    getOperationsMatrix.mockResolvedValue({
+      ...operationsMatrixPayload,
+      rows: [],
+      summary: {
+        ...operationsMatrixPayload.summary,
+        totalRows: 0,
+        observationOnlyRows: 0,
+        inertMetadataOnlyRows: 0,
+        missingProviderRows: 0,
+        scoreEligibleRows: 0,
+      },
+      metadata: {
+        ...operationsMatrixPayload.metadata,
+        rowCount: 0,
+      },
+    });
+
+    render(<MarketProviderOperationsPage />);
+
+    expect(await screen.findByText('Provider operations matrix')).toBeInTheDocument();
+    expect(screen.getByText('暂无 provider matrix 行')).toBeInTheDocument();
+  });
+
+  it('renders a section-scoped API error when the operations matrix request fails', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+    getOperationsMatrix.mockRejectedValue(new Error('forbidden'));
+
+    render(<MarketProviderOperationsPage />);
+
+    expect(await screen.findByRole('heading', { name: '数据源运维' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('读取 provider operations matrix 失败')).toBeInTheDocument());
   });
 
   it('keeps raw diagnostics collapsed by default and preserves compact empty states', async () => {
