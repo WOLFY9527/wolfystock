@@ -455,7 +455,12 @@ def test_market_regime_and_liquidity_impulse_routes_surface_missing_authorized_u
     assert flow_plan.cache_required is True
     assert flow_plan.score_contribution_allowed is False
     assert flow_plan.degradation_policy == "require_authorized_feed_or_explicit_missing"
-    assert "missing_provider_configuration" in flow_plan.reason_codes["plan"]
+    assert {
+        "missing_provider_configuration",
+        "authorization_required",
+        "freshness_floor_required",
+        "coverage_floor_required",
+    }.issubset(set(flow_plan.reason_codes["plan"]))
     assert {"yfinance_current_baseline", "yahooquery", "akshare", "baostock", "coinbase_public"}.issubset(
         _ids(flow_plan.forbidden_providers)
     )
@@ -471,7 +476,12 @@ def test_market_regime_and_liquidity_impulse_routes_surface_missing_authorized_u
     assert breadth_plan.cache_required is True
     assert breadth_plan.score_contribution_allowed is False
     assert breadth_plan.degradation_policy == "require_authorized_feed_or_explicit_missing"
-    assert "missing_provider_configuration" in breadth_plan.reason_codes["plan"]
+    assert {
+        "missing_provider_configuration",
+        "authorization_required",
+        "freshness_floor_required",
+        "coverage_floor_required",
+    }.issubset(set(breadth_plan.reason_codes["plan"]))
     assert {
         "yfinance_current_baseline",
         "yahooquery",
@@ -485,6 +495,74 @@ def test_market_regime_and_liquidity_impulse_routes_surface_missing_authorized_u
     assert breadth_candidate.paid_data_likely_required is True
     assert breadth_candidate.key_required is True
     assert breadth_candidate.no_default_live_http_calls is True
+
+
+def test_authorized_us_breadth_detail_routes_stay_missing_and_fail_closed_for_scoring() -> None:
+    advancers_plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="US",
+            asset_type="equity",
+            use_case="liquidity_impulse",
+            capability="us_advancers_decliners",
+            freshness_need="daily",
+            scoring_allowed=False,
+            symbol="SPY",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+    highs_lows_plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="US",
+            asset_type="equity",
+            use_case="market_overview",
+            capability="us_new_highs_lows",
+            freshness_need="daily",
+            scoring_allowed=False,
+            symbol="SPY",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+    above_ma_plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="US",
+            asset_type="equity",
+            use_case="market_regime",
+            capability="us_above_ma_breadth",
+            freshness_need="daily",
+            scoring_allowed=False,
+            symbol="SPY",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+
+    for plan in (advancers_plan, highs_lows_plan, above_ma_plan):
+        assert _ids(plan.primary_candidates) == {"official_or_authorized.us_market_breadth"}
+        assert _ids(plan.observation_candidates) == set()
+        assert plan.cache_required is True
+        assert plan.score_contribution_allowed is False
+        assert {
+            "missing_provider_configuration",
+            "authorization_required",
+            "freshness_floor_required",
+            "coverage_floor_required",
+        }.issubset(set(plan.reason_codes["plan"]))
+        assert {
+            "yfinance_current_baseline",
+            "yahooquery",
+            "akshare",
+            "baostock",
+            "pytdx_existing_baseline",
+        }.issubset(_ids(plan.forbidden_providers))
+
+    forbidden = {
+        candidate.provider_id: set(advancers_plan.reason_codes[candidate.provider_id])
+        for candidate in advancers_plan.forbidden_providers
+    }
+    assert "provider_forbidden_for_use_case" in forbidden["yfinance_current_baseline"]
+    assert "provider_not_capable" in forbidden["yfinance_current_baseline"]
 
 
 def test_rotation_radar_true_flow_route_rejects_proxy_and_exchange_snapshot_replacements() -> None:
@@ -504,6 +582,12 @@ def test_rotation_radar_true_flow_route_rejects_proxy_and_exchange_snapshot_repl
 
     assert _ids(plan.primary_candidates) == {"authorized.us_etf_flow"}
     assert plan.score_contribution_allowed is False
+    assert {
+        "missing_provider_configuration",
+        "authorization_required",
+        "freshness_floor_required",
+        "coverage_floor_required",
+    }.issubset(set(plan.reason_codes["plan"]))
     assert "yfinance_current_baseline" in _ids(plan.forbidden_providers)
     assert "yahooquery" in _ids(plan.forbidden_providers)
     assert "coinbase_public" in _ids(plan.forbidden_providers)

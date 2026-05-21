@@ -94,6 +94,30 @@ class ProviderCapability:
     operator_notes: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class ProviderScoringContract:
+    provider_id: str
+    capability: str
+    coverage_universe: str
+    cadence: str
+    freshness_floor: str
+    coverage_ratio_floor: float
+    required_source_tier: str
+    score_eligibility_gate: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "providerId": self.provider_id,
+            "capability": self.capability,
+            "coverageUniverse": self.coverage_universe,
+            "cadence": self.cadence,
+            "freshnessFloor": self.freshness_floor,
+            "coverageRatioFloor": self.coverage_ratio_floor,
+            "requiredSourceTier": self.required_source_tier,
+            "scoreEligibilityGate": self.score_eligibility_gate,
+        }
+
+
 def _ttl(**values: int) -> Mapping[str, int]:
     return MappingProxyType(dict(values))
 
@@ -698,6 +722,45 @@ _PROVIDER_CAPABILITY_SUPPORT_CONTRACTS = (
     ),
     _capability_support_entry(
         "official_or_authorized.us_market_breadth",
+        "us_advancers_decliners",
+        provider_name="Official or Authorized US Market Breadth",
+        source_type="missing",
+        source_tier="official_or_authorized_licensed_feed",
+        trust_level="score_grade_when_configured",
+        freshness_expectation="licensed_daily_or_delayed_breadth_snapshot",
+        degradation_reason="authorized_feed_not_configured",
+        missing_provider_reason="authorized_us_market_breadth_feed_not_configured",
+        paid_data_likely_required=True,
+        key_required=True,
+    ),
+    _capability_support_entry(
+        "official_or_authorized.us_market_breadth",
+        "us_new_highs_lows",
+        provider_name="Official or Authorized US Market Breadth",
+        source_type="missing",
+        source_tier="official_or_authorized_licensed_feed",
+        trust_level="score_grade_when_configured",
+        freshness_expectation="licensed_daily_or_delayed_breadth_snapshot",
+        degradation_reason="authorized_feed_not_configured",
+        missing_provider_reason="authorized_us_market_breadth_feed_not_configured",
+        paid_data_likely_required=True,
+        key_required=True,
+    ),
+    _capability_support_entry(
+        "official_or_authorized.us_market_breadth",
+        "us_above_ma_breadth",
+        provider_name="Official or Authorized US Market Breadth",
+        source_type="missing",
+        source_tier="official_or_authorized_licensed_feed",
+        trust_level="score_grade_when_configured",
+        freshness_expectation="licensed_daily_or_delayed_breadth_snapshot",
+        degradation_reason="authorized_feed_not_configured",
+        missing_provider_reason="authorized_us_market_breadth_feed_not_configured",
+        paid_data_likely_required=True,
+        key_required=True,
+    ),
+    _capability_support_entry(
+        "official_or_authorized.us_market_breadth",
         "us_sector_breadth",
         provider_name="Official or Authorized US Market Breadth",
         source_type="missing",
@@ -712,6 +775,92 @@ _PROVIDER_CAPABILITY_SUPPORT_CONTRACTS = (
 )
 _PROVIDER_CAPABILITY_SUPPORT_BY_KEY = {
     (item.provider_id, item.capability): item for item in _PROVIDER_CAPABILITY_SUPPORT_CONTRACTS
+}
+
+_PROVIDER_SCORING_CONTRACTS = (
+    ProviderScoringContract(
+        provider_id="authorized.us_etf_flow",
+        capability="us_etf_flow_daily",
+        coverage_universe="licensed_us_listed_etf_universe",
+        cadence="daily",
+        freshness_floor="daily",
+        coverage_ratio_floor=0.8,
+        required_source_tier="authorized_licensed_feed",
+        score_eligibility_gate="configured_authorized_feed_and_daily_freshness_and_min_coverage",
+    ),
+    ProviderScoringContract(
+        provider_id="authorized.us_etf_flow",
+        capability="us_etf_creation_redemption",
+        coverage_universe="licensed_us_primary_etf_basket",
+        cadence="daily",
+        freshness_floor="daily",
+        coverage_ratio_floor=0.8,
+        required_source_tier="authorized_licensed_feed",
+        score_eligibility_gate="configured_authorized_feed_and_daily_freshness_and_min_coverage",
+    ),
+    ProviderScoringContract(
+        provider_id="authorized.us_etf_flow",
+        capability="us_sector_etf_flow",
+        coverage_universe="licensed_us_sector_etf_universe",
+        cadence="daily",
+        freshness_floor="daily",
+        coverage_ratio_floor=0.8,
+        required_source_tier="authorized_licensed_feed",
+        score_eligibility_gate="configured_authorized_feed_and_daily_freshness_and_min_coverage",
+    ),
+    ProviderScoringContract(
+        provider_id="official_or_authorized.us_market_breadth",
+        capability="us_market_breadth_constituents",
+        coverage_universe="nyse_nasdaq_listed_equity_universe",
+        cadence="daily",
+        freshness_floor="daily",
+        coverage_ratio_floor=0.8,
+        required_source_tier="official_or_authorized_licensed_feed",
+        score_eligibility_gate="configured_official_or_authorized_feed_and_daily_freshness_and_min_coverage",
+    ),
+    ProviderScoringContract(
+        provider_id="official_or_authorized.us_market_breadth",
+        capability="us_advancers_decliners",
+        coverage_universe="nyse_nasdaq_listed_equity_universe",
+        cadence="daily",
+        freshness_floor="daily",
+        coverage_ratio_floor=0.8,
+        required_source_tier="official_or_authorized_licensed_feed",
+        score_eligibility_gate="configured_official_or_authorized_feed_and_daily_freshness_and_min_coverage",
+    ),
+    ProviderScoringContract(
+        provider_id="official_or_authorized.us_market_breadth",
+        capability="us_new_highs_lows",
+        coverage_universe="nyse_nasdaq_listed_equity_universe",
+        cadence="daily",
+        freshness_floor="daily",
+        coverage_ratio_floor=0.8,
+        required_source_tier="official_or_authorized_licensed_feed",
+        score_eligibility_gate="configured_official_or_authorized_feed_and_daily_freshness_and_min_coverage",
+    ),
+    ProviderScoringContract(
+        provider_id="official_or_authorized.us_market_breadth",
+        capability="us_above_ma_breadth",
+        coverage_universe="configured_index_or_exchange_breadth_universe",
+        cadence="daily",
+        freshness_floor="daily",
+        coverage_ratio_floor=0.8,
+        required_source_tier="official_or_authorized_licensed_feed",
+        score_eligibility_gate="configured_official_or_authorized_feed_and_daily_freshness_and_min_coverage",
+    ),
+    ProviderScoringContract(
+        provider_id="official_or_authorized.us_market_breadth",
+        capability="us_sector_breadth",
+        coverage_universe="licensed_us_sector_breadth_basket",
+        cadence="daily",
+        freshness_floor="daily",
+        coverage_ratio_floor=0.8,
+        required_source_tier="official_or_authorized_licensed_feed",
+        score_eligibility_gate="configured_official_or_authorized_feed_and_daily_freshness_and_min_coverage",
+    ),
+)
+_PROVIDER_SCORING_CONTRACTS_BY_KEY = {
+    (item.provider_id, item.capability): item for item in _PROVIDER_SCORING_CONTRACTS
 }
 
 
@@ -784,9 +933,20 @@ _PROVIDER_FIT_METADATA = (
         key_required=True,
         cache_required=True,
         background_refresh_recommended=True,
-        best_use_cases=("us_etf_flow_authority", "creation_redemption_evidence", "sector_flow_authority"),
-        rejected_for=("runtime_unconfigured", "score_inputs_until_licensed"),
-        not_recommended_for=("proxy_replacements", "frontend_claims"),
+        best_use_cases=(
+            "us_etf_flow_authority",
+            "daily_net_flow_authority",
+            "creation_redemption_evidence",
+            "sector_flow_authority",
+            "licensed_us_etf_universe_coverage",
+        ),
+        rejected_for=(
+            "runtime_unconfigured",
+            "score_inputs_until_licensed",
+            "freshness_unqualified",
+            "coverage_unqualified",
+        ),
+        not_recommended_for=("proxy_replacements", "frontend_claims", "partial_coverage_scoring"),
         missing_provider_reason="authorized_us_etf_flow_feed_not_configured",
         plan_dependent=True,
     ),
@@ -975,9 +1135,22 @@ _PROVIDER_FIT_METADATA = (
         key_required=True,
         cache_required=True,
         background_refresh_recommended=True,
-        best_use_cases=("us_market_breadth_authority", "breadth_constituent_coverage", "sector_breadth_confirmation"),
-        rejected_for=("runtime_unconfigured", "score_inputs_until_licensed"),
-        not_recommended_for=("proxy_replacements", "frontend_claims"),
+        best_use_cases=(
+            "us_market_breadth_authority",
+            "breadth_constituent_coverage",
+            "advancers_decliners_authority",
+            "new_highs_lows_authority",
+            "above_ma_breadth_authority",
+            "sector_breadth_confirmation",
+            "nyse_nasdaq_exchange_coverage",
+        ),
+        rejected_for=(
+            "runtime_unconfigured",
+            "score_inputs_until_licensed",
+            "freshness_unqualified",
+            "coverage_unqualified",
+        ),
+        not_recommended_for=("proxy_replacements", "frontend_claims", "partial_coverage_scoring"),
         missing_provider_reason="authorized_us_market_breadth_feed_not_configured",
         plan_dependent=True,
     ),
@@ -1258,6 +1431,36 @@ def get_provider_capability_support_contract(
     )
 
 
+def list_provider_scoring_contracts(
+    provider_id: str | None = None,
+) -> tuple[ProviderScoringContract, ...]:
+    """Return deterministic score-gate metadata for authorized flow/breadth contracts."""
+
+    if provider_id is None:
+        return tuple(
+            sorted(
+                _PROVIDER_SCORING_CONTRACTS,
+                key=lambda item: (item.provider_id, item.capability),
+            )
+        )
+
+    normalized_provider = _normalize_provider_id(provider_id)
+    return tuple(
+        item for item in _PROVIDER_SCORING_CONTRACTS if item.provider_id == normalized_provider
+    )
+
+
+def get_provider_scoring_contract(
+    provider_id: str,
+    capability: str,
+) -> Optional[ProviderScoringContract]:
+    """Return score-gate metadata for a provider/capability pair."""
+
+    return _PROVIDER_SCORING_CONTRACTS_BY_KEY.get(
+        (_normalize_provider_id(provider_id), _normalize_capability(capability))
+    )
+
+
 def list_provider_fit_metadata(
     provider_id: str | None = None,
 ) -> tuple[ProviderFitMetadataContract, ...]:
@@ -1349,17 +1552,20 @@ __all__ = [
     "ProviderFitMetadataContract",
     "ProviderMarket",
     "ProviderQuotaClass",
+    "ProviderScoringContract",
     "ScannerUsage",
-    "get_provider_dry_run_probe_contract",
     "get_provider_capability",
     "get_provider_capability_support_contract",
+    "get_provider_dry_run_probe_contract",
     "get_provider_fit_metadata",
+    "get_provider_scoring_contract",
     "is_provider_allowed_for_backtest",
     "is_provider_allowed_for_scanner",
     "list_provider_capability_support_contracts",
     "list_provider_dry_run_probe_contracts",
     "list_provider_capabilities",
     "list_provider_fit_metadata",
+    "list_provider_scoring_contracts",
     "providers_for_domain",
     "recommended_ttl",
 ]

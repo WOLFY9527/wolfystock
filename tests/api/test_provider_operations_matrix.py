@@ -116,8 +116,29 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
     assert etf_flow["keyRequired"] is True
     assert etf_flow["scoreContributionAllowed"] is False
     assert etf_flow["scoreEligible"] is False
-    assert "us_etf_flow_daily" in etf_flow["supportedCapabilities"]
-    assert "missing_provider_configuration" in etf_flow["routerReasonCodes"]
+    assert {
+        "us_etf_flow_daily",
+        "us_etf_creation_redemption",
+        "us_sector_etf_flow",
+    }.issubset(set(etf_flow["supportedCapabilities"]))
+    assert etf_flow["contractCadences"] == ["daily"]
+    assert etf_flow["contractFreshnessFloors"] == ["daily"]
+    assert etf_flow["contractCoverageRatioFloor"] == 0.8
+    assert etf_flow["requiredSourceTiers"] == ["authorized_licensed_feed"]
+    assert etf_flow["scoreEligibilityGates"] == [
+        "configured_authorized_feed_and_daily_freshness_and_min_coverage"
+    ]
+    assert {
+        "licensed_us_listed_etf_universe",
+        "licensed_us_primary_etf_basket",
+        "licensed_us_sector_etf_universe",
+    }.issubset(set(etf_flow["contractCoverageUniverses"]))
+    assert {
+        "missing_provider_configuration",
+        "authorization_required",
+        "freshness_floor_required",
+        "coverage_floor_required",
+    }.issubset(set(etf_flow["routerReasonCodes"]))
 
     breadth = _row_by_id(payload, "official_or_authorized.us_market_breadth")
     assert breadth["sourceType"] == "missing"
@@ -127,8 +148,31 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
     assert breadth["keyRequired"] is True
     assert breadth["scoreContributionAllowed"] is False
     assert breadth["scoreEligible"] is False
-    assert "us_market_breadth_constituents" in breadth["supportedCapabilities"]
-    assert "missing_provider_configuration" in breadth["routerReasonCodes"]
+    assert {
+        "us_market_breadth_constituents",
+        "us_advancers_decliners",
+        "us_new_highs_lows",
+        "us_above_ma_breadth",
+        "us_sector_breadth",
+    }.issubset(set(breadth["supportedCapabilities"]))
+    assert breadth["contractCadences"] == ["daily"]
+    assert breadth["contractFreshnessFloors"] == ["daily"]
+    assert breadth["contractCoverageRatioFloor"] == 0.8
+    assert breadth["requiredSourceTiers"] == ["official_or_authorized_licensed_feed"]
+    assert breadth["scoreEligibilityGates"] == [
+        "configured_official_or_authorized_feed_and_daily_freshness_and_min_coverage"
+    ]
+    assert {
+        "nyse_nasdaq_listed_equity_universe",
+        "configured_index_or_exchange_breadth_universe",
+        "licensed_us_sector_breadth_basket",
+    }.issubset(set(breadth["contractCoverageUniverses"]))
+    assert {
+        "missing_provider_configuration",
+        "authorization_required",
+        "freshness_floor_required",
+        "coverage_floor_required",
+    }.issubset(set(breadth["routerReasonCodes"]))
 
 
 def test_weak_and_proxy_providers_remain_non_score_grade() -> None:

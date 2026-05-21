@@ -27,10 +27,12 @@ from src.services.provider_capability_matrix import (
     ProviderCapability,
     ProviderCapabilitySupportContract,
     ProviderFitMetadataContract,
+    ProviderScoringContract,
     get_provider_dry_run_probe_contract,
     list_provider_capabilities,
     list_provider_capability_support_contracts,
     list_provider_fit_metadata,
+    list_provider_scoring_contracts,
 )
 from src.services.provider_fit_advisor_service import list_provider_fit_advisor_entries
 
@@ -94,6 +96,12 @@ class _ProviderAccumulator:
     supported_capabilities: set[str] = field(default_factory=set)
     affected_surfaces: set[str] = field(default_factory=set)
     router_reason_codes: set[str] = field(default_factory=set)
+    contract_coverage_universes: set[str] = field(default_factory=set)
+    contract_cadences: set[str] = field(default_factory=set)
+    contract_freshness_floors: set[str] = field(default_factory=set)
+    required_source_tiers: set[str] = field(default_factory=set)
+    score_eligibility_gates: set[str] = field(default_factory=set)
+    contract_coverage_ratio_floor: float | None = None
     missing_provider_reason: str | None = None
     degradation_reason: str | None = None
     remediation_hint: str | None = None
@@ -158,6 +166,8 @@ class ProviderOperationsMatrixService:
             self._merge_capability(rows, capability)
         for support in list_provider_capability_support_contracts():
             self._merge_support_contract(rows, support)
+        for scoring_contract in list_provider_scoring_contracts():
+            self._merge_scoring_contract(rows, scoring_contract)
         for metadata in list_provider_fit_metadata():
             self._merge_fit_metadata(rows, metadata)
         for advisor in list_provider_fit_advisor_entries():
@@ -261,6 +271,25 @@ class ProviderOperationsMatrixService:
             row.no_default_live_http_calls = (
                 row.no_default_live_http_calls and probe.no_default_live_http_calls
             )
+
+    def _merge_scoring_contract(
+        self,
+        rows: dict[str, _ProviderAccumulator],
+        scoring_contract: ProviderScoringContract,
+    ) -> None:
+        row = self._row(rows, scoring_contract.provider_id)
+        row.supported_capabilities.add(scoring_contract.capability)
+        row.contract_coverage_universes.add(scoring_contract.coverage_universe)
+        row.contract_cadences.add(scoring_contract.cadence)
+        row.contract_freshness_floors.add(scoring_contract.freshness_floor)
+        row.required_source_tiers.add(scoring_contract.required_source_tier)
+        row.score_eligibility_gates.add(scoring_contract.score_eligibility_gate)
+        floor = float(scoring_contract.coverage_ratio_floor)
+        row.contract_coverage_ratio_floor = (
+            floor
+            if row.contract_coverage_ratio_floor is None
+            else min(row.contract_coverage_ratio_floor, floor)
+        )
 
     def _merge_router_reason_codes(
         self,
@@ -373,6 +402,12 @@ class ProviderOperationsMatrixService:
             "paidDataLikelyRequired": row.paid_data_likely_required,
             "keyRequired": row.key_required,
             "noDefaultLiveHttpCalls": row.no_default_live_http_calls,
+            "contractCoverageUniverses": sorted(row.contract_coverage_universes),
+            "contractCadences": sorted(row.contract_cadences),
+            "contractFreshnessFloors": sorted(row.contract_freshness_floors),
+            "contractCoverageRatioFloor": row.contract_coverage_ratio_floor,
+            "requiredSourceTiers": sorted(row.required_source_tiers),
+            "scoreEligibilityGates": sorted(row.score_eligibility_gates),
             "supportedCapabilities": sorted(row.supported_capabilities),
             "affectedSurfaces": sorted(row.affected_surfaces),
             "routerReasonCodes": sorted(row.router_reason_codes),

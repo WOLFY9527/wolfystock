@@ -20,6 +20,7 @@ from src.services.provider_capability_matrix import (
     get_provider_capability_support_contract,
     get_provider_dry_run_probe_contract,
     get_provider_fit_metadata,
+    get_provider_scoring_contract,
     is_provider_allowed_for_backtest,
     providers_for_domain,
 )
@@ -100,6 +101,13 @@ _AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS = (
     "akshare",
     "baostock",
     "pytdx_existing_baseline",
+)
+_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES = (
+    "cache_required",
+    "missing_provider_configuration",
+    "authorization_required",
+    "freshness_floor_required",
+    "coverage_floor_required",
 )
 
 
@@ -370,7 +378,7 @@ _ROUTE_POLICIES = MappingProxyType(
             required_source_types=("cache_snapshot",),
             freshness_floor="daily",
             trust_floor="authorized_flow_or_missing",
-            plan_reason_codes=("cache_required", "missing_provider_configuration"),
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
         ),
         ("market_overview", "us_market_breadth_constituents"): _RoutePolicy(
             primary_provider_ids=("official_or_authorized.us_market_breadth",),
@@ -382,7 +390,43 @@ _ROUTE_POLICIES = MappingProxyType(
             required_source_types=("cache_snapshot",),
             freshness_floor="daily",
             trust_floor="authorized_breadth_or_missing",
-            plan_reason_codes=("cache_required", "missing_provider_configuration"),
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
+        ),
+        ("market_overview", "us_advancers_decliners"): _RoutePolicy(
+            primary_provider_ids=("official_or_authorized.us_market_breadth",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_breadth_or_missing",
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
+        ),
+        ("market_overview", "us_new_highs_lows"): _RoutePolicy(
+            primary_provider_ids=("official_or_authorized.us_market_breadth",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_breadth_or_missing",
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
+        ),
+        ("market_overview", "us_above_ma_breadth"): _RoutePolicy(
+            primary_provider_ids=("official_or_authorized.us_market_breadth",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_breadth_or_missing",
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
         ),
         ("market_regime", "us_etf_flow_daily"): _RoutePolicy(
             primary_provider_ids=("authorized.us_etf_flow",),
@@ -394,7 +438,7 @@ _ROUTE_POLICIES = MappingProxyType(
             required_source_types=("cache_snapshot",),
             freshness_floor="daily",
             trust_floor="authorized_flow_or_missing",
-            plan_reason_codes=("cache_required", "missing_provider_configuration"),
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
         ),
         ("market_regime", "us_market_breadth_constituents"): _RoutePolicy(
             primary_provider_ids=("official_or_authorized.us_market_breadth",),
@@ -406,7 +450,31 @@ _ROUTE_POLICIES = MappingProxyType(
             required_source_types=("cache_snapshot",),
             freshness_floor="daily",
             trust_floor="authorized_breadth_or_missing",
-            plan_reason_codes=("cache_required", "missing_provider_configuration"),
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
+        ),
+        ("market_regime", "us_new_highs_lows"): _RoutePolicy(
+            primary_provider_ids=("official_or_authorized.us_market_breadth",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_breadth_or_missing",
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
+        ),
+        ("market_regime", "us_above_ma_breadth"): _RoutePolicy(
+            primary_provider_ids=("official_or_authorized.us_market_breadth",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_breadth_or_missing",
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
         ),
         ("liquidity_impulse", "us_etf_flow_daily"): _RoutePolicy(
             primary_provider_ids=("authorized.us_etf_flow",),
@@ -418,7 +486,7 @@ _ROUTE_POLICIES = MappingProxyType(
             required_source_types=("cache_snapshot",),
             freshness_floor="daily",
             trust_floor="authorized_flow_or_missing",
-            plan_reason_codes=("cache_required", "missing_provider_configuration"),
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
         ),
         ("liquidity_impulse", "us_etf_creation_redemption"): _RoutePolicy(
             primary_provider_ids=("authorized.us_etf_flow",),
@@ -430,7 +498,7 @@ _ROUTE_POLICIES = MappingProxyType(
             required_source_types=("cache_snapshot",),
             freshness_floor="daily",
             trust_floor="authorized_flow_or_missing",
-            plan_reason_codes=("cache_required", "missing_provider_configuration"),
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
         ),
         ("liquidity_impulse", "us_market_breadth_constituents"): _RoutePolicy(
             primary_provider_ids=("official_or_authorized.us_market_breadth",),
@@ -442,7 +510,43 @@ _ROUTE_POLICIES = MappingProxyType(
             required_source_types=("cache_snapshot",),
             freshness_floor="daily",
             trust_floor="authorized_breadth_or_missing",
-            plan_reason_codes=("cache_required", "missing_provider_configuration"),
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
+        ),
+        ("liquidity_impulse", "us_advancers_decliners"): _RoutePolicy(
+            primary_provider_ids=("official_or_authorized.us_market_breadth",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_breadth_or_missing",
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
+        ),
+        ("liquidity_impulse", "us_new_highs_lows"): _RoutePolicy(
+            primary_provider_ids=("official_or_authorized.us_market_breadth",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_breadth_or_missing",
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
+        ),
+        ("liquidity_impulse", "us_above_ma_breadth"): _RoutePolicy(
+            primary_provider_ids=("official_or_authorized.us_market_breadth",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_breadth_or_missing",
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
         ),
         ("rotation_radar", "quote"): _RoutePolicy(
             forbidden_provider_ids=("sec_edgar", "baostock", "coinbase_public", "yfinance_current_baseline", "yahooquery"),
@@ -464,7 +568,19 @@ _ROUTE_POLICIES = MappingProxyType(
             required_source_types=("cache_snapshot",),
             freshness_floor="daily",
             trust_floor="authorized_flow_or_missing",
-            plan_reason_codes=("cache_required", "missing_provider_configuration"),
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
+        ),
+        ("rotation_radar", "us_market_breadth_constituents"): _RoutePolicy(
+            primary_provider_ids=("official_or_authorized.us_market_breadth",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_breadth_or_missing",
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
         ),
         ("scanner_price_scoring", "cn_realtime_quote"): _RoutePolicy(
             forbidden_provider_ids=("baostock", "sec_edgar", "coinbase_public", "yfinance_current_baseline"),
@@ -785,6 +901,15 @@ def _build_reason_codes(
         if support is not None and _normalize(request.freshness_need) in _LIVE_FRESHNESS_VALUES:
             if "delayed" in support.freshness_expectation or "t_plus_1" in support.freshness_expectation:
                 provider_codes.append("provider_not_capable")
+        scoring_contract = get_provider_scoring_contract(candidate.provider_id, request.capability)
+        if scoring_contract is not None:
+            provider_codes.extend(
+                (
+                    "authorization_required",
+                    "freshness_floor_required",
+                    "coverage_floor_required",
+                )
+            )
         if _normalize(request.use_case) == "backtest":
             provider_codes.append("reproducible_data_required")
         if not request.allow_network and _normalize(request.freshness_need) in _LIVE_FRESHNESS_VALUES:
@@ -810,6 +935,9 @@ def _provider_is_not_capable(candidate: ProviderRouteCandidate, request: DataSou
             "us_etf_creation_redemption",
             "us_sector_etf_flow",
             "us_market_breadth_constituents",
+            "us_advancers_decliners",
+            "us_new_highs_lows",
+            "us_above_ma_breadth",
             "us_sector_breadth",
         }
         and candidate.source_type in _PROXY_SOURCE_TYPES

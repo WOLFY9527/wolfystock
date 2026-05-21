@@ -11,8 +11,11 @@ import pytest
 
 from src.contracts.source_confidence import ProviderDryRunProbeContract, ProviderFitMetadataContract
 from src.services.provider_capability_matrix import (
+    get_provider_capability_support_contract,
     get_provider_dry_run_probe_contract,
     get_provider_fit_metadata,
+    get_provider_scoring_contract,
+    list_provider_capability_support_contracts,
     list_provider_dry_run_probe_contracts,
     list_provider_fit_metadata,
 )
@@ -201,6 +204,90 @@ def test_provider_fit_metadata_keeps_all_entries_inert_and_non_scoring() -> None
     assert {item.live_tests_avoided for item in entries} == {True}
     assert "reliable" not in {item.trust_level for item in entries}
     assert get_provider_fit_metadata("missing_provider") is None
+
+
+def test_authorized_us_flow_and_breadth_metadata_carry_coverage_and_score_gate_requirements() -> None:
+    etf_entry = get_provider_fit_metadata("authorized.us_etf_flow")
+    breadth_entry = get_provider_fit_metadata("official_or_authorized.us_market_breadth")
+
+    assert etf_entry is not None
+    assert {
+        "daily_net_flow_authority",
+        "creation_redemption_evidence",
+        "sector_flow_authority",
+        "licensed_us_etf_universe_coverage",
+    }.issubset(set(etf_entry.best_use_cases))
+    assert {"freshness_unqualified", "coverage_unqualified"}.issubset(set(etf_entry.rejected_for))
+    assert "partial_coverage_scoring" in etf_entry.not_recommended_for
+
+    assert breadth_entry is not None
+    assert {
+        "advancers_decliners_authority",
+        "new_highs_lows_authority",
+        "above_ma_breadth_authority",
+        "sector_breadth_confirmation",
+        "nyse_nasdaq_exchange_coverage",
+    }.issubset(set(breadth_entry.best_use_cases))
+    assert {"freshness_unqualified", "coverage_unqualified"}.issubset(set(breadth_entry.rejected_for))
+    assert "partial_coverage_scoring" in breadth_entry.not_recommended_for
+
+
+def test_authorized_us_flow_and_breadth_support_contracts_cover_required_capabilities() -> None:
+    breadth_supports = list_provider_capability_support_contracts(
+        "official_or_authorized.us_market_breadth"
+    )
+    breadth_capabilities = {item.capability for item in breadth_supports}
+    assert {
+        "us_market_breadth_constituents",
+        "us_advancers_decliners",
+        "us_new_highs_lows",
+        "us_above_ma_breadth",
+        "us_sector_breadth",
+    } == breadth_capabilities
+
+    for provider_id, capability, expected_universe, expected_source_tier in (
+        (
+            "authorized.us_etf_flow",
+            "us_etf_flow_daily",
+            "licensed_us_listed_etf_universe",
+            "authorized_licensed_feed",
+        ),
+        (
+            "authorized.us_etf_flow",
+            "us_sector_etf_flow",
+            "licensed_us_sector_etf_universe",
+            "authorized_licensed_feed",
+        ),
+        (
+            "official_or_authorized.us_market_breadth",
+            "us_advancers_decliners",
+            "nyse_nasdaq_listed_equity_universe",
+            "official_or_authorized_licensed_feed",
+        ),
+        (
+            "official_or_authorized.us_market_breadth",
+            "us_above_ma_breadth",
+            "configured_index_or_exchange_breadth_universe",
+            "official_or_authorized_licensed_feed",
+        ),
+    ):
+        support = get_provider_capability_support_contract(provider_id, capability)
+        scoring = get_provider_scoring_contract(provider_id, capability)
+
+        assert support is not None
+        assert support.source_type == "missing"
+        assert support.observation_only is True
+        assert support.score_contribution_allowed is False
+        assert support.cache_required is True
+        assert support.key_required is True
+
+        assert scoring is not None
+        assert scoring.coverage_universe == expected_universe
+        assert scoring.cadence == "daily"
+        assert scoring.freshness_floor == "daily"
+        assert scoring.coverage_ratio_floor == pytest.approx(0.8)
+        assert scoring.required_source_tier == expected_source_tier
+        assert "min_coverage" in scoring.score_eligibility_gate
 
 
 def test_provider_fit_dry_run_probe_contracts_stay_disabled_and_secret_safe() -> None:
