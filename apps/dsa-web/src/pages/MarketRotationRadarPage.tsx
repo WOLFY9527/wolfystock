@@ -27,6 +27,7 @@ import { getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   marketRotationApi,
   type MarketRotationEvidenceQuality,
+  type MarketRotationEtfLeadershipDiagnostics,
   type MarketRotationRadarResponse,
   type MarketRotationRiskLabel,
   type MarketRotationSignalType,
@@ -35,6 +36,7 @@ import {
   type MarketRotationTheme,
   type MarketRotationTimeWindow,
 } from '../api/marketRotation';
+import { formatDateTime } from '../utils/format';
 import { cn } from '../utils/cn';
 import { normalizeRotationEvidence } from '../utils/evidenceDisplay';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
@@ -64,6 +66,7 @@ const RISK_LABELS: Record<MarketRotationRiskLabel, string> = {
 
 const TAXONOMY_PLACEHOLDERS = ['主题', '行业', '概念', 'ETF代理'];
 const REAL_FLOW_EVIDENCE_TYPES = new Set(['real_flow', 'mixed_real_and_proxy']);
+const BOUNDED_ETF_SYMBOLS = ['SPY', 'QQQ', 'IWM', 'SMH', 'SOXX', 'IGV'] as const;
 
 type SignalLaneMeta = {
   label: string;
@@ -512,12 +515,107 @@ function marketLabel(market: string): string {
   return MARKET_OPTIONS.find((option) => option.id === market)?.label || market;
 }
 
+function compactSymbols(symbols?: string[], fallback = '待补齐'): string {
+  return Array.isArray(symbols) && symbols.length ? symbols.join(' / ') : fallback;
+}
+
+function leadershipSpreadLabel(value?: number | null): string {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(2) : '未启用';
+}
+
+function summarizeEtfEvidence(diagnostics: MarketRotationEtfLeadershipDiagnostics) {
+  const evidence = Array.isArray(diagnostics.evidence) ? diagnostics.evidence : [];
+  const authorityAllowed = evidence.filter((row) => row.sourceAuthorityAllowed === true).length;
+  const scoreEligible = evidence.filter((row) => row.scoreContributionAllowed === true).length;
+  const freshness =
+    evidence.find((row) => row.freshness && row.freshness !== 'fallback')?.freshness
+    || evidence[0]?.freshness
+    || 'fallback';
+  const sourceLabel = String(evidence.find((row) => row.sourceLabel)?.sourceLabel || diagnostics.source || '待确认');
+  const reasonCodes = evidence.flatMap((row) => row.reasonCodes || []);
+  const uniqueReasons = Array.from(new Set(reasonCodes.filter(Boolean)));
+  return {
+    authorityAllowed,
+    scoreEligible,
+    total: evidence.length,
+    freshness,
+    sourceLabel,
+    uniqueReasons,
+  };
+}
+
 const ThemeMetric: React.FC<{ label: string; value: string; tone?: string }> = ({ label, value, tone = 'text-white/78' }) => (
   <div className="min-w-0 rounded-md border border-white/[0.05] bg-black/15 px-3 py-2">
     <p className="truncate text-[10px] font-semibold text-white/38">{label}</p>
     <p className={cn('mt-1 truncate font-mono text-sm font-semibold tabular-nums', tone)}>{value}</p>
   </div>
 );
+
+const EtfLeadershipDiagnosticsPanel: React.FC<{
+  diagnostics: MarketRotationEtfLeadershipDiagnostics;
+}> = ({ diagnostics }) => {
+  const enabled = diagnostics.enabled;
+  const evidence = summarizeEtfEvidence(diagnostics);
+  const reasonCodes = diagnostics.reasonCodes.length ? diagnostics.reasonCodes : ['fail_closed'];
+  return (
+    <div data-testid="rotation-radar-etf-leadership-panel" className="min-w-0 px-1 py-3">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <TerminalSectionHeader eyebrow="Bounded ETF Authority" title="ETF Leadership diagnostics" />
+        <TerminalChip variant={enabled ? 'success' : 'caution'}>{enabled ? 'Enabled' : 'Disabled'}</TerminalChip>
+      </div>
+
+      <p className="mt-2 text-[11px] leading-5 text-white/48">
+        仅覆盖 {BOUNDED_ETF_SYMBOLS.join(' / ')}。这是 display-only 的 bounded ETF authority diagnostics，
+        不扩展主题排名、headline eligibility 或任何交易含义。
+      </p>
+
+      <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
+        <TerminalChip>{`Confidence ${diagnostics.confidenceLabel || '未返回'}`}</TerminalChip>
+        <TerminalChip>{`As Of ${formatDateTime(diagnostics.asOf) || '待确认'}`}</TerminalChip>
+        <TerminalChip>{`Source ${diagnostics.source || evidence.sourceLabel}`}</TerminalChip>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <ThemeMetric label="Eligible ETFs" value={`${diagnostics.eligibleSymbols.length}/6`} />
+        <ThemeMetric label="Leadership Spread" value={leadershipSpreadLabel(diagnostics.leadershipSpread)} tone={enabled ? 'text-cyan-100' : 'text-white/52'} />
+        <ThemeMetric label="Authority Evidence" value={`${evidence.authorityAllowed}/${evidence.total || diagnostics.eligibleSymbols.length || 0}`} tone={enabled ? 'text-emerald-200' : 'text-amber-200'} />
+        <ThemeMetric label="Score-Eligible" value={`${evidence.scoreEligible}/${evidence.total || diagnostics.eligibleSymbols.length || 0}`} tone={enabled ? 'text-emerald-200' : 'text-amber-200'} />
+      </div>
+
+      <div className="mt-3 grid gap-2">
+        <TerminalNestedBlock className="min-w-0 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase text-white/35">Eligible</p>
+          <p className="mt-1 text-xs text-white/72">{compactSymbols(diagnostics.eligibleSymbols)}</p>
+        </TerminalNestedBlock>
+        <TerminalNestedBlock className="min-w-0 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase text-white/35">Leading</p>
+          <p className="mt-1 text-xs text-white/72">{enabled ? compactSymbols(diagnostics.leadingSymbols, '待补齐') : 'Disabled / fail-closed'}</p>
+        </TerminalNestedBlock>
+        <TerminalNestedBlock className="min-w-0 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase text-white/35">Lagging</p>
+          <p className="mt-1 text-xs text-white/72">{enabled ? compactSymbols(diagnostics.laggingSymbols, '待补齐') : 'Disabled / fail-closed'}</p>
+        </TerminalNestedBlock>
+      </div>
+
+      <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
+        {reasonCodes.map((code) => (
+          <TerminalChip key={code} variant={enabled ? 'info' : 'caution'}>{code}</TerminalChip>
+        ))}
+      </div>
+
+      <TerminalNotice variant={enabled ? 'info' : 'caution'} className="mt-3 text-[11px] leading-5 text-white/56">
+        {enabled
+          ? `Evidence summary: Authority ${evidence.authorityAllowed}/${evidence.total}, Score-Eligible ${evidence.scoreEligible}/${evidence.total}, Source ${evidence.sourceLabel}.`
+          : `Fail-closed: reasonCodes 已保留展示。Authority ${evidence.authorityAllowed}/${evidence.total || 0}，Score-Eligible ${evidence.scoreEligible}/${evidence.total || 0}。`}
+      </TerminalNotice>
+      {!enabled && evidence.uniqueReasons.length ? (
+        <p className="mt-2 text-[11px] leading-5 text-white/42">
+          Evidence row reasonCodes: {evidence.uniqueReasons.join(', ')}
+        </p>
+      ) : null}
+    </div>
+  );
+};
 
 const WindowChip: React.FC<{ window: MarketRotationTimeWindow }> = ({ window }) => (
   <TerminalNestedBlock className="min-w-0 px-3 py-2">
@@ -872,8 +970,9 @@ const WatchlistMemberRow: React.FC<{ member: {
 
 const ThemeDetailPanel: React.FC<{
   theme?: MarketRotationTheme;
+  diagnostics: MarketRotationEtfLeadershipDiagnostics;
   proxyResetKey: number;
-}> = ({ theme, proxyResetKey }) => {
+}> = ({ theme, diagnostics, proxyResetKey }) => {
   if (!theme) {
     return null;
   }
@@ -908,6 +1007,8 @@ const ThemeDetailPanel: React.FC<{
 
   return (
     <ConsoleContextRail data-testid="rotation-theme-detail-panel" className="xl:sticky xl:top-4">
+      <EtfLeadershipDiagnosticsPanel diagnostics={diagnostics} />
+
       <div className="min-w-0 px-1 py-3">
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
@@ -1332,6 +1433,7 @@ const MarketRotationRadarPage: React.FC = () => {
 
               <div className="min-w-0 xl:col-span-4">
                 <ThemeDetailPanel
+                  diagnostics={payload.etfLeadershipDiagnostics}
                   theme={selectedTheme}
                   proxyResetKey={proxyDisclosureSeed}
                 />

@@ -39,6 +39,67 @@ const radarFixture = (): MarketRotationRadarResponse => ({
     IWM: { symbol: 'IWM', changePercent: 0.1, timeWindows: {}, freshness: 'delayed', isFallback: false, isStale: false },
     IGV: { symbol: 'IGV', changePercent: 0.6, timeWindows: {}, freshness: 'delayed', isFallback: false, isStale: false },
   },
+  etfLeadershipDiagnostics: {
+    enabled: true,
+    source: 'alpaca_etf_authority_spine',
+    asOf: '2026-05-07T09:45:00Z',
+    eligibleSymbols: ['SPY', 'QQQ', 'IWM', 'SMH', 'SOXX', 'IGV'],
+    leadingSymbols: ['SMH', 'SOXX', 'QQQ'],
+    laggingSymbols: ['IWM', 'IGV', 'SPY'],
+    leadershipSpread: 1.24,
+    confidenceLabel: 'high',
+    reasonCodes: ['bounded_etf_authority_active'],
+    evidence: [
+      {
+        symbol: 'SPY',
+        sourceLabel: 'Alpaca SIP',
+        freshness: 'live',
+        sourceAuthorityAllowed: true,
+        scoreContributionAllowed: true,
+        reasonCodes: [],
+      },
+      {
+        symbol: 'QQQ',
+        sourceLabel: 'Alpaca SIP',
+        freshness: 'live',
+        sourceAuthorityAllowed: true,
+        scoreContributionAllowed: true,
+        reasonCodes: [],
+      },
+      {
+        symbol: 'IWM',
+        sourceLabel: 'Alpaca SIP',
+        freshness: 'live',
+        sourceAuthorityAllowed: true,
+        scoreContributionAllowed: true,
+        reasonCodes: [],
+      },
+      {
+        symbol: 'SMH',
+        sourceLabel: 'Alpaca SIP',
+        freshness: 'live',
+        sourceAuthorityAllowed: true,
+        scoreContributionAllowed: true,
+        reasonCodes: [],
+      },
+      {
+        symbol: 'SOXX',
+        sourceLabel: 'Alpaca SIP',
+        freshness: 'live',
+        sourceAuthorityAllowed: true,
+        scoreContributionAllowed: true,
+        reasonCodes: [],
+      },
+      {
+        symbol: 'IGV',
+        sourceLabel: 'Alpaca SIP',
+        freshness: 'live',
+        sourceAuthorityAllowed: true,
+        scoreContributionAllowed: true,
+        reasonCodes: [],
+      },
+    ],
+  },
   summary: {
     strongestThemes: [
       {
@@ -399,6 +460,18 @@ function taxonomyMarketFixture(market: 'CN' | 'HK' | 'CRYPTO'): MarketRotationRa
     fadingThemes: [],
     watchlistSignals: [],
   };
+  fixture.etfLeadershipDiagnostics = {
+    enabled: false,
+    source: 'alpaca_etf_authority_spine',
+    asOf: '2026-05-07T09:45:00Z',
+    eligibleSymbols: [],
+    leadingSymbols: [],
+    laggingSymbols: [],
+    leadershipSpread: null,
+    confidenceLabel: 'disabled',
+    reasonCodes: ['market_not_supported'],
+    evidence: [],
+  };
   return fixture;
 }
 
@@ -459,6 +532,27 @@ describe('MarketRotationRadarPage', () => {
     const bodyText = page.textContent?.toLowerCase() || '';
     expect(bodyText).not.toMatch(/raw_payload|provider_payload|api_key|password|session_id|cookie|secret/);
     expect(bodyText).not.toMatch(forbiddenTradingActionPattern);
+  });
+
+  it('renders a bounded ETF leadership diagnostics panel from etfLeadershipDiagnostics only', async () => {
+    render(<MarketRotationRadarPage />);
+
+    const panel = await screen.findByTestId('rotation-radar-etf-leadership-panel');
+    expect(panel).toHaveTextContent('ETF Leadership');
+    expect(panel).toHaveTextContent('SPY / QQQ / IWM / SMH / SOXX / IGV');
+    expect(panel).toHaveTextContent('Enabled');
+    expect(panel).toHaveTextContent('high');
+    expect(panel).toHaveTextContent('SMH');
+    expect(panel).toHaveTextContent('SOXX');
+    expect(panel).toHaveTextContent('QQQ');
+    expect(panel).toHaveTextContent('IWM');
+    expect(panel).toHaveTextContent('IGV');
+    expect(panel).toHaveTextContent('SPY');
+    expect(panel).toHaveTextContent('bounded_etf_authority_active');
+    expect(panel).toHaveTextContent('Authority 6/6');
+    expect(panel).toHaveTextContent('Score-Eligible 6/6');
+    expect(panel.textContent || '').not.toMatch(/headline eligible|top theme|bullish|risk-on/i);
+    expect(panel.textContent || '').not.toMatch(forbiddenTradingActionPattern);
   });
 
   it('keeps shell spacing on TerminalPageShell with the shared desktop rhythm', async () => {
@@ -569,6 +663,44 @@ describe('MarketRotationRadarPage', () => {
     expect(within(detail).getByTestId('data-freshness-badge-fallback')).toBeInTheDocument();
     expect(within(detail).queryByTestId('data-freshness-badge-live')).not.toBeInTheDocument();
     expect(screen.getByText('部分外部数据暂不可用').closest('[data-terminal-primitive="notice"]')).not.toBeNull();
+  });
+
+  it('shows disabled ETF leadership reason codes without market-direction wording', async () => {
+    const fixture = radarFixture();
+    fixture.etfLeadershipDiagnostics = {
+      enabled: false,
+      source: 'alpaca_etf_authority_spine',
+      asOf: '2026-05-07T09:45:00Z',
+      eligibleSymbols: ['SPY', 'QQQ', 'IWM', 'SOXX', 'IGV'],
+      leadingSymbols: [],
+      laggingSymbols: [],
+      leadershipSpread: null,
+      confidenceLabel: 'disabled',
+      reasonCodes: ['missing_required_windows', 'ineligible_bounded_etf'],
+      evidence: [
+        {
+          symbol: 'SMH',
+          sourceLabel: 'Alpaca SIP',
+          freshness: 'live',
+          sourceAuthorityAllowed: false,
+          scoreContributionAllowed: false,
+          reasonCodes: ['missing_required_windows', 'entitlement'],
+        },
+      ],
+    };
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(fixture);
+
+    render(<MarketRotationRadarPage />);
+
+    const panel = await screen.findByTestId('rotation-radar-etf-leadership-panel');
+    expect(panel).toHaveTextContent('Disabled');
+    expect(panel).toHaveTextContent('missing_required_windows');
+    expect(panel).toHaveTextContent('ineligible_bounded_etf');
+    expect(panel).toHaveTextContent('Authority 0/1');
+    expect(panel).toHaveTextContent('Score-Eligible 0/1');
+    expect(panel).not.toHaveTextContent('leadingSymbols');
+    expect(panel.textContent || '').not.toMatch(/bullish|risk-on|outperform breakout/i);
+    expect(panel.textContent || '').not.toMatch(forbiddenTradingActionPattern);
   });
 
   it('renders proxy-only evidence chips without real fund-flow claims', async () => {

@@ -44,6 +44,35 @@ describe('marketRotationApi', () => {
             is_stale: false,
           },
         },
+        etf_leadership_diagnostics: {
+          enabled: true,
+          source: 'alpaca_etf_authority_spine',
+          as_of: '2026-05-07T09:45:00Z',
+          eligible_symbols: ['SPY', 'QQQ', 'IWM', 'SMH', 'SOXX', 'IGV'],
+          leading_symbols: ['SMH', 'SOXX', 'QQQ'],
+          lagging_symbols: ['IWM', 'IGV', 'SPY'],
+          leadership_spread: 1.24,
+          confidence_label: 'high',
+          reason_codes: ['bounded_etf_authority_active'],
+          evidence: [
+            {
+              symbol: 'SMH',
+              source_label: 'Alpaca SIP',
+              freshness: 'live',
+              source_authority_allowed: true,
+              score_contribution_allowed: true,
+              reason_codes: [],
+            },
+            {
+              symbol: 'SPY',
+              source_label: 'Alpaca SIP',
+              freshness: 'live',
+              source_authority_allowed: true,
+              score_contribution_allowed: true,
+              reason_codes: [],
+            },
+          ],
+        },
         summary: {
           strongest_themes: [
             {
@@ -217,6 +246,18 @@ describe('marketRotationApi', () => {
     expect(payload.summary.eligibleThemeCount).toBe(3);
     expect(payload.summary.headlineEligibleThemeCount).toBe(1);
     expect(payload.summary.observationThemeCount).toBe(1);
+    expect(payload.etfLeadershipDiagnostics.enabled).toBe(true);
+    expect(payload.etfLeadershipDiagnostics.source).toBe('alpaca_etf_authority_spine');
+    expect(payload.etfLeadershipDiagnostics.leadingSymbols).toEqual(['SMH', 'SOXX', 'QQQ']);
+    expect(payload.etfLeadershipDiagnostics.laggingSymbols).toEqual(['IWM', 'IGV', 'SPY']);
+    expect(payload.etfLeadershipDiagnostics.evidence[0]).toMatchObject({
+      symbol: 'SMH',
+      sourceLabel: 'Alpaca SIP',
+      freshness: 'live',
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+      reasonCodes: [],
+    });
     expect(payload.summary.headlineWarning).toBe('当前头部主题仅满足代理证据，不代表真实资金流。');
     expect(payload.summary.noHeadlineReason).toBe('等待真实行情覆盖后再生成头部排名。');
     expect(payload.summary.rankingPolicy).toBe('仅 headlineEligible 主题参与头部排序；observation/taxonomy 仅作说明。');
@@ -256,6 +297,18 @@ describe('marketRotationApi', () => {
         metadata: {
           no_external_calls: true,
           taxonomy_only_theme_count: 1,
+        },
+        etf_leadership_diagnostics: {
+          enabled: false,
+          source: 'alpaca_etf_authority_spine',
+          as_of: '2026-05-07T09:45:00Z',
+          eligible_symbols: [],
+          leading_symbols: [],
+          lagging_symbols: [],
+          leadership_spread: null,
+          confidence_label: 'disabled',
+          reason_codes: ['market_not_supported'],
+          evidence: [],
         },
         benchmarks: {},
         summary: {
@@ -319,6 +372,9 @@ describe('marketRotationApi', () => {
     expect(apiClient.get).toHaveBeenCalledWith('/api/v1/market/rotation-radar', { params: { market: 'CN' } });
     expect(payload.market).toBe('CN');
     expect(payload.supportedMarkets).toEqual(['US', 'CN', 'HK', 'CRYPTO']);
+    expect(payload.etfLeadershipDiagnostics.enabled).toBe(false);
+    expect(payload.etfLeadershipDiagnostics.confidenceLabel).toBe('disabled');
+    expect(payload.etfLeadershipDiagnostics.reasonCodes).toEqual(['market_not_supported']);
     expect(payload.summary.observationThemes).toBeUndefined();
     expect(payload.summary.taxonomyThemes).toBeUndefined();
     expect(payload.summary.eligibleThemeCount).toBeUndefined();

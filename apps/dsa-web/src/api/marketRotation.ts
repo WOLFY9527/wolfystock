@@ -158,6 +158,32 @@ export type MarketRotationProxyStatus = {
   coverageContribution?: number;
 };
 
+export type MarketRotationEtfLeadershipEvidence = {
+  symbol?: string;
+  sourceLabel?: string | null;
+  sourceTier?: string | null;
+  trustLevel?: string | null;
+  freshness?: MarketDataFreshness;
+  asOf?: string | null;
+  sourceAuthorityAllowed?: boolean;
+  scoreContributionAllowed?: boolean;
+  reasonCodes?: string[];
+  [key: string]: unknown;
+};
+
+export type MarketRotationEtfLeadershipDiagnostics = {
+  enabled: boolean;
+  source?: string | null;
+  asOf?: string | null;
+  eligibleSymbols: string[];
+  leadingSymbols: string[];
+  laggingSymbols: string[];
+  leadershipSpread?: number | null;
+  confidenceLabel?: string | null;
+  reasonCodes: string[];
+  evidence: MarketRotationEtfLeadershipEvidence[];
+};
+
 export type MarketRotationTheme = MarketRotationSummaryItem & {
   rotationStateEvidence?: Record<string, unknown> | null;
   market?: string;
@@ -306,6 +332,7 @@ export type MarketRotationRadarResponse = {
   warning?: string | null;
   noAdviceDisclosure: string;
   benchmarks: Record<string, MarketRotationBenchmark>;
+  etfLeadershipDiagnostics: MarketRotationEtfLeadershipDiagnostics;
   summary: {
     strongestThemes: MarketRotationSummaryItem[];
     acceleratingThemes: MarketRotationSummaryItem[];
@@ -367,6 +394,28 @@ function normalizeBenchmark(benchmark: MarketRotationBenchmark): MarketRotationB
   };
 }
 
+function normalizeEtfLeadershipDiagnostics(
+  diagnostics?: MarketRotationEtfLeadershipDiagnostics | null,
+): MarketRotationEtfLeadershipDiagnostics {
+  return {
+    enabled: diagnostics?.enabled === true,
+    source: diagnostics?.source || null,
+    asOf: diagnostics?.asOf || null,
+    eligibleSymbols: Array.isArray(diagnostics?.eligibleSymbols) ? diagnostics.eligibleSymbols : [],
+    leadingSymbols: Array.isArray(diagnostics?.leadingSymbols) ? diagnostics.leadingSymbols : [],
+    laggingSymbols: Array.isArray(diagnostics?.laggingSymbols) ? diagnostics.laggingSymbols : [],
+    leadershipSpread: typeof diagnostics?.leadershipSpread === 'number' ? diagnostics.leadershipSpread : null,
+    confidenceLabel: diagnostics?.confidenceLabel || null,
+    reasonCodes: Array.isArray(diagnostics?.reasonCodes) ? diagnostics.reasonCodes : [],
+    evidence: Array.isArray(diagnostics?.evidence)
+      ? diagnostics.evidence.map((row) => ({
+        ...row,
+        reasonCodes: Array.isArray(row.reasonCodes) ? row.reasonCodes : [],
+      }))
+      : [],
+  };
+}
+
 export const marketRotationApi = {
   getRotationRadar: async (market?: string): Promise<MarketRotationRadarResponse> => {
     const response = market
@@ -384,6 +433,7 @@ export const marketRotationApi = {
       ...normalized,
       themes: Array.isArray(normalized.themes) ? normalized.themes.map(normalizeTheme) : [],
       benchmarks,
+      etfLeadershipDiagnostics: normalizeEtfLeadershipDiagnostics(normalized.etfLeadershipDiagnostics),
       summary: {
         strongestThemes: normalized.summary?.strongestThemes || [],
         acceleratingThemes: normalized.summary?.acceleratingThemes || [],
