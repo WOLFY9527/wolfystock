@@ -13,6 +13,12 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
+from src.services.provider_unavailable_reason_buckets import (
+    NO_PROVIDER_SELECTION_REASON_BUCKET_RULES,
+    explicit_unavailable_reason_bucket,
+    safe_unavailable_reason_bucket,
+)
+
 
 CN_HK_FLOW_SYMBOLS = (
     "NORTHBOUND",
@@ -204,57 +210,14 @@ def parse_mocked_cn_hk_flow_payload(payload: Any) -> tuple[ParsedCnHkFlowObserva
 
 
 def _explicit_reason_bucket(payload: Any) -> str | None:
-    if not isinstance(payload, Mapping):
-        return None
-
-    observations = payload.get("observations")
-    if isinstance(observations, Sequence) and not isinstance(observations, (str, bytes)) and len(observations) == 0:
-        return "empty_payload"
-
-    markers = [
-        payload.get("unavailable_reason"),
-        payload.get("unavailableReason"),
-        payload.get("reason"),
-        payload.get("reasonCode"),
-        payload.get("errorCode"),
-        payload.get("status"),
-        payload.get("credentialState"),
-        payload.get("credential_state"),
-        payload.get("message"),
-    ]
-    error = payload.get("error")
-    if isinstance(error, Mapping):
-        markers.extend(
-            [
-                error.get("reason"),
-                error.get("reasonCode"),
-                error.get("errorCode"),
-                error.get("status"),
-                error.get("message"),
-            ]
-        )
-    elif error is not None:
-        markers.append(error)
-
-    normalized = " ".join(_text(marker).lower() for marker in markers if marker is not None)
-    if not normalized:
-        return None
-    if any(token in normalized for token in ("missing_credentials", "credential missing", "missing api key", "not_configured", "api_key_missing", "missing token")):
-        return "missing_credentials"
-    if any(token in normalized for token in ("permission_denied", "permission denied", "forbidden", "403", "unauthorized_scope")):
-        return "permission_denied"
-    if any(token in normalized for token in ("empty_payload", "empty response", "empty dataset", "no_data", "no data")):
-        return "empty_payload"
-    if any(token in normalized for token in ("malformed_payload", "malformed", "invalid", "schema")):
-        return "malformed_payload"
-    return None
+    return explicit_unavailable_reason_bucket(
+        payload,
+        reason_bucket_rules=NO_PROVIDER_SELECTION_REASON_BUCKET_RULES,
+    )
 
 
 def _safe_reason_bucket(value: Any) -> str:
-    normalized = _text(value).lower()
-    if normalized in SAFE_UNAVAILABLE_REASON_BUCKETS:
-        return normalized
-    return "malformed_payload"
+    return safe_unavailable_reason_bucket(value, SAFE_UNAVAILABLE_REASON_BUCKETS)
 
 
 def _extract_as_of(payload: Any) -> str | None:

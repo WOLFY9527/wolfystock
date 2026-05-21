@@ -12,6 +12,13 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
+from src.services.provider_unavailable_reason_buckets import (
+    CUSTOM_SOURCE_REASON_BUCKET_RULES,
+    CUSTOM_SOURCE_REASON_MARKER_KEYS,
+    explicit_unavailable_reason_bucket,
+    safe_unavailable_reason_bucket,
+)
+
 
 SOURCE_TYPE_CUSTOM = "custom"
 GENERIC_SAFE_PANEL_PARSER_ID = "generic_safe_panel_v1"
@@ -190,45 +197,16 @@ def _build_unavailable_parser_result(
 
 
 def _explicit_reason_bucket(payload: Any) -> str | None:
-    if not isinstance(payload, Mapping):
-        return None
-
-    observations = payload.get("observations")
-    if isinstance(observations, Sequence) and not isinstance(observations, (str, bytes)) and len(observations) == 0:
-        return "empty_payload"
-
-    markers = [
-        payload.get("unavailableReason"),
-        payload.get("unavailable_reason"),
-        payload.get("reason"),
-        payload.get("reasonCode"),
-        payload.get("errorCode"),
-        payload.get("status"),
-        payload.get("credentialState"),
-        payload.get("credential_state"),
-        payload.get("message"),
-    ]
-    normalized = " ".join(_text(marker).lower() for marker in markers if marker is not None)
-    if not normalized:
-        return None
-    if any(token in normalized for token in ("missing_credentials", "missing api key", "missing token", "not_configured")):
-        return "missing_credentials"
-    if any(token in normalized for token in ("permission_denied", "permission denied", "forbidden", "403")):
-        return "permission_denied"
-    if any(token in normalized for token in ("empty_payload", "empty response", "empty dataset", "no_data", "no data")):
-        return "empty_payload"
-    if any(token in normalized for token in ("temporarily_unavailable", "temporarily unavailable", "unavailable", "timeout")):
-        return "temporarily_unavailable"
-    if any(token in normalized for token in ("malformed_payload", "malformed", "invalid", "schema")):
-        return "malformed_payload"
-    return None
+    return explicit_unavailable_reason_bucket(
+        payload,
+        marker_keys=CUSTOM_SOURCE_REASON_MARKER_KEYS,
+        reason_bucket_rules=CUSTOM_SOURCE_REASON_BUCKET_RULES,
+        include_error_markers=False,
+    )
 
 
 def _safe_reason_bucket(value: Any) -> str:
-    normalized = _text(value).lower()
-    if normalized in SAFE_UNAVAILABLE_REASON_BUCKETS:
-        return normalized
-    return "malformed_payload"
+    return safe_unavailable_reason_bucket(value, SAFE_UNAVAILABLE_REASON_BUCKETS)
 
 
 def _required_payload_text(payload: Mapping[str, Any], key: str) -> str:
