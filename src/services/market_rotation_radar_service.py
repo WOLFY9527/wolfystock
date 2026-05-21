@@ -48,6 +48,13 @@ NO_ADVICE_DISCLOSURE = "仅用于观察资金轮动迹象，非买卖建议。"
 RADAR_ENDPOINT = "/api/v1/market/rotation-radar"
 TIME_WINDOW_KEYS = ("5m", "15m", "60m", "1d")
 MARKET_BENCHMARK_SYMBOLS = ("QQQ", "SPY", "IWM")
+ROTATION_ETF_LEADERSHIP_SYMBOLS = ("SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV")
+ROTATION_ETF_LEADERSHIP_WINDOW_WEIGHTS = {
+    "5m": 0.15,
+    "15m": 0.20,
+    "60m": 0.25,
+    "1d": 0.40,
+}
 SECTOR_BENCHMARK_SYMBOLS = tuple(
     symbol
     for symbol in list_rotation_theme_proxy_etfs("US")
@@ -286,6 +293,11 @@ class MarketRotationRadarService:
             generated_at,
             etf_authority_spine=quote_provider_metadata.get("etfAuthoritySpine"),
         )
+        etf_leadership_diagnostics = self._etf_leadership_diagnostics(
+            benchmarks=benchmarks,
+            etf_authority_spine=quote_provider_metadata.get("etfAuthoritySpine"),
+            generated_at=generated_at,
+        )
         themes = [
             self._analyze_theme(theme, quote_result.quotes, benchmarks, generated_at)
             for theme in THEME_BASKETS
@@ -328,6 +340,7 @@ class MarketRotationRadarService:
             "warning": "；".join(warnings) if warnings else None,
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
             "benchmarks": benchmarks,
+            "etfLeadershipDiagnostics": etf_leadership_diagnostics,
             "summary": self._build_summary(themes),
             "themes": themes,
             "metadata": {
@@ -1430,6 +1443,219 @@ class MarketRotationRadarService:
                 continue
             result[symbol] = dict(row)
         return result
+
+    def _etf_leadership_diagnostics(
+        self,
+        *,
+        benchmarks: Mapping[str, Dict[str, Any]],
+        etf_authority_spine: Optional[Mapping[str, Any]],
+        generated_at: str,
+    ) -> Dict[str, Any]:
+        source = "alpaca_etf_authority_spine"
+        spine = dict(etf_authority_spine) if isinstance(etf_authority_spine, Mapping) else {}
+        if not spine:
+            return self._disabled_etf_leadership_diagnostics(
+                source=source,
+                as_of=generated_at,
+                reason_codes=["etf_authority_spine_missing"],
+            )
+
+        rows = self._etf_authority_quote_rows(spine)
+        row_universe = {
+            str(symbol).strip().upper()
+            for symbol in self._string_list(spine.get("universe"))
+            if str(symbol).strip()
+        }
+        as_of = str(spine.get("asOf") or generated_at)
+        evidence: List[Dict[str, Any]] = []
+        eligible_symbols: List[str] = []
+        ineligible_symbols: List[str] = []
+        reason_codes: List[str] = []
+        spine_reason_codes = self._string_list(spine.get("reasonCodes"))
+
+        if not bool(spine.get("sourceAuthorityAllowed")) or not bool(spine.get("scoreContributionAllowed")):
+            reason_codes.extend(spine_reason_codes or ["etf_authority_spine_ineligible"])
+
+        missing_spine_symbols = [
+            symbol for symbol in ROTATION_ETF_LEADERSHIP_SYMBOLS
+            if symbol not in row_universe and symbol not in rows
+        ]
+        if missing_spine_symbols:
+            reason_codes.append("bounded_universe_incomplete")
+
+        if self._string_list(spine.get("missingWindows")):
+            reason_codes.append("missing_required_windows")
+        if self._string_list(spine.get("staleWindows")):
+            reason_codes.append("stale_required_windows")
+
+        for symbol in ROTATION_ETF_LEADERSHIP_SYMBOLS:
+            row = rows.get(symbol, {})
+            benchmark = benchmarks.get(symbol, {})
+            window_returns = self._etf_leadership_window_returns(benchmark)
+            row_reason_codes = self._string_list(row.get("reasonCodes"))
+            source_authority_allowed = bool(row.get("sourceAuthorityAllowed"))
+            score_contribution_allowed = bool(row.get("scoreContributionAllowed"))
+            required_windows_fulfilled = self._etf_leadership_required_windows_fulfilled(
+                row=row,
+                benchmark=benchmark,
+            )
+            leadership_score = self._etf_leadership_score(window_returns) if required_windows_fulfilled else None
+            eligible = bool(
+                source_authority_allowed
+                and score_contribution_allowed
+                and required_windows_fulfilled
+                and leadership_score is not None
+            )
+            if eligible:
+                eligible_symbols.append(symbol)
+            else:
+                ineligible_symbols.append(symbol)
+            evidence.append(
+                {
+                    "symbol": symbol,
+                    "leadershipScore": leadership_score,
+                    "windowReturns": window_returns,
+                    "sourceAuthorityAllowed": source_authority_allowed,
+                    "scoreContributionAllowed": score_contribution_allowed,
+                    "reasonCodes": row_reason_codes,
+                    "asOf": row.get("asOf") or benchmark.get("asOf") or as_of,
+                    "sourceLabel": row.get("sourceLabel") or benchmark.get("sourceLabel"),
+                    "sourceTier": row.get("sourceTier") or benchmark.get("sourceTier"),
+                }
+            )
+
+        if ineligible_symbols:
+            reason_codes.append("ineligible_bounded_etf")
+
+        deduped_reason_codes = list(dict.fromkeys(reason_codes))
+        if len(eligible_symbols) != len(ROTATION_ETF_LEADERSHIP_SYMBOLS):
+            return self._disabled_etf_leadership_diagnostics(
+                source=source,
+                as_of=as_of,
+                reason_codes=deduped_reason_codes or ["ineligible_bounded_etf"],
+                eligible_symbols=eligible_symbols,
+                evidence=evidence,
+            )
+
+        ranked_evidence = sorted(
+            [row for row in evidence if row.get("leadershipScore") is not None],
+            key=lambda row: float(row.get("leadershipScore") or 0.0),
+            reverse=True,
+        )
+        leading_symbols = [str(row["symbol"]) for row in ranked_evidence[:3]]
+        lagging_symbols = [str(row["symbol"]) for row in ranked_evidence[-3:]][::-1]
+        leadership_spread = None
+        if ranked_evidence:
+            leadership_spread = round(
+                float(ranked_evidence[0]["leadershipScore"]) - float(ranked_evidence[-1]["leadershipScore"]),
+                3,
+            )
+        return {
+            "enabled": True,
+            "source": source,
+            "asOf": as_of,
+            "requiredSymbols": list(ROTATION_ETF_LEADERSHIP_SYMBOLS),
+            "requiredWindows": list(TIME_WINDOW_KEYS),
+            "eligibleSymbols": eligible_symbols,
+            "leadingSymbols": leading_symbols,
+            "laggingSymbols": lagging_symbols,
+            "leadershipSpread": leadership_spread,
+            "confidenceLabel": self._etf_leadership_confidence_label(leadership_spread),
+            "reasonCodes": ["bounded_etf_authority_active"],
+            "evidence": evidence,
+        }
+
+    def _disabled_etf_leadership_diagnostics(
+        self,
+        *,
+        source: str,
+        as_of: str,
+        reason_codes: Sequence[str],
+        eligible_symbols: Optional[Sequence[str]] = None,
+        evidence: Optional[Sequence[Mapping[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "enabled": False,
+            "source": source,
+            "asOf": as_of,
+            "requiredSymbols": list(ROTATION_ETF_LEADERSHIP_SYMBOLS),
+            "requiredWindows": list(TIME_WINDOW_KEYS),
+            "eligibleSymbols": list(eligible_symbols or []),
+            "leadingSymbols": [],
+            "laggingSymbols": [],
+            "leadershipSpread": None,
+            "confidenceLabel": "disabled",
+            "reasonCodes": list(dict.fromkeys(self._string_list(reason_codes))),
+            "evidence": [dict(row) for row in (evidence or [])],
+        }
+
+    @staticmethod
+    def _etf_leadership_window_returns(benchmark: Mapping[str, Any]) -> Dict[str, float]:
+        time_windows = benchmark.get("timeWindows")
+        result: Dict[str, float] = {}
+        if not isinstance(time_windows, Mapping):
+            return result
+        for window in TIME_WINDOW_KEYS:
+            slot = time_windows.get(window)
+            if not isinstance(slot, Mapping):
+                continue
+            change = slot.get("changePercent")
+            if change is None:
+                continue
+            try:
+                result[window] = round(float(change), 3)
+            except Exception:
+                continue
+        return result
+
+    def _etf_leadership_required_windows_fulfilled(
+        self,
+        *,
+        row: Mapping[str, Any],
+        benchmark: Mapping[str, Any],
+    ) -> bool:
+        windows_fulfilled = {
+            str(window).strip()
+            for window in self._string_list(row.get("windowsFulfilled"))
+            if str(window).strip()
+        }
+        if windows_fulfilled != set(TIME_WINDOW_KEYS):
+            return False
+        time_windows = benchmark.get("timeWindows")
+        if not isinstance(time_windows, Mapping):
+            return False
+        for window in TIME_WINDOW_KEYS:
+            slot = time_windows.get(window)
+            if not isinstance(slot, Mapping):
+                return False
+            if not slot.get("available"):
+                return False
+            if slot.get("changePercent") is None:
+                return False
+        return True
+
+    @staticmethod
+    def _etf_leadership_score(window_returns: Mapping[str, float]) -> Optional[float]:
+        weighted_total = 0.0
+        weight_total = 0.0
+        for window, weight in ROTATION_ETF_LEADERSHIP_WINDOW_WEIGHTS.items():
+            change = window_returns.get(window)
+            if change is None:
+                return None
+            weighted_total += float(change) * float(weight)
+            weight_total += float(weight)
+        if weight_total <= 0:
+            return None
+        return round(weighted_total / weight_total, 3)
+
+    @staticmethod
+    def _etf_leadership_confidence_label(leadership_spread: Optional[float]) -> str:
+        spread = abs(float(leadership_spread or 0.0))
+        if spread >= 1.0:
+            return "high"
+        if spread >= 0.5:
+            return "medium"
+        return "low"
 
     def _analyze_theme(
         self,

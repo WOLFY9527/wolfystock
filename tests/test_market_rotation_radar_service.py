@@ -112,6 +112,86 @@ def _alpaca_bars(*, start_close: float = 100.0, end_close: float = 102.0, as_of:
     ]
 
 
+def _alpaca_time_windows(
+    changes: dict[str, float],
+    *,
+    as_of: str = "2026-05-07T09:45:00+00:00",
+) -> dict[str, dict[str, object]]:
+    return {
+        window: {
+            "changePercent": change,
+            "relativeVolume": 1.2,
+            "freshness": "live" if window != "1d" else "delayed",
+            "asOf": as_of,
+            "available": True,
+            "source": "alpaca",
+            "sourceLabel": "Alpaca SIP",
+            "sourceTier": "broker_authorized",
+            "providerTier": "tier_1_configured",
+        }
+        for window, change in changes.items()
+    }
+
+
+def _bounded_etf_authority_fixture() -> tuple[tuple[str, ...], dict[str, dict], dict[str, object]]:
+    stable_etfs = ("SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV")
+    window_changes = {
+        "SPY": {"5m": 0.2, "15m": 0.4, "60m": 0.6, "1d": 0.9},
+        "QQQ": {"5m": 0.5, "15m": 0.7, "60m": 1.1, "1d": 1.6},
+        "IWM": {"5m": -0.2, "15m": 0.1, "60m": 0.3, "1d": 0.4},
+        "SMH": {"5m": 0.8, "15m": 1.2, "60m": 1.8, "1d": 2.4},
+        "SOXX": {"5m": 0.7, "15m": 1.0, "60m": 1.5, "1d": 2.1},
+        "IGV": {"5m": 0.1, "15m": 0.3, "60m": 0.6, "1d": 0.8},
+    }
+    quotes: dict[str, dict] = {}
+    for symbol in stable_etfs:
+        time_windows = _alpaca_time_windows(window_changes[symbol])
+        quote = _quote(
+            symbol,
+            window_changes[symbol]["1d"],
+            freshness="live",
+            time_windows=time_windows,
+            source="alpaca",
+            source_type="official_public",
+            source_tier="broker_authorized",
+        )
+        quote["sourceLabel"] = "Alpaca SIP"
+        quote["providerTier"] = "tier_1_configured"
+        quote["confidenceWeight"] = 0.9
+        quotes[symbol] = quote
+    spine = {
+        "universe": list(stable_etfs),
+        "requiredWindows": ["5m", "15m", "60m", "1d"],
+        "fulfilledWindows": ["5m", "15m", "60m", "1d"],
+        "missingWindows": [],
+        "staleWindows": [],
+        "freshness": "live",
+        "asOf": "2026-05-07T09:45:00+00:00",
+        "sourceLabel": "Alpaca SIP",
+        "sourceTier": "broker_authorized",
+        "trustLevel": "active",
+        "sourceAuthorityAllowed": True,
+        "scoreContributionAllowed": True,
+        "reasonCodes": [],
+        "quotes": [
+            {
+                "symbol": symbol,
+                "windowsFulfilled": ["5m", "15m", "60m", "1d"],
+                "freshness": "live",
+                "asOf": "2026-05-07T09:45:00+00:00",
+                "sourceLabel": "Alpaca SIP",
+                "sourceTier": "broker_authorized",
+                "trustLevel": "active",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "reasonCodes": [],
+            }
+            for symbol in stable_etfs
+        ],
+    }
+    return stable_etfs, quotes, spine
+
+
 def _runtime_probe_symbols() -> tuple[str, ...]:
     return (
         "QQQ",
@@ -2596,6 +2676,238 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(igv_proxy["etfAuthorityEvidence"]["scoreContributionAllowed"])
         self.assertEqual(igv_proxy["etfAuthorityEvidence"]["symbol"], "IGV")
         self.assertEqual(igv_proxy["etfAuthorityEvidence"]["reasonCodes"], [])
+
+    def test_active_bounded_etf_authority_spine_produces_leadership_diagnostics(self) -> None:
+        stable_etfs, quotes, etf_authority_spine = _bounded_etf_authority_fixture()
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "configured",
+                    "source": "alpaca",
+                    "sourceLabel": "Alpaca SIP",
+                    "sourceType": "official_public",
+                    "sourceTier": "broker_authorized",
+                    "providerTier": "tier_1_configured",
+                    "freshness": "live",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "noExternalCalls": False,
+                    "providerDiagnostics": {
+                        "etfAuthoritySpine": etf_authority_spine,
+                    },
+                },
+            },
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        diagnostics = payload["etfLeadershipDiagnostics"]
+
+        self.assertTrue(diagnostics["enabled"])
+        self.assertEqual(diagnostics["source"], "alpaca_etf_authority_spine")
+        self.assertEqual(diagnostics["asOf"], "2026-05-07T09:45:00+00:00")
+        self.assertEqual(diagnostics["eligibleSymbols"], list(stable_etfs))
+        self.assertEqual(diagnostics["leadingSymbols"], ["SMH", "SOXX", "QQQ"])
+        self.assertEqual(diagnostics["laggingSymbols"], ["IWM", "IGV", "SPY"])
+        self.assertGreater(diagnostics["leadershipSpread"], 1.0)
+        self.assertEqual(diagnostics["confidenceLabel"], "high")
+        self.assertEqual(diagnostics["reasonCodes"], ["bounded_etf_authority_active"])
+        self.assertEqual([row["symbol"] for row in diagnostics["evidence"]], list(stable_etfs))
+        self.assertTrue(all(row["sourceAuthorityAllowed"] for row in diagnostics["evidence"]))
+        self.assertTrue(all(row["scoreContributionAllowed"] for row in diagnostics["evidence"]))
+
+    def test_partial_etf_authority_windows_disable_leadership_diagnostics(self) -> None:
+        stable_etfs, quotes, etf_authority_spine = _bounded_etf_authority_fixture()
+        quotes["SMH"]["timeWindows"].pop("15m")
+        etf_authority_spine["fulfilledWindows"] = ["5m", "60m", "1d"]
+        etf_authority_spine["missingWindows"] = ["15m"]
+        etf_authority_spine["trustLevel"] = "partial"
+        etf_authority_spine["sourceAuthorityAllowed"] = False
+        etf_authority_spine["scoreContributionAllowed"] = False
+        etf_authority_spine["reasonCodes"] = ["missing_required_windows", "entitlement"]
+        for row in etf_authority_spine["quotes"]:
+            if row["symbol"] == "SMH":
+                row["windowsFulfilled"] = ["5m", "60m", "1d"]
+                row["trustLevel"] = "partial"
+                row["sourceAuthorityAllowed"] = False
+                row["scoreContributionAllowed"] = False
+                row["reasonCodes"] = ["missing_required_windows", "entitlement"]
+
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "configured",
+                    "source": "alpaca",
+                    "sourceLabel": "Alpaca SIP",
+                    "sourceType": "official_public",
+                    "sourceTier": "broker_authorized",
+                    "providerTier": "tier_1_configured",
+                    "freshness": "live",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "noExternalCalls": False,
+                    "providerDiagnostics": {
+                        "etfAuthoritySpine": etf_authority_spine,
+                    },
+                },
+            },
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        diagnostics = payload["etfLeadershipDiagnostics"]
+
+        self.assertFalse(diagnostics["enabled"])
+        self.assertEqual(diagnostics["leadingSymbols"], [])
+        self.assertEqual(diagnostics["laggingSymbols"], [])
+        self.assertIsNone(diagnostics["leadershipSpread"])
+        self.assertEqual(diagnostics["confidenceLabel"], "disabled")
+        self.assertIn("missing_required_windows", diagnostics["reasonCodes"])
+        self.assertIn("ineligible_bounded_etf", diagnostics["reasonCodes"])
+
+    def test_missing_credentials_disable_leadership_diagnostics(self) -> None:
+        stable_etfs, quotes, etf_authority_spine = _bounded_etf_authority_fixture()
+        etf_authority_spine["sourceAuthorityAllowed"] = False
+        etf_authority_spine["scoreContributionAllowed"] = False
+        etf_authority_spine["trustLevel"] = "unavailable"
+        etf_authority_spine["reasonCodes"] = ["credentials"]
+        for row in etf_authority_spine["quotes"]:
+            row["sourceAuthorityAllowed"] = False
+            row["scoreContributionAllowed"] = False
+            row["trustLevel"] = "unavailable"
+            row["reasonCodes"] = ["credentials"]
+
+        yfinance_quotes = {
+            symbol: _quote(
+                symbol,
+                quotes[symbol]["changePercent"],
+                freshness="delayed",
+                is_fallback=True,
+                time_windows={"1d": {"changePercent": quotes[symbol]["changePercent"], "freshness": "delayed", "asOf": "2026-05-07T09:45:00+00:00", "available": True}},
+                source="yfinance_proxy",
+                source_type="unofficial_public_api",
+                source_tier="unofficial_public_api",
+            )
+            for symbol in stable_etfs
+        }
+
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: {
+                "quotes": {symbol: yfinance_quotes[symbol] for symbol in symbols if symbol in yfinance_quotes},
+                "metadata": {
+                    "quoteMode": "proxy",
+                    "source": "yfinance_proxy",
+                    "sourceLabel": "Yahoo Finance",
+                    "sourceType": "unofficial_public_api",
+                    "sourceTier": "unofficial_public_api",
+                    "providerTier": "tier_2_delayed_proxy",
+                    "freshness": "delayed",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "noExternalCalls": False,
+                    "providerDiagnostics": {
+                        "etfAuthoritySpine": etf_authority_spine,
+                    },
+                },
+            },
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        diagnostics = payload["etfLeadershipDiagnostics"]
+
+        self.assertFalse(diagnostics["enabled"])
+        self.assertEqual(diagnostics["eligibleSymbols"], [])
+        self.assertIn("credentials", diagnostics["reasonCodes"])
+        self.assertEqual(diagnostics["confidenceLabel"], "disabled")
+
+    def test_static_or_yfinance_fallback_cannot_produce_leadership_diagnostics(self) -> None:
+        stable_etfs, quotes, _ = _bounded_etf_authority_fixture()
+        yfinance_quotes = {
+            symbol: _quote(
+                symbol,
+                quotes[symbol]["changePercent"],
+                freshness="delayed",
+                is_fallback=True,
+                time_windows={"1d": {"changePercent": quotes[symbol]["changePercent"], "freshness": "delayed", "asOf": "2026-05-07T09:45:00+00:00", "available": True}},
+                source="yfinance_proxy",
+                source_type="unofficial_public_api",
+                source_tier="unofficial_public_api",
+            )
+            for symbol in stable_etfs
+        }
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: {
+                "quotes": {symbol: yfinance_quotes[symbol] for symbol in symbols if symbol in yfinance_quotes},
+                "metadata": {
+                    "quoteMode": "proxy",
+                    "source": "yfinance_proxy",
+                    "sourceLabel": "Yahoo Finance",
+                    "sourceType": "unofficial_public_api",
+                    "sourceTier": "unofficial_public_api",
+                    "providerTier": "tier_2_delayed_proxy",
+                    "freshness": "delayed",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "noExternalCalls": False,
+                },
+            },
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        diagnostics = payload["etfLeadershipDiagnostics"]
+
+        self.assertFalse(diagnostics["enabled"])
+        self.assertEqual(diagnostics["eligibleSymbols"], [])
+        self.assertEqual(diagnostics["leadingSymbols"], [])
+        self.assertEqual(diagnostics["laggingSymbols"], [])
+        self.assertIn("etf_authority_spine_missing", diagnostics["reasonCodes"])
+
+    def test_leadership_diagnostics_stay_bounded_to_authority_spine_symbols(self) -> None:
+        stable_etfs, quotes, etf_authority_spine = _bounded_etf_authority_fixture()
+        etf_authority_spine["universe"] = [*stable_etfs, "XLF"]
+        etf_authority_spine["quotes"].append(
+            {
+                "symbol": "XLF",
+                "windowsFulfilled": ["5m", "15m", "60m", "1d"],
+                "freshness": "live",
+                "asOf": "2026-05-07T09:45:00+00:00",
+                "sourceLabel": "Alpaca SIP",
+                "sourceTier": "broker_authorized",
+                "trustLevel": "active",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "reasonCodes": [],
+            }
+        )
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "configured",
+                    "source": "alpaca",
+                    "sourceLabel": "Alpaca SIP",
+                    "sourceType": "official_public",
+                    "sourceTier": "broker_authorized",
+                    "providerTier": "tier_1_configured",
+                    "freshness": "live",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "noExternalCalls": False,
+                    "providerDiagnostics": {
+                        "etfAuthoritySpine": etf_authority_spine,
+                    },
+                },
+            },
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        diagnostics = payload["etfLeadershipDiagnostics"]
+
+        self.assertEqual(diagnostics["eligibleSymbols"], list(stable_etfs))
+        self.assertNotIn("XLF", diagnostics["eligibleSymbols"])
+        self.assertNotIn("XLF", diagnostics["leadingSymbols"])
+        self.assertNotIn("XLF", diagnostics["laggingSymbols"])
+        self.assertTrue(all(row["symbol"] in stable_etfs for row in diagnostics["evidence"]))
 
 
 if __name__ == "__main__":
