@@ -1,0 +1,335 @@
+#!/usr/bin/env python3
+"""Emit a sanitized Market Intelligence runtime diagnostic bundle."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+from typing import Any, Callable
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from src.services.official_macro_transport import run_official_macro_live_smoke
+from src.services.rotation_radar_quote_provider import run_rotation_radar_alpaca_live_smoke
+
+
+DEFAULT_TIMEOUT_SECONDS = 3.0
+BASE_URL_ENV_VAR = "MARKET_INTELLIGENCE_BASE_URL"
+REDACTED = "redacted"
+_BLOCKED_REASON_TOKENS = ("token", "secret", "auth", "cookie", "header", "bearer", "apikey", "api_key")
+_SAFE_REASON_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789_:-")
+_ENDPOINTS: tuple[tuple[str, str], ...] = (
+    ("marketOverviewMacro", "/api/v1/market-overview/macro"),
+    ("liquidityMonitor", "/api/v1/market/liquidity-monitor"),
+    ("rotationRadar", "/api/v1/market/rotation-radar?market=US"),
+    ("marketTemperature", "/api/v1/market/temperature"),
+    ("dataReadiness", "/api/v1/market/data-readiness"),
+)
+
+
+def _sanitize_reason(value: Any) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    lowered = text.lower()
+    if any(token in lowered for token in _BLOCKED_REASON_TOKENS):
+        return REDACTED
+    if len(text) > 64 or any(character.lower() not in _SAFE_REASON_CHARS for character in text):
+        return REDACTED
+    return text
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item or "").strip()]
+
+
+def _compact_official_macro_diagnostic(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "credentialsPresent": bool(payload.get("credentialsPresent", False)),
+        "providerConstructed": bool(payload.get("providerConstructed", False)),
+        "probePassed": bool(payload.get("probePassed", False)),
+        "freshnessValid": bool(payload.get("freshnessValid", False)),
+        "sourceMetadataValid": bool(payload.get("sourceMetadataValid", False)),
+        "sourceAuthorityAllowed": bool(payload.get("sourceAuthorityAllowed", False)),
+        "scoreContributionAllowed": bool(payload.get("scoreContributionAllowed", False)),
+        "fulfilledSeries": _string_list(payload.get("fulfilledSeries")),
+        "missingSeries": _string_list(payload.get("missingSeries")),
+        "staleSeries": _string_list(payload.get("staleSeries")),
+        "reason": _sanitize_reason(payload.get("reason")),
+    }
+
+
+def _compact_alpaca_rotation_diagnostic(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "credentialsPresent": bool(payload.get("credentialsPresent", False)),
+        "providerConstructed": bool(payload.get("providerConstructed", False)),
+        "probePassed": bool(payload.get("probePassed", False)),
+        "freshnessValid": bool(payload.get("freshnessValid", False)),
+        "sourceMetadataValid": bool(payload.get("sourceMetadataValid", False)),
+        "sourceAuthorityAllowed": bool(payload.get("sourceAuthorityAllowed", False)),
+        "scoreContributionAllowed": bool(payload.get("scoreContributionAllowed", False)),
+        "fulfilledWindows": _string_list(payload.get("fulfilledWindows")),
+        "missingWindows": _string_list(payload.get("missingWindows")),
+        "staleWindows": _string_list(payload.get("staleWindows")),
+        "reason": _sanitize_reason(payload.get("reason")),
+    }
+
+
+def _normalize_request_base_url(base_url: str) -> str:
+    parsed = urllib.parse.urlsplit(str(base_url).strip())
+    scheme = parsed.scheme or "http"
+    netloc = parsed.netloc or parsed.path
+    path = "" if parsed.netloc else ""
+    return urllib.parse.urlunsplit((scheme, netloc, path.rstrip("/"), "", ""))
+
+
+def _sanitize_base_url_display(base_url: str) -> str:
+    normalized = _normalize_request_base_url(base_url)
+    parsed = urllib.parse.urlsplit(normalized)
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+
+
+def _fetch_json(base_url: str, path: str, timeout_seconds: float) -> tuple[int, dict[str, Any]]:
+    url = f"{_normalize_request_base_url(base_url).rstrip('/')}{path}"
+    request = urllib.request.Request(
+        url,
+        headers={"Accept": "application/json"},
+        method="GET",
+    )
+    with urllib.request.urlopen(request, timeout=max(float(timeout_seconds), 0.1)) as response:
+        status_code = int(getattr(response, "status", 200) or 200)
+        payload = json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("endpoint payload must be a JSON object")
+    return status_code, payload
+
+
+def _item_has_value(item: Any) -> bool:
+    return isinstance(item, dict) and item.get("value") is not None and not bool(item.get("isUnavailable"))
+
+
+def _summarize_market_overview_macro(payload: dict[str, Any]) -> dict[str, Any]:
+    items = payload.get("items") if isinstance(payload.get("items"), list) else []
+    available_item_count = sum(1 for item in items if _item_has_value(item))
+    provider_status = str(dict(payload.get("providerHealth") or {}).get("status") or "unknown")
+    return {
+        "available": available_item_count > 0 and provider_status != "unavailable",
+        "providerHealthStatus": provider_status,
+        "freshness": str(payload.get("freshness") or "unknown"),
+        "availableItemCount": available_item_count,
+        "unavailableItemCount": max(0, len(items) - available_item_count),
+    }
+
+
+def _summarize_liquidity_monitor(payload: dict[str, Any]) -> dict[str, Any]:
+    score = dict(payload.get("score") or {})
+    indicators = payload.get("indicators") if isinstance(payload.get("indicators"), list) else []
+    included_indicator_count = int(score.get("includedIndicatorCount") or 0)
+    score_regime = str(score.get("regime") or "unknown")
+    unavailable_indicator_count = sum(
+        1
+        for indicator in indicators
+        if bool(dict(indicator.get("evidence") or {}).get("isUnavailable"))
+    )
+    available = score_regime != "unavailable" and included_indicator_count > 0
+    return {
+        "available": available,
+        "scoreRegime": score_regime,
+        "includedIndicatorCount": included_indicator_count,
+        "indicatorCount": len(indicators),
+        "unavailableIndicatorCount": unavailable_indicator_count,
+        "freshnessStatus": str(dict(payload.get("freshness") or {}).get("status") or "unknown"),
+    }
+
+
+def _summarize_rotation_radar(payload: dict[str, Any]) -> dict[str, Any]:
+    metadata = dict(payload.get("metadata") or {})
+    quote_provider = dict(metadata.get("quoteProvider") or {})
+    summary = dict(payload.get("summary") or {})
+    headline_eligible_theme_count = int(summary.get("headlineEligibleThemeCount") or 0)
+    quote_provider_status = str(quote_provider.get("status") or "unknown")
+    return {
+        "available": quote_provider_status == "success" or headline_eligible_theme_count > 0,
+        "quoteProviderPresent": bool(quote_provider.get("present", False)),
+        "quoteProviderStatus": quote_provider_status,
+        "freshness": str(payload.get("freshness") or "unknown"),
+        "headlineEligibleThemeCount": headline_eligible_theme_count,
+        "observationThemeCount": int(summary.get("observationThemeCount") or 0),
+    }
+
+
+def _summarize_market_temperature(payload: dict[str, Any]) -> dict[str, Any]:
+    provider_status = str(dict(payload.get("providerHealth") or {}).get("status") or "unknown")
+    disabled_reason = _sanitize_reason(payload.get("disabledReason"))
+    return {
+        "available": bool(payload.get("temperatureAvailable", False)),
+        "temperatureAvailable": bool(payload.get("temperatureAvailable", False)),
+        "disabledReason": disabled_reason if payload.get("disabledReason") is not None else None,
+        "providerHealthStatus": provider_status,
+    }
+
+
+def _summarize_data_readiness(payload: dict[str, Any]) -> dict[str, Any]:
+    checks = payload.get("checks") if isinstance(payload.get("checks"), list) else []
+    failing_check_count = sum(
+        1 for check in checks if str(dict(check).get("status") or "unknown") in {"missing", "misconfigured"}
+    )
+    readiness_status = str(payload.get("readinessStatus") or "unknown")
+    return {
+        "available": readiness_status in {"ready", "partial"},
+        "readinessStatus": readiness_status,
+        "failingCheckCount": failing_check_count,
+        "checkCount": len(checks),
+    }
+
+
+_ENDPOINT_SUMMARIZERS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
+    "marketOverviewMacro": _summarize_market_overview_macro,
+    "liquidityMonitor": _summarize_liquidity_monitor,
+    "rotationRadar": _summarize_rotation_radar,
+    "marketTemperature": _summarize_market_temperature,
+    "dataReadiness": _summarize_data_readiness,
+}
+
+
+def _build_discrepancies(
+    official_macro_diagnostic: dict[str, Any],
+    alpaca_rotation_diagnostic: dict[str, Any],
+    runtime_readiness: dict[str, Any],
+) -> list[dict[str, str]]:
+    discrepancies: list[dict[str, str]] = []
+    if official_macro_diagnostic.get("probePassed") and runtime_readiness.get("marketOverviewMacro", {}).get("available") is False:
+        discrepancies.append(
+            {
+                "code": "diagnostic_pass_runtime_unavailable",
+                "diagnostic": "officialMacroDiagnostic",
+                "runtimeSurface": "marketOverviewMacro",
+            }
+        )
+    if alpaca_rotation_diagnostic.get("probePassed") and runtime_readiness.get("rotationRadar", {}).get("available") is False:
+        discrepancies.append(
+            {
+                "code": "diagnostic_pass_runtime_unavailable",
+                "diagnostic": "alpacaRotationDiagnostic",
+                "runtimeSurface": "rotationRadar",
+            }
+        )
+    return discrepancies
+
+
+def collect_diagnostic_bundle(
+    *,
+    base_url: str | None = None,
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    official_macro_diagnostic = _compact_official_macro_diagnostic(run_official_macro_live_smoke())
+    alpaca_rotation_diagnostic = _compact_alpaca_rotation_diagnostic(run_rotation_radar_alpaca_live_smoke())
+    result: dict[str, Any] = {
+        "officialMacroDiagnostic": official_macro_diagnostic,
+        "alpacaRotationDiagnostic": alpaca_rotation_diagnostic,
+        "discrepancies": [],
+    }
+
+    if not base_url:
+        return result
+
+    endpoint_reachability: dict[str, Any] = {
+        "baseUrl": _sanitize_base_url_display(base_url),
+        "endpoints": [],
+    }
+    runtime_readiness: dict[str, Any] = {}
+
+    for endpoint_id, path in _ENDPOINTS:
+        try:
+            status_code, payload = _fetch_json(base_url, path, timeout_seconds)
+        except urllib.error.HTTPError as exc:
+            endpoint_reachability["endpoints"].append(
+                {
+                    "id": endpoint_id,
+                    "path": path,
+                    "ok": False,
+                    "statusCode": int(exc.code),
+                    "errorType": type(exc).__name__,
+                }
+            )
+            continue
+        except Exception as exc:
+            endpoint_reachability["endpoints"].append(
+                {
+                    "id": endpoint_id,
+                    "path": path,
+                    "ok": False,
+                    "errorType": type(exc).__name__,
+                }
+            )
+            continue
+
+        endpoint_reachability["endpoints"].append(
+            {
+                "id": endpoint_id,
+                "path": path,
+                "ok": True,
+                "statusCode": status_code,
+            }
+        )
+        runtime_readiness[endpoint_id] = _ENDPOINT_SUMMARIZERS[endpoint_id](payload)
+
+    reachable_count = sum(1 for endpoint in endpoint_reachability["endpoints"] if endpoint.get("ok"))
+    endpoint_reachability["reachableCount"] = reachable_count
+    endpoint_reachability["unreachableCount"] = len(endpoint_reachability["endpoints"]) - reachable_count
+    result["endpointReachability"] = endpoint_reachability
+    if runtime_readiness:
+        result["runtimeReadiness"] = runtime_readiness
+        result["discrepancies"] = _build_discrepancies(
+            official_macro_diagnostic,
+            alpaca_rotation_diagnostic,
+            runtime_readiness,
+        )
+    return result
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--base-url",
+        default=os.environ.get(BASE_URL_ENV_VAR),
+        help=f"Optional local backend base URL. Defaults to ${BASE_URL_ENV_VAR} when set.",
+    )
+    parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=DEFAULT_TIMEOUT_SECONDS,
+        help="Per-endpoint timeout when querying the optional local backend.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    try:
+        payload = collect_diagnostic_bundle(base_url=args.base_url, timeout_seconds=args.timeout_seconds)
+    except Exception:
+        fallback = {
+            "officialMacroDiagnostic": _compact_official_macro_diagnostic({}),
+            "alpacaRotationDiagnostic": _compact_alpaca_rotation_diagnostic({}),
+            "discrepancies": [],
+        }
+        print(json.dumps(fallback, ensure_ascii=False, sort_keys=True))
+        return 1
+
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
