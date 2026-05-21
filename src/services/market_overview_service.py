@@ -3042,6 +3042,8 @@ class MarketOverviewService:
                 official_vix_failure,
                 series_id="VIXCLS",
             )
+        else:
+            item_map.setdefault("VIX", self._official_macro_unavailable_item("VIX", "VIX", "VIXCLS", unit="pts"))
         official_credit = self._official_macro_item(
             "CREDIT",
             "Credit spreads",
@@ -3063,6 +3065,7 @@ class MarketOverviewService:
         official_ppi = self._official_macro_yoy_item("PPI", "PPI", official_points.get("PPIACO", []), unit="YoY %", market="US")
         if official_ppi:
             item_map["PPI"] = official_ppi
+        item_map.setdefault("SOFR", self._official_macro_unavailable_item("SOFR", "SOFR", "SOFR", unit="%", market="US"))
         for symbol, (series_id, label, unit, market) in self.OFFICIAL_MACRO_SERIES.items():
             if symbol == "CREDIT" and symbol in item_map:
                 continue
@@ -3379,6 +3382,8 @@ class MarketOverviewService:
         official_sofr = self._official_macro_item("SOFR", "SOFR", official_points.get("SOFR", []), unit="%", market="US")
         if official_sofr:
             items.append(official_sofr)
+        else:
+            items.append(self._official_macro_unavailable_item("SOFR", "SOFR", "SOFR", unit="%", market="US"))
         for symbol in ("CN10Y", "DR007", "SHIBOR", "LPR"):
             if symbol in fallback_items:
                 items.append(fallback_items[symbol])

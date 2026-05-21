@@ -29,6 +29,7 @@ from src.services.official_macro_transport import (
     parse_fred_observation_points_payload,
     parse_fred_observations_payload,
     fetch_fred_observation_points,
+    fetch_treasury_daily_rate_observation_points,
     parse_nyfed_sofr_payload,
     parse_treasury_daily_rate_observation_points_csv,
     parse_treasury_daily_rates_csv,
@@ -602,6 +603,27 @@ def test_parse_treasury_daily_rate_observation_points_csv_returns_latest_two_row
             "unavailable_reason": None,
         },
     ]
+
+
+def test_fetch_treasury_daily_rate_observation_points_retries_once_within_bounded_timeout_budget() -> None:
+    attempts: list[float] = []
+    csv_bytes = _load_text_fixture("treasury_daily_rates.csv").encode("utf-8")
+
+    def _fake_fetch_transport_bytes(request, *, timeout):
+        attempts.append(timeout)
+        if len(attempts) == 1:
+            raise OfficialMacroTransportError(
+                "timeout",
+                "treasury timed out",
+                diagnostics={"providerName": "treasury", "endpointHost": "home.treasury.gov"},
+            )
+        return csv_bytes
+
+    with patch("src.services.official_macro_transport._fetch_transport_bytes", side_effect=_fake_fetch_transport_bytes):
+        points = fetch_treasury_daily_rate_observation_points(limit=2, timeout=0.8)
+
+    assert attempts == [pytest.approx(0.4, abs=0.01), pytest.approx(0.4, abs=0.01)]
+    assert [item.value for item in points["DGS10"]] == [4.41, 4.45]
 
 
 def test_parse_nyfed_sofr_payload_is_explicitly_unsupported_without_repo_shape() -> None:

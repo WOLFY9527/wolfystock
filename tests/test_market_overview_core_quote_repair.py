@@ -484,6 +484,83 @@ def test_vix_fred_missing_runtime_config_uses_config_probe_without_network(monke
     assert "api_key" not in str(diagnostics)
 
 
+def test_macro_panel_keeps_missing_fred_series_explicitly_unavailable_without_zero_fill(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = MarketOverviewService()
+    proxy_as_of = datetime.now(CN_TZ)
+    monkeypatch.setenv("FRED_API_KEY", "")
+    Config.reset_instance()
+
+    proxy_items = [
+        {
+            "symbol": "US10Y",
+            "label": "10Y yield",
+            "value": 4.5,
+            "price": 4.5,
+            "unit": "%",
+            "change_pct": 0.0,
+            "changePercent": 0.0,
+            "risk_direction": "neutral",
+            "trend": [4.48, 4.5],
+            "source": "yfinance",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_proxy",
+            "asOf": proxy_as_of.isoformat(timespec="seconds"),
+        },
+        {
+            "symbol": "US30Y",
+            "label": "30Y yield",
+            "value": 4.9,
+            "price": 4.9,
+            "unit": "%",
+            "change_pct": 0.0,
+            "changePercent": 0.0,
+            "risk_direction": "neutral",
+            "trend": [4.88, 4.9],
+            "source": "yfinance",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_proxy",
+            "asOf": proxy_as_of.isoformat(timespec="seconds"),
+        },
+        {
+            "symbol": "DXY",
+            "label": "US Dollar Index",
+            "value": 104.2,
+            "price": 104.2,
+            "unit": "idx",
+            "change_pct": 0.2,
+            "changePercent": 0.2,
+            "risk_direction": "increasing",
+            "trend": [104.0, 104.2],
+            "source": "yfinance",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_proxy",
+            "asOf": proxy_as_of.isoformat(timespec="seconds"),
+        },
+    ]
+
+    log_patcher = _log_patch()
+    try:
+        with (
+            patch.object(service, "_quote_items", return_value=proxy_items),
+            patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", return_value={}),
+            patch("src.services.official_macro_transport.urlopen", side_effect=AssertionError("network should not be called")),
+        ):
+            payload = service.get_macro()
+    finally:
+        log_patcher.stop()
+        Config.reset_instance()
+
+    for symbol in ("VIX", "SOFR", "FEDFUNDS", "CPI", "PPI", "CREDIT"):
+        item = _item(payload, symbol)
+        assert item["value"] is None
+        assert item["price"] is None
+        assert item["freshness"] == "unavailable"
+        assert item["isUnavailable"] is True
+        assert item["source"] == "fred"
+        assert item["sourceType"] == "official_public"
+        assert item["trustLevel"] == "unavailable"
+
+
 def test_vix_runtime_timeout_exception_is_not_collapsed_to_transport_error() -> None:
     service = MarketOverviewService()
     as_of = datetime.now(CN_TZ)

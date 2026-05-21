@@ -56,6 +56,7 @@ FRED_FRESHNESS_HINTS = {
 TREASURY_FRESHNESS_HINT = "daily_1530_et"
 NYFED_SOFR_UNSUPPORTED_REASON = "nyfed_sofr_shape_undocumented"
 DEFAULT_TRANSPORT_TIMEOUT_SECONDS = 4.0
+TREASURY_FETCH_MAX_ATTEMPTS = 2
 HTTPS_CA_BUNDLE_ENV_VARS = ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE")
 
 
@@ -358,17 +359,30 @@ def fetch_treasury_daily_rate_observation_points(
     timeout: float = DEFAULT_TRANSPORT_TIMEOUT_SECONDS,
 ) -> dict[str, list[MacroObservation]]:
     request = build_treasury_daily_rates_request()
-    try:
-        text = _fetch_transport_bytes(request, timeout=timeout).decode("utf-8-sig")
-        return parse_treasury_daily_rate_observation_points_csv(text, limit=limit)
-    except OfficialMacroTransportError:
-        raise
-    except (UnicodeDecodeError, csv.Error) as exc:
-        raise OfficialMacroTransportError(
-            "parse_error",
-            f"{request.source_id or 'official macro'} response could not be parsed",
-            diagnostics=_transport_diagnostics(request, timeout=timeout, exception=exc),
-        ) from exc
+    attempts = max(1, int(TREASURY_FETCH_MAX_ATTEMPTS))
+    per_attempt_timeout = max(float(timeout) / float(attempts), 0.001)
+    last_transport_error: OfficialMacroTransportError | None = None
+    for attempt_index in range(attempts):
+        try:
+            text = _fetch_transport_bytes(request, timeout=per_attempt_timeout).decode("utf-8-sig")
+            return parse_treasury_daily_rate_observation_points_csv(text, limit=limit)
+        except OfficialMacroTransportError as exc:
+            last_transport_error = exc
+            if attempt_index + 1 >= attempts or exc.reason not in {"timeout", "transport_error", "empty_response"}:
+                raise
+        except (UnicodeDecodeError, csv.Error) as exc:
+            raise OfficialMacroTransportError(
+                "parse_error",
+                f"{request.source_id or 'official macro'} response could not be parsed",
+                diagnostics=_transport_diagnostics(request, timeout=per_attempt_timeout, exception=exc),
+            ) from exc
+    if last_transport_error is not None:
+        raise last_transport_error
+    raise OfficialMacroTransportError(
+        "transport_error",
+        f"{request.source_id or 'official macro'} transport failed",
+        diagnostics=_transport_diagnostics(request, timeout=per_attempt_timeout),
+    )
 
 
 def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) -> bytes:
