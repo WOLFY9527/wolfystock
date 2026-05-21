@@ -474,6 +474,19 @@ class MarketScannerService:
             return None
         return self.db.require_user_id(self.owner_id if owner_id is None else owner_id)
 
+    def _recent_analysis_visibility_kwargs(
+        self,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "owner_id": self.owner_id if owner_id is None else owner_id,
+            "include_all_owners": (
+                self.include_all_owners if include_all_owners is None else bool(include_all_owners)
+            ),
+        }
+
     @staticmethod
     def _normalize_scanner_symbol(symbol: str, *, market: str) -> Optional[str]:
         normalized_market = (market or "").strip().lower()
@@ -664,8 +677,13 @@ class MarketScannerService:
         if profile_config.market != "cn":
             raise ValueError(f"当前阶段暂不支持市场: {profile_config.market}")
 
-        universe_resolution = self._resolve_cn_stock_universe()
-        snapshot_resolution = self._resolve_cn_snapshot(profile=profile_config, stock_list=universe_resolution.get("data"))
+        recent_analysis_owner_id = self.owner_id if owner_id is None else owner_id
+        universe_resolution = self._resolve_cn_stock_universe(owner_id=recent_analysis_owner_id)
+        snapshot_resolution = self._resolve_cn_snapshot(
+            profile=profile_config,
+            stock_list=universe_resolution.get("data"),
+            owner_id=recent_analysis_owner_id,
+        )
 
         stock_list = universe_resolution.get("data")
         stock_list_source = str(universe_resolution.get("source") or "unknown")
@@ -4301,7 +4319,11 @@ class MarketScannerService:
             raise ValueError(f"扫描配置 {profile_config.key} 预留给未来阶段，当前尚未实现")
         return profile_config
 
-    def _resolve_cn_stock_universe(self) -> Dict[str, Any]:
+    def _resolve_cn_stock_universe(
+        self,
+        *,
+        owner_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         local_cache = self._load_local_universe_cache()
         if local_cache.get("success"):
             return local_cache
@@ -4353,7 +4375,7 @@ class MarketScannerService:
                 "cache_path": str(self.local_universe_cache_path),
             }
 
-        db_fallback = self._load_local_stock_list_fallback()
+        db_fallback = self._load_local_stock_list_fallback(owner_id=owner_id)
         attempts.extend(db_fallback.get("attempts") or [])
         if db_fallback.get("success"):
             normalized = db_fallback["data"]
@@ -4506,10 +4528,16 @@ class MarketScannerService:
         normalized = normalized.drop_duplicates(subset=["code"], keep="first")
         return normalized.reset_index(drop=True)
 
-    def _load_local_stock_list_fallback(self) -> Dict[str, Any]:
+    def _load_local_stock_list_fallback(
+        self,
+        *,
+        owner_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         names: Dict[str, str] = {}
         codes: List[str] = []
-        for code, name in self.repo.list_recent_analysis_symbols():
+        for code, name in self.repo.list_recent_analysis_symbols(
+            **self._recent_analysis_visibility_kwargs(owner_id=owner_id)
+        ):
             normalized = normalize_stock_code(str(code or ""))
             if not normalized or normalized in names:
                 continue
@@ -4583,6 +4611,7 @@ class MarketScannerService:
         *,
         profile: ScannerMarketProfile,
         stock_list: Optional[pd.DataFrame],
+        owner_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         realtime_result = {
             "success": False,
@@ -4631,6 +4660,7 @@ class MarketScannerService:
             profile=profile,
             stock_list=stock_list,
             attempts=realtime_result.get("attempts") or [],
+            owner_id=owner_id,
         )
         if degraded_result.get("success"):
             return degraded_result
@@ -4663,6 +4693,7 @@ class MarketScannerService:
         profile: ScannerMarketProfile,
         stock_list: Optional[pd.DataFrame],
         attempts: Sequence[Dict[str, Any]],
+        owner_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         names: Dict[str, str] = {}
         candidate_codes: List[str] = []
@@ -4682,7 +4713,9 @@ class MarketScannerService:
                 code = normalize_stock_code(str(raw_code or ""))
                 if code and code not in candidate_codes:
                     candidate_codes.append(code)
-        for code, name in self.repo.list_recent_analysis_symbols():
+        for code, name in self.repo.list_recent_analysis_symbols(
+            **self._recent_analysis_visibility_kwargs(owner_id=owner_id)
+        ):
             normalized = normalize_stock_code(str(code or ""))
             if normalized and normalized not in names and name:
                 names[normalized] = str(name).strip()

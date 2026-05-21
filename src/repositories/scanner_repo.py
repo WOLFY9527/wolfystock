@@ -197,9 +197,19 @@ class ScannerRepository:
             ).scalars().all()
             return list(rows)
 
-    def list_recent_analysis_symbols(self) -> List[Tuple[str, Optional[str]]]:
+    def list_recent_analysis_symbols(
+        self,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+        limit: Optional[int] = None,
+    ) -> List[Tuple[str, Optional[str]]]:
         """Return recent analysis-history codes and names for scanner-local fallbacks."""
-        return self.db.list_recent_analysis_symbols()
+        return self.db.list_recent_analysis_symbols(
+            owner_id=owner_id,
+            include_all_owners=include_all_owners,
+            limit=limit,
+        )
 
     def count_recent_symbol_mentions(
         self,

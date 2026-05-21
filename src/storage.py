@@ -83,6 +83,8 @@ from src.utils.time_utils import to_beijing_iso8601
 
 logger = logging.getLogger(__name__)
 AdminNotificationService = None
+DEFAULT_RECENT_ANALYSIS_SYMBOL_LIMIT = 100
+MAX_RECENT_ANALYSIS_SYMBOL_LIMIT = 500
 
 
 def _execution_log_level_from_status(status: Any) -> str:
@@ -3483,6 +3485,16 @@ class DatabaseManager:
         if not text:
             return None
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _resolve_bounded_limit(value: Optional[int], *, default: int, high: int) -> int:
+        try:
+            resolved = int(value) if value is not None else int(default)
+        except (TypeError, ValueError):
+            resolved = int(default)
+        if resolved <= 0:
+            resolved = int(default)
+        return min(resolved, int(high))
 
     @staticmethod
     def _sanitize_task_metadata(value: Any) -> Dict[str, Any]:
@@ -8905,12 +8917,51 @@ class DatabaseManager:
             ).scalars().first()
             return result
 
-    def list_recent_analysis_symbols(self) -> List[Tuple[str, Optional[str]]]:
-        """Return recent analysis-history codes and names in newest-first order."""
+    def list_recent_analysis_symbols(
+        self,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+        limit: Optional[int] = DEFAULT_RECENT_ANALYSIS_SYMBOL_LIMIT,
+    ) -> List[Tuple[str, Optional[str]]]:
+        """Return latest distinct analysis-history codes and names in newest-first order."""
+        resolved_limit = self._resolve_bounded_limit(
+            limit,
+            default=DEFAULT_RECENT_ANALYSIS_SYMBOL_LIMIT,
+            high=MAX_RECENT_ANALYSIS_SYMBOL_LIMIT,
+        )
+        normalized_owner_id = str(owner_id or "").strip()
+        code_expr = func.trim(AnalysisHistory.code)
+
         with self.get_session() as session:
+            conditions = [
+                AnalysisHistory.code.isnot(None),
+                code_expr != "",
+            ]
+            if normalized_owner_id and not include_all_owners:
+                conditions.append(AnalysisHistory.owner_id == self.require_user_id(normalized_owner_id))
+
+            ranked_symbols = (
+                select(
+                    code_expr.label("code"),
+                    AnalysisHistory.name.label("name"),
+                    AnalysisHistory.created_at.label("created_at"),
+                    AnalysisHistory.id.label("id"),
+                    func.row_number()
+                    .over(
+                        partition_by=code_expr,
+                        order_by=(AnalysisHistory.created_at.desc(), AnalysisHistory.id.desc()),
+                    )
+                    .label("symbol_rank"),
+                )
+                .where(and_(*conditions))
+                .subquery()
+            )
             rows = session.execute(
-                select(AnalysisHistory.code, AnalysisHistory.name)
-                .order_by(AnalysisHistory.created_at.desc())
+                select(ranked_symbols.c.code, ranked_symbols.c.name)
+                .where(ranked_symbols.c.symbol_rank == 1)
+                .order_by(ranked_symbols.c.created_at.desc(), ranked_symbols.c.id.desc())
+                .limit(resolved_limit)
             ).all()
         return [
             (str(code), str(name) if name is not None else None)

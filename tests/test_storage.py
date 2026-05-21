@@ -145,6 +145,65 @@ class TestStorage(unittest.TestCase):
 
         DatabaseManager.reset_instance()
 
+    def test_list_recent_analysis_symbols_is_limited_deduped_and_owner_scoped(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+        db.create_or_update_app_user(user_id="owner-a", username="owner-a")
+        db.create_or_update_app_user(user_id="owner-b", username="owner-b")
+
+        db.save_analysis_history(
+            result=self._build_analysis_result(code="600001", name="旧名称"),
+            query_id="query_owner_a_old",
+            report_type="simple",
+            news_content="",
+            save_snapshot=False,
+            owner_id="owner-a",
+        )
+        db.save_analysis_history(
+            result=self._build_analysis_result(code="600003", name="其他用户"),
+            query_id="query_owner_b",
+            report_type="simple",
+            news_content="",
+            save_snapshot=False,
+            owner_id="owner-b",
+        )
+        db.save_analysis_history(
+            result=self._build_analysis_result(code="600002", name="机器人核心"),
+            query_id="query_owner_a_second",
+            report_type="simple",
+            news_content="",
+            save_snapshot=False,
+            owner_id="owner-a",
+        )
+        db.save_analysis_history(
+            result=self._build_analysis_result(code="600001", name="新名称"),
+            query_id="query_owner_a_new",
+            report_type="simple",
+            news_content="",
+            save_snapshot=False,
+            owner_id="owner-a",
+        )
+
+        recent_symbols = db.list_recent_analysis_symbols(owner_id="owner-a", limit=2)
+        scanner_repo = ScannerRepository(db)
+        analysis_repo = AnalysisRepository(db, owner_id="owner-a")
+
+        self.assertEqual(recent_symbols, [("600001", "新名称"), ("600002", "机器人核心")])
+        self.assertEqual(
+            scanner_repo.list_recent_analysis_symbols(owner_id="owner-a", limit=1),
+            [("600001", "新名称")],
+        )
+        self.assertEqual(
+            analysis_repo.list_recent_named_codes(limit=2),
+            [
+                {"code": "600001", "name": "新名称"},
+                {"code": "600002", "name": "机器人核心"},
+            ],
+        )
+        self.assertEqual(len(db.list_recent_analysis_symbols(limit=2)), 2)
+
+        DatabaseManager.reset_instance()
+
     def test_touch_and_revoke_app_user_session_keep_session_state_consistent(self):
         DatabaseManager.reset_instance()
         db = DatabaseManager(db_url="sqlite:///:memory:")

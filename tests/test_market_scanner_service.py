@@ -34,7 +34,7 @@ def _make_history(
     volume_base: float,
     bars: int = 100,
 ) -> pd.DataFrame:
-    end_date = pd.Timestamp("2026-04-30")
+    end_date = pd.Timestamp(datetime.now().date()) - pd.offsets.BDay(1)
     dates = pd.bdate_range(end=end_date, periods=bars)
     closes = np.array([start_price + slope * idx + 0.12 * np.sin(idx / 5.0) for idx in range(bars)], dtype=float)
     opens = closes * 0.992
@@ -640,12 +640,26 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.db = DatabaseManager(db_url="sqlite:///:memory:")
         self.stock_repo = StockRepository(self.db)
         self.data_manager = FakeScannerDataManager()
+        self._cache_temp_dir = tempfile.TemporaryDirectory()
+        self._config_patcher = patch(
+            "src.services.market_scanner_service.get_config",
+            return_value=SimpleNamespace(
+                scanner_local_universe_path=str(
+                    Path(self._cache_temp_dir.name) / "scanner_cn_universe_cache.csv"
+                )
+            ),
+        )
+        self._config_patcher.start()
+        self._scanner_cache_path = Path(self._cache_temp_dir.name) / "scanner_cn_universe_cache.csv"
+        self.data_manager.stock_list[["code", "name"]].to_csv(self._scanner_cache_path, index=False)
         self.service = MarketScannerService(self.db, data_manager=self.data_manager)
 
         local_history = self.data_manager.histories["600001"].copy()
         self.stock_repo.save_dataframe(local_history, "600001", data_source="LocalWarmCache")
 
     def tearDown(self) -> None:
+        self._config_patcher.stop()
+        self._cache_temp_dir.cleanup()
         DatabaseManager.reset_instance()
 
     def _make_review_df(self, rows: list[tuple[str, float, float, float]]) -> pd.DataFrame:
@@ -1712,15 +1726,39 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         stock_repo.list_distinct_codes.return_value = ["600001", "600002", "300123"]
         self.service.repo = scanner_repo
         self.service.stock_repo = stock_repo
+        self.service.owner_id = "owner-a"
 
         result = self.service._load_local_stock_list_fallback()
 
-        scanner_repo.list_recent_analysis_symbols.assert_called_once_with()
+        scanner_repo.list_recent_analysis_symbols.assert_called_once_with(
+            owner_id="owner-a",
+            include_all_owners=False,
+        )
         stock_repo.list_distinct_codes.assert_called_once_with()
         self.assertTrue(result["success"])
         frame = result["data"]
         self.assertEqual(frame["code"].tolist(), ["600001", "600002", "300123"])
         self.assertEqual(frame["name"].tolist()[:2], ["算力龙头", "机器人核心"])
+
+    def test_degraded_snapshot_uses_owner_scoped_recent_analysis_names(self) -> None:
+        scanner_repo = MagicMock()
+        scanner_repo.list_recent_analysis_symbols.return_value = [("600001", "算力龙头")]
+        self.service.repo = scanner_repo
+        self.service.owner_id = "owner-a"
+        profile = get_scanner_profile(market="cn")
+
+        result = self.service._build_degraded_snapshot_from_local_history(
+            profile=profile,
+            stock_list=None,
+            attempts=[],
+        )
+
+        scanner_repo.list_recent_analysis_symbols.assert_called_once_with(
+            owner_id="owner-a",
+            include_all_owners=False,
+        )
+        self.assertTrue(result["success"])
+        self.assertEqual(result["data"].iloc[0]["name"], "算力龙头")
 
     def test_load_local_history_uses_stock_repository_boundary(self) -> None:
         stock_repo = MagicMock()

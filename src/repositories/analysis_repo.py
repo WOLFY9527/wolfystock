@@ -275,10 +275,18 @@ class AnalysisRepository:
             logger.error(f"查询最新基本面快照失败: {e}")
             return None
 
-    def list_recent_named_codes(self) -> List[Dict[str, Optional[str]]]:
+    def list_recent_named_codes(
+        self,
+        *,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Optional[str]]]:
         """Return recent analysis codes with their latest seen names."""
         return [
             {"code": code.strip(), "name": str(name or "").strip() or None}
-            for code, name in self.db.list_recent_analysis_symbols()
+            for code, name in self.db.list_recent_analysis_symbols(
+                owner_id=self.owner_id,
+                include_all_owners=self.include_all_owners,
+                limit=limit,
+            )
             if code
         ]
