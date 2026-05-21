@@ -1501,6 +1501,17 @@ def _provider_activation_diagnostics(
         full_universe_symbol_count=full_universe_symbol_count,
         activation_blocker=activation_blocker,
     )
+    alpaca_activation_diagnostics = _alpaca_activation_diagnostics(
+        configured_quotes=configured_attempt.quotes,
+        probe_symbols=_bounded_unique_symbols(
+            _as_string_sequence(configured_attempt.metadata.get("stableActivationProbeSymbols"))
+        ),
+        activation_window_results=activation_window_results,
+        credentials_present=bool(configured_attempt.metadata.get("credentialsPresent")),
+        provider_constructed=provider_constructed,
+        provider_failure_reasons=provider_failure_reasons,
+        activation_blocker=activation_blocker,
+    )
     return {
         "configuredProviderAttempted": bool(configured_attempt.metadata.get("configuredProviderAttempted", True)),
         "providerAttempted": bool(configured_attempt.metadata.get("providerAttempted", True)),
@@ -1601,6 +1612,7 @@ def _provider_activation_diagnostics(
         "providerFailureReasons": provider_failure_reasons,
         "recommendedAction": recommended_action,
         "activationHint": activation_hint,
+        "alpacaActivationDiagnostics": alpaca_activation_diagnostics,
         "liveActivationStatus": _live_activation_status(
             credentials_present=bool(configured_attempt.metadata.get("credentialsPresent")),
             provider_constructed=provider_constructed,
@@ -1629,6 +1641,82 @@ def _provider_activation_diagnostics(
             static_basket_fallback_used=static_basket_fallback_used,
         ),
     }
+
+
+def _alpaca_activation_diagnostics(
+    *,
+    configured_quotes: Mapping[str, Dict[str, Any]],
+    probe_symbols: Sequence[str],
+    activation_window_results: Mapping[str, Mapping[str, Any]],
+    credentials_present: bool,
+    provider_constructed: bool,
+    provider_failure_reasons: Sequence[str],
+    activation_blocker: Optional[str],
+) -> Dict[str, Any]:
+    stale_windows: list[str] = []
+    source_metadata_invalid_windows: list[str] = []
+    for symbol in probe_symbols:
+        quote = configured_quotes.get(symbol)
+        if not isinstance(quote, Mapping):
+            continue
+        time_windows = quote.get("timeWindows")
+        if not isinstance(time_windows, Mapping):
+            continue
+        for window in _ALPACA_TIMEFRAMES:
+            slot = time_windows.get(window)
+            if not isinstance(slot, Mapping) or not slot.get("available", True):
+                continue
+            if str(slot.get("freshness") or "").strip().lower() == "stale" and window not in stale_windows:
+                stale_windows.append(window)
+            if not _alpaca_activation_slot_source_valid(slot) and window not in source_metadata_invalid_windows:
+                source_metadata_invalid_windows.append(window)
+    fulfilled_windows = _fulfilled_windows_from_request_results(activation_window_results)
+    missing_windows = _missing_windows_from_request_results(activation_window_results)
+    probe_passed = bool(probe_symbols) and not missing_windows
+    freshness_valid = not stale_windows
+    source_metadata_valid = not source_metadata_invalid_windows
+    source_authority_allowed = bool(
+        credentials_present
+        and provider_constructed
+        and probe_passed
+        and freshness_valid
+        and source_metadata_valid
+    )
+    reason = None
+    if not credentials_present:
+        reason = "credentials"
+    elif not provider_constructed:
+        reason = _primary_failure_class(provider_failure_reasons) or "provider_error"
+    elif not probe_passed:
+        reason = str(activation_blocker or "window_coverage").strip() or "window_coverage"
+    elif not freshness_valid:
+        reason = "stale_window"
+    elif not source_metadata_valid:
+        reason = "source_metadata_invalid"
+    return {
+        "credentialsPresent": bool(credentials_present),
+        "providerConstructed": bool(provider_constructed),
+        "probeSymbols": list(probe_symbols),
+        "probePassed": bool(probe_passed),
+        "fulfilledWindows": fulfilled_windows,
+        "missingWindows": missing_windows,
+        "freshnessValid": bool(freshness_valid),
+        "staleWindows": stale_windows,
+        "sourceMetadataValid": bool(source_metadata_valid),
+        "sourceMetadataInvalidWindows": source_metadata_invalid_windows,
+        "sourceAuthorityAllowed": bool(source_authority_allowed),
+        "scoreContributionAllowed": bool(source_authority_allowed),
+        "reason": reason,
+    }
+
+
+def _alpaca_activation_slot_source_valid(slot: Mapping[str, Any]) -> bool:
+    return (
+        str(slot.get("source") or "").strip().lower() == _CONFIGURED_SOURCE
+        and str(slot.get("sourceType") or "").strip().lower() == _CONFIGURED_SOURCE_TYPE
+        and str(slot.get("sourceTier") or "").strip().lower() == _CONFIGURED_SOURCE_TIER
+        and str(slot.get("providerTier") or "").strip().lower() == _CONFIGURED_PROVIDER_TIER
+    )
 
 
 def _safe_credential_source(value: Any) -> str:

@@ -884,6 +884,19 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertIsNone(diagnostics["sourceAuthorityReason"])
         self.assertEqual(diagnostics["routeRejectedReasonCodes"], [])
         self.assertEqual(diagnostics["sourceAuthorityRouter"]["request"]["useCase"], "rotation_radar")
+        activation = diagnostics["alpacaActivationDiagnostics"]
+        self.assertTrue(activation["credentialsPresent"])
+        self.assertTrue(activation["providerConstructed"])
+        self.assertTrue(activation["probePassed"])
+        self.assertTrue(activation["freshnessValid"])
+        self.assertTrue(activation["sourceMetadataValid"])
+        self.assertTrue(activation["sourceAuthorityAllowed"])
+        self.assertTrue(activation["scoreContributionAllowed"])
+        self.assertIsNone(activation["reason"])
+        self.assertEqual(activation["fulfilledWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(activation["missingWindows"], [])
+        self.assertEqual(activation["staleWindows"], [])
+        self.assertEqual(activation["sourceMetadataInvalidWindows"], [])
         self.assertEqual(sorted(payload["quotes"]), ["APP", "QQQ"])
         self.assertEqual(fetch_calls.count(("APP", "5Min")), 1)
         quote = payload["quotes"]["APP"]
@@ -963,6 +976,11 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["liveActivationStatus"], "partial")
         self.assertEqual(diagnostics["fulfilledWindows"], ["5m", "15m", "60m", "1d"])
         self.assertNotEqual(diagnostics["liveActivationStatus"], "unavailable")
+        activation = diagnostics["alpacaActivationDiagnostics"]
+        self.assertTrue(activation["probePassed"])
+        self.assertTrue(activation["sourceAuthorityAllowed"])
+        self.assertTrue(activation["scoreContributionAllowed"])
+        self.assertIsNone(activation["reason"])
         for window in ("5m", "15m", "60m", "1d"):
             self.assertEqual(diagnostics["requestWindowResults"][window]["successCount"], 6)
             self.assertIn("timeout", diagnostics["requestWindowResults"][window]["failureClasses"])
@@ -1443,6 +1461,10 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertFalse(diagnostics["staticBasketFallbackUsed"])
         self.assertEqual(diagnostics["finalSourceTier"], "unofficial_public_api")
         self.assertEqual(diagnostics["trustLevel"], "degraded")
+        activation = diagnostics["alpacaActivationDiagnostics"]
+        self.assertFalse(activation["sourceAuthorityAllowed"])
+        self.assertFalse(activation["scoreContributionAllowed"])
+        self.assertEqual(activation["reason"], "credentials")
         self.assertFalse(metadata["sourceAuthorityAllowed"])
         self.assertFalse(metadata["scoreContributionAllowed"])
         self.assertEqual(metadata["sourceAuthorityReason"], "source_authority_router_rejected")
@@ -1634,6 +1656,13 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertFalse(diagnostics["fallbackYfinanceUsed"])
         self.assertEqual(diagnostics["finalSourceTier"], "broker_authorized")
         self.assertEqual(diagnostics["trustLevel"], "partial")
+        activation = diagnostics["alpacaActivationDiagnostics"]
+        self.assertFalse(activation["probePassed"])
+        self.assertTrue(activation["freshnessValid"])
+        self.assertTrue(activation["sourceMetadataValid"])
+        self.assertFalse(activation["sourceAuthorityAllowed"])
+        self.assertFalse(activation["scoreContributionAllowed"])
+        self.assertEqual(activation["reason"], "entitlement")
 
     def test_configured_provider_auth_failure_reports_actionable_window_diagnostics_without_secret_leak(self) -> None:
         class AuthFailingAlpacaFetcher:
@@ -1742,6 +1771,10 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             diagnostics["activationHint"],
             "Alpaca credentials are present and the provider was constructed, but no configured windows were fulfilled: empty_response.",
         )
+        activation = diagnostics["alpacaActivationDiagnostics"]
+        self.assertFalse(activation["sourceAuthorityAllowed"])
+        self.assertFalse(activation["scoreContributionAllowed"])
+        self.assertEqual(activation["reason"], "empty_response")
         for window in ("5m", "15m", "60m", "1d"):
             self.assertEqual(diagnostics["requestWindowResults"][window]["requestedSymbolCount"], 2)
             self.assertEqual(diagnostics["requestWindowResults"][window]["successCount"], 0)
@@ -1785,6 +1818,41 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         for window in ("5m", "15m", "60m", "1d"):
             self.assertEqual(diagnostics["requestWindowResults"][window]["failureClasses"], {"interval_mapping": 1})
             self.assertEqual(diagnostics["requestWindowResults"][window]["dominantFailureClass"], "interval_mapping")
+
+    def test_configured_provider_stale_activation_probe_blocks_diagnostic_authority(self) -> None:
+        stale_as_of = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+
+        class StaleAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                return _alpaca_bars(end_close=102.0, as_of=stale_as_of)
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            StaleAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            side_effect=AssertionError("yfinance fallback should not be called when Alpaca covers all symbols"),
+        ):
+            payload = load_rotation_radar_quotes(["QQQ", "SPY", "IWM", "SMH", "SOXX", "IGV"])
+
+        diagnostics = payload["metadata"]["providerDiagnostics"]
+        activation = diagnostics["alpacaActivationDiagnostics"]
+        self.assertEqual(diagnostics["liveActivationStatus"], "active")
+        self.assertTrue(activation["probePassed"])
+        self.assertFalse(activation["freshnessValid"])
+        self.assertTrue(activation["sourceMetadataValid"])
+        self.assertFalse(activation["sourceAuthorityAllowed"])
+        self.assertFalse(activation["scoreContributionAllowed"])
+        self.assertEqual(activation["reason"], "stale_window")
+        self.assertEqual(activation["staleWindows"], ["5m", "15m", "60m", "1d"])
 
     def test_configured_provider_calendar_and_market_session_empty_bars_are_activation_blockers(self) -> None:
         cases = (
