@@ -91,6 +91,12 @@ OFFICIAL_DAILY_FRESHNESS_POLICIES = {
         "maxAcceptedLagDays": 4,
         "maxAcceptedBusinessLagDays": 2,
     },
+    "DGS2": {
+        "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
+        "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
+        "maxAcceptedLagDays": 4,
+        "maxAcceptedBusinessLagDays": 2,
+    },
     "DGS10": {
         "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
         "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
@@ -98,6 +104,24 @@ OFFICIAL_DAILY_FRESHNESS_POLICIES = {
         "maxAcceptedBusinessLagDays": 2,
     },
     "DGS30": {
+        "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
+        "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
+        "maxAcceptedLagDays": 4,
+        "maxAcceptedBusinessLagDays": 2,
+    },
+    "SOFR": {
+        "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
+        "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
+        "maxAcceptedLagDays": 4,
+        "maxAcceptedBusinessLagDays": 2,
+    },
+    "DFF": {
+        "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
+        "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
+        "maxAcceptedLagDays": 4,
+        "maxAcceptedBusinessLagDays": 2,
+    },
+    "BAMLH0A0HYM2": {
         "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
         "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
         "maxAcceptedLagDays": 4,
@@ -2464,6 +2488,57 @@ class MarketOverviewService:
             "officialOverlayFailureReason": failure_reason,
             "providerClass": provider_class,
             "activationHint": activation_hint,
+            **self._official_macro_authority_meta(
+                item,
+                source_type=source_type,
+                provider_class=provider_class,
+                failure_reason=failure_reason,
+            ),
+        }
+
+    @staticmethod
+    def _official_macro_authority_meta(
+        item: Dict[str, Any],
+        *,
+        source_type: str,
+        provider_class: str,
+        failure_reason: Optional[str],
+    ) -> Dict[str, Any]:
+        if source_type != "official_public" or provider_class != "official_daily":
+            return {}
+
+        freshness = str(item.get("freshness") or "").strip().lower()
+        is_authoritative = bool(
+            freshness in {"live", "cached", "delayed"}
+            and not bool(item.get("isFallback"))
+            and not bool(item.get("isUnavailable"))
+            and not bool(item.get("isPartial"))
+            and _has_valid_market_value(item)
+        )
+        explicit_authority = item.get("sourceAuthorityAllowed") if "sourceAuthorityAllowed" in item else None
+        source_authority_allowed = is_authoritative if explicit_authority is None else bool(explicit_authority and is_authoritative)
+        source_authority_reason = (
+            None
+            if source_authority_allowed
+            else (
+                item.get("sourceAuthorityReason")
+                or failure_reason
+                or item.get("degradationReason")
+                or ("stale_official_row" if freshness == "stale" else "official_macro_unavailable")
+            )
+        )
+
+        explicit_score_allowed = item.get("scoreContributionAllowed") if "scoreContributionAllowed" in item else None
+        score_contribution_allowed = bool(source_authority_allowed and not item.get("observationOnly"))
+        if explicit_score_allowed is not None:
+            score_contribution_allowed = bool(score_contribution_allowed and explicit_score_allowed)
+
+        return {
+            "sourceAuthorityAllowed": source_authority_allowed,
+            "scoreContributionAllowed": score_contribution_allowed,
+            "sourceAuthorityRouteRejected": False,
+            "sourceAuthorityReason": source_authority_reason,
+            "routeRejectedReasonCodes": list(item.get("routeRejectedReasonCodes") or []),
         }
 
     @staticmethod
@@ -4709,6 +4784,7 @@ class MarketOverviewService:
             "sourceLabel": source_label,
             "asOf": latest.as_of,
             "updatedAt": latest.as_of,
+            "officialSeriesId": latest.symbol,
             "officialObservationDate": latest.date,
             "officialAsOf": latest.as_of,
             "isFallback": False,

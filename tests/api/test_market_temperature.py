@@ -6,7 +6,7 @@ from __future__ import annotations
 import copy
 import json
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,6 +17,7 @@ from src.services.market_overview_service import (
     classify_market_payload_reliability,
     get_freshness_status,
 )
+from src.services.official_macro_transport import MacroObservation
 
 
 def _regime_ready_temperature_inputs(*, proxy_dxy: bool = True, observation_only_btc: bool = True) -> dict:
@@ -649,6 +650,70 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertGreaterEqual(payload["reliableInputCount"], 5)
         self.assertEqual(payload["fallbackInputCount"], 0)
         self.assertGreater(payload["confidence"], 0.7)
+
+    def test_market_overview_official_macro_rows_keep_authority_metadata(self) -> None:
+        service = MarketOverviewService()
+        current = datetime.now(timezone(timedelta(hours=8)))
+        today = current.date().isoformat()
+        previous = (current - timedelta(days=1)).date().isoformat()
+        official_points = {
+            "VIXCLS": [
+                MacroObservation("VIXCLS", 18.4, today, today, "fred:VIXCLS", "official_public", "daily_close"),
+                MacroObservation("VIXCLS", 19.2, previous, previous, "fred:VIXCLS", "official_public", "daily_close"),
+            ],
+            "DGS2": [
+                MacroObservation("DGS2", 4.82, today, today, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+                MacroObservation("DGS2", 4.79, previous, previous, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+            ],
+            "DGS10": [
+                MacroObservation("DGS10", 4.41, today, today, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+                MacroObservation("DGS10", 4.36, previous, previous, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+            ],
+            "DGS30": [
+                MacroObservation("DGS30", 4.63, today, today, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+                MacroObservation("DGS30", 4.58, previous, previous, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+            ],
+            "SOFR": [
+                MacroObservation("SOFR", 5.31, today, today, "fred:SOFR", "official_public", "daily_fixing"),
+                MacroObservation("SOFR", 5.30, previous, previous, "fred:SOFR", "official_public", "daily_fixing"),
+            ],
+            "DFF": [
+                MacroObservation("DFF", 5.25, today, today, "fred:DFF", "official_public", "daily_policy_rate"),
+                MacroObservation("DFF", 5.25, previous, previous, "fred:DFF", "official_public", "daily_policy_rate"),
+            ],
+            "BAMLH0A0HYM2": [
+                MacroObservation("BAMLH0A0HYM2", 3.75, today, today, "fred:BAMLH0A0HYM2", "official_public", "daily_credit_stress"),
+                MacroObservation("BAMLH0A0HYM2", 3.80, previous, previous, "fred:BAMLH0A0HYM2", "official_public", "daily_credit_stress"),
+            ],
+        }
+
+        with (
+            patch.object(service, "_official_macro_points", return_value=official_points),
+            patch.object(service, "_quote_items", return_value=[]),
+        ):
+            payload = service._with_market_meta(service._fetch_macro(), "macro")
+            payload["items"] = [service._with_item_meta(item, "macro", payload) for item in payload.get("items", [])]
+
+        macro_items = {
+            str(item["symbol"]): item
+            for item in payload["items"]
+            if isinstance(item, dict) and item.get("symbol") in {"VIX", "SOFR", "FEDFUNDS", "CREDIT"}
+        }
+
+        assert macro_items["VIX"]["sourceAuthorityAllowed"] is True
+        assert macro_items["VIX"]["scoreContributionAllowed"] is True
+        assert macro_items["SOFR"]["sourceAuthorityAllowed"] is True
+        assert macro_items["SOFR"]["scoreContributionAllowed"] is True
+        assert macro_items["FEDFUNDS"]["sourceAuthorityAllowed"] is True
+        assert macro_items["FEDFUNDS"]["scoreContributionAllowed"] is True
+        assert macro_items["CREDIT"]["sourceAuthorityAllowed"] is True
+        assert macro_items["CREDIT"]["scoreContributionAllowed"] is False
+        assert macro_items["CREDIT"]["observationOnly"] is True
+        for item in macro_items.values():
+            assert item["sourceType"] == "official_public"
+            assert item["sourceTier"] == "official_public"
+            assert item["sourceAuthorityReason"] is None
+            assert item["routeRejectedReasonCodes"] == []
 
     def test_official_macro_daily_rates_remain_delayed_or_stale_not_live(self) -> None:
         delayed = get_freshness_status(

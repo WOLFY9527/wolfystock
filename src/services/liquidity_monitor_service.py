@@ -404,13 +404,18 @@ class LiquidityMonitorService:
         cache_candidate: PanelState,
         snapshot_candidate: PanelState,
     ) -> PanelState:
-        if not self._panel_candidate_is_newer(snapshot_candidate, cache_candidate):
+        snapshot_has_usable_official_rows = self._panel_has_usable_official_rows(key, snapshot_candidate)
+        cache_has_usable_official_rows = (
+            not cache_candidate.is_stale
+            and self._panel_has_usable_official_rows(key, cache_candidate)
+        )
+        if snapshot_has_usable_official_rows and not cache_has_usable_official_rows:
+            return snapshot_candidate
+        if cache_has_usable_official_rows and not snapshot_has_usable_official_rows:
             return cache_candidate
-        if not self._panel_has_usable_official_rows(key, snapshot_candidate):
-            return cache_candidate
-        if not cache_candidate.is_stale and self._panel_has_usable_official_rows(key, cache_candidate):
-            return cache_candidate
-        return snapshot_candidate
+        if snapshot_has_usable_official_rows and cache_has_usable_official_rows:
+            return snapshot_candidate if self._panel_candidate_is_newer(snapshot_candidate, cache_candidate) else cache_candidate
+        return cache_candidate
 
     def _panel_candidate_is_newer(self, candidate: PanelState, baseline: PanelState) -> bool:
         candidate_time = self._panel_candidate_time(candidate)

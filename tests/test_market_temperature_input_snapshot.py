@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from src.services.market_overview_service import MarketOverviewService
+from src.services.official_macro_transport import MacroObservation
 
 
 @pytest.fixture(autouse=True)
@@ -389,6 +390,65 @@ def test_temperature_score_inputs_add_source_authority_diagnostics() -> None:
     assert proxy_item["sourceAuthorityRouteRejected"] is False
     assert proxy_item["sourceAuthorityReason"] == "proxy_context_only"
     assert proxy_item["routeRejectedReasonCodes"] == []
+
+
+def test_temperature_inputs_preserve_official_macro_authority_metadata_after_rates_volatility_merge() -> None:
+    service = MarketOverviewService()
+    today = "2026-05-20"
+    previous = "2026-05-19"
+    official_points = {
+        "VIXCLS": [
+            MacroObservation("VIXCLS", 18.4, today, today, "fred:VIXCLS", "official_public", "daily_close"),
+            MacroObservation("VIXCLS", 19.2, previous, previous, "fred:VIXCLS", "official_public", "daily_close"),
+        ],
+        "DGS2": [
+            MacroObservation("DGS2", 4.82, today, today, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+            MacroObservation("DGS2", 4.79, previous, previous, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+        ],
+        "DGS10": [
+            MacroObservation("DGS10", 4.41, today, today, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+            MacroObservation("DGS10", 4.36, previous, previous, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+        ],
+        "DGS30": [
+            MacroObservation("DGS30", 4.63, today, today, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+            MacroObservation("DGS30", 4.58, previous, previous, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+        ],
+        "SOFR": [
+            MacroObservation("SOFR", 5.31, today, today, "fred:SOFR", "official_public", "daily_fixing"),
+            MacroObservation("SOFR", 5.30, previous, previous, "fred:SOFR", "official_public", "daily_fixing"),
+        ],
+    }
+
+    def cached_payload(cache_key: str, _fetcher: object, fallback_factory: object) -> dict:
+        if cache_key == "rates":
+            return service._fetch_rates_snapshot()
+        if cache_key == "volatility":
+            return service._fetch_volatility()
+        return fallback_factory()  # type: ignore[operator]
+
+    with (
+        patch.object(service, "_cached_payload", side_effect=cached_payload),
+        patch.object(service, "_official_macro_points", return_value=official_points),
+        patch.object(service, "_quote_items", return_value=[]),
+        patch.object(service, "_atr_item", return_value=None),
+    ):
+        inputs = service._build_market_temperature_inputs_from_internal_snapshots()
+
+    rates_by_symbol = {
+        str(item["symbol"]): item
+        for item in inputs["rates"]["items"]
+        if isinstance(item, dict) and item.get("symbol") in {"VIX", "US2Y", "US10Y", "US30Y", "SOFR"}
+    }
+
+    assert set(rates_by_symbol) == {"VIX", "US2Y", "US10Y", "US30Y", "SOFR"}
+    for symbol, item in rates_by_symbol.items():
+        assert item["sourceType"] == "official_public"
+        assert item["sourceTier"] == "official_public"
+        assert item["sourceAuthorityAllowed"] is True, symbol
+        assert item["scoreContributionAllowed"] is True, symbol
+        assert item["sourceAuthorityReason"] is None
+        assert item["routeRejectedReasonCodes"] == []
+        assert item["freshness"] in {"cached", "delayed"}
 
 
 def test_temperature_score_helpers_skip_explicit_non_scoring_inputs() -> None:
