@@ -16,7 +16,10 @@ from data_provider.provider_credentials import ProviderCredentialBundle
 from src.config import Config
 from src.services.market_data_source_registry import project_source_provenance
 from src.services.market_rotation_radar_service import MarketRotationRadarService
-from src.services.rotation_radar_quote_provider import load_rotation_radar_quotes
+from src.services.rotation_radar_quote_provider import (
+    load_rotation_radar_quotes,
+    run_rotation_radar_alpaca_live_smoke,
+)
 
 
 def _quote(
@@ -1853,6 +1856,94 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertFalse(activation["scoreContributionAllowed"])
         self.assertEqual(activation["reason"], "stale_window")
         self.assertEqual(activation["staleWindows"], ["5m", "15m", "60m", "1d"])
+
+    def test_alpaca_live_smoke_missing_credentials_exits_cleanly_without_secret_output(self) -> None:
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_missing_alpaca_credentials(),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            side_effect=AssertionError("live smoke must not call yfinance when credentials are missing"),
+        ):
+            summary = run_rotation_radar_alpaca_live_smoke()
+
+        self.assertEqual(
+            summary,
+            {
+                "credentialsPresent": False,
+                "providerConstructed": False,
+                "probePassed": False,
+                "freshnessValid": True,
+                "sourceMetadataValid": True,
+                "sourceAuthorityAllowed": False,
+                "scoreContributionAllowed": False,
+                "fulfilledWindows": [],
+                "missingWindows": ["5m", "15m", "60m", "1d"],
+                "staleWindows": [],
+                "reason": "credentials",
+            },
+        )
+        dumped = json.dumps(summary, ensure_ascii=False)
+        self.assertNotIn("alpaca-secret", dumped)
+        self.assertNotIn("alpaca-key-id", dumped)
+        self.assertNotIn("ALPACA_API_SECRET_KEY", dumped)
+
+    def test_alpaca_live_smoke_probes_only_stable_symbols_with_bounded_summary(self) -> None:
+        requested_symbols: list[str] = []
+
+        class StableOnlyAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                requested_symbols.append(symbol)
+                return _alpaca_bars(end_close=102.0)
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            StableOnlyAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            side_effect=AssertionError("live smoke must stay on the bounded Alpaca configured path"),
+        ):
+            summary = run_rotation_radar_alpaca_live_smoke()
+
+        self.assertEqual(set(requested_symbols), {"SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV"})
+        self.assertTrue(summary["credentialsPresent"])
+        self.assertTrue(summary["providerConstructed"])
+        self.assertTrue(summary["probePassed"])
+        self.assertTrue(summary["freshnessValid"])
+        self.assertTrue(summary["sourceMetadataValid"])
+        self.assertTrue(summary["sourceAuthorityAllowed"])
+        self.assertTrue(summary["scoreContributionAllowed"])
+        self.assertEqual(summary["fulfilledWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(summary["missingWindows"], [])
+        self.assertEqual(summary["staleWindows"], [])
+        self.assertIsNone(summary["reason"])
+        self.assertEqual(
+            sorted(summary),
+            sorted(
+                [
+                    "credentialsPresent",
+                    "providerConstructed",
+                    "probePassed",
+                    "freshnessValid",
+                    "sourceMetadataValid",
+                    "sourceAuthorityAllowed",
+                    "scoreContributionAllowed",
+                    "fulfilledWindows",
+                    "missingWindows",
+                    "staleWindows",
+                    "reason",
+                ]
+            ),
+        )
 
     def test_configured_provider_calendar_and_market_session_empty_bars_are_activation_blockers(self) -> None:
         cases = (

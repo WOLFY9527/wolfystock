@@ -142,6 +142,36 @@ def get_rotation_radar_provider_diagnostics() -> Dict[str, Any]:
     return _configured_provider_base_metadata(get_provider_credentials(_CONFIGURED_PROVIDER_ID))
 
 
+def run_rotation_radar_alpaca_live_smoke() -> Dict[str, Any]:
+    """Run a bounded Alpaca-only activation smoke for rotation radar diagnostics."""
+
+    smoke_symbols = tuple(_ALPACA_STABLE_ACTIVATION_PROBE_SYMBOLS)
+    configured_attempt = _load_configured_provider_quotes(smoke_symbols)
+    diagnostics = _provider_activation_diagnostics(
+        requested_symbols=smoke_symbols,
+        quotes=configured_attempt.quotes,
+        failed_symbol_reasons=configured_attempt.failed_symbol_reasons,
+        configured_attempt=configured_attempt,
+        yfinance_attempt=_ProviderAttempt(status="not_requested"),
+        window_coverage={},
+        source_summary={"sourceTier": _CONFIGURED_SOURCE_TIER if configured_attempt.quotes else "unknown"},
+    )["alpacaActivationDiagnostics"]
+    raw_reason = diagnostics.get("reason")
+    return {
+        "credentialsPresent": bool(diagnostics.get("credentialsPresent", False)),
+        "providerConstructed": bool(diagnostics.get("providerConstructed", False)),
+        "probePassed": bool(diagnostics.get("probePassed", False)),
+        "freshnessValid": bool(diagnostics.get("freshnessValid", False)),
+        "sourceMetadataValid": bool(diagnostics.get("sourceMetadataValid", False)),
+        "sourceAuthorityAllowed": bool(diagnostics.get("sourceAuthorityAllowed", False)),
+        "scoreContributionAllowed": bool(diagnostics.get("scoreContributionAllowed", False)),
+        "fulfilledWindows": _as_string_sequence(diagnostics.get("fulfilledWindows")),
+        "missingWindows": _as_string_sequence(diagnostics.get("missingWindows")),
+        "staleWindows": _as_string_sequence(diagnostics.get("staleWindows")),
+        "reason": str(raw_reason).strip() if raw_reason is not None else None,
+    }
+
+
 def load_rotation_radar_quotes(symbols: Iterable[str]) -> Dict[str, Any]:
     requested_symbols = tuple(dict.fromkeys(str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()))
     configured_attempt = _load_configured_provider_quotes(requested_symbols)
