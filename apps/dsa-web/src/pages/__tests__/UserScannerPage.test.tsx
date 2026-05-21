@@ -999,7 +999,9 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-launch-bar')).not.toHaveClass('overflow-hidden', 'max-h-[calc(100vh-120px)]', 'xl:h-full', 'xl:max-h-[calc(100vh-120px)]', 'xl:sticky');
     expect(screen.getByTestId('scanner-candidate-scroll-region')).not.toHaveClass('overflow-y-auto', 'flex-1');
     expect(screen.getByTestId('scanner-candidate-scroll-region')).not.toHaveClass('order-1');
-    expect(screen.getByTestId('scanner-result-table')).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-ranked-list')).toHaveClass('overflow-x-auto');
+    expect(screen.getByTestId('scanner-ranked-list')).not.toHaveClass('overflow-hidden', 'no-scrollbar');
+    expect(screen.getByTestId('scanner-result-table')).toHaveClass('contents', 'md:block', 'md:min-w-[1220px]');
   });
 
   it('keeps the dense status strip and candidate table ahead of secondary diagnostics by default', async () => {

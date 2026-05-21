@@ -2611,8 +2611,13 @@ const UserScannerPage: React.FC = () => {
                     <div className={`grid min-h-0 flex-1 min-w-0 gap-3 px-2 py-2 ${showDetailRail ? 'xl:grid-cols-[minmax(820px,1fr)_minmax(320px,340px)]' : 'grid-cols-1'}`}>
                       <div data-testid="scanner-primary-work-region" className="min-w-0">
                         {workbenchDiagnostics.length ? (
-                          <div data-testid="scanner-ranked-list" className="overflow-hidden rounded-xl border border-white/5 bg-white/[0.02]">
-                            <div data-testid="scanner-result-table" className="contents">
+                          <div
+                            data-testid="scanner-ranked-list"
+                            className="overflow-x-auto overscroll-x-contain rounded-xl border border-white/5 bg-white/[0.02] [-webkit-overflow-scrolling:touch]"
+                            aria-label={language === 'en' ? 'Ranked scanner results' : '扫描排名结果'}
+                            tabIndex={0}
+                          >
+                            <div data-testid="scanner-result-table" className="contents md:block md:min-w-[1220px]">
                               <div className="hidden items-center gap-3 border-b border-white/5 bg-black/[0.18] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/38 md:grid md:grid-cols-[64px_minmax(180px,1fr)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)_auto]">
                                 <span>{language === 'en' ? 'Rank' : '排名'}</span>
                                 <span>{language === 'en' ? 'Symbol / name' : '代码 / 名称'}</span>
