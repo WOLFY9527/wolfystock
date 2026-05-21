@@ -590,6 +590,50 @@ def test_hsi_sina_proxy_quote_uses_dashboard_symbol_and_truthful_metadata() -> N
     assert all(item["symbol"] != "HSI.HK" for item in payload["items"])
 
 
+def test_hsi_sina_provider_quote_overrides_hk_alias_fallback_row() -> None:
+    service = MarketOverviewService()
+    row = [
+        "HSI",
+        "恒生指数",
+        "25838.960",
+        "25962.730",
+        "25838.960",
+        "25505.710",
+        "25675.182",
+        "-287.550",
+        "-1.110",
+        "0.000",
+        "0.000",
+        "292712398.554",
+        "21878681948",
+        "0.000",
+        "0.000",
+        "28056.100",
+        "22668.350",
+        "2026/05/18",
+        "16:09:22",
+    ]
+    fallback = service._card_snapshot([
+        service._metric_item("恒生指数", "HSI.HK", 17680.30, 146.20, 0.83, "pts", [17410, 17520, 17610, 17680.30], market="HK")
+    ])
+
+    log_patcher = _log_patch()
+    try:
+        with (
+            patch.object(service, "_fallback_cn_indices_snapshot", return_value=fallback),
+            patch("src.services.market_overview_service.fetch_sina_cn_index_rows", return_value={"rt_hkHSI": row}),
+        ):
+            payload = service.get_cn_indices()
+    finally:
+        log_patcher.stop()
+
+    hsi = _item(payload, "HSI")
+    assert hsi["value"] == 25675.182
+    assert hsi["source"] == "sina"
+    assert hsi["isFallback"] is False
+    assert all(item["symbol"] != "HSI.HK" for item in payload["items"])
+
+
 def test_us10y_dxy_and_btc_keep_truthful_source_freshness_metadata() -> None:
     service = MarketOverviewService()
     as_of = datetime.now(CN_TZ)

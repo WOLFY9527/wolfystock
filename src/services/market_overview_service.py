@@ -706,6 +706,13 @@ class MarketOverviewService:
         "HSI": "rt_hkHSI",
         "HSTECH": "rt_hkHSTECH",
     }
+    CN_INDEX_SYMBOL_ALIASES = {
+        "000001.SS": "000001.SH",
+        "sh000001": "000001.SH",
+        "000300.SS": "000300.SH",
+        "HSI.HK": "HSI",
+        "HSTECH.HK": "HSTECH",
+    }
     AKSHARE_CN_INDEX_SYMBOLS = {
         "sh000001": "000001.SH",
         "sz399001": "399001.SZ",
@@ -3081,12 +3088,14 @@ class MarketOverviewService:
         live_count = 0
         for fallback_item in fallback.get("items", []):
             symbol = str(fallback_item.get("symbol") or "")
-            quote = live_quotes.get(symbol)
+            canonical_symbol = self._canonical_cn_index_symbol(symbol)
+            quote = live_quotes.get(canonical_symbol)
             if quote:
                 live_count += 1
                 merged_items.append({
                     **fallback_item,
                     **quote,
+                    "symbol": canonical_symbol,
                     "label": quote.get("name") or fallback_item.get("label"),
                     "price": quote.get("value"),
                     "unit": "pts",
@@ -3128,6 +3137,10 @@ class MarketOverviewService:
             if quote:
                 quotes[canonical_symbol] = quote
         return quotes
+
+    def _canonical_cn_index_symbol(self, symbol: Any) -> str:
+        normalized_symbol = str(symbol or "").strip()
+        return self.CN_INDEX_SYMBOL_ALIASES.get(normalized_symbol, normalized_symbol)
 
     def _sina_cn_index_item(self, canonical_symbol: str, row: List[str]) -> Optional[Dict[str, Any]]:
         if canonical_symbol in {"HSI", "HSTECH"}:
