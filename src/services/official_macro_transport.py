@@ -73,6 +73,8 @@ OFFICIAL_MACRO_LIVE_SMOKE_TREASURY_SERIES_IDS = ("DGS2", "DGS10", "DGS30")
 OFFICIAL_MACRO_LIVE_SMOKE_AGGREGATE_BUDGET_SECONDS = 8.0
 OFFICIAL_MACRO_LIVE_SMOKE_FRED_TIMEOUT_SECONDS = 1.0
 OFFICIAL_MACRO_LIVE_SMOKE_TREASURY_TIMEOUT_SECONDS = 1.5
+OFFICIAL_MACRO_LIVE_SMOKE_MAX_ATTEMPTS = 3
+OFFICIAL_MACRO_LIVE_SMOKE_RETRY_SLEEP_SECONDS = 0.05
 
 
 class OfficialMacroTransportError(RuntimeError):
@@ -406,6 +408,8 @@ def run_official_macro_live_smoke(
     aggregate_budget_seconds: float = OFFICIAL_MACRO_LIVE_SMOKE_AGGREGATE_BUDGET_SECONDS,
     fred_timeout_seconds: float = OFFICIAL_MACRO_LIVE_SMOKE_FRED_TIMEOUT_SECONDS,
     treasury_timeout_seconds: float = OFFICIAL_MACRO_LIVE_SMOKE_TREASURY_TIMEOUT_SECONDS,
+    max_attempts: int = OFFICIAL_MACRO_LIVE_SMOKE_MAX_ATTEMPTS,
+    retry_sleep_seconds: float = OFFICIAL_MACRO_LIVE_SMOKE_RETRY_SLEEP_SECONDS,
 ) -> dict[str, Any]:
     """Run a bounded FRED/Treasury official macro readiness diagnostic."""
 
@@ -413,9 +417,12 @@ def run_official_macro_live_smoke(
     credentials_present = bool(config_probe.get("apiKeyPresent"))
     provider_constructed = bool(credentials_present)
     deadline = time.monotonic() + max(0.0, float(aggregate_budget_seconds))
+    bounded_max_attempts = max(1, min(int(max_attempts), 4))
+    bounded_retry_sleep_seconds = max(0.0, float(retry_sleep_seconds))
 
-    results: dict[str, str] = {}
-    invalid_metadata_detected = False
+    results: dict[str, str] = {series_id: "missing" for series_id in OFFICIAL_MACRO_LIVE_SMOKE_SERIES_IDS}
+    attempts_executed = 0
+    transient_missing_series_seen: set[str] = set()
 
     def remaining_timeout(cap: float) -> float | None:
         remaining = deadline - time.monotonic()
@@ -424,20 +431,37 @@ def run_official_macro_live_smoke(
         return max(0.001, min(float(cap), remaining))
 
     if credentials_present:
-        for series_id in OFFICIAL_MACRO_LIVE_SMOKE_FRED_SERIES_IDS:
-            timeout = remaining_timeout(fred_timeout_seconds)
-            if timeout is None:
-                results.setdefault(series_id, "missing")
-                continue
-            try:
-                points = fetch_fred_observation_points(series_id, limit=2, timeout=timeout)
-            except Exception:
-                points = []
-            series_status = _official_macro_smoke_series_status(series_id, points, now=now)
-            results[series_id] = series_status
-            if series_status == "invalid_metadata":
-                invalid_metadata_detected = True
+        pending_series = list(OFFICIAL_MACRO_LIVE_SMOKE_FRED_SERIES_IDS)
+        for attempt_index in range(bounded_max_attempts):
+            attempts_executed = attempt_index + 1
+            current_attempt_missing: list[str] = []
+            for series_id in pending_series:
+                timeout = remaining_timeout(fred_timeout_seconds)
+                if timeout is None:
+                    current_attempt_missing.append(series_id)
+                    continue
+                try:
+                    points = fetch_fred_observation_points(series_id, limit=2, timeout=timeout)
+                except Exception:
+                    points = []
+                series_status = _official_macro_smoke_series_status(series_id, points, now=now)
+                results[series_id] = series_status
+                if series_status == "missing":
+                    current_attempt_missing.append(series_id)
+            transient_missing_series_seen.update(current_attempt_missing)
+            pending_series = [
+                series_id
+                for series_id in OFFICIAL_MACRO_LIVE_SMOKE_FRED_SERIES_IDS
+                if results.get(series_id) != "fulfilled"
+            ]
+            if not pending_series or attempts_executed >= bounded_max_attempts:
+                break
+            sleep_budget = remaining_timeout(bounded_retry_sleep_seconds)
+            if sleep_budget is None:
+                break
+            time.sleep(sleep_budget)
     else:
+        attempts_executed = 1
         for series_id in OFFICIAL_MACRO_LIVE_SMOKE_FRED_SERIES_IDS:
             results.setdefault(series_id, "missing")
         treasury_timeout = remaining_timeout(treasury_timeout_seconds)
@@ -450,8 +474,8 @@ def run_official_macro_live_smoke(
         for series_id in OFFICIAL_MACRO_LIVE_SMOKE_TREASURY_SERIES_IDS:
             series_status = _official_macro_smoke_series_status(series_id, treasury_points.get(series_id, []), now=now)
             results[series_id] = series_status
-            if series_status == "invalid_metadata":
-                invalid_metadata_detected = True
+    if attempts_executed == 0:
+        attempts_executed = 1
 
     fulfilled_series = [
         series_id for series_id in OFFICIAL_MACRO_LIVE_SMOKE_SERIES_IDS if results.get(series_id) == "fulfilled"
@@ -464,6 +488,9 @@ def run_official_macro_live_smoke(
         for series_id in OFFICIAL_MACRO_LIVE_SMOKE_SERIES_IDS
         if results.get(series_id) not in {"fulfilled", "stale"}
     ]
+    invalid_metadata_detected = any(
+        results.get(series_id) == "invalid_metadata" for series_id in OFFICIAL_MACRO_LIVE_SMOKE_SERIES_IDS
+    )
     freshness_valid = not stale_series
     source_metadata_valid = not invalid_metadata_detected
     probe_passed = not missing_series and freshness_valid and source_metadata_valid
@@ -484,6 +511,11 @@ def run_official_macro_live_smoke(
         reason = "source_metadata_invalid"
     elif missing_series:
         reason = "series_coverage"
+    transient_missing_series = [
+        series_id
+        for series_id in OFFICIAL_MACRO_LIVE_SMOKE_SERIES_IDS
+        if series_id in transient_missing_series_seen and results.get(series_id) == "fulfilled"
+    ]
 
     return {
         "credentialsPresent": credentials_present,
@@ -497,6 +529,10 @@ def run_official_macro_live_smoke(
         "missingSeries": missing_series,
         "staleSeries": stale_series,
         "reason": reason,
+        "attempts": attempts_executed,
+        "maxAttempts": bounded_max_attempts,
+        "transientMissingSeries": transient_missing_series,
+        "finalAttemptMissingSeries": missing_series,
     }
 
 

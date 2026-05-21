@@ -43,6 +43,20 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "official_macro"
 MODULE_PATH = REPO_ROOT / "src" / "services" / "official_macro_transport.py"
 FORBIDDEN_IMPORT_PREFIXES = ("requests", "httpx", "aiohttp", "urllib3", "yfinance")
+OFFICIAL_MACRO_SMOKE_CORE_FIELDS = {
+    "credentialsPresent",
+    "providerConstructed",
+    "probePassed",
+    "freshnessValid",
+    "sourceMetadataValid",
+    "sourceAuthorityAllowed",
+    "scoreContributionAllowed",
+    "fulfilledSeries",
+    "missingSeries",
+    "staleSeries",
+    "reason",
+}
+OFFICIAL_MACRO_SMOKE_RETRY_FIELDS = {"attempts", "maxAttempts", "transientMissingSeries", "finalAttemptMissingSeries"}
 
 
 def _load_json_fixture(name: str) -> dict[str, object]:
@@ -71,6 +85,11 @@ def _macro_point(
         source_type=source_type,
         freshness_hint=freshness_hint,
     )
+
+
+def _assert_smoke_summary_fields(summary: dict[str, object]) -> None:
+    assert OFFICIAL_MACRO_SMOKE_CORE_FIELDS.issubset(summary.keys())
+    assert OFFICIAL_MACRO_SMOKE_RETRY_FIELDS.issubset(summary.keys())
 
 
 def _module_imports() -> set[str]:
@@ -684,7 +703,8 @@ def test_official_macro_live_smoke_missing_fred_key_exits_cleanly_without_secret
     ):
         summary = run_official_macro_live_smoke(now=now)
 
-    assert summary == {
+    _assert_smoke_summary_fields(summary)
+    assert summary | {} == {
         "credentialsPresent": False,
         "providerConstructed": False,
         "probePassed": False,
@@ -696,6 +716,10 @@ def test_official_macro_live_smoke_missing_fred_key_exits_cleanly_without_secret
         "missingSeries": ["VIXCLS", "SOFR", "DFF", "BAMLH0A0HYM2"],
         "staleSeries": [],
         "reason": "credentials",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "transientMissingSeries": [],
+        "finalAttemptMissingSeries": ["VIXCLS", "SOFR", "DFF", "BAMLH0A0HYM2"],
     }
     dumped = json.dumps(summary, ensure_ascii=False)
     assert "fred-secret-test-key" not in dumped
@@ -732,7 +756,8 @@ def test_official_macro_live_smoke_reports_bounded_official_series_successfully(
         summary = run_official_macro_live_smoke(now=now)
 
     assert fred_requested == ["VIXCLS", "SOFR", "DFF", "DGS2", "DGS10", "DGS30", "BAMLH0A0HYM2"]
-    assert summary == {
+    _assert_smoke_summary_fields(summary)
+    assert summary | {} == {
         "credentialsPresent": True,
         "providerConstructed": True,
         "probePassed": True,
@@ -744,6 +769,10 @@ def test_official_macro_live_smoke_reports_bounded_official_series_successfully(
         "missingSeries": [],
         "staleSeries": [],
         "reason": None,
+        "attempts": 1,
+        "maxAttempts": 3,
+        "transientMissingSeries": [],
+        "finalAttemptMissingSeries": [],
     }
 
 
@@ -776,8 +805,12 @@ def test_official_macro_live_smoke_partial_dgs_coverage_fails_closed_without_tre
     ):
         summary = run_official_macro_live_smoke(now=now)
 
-    assert fred_requested == ["VIXCLS", "SOFR", "DFF", "DGS2", "DGS10", "DGS30", "BAMLH0A0HYM2"]
-    assert summary == {
+    assert fred_requested.count("DGS30") == 3
+    assert set(fred_requested) == {"VIXCLS", "SOFR", "DFF", "DGS2", "DGS10", "DGS30", "BAMLH0A0HYM2"}
+    for series_id in {"VIXCLS", "SOFR", "DFF", "DGS2", "DGS10", "BAMLH0A0HYM2"}:
+        assert fred_requested.count(series_id) == 1
+    _assert_smoke_summary_fields(summary)
+    assert summary | {} == {
         "credentialsPresent": True,
         "providerConstructed": True,
         "probePassed": False,
@@ -789,6 +822,10 @@ def test_official_macro_live_smoke_partial_dgs_coverage_fails_closed_without_tre
         "missingSeries": ["DGS30"],
         "staleSeries": [],
         "reason": "series_coverage",
+        "attempts": 3,
+        "maxAttempts": 3,
+        "transientMissingSeries": [],
+        "finalAttemptMissingSeries": ["DGS30"],
     }
 
 
@@ -819,7 +856,8 @@ def test_official_macro_live_smoke_stale_dgs_yields_fail_closed_without_treasury
     ):
         summary = run_official_macro_live_smoke(now=now)
 
-    assert summary == {
+    _assert_smoke_summary_fields(summary)
+    assert summary | {} == {
         "credentialsPresent": True,
         "providerConstructed": True,
         "probePassed": False,
@@ -831,6 +869,10 @@ def test_official_macro_live_smoke_stale_dgs_yields_fail_closed_without_treasury
         "missingSeries": [],
         "staleSeries": ["DGS10"],
         "reason": "stale_series",
+        "attempts": 3,
+        "maxAttempts": 3,
+        "transientMissingSeries": [],
+        "finalAttemptMissingSeries": [],
     }
 
 
@@ -870,7 +912,8 @@ def test_official_macro_live_smoke_rejects_proxy_metadata_for_treasury_yield_ser
     ):
         summary = run_official_macro_live_smoke(now=now)
 
-    assert summary == {
+    _assert_smoke_summary_fields(summary)
+    assert summary | {} == {
         "credentialsPresent": True,
         "providerConstructed": True,
         "probePassed": False,
@@ -882,4 +925,149 @@ def test_official_macro_live_smoke_rejects_proxy_metadata_for_treasury_yield_ser
         "missingSeries": ["DGS10"],
         "staleSeries": [],
         "reason": "source_metadata_invalid",
+        "attempts": 3,
+        "maxAttempts": 3,
+        "transientMissingSeries": [],
+        "finalAttemptMissingSeries": ["DGS10"],
     }
+
+
+def test_official_macro_live_smoke_retries_transient_missing_series_and_passes() -> None:
+    now = datetime(2026, 5, 14, 12, 0, tzinfo=timezone.utc)
+    attempts_by_series: dict[str, int] = {}
+
+    def _fake_fetch_fred(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        attempts_by_series[series_id] = attempts_by_series.get(series_id, 0) + 1
+        if series_id in {"SOFR", "BAMLH0A0HYM2"} and attempts_by_series[series_id] == 1:
+            return []
+        values = {
+            "VIXCLS": 18.22,
+            "SOFR": 5.31,
+            "DFF": 4.33,
+            "DGS2": 3.87,
+            "DGS10": 4.41,
+            "DGS30": 4.89,
+            "BAMLH0A0HYM2": 3.31,
+        }
+        return [_macro_point(series_id, values[series_id], "2026-05-13")]
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_fake_fetch_fred,
+    ), patch(
+        "src.services.official_macro_transport.fetch_treasury_daily_rate_observation_points",
+        side_effect=AssertionError("retry hardening must stay within official FRED smoke path when credentials are configured"),
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_official_macro_live_smoke(now=now)
+
+    assert summary["probePassed"] is True
+    assert summary["attempts"] == 2
+    assert summary["maxAttempts"] == 3
+    assert summary["transientMissingSeries"] == ["SOFR", "BAMLH0A0HYM2"]
+    assert summary["finalAttemptMissingSeries"] == []
+    assert attempts_by_series == {
+        "VIXCLS": 1,
+        "SOFR": 2,
+        "DFF": 1,
+        "DGS2": 1,
+        "DGS10": 1,
+        "DGS30": 1,
+        "BAMLH0A0HYM2": 2,
+    }
+
+
+def test_official_macro_live_smoke_stops_after_bounded_retry_for_persistent_missing_series() -> None:
+    now = datetime(2026, 5, 14, 12, 0, tzinfo=timezone.utc)
+    attempts_by_series: dict[str, int] = {}
+
+    def _fake_fetch_fred(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        attempts_by_series[series_id] = attempts_by_series.get(series_id, 0) + 1
+        if series_id == "BAMLH0A0HYM2":
+            return []
+        values = {
+            "VIXCLS": 18.22,
+            "SOFR": 5.31,
+            "DFF": 4.33,
+            "DGS2": 3.87,
+            "DGS10": 4.41,
+            "DGS30": 4.89,
+        }
+        return [_macro_point(series_id, values[series_id], "2026-05-13")]
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_fake_fetch_fred,
+    ), patch(
+        "src.services.official_macro_transport.fetch_treasury_daily_rate_observation_points",
+        side_effect=AssertionError("persistent missing series must not trigger Treasury fallback when FRED is configured"),
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_official_macro_live_smoke(now=now)
+
+    assert summary["probePassed"] is False
+    assert summary["reason"] == "series_coverage"
+    assert summary["attempts"] == 3
+    assert summary["maxAttempts"] == 3
+    assert summary["missingSeries"] == ["BAMLH0A0HYM2"]
+    assert summary["finalAttemptMissingSeries"] == ["BAMLH0A0HYM2"]
+    assert attempts_by_series["BAMLH0A0HYM2"] == 3
+    assert set(attempts_by_series) == {
+        "VIXCLS",
+        "SOFR",
+        "DFF",
+        "DGS2",
+        "DGS10",
+        "DGS30",
+        "BAMLH0A0HYM2",
+    }
+
+
+def test_official_macro_live_smoke_retries_only_bounded_series_without_broad_fanout() -> None:
+    now = datetime(2026, 5, 14, 12, 0, tzinfo=timezone.utc)
+    requested_series: list[str] = []
+
+    def _fake_fetch_fred(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        requested_series.append(series_id)
+        if series_id == "SOFR" and requested_series.count("SOFR") == 1:
+            return []
+        values = {
+            "VIXCLS": 18.22,
+            "SOFR": 5.31,
+            "DFF": 4.33,
+            "DGS2": 3.87,
+            "DGS10": 4.41,
+            "DGS30": 4.89,
+            "BAMLH0A0HYM2": 3.31,
+        }
+        return [_macro_point(series_id, values[series_id], "2026-05-13")]
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_fake_fetch_fred,
+    ), patch(
+        "src.services.official_macro_transport.fetch_treasury_daily_rate_observation_points",
+        side_effect=AssertionError("bounded series retry must not broaden provider fanout"),
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_official_macro_live_smoke(now=now)
+
+    assert summary["probePassed"] is True
+    assert set(requested_series) == {
+        "VIXCLS",
+        "SOFR",
+        "DFF",
+        "DGS2",
+        "DGS10",
+        "DGS30",
+        "BAMLH0A0HYM2",
+    }
+    assert requested_series.count("SOFR") == 2
+    for series_id in {"VIXCLS", "DFF", "DGS2", "DGS10", "DGS30", "BAMLH0A0HYM2"}:
+        assert requested_series.count(series_id) == 1
