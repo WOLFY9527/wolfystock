@@ -129,6 +129,10 @@ def _runtime_probe_symbols() -> tuple[str, ...]:
     )
 
 
+def _utc_dt(year: int, month: int, day: int, hour: int, minute: int = 0) -> datetime:
+    return datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
+
+
 class MarketRotationRadarServiceTestCase(unittest.TestCase):
     def test_live_quotes_score_confirmed_rotation_with_breadth_and_newsless_evidence(self) -> None:
         quotes = {
@@ -1091,6 +1095,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
     def test_configured_alpaca_long_window_threshold_coverage_reports_partial_short_blocker(self) -> None:
         symbols = _runtime_probe_symbols()
         failed_symbols = set(symbols[9:])
+        regular_session_now = _utc_dt(2026, 5, 8, 17, 30)
 
         class PartialWindowAlpacaFetcher:
             def __init__(self, **kwargs) -> None:
@@ -1112,6 +1117,10 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             PartialWindowAlpacaFetcher,
             create=True,
         ), patch(
+            "src.services.rotation_radar_quote_provider._utc_now",
+            return_value=regular_session_now,
+            create=True,
+        ), patch(
             "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
             return_value=pd.DataFrame(),
         ):
@@ -1125,9 +1134,8 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["missingWindows"], ["5m", "15m"])
         self.assertEqual(diagnostics["configuredProviderFulfilledWindows"], ["60m", "1d"])
         self.assertEqual(diagnostics["configuredProviderMissingWindows"], ["5m", "15m"])
-        self.assertEqual(diagnostics["activationBlocker"], "intraday_short_window_empty")
-        self.assertIn("IEX feed short-interval bars", diagnostics["activationHint"])
-        self.assertIn("reducing the symbol universe", diagnostics["activationHint"])
+        self.assertEqual(diagnostics["activationBlocker"], "feed_intraday_empty")
+        self.assertIn("5m/15m", diagnostics["activationHint"])
         self.assertEqual(diagnostics["minimumActivationCoverageMet"], True)
         self.assertEqual(diagnostics["minimumActivationSuccessRatio"], 0.75)
         self.assertEqual(diagnostics["minimumActivationSuccessCount"], 4)
@@ -1249,6 +1257,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         )
         stable_symbols = {"QQQ", "SPY", "IWM", "SMH", "SOXX", "IGV"}
         timed_out_symbols = {"CLOU", "CIBR", "HACK"}
+        regular_session_now = _utc_dt(2026, 5, 8, 17, 30)
 
         class MixedCoverageAlpacaFetcher:
             def __init__(self, **kwargs) -> None:
@@ -1270,6 +1279,10 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             MixedCoverageAlpacaFetcher,
             create=True,
         ), patch(
+            "src.services.rotation_radar_quote_provider._utc_now",
+            return_value=regular_session_now,
+            create=True,
+        ), patch(
             "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
             return_value=pd.DataFrame(),
         ):
@@ -1287,7 +1300,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["configuredProviderFulfilledWindows"], ["60m", "1d"])
         self.assertEqual(diagnostics["configuredProviderMissingWindows"], ["5m", "15m"])
         self.assertEqual(diagnostics["liveActivationStatus"], "partial")
-        self.assertEqual(diagnostics["activationBlocker"], "intraday_short_window_empty")
+        self.assertEqual(diagnostics["activationBlocker"], "feed_intraday_empty")
         self.assertEqual(diagnostics["activationWindowResults"]["60m"]["requestedSymbolCount"], 6)
         self.assertEqual(diagnostics["activationWindowResults"]["60m"]["successCount"], 6)
         self.assertTrue(diagnostics["activationWindowResults"]["60m"]["fulfilled"])
@@ -1667,6 +1680,63 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertFalse(activation["scoreContributionAllowed"])
         self.assertEqual(activation["reason"], "entitlement")
 
+    def test_alpaca_short_intraday_requests_use_recent_completed_regular_session_outside_market_hours(self) -> None:
+        request_calls: list[dict[str, str]] = []
+        outside_market_now = _utc_dt(2026, 5, 9, 15, 0)
+
+        class RecordingAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                request_calls.append({
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "start": start,
+                    "end": end,
+                })
+                return _alpaca_bars(end_close=102.0)
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            RecordingAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider._utc_now",
+            return_value=outside_market_now,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            side_effect=AssertionError("yfinance fallback should not be called when Alpaca covers all symbols"),
+        ):
+            load_rotation_radar_quotes(["SPY"])
+
+        request_by_timeframe = {entry["timeframe"]: entry for entry in request_calls}
+        self.assertEqual(
+            request_by_timeframe["5Min"],
+            {
+                "symbol": "SPY",
+                "timeframe": "5Min",
+                "start": "2026-05-08T18:00:00+00:00",
+                "end": "2026-05-08T20:00:00+00:00",
+            },
+        )
+        self.assertEqual(
+            request_by_timeframe["15Min"],
+            {
+                "symbol": "SPY",
+                "timeframe": "15Min",
+                "start": "2026-05-08T14:00:00+00:00",
+                "end": "2026-05-08T20:00:00+00:00",
+            },
+        )
+        self.assertEqual(request_by_timeframe["1Hour"]["end"], outside_market_now.isoformat())
+        self.assertEqual(request_by_timeframe["1Day"]["end"], outside_market_now.isoformat())
+
     def test_configured_provider_auth_failure_reports_actionable_window_diagnostics_without_secret_leak(self) -> None:
         class AuthFailingAlpacaFetcher:
             def __init__(self, **kwargs) -> None:
@@ -1856,6 +1926,46 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertFalse(activation["scoreContributionAllowed"])
         self.assertEqual(activation["reason"], "stale_window")
         self.assertEqual(activation["staleWindows"], ["5m", "15m", "60m", "1d"])
+
+    def test_alpaca_live_smoke_short_windows_outside_market_hours_report_market_closed_window_empty(self) -> None:
+        outside_market_now = _utc_dt(2026, 5, 9, 15, 0)
+
+        class OutsideHoursShortWindowFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                if timeframe in {"5Min", "15Min"}:
+                    return []
+                return _alpaca_bars(end_close=102.0)
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            OutsideHoursShortWindowFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider._utc_now",
+            return_value=outside_market_now,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            side_effect=AssertionError("live smoke must stay on the bounded Alpaca configured path"),
+        ):
+            summary = run_rotation_radar_alpaca_live_smoke()
+
+        self.assertTrue(summary["credentialsPresent"])
+        self.assertTrue(summary["providerConstructed"])
+        self.assertFalse(summary["probePassed"])
+        self.assertFalse(summary["sourceAuthorityAllowed"])
+        self.assertFalse(summary["scoreContributionAllowed"])
+        self.assertEqual(summary["fulfilledWindows"], ["60m", "1d"])
+        self.assertEqual(summary["missingWindows"], ["5m", "15m"])
+        self.assertEqual(summary["staleWindows"], [])
+        self.assertEqual(summary["reason"], "market_closed_window_empty")
 
     def test_alpaca_live_smoke_missing_credentials_exits_cleanly_without_secret_output(self) -> None:
         with patch(

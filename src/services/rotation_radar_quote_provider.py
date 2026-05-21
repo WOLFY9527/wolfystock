@@ -5,10 +5,11 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time as clock_time
 from math import ceil
 from time import monotonic
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -41,6 +42,9 @@ _ALPACA_STABLE_ACTIVATION_PROBE_SYMBOLS = ("SPY", "QQQ", "IWM", "SMH", "SOXX", "
 _ALPACA_PER_WINDOW_TIMEOUT_SECONDS = 2.5
 _ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS = 8.0
 _ALPACA_MINIMUM_ACTIVATION_SUCCESS_RATIO = 0.75
+_US_EASTERN_TZ = ZoneInfo("America/New_York")
+_US_REGULAR_SESSION_OPEN = clock_time(9, 30)
+_US_REGULAR_SESSION_CLOSE = clock_time(16, 0)
 _ALPACA_TIMEFRAMES = {
     "5m": ("5Min", timedelta(hours=2), 48),
     "15m": ("15Min", timedelta(hours=6), 48),
@@ -90,9 +94,11 @@ _ACTIVATION_BLOCKERS = {
     "entitlement",
     "interval_mapping",
     "market_session",
+    "market_closed_window_empty",
     "calendar",
     "timeout",
     "empty_response",
+    "feed_intraday_empty",
     "intraday_short_window_empty",
     "short_window_coverage",
     "symbol_coverage",
@@ -130,6 +136,15 @@ class _ConfiguredActivationStageResult:
     request_window_results: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     symbol_failure_samples: list[Dict[str, str]] = field(default_factory=list)
     timeout_symbol_count: int = 0
+
+
+@dataclass(frozen=True)
+class _IntradayWindowRequestPlan:
+    start: datetime
+    end: datetime
+    selection_mode: str
+    session_state: str
+    session_date: str
 
 
 def get_rotation_radar_quote_provider() -> QuoteProvider:
@@ -172,6 +187,96 @@ def run_rotation_radar_alpaca_live_smoke() -> Dict[str, Any]:
     }
 
 
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _short_intraday_window_request_plan(
+    window: str,
+    *,
+    now_utc: Optional[datetime] = None,
+) -> _IntradayWindowRequestPlan:
+    current_utc = (now_utc or _utc_now()).astimezone(timezone.utc)
+    current_et = current_utc.astimezone(_US_EASTERN_TZ)
+    _, lookback, _ = _ALPACA_TIMEFRAMES[window]
+    interval_minutes = 5 if window == "5m" else 15
+    session_date = current_et.date()
+    session_open = datetime.combine(session_date, _US_REGULAR_SESSION_OPEN, tzinfo=_US_EASTERN_TZ)
+    session_close = datetime.combine(session_date, _US_REGULAR_SESSION_CLOSE, tzinfo=_US_EASTERN_TZ)
+    minimum_completed_end = session_open + timedelta(minutes=interval_minutes)
+
+    if current_et.weekday() >= 5:
+        target_date = _previous_us_weekday(session_date)
+        session_state = "weekend"
+        selection_mode = "recent_completed_regular_session"
+        request_end_et = datetime.combine(target_date, _US_REGULAR_SESSION_CLOSE, tzinfo=_US_EASTERN_TZ)
+    elif current_et < session_open:
+        target_date = _previous_us_weekday(session_date)
+        session_state = "pre_market"
+        selection_mode = "recent_completed_regular_session"
+        request_end_et = datetime.combine(target_date, _US_REGULAR_SESSION_CLOSE, tzinfo=_US_EASTERN_TZ)
+    elif current_et >= session_close:
+        target_date = session_date
+        session_state = "after_close"
+        selection_mode = "recent_completed_regular_session"
+        request_end_et = session_close
+    else:
+        floored_end = _floor_datetime_to_minutes(current_et, interval_minutes)
+        if floored_end < minimum_completed_end:
+            target_date = _previous_us_weekday(session_date)
+            session_state = "insufficient_live_window"
+            selection_mode = "recent_completed_regular_session"
+            request_end_et = datetime.combine(target_date, _US_REGULAR_SESSION_CLOSE, tzinfo=_US_EASTERN_TZ)
+        else:
+            target_date = session_date
+            session_state = "regular_open"
+            selection_mode = "current_regular_session"
+            request_end_et = min(floored_end, session_close)
+
+    target_session_open = datetime.combine(target_date, _US_REGULAR_SESSION_OPEN, tzinfo=_US_EASTERN_TZ)
+    request_start_et = max(target_session_open, request_end_et - lookback)
+    return _IntradayWindowRequestPlan(
+        start=request_start_et.astimezone(timezone.utc),
+        end=request_end_et.astimezone(timezone.utc),
+        selection_mode=selection_mode,
+        session_state=session_state,
+        session_date=target_date.isoformat(),
+    )
+
+
+def _short_intraday_window_plan_metadata(
+    *,
+    now_utc: Optional[datetime] = None,
+) -> Dict[str, Dict[str, str]]:
+    current_utc = now_utc or _utc_now()
+    metadata: Dict[str, Dict[str, str]] = {}
+    for window in _SHORT_INTRADAY_WINDOWS:
+        plan = _short_intraday_window_request_plan(window, now_utc=current_utc)
+        metadata[window] = {
+            "selectionMode": plan.selection_mode,
+            "sessionState": plan.session_state,
+            "sessionDate": plan.session_date,
+            "start": plan.start.isoformat(),
+            "end": plan.end.isoformat(),
+        }
+    return metadata
+
+
+def _previous_us_weekday(value: Any) -> Any:
+    previous = value - timedelta(days=1)
+    while previous.weekday() >= 5:
+        previous -= timedelta(days=1)
+    return previous
+
+
+def _floor_datetime_to_minutes(value: datetime, interval_minutes: int) -> datetime:
+    floored = value.replace(second=0, microsecond=0)
+    remainder = floored.minute % max(1, int(interval_minutes))
+    if remainder:
+        floored -= timedelta(minutes=remainder)
+    return floored
+
+
 def load_rotation_radar_quotes(symbols: Iterable[str]) -> Dict[str, Any]:
     requested_symbols = tuple(dict.fromkeys(str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()))
     configured_attempt = _load_configured_provider_quotes(requested_symbols)
@@ -203,8 +308,10 @@ def load_rotation_radar_quotes(symbols: Iterable[str]) -> Dict[str, Any]:
 
 
 def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt:
+    now_utc = _utc_now()
     credentials = get_provider_credentials(_CONFIGURED_PROVIDER_ID)
     metadata = _configured_provider_base_metadata(credentials)
+    metadata["shortIntradayWindowPlans"] = _short_intraday_window_plan_metadata(now_utc=now_utc)
     if credentials.is_partial:
         return _ProviderAttempt(
             status="incomplete_credentials",
@@ -288,6 +395,7 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
         data_feed=data_feed,
         timeout_seconds=min(limits["perWindowTimeout"], max(remaining_budget(), 0.001)),
         max_workers=max_workers,
+        now_utc=now_utc,
     )
     _merge_configured_activation_stage(
         request_window_results,
@@ -328,6 +436,7 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
                 data_feed=data_feed,
                 timeout_seconds=min(limits["perWindowTimeout"], max(budget_left, 0.001)),
                 max_workers=max_workers,
+                now_utc=now_utc,
             )
             _merge_configured_activation_stage(
                 request_window_results,
@@ -365,6 +474,7 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
                     data_feed=data_feed,
                     timeout_seconds=min(limits["perWindowTimeout"], max(budget_left, 0.001)),
                     max_workers=max_workers,
+                    now_utc=now_utc,
                 )
                 _merge_configured_activation_stage(
                     request_window_results,
@@ -549,6 +659,7 @@ def _load_configured_provider_symbol_batch(
     data_feed: str,
     timeout_seconds: float,
     max_workers: int,
+    now_utc: datetime,
 ) -> _ConfiguredActivationStageResult:
     batch_symbols = tuple(dict.fromkeys(str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()))
     result = _ConfiguredActivationStageResult(
@@ -559,7 +670,7 @@ def _load_configured_provider_symbol_batch(
 
     executor = ThreadPoolExecutor(max_workers=max(1, min(int(max_workers), len(batch_symbols))))
     future_to_symbol = {
-        executor.submit(_quote_from_alpaca_fetcher, fetcher, symbol, data_feed): symbol
+        executor.submit(_quote_from_alpaca_fetcher, fetcher, symbol, data_feed, now_utc): symbol
         for symbol in batch_symbols
     }
     processed_futures = set()
@@ -1492,6 +1603,9 @@ def _provider_activation_diagnostics(
             request_window_results=request_window_results,
             provider_failure_reasons=provider_failure_reasons,
         ) or ""
+    short_intraday_window_plans = configured_attempt.metadata.get("shortIntradayWindowPlans")
+    if not isinstance(short_intraday_window_plans, Mapping):
+        short_intraday_window_plans = _short_intraday_window_plan_metadata()
     fallback_provider_used = bool(yfinance_fallback_used or static_basket_fallback_used)
     feed_entitlement_status = _feed_entitlement_status(
         configured_attempt.metadata,
@@ -1506,6 +1620,7 @@ def _provider_activation_diagnostics(
         fulfilled_windows=fulfilled_windows,
         missing_windows=missing_windows,
         request_window_results=request_window_results,
+        short_intraday_window_plans=short_intraday_window_plans,
         yfinance_fallback_used=yfinance_fallback_used,
         static_basket_fallback_used=static_basket_fallback_used,
     )
@@ -1515,6 +1630,7 @@ def _provider_activation_diagnostics(
         fulfilled_windows=fulfilled_windows,
         missing_windows=missing_windows,
         provider_failure_reasons=provider_failure_reasons,
+        activation_blocker=activation_blocker,
     )
     activation_hint = _activation_hint(
         credentials_present=bool(configured_attempt.metadata.get("credentialsPresent")),
@@ -1579,6 +1695,7 @@ def _provider_activation_diagnostics(
         "requestWindowResults": request_window_results,
         "activationWindowResults": activation_window_results,
         "diagnosticWindowResults": request_window_results,
+        "shortIntradayWindowPlans": dict(short_intraday_window_plans),
         "diagnosticFulfilledWindows": diagnostic_fulfilled_windows,
         "diagnosticMissingWindows": diagnostic_missing_windows,
         "successSymbolsByWindow": _symbols_by_window_from_request_results(
@@ -1836,6 +1953,7 @@ def _activation_blocker(
     fulfilled_windows: Sequence[str],
     missing_windows: Sequence[str],
     request_window_results: Mapping[str, Mapping[str, Any]],
+    short_intraday_window_plans: Mapping[str, Any],
     yfinance_fallback_used: bool,
     static_basket_fallback_used: bool,
 ) -> Optional[str]:
@@ -1857,10 +1975,9 @@ def _activation_blocker(
         fulfilled_windows=fulfilled_windows,
         missing_windows=missing_windows,
         request_window_results=request_window_results,
+        short_intraday_window_plans=short_intraday_window_plans,
     )
-    if short_window_blocker and not normalized_reasons.intersection(
-        {"auth_failed", "entitlement_denied", "interval_mapping", "market_session", "calendar", "rate_limited"}
-    ):
+    if short_window_blocker:
         return short_window_blocker
     if "auth_failed" in normalized_reasons:
         return "auth"
@@ -1896,6 +2013,7 @@ def _short_window_activation_blocker(
     fulfilled_windows: Sequence[str],
     missing_windows: Sequence[str],
     request_window_results: Mapping[str, Mapping[str, Any]],
+    short_intraday_window_plans: Mapping[str, Any],
 ) -> Optional[str]:
     fulfilled = {str(window) for window in fulfilled_windows}
     missing = {str(window) for window in missing_windows}
@@ -1903,19 +2021,48 @@ def _short_window_activation_blocker(
         return None
     if not missing.intersection(_SHORT_INTRADAY_WINDOWS):
         return None
-    short_failure_classes: set[str] = set()
+    short_failure_counts: Dict[str, int] = {}
     for window in _SHORT_INTRADAY_WINDOWS:
         result = request_window_results.get(window, {})
         failure_classes = result.get("failureClasses") if isinstance(result, Mapping) else {}
         if isinstance(failure_classes, Mapping):
-            short_failure_classes.update(
-                _normalize_configured_failure_class(failure_class)
-                for failure_class, count in failure_classes.items()
-                if int(count or 0) > 0
-            )
-    if "empty_response" in short_failure_classes:
-        return "intraday_short_window_empty"
+            for failure_class, count in failure_classes.items():
+                normalized = _normalize_configured_failure_class(failure_class)
+                short_failure_counts[normalized] = short_failure_counts.get(normalized, 0) + max(0, int(count or 0))
+    dominant_short_failure = _dominant_failure_class(short_failure_counts)
+    if dominant_short_failure == "auth_failed":
+        return "auth"
+    if dominant_short_failure == "entitlement_denied":
+        return "entitlement"
+    if dominant_short_failure == "interval_mapping":
+        return "interval_mapping"
+    if dominant_short_failure == "calendar":
+        return "calendar"
+    if dominant_short_failure == "market_session":
+        return "market_closed_window_empty"
+    if dominant_short_failure in {"rate_limited", "timeout"}:
+        return "timeout"
+    if dominant_short_failure == "symbol_not_found":
+        return "symbol_coverage"
+    if dominant_short_failure == "provider_error":
+        return "provider_error"
+    if dominant_short_failure == "empty_response":
+        if _short_intraday_windows_selected_outside_regular_session(short_intraday_window_plans):
+            return "market_closed_window_empty"
+        return "feed_intraday_empty"
     return "short_window_coverage"
+
+
+def _short_intraday_windows_selected_outside_regular_session(
+    short_intraday_window_plans: Mapping[str, Any],
+) -> bool:
+    for window in _SHORT_INTRADAY_WINDOWS:
+        plan = short_intraday_window_plans.get(window)
+        if not isinstance(plan, Mapping):
+            continue
+        if str(plan.get("selectionMode") or "").strip() == "recent_completed_regular_session":
+            return True
+    return False
 
 
 def _diagnostic_request_window_results(
@@ -2016,12 +2163,17 @@ def _recommended_action(
     fulfilled_windows: Sequence[str],
     missing_windows: Sequence[str],
     provider_failure_reasons: Sequence[str],
+    activation_blocker: Optional[str],
 ) -> str:
     primary = _primary_failure_class(provider_failure_reasons)
     if not credentials_present:
         return "configure_alpaca_credentials"
     if not provider_constructed:
         return "check_alpaca_provider_configuration"
+    if activation_blocker == "market_closed_window_empty":
+        return "retry_during_regular_market_session"
+    if activation_blocker == "feed_intraday_empty":
+        return "verify_intraday_feed_or_recent_session_window"
     if primary == "auth_failed":
         return "verify_alpaca_credentials"
     if primary == "entitlement_denied":
@@ -2073,6 +2225,16 @@ def _activation_hint(
             "Alpaca long-window coverage is available, but 5m/15m activation is blocked. "
             "Check IEX feed short-interval bars, symbol support, market session timing, "
             "or try reducing the symbol universe."
+        )
+    if activation_blocker == "market_closed_window_empty":
+        return (
+            "Alpaca long-window coverage is available, but 5m/15m probes were anchored to the most recent "
+            "completed regular US session outside market hours and still returned empty bars."
+        )
+    if activation_blocker == "feed_intraday_empty":
+        return (
+            "Alpaca long-window coverage is available, but 5m/15m probes from a completed regular-session "
+            "window still returned empty bars."
         )
     if not fulfilled_windows and missing_windows:
         return (
@@ -2205,18 +2367,30 @@ def _record_failed_symbol(
     return failed_symbol_count + 1
 
 
-def _quote_from_alpaca_fetcher(fetcher: AlpacaFetcher, symbol: str, data_feed: str) -> _AlpacaQuoteResult:
-    end_dt = datetime.now(timezone.utc)
+def _quote_from_alpaca_fetcher(
+    fetcher: AlpacaFetcher,
+    symbol: str,
+    data_feed: str,
+    now_utc: Optional[datetime] = None,
+) -> _AlpacaQuoteResult:
+    end_dt = (now_utc or _utc_now()).astimezone(timezone.utc)
     windows: Dict[str, Dict[str, Any]] = {}
     window_sources: Dict[str, Dict[str, Any]] = {}
     window_failure_reasons: Dict[str, str] = {}
     for window, (timeframe, lookback, limit) in _ALPACA_TIMEFRAMES.items():
+        request_start = end_dt - lookback
+        request_end = end_dt
+        request_plan: Optional[_IntradayWindowRequestPlan] = None
+        if window in _SHORT_INTRADAY_WINDOWS:
+            request_plan = _short_intraday_window_request_plan(window, now_utc=end_dt)
+            request_start = request_plan.start
+            request_end = request_plan.end
         try:
             bars = fetcher.get_bars(
                 symbol,
                 timeframe=timeframe,
-                start=(end_dt - lookback).isoformat(),
-                end=end_dt.isoformat(),
+                start=request_start.isoformat(),
+                end=request_end.isoformat(),
                 limit=limit,
             )
         except Exception as exc:
@@ -2226,7 +2400,13 @@ def _quote_from_alpaca_fetcher(fetcher: AlpacaFetcher, symbol: str, data_feed: s
         if not materialized_bars:
             window_failure_reasons[window] = _empty_bars_failure_class(bars)
             continue
-        slot = _window_from_alpaca_bars(symbol, window, materialized_bars, data_feed=data_feed)
+        slot = _window_from_alpaca_bars(
+            symbol,
+            window,
+            materialized_bars,
+            data_feed=data_feed,
+            request_plan=request_plan,
+        )
         if slot is not None:
             windows[window] = slot
             window_sources[window] = {
@@ -2304,6 +2484,7 @@ def _window_from_alpaca_bars(
     bars: Any,
     *,
     data_feed: str,
+    request_plan: Optional[_IntradayWindowRequestPlan] = None,
 ) -> Optional[Dict[str, Any]]:
     materialized = _materialize_bars(bars)
     if not materialized:
@@ -2324,7 +2505,7 @@ def _window_from_alpaca_bars(
         relative_volume = round(float(volume) / float(average_volume), 3)
     as_of = _as_of_from_bar(last_bar)
     freshness = _configured_freshness_from_as_of(as_of, data_feed=data_feed, window=window)
-    return {
+    payload = {
         "window": window,
         "available": change_percent is not None or relative_volume is not None,
         "changePercent": change_percent,
@@ -2340,6 +2521,15 @@ def _window_from_alpaca_bars(
         "asOf": as_of,
         "reason": None if change_percent is not None or relative_volume is not None else "window_unavailable",
     }
+    if request_plan is not None:
+        payload.update({
+            "requestWindowSelectionMode": request_plan.selection_mode,
+            "requestSessionState": request_plan.session_state,
+            "requestSessionDate": request_plan.session_date,
+            "requestStart": request_plan.start.isoformat(),
+            "requestEnd": request_plan.end.isoformat(),
+        })
+    return payload
 
 
 def _materialize_bars(bars: Any) -> list[Any]:
@@ -2422,11 +2612,11 @@ def _trend_from_bars(bars: Any) -> list[float]:
 def _as_of_from_bar(bar: Any) -> str:
     raw = _field(bar, "t", "timestamp", "date", "Date")
     if raw is None:
-        return datetime.now(timezone.utc).isoformat(timespec="seconds")
+        return _utc_now().isoformat(timespec="seconds")
     try:
         timestamp = pd.Timestamp(raw)
     except Exception:
-        return datetime.now(timezone.utc).isoformat(timespec="seconds")
+        return _utc_now().isoformat(timespec="seconds")
     if timestamp.tzinfo is None:
         timestamp = timestamp.tz_localize(timezone.utc)
     else:
@@ -2439,7 +2629,7 @@ def _configured_freshness_from_as_of(as_of: str, *, data_feed: str, window: str)
         parsed = datetime.fromisoformat(str(as_of).replace("Z", "+00:00"))
     except Exception:
         return "delayed"
-    current = datetime.now(timezone.utc)
+    current = _utc_now()
     age_seconds = (current - parsed.astimezone(timezone.utc)).total_seconds()
     if age_seconds < 0:
         age_seconds = 0
@@ -2691,11 +2881,11 @@ def _trend_from_frame(frame: Any) -> list[float]:
 
 def _as_of_from_index(index_value: Any) -> str:
     if index_value is None:
-        return datetime.now(timezone.utc).isoformat(timespec="seconds")
+        return _utc_now().isoformat(timespec="seconds")
     try:
         timestamp = pd.Timestamp(index_value)
     except Exception:
-        return datetime.now(timezone.utc).isoformat(timespec="seconds")
+        return _utc_now().isoformat(timespec="seconds")
     if timestamp.tzinfo is None:
         timestamp = timestamp.tz_localize(timezone.utc)
     else:
@@ -2708,7 +2898,7 @@ def _freshness_from_as_of(as_of: str) -> str:
         parsed = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
     except Exception:
         return "delayed"
-    current = datetime.now(timezone.utc)
+    current = _utc_now()
     return "stale" if (current - parsed).days >= 3 else "delayed"
 
 
