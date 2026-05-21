@@ -3857,6 +3857,116 @@ def test_us_rates_indicator_prefers_fresh_official_snapshot_over_newer_proxy_cac
     assert "Yahoo Finance" not in str(indicator["summary"])
 
 
+def test_stale_official_rates_snapshot_does_not_mask_newer_proxy_cache(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    proxy_cache_as_of = "2026-05-15T14:18:00+08:00"
+    stale_official_as_of = "2026-05-01T14:10:00+08:00"
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {
+                    "symbol": "US10Y",
+                    "label": "10Y yield",
+                    "value": 4.55,
+                    "changePercent": -0.21,
+                    "source": "yfinance_proxy",
+                    "sourceType": "proxy_public",
+                    "sourceLabel": "Yahoo Finance",
+                    "freshness": "delayed",
+                    "updatedAt": proxy_cache_as_of,
+                    "asOf": proxy_cache_as_of,
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "30Y yield",
+                    "value": 4.79,
+                    "changePercent": -0.15,
+                    "source": "yfinance_proxy",
+                    "sourceType": "proxy_public",
+                    "sourceLabel": "Yahoo Finance",
+                    "freshness": "delayed",
+                    "updatedAt": proxy_cache_as_of,
+                    "asOf": proxy_cache_as_of,
+                },
+            ],
+            updated_at=proxy_cache_as_of,
+            as_of=proxy_cache_as_of,
+        ),
+        ttl_seconds=300,
+    )
+    _save_market_overview_snapshot(
+        isolated_db,
+        key="rates",
+        payload=_raw_snapshot_payload(
+            source="mixed",
+            freshness="stale",
+            updated_at=stale_official_as_of,
+            as_of=stale_official_as_of,
+            items=[
+                {
+                    "symbol": "US10Y",
+                    "label": "US 10Y",
+                    "value": 4.31,
+                    "changePercent": -0.31,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS10",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "freshness": "stale",
+                    "officialSeriesId": "DGS10",
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "sourceAuthorityReason": "stale_official_row",
+                    "trustLevel": "weak",
+                    "updatedAt": stale_official_as_of,
+                    "asOf": stale_official_as_of,
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "US 30Y",
+                    "value": 4.58,
+                    "changePercent": -0.18,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS30",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "freshness": "stale",
+                    "officialSeriesId": "DGS30",
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "sourceAuthorityReason": "stale_official_row",
+                    "trustLevel": "weak",
+                    "updatedAt": stale_official_as_of,
+                    "asOf": stale_official_as_of,
+                },
+            ],
+        ),
+    )
+
+    with (
+        patch.object(LiquidityMonitorService, "_now", return_value=datetime(2026, 5, 15, 14, 20, tzinfo=CN_TZ)),
+        patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", return_value=_FakeHistoryFrame([]), create=True),
+        patch("src.services.liquidity_monitor_service.fetch_binance_funding_row", side_effect=RuntimeError("network disabled")),
+    ):
+        payload = service.get_liquidity_monitor()
+
+    indicator = {item["key"]: item for item in payload["indicators"]}["us_rates_pressure"]
+    diagnostics = indicator["coverageDiagnostics"]
+
+    assert indicator["freshness"] == "delayed"
+    assert indicator["includedInScore"] is False
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["scoreExclusionReason"] == "proxy_only_missing_real_source"
+    assert "Yahoo Finance" in str(indicator["summary"])
+    assert "US Treasury" not in str(indicator["summary"])
+    assert "stale_official_row" not in str(indicator["summary"])
+
+
 def test_official_credit_stress_observation_is_summary_only_and_does_not_change_score(isolated_db: DatabaseManager) -> None:
     base_as_of = "2026-05-12T16:15:00+08:00"
 

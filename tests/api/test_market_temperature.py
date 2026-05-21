@@ -863,6 +863,106 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
             assert item["sourceAuthorityReason"] is None
             assert item["routeRejectedReasonCodes"] == []
 
+    def test_market_overview_rates_runtime_prefers_fresh_official_rows_over_proxy_cache(self) -> None:
+        service = MarketOverviewService()
+        current = datetime.now(timezone(timedelta(hours=8)))
+        current_iso = current.isoformat(timespec="seconds")
+        today = current.date().isoformat()
+        previous = (current - timedelta(days=1)).date().isoformat()
+        MarketOverviewService._market_cache.set(
+            "rates",
+            {
+                "source": "yfinance_proxy",
+                "sourceType": "proxy_public",
+                "sourceLabel": "Yahoo Finance",
+                "freshness": "delayed",
+                "updatedAt": current_iso,
+                "asOf": current_iso,
+                "fallbackUsed": False,
+                "items": [
+                    {
+                        "symbol": "US2Y",
+                        "label": "2Y yield",
+                        "value": 4.95,
+                        "changePercent": 0.12,
+                        "source": "yfinance_proxy",
+                        "sourceType": "proxy_public",
+                        "sourceLabel": "Yahoo Finance",
+                        "freshness": "delayed",
+                        "updatedAt": current_iso,
+                        "asOf": current_iso,
+                    },
+                    {
+                        "symbol": "US10Y",
+                        "label": "10Y yield",
+                        "value": 4.55,
+                        "changePercent": 0.21,
+                        "source": "yfinance_proxy",
+                        "sourceType": "proxy_public",
+                        "sourceLabel": "Yahoo Finance",
+                        "freshness": "delayed",
+                        "updatedAt": current_iso,
+                        "asOf": current_iso,
+                    },
+                    {
+                        "symbol": "US30Y",
+                        "label": "30Y yield",
+                        "value": 4.79,
+                        "changePercent": 0.15,
+                        "source": "yfinance_proxy",
+                        "sourceType": "proxy_public",
+                        "sourceLabel": "Yahoo Finance",
+                        "freshness": "delayed",
+                        "updatedAt": current_iso,
+                        "asOf": current_iso,
+                    },
+                ],
+            },
+            ttl_seconds=300,
+        )
+        official_points = {
+            "DGS2": [
+                MacroObservation("DGS2", 4.82, today, today, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+                MacroObservation("DGS2", 4.79, previous, previous, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+            ],
+            "DGS10": [
+                MacroObservation("DGS10", 4.41, today, today, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+                MacroObservation("DGS10", 4.36, previous, previous, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+            ],
+            "DGS30": [
+                MacroObservation("DGS30", 4.63, today, today, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+                MacroObservation("DGS30", 4.58, previous, previous, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+            ],
+            "SOFR": [
+                MacroObservation("SOFR", 5.31, today, today, "fred:SOFR", "official_public", "daily_fixing"),
+                MacroObservation("SOFR", 5.30, previous, previous, "fred:SOFR", "official_public", "daily_fixing"),
+            ],
+        }
+
+        with (
+            patch.object(service, "_official_macro_points", return_value=official_points) as official_macro_points,
+            patch("src.services.market_overview_service.ExecutionLogService") as log_service,
+        ):
+            log_service.return_value.record_market_overview_fetch.return_value = "log-rates"
+            payload = service.get_rates()
+
+        rates_by_symbol = {
+            str(item.get("symbol")): item
+            for item in payload["items"]
+            if isinstance(item, dict) and item.get("symbol") in {"US2Y", "US10Y", "US30Y", "SOFR"}
+        }
+        assert official_macro_points.call_count == 1
+        assert rates_by_symbol["US10Y"]["value"] == 4.41
+        assert rates_by_symbol["US10Y"]["source"] == "treasury"
+        assert rates_by_symbol["US10Y"]["sourceType"] == "official_public"
+        assert rates_by_symbol["US10Y"]["officialSeriesId"] == "DGS10"
+        assert rates_by_symbol["US10Y"]["sourceAuthorityAllowed"] is True
+        assert rates_by_symbol["US10Y"]["scoreContributionAllowed"] is True
+        assert rates_by_symbol["US10Y"]["sourceAuthorityReason"] is None
+        assert rates_by_symbol["SOFR"]["source"] == "fred"
+        assert rates_by_symbol["SOFR"]["officialSeriesId"] == "SOFR"
+        assert "Yahoo Finance" not in {item.get("sourceLabel") for item in rates_by_symbol.values()}
+
     def test_market_overview_macro_api_preserves_official_authority_projection_fields(self) -> None:
         app = FastAPI()
         app.include_router(market_overview.router, prefix="/api/v1/market-overview")

@@ -1845,7 +1845,7 @@ class MarketOverviewService:
                 return persistent
             return fallback_factory()
 
-        return self._market_cache.get_or_refresh(
+        payload = self._market_cache.get_or_refresh(
             cache_key,
             ttl_seconds,
             store_success,
@@ -1854,6 +1854,246 @@ class MarketOverviewService:
             background_refresh=True,
             cold_start_timeout_seconds=self.MARKET_COLD_START_TIMEOUT_SECONDS,
         )
+        return self._align_official_macro_runtime_payload(cache_key, payload)
+
+    def _align_official_macro_runtime_payload(self, cache_key: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if cache_key not in {"macro", "rates", "volatility"}:
+            return payload
+        if not isinstance(payload.get("items"), list):
+            return payload
+        if self._official_macro_payload_has_required_authority(cache_key, payload):
+            return payload
+
+        official_points = self._official_macro_points(
+            include_policy_and_inflation=cache_key == "macro",
+            include_credit_stress=cache_key == "macro",
+        )
+        if cache_key == "volatility":
+            return self._align_official_macro_volatility_payload(payload, official_points)
+        if cache_key == "rates":
+            return self._align_official_macro_rates_payload(payload, official_points)
+        return self._align_official_macro_macro_payload(payload, official_points)
+
+    def _align_official_macro_volatility_payload(
+        self,
+        payload: Dict[str, Any],
+        official_points: Dict[str, List[MacroObservation]],
+    ) -> Dict[str, Any]:
+        official_vix, official_vix_failure = self._official_macro_overlay_item(
+            "VIX",
+            "VIX",
+            official_points.get("VIXCLS", []),
+            series_id="VIXCLS",
+            unit="pts",
+            change_scale=1.0,
+        )
+        if not official_vix and not official_vix_failure:
+            return payload
+
+        items: List[Any] = []
+        replaced_vix = False
+        for raw in payload.get("items", []):
+            if not isinstance(raw, dict) or str(raw.get("symbol") or "") != "VIX":
+                items.append(raw)
+                continue
+            replaced_vix = True
+            items.append(
+                official_vix
+                if official_vix
+                else self._with_official_overlay_failure(raw, official_vix_failure, series_id="VIXCLS")
+            )
+        if official_vix and not replaced_vix:
+            items.insert(0, official_vix)
+        aligned = {**payload, "items": items}
+        if official_vix:
+            self._mark_official_macro_runtime_payload(aligned)
+        return aligned
+
+    def _align_official_macro_rates_payload(
+        self,
+        payload: Dict[str, Any],
+        official_points: Dict[str, List[MacroObservation]],
+    ) -> Dict[str, Any]:
+        item_map = {
+            str(item.get("symbol") or ""): item
+            for item in payload.get("items", [])
+            if isinstance(item, dict)
+        }
+        official_available = False
+        for symbol in ("US2Y", "US10Y", "US30Y"):
+            series_id, label, unit, market = self.OFFICIAL_RATE_SERIES[symbol]
+            official_item, official_failure = self._official_macro_overlay_item(
+                symbol,
+                label,
+                official_points.get(series_id, []),
+                series_id=series_id,
+                unit=unit,
+                market=market,
+            )
+            if official_item:
+                item_map[symbol] = official_item
+                official_available = True
+            elif symbol in item_map and official_failure:
+                item_map[symbol] = self._with_official_overlay_failure(
+                    item_map[symbol],
+                    official_failure,
+                    series_id=series_id,
+                )
+
+        official_sofr, official_sofr_failure = self._official_macro_overlay_item(
+            "SOFR",
+            "SOFR",
+            official_points.get("SOFR", []),
+            series_id="SOFR",
+            unit="%",
+            market="US",
+        )
+        if official_sofr:
+            item_map["SOFR"] = official_sofr
+            official_available = True
+        elif "SOFR" in item_map and official_sofr_failure:
+            item_map["SOFR"] = self._with_official_overlay_failure(
+                item_map["SOFR"],
+                official_sofr_failure,
+                series_id="SOFR",
+            )
+
+        aligned = {**payload, "items": self._ordered_runtime_items(payload, item_map, ("US2Y", "US10Y", "US30Y", "SOFR"))}
+        if official_available:
+            self._mark_official_macro_runtime_payload(aligned)
+        return aligned
+
+    def _align_official_macro_macro_payload(
+        self,
+        payload: Dict[str, Any],
+        official_points: Dict[str, List[MacroObservation]],
+    ) -> Dict[str, Any]:
+        item_map = {
+            str(item.get("symbol") or ""): item
+            for item in payload.get("items", [])
+            if isinstance(item, dict)
+        }
+        official_available = False
+        for panel_symbol, (series_id, label, unit, market) in self.OFFICIAL_RATE_SERIES.items():
+            official_item, official_failure = self._official_macro_overlay_item(
+                panel_symbol,
+                label,
+                official_points.get(series_id, []),
+                series_id=series_id,
+                unit=unit,
+                market=market,
+            )
+            if official_item:
+                item_map[panel_symbol] = official_item
+                official_available = True
+            elif panel_symbol in item_map and official_failure:
+                item_map[panel_symbol] = self._with_official_overlay_failure(
+                    item_map[panel_symbol],
+                    official_failure,
+                    series_id=series_id,
+                )
+
+        for symbol, label, series_id, unit, kwargs in (
+            ("SOFR", "SOFR", "SOFR", "%", {"market": "US"}),
+            ("VIX", "VIX", "VIXCLS", "pts", {"change_scale": 1.0}),
+            ("FEDFUNDS", "Fed Funds", "DFF", "%", {"market": "US"}),
+            ("CREDIT", "Credit spreads", "BAMLH0A0HYM2", "bps", {"value_scale": 100.0, "change_scale": 100.0}),
+        ):
+            official_item, official_failure = self._official_macro_overlay_item(
+                symbol,
+                label,
+                official_points.get(series_id, []),
+                series_id=series_id,
+                unit=unit,
+                **kwargs,
+            )
+            if official_item:
+                if symbol == "CREDIT":
+                    official_item["observationOnly"] = True
+                    official_item["includedInScore"] = False
+                item_map[symbol] = official_item
+                official_available = True
+            elif symbol in item_map and official_failure:
+                item_map[symbol] = self._with_official_overlay_failure(
+                    item_map[symbol],
+                    official_failure,
+                    series_id=series_id,
+                )
+
+        ordered_symbols = ("US2Y", "US10Y", "US30Y", "SOFR", "VIX", "DXY", "GOLD", "OIL", "FEDFUNDS", "CPI", "PPI", "CREDIT")
+        aligned = {**payload, "items": self._ordered_runtime_items(payload, item_map, ordered_symbols)}
+        if official_available:
+            self._mark_official_macro_runtime_payload(aligned)
+        return aligned
+
+    @staticmethod
+    def _ordered_runtime_items(
+        payload: Dict[str, Any],
+        item_map: Dict[str, Dict[str, Any]],
+        official_symbols: tuple[str, ...],
+    ) -> List[Dict[str, Any]]:
+        ordered: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+        for raw in payload.get("items", []):
+            if not isinstance(raw, dict):
+                continue
+            symbol = str(raw.get("symbol") or "")
+            item = item_map.get(symbol)
+            if item is None:
+                continue
+            ordered.append(item)
+            seen.add(symbol)
+        for symbol in official_symbols:
+            if symbol in item_map and symbol not in seen:
+                ordered.append(item_map[symbol])
+                seen.add(symbol)
+        return ordered
+
+    def _mark_official_macro_runtime_payload(self, payload: Dict[str, Any]) -> None:
+        payload["source"] = "mixed"
+        payload["sourceLabel"] = self._source_label("mixed")
+        payload["isFallback"] = False
+        payload["fallbackUsed"] = any(
+            bool(item.get("isFallback") or item.get("isUnavailable"))
+            for item in payload.get("items", [])
+            if isinstance(item, dict)
+        )
+        if payload["fallbackUsed"]:
+            payload["warning"] = payload.get("warning") or OFFICIAL_MACRO_UNAVAILABLE_WARNING
+
+    def _official_macro_payload_has_required_authority(self, cache_key: str, payload: Dict[str, Any]) -> bool:
+        required_groups = {
+            "volatility": ({"VIX", "VIXCLS"},),
+            "rates": ({"US2Y"}, {"US10Y"}, {"US30Y"}, {"SOFR"}),
+            "macro": ({"VIX", "VIXCLS"}, {"US2Y"}, {"US10Y"}, {"US30Y"}, {"SOFR"}),
+        }.get(cache_key)
+        items = payload.get("items")
+        if not required_groups or not isinstance(items, list):
+            return False
+        return all(
+            any(
+                isinstance(item, dict)
+                and str(item.get("symbol") or "") in symbol_group
+                and self._official_macro_runtime_item_has_authority(item, payload)
+                for item in items
+            )
+            for symbol_group in required_groups
+        )
+
+    @staticmethod
+    def _official_macro_runtime_item_has_authority(item: Dict[str, Any], payload: Dict[str, Any]) -> bool:
+        source_type = str(item.get("sourceType") or payload.get("sourceType") or "").lower()
+        source = str(item.get("source") or payload.get("source") or "").lower()
+        freshness = str(item.get("freshness") or payload.get("freshness") or "").lower()
+        if source_type != "official_public" or source not in {"fred", "treasury"}:
+            return False
+        if freshness not in {"live", "cached", "delayed"}:
+            return False
+        if bool(item.get("isFallback") or item.get("fallbackUsed") or item.get("isUnavailable") or item.get("isPartial")):
+            return False
+        if item.get("sourceAuthorityAllowed") is False:
+            return False
+        return _has_valid_market_value(item)
 
     @classmethod
     def _local_fallback_last_successful_at(cls, payload: Dict[str, Any]) -> Any:
