@@ -7,9 +7,9 @@ import { historyApi } from '../../api/history';
 import { normalizeFrontendReportContract } from '../../api/reportNormalizer';
 import { UiPreferencesProvider } from '../../contexts/UiPreferencesContext';
 import { stocksApi } from '../../api/stocks';
+import { resolveHomeCandlestickTooltipPosition } from '../../components/home-bento/homeCandlestickChartUtils';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { useStockPoolStore } from '../../stores';
-import { resolveHomeCandlestickTooltipPosition } from '../../components/home-bento/HomeCandlestickChart';
 import { buildInstitutionalReportMarkdown, getCompanyWithTicker } from '../../utils/homeReportIdentity';
 import HomeSurfacePage from '../HomeSurfacePage';
 

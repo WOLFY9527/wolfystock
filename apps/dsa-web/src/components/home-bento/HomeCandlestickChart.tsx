@@ -24,6 +24,7 @@ import {
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { useElementSize } from '../../hooks/useElementSize';
 import { cn } from '../../utils/cn';
+import { resolveHomeCandlestickTooltipPosition } from './homeCandlestickChartUtils';
 
 echarts.use([
   CandlestickChart,
@@ -106,11 +107,6 @@ type HomeCandlestickChartProps = {
 export type HomeCandlestickChartContext = {
   timeframe: HomeTimeframeKey;
   sourceHint?: string;
-};
-
-type TooltipPositionSize = {
-  contentSize: [number, number];
-  viewSize: [number, number];
 };
 
 type TimeframeOption = {
@@ -217,58 +213,6 @@ const escapeHtml = (value: string): string => value
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
-
-const viewportSize = () => ({
-  width: typeof window !== 'undefined'
-    ? window.innerWidth || document.documentElement.clientWidth || 0
-    : 0,
-  height: typeof window !== 'undefined'
-    ? window.innerHeight || document.documentElement.clientHeight || 0
-    : 0,
-});
-
-// eslint-disable-next-line react-refresh/only-export-components -- tested geometry helper for viewport-constrained tooltips
-export const resolveHomeCandlestickTooltipPosition = (
-  point: [number, number],
-  size: TooltipPositionSize,
-  chartRect?: Pick<DOMRect, 'left' | 'top'> | null,
-  viewport = viewportSize(),
-): [number, number] => {
-  const margin = 10;
-  const cursorGap = 14;
-  const [contentWidth = 180, contentHeight = 96] = size.contentSize;
-  const [viewWidth, viewHeight] = size.viewSize;
-  const [mouseX, mouseY] = point;
-
-  if (chartRect && viewport.width > 0 && viewport.height > 0) {
-    let viewportX = chartRect.left + mouseX + cursorGap;
-    if (viewportX + contentWidth + margin > viewport.width) {
-      viewportX = chartRect.left + mouseX - contentWidth - cursorGap;
-    }
-    viewportX = Math.max(margin, Math.min(viewportX, viewport.width - contentWidth - margin));
-
-    let viewportY = chartRect.top + mouseY - contentHeight - cursorGap;
-    if (viewportY < margin) {
-      viewportY = chartRect.top + mouseY + cursorGap;
-    }
-    viewportY = Math.max(margin, Math.min(viewportY, viewport.height - contentHeight - margin));
-
-    return [viewportX - chartRect.left, viewportY - chartRect.top];
-  }
-
-  let x = mouseX + cursorGap;
-  if (x + contentWidth + margin > viewWidth) {
-    x = mouseX - contentWidth - cursorGap;
-  }
-  x = Math.max(margin, Math.min(x, viewWidth - contentWidth - margin));
-
-  let y = mouseY - contentHeight - cursorGap;
-  if (y < margin) {
-    y = mouseY + cursorGap;
-  }
-  y = Math.max(margin, Math.min(y, viewHeight - contentHeight - margin));
-  return [x, y];
-};
 
 const parseUtcDate = (value: string): Date | null => {
   if (!value) {
