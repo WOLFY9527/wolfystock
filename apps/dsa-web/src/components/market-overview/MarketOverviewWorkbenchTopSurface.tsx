@@ -8,6 +8,10 @@ import {
 import { TerminalChip, TerminalDenseList, TerminalNotice, TerminalPanel, TerminalSectionHeader } from '../terminal';
 import { cn } from '../../utils/cn';
 import { MarketRegimeSynthesisHeader, type MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
+import {
+  OfficialMacroAuthorityDiagnostics,
+  type OfficialMacroAuthorityDiagnosticsView,
+} from '../common/OfficialMacroAuthorityDiagnostics';
 
 export type MarketOverviewDecisionChipView = {
   label: string;
@@ -69,6 +73,7 @@ type MarketOverviewWorkbenchTopSurfaceProps = {
   dataState: MarketOverviewDataStateStripView;
   temperatureSummary: MarketOverviewTemperatureSummaryView;
   briefingSummary: MarketOverviewBriefingSummaryView;
+  officialMacroDiagnostics: OfficialMacroAuthorityDiagnosticsView;
   categoryTabs: MarketOverviewCategoryTabView[];
   activeCategory: MarketOverviewTab;
   onCategoryChange: (tab: MarketOverviewTab) => void;
@@ -340,6 +345,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
   dataState,
   temperatureSummary,
   briefingSummary,
+  officialMacroDiagnostics,
   categoryTabs,
   activeCategory,
   onCategoryChange,
@@ -397,6 +403,13 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
                 briefingSummary={briefingSummary}
               />
             </section>
+            <div className="border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4">
+              <OfficialMacroAuthorityDiagnostics
+                testId="market-overview-official-macro-diagnostics"
+                title="Authority diagnostics"
+                view={officialMacroDiagnostics}
+              />
+            </div>
             <div data-market-research-flow="pulse" className="border-t border-[color:var(--wolfy-divider)]">
               <CrossAssetHeroRibbon anchors={heroAnchors} />
             </div>

@@ -31,12 +31,90 @@ export interface LiquidityMonitorIndicator {
   scoreWeight: number;
   summary?: string | null;
   updatedAt?: string | null;
+  evidence?: LiquidityMonitorEvidenceSnapshot | null;
+  coverageDiagnostics?: LiquidityMonitorCoverageDiagnostics | null;
 }
 
 export interface LiquidityMonitorSourceMetadata {
   externalProviderCalls: boolean;
   providerRuntimeChanged: boolean;
   marketCacheMutation: boolean;
+}
+
+export interface LiquidityMonitorEvidenceInput {
+  key: string;
+  label: string;
+  source: string;
+  sourceLabel?: string | null;
+  sourceType?: string | null;
+  sourceTier?: string | null;
+  trustLevel?: string | null;
+  asOf?: string | null;
+  freshness: string;
+  isFallback?: boolean;
+  isStale?: boolean;
+  isPartial?: boolean;
+  isUnavailable?: boolean;
+  observationOnly?: boolean;
+  sourceAuthorityAllowed?: boolean;
+  scoreContributionAllowed?: boolean;
+  sourceAuthorityReason?: string | null;
+  sourceAuthorityRouteRejected?: boolean;
+  routeRejectedReasonCodes?: string[];
+  officialSeriesId?: string | null;
+  officialObservationDate?: string | null;
+  officialAsOf?: string | null;
+  coverage?: number | null;
+  confidenceWeight?: number | null;
+  degradationReason?: string | null;
+  capReason?: string | null;
+}
+
+export interface LiquidityMonitorEvidenceSnapshot {
+  contractVersion: string;
+  source: string;
+  sourceLabel?: string | null;
+  asOf?: string | null;
+  freshness: string;
+  isFallback?: boolean;
+  isStale?: boolean;
+  isPartial?: boolean;
+  isUnavailable?: boolean;
+  coverage?: number | null;
+  confidenceWeight?: number | null;
+  degradationReason?: string | null;
+  capReason?: string | null;
+  inputs: LiquidityMonitorEvidenceInput[];
+}
+
+export interface LiquidityMonitorCoverageDiagnostics {
+  indicatorId: string;
+  indicatorName: string;
+  requiredInputs: string[];
+  fulfilledInputs: string[];
+  missingInputs: string[];
+  requiredProviderClass?: string | null;
+  configuredProviderAvailable?: boolean;
+  realSourceAvailable?: boolean;
+  proxyOnly?: boolean;
+  observationOnly?: boolean;
+  scoreContributionAllowed?: boolean;
+  scoreExclusionReason?: string | null;
+  requiredRealSourceForScore?: boolean;
+  proxyObservationOnlyReason?: string | null;
+  missingProviderReason?: string | null;
+  paidDataLikelyRequired?: boolean;
+  sourceTier?: string | null;
+  freshness?: string | null;
+  trustLevel?: string | null;
+  contributesToScore?: boolean;
+  scoreContribution?: number | null;
+  capReason?: string | null;
+  degradationReason?: string | null;
+  sourceAuthorityRouteRejected?: boolean;
+  sourceAuthorityReason?: string | null;
+  routeRejectedReasonCodes?: string[];
+  activationHint?: string | null;
 }
 
 export interface LiquidityImpulseSynthesisEvidenceItem {

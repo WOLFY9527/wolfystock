@@ -40,6 +40,15 @@ export interface MarketDataMeta {
   delayMinutes?: number;
   sourceTier?: string;
   trustLevel?: string;
+  observationOnly?: boolean;
+  sourceAuthorityAllowed?: boolean;
+  scoreContributionAllowed?: boolean;
+  sourceAuthorityReason?: string | null;
+  sourceAuthorityRouteRejected?: boolean;
+  routeRejectedReasonCodes?: string[];
+  officialSeriesId?: string | null;
+  officialObservationDate?: string | null;
+  officialAsOf?: string | null;
   degradationReason?: string | null;
   degradationReasons?: string[];
   warning?: string | null;
@@ -94,6 +103,15 @@ function normalizePanel(payload: Record<string, unknown>): MarketOverviewPanel {
     delayMinutes: normalized.delayMinutes,
     sourceTier: normalized.sourceTier,
     trustLevel: normalized.trustLevel,
+    observationOnly: normalized.observationOnly,
+    sourceAuthorityAllowed: normalized.sourceAuthorityAllowed,
+    scoreContributionAllowed: normalized.scoreContributionAllowed,
+    sourceAuthorityReason: normalized.sourceAuthorityReason,
+    sourceAuthorityRouteRejected: normalized.sourceAuthorityRouteRejected,
+    routeRejectedReasonCodes: normalized.routeRejectedReasonCodes,
+    officialSeriesId: normalized.officialSeriesId,
+    officialObservationDate: normalized.officialObservationDate,
+    officialAsOf: normalized.officialAsOf,
     degradationReason: normalized.degradationReason,
     degradationReasons: normalized.degradationReasons,
     warning: normalized.warning,

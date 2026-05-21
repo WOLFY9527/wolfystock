@@ -48,6 +48,7 @@ import {
 import { TerminalChip, TerminalGrid, TerminalPageShell, TerminalPanel } from '../terminal';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
+import { buildOfficialMacroAuthorityDiagnosticsView } from '../common/OfficialMacroAuthorityDiagnostics';
 
 const MARKET_OVERVIEW_GRID_FALLBACK_MIN_MS = 120;
 
@@ -1934,6 +1935,29 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
   const dataStateStatuses = collectDataStateMeta(panels).map(resolveProviderStatus);
   const fallbackCount = dataQuality.counts.fallback + dataQuality.counts.mock;
   const unavailableCount = dataStateStatuses.filter((status) => status === 'partial' || status === 'unavailable' || status === 'error').length + refreshErrorCount;
+  const officialMacroDiagnostics = buildOfficialMacroAuthorityDiagnosticsView(
+    (panels.macro?.items || []).map((item) => ({
+      key: item.symbol,
+      label: item.label,
+      sourceLabel: item.sourceLabel,
+      sourceTier: item.sourceTier,
+      trustLevel: item.trustLevel,
+      freshness: item.freshness,
+      asOf: item.asOf,
+      isFallback: item.isFallback,
+      isUnavailable: item.isUnavailable,
+      isPartial: item.isPartial,
+      observationOnly: item.observationOnly,
+      sourceAuthorityAllowed: item.sourceAuthorityAllowed,
+      scoreContributionAllowed: item.scoreContributionAllowed,
+      sourceAuthorityReason: item.sourceAuthorityReason,
+      sourceAuthorityRouteRejected: item.sourceAuthorityRouteRejected,
+      routeRejectedReasonCodes: item.routeRejectedReasonCodes,
+      officialSeriesId: item.officialSeriesId,
+      officialObservationDate: item.officialObservationDate,
+      officialAsOf: item.officialAsOf,
+    })),
+  );
   const dataStateView: MarketOverviewDataStateStripView = {
     availableCount: dataQuality.counts.live + dataQuality.counts.delayed + dataQuality.counts.cached,
     fallbackCount,
@@ -2050,6 +2074,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
           dataState={dataStateView}
           temperatureSummary={temperatureSummary}
           briefingSummary={briefingSummary}
+          officialMacroDiagnostics={officialMacroDiagnostics}
           categoryTabs={categoryTabs}
           activeCategory={activeCategory}
           onCategoryChange={setActiveCategory}

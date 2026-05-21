@@ -29,6 +29,10 @@ import {
   TerminalSectionHeader,
 } from '../components/terminal';
 import { WideWorkspacePageShell } from '../components/layout/WideWorkspaceShell';
+import {
+  OfficialMacroAuthorityDiagnostics,
+  buildOfficialMacroAuthorityDiagnosticsView,
+} from '../components/common/OfficialMacroAuthorityDiagnostics';
 import { formatDateTime, formatPercent, formatSignedNumber } from '../utils/format';
 import { cn } from '../utils/cn';
 
@@ -395,6 +399,31 @@ const LiquidityMonitorPage: React.FC = () => {
   const indicators = data?.indicators || [];
   const selectedIndicator = indicators.find((item) => item.key === selectedKey) || indicators[0] || null;
   const synthesisView = buildLiquidityImpulseSynthesisView(data?.liquidityImpulseSynthesis);
+  const officialMacroDiagnostics = buildOfficialMacroAuthorityDiagnosticsView(
+    indicators.flatMap((indicator) => (
+      indicator.evidence?.inputs?.map((input) => ({
+        key: `${indicator.key}:${input.officialSeriesId || input.key}`,
+        label: input.label,
+        sourceLabel: input.sourceLabel,
+        sourceTier: input.sourceTier,
+        trustLevel: input.trustLevel,
+        freshness: input.freshness,
+        asOf: input.asOf,
+        isFallback: input.isFallback,
+        isUnavailable: input.isUnavailable,
+        isPartial: input.isPartial,
+        observationOnly: input.observationOnly,
+        sourceAuthorityAllowed: input.sourceAuthorityAllowed,
+        scoreContributionAllowed: input.scoreContributionAllowed,
+        sourceAuthorityReason: input.sourceAuthorityReason,
+        sourceAuthorityRouteRejected: input.sourceAuthorityRouteRejected,
+        routeRejectedReasonCodes: input.routeRejectedReasonCodes,
+        officialSeriesId: input.officialSeriesId,
+        officialObservationDate: input.officialObservationDate,
+        officialAsOf: input.officialAsOf,
+      })) || []
+    )),
+  );
 
   return (
     <WideWorkspacePageShell className="flex min-h-0 flex-1 py-5 md:py-6">
@@ -508,6 +537,12 @@ const LiquidityMonitorPage: React.FC = () => {
           </div>
 
           <div className="flex flex-col gap-4 xl:col-span-4">
+            <OfficialMacroAuthorityDiagnostics
+              testId="liquidity-monitor-official-macro-diagnostics"
+              title="Authority diagnostics"
+              view={officialMacroDiagnostics}
+            />
+
             <TerminalPanel>
               <TerminalSectionHeader eyebrow="选中指标" title="指标细节" action={<Waves className="h-4 w-4 text-white/28" aria-hidden="true" />} />
               {selectedIndicator ? (

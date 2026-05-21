@@ -122,6 +122,161 @@ const macroPanel = () => ({
   ],
 });
 
+const officialMacroPanel = () => ({
+  ...panel('MacroIndicatorsCard', 'VIX', 'VIX'),
+  source: 'mixed',
+  sourceLabel: 'Official macro mix',
+  freshness: 'cached' as const,
+  isFallback: false,
+  items: [
+    {
+      symbol: 'VIX',
+      label: 'VIX',
+      value: 18.4,
+      unit: 'pts',
+      changePct: -1.2,
+      riskDirection: 'decreasing' as const,
+      trend: [19.2, 18.9, 18.4],
+      source: 'fred',
+      sourceLabel: 'FRED VIXCLS',
+      sourceType: 'official_public',
+      sourceTier: 'official_public',
+      trustLevel: 'reliable',
+      updatedAt: '2026-05-21T10:00:05+08:00',
+      asOf: '2026-05-21T10:00:00+08:00',
+      freshness: 'cached' as const,
+      isFallback: false,
+      isPartial: false,
+      isUnavailable: false,
+      observationOnly: false,
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+      sourceAuthorityReason: null,
+      sourceAuthorityRouteRejected: false,
+      routeRejectedReasonCodes: [],
+      officialSeriesId: 'VIXCLS',
+      officialObservationDate: '2026-05-20',
+      officialAsOf: '2026-05-20',
+    },
+    {
+      symbol: 'FEDFUNDS',
+      label: 'Fed Funds',
+      value: 5.33,
+      unit: '%',
+      changePct: 0,
+      riskDirection: 'neutral' as const,
+      trend: [5.33, 5.33, 5.33],
+      source: 'fred',
+      sourceLabel: 'FRED DFF',
+      sourceType: 'official_public',
+      sourceTier: 'official_public',
+      trustLevel: 'reliable',
+      updatedAt: '2026-05-21T10:00:05+08:00',
+      asOf: '2026-05-21T10:00:00+08:00',
+      freshness: 'cached' as const,
+      isFallback: false,
+      isPartial: false,
+      isUnavailable: false,
+      observationOnly: false,
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+      sourceAuthorityReason: null,
+      sourceAuthorityRouteRejected: false,
+      routeRejectedReasonCodes: [],
+      officialSeriesId: 'DFF',
+      officialObservationDate: '2026-05-20',
+      officialAsOf: '2026-05-20',
+    },
+    {
+      symbol: 'CREDIT',
+      label: 'Credit spreads',
+      value: 3.75,
+      unit: '%',
+      changePct: 0.1,
+      riskDirection: 'increasing' as const,
+      trend: [3.6, 3.7, 3.75],
+      source: 'fred',
+      sourceLabel: 'FRED BAMLH0A0HYM2',
+      sourceType: 'official_public',
+      sourceTier: 'official_public',
+      trustLevel: 'reliable',
+      updatedAt: '2026-05-21T10:00:05+08:00',
+      asOf: '2026-05-21T10:00:00+08:00',
+      freshness: 'cached' as const,
+      isFallback: false,
+      isPartial: false,
+      isUnavailable: false,
+      observationOnly: true,
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: false,
+      sourceAuthorityReason: null,
+      sourceAuthorityRouteRejected: false,
+      routeRejectedReasonCodes: [],
+      officialSeriesId: 'BAMLH0A0HYM2',
+      officialObservationDate: '2026-05-20',
+      officialAsOf: '2026-05-20',
+    },
+    {
+      symbol: 'US2Y',
+      label: 'US 2Y',
+      value: null,
+      unit: '%',
+      changePct: null,
+      riskDirection: 'neutral' as const,
+      trend: [],
+      source: 'yahoo',
+      sourceLabel: 'Yahoo proxy',
+      sourceType: 'public_proxy',
+      sourceTier: 'unofficial_public_api',
+      trustLevel: 'usable_with_caution',
+      updatedAt: '2026-05-21T10:00:05+08:00',
+      asOf: '2026-05-21T10:00:00+08:00',
+      freshness: 'fallback' as const,
+      isFallback: true,
+      isPartial: true,
+      isUnavailable: false,
+      observationOnly: false,
+      sourceAuthorityAllowed: false,
+      scoreContributionAllowed: false,
+      sourceAuthorityReason: 'proxy_context_only',
+      sourceAuthorityRouteRejected: false,
+      routeRejectedReasonCodes: [],
+      officialSeriesId: 'DGS2',
+      officialObservationDate: null,
+      officialAsOf: null,
+    },
+    {
+      symbol: 'US30Y',
+      label: 'US 30Y',
+      value: null,
+      unit: '%',
+      changePct: null,
+      riskDirection: 'neutral' as const,
+      trend: [],
+      source: 'unavailable',
+      sourceLabel: 'Not returned',
+      sourceType: 'unavailable',
+      sourceTier: 'unavailable',
+      trustLevel: 'unavailable',
+      updatedAt: '2026-05-21T10:00:05+08:00',
+      asOf: '2026-05-21T10:00:00+08:00',
+      freshness: 'unavailable' as const,
+      isFallback: false,
+      isPartial: false,
+      isUnavailable: true,
+      observationOnly: false,
+      sourceAuthorityAllowed: false,
+      scoreContributionAllowed: false,
+      sourceAuthorityReason: 'source_authority_router_rejected',
+      sourceAuthorityRouteRejected: true,
+      routeRejectedReasonCodes: ['provider_forbidden_for_use_case'],
+      officialSeriesId: 'DGS30',
+      officialObservationDate: null,
+      officialAsOf: null,
+    },
+  ],
+});
+
 const cryptoPanel = () => ({
   panelName: 'CryptoCard',
   lastRefreshAt: '2026-04-29T10:00:00',
@@ -2649,7 +2804,7 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     expect(await screen.findByTestId('market-sentiment-compact-card')).toBeInTheDocument();
-    expect(screen.getByText('26')).toBeInTheDocument();
+    expect((await screen.findAllByText('26')).length).toBeGreaterThan(0);
     expect(screen.getByTestId('market-overview-main-grid')).toBeInTheDocument();
   });
 
@@ -2937,5 +3092,28 @@ describe('MarketOverviewPage', () => {
     expect(getRowCardOrder('cn-hero')).toEqual(['cnIndices']);
     expect(getRowCardOrder('cn-modules-1')).toEqual(['cnBreadth', 'cnFlows']);
     expect(window.localStorage.getItem('market-overview-order-cn')).toBeNull();
+  });
+
+  it('shows compact official macro authority diagnostics without promoting degraded rows', async () => {
+    vi.mocked(marketOverviewApi.getMacro).mockResolvedValueOnce(officialMacroPanel());
+
+    render(<MarketOverviewPage />);
+
+    const diagnostics = screen.getByTestId('market-overview-official-macro-diagnostics');
+    await waitFor(() => expect(diagnostics).toHaveTextContent('FRED VIXCLS'));
+    expect(diagnostics).toHaveTextContent('VIXCLS');
+    expect(diagnostics).toHaveTextContent('SOFR');
+    expect(diagnostics).toHaveTextContent('DFF');
+    expect(diagnostics).toHaveTextContent('DGS2');
+    expect(diagnostics).toHaveTextContent('DGS10');
+    expect(diagnostics).toHaveTextContent('DGS30');
+    expect(diagnostics).toHaveTextContent('BAMLH0A0HYM2');
+    expect(diagnostics).toHaveTextContent('Official');
+    expect(diagnostics).toHaveTextContent('Score-eligible');
+    expect(diagnostics).toHaveTextContent('Observation-only');
+    expect(diagnostics).toHaveTextContent('Fallback');
+    expect(diagnostics).toHaveTextContent('Rejected');
+    expect(diagnostics).toHaveTextContent('provider_forbidden_for_use_case');
+    expect(diagnostics).toHaveTextContent('As-of 2026-05-20');
   });
 });
