@@ -1470,6 +1470,7 @@ def _source_authority_diagnostics(
     source_type = str(source_summary.get("sourceType") or "").strip().lower()
     yfinance_fallback_used = bool(provider_diagnostics.get("yfinanceFallbackUsed", False))
     present = status not in {"fallback", "not_requested"}
+    configured_activation_reason = _configured_activation_authority_reason(provider_diagnostics)
 
     route_rejected_reason_codes: list[str] = []
     source_authority_allowed = present
@@ -1488,6 +1489,9 @@ def _source_authority_diagnostics(
         source_authority_allowed = False
         source_authority_route_rejected = True
         source_authority_reason = _SOURCE_AUTHORITY_REJECTED_REASON
+    elif source == _CONFIGURED_SOURCE and configured_activation_reason:
+        source_authority_allowed = False
+        source_authority_reason = configured_activation_reason
     elif not present:
         source_authority_allowed = False
         source_authority_reason = "provider_absent"
@@ -1500,6 +1504,16 @@ def _source_authority_diagnostics(
         "routeRejectedReasonCodes": route_rejected_reason_codes,
         "sourceAuthorityRouter": route_snapshot,
     }
+
+
+def _configured_activation_authority_reason(provider_diagnostics: Mapping[str, Any]) -> Optional[str]:
+    activation = provider_diagnostics.get("alpacaActivationDiagnostics")
+    if not isinstance(activation, Mapping):
+        return None
+    if bool(activation.get("sourceAuthorityAllowed")) and bool(activation.get("scoreContributionAllowed")):
+        return None
+    reason = str(activation.get("reason") or "").strip()
+    return reason or "alpaca_activation_gate_failed"
 
 
 def _provider_activation_diagnostics(

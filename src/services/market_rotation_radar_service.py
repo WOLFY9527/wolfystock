@@ -855,6 +855,10 @@ class MarketRotationRadarService:
         source_type = str(metadata.get("sourceType") or "").strip().lower()
         present = bool(metadata.get("present"))
         yfinance_fallback_used = bool(diagnostics.get("yfinanceFallbackUsed", False))
+        provider_reported_authority = metadata.get("sourceAuthorityAllowed")
+        provider_reported_score = metadata.get("scoreContributionAllowed")
+        provider_reported_reason = str(metadata.get("sourceAuthorityReason") or "").strip()
+        configured_activation_reason = self._configured_activation_authority_reason(diagnostics)
 
         route_rejected_reason_codes: list[str] = []
         source_authority_allowed = present
@@ -873,6 +877,16 @@ class MarketRotationRadarService:
             source_authority_allowed = False
             source_authority_route_rejected = True
             source_authority_reason = ROTATION_RADAR_SOURCE_AUTHORITY_REJECTED_REASON
+        elif provider_reported_authority is False or provider_reported_score is False:
+            source_authority_allowed = False
+            source_authority_reason = (
+                provider_reported_reason
+                or configured_activation_reason
+                or "provider_authority_gate_failed"
+            )
+        elif configured_activation_reason:
+            source_authority_allowed = False
+            source_authority_reason = configured_activation_reason
         elif not present:
             source_authority_allowed = False
             source_authority_reason = "provider_absent"
@@ -885,6 +899,16 @@ class MarketRotationRadarService:
             "routeRejectedReasonCodes": route_rejected_reason_codes,
             "sourceAuthorityRouter": route_snapshot,
         }
+
+    @staticmethod
+    def _configured_activation_authority_reason(diagnostics: Mapping[str, Any]) -> Optional[str]:
+        activation = diagnostics.get("alpacaActivationDiagnostics")
+        if not isinstance(activation, Mapping):
+            return None
+        if bool(activation.get("sourceAuthorityAllowed")) and bool(activation.get("scoreContributionAllowed")):
+            return None
+        reason = str(activation.get("reason") or "").strip()
+        return reason or "alpaca_activation_gate_failed"
 
     def _quote_provider_diagnostics(
         self,

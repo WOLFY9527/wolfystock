@@ -1726,6 +1726,9 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(metadata["quoteMode"], "configured")
         self.assertEqual(metadata["windowCoverage"]["1d"]["coveragePercent"], 100.0)
         self.assertEqual(metadata["windowCoverage"]["5m"]["usableSymbolCount"], 0)
+        self.assertFalse(metadata["sourceAuthorityAllowed"])
+        self.assertFalse(metadata["scoreContributionAllowed"])
+        self.assertEqual(metadata["sourceAuthorityReason"], "entitlement")
         self.assertEqual(diagnostics["fulfilledWindows"], ["1d"])
         self.assertEqual(diagnostics["missingWindows"], ["5m", "15m", "60m"])
         self.assertEqual(diagnostics["configuredProviderFulfilledWindows"], ["1d"])
@@ -1750,6 +1753,9 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertFalse(diagnostics["fallbackProviderUsed"])
         self.assertFalse(diagnostics["yfinanceFallbackUsed"])
         self.assertFalse(diagnostics["fallbackYfinanceUsed"])
+        self.assertFalse(diagnostics["sourceAuthorityAllowed"])
+        self.assertFalse(diagnostics["scoreContributionAllowed"])
+        self.assertEqual(diagnostics["sourceAuthorityReason"], "entitlement")
         self.assertEqual(diagnostics["finalSourceTier"], "broker_authorized")
         self.assertEqual(diagnostics["trustLevel"], "partial")
         activation = diagnostics["alpacaActivationDiagnostics"]
@@ -1999,6 +2005,12 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         diagnostics = payload["metadata"]["providerDiagnostics"]
         activation = diagnostics["alpacaActivationDiagnostics"]
         self.assertEqual(diagnostics["liveActivationStatus"], "active")
+        self.assertFalse(payload["metadata"]["sourceAuthorityAllowed"])
+        self.assertFalse(payload["metadata"]["scoreContributionAllowed"])
+        self.assertEqual(payload["metadata"]["sourceAuthorityReason"], "stale_window")
+        self.assertFalse(diagnostics["sourceAuthorityAllowed"])
+        self.assertFalse(diagnostics["scoreContributionAllowed"])
+        self.assertEqual(diagnostics["sourceAuthorityReason"], "stale_window")
         self.assertTrue(activation["probePassed"])
         self.assertFalse(activation["freshnessValid"])
         self.assertTrue(activation["sourceMetadataValid"])
@@ -2715,6 +2727,100 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual([row["symbol"] for row in diagnostics["evidence"]], list(stable_etfs))
         self.assertTrue(all(row["sourceAuthorityAllowed"] for row in diagnostics["evidence"]))
         self.assertTrue(all(row["scoreContributionAllowed"] for row in diagnostics["evidence"]))
+
+    def test_runtime_alpaca_etf_spine_reaches_service_payload_without_theme_promotion(self) -> None:
+        stable_etfs = {"SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV"}
+
+        class StableOnlyAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                if symbol not in stable_etfs:
+                    return []
+                return _alpaca_bars(
+                    start_close=100.0,
+                    end_close={
+                        "5Min": 101.0,
+                        "15Min": 102.0,
+                        "1Hour": 103.0,
+                        "1Day": 104.0,
+                    }[timeframe],
+                )
+
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            StableOnlyAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=pd.DataFrame(),
+        ):
+            payload = MarketRotationRadarService(
+                quote_provider=load_rotation_radar_quotes,
+                now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+            ).get_rotation_radar()
+
+        provider_meta = payload["metadata"]["quoteProvider"]
+        diagnostics_spine = provider_meta["providerDiagnostics"]["etfAuthoritySpine"]
+        metadata_spine = provider_meta["etfAuthoritySpine"]
+        ai_theme = next(theme for theme in payload["themes"] if theme["id"] == "ai_applications")
+        igv_proxy = ai_theme["benchmarkProxies"]["IGV"]
+
+        self.assertEqual(diagnostics_spine["universe"], ["SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV"])
+        self.assertTrue(diagnostics_spine["sourceAuthorityAllowed"])
+        self.assertTrue(diagnostics_spine["scoreContributionAllowed"])
+        self.assertEqual(metadata_spine, diagnostics_spine)
+        self.assertTrue(igv_proxy["etfAuthorityEvidence"]["sourceAuthorityAllowed"])
+        self.assertTrue(igv_proxy["etfAuthorityEvidence"]["scoreContributionAllowed"])
+        self.assertTrue(payload["etfLeadershipDiagnostics"]["enabled"])
+        self.assertEqual(payload["etfLeadershipDiagnostics"]["reasonCodes"], ["bounded_etf_authority_active"])
+        self.assertEqual(payload["summary"]["headlineEligibleThemeCount"], 0)
+        self.assertFalse(ai_theme["headlineEligible"])
+        self.assertFalse(ai_theme["scoreContributionAllowed"])
+        self.assertEqual(ai_theme["rankingLane"], "observation")
+
+    def test_stale_runtime_alpaca_windows_fail_close_service_authority(self) -> None:
+        stale_as_of = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+
+        class StaleAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                return _alpaca_bars(end_close=102.0, as_of=stale_as_of)
+
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            StaleAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            side_effect=AssertionError("yfinance fallback should not be called when Alpaca covers the runtime universe"),
+        ):
+            payload = MarketRotationRadarService(
+                quote_provider=load_rotation_radar_quotes,
+                now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+            ).get_rotation_radar()
+
+        provider_meta = payload["metadata"]["quoteProvider"]
+        spine = provider_meta["etfAuthoritySpine"]
+
+        self.assertFalse(provider_meta["sourceAuthorityAllowed"])
+        self.assertFalse(provider_meta["scoreContributionAllowed"])
+        self.assertEqual(provider_meta["sourceAuthorityReason"], "stale_window")
+        self.assertFalse(spine["sourceAuthorityAllowed"])
+        self.assertFalse(spine["scoreContributionAllowed"])
+        self.assertFalse(payload["etfLeadershipDiagnostics"]["enabled"])
+        self.assertIn("stale_required_windows", payload["etfLeadershipDiagnostics"]["reasonCodes"])
 
     def test_partial_etf_authority_windows_disable_leadership_diagnostics(self) -> None:
         stable_etfs, quotes, etf_authority_spine = _bounded_etf_authority_fixture()

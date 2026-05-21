@@ -1,5 +1,12 @@
 ## 2026-05-22
 
+- **Rotation Radar ETF authority alignment** - Rotation Radar quote-provider
+  authority now follows the bounded Alpaca ETF activation gate before exposing
+  score-grade authority flags. Fresh bounded ETF windows can populate the
+  ETF authority spine and leadership diagnostics while stale, missing, partial,
+  credential-failed, yfinance, or static fallback paths remain fail-closed and
+  non-scoring; static theme taxonomy and broad theme flow remain out of
+  headline promotion.
 - **Market data readiness path redaction** - `GET /api/v1/market/data-readiness`
   no longer returns full local filesystem paths in diagnostic `details`. The
   endpoint preserves readiness semantics and safe operator signals such as env
