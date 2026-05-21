@@ -496,6 +496,22 @@ describe('LiquidityMonitorPage', () => {
     expect(screen.getByTestId('liquidity-impulse-synthesis-data-gaps')).toHaveTextContent('CN/HK Flows');
   });
 
+  it('renders a compact direction-readiness summary with score-grade coverage and blocking reasons', async () => {
+    getLiquidityMonitor.mockResolvedValueOnce(payload);
+
+    render(<LiquidityMonitorPage />);
+
+    const summary = await screen.findByTestId('liquidity-monitor-coverage-summary');
+    expect(summary).toHaveTextContent('方向证据可用');
+    expect(summary).toHaveTextContent('2 项 score-grade');
+    expect(summary).toHaveTextContent('1 项仅观察');
+    expect(summary).toHaveTextContent('2 项缺失/不可用');
+    expect(summary).toHaveTextContent('主要阻塞');
+    expect(summary).toHaveTextContent('覆盖不完整');
+    expect(summary).toHaveTextContent('仅观察态');
+    expect(summary).toHaveTextContent('仅在真实 funding 快照存在时显示');
+  });
+
   it('renders partial and unavailable indicators compactly', async () => {
     getLiquidityMonitor.mockResolvedValueOnce(payload);
 
@@ -603,6 +619,8 @@ describe('LiquidityMonitorPage', () => {
     expect(await screen.findByTestId('liquidity-impulse-synthesis-title')).toHaveTextContent('流动性方向待确认');
     expect(screen.getByTestId('liquidity-impulse-synthesis-state-chip')).toHaveTextContent('Proxy-only');
     expect(screen.getByTestId('liquidity-impulse-synthesis-summary')).toHaveTextContent('不升级为真实扩张或收缩结论');
+    expect(screen.getByTestId('liquidity-monitor-coverage-summary')).toHaveTextContent('方向证据不足');
+    expect(screen.getByTestId('liquidity-monitor-coverage-summary')).toHaveTextContent('0 项 score-grade');
   });
 
   it('shows a missing synthesis payload honestly without fabricating a call', async () => {

@@ -170,6 +170,31 @@ const EVIDENCE_REASON_LABELS: Record<string, string> = {
   fallback_source: '仅备用来源',
 };
 
+const LIQUIDITY_BLOCKING_REASON_LABELS: Record<string, string> = {
+  partial_coverage: '覆盖不完整',
+  observation_only: '仅观察态',
+  proxy_only_missing_real_source: '缺少真实数据源',
+  proxy_context_only: '代理上下文仅观察',
+  source_authority_router_rejected: '来源权限未通过',
+  provider_forbidden_for_use_case: '当前用例禁止该来源',
+  provider_observation_only: '提供方仅允许观察',
+  trust_gate_blocked: '信任门禁阻断',
+  provider_absent: '所需提供方未配置',
+  unavailable_source: '来源不可用',
+  indicator_unavailable: '指标不可用',
+};
+
+type LiquidityCoverageReadinessSummary = {
+  state: 'ready' | 'insufficient' | 'missing';
+  stateLabel: string;
+  stateChipVariant: 'neutral' | 'success' | 'caution';
+  scoreGradeCount: number;
+  observationOnlyCount: number;
+  missingOrUnavailableCount: number;
+  summaryLine: string;
+  blockingReasonsLine: string;
+};
+
 function titleCaseFromSnake(value?: string | null): string {
   if (!value) return '待确认';
   return value
@@ -358,6 +383,143 @@ function buildLiquidityImpulseSynthesisView(
   };
 }
 
+function scoreGradeEvidenceCount(data: LiquidityMonitorResponse | null, indicators: LiquidityMonitorIndicator[]): number {
+  const evidenceQuality = data?.liquidityImpulseSynthesis?.evidenceQuality || {};
+  const realScoringEvidenceCount = evidenceQuality.realScoringEvidenceCount;
+  if (typeof realScoringEvidenceCount === 'number' && Number.isFinite(realScoringEvidenceCount)) {
+    return Math.max(0, Math.round(realScoringEvidenceCount));
+  }
+
+  const scoringEvidenceCount = evidenceQuality.scoringEvidenceCount;
+  const proxyOnlyScoringCount = evidenceQuality.proxyOnlyScoringCount;
+  if (typeof scoringEvidenceCount === 'number' && Number.isFinite(scoringEvidenceCount)) {
+    const proxyCount = typeof proxyOnlyScoringCount === 'number' && Number.isFinite(proxyOnlyScoringCount)
+      ? Math.round(proxyOnlyScoringCount)
+      : 0;
+    return Math.max(0, Math.round(scoringEvidenceCount) - proxyCount);
+  }
+
+  return indicators.filter((indicator) => (
+    indicator.coverageDiagnostics?.scoreContributionAllowed === true || indicator.includedInScore
+  )).length;
+}
+
+function isObservationOnlyIndicator(indicator: LiquidityMonitorIndicator): boolean {
+  if (indicator.coverageDiagnostics?.observationOnly === true) {
+    return true;
+  }
+
+  const inputs = indicator.evidence?.inputs || [];
+  return inputs.length > 0
+    && inputs.some((input) => input.observationOnly)
+    && !inputs.some((input) => input.scoreContributionAllowed);
+}
+
+function isMissingOrUnavailableIndicator(indicator: LiquidityMonitorIndicator): boolean {
+  if (indicator.status === 'unavailable') {
+    return true;
+  }
+
+  const diagnostics = indicator.coverageDiagnostics;
+  if (!diagnostics) {
+    return false;
+  }
+
+  return diagnostics.configuredProviderAvailable === false
+    || diagnostics.realSourceAvailable === false
+    || diagnostics.sourceAuthorityRouteRejected === true
+    || diagnostics.missingInputs.length > 0;
+}
+
+function pushUniqueReason(target: string[], value?: string | null): void {
+  if (!value || target.includes(value)) {
+    return;
+  }
+  target.push(value);
+}
+
+function humanizeBlockingReason(reason: string): string {
+  if (LIQUIDITY_BLOCKING_REASON_LABELS[reason]) {
+    return LIQUIDITY_BLOCKING_REASON_LABELS[reason];
+  }
+  if (reason.startsWith('requires_')) {
+    return '所需提供方未配置';
+  }
+  return titleCaseFromSnake(reason);
+}
+
+function indicatorBlockingReasons(indicator: LiquidityMonitorIndicator): string[] {
+  const diagnostics = indicator.coverageDiagnostics;
+  const reasons: string[] = [];
+
+  if (diagnostics) {
+    pushUniqueReason(reasons, diagnostics.scoreExclusionReason);
+    pushUniqueReason(reasons, diagnostics.capReason);
+    pushUniqueReason(reasons, diagnostics.degradationReason);
+    pushUniqueReason(reasons, diagnostics.proxyObservationOnlyReason);
+    pushUniqueReason(reasons, diagnostics.sourceAuthorityReason);
+    (diagnostics.routeRejectedReasonCodes || []).forEach((reason) => pushUniqueReason(reasons, reason));
+    if (reasons.length === 0 && diagnostics.observationOnly) {
+      pushUniqueReason(reasons, 'observation_only');
+    }
+  }
+
+  if (reasons.length === 0 && indicator.status === 'unavailable') {
+    return [indicator.summary || LIQUIDITY_BLOCKING_REASON_LABELS.indicator_unavailable];
+  }
+
+  return reasons.map(humanizeBlockingReason);
+}
+
+function buildCoverageReadinessSummary(
+  data: LiquidityMonitorResponse | null,
+  synthesisView: LiquidityImpulseSynthesisHeaderView,
+): LiquidityCoverageReadinessSummary {
+  const indicators = data?.indicators || [];
+  const scoreGradeCount = scoreGradeEvidenceCount(data, indicators);
+  const observationOnlyCount = indicators.filter(isObservationOnlyIndicator).length;
+  const missingOrUnavailableCount = indicators.filter(isMissingOrUnavailableIndicator).length;
+  const blockedIndicators = indicators.filter((indicator) => (
+    indicator.coverageDiagnostics?.scoreContributionAllowed === false || isMissingOrUnavailableIndicator(indicator)
+  ));
+  const blockingReasons = new Map<string, number>();
+
+  blockedIndicators.forEach((indicator) => {
+    indicatorBlockingReasons(indicator).forEach((reason) => {
+      blockingReasons.set(reason, (blockingReasons.get(reason) || 0) + 1);
+    });
+  });
+
+  const topBlockingReasons = [...blockingReasons.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 3)
+    .map(([reason]) => reason);
+
+  const state = synthesisView.state === 'ready'
+    ? 'ready'
+    : synthesisView.state === 'missing'
+      ? 'missing'
+      : 'insufficient';
+  const stateLabel = state === 'ready'
+    ? '方向证据可用'
+    : state === 'missing'
+      ? '方向证据待返回'
+      : '方向证据不足';
+  const summaryLead = state === 'insufficient' ? '当前仅有' : '当前有';
+  const summaryLine = `${summaryLead} ${scoreGradeCount} 项 score-grade 证据，${observationOnlyCount} 项仅观察，${missingOrUnavailableCount} 项缺失/不可用。`;
+
+  return {
+    state,
+    stateLabel,
+    stateChipVariant: state === 'ready' ? 'success' : state === 'insufficient' ? 'caution' : 'neutral',
+    scoreGradeCount,
+    observationOnlyCount,
+    missingOrUnavailableCount,
+    summaryLine,
+    blockingReasonsLine: `主要阻塞：${topBlockingReasons.length > 0 ? topBlockingReasons.join('；') : '当前没有额外阻塞。'}`,
+  };
+}
+
 const LiquidityMonitorPage: React.FC = () => {
   const [data, setData] = useState<LiquidityMonitorResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -397,6 +559,7 @@ const LiquidityMonitorPage: React.FC = () => {
   const indicators = data?.indicators || [];
   const selectedIndicator = indicators.find((item) => item.key === selectedKey) || indicators[0] || null;
   const synthesisView = buildLiquidityImpulseSynthesisView(data?.liquidityImpulseSynthesis);
+  const coverageSummary = buildCoverageReadinessSummary(data, synthesisView);
   const officialMacroDiagnostics = buildOfficialMacroAuthorityDiagnosticsView(
     indicators.flatMap((indicator) => (
       indicator.evidence?.inputs?.map((input) => ({
@@ -479,11 +642,30 @@ const LiquidityMonitorPage: React.FC = () => {
             </TerminalPanel>
 
             <TerminalPanel>
-              <TerminalSectionHeader eyebrow="核心引擎" title="判断框架" />
+              <TerminalSectionHeader
+                eyebrow="核心引擎"
+                title="判断框架"
+                action={<TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.stateLabel}</TerminalChip>}
+              />
               <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <TerminalMetric label="风险偏好" value={data.score.value >= 56 ? '改善' : data.score.value <= 44 ? '受压' : '中性'} valueClassName="text-lg font-sans" />
                 <TerminalMetric label="最新时间" value={formatDateTime(data.freshness.latestAsOf) || '待确认'} valueClassName="text-sm font-sans" />
                 <TerminalMetric label="评分状态" value={data.score.regime === 'unavailable' ? '数据不足' : '已输出'} valueClassName="text-lg font-sans" />
+              </div>
+              <div
+                className="mt-4 rounded-xl border border-white/[0.05] bg-black/20 px-4 py-3"
+                data-testid="liquidity-monitor-coverage-summary"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.stateLabel}</TerminalChip>
+                  <TerminalChip variant="success">{coverageSummary.scoreGradeCount} 项 score-grade</TerminalChip>
+                  <TerminalChip variant="info">{coverageSummary.observationOnlyCount} 项仅观察</TerminalChip>
+                  <TerminalChip variant={coverageSummary.missingOrUnavailableCount > 0 ? 'caution' : 'neutral'}>
+                    {coverageSummary.missingOrUnavailableCount} 项缺失/不可用
+                  </TerminalChip>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-white/64">{coverageSummary.summaryLine}</p>
+                <p className="mt-1 text-xs leading-5 text-white/45">{coverageSummary.blockingReasonsLine}</p>
               </div>
             </TerminalPanel>
 

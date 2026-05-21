@@ -922,6 +922,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Added a Liquidity Monitor score-grade coverage summary so the page explicitly shows direction-readiness, score-grade evidence count, observation-only evidence count, missing/unavailable count, and blocking reasons without changing scoring or promoting proxy/fallback data.
+
 - Hardened GitHub release creation to fail closed: annotated tags are required, release notes must come from a non-empty annotated tag body or explicit repository notes file, the generic `See CHANGELOG` fallback was removed, and release-secret-scan plus full `ci_gate.sh` now run before publishing.
 
 ### 修复
