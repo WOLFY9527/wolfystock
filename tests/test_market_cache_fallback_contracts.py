@@ -285,3 +285,86 @@ def test_persistent_cross_panel_sentiment_snapshot_is_served_stale_not_live(
     assert payload["providerHealth"]["sourceLabel"] == "Snapshot"
 
     DatabaseManager.reset_instance()
+
+
+def test_process_local_scores_fallback_is_marked_stale_without_losing_source_metadata() -> None:
+    service = MarketOverviewService()
+    service._market_cache.clear()
+    service._market_data_cache.clear()
+    old_as_of = "2026-05-20T15:00:00+08:00"
+    service._market_data_cache["temperature"] = {
+        "source": "computed",
+        "sourceLabel": "Market Temperature",
+        "sourceType": "computed_from_official_inputs",
+        "asOf": old_as_of,
+        "updatedAt": old_as_of,
+        "freshness": "cached",
+        "scores": {"overall": {"value": 63, "label": "偏暖"}},
+        "fallbackReason": "previous_partial_coverage",
+        "sourceFreshnessEvidence": {
+            "freshness": "cached",
+            "warning": "partial provider coverage",
+        },
+    }
+
+    payload = service._cached_payload(
+        "temperature",
+        Mock(side_effect=RuntimeError("temperature provider down")),
+        Mock(return_value={"source": "fallback", "freshness": "fallback", "isFallback": True, "scores": {}}),
+    )
+    projected = service._with_market_meta(payload, service._category_for_cache_key("temperature"))
+
+    assert payload["fallbackUsed"] is True
+    assert payload["isStale"] is True
+    assert payload["freshness"] == "stale"
+    assert payload["lastSuccessfulAt"] == old_as_of
+    assert payload["source"] == "computed"
+    assert payload["sourceLabel"] == "Market Temperature"
+    assert payload["sourceType"] == "computed_from_official_inputs"
+    assert payload["fallbackReason"] == "previous_partial_coverage"
+    assert payload["sourceFreshnessEvidence"]["freshness"] == "stale"
+    assert payload["sourceFreshnessEvidence"]["warning"] == "partial provider coverage"
+    assert projected["freshness"] == "stale"
+    assert projected["isStale"] is True
+    assert projected["fallbackUsed"] is True
+
+
+def test_process_local_item_fallback_marks_items_stale_and_preserves_item_sources() -> None:
+    service = MarketOverviewService()
+    service._market_cache.clear()
+    service._market_data_cache.clear()
+    old_as_of = "2026-05-20T15:01:00+08:00"
+    service._market_data_cache["indices"] = {
+        "source": "sina",
+        "sourceLabel": "新浪财经",
+        "asOf": old_as_of,
+        "updatedAt": old_as_of,
+        "freshness": "live",
+        "items": [
+            {
+                "symbol": "000001.SH",
+                "value": 4100.0,
+                "source": "sina",
+                "sourceLabel": "新浪财经",
+                "freshness": "live",
+                "asOf": old_as_of,
+            }
+        ],
+    }
+
+    payload = service._cached_payload(
+        "indices",
+        Mock(side_effect=RuntimeError("indices provider down")),
+        Mock(return_value={"source": "fallback", "freshness": "fallback", "isFallback": True, "items": []}),
+    )
+
+    assert payload["fallbackUsed"] is True
+    assert payload["isStale"] is True
+    assert payload["freshness"] == "stale"
+    assert payload["lastSuccessfulAt"] == old_as_of
+    assert payload["source"] == "sina"
+    assert payload["sourceLabel"] == "新浪财经"
+    assert payload["items"][0]["freshness"] == "stale"
+    assert payload["items"][0]["isStale"] is True
+    assert payload["items"][0]["source"] == "sina"
+    assert payload["items"][0]["sourceLabel"] == "新浪财经"

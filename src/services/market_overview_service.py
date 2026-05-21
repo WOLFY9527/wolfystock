@@ -1839,9 +1839,7 @@ class MarketOverviewService:
         def fallback() -> Dict[str, Any]:
             cached = self._market_data_cache.get(cache_key)
             if cached:
-                payload = copy.deepcopy(cached)
-                payload["fallbackUsed"] = True
-                return payload
+                return self._mark_local_fallback_payload(cached)
             persistent = self._load_persistent_snapshot(cache_key)
             if persistent:
                 return persistent
@@ -1856,6 +1854,66 @@ class MarketOverviewService:
             background_refresh=True,
             cold_start_timeout_seconds=self.MARKET_COLD_START_TIMEOUT_SECONDS,
         )
+
+    @classmethod
+    def _local_fallback_last_successful_at(cls, payload: Dict[str, Any]) -> Any:
+        for key in ("asOf", "updatedAt", "last_update", "last_refresh_at", "timestamp", "lastSuccessfulAt"):
+            value = payload.get(key)
+            if value:
+                return value
+        items = payload.get("items")
+        if isinstance(items, list):
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                for key in ("asOf", "updatedAt", "last_update", "last_refresh_at", "timestamp", "lastSuccessfulAt"):
+                    value = item.get(key)
+                    if value:
+                        return value
+        return None
+
+    @classmethod
+    def _mark_local_fallback_payload(cls, cached: Dict[str, Any]) -> Dict[str, Any]:
+        payload = copy.deepcopy(cached)
+        last_successful_at = cls._local_fallback_last_successful_at(payload)
+        payload["fallbackUsed"] = True
+        payload["isStale"] = True
+        payload["freshness"] = "stale"
+        if last_successful_at:
+            payload["lastSuccessfulAt"] = last_successful_at
+        freshness_evidence = payload.get("sourceFreshnessEvidence")
+        if not isinstance(freshness_evidence, dict):
+            freshness_evidence = {}
+        payload["sourceFreshnessEvidence"] = {
+            **freshness_evidence,
+            "freshness": "stale",
+            "isStale": True,
+            "isFallback": bool(freshness_evidence.get("isFallback")),
+        }
+        items = payload.get("items")
+        if isinstance(items, list):
+            payload["items"] = [
+                cls._mark_local_fallback_item(item) if isinstance(item, dict) else item
+                for item in items
+            ]
+        return payload
+
+    @staticmethod
+    def _mark_local_fallback_item(item: Dict[str, Any]) -> Dict[str, Any]:
+        payload = {
+            **item,
+            "isStale": True,
+            "freshness": "stale",
+        }
+        freshness_evidence = payload.get("sourceFreshnessEvidence")
+        if isinstance(freshness_evidence, dict):
+            payload["sourceFreshnessEvidence"] = {
+                **freshness_evidence,
+                "freshness": "stale",
+                "isStale": True,
+                "isFallback": bool(freshness_evidence.get("isFallback")),
+            }
+        return payload
 
     def _snapshot_key(self, cache_key: str) -> str:
         return f"market_overview:{cache_key}"
