@@ -148,6 +148,214 @@ function uniqueText(values: Array<unknown>): string[] {
   return result;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return undefined;
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function firstRecordValue(payload: unknown, paths: string[][]): Record<string, unknown> | undefined {
+  for (const path of paths) {
+    const record = asRecord(readObjectField(payload, path));
+    if (record) {
+      return record;
+    }
+  }
+  return undefined;
+}
+
+function readRecordField(record: Record<string, unknown> | undefined, keys: string[]): unknown {
+  if (!record) {
+    return undefined;
+  }
+  for (const key of keys) {
+    if (record[key] !== undefined && record[key] !== null) {
+      return record[key];
+    }
+  }
+  return undefined;
+}
+
+function conciseText(value: unknown): string | null {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    const text = String(value).trim();
+    return text && text !== EMPTY_FIELD_VALUE && text !== EMPTY_DISPLAY_VALUE ? text : null;
+  }
+  return null;
+}
+
+function conciseField(record: Record<string, unknown> | undefined, keys: string[]): string | null {
+  return conciseText(readRecordField(record, keys));
+}
+
+function conciseList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return uniqueText(value.map((item) => conciseText(item)).filter(Boolean));
+  }
+  const text = conciseText(value);
+  return text ? [text] : [];
+}
+
+function findStockEvidencePacket(report: AnalysisReport | null): Record<string, unknown> | undefined {
+  const direct = firstRecordValue(report, [
+    ['stockEvidencePacket'],
+    ['stock_evidence_packet'],
+    ['details', 'stockEvidencePacket'],
+    ['details', 'stock_evidence_packet'],
+    ['details', 'analysisResult', 'stockEvidencePacket'],
+    ['details', 'analysisResult', 'stock_evidence_packet'],
+    ['details', 'rawResult', 'stockEvidencePacket'],
+    ['details', 'rawResult', 'stock_evidence_packet'],
+    ['details', 'rawResult', 'report', 'stockEvidencePacket'],
+    ['details', 'rawResult', 'report', 'stock_evidence_packet'],
+  ]);
+  if (direct) {
+    return direct;
+  }
+
+  const rawItems = readObjectField(report, ['details', 'rawResult', 'items']);
+  const itemPacket = asArray(rawItems)
+    .map((item) => firstRecordValue(item, [['stockEvidencePacket'], ['stock_evidence_packet']]))
+    .find(Boolean);
+  return itemPacket;
+}
+
+function formatEvidenceGap(item: unknown): string | null {
+  const record = asRecord(item);
+  if (!record) {
+    return conciseText(item);
+  }
+  const label = uniqueText([
+    conciseField(record, ['evidenceClass', 'evidence_class', 'surface', 'key', 'label']),
+    conciseField(record, ['reasonCode', 'reason_code', 'reason']),
+  ]).join(' / ');
+  const detail = conciseField(record, ['detail', 'message', 'summary', 'status']);
+  if (label && detail) {
+    return `${label} - ${detail}`;
+  }
+  return label || detail;
+}
+
+function formatClaimBoundary(item: unknown): string | null {
+  const record = asRecord(item);
+  if (!record) {
+    return conciseText(item);
+  }
+  const claim = conciseField(record, ['claim', 'key', 'label']);
+  const allowed = readRecordField(record, ['allowed']);
+  const state = typeof allowed === 'boolean' ? (allowed ? 'allowed' : 'blocked') : conciseField(record, ['status', 'state']);
+  const reason = conciseField(record, ['reasonCode', 'reason_code', 'reason']);
+  const detail = conciseField(record, ['detail', 'message', 'summary']);
+  const claimState = uniqueText([claim, state]).join(' ');
+  const head = uniqueText([claimState, reason]).join(' / ');
+  if (head && detail) {
+    return `${head} - ${detail}`;
+  }
+  return head || detail;
+}
+
+function formatSourceRef(item: unknown): string | null {
+  const record = asRecord(item);
+  if (!record) {
+    return conciseText(item);
+  }
+  const parts = uniqueText([
+    conciseField(record, ['sourceRefId', 'source_ref_id', 'id']),
+    conciseField(record, ['provider', 'providerId', 'provider_id']),
+    conciseField(record, ['status']),
+    conciseField(record, ['freshness', 'freshnessClass', 'freshness_class']),
+  ]);
+  const observationOnly = readRecordField(record, ['observationOnly', 'observation_only']);
+  if (observationOnly === true) {
+    parts.push('observation-only');
+  }
+  return parts.join(' / ') || null;
+}
+
+function evidenceClasses(items: unknown[]): string[] {
+  return uniqueText(items.map((item) => {
+    const record = asRecord(item);
+    return record
+      ? conciseField(record, ['evidenceClass', 'evidence_class', 'class', 'key'])
+      : conciseText(item);
+  }));
+}
+
+function buildEvidenceBoundaryLines(report: AnalysisReport | null): string[] {
+  const packet = findStockEvidencePacket(report);
+  const dataQualityReport = report?.dataQualityReport || report?.details?.dataQualityReport || report?.meta.dataQualityReport;
+  const confidenceCap = readRecordField(packet, ['confidenceCap', 'confidence_cap']);
+  const confidenceCapRecord = asRecord(confidenceCap);
+  const confidenceCapValue = conciseText(confidenceCapRecord?.value) || conciseText(confidenceCap) || conciseText(dataQualityReport?.confidenceCap);
+  const capReasons = uniqueText([
+    ...conciseList(confidenceCapRecord?.reasonCodes),
+    ...conciseList(confidenceCapRecord?.reason_codes),
+    ...conciseList(dataQualityReport?.reasonCodes),
+  ]);
+  const thesisEligibility = asRecord(readRecordField(packet, ['thesisEligibility', 'thesis_eligibility']));
+  const sourceRefs = asArray(readRecordField(packet, ['sourceRefs', 'source_refs']));
+  const scoreEligibleEvidence = asArray(readRecordField(packet, ['scoreEligibleEvidence', 'score_eligible_evidence']));
+  const observationOnlyEvidence = asArray(readRecordField(packet, ['observationOnlyEvidence', 'observation_only_evidence']));
+  const lines: string[] = [];
+
+  const notInvestmentAdvice = readRecordField(packet, ['notInvestmentAdvice', 'not_investment_advice']);
+  if (typeof notInvestmentAdvice === 'boolean') {
+    lines.push(`- Not investment advice: ${notInvestmentAdvice}`);
+  }
+  if (confidenceCapValue) {
+    lines.push(`- Confidence cap: ${confidenceCapValue}`);
+  }
+  if (capReasons.length) {
+    lines.push(`- Cap reasons: ${capReasons.slice(0, 5).join(', ')}`);
+  }
+
+  const confidenceLabel = conciseField(packet, ['confidenceLabel', 'confidence_label']);
+  if (confidenceLabel) {
+    lines.push(`- Packet confidence: ${confidenceLabel}`);
+  }
+  const promptSummary = conciseField(packet, ['promptSummary', 'prompt_summary']);
+  if (promptSummary) {
+    lines.push(`- Packet summary: ${promptSummary}`);
+  }
+  const thesisStatus = conciseField(thesisEligibility, ['status']);
+  if (thesisStatus) {
+    lines.push(`- Thesis eligibility: ${thesisStatus}`);
+  }
+
+  const dataGapLines = asArray(readRecordField(packet, ['dataGaps', 'data_gaps']))
+    .map(formatEvidenceGap)
+    .filter((item): item is string => Boolean(item))
+    .slice(0, 5);
+  dataGapLines.forEach((item) => lines.push(`- Data gap: ${item}`));
+
+  const boundaryLines = asArray(readRecordField(packet, ['claimBoundaries', 'claim_boundaries']))
+    .map(formatClaimBoundary)
+    .filter((item): item is string => Boolean(item))
+    .slice(0, 5);
+  boundaryLines.forEach((item) => lines.push(`- Boundary: ${item}`));
+
+  if (sourceRefs.length || scoreEligibleEvidence.length || observationOnlyEvidence.length) {
+    lines.push(`- Source refs: ${sourceRefs.length} total; ${scoreEligibleEvidence.length} score-eligible; ${observationOnlyEvidence.length} observation-only`);
+  }
+  sourceRefs
+    .map(formatSourceRef)
+    .filter((item): item is string => Boolean(item))
+    .slice(0, 5)
+    .forEach((item) => lines.push(`- Source: ${item}`));
+
+  const observationClasses = evidenceClasses(observationOnlyEvidence);
+  if (observationClasses.length) {
+    lines.push(`- Observation-only evidence: ${observationClasses.slice(0, 5).join(', ')}`);
+  }
+
+  return lines.length ? ['## 证据边界 / Evidence Boundaries', ...lines, ''] : [];
+}
+
 function formatReportDateTime(value?: string): string {
   const text = String(value || '').trim();
   if (!text) {
@@ -211,6 +419,7 @@ export function buildInstitutionalReportMarkdown(
     : [];
   const battleCards = standardReport?.battlePlanCompact?.cards || [];
   const battleNotes = standardReport?.battlePlanCompact?.notes || [];
+  const evidenceBoundaryLines = buildEvidenceBoundaryLines(report);
   const compactList = (items?: Array<string | undefined | null>, fallback = '- 数据缺失') => {
     const values = uniqueText(items || []);
     return values.length ? values.map((item) => `- ${item}`) : [fallback];
@@ -289,6 +498,7 @@ export function buildInstitutionalReportMarkdown(
     '## 检查清单 / Decision Checklist',
     ...(standardReport?.checklistItems?.length ? standardReport.checklistItems.map((item) => `- [${item.status}] ${item.text}`) : ['- [UNKNOWN] 数据覆盖待确认']),
     '',
+    ...evidenceBoundaryLines,
     '## 数据说明 / Data Notes',
     ...(coverageNotes?.dataSources?.length ? coverageNotes.dataSources.map((item) => `- ${item}`) : ['- 数据源未完整标注']),
     ...(coverageNotes?.coverageGaps?.length ? coverageNotes.coverageGaps.map((item) => `- ${item}`) : ['- 缺失字段会以 -- 展示']),

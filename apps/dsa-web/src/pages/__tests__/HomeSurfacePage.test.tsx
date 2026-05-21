@@ -693,6 +693,109 @@ describe('HomeSurfacePage', () => {
     expect(markdown).not.toContain('Finnhub, Finnhub');
   });
 
+  it('preserves evidence boundaries in markdown export without dumping raw evidence payloads', () => {
+    const reportWithEvidenceBoundaries = {
+      ...defaultHistoryReport,
+      details: {
+        ...defaultHistoryReport.details,
+        rawResult: {
+          rawPayload: 'must-not-export-raw-result',
+          items: [
+            {
+              stockEvidencePacket: {
+                schemaVersion: 'stock_evidence_packet_v1',
+                symbol: 'ORCL',
+                asOf: '2026-05-20T14:00:00Z',
+                thesisEligibility: {
+                  status: 'caution',
+                  reasonCodes: ['weak_or_fallback_provider_evidence'],
+                },
+                confidenceCap: {
+                  value: 55,
+                  policyVersion: 'stock_evidence_confidence_cap_v1',
+                  reasonCodes: ['weak_or_fallback_provider_evidence', 'news_unknown_or_placeholder'],
+                },
+                confidenceLabel: 'low',
+                dataGaps: [
+                  {
+                    evidenceClass: 'news',
+                    reasonCode: 'news_unknown_or_placeholder',
+                    detail: 'News is unknown, missing, weak, or placeholder.',
+                  },
+                ],
+                sourceRefs: [
+                  {
+                    sourceRefId: 'quote:fallback_cache',
+                    evidenceClass: 'quote',
+                    provider: 'fallback_cache',
+                    status: 'available',
+                    freshness: 'stale',
+                    observationOnly: false,
+                    scoreContributionAllowed: true,
+                  },
+                  {
+                    sourceRefId: 'sec_filing_evidence:sec_edgar',
+                    evidenceClass: 'sec_filing_evidence',
+                    provider: 'SEC EDGAR',
+                    status: 'available',
+                    freshness: 'filing_or_daily',
+                    observationOnly: true,
+                    scoreContributionAllowed: false,
+                  },
+                ],
+                scoreEligibleEvidence: [
+                  { evidenceClass: 'quote' },
+                ],
+                observationOnlyEvidence: [
+                  { evidenceClass: 'sec_filing_evidence', reasonCodes: ['observation_only'] },
+                ],
+                claimBoundaries: [
+                  {
+                    claim: 'price_is_live',
+                    allowed: false,
+                    reasonCode: 'quote_freshness_not_proven',
+                    detail: 'Quote freshness is not proven.',
+                  },
+                  {
+                    claim: 'sec_filing_supports_trading_signal',
+                    allowed: false,
+                    reasonCode: 'sec_observation_only_non_scoring',
+                    detail: 'SEC filing sidecar is observation-only and cannot support trading signals.',
+                  },
+                ],
+                promptSummary: 'ORCL evidence packet: quote=available; confidence_cap=55; thesis_eligibility=caution.',
+                notInvestmentAdvice: true,
+                rawPayload: 'must-not-export-raw-packet',
+              },
+            },
+          ],
+        },
+      },
+      dataQualityReport: {
+        ...defaultHistoryReport.dataQualityReport,
+        confidenceCap: 55,
+        reasonCodes: ['weak_or_fallback_provider_evidence'],
+      },
+    };
+
+    const markdown = buildInstitutionalReportMarkdown(reportWithEvidenceBoundaries);
+
+    expect(markdown).toContain('## 证据边界 / Evidence Boundaries');
+    expect(markdown).toContain('- Not investment advice: true');
+    expect(markdown).toContain('- Confidence cap: 55');
+    expect(markdown).toContain('- Cap reasons: weak_or_fallback_provider_evidence');
+    expect(markdown).toContain('- Packet confidence: low');
+    expect(markdown).toContain('- Packet summary: ORCL evidence packet: quote=available; confidence_cap=55; thesis_eligibility=caution.');
+    expect(markdown).toContain('- Thesis eligibility: caution');
+    expect(markdown).toContain('- Data gap: news / news_unknown_or_placeholder - News is unknown, missing, weak, or placeholder.');
+    expect(markdown).toContain('- Boundary: price_is_live blocked / quote_freshness_not_proven - Quote freshness is not proven.');
+    expect(markdown).toContain('- Source refs: 2 total; 1 score-eligible; 1 observation-only');
+    expect(markdown).toContain('- Source: quote:fallback_cache / fallback_cache / available / stale');
+    expect(markdown).toContain('- Observation-only evidence: sec_filing_evidence');
+    expect(markdown).not.toContain('must-not-export-raw-result');
+    expect(markdown).not.toContain('must-not-export-raw-packet');
+  });
+
   it('uses ticker-only fallback for placeholder or duplicated company identities', () => {
     expect(getCompanyWithTicker({ companyName: 'Robinhood Markets', symbol: 'HOOD' })).toBe('Robinhood Markets (HOOD)');
     expect(getCompanyWithTicker({ companyName: 'HOOD', symbol: 'HOOD' })).toBe('HOOD');
