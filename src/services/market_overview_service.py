@@ -1134,6 +1134,8 @@ class MarketOverviewService:
         if cache_key == "cn_indices":
             snapshot["providerHealth"]["observationProviders"] = self._cn_indices_observation_provider_health()
             observation_coverage = snapshot.pop("observationCoverage", None)
+            if observation_coverage is None:
+                observation_coverage = {"akshare": self._build_akshare_cn_index_observation_coverage()}
             if isinstance(observation_coverage, dict) and observation_coverage:
                 snapshot["providerHealth"]["observationCoverage"] = observation_coverage
         snapshot = self._with_evidence_snapshot(snapshot, self._category_for_cache_key(cache_key))
@@ -3076,13 +3078,12 @@ class MarketOverviewService:
         return payload
 
     def _fetch_cn_indices_snapshot(self) -> Dict[str, Any]:
-        fallback = self._fallback_cn_indices_snapshot()
-        observation_coverage = {"akshare": self._build_akshare_cn_index_observation_coverage()}
-        fallback["observationCoverage"] = observation_coverage
         try:
             live_quotes = self._fetch_sina_cn_index_quotes()
         except Exception:
-            return fallback
+            return self._fallback_cn_indices_snapshot()
+
+        fallback = self._fallback_cn_indices_snapshot()
 
         merged_items = []
         live_count = 0
@@ -3121,7 +3122,6 @@ class MarketOverviewService:
             "items": merged_items,
             "fallbackUsed": live_count != len(merged_items),
             "warning": FALLBACK_WARNING if live_count != len(merged_items) else None,
-            "observationCoverage": observation_coverage,
         }
 
     def _fetch_sina_cn_index_quotes(self) -> Dict[str, Dict[str, Any]]:

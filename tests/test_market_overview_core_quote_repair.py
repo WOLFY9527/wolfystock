@@ -590,6 +590,80 @@ def test_hsi_sina_proxy_quote_uses_dashboard_symbol_and_truthful_metadata() -> N
     assert all(item["symbol"] != "HSI.HK" for item in payload["items"])
 
 
+def test_cn_indices_cold_start_fetches_sina_hsi_before_slow_observation_coverage() -> None:
+    service = MarketOverviewService()
+    service.MARKET_COLD_START_TIMEOUT_SECONDS = 0.05
+    row = [
+        "HSI",
+        "恒生指数",
+        "25838.960",
+        "25962.730",
+        "25838.960",
+        "25505.710",
+        "25675.182",
+        "-287.550",
+        "-1.110",
+        "0.000",
+        "0.000",
+        "292712398.554",
+        "21878681948",
+        "0.000",
+        "0.000",
+        "28056.100",
+        "22668.350",
+        "2026/05/18",
+        "16:09:22",
+    ]
+    calls: list[str] = []
+    original_fallback = service._fallback_cn_indices_snapshot
+
+    def sina_rows(symbols: list[str]) -> dict:
+        calls.append("sina")
+        assert "rt_hkHSI" in symbols
+        return {"rt_hkHSI": row}
+
+    def fallback_snapshot() -> dict:
+        calls.append("fallback")
+        return original_fallback()
+
+    def slow_observation_coverage() -> dict:
+        calls.append("akshare")
+        time.sleep(0.1)
+        return {
+            "providerName": "akshare",
+            "sourceType": "public_proxy",
+            "sourceTier": "unofficial_public_api",
+            "trustLevel": "weak",
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "freshness": "unavailable",
+            "coverageCount": 0,
+            "matchedCanonicalSymbols": [],
+            "missingExpectedSymbols": list(service.AKSHARE_CN_INDEX_EXPECTED_SYMBOLS),
+            "degradationReason": "akshare_fetch_timeout",
+        }
+
+    log_patcher = _log_patch()
+    try:
+        with (
+            patch("src.services.market_overview_service.fetch_sina_cn_index_rows", side_effect=sina_rows),
+            patch.object(service, "_fallback_cn_indices_snapshot", side_effect=fallback_snapshot),
+            patch.object(service, "_build_akshare_cn_index_observation_coverage", side_effect=slow_observation_coverage),
+        ):
+            payload = service.get_cn_indices()
+            MarketOverviewService._market_cache.wait_for_refreshes(timeout=2)
+    finally:
+        log_patcher.stop()
+
+    hsi = _item(payload, "HSI")
+    assert hsi["value"] == 25675.182
+    assert hsi["source"] == "sina"
+    assert hsi["sourceLabel"] == "新浪财经"
+    assert all(item["symbol"] != "HSI.HK" for item in payload["items"])
+    assert calls.index("sina") < calls.index("fallback")
+    assert calls.index("sina") < calls.index("akshare")
+
+
 def test_hsi_sina_provider_quote_overrides_hk_alias_fallback_row() -> None:
     service = MarketOverviewService()
     row = [
