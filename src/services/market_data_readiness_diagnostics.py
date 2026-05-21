@@ -114,7 +114,11 @@ def _build_local_us_parquet_dir_check(
             user_facing_message="Local US parquet directory is not configured.",
             remediation_hint="Set LOCAL_US_PARQUET_DIR or US_STOCK_PARQUET_DIR to a normalized US parquet root.",
             affects_surfaces=_LOCAL_US_SURFACES,
-            details={"envKeys": list(_LOCAL_US_PARQUET_ENV_KEYS)},
+            details={
+                "envKeys": list(_LOCAL_US_PARQUET_ENV_KEYS),
+                "pathConfigured": False,
+                "storageKind": "local_filesystem",
+            },
         )
 
     try:
@@ -128,7 +132,12 @@ def _build_local_us_parquet_dir_check(
             user_facing_message="Local US parquet directory could not be inspected.",
             remediation_hint="Verify the configured parquet root is readable by the current process.",
             affects_surfaces=_LOCAL_US_SURFACES,
-            details={"envKey": parquet_dir_key, "path": str(parquet_dir), "error": str(exc)},
+            details=_build_path_details(
+                env_key=parquet_dir_key,
+                parquet_dir=parquet_dir,
+                reason="path_inspection_failed",
+                error=exc,
+            ),
         )
 
     if not exists:
@@ -139,7 +148,7 @@ def _build_local_us_parquet_dir_check(
             user_facing_message="Configured local US parquet directory does not exist.",
             remediation_hint="Fix LOCAL_US_PARQUET_DIR/US_STOCK_PARQUET_DIR or sync the parquet dataset to the configured path.",
             affects_surfaces=_LOCAL_US_SURFACES,
-            details={"envKey": parquet_dir_key, "path": str(parquet_dir)},
+            details=_build_path_details(env_key=parquet_dir_key, parquet_dir=parquet_dir),
         )
     if not is_dir:
         return MarketDataReadinessCheck(
@@ -149,7 +158,7 @@ def _build_local_us_parquet_dir_check(
             user_facing_message="Configured local US parquet path is not a directory.",
             remediation_hint="Point LOCAL_US_PARQUET_DIR/US_STOCK_PARQUET_DIR at the parquet directory, not a single file.",
             affects_surfaces=_LOCAL_US_SURFACES,
-            details={"envKey": parquet_dir_key, "path": str(parquet_dir)},
+            details=_build_path_details(env_key=parquet_dir_key, parquet_dir=parquet_dir),
         )
 
     return MarketDataReadinessCheck(
@@ -159,8 +168,30 @@ def _build_local_us_parquet_dir_check(
         user_facing_message="Local US parquet directory is configured and reachable.",
         remediation_hint=None,
         affects_surfaces=_LOCAL_US_SURFACES,
-        details={"envKey": parquet_dir_key, "path": str(parquet_dir)},
+        details=_build_path_details(env_key=parquet_dir_key, parquet_dir=parquet_dir),
     )
+
+
+def _build_path_details(
+    *,
+    env_key: Optional[str],
+    parquet_dir: Path,
+    reason: Optional[str] = None,
+    error: Optional[OSError] = None,
+) -> dict[str, Any]:
+    details: dict[str, Any] = {
+        "envKey": env_key,
+        "pathConfigured": True,
+        "pathBasename": parquet_dir.name or None,
+        "storageKind": "local_filesystem",
+    }
+    if reason:
+        details["reason"] = reason
+    if error is not None:
+        details["errorType"] = type(error).__name__
+        if error.errno is not None:
+            details["errorCode"] = error.errno
+    return details
 
 
 def _build_parquet_engine_check(

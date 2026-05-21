@@ -118,6 +118,13 @@ def test_market_data_readiness_route_returns_read_only_diagnostic_payload(
 
     serialized = json.dumps(payload, ensure_ascii=False)
     assert secret not in serialized
+    assert str(parquet_dir) not in serialized
+    assert str(tmp_path) not in serialized
+
+    parquet_check = next(check for check in checks if check["id"] == "local_us_parquet_dir")
+    assert parquet_check["details"]["pathConfigured"] is True
+    assert parquet_check["details"]["pathBasename"] == "us-parquet"
+    assert parquet_check["details"]["storageKind"] == "local_filesystem"
 
 
 def test_market_data_readiness_symbols_query_is_bounded_and_sanitized(

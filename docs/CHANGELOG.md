@@ -1,3 +1,12 @@
+## 2026-05-22
+
+- **Market data readiness path redaction** - `GET /api/v1/market/data-readiness`
+  no longer returns full local filesystem paths in diagnostic `details`. The
+  endpoint preserves readiness semantics and safe operator signals such as env
+  key names, `pathConfigured`, `pathBasename`, `storageKind`, and sanitized
+  failure reason metadata while continuing to avoid provider runtime calls,
+  network calls, auth/RBAC changes, and source-gate changes.
+
 ## 2026-05-20
 
 - **Stock evidence packet API integration** - `GET /api/v1/agent/stock-evidence`

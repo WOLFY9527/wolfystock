@@ -36,6 +36,10 @@ EXPECTED_PROVIDER_IDS = {
     "coinbase_public",
     "fred_existing_baseline",
     "treasury_existing_baseline",
+    "authorized.us_etf_flow",
+    "official_or_authorized.us_market_breadth",
+    "official_public.cn_money_market_rates",
+    "official_public.fed_liquidity",
 }
 EXPECTED_ENTRY_FIELDS = {
     "providerName",

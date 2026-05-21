@@ -29,6 +29,13 @@ def _find_check(payload: dict, check_id: str) -> dict:
     return next(check for check in payload["checks"] if check["id"] == check_id)
 
 
+def _assert_path_not_disclosed(payload: dict, path: Path) -> None:
+    serialized = json.dumps(payload, ensure_ascii=False)
+
+    assert str(path) not in serialized
+    assert str(path.parent) not in serialized
+
+
 def test_parquet_dir_missing_reports_misconfigured(tmp_path: Path) -> None:
     missing_dir = tmp_path / "missing-us-parquet"
 
@@ -44,7 +51,38 @@ def test_parquet_dir_missing_reports_misconfigured(tmp_path: Path) -> None:
 
     assert payload["readinessStatus"] == "misconfigured"
     assert parquet_check["status"] == "misconfigured"
-    assert parquet_check["details"]["path"] == str(missing_dir)
+    assert parquet_check["details"]["envKey"] == "LOCAL_US_PARQUET_DIR"
+    assert parquet_check["details"]["pathConfigured"] is True
+    assert parquet_check["details"]["pathBasename"] == "missing-us-parquet"
+    assert parquet_check["details"]["storageKind"] == "local_filesystem"
+    _assert_path_not_disclosed(payload, missing_dir)
+
+
+def test_parquet_dir_inspection_error_redacts_configured_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    parquet_dir = tmp_path / "private-us-parquet"
+
+    def _raise_os_error(self):
+        raise OSError(f"permission denied: {self}")
+
+    monkeypatch.setattr(Path, "exists", _raise_os_error)
+
+    payload = build_market_data_readiness_diagnostics(
+        env={
+            "LOCAL_US_PARQUET_DIR": str(parquet_dir),
+            "TUSHARE_TOKEN": "configured",
+        },
+        spec_finder=_spec_finder_with(ALL_OPTIONAL_MODULES),
+    ).to_dict()
+
+    parquet_check = _find_check(payload, "local_us_parquet_dir")
+
+    assert payload["readinessStatus"] == "misconfigured"
+    assert parquet_check["status"] == "misconfigured"
+    assert parquet_check["details"]["reason"] == "path_inspection_failed"
+    assert parquet_check["details"]["errorType"] == "OSError"
+    assert parquet_check["details"]["pathConfigured"] is True
+    assert parquet_check["details"]["pathBasename"] == "private-us-parquet"
+    _assert_path_not_disclosed(payload, parquet_dir)
 
 
 def test_parquet_dir_set_but_engine_missing_reports_misconfigured(tmp_path: Path) -> None:
