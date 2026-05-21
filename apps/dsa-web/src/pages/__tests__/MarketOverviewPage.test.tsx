@@ -1169,6 +1169,18 @@ const allMarketPanelRequests = [
 const AUTO_REVALIDATE_OBSERVATION_WINDOW_MS = 5_000;
 
 type MarketPanelRequestMock = (typeof allMarketPanelRequests)[number];
+type DeferredPromise<T> = {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+};
+
+function createDeferredPromise<T>(): DeferredPromise<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
 
 function countMarketPanelRequests(): number {
   return allMarketPanelRequests.reduce((total, request) => total + vi.mocked(request).mock.calls.length, 0);
@@ -3074,6 +3086,74 @@ describe('MarketOverviewPage', () => {
     expect(marketOverviewApi.getFundsFlow).toHaveBeenCalledTimes(1);
     expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1);
     expect(marketApi.getFutures).toHaveBeenCalledTimes(1);
+  });
+
+  it('coalesces duplicate in-flight polling refreshes for the same market overview panels', async () => {
+    vi.useFakeTimers();
+    const setIntervalSpy = vi.spyOn(window, 'setInterval');
+
+    render(<MarketOverviewPage />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(650);
+    });
+    expectMarketPanelRequestsCalledOnce(allMarketPanelRequests);
+
+    const intervalByDelay = new Map(
+      setIntervalSpy.mock.calls.map(([callback, delay]) => [delay, callback as () => void]),
+    );
+    const fastCallback = intervalByDelay.get(45_000);
+    expect(typeof fastCallback).toBe('function');
+
+    const indicesRefresh = createDeferredPromise<ReturnType<typeof panel>>();
+    const volatilityRefresh = createDeferredPromise<ReturnType<typeof panel>>();
+    const cryptoRefresh = createDeferredPromise<ReturnType<typeof cryptoPanel>>();
+    vi.mocked(marketOverviewApi.getIndices).mockReturnValueOnce(indicesRefresh.promise);
+    vi.mocked(marketOverviewApi.getVolatility).mockReturnValueOnce(volatilityRefresh.promise);
+    vi.mocked(marketApi.getCrypto).mockReturnValueOnce(cryptoRefresh.promise);
+
+    await act(async () => {
+      fastCallback?.();
+      fastCallback?.();
+      await Promise.resolve();
+    });
+
+    expect(marketOverviewApi.getIndices).toHaveBeenCalledTimes(2);
+    expect(marketOverviewApi.getVolatility).toHaveBeenCalledTimes(2);
+    expect(marketApi.getCrypto).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      indicesRefresh.resolve(panel('IndexTrendsCard', 'SPX'));
+      volatilityRefresh.resolve(panel('VolatilityCard', 'VIX'));
+      cryptoRefresh.resolve(cryptoPanel());
+      await Promise.resolve();
+    });
+  });
+
+  it('keeps different panel refreshes independent while one manual refresh is still in flight', async () => {
+    const volatilityRefresh = createDeferredPromise<ReturnType<typeof panel>>();
+    const sentimentRefresh = createDeferredPromise<ReturnType<typeof sentimentPanel>>();
+
+    render(<MarketOverviewPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: '美股' }));
+    await waitFor(() => expect(marketOverviewApi.getVolatility).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(marketApi.getSentiment).toHaveBeenCalledTimes(1));
+
+    vi.mocked(marketOverviewApi.getVolatility).mockReturnValueOnce(volatilityRefresh.promise);
+    vi.mocked(marketApi.getSentiment).mockReturnValueOnce(sentimentRefresh.promise);
+
+    fireEvent.click(screen.getByRole('button', { name: /刷新 波动率与风险压力/i }));
+    fireEvent.click(screen.getByRole('button', { name: /刷新 情绪与资金面/i }));
+
+    expect(marketOverviewApi.getVolatility).toHaveBeenCalledTimes(2);
+    expect(marketApi.getSentiment).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      volatilityRefresh.resolve(panel('VolatilityCard', 'VIX'));
+      sentimentRefresh.resolve(sentimentPanel());
+      await Promise.resolve();
+    });
   });
 
   it('keeps fallback summary modules visible when new APIs fail', async () => {

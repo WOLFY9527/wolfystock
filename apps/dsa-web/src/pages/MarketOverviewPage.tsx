@@ -36,6 +36,7 @@ const AUTO_REVALIDATE_RETRY_DELAY_MS = 2_500;
 const AUTO_REVALIDATE_MAX_ATTEMPTS = 3;
 
 type PanelRequest = readonly [PanelKey, () => Promise<PanelState[PanelKey]>];
+type RefreshPanelRequestMode = 'background-refresh' | 'manual-refresh';
 type StagedPanelRequestGroup = {
   delayMs: number;
   requests: PanelRequest[];
@@ -544,6 +545,7 @@ function getPanelLoader(panelKey: PanelKey): (() => Promise<PanelState[PanelKey]
 }
 
 const routeEntryPanelRequestCache = new Map<string, Promise<PanelState[PanelKey]>>();
+const inFlightRefreshPanelRequestCache = new Map<string, Promise<PanelState[PanelKey]>>();
 
 function loadPanelWithRouteEntryDedupe(
   panelKey: PanelKey,
@@ -561,6 +563,25 @@ function loadPanelWithRouteEntryDedupe(
       routeEntryPanelRequestCache.delete(cacheKey);
     }
   });
+  return promise;
+}
+
+function loadPanelWithRefreshDedupe(
+  panelKey: PanelKey,
+  mode: RefreshPanelRequestMode,
+  loadPanel: () => Promise<PanelState[PanelKey]>,
+): Promise<PanelState[PanelKey]> {
+  const cacheKey = `${mode}:${String(panelKey)}`;
+  const cached = inFlightRefreshPanelRequestCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const promise = loadPanel().finally(() => {
+    if (inFlightRefreshPanelRequestCache.get(cacheKey) === promise) {
+      inFlightRefreshPanelRequestCache.delete(cacheKey);
+    }
+  });
+  inFlightRefreshPanelRequestCache.set(cacheKey, promise);
   return promise;
 }
 
@@ -727,12 +748,13 @@ const MarketOverviewPage = () => {
     loadPanel: () => Promise<PanelState[PanelKey]>,
     options?: { silent?: boolean },
   ) => {
+    const mode: RefreshPanelRequestMode = options?.silent ? 'background-refresh' : 'manual-refresh';
     if (!options?.silent) {
       setRefreshingPanel(panelKey);
     }
     debugMarketPanel(panelKey, 'loading');
     try {
-      const panel = await withPanelTimeout(loadPanel(), panelKey);
+      const panel = await withPanelTimeout(loadPanelWithRefreshDedupe(panelKey, mode, loadPanel), panelKey);
       setRefreshErrors((currentErrors) => {
         const nextErrors = { ...currentErrors };
         delete nextErrors[String(panelKey)];
