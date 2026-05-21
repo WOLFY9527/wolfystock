@@ -227,6 +227,21 @@ class RotationRadarSummaryModel(BaseModel):
     watchlistSignals: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+class RotationRadarEtfLeadershipDiagnosticsModel(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    enabled: bool = False
+    source: Optional[str] = None
+    asOf: Optional[str] = None
+    eligibleSymbols: List[str] = Field(default_factory=list)
+    leadingSymbols: List[str] = Field(default_factory=list)
+    laggingSymbols: List[str] = Field(default_factory=list)
+    leadershipSpread: Optional[float] = None
+    confidenceLabel: Optional[str] = None
+    reasonCodes: List[str] = Field(default_factory=list)
+    evidence: List[Dict[str, Any]] = Field(default_factory=list)
+
+
 class MarketRotationRadarResponse(BaseModel):
     endpoint: str
     market: str = "US"
@@ -240,6 +255,9 @@ class MarketRotationRadarResponse(BaseModel):
     warning: Optional[str] = None
     noAdviceDisclosure: str
     benchmarks: Dict[str, RotationRadarBenchmarkModel] = Field(default_factory=dict)
+    etfLeadershipDiagnostics: RotationRadarEtfLeadershipDiagnosticsModel = Field(
+        default_factory=RotationRadarEtfLeadershipDiagnosticsModel
+    )
     summary: RotationRadarSummaryModel
     themes: List[RotationRadarThemeModel] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)

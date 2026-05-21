@@ -97,6 +97,86 @@ def _headline_quote(
     return quote
 
 
+def _etf_authority_time_windows(
+    changes: dict[str, float],
+    *,
+    as_of: str = "2026-05-07T09:45:00+00:00",
+    freshness: str = "live",
+) -> dict[str, dict[str, object]]:
+    return {
+        window: {
+            "changePercent": change,
+            "relativeVolume": 1.2,
+            "freshness": freshness,
+            "asOf": as_of,
+            "available": True,
+            "source": "alpaca",
+            "sourceLabel": "Alpaca SIP",
+            "sourceTier": "broker_authorized",
+            "providerTier": "tier_1_configured",
+        }
+        for window, change in changes.items()
+    }
+
+
+def _bounded_etf_authority_fixture() -> tuple[tuple[str, ...], dict[str, dict], dict[str, object]]:
+    stable_etfs = ("SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV")
+    window_changes = {
+        "SPY": {"5m": 0.2, "15m": 0.4, "60m": 0.6, "1d": 0.9},
+        "QQQ": {"5m": 0.5, "15m": 0.7, "60m": 1.1, "1d": 1.6},
+        "IWM": {"5m": -0.2, "15m": 0.1, "60m": 0.3, "1d": 0.4},
+        "SMH": {"5m": 0.8, "15m": 1.2, "60m": 1.8, "1d": 2.4},
+        "SOXX": {"5m": 0.7, "15m": 1.0, "60m": 1.5, "1d": 2.1},
+        "IGV": {"5m": 0.1, "15m": 0.3, "60m": 0.6, "1d": 0.8},
+    }
+    quotes: dict[str, dict] = {}
+    for symbol in stable_etfs:
+        quote = _shared_cache_quote(symbol, len(quotes), freshness="live")
+        quote["changePercent"] = window_changes[symbol]["1d"]
+        quote["timeWindows"] = _etf_authority_time_windows(window_changes[symbol])
+        quote["source"] = "alpaca"
+        quote["sourceLabel"] = "Alpaca SIP"
+        quote["sourceType"] = "official_public"
+        quote["sourceTier"] = "broker_authorized"
+        quote["providerTier"] = "tier_1_configured"
+        quote["freshness"] = "live"
+        quote["isStale"] = False
+        quote["isFallback"] = False
+        quote["confidenceWeight"] = 0.9
+        quotes[symbol] = quote
+    spine = {
+        "universe": list(stable_etfs),
+        "requiredWindows": ["5m", "15m", "60m", "1d"],
+        "fulfilledWindows": ["5m", "15m", "60m", "1d"],
+        "missingWindows": [],
+        "staleWindows": [],
+        "freshness": "live",
+        "asOf": "2026-05-07T09:45:00+00:00",
+        "sourceLabel": "Alpaca SIP",
+        "sourceTier": "broker_authorized",
+        "trustLevel": "active",
+        "sourceAuthorityAllowed": True,
+        "scoreContributionAllowed": True,
+        "reasonCodes": [],
+        "quotes": [
+            {
+                "symbol": symbol,
+                "windowsFulfilled": ["5m", "15m", "60m", "1d"],
+                "freshness": "live",
+                "asOf": "2026-05-07T09:45:00+00:00",
+                "sourceLabel": "Alpaca SIP",
+                "sourceTier": "broker_authorized",
+                "trustLevel": "active",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "reasonCodes": [],
+            }
+            for symbol in stable_etfs
+        ],
+    }
+    return stable_etfs, quotes, spine
+
+
 def _install_counting_default_provider(
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -583,6 +663,196 @@ def test_market_rotation_radar_route_separates_headline_and_observation_lanes_wh
         assert any(theme["id"] == "ai_applications" for theme in payload["summary"]["strongestThemes"])
         assert payload["metadata"]["quoteProvider"]["sourceType"] == "cache_snapshot"
         assert payload["metadata"]["quoteProvider"]["freshness"] == "cached"
+    finally:
+        client.close()
+
+
+def test_market_rotation_radar_api_preserves_enabled_etf_leadership_contract_without_broadening_headlines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stable_etfs, quotes, etf_authority_spine = _bounded_etf_authority_fixture()
+
+    def provider_factory():
+        def provider(symbols):
+            return {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "configured",
+                    "source": "alpaca",
+                    "sourceLabel": "Alpaca SIP",
+                    "sourceType": "official_public",
+                    "sourceTier": "broker_authorized",
+                    "providerTier": "tier_1_configured",
+                    "freshness": "live",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "noExternalCalls": False,
+                    "providerDiagnostics": {
+                        "etfAuthoritySpine": etf_authority_spine,
+                    },
+                },
+            }
+
+        return provider
+
+    client = _client(monkeypatch, provider_factory=provider_factory)
+    try:
+        response = client.get("/api/v1/market/rotation-radar")
+
+        assert response.status_code == 200
+        payload = response.json()
+        diagnostics = payload["etfLeadershipDiagnostics"]
+        assert diagnostics["enabled"] is True
+        assert diagnostics["source"] == "alpaca_etf_authority_spine"
+        assert diagnostics["asOf"] == "2026-05-07T09:45:00+00:00"
+        assert diagnostics["eligibleSymbols"] == list(stable_etfs)
+        assert diagnostics["leadingSymbols"] == ["SMH", "SOXX", "QQQ"]
+        assert diagnostics["laggingSymbols"] == ["IWM", "IGV", "SPY"]
+        assert diagnostics["leadershipSpread"] > 1.0
+        assert diagnostics["confidenceLabel"] == "high"
+        assert diagnostics["reasonCodes"] == ["bounded_etf_authority_active"]
+        assert [row["symbol"] for row in diagnostics["evidence"]] == list(stable_etfs)
+        assert all(row["symbol"] in stable_etfs for row in diagnostics["evidence"])
+        assert all(row["sourceAuthorityAllowed"] is True for row in diagnostics["evidence"])
+        assert all(row["scoreContributionAllowed"] is True for row in diagnostics["evidence"])
+        assert payload["metadata"]["quoteProvider"]["etfAuthoritySpine"]["sourceAuthorityAllowed"] is True
+        assert payload["metadata"]["quoteProvider"]["etfAuthoritySpine"]["scoreContributionAllowed"] is True
+        ai_theme = next(theme for theme in payload["themes"] if theme["id"] == "ai_applications")
+        igv_proxy = ai_theme["benchmarkProxies"]["IGV"]
+        assert igv_proxy["etfAuthorityEvidence"]["symbol"] == "IGV"
+        assert igv_proxy["etfAuthorityEvidence"]["sourceAuthorityAllowed"] is True
+        assert igv_proxy["etfAuthorityEvidence"]["scoreContributionAllowed"] is True
+        assert igv_proxy["etfAuthorityEvidence"]["reasonCodes"] == []
+        assert payload["summary"]["headlineEligibleThemeCount"] == 0
+        assert payload["summary"]["eligibleThemeCount"] == 0
+        assert payload["summary"]["strongestThemes"] == []
+        assert payload["summary"]["acceleratingThemes"] == []
+        assert ai_theme["headlineEligible"] is False
+        assert ai_theme["scoreContributionAllowed"] is False
+        assert ai_theme["rankingLane"] == "observation"
+    finally:
+        client.close()
+
+
+def test_market_rotation_radar_api_preserves_disabled_etf_leadership_reason_codes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, quotes, etf_authority_spine = _bounded_etf_authority_fixture()
+    quotes["SMH"]["timeWindows"].pop("15m")
+    etf_authority_spine["fulfilledWindows"] = ["5m", "60m", "1d"]
+    etf_authority_spine["missingWindows"] = ["15m"]
+    etf_authority_spine["trustLevel"] = "partial"
+    etf_authority_spine["sourceAuthorityAllowed"] = False
+    etf_authority_spine["scoreContributionAllowed"] = False
+    etf_authority_spine["reasonCodes"] = ["missing_required_windows", "entitlement"]
+    for row in etf_authority_spine["quotes"]:
+        if row["symbol"] == "SMH":
+            row["windowsFulfilled"] = ["5m", "60m", "1d"]
+            row["trustLevel"] = "partial"
+            row["sourceAuthorityAllowed"] = False
+            row["scoreContributionAllowed"] = False
+            row["reasonCodes"] = ["missing_required_windows", "entitlement"]
+
+    def provider_factory():
+        def provider(symbols):
+            return {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "configured",
+                    "source": "alpaca",
+                    "sourceLabel": "Alpaca SIP",
+                    "sourceType": "official_public",
+                    "sourceTier": "broker_authorized",
+                    "providerTier": "tier_1_configured",
+                    "freshness": "live",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "noExternalCalls": False,
+                    "providerDiagnostics": {
+                        "etfAuthoritySpine": etf_authority_spine,
+                    },
+                },
+            }
+
+        return provider
+
+    client = _client(monkeypatch, provider_factory=provider_factory)
+    try:
+        response = client.get("/api/v1/market/rotation-radar")
+
+        assert response.status_code == 200
+        payload = response.json()
+        diagnostics = payload["etfLeadershipDiagnostics"]
+        assert diagnostics["enabled"] is False
+        assert diagnostics["leadingSymbols"] == []
+        assert diagnostics["laggingSymbols"] == []
+        assert diagnostics["leadershipSpread"] is None
+        assert diagnostics["confidenceLabel"] == "disabled"
+        assert "missing_required_windows" in diagnostics["reasonCodes"]
+        assert "ineligible_bounded_etf" in diagnostics["reasonCodes"]
+        smh_row = next(row for row in diagnostics["evidence"] if row["symbol"] == "SMH")
+        assert smh_row["sourceAuthorityAllowed"] is False
+        assert smh_row["scoreContributionAllowed"] is False
+        assert "missing_required_windows" in smh_row["reasonCodes"]
+        assert "entitlement" in smh_row["reasonCodes"]
+    finally:
+        client.close()
+
+
+def test_market_rotation_radar_api_yfinance_fallback_cannot_enable_etf_leadership(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stable_etfs, quotes, _ = _bounded_etf_authority_fixture()
+    yfinance_quotes = {
+        symbol: {
+            **_shared_cache_quote(symbol, index, freshness="delayed"),
+            "changePercent": quotes[symbol]["changePercent"],
+            "timeWindows": {
+                "1d": {
+                    "changePercent": quotes[symbol]["changePercent"],
+                    "freshness": "delayed",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "available": True,
+                }
+            },
+            "source": "yfinance_proxy",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_public_api",
+            "sourceTier": "unofficial_public_api",
+            "isFallback": True,
+        }
+        for index, symbol in enumerate(stable_etfs)
+    }
+
+    def provider_factory():
+        def provider(symbols):
+            return {
+                "quotes": {symbol: yfinance_quotes[symbol] for symbol in symbols if symbol in yfinance_quotes},
+                "metadata": {
+                    "quoteMode": "proxy",
+                    "source": "yfinance_proxy",
+                    "sourceLabel": "Yahoo Finance",
+                    "sourceType": "unofficial_public_api",
+                    "sourceTier": "unofficial_public_api",
+                    "providerTier": "tier_2_delayed_proxy",
+                    "freshness": "delayed",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "noExternalCalls": False,
+                },
+            }
+
+        return provider
+
+    client = _client(monkeypatch, provider_factory=provider_factory)
+    try:
+        response = client.get("/api/v1/market/rotation-radar")
+
+        assert response.status_code == 200
+        payload = response.json()
+        diagnostics = payload["etfLeadershipDiagnostics"]
+        assert diagnostics["enabled"] is False
+        assert diagnostics["eligibleSymbols"] == []
+        assert diagnostics["leadingSymbols"] == []
+        assert diagnostics["laggingSymbols"] == []
+        assert "etf_authority_spine_missing" in diagnostics["reasonCodes"]
     finally:
         client.close()
 
