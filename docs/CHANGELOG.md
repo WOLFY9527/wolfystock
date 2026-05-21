@@ -915,6 +915,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Hardened GitHub release creation to fail closed: annotated tags are required, release notes must come from a non-empty annotated tag body or explicit repository notes file, the generic `See CHANGELOG` fallback was removed, and release-secret-scan plus full `ci_gate.sh` now run before publishing.
+
 ### 修复
 
 - 💬 **问股 Chat 全宽气泡、底部遮罩与 DOM 流式输出修复** — `apps/dsa-web/src/pages/ChatPage.tsx` 与 `src/components/common/TypewriterText.tsx` 对 `/chat` 做了一轮严格限域修复：消息流主容器收口为 `max-w-4xl` 并补上 `pb-56`，防止长回复被底部输入区吃掉；assistant/user 气泡分别改为真正的全宽左流与 `max-w-[80%]` 右对话泡，移除了旧 `prose-blockquote`/思考区 `border-l` 带来的竖线与截断感；底部输入壳层改成 `z-50` 的强渐变毛玻璃遮罩，避免正文滚到输入区下方；最新一条 assistant 回复的打字机也从 `useState + setInterval` 改为 `requestAnimationFrame + ref` 直写 DOM，减少长文本流式输出时的 React 分块卡顿。此次改动不调整 agent API、会话存储、路由或技能数据流，只修正问股页面的渲染壳层与流式表现。
