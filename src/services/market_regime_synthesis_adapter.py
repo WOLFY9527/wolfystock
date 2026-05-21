@@ -9,8 +9,13 @@ other Market Intelligence surfaces.
 
 from __future__ import annotations
 
+import statistics
 from typing import Any, Mapping, Sequence
 
+from src.services.liquidity_impulse_synthesis_service import (
+    LiquidityImpulseEvidenceItem,
+    synthesize_liquidity_impulse,
+)
 from src.services.market_regime_synthesis_service import (
     MarketRegimeEvidenceItem,
     synthesize_market_regime,
@@ -93,6 +98,14 @@ def build_market_regime_evidence_items(inputs: Mapping[str, Any]) -> tuple[Marke
                 if symbol == "ADV_RATIO":
                     evidence.append(_breadth_percentile_evidence("breadth", breadth_panel, raw_item))
 
+    rotation_evidence = _rotation_leadership_evidence(inputs)
+    if rotation_evidence is not None:
+        evidence.append(rotation_evidence)
+
+    liquidity_evidence = _liquidity_impulse_evidence(inputs)
+    if liquidity_evidence is not None:
+        evidence.append(liquidity_evidence)
+
     return tuple(evidence)
 
 
@@ -167,6 +180,352 @@ def _breadth_percentile_evidence(
         updated_at=_text(item.get("updatedAt") or panel.get("updatedAt")) or None,
         degradation_reason=_degradation_reason(item, panel),
     )
+
+
+def _rotation_leadership_evidence(inputs: Mapping[str, Any]) -> MarketRegimeEvidenceItem | None:
+    panel = inputs.get("sectors")
+    if not isinstance(panel, Mapping):
+        return None
+    items = panel.get("items")
+    if not isinstance(items, Sequence):
+        return None
+
+    candidates = [item for item in items if isinstance(item, Mapping) and _rotation_item_allowed(item)]
+    if candidates:
+        return _rotation_leadership_from_items("sectors", panel, candidates, score_allowed=True)
+
+    blocked = [item for item in items if isinstance(item, Mapping) and _rotation_item_relevant(item)]
+    if not blocked:
+        return None
+    return _rotation_leadership_from_items("sectors", panel, blocked, score_allowed=False)
+
+
+def _rotation_leadership_from_items(
+    panel_key: str,
+    panel: Mapping[str, Any],
+    items: Sequence[Mapping[str, Any]],
+    *,
+    score_allowed: bool,
+) -> MarketRegimeEvidenceItem:
+    avg_rotation_score = _average_float(
+        _optional_float(item.get("rotationScore")) for item in items
+    )
+    avg_change = _average_float(
+        _optional_float(item.get("changePercent") or item.get("change")) for item in items
+    )
+    primary = items[0]
+    source_reason = _rotation_degradation_reason(primary, panel)
+    if score_allowed:
+        source_tier = _text(primary.get("sourceTier") or primary.get("sourceType") or primary.get("source"))
+        trust_level = _text(primary.get("trustLevel")) or "usable"
+        freshness = _text(primary.get("freshness") or panel.get("freshness")) or "unknown"
+        direction = _direction_text(primary, change=avg_change, value=avg_rotation_score)
+        source = _text(primary.get("source") or panel.get("source") or "rotation_radar_projection")
+        degradation_reason = source_reason
+        observation_only = _bool(primary.get("observationOnly"), panel.get("observationOnly"))
+        score_contribution_allowed = True
+    else:
+        source_tier = _text(primary.get("sourceTier") or primary.get("sourceType") or primary.get("source"))
+        trust_level = _text(primary.get("trustLevel")) or "unavailable"
+        freshness = _text(primary.get("freshness") or panel.get("freshness")) or "unavailable"
+        direction = _direction_text(primary, change=avg_change, value=avg_rotation_score)
+        source = _text(primary.get("source") or panel.get("source") or "rotation_radar_projection")
+        degradation_reason = (
+            source_reason
+            or _text(primary.get("sourceAuthorityReason"))
+            or _first_text(primary.get("degradationReason"), primary.get("rankExclusionReason"))
+            or "score_contribution_not_allowed"
+        )
+        observation_only = True
+        score_contribution_allowed = False
+
+    return MarketRegimeEvidenceItem(
+        key="sectors:rotation_leadership",
+        label="Rotation Leadership",
+        category=panel_key,
+        pillar="rotation_leadership",
+        value=avg_rotation_score,
+        percentile=avg_rotation_score,
+        direction=direction,
+        source=source,
+        source_tier=source_tier,
+        trust_level=trust_level,
+        freshness=freshness,
+        observation_only=observation_only,
+        score_contribution_allowed=score_contribution_allowed,
+        as_of=_text(primary.get("asOf") or panel.get("asOf")) or None,
+        updated_at=_text(primary.get("updatedAt") or panel.get("updatedAt")) or None,
+        degradation_reason=degradation_reason,
+    )
+
+
+def _rotation_item_allowed(item: Mapping[str, Any]) -> bool:
+    if not _rotation_item_relevant(item):
+        return False
+    if not _bool(item.get("sourceAuthorityAllowed"), default=True):
+        return False
+    if not _bool(item.get("scoreContributionAllowed"), default=True):
+        return False
+    if "rankEligible" in item and not _bool(item.get("rankEligible")):
+        return False
+    if "headlineEligible" in item and not _bool(item.get("headlineEligible")):
+        return False
+    return True
+
+
+def _rotation_item_relevant(item: Mapping[str, Any]) -> bool:
+    return _text(item.get("symbol") or item.get("name") or item.get("id")) != ""
+
+
+def _rotation_degradation_reason(item: Mapping[str, Any], panel: Mapping[str, Any]) -> str | None:
+    return _first_text(
+        item.get("sourceAuthorityReason"),
+        item.get("degradationReason"),
+        item.get("rankExclusionReason"),
+        panel.get("degradationReason"),
+    )
+
+
+def _liquidity_impulse_evidence(inputs: Mapping[str, Any]) -> MarketRegimeEvidenceItem | None:
+    projected = tuple(_projected_liquidity_evidence_items(inputs))
+    if not projected:
+        return None
+
+    result = synthesize_liquidity_impulse(projected)
+    freshness = _worst_freshness(item.freshness for item in projected)
+    trust_level = _liquidity_trust_level(result.confidence_label)
+    source_tier = "computed_from_real" if int(result.evidence_quality.get("realScoringEvidenceCount") or 0) > 0 and result.liquidity_impulse != "data_insufficient" else "computed_from_data_gap"
+    source = "liquidity_monitor_projection"
+    as_of = _first_text(*(item.as_of for item in projected)) or None
+    updated_at = _first_text(*(item.updated_at for item in projected)) or None
+    direction = "up" if result.direction_score > 0 else "down" if result.direction_score < 0 else None
+    score_allowed = result.liquidity_impulse != "data_insufficient" and int(result.evidence_quality.get("realScoringEvidenceCount") or 0) > 0
+    degradation_reason = None
+    if not score_allowed:
+        degradation_reason = _first_text(
+            *(gap.get("reason") for gap in result.data_gaps if isinstance(gap, Mapping)),
+            result.subtype,
+        )
+
+    return MarketRegimeEvidenceItem(
+        key="liquidity_monitor:liquidity_impulse",
+        label="Liquidity Impulse",
+        category="liquidity_monitor",
+        pillar="liquidity_impulse",
+        value=result.direction_score,
+        direction=direction,
+        source=source,
+        source_tier=source_tier,
+        trust_level=trust_level,
+        freshness=freshness,
+        observation_only=any(item.observation_only for item in projected),
+        score_contribution_allowed=score_allowed,
+        as_of=as_of,
+        updated_at=updated_at,
+        degradation_reason=degradation_reason,
+    )
+
+
+def _projected_liquidity_evidence_items(inputs: Mapping[str, Any]) -> tuple[LiquidityImpulseEvidenceItem, ...]:
+    evidence: list[LiquidityImpulseEvidenceItem] = []
+    panels = {
+        "rates": inputs.get("rates"),
+        "fx": inputs.get("fx"),
+        "futures": inputs.get("futures"),
+        "crypto": inputs.get("crypto"),
+        "breadth": inputs.get("breadth"),
+        "flows": inputs.get("flows"),
+    }
+    if isinstance(panels["rates"], Mapping):
+        items = panels["rates"].get("items")
+        if isinstance(items, Sequence):
+            for symbol, pillar in (("US10Y", "rates_pressure"), ("VIX", "volatility_stress")):
+                raw_item = _first_mapping_item(items, symbol)
+                if raw_item is not None:
+                    evidence.append(_liquidity_evidence_from_item("rates", raw_item, pillar))
+    if isinstance(panels["fx"], Mapping):
+        items = panels["fx"].get("items")
+        if isinstance(items, Sequence):
+            for symbol in ("DXY", "USDCNH"):
+                raw_item = _first_mapping_item(items, symbol)
+                if raw_item is not None:
+                    evidence.append(_liquidity_evidence_from_item("fx", raw_item, "dollar_pressure"))
+    if isinstance(panels["futures"], Mapping):
+        items = panels["futures"].get("items")
+        if isinstance(items, Sequence):
+            for symbol in ("ES", "NQ", "YM", "RTY"):
+                raw_item = _first_mapping_item(items, symbol)
+                if raw_item is not None:
+                    evidence.append(_liquidity_evidence_from_item("futures", raw_item, "risk_asset_demand"))
+    if isinstance(panels["crypto"], Mapping):
+        items = panels["crypto"].get("items")
+        if isinstance(items, Sequence):
+            for symbol in ("BTC", "ETH", "BNB"):
+                raw_item = _first_mapping_item(items, symbol)
+                if raw_item is not None:
+                    evidence.append(_liquidity_evidence_from_item("crypto", raw_item, "crypto_liquidity_beta"))
+    if isinstance(panels["breadth"], Mapping):
+        items = panels["breadth"].get("items")
+        if isinstance(items, Sequence):
+            raw_item = _first_mapping_item(items, "ADV_RATIO")
+            if raw_item is not None:
+                evidence.append(_liquidity_breadth_evidence(raw_item))
+    if isinstance(panels["flows"], Mapping):
+        items = panels["flows"].get("items")
+        if isinstance(items, Sequence):
+            for symbol, pillar in (("CN_ETF", "equity_flow_proxy"), ("NORTHBOUND", "china_liquidity_context")):
+                raw_item = _first_mapping_item(items, symbol)
+                if raw_item is not None:
+                    evidence.append(_liquidity_evidence_from_item("flows", raw_item, pillar))
+    return tuple(evidence)
+
+
+def _liquidity_evidence_from_item(
+    panel_key: str,
+    item: Mapping[str, Any],
+    pillar: str,
+) -> LiquidityImpulseEvidenceItem:
+    score_allowed = _liquidity_item_allowed(item)
+    source = _text(item.get("source") or "liquidity_monitor_projection")
+    source_tier = _text(item.get("sourceTier") or item.get("sourceType") or source)
+    trust_level = _text(item.get("trustLevel")) or "unknown"
+    freshness = _text(item.get("freshness")) or "unknown"
+    observation_only = _bool(item.get("observationOnly"))
+    proxy_only = not _bool(item.get("sourceAuthorityAllowed"), default=True) or source_tier in {"unofficial_proxy", "unofficial_public_api", "public_proxy"}
+    included_in_score = score_allowed if score_allowed else False
+    direction, magnitude = _liquidity_direction_and_magnitude(panel_key, item, pillar)
+    degradation_reason = None if score_allowed else _first_text(
+        item.get("sourceAuthorityReason"),
+        item.get("degradationReason"),
+        "score_contribution_not_allowed",
+    )
+    return LiquidityImpulseEvidenceItem(
+        key=f"liquidity_bridge:{panel_key}:{_text(item.get('symbol') or item.get('key'))}",
+        label=_label(item),
+        category=panel_key,
+        pillar=pillar,
+        value=magnitude,
+        change=magnitude,
+        direction=direction,
+        source=source,
+        source_tier=source_tier,
+        trust_level=trust_level,
+        freshness=freshness,
+        observation_only=observation_only,
+        score_contribution_allowed=score_allowed,
+        included_in_score=included_in_score,
+        proxy_only=proxy_only,
+        as_of=_text(item.get("asOf") or item.get("updatedAt")) or None,
+        updated_at=_text(item.get("updatedAt") or item.get("asOf")) or None,
+        degradation_reason=degradation_reason,
+    )
+
+
+def _liquidity_breadth_evidence(item: Mapping[str, Any]) -> LiquidityImpulseEvidenceItem:
+    score_allowed = _liquidity_item_allowed(item)
+    source = _text(item.get("source") or "liquidity_monitor_projection")
+    source_tier = _text(item.get("sourceTier") or item.get("sourceType") or source)
+    trust_level = _text(item.get("trustLevel")) or "unknown"
+    freshness = _text(item.get("freshness")) or "unknown"
+    observation_only = _bool(item.get("observationOnly"))
+    proxy_only = not _bool(item.get("sourceAuthorityAllowed"), default=True) or source_tier in {"unofficial_proxy", "unofficial_public_api", "public_proxy"}
+    percentile = _bounded_percentile(item.get("value"))
+    direction = _breadth_direction(item, percentile)
+    degradation_reason = None if score_allowed else _first_text(
+        item.get("sourceAuthorityReason"),
+        item.get("degradationReason"),
+        "score_contribution_not_allowed",
+    )
+    return LiquidityImpulseEvidenceItem(
+        key=f"liquidity_bridge:breadth:{_text(item.get('symbol') or item.get('key'))}",
+        label=_label(item),
+        category="breadth",
+        pillar="breadth_confirmation",
+        value=percentile,
+        percentile=percentile,
+        direction=direction,
+        source=source,
+        source_tier=source_tier,
+        trust_level=trust_level,
+        freshness=freshness,
+        observation_only=observation_only,
+        score_contribution_allowed=score_allowed,
+        included_in_score=score_allowed if score_allowed else False,
+        proxy_only=proxy_only,
+        as_of=_text(item.get("asOf") or item.get("updatedAt")) or None,
+        updated_at=_text(item.get("updatedAt") or item.get("asOf")) or None,
+        degradation_reason=degradation_reason,
+    )
+
+
+def _liquidity_item_allowed(item: Mapping[str, Any]) -> bool:
+    if not _bool(item.get("scoreContributionAllowed"), default=True):
+        return False
+    if "sourceAuthorityAllowed" in item and not _bool(item.get("sourceAuthorityAllowed")):
+        return False
+    if _text(item.get("sourceAuthorityReason")) in {"proxy_context_only", "source_authority_router_rejected", "provider_absent"}:
+        return False
+    if _text(item.get("sourceTier") or item.get("sourceType")) in {"unofficial_proxy", "public_proxy", "unofficial_public_api"}:
+        return False
+    if _bool(item.get("observationOnly")):
+        return False
+    return True
+
+
+def _liquidity_direction_and_magnitude(
+    panel_key: str,
+    item: Mapping[str, Any],
+    pillar: str,
+) -> tuple[str | None, float | None]:
+    change = _first_float(item.get("changePercent"), item.get("change"))
+    value = _first_float(item.get("value"), item.get("price"))
+    if pillar == "breadth_confirmation":
+        percentile = _bounded_percentile(item.get("value"))
+        return _breadth_direction(item, percentile), percentile
+    if change is not None:
+        return _direction_text(item, change=change, value=value), change
+    if value is not None:
+        return _direction_text(item, change=None, value=value), value
+    return None, None
+
+
+def _first_mapping_item(items: Sequence[Any], symbol: str) -> Mapping[str, Any] | None:
+    for raw_item in items:
+        if isinstance(raw_item, Mapping) and _text(raw_item.get("symbol")).upper() == symbol.upper():
+            return raw_item
+    return None
+
+
+def _average_float(values: Sequence[float | None]) -> float | None:
+    finite = [float(value) for value in values if value is not None]
+    return round(statistics.fmean(finite), 3) if finite else None
+
+
+def _worst_freshness(values: Sequence[str]) -> str:
+    order = {
+        "live": 0,
+        "fresh": 0,
+        "cached": 1,
+        "delayed": 2,
+        "stale": 3,
+        "partial": 4,
+        "fallback": 5,
+        "mock": 6,
+        "unavailable": 7,
+        "error": 8,
+    }
+    normalized = [(_text(value).lower() or "unknown") for value in values if _text(value)]
+    if not normalized:
+        return "unknown"
+    return max(normalized, key=lambda value: order.get(value, 9))
+
+
+def _liquidity_trust_level(confidence_label: str) -> str:
+    if confidence_label in {"high", "medium"}:
+        return "usable"
+    if confidence_label == "low":
+        return "usable_with_caution"
+    return "unavailable"
 
 
 def _direction_text(
@@ -265,6 +624,14 @@ def _label(item: Mapping[str, Any]) -> str:
 
 def _text(value: Any) -> str:
     return str(value).strip() if value is not None else ""
+
+
+def _first_text(*values: Any) -> str:
+    for value in values:
+        text = _text(value)
+        if text:
+            return text
+    return ""
 
 
 def _bool(*values: Any, default: bool = False) -> bool:

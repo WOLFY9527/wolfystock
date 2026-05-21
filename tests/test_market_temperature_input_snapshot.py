@@ -413,6 +413,69 @@ def test_temperature_score_helpers_skip_explicit_non_scoring_inputs() -> None:
     assert service._item_value(items, "ES") is None
 
 
+def test_sector_rotation_projection_preserves_authority_and_ranking_metadata() -> None:
+    service = MarketOverviewService()
+
+    payload = service._project_sector_rotation_snapshot(
+        {
+            "source": "computed",
+            "sourceLabel": "Computed",
+            "freshness": "cached",
+            "updatedAt": "2026-05-20T10:00:00+08:00",
+            "generatedAt": "2026-05-20T10:00:00+08:00",
+            "metadata": {
+                "quoteProvider": {"asOf": "2026-05-20T10:00:00+08:00"},
+                "observedEvidence": {"asOf": "2026-05-20T10:00:00+08:00"},
+            },
+            "themes": [
+                {
+                    "id": "ai_applications",
+                    "name": "AI Applications",
+                    "market": "US",
+                    "rotationScore": 72,
+                    "relativeStrength": {"averageRelativeStrengthPercent": 2.3},
+                    "source": "alpaca",
+                    "sourceLabel": "Alpaca",
+                    "sourceTier": "tier_1_configured",
+                    "trustLevel": "high",
+                    "freshness": "cached",
+                    "scoreContributionAllowed": True,
+                    "sourceAuthorityAllowed": True,
+                    "sourceAuthorityReason": None,
+                    "rankEligible": True,
+                    "headlineEligible": True,
+                    "scoreCap": 0.92,
+                    "rankingTrust": {
+                        "sourceTier": "tier_1_configured",
+                        "trustLevel": "high",
+                        "freshness": "cached",
+                        "scoreCap": 0.92,
+                        "conclusionAllowed": True,
+                    },
+                    "degradationReasons": ["quote_window_narrow"],
+                    "rotationStateEvidence": {
+                        "schemaVersion": "rotation_state_evidence_v1",
+                        "source": "alpaca",
+                        "sourceConfidence": {"freshness": "cached"},
+                    },
+                }
+            ],
+        }
+    )
+
+    item = payload["items"][0]
+    assert item["sourceAuthorityAllowed"] is True
+    assert item["sourceAuthorityReason"] is None
+    assert item["scoreContributionAllowed"] is True
+    assert item["rankEligible"] is True
+    assert item["headlineEligible"] is True
+    assert item["scoreCap"] == 0.92
+    assert item["rankingTrust"]["scoreCap"] == 0.92
+    assert item["degradationReasons"] == ["quote_window_narrow"]
+    assert item["sourceTier"] == "tier_1_configured"
+    assert item["trustLevel"] == "high"
+
+
 def test_public_rates_method_keeps_public_wrapper_shape() -> None:
     service = MarketOverviewService()
 

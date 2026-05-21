@@ -41,6 +41,7 @@ def _regime_ready_temperature_inputs(*, proxy_dxy: bool = True, observation_only
                     "sourceType": "official_public",
                     "trustLevel": "high",
                     "freshness": "live",
+                    "sourceAuthorityAllowed": True,
                     "scoreContributionAllowed": True,
                 }
             ]
@@ -55,6 +56,7 @@ def _regime_ready_temperature_inputs(*, proxy_dxy: bool = True, observation_only
                     "sourceType": "official_public",
                     "trustLevel": "high",
                     "freshness": "live",
+                    "sourceAuthorityAllowed": True,
                     "scoreContributionAllowed": True,
                 }
             ]
@@ -70,6 +72,7 @@ def _regime_ready_temperature_inputs(*, proxy_dxy: bool = True, observation_only
                     "sourceType": "official_public",
                     "trustLevel": "high",
                     "freshness": "cached",
+                    "sourceAuthorityAllowed": True,
                     "scoreContributionAllowed": True,
                 },
                 {
@@ -81,6 +84,7 @@ def _regime_ready_temperature_inputs(*, proxy_dxy: bool = True, observation_only
                     "sourceType": "official_public",
                     "trustLevel": "high",
                     "freshness": "cached",
+                    "sourceAuthorityAllowed": True,
                     "scoreContributionAllowed": True,
                 },
             ]
@@ -96,6 +100,8 @@ def _regime_ready_temperature_inputs(*, proxy_dxy: bool = True, observation_only
                     "sourceType": dxy_source_type,
                     "trustLevel": dxy_trust_level,
                     "freshness": dxy_freshness,
+                    "sourceAuthorityAllowed": not proxy_dxy,
+                    "sourceAuthorityReason": dxy_reason,
                     "scoreContributionAllowed": True,
                     "degradationReason": dxy_reason,
                 }
@@ -112,6 +118,7 @@ def _regime_ready_temperature_inputs(*, proxy_dxy: bool = True, observation_only
                     "sourceType": "exchange_public",
                     "trustLevel": "high",
                     "freshness": "live",
+                    "sourceAuthorityAllowed": True,
                     "scoreContributionAllowed": True,
                 },
                 {
@@ -123,6 +130,7 @@ def _regime_ready_temperature_inputs(*, proxy_dxy: bool = True, observation_only
                     "sourceType": "exchange_public",
                     "trustLevel": "high",
                     "freshness": "live",
+                    "sourceAuthorityAllowed": True,
                     "scoreContributionAllowed": True,
                 },
                 {
@@ -134,6 +142,7 @@ def _regime_ready_temperature_inputs(*, proxy_dxy: bool = True, observation_only
                     "sourceType": "exchange_public",
                     "trustLevel": "high",
                     "freshness": "live",
+                    "sourceAuthorityAllowed": True,
                     "scoreContributionAllowed": True,
                 },
             ]
@@ -149,6 +158,8 @@ def _regime_ready_temperature_inputs(*, proxy_dxy: bool = True, observation_only
                     "sourceType": "exchange_public",
                     "trustLevel": "high",
                     "freshness": "live",
+                    "sourceAuthorityAllowed": not observation_only_btc,
+                    "sourceAuthorityReason": btc_reason,
                     "observationOnly": btc_observation_only,
                     "scoreContributionAllowed": btc_score_allowed,
                     "degradationReason": btc_reason,
@@ -162,10 +173,51 @@ def _regime_ready_temperature_inputs(*, proxy_dxy: bool = True, observation_only
                     "sourceType": "exchange_public",
                     "trustLevel": "high",
                     "freshness": "live",
+                    "sourceAuthorityAllowed": True,
                     "scoreContributionAllowed": True,
                 },
             ]
         },
+    }
+
+
+def _rotation_theme(
+    *,
+    score_contribution_allowed: bool,
+    source_authority_allowed: bool,
+    rotation_score: float,
+    change_percent: float,
+    source: str = "alpaca",
+    source_type: str = "tier_1_configured",
+    trust_level: str = "high",
+    freshness: str = "cached",
+    source_authority_reason: str | None = None,
+) -> dict:
+    return {
+        "symbol": "ai_applications",
+        "label": "AI Applications",
+        "value": rotation_score,
+        "rotationScore": rotation_score,
+        "changePercent": change_percent,
+        "source": source,
+        "sourceTier": source_type,
+        "sourceType": source_type,
+        "trustLevel": trust_level,
+        "freshness": freshness,
+        "sourceAuthorityAllowed": source_authority_allowed,
+        "sourceAuthorityReason": source_authority_reason,
+        "scoreContributionAllowed": score_contribution_allowed,
+        "rankEligible": score_contribution_allowed,
+        "headlineEligible": score_contribution_allowed,
+        "scoreCap": 0.9 if score_contribution_allowed else 0.0,
+        "rankingTrust": {
+            "sourceTier": source_type,
+            "trustLevel": trust_level,
+            "freshness": freshness,
+            "scoreCap": 0.9 if score_contribution_allowed else 0.0,
+            "conclusionAllowed": score_contribution_allowed,
+        },
+        "degradationReasons": [] if score_contribution_allowed else [source_authority_reason or "proxy_context_only"],
     }
 
 
@@ -372,6 +424,70 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertTrue(
             all(driver["key"] != "crypto:BTC" for driver in discounted_synthesis["topDrivers"])
         )
+
+    def test_market_temperature_regime_bridge_blocks_non_scoring_rotation_and_liquidity(self) -> None:
+        service = MarketOverviewService()
+        blocked_inputs = _regime_ready_temperature_inputs(proxy_dxy=True, observation_only_btc=True)
+        blocked_inputs["sectors"] = {
+            "items": [
+                _rotation_theme(
+                    score_contribution_allowed=False,
+                    source_authority_allowed=False,
+                    source="yfinance_proxy",
+                    source_type="unofficial_proxy",
+                    trust_level="usable_with_caution",
+                    freshness="delayed",
+                    source_authority_reason="proxy_context_only",
+                    rotation_score=18.0,
+                    change_percent=-3.1,
+                )
+            ]
+        }
+        blocked_inputs["rates"]["items"][0]["scoreContributionAllowed"] = False
+        blocked_inputs["rates"]["items"][0]["sourceAuthorityAllowed"] = False
+        blocked_inputs["rates"]["items"][1]["scoreContributionAllowed"] = False
+        blocked_inputs["rates"]["items"][1]["sourceAuthorityAllowed"] = False
+        blocked_inputs["crypto"]["items"][1]["scoreContributionAllowed"] = False
+        blocked_inputs["crypto"]["items"][1]["sourceAuthorityAllowed"] = False
+        blocked_inputs["futures"]["items"][0]["scoreContributionAllowed"] = False
+        blocked_inputs["futures"]["items"][1]["scoreContributionAllowed"] = False
+        blocked_inputs["futures"]["items"][2]["scoreContributionAllowed"] = False
+        blocked_inputs["breadth"]["items"][0]["scoreContributionAllowed"] = False
+
+        allowed_inputs = _regime_ready_temperature_inputs(proxy_dxy=False, observation_only_btc=False)
+        allowed_inputs["sectors"] = {
+            "items": [
+                _rotation_theme(
+                    score_contribution_allowed=True,
+                    source_authority_allowed=True,
+                    rotation_score=18.0,
+                    change_percent=-3.1,
+                )
+            ]
+        }
+
+        with patch.object(service, "_build_market_temperature_inputs", return_value=blocked_inputs):
+            blocked_payload = service.get_market_temperature()
+
+        MarketOverviewService._market_cache.clear()
+        MarketOverviewService._market_data_cache.clear()
+
+        with patch.object(service, "_build_market_temperature_inputs", return_value=allowed_inputs):
+            allowed_payload = service.get_market_temperature()
+
+        blocked = blocked_payload["marketRegimeSynthesis"]
+        allowed = allowed_payload["marketRegimeSynthesis"]
+
+        self.assertNotIn("rotation_leadership", blocked["evidenceQuality"]["coveredPillars"])
+        self.assertNotIn("liquidity_impulse", blocked["evidenceQuality"]["coveredPillars"])
+        self.assertTrue(any(gap["key"] == "sectors:rotation_leadership" for gap in blocked["dataGaps"]))
+        self.assertTrue(any(gap["key"] == "liquidity_monitor:liquidity_impulse" for gap in blocked["dataGaps"]))
+
+        self.assertIn("rotation_leadership", allowed["evidenceQuality"]["coveredPillars"])
+        self.assertIn("liquidity_impulse", allowed["evidenceQuality"]["coveredPillars"])
+        self.assertLess(allowed["rotationQuality"], 0)
+        self.assertLess(allowed["liquidityImpulse"], 0)
+        self.assertGreater(allowed["confidence"], blocked["confidence"])
 
     def test_mixed_input_confidence_averages_item_level_sources(self) -> None:
         service = MarketOverviewService()
