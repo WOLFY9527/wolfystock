@@ -6,6 +6,8 @@ import type {
   MarketDecisionSemantics,
   MarketDecisionSemanticsClaimBoundary,
   MarketDecisionSemanticsItem,
+  MarketDirectionReadiness,
+  MarketDirectionReadinessPillar,
   MarketBriefingResponse,
   MarketRegimeSynthesis,
   MarketRegimeSynthesisEvidenceItem,
@@ -39,6 +41,7 @@ import {
   type MarketOverviewDecisionSemanticsBoundaryView,
   type MarketOverviewDecisionSemanticsLineView,
   type MarketOverviewDecisionSemanticsView,
+  type MarketOverviewDirectionReadinessView,
   type MarketOverviewHeroAnchorView,
   type MarketOverviewTemperatureSummaryView,
 } from './MarketOverviewWorkbenchTopSurface';
@@ -1004,6 +1007,71 @@ function marketDecisionBoundaryLine(
   };
 }
 
+function marketDirectionReadinessStatusLabel(status: string, language: 'zh' | 'en'): string {
+  const labels = language === 'en'
+    ? {
+      direction_ready: 'Direction-ready',
+      partial_context_only: 'Context-only',
+      data_insufficient: 'Data insufficient',
+    }
+    : {
+      direction_ready: '方向可用',
+      partial_context_only: '仅作上下文',
+      data_insufficient: '数据不足',
+    };
+  return labels[status as keyof typeof labels] || status;
+}
+
+function marketDirectionReadinessStatusVariant(status: string): MarketOverviewDirectionReadinessView['statusVariant'] {
+  if (status === 'direction_ready') {
+    return 'success';
+  }
+  if (status === 'partial_context_only') {
+    return 'caution';
+  }
+  if (status === 'data_insufficient') {
+    return 'danger';
+  }
+  return 'neutral';
+}
+
+function marketDirectionReadinessPillarLine(
+  item: MarketDirectionReadinessPillar,
+  index: number,
+  fallbackPrefix: string,
+): MarketOverviewDirectionReadinessView['scoreGradePillars'][number] {
+  const pillar = marketDecisionSemanticsText(item.pillar);
+  const label = marketDecisionSemanticsText(item.label) || pillar || `${fallbackPrefix} ${index + 1}`;
+  return {
+    key: `${fallbackPrefix}-${pillar || label}-${index}`,
+    label,
+    reasonCode: marketDecisionSemanticsText(item.reasonCode),
+  };
+}
+
+function buildMarketDirectionReadinessView(
+  readiness: MarketDirectionReadiness | undefined,
+  language: 'zh' | 'en',
+): MarketOverviewDirectionReadinessView | undefined {
+  if (!readiness) {
+    return undefined;
+  }
+  return {
+    status: readiness.status,
+    statusLabel: marketDirectionReadinessStatusLabel(readiness.status, language),
+    statusVariant: marketDirectionReadinessStatusVariant(readiness.status),
+    confidenceLabel: regimeConfidenceLabel(readiness.confidenceLabel),
+    scoreGradeCount: readiness.scoreGradePillars.count,
+    observationOnlyCount: readiness.observationOnlyPillars.count,
+    missingCount: readiness.missingPillars.count,
+    scoreGradePillars: readiness.scoreGradePillars.items.map((item, index) => marketDirectionReadinessPillarLine(item, index, 'score')),
+    observationOnlyPillars: readiness.observationOnlyPillars.items.map((item, index) => marketDirectionReadinessPillarLine(item, index, 'observation')),
+    missingPillars: readiness.missingPillars.items.map((item, index) => marketDirectionReadinessPillarLine(item, index, 'missing')),
+    blockingReasons: readiness.blockingReasons,
+    notInvestmentAdvice: readiness.notInvestmentAdvice,
+  };
+}
+
 function buildMarketDecisionSemanticsView(
   semantics: MarketDecisionSemantics | undefined,
   language: 'zh' | 'en',
@@ -1028,6 +1096,7 @@ function buildMarketDecisionSemanticsView(
     invalidationTriggers: semantics.invalidationTriggers.map((item, index) => marketDecisionSemanticsLine(item, index, 'invalidate')),
     counterEvidence: semantics.counterEvidence.map((item, index) => marketDecisionSemanticsLine(item, index, 'counter')),
     dataGaps: semantics.dataGaps.map((item, index) => marketDecisionSemanticsLine(item, index, 'gap')),
+    directionReadiness: buildMarketDirectionReadinessView(semantics.directionReadiness, language),
     claimBoundaries: semantics.claimBoundaries.map((item, index) => marketDecisionBoundaryLine(item, index, language)),
     notInvestmentAdvice: semantics.notInvestmentAdvice,
   };

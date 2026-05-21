@@ -301,6 +301,12 @@ def test_public_temperature_and_briefing_shapes_do_not_leak_the_shared_input_sna
     assert {"source", "updatedAt", "items", "confidence", "isReliable", "fallbackUsed", "providerHealth", "evidenceSnapshot"}.issubset(briefing_payload)
     assert temperature_payload["marketRegimeSynthesis"]["notInvestmentAdvice"] is True
     assert "primaryRegime" in temperature_payload["marketRegimeSynthesis"]
+    assert temperature_payload["marketDecisionSemantics"]["directionReadiness"]["notInvestmentAdvice"] is True
+    assert temperature_payload["marketDecisionSemantics"]["directionReadiness"]["status"] in {
+        "direction_ready",
+        "partial_context_only",
+        "data_insufficient",
+    }
 
 
 def test_temperature_input_builder_uses_internal_snapshots_without_public_wrapper_side_effects() -> None:

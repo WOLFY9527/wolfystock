@@ -648,6 +648,27 @@ const marketDecisionSemanticsPayload = () => ({
     capReasons: ['counter_evidence_present'],
   },
   exposureBias: 'risk_on_watch',
+  directionReadiness: {
+    status: 'direction_ready',
+    confidenceLabel: 'medium',
+    scoreGradePillars: {
+      count: 3,
+      items: [
+        { pillar: 'official_macro_rates_volatility', label: 'Official macro/rates/volatility', reasonCode: 'score_grade_evidence' },
+        { pillar: 'liquidity_conditions', label: 'Liquidity/conditions', reasonCode: 'score_grade_evidence' },
+        { pillar: 'rotation_or_risk_participation', label: 'Rotation/risk participation', reasonCode: 'score_grade_evidence' },
+      ],
+    },
+    observationOnlyPillars: { count: 0, items: [] },
+    missingPillars: { count: 0, items: [] },
+    blockingReasons: [],
+    claimBoundaries: [
+      { claim: 'market_direction_readiness_context', allowed: true, reasonCode: 'direction_ready' },
+      { claim: 'trade_instruction', allowed: false, reasonCode: 'not_investment_advice' },
+      { claim: 'allocation_or_suitability_guidance', allowed: false, reasonCode: 'not_investment_advice' },
+    ],
+    notInvestmentAdvice: true,
+  },
   styleTilts: [
     { tilt: 'liquidity_beta_watch', label: 'Liquidity beta watch', detail: 'Risk-on regime and expanding liquidity align, but this remains watch-only.' },
     { tilt: 'rotation_leadership_watch', label: 'Rotation leadership watch', detail: 'Score-grade rotation leadership is confirming the posture watch.' },
@@ -682,6 +703,34 @@ const insufficientMarketDecisionSemanticsPayload = () => ({
     capReasons: ['missing_scoring_pillars', 'proxy_or_observation_only_evidence'],
   },
   exposureBias: 'no_bias_data_insufficient',
+  directionReadiness: {
+    status: 'data_insufficient',
+    confidenceLabel: 'insufficient',
+    scoreGradePillars: { count: 0, items: [] },
+    observationOnlyPillars: {
+      count: 2,
+      items: [
+        { pillar: 'official_macro_rates_volatility', label: 'Official macro/rates/volatility', reasonCode: 'fallback_or_proxy_evidence' },
+        { pillar: 'rotation_or_risk_participation', label: 'Rotation/risk participation', reasonCode: 'observation_only_evidence' },
+      ],
+    },
+    missingPillars: {
+      count: 1,
+      items: [
+        { pillar: 'liquidity_conditions', label: 'Liquidity/conditions', reasonCode: 'missing_scoring_evidence' },
+      ],
+    },
+    blockingReasons: [
+      'no_meaningful_score_grade_pillars',
+      'fallback_proxy_or_observation_only_evidence_present',
+    ],
+    claimBoundaries: [
+      { claim: 'market_direction_readiness_context', allowed: false, reasonCode: 'data_insufficient' },
+      { claim: 'trade_instruction', allowed: false, reasonCode: 'not_investment_advice' },
+      { claim: 'allocation_or_suitability_guidance', allowed: false, reasonCode: 'not_investment_advice' },
+    ],
+    notInvestmentAdvice: true,
+  },
   styleTilts: [],
   confirmationSignals: [],
   invalidationTriggers: [],
@@ -2088,6 +2137,13 @@ describe('MarketOverviewPage', () => {
     expect(posturePanel).toHaveTextContent('counter_evidence_present');
     expect(posturePanel).toHaveTextContent('非投资建议');
     expect(posturePanel).toHaveTextContent('not_investment_advice');
+
+    const readinessStrip = within(posturePanel).getByTestId('market-direction-readiness-strip');
+    expect(readinessStrip).toHaveTextContent('方向可用');
+    expect(readinessStrip).toHaveTextContent('评分级 3');
+    expect(readinessStrip).toHaveTextContent('观察级 0');
+    expect(readinessStrip).toHaveTextContent('缺口 0');
+    expect(readinessStrip).toHaveTextContent('Official macro/rates/volatility');
   });
 
   it('keeps data-insufficient posture conservative without trading advice language', async () => {
@@ -2103,6 +2159,8 @@ describe('MarketOverviewPage', () => {
     expect(posturePanel).toHaveTextContent('可靠证据不足');
     expect(posturePanel).toHaveTextContent('missing_scoring_pillars');
     expect(posturePanel).toHaveTextContent('BTC');
+    expect(within(posturePanel).getByTestId('market-direction-readiness-strip')).toHaveTextContent('数据不足');
+    expect(within(posturePanel).getByTestId('market-direction-readiness-reasons')).toHaveTextContent('fallback_proxy_or_observation_only_evidence_present');
     expect(text).not.toMatch(/买入|卖出|加仓|减仓|仓位|看多|看空|bullish|bearish|buy|sell|add|reduce|position-size/i);
   });
 

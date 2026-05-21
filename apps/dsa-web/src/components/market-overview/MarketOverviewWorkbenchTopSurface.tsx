@@ -75,6 +75,27 @@ export type MarketOverviewDecisionSemanticsBoundaryView = {
   reasonCode?: string;
 };
 
+export type MarketOverviewDirectionReadinessPillarView = {
+  key: string;
+  label: string;
+  reasonCode?: string;
+};
+
+export type MarketOverviewDirectionReadinessView = {
+  status: 'direction_ready' | 'partial_context_only' | 'data_insufficient' | string;
+  statusLabel: string;
+  statusVariant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+  confidenceLabel: string;
+  scoreGradeCount: number;
+  observationOnlyCount: number;
+  missingCount: number;
+  scoreGradePillars: MarketOverviewDirectionReadinessPillarView[];
+  observationOnlyPillars: MarketOverviewDirectionReadinessPillarView[];
+  missingPillars: MarketOverviewDirectionReadinessPillarView[];
+  blockingReasons: string[];
+  notInvestmentAdvice: boolean;
+};
+
 export type MarketOverviewDecisionSemanticsView = {
   postureLabel: string;
   confidenceLabel: string;
@@ -87,6 +108,7 @@ export type MarketOverviewDecisionSemanticsView = {
   invalidationTriggers: MarketOverviewDecisionSemanticsLineView[];
   counterEvidence: MarketOverviewDecisionSemanticsLineView[];
   dataGaps: MarketOverviewDecisionSemanticsLineView[];
+  directionReadiness?: MarketOverviewDirectionReadinessView;
   claimBoundaries: MarketOverviewDecisionSemanticsBoundaryView[];
   notInvestmentAdvice: boolean;
 };
@@ -198,6 +220,68 @@ const MarketDecisionSemanticsList: React.FC<{
   </div>
 );
 
+const MarketDirectionReadinessStrip: React.FC<{
+  view?: MarketOverviewDirectionReadinessView;
+}> = ({ view }) => {
+  if (!view) {
+    return null;
+  }
+
+  const pillarSummary = [
+    ...view.scoreGradePillars,
+    ...view.observationOnlyPillars,
+    ...view.missingPillars,
+  ].slice(0, 3);
+
+  return (
+    <div
+      data-testid="market-direction-readiness-strip"
+      className="mt-3 min-w-0 rounded-md border border-white/[0.07] bg-black/10 px-3 py-2"
+    >
+      <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <TerminalChip
+            variant={view.statusVariant}
+            className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest"
+          >
+            {view.statusLabel}
+          </TerminalChip>
+          <TerminalChip variant="neutral" className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest">
+            {view.confidenceLabel}
+          </TerminalChip>
+          <span className="font-mono text-[11px] text-white/55">
+            评分级 {view.scoreGradeCount} · 观察级 {view.observationOnlyCount} · 缺口 {view.missingCount}
+          </span>
+        </div>
+        {view.blockingReasons.length ? (
+          <p
+            data-testid="market-direction-readiness-reasons"
+            className="min-w-0 break-words font-mono text-[10px] leading-4 text-amber-100/62 lg:max-w-[48%] lg:text-right"
+          >
+            {view.blockingReasons.slice(0, 3).join(' · ')}
+          </p>
+        ) : null}
+      </div>
+      {pillarSummary.length ? (
+        <div className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-[10px] font-semibold text-white/48">
+          {pillarSummary.map((pillar) => (
+            <span
+              key={pillar.key}
+              className="max-w-full truncate rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1"
+            >
+              {pillar.label}
+              {pillar.reasonCode && pillar.reasonCode !== 'score_grade_evidence' ? ` · ${pillar.reasonCode}` : ''}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {view.notInvestmentAdvice ? (
+        <p className="mt-2 text-[10px] font-semibold text-white/34">非投资建议</p>
+      ) : null}
+    </div>
+  );
+};
+
 const MarketDecisionSemanticsStrip: React.FC<{
   view?: MarketOverviewDecisionSemanticsView;
 }> = ({ view }) => {
@@ -241,6 +325,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
                 {view.capReasons.join(' · ')}
               </p>
             ) : null}
+            <MarketDirectionReadinessStrip view={view.directionReadiness} />
             <div
               data-testid="market-decision-semantics-claim-boundaries"
               className="mt-2 flex min-w-0 flex-wrap gap-1.5"

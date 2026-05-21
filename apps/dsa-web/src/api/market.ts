@@ -306,6 +306,32 @@ export type MarketDecisionSemanticsClaimBoundary = MarketDecisionSemanticsItem &
   allowed?: boolean;
 };
 
+export type MarketDirectionReadinessStatus = 'direction_ready' | 'partial_context_only' | 'data_insufficient';
+export type MarketDirectionReadinessConfidenceLabel = 'high' | 'medium' | 'low' | 'insufficient' | string;
+
+export type MarketDirectionReadinessPillar = MarketDecisionSemanticsItem & {
+  pillar?: string;
+  reasonCode?: string;
+  evidenceRefs?: MarketDecisionSemanticsItem[];
+};
+
+export type MarketDirectionReadinessBucket = {
+  count: number;
+  items: MarketDirectionReadinessPillar[];
+};
+
+export type MarketDirectionReadiness = {
+  version?: string;
+  status: MarketDirectionReadinessStatus;
+  confidenceLabel: MarketDirectionReadinessConfidenceLabel;
+  scoreGradePillars: MarketDirectionReadinessBucket;
+  observationOnlyPillars: MarketDirectionReadinessBucket;
+  missingPillars: MarketDirectionReadinessBucket;
+  blockingReasons: string[];
+  claimBoundaries: MarketDecisionSemanticsClaimBoundary[];
+  notInvestmentAdvice: boolean;
+};
+
 export type MarketDecisionSemantics = {
   version?: string;
   posture: string;
@@ -320,6 +346,7 @@ export type MarketDecisionSemantics = {
   invalidationTriggers: MarketDecisionSemanticsItem[];
   counterEvidence: MarketDecisionSemanticsItem[];
   dataGaps: MarketDecisionSemanticsItem[];
+  directionReadiness?: MarketDirectionReadiness;
   claimBoundaries: MarketDecisionSemanticsClaimBoundary[];
   notInvestmentAdvice: boolean;
 };
@@ -435,6 +462,35 @@ function normalizeMarketDecisionSemanticsList<T extends MarketDecisionSemanticsI
     : [];
 }
 
+function normalizeMarketDirectionReadinessBucket(
+  bucket?: Partial<MarketDirectionReadinessBucket> | null,
+): MarketDirectionReadinessBucket {
+  const items = normalizeMarketDecisionSemanticsList(bucket?.items);
+  return {
+    count: typeof bucket?.count === 'number' ? bucket.count : items.length,
+    items,
+  };
+}
+
+function normalizeMarketDirectionReadiness(
+  readiness?: Partial<MarketDirectionReadiness> | null,
+): MarketDirectionReadiness | undefined {
+  if (!readiness?.status) {
+    return undefined;
+  }
+  return {
+    version: readiness.version,
+    status: readiness.status,
+    confidenceLabel: readiness.confidenceLabel || 'insufficient',
+    scoreGradePillars: normalizeMarketDirectionReadinessBucket(readiness.scoreGradePillars),
+    observationOnlyPillars: normalizeMarketDirectionReadinessBucket(readiness.observationOnlyPillars),
+    missingPillars: normalizeMarketDirectionReadinessBucket(readiness.missingPillars),
+    blockingReasons: Array.isArray(readiness.blockingReasons) ? readiness.blockingReasons.filter(Boolean) : [],
+    claimBoundaries: normalizeMarketDecisionSemanticsList(readiness.claimBoundaries),
+    notInvestmentAdvice: readiness.notInvestmentAdvice !== false,
+  };
+}
+
 function normalizeMarketDecisionSemantics(
   semantics?: Partial<MarketDecisionSemantics> | null,
 ): MarketDecisionSemantics | undefined {
@@ -457,6 +513,7 @@ function normalizeMarketDecisionSemantics(
     invalidationTriggers: normalizeMarketDecisionSemanticsList(semantics.invalidationTriggers),
     counterEvidence: normalizeMarketDecisionSemanticsList(semantics.counterEvidence),
     dataGaps: normalizeMarketDecisionSemanticsList(semantics.dataGaps),
+    directionReadiness: normalizeMarketDirectionReadiness(semantics.directionReadiness),
     claimBoundaries: normalizeMarketDecisionSemanticsList(semantics.claimBoundaries),
     notInvestmentAdvice: semantics.notInvestmentAdvice !== false,
   };

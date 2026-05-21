@@ -14,6 +14,7 @@ from typing import Any, Mapping, Sequence
 
 
 MARKET_DECISION_SEMANTICS_VERSION = "market_decision_semantics_v1"
+MARKET_DIRECTION_READINESS_VERSION = "market_direction_readiness_v1"
 
 _OFFENSIVE_REGIMES = {
     "risk_on_liquidity_expansion": 1.0,
@@ -55,6 +56,84 @@ _NON_SCORE_GRADE_SOURCE_TIERS = {
 
 _NON_SCORE_GRADE_FRESHNESS = {"fallback", "unavailable", "error"}
 _NON_SCORE_GRADE_ROTATION_QUALITY = {"degraded_proxy", "taxonomy_only", "proxy_only", "fallback_only"}
+_READINESS_BLOCKED_FRESHNESS = {"stale", "partial", "fallback", "unavailable", "error", "mock", "synthetic"}
+_READINESS_BLOCKED_TRUST = {"weak", "degraded", "unavailable", "rejected"}
+_READINESS_REQUIRED_PILLARS = {
+    "official_macro_rates_volatility": "Official macro/rates/volatility",
+    "liquidity_conditions": "Liquidity/conditions",
+    "rotation_or_risk_participation": "Rotation/risk participation",
+}
+_OFFICIAL_MACRO_PILLARS = {"rates_pressure", "volatility_stress", "dollar_pressure"}
+_RISK_PARTICIPATION_PILLARS = {
+    "risk_appetite",
+    "breadth_health",
+    "china_risk_appetite",
+    "crypto_risk_beta",
+    "rotation_leadership",
+    "risk_asset_demand",
+    "breadth_confirmation",
+    "crypto_liquidity_beta",
+}
+_OFFICIAL_SOURCE_TIERS = {"official_public", "official_api"}
+_OFFICIAL_SOURCES = {"fred", "treasury", "official_macro"}
+_READINESS_PROXY_SOURCE_MARKERS = (
+    "proxy",
+    "yfinance",
+    "yahoo",
+    "fallback",
+    "static",
+    "synthetic",
+    "unavailable",
+    "missing",
+)
+_READINESS_DEGRADATION_MARKERS = (
+    "proxy",
+    "fallback",
+    "static",
+    "synthetic",
+    "unavailable",
+    "missing",
+    "rejected",
+)
+_READINESS_MAX_ITEMS = 6
+
+
+@dataclass(frozen=True, slots=True)
+class DirectionReadinessBucket:
+    count: int
+    items: tuple[dict[str, Any], ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "count": self.count,
+            "items": [dict(item) for item in self.items],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class MarketDirectionReadiness:
+    status: str
+    confidence_label: str
+    score_grade_pillars: DirectionReadinessBucket
+    observation_only_pillars: DirectionReadinessBucket
+    missing_pillars: DirectionReadinessBucket
+    blocking_reasons: tuple[str, ...]
+    claim_boundaries: tuple[dict[str, Any], ...]
+    not_investment_advice: bool = True
+    version: str = MARKET_DIRECTION_READINESS_VERSION
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "version": self.version,
+            "status": self.status,
+            "confidenceLabel": self.confidence_label,
+            "scoreGradePillars": self.score_grade_pillars.to_dict(),
+            "observationOnlyPillars": self.observation_only_pillars.to_dict(),
+            "missingPillars": self.missing_pillars.to_dict(),
+            "blockingReasons": list(self.blocking_reasons),
+            "claimBoundaries": [dict(item) for item in self.claim_boundaries],
+            "notInvestmentAdvice": self.not_investment_advice,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +160,7 @@ class MarketDecisionSemanticsResult:
     invalidation_triggers: tuple[dict[str, Any], ...]
     counter_evidence: tuple[dict[str, Any], ...]
     data_gaps: tuple[dict[str, Any], ...]
+    direction_readiness: MarketDirectionReadiness
     claim_boundaries: tuple[dict[str, Any], ...]
     not_investment_advice: bool = True
     version: str = MARKET_DECISION_SEMANTICS_VERSION
@@ -96,6 +176,7 @@ class MarketDecisionSemanticsResult:
             "invalidationTriggers": [dict(item) for item in self.invalidation_triggers],
             "counterEvidence": [dict(item) for item in self.counter_evidence],
             "dataGaps": [dict(item) for item in self.data_gaps],
+            "directionReadiness": self.direction_readiness.to_dict(),
             "claimBoundaries": [dict(item) for item in self.claim_boundaries],
             "notInvestmentAdvice": self.not_investment_advice,
         }
@@ -186,6 +267,13 @@ class MarketDecisionSemanticsService:
             rotation,
             rotation_style_allowed,
         )
+        direction_readiness = _derive_direction_readiness(
+            regime,
+            liquidity,
+            rotation,
+            posture,
+            posture_confidence,
+        )
         claim_boundaries = _claim_boundaries(posture, posture_confidence, bool(style_tilts))
 
         return MarketDecisionSemanticsResult(
@@ -197,6 +285,7 @@ class MarketDecisionSemanticsService:
             invalidation_triggers=invalidation_triggers,
             counter_evidence=counter_evidence,
             data_gaps=data_gaps,
+            direction_readiness=direction_readiness,
             claim_boundaries=claim_boundaries,
         )
 
@@ -616,6 +705,362 @@ def _rotation_style_allowed(rotation: Mapping[str, Any]) -> bool:
     if _text(rotation.get("sourceTier")).lower() in _NON_SCORE_GRADE_SOURCE_TIERS:
         return False
     return True
+
+
+def _derive_direction_readiness(
+    regime: Mapping[str, Any],
+    liquidity: Mapping[str, Any],
+    rotation: Mapping[str, Any],
+    posture: str,
+    posture_confidence: PostureConfidence,
+) -> MarketDirectionReadiness:
+    score_grade: list[dict[str, Any]] = []
+    observation_only: list[dict[str, Any]] = []
+    missing: list[dict[str, Any]] = []
+
+    for classification in (
+        _classify_official_macro_readiness(regime, liquidity),
+        _classify_liquidity_readiness(liquidity),
+        _classify_rotation_or_risk_participation_readiness(regime, liquidity, rotation),
+    ):
+        if classification["status"] == "score_grade":
+            score_grade.append(classification["item"])
+        elif classification["status"] == "observation_only":
+            observation_only.append(classification["item"])
+        else:
+            missing.append(classification["item"])
+
+    blocking_reasons: list[str] = []
+    for item in observation_only + missing:
+        _append_unique(blocking_reasons, f"required_{item['pillar']}_not_score_grade")
+
+    fallback_proxy_present = bool(_readiness_non_score_evidence_count(regime, liquidity) or observation_only)
+    if fallback_proxy_present:
+        _append_unique(blocking_reasons, "fallback_proxy_or_observation_only_evidence_present")
+    if posture == "data_insufficient":
+        _append_unique(blocking_reasons, "market_decision_semantics_data_insufficient")
+
+    score_grade_count = len(score_grade)
+    non_score_dominant = fallback_proxy_present and score_grade_count <= 1
+    if score_grade_count == len(_READINESS_REQUIRED_PILLARS) and posture != "data_insufficient":
+        status = "direction_ready"
+        blocking_reasons = []
+    elif score_grade_count == 0 or non_score_dominant:
+        status = "data_insufficient"
+        _append_unique(blocking_reasons, "no_meaningful_score_grade_pillars")
+    else:
+        status = "partial_context_only"
+
+    return MarketDirectionReadiness(
+        status=status,
+        confidence_label=_direction_readiness_confidence_label(status, posture_confidence),
+        score_grade_pillars=_readiness_bucket(score_grade),
+        observation_only_pillars=_readiness_bucket(observation_only),
+        missing_pillars=_readiness_bucket(missing),
+        blocking_reasons=tuple(blocking_reasons),
+        claim_boundaries=_direction_readiness_claim_boundaries(status),
+    )
+
+
+def _classify_official_macro_readiness(
+    regime: Mapping[str, Any],
+    liquidity: Mapping[str, Any],
+) -> dict[str, Any]:
+    pillar = "official_macro_rates_volatility"
+    evidence = [
+        item
+        for item in _readiness_surface_items(regime, "market_regime_synthesis", ("topDrivers", "dataGaps"))
+        + _readiness_surface_items(liquidity, "liquidity_impulse_synthesis", ("dominantDrivers", "dataGaps"))
+        if _text(item.get("pillar")) in _OFFICIAL_MACRO_PILLARS
+    ]
+    score_grade = [
+        item
+        for item in evidence
+        if _readiness_item_score_grade(item) and _readiness_item_official(item)
+    ]
+    return _readiness_classification(pillar, evidence, score_grade)
+
+
+def _classify_liquidity_readiness(liquidity: Mapping[str, Any]) -> dict[str, Any]:
+    pillar = "liquidity_conditions"
+    quality = _mapping(liquidity.get("evidenceQuality"))
+    drivers = _sequence(liquidity.get("dominantDrivers"))
+    evidence = _readiness_surface_items(liquidity, "liquidity_impulse_synthesis", ("dominantDrivers", "dataGaps"))
+    score_grade_driver_count = _readiness_score_grade_driver_count(drivers)
+    liquidity_score_grade = (
+        _text(liquidity.get("liquidityImpulse")) != "data_insufficient"
+        and int(_float(quality.get("scoringPillarCount"))) >= 3
+        and int(_float(quality.get("realScoringEvidenceCount"))) > 0
+        and score_grade_driver_count >= 2
+    )
+    score_grade = [
+        item
+        for item in evidence
+        if _text(item.get("sourceList")) == "dominantDrivers" and _readiness_item_score_grade(item)
+    ]
+    if liquidity_score_grade and not score_grade:
+        score_grade = [
+            {
+                "surface": "liquidity_impulse_synthesis",
+                "sourceList": "evidenceQuality",
+                "key": "liquidity_impulse_synthesis:evidence_quality",
+                "label": "Liquidity impulse synthesis",
+                "reasonCode": "score_grade_evidence",
+            }
+        ]
+    return _readiness_classification(pillar, evidence, score_grade)
+
+
+def _classify_rotation_or_risk_participation_readiness(
+    regime: Mapping[str, Any],
+    liquidity: Mapping[str, Any],
+    rotation: Mapping[str, Any],
+) -> dict[str, Any]:
+    pillar = "rotation_or_risk_participation"
+    evidence = [
+        item
+        for item in _readiness_surface_items(regime, "market_regime_synthesis", ("topDrivers", "dataGaps"))
+        + _readiness_surface_items(liquidity, "liquidity_impulse_synthesis", ("dominantDrivers", "dataGaps"))
+        if _text(item.get("pillar")) in _RISK_PARTICIPATION_PILLARS
+    ]
+    if rotation:
+        evidence.append({"surface": "rotation_summary", "sourceList": "summary", **dict(rotation)})
+
+    score_grade = [
+        item
+        for item in evidence
+        if (
+            (item.get("surface") == "rotation_summary" and _rotation_readiness_allowed(item))
+            or (
+                item.get("surface") != "rotation_summary"
+                and _readiness_item_score_grade(item)
+            )
+        )
+    ]
+    if not any(item.get("surface") == "rotation_summary" for item in score_grade):
+        risk_participation_count = sum(1 for item in score_grade if item.get("surface") != "rotation_summary")
+        if risk_participation_count < 2:
+            score_grade = [item for item in score_grade if item.get("surface") == "rotation_summary"]
+    return _readiness_classification(pillar, evidence, score_grade)
+
+
+def _readiness_classification(
+    pillar: str,
+    evidence: Sequence[Mapping[str, Any]],
+    score_grade: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    if score_grade:
+        return {
+            "status": "score_grade",
+            "item": _readiness_pillar_item(
+                pillar,
+                "score_grade_evidence",
+                score_grade,
+            ),
+        }
+    if evidence and not _readiness_evidence_only_missing_gaps(evidence):
+        return {
+            "status": "observation_only",
+            "item": _readiness_pillar_item(
+                pillar,
+                _readiness_reason_code(evidence),
+                evidence,
+            ),
+        }
+    return {
+        "status": "missing",
+        "item": _readiness_pillar_item(
+            pillar,
+            "missing_scoring_evidence",
+            (),
+        ),
+    }
+
+
+def _readiness_evidence_only_missing_gaps(evidence: Sequence[Mapping[str, Any]]) -> bool:
+    return bool(evidence) and all(
+        _text(item.get("sourceList")) == "dataGaps"
+        and _text(item.get("reason")) == "missing_scoring_evidence"
+        for item in evidence
+    )
+
+
+def _readiness_pillar_item(
+    pillar: str,
+    reason_code: str,
+    evidence: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    refs = []
+    for item in evidence[:3]:
+        key = _text(item.get("key") or item.get("symbol") or item.get("id") or item.get("label"))
+        label = _text(item.get("label") or item.get("name") or item.get("symbol") or key)
+        if not key and not label:
+            continue
+        refs.append(
+            {
+                "key": key or label,
+                "label": label or key,
+                "surface": _text(item.get("surface")),
+            }
+        )
+    return {
+        "pillar": pillar,
+        "label": _READINESS_REQUIRED_PILLARS[pillar],
+        "reasonCode": reason_code,
+        "evidenceRefs": refs,
+    }
+
+
+def _readiness_bucket(items: Sequence[Mapping[str, Any]]) -> DirectionReadinessBucket:
+    return DirectionReadinessBucket(
+        count=len(items),
+        items=tuple(dict(item) for item in items[:_READINESS_MAX_ITEMS]),
+    )
+
+
+def _readiness_surface_items(
+    payload: Mapping[str, Any],
+    surface: str,
+    keys: Sequence[str],
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for key in keys:
+        for raw_item in _sequence(payload.get(key)):
+            item = _mapping(raw_item)
+            if not item:
+                continue
+            items.append({"surface": surface, "sourceList": key, **item})
+    return items
+
+
+def _readiness_item_score_grade(item: Mapping[str, Any]) -> bool:
+    if _text(item.get("sourceList")) == "dataGaps":
+        return False
+    if _bool(item.get("observationOnly")):
+        return False
+    if _bool(item.get("isFallback")) or _bool(item.get("isUnavailable")) or _bool(item.get("isPartial")):
+        return False
+    if not _bool(item.get("scoreContributionAllowed"), default=True):
+        return False
+    if "includedInScore" in item and not _bool(item.get("includedInScore"), default=True):
+        return False
+    if "sourceAuthorityAllowed" in item and not _bool(item.get("sourceAuthorityAllowed")):
+        return False
+    if _bool(item.get("proxyOnly")):
+        return False
+
+    source_tier = _text(item.get("sourceTier") or item.get("sourceType") or item.get("source")).lower()
+    source = _text(item.get("source")).lower()
+    freshness = _text(item.get("freshness")).lower()
+    trust_level = _text(item.get("trustLevel")).lower()
+    degradation_reason = _text(item.get("degradationReason") or item.get("sourceAuthorityReason")).lower()
+
+    if source_tier in _NON_SCORE_GRADE_SOURCE_TIERS:
+        return False
+    if any(marker in source_tier or marker in source for marker in _READINESS_PROXY_SOURCE_MARKERS):
+        return False
+    if freshness in _READINESS_BLOCKED_FRESHNESS:
+        return False
+    if trust_level in _READINESS_BLOCKED_TRUST:
+        return False
+    if any(marker in degradation_reason for marker in _READINESS_DEGRADATION_MARKERS):
+        return False
+    return True
+
+
+def _readiness_item_official(item: Mapping[str, Any]) -> bool:
+    source_tier = _text(item.get("sourceTier") or item.get("sourceType")).lower()
+    source = _text(item.get("source")).lower()
+    return source_tier in _OFFICIAL_SOURCE_TIERS or source in _OFFICIAL_SOURCES
+
+
+def _rotation_readiness_allowed(rotation: Mapping[str, Any]) -> bool:
+    return _rotation_style_allowed(rotation) and _readiness_item_score_grade(rotation)
+
+
+def _readiness_score_grade_driver_count(drivers: Sequence[Any]) -> int:
+    return sum(1 for raw_item in drivers if _readiness_item_score_grade(_mapping(raw_item)))
+
+
+def _readiness_non_score_evidence_count(
+    regime: Mapping[str, Any],
+    liquidity: Mapping[str, Any],
+) -> int:
+    regime_quality = _mapping(regime.get("evidenceQuality"))
+    liquidity_quality = _mapping(liquidity.get("evidenceQuality"))
+    return (
+        int(_float(regime_quality.get("observationOnlyEvidenceCount")))
+        + int(_float(regime_quality.get("scoreBlockedEvidenceCount")))
+        + int(_float(liquidity_quality.get("observationOnlyEvidenceCount")))
+        + int(_float(liquidity_quality.get("scoreBlockedEvidenceCount")))
+        + int(_float(liquidity_quality.get("proxyOnlyScoringCount")))
+    )
+
+
+def _readiness_reason_code(evidence: Sequence[Mapping[str, Any]]) -> str:
+    for item in evidence:
+        if _bool(item.get("observationOnly")):
+            return "observation_only_evidence"
+        if not _bool(item.get("scoreContributionAllowed"), default=True):
+            return "score_contribution_not_allowed"
+        if "includedInScore" in item and not _bool(item.get("includedInScore"), default=True):
+            return "score_contribution_not_allowed"
+        if "sourceAuthorityAllowed" in item and not _bool(item.get("sourceAuthorityAllowed")):
+            return "source_authority_not_allowed"
+        if _bool(item.get("proxyOnly")):
+            return "fallback_or_proxy_evidence"
+        if _bool(item.get("isFallback")):
+            return "fallback_or_proxy_evidence"
+        if _bool(item.get("isUnavailable")):
+            return "unavailable_evidence"
+        if _bool(item.get("isPartial")):
+            return "partial_evidence"
+        freshness = _text(item.get("freshness")).lower()
+        if freshness in _READINESS_BLOCKED_FRESHNESS:
+            return "freshness_not_ready"
+        source_tier = _text(item.get("sourceTier") or item.get("sourceType") or item.get("source")).lower()
+        source = _text(item.get("source")).lower()
+        if source_tier in _NON_SCORE_GRADE_SOURCE_TIERS or any(
+            marker in source_tier or marker in source for marker in _READINESS_PROXY_SOURCE_MARKERS
+        ):
+            return "fallback_or_proxy_evidence"
+    return "not_score_grade_evidence"
+
+
+def _direction_readiness_confidence_label(
+    status: str,
+    posture_confidence: PostureConfidence,
+) -> str:
+    if status == "data_insufficient":
+        return "insufficient"
+    if status == "partial_context_only":
+        return "low"
+    if posture_confidence.label == "high":
+        return "high"
+    return "medium"
+
+
+def _direction_readiness_claim_boundaries(status: str) -> tuple[dict[str, Any], ...]:
+    return (
+        {
+            "claim": "market_direction_readiness_context",
+            "allowed": status != "data_insufficient",
+            "reasonCode": status,
+            "detail": "Readiness describes evidence coverage and source quality only.",
+        },
+        {
+            "claim": "trade_instruction",
+            "allowed": False,
+            "reasonCode": "not_investment_advice",
+            "detail": "Readiness is not an execution instruction.",
+        },
+        {
+            "claim": "allocation_or_suitability_guidance",
+            "allowed": False,
+            "reasonCode": "not_investment_advice",
+            "detail": "Readiness does not provide allocation or suitability guidance.",
+        },
+    )
 
 
 def _claim_boundaries(

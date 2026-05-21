@@ -181,6 +181,54 @@ def test_score_grade_alignment_produces_observational_offensive_watch() -> None:
     assert result.invalidation_triggers
     assert any(boundary["claim"] == "observational_posture_watch" and boundary["allowed"] for boundary in result.claim_boundaries)
     assert all(boundary["claim"] != "direct_trade_action" or not boundary["allowed"] for boundary in result.claim_boundaries)
+    readiness = result.to_dict()["directionReadiness"]
+    assert readiness["status"] == "direction_ready"
+    assert readiness["confidenceLabel"] in {"medium", "high"}
+    assert readiness["scoreGradePillars"]["count"] == 3
+    assert {item["pillar"] for item in readiness["scoreGradePillars"]["items"]} == {
+        "official_macro_rates_volatility",
+        "liquidity_conditions",
+        "rotation_or_risk_participation",
+    }
+    assert readiness["observationOnlyPillars"]["count"] == 0
+    assert readiness["missingPillars"]["count"] == 0
+    assert readiness["blockingReasons"] == []
+    assert readiness["notInvestmentAdvice"] is True
+    assert any(boundary["claim"] == "trade_instruction" and not boundary["allowed"] for boundary in readiness["claimBoundaries"])
+
+
+def test_direction_readiness_is_context_only_when_required_official_macro_pillar_is_missing() -> None:
+    regime = synthesize_market_regime(
+        [
+            _regime_evidence("spx", "risk_appetite", "up", source_tier="exchange_public"),
+            _regime_evidence("btc", "crypto_risk_beta", "up", source_tier="exchange_public"),
+            _regime_evidence("breadth", "breadth_health", "up", source_tier="exchange_public"),
+            _regime_evidence("rotation", "rotation_leadership", "up", source_tier="tier_1_configured"),
+        ]
+    )
+    liquidity = synthesize_liquidity_impulse(
+        [
+            _liquidity_evidence("btc", "crypto_liquidity_beta", "up", source_tier="exchange_public"),
+            _liquidity_evidence("es", "risk_asset_demand", "up", source_tier="exchange_public"),
+            _liquidity_evidence("breadth", "breadth_confirmation", "up", source_tier="exchange_public"),
+        ]
+    )
+
+    result = derive_market_decision_semantics(
+        regime,
+        liquidity,
+        _rotation_summary(),
+    )
+    readiness = result.to_dict()["directionReadiness"]
+
+    assert readiness["status"] == "partial_context_only"
+    assert readiness["confidenceLabel"] == "low"
+    assert "required_official_macro_rates_volatility_not_score_grade" in readiness["blockingReasons"]
+    assert any(item["pillar"] == "official_macro_rates_volatility" for item in readiness["missingPillars"]["items"])
+    assert {item["pillar"] for item in readiness["scoreGradePillars"]["items"]} == {
+        "liquidity_conditions",
+        "rotation_or_risk_participation",
+    }
 
 
 def test_low_confidence_alignment_keeps_tentative_watch_and_caps_style_claims() -> None:
@@ -309,6 +357,14 @@ def test_proxy_only_or_non_scoring_inputs_cannot_produce_posture_or_style_conclu
     assert result.exposure_bias == "no_bias_data_insufficient"
     assert result.style_tilts == ()
     assert "proxy_or_observation_only_evidence" in result.posture_confidence.cap_reasons
+    readiness = result.to_dict()["directionReadiness"]
+    assert readiness["status"] == "data_insufficient"
+    assert readiness["confidenceLabel"] == "insufficient"
+    assert "no_meaningful_score_grade_pillars" in readiness["blockingReasons"]
+    assert "fallback_proxy_or_observation_only_evidence_present" in readiness["blockingReasons"]
+    assert readiness["scoreGradePillars"]["count"] == 0
+    assert readiness["observationOnlyPillars"]["count"] >= 1
+    assert readiness["notInvestmentAdvice"] is True
     blocked = {item["claim"]: item for item in result.claim_boundaries if not item["allowed"]}
     assert blocked["observational_posture_watch"]["reasonCode"] == "insufficient_score_grade_evidence"
     assert blocked["style_tilt_watch"]["reasonCode"] == "insufficient_score_grade_evidence"
@@ -369,6 +425,7 @@ def test_result_payload_contains_required_fields_and_camel_case_projection() -> 
         "invalidationTriggers",
         "counterEvidence",
         "dataGaps",
+        "directionReadiness",
         "claimBoundaries",
         "notInvestmentAdvice",
     ):
@@ -376,6 +433,7 @@ def test_result_payload_contains_required_fields_and_camel_case_projection() -> 
     assert payload["version"] == MARKET_DECISION_SEMANTICS_VERSION
     assert payload["posture"] == "defensive"
     assert payload["notInvestmentAdvice"] is True
+    assert payload["directionReadiness"]["notInvestmentAdvice"] is True
 
 
 def test_service_module_has_no_provider_network_runtime_or_endpoint_imports() -> None:
