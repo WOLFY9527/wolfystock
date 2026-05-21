@@ -68,12 +68,7 @@ OFFICIAL_MACRO_LIVE_SMOKE_SERIES_IDS = (
     "DGS30",
     "BAMLH0A0HYM2",
 )
-OFFICIAL_MACRO_LIVE_SMOKE_FRED_SERIES_IDS = (
-    "VIXCLS",
-    "SOFR",
-    "DFF",
-    "BAMLH0A0HYM2",
-)
+OFFICIAL_MACRO_LIVE_SMOKE_FRED_SERIES_IDS = OFFICIAL_MACRO_LIVE_SMOKE_SERIES_IDS
 OFFICIAL_MACRO_LIVE_SMOKE_TREASURY_SERIES_IDS = ("DGS2", "DGS10", "DGS30")
 OFFICIAL_MACRO_LIVE_SMOKE_AGGREGATE_BUDGET_SECONDS = 8.0
 OFFICIAL_MACRO_LIVE_SMOKE_FRED_TIMEOUT_SECONDS = 1.0
@@ -445,19 +440,18 @@ def run_official_macro_live_smoke(
     else:
         for series_id in OFFICIAL_MACRO_LIVE_SMOKE_FRED_SERIES_IDS:
             results.setdefault(series_id, "missing")
-
-    treasury_timeout = remaining_timeout(treasury_timeout_seconds)
-    treasury_points: dict[str, list[MacroObservation]] = {}
-    if treasury_timeout is not None:
-        try:
-            treasury_points = fetch_treasury_daily_rate_observation_points(limit=2, timeout=treasury_timeout)
-        except Exception:
-            treasury_points = {}
-    for series_id in OFFICIAL_MACRO_LIVE_SMOKE_TREASURY_SERIES_IDS:
-        series_status = _official_macro_smoke_series_status(series_id, treasury_points.get(series_id, []), now=now)
-        results[series_id] = series_status
-        if series_status == "invalid_metadata":
-            invalid_metadata_detected = True
+        treasury_timeout = remaining_timeout(treasury_timeout_seconds)
+        treasury_points: dict[str, list[MacroObservation]] = {}
+        if treasury_timeout is not None:
+            try:
+                treasury_points = fetch_treasury_daily_rate_observation_points(limit=2, timeout=treasury_timeout)
+            except Exception:
+                treasury_points = {}
+        for series_id in OFFICIAL_MACRO_LIVE_SMOKE_TREASURY_SERIES_IDS:
+            series_status = _official_macro_smoke_series_status(series_id, treasury_points.get(series_id, []), now=now)
+            results[series_id] = series_status
+            if series_status == "invalid_metadata":
+                invalid_metadata_detected = True
 
     fulfilled_series = [
         series_id for series_id in OFFICIAL_MACRO_LIVE_SMOKE_SERIES_IDS if results.get(series_id) == "fulfilled"

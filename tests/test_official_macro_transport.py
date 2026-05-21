@@ -705,7 +705,6 @@ def test_official_macro_live_smoke_missing_fred_key_exits_cleanly_without_secret
 def test_official_macro_live_smoke_reports_bounded_official_series_successfully() -> None:
     now = datetime(2026, 5, 14, 12, 0, tzinfo=timezone.utc)
     fred_requested: list[str] = []
-    treasury_calls: list[float] = []
 
     def _fake_fetch_fred(series_id: str, *, limit: int = 2, timeout: float = 0.0):
         fred_requested.append(series_id)
@@ -713,32 +712,26 @@ def test_official_macro_live_smoke_reports_bounded_official_series_successfully(
             "VIXCLS": 18.22,
             "SOFR": 5.31,
             "DFF": 4.33,
+            "DGS2": 3.87,
+            "DGS10": 4.41,
+            "DGS30": 4.89,
             "BAMLH0A0HYM2": 3.31,
         }
         return [_macro_point(series_id, values[series_id], "2026-05-13")]
-
-    def _fake_fetch_treasury(*, limit: int = 2, timeout: float = 0.0):
-        treasury_calls.append(timeout)
-        return {
-            "DGS2": [_macro_point("DGS2", 3.87, "2026-05-13", source_id="treasury:daily_treasury_yield_curve", freshness_hint="daily_1530_et")],
-            "DGS10": [_macro_point("DGS10", 4.41, "2026-05-13", source_id="treasury:daily_treasury_yield_curve", freshness_hint="daily_1530_et")],
-            "DGS30": [_macro_point("DGS30", 4.89, "2026-05-13", source_id="treasury:daily_treasury_yield_curve", freshness_hint="daily_1530_et")],
-        }
 
     with patch(
         "src.services.official_macro_transport.fetch_fred_observation_points",
         side_effect=_fake_fetch_fred,
     ), patch(
         "src.services.official_macro_transport.fetch_treasury_daily_rate_observation_points",
-        side_effect=_fake_fetch_treasury,
+        side_effect=AssertionError("bounded FRED smoke should not fan out to Treasury when FRED is configured"),
     ), patch(
         "src.services.official_macro_transport.fred_runtime_config_probe",
         return_value={"configPresent": True, "apiKeyPresent": True},
     ):
         summary = run_official_macro_live_smoke(now=now)
 
-    assert fred_requested == ["VIXCLS", "SOFR", "DFF", "BAMLH0A0HYM2"]
-    assert len(treasury_calls) == 1
+    assert fred_requested == ["VIXCLS", "SOFR", "DFF", "DGS2", "DGS10", "DGS30", "BAMLH0A0HYM2"]
     assert summary == {
         "credentialsPresent": True,
         "providerConstructed": True,
@@ -754,30 +747,72 @@ def test_official_macro_live_smoke_reports_bounded_official_series_successfully(
     }
 
 
-def test_official_macro_live_smoke_partial_missing_and_stale_series_fail_closed() -> None:
+def test_official_macro_live_smoke_partial_dgs_coverage_fails_closed_without_treasury_fallback() -> None:
     now = datetime(2026, 5, 14, 12, 0, tzinfo=timezone.utc)
+    fred_requested: list[str] = []
 
     def _fake_fetch_fred(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        fred_requested.append(series_id)
         points = {
             "VIXCLS": [_macro_point("VIXCLS", 18.22, "2026-05-13")],
-            "SOFR": [_macro_point("SOFR", 5.31, "2026-05-08")],
-            "DFF": [],
+            "SOFR": [_macro_point("SOFR", 5.31, "2026-05-13")],
+            "DFF": [_macro_point("DFF", 4.33, "2026-05-13")],
+            "DGS2": [_macro_point("DGS2", 3.87, "2026-05-13")],
+            "DGS10": [_macro_point("DGS10", 4.41, "2026-05-13")],
+            "DGS30": [],
             "BAMLH0A0HYM2": [_macro_point("BAMLH0A0HYM2", 3.31, "2026-05-13")],
         }
         return list(points[series_id])
-
-    treasury_points = {
-        "DGS2": [_macro_point("DGS2", 3.87, "2026-05-13", source_id="treasury:daily_treasury_yield_curve", freshness_hint="daily_1530_et")],
-        "DGS10": [_macro_point("DGS10", 4.41, "2026-05-08", source_id="treasury:daily_treasury_yield_curve", freshness_hint="daily_1530_et")],
-        "DGS30": [_macro_point("DGS30", 4.89, "2026-05-13", source_id="treasury:daily_treasury_yield_curve", freshness_hint="daily_1530_et")],
-    }
 
     with patch(
         "src.services.official_macro_transport.fetch_fred_observation_points",
         side_effect=_fake_fetch_fred,
     ), patch(
         "src.services.official_macro_transport.fetch_treasury_daily_rate_observation_points",
-        return_value=treasury_points,
+        side_effect=AssertionError("partial DGS coverage must not fall back to Treasury when FRED is configured"),
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_official_macro_live_smoke(now=now)
+
+    assert fred_requested == ["VIXCLS", "SOFR", "DFF", "DGS2", "DGS10", "DGS30", "BAMLH0A0HYM2"]
+    assert summary == {
+        "credentialsPresent": True,
+        "providerConstructed": True,
+        "probePassed": False,
+        "freshnessValid": True,
+        "sourceMetadataValid": True,
+        "sourceAuthorityAllowed": False,
+        "scoreContributionAllowed": False,
+        "fulfilledSeries": ["VIXCLS", "SOFR", "DFF", "DGS2", "DGS10", "BAMLH0A0HYM2"],
+        "missingSeries": ["DGS30"],
+        "staleSeries": [],
+        "reason": "series_coverage",
+    }
+
+
+def test_official_macro_live_smoke_stale_dgs_yields_fail_closed_without_treasury_fallback() -> None:
+    now = datetime(2026, 5, 14, 12, 0, tzinfo=timezone.utc)
+
+    def _fake_fetch_fred(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        points = {
+            "VIXCLS": [_macro_point("VIXCLS", 18.22, "2026-05-13")],
+            "SOFR": [_macro_point("SOFR", 5.31, "2026-05-13")],
+            "DFF": [_macro_point("DFF", 4.33, "2026-05-13")],
+            "DGS2": [_macro_point("DGS2", 3.87, "2026-05-13")],
+            "DGS10": [_macro_point("DGS10", 4.41, "2026-05-08")],
+            "DGS30": [_macro_point("DGS30", 4.89, "2026-05-13")],
+            "BAMLH0A0HYM2": [_macro_point("BAMLH0A0HYM2", 3.31, "2026-05-13")],
+        }
+        return list(points[series_id])
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_fake_fetch_fred,
+    ), patch(
+        "src.services.official_macro_transport.fetch_treasury_daily_rate_observation_points",
+        side_effect=AssertionError("stale DGS coverage must not fall back to Treasury when FRED is configured"),
     ), patch(
         "src.services.official_macro_transport.fred_runtime_config_probe",
         return_value={"configPresent": True, "apiKeyPresent": True},
@@ -792,46 +827,43 @@ def test_official_macro_live_smoke_partial_missing_and_stale_series_fail_closed(
         "sourceMetadataValid": True,
         "sourceAuthorityAllowed": False,
         "scoreContributionAllowed": False,
-        "fulfilledSeries": ["VIXCLS", "DGS2", "DGS30", "BAMLH0A0HYM2"],
-        "missingSeries": ["DFF"],
-        "staleSeries": ["SOFR", "DGS10"],
+        "fulfilledSeries": ["VIXCLS", "SOFR", "DFF", "DGS2", "DGS30", "BAMLH0A0HYM2"],
+        "missingSeries": [],
+        "staleSeries": ["DGS10"],
         "reason": "stale_series",
     }
 
 
-def test_official_macro_live_smoke_rejects_proxy_metadata_even_when_values_exist() -> None:
+def test_official_macro_live_smoke_rejects_proxy_metadata_for_treasury_yield_series() -> None:
     now = datetime(2026, 5, 14, 12, 0, tzinfo=timezone.utc)
 
     def _fake_fetch_fred(series_id: str, *, limit: int = 2, timeout: float = 0.0):
-        if series_id == "VIXCLS":
+        if series_id == "DGS10":
             return [
                 _macro_point(
-                    "VIXCLS",
-                    18.22,
+                    "DGS10",
+                    4.41,
                     "2026-05-13",
                     source_id="yfinance_proxy",
                     source_type="unofficial_proxy",
                 )
             ]
         values = {
+            "VIXCLS": 18.22,
             "SOFR": 5.31,
             "DFF": 4.33,
+            "DGS2": 3.87,
+            "DGS30": 4.89,
             "BAMLH0A0HYM2": 3.31,
         }
         return [_macro_point(series_id, values[series_id], "2026-05-13")]
-
-    treasury_points = {
-        "DGS2": [_macro_point("DGS2", 3.87, "2026-05-13", source_id="treasury:daily_treasury_yield_curve", freshness_hint="daily_1530_et")],
-        "DGS10": [_macro_point("DGS10", 4.41, "2026-05-13", source_id="treasury:daily_treasury_yield_curve", freshness_hint="daily_1530_et")],
-        "DGS30": [_macro_point("DGS30", 4.89, "2026-05-13", source_id="treasury:daily_treasury_yield_curve", freshness_hint="daily_1530_et")],
-    }
 
     with patch(
         "src.services.official_macro_transport.fetch_fred_observation_points",
         side_effect=_fake_fetch_fred,
     ), patch(
         "src.services.official_macro_transport.fetch_treasury_daily_rate_observation_points",
-        return_value=treasury_points,
+        side_effect=AssertionError("proxy Treasury yield metadata must not be masked by Treasury fallback when FRED is configured"),
     ), patch(
         "src.services.official_macro_transport.fred_runtime_config_probe",
         return_value={"configPresent": True, "apiKeyPresent": True},
@@ -846,8 +878,8 @@ def test_official_macro_live_smoke_rejects_proxy_metadata_even_when_values_exist
         "sourceMetadataValid": False,
         "sourceAuthorityAllowed": False,
         "scoreContributionAllowed": False,
-        "fulfilledSeries": ["SOFR", "DFF", "DGS2", "DGS10", "DGS30", "BAMLH0A0HYM2"],
-        "missingSeries": ["VIXCLS"],
+        "fulfilledSeries": ["VIXCLS", "SOFR", "DFF", "DGS2", "DGS30", "BAMLH0A0HYM2"],
+        "missingSeries": ["DGS10"],
         "staleSeries": [],
         "reason": "source_metadata_invalid",
     }
