@@ -169,6 +169,232 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
     assert diagnostics["scoreContributionAllowed"] is True
 
 
+def test_liquidity_monitor_route_preserves_evidence_input_authority_metadata() -> None:
+    app = FastAPI()
+    app.include_router(liquidity_monitor.router, prefix="/api/v1/market")
+
+    payload = {
+        "endpoint": "/api/v1/market/liquidity-monitor",
+        "generatedAt": "2026-05-07T10:00:00+08:00",
+        "score": {
+            "value": 50,
+            "regime": "unavailable",
+            "confidence": 0.2,
+            "includedIndicatorCount": 0,
+            "possibleIndicatorWeight": 43,
+            "includedIndicatorWeight": 0,
+        },
+        "freshness": {
+            "status": "delayed",
+            "weakestIndicatorFreshness": "delayed",
+            "latestAsOf": "2026-05-07T10:00:00+08:00",
+        },
+        "indicators": [
+            {
+                "key": "vix_pressure",
+                "label": "VIX pressure",
+                "status": "partial",
+                "freshness": "delayed",
+                "includedInScore": False,
+                "scoreContribution": 0,
+                "evidence": {
+                    "contractVersion": "source_confidence_contract_v1",
+                    "source": "yfinance_proxy",
+                    "sourceLabel": "Yahoo Finance proxy",
+                    "asOf": "2026-05-07T10:00:00+08:00",
+                    "freshness": "partial",
+                    "isFallback": False,
+                    "isStale": False,
+                    "isPartial": True,
+                    "isUnavailable": False,
+                    "coverage": 1.0,
+                    "confidenceWeight": 0.7,
+                    "degradationReason": "proxy_only_missing_real_source",
+                    "capReason": "proxy_only_missing_real_source",
+                    "inputs": [
+                        {
+                            "key": "VIX",
+                            "label": "VIX",
+                            "source": "yfinance_proxy",
+                            "sourceLabel": "Yahoo Finance proxy",
+                            "sourceType": "unofficial_proxy",
+                            "sourceTier": "unofficial_public_api",
+                            "trustLevel": "usable_with_caution",
+                            "asOf": "2026-05-07T10:00:00+08:00",
+                            "freshness": "delayed",
+                            "isFallback": False,
+                            "isStale": False,
+                            "isPartial": False,
+                            "isUnavailable": False,
+                            "observationOnly": False,
+                            "sourceAuthorityAllowed": False,
+                            "scoreContributionAllowed": False,
+                            "sourceAuthorityReason": "proxy_only_missing_real_source",
+                            "sourceAuthorityRouteRejected": True,
+                            "routeRejectedReasonCodes": ["provider_forbidden_for_use_case"],
+                            "officialSeriesId": "VIXCLS",
+                            "officialObservationDate": "2026-05-06",
+                            "officialAsOf": "2026-05-07T09:00:00+08:00",
+                            "coverage": 1.0,
+                            "confidenceWeight": 0.7,
+                            "degradationReason": "proxy_only_missing_real_source",
+                            "capReason": "proxy_only_missing_real_source",
+                        },
+                        {
+                            "key": "fallback_liquidity_proxy",
+                            "label": "Fallback liquidity proxy",
+                            "source": "fallback",
+                            "sourceLabel": "Static fallback",
+                            "sourceType": "fallback_static",
+                            "sourceTier": "static_fallback",
+                            "trustLevel": "unavailable",
+                            "asOf": "2026-05-07T10:00:00+08:00",
+                            "freshness": "fallback",
+                            "isFallback": True,
+                            "isStale": False,
+                            "isPartial": False,
+                            "isUnavailable": True,
+                            "observationOnly": True,
+                            "sourceAuthorityAllowed": False,
+                            "scoreContributionAllowed": False,
+                            "sourceAuthorityReason": "fallback_not_score_grade",
+                            "sourceAuthorityRouteRejected": False,
+                            "routeRejectedReasonCodes": [],
+                            "officialSeriesId": "FALLBACK_PROXY",
+                            "officialObservationDate": "2026-05-06",
+                            "officialAsOf": "2026-05-07T09:00:00+08:00",
+                            "coverage": 0.0,
+                            "confidenceWeight": 0.0,
+                            "degradationReason": "fallback_source",
+                            "capReason": "unavailable_source",
+                        },
+                    ],
+                },
+                "coverageDiagnostics": {
+                    "indicatorId": "vix_pressure",
+                    "indicatorName": "VIX pressure",
+                    "requiredInputs": ["VIX"],
+                    "fulfilledInputs": ["VIX"],
+                    "missingInputs": [],
+                    "requiredProviderClass": "official_public.vix_or_volatility",
+                    "configuredProviderAvailable": True,
+                    "realSourceAvailable": False,
+                    "proxyOnly": True,
+                    "observationOnly": False,
+                    "scoreContributionAllowed": False,
+                    "scoreExclusionReason": "proxy_only_missing_real_source",
+                    "requiredRealSourceForScore": True,
+                    "proxyObservationOnlyReason": "proxy_only_missing_real_source",
+                    "missingProviderReason": "requires_official_public.vix_or_volatility",
+                    "paidDataLikelyRequired": False,
+                    "sourceTier": "unofficial_public_api",
+                    "freshness": "partial",
+                    "trustLevel": "usable_with_caution",
+                    "contributesToScore": False,
+                    "scoreContribution": 0,
+                    "capReason": "proxy_only_missing_real_source",
+                    "degradationReason": "proxy_only_missing_real_source",
+                    "sourceAuthorityRouteRejected": True,
+                    "sourceAuthorityReason": "proxy_only_missing_real_source",
+                    "routeRejectedReasonCodes": ["provider_forbidden_for_use_case"],
+                    "activationHint": "proxy capped",
+                },
+            }
+        ],
+        "liquidityImpulseSynthesis": {
+            "liquidityImpulse": "data_insufficient",
+            "impulseLabel": "Data insufficient for a reliable liquidity call",
+            "subtype": "data_insufficient",
+            "confidence": 0.2,
+            "confidenceLabel": "insufficient",
+            "pillarScores": {},
+            "directionScore": 0.0,
+            "dominantDrivers": [],
+            "counterEvidence": [],
+            "dataGaps": [{"key": "liquidity_monitor:vix_pressure", "reason": "score_contribution_not_allowed"}],
+            "narrativeBullets": ["Available evidence is degraded or non-score-eligible."],
+            "evidenceQuality": {"proxyOnlyScoringCount": 0},
+            "notInvestmentAdvice": True,
+        },
+        "advisoryDisclosure": "Advisory-only liquidity monitor output.",
+        "sourceMetadata": {
+            "externalProviderCalls": False,
+            "providerRuntimeChanged": False,
+            "marketCacheMutation": False,
+        },
+    }
+
+    with patch("api.v1.endpoints.liquidity_monitor.LiquidityMonitorService") as mock_service:
+        mock_service.return_value.get_liquidity_monitor.return_value = payload
+        response = TestClient(app).get("/api/v1/market/liquidity-monitor")
+
+    assert response.status_code == 200
+    body = response.json()
+    indicator = body["indicators"][0]
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert indicator["coverageDiagnostics"]["scoreContributionAllowed"] is False
+    assert indicator["coverageDiagnostics"]["contributesToScore"] is False
+
+    proxy_input, fallback_input = indicator["evidence"]["inputs"]
+    for evidence_input in (proxy_input, fallback_input):
+        assert set(
+            [
+                "sourceAuthorityAllowed",
+                "scoreContributionAllowed",
+                "sourceAuthorityReason",
+                "sourceAuthorityRouteRejected",
+                "routeRejectedReasonCodes",
+                "officialSeriesId",
+                "officialObservationDate",
+                "officialAsOf",
+                "sourceLabel",
+                "sourceTier",
+                "trustLevel",
+                "freshness",
+                "asOf",
+                "isFallback",
+                "isUnavailable",
+                "isPartial",
+                "observationOnly",
+            ]
+        ).issubset(evidence_input)
+        assert evidence_input["sourceAuthorityAllowed"] is False
+        assert evidence_input["scoreContributionAllowed"] is False
+
+    assert proxy_input["sourceLabel"] == "Yahoo Finance proxy"
+    assert proxy_input["sourceTier"] == "unofficial_public_api"
+    assert proxy_input["trustLevel"] == "usable_with_caution"
+    assert proxy_input["freshness"] == "delayed"
+    assert proxy_input["asOf"] == "2026-05-07T10:00:00+08:00"
+    assert proxy_input["isFallback"] is False
+    assert proxy_input["isUnavailable"] is False
+    assert proxy_input["isPartial"] is False
+    assert proxy_input["observationOnly"] is False
+    assert proxy_input["sourceAuthorityReason"] == "proxy_only_missing_real_source"
+    assert proxy_input["sourceAuthorityRouteRejected"] is True
+    assert proxy_input["routeRejectedReasonCodes"] == ["provider_forbidden_for_use_case"]
+    assert proxy_input["officialSeriesId"] == "VIXCLS"
+    assert proxy_input["officialObservationDate"] == "2026-05-06"
+    assert proxy_input["officialAsOf"] == "2026-05-07T09:00:00+08:00"
+
+    assert fallback_input["sourceLabel"] == "Static fallback"
+    assert fallback_input["sourceTier"] == "static_fallback"
+    assert fallback_input["trustLevel"] == "unavailable"
+    assert fallback_input["freshness"] == "fallback"
+    assert fallback_input["asOf"] == "2026-05-07T10:00:00+08:00"
+    assert fallback_input["isFallback"] is True
+    assert fallback_input["isUnavailable"] is True
+    assert fallback_input["isPartial"] is False
+    assert fallback_input["observationOnly"] is True
+    assert fallback_input["sourceAuthorityReason"] == "fallback_not_score_grade"
+    assert fallback_input["sourceAuthorityRouteRejected"] is False
+    assert fallback_input["routeRejectedReasonCodes"] == []
+    assert fallback_input["officialSeriesId"] == "FALLBACK_PROXY"
+    assert fallback_input["officialObservationDate"] == "2026-05-06"
+    assert fallback_input["officialAsOf"] == "2026-05-07T09:00:00+08:00"
+
+
 def test_liquidity_monitor_route_preserves_explicit_non_live_indicator_contracts() -> None:
     app = FastAPI()
     app.include_router(liquidity_monitor.router, prefix="/api/v1/market")
