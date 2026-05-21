@@ -9,52 +9,74 @@ export const OfficialMacroAuthorityDiagnostics: React.FC<{
   view: OfficialMacroAuthorityDiagnosticsView;
 }> = ({ testId, title, view }) => {
   const resolvedCount = view.rows.filter((row) => !row.missing).length;
+  const countRowsWithChip = (label: string) => view.rows.filter((row) => row.chips.some((chip) => chip.label === label)).length;
+  const officialCount = countRowsWithChip('Official');
+  const proxyCount = countRowsWithChip('Proxy-only');
+  const fallbackCount = countRowsWithChip('Fallback');
+  const unavailableCount = countRowsWithChip('Unavailable');
+  const rejectedCount = countRowsWithChip('Rejected');
+  const gapCount = view.rows.filter((row) => row.missing).length;
+  const hasGapsOrRejections = gapCount > 0 || rejectedCount > 0;
 
   return (
     <TerminalPanel dense data-testid={testId} className="bg-white/[0.02]">
-      <TerminalSectionHeader
-        eyebrow="官方宏观"
-        title={title}
-        action={<TerminalChip variant="neutral">{`${resolvedCount} / ${view.scopeSeries.length}`}</TerminalChip>}
-      />
+      <details>
+        <summary className="cursor-pointer list-none rounded-md outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 [&::-webkit-details-marker]:hidden">
+          <TerminalSectionHeader
+            eyebrow="官方宏观"
+            title={title}
+            action={<TerminalChip variant="neutral">{`${resolvedCount} / ${view.scopeSeries.length}`}</TerminalChip>}
+          />
 
-      <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
-        {view.scopeSeries.map((seriesId) => (
-          <TerminalChip key={seriesId} variant="neutral" className="font-mono text-[10px]">
-            {seriesId}
-          </TerminalChip>
-        ))}
-      </div>
+          <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
+            <TerminalChip variant="success">Official {officialCount}</TerminalChip>
+            <TerminalChip variant="caution">Proxy {proxyCount}</TerminalChip>
+            <TerminalChip variant="caution">Fallback {fallbackCount}</TerminalChip>
+            <TerminalChip variant="caution">Unavailable {unavailableCount}</TerminalChip>
+            <TerminalChip variant={hasGapsOrRejections ? 'danger' : 'neutral'}>
+              {hasGapsOrRejections ? `Gaps/rejections ${gapCount + rejectedCount}` : 'No gaps/rejections'}
+            </TerminalChip>
+          </div>
 
-      <div className="mt-3 grid min-w-0 gap-2">
-        {view.rows.map((row) => (
-          <div
-            key={row.key}
-            className={cn(
-              'rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5',
-              row.missing ? 'opacity-80' : '',
-            )}
-          >
-            <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-white/84">{row.label}</p>
-                <p className="truncate font-mono text-[10px] uppercase tracking-[0.18em] text-white/34">{row.seriesId}</p>
-                <p className="mt-1 text-[11px] leading-5 text-white/45">{row.meta}</p>
-                {row.reasonText ? (
-                  <p className="mt-1 break-words font-mono text-[10px] leading-5 text-amber-200/80">{row.reasonText}</p>
-                ) : null}
-              </div>
-              <div className="flex min-w-0 flex-wrap gap-1.5 lg:max-w-[42%] lg:justify-end">
-                {row.chips.map((chip) => (
-                  <TerminalChip key={`${row.key}-${chip.label}`} variant={chip.variant}>
-                    {chip.label}
-                  </TerminalChip>
-                ))}
+          <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
+            {view.scopeSeries.map((seriesId) => (
+              <TerminalChip key={seriesId} variant="neutral" className="font-mono text-[10px]">
+                {seriesId}
+              </TerminalChip>
+            ))}
+          </div>
+        </summary>
+
+        <div className="mt-3 grid min-w-0 gap-2">
+          {view.rows.map((row) => (
+            <div
+              key={row.key}
+              className={cn(
+                'rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5',
+                row.missing ? 'opacity-80' : '',
+              )}
+            >
+              <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white/84">{row.label}</p>
+                  <p className="truncate font-mono text-[10px] uppercase tracking-[0.18em] text-white/34">{row.seriesId}</p>
+                  <p className="mt-1 text-[11px] leading-5 text-white/45">{row.meta}</p>
+                  {row.reasonText ? (
+                    <p className="mt-1 break-words font-mono text-[10px] leading-5 text-amber-200/80">{row.reasonText}</p>
+                  ) : null}
+                </div>
+                <div className="flex min-w-0 flex-wrap gap-1.5 lg:max-w-[42%] lg:justify-end">
+                  {row.chips.map((chip) => (
+                    <TerminalChip key={`${row.key}-${chip.label}`} variant={chip.variant}>
+                      {chip.label}
+                    </TerminalChip>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </details>
     </TerminalPanel>
   );
 };

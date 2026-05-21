@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LiquidityMonitorPage from '../LiquidityMonitorPage';
 
@@ -514,6 +514,16 @@ describe('LiquidityMonitorPage', () => {
     render(<LiquidityMonitorPage />);
 
     const diagnostics = await screen.findByTestId('liquidity-monitor-official-macro-diagnostics');
+    const details = diagnostics.querySelector('details');
+    const summary = diagnostics.querySelector('summary');
+    expect(details).not.toBeNull();
+    expect(summary).not.toBeNull();
+    expect(details).not.toHaveAttribute('open');
+    expect(diagnostics).toHaveTextContent('Official 5');
+    expect(diagnostics).toHaveTextContent('Proxy 1');
+    expect(diagnostics).toHaveTextContent('Fallback 1');
+    expect(diagnostics).toHaveTextContent('Unavailable 1');
+    expect(diagnostics).toHaveTextContent('Gaps/rejections 1');
     expect(diagnostics).toHaveTextContent('VIXCLS');
     expect(diagnostics).toHaveTextContent('SOFR');
     expect(diagnostics).toHaveTextContent('DFF');
@@ -521,6 +531,11 @@ describe('LiquidityMonitorPage', () => {
     expect(diagnostics).toHaveTextContent('DGS10');
     expect(diagnostics).toHaveTextContent('DGS30');
     expect(diagnostics).toHaveTextContent('BAMLH0A0HYM2');
+    expect(within(diagnostics).getByText(/provider_forbidden_for_use_case/, { selector: 'p' })).not.toBeVisible();
+
+    fireEvent.click(summary as HTMLElement);
+
+    expect(details).toHaveAttribute('open');
     expect(diagnostics).toHaveTextContent('Official');
     expect(diagnostics).toHaveTextContent('Score-eligible');
     expect(diagnostics).toHaveTextContent('Observation-only');
@@ -528,6 +543,7 @@ describe('LiquidityMonitorPage', () => {
     expect(diagnostics).toHaveTextContent('Rejected');
     expect(diagnostics).toHaveTextContent('provider_forbidden_for_use_case');
     expect(diagnostics).toHaveTextContent('As-of 2026-05-06');
+    expect(within(diagnostics).getByText(/provider_forbidden_for_use_case/, { selector: 'p' })).toBeVisible();
   });
 
   it('shows the selected indicator inspector and collapsed source details', async () => {

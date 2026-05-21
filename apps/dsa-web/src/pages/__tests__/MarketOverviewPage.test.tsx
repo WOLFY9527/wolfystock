@@ -3198,7 +3198,16 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     const diagnostics = screen.getByTestId('market-overview-official-macro-diagnostics');
-    await waitFor(() => expect(diagnostics).toHaveTextContent('FRED VIXCLS'));
+    await waitFor(() => expect(diagnostics).toHaveTextContent('Official 3'));
+    const details = diagnostics.querySelector('details');
+    const summary = diagnostics.querySelector('summary');
+    expect(details).not.toBeNull();
+    expect(summary).not.toBeNull();
+    expect(details).not.toHaveAttribute('open');
+    expect(diagnostics).toHaveTextContent('Proxy 1');
+    expect(diagnostics).toHaveTextContent('Fallback 1');
+    expect(diagnostics).toHaveTextContent('Unavailable 3');
+    expect(diagnostics).toHaveTextContent('Gaps/rejections 3');
     expect(diagnostics).toHaveTextContent('VIXCLS');
     expect(diagnostics).toHaveTextContent('SOFR');
     expect(diagnostics).toHaveTextContent('DFF');
@@ -3206,6 +3215,11 @@ describe('MarketOverviewPage', () => {
     expect(diagnostics).toHaveTextContent('DGS10');
     expect(diagnostics).toHaveTextContent('DGS30');
     expect(diagnostics).toHaveTextContent('BAMLH0A0HYM2');
+    expect(within(diagnostics).getByText(/provider_forbidden_for_use_case/, { selector: 'p' })).not.toBeVisible();
+
+    fireEvent.click(summary as HTMLElement);
+
+    expect(details).toHaveAttribute('open');
     expect(diagnostics).toHaveTextContent('Official');
     expect(diagnostics).toHaveTextContent('Score-eligible');
     expect(diagnostics).toHaveTextContent('Observation-only');
@@ -3213,5 +3227,6 @@ describe('MarketOverviewPage', () => {
     expect(diagnostics).toHaveTextContent('Rejected');
     expect(diagnostics).toHaveTextContent('provider_forbidden_for_use_case');
     expect(diagnostics).toHaveTextContent('As-of 2026-05-20');
+    expect(within(diagnostics).getByText(/provider_forbidden_for_use_case/, { selector: 'p' })).toBeVisible();
   });
 });
