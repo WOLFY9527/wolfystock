@@ -39,6 +39,7 @@ _QUOTE_PROVIDER_ORDER = ("alpaca", "yfinance")
 _ALPACA_MAX_SYMBOLS_PER_WINDOW = 32
 _ALPACA_MAX_PROBE_SYMBOLS = 12
 _ALPACA_STABLE_ACTIVATION_PROBE_SYMBOLS = ("SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV")
+_ROTATION_RADAR_AUTHORITY_ETF_UNIVERSE = _ALPACA_STABLE_ACTIVATION_PROBE_SYMBOLS
 _ALPACA_PER_WINDOW_TIMEOUT_SECONDS = 2.5
 _ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS = 8.0
 _ALPACA_MINIMUM_ACTIVATION_SUCCESS_RATIO = 0.75
@@ -1374,6 +1375,12 @@ def _quote_metadata(
         provider_diagnostics=provider_diagnostics,
         status=status,
     )
+    etf_authority_spine = _etf_authority_spine_diagnostics(
+        requested_symbols=requested_symbols,
+        quotes=quotes,
+        configured_attempt=configured_attempt,
+        provider_diagnostics=provider_diagnostics,
+    )
     return {
         "status": status,
         "quoteMode": quote_mode,
@@ -1406,6 +1413,7 @@ def _quote_metadata(
         "providerDiagnostics": {
             **provider_diagnostics,
             **source_authority,
+            "etfAuthoritySpine": etf_authority_spine,
         },
         "noExternalCalls": False,
         "failedSymbols": _bounded_unique_symbols(list(failed_symbol_reasons)),
@@ -1855,6 +1863,186 @@ def _alpaca_activation_diagnostics(
         "scoreContributionAllowed": bool(source_authority_allowed),
         "reason": reason,
     }
+
+
+def _etf_authority_spine_diagnostics(
+    *,
+    requested_symbols: Sequence[str],
+    quotes: Mapping[str, Dict[str, Any]],
+    configured_attempt: _ProviderAttempt,
+    provider_diagnostics: Mapping[str, Any],
+) -> Dict[str, Any]:
+    requested = {str(symbol).strip().upper() for symbol in requested_symbols if str(symbol).strip()}
+    universe = [
+        symbol
+        for symbol in _ROTATION_RADAR_AUTHORITY_ETF_UNIVERSE
+        if symbol in requested or symbol in quotes or symbol in configured_attempt.quotes
+    ]
+    activation = provider_diagnostics.get("alpacaActivationDiagnostics")
+    activation = dict(activation) if isinstance(activation, Mapping) else {}
+    fulfilled_windows = _as_string_sequence(activation.get("fulfilledWindows"))
+    missing_windows = _as_string_sequence(activation.get("missingWindows"))
+    stale_windows = _as_string_sequence(activation.get("staleWindows"))
+    activation_reason = str(activation.get("reason") or "").strip() or None
+    activation_allowed = bool(activation.get("sourceAuthorityAllowed"))
+
+    rows: list[Dict[str, Any]] = []
+    as_of_candidates: list[str] = []
+    freshness_values: list[str] = []
+    source_labels: list[str] = []
+    source_tiers: list[str] = []
+    any_partial = False
+
+    for symbol in universe:
+        quote = quotes.get(symbol)
+        row = _etf_authority_spine_row(
+            symbol=symbol,
+            quote=quote if isinstance(quote, Mapping) else None,
+            activation_allowed=activation_allowed,
+            activation_reason=activation_reason,
+            fulfilled_windows=fulfilled_windows,
+            missing_windows=missing_windows,
+            stale_windows=stale_windows,
+        )
+        rows.append(row)
+        if row["asOf"]:
+            as_of_candidates.append(str(row["asOf"]))
+        if row["freshness"]:
+            freshness_values.append(str(row["freshness"]))
+        if row["sourceLabel"]:
+            source_labels.append(str(row["sourceLabel"]))
+        if row["sourceTier"]:
+            source_tiers.append(str(row["sourceTier"]))
+        if row["trustLevel"] == "partial":
+            any_partial = True
+
+    reason_codes = _etf_authority_reason_codes(
+        activation_reason=activation_reason,
+        missing_windows=missing_windows,
+        stale_windows=stale_windows,
+    )
+    if activation_allowed and rows:
+        trust_level = "active"
+    elif activation_reason in {"credentials", "missing_credentials", "auth_failed", "provider_error"}:
+        trust_level = "unavailable"
+    elif rows and (any_partial or any(row.get("sourceLabel") for row in rows)):
+        trust_level = "partial"
+    else:
+        trust_level = "unavailable"
+
+    return {
+        "universe": universe,
+        "requiredWindows": list(_ALPACA_TIMEFRAMES),
+        "fulfilledWindows": fulfilled_windows,
+        "missingWindows": missing_windows,
+        "staleWindows": stale_windows,
+        "freshness": _etf_authority_freshness(freshness_values),
+        "asOf": max(as_of_candidates) if as_of_candidates else None,
+        "sourceLabel": _dominant_label(_count_values(source_labels), default=None) if source_labels else None,
+        "sourceTier": _dominant_label(_count_values(source_tiers), default=None) if source_tiers else None,
+        "trustLevel": trust_level,
+        "sourceAuthorityAllowed": bool(activation_allowed and rows),
+        "scoreContributionAllowed": bool(activation_allowed and rows),
+        "reasonCodes": reason_codes,
+        "quotes": rows,
+    }
+
+
+def _etf_authority_spine_row(
+    *,
+    symbol: str,
+    quote: Optional[Mapping[str, Any]],
+    activation_allowed: bool,
+    activation_reason: Optional[str],
+    fulfilled_windows: Sequence[str],
+    missing_windows: Sequence[str],
+    stale_windows: Sequence[str],
+) -> Dict[str, Any]:
+    time_windows = quote.get("timeWindows") if isinstance(quote, Mapping) else {}
+    time_windows = time_windows if isinstance(time_windows, Mapping) else {}
+    row_fulfilled_windows = [
+        window
+        for window in _ALPACA_TIMEFRAMES
+        if _etf_authority_window_slot_valid(time_windows.get(window))
+    ]
+    row_missing_windows = [window for window in _ALPACA_TIMEFRAMES if window not in row_fulfilled_windows]
+    row_stale_windows = [
+        window
+        for window in row_fulfilled_windows
+        if str((time_windows.get(window) or {}).get("freshness") or "").strip().lower() == "stale"
+    ]
+    quote_is_configured = bool(
+        isinstance(quote, Mapping)
+        and str(quote.get("source") or "").strip().lower() == _CONFIGURED_SOURCE
+        and str(quote.get("sourceTier") or "").strip().lower() == _CONFIGURED_SOURCE_TIER
+    )
+    row_allowed = bool(
+        activation_allowed
+        and quote_is_configured
+        and row_fulfilled_windows == list(_ALPACA_TIMEFRAMES)
+        and not row_stale_windows
+    )
+    reason_codes = _etf_authority_reason_codes(
+        activation_reason=activation_reason,
+        missing_windows=row_missing_windows or missing_windows,
+        stale_windows=row_stale_windows or stale_windows,
+        quote_missing=not isinstance(quote, Mapping),
+    )
+    if row_allowed:
+        trust_level = "active"
+    elif isinstance(quote, Mapping):
+        trust_level = "partial"
+    else:
+        trust_level = "unavailable"
+    return {
+        "symbol": symbol,
+        "windowsFulfilled": row_fulfilled_windows,
+        "freshness": quote.get("freshness") if isinstance(quote, Mapping) else None,
+        "asOf": quote.get("asOf") if isinstance(quote, Mapping) else None,
+        "sourceLabel": quote.get("sourceLabel") if isinstance(quote, Mapping) else None,
+        "sourceTier": quote.get("sourceTier") if isinstance(quote, Mapping) else None,
+        "trustLevel": trust_level,
+        "sourceAuthorityAllowed": row_allowed,
+        "scoreContributionAllowed": row_allowed,
+        "reasonCodes": reason_codes,
+    }
+
+
+def _etf_authority_window_slot_valid(slot: Any) -> bool:
+    return bool(
+        isinstance(slot, Mapping)
+        and slot.get("available")
+        and _alpaca_activation_slot_source_valid(slot)
+    )
+
+
+def _etf_authority_reason_codes(
+    *,
+    activation_reason: Optional[str],
+    missing_windows: Sequence[str],
+    stale_windows: Sequence[str],
+    quote_missing: bool = False,
+) -> list[str]:
+    reason_codes: list[str] = []
+    if activation_reason:
+        reason_codes.append(str(activation_reason))
+    if quote_missing:
+        reason_codes.append("quote_missing")
+    if missing_windows:
+        reason_codes.extend(f"missing_window:{window}" for window in missing_windows)
+    if stale_windows:
+        reason_codes.extend(f"stale_window:{window}" for window in stale_windows)
+    return list(dict.fromkeys(reason_codes))
+
+
+def _etf_authority_freshness(values: Sequence[str]) -> Optional[str]:
+    normalized = [str(value or "").strip().lower() for value in values if str(value or "").strip()]
+    if not normalized:
+        return None
+    for candidate in ("live", "delayed", "cached", "stale", "fallback"):
+        if candidate in normalized:
+            return candidate
+    return normalized[0]
 
 
 def _alpaca_activation_slot_source_valid(slot: Mapping[str, Any]) -> bool:

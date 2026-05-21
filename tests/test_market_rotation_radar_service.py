@@ -808,7 +808,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
                     }[timeframe],
                 )
 
-        with patch(
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
             "src.services.rotation_radar_quote_provider.get_provider_credentials",
             return_value=_alpaca_credentials(feed="sip"),
             create=True,
@@ -1434,7 +1434,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["providerFailureReason"], "credential_fields_missing")
 
     def test_missing_alpaca_credentials_skips_configured_provider_and_keeps_yfinance_degraded(self) -> None:
-        with patch(
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
             "src.services.rotation_radar_quote_provider.get_provider_credentials",
             return_value=_missing_alpaca_credentials(),
             create=True,
@@ -1554,7 +1554,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             def __init__(self, **kwargs) -> None:
                 raise RuntimeError("bad secret value SHOULD_NOT_LEAK")
 
-        with patch(
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
             "src.services.rotation_radar_quote_provider.get_provider_credentials",
             return_value=_alpaca_credentials(feed="sip"),
             create=True,
@@ -1627,7 +1627,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
                     raise RuntimeError("subscription required")
                 return _alpaca_bars(end_close=102.0)
 
-        with patch(
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
             "src.services.rotation_radar_quote_provider.get_provider_credentials",
             return_value=_alpaca_credentials(feed="sip"),
             create=True,
@@ -2393,6 +2393,209 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             self.assertNotIn(marker.lower(), dumped)
         self.assertIn("资金轮动迹象", dumped)
         self.assertIn("非买卖建议", dumped)
+
+    def test_bounded_etf_authority_spine_is_emitted_when_alpaca_windows_pass(self) -> None:
+        stable_etfs = ("SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV")
+
+        class StableEtfAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                return _alpaca_bars(
+                    start_close=100.0,
+                    end_close={
+                        "5Min": 101.0,
+                        "15Min": 102.0,
+                        "1Hour": 103.0,
+                        "1Day": 104.0,
+                    }[timeframe],
+                )
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            StableEtfAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            side_effect=AssertionError("yfinance fallback should not be called when Alpaca covers the bounded ETF spine"),
+        ):
+            payload = load_rotation_radar_quotes(stable_etfs)
+
+        spine = payload["metadata"]["providerDiagnostics"]["etfAuthoritySpine"]
+
+        self.assertEqual(spine["universe"], list(stable_etfs))
+        self.assertEqual(spine["requiredWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(spine["fulfilledWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(spine["missingWindows"], [])
+        self.assertTrue(spine["sourceAuthorityAllowed"])
+        self.assertTrue(spine["scoreContributionAllowed"])
+        self.assertEqual(spine["trustLevel"], "active")
+        self.assertEqual(spine["reasonCodes"], [])
+        self.assertEqual([row["symbol"] for row in spine["quotes"]], list(stable_etfs))
+        self.assertTrue(all(row["windowsFulfilled"] == ["5m", "15m", "60m", "1d"] for row in spine["quotes"]))
+        self.assertTrue(all(row["sourceLabel"] == "Alpaca SIP" for row in spine["quotes"]))
+        self.assertTrue(all(row["sourceTier"] == "broker_authorized" for row in spine["quotes"]))
+        self.assertTrue(all(row["sourceAuthorityAllowed"] for row in spine["quotes"]))
+        self.assertTrue(all(row["scoreContributionAllowed"] for row in spine["quotes"]))
+        self.assertTrue(all(row["reasonCodes"] == [] for row in spine["quotes"]))
+
+    def test_missing_credentials_keep_bounded_etf_authority_spine_non_scoring(self) -> None:
+        stable_etfs = ("SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV")
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_missing_alpaca_credentials(),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=_yfinance_frame(),
+        ):
+            payload = load_rotation_radar_quotes(stable_etfs)
+
+        spine = payload["metadata"]["providerDiagnostics"]["etfAuthoritySpine"]
+
+        self.assertFalse(spine["sourceAuthorityAllowed"])
+        self.assertFalse(spine["scoreContributionAllowed"])
+        self.assertEqual(spine["trustLevel"], "unavailable")
+        self.assertIn("credentials", spine["reasonCodes"])
+        self.assertEqual([row["symbol"] for row in spine["quotes"]], list(stable_etfs))
+        self.assertTrue(all(row["scoreContributionAllowed"] is False for row in spine["quotes"]))
+        self.assertTrue(all(row["sourceAuthorityAllowed"] is False for row in spine["quotes"]))
+        self.assertTrue(all("credentials" in row["reasonCodes"] for row in spine["quotes"]))
+
+    def test_partial_windows_keep_bounded_etf_authority_spine_non_scoring(self) -> None:
+        stable_etfs = ("SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV")
+
+        class DailyOnlyAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                if timeframe != "1Day":
+                    raise RuntimeError("subscription required")
+                return _alpaca_bars(end_close=102.0)
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            DailyOnlyAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            side_effect=AssertionError("yfinance fallback should not be called when Alpaca returns bounded ETF rows"),
+        ):
+            payload = load_rotation_radar_quotes(stable_etfs)
+
+        spine = payload["metadata"]["providerDiagnostics"]["etfAuthoritySpine"]
+
+        self.assertFalse(spine["sourceAuthorityAllowed"])
+        self.assertFalse(spine["scoreContributionAllowed"])
+        self.assertEqual(spine["fulfilledWindows"], ["1d"])
+        self.assertEqual(spine["missingWindows"], ["5m", "15m", "60m"])
+        self.assertEqual(spine["trustLevel"], "partial")
+        self.assertIn("entitlement", spine["reasonCodes"])
+        self.assertTrue(all(row["scoreContributionAllowed"] is False for row in spine["quotes"]))
+        self.assertTrue(all(row["sourceAuthorityAllowed"] is False for row in spine["quotes"]))
+        self.assertTrue(all("entitlement" in row["reasonCodes"] for row in spine["quotes"]))
+
+    def test_active_etf_authority_spine_does_not_promote_static_themes_to_headlines(self) -> None:
+        stable_etfs = ("SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV")
+        time_windows = {
+            "5m": {"changePercent": 0.8, "relativeVolume": 1.2, "freshness": "live", "asOf": "2026-05-07T09:45:00+00:00", "available": True, "source": "alpaca", "sourceLabel": "Alpaca SIP", "sourceTier": "broker_authorized", "providerTier": "tier_1_configured"},
+            "15m": {"changePercent": 1.1, "relativeVolume": 1.3, "freshness": "live", "asOf": "2026-05-07T09:45:00+00:00", "available": True, "source": "alpaca", "sourceLabel": "Alpaca SIP", "sourceTier": "broker_authorized", "providerTier": "tier_1_configured"},
+            "60m": {"changePercent": 1.6, "relativeVolume": 1.4, "freshness": "live", "asOf": "2026-05-07T09:45:00+00:00", "available": True, "source": "alpaca", "sourceLabel": "Alpaca SIP", "sourceTier": "broker_authorized", "providerTier": "tier_1_configured"},
+            "1d": {"changePercent": 2.0, "relativeVolume": 1.5, "freshness": "delayed", "asOf": "2026-05-07T09:45:00+00:00", "available": True, "source": "alpaca", "sourceLabel": "Alpaca SIP", "sourceTier": "broker_authorized", "providerTier": "tier_1_configured"},
+        }
+        quotes = {
+            symbol: _quote(
+                symbol,
+                1.0 + index * 0.1,
+                freshness="live",
+                time_windows=time_windows,
+                source="alpaca",
+                source_type="official_public",
+                source_tier="broker_authorized",
+            )
+            for index, symbol in enumerate(stable_etfs)
+        }
+        etf_authority_spine = {
+            "universe": list(stable_etfs),
+            "requiredWindows": ["5m", "15m", "60m", "1d"],
+            "fulfilledWindows": ["5m", "15m", "60m", "1d"],
+            "missingWindows": [],
+            "staleWindows": [],
+            "freshness": "live",
+            "asOf": "2026-05-07T09:45:00+00:00",
+            "sourceLabel": "Alpaca SIP",
+            "sourceTier": "broker_authorized",
+            "trustLevel": "active",
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "reasonCodes": [],
+            "quotes": [
+                {
+                    "symbol": symbol,
+                    "windowsFulfilled": ["5m", "15m", "60m", "1d"],
+                    "freshness": "live",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "sourceLabel": "Alpaca SIP",
+                    "sourceTier": "broker_authorized",
+                    "trustLevel": "active",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "reasonCodes": [],
+                }
+                for symbol in stable_etfs
+            ],
+        }
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "configured",
+                    "source": "alpaca",
+                    "sourceLabel": "Alpaca SIP",
+                    "sourceType": "official_public",
+                    "sourceTier": "broker_authorized",
+                    "providerTier": "tier_1_configured",
+                    "freshness": "live",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "noExternalCalls": False,
+                    "providerDiagnostics": {
+                        "etfAuthoritySpine": etf_authority_spine,
+                    },
+                },
+            },
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+        payload = service.get_rotation_radar()
+
+        provider_meta = payload["metadata"]["quoteProvider"]
+        spine = provider_meta["etfAuthoritySpine"]
+        ai_theme = next(theme for theme in payload["themes"] if theme["id"] == "ai_applications")
+        igv_proxy = ai_theme["benchmarkProxies"]["IGV"]
+
+        self.assertTrue(spine["sourceAuthorityAllowed"])
+        self.assertTrue(spine["scoreContributionAllowed"])
+        self.assertEqual(provider_meta["status"], "partial")
+        self.assertEqual(payload["summary"]["headlineEligibleThemeCount"], 0)
+        self.assertEqual(payload["summary"]["eligibleThemeCount"], 0)
+        self.assertFalse(ai_theme["headlineEligible"])
+        self.assertFalse(ai_theme["scoreContributionAllowed"])
+        self.assertTrue(ai_theme["staticThemeOnly"])
+        self.assertEqual(ai_theme["rankingLane"], "observation")
+        self.assertTrue(igv_proxy["etfAuthorityEvidence"]["sourceAuthorityAllowed"])
+        self.assertTrue(igv_proxy["etfAuthorityEvidence"]["scoreContributionAllowed"])
+        self.assertEqual(igv_proxy["etfAuthorityEvidence"]["symbol"], "IGV")
+        self.assertEqual(igv_proxy["etfAuthorityEvidence"]["reasonCodes"], [])
 
 
 if __name__ == "__main__":

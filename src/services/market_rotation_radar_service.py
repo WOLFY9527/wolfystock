@@ -281,7 +281,11 @@ class MarketRotationRadarService:
         quote_result = self._load_quotes()
         quote_provider_metadata = self._quote_provider_metadata(quote_result)
         observed_evidence_metadata = self._observed_evidence_metadata(quote_result)
-        benchmarks = self._build_benchmarks(quote_result.quotes, generated_at)
+        benchmarks = self._build_benchmarks(
+            quote_result.quotes,
+            generated_at,
+            etf_authority_spine=quote_provider_metadata.get("etfAuthoritySpine"),
+        )
         themes = [
             self._analyze_theme(theme, quote_result.quotes, benchmarks, generated_at)
             for theme in THEME_BASKETS
@@ -803,7 +807,14 @@ class MarketRotationRadarService:
         authority = self._quote_source_authority_diagnostics(metadata)
         metadata.update(authority)
         metadata["providerDiagnostics"].update(authority)
+        metadata["etfAuthoritySpine"] = self._etf_authority_spine(
+            metadata["providerDiagnostics"].get("etfAuthoritySpine")
+        )
         return metadata
+
+    @staticmethod
+    def _etf_authority_spine(value: Any) -> Dict[str, Any]:
+        return dict(value) if isinstance(value, Mapping) else {}
 
     @staticmethod
     def _build_rotation_radar_quote_route_request() -> DataSourceRouteRequest:
@@ -1357,8 +1368,15 @@ class MarketRotationRadarService:
             return "quote_fetch_failed"
         return "quote_unavailable"
 
-    def _build_benchmarks(self, quotes: Mapping[str, Dict[str, Any]], generated_at: str) -> Dict[str, Dict[str, Any]]:
+    def _build_benchmarks(
+        self,
+        quotes: Mapping[str, Dict[str, Any]],
+        generated_at: str,
+        *,
+        etf_authority_spine: Optional[Mapping[str, Any]] = None,
+    ) -> Dict[str, Dict[str, Any]]:
         benchmarks: Dict[str, Dict[str, Any]] = {}
+        etf_authority_quotes = self._etf_authority_quote_rows(etf_authority_spine)
         for symbol in BENCHMARK_SYMBOLS:
             quote = quotes.get(symbol)
             if quote:
@@ -1376,6 +1394,7 @@ class MarketRotationRadarService:
                     "providerTier": quote.get("providerTier"),
                     "confidenceWeight": quote.get("confidenceWeight"),
                     "asOf": quote.get("asOf"),
+                    "etfAuthorityEvidence": etf_authority_quotes.get(symbol),
                 }
             else:
                 benchmarks[symbol] = {
@@ -1391,8 +1410,26 @@ class MarketRotationRadarService:
                     "sourceTier": "static_fallback",
                     "providerTier": "fallback",
                     "asOf": generated_at,
+                    "etfAuthorityEvidence": etf_authority_quotes.get(symbol),
                 }
         return benchmarks
+
+    @staticmethod
+    def _etf_authority_quote_rows(etf_authority_spine: Optional[Mapping[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        if not isinstance(etf_authority_spine, Mapping):
+            return {}
+        rows = etf_authority_spine.get("quotes")
+        if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+            return {}
+        result: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            if not isinstance(row, Mapping):
+                continue
+            symbol = str(row.get("symbol") or "").strip().upper()
+            if not symbol:
+                continue
+            result[symbol] = dict(row)
+        return result
 
     def _analyze_theme(
         self,
@@ -3086,6 +3123,7 @@ class MarketRotationRadarService:
                 "providerTier": benchmark.get("providerTier"),
                 "confidenceWeight": benchmark.get("confidenceWeight"),
                 "asOf": benchmark.get("asOf"),
+                "etfAuthorityEvidence": benchmark.get("etfAuthorityEvidence"),
                 "quality": proxy_status,
             }
         return proxies
