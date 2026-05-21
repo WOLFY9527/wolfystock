@@ -12,6 +12,7 @@ import os
 import json
 import socket
 import ssl
+import time
 from typing import Any, Iterable, Mapping, Sequence
 from urllib.parse import urlencode, urlparse
 from urllib.error import HTTPError, URLError
@@ -58,6 +59,25 @@ NYFED_SOFR_UNSUPPORTED_REASON = "nyfed_sofr_shape_undocumented"
 DEFAULT_TRANSPORT_TIMEOUT_SECONDS = 4.0
 TREASURY_FETCH_MAX_ATTEMPTS = 2
 HTTPS_CA_BUNDLE_ENV_VARS = ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE")
+OFFICIAL_MACRO_LIVE_SMOKE_SERIES_IDS = (
+    "VIXCLS",
+    "SOFR",
+    "DFF",
+    "DGS2",
+    "DGS10",
+    "DGS30",
+    "BAMLH0A0HYM2",
+)
+OFFICIAL_MACRO_LIVE_SMOKE_FRED_SERIES_IDS = (
+    "VIXCLS",
+    "SOFR",
+    "DFF",
+    "BAMLH0A0HYM2",
+)
+OFFICIAL_MACRO_LIVE_SMOKE_TREASURY_SERIES_IDS = ("DGS2", "DGS10", "DGS30")
+OFFICIAL_MACRO_LIVE_SMOKE_AGGREGATE_BUDGET_SECONDS = 8.0
+OFFICIAL_MACRO_LIVE_SMOKE_FRED_TIMEOUT_SECONDS = 1.0
+OFFICIAL_MACRO_LIVE_SMOKE_TREASURY_TIMEOUT_SECONDS = 1.5
 
 
 class OfficialMacroTransportError(RuntimeError):
@@ -385,6 +405,107 @@ def fetch_treasury_daily_rate_observation_points(
     )
 
 
+def run_official_macro_live_smoke(
+    *,
+    now: datetime | None = None,
+    aggregate_budget_seconds: float = OFFICIAL_MACRO_LIVE_SMOKE_AGGREGATE_BUDGET_SECONDS,
+    fred_timeout_seconds: float = OFFICIAL_MACRO_LIVE_SMOKE_FRED_TIMEOUT_SECONDS,
+    treasury_timeout_seconds: float = OFFICIAL_MACRO_LIVE_SMOKE_TREASURY_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """Run a bounded FRED/Treasury official macro readiness diagnostic."""
+
+    config_probe = fred_runtime_config_probe()
+    credentials_present = bool(config_probe.get("apiKeyPresent"))
+    provider_constructed = bool(credentials_present)
+    deadline = time.monotonic() + max(0.0, float(aggregate_budget_seconds))
+
+    results: dict[str, str] = {}
+    invalid_metadata_detected = False
+
+    def remaining_timeout(cap: float) -> float | None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        return max(0.001, min(float(cap), remaining))
+
+    if credentials_present:
+        for series_id in OFFICIAL_MACRO_LIVE_SMOKE_FRED_SERIES_IDS:
+            timeout = remaining_timeout(fred_timeout_seconds)
+            if timeout is None:
+                results.setdefault(series_id, "missing")
+                continue
+            try:
+                points = fetch_fred_observation_points(series_id, limit=2, timeout=timeout)
+            except Exception:
+                points = []
+            series_status = _official_macro_smoke_series_status(series_id, points, now=now)
+            results[series_id] = series_status
+            if series_status == "invalid_metadata":
+                invalid_metadata_detected = True
+    else:
+        for series_id in OFFICIAL_MACRO_LIVE_SMOKE_FRED_SERIES_IDS:
+            results.setdefault(series_id, "missing")
+
+    treasury_timeout = remaining_timeout(treasury_timeout_seconds)
+    treasury_points: dict[str, list[MacroObservation]] = {}
+    if treasury_timeout is not None:
+        try:
+            treasury_points = fetch_treasury_daily_rate_observation_points(limit=2, timeout=treasury_timeout)
+        except Exception:
+            treasury_points = {}
+    for series_id in OFFICIAL_MACRO_LIVE_SMOKE_TREASURY_SERIES_IDS:
+        series_status = _official_macro_smoke_series_status(series_id, treasury_points.get(series_id, []), now=now)
+        results[series_id] = series_status
+        if series_status == "invalid_metadata":
+            invalid_metadata_detected = True
+
+    fulfilled_series = [
+        series_id for series_id in OFFICIAL_MACRO_LIVE_SMOKE_SERIES_IDS if results.get(series_id) == "fulfilled"
+    ]
+    stale_series = [
+        series_id for series_id in OFFICIAL_MACRO_LIVE_SMOKE_SERIES_IDS if results.get(series_id) == "stale"
+    ]
+    missing_series = [
+        series_id
+        for series_id in OFFICIAL_MACRO_LIVE_SMOKE_SERIES_IDS
+        if results.get(series_id) not in {"fulfilled", "stale"}
+    ]
+    freshness_valid = not stale_series
+    source_metadata_valid = not invalid_metadata_detected
+    probe_passed = not missing_series and freshness_valid and source_metadata_valid
+    source_authority_allowed = bool(
+        credentials_present
+        and provider_constructed
+        and probe_passed
+        and freshness_valid
+        and source_metadata_valid
+    )
+
+    reason: str | None = None
+    if not credentials_present:
+        reason = "credentials"
+    elif not freshness_valid:
+        reason = "stale_series"
+    elif not source_metadata_valid:
+        reason = "source_metadata_invalid"
+    elif missing_series:
+        reason = "series_coverage"
+
+    return {
+        "credentialsPresent": credentials_present,
+        "providerConstructed": provider_constructed,
+        "probePassed": probe_passed,
+        "freshnessValid": freshness_valid,
+        "sourceMetadataValid": source_metadata_valid,
+        "sourceAuthorityAllowed": source_authority_allowed,
+        "scoreContributionAllowed": source_authority_allowed,
+        "fulfilledSeries": fulfilled_series,
+        "missingSeries": missing_series,
+        "staleSeries": stale_series,
+        "reason": reason,
+    }
+
+
 def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) -> bytes:
     ca_bundle_source = _selected_https_ca_bundle_source()
     base_diagnostics = _transport_diagnostics(request, timeout=timeout, ca_bundle_source=ca_bundle_source)
@@ -596,6 +717,60 @@ def _provider_name(source_id: str | None) -> str:
     if prefix:
         return prefix
     return "official_macro"
+
+
+def _official_macro_smoke_series_status(
+    series_id: str,
+    points: Sequence[MacroObservation],
+    *,
+    now: datetime | None = None,
+) -> str:
+    latest = next((point for point in points if point.value is not None), None)
+    if latest is None:
+        return "missing"
+    if not _official_macro_smoke_source_metadata_valid(series_id, latest):
+        return "invalid_metadata"
+    if _official_macro_smoke_is_stale(series_id, latest, now=now):
+        return "stale"
+    return "fulfilled"
+
+
+def _official_macro_smoke_source_metadata_valid(series_id: str, point: MacroObservation) -> bool:
+    if str(point.symbol or "").strip().upper() != str(series_id or "").strip().upper():
+        return False
+    if str(point.source_type or "").strip().lower() != OFFICIAL_SOURCE_TYPE:
+        return False
+    try:
+        from src.services.official_macro_source_registry import get_official_macro_source_for_transport_source
+
+        contract = get_official_macro_source_for_transport_source(point.source_id)
+    except Exception:
+        contract = None
+    return bool(contract and str(contract.source_type or "").strip().lower() == OFFICIAL_SOURCE_TYPE)
+
+
+def _official_macro_smoke_is_stale(
+    series_id: str,
+    point: MacroObservation,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    try:
+        from src.services.market_overview_service import get_freshness_status
+
+        freshness = get_freshness_status(
+            point.as_of or point.date,
+            "macro_rate",
+            _provider_name(point.source_id),
+            False,
+            source_type=point.source_type,
+            series_id=series_id,
+            official_observation_date=point.date,
+            now=now,
+        )
+    except Exception:
+        return True
+    return str(freshness.get("freshness") or "").strip().lower() == "stale"
 
 
 def _requested_series(request: MacroTransportRequest) -> str | None:
