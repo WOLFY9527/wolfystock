@@ -71,6 +71,8 @@ _CREDENTIAL_ENV_KEYS_BY_PROVIDER = {
 _MISSING_FEED_PROVIDER_IDS = frozenset(
     {
         "authorized.us_etf_flow",
+        "official_public.cn_money_market_rates",
+        "official_public.fed_liquidity",
         "official_or_authorized.us_market_breadth",
     }
 )
@@ -440,8 +442,12 @@ class ProviderOperationsMatrixService:
             ("scanner_diagnostics", "cn_history_daily", "CN", "equity"),
             ("market_observation", "cn_market_stats", "CN", "equity"),
             ("venue_observation", "venue_ticker", "crypto", "crypto"),
+            ("market_overview", "fed_liquidity", "US", "macro"),
+            ("liquidity_impulse", "fed_liquidity", "US", "macro"),
             ("market_overview", "us_etf_flow_daily", "US", "etf"),
             ("liquidity_impulse", "us_etf_creation_redemption", "US", "etf"),
+            ("market_overview", "cn_money_market_rates", "CN", "macro"),
+            ("liquidity_impulse", "cn_money_market_rates", "CN", "macro"),
             ("rotation_radar", "us_sector_etf_flow", "US", "etf"),
             ("market_overview", "us_market_breadth_constituents", "US", "equity"),
             ("liquidity_impulse", "us_market_breadth_constituents", "US", "equity"),

@@ -174,6 +174,66 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
         "coverage_floor_required",
     }.issubset(set(breadth["routerReasonCodes"]))
 
+    fed = _row_by_id(payload, "official_public.fed_liquidity")
+    assert fed["sourceType"] == "missing"
+    assert fed["sourceTier"] == "official_public"
+    assert fed["runtimeState"] == "missing_provider_configuration"
+    assert fed["credentialState"] == "not_required"
+    assert fed["dependencyState"] == "not_required"
+    assert fed["missingProviderReason"] == "official_fed_liquidity_contract_not_configured"
+    assert fed["paidDataLikelyRequired"] is False
+    assert fed["keyRequired"] is False
+    assert fed["scoreContributionAllowed"] is False
+    assert fed["scoreEligible"] is False
+    assert fed["supportedCapabilities"] == ["fed_liquidity"]
+    assert fed["contractCadences"] == ["daily_weekly"]
+    assert fed["contractFreshnessFloors"] == ["delayed"]
+    assert fed["contractCoverageRatioFloor"] == 1.0
+    assert fed["requiredSourceTiers"] == ["official_public"]
+    assert fed["scoreEligibilityGates"] == [
+        "configured_official_release_ids_and_cache_freshness_and_full_component_coverage"
+    ]
+    assert fed["contractCoverageUniverses"] == ["rrp_tga_reserve_balances_release_bundle"]
+    assert {"market_overview", "liquidity_impulse"}.issubset(set(fed["affectedSurfaces"]))
+    assert {
+        "missing_provider_configuration",
+        "cache_required",
+        "release_schedule_required",
+        "release_lag_expected",
+        "freshness_floor_required",
+        "coverage_floor_required",
+    }.issubset(set(fed["routerReasonCodes"]))
+
+    cn_money = _row_by_id(payload, "official_public.cn_money_market_rates")
+    assert cn_money["sourceType"] == "missing"
+    assert cn_money["sourceTier"] == "official_public"
+    assert cn_money["runtimeState"] == "missing_provider_configuration"
+    assert cn_money["credentialState"] == "not_required"
+    assert cn_money["dependencyState"] == "not_required"
+    assert cn_money["missingProviderReason"] == "official_cn_money_market_rates_contract_not_configured"
+    assert cn_money["paidDataLikelyRequired"] is False
+    assert cn_money["keyRequired"] is False
+    assert cn_money["scoreContributionAllowed"] is False
+    assert cn_money["scoreEligible"] is False
+    assert cn_money["supportedCapabilities"] == ["cn_money_market_rates"]
+    assert cn_money["contractCadences"] == ["session_daily"]
+    assert cn_money["contractFreshnessFloors"] == ["delayed"]
+    assert cn_money["contractCoverageRatioFloor"] == 1.0
+    assert cn_money["requiredSourceTiers"] == ["official_public"]
+    assert cn_money["scoreEligibilityGates"] == [
+        "configured_official_rates_and_session_freshness_and_full_component_coverage"
+    ]
+    assert cn_money["contractCoverageUniverses"] == ["dr007_shibor_repo_liquidity_rate_bundle"]
+    assert {"market_overview", "liquidity_impulse"}.issubset(set(cn_money["affectedSurfaces"]))
+    assert {
+        "missing_provider_configuration",
+        "cache_required",
+        "session_calendar_required",
+        "holiday_calendar_required",
+        "freshness_floor_required",
+        "coverage_floor_required",
+    }.issubset(set(cn_money["routerReasonCodes"]))
+
 
 def test_weak_and_proxy_providers_remain_non_score_grade() -> None:
     payload = ProviderOperationsMatrixService(env={}, spec_finder=lambda _: None).build_matrix()

@@ -172,6 +172,8 @@ def test_missing_source_defaults_to_missing_labels() -> None:
 def test_provider_fit_source_aliases_are_additive_and_truthful_for_new_audited_ids() -> None:
     expected = {
         "authorized.us_etf_flow": ("missing", "未接入"),
+        "official_public.fed_liquidity": ("missing", "未接入"),
+        "official_public.cn_money_market_rates": ("missing", "未接入"),
         "sec_edgar": ("official_public", "SEC EDGAR"),
         "pandas_datareader_fred": ("official_public", "FRED"),
         "pandas_datareader_oecd": ("official_public", "OECD"),
@@ -197,7 +199,12 @@ def test_provider_fit_source_aliases_are_additive_and_truthful_for_new_audited_i
 
 
 def test_future_authorized_us_flow_and_breadth_provider_classes_do_not_project_as_live_authority() -> None:
-    for source in ("authorized.us_etf_flow", "official_or_authorized.us_market_breadth"):
+    for source in (
+        "authorized.us_etf_flow",
+        "official_or_authorized.us_market_breadth",
+        "official_public.fed_liquidity",
+        "official_public.cn_money_market_rates",
+    ):
         provenance = project_source_provenance(
             source=source,
             source_type="official_public",

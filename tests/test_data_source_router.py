@@ -596,6 +596,102 @@ def test_rotation_radar_true_flow_route_rejects_proxy_and_exchange_snapshot_repl
     assert "provider_not_capable" in plan.reason_codes["yfinance_current_baseline"]
 
 
+def test_official_fed_liquidity_contract_routes_stay_missing_cache_required_and_non_scoring() -> None:
+    plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="US",
+            asset_type="macro",
+            use_case="liquidity_impulse",
+            capability="fed_liquidity",
+            freshness_need="daily",
+            scoring_allowed=False,
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+
+    assert _ids(plan.primary_candidates) == {"official_public.fed_liquidity"}
+    assert _ids(plan.observation_candidates) == set()
+    assert plan.cache_required is True
+    assert plan.background_refresh_required is True
+    assert plan.score_contribution_allowed is False
+    assert plan.degradation_policy == "require_official_release_cache_or_explicit_missing"
+    assert plan.required_source_types == ("official_public", "cache_snapshot")
+    assert plan.freshness_floor == "delayed"
+    assert plan.trust_floor == "official_liquidity_context_or_missing"
+    assert {
+        "cache_required",
+        "missing_provider_configuration",
+        "release_schedule_required",
+        "release_lag_expected",
+        "freshness_floor_required",
+        "coverage_floor_required",
+    }.issubset(set(plan.reason_codes["plan"]))
+    assert {
+        "coinbase_public",
+        "yfinance_current_baseline",
+        "yahooquery",
+        "akshare",
+        "baostock",
+        "pytdx_existing_baseline",
+    }.issubset(_ids(plan.forbidden_providers))
+
+    candidate = plan.primary_candidates[0]
+    assert candidate.source_type == "missing"
+    assert candidate.source_tier == "official_public"
+    assert candidate.observation_only is True
+    assert candidate.score_contribution_allowed is False
+    assert candidate.missing_provider_reason == "official_fed_liquidity_contract_not_configured"
+
+
+def test_cn_money_market_contract_routes_stay_missing_cache_required_and_non_scoring() -> None:
+    plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="CN",
+            asset_type="macro",
+            use_case="market_overview",
+            capability="cn_money_market_rates",
+            freshness_need="delayed",
+            scoring_allowed=False,
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+
+    assert _ids(plan.primary_candidates) == {"official_public.cn_money_market_rates"}
+    assert _ids(plan.observation_candidates) == set()
+    assert plan.cache_required is True
+    assert plan.background_refresh_required is True
+    assert plan.score_contribution_allowed is False
+    assert plan.degradation_policy == "require_official_release_cache_or_explicit_missing"
+    assert plan.required_source_types == ("official_public", "cache_snapshot")
+    assert plan.freshness_floor == "delayed"
+    assert plan.trust_floor == "official_liquidity_context_or_missing"
+    assert {
+        "cache_required",
+        "missing_provider_configuration",
+        "session_calendar_required",
+        "holiday_calendar_required",
+        "freshness_floor_required",
+        "coverage_floor_required",
+    }.issubset(set(plan.reason_codes["plan"]))
+    assert {
+        "coinbase_public",
+        "yfinance_current_baseline",
+        "yahooquery",
+        "akshare",
+        "baostock",
+        "pytdx_existing_baseline",
+    }.issubset(_ids(plan.forbidden_providers))
+
+    candidate = plan.primary_candidates[0]
+    assert candidate.source_type == "missing"
+    assert candidate.source_tier == "official_public"
+    assert candidate.observation_only is True
+    assert candidate.score_contribution_allowed is False
+    assert candidate.missing_provider_reason == "official_cn_money_market_rates_contract_not_configured"
+
+
 def test_route_diagnostic_snapshot_serializes_missing_provider_fields_for_authorized_flow_contracts() -> None:
     request = DataSourceRouteRequest(
         market="US",
@@ -629,6 +725,49 @@ def test_route_diagnostic_snapshot_serializes_missing_provider_fields_for_author
             "missingProviderReason": "authorized_us_etf_flow_feed_not_configured",
         }
     ]
+
+
+def test_route_diagnostic_snapshot_serializes_official_liquidity_contract_fields() -> None:
+    request = DataSourceRouteRequest(
+        market="US",
+        asset_type="macro",
+        use_case="liquidity_impulse",
+        capability="fed_liquidity",
+        freshness_need="daily",
+        scoring_allowed=False,
+        allow_network=False,
+        reproducibility_required=False,
+    )
+
+    snapshot = build_data_source_route_diagnostic_snapshot(request).to_dict()
+
+    assert snapshot["primaryCandidates"] == [
+        {
+            "providerId": "official_public.fed_liquidity",
+            "providerName": "Official Fed Liquidity",
+            "capability": "fed_liquidity",
+            "sourceType": "missing",
+            "sourceTier": "official_public",
+            "trustLevel": "score_grade_when_configured",
+            "freshnessExpectation": "daily_or_weekly_public_release_lag",
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "paidDataLikelyRequired": False,
+            "keyRequired": False,
+            "enabledByDefault": False,
+            "noDefaultLiveHttpCalls": True,
+            "missingProviderReason": "official_fed_liquidity_contract_not_configured",
+        }
+    ]
+    assert snapshot["requiredSourceTypes"] == ["official_public", "cache_snapshot"]
+    assert {
+        "cache_required",
+        "missing_provider_configuration",
+        "release_schedule_required",
+        "release_lag_expected",
+        "freshness_floor_required",
+        "coverage_floor_required",
+    }.issubset(set(snapshot["reasonCodes"]["plan"]))
 
 
 def test_route_diagnostic_snapshot_serializes_required_fields_without_runtime_calls() -> None:

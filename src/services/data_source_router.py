@@ -109,6 +109,31 @@ _AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES = (
     "freshness_floor_required",
     "coverage_floor_required",
 )
+_OFFICIAL_LIQUIDITY_FORBIDDEN_PROVIDER_IDS = (
+    "coinbase_public",
+    "yfinance_current_baseline",
+    "yahooquery",
+    "akshare",
+    "baostock",
+    "pytdx_existing_baseline",
+    "sec_edgar",
+)
+_FED_LIQUIDITY_PLAN_REASON_CODES = (
+    "cache_required",
+    "missing_provider_configuration",
+    "release_schedule_required",
+    "release_lag_expected",
+    "freshness_floor_required",
+    "coverage_floor_required",
+)
+_CN_MONEY_MARKET_PLAN_REASON_CODES = (
+    "cache_required",
+    "missing_provider_configuration",
+    "session_calendar_required",
+    "holiday_calendar_required",
+    "freshness_floor_required",
+    "coverage_floor_required",
+)
 
 
 def _text(value: str | None) -> str:
@@ -392,6 +417,30 @@ _ROUTE_POLICIES = MappingProxyType(
             trust_floor="authorized_breadth_or_missing",
             plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
         ),
+        ("market_overview", "cn_money_market_rates"): _RoutePolicy(
+            primary_provider_ids=("official_public.cn_money_market_rates",),
+            forbidden_provider_ids=_OFFICIAL_LIQUIDITY_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_official_release_cache_or_explicit_missing",
+            required_source_types=("official_public", "cache_snapshot"),
+            freshness_floor="delayed",
+            trust_floor="official_liquidity_context_or_missing",
+            plan_reason_codes=_CN_MONEY_MARKET_PLAN_REASON_CODES,
+        ),
+        ("market_overview", "fed_liquidity"): _RoutePolicy(
+            primary_provider_ids=("official_public.fed_liquidity",),
+            forbidden_provider_ids=_OFFICIAL_LIQUIDITY_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_official_release_cache_or_explicit_missing",
+            required_source_types=("official_public", "cache_snapshot"),
+            freshness_floor="delayed",
+            trust_floor="official_liquidity_context_or_missing",
+            plan_reason_codes=_FED_LIQUIDITY_PLAN_REASON_CODES,
+        ),
         ("market_overview", "us_advancers_decliners"): _RoutePolicy(
             primary_provider_ids=("official_or_authorized.us_market_breadth",),
             forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
@@ -499,6 +548,30 @@ _ROUTE_POLICIES = MappingProxyType(
             freshness_floor="daily",
             trust_floor="authorized_flow_or_missing",
             plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
+        ),
+        ("liquidity_impulse", "cn_money_market_rates"): _RoutePolicy(
+            primary_provider_ids=("official_public.cn_money_market_rates",),
+            forbidden_provider_ids=_OFFICIAL_LIQUIDITY_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_official_release_cache_or_explicit_missing",
+            required_source_types=("official_public", "cache_snapshot"),
+            freshness_floor="delayed",
+            trust_floor="official_liquidity_context_or_missing",
+            plan_reason_codes=_CN_MONEY_MARKET_PLAN_REASON_CODES,
+        ),
+        ("liquidity_impulse", "fed_liquidity"): _RoutePolicy(
+            primary_provider_ids=("official_public.fed_liquidity",),
+            forbidden_provider_ids=_OFFICIAL_LIQUIDITY_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="require_official_release_cache_or_explicit_missing",
+            required_source_types=("official_public", "cache_snapshot"),
+            freshness_floor="delayed",
+            trust_floor="official_liquidity_context_or_missing",
+            plan_reason_codes=_FED_LIQUIDITY_PLAN_REASON_CODES,
         ),
         ("liquidity_impulse", "us_market_breadth_constituents"): _RoutePolicy(
             primary_provider_ids=("official_or_authorized.us_market_breadth",),
@@ -939,6 +1012,8 @@ def _provider_is_not_capable(candidate: ProviderRouteCandidate, request: DataSou
             "us_new_highs_lows",
             "us_above_ma_breadth",
             "us_sector_breadth",
+            "fed_liquidity",
+            "cn_money_market_rates",
         }
         and candidate.source_type in _PROXY_SOURCE_TYPES
     ):

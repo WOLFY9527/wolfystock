@@ -46,6 +46,8 @@ EXPECTED_PROVIDER_IDS = {
     "binance_public",
     "coinbase_public",
     "fred_existing_baseline",
+    "official_public.cn_money_market_rates",
+    "official_public.fed_liquidity",
     "official_or_authorized.us_market_breadth",
     "treasury_existing_baseline",
 }
@@ -104,6 +106,28 @@ def test_provider_fit_metadata_covers_all_audited_candidates_and_stays_sorted() 
                 "freshnessExpectation": "licensed_daily_or_delayed_fund_flow",
                 "paidDataLikelyRequired": True,
                 "keyRequired": True,
+            },
+        ),
+        (
+            "official_public.fed_liquidity",
+            {
+                "providerCategory": "official_macro_liquidity_contract",
+                "sourceTier": "official_public",
+                "trustLevel": "score_grade_when_configured",
+                "freshnessExpectation": "daily_or_weekly_public_release_lag",
+                "paidDataLikelyRequired": False,
+                "keyRequired": False,
+            },
+        ),
+        (
+            "official_public.cn_money_market_rates",
+            {
+                "providerCategory": "official_macro_liquidity_contract",
+                "sourceTier": "official_public",
+                "trustLevel": "score_grade_when_configured",
+                "freshnessExpectation": "session_delayed_or_daily_official_fixing",
+                "paidDataLikelyRequired": False,
+                "keyRequired": False,
             },
         ),
         (
@@ -230,6 +254,78 @@ def test_authorized_us_flow_and_breadth_metadata_carry_coverage_and_score_gate_r
     }.issubset(set(breadth_entry.best_use_cases))
     assert {"freshness_unqualified", "coverage_unqualified"}.issubset(set(breadth_entry.rejected_for))
     assert "partial_coverage_scoring" in breadth_entry.not_recommended_for
+
+
+def test_official_liquidity_contract_metadata_carries_release_and_session_gates() -> None:
+    fed_entry = get_provider_fit_metadata("official_public.fed_liquidity")
+    cn_entry = get_provider_fit_metadata("official_public.cn_money_market_rates")
+
+    assert fed_entry is not None
+    assert {
+        "fed_rrp_balance_authority",
+        "treasury_general_account_authority",
+        "reserve_balances_authority",
+        "federal_liquidity_release_calendar",
+    }.issubset(set(fed_entry.best_use_cases))
+    assert {
+        "runtime_unconfigured",
+        "release_lag_unqualified",
+        "coverage_unqualified",
+    }.issubset(set(fed_entry.rejected_for))
+    assert "score_inputs_without_full_official_cache" in fed_entry.not_recommended_for
+
+    assert cn_entry is not None
+    assert {
+        "dr007_authority",
+        "shibor_authority",
+        "repo_liquidity_rate_authority",
+        "cn_money_market_session_calendar",
+    }.issubset(set(cn_entry.best_use_cases))
+    assert {
+        "runtime_unconfigured",
+        "session_unqualified",
+        "coverage_unqualified",
+    }.issubset(set(cn_entry.rejected_for))
+    assert "score_inputs_without_full_official_cache" in cn_entry.not_recommended_for
+
+
+def test_official_liquidity_contract_supports_and_scoring_gates_stay_missing_and_fail_closed() -> None:
+    for provider_id, capability, expected_universe, expected_cadence, expected_reason in (
+        (
+            "official_public.fed_liquidity",
+            "fed_liquidity",
+            "rrp_tga_reserve_balances_release_bundle",
+            "daily_weekly",
+            "official_fed_liquidity_contract_not_configured",
+        ),
+        (
+            "official_public.cn_money_market_rates",
+            "cn_money_market_rates",
+            "dr007_shibor_repo_liquidity_rate_bundle",
+            "session_daily",
+            "official_cn_money_market_rates_contract_not_configured",
+        ),
+    ):
+        support = get_provider_capability_support_contract(provider_id, capability)
+        scoring = get_provider_scoring_contract(provider_id, capability)
+
+        assert support is not None
+        assert support.source_type == "missing"
+        assert support.source_tier == "official_public"
+        assert support.observation_only is True
+        assert support.score_contribution_allowed is False
+        assert support.paid_data_likely_required is False
+        assert support.key_required is False
+        assert support.cache_required is True
+        assert support.background_refresh_recommended is True
+        assert support.missing_provider_reason == expected_reason
+
+        assert scoring is not None
+        assert scoring.coverage_universe == expected_universe
+        assert scoring.cadence == expected_cadence
+        assert scoring.freshness_floor == "delayed"
+        assert scoring.coverage_ratio_floor == 1.0
+        assert scoring.required_source_tier == "official_public"
 
 
 def test_authorized_us_flow_and_breadth_support_contracts_cover_required_capabilities() -> None:
