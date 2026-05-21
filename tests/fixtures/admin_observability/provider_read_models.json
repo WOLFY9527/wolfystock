@@ -255,8 +255,8 @@
     },
     "metadata": {
       "readOnly": true,
-      "authDependencyLabel": "admin_user",
-      "transitionalGap": "Operational provider route still uses coarse admin gating.",
+      "authDependencyLabel": "admin_capability",
+      "capabilityLabel": "ops:providers:read",
       "redaction": [
         "payload_content_removed",
         "credential_values_omitted"
@@ -275,10 +275,16 @@
         "transitional_gap": null
       },
       {
+        "surface": "admin_provider_operations_matrix",
+        "auth_dependency_label": "admin_capability",
+        "capability_label": "ops:providers:read",
+        "transitional_gap": null
+      },
+      {
         "surface": "admin_market_provider_operations",
-        "auth_dependency_label": "admin_user",
-        "capability_label": null,
-        "transitional_gap": "Operational provider route still uses coarse admin gating."
+        "auth_dependency_label": "admin_capability",
+        "capability_label": "ops:providers:read",
+        "transitional_gap": null
       }
     ],
     "raw_details_policy": "diagnostic_rollups_only",

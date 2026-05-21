@@ -28,6 +28,7 @@ from api.v1.schemas.market_provider_operations import MarketProviderOperationsRe
 
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "admin_observability"
+AUTH_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "auth"
 FORBIDDEN_SENSITIVE_TERMS = (
     "authorization",
     "bearer ",
@@ -67,6 +68,10 @@ ALLOWED_CREDENTIAL_CONTRACT_KEYS = {
     "configuredCredentialCount",
 }
 FORBIDDEN_CREDENTIAL_DETAIL_TERMS = ("apiKey", "token", "secret", "value", "env", "raw")
+PROVIDER_OPS_READ_ROUTES = {
+    "GET /api/v1/admin/providers/operations-matrix",
+    "GET /api/v1/admin/market-providers/operations",
+}
 
 
 @dataclass(frozen=True)
@@ -488,6 +493,40 @@ def test_admin_provider_observability_read_models_match_public_contracts() -> No
 
     assert payload["fixture_meta"]["surface"] == "admin_provider_observability"
     assert payload["fixture_meta"]["read_only"] is True
+
+
+def test_provider_observability_fixtures_follow_capability_inventory_for_provider_ops_routes() -> None:
+    auth_inventory = json.loads((AUTH_FIXTURE_DIR / "backend_route_capability_inventory.json").read_text(encoding="utf-8"))
+    provider_inventory = next(
+        group for group in auth_inventory["protected_groups"] if group["route_id"] == "admin.providers.read"
+    )
+    read_models = _load_fixture("provider_read_models.json")
+    boundary_inventory = _load_fixture("mutation_boundary_inventory.json")
+
+    assert provider_inventory["auth_dependency_label"] == "admin_capability"
+    assert provider_inventory["capability_label"] == "ops:providers:read"
+    assert provider_inventory["transitional_note"] is None
+
+    operations_metadata = read_models["market_provider_operations"]["metadata"]
+    assert operations_metadata["authDependencyLabel"] == "admin_capability"
+    assert operations_metadata["capabilityLabel"] == "ops:providers:read"
+    assert operations_metadata.get("transitionalGap") is None
+
+    auth_surfaces = {item["surface"]: item for item in read_models["fixture_meta"]["auth_surfaces"]}
+    for surface in ("admin_provider_operations_matrix", "admin_market_provider_operations"):
+        entry = auth_surfaces[surface]
+        assert entry["auth_dependency_label"] == "admin_capability"
+        assert entry["capability_label"] == "ops:providers:read"
+        assert entry["transitional_gap"] is None
+
+    provider_ops_routes = {
+        item["route"]: item for item in boundary_inventory["read_only_surfaces"] if item["route"] in PROVIDER_OPS_READ_ROUTES
+    }
+    assert set(provider_ops_routes) == PROVIDER_OPS_READ_ROUTES
+    for route, entry in provider_ops_routes.items():
+        assert entry["surface"] == "admin_provider_observability"
+        assert entry["auth_dependency_label"] == "admin_capability"
+        assert entry["capability_label"] == "ops:providers:read"
 
 
 def test_admin_user_activity_and_portfolio_read_models_match_public_contracts() -> None:

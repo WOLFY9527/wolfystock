@@ -25,6 +25,22 @@
       "payload_fixture": "provider_read_models.json"
     },
     {
+      "surface": "admin_provider_observability",
+      "route": "GET /api/v1/admin/providers/operations-matrix",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "mutation_authority": false,
+      "payload_fixture": "provider_read_models.json"
+    },
+    {
+      "surface": "admin_provider_observability",
+      "route": "GET /api/v1/admin/market-providers/operations",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "mutation_authority": false,
+      "payload_fixture": "provider_read_models.json"
+    },
+    {
       "surface": "admin_user_observability",
       "route": "GET /api/v1/admin/users",
       "auth_dependency_label": "admin_user",
@@ -110,12 +126,6 @@
         "backend_auth_dependency": "admin_user",
         "backend_capability_label": null,
         "frontend_capability_flag": "canReadUserActivity"
-      },
-      {
-        "surface": "admin_market_provider_operations",
-        "backend_auth_dependency": "admin_user",
-        "backend_capability_label": null,
-        "frontend_capability_flag": "canReadProviders"
       }
     ]
   },
