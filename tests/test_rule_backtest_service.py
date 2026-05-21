@@ -16,6 +16,7 @@ from sqlalchemy import select
 
 from src.config import Config
 from src.core.rule_backtest_engine import RuleBacktestEngine, RuleBacktestParser
+from src.services.backtest_professional_readiness import build_backtest_professional_readiness
 from src.services.rule_backtest_support_exports import (
     build_execution_assumptions_fingerprint,
     build_execution_trace_export_csv_text,
@@ -116,6 +117,17 @@ FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS = [
     "grid search",
 ]
 
+WALK_FORWARD_DIAGNOSTIC_WINDOW_KEYS = {
+    "window_index",
+    "state",
+    "train_start",
+    "train_end",
+    "test_start",
+    "test_end",
+    "trade_count",
+    "metrics",
+}
+
 
 class RuleBacktestTestCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -207,9 +219,41 @@ class RuleBacktestTestCase(unittest.TestCase):
 
     @staticmethod
     def _assert_robustness_payload_avoids_optimizer_semantics(payload: dict) -> None:
-        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True).lower()
+        filtered_payload = dict(payload)
+        filtered_payload.pop("contract_metadata", None)
+        serialized = json.dumps(filtered_payload, ensure_ascii=False, sort_keys=True).lower()
         for needle in FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS:
             assert needle not in serialized, needle
+
+    @staticmethod
+    def _assert_robustness_payload_stays_diagnostic_only(payload: dict) -> None:
+        RuleBacktestTestCase._assert_robustness_payload_avoids_optimizer_semantics(payload)
+        assert payload.get("source") == "summary.robustness_analysis"
+        assert "professional_quant_ready" not in payload
+
+        contract_metadata = dict(payload.get("contract_metadata") or {})
+        assert contract_metadata.get("diagnostic_only") is True
+        assert contract_metadata.get("optimizer_executed") is False
+        assert contract_metadata.get("parameter_sweep_executed") is False
+        assert contract_metadata.get("provider_calls_executed") is False
+        assert contract_metadata.get("portfolio_allocation_backtest_executed") is False
+        assert contract_metadata.get("professional_quant_readiness_claimed") is False
+        assert contract_metadata.get("walk_forward_validation_claimed") is False
+        assert contract_metadata.get("strategy_selection_mode") == "reuse_input_strategy_without_optimizer_search"
+
+        walk_forward = dict(payload.get("walk_forward") or {})
+        walk_forward_serialized = json.dumps(walk_forward, ensure_ascii=False, sort_keys=True).lower()
+        for forbidden in (
+            "validation_score",
+            "validated_strategy",
+            "selected_strategy",
+            "optimized_parameters",
+        ):
+            assert forbidden not in walk_forward_serialized, forbidden
+
+        windows = list(walk_forward.get("windows") or [])
+        if windows:
+            assert set(windows[0].keys()) == WALK_FORWARD_DIAGNOSTIC_WINDOW_KEYS
 
     @staticmethod
     def _compare_run_payload(
@@ -1418,6 +1462,39 @@ class RuleBacktestTestCase(unittest.TestCase):
         )
         self._assert_robustness_payload_avoids_optimizer_semantics(payload)
 
+    def test_build_robustness_analysis_exposes_diagnostic_only_contract_metadata(self) -> None:
+        service = RuleBacktestService(self.db)
+        parsed = service._dict_to_parsed_strategy(
+            service.parse_strategy(
+                "Buy when Close > MA3. Sell when Close < MA3.",
+                code="TEST",
+                start_date="2024-01-01",
+                end_date="2024-05-31",
+                initial_capital=100000.0,
+            ),
+            "Buy when Close > MA3. Sell when Close < MA3.",
+        )
+        bars = self._make_bars(
+            [100.0 + (index * 0.45) + ((-1) ** index) * 0.8 for index in range(80)],
+            start=date(2024, 1, 1),
+        )
+
+        payload = service._build_robustness_analysis(
+            code="TEST",
+            parsed=parsed,
+            bars=bars,
+            initial_capital=100000.0,
+            fee_bps=0.0,
+            slippage_bps=0.0,
+            lookback_bars=20,
+            benchmark_mode="auto",
+            benchmark_code=None,
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 5, 31),
+        )
+
+        self._assert_robustness_payload_stays_diagnostic_only(payload)
+
     def test_run_backtest_persists_custom_monte_carlo_robustness_config(self) -> None:
         service = RuleBacktestService(self.db)
         self._seed_history(
@@ -1603,6 +1680,52 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(detail["robustness_analysis"]["state"], "available")
         self.assertEqual(history["items"][0]["robustness_analysis"]["state"], "available")
         self.assertEqual(detail["summary"]["robustness_analysis"], detail["robustness_analysis"])
+        self._assert_robustness_payload_stays_diagnostic_only(response["robustness_analysis"])
+        self._assert_robustness_payload_stays_diagnostic_only(detail["robustness_analysis"])
+        self._assert_robustness_payload_stays_diagnostic_only(history["items"][0]["robustness_analysis"])
+
+    def test_professional_readiness_requires_lineage_cost_fill_and_corporate_action_evidence(self) -> None:
+        readiness = build_backtest_professional_readiness(
+            data_quality={
+                "authority_status": "allowed",
+                "authority_source_type": "cache_snapshot",
+                "authority_reason_codes": [],
+                "adjustment_mode": "adjusted_ohlc",
+                "return_basis": "adjusted_total_return",
+                "dividends_handled": "handled",
+                "splits_handled": "unknown",
+            },
+            execution_assumptions={
+                "trading_calendar": "XNYS",
+                "holiday_calendar": "modeled",
+                "half_day_policy": "modeled",
+                "volume_participation_limit": None,
+                "partial_fill_supported": False,
+                "no_fill_supported": True,
+                "limit_up_down_handling": "modeled",
+                "halt_handling": "modeled",
+                "fee_model": {"commission_bps": 2.5},
+                "slippage_model": {"slippage_bps": 1.25},
+            },
+            cost_capacity_diagnostics={"assumptions": {"spread_bps": 0.0, "minimum_fee": 0.0}},
+            result_authority={
+                "domains": {
+                    "execution_assumptions_snapshot": {
+                        "completeness": "complete",
+                    }
+                }
+            },
+            dataset_version="unknown",
+        ).to_dict()
+
+        self.assertFalse(readiness["professional_quant_ready"])
+        self.assertEqual(readiness["overall_state"], "research_prototype")
+        self.assertIn("split_policy_unverified", readiness["categories"]["corporate_actions"]["blockers"])
+        self.assertIn("partial_fill_model_missing", readiness["categories"]["fill_model"]["blockers"])
+        self.assertIn("liquidity_constraints_not_modelled", readiness["categories"]["fill_model"]["blockers"])
+        self.assertIn("tax_model_missing", readiness["categories"]["cost_model"]["blockers"])
+        self.assertIn("market_impact_model_missing", readiness["categories"]["cost_model"]["blockers"])
+        self.assertIn("dataset_version_unknown", readiness["categories"]["reproducibility"]["blockers"])
 
     def test_universe_jobs_remain_local_only_and_execute_symbols_in_sequence(self) -> None:
         service = RuleBacktestService(self.db)

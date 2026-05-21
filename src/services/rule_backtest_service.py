@@ -2249,9 +2249,23 @@ class RuleBacktestService:
             + list(monte_carlo.get("diagnostics") or [])
             + list(stress_tests.get("diagnostics") or [])
         )
+        contract_metadata = {
+            "diagnostic_only": True,
+            "optimizer_executed": False,
+            "parameter_sweep_executed": False,
+            "provider_calls_executed": False,
+            "portfolio_allocation_backtest_executed": False,
+            "professional_quant_readiness_claimed": False,
+            "walk_forward_validation_claimed": False,
+            "strategy_selection_mode": "reuse_input_strategy_without_optimizer_search",
+        }
+        walk_forward = dict(walk_forward)
+        walk_forward["analysis_mode"] = "diagnostic_replay"
         return {
             "state": overall_state,
+            "source": "summary.robustness_analysis",
             "seed": resolved_seed,
+            "contract_metadata": contract_metadata,
             "configuration": {
                 "walk_forward": walk_forward_config,
                 "monte_carlo": monte_carlo_config,

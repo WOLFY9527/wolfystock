@@ -113,7 +113,29 @@ class BacktestApiContractTestCase(unittest.TestCase):
     @staticmethod
     def _assert_robustness_payload_stays_research_prototype(payload: dict) -> None:
         assert payload["state"] == "research_prototype"
-        serialized = str(payload).lower()
+        assert payload["source"] == "summary.robustness_analysis"
+        assert "professional_quant_ready" not in payload
+
+        contract_metadata = dict(payload.get("contract_metadata") or {})
+        assert contract_metadata.get("diagnostic_only") is True
+        assert contract_metadata.get("optimizer_executed") is False
+        assert contract_metadata.get("parameter_sweep_executed") is False
+        assert contract_metadata.get("provider_calls_executed") is False
+        assert contract_metadata.get("portfolio_allocation_backtest_executed") is False
+        assert contract_metadata.get("professional_quant_readiness_claimed") is False
+        assert contract_metadata.get("walk_forward_validation_claimed") is False
+        assert contract_metadata.get("strategy_selection_mode") == "reuse_input_strategy_without_optimizer_search"
+
+        walk_forward = dict(payload.get("walk_forward") or {})
+        if walk_forward:
+            assert walk_forward.get("analysis_mode") == "diagnostic_replay"
+            serialized = str(walk_forward).lower()
+            for forbidden in ("validation_score", "validated_strategy", "selected_strategy", "optimized_parameters"):
+                assert forbidden not in serialized, forbidden
+
+        filtered_payload = dict(payload)
+        filtered_payload.pop("contract_metadata", None)
+        serialized = str(filtered_payload).lower()
         for needle in FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS:
             assert needle not in serialized, needle
 
@@ -547,6 +569,16 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "profile": "single_symbol_fixture",
             "source": "summary.robustness_analysis",
             "seed": 4242,
+            "contract_metadata": {
+                "diagnostic_only": True,
+                "optimizer_executed": False,
+                "parameter_sweep_executed": False,
+                "provider_calls_executed": False,
+                "portfolio_allocation_backtest_executed": False,
+                "professional_quant_readiness_claimed": False,
+                "walk_forward_validation_claimed": False,
+                "strategy_selection_mode": "reuse_input_strategy_without_optimizer_search",
+            },
             "configuration": {
                 "walk_forward": {
                     "train_window": 36,
@@ -559,6 +591,24 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "seed": 4242,
                     "noise_scale": 0.5,
                 },
+            },
+            "walk_forward": {
+                "analysis_mode": "diagnostic_replay",
+                "window_count": 2,
+                "windows": [
+                    {
+                        "window_index": 1,
+                        "state": "completed",
+                        "train_start": "2024-01-01",
+                        "train_end": "2024-02-05",
+                        "test_start": "2024-02-06",
+                        "test_end": "2024-02-23",
+                        "trade_count": 3,
+                        "metrics": {"total_return_pct": 3.2},
+                    }
+                ],
+                "aggregate_metrics": {"median_total_return_pct": 3.2},
+                "diagnostics": [],
             },
         }
 
