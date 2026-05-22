@@ -2,7 +2,7 @@ export type MarketIntelligenceGuidanceLocale = 'zh' | 'en';
 
 const ZH_REASON_LABELS: Record<string, string> = {
   allocation_or_suitability_guidance: '适配边界',
-  bounded_etf_authority_active: 'Bounded ETF authority active',
+  bounded_etf_authority_active: 'ETF authority 已启用',
   cache_required: '需要缓存与时效门槛',
   counter_evidence_present: '反证已出现',
   credential_missing: '凭证未配置',
@@ -12,11 +12,11 @@ const ZH_REASON_LABELS: Record<string, string> = {
   fallback_or_proxy_evidence: '备用或代理证据',
   fallback_proxy_or_observation_only_evidence_present: '存在备用、代理或观察级证据',
   freshness_floor_required: '需要满足时效下限',
-  ineligible_bounded_etf: 'Bounded ETF set is not eligible',
+  ineligible_bounded_etf: 'ETF authority 未满足可用条件',
   insufficient_score_grade_evidence: '评分级证据不足',
   market_direction_readiness_context: '方向可用性边界',
   missing_provider_configuration: '提供方运行契约未配置',
-  missing_required_windows: 'Required ETF windows are missing',
+  missing_required_windows: 'ETF 必要时窗缺失',
   missing_scoring_evidence: '评分级证据缺口',
   missing_scoring_pillars: '评分支柱缺失',
   no_meaningful_score_grade_pillars: '没有足够的评分级支柱',
@@ -39,6 +39,14 @@ const ZH_REASON_LABELS: Record<string, string> = {
   trust_gate_blocked: '信任门禁阻断',
   unavailable_source: '来源不可用',
   watch_only_language: '仅观察语言',
+  true_flow_data_missing: '缺少真实流向确认',
+  flow_methodology_missing: '缺少流向方法学确认',
+  benchmark_proxy_missing: '基准代理覆盖不足',
+  proxy_quote_missing: '代理行情缺失',
+  proxy_stale: '代理行情过期',
+  proxy_windows_missing: '代理时窗缺失',
+  provider_unavailable: '数据源当前不可用',
+  tickflow_permission_unavailable: '权限未覆盖所需数据',
 };
 
 const EN_REASON_LABELS: Record<string, string> = {
@@ -120,6 +128,16 @@ export function marketIntelligenceReasonLabels(
     labels.push(label);
   });
   return labels.slice(0, limit);
+}
+
+export function joinMarketReasonLabels(
+  values: Array<string | null | undefined>,
+  locale: MarketIntelligenceGuidanceLocale = 'zh',
+  limit = 3,
+  fallback = locale === 'en' ? 'Data boundary pending confirmation' : '数据边界待确认',
+): string {
+  const labels = marketIntelligenceReasonLabels(values, locale, limit);
+  return labels.length ? labels.join('、') : fallback;
 }
 
 export function sanitizeMarketGuidanceCopy(value?: string | null, fallback = '仅供研究观察。'): string {

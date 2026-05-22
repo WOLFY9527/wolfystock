@@ -1330,6 +1330,23 @@ function formatTopLevelDataStatus(status: TopLevelDataStatus): string {
   return status.detail ? `${status.headline} · ${status.detail}` : status.headline;
 }
 
+function explainTopLevelDataStatus(status: TopLevelDataStatus): string {
+  switch (status.kind) {
+    case 'refreshing':
+      return '关键实时源仍在刷新，先保留已验证信号，等待更多确认。';
+    case 'fallbackOnlyUnavailable':
+      return '关键面板暂不可用，缺少足够的可计分证据来支持方向结论。';
+    case 'mixedDataAvailable':
+      return '当前可见信号包含延迟、代理或缺失项，尚不足以支持可靠方向判断。';
+    case 'proxyPartialAvailable':
+      return '当前主要依赖代理信号，缺少实时确认，先保留观察结论。';
+    case 'delayedAvailable':
+      return '当前主要依赖延迟信号，缺少实时确认，先保留观察结论。';
+    default:
+      return formatTopLevelDataStatus(status);
+  }
+}
+
 function describeDirectionalItem(item?: MarketOverviewItem, fallbackLabel = 'N/A'): string {
   if (!item) {
     return fallbackLabel;
@@ -1401,7 +1418,7 @@ function buildMarketDecision(params: {
 
   if (!reliable) {
     return {
-      text: formatTopLevelDataStatus(topLevelDataStatus),
+      text: explainTopLevelDataStatus(topLevelDataStatus),
       chips,
     };
   }

@@ -190,12 +190,24 @@ type LiquidityCoverageReadinessSummary = {
   state: 'ready' | 'insufficient' | 'missing';
   stateLabel: string;
   stateChipVariant: 'neutral' | 'success' | 'caution';
+  directionLabel: '可参考' | '部分可参考' | '不可判断';
+  directionExplanation: string;
   scoreGradeCount: number;
   observationOnlyCount: number;
   missingOrUnavailableCount: number;
   summaryLine: string;
   blockingReasonsLine: string;
 };
+
+const ACTIONABLE_LIQUIDITY_SOURCE_GAPS = [
+  'Fed liquidity',
+  'ETF / fund flow',
+  'US breadth',
+  'DXY authority',
+  'CN / HK flow',
+  'CN money-market',
+  'futures confirmation',
+] as const;
 
 function titleCaseFromSnake(value?: string | null): string {
   if (!value) return '待确认';
@@ -502,22 +514,35 @@ function buildCoverageReadinessSummary(
     : synthesisView.state === 'missing'
       ? 'missing'
       : 'insufficient';
+  const directionLabel = state === 'ready'
+    ? '可参考'
+    : scoreGradeCount > 0 || observationOnlyCount > 0
+      ? '部分可参考'
+      : '不可判断';
   const stateLabel = state === 'ready'
-    ? '方向证据可用'
+    ? '方向可用'
     : state === 'missing'
-      ? '方向证据待返回'
+      ? '数据待返回'
       : '方向证据不足';
-  const summaryLead = state === 'insufficient'
-    ? '当前流动性方向不可完整使用'
-    : state === 'missing'
-      ? '当前流动性方向载荷未返回'
-      : '当前流动性方向可用于研究观察';
-  const summaryLine = `${summaryLead}：Score-grade evidence ${scoreGradeCount}，Observation-only evidence ${observationOnlyCount}，Missing evidence ${missingOrUnavailableCount}。`;
+  const blockingLead = topBlockingReasons.length > 0 ? topBlockingReasons.join('、') : '关键来源仍待补齐';
+  const directionExplanation = directionLabel === '可参考'
+    ? '可计分证据已具备，当前可以把流动性方向作为研究背景继续跟踪。'
+    : directionLabel === '部分可参考'
+      ? `已有部分可计分证据，但仍受${blockingLead}限制。`
+      : `当前不能判断流动性方向，主要因为${blockingLead}。`;
+  const summaryLead = directionLabel === '可参考'
+    ? '当前流动性方向可参考'
+    : directionLabel === '部分可参考'
+      ? '当前流动性方向仅部分可参考'
+      : '当前流动性方向不可判断';
+  const summaryLine = `${summaryLead}：可计分证据 ${scoreGradeCount}，观察证据 ${observationOnlyCount}，缺失证据 ${missingOrUnavailableCount}。`;
 
   return {
     state,
     stateLabel,
     stateChipVariant: state === 'ready' ? 'success' : state === 'insufficient' ? 'caution' : 'neutral',
+    directionLabel,
+    directionExplanation,
     scoreGradeCount,
     observationOnlyCount,
     missingOrUnavailableCount,
@@ -525,6 +550,39 @@ function buildCoverageReadinessSummary(
     blockingReasonsLine: `为什么不是完整方向结论：${topBlockingReasons.length > 0 ? topBlockingReasons.join('；') : '当前没有额外阻塞。'}`,
   };
 }
+
+const LiquidityGuidancePanel: React.FC<{
+  coverageSummary: LiquidityCoverageReadinessSummary;
+}> = ({ coverageSummary }) => (
+  <TerminalPanel data-testid="liquidity-monitor-guidance-panel">
+    <TerminalSectionHeader
+      eyebrow="流动性方向"
+      title={coverageSummary.directionLabel}
+      action={<TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.directionLabel}</TerminalChip>}
+    />
+    <p className="mt-3 text-sm font-medium text-white/84">{coverageSummary.directionExplanation}</p>
+    <p
+      className="mt-1 text-xs leading-5 text-white/52"
+      data-testid="liquidity-monitor-coverage-summary"
+    >
+      {coverageSummary.summaryLine}
+    </p>
+    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <TerminalMetric label="可计分证据" value={coverageSummary.scoreGradeCount} valueClassName="text-2xl" />
+      <TerminalMetric label="观察证据" value={coverageSummary.observationOnlyCount} valueClassName="text-2xl" />
+      <TerminalMetric label="缺失证据" value={coverageSummary.missingOrUnavailableCount} valueClassName="text-2xl" />
+    </div>
+    <div className="mt-4 rounded-xl border border-white/[0.05] bg-black/20 px-4 py-3">
+      <p className="text-[11px] font-medium text-white/72">优先补齐的来源</p>
+      <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+        {ACTIONABLE_LIQUIDITY_SOURCE_GAPS.map((item) => (
+          <TerminalChip key={item} variant="caution">{item}</TerminalChip>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] leading-5 text-white/48">{coverageSummary.blockingReasonsLine}</p>
+    </div>
+  </TerminalPanel>
+);
 
 const LiquidityMonitorPage: React.FC = () => {
   const [data, setData] = useState<LiquidityMonitorResponse | null>(null);
@@ -619,6 +677,8 @@ const LiquidityMonitorPage: React.FC = () => {
       {data ? (
         <TerminalGrid>
           <div className="flex flex-col gap-4 xl:col-span-8">
+            <LiquidityGuidancePanel coverageSummary={coverageSummary} />
+
             <LiquidityImpulseSynthesisHeader view={synthesisView} />
 
             <TerminalPanel>
@@ -647,41 +707,10 @@ const LiquidityMonitorPage: React.FC = () => {
               </div>
             </TerminalPanel>
 
-            <TerminalPanel>
-              <TerminalSectionHeader
-                eyebrow="核心引擎"
-                title="判断框架"
-                action={<TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.stateLabel}</TerminalChip>}
-              />
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <TerminalMetric label="风险偏好" value={data.score.value >= 56 ? '改善' : data.score.value <= 44 ? '受压' : '中性'} valueClassName="text-lg font-sans" />
-                <TerminalMetric label="最新时间" value={formatDateTime(data.freshness.latestAsOf) || '待确认'} valueClassName="text-sm font-sans" />
-                <TerminalMetric label="评分状态" value={data.score.regime === 'unavailable' ? '数据不足' : '已输出'} valueClassName="text-lg font-sans" />
-              </div>
-              <div
-                className="mt-4 rounded-xl border border-white/[0.05] bg-black/20 px-4 py-3"
-                data-testid="liquidity-monitor-coverage-summary"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.stateLabel}</TerminalChip>
-                  {coverageSummary.observationOnlyCount > 0 || coverageSummary.missingOrUnavailableCount > 0 ? (
-                    <TerminalChip variant="caution">部分可用</TerminalChip>
-                  ) : null}
-                  <TerminalChip variant="success">Score-grade evidence {coverageSummary.scoreGradeCount}</TerminalChip>
-                  <TerminalChip variant="info">Observation-only evidence {coverageSummary.observationOnlyCount}</TerminalChip>
-                  <TerminalChip variant={coverageSummary.missingOrUnavailableCount > 0 ? 'caution' : 'neutral'}>
-                    Missing evidence {coverageSummary.missingOrUnavailableCount}
-                  </TerminalChip>
-                </div>
-                <p className="mt-3 text-sm leading-6 text-white/64">{coverageSummary.summaryLine}</p>
-                <p className="mt-1 text-xs leading-5 text-white/45">{coverageSummary.blockingReasonsLine}</p>
-              </div>
-            </TerminalPanel>
-
             <TerminalDisclosure
               data-testid="liquidity-monitor-indicator-disclosure"
               title="完整指标矩阵"
-              summary={`${indicators.length} 个指标，默认折叠；上方先看方向可用性。`}
+              summary={`${indicators.length} 个指标默认折叠，先看上方的方向结论与证据边界。`}
               className="p-4"
             >
               <TerminalDenseTable>
@@ -732,7 +761,7 @@ const LiquidityMonitorPage: React.FC = () => {
           <div className="flex flex-col gap-4 xl:col-span-4">
             <OfficialMacroAuthorityDiagnostics
               testId="liquidity-monitor-official-macro-diagnostics"
-              title="来源覆盖诊断"
+              title="技术细节 / Details"
               view={officialMacroDiagnostics}
             />
 
@@ -755,8 +784,8 @@ const LiquidityMonitorPage: React.FC = () => {
               data-testid="liquidity-monitor-source-disclosure"
             >
               <TerminalSectionHeader
-                eyebrow="来源"
-                title="数据状态"
+                eyebrow="技术细节"
+                title="运行边界"
                 action={(
                   <TerminalButton
                     variant="compact"

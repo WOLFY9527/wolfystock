@@ -1610,9 +1610,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-decision-strip')).toHaveTextContent(/市场状态/);
     expect(screen.getByTestId('market-command-chips')).toHaveTextContent(/风险/);
     expect(screen.getByTestId('market-command-chips')).toHaveTextContent(/流动性/);
-    expect(screen.getByTestId('market-command-chips')).toHaveTextContent(/宽度/);
-    expect(screen.getByTestId('market-command-chips')).toHaveTextContent(/观察/);
-    expect(screen.getByTestId('market-command-chips').querySelectorAll('[data-terminal-primitive="chip"]')).toHaveLength(4);
+    expect(screen.getByTestId('market-command-chips').querySelectorAll('[data-terminal-primitive="chip"]')).toHaveLength(2);
     expect(screen.getByTestId('market-decision-text')).toHaveTextContent(/风险|数据不足/);
     expect(screen.getByTestId('market-temperature-strip')).toBeInTheDocument();
     expect(screen.getByText(/信号可信：高/i)).toBeInTheDocument();
@@ -2117,8 +2115,8 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-regime-synthesis-data-gaps')).toHaveTextContent(/A股宽度/);
     expect(screen.getByTestId('market-overview-rail-action-hint')).toHaveTextContent(/优先观察已验证信号，暂不生成强判断|等待刷新完成后再生成强判断|部分关键面板暂不可用，暂不生成强判断/i);
     expect(screen.getByTestId('market-briefing-warning')).toHaveTextContent('当前真实数据不足，暂不生成强市场判断');
-    expect(screen.getByTestId('market-decision-text')).toHaveTextContent(/等待实时源|部分数据暂不可用/);
-    expect(screen.getByTestId('market-command-safe-state')).toHaveTextContent(/当前不生成强判断/);
+    expect(screen.getByTestId('market-decision-text')).toHaveTextContent('当前不能形成可靠方向判断');
+    expect(screen.getByTestId('market-command-safe-state')).toHaveTextContent(/关键实时源仍在刷新|关键面板暂不可用|当前可见信号|当前主要依赖延迟信号|当前主要依赖代理信号/);
   });
 
   it('renders a compact observational posture panel from market decision semantics', async () => {
@@ -2131,30 +2129,31 @@ describe('MarketOverviewPage', () => {
     expect(posturePanel).toHaveTextContent('64');
     expect(posturePanel).toHaveTextContent('当前市场观察');
     expect(posturePanel).toHaveTextContent('支持证据');
-    expect(posturePanel).toHaveTextContent('反证');
+    expect(posturePanel).toHaveTextContent('反证 / 风险');
     expect(posturePanel).toHaveTextContent('缺失证据');
-    expect(posturePanel).toHaveTextContent('后续观察');
+    expect(posturePanel).toHaveTextContent('下一步观察');
     expect(posturePanel).toHaveTextContent('Liquidity beta watch');
     expect(posturePanel).toHaveTextContent('Liquidity impulse should remain expanding.');
     expect(posturePanel).toHaveTextContent('Remove the risk-on watch if liquidity turns mixed or contracting.');
     expect(posturePanel).not.toHaveTextContent('liquidity_stops_expanding');
     expect(posturePanel).toHaveTextContent('US10Y');
     expect(posturePanel).toHaveTextContent('Fed liquidity');
-    expect(posturePanel).toHaveTextContent('反证已出现');
     expect(posturePanel).toHaveTextContent('非投资建议');
     expect(posturePanel).not.toHaveTextContent('counter_evidence_present');
     expect(posturePanel).not.toHaveTextContent('not_investment_advice');
+    expect(posturePanel).toHaveTextContent('可计分证据 3');
+    expect(posturePanel).toHaveTextContent('观察证据 0');
+    expect(posturePanel).toHaveTextContent('缺失证据 0');
 
+    const debug = within(posturePanel).getByTestId('market-decision-debug-details');
+    expect(debug).not.toHaveAttribute('open');
+    fireEvent.click(within(debug).getByRole('button', { name: '展开 技术细节 / Details' }));
     const readinessStrip = within(posturePanel).getByTestId('market-direction-readiness-strip');
     expect(readinessStrip).toHaveTextContent('方向可用');
     expect(readinessStrip).toHaveTextContent('评分级 3');
     expect(readinessStrip).toHaveTextContent('观察级 0');
     expect(readinessStrip).toHaveTextContent('缺口 0');
     expect(readinessStrip).toHaveTextContent('Official macro/rates/volatility');
-
-    const debug = within(posturePanel).getByTestId('market-decision-debug-details');
-    expect(debug).not.toHaveAttribute('open');
-    fireEvent.click(within(debug).getByRole('button', { name: '展开 原始诊断代码' }));
     expect(debug).toHaveTextContent('counter_evidence_present');
     expect(debug).toHaveTextContent('not_investment_advice');
   });
@@ -2169,11 +2168,14 @@ describe('MarketOverviewPage', () => {
     const text = posturePanel.textContent || '';
 
     expect(posturePanel).toHaveTextContent('证据不足');
-    expect(posturePanel).toHaveTextContent('可靠证据不足');
+    expect(posturePanel).toHaveTextContent('当前不能形成可靠方向判断');
+    expect(posturePanel).toHaveTextContent('当前可靠证据不足');
     expect(posturePanel).toHaveTextContent('评分支柱缺失');
     expect(posturePanel).toHaveTextContent('代理或观察级证据');
     expect(posturePanel).not.toHaveTextContent('missing_scoring_pillars');
     expect(posturePanel).toHaveTextContent('BTC');
+    const debug = within(posturePanel).getByTestId('market-decision-debug-details');
+    fireEvent.click(within(debug).getByRole('button', { name: '展开 技术细节 / Details' }));
     expect(within(posturePanel).getByTestId('market-direction-readiness-strip')).toHaveTextContent('数据不足');
     expect(within(posturePanel).getByTestId('market-direction-readiness-reasons')).toHaveTextContent('没有足够的评分级支柱');
     expect(within(posturePanel).getByTestId('market-direction-readiness-reasons')).not.toHaveTextContent('fallback_proxy_or_observation_only_evidence_present');
@@ -2214,7 +2216,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-temperature-unreliable-summary')).toHaveTextContent('可靠输入不足，暂不生成综合判断');
     expect(screen.getByTestId('market-overview-temperature-summary')).toHaveTextContent(/可靠输入不足|暂不判定/);
     expect(screen.getByTestId('market-overview-temperature-summary')).not.toHaveTextContent('N/A');
-    expect(screen.getByTestId('market-decision-text')).toHaveTextContent(/数据可用：存在延迟源|数据可用：存在延迟\/代理源/);
+    expect(screen.getByTestId('market-decision-text')).toHaveTextContent('当前不能形成可靠方向判断');
     expect(screen.getByTestId('market-regime-synthesis-title')).toHaveTextContent('综合结论待返回');
     expect(screen.getByTestId('market-regime-synthesis-state-chip')).toHaveTextContent('载荷缺失');
     expect(screen.getByTestId('market-regime-synthesis-confidence-chip')).toHaveTextContent('未返回');
@@ -2317,8 +2319,8 @@ describe('MarketOverviewPage', () => {
 
     render(<MarketOverviewPage />);
 
-    expect(await screen.findByTestId('market-decision-text')).toHaveTextContent('数据可用：存在延迟/代理源');
-    expect(screen.getByTestId('market-decision-text')).not.toHaveTextContent(/数据不足 · 等待更多实时源/);
+    expect(await screen.findByTestId('market-decision-text')).toHaveTextContent('当前不能形成可靠方向判断');
+    expect(screen.getByTestId('market-command-safe-state')).toHaveTextContent('当前可见信号包含延迟、代理或缺失项');
     expect(screen.getByTestId('market-overview-rail-action-hint')).not.toHaveTextContent(/等待实时源补齐后再生成强判断/);
   });
 
@@ -2345,8 +2347,8 @@ describe('MarketOverviewPage', () => {
       },
     });
 
-    expect(screen.getByTestId('market-decision-text')).toHaveTextContent('部分数据暂不可用');
-    expect(screen.getByTestId('market-command-safe-state')).toHaveTextContent(/当前不生成强判断/);
+    expect(screen.getByTestId('market-decision-text')).toHaveTextContent('当前不能形成可靠方向判断');
+    expect(screen.getByTestId('market-command-safe-state')).toHaveTextContent('关键面板暂不可用');
   });
 
   it('uses a refresh-state top status only while the overview is truly refreshing', async () => {
@@ -2374,7 +2376,8 @@ describe('MarketOverviewPage', () => {
       },
     });
 
-    expect(screen.getByTestId('market-decision-text')).toHaveTextContent('等待实时源');
+    expect(screen.getByTestId('market-decision-text')).toHaveTextContent('当前不能形成可靠方向判断');
+    expect(screen.getByTestId('market-command-safe-state')).toHaveTextContent('关键实时源仍在刷新');
     expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/刷新中/i);
   });
 
@@ -3352,28 +3355,14 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     const diagnostics = screen.getByTestId('market-overview-official-macro-diagnostics');
-    await waitFor(() => expect(diagnostics).toHaveTextContent('评分级证据 2'));
-    const details = diagnostics.querySelector('details');
-    const summary = diagnostics.querySelector('summary');
-    expect(details).not.toBeNull();
-    expect(summary).not.toBeNull();
-    expect(details).not.toHaveAttribute('open');
-    expect(diagnostics).toHaveTextContent('官方覆盖 3');
+    await waitFor(() => expect(diagnostics).toHaveTextContent('可计分 2'));
+    expect(diagnostics).toHaveTextContent('官方 3');
     expect(diagnostics).toHaveTextContent('代理/观察 2');
-    expect(diagnostics).toHaveTextContent('备用 1');
     expect(diagnostics).toHaveTextContent('缺口 3');
-    expect(diagnostics).toHaveTextContent('VIXCLS');
-    expect(diagnostics).toHaveTextContent('SOFR');
-    expect(diagnostics).toHaveTextContent('DFF');
-    expect(diagnostics).toHaveTextContent('DGS2');
-    expect(diagnostics).toHaveTextContent('DGS10');
-    expect(diagnostics).toHaveTextContent('DGS30');
-    expect(diagnostics).toHaveTextContent('BAMLH0A0HYM2');
-    expect(within(diagnostics).getByText(/provider_forbidden_for_use_case/, { selector: 'p' })).not.toBeVisible();
+    expect(within(diagnostics).queryByText(/provider_forbidden_for_use_case/, { selector: 'p' })).not.toBeInTheDocument();
 
-    fireEvent.click(summary as HTMLElement);
+    fireEvent.click(within(diagnostics).getByRole('button', { name: '展开 来源覆盖诊断' }));
 
-    expect(details).toHaveAttribute('open');
     expect(diagnostics).toHaveTextContent('Official');
     expect(diagnostics).toHaveTextContent('Score-eligible');
     expect(diagnostics).toHaveTextContent('Observation-only');

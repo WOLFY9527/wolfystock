@@ -490,12 +490,12 @@ describe('MarketRotationRadarPage', () => {
     render(<MarketRotationRadarPage />);
 
     const page = await screen.findByTestId('market-rotation-radar-page');
-    expect(page).toHaveTextContent('主题轮动 / 相对强弱雷达');
+    expect(page).toHaveTextContent('主题轮动雷达');
     expect(page.className).not.toContain('bg-[#030303]');
     expect(page.querySelector('[data-terminal-primitive="page-shell"]')).not.toBeNull();
     expect(screen.getByTestId('rotation-radar-summary-band')).toHaveAttribute('data-terminal-primitive', 'panel');
     expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('观察信号');
-    expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('证据分层');
+    expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('证据边界');
     expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('证据质量');
     expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('主要缺口');
     expect(screen.getByTestId('rotation-radar-mode-controls')).toHaveTextContent('US');
@@ -503,9 +503,9 @@ describe('MarketRotationRadarPage', () => {
     expect(screen.getByTestId('rotation-market-tab-US')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '刷新主题轮动雷达' })).toHaveAttribute('data-terminal-primitive', 'button');
     expect(screen.getByTestId('rotation-radar-freshness')).toHaveAttribute('data-terminal-primitive', 'nested-block');
-    expect(screen.getByTestId('rotation-radar-lane-band')).toHaveTextContent('True Flow');
-    expect(screen.getByTestId('rotation-radar-lane-band')).toHaveTextContent('Relative Strength');
-    expect(screen.getByTestId('rotation-radar-lane-band')).toHaveTextContent('Taxonomy Fallback');
+    expect(screen.getByTestId('rotation-radar-lane-band')).toHaveTextContent('真实流向确认');
+    expect(screen.getByTestId('rotation-radar-lane-band')).toHaveTextContent('相对强弱');
+    expect(screen.getByTestId('rotation-radar-lane-band')).toHaveTextContent('主题库模式');
 
     const leaderList = screen.getByTestId('rotation-radar-leader-list');
     expect(leaderList).toHaveAttribute('data-linear-primitive', 'data-workbench-frame');
@@ -520,8 +520,8 @@ describe('MarketRotationRadarPage', () => {
     const detail = screen.getByTestId('rotation-theme-detail-panel');
     expect(detail).toHaveAttribute('data-linear-primitive', 'context-rail');
     expect(detail).toHaveTextContent('AI 应用');
-    expect(within(detail).getByText('Relative Strength')).toHaveAttribute('data-terminal-primitive', 'chip');
-    expect(within(detail).getAllByText('Degraded Proxy')[0]).toHaveAttribute('data-terminal-primitive', 'chip');
+    expect(within(detail).getAllByText('相对强弱')[0]).toHaveAttribute('data-terminal-primitive', 'chip');
+    expect(within(detail).getAllByText('受限代理级')[0]).toHaveAttribute('data-terminal-primitive', 'chip');
     expect(within(detail).getByText('确认轮动')).toHaveAttribute('data-terminal-primitive', 'chip');
     expect(within(detail).getByText(/^置信度 \d+%$/)).toHaveAttribute('data-terminal-primitive', 'chip');
     expect(within(detail).getByText('延迟可用')).toHaveAttribute('data-terminal-primitive', 'chip');
@@ -537,6 +537,8 @@ describe('MarketRotationRadarPage', () => {
   it('renders a bounded ETF leadership diagnostics panel from etfLeadershipDiagnostics only', async () => {
     render(<MarketRotationRadarPage />);
 
+    const disclosure = await screen.findByTestId('rotation-etf-diagnostics-disclosure');
+    fireEvent.click(within(disclosure).getByRole('button', { name: '展开 ETF authority 技术细节' }));
     const panel = await screen.findByTestId('rotation-radar-etf-leadership-panel');
     expect(panel).toHaveTextContent('ETF Leadership');
     expect(panel).toHaveTextContent('SPY / QQQ / IWM / SMH / SOXX / IGV');
@@ -548,7 +550,7 @@ describe('MarketRotationRadarPage', () => {
     expect(panel).toHaveTextContent('IWM');
     expect(panel).toHaveTextContent('IGV');
     expect(panel).toHaveTextContent('SPY');
-    expect(panel).toHaveTextContent('Bounded ETF authority active');
+    expect(panel).toHaveTextContent('ETF authority 已启用');
     expect(panel).not.toHaveTextContent('bounded_etf_authority_active');
     expect(panel).toHaveTextContent('Authority 6/6');
     expect(panel).toHaveTextContent('Score-Eligible 6/6');
@@ -581,11 +583,11 @@ describe('MarketRotationRadarPage', () => {
 
     await waitFor(() => expect(marketRotationApi.getRotationRadar).toHaveBeenLastCalledWith('CN'));
     expect(screen.getByTestId('rotation-market-tab-CN')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('rotation-radar-leader-list')).toHaveTextContent(/没有可用于头部排名|等待真实行情/);
+    expect(screen.getByTestId('rotation-radar-leader-list')).toHaveTextContent(/暂无可展示主题|按主题分类浏览/);
     expect(within(screen.getByTestId('rotation-radar-leader-list')).queryAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(0);
     expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('AI算力');
-    expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('主题库已载入');
-    expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('待接入本地行情');
+    expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('当前不能判断主题轮动');
+    expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('缺少 ETF authority / flow / breadth confirmation');
     expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('寒武纪');
     expect(document.body.textContent || '').not.toMatch(/\bN\/A\b/g);
 
@@ -698,11 +700,13 @@ describe('MarketRotationRadarPage', () => {
 
     render(<MarketRotationRadarPage />);
 
-    expect(await screen.findByTestId('rotation-radar-guidance')).toHaveTextContent('Theme library only / not a live rotation signal');
+    expect(await screen.findByTestId('rotation-radar-guidance')).toHaveTextContent('主题库模式：不是实时轮动信号');
+    const disclosure = await screen.findByTestId('rotation-etf-diagnostics-disclosure');
+    fireEvent.click(within(disclosure).getByRole('button', { name: '展开 ETF authority 技术细节' }));
     const panel = await screen.findByTestId('rotation-radar-etf-leadership-panel');
     expect(panel).toHaveTextContent('Disabled');
-    expect(panel).toHaveTextContent('Required ETF windows are missing');
-    expect(panel).toHaveTextContent('Bounded ETF set is not eligible');
+    expect(panel).toHaveTextContent('ETF 必要时窗缺失');
+    expect(panel).toHaveTextContent('ETF authority 未满足可用条件');
     expect(panel).not.toHaveTextContent('missing_required_windows');
     expect(panel).not.toHaveTextContent('ineligible_bounded_etf');
     expect(panel).toHaveTextContent('Authority 0/1');
@@ -724,8 +728,8 @@ describe('MarketRotationRadarPage', () => {
     expect(within(detail).getByText('轮动代理证据')).toBeInTheDocument();
     expect(within(detail).getByText('分类观察')).toBeInTheDocument();
     expect(within(detail).getByText('真实资金流暂缺')).toBeInTheDocument();
-    expect(within(detail).getByText('Relative Strength')).toBeInTheDocument();
-    expect(within(detail).getAllByText('Degraded Proxy').length).toBeGreaterThan(0);
+    expect(within(detail).getAllByText('相对强弱').length).toBeGreaterThan(0);
+    expect(within(detail).getAllByText('受限代理级').length).toBeGreaterThan(0);
     expect(detail.textContent || '').not.toMatch(/真实资金流确认|资金流入确认/);
 
     const evidenceDetails = within(detail).getByTestId('rotation-theme-evidence-details-ai_applications');

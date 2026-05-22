@@ -336,8 +336,8 @@ describe('MarketProviderOperationsPage', () => {
 
     render(<MarketProviderOperationsPage />);
 
-    expect(screen.getByText('数据源运维')).toBeInTheDocument();
-    expect(screen.getByText('正在读取市场数据源运维快照')).toBeInTheDocument();
+    expect(screen.getByText('数据源维护路线图')).toBeInTheDocument();
+    expect(screen.getByText('正在读取数据源维护快照')).toBeInTheDocument();
   });
 
   it('lets the shared shell own the page background instead of locking a local pure-black slab', async () => {
@@ -346,7 +346,7 @@ describe('MarketProviderOperationsPage', () => {
     render(<MarketProviderOperationsPage />);
 
     const pageRoot = screen.getByTestId('market-provider-operations-page');
-    expect(await screen.findByRole('heading', { name: '数据源运维' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '数据源维护路线图' })).toBeInTheDocument();
     expect(pageRoot.className).not.toContain('bg-[#050505]');
     expect(pageRoot.className).not.toContain('bg-black');
   });
@@ -356,7 +356,7 @@ describe('MarketProviderOperationsPage', () => {
 
     render(<MarketProviderOperationsPage />);
 
-    expect(await screen.findByRole('heading', { name: '数据源运维' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '数据源维护路线图' })).toBeInTheDocument();
     expect(screen.getAllByText('数据源健康').length).toBeGreaterThan(0);
     expect(screen.getAllByText('熔断状态').length).toBeGreaterThan(0);
     expect(screen.getAllByText('失败率').length).toBeGreaterThan(0);
@@ -378,15 +378,15 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getByText('Representative US parquet files are missing for part of the requested symbol set.')).toBeInTheDocument();
     expect(screen.getByText('限制与快照摘要')).toBeInTheDocument();
     const gapBoard = screen.getByTestId('market-provider-source-gap-board');
-    expect(gapBoard).toHaveTextContent('Source gap board');
-    expect(gapBoard).toHaveTextContent('Market direction');
-    expect(gapBoard).toHaveTextContent('Liquidity direction');
-    expect(gapBoard).toHaveTextContent('China/HK context');
+    expect(gapBoard).toHaveTextContent('优先级路线图');
+    expect(gapBoard).toHaveTextContent('P0 · 市场方向阻断项');
+    expect(gapBoard).toHaveTextContent('P1 · 流动性方向阻断项');
+    expect(gapBoard).toHaveTextContent('P3 · 区域 / 期货确认改进项');
     expect(gapBoard).toHaveTextContent('Fed Liquidity');
-    expect(gapBoard).toHaveTextContent('current state');
-    expect(gapBoard).toHaveTextContent('impact');
-    expect(gapBoard).toHaveTextContent('required provider/runtime work');
-    expect(gapBoard).toHaveTextContent('blocks score-grade conclusions: yes');
+    expect(gapBoard).toHaveTextContent('来源缺口');
+    expect(gapBoard).toHaveTextContent('解锁能力');
+    expect(gapBoard).toHaveTextContent('所需工作');
+    expect(gapBoard).toHaveTextContent('阻断评分级结论：是');
     expect(gapBoard).not.toHaveTextContent('missing_provider_configuration');
     expect(screen.queryByText('official_public.fed_liquidity')).not.toBeInTheDocument();
     expect(screen.getAllByText('缓存状态').length).toBeGreaterThan(0);
@@ -481,7 +481,7 @@ describe('MarketProviderOperationsPage', () => {
 
     render(<MarketProviderOperationsPage />);
 
-    expect(await screen.findByText('Provider operations matrix')).toBeInTheDocument();
+    expect(await screen.findByText('优先级数据源路线图')).toBeInTheDocument();
     expect(screen.getByText('暂无 provider matrix 行')).toBeInTheDocument();
   });
 
@@ -491,7 +491,7 @@ describe('MarketProviderOperationsPage', () => {
 
     render(<MarketProviderOperationsPage />);
 
-    expect(await screen.findByRole('heading', { name: '数据源运维' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '数据源维护路线图' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('读取 provider operations matrix 失败')).toBeInTheDocument());
   });
 

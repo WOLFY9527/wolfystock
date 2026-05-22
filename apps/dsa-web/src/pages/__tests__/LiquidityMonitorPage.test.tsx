@@ -502,14 +502,15 @@ describe('LiquidityMonitorPage', () => {
     render(<LiquidityMonitorPage />);
 
     const summary = await screen.findByTestId('liquidity-monitor-coverage-summary');
-    expect(summary).toHaveTextContent('方向证据可用');
-    expect(summary).toHaveTextContent('Score-grade evidence 2');
-    expect(summary).toHaveTextContent('Observation-only evidence 1');
-    expect(summary).toHaveTextContent('Missing evidence 2');
-    expect(summary).toHaveTextContent('为什么不是完整方向结论');
-    expect(summary).toHaveTextContent('覆盖不完整');
-    expect(summary).toHaveTextContent('仅观察态');
-    expect(summary).toHaveTextContent('仅在真实 funding 快照存在时显示');
+    expect(summary).toHaveTextContent('当前流动性方向可参考');
+    expect(summary).toHaveTextContent('可计分证据 2');
+    expect(summary).toHaveTextContent('观察证据 1');
+    expect(summary).toHaveTextContent('缺失证据 2');
+    expect(screen.getByTestId('liquidity-monitor-guidance-panel')).toHaveTextContent('为什么不是完整方向结论');
+    expect(screen.getByTestId('liquidity-monitor-guidance-panel')).toHaveTextContent('覆盖不完整');
+    expect(screen.getByTestId('liquidity-monitor-guidance-panel')).toHaveTextContent('仅观察态');
+    expect(screen.getByTestId('liquidity-monitor-guidance-panel')).toHaveTextContent('Fed liquidity');
+    expect(screen.getByTestId('liquidity-monitor-guidance-panel')).toHaveTextContent('ETF / fund flow');
     expect(summary.textContent || '').not.toMatch(/score_contribution_not_allowed|source_authority_router_rejected/);
   });
 
@@ -519,11 +520,11 @@ describe('LiquidityMonitorPage', () => {
     render(<LiquidityMonitorPage />);
 
     await screen.findByRole('heading', { name: '流动性监测' });
-    expect(screen.getAllByText('部分可用').length).toBeGreaterThan(0);
     const indicatorDisclosure = screen.getByTestId('liquidity-monitor-indicator-disclosure');
     expect(indicatorDisclosure).not.toHaveAttribute('open');
     expect(screen.queryByText('Crypto 资金费率')).not.toBeInTheDocument();
     fireEvent.click(within(indicatorDisclosure).getByRole('button', { name: '展开 完整指标矩阵' }));
+    expect(screen.getAllByText('部分可用').length).toBeGreaterThan(0);
     expect(screen.getByText('暂不可用')).toBeInTheDocument();
     expect(screen.getByText('Crypto 资金费率')).toBeVisible();
     expect(screen.getByText('仅在真实 funding 快照存在时显示')).toBeVisible();
@@ -535,28 +536,14 @@ describe('LiquidityMonitorPage', () => {
     render(<LiquidityMonitorPage />);
 
     const diagnostics = await screen.findByTestId('liquidity-monitor-official-macro-diagnostics');
-    const details = diagnostics.querySelector('details');
-    const summary = diagnostics.querySelector('summary');
-    expect(details).not.toBeNull();
-    expect(summary).not.toBeNull();
-    expect(details).not.toHaveAttribute('open');
-    expect(diagnostics).toHaveTextContent('评分级证据 4');
-    expect(diagnostics).toHaveTextContent('官方覆盖 5');
+    expect(diagnostics).toHaveTextContent('可计分 4');
+    expect(diagnostics).toHaveTextContent('官方 5');
     expect(diagnostics).toHaveTextContent('代理/观察 2');
-    expect(diagnostics).toHaveTextContent('备用 1');
     expect(diagnostics).toHaveTextContent('缺口 1');
-    expect(diagnostics).toHaveTextContent('VIXCLS');
-    expect(diagnostics).toHaveTextContent('SOFR');
-    expect(diagnostics).toHaveTextContent('DFF');
-    expect(diagnostics).toHaveTextContent('DGS2');
-    expect(diagnostics).toHaveTextContent('DGS10');
-    expect(diagnostics).toHaveTextContent('DGS30');
-    expect(diagnostics).toHaveTextContent('BAMLH0A0HYM2');
-    expect(within(diagnostics).getByText(/provider_forbidden_for_use_case/, { selector: 'p' })).not.toBeVisible();
+    expect(within(diagnostics).queryByText(/provider_forbidden_for_use_case/, { selector: 'p' })).not.toBeInTheDocument();
 
-    fireEvent.click(summary as HTMLElement);
+    fireEvent.click(within(diagnostics).getByRole('button', { name: '展开 技术细节 / Details' }));
 
-    expect(details).toHaveAttribute('open');
     expect(diagnostics).toHaveTextContent('Official');
     expect(diagnostics).toHaveTextContent('Score-eligible');
     expect(diagnostics).toHaveTextContent('Observation-only');
@@ -572,8 +559,7 @@ describe('LiquidityMonitorPage', () => {
 
     render(<LiquidityMonitorPage />);
 
-    await screen.findByRole('heading', { name: '流动性监测' });
-    expect(screen.getAllByText('VIX / 波动率压力').length).toBeGreaterThan(0);
+    expect(await screen.findByText('VIX / 波动率压力')).toBeInTheDocument();
     expect(screen.getAllByText('均值 -2.50%').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '展开 数据源细节' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '展开 数据源细节' }));
@@ -624,8 +610,8 @@ describe('LiquidityMonitorPage', () => {
     expect(await screen.findByTestId('liquidity-impulse-synthesis-title')).toHaveTextContent('流动性方向待确认');
     expect(screen.getByTestId('liquidity-impulse-synthesis-state-chip')).toHaveTextContent('Proxy-only');
     expect(screen.getByTestId('liquidity-impulse-synthesis-summary')).toHaveTextContent('不升级为真实扩张或收缩结论');
-    expect(screen.getByTestId('liquidity-monitor-coverage-summary')).toHaveTextContent('方向证据不足');
-    expect(screen.getByTestId('liquidity-monitor-coverage-summary')).toHaveTextContent('Score-grade evidence 0');
+    expect(screen.getByTestId('liquidity-monitor-guidance-panel')).toHaveTextContent('部分可参考');
+    expect(screen.getByTestId('liquidity-monitor-coverage-summary')).toHaveTextContent('可计分证据 0');
   });
 
   it('shows a missing synthesis payload honestly without fabricating a call', async () => {

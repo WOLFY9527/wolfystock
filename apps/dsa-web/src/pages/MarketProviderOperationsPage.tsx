@@ -353,8 +353,8 @@ type SourceGapCapability = {
 
 const SOURCE_GAP_CAPABILITIES: SourceGapCapability[] = [
   {
-    id: 'marketDirection',
-    title: 'Market direction',
+    id: 'p0MarketDirection',
+    title: 'P0 · 市场方向阻断项',
     match: (row) => capabilityHaystack(row).some((value) => (
       value.includes('market_overview')
       || value.includes('fed_liquidity')
@@ -364,8 +364,8 @@ const SOURCE_GAP_CAPABILITIES: SourceGapCapability[] = [
     )),
   },
   {
-    id: 'liquidityDirection',
-    title: 'Liquidity direction',
+    id: 'p1LiquidityDirection',
+    title: 'P1 · 流动性方向阻断项',
     match: (row) => capabilityHaystack(row).some((value) => (
       value.includes('liquidity_monitor')
       || value.includes('liquidity_impulse')
@@ -374,8 +374,8 @@ const SOURCE_GAP_CAPABILITIES: SourceGapCapability[] = [
     )),
   },
   {
-    id: 'themeRotation',
-    title: 'Theme rotation',
+    id: 'p2ThemeRotation',
+    title: 'P2 · 主题轮动阻断项',
     match: (row) => capabilityHaystack(row).some((value) => (
       value.includes('rotation')
       || value.includes('theme')
@@ -384,8 +384,8 @@ const SOURCE_GAP_CAPABILITIES: SourceGapCapability[] = [
     )),
   },
   {
-    id: 'chinaHkContext',
-    title: 'China/HK context',
+    id: 'p3RegionalFutures',
+    title: 'P3 · 区域 / 期货确认改进项',
     match: (row) => capabilityHaystack(row).some((value) => (
       value.includes('cn')
       || value.includes('hk')
@@ -393,13 +393,7 @@ const SOURCE_GAP_CAPABILITIES: SourceGapCapability[] = [
       || value.includes('tushare')
       || value.includes('tickflow')
       || value.includes('baostock')
-    )),
-  },
-  {
-    id: 'futuresRisk',
-    title: 'Futures/risk confirmation',
-    match: (row) => capabilityHaystack(row).some((value) => (
-      value.includes('futures')
+      || value.includes('futures')
       || value.includes('risk')
       || value.includes('volatility')
       || value.includes('vix')
@@ -433,36 +427,36 @@ function capabilityHaystack(row: ProviderOperationsMatrixRow): string[] {
 function sourceGapCurrentState(row: ProviderOperationsMatrixRow): string {
   const reasons = matrixReasonCodes(row);
   const primary = row.runtimeState || row.credentialState || row.dependencyState || row.degradationReason || reasons[0];
-  return marketIntelligenceReasonLabel(primary, 'en');
+  return marketIntelligenceReasonLabel(primary, 'zh');
 }
 
 function sourceGapImpact(row: ProviderOperationsMatrixRow): string {
   if (row.sourceAuthorityAllowed === false) {
-    return 'Source authority is not available for score-grade conclusions.';
+    return '解锁真实 authority 通过后的前台结论能力。';
   }
   if (row.scoreContributionAllowed === false || row.scoreEligible === false) {
-    return 'Evidence can remain visible, but cannot support score-grade conclusions.';
+    return '让证据从可见但不计分，提升到可支撑评分级结论。';
   }
   if (row.observationOnly) {
-    return 'Evidence is observation-only until provider coverage and freshness gates pass.';
+    return '让当前仅观察的证据进入可用结论面。';
   }
-  return 'Provider can support the capability once runtime coverage remains healthy.';
+  return '维持运行稳定后，可继续支撑对应产品能力。';
 }
 
 function sourceGapRequiredWork(row: ProviderOperationsMatrixRow): string {
   if (row.credentialState === 'missing' || row.keyRequired) {
-    return 'Configure the required credential through the existing runtime path.';
+    return '沿现有运行路径补齐所需凭证。';
   }
   if (row.runtimeState === 'missing_provider_configuration' || row.missingProviderReason) {
-    return 'Configure the existing provider/runtime contract and satisfy cache freshness gates.';
+    return '补齐既有 provider/runtime 契约，并满足缓存与时效门槛。';
   }
   if (row.dependencyState === 'dependency_missing') {
-    return 'Install or enable the existing dependency before runtime evidence can be used.';
+    return '补齐既有依赖，再让运行时证据进入页面。';
   }
   if (matrixCacheRequired(row)) {
-    return 'Populate the approved cache path and keep freshness above the configured floor.';
+    return '填充已批准的缓存路径，并保持 freshness 达标。';
   }
-  return 'Keep provider runtime, cache, and authority gates passing.';
+  return '继续保持 provider runtime、缓存与 authority 门槛通过。';
 }
 
 function sourceGapBlocksScoreGrade(row: ProviderOperationsMatrixRow): boolean {
@@ -474,6 +468,10 @@ function sourceGapRowsForCapability(rows: ProviderOperationsMatrixRow[], capabil
     .filter((row) => capability.match(row))
     .filter((row) => sourceGapBlocksScoreGrade(row) || row.sourceType === 'missing' || row.inertMetadataOnly)
     .slice(0, 4);
+}
+
+function sourceGapName(row: ProviderOperationsMatrixRow): string {
+  return row.providerName || row.providerId;
 }
 
 function statusChipVariant(status: StatusTone): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
@@ -637,39 +635,42 @@ const ReadOnlyBadges: React.FC<{ response?: MarketProviderOperationsResponse | n
 };
 
 const SourceGapBoard: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ rows }) => (
-  <div data-testid="market-provider-source-gap-board" className="mt-4 grid min-w-0 gap-3 xl:grid-cols-5">
+  <div data-testid="market-provider-source-gap-board" className="mt-4 grid min-w-0 gap-3 xl:grid-cols-2">
     {SOURCE_GAP_CAPABILITIES.map((capability) => {
       const gapRows = sourceGapRowsForCapability(rows, capability);
       return (
         <TerminalNestedBlock key={capability.id} className="min-w-0 bg-black/10">
           <div className="flex min-w-0 items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">Source gap board</p>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">优先级路线图</p>
               <p className="mt-1 truncate text-sm font-semibold text-white/82">{capability.title}</p>
             </div>
             <TerminalChip variant={gapRows.length ? 'caution' : 'success'}>
-              {gapRows.length ? `${gapRows.length} gaps` : 'clear'}
+              {gapRows.length ? `${gapRows.length} 项待补齐` : '已清空'}
             </TerminalChip>
           </div>
           <div className="mt-3 grid gap-2">
             {gapRows.length ? gapRows.map((row) => (
               <div key={`${capability.id}-${row.providerId}`} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2">
-                <p className="truncate text-xs font-semibold text-white/78">{row.providerName || row.providerId}</p>
+                <p className="truncate text-xs font-semibold text-white/78">{sourceGapName(row)}</p>
                 <p className="mt-1 text-[11px] leading-5 text-white/48">
-                  current state: {sourceGapCurrentState(row)}
+                  来源缺口：{marketIntelligenceReasonLabel(row.missingProviderReason || row.degradationReason || row.runtimeState, 'zh')}
                 </p>
                 <p className="mt-1 text-[11px] leading-5 text-white/48">
-                  impact: {sourceGapImpact(row)}
+                  解锁能力：{sourceGapImpact(row)}
                 </p>
                 <p className="mt-1 text-[11px] leading-5 text-white/48">
-                  required provider/runtime work: {sourceGapRequiredWork(row)}
+                  当前状态：{sourceGapCurrentState(row)}
+                </p>
+                <p className="mt-1 text-[11px] leading-5 text-white/48">
+                  所需工作：{sourceGapRequiredWork(row)}
                 </p>
                 <p className="mt-1 text-[11px] font-semibold text-amber-100/72">
-                  blocks score-grade conclusions: {sourceGapBlocksScoreGrade(row) ? 'yes' : 'no'}
+                  阻断评分级结论：{sourceGapBlocksScoreGrade(row) ? '是' : '否'}
                 </p>
               </div>
             )) : (
-              <p className="text-[11px] leading-5 text-white/38">No blocking source gap is visible for this capability.</p>
+              <p className="text-[11px] leading-5 text-white/38">当前没有可见的阻断项。</p>
             )}
           </div>
         </TerminalNestedBlock>
@@ -689,20 +690,19 @@ const ProviderOperationsMatrixPanel: React.FC<{
   return (
     <TerminalPanel as="section" className="col-span-12">
       <TerminalSectionHeader
-        eyebrow="能力缺口"
-        title="Source gap board"
+        eyebrow="路线图"
+        title="优先级数据源路线图"
         action={(
           <div className="flex flex-wrap gap-1.5">
-            <TerminalChip variant="neutral">{formatNumber(summary.totalRows, 0)} rows</TerminalChip>
-            <TerminalChip variant="info">{formatNumber(summary.observationOnlyRows, 0)} observation-only</TerminalChip>
-            <TerminalChip variant="success">{formatNumber(summary.scoreEligibleRows, 0)} score-eligible</TerminalChip>
+            <TerminalChip variant="neutral">{formatNumber(summary.totalRows, 0)} 条来源契约</TerminalChip>
+            <TerminalChip variant="info">{formatNumber(summary.observationOnlyRows, 0)} 条仅观察</TerminalChip>
+            <TerminalChip variant="success">{formatNumber(summary.scoreEligibleRows, 0)} 条可计分</TerminalChip>
           </div>
         )}
       />
       <p className="mt-2 text-[11px] leading-5 text-white/42">
-        先按产品能力看缺口会解锁什么，再展开完整 provider matrix。缺口说明不触发 provider runtime，不展示 secret、原始 URL、原始 payload 或本地路径。
+        先看哪些缺口真正阻断了产品首屏结论，再按需展开完整 provider matrix。这里仍保持只读，不触发 provider runtime，不展示 secret、原始 URL、原始 payload 或本地路径。
       </p>
-      <p className="mt-4 text-xs font-semibold text-white/54">Provider operations matrix</p>
 
       {error ? <ApiErrorAlert error={error} className="mt-4" /> : null}
 
@@ -1329,14 +1329,14 @@ const MarketProviderOperationsPage: React.FC = () => {
       <TerminalPageShell className="py-5 md:py-6">
         <TerminalPanel as="section" className="relative overflow-hidden">
           <TerminalPageHeading
-            eyebrow="数据源就绪台"
-            title="数据源运维"
+            eyebrow="数据源维护"
+            title="数据源维护路线图"
             action={<ReadOnlyBadges response={response} />}
           />
           <p className="mt-3 max-w-4xl text-sm leading-6 text-white/54">
             {isLoading
-              ? '正在读取市场数据源运维快照'
-              : `先看健康、熔断、失败率与缓存，再下钻限制、快照摘要与追踪标识。生成 ${formatDisplayDate(response?.generatedAt, '待统计')} · 窗口 ${response?.window?.key || '24h'} · 只读快照`}
+              ? '正在读取数据源维护快照'
+              : `先看路线图与阻断项，再按需下钻健康、熔断、失败率与缓存。生成 ${formatDisplayDate(response?.generatedAt, '待统计')} · 窗口 ${response?.window?.key || '24h'} · 只读快照`}
           </p>
           {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}
         </TerminalPanel>
