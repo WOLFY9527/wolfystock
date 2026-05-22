@@ -10,6 +10,12 @@
 - Backtest robustness support exports now use neutral parameter-selection terminology instead of optimizer wording in public metadata.
 - Polygon EOD US breadth scoring now requires a valid previous-close comparison; open-close breadth remains observation-only and broad-market claims stay partial while high/low metrics are unavailable.
 
+- **Frontend secret and i18n CI sentinels** - CI now includes a focused
+  Vitest raw i18n sentinel step in `web-gate` before Playwright, covering the
+  route shell, auth guard, shared shell, login, and Settings data-source
+  surfaces. A deterministic pytest guard also rejects frontend Polygon provider
+  secret namespace misuse such as `VITE_*POLYGON*` while preserving backend-only
+  `POLYGON_API_KEY` runtime usage.
 - **Market Intelligence Polygon breadth runtime diagnostic** - The
   sanitized `scripts/diagnose_market_intelligence_runtime.py` bundle now
   includes compact Polygon US breadth activation status with credential

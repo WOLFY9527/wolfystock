@@ -103,6 +103,14 @@ jobs:
         run: npm ci
       - name: 🔎 Lint
         run: npm run lint
+      - name: 🧪 Vitest raw i18n sentinels
+        run: |
+          npm run test -- --run \
+            src/__tests__/AppRoutes.test.tsx \
+            src/components/auth/__tests__/AuthGuardOverlay.test.tsx \
+            src/components/layout/__tests__/Shell.test.tsx \
+            src/pages/__tests__/LoginPage.test.tsx
+          npm run test -- --run src/pages/__tests__/SettingsPage.test.tsx --testNamePattern "splits data settings into Data Routing and Data Source Library"
       - name: 🏗️ Build
         run: npm run build
       - name: 🎭 Install Playwright
