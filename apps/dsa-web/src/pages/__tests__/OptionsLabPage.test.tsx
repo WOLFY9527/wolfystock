@@ -242,6 +242,17 @@ function mockHappyPath() {
     ivRank: null,
     ivPercentile: null,
     ivRankStatus: 'unavailable',
+    decisionGrade: false,
+    gateDecision: 'blocked',
+    failClosedReasonCodes: ['synthetic_or_fixture_data_not_decision_grade'],
+    dataQualityGates: {
+      decisionGrade: false,
+      tier: 'synthetic_demo_only',
+    },
+    liquidityGates: {
+      passed: true,
+      liquidityScore: 76,
+    },
     expectedMove: {
       expectedMoveAbs: 7.5,
       expectedMovePct: 14.31,
@@ -392,7 +403,7 @@ describe('OptionsLabPage', () => {
     expect(within(snapshotPanel).getAllByText('标的').length).toBeGreaterThan(0);
     expect(within(snapshotPanel).getAllByText('IV 分位').length).toBeGreaterThan(0);
     expect(screen.getByTestId('options-lab-bento-grid')).toHaveClass('mt-5', 'grid', 'gap-6');
-    ['标的快照', '期权假设', '策略决策', '风险边界', '策略候选', '数据限制', 'Call / Put 工作区'].forEach((label) => {
+    ['标的快照', '期权假设', '情景准备度', '风险边界', '策略候选', '数据限制', 'Call / Put 工作区'].forEach((label) => {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     });
     expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('保持折叠');
@@ -423,7 +434,8 @@ describe('OptionsLabPage', () => {
     ['状态', '最大亏损', '最大收益', '盈亏平衡', '情景收益', '核心原因'].forEach((label) => {
       expect(within(section).getAllByText(label).length).toBeGreaterThan(0);
     });
-    expect(within(section).getByTestId('options-lab-primary-strategy-row')).toHaveTextContent('首选观察');
+    expect(within(section).getByTestId('options-lab-primary-strategy-row')).toHaveTextContent('观察排序 #1');
+    expect(within(section).getByTestId('options-lab-primary-strategy-row')).toHaveTextContent('未达判断等级');
     expect(within(section).queryByText('流动性提示')).not.toBeInTheDocument();
     expect(within(section).queryByText('波动率 / 时间价值提示')).not.toBeInTheDocument();
     expect(within(section).getByText('风险提示已合并')).toBeInTheDocument();
@@ -435,7 +447,7 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-decision-engine');
-    expect(within(section).getByText('策略决策')).toBeInTheDocument();
+    expect(within(section).getByText('情景准备度')).toBeInTheDocument();
     await waitFor(() => {
       expect(within(section).getAllByText('预期波动').length).toBeGreaterThan(0);
     });
@@ -447,12 +459,45 @@ describe('OptionsLabPage', () => {
     expect(within(section).getByText('IV / 敏感度')).toBeInTheDocument();
     expect(within(section).getAllByText('IV 分位不可用').length).toBeGreaterThan(0);
     expect(within(section).getAllByText('$7.50').length).toBeGreaterThan(0);
-    expect(within(section).getByText('主要策略')).toBeInTheDocument();
-    expect(within(section).getByText('暂无可执行策略')).toBeInTheDocument();
-    expect(within(section).getAllByText(/不交易：数据质量未达到可判断等级/).length).toBeGreaterThan(0);
+    expect(within(section).getByText('观察结构')).toBeInTheDocument();
+    expect(within(section).getAllByText(/边界原因：数据质量未达到可判断等级/).length).toBeGreaterThan(0);
     expect(within(section).getAllByText(/牛市看涨价差/).length).toBeGreaterThan(0);
     expect(document.body.textContent || '').not.toContain('有条件可交易');
+    expect(document.body.textContent || '').not.toContain('适合等待更好定价');
     expect(within(section).queryByText(/synthetic_or_fixture_data_not_decision_grade|provider_timeout/i)).not.toBeInTheDocument();
+  });
+
+  it('shows a non-decision-grade boundary for blocked gate payloads', async () => {
+    renderPage();
+
+    const section = await screen.findByTestId('options-lab-decision-engine');
+    const riskPanel = screen.getByTestId('options-lab-risk-boundary-panel');
+    await waitFor(() => {
+      expect(screen.getByTestId('options-lab-decision-summary')).toBeInTheDocument();
+    });
+
+    expect(within(section).getAllByText('未达到可判断等级，仅供情景观察，不可作为交易信号。').length).toBeGreaterThan(0);
+    expect(within(riskPanel).getByText('未达到可判断等级，仅供情景观察，不可作为交易信号。')).toBeInTheDocument();
+    expect(within(section).getByText('观察结构')).toBeInTheDocument();
+    expect(within(section).queryByText('主要策略')).not.toBeInTheDocument();
+    expect(document.body.textContent || '').not.toContain('决策中枢');
+    expect(document.body.textContent || '').not.toContain('策略决策');
+    expect(document.body.textContent || '').not.toContain('首选观察');
+    expect(document.body.textContent || '').not.toContain('可观察结构');
+  });
+
+  it('keeps delayed and demo fixture states explicitly observation-only', async () => {
+    renderPage();
+
+    const section = await screen.findByTestId('options-lab-decision-engine');
+    const snapshotPanel = screen.getByTestId('options-lab-snapshot-panel');
+    await waitFor(() => {
+      expect(within(section).getAllByText('演示/延迟数据：仅用于界面与情景验证，不生成判断结论。').length).toBeGreaterThan(0);
+    });
+
+    expect(within(snapshotPanel).getAllByText('演示/延迟数据').length).toBeGreaterThan(0);
+    expect(within(section).getAllByText('演示/延迟数据').length).toBeGreaterThan(0);
+    expect(document.body.textContent || '').not.toContain('适合等待更好定价');
   });
 
   it('consolidates risk warnings into a compact boundary with hidden overflow caveats', async () => {
@@ -496,9 +541,10 @@ describe('OptionsLabPage', () => {
 
     const assumptions = screen.getByTestId('options-lab-assumptions-panel');
     expect(decision).toContainElement(summary);
-    expect(summary).toHaveTextContent('结论');
+    expect(summary).toHaveTextContent('观察状态');
     expect(summary).toHaveTextContent('数据不足，禁止判断');
-    expect(summary).toHaveTextContent('暂无可执行策略');
+    expect(summary).toHaveTextContent('牛市看涨价差');
+    expect(summary).toHaveTextContent('边界原因：数据质量未达到可判断等级');
     expect(Boolean(assumptions.compareDocumentPosition(decision) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(within(analysisDetails).getByRole('button', { name: /展开/ })).toHaveAttribute('aria-expanded', 'false');
     expect(Boolean(decision.compareDocumentPosition(analysisDetails) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
@@ -550,10 +596,10 @@ describe('OptionsLabPage', () => {
 
     const decision = await screen.findByTestId('options-lab-decision-engine');
     await waitFor(() => {
-      expect(within(decision).getAllByText('暂无可执行策略').length).toBeGreaterThan(0);
+      expect(within(decision).getAllByText('暂无可判断结构').length).toBeGreaterThan(0);
     });
     expect(within(decision).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
-    expect(within(decision).getByText(/不交易：候选结构边际优势或风险回报不足/)).toBeInTheDocument();
+    expect(within(decision).getByText(/边界原因：候选结构边际优势或风险回报不足/)).toBeInTheDocument();
   });
 
   it('renders missing sensitivity and liquidity warnings in the decision section', async () => {
@@ -621,7 +667,7 @@ describe('OptionsLabPage', () => {
     });
     expect(within(riskPanel).getAllByText('买卖价差过宽').length).toBeGreaterThan(0);
     expect(within(riskPanel).getAllByText('敏感度缺失').length).toBeGreaterThan(0);
-    expect(section).toHaveTextContent('策略决策');
+    expect(section).toHaveTextContent('情景准备度');
   });
 
   it('does not fire compare before required assumptions are ready and shows a compact empty state', async () => {
@@ -931,7 +977,7 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-decision-engine');
-    expect(within(section).getByText('策略决策')).toBeInTheDocument();
+    expect(within(section).getByText('情景准备度')).toBeInTheDocument();
     await waitFor(() => {
       expect(within(section).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
     });

@@ -197,6 +197,31 @@ function noTradeReasonLabel(value?: string | null): string {
   return value ? limitationLabel(value) : '暂无';
 }
 
+function isNonDecisionGrade(decision?: OptionsDecisionResponse | null): boolean {
+  if (!decision) return false;
+  return decision.decisionGrade === false
+    || decision.gateDecision === 'blocked'
+    || asArray(decision.failClosedReasonCodes).length > 0
+    || decision.dataQuality?.dataQualityTier === 'synthetic_demo_only'
+    || decision.dataQuality?.dataQualityTier === 'insufficient';
+}
+
+function isDemoOrDelayedDecision(decision?: OptionsDecisionResponse | null): boolean {
+  const freshness = decision?.freshness?.freshness;
+  const tier = decision?.dataQuality?.dataQualityTier;
+  return freshness === 'synthetic_delayed'
+    || freshness === 'mock'
+    || freshness === 'delayed'
+    || tier === 'synthetic_demo_only'
+    || tier === 'delayed_usable';
+}
+
+function observationBoundaryCopy(decision?: OptionsDecisionResponse | null): string | null {
+  if (isNonDecisionGrade(decision)) return '未达到可判断等级，仅供情景观察，不可作为交易信号。';
+  if (isDemoOrDelayedDecision(decision)) return '演示/延迟数据：仅用于界面与情景验证，不生成判断结论。';
+  return null;
+}
+
 function metricTone(value?: number | null): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 'text-[color:var(--wolfy-text-secondary)]';
   if (value > 0) return 'text-[color:var(--wolfy-market-up)]';
@@ -393,9 +418,9 @@ function decisionStatusLabel(decision?: OptionsDecisionResponse | null): string 
   const label = decision?.decisionLabel || decision?.optimizer?.optimizerLabel;
   const tier = decision?.dataQuality?.dataQualityTier;
   if (label === '数据不足，禁止判断' || tier === 'synthetic_demo_only' || tier === 'insufficient') return '数据不足，禁止判断';
-  if (label === '不建议' || label === '不建议交易') return '可观察，不建议开仓';
-  if (label === '仅观察' || label === '可关注替代结构') return '可构建低风险观察策略';
-  if (label === '有条件可交易') return '适合等待更好定价';
+  if (label === '不建议' || label === '不建议交易') return '观察边界明确';
+  if (label === '仅观察' || label === '可关注替代结构') return '可记录低风险观察结构';
+  if (label === '有条件可交易') return '定价条件需继续观察';
   return '仅供观察';
 }
 
@@ -411,7 +436,7 @@ const SnapshotPanel: React.FC<{
   const statusItems = [
     { label: '标的', value: summary?.symbol || chain?.symbol || '--' },
     { label: '最新价', value: money(underlying?.price) },
-    { label: '结论', value: decisionStatusLabel(decision) },
+    { label: '观察状态', value: decisionStatusLabel(decision) },
     { label: '数据状态', value: freshnessLabel(decision?.freshness?.freshness || underlying?.freshness) },
     { label: '到期', value: chain?.expiration || '--' },
   ];
@@ -532,8 +557,9 @@ const StrategyRow: React.FC<{
   strategy: OptionsStrategyComparison;
   rank: number;
   highlighted: boolean;
+  gateBlocked: boolean;
   alternative?: RankedAlternative;
-}> = ({ strategy, rank, highlighted, alternative }) => (
+}> = ({ strategy, rank, highlighted, gateBlocked, alternative }) => (
   <article
     data-testid={highlighted ? 'options-lab-primary-strategy-row' : undefined}
     className={cn(
@@ -546,14 +572,14 @@ const StrategyRow: React.FC<{
     <div className="min-w-0">
       <div className="flex items-center gap-2">
         <span className="font-mono text-xs text-[color:var(--wolfy-text-muted)]">#{rank}</span>
-        {highlighted ? <Pill tone="info">首选观察</Pill> : null}
+        {highlighted ? <Pill tone={gateBlocked ? 'warn' : 'info'}>{gateBlocked ? `观察排序 #${rank}` : '观察排序靠前'}</Pill> : null}
       </div>
       <h3 className="mt-1 truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{strategyChineseLabel(strategy.strategyType)}</h3>
       <p className="mt-0.5 truncate font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{strategyLabel(strategy.strategyType)}</p>
     </div>
     <div>
       <p className={labelClass}>状态</p>
-      <p className="mt-1 text-xs font-semibold text-[color:var(--wolfy-accent-soft)]">{strategyStatusLabel(strategy, alternative)}</p>
+      <p className="mt-1 text-xs font-semibold text-[color:var(--wolfy-accent-soft)]">{gateBlocked ? '未达判断等级' : strategyStatusLabel(strategy, alternative)}</p>
     </div>
     <div>
       <p className={labelClass}>最大亏损</p>
@@ -594,6 +620,7 @@ const StrategyComparisonPanel: React.FC<{
   const rankedAlternatives = asArray(decision?.rankedAlternatives).length
     ? asArray(decision?.rankedAlternatives)
     : asArray(decision?.optimizer?.alternatives);
+  const gateBlocked = isNonDecisionGrade(decision);
   const rankMap = new Map(rankedAlternatives.map((alternative, index) => [alternative.strategyKey, { alternative, index }]));
   const rankedStrategies = [...strategies].sort((left, right) => {
     const leftRank = rankMap.get(left.strategyType)?.index ?? Number.MAX_SAFE_INTEGER;
@@ -634,6 +661,7 @@ const StrategyComparisonPanel: React.FC<{
               strategy={strategy}
               rank={index + 1}
               highlighted={index === 0}
+              gateBlocked={gateBlocked}
               alternative={rankMap.get(strategy.strategyType)?.alternative}
             />
           ))}
@@ -668,6 +696,10 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
   const ivRank = decision?.ivRank ?? decision?.ivGreeks?.ivRank;
   const ivPercentile = decision?.ivPercentile ?? decision?.ivGreeks?.ivPercentile;
   const evidenceSummary = decision ? normalizeOptionsEvidence(decision) : null;
+  const boundaryCopy = observationBoundaryCopy(decision);
+  const demoBoundaryCopy = isDemoOrDelayedDecision(decision)
+    ? '演示/延迟数据：仅用于界面与情景验证，不生成判断结论。'
+    : null;
   const showEvidenceSummary = Boolean(evidenceSummary && (
     evidenceSummary.posture !== 'unknown'
     || evidenceSummary.limitationLabels.length
@@ -679,7 +711,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
     : label === '仅观察'
       ? 'text-[color:var(--wolfy-accent-soft)]'
       : 'text-amber-100';
-  const primaryStrategy = optimizer?.preferredStrategyKey || null;
+  const primaryStrategy = isNonDecisionGrade(decision) ? null : optimizer?.preferredStrategyKey || null;
   const observationCandidate = primaryStrategy || rankedAlternatives[0]?.strategyKey || decision?.betterAlternative?.strategyType || null;
   const decisionTags = [...new Set([
     freshnessLabel(decision?.freshness?.freshness),
@@ -687,7 +719,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
   ].filter((item) => item && item !== '--'))].slice(0, 3);
   return (
     <section className={cn(panelClass, className)} data-testid="options-lab-decision-engine">
-      <SectionHeader eyebrow="决策中枢" title="策略决策" icon={ShieldCheck}>
+      <SectionHeader eyebrow="准备度中枢" title="情景准备度" icon={ShieldCheck}>
         <div className="flex flex-wrap justify-end gap-2">
           {showEvidenceSummary ? <EvidenceChips summary={evidenceSummary} maxLabels={1} /> : (
             <Pill tone={label.includes('禁止') || label.includes('不建议') ? 'risk' : 'warn'}>{label}</Pill>
@@ -699,13 +731,13 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
         <p className={cn(innerBlockClass, 'mt-5 border-dashed px-4 py-4 text-sm text-[color:var(--wolfy-text-secondary)]')}>{emptyMessage}</p>
       ) : null}
       {!emptyMessage && decisionState.loading ? (
-        <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 font-mono text-sm text-[color:var(--wolfy-accent-soft)]')}>正在计算策略决策...</p>
+        <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 font-mono text-sm text-[color:var(--wolfy-accent-soft)]')}>正在计算情景准备度...</p>
       ) : null}
       {!emptyMessage && !decisionState.loading && decisionState.error ? (
         <TerminalNotice variant="danger" className="mt-5">{decisionState.error}</TerminalNotice>
       ) : null}
       {!emptyMessage && !decisionState.loading && !decisionState.error && !decision ? (
-        <TerminalEmptyState title="等待策略决策" className="mt-5">
+        <TerminalEmptyState title="等待情景准备度" className="mt-5">
           先完成合约链加载，再进入 payoff / risk workspace。
         </TerminalEmptyState>
       ) : null}
@@ -717,13 +749,16 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
           >
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
-                <p className={labelClass}>结论</p>
+                <p className={labelClass}>观察状态</p>
                 <p className={cn('mt-2 text-xl font-semibold', labelTone)}>{decisionStatusLabel(decision)}</p>
                 <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-                  {primaryStrategy
-                    ? `主要策略：${strategyChineseLabel(primaryStrategy)}`
-                    : '暂无可执行策略'}
+                  {boundaryCopy || (primaryStrategy
+                    ? `观察结构：${strategyChineseLabel(primaryStrategy)}`
+                    : '暂无可判断结构')}
                 </p>
+                {demoBoundaryCopy && demoBoundaryCopy !== boundaryCopy ? (
+                  <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{demoBoundaryCopy}</p>
+                ) : null}
               </div>
               <div className="flex flex-wrap gap-2">
                 {decisionTags.map((tag) => (
@@ -738,12 +773,12 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
               <DecisionMetric label="IV / 敏感度" value={number(decision?.ivGreeks?.ivReadiness)} tone="text-[color:var(--wolfy-accent-soft)]" />
             </div>
             <div className={cn(innerBlockClass, 'mt-4 p-3')}>
-              <p className={labelClass}>主要策略</p>
-              <p className="mt-2 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{observationCandidate ? strategyChineseLabel(observationCandidate) : '暂无可执行策略'}</p>
+              <p className={labelClass}>观察结构</p>
+              <p className="mt-2 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{observationCandidate ? strategyChineseLabel(observationCandidate) : '暂无可判断结构'}</p>
               <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-accent-soft)]/80">
                 {primaryStrategy
-                  ? `可观察结构：${strategyChineseLabel(primaryStrategy)}`
-                  : `不交易：${noTradeReasonLabel(optimizer?.noTradeReason)}`}
+                  ? `观察结构：${strategyChineseLabel(primaryStrategy)}`
+                  : `边界原因：${noTradeReasonLabel(optimizer?.noTradeReason)}`}
               </p>
             </div>
           </div>
@@ -787,6 +822,7 @@ const RiskBoundaryPanel: React.FC<{
   className?: string;
 }> = ({ decision, chain, loading, error, className }) => {
   const evidenceSummary = decision ? normalizeOptionsEvidence(decision) : null;
+  const boundaryCopy = observationBoundaryCopy(decision);
   const showEvidenceSummary = Boolean(evidenceSummary && (
     evidenceSummary.posture !== 'unknown'
     || evidenceSummary.limitationLabels.length
@@ -834,9 +870,9 @@ const RiskBoundaryPanel: React.FC<{
       </SectionHeader>
       <div className="mt-5 grid gap-3 text-sm">
         <div className="rounded-md border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_10%,transparent)] p-3">
-          <p className={labelClass}>结论</p>
+          <p className={labelClass}>观察边界</p>
           <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-market-down)]">{topState}</p>
-          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">仅供观察，不可作为交易信号。</p>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{boundaryCopy || '仅供观察，不可作为交易信号。'}</p>
         </div>
         <div className={cn(innerBlockClass, 'flex items-center justify-between gap-3 p-3')}>
           <span className={labelClass}>数据状态</span>
@@ -1136,7 +1172,7 @@ const OptionsLabPageContent: React.FC = () => {
         if (ignored) return;
         setDecisionState({
           loading: false,
-          error: '策略决策暂不可用。请稍后重试或调整假设。',
+          error: '情景准备度暂不可用。请稍后重试或调整假设。',
           decision: null,
         });
       }
@@ -1193,10 +1229,10 @@ const OptionsLabPageContent: React.FC = () => {
     return null;
   }, [expirations.length, hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
   const decisionEmptyMessage = useMemo(() => {
-    if (state.loading) return '正在加载基础数据，稍后将自动计算策略决策。';
-    if (state.error) return '期权链暂不可用，策略决策已暂停。';
+    if (state.loading) return '正在加载基础数据，稍后将自动计算情景准备度。';
+    if (state.error) return '期权链暂不可用，情景准备度已暂停。';
     const targetPriceValue = Number(targetPrice);
-    if (!state.summary || !state.expirations || !state.chain || !hasChainRows) return '先加载合约链后，再进入策略决策。';
+    if (!state.summary || !state.expirations || !state.chain || !hasChainRows) return '先加载合约链后，再进入情景准备度。';
     if (!Number.isFinite(targetPriceValue) || targetPriceValue <= 0 || !targetDate.trim()) return '先补齐目标价格与目标日期。';
     return null;
   }, [hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);

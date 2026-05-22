@@ -144,6 +144,8 @@ export type OptionsStrategyCompareMetadata = {
   forceRefreshIgnored?: boolean;
 };
 
+export type OptionsGateDetails = Record<string, unknown> | null;
+
 export type OptionsStrategyCompareResponse = {
   symbol: string;
   underlying: Record<string, unknown>;
@@ -204,6 +206,11 @@ export type OptionsDecisionResponse = {
   ivRank?: number | null;
   ivPercentile?: number | null;
   ivRankStatus?: 'unavailable' | 'available' | string | null;
+  decisionGrade?: boolean | null;
+  gateDecision?: string | null;
+  failClosedReasonCodes?: string[] | null;
+  dataQualityGates?: OptionsGateDetails;
+  liquidityGates?: OptionsGateDetails;
   expectedMove?: {
     expectedMoveAbs?: number | null;
     expectedMovePct?: number | null;
@@ -448,6 +455,17 @@ function fixtureDecision(symbol: string): OptionsDecisionResponse {
     ivRank: null,
     ivPercentile: null,
     ivRankStatus: 'unavailable',
+    decisionGrade: false,
+    gateDecision: 'blocked',
+    failClosedReasonCodes: ['synthetic_or_fixture_data_not_decision_grade'],
+    dataQualityGates: {
+      decisionGrade: false,
+      tier: 'synthetic_demo_only',
+    },
+    liquidityGates: {
+      passed: true,
+      liquidityScore: 76,
+    },
     expectedMove: {
       expectedMoveAbs: 7.5,
       expectedMovePct: 14.3,

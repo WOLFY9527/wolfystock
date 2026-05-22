@@ -92,6 +92,17 @@ describe('optionsLabApi fixture fallback boundaries', () => {
         iv_rank: null,
         iv_percentile: null,
         iv_rank_status: 'unavailable',
+        decision_grade: false,
+        gate_decision: 'blocked',
+        fail_closed_reason_codes: ['synthetic_or_fixture_data_not_decision_grade'],
+        data_quality_gates: {
+          decision_grade: false,
+          tier: 'synthetic_demo_only',
+        },
+        liquidity_gates: {
+          passed: true,
+          liquidity_score: 50,
+        },
         expected_move: {
           expected_move_abs: 7.5,
           expected_move_pct: 14.31,
@@ -156,6 +167,17 @@ describe('optionsLabApi fixture fallback boundaries', () => {
     })).resolves.toMatchObject({
       symbol: 'TEM',
       decisionLabel: '数据不足，禁止判断',
+      decisionGrade: false,
+      gateDecision: 'blocked',
+      failClosedReasonCodes: ['synthetic_or_fixture_data_not_decision_grade'],
+      dataQualityGates: {
+        decisionGrade: false,
+        tier: 'synthetic_demo_only',
+      },
+      liquidityGates: {
+        passed: true,
+        liquidityScore: 50,
+      },
       dataQuality: {
         dataQualityTier: 'synthetic_demo_only',
       },
@@ -177,6 +199,17 @@ describe('optionsLabApi fixture fallback boundaries', () => {
       strategy: 'bull_call_spread',
     })).resolves.toMatchObject({
       decisionLabel: '数据不足，禁止判断',
+      decisionGrade: false,
+      gateDecision: 'blocked',
+      failClosedReasonCodes: ['synthetic_or_fixture_data_not_decision_grade'],
+      dataQualityGates: {
+        decisionGrade: false,
+        tier: 'synthetic_demo_only',
+      },
+      liquidityGates: {
+        passed: true,
+        liquidityScore: 76,
+      },
       dataQuality: {
         dataQualityTier: 'synthetic_demo_only',
       },
