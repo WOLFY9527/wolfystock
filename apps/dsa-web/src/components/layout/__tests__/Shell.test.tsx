@@ -9,9 +9,8 @@ import { ShellRailContext } from '../ShellRailContext';
 import { setAdminSurfaceMode } from '../../../hooks/useProductSurface';
 import { useStockPoolStore } from '../../../stores';
 
-const { mockLogout, mockGetAgentStatus, mockHardRedirect, useAuthMock } = vi.hoisted(() => ({
+const { mockLogout, mockHardRedirect, useAuthMock } = vi.hoisted(() => ({
   mockLogout: vi.fn().mockResolvedValue(undefined),
-  mockGetAgentStatus: vi.fn().mockResolvedValue({ enabled: true }),
   mockHardRedirect: vi.fn(),
   useAuthMock: vi.fn(),
 }));
@@ -26,17 +25,6 @@ vi.mock('../../../contexts/UiLanguageContext', () => ({
     toggleLanguage: vi.fn(),
     t: (key: string, vars?: Record<string, string | number | undefined>) => translate('zh', key, vars),
   }),
-}));
-
-vi.mock('../../../stores/agentChatStore', () => ({
-  useAgentChatStore: (selector: (state: { completionBadge: boolean }) => unknown) =>
-    selector({ completionBadge: true }),
-}));
-
-vi.mock('../../../api/agent', () => ({
-  agentApi: {
-    getStatus: (...args: unknown[]) => mockGetAgentStatus(...args),
-  },
 }));
 
 vi.mock('../../../utils/browserRedirect', () => ({
@@ -108,9 +96,9 @@ describe('Shell', () => {
     });
   });
 
-  it('renders the streamlined navigation and completion badge without the old theme control', () => {
+  it('renders the streamlined navigation without the old theme control', () => {
     render(
-      <MemoryRouter initialEntries={['/chat']}>
+      <MemoryRouter initialEntries={['/market-overview']}>
         <ThemeProvider>
           <Shell>
             <div>page content</div>
@@ -125,16 +113,18 @@ describe('Shell', () => {
     const logo = within(brandLink).getByRole('img', { name: 'WolfyStock logo' });
     expect(logo).toHaveAttribute('src', '/wolfystock-logo-mark.png');
     expect(logo).not.toHaveClass('invert');
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.chat') })).toBeInTheDocument();
     const scannerLink = screen.getByRole('link', { name: '扫描器' });
     expect(scannerLink).toHaveClass('text-sm', 'font-medium', 'text-white/50');
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.chat') })).toHaveClass('text-sm', 'font-bold', 'text-white');
-    expect(screen.getByTestId('chat-completion-badge')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toHaveClass('text-sm', 'font-bold', 'text-white');
+    expect(screen.queryByTestId('chat-completion-badge')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
-    expect(document.querySelector('.shell-content-frame')).toHaveClass('shell-content-frame--chat', 'shell-content-frame--wide');
-    expect(document.querySelector('.shell-main-column')).toHaveClass('shell-main-column--chat', 'p-0');
-    expect(document.querySelector('.shell-main-column')).not.toHaveClass('px-6', 'pt-6', 'pb-12', 'md:px-8', 'xl:px-12');
-    expect(document.querySelector('.theme-page-transition')).toHaveClass('theme-page-transition--chat', 'h-full', 'min-h-0');
+    expect(screen.queryByRole('link', { name: '决策台' })).not.toBeInTheDocument();
+    expect(document.querySelector('.shell-content-frame')).toHaveClass('shell-content-frame--wide');
+    expect(document.querySelector('.shell-content-frame--chat')).toBeNull();
+    expect(document.querySelector('.shell-main-column')).toHaveClass('px-6', 'pt-6', 'pb-12', 'md:px-8', 'xl:px-12');
+    expect(document.querySelector('.shell-main-column--chat')).toBeNull();
+    expect(document.querySelector('.theme-page-transition')).toHaveClass('h-full', 'min-h-0');
+    expect(document.querySelector('.theme-page-transition--chat')).toBeNull();
   });
 
   it('renders the complete primary navigation on desktop', async () => {
@@ -151,7 +141,6 @@ describe('Shell', () => {
     const primaryNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.home') })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.scanner') })).toBeInTheDocument();
-    expect(await within(primaryNav).findByRole('link', { name: translate('zh', 'nav.chat') })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.portfolio') })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: '流动性监测' })).toBeInTheDocument();
@@ -226,8 +215,8 @@ describe('Shell', () => {
 
     expect(screen.getByRole('link', { name: translate('zh', 'nav.home') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.scanner') })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.chat') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.portfolio') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.backtest') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.signIn') })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: translate('zh', 'nav.settings') })).not.toBeInTheDocument();
@@ -258,25 +247,9 @@ describe('Shell', () => {
     expect(screen.getByRole('link', { name: '扫描器' })).toBeInTheDocument();
   });
 
-  it('keeps the Ask Stock navigation entry accessible when the agent runtime is unavailable', async () => {
-    mockGetAgentStatus.mockResolvedValueOnce({ enabled: false });
-
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <ThemeProvider>
-          <Shell>
-            <div>page content</div>
-          </Shell>
-        </ThemeProvider>
-      </MemoryRouter>
-    );
-
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.chat') })).toBeInTheDocument();
-  });
-
   it('shows a confirmation dialog before logout', async () => {
     render(
-      <MemoryRouter initialEntries={['/chat']}>
+      <MemoryRouter initialEntries={['/market-overview']}>
         <ThemeProvider>
           <Shell>
             <div>page content</div>
@@ -298,7 +271,7 @@ describe('Shell', () => {
     window.innerWidth = 375;
 
     render(
-      <MemoryRouter initialEntries={['/chat']}>
+      <MemoryRouter initialEntries={['/market-overview']}>
         <ThemeProvider>
           <Shell>
             <div>page content</div>
@@ -360,7 +333,6 @@ describe('Shell', () => {
     const drawerNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.home') })).toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.scanner') })).toBeInTheDocument();
-    expect(await within(drawerNav).findByRole('link', { name: translate('zh', 'nav.chat') })).toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.portfolio') })).toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: '轮动雷达' })).toBeInTheDocument();
@@ -386,7 +358,7 @@ describe('Shell', () => {
     window.innerWidth = 375;
 
     render(
-      <MemoryRouter initialEntries={['/chat']}>
+      <MemoryRouter initialEntries={['/market-overview']}>
         <ThemeProvider>
           <Shell>
             <div>page content</div>

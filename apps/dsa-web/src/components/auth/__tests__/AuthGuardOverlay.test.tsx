@@ -31,8 +31,8 @@ describe('AuthGuardOverlay', () => {
 
   it('renders the centered auth guard shell in Chinese', () => {
     render(
-      <MemoryRouter initialEntries={['/zh/chat']}>
-        <AuthGuardOverlay moduleName="问股" />
+      <MemoryRouter initialEntries={['/zh/market-overview']}>
+        <AuthGuardOverlay moduleName="市场总览" />
       </MemoryRouter>,
     );
 
@@ -54,7 +54,7 @@ describe('AuthGuardOverlay', () => {
       'rounded-[24px]',
       'shadow-2xl',
     );
-    expect(screen.getByRole('heading', { name: '登录解锁 问股' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '登录解锁 市场总览' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '登录 / 创建账户' }));
     expect(navigate).toHaveBeenCalledWith('/zh/login');
   });

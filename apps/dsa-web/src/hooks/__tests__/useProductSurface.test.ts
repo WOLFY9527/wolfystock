@@ -34,9 +34,9 @@ describe('useProductSurface locale-aware auth paths', () => {
   });
 
   it('builds locale-prefixed login paths from the active route surface', () => {
-    window.history.replaceState(window.history.state, '', '/en/chat');
+    window.history.replaceState(window.history.state, '', '/en/market-overview');
 
-    expect(buildLoginPath('/chat')).toBe('/en/login?redirect=%2Fen%2Fchat');
+    expect(buildLoginPath('/market-overview')).toBe('/en/login?redirect=%2Fen%2Fmarket-overview');
   });
 
   it('builds locale-prefixed registration paths from the stored locale when the route is unprefixed', () => {

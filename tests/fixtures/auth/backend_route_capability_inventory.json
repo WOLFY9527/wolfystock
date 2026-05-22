@@ -2,7 +2,7 @@
   "protected_groups": [
     {
       "route_id": "agent.member_surface",
-      "path_pattern": "^/api/v1/agent/(?:stock-evidence|chat|chat/sessions(?:/\\{session_id\\})?|chat/stream)$",
+      "path_pattern": "^/api/v1/agent/(?:chat|chat/sessions(?:/\\{session_id\\})?|chat/stream)$",
       "methods": ["GET", "POST", "DELETE"],
       "surface": "agent",
       "auth_dependency_label": "authenticated_user",
