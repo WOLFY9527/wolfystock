@@ -80,9 +80,12 @@ def test_market_us_breadth_uses_polygon_computed_ad_when_authority_gate_passes()
         "probePassed": True,
         "observationDate": "2026-05-21",
         "previousObservationDate": "2026-05-20",
+        "comparisonBasis": "previous_close",
         "asOf": "2026-05-21",
         "freshnessValid": True,
         "coverageCount": 12000,
+        "previousCoverageCount": 11950,
+        "comparisonCoverageCount": 11950,
         "sourceMetadataValid": True,
         "sourceAuthorityAllowed": True,
         "scoreContributionAllowed": True,
@@ -122,13 +125,22 @@ def test_market_us_breadth_uses_polygon_computed_ad_when_authority_gate_passes()
     assert payload["source"] == "polygon_us_grouped_daily"
     assert payload["sourceLabel"] == "Polygon grouped daily US equities (computed breadth)"
     assert payload["breadthClaimType"] == "computed_authorized_polygon_grouped_daily_breadth"
+    assert payload["breadthClaimScope"] == "advance_decline_only"
+    assert payload["breadthCompleteness"] == "partial_ad_only"
     assert payload["officialExchangePublishedBreadth"] is False
     assert payload["representativeSample"] is False
     assert payload["sourceAuthorityAllowed"] is True
     assert payload["scoreContributionAllowed"] is True
+    assert payload["broadMarketClaimAllowed"] is False
+    assert payload["comparisonBasis"] == "previous_close"
+    assert payload["previousObservationDate"] == "2026-05-20"
+    assert payload["comparisonCoverageCount"] == 11950
     assert payload["isPartial"] is True
     assert payload["authorityDiagnostics"]["reasonCodes"] == ["polygon_high_low_history_unavailable"]
+    assert payload["authorityDiagnostics"]["comparisonBasis"] == "previous_close"
     assert by_symbol["ADVANCERS"]["value"] == 7000
+    assert by_symbol["ADVANCERS"]["broadMarketClaimAllowed"] is False
+    assert by_symbol["ADVANCERS"]["comparisonBasis"] == "previous_close"
     assert by_symbol["DECLINERS"]["value"] == 4000
     assert by_symbol["UNCHANGED"]["value"] == 1000
     assert by_symbol["ADVANCE_DECLINE_RATIO"]["value"] == 1.75

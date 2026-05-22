@@ -9,10 +9,12 @@ from zoneinfo import ZoneInfo
 from src.services.polygon_us_breadth_provider import (
     POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
     POLYGON_US_BREADTH_REASON_COVERAGE_BELOW_THRESHOLD,
+    POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE,
     POLYGON_US_BREADTH_REASON_RESPONSE_INVALID,
     POLYGON_US_BREADTH_REASON_UNAUTHORIZED,
     POLYGON_US_EASTERN_TZ,
     compute_polygon_us_breadth,
+    diagnostic_summary,
     run_polygon_us_breadth_activation,
 )
 from src.services.us_breadth_contracts import (
@@ -91,6 +93,77 @@ def test_low_polygon_coverage_keeps_us_breadth_fail_closed() -> None:
     assert result["reasonCodes"] == [POLYGON_US_BREADTH_REASON_COVERAGE_BELOW_THRESHOLD]
 
 
+def test_missing_previous_grouped_daily_payload_keeps_ad_breadth_non_scoring() -> None:
+    result = compute_polygon_us_breadth(
+        _grouped_payload([
+            {"T": "AAA", "o": 10.0, "c": 11.0},
+            {"T": "BBB", "o": 20.0, "c": 18.0},
+            {"T": "CCC", "o": 30.0, "c": 30.0},
+        ]),
+        observation_date="2026-05-21",
+        now=datetime(2026, 5, 22, 12, tzinfo=ZoneInfo("America/New_York")),
+        min_coverage_count=3,
+    )
+
+    assert result["comparisonBasis"] == "open_close"
+    assert result["previousObservationDate"] is None
+    assert result["sourceAuthorityAllowed"] is False
+    assert result["scoreContributionAllowed"] is False
+    assert result["metrics"]["advancers"] == 1
+    assert result["metrics"]["decliners"] == 1
+    assert result["metrics"]["unchanged"] == 1
+    assert POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE in result["reasonCodes"]
+
+
+def test_malformed_previous_grouped_daily_payload_keeps_ad_breadth_non_scoring() -> None:
+    result = compute_polygon_us_breadth(
+        _grouped_payload([
+            {"T": "AAA", "o": 10.0, "c": 11.0},
+            {"T": "BBB", "o": 20.0, "c": 18.0},
+            {"T": "CCC", "o": 30.0, "c": 30.0},
+        ]),
+        previous_payload={"status": "OK", "resultsCount": "bad", "results": []},
+        observation_date="2026-05-21",
+        previous_observation_date="2026-05-20",
+        now=datetime(2026, 5, 22, 12, tzinfo=ZoneInfo("America/New_York")),
+        min_coverage_count=3,
+    )
+
+    assert result["comparisonBasis"] == "open_close"
+    assert result["previousObservationDate"] is None
+    assert result["sourceAuthorityAllowed"] is False
+    assert result["scoreContributionAllowed"] is False
+    assert POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE in result["reasonCodes"]
+
+
+def test_low_coverage_previous_grouped_daily_payload_keeps_ad_breadth_non_scoring() -> None:
+    latest = _grouped_payload([
+        {"T": "AAA", "o": 10.0, "c": 11.0},
+        {"T": "BBB", "o": 20.0, "c": 18.0},
+        {"T": "CCC", "o": 30.0, "c": 30.0},
+    ])
+    previous = _grouped_payload([
+        {"T": "AAA", "o": 9.0, "c": 10.0},
+    ])
+
+    result = compute_polygon_us_breadth(
+        latest,
+        previous_payload=previous,
+        observation_date="2026-05-21",
+        previous_observation_date="2026-05-20",
+        now=datetime(2026, 5, 22, 12, tzinfo=ZoneInfo("America/New_York")),
+        min_coverage_count=3,
+    )
+
+    assert result["comparisonBasis"] == "open_close"
+    assert result["previousObservationDate"] is None
+    assert result["previousCoverageCount"] == 1
+    assert result["comparisonCoverageCount"] == 1
+    assert result["sourceAuthorityAllowed"] is False
+    assert result["scoreContributionAllowed"] is False
+    assert POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE in result["reasonCodes"]
+
+
 def test_fresh_valid_polygon_grouped_daily_computes_ad_breadth_from_previous_close() -> None:
     latest = _grouped_payload([
         {"T": "AAA", "o": 10.0, "c": 11.0},
@@ -117,9 +190,14 @@ def test_fresh_valid_polygon_grouped_daily_computes_ad_breadth_from_previous_clo
     assert result["probePassed"] is True
     assert result["freshnessValid"] is True
     assert result["coverageCount"] == 4
+    assert result["previousCoverageCount"] == 4
+    assert result["comparisonCoverageCount"] == 4
+    assert result["comparisonBasis"] == "previous_close"
+    assert result["previousObservationDate"] == "2026-05-20"
     assert result["sourceMetadataValid"] is True
     assert result["sourceAuthorityAllowed"] is True
     assert result["scoreContributionAllowed"] is True
+    assert result["broadMarketClaimAllowed"] is False
     assert result["fulfilledMetrics"] == [
         "ADVANCERS",
         "DECLINERS",
@@ -137,6 +215,8 @@ def test_fresh_valid_polygon_grouped_daily_computes_ad_breadth_from_previous_clo
     assert result["authorityBasis"] == "computed_from_authorized_polygon_grouped_daily"
     assert POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON in result["reasonCodes"]
     assert {"NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"}.issubset(result["missingMetrics"])
+    assert diagnostic_summary(result)["comparisonBasis"] == "previous_close"
+    assert diagnostic_summary(result)["previousObservationDate"] == "2026-05-20"
 
 
 def test_polygon_activation_fetches_recent_completed_date_and_previous_comparison() -> None:
@@ -168,4 +248,5 @@ def test_polygon_activation_fetches_recent_completed_date_and_previous_compariso
     assert calls == ["2026-05-21", "2026-05-20"]
     assert result["observationDate"] == "2026-05-21"
     assert result["previousObservationDate"] == "2026-05-20"
+    assert result["comparisonBasis"] == "previous_close"
     assert result["sourceAuthorityAllowed"] is True

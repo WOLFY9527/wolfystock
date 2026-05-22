@@ -54,6 +54,7 @@ from src.services.market_overview_tickflow_breadth_provider import (
 )
 from src.services.us_breadth_contracts import (
     US_BREADTH_MISSING_PROVIDER_REASON,
+    US_BREADTH_SYMBOLS,
     build_us_breadth_missing_authority_diagnostic,
     representative_sample_breadth_metadata,
 )
@@ -4070,7 +4071,11 @@ class MarketOverviewService:
     def _fetch_us_breadth_snapshot(self) -> Dict[str, Any]:
         polygon_activation = run_polygon_us_breadth_activation()
         authority_diagnostic = self._polygon_us_breadth_authority_diagnostic(polygon_activation)
-        if polygon_activation.get("sourceAuthorityAllowed"):
+        if (
+            polygon_activation.get("sourceAuthorityAllowed")
+            and polygon_activation.get("scoreContributionAllowed")
+            and polygon_activation.get("comparisonBasis") == "previous_close"
+        ):
             return self._polygon_us_breadth_snapshot(polygon_activation, authority_diagnostic)
 
         representative_meta = representative_sample_breadth_metadata()
@@ -4188,14 +4193,25 @@ class MarketOverviewService:
         missing_metrics = list(activation.get("missingMetrics") or [])
         reason_codes = list(activation.get("reasonCodes") or [])
         metric_coverage_ratio = round(len(fulfilled_metrics) / max(1, len(fulfilled_metrics) + len(missing_metrics)), 3)
+        score_contribution_allowed = bool(
+            activation.get("scoreContributionAllowed")
+            and activation.get("comparisonBasis") == "previous_close"
+        )
+        source_authority_allowed = bool(activation.get("sourceAuthorityAllowed") and score_contribution_allowed)
+        broad_market_claim_allowed = bool(
+            activation.get("broadMarketClaimAllowed")
+            and set(US_BREADTH_SYMBOLS).issubset(set(fulfilled_metrics))
+        )
         source_meta = {
             "breadthClaimType": "computed_authorized_polygon_grouped_daily_breadth",
+            "breadthClaimScope": "advance_decline_only",
+            "breadthCompleteness": "partial_ad_only",
             "representativeSample": False,
             "officialExchangePublishedBreadth": False,
-            "broadMarketClaimAllowed": True,
+            "broadMarketClaimAllowed": broad_market_claim_allowed,
             "observationOnly": False,
-            "sourceAuthorityAllowed": True,
-            "scoreContributionAllowed": True,
+            "sourceAuthorityAllowed": source_authority_allowed,
+            "scoreContributionAllowed": score_contribution_allowed,
             "sourceAuthorityReason": None,
             "sourceAuthorityRouteRejected": False,
             "routeRejectedReasonCodes": reason_codes,
@@ -4208,6 +4224,10 @@ class MarketOverviewService:
             "universe": POLYGON_US_BREADTH_UNIVERSE,
             "coverageCount": activation.get("coverageCount"),
             "coverageThreshold": activation.get("coverageThreshold"),
+            "previousObservationDate": activation.get("previousObservationDate"),
+            "comparisonBasis": activation.get("comparisonBasis"),
+            "previousCoverageCount": activation.get("previousCoverageCount"),
+            "comparisonCoverageCount": activation.get("comparisonCoverageCount"),
             "metricCoverageRatio": metric_coverage_ratio,
             "sourceFreshnessEvidence": {
                 "freshness": "delayed",
@@ -4216,6 +4236,8 @@ class MarketOverviewService:
                 "isPartial": bool(missing_metrics),
                 "isUnavailable": False,
                 "observationDate": activation.get("observationDate"),
+                "previousObservationDate": activation.get("previousObservationDate"),
+                "comparisonBasis": activation.get("comparisonBasis"),
                 "freshnessPolicy": "polygon_grouped_daily_eod_recent_completed_us_weekday",
             },
         }
@@ -4277,6 +4299,9 @@ class MarketOverviewService:
             "asOf": as_of,
             "observationDate": activation.get("observationDate"),
             "previousObservationDate": activation.get("previousObservationDate"),
+            "comparisonBasis": activation.get("comparisonBasis"),
+            "previousCoverageCount": activation.get("previousCoverageCount"),
+            "comparisonCoverageCount": activation.get("comparisonCoverageCount"),
             "freshness": "delayed",
             "coverage": metric_coverage_ratio,
             "isPartial": bool(missing_metrics),
@@ -4284,7 +4309,8 @@ class MarketOverviewService:
             "fallbackUsed": False,
             "warning": (
                 "US breadth uses computed Polygon grouped-daily AD metrics; "
-                "52-week high/low breadth is unavailable without historical lookback."
+                "broad-market breadth claims remain disabled because 52-week high/low "
+                "breadth is unavailable without historical lookback."
             ),
             "explanation": (
                 "This is computed from Polygon's authorized grouped daily US equity feed "
@@ -4332,8 +4358,8 @@ class MarketOverviewService:
         return {
             **item,
             **source_meta,
-            "scoreContributionAllowed": True,
-            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": bool(source_meta.get("scoreContributionAllowed")),
+            "sourceAuthorityAllowed": bool(source_meta.get("sourceAuthorityAllowed")),
             "sourceAuthorityReason": None,
             "sourceFreshnessEvidence": {
                 **dict(source_meta.get("sourceFreshnessEvidence") or {}),
@@ -4358,6 +4384,7 @@ class MarketOverviewService:
         )
         return {
             **item,
+            **dict(source_meta),
             "source": POLYGON_US_BREADTH_SOURCE,
             "sourceLabel": POLYGON_US_BREADTH_SOURCE_LABEL,
             "sourceType": POLYGON_US_BREADTH_SOURCE_TYPE,
@@ -4369,6 +4396,8 @@ class MarketOverviewService:
             "updatedAt": updated_at,
             "isFallback": False,
             "isUnavailable": True,
+            "observationOnly": True,
+            "broadMarketClaimAllowed": False,
             "sourceAuthorityAllowed": False,
             "scoreContributionAllowed": False,
             "sourceAuthorityReason": POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
@@ -4380,6 +4409,7 @@ class MarketOverviewService:
                 "isStale": False,
                 "isPartial": False,
                 "isUnavailable": True,
+                "comparisonBasis": source_meta.get("comparisonBasis"),
                 "warning": "52-week high/low breadth history unavailable",
             },
         }

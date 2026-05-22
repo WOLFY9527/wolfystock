@@ -48,6 +48,7 @@ POLYGON_US_BREADTH_REASON_UNAUTHORIZED = "polygon_unauthorized"
 POLYGON_US_BREADTH_REASON_RESPONSE_INVALID = "polygon_response_invalid"
 POLYGON_US_BREADTH_REASON_COVERAGE_BELOW_THRESHOLD = "polygon_coverage_below_threshold"
 POLYGON_US_BREADTH_REASON_EOD_STALE = "polygon_eod_stale"
+POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE = "polygon_previous_close_unavailable"
 POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON = "polygon_high_low_history_unavailable"
 
 _AD_FULFILLED_METRICS = (
@@ -163,6 +164,7 @@ def compute_polygon_us_breadth(
 ) -> dict[str, Any]:
     """Compute score-eligible AD breadth when freshness and coverage gates pass."""
 
+    coverage_threshold = max(1, int(min_coverage_count))
     parsed = parse_polygon_grouped_daily_payload(payload)
     if not parsed.ok:
         return _fail_closed_summary(
@@ -170,34 +172,18 @@ def compute_polygon_us_breadth(
             credentials_present=credentials_present,
             provider_constructed=provider_constructed,
             observation_date=observation_date,
+            coverage_threshold=coverage_threshold,
         )
 
-    comparison = parse_polygon_grouped_daily_payload(previous_payload)
-    previous_close_by_ticker = (
-        {row.ticker: row.close_price for row in comparison.rows}
-        if comparison.ok
-        else {}
-    )
-    advancers = 0
-    decliners = 0
-    unchanged = 0
-    for row in parsed.rows:
-        comparison_price = previous_close_by_ticker.get(row.ticker, row.open_price)
-        if row.close_price > comparison_price + _EPSILON:
-            advancers += 1
-        elif row.close_price < comparison_price - _EPSILON:
-            decliners += 1
-        else:
-            unchanged += 1
-
     coverage_count = len(parsed.rows)
-    if coverage_count < max(1, int(min_coverage_count)):
+    if coverage_count < coverage_threshold:
         return _fail_closed_summary(
             reason_codes=(POLYGON_US_BREADTH_REASON_COVERAGE_BELOW_THRESHOLD,),
             credentials_present=credentials_present,
             provider_constructed=provider_constructed,
             observation_date=observation_date,
             coverage_count=coverage_count,
+            coverage_threshold=coverage_threshold,
         )
 
     freshness = polygon_eod_freshness(observation_date, now=now)
@@ -208,17 +194,50 @@ def compute_polygon_us_breadth(
             provider_constructed=provider_constructed,
             observation_date=observation_date,
             coverage_count=coverage_count,
+            coverage_threshold=coverage_threshold,
             freshness_valid=False,
         )
 
+    comparison = parse_polygon_grouped_daily_payload(previous_payload)
+    previous_close_by_ticker = {row.ticker: row.close_price for row in comparison.rows} if comparison.ok else {}
+    previous_coverage_count = len(comparison.rows) if comparison.ok else 0
+    matched_rows = tuple(row for row in parsed.rows if row.ticker in previous_close_by_ticker)
+    comparison_coverage_count = len(matched_rows) if previous_observation_date and comparison.ok else 0
+    previous_close_available = bool(
+        previous_observation_date
+        and comparison.ok
+        and previous_coverage_count >= coverage_threshold
+        and comparison_coverage_count >= coverage_threshold
+    )
+    rows_for_comparison = matched_rows if previous_close_available else parsed.rows
+    comparison_basis = "previous_close" if previous_close_available else "open_close"
+
+    advancers = 0
+    decliners = 0
+    unchanged = 0
+    for row in rows_for_comparison:
+        comparison_price = previous_close_by_ticker[row.ticker] if previous_close_available else row.open_price
+        if row.close_price > comparison_price + _EPSILON:
+            advancers += 1
+        elif row.close_price < comparison_price - _EPSILON:
+            decliners += 1
+        else:
+            unchanged += 1
+
     ad_ratio = round(advancers / decliners, 3) if decliners > 0 else None
-    fulfilled_metrics = list(_AD_FULFILLED_METRICS if ad_ratio is not None else _AD_FULFILLED_METRICS[:-1])
+    fulfilled_metrics = (
+        list(_AD_FULFILLED_METRICS if ad_ratio is not None else _AD_FULFILLED_METRICS[:-1])
+        if previous_close_available
+        else []
+    )
     missing_metrics = [
         symbol
         for symbol in US_BREADTH_SYMBOLS
         if symbol not in fulfilled_metrics
     ]
     reason_codes = [POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON]
+    if not previous_close_available:
+        reason_codes.insert(0, POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE)
     if ad_ratio is None:
         reason_codes.append(POLYGON_US_BREADTH_REASON_RESPONSE_INVALID)
 
@@ -227,12 +246,15 @@ def compute_polygon_us_breadth(
         credentials_present
         and provider_constructed
         and parsed.ok
-        and coverage_count >= max(1, int(min_coverage_count))
+        and previous_close_available
+        and coverage_count >= coverage_threshold
+        and comparison_coverage_count >= coverage_threshold
         and freshness["freshnessValid"]
         and source_metadata_valid
         and ad_ratio is not None
     )
     score_allowed = bool(authority_allowed and fulfilled_metrics)
+    broad_market_claim_allowed = bool(score_allowed and set(US_BREADTH_SYMBOLS).issubset(set(fulfilled_metrics)))
     metrics = {
         "advancers": advancers,
         "decliners": decliners,
@@ -247,16 +269,21 @@ def compute_polygon_us_breadth(
         "providerConstructed": provider_constructed,
         "probePassed": authority_allowed,
         "observationDate": observation_date,
-        "previousObservationDate": previous_observation_date,
+        "previousObservationDate": previous_observation_date if previous_close_available else None,
+        "comparisonBasis": comparison_basis,
         "asOf": observation_date,
         "freshnessValid": bool(freshness["freshnessValid"]),
         "freshnessPolicy": freshness,
         "coverageCount": coverage_count,
+        "previousCoverageCount": previous_coverage_count,
+        "comparisonCoverageCount": comparison_coverage_count,
         "rawResultsCount": parsed.results_count,
-        "coverageThreshold": max(1, int(min_coverage_count)),
+        "coverageThreshold": coverage_threshold,
         "sourceMetadataValid": source_metadata_valid,
         "sourceAuthorityAllowed": authority_allowed,
         "scoreContributionAllowed": score_allowed,
+        "broadMarketClaimAllowed": broad_market_claim_allowed,
+        "observationOnly": not score_allowed,
         "fulfilledMetrics": fulfilled_metrics,
         "missingMetrics": missing_metrics,
         "reasonCodes": reason_codes,
@@ -355,11 +382,17 @@ def diagnostic_summary(result: Mapping[str, Any]) -> dict[str, Any]:
         "providerConstructed": bool(result.get("providerConstructed")),
         "probePassed": bool(result.get("probePassed")),
         "observationDate": result.get("observationDate"),
+        "previousObservationDate": result.get("previousObservationDate"),
+        "comparisonBasis": result.get("comparisonBasis"),
         "freshnessValid": bool(result.get("freshnessValid")),
         "coverageCount": int(result.get("coverageCount") or 0),
+        "previousCoverageCount": int(result.get("previousCoverageCount") or 0),
+        "comparisonCoverageCount": int(result.get("comparisonCoverageCount") or 0),
+        "coverageThreshold": int(result.get("coverageThreshold") or 0),
         "sourceMetadataValid": bool(result.get("sourceMetadataValid")),
         "sourceAuthorityAllowed": bool(result.get("sourceAuthorityAllowed")),
         "scoreContributionAllowed": bool(result.get("scoreContributionAllowed")),
+        "broadMarketClaimAllowed": bool(result.get("broadMarketClaimAllowed")),
         "fulfilledMetrics": list(result.get("fulfilledMetrics") or []),
         "missingMetrics": list(result.get("missingMetrics") or []),
         "reasonCodes": list(result.get("reasonCodes") or []),
@@ -399,6 +432,7 @@ def _fail_closed_summary(
     provider_constructed: bool,
     observation_date: str | None = None,
     coverage_count: int = 0,
+    coverage_threshold: int = 0,
     freshness_valid: bool = False,
 ) -> dict[str, Any]:
     return {
@@ -407,12 +441,18 @@ def _fail_closed_summary(
         "probePassed": False,
         "observationDate": observation_date,
         "previousObservationDate": None,
+        "comparisonBasis": None,
         "asOf": observation_date,
         "freshnessValid": freshness_valid,
         "coverageCount": coverage_count,
+        "previousCoverageCount": 0,
+        "comparisonCoverageCount": 0,
+        "coverageThreshold": coverage_threshold,
         "sourceMetadataValid": _source_metadata_valid(),
         "sourceAuthorityAllowed": False,
         "scoreContributionAllowed": False,
+        "broadMarketClaimAllowed": False,
+        "observationOnly": True,
         "fulfilledMetrics": [],
         "missingMetrics": list(US_BREADTH_SYMBOLS),
         "reasonCodes": list(reason_codes),
@@ -496,6 +536,7 @@ __all__ = [
     "POLYGON_US_BREADTH_AUTHORITY_BASIS",
     "POLYGON_US_BREADTH_REASON_COVERAGE_BELOW_THRESHOLD",
     "POLYGON_US_BREADTH_REASON_EOD_STALE",
+    "POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE",
     "POLYGON_US_BREADTH_REASON_RESPONSE_INVALID",
     "POLYGON_US_BREADTH_REASON_UNAUTHORIZED",
     "POLYGON_US_BREADTH_SOURCE",

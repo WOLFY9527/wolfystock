@@ -1,4 +1,5 @@
 ## 2026-05-22
+- Polygon EOD US breadth scoring now requires a valid previous-close comparison; open-close breadth remains observation-only and broad-market claims stay partial while high/low metrics are unavailable.
 
 - **Market Intelligence Polygon breadth runtime diagnostic** - The
   sanitized `scripts/diagnose_market_intelligence_runtime.py` bundle now
