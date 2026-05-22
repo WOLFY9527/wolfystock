@@ -659,8 +659,8 @@ function rotationGuidance(payload: MarketRotationRadarResponse): {
 
   if (libraryMode) {
     return {
-      title: '主题库模式：不是实时轮动信号',
-      detail: '当前仅展示主题分类与观察线索，缺少 ETF authority / flow / breadth confirmation.',
+      title: '主题库模式：当前不是实时轮动信号',
+      detail: '当前仅展示主题分类与观察线索，缺少 ETF authority / flow / breadth confirmation。',
       variant: 'caution',
     };
   }
@@ -668,7 +668,7 @@ function rotationGuidance(payload: MarketRotationRadarResponse): {
   if (!hasRealFlowSignal) {
     return {
       title: '当前不能判断主题轮动',
-      detail: '当前仅展示主题分类与观察线索，缺少 ETF authority / flow / breadth confirmation.',
+      detail: '当前仅展示主题分类与观察线索，缺少 ETF authority / flow / breadth confirmation。',
       variant: 'info',
     };
   }
@@ -683,20 +683,78 @@ function rotationGuidance(payload: MarketRotationRadarResponse): {
 const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> = ({ payload }) => {
   const guidance = rotationGuidance(payload);
   const libraryMode = isRotationLibraryMode(payload);
+  const scopeThemes = resolveSummaryThemes(payload.themes || [], payload.summary.strongestThemes || []);
+  const summaryThemes = scopeThemes.length ? scopeThemes : payload.themes || [];
+  const dominantLane = summarizeLane(summaryThemes);
+  const topThemeTitle = summaryTitle(payload.summary.strongestThemes, libraryMode ? '按主题分类浏览' : '等待真实行情');
+  const upgradeLine = '需要 ETF authority / flow / breadth confirmation 才能升级为实时轮动信号。';
+  const nextWatch = libraryMode
+    ? `优先补齐 ${summarizeGap(summaryThemes)}，再确认 ETF authority、流向与广度是否同时过关。`
+    : payload.summary.watchlistSignals?.length
+      ? `${payload.summary.watchlistSignals[0].themeName} · ${payload.summary.watchlistSignals[0].signalLabel || payload.summary.watchlistSignals[0].label || '观察线索'}`
+      : '继续核对是否有新的实时轮动确认。';
+
   return (
-    <TerminalNotice
+    <TerminalPanel
       data-testid="rotation-radar-guidance"
-      variant={guidance.variant}
-      className="text-sm leading-6"
+      className="relative overflow-hidden"
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="font-semibold text-white/82">{guidance.title}</span>
-        <TerminalChip variant={libraryMode ? 'caution' : 'info'}>
-          {libraryMode ? '主题库模式' : '仅供研究观察'}
-        </TerminalChip>
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-cyan-400/0 via-cyan-200/42 to-sky-400/0" aria-hidden="true" />
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-medium tracking-[0.24em] text-white/38">轮动判断摘要</p>
+          <p className="mt-2 text-base font-semibold leading-6 text-white/90 md:text-lg">{guidance.title}</p>
+          <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">{guidance.detail}</p>
+        </div>
+        <div className="flex min-w-0 flex-wrap justify-end gap-2">
+          <TerminalChip variant={guidance.variant}>{libraryMode ? '主题库模式' : '仅供研究观察'}</TerminalChip>
+          <TerminalChip variant={libraryMode ? 'caution' : 'info'}>{dominantLane.label}</TerminalChip>
+          <TerminalChip variant={rotationScoreEligibleCount(payload) > 0 ? 'success' : 'caution'}>
+            可计分证据 {rotationScoreEligibleCount(payload)}
+          </TerminalChip>
+        </div>
       </div>
-      <p className="mt-1 text-white/56">{guidance.detail}</p>
-    </TerminalNotice>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-3">
+        <div data-testid="rotation-radar-summary-band" data-terminal-primitive="panel" className="contents">
+        <div className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+          <p className="text-[11px] font-medium text-white/48">当前状态</p>
+          <p className="mt-2 text-sm font-semibold text-white/82">{libraryMode ? '当前不是实时轮动信号' : '当前可继续观察主题轮动'}</p>
+          <p className="mt-2 text-[11px] leading-5 text-white/58">
+            {libraryMode ? '主题库不是机会榜，不是实时排名，只保留分类浏览与观察线索。' : '页面只解释研究证据，不放大为交易含义。'}
+          </p>
+        </div>
+        <div className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+          <p className="text-[11px] font-medium text-white/48">当前可用 / 观察信号</p>
+          <p className="mt-2 text-sm font-semibold text-white/82">{topThemeTitle}</p>
+          <p className="mt-2 text-[11px] leading-5 text-white/58">
+            证据边界：{dominantLane.label}。证据质量：{summarizeEvidenceQuality(summaryThemes)}。
+          </p>
+        </div>
+        <div className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+          <p className="text-[11px] font-medium text-white/48">主要缺口 / 升级条件</p>
+          <p className="mt-2 text-sm font-semibold text-white/82">{summarizeGap(summaryThemes)}</p>
+          <p className="mt-2 text-[11px] leading-5 text-white/58">{upgradeLine}</p>
+        </div>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+        <p className="text-[11px] font-medium text-white/48">下一步观察</p>
+        <p className="mt-2 text-[11px] leading-5 text-white/60">{nextWatch}</p>
+      </div>
+
+      <TerminalDisclosure
+        title="技术细节 / Details"
+        summary="证据分层、主题摘要与升级边界默认折叠"
+        className="mt-4 bg-black/10"
+      >
+        <div className="grid gap-4">
+          <SummaryBand payload={payload} />
+          <LaneBand themes={payload.themes || []} libraryMode={libraryMode} />
+        </div>
+      </TerminalDisclosure>
+    </TerminalPanel>
   );
 };
 
@@ -920,34 +978,34 @@ const LeaderRow: React.FC<{
         selected ? 'bg-cyan-200/[0.06]' : 'hover:bg-white/[0.025]',
       )}
     >
-      <span className="font-mono text-xs text-white/38 tabular-nums">{rank.toString().padStart(2, '0')}</span>
+      <span className="font-mono text-xs text-white/38 tabular-nums">{displayAsLibrary ? '目录' : rank.toString().padStart(2, '0')}</span>
       <span className="min-w-0">
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate text-sm font-semibold text-white/84">{theme.name}</span>
           <DataFreshnessBadge freshness={theme.freshness} className="hidden px-1.5 text-[9px] sm:inline-flex" />
         </span>
         <span className="mt-1 block truncate text-[11px] text-white/38">
-          {displayAsLibrary ? '主题分类与观察线索' : `${laneMeta(theme).label} · ${mapDataStateLabel(theme)}`}
+          {displayAsLibrary ? '主题库条目，仅供分类浏览与观察' : `${laneMeta(theme).label} · ${mapDataStateLabel(theme)}`}
         </span>
         <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
           <SignalLaneChip theme={theme} className="px-1.5 py-0.5 text-[10px]" />
           <EvidenceQualityChip theme={theme} className="px-1.5 py-0.5 text-[10px]" />
-          {gaps.length ? <TerminalChip className="px-1.5 py-0.5 text-[10px]">{`Gap ${gaps.length}`}</TerminalChip> : null}
+          {gaps.length ? <TerminalChip className="px-1.5 py-0.5 text-[10px]">{`缺口 ${gaps.length}`}</TerminalChip> : null}
         </span>
         {evidenceSummary ? (
           <EvidenceChips summary={evidenceSummary} maxLabels={2} className="mt-1 hidden sm:flex" />
         ) : null}
       </span>
       <span className={cn('text-right font-mono text-lg font-semibold tabular-nums', displayAsLibrary ? 'text-white/46' : scoreTone(theme.rotationScore))}>
-        {displayAsLibrary ? '观察' : theme.rotationScore}
+        {displayAsLibrary ? '主题库' : theme.rotationScore}
       </span>
       <span className="hidden text-right font-mono text-xs text-emerald-200 tabular-nums md:block">
-        {displayAsLibrary ? '线索' : signedPercent(theme.relativeStrength?.averageRelativeStrengthPercent)}
+        {displayAsLibrary ? '分类' : signedPercent(theme.relativeStrength?.averageRelativeStrengthPercent)}
       </span>
       <span className="hidden text-right font-mono text-xs text-cyan-100 tabular-nums md:block">
-        {displayAsLibrary ? '线索' : ratio(theme.volume?.averageRelativeVolume)}
+        {displayAsLibrary ? '观察' : ratio(theme.volume?.averageRelativeVolume)}
       </span>
-      <span className="text-right font-mono text-xs text-white/58 tabular-nums">{displayAsLibrary ? '观察' : percent(theme.breadth?.percentUp, 0)}</span>
+      <span className="text-right font-mono text-xs text-white/58 tabular-nums">{displayAsLibrary ? '待升级' : percent(theme.breadth?.percentUp, 0)}</span>
     </button>
   );
 };
@@ -966,15 +1024,15 @@ const LaggardRow: React.FC<{
       'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_3.5rem] gap-2 px-3 py-3 text-left transition-colors',
       selected ? 'bg-amber-300/[0.07]' : 'hover:bg-white/[0.025]',
     )}
-  >
-    <span className="min-w-0">
-      <span className="block truncate text-sm font-semibold text-white/78">{theme.name}</span>
-      <span className="mt-1 block truncate text-[11px] text-white/38">
-        {libraryMode || isTaxonomyOnlyTheme(theme) ? '观察线索' : `${laneMeta(theme).label} · ${mapDataStateLabel(theme)}`}
+    >
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-semibold text-white/78">{theme.name}</span>
+        <span className="mt-1 block truncate text-[11px] text-white/38">
+        {libraryMode || isTaxonomyOnlyTheme(theme) ? '主题库观察线索' : `${laneMeta(theme).label} · ${mapDataStateLabel(theme)}`}
+        </span>
       </span>
-    </span>
     <span className={cn('text-right font-mono text-sm font-semibold tabular-nums', libraryMode || isTaxonomyOnlyTheme(theme) ? 'text-white/44' : scoreTone(theme.rotationScore))}>
-      {libraryMode || isTaxonomyOnlyTheme(theme) ? '观察' : theme.rotationScore}
+      {libraryMode || isTaxonomyOnlyTheme(theme) ? '主题库' : theme.rotationScore}
     </span>
   </button>
 );
@@ -999,7 +1057,7 @@ const CompactThemeRow: React.FC<{
       <span className="block truncate text-[10px] text-white/35">{theme.englishName || theme.focus || theme.benchmark}</span>
     </span>
     <span className={cn('text-right font-mono font-semibold tabular-nums', libraryMode || isTaxonomyOnlyTheme(theme) ? 'text-white/44' : scoreTone(theme.rotationScore))}>
-      {libraryMode || isTaxonomyOnlyTheme(theme) ? '观察' : theme.rotationScore}
+      {libraryMode || isTaxonomyOnlyTheme(theme) ? '主题库' : theme.rotationScore}
     </span>
     <span className="text-right text-[11px] text-white/42">{laneMeta(theme).label}</span>
   </button>
@@ -1116,7 +1174,7 @@ const ThemeDetailPanel: React.FC<{
           </div>
           <div className="shrink-0 text-right">
             <p className={cn('font-mono text-4xl font-semibold leading-none tabular-nums', taxonomyOnly || libraryMode ? 'text-white/44' : scoreTone(theme.rotationScore))}>
-              {taxonomyOnly || libraryMode ? '观察' : theme.rotationScore}
+              {taxonomyOnly || libraryMode ? '主题库' : theme.rotationScore}
             </p>
             <p className="mt-1 text-[10px] font-bold uppercase text-white/35">{taxonomyOnly || libraryMode ? '当前模式' : '强弱评分'}</p>
           </div>
@@ -1129,9 +1187,9 @@ const ThemeDetailPanel: React.FC<{
           <TerminalChip>{taxonomyOnly ? theme.confidenceLabel || '待行情确认' : `置信度 ${compactConfidence(theme.confidence)}`}</TerminalChip>
           <TerminalChip variant={dataWarning ? 'caution' : 'success'}>{mapDataStateLabel(theme)}</TerminalChip>
           <TerminalChip variant={theme.sourceAuthorityAllowed ? 'success' : 'neutral'}>
-            {theme.sourceAuthorityAllowed ? 'Authority 可用' : 'Authority 受限'}
+            {theme.sourceAuthorityAllowed ? '权威来源可用' : '需要权威来源'}
           </TerminalChip>
-          {gaps.length ? <TerminalChip variant="caution">{`Data Gaps ${gaps.length}`}</TerminalChip> : null}
+          {gaps.length ? <TerminalChip variant="caution">{`缺口 ${gaps.length}`}</TerminalChip> : null}
           {!taxonomyOnly ? <DataFreshnessBadge freshness={theme.freshness} className="px-1.5 text-[9px]" /> : null}
         </div>
         {evidenceSummary ? (
@@ -1142,8 +1200,9 @@ const ThemeDetailPanel: React.FC<{
       <div className="min-w-0 px-1 py-3">
         {taxonomyOnly || libraryMode ? (
           <TerminalNotice variant="info" className="grid gap-2 px-3 py-3 text-[11px] leading-5">
-            <p>当前不能判断主题轮动。</p>
-            <p>当前仅展示主题分类与观察线索，缺少 ETF authority / flow / breadth confirmation.</p>
+            <p>当前不能判断主题轮动，当前不是实时轮动信号。</p>
+            <p>当前仅展示主题分类与观察线索，主题库不是机会榜，也不是实时排名。</p>
+            <p>需要 ETF authority / flow / breadth confirmation 才能升级为实时轮动信号。</p>
           </TerminalNotice>
         ) : dataWarning ? (
           <TerminalNotice variant="caution" className="text-[11px] leading-5">
@@ -1173,10 +1232,10 @@ const ThemeDetailPanel: React.FC<{
         </div>
       </div>
 
-      {taxonomyOnly ? (
+      {taxonomyOnly || libraryMode ? (
         <div className="min-w-0 px-1 py-3">
           <div>
-            <p className="text-[10px] font-bold uppercase text-white/35">映射概念</p>
+            <p className="text-[10px] font-bold uppercase text-white/35">分类映射</p>
             <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
               {(theme.themeDetail?.mappedConcepts || theme.mappedConcepts || []).slice(0, 8).map((concept) => (
                 <TerminalChip key={concept} variant="info">{concept}</TerminalChip>
@@ -1185,7 +1244,7 @@ const ThemeDetailPanel: React.FC<{
             </div>
           </div>
           <div className="mt-4">
-            <p className="text-[10px] font-bold uppercase text-white/35">代表标签 / 符号</p>
+            <p className="text-[10px] font-bold uppercase text-white/35">代表标签 / 观察标的</p>
             <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
               {(theme.themeDetail?.representativeLabels || theme.representativeLabels || theme.membersConfigured || []).slice(0, 8).map((label) => (
                 <TerminalChip key={label}>{label}</TerminalChip>
@@ -1194,7 +1253,7 @@ const ThemeDetailPanel: React.FC<{
           </div>
         </div>
       ) : null}
-      {!taxonomyOnly ? (
+      {!(taxonomyOnly || libraryMode) ? (
         <>
           <div className="min-w-0 px-1 py-3">
             <div className="grid grid-cols-2 gap-2">
@@ -1208,7 +1267,7 @@ const ThemeDetailPanel: React.FC<{
           </div>
 
           <div className="min-w-0 px-1 py-3">
-            <p className="text-[10px] font-bold uppercase text-white/35">下一观察 / 风险</p>
+            <p className="text-[10px] font-bold uppercase text-white/35">下一步观察 / 风险</p>
             <TerminalNotice variant="info" className="mt-2 text-[11px] leading-5 text-cyan-50/62">
               {nextWatch?.symbol
                 ? `${nextWatch.symbol} · ${nextWatch.signalLabel || nextWatch.label || '观察信号'} · ${nextWatch.readOnly ? '只读证据' : '待确认'}`
@@ -1431,17 +1490,13 @@ const MarketRotationRadarPage: React.FC = () => {
 
             <RotationGuidancePanel payload={payload} />
 
-            <SummaryBand payload={payload} />
-
-            <LaneBand themes={payload.themes || []} libraryMode={libraryMode} />
-
             <TerminalGrid className="gap-4" data-workbench-split="8:4">
               <section className="min-w-0 space-y-4 xl:col-span-8" aria-label={libraryMode ? '主题分类与观察线索' : '今日主题强弱 Top-N'}>
                 <DataWorkbenchFrame data-testid="rotation-radar-leader-list">
                   <div className="grid min-w-0 gap-0 md:grid-cols-[minmax(0,1.55fr)_minmax(260px,0.65fr)]">
                     <section className="min-w-0 border-b border-white/[0.05] md:border-b-0 md:border-r md:border-white/[0.05]">
                       <div className="flex min-w-0 items-start justify-between gap-3 border-b border-white/[0.05] px-3 py-3">
-                        <TerminalSectionHeader eyebrow={libraryMode ? '主题浏览' : '领先主题'} title={headlineThemes.length ? (libraryMode ? `${headlineThemes.length} 个主题分类线索` : `Top ${headlineThemes.length} 主题强弱`) : (libraryMode ? '暂无可展示主题' : '暂无头部排名')} />
+                        <TerminalSectionHeader eyebrow={libraryMode ? '主题库浏览' : '领先主题'} title={headlineThemes.length ? (libraryMode ? `${headlineThemes.length} 个主题分类条目` : `Top ${headlineThemes.length} 主题强弱`) : (libraryMode ? '暂无可展示主题' : '暂无头部排名')} />
                         <div className="hidden min-w-0 grid-cols-[4.75rem_4.75rem_4.5rem] gap-2 text-right text-[10px] font-semibold uppercase text-white/32 md:grid">
                           <span>相对</span>
                           <span>量能</span>
@@ -1475,7 +1530,7 @@ const MarketRotationRadarPage: React.FC = () => {
 
                     <aside className="min-w-0">
                       <div className="border-b border-white/[0.05] px-3 py-3">
-                        <TerminalSectionHeader eyebrow="风险 / 分歧" title={libraryMode ? '待确认与分歧线索' : '观察退潮与分歧'} />
+                        <TerminalSectionHeader eyebrow="待确认 / 分歧" title={libraryMode ? '升级前的缺口与分歧' : '观察退潮与分歧'} />
                       </div>
                       {weakeningThemes.length ? (
                         <DenseRows>
@@ -1507,7 +1562,7 @@ const MarketRotationRadarPage: React.FC = () => {
                   <div className="border-b border-white/[0.05] px-3 py-3">
                     <TerminalSectionHeader
                       eyebrow="主题 / 行业板"
-                      title={libraryMode ? `${filteredThemes.length}/${payload.themes.length} 个主题分类条目` : `${filteredThemes.length}/${payload.themes.length} 个条目，紧凑选择。`}
+                      title={libraryMode ? `${filteredThemes.length}/${payload.themes.length} 个主题库条目` : `${filteredThemes.length}/${payload.themes.length} 个条目，紧凑选择。`}
                     />
                   </div>
                   <div className="max-h-80 overflow-y-auto no-scrollbar">

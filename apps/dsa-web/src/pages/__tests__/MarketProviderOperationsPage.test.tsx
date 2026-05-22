@@ -379,11 +379,11 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getByText('限制与快照摘要')).toBeInTheDocument();
     const gapBoard = screen.getByTestId('market-provider-source-gap-board');
     expect(gapBoard).toHaveTextContent('优先级路线图');
-    expect(gapBoard).toHaveTextContent('P0 · 市场方向阻断项');
-    expect(gapBoard).toHaveTextContent('P1 · 流动性方向阻断项');
-    expect(gapBoard).toHaveTextContent('P3 · 区域 / 期货确认改进项');
+    expect(gapBoard).toHaveTextContent('P0 市场方向判断');
+    expect(gapBoard).toHaveTextContent('P1 流动性方向');
+    expect(gapBoard).toHaveTextContent('P3 区域 / 期货确认');
     expect(gapBoard).toHaveTextContent('Fed Liquidity');
-    expect(gapBoard).toHaveTextContent('来源缺口');
+    expect(gapBoard).toHaveTextContent('当前为什么不可用');
     expect(gapBoard).toHaveTextContent('解锁能力');
     expect(gapBoard).toHaveTextContent('所需工作');
     expect(gapBoard).toHaveTextContent('阻断评分级结论：是');
@@ -481,7 +481,7 @@ describe('MarketProviderOperationsPage', () => {
 
     render(<MarketProviderOperationsPage />);
 
-    expect(await screen.findByText('优先级数据源路线图')).toBeInTheDocument();
+    expect(await screen.findByText('数据源优先级路线图')).toBeInTheDocument();
     expect(screen.getByText('暂无 provider matrix 行')).toBeInTheDocument();
   });
 

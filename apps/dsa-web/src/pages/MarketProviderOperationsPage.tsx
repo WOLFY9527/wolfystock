@@ -354,7 +354,7 @@ type SourceGapCapability = {
 const SOURCE_GAP_CAPABILITIES: SourceGapCapability[] = [
   {
     id: 'p0MarketDirection',
-    title: 'P0 · 市场方向阻断项',
+    title: 'P0 市场方向判断',
     match: (row) => capabilityHaystack(row).some((value) => (
       value.includes('market_overview')
       || value.includes('fed_liquidity')
@@ -365,7 +365,7 @@ const SOURCE_GAP_CAPABILITIES: SourceGapCapability[] = [
   },
   {
     id: 'p1LiquidityDirection',
-    title: 'P1 · 流动性方向阻断项',
+    title: 'P1 流动性方向',
     match: (row) => capabilityHaystack(row).some((value) => (
       value.includes('liquidity_monitor')
       || value.includes('liquidity_impulse')
@@ -375,7 +375,7 @@ const SOURCE_GAP_CAPABILITIES: SourceGapCapability[] = [
   },
   {
     id: 'p2ThemeRotation',
-    title: 'P2 · 主题轮动阻断项',
+    title: 'P2 主题轮动',
     match: (row) => capabilityHaystack(row).some((value) => (
       value.includes('rotation')
       || value.includes('theme')
@@ -385,7 +385,7 @@ const SOURCE_GAP_CAPABILITIES: SourceGapCapability[] = [
   },
   {
     id: 'p3RegionalFutures',
-    title: 'P3 · 区域 / 期货确认改进项',
+    title: 'P3 区域 / 期货确认',
     match: (row) => capabilityHaystack(row).some((value) => (
       value.includes('cn')
       || value.includes('hk')
@@ -467,7 +467,7 @@ function sourceGapRowsForCapability(rows: ProviderOperationsMatrixRow[], capabil
   return rows
     .filter((row) => capability.match(row))
     .filter((row) => sourceGapBlocksScoreGrade(row) || row.sourceType === 'missing' || row.inertMetadataOnly)
-    .slice(0, 4);
+    .slice(0, 3);
 }
 
 function sourceGapName(row: ProviderOperationsMatrixRow): string {
@@ -654,7 +654,7 @@ const SourceGapBoard: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ row
               <div key={`${capability.id}-${row.providerId}`} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2">
                 <p className="truncate text-xs font-semibold text-white/78">{sourceGapName(row)}</p>
                 <p className="mt-1 text-[11px] leading-5 text-white/48">
-                  来源缺口：{marketIntelligenceReasonLabel(row.missingProviderReason || row.degradationReason || row.runtimeState, 'zh')}
+                  当前为什么不可用：{marketIntelligenceReasonLabel(row.missingProviderReason || row.degradationReason || row.runtimeState, 'zh')}
                 </p>
                 <p className="mt-1 text-[11px] leading-5 text-white/48">
                   解锁能力：{sourceGapImpact(row)}
@@ -691,7 +691,7 @@ const ProviderOperationsMatrixPanel: React.FC<{
     <TerminalPanel as="section" className="col-span-12">
       <TerminalSectionHeader
         eyebrow="路线图"
-        title="优先级数据源路线图"
+        title="数据源优先级路线图"
         action={(
           <div className="flex flex-wrap gap-1.5">
             <TerminalChip variant="neutral">{formatNumber(summary.totalRows, 0)} 条来源契约</TerminalChip>

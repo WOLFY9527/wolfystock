@@ -2,7 +2,6 @@ import type React from 'react';
 import type { MarketOverviewTab } from '../../pages/MarketOverviewTabConfig';
 import {
   ConsoleBoard,
-  ConsoleStatusStrip,
   KeyLevelStrip,
 } from '../linear';
 import { TerminalChip, TerminalDenseList, TerminalDisclosure, TerminalNotice, TerminalPanel, TerminalSectionHeader } from '../terminal';
@@ -157,48 +156,6 @@ const CrossAssetHeroRibbon: React.FC<{ anchors: MarketOverviewHeroAnchorView[] }
   />
 );
 
-const MarketDecisionStrip: React.FC<{
-  text: string;
-  chips: MarketOverviewDecisionChipView[];
-  reliable: boolean;
-}> = ({ text, chips, reliable }) => (
-  <TerminalPanel
-    as="section"
-    data-testid="market-decision-strip"
-    data-command-bar="market-state"
-    data-mobile-order="decision"
-    data-market-research-flow="state"
-    className="relative overflow-hidden p-0 shadow-[0_0_24px_rgba(59,130,246,0.10)]"
-  >
-    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-blue-500/0 via-blue-400/45 to-purple-500/0" aria-hidden="true" />
-    <div className="flex min-w-0 flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
-      <div className="min-w-0">
-        <p className="text-[10px] font-medium tracking-wide text-white/40">市场状态</p>
-        <p data-testid="market-decision-text" className="mt-1 line-clamp-2 text-base font-semibold leading-6 text-white/88 md:truncate">
-          {reliable ? text : '当前不能形成可靠方向判断'}
-        </p>
-        {!reliable ? (
-          <p data-testid="market-command-safe-state" className="mt-1 truncate text-[11px] text-amber-200/78">
-            {text}
-          </p>
-        ) : null}
-      </div>
-      <div data-testid="market-command-chips" className="ui-scroll-x-quiet -mx-1 flex min-w-0 max-w-full gap-2 px-1 md:mx-0 md:shrink-0 md:px-0">
-        {chips.slice(0, 2).map((chip) => (
-          <TerminalChip
-            key={`${chip.label}-${chip.value}`}
-            variant={chip.variant}
-            className="shrink-0 px-2.5 py-1.5 text-[10px]"
-          >
-            <span className="text-white/36">{chip.label}</span>
-            <span className="max-w-[150px] truncate tracking-normal">{chip.value}</span>
-          </TerminalChip>
-        ))}
-      </div>
-    </div>
-  </TerminalPanel>
-);
-
 const MarketDecisionSemanticsList: React.FC<{
   testId: string;
   label: string;
@@ -325,114 +282,123 @@ function directionUsabilitySummary(view: MarketOverviewDecisionSemanticsView): {
 
 const MarketDecisionSemanticsStrip: React.FC<{
   view?: MarketOverviewDecisionSemanticsView;
-}> = ({ view }) => {
-  if (!view) {
-    return null;
-  }
-
-  const supportingEvidence = [
+  decisionText: string;
+  decisionChips: MarketOverviewDecisionChipView[];
+  decisionReliable: boolean;
+  dataState: MarketOverviewDataStateStripView;
+  regimeSynthesis: MarketRegimeSynthesisHeaderView;
+  temperatureSummary: MarketOverviewTemperatureSummaryView;
+  briefingSummary: MarketOverviewBriefingSummaryView;
+  officialMacroDiagnostics: OfficialMacroAuthorityDiagnosticsView;
+}> = ({
+  view,
+  decisionText,
+  decisionChips,
+  decisionReliable,
+  dataState,
+  regimeSynthesis,
+  temperatureSummary,
+  briefingSummary,
+  officialMacroDiagnostics,
+}) => {
+  const supportingEvidence = view ? [
     ...view.styleTilts.slice(0, 1),
     ...view.confirmationSignals,
-  ].slice(0, 3);
-  const counterEvidence = view.counterEvidence.slice(0, 3);
-  const missingEvidence = view.dataGaps.slice(0, 5);
-  const watchNext = (view.invalidationTriggers.length ? view.invalidationTriggers : view.dataGaps).slice(0, 3);
-  const statusSummary = directionUsabilitySummary(view);
-  const confidenceSummary = view.confidenceValueText
+  ].slice(0, 3) : [];
+  const counterEvidence = view?.counterEvidence.slice(0, 3) || [];
+  const missingEvidence = view?.dataGaps.slice(0, 5) || [];
+  const watchNext = view ? (view.invalidationTriggers.length ? view.invalidationTriggers : view.dataGaps).slice(0, 3) : [];
+  const statusSummary = view
+    ? directionUsabilitySummary(view)
+    : {
+      label: decisionReliable ? '可参考' : '方向不可用',
+      variant: decisionReliable ? 'success' as const : 'caution' as const,
+      headline: decisionReliable ? decisionText : '当前暂不形成方向结论',
+      detail: decisionReliable ? '等待更多支持与反证继续确认。' : '关键支持与反证尚未整理完成，先保持观察。',
+    };
+  const confidenceSummary = view?.confidenceValueText
     ? `${view.confidenceLabel}（${view.confidenceValueText}）`
-    : view.confidenceLabel;
+    : (view?.confidenceLabel || temperatureSummary.confidenceLabel);
   const rawDebugCodes = [
-    ...view.capReasons,
-    ...(view.directionReadiness?.blockingReasons || []),
-    ...view.claimBoundaries.map((boundary) => boundary.reasonCode || '').filter(Boolean),
+    ...(view?.capReasons || []),
+    ...(view?.directionReadiness?.blockingReasons || []),
+    ...((view?.claimBoundaries || []).map((boundary) => boundary.reasonCode || '').filter(Boolean)),
   ];
+  const visibleDecisionChips = decisionChips.slice(0, 2);
+  const summarySentence = decisionReliable
+    ? decisionText
+    : `${statusSummary.detail} ${decisionText}`.trim();
+  const snapshotLabel = dataState.updatedAtLabel
+    ? `更新 ${dataState.updatedAtLabel}`
+    : (dataState.isRefreshing ? '刷新中' : '待刷新');
 
   return (
     <section
       data-testid="market-decision-semantics-strip"
       data-market-research-flow="decision-semantics"
       className={cn(
-        'border-t border-[color:var(--wolfy-divider)] bg-white/[0.018] px-3 py-3 md:px-4',
-        view.insufficient ? 'opacity-85' : '',
+        'relative overflow-hidden border-t border-[color:var(--wolfy-divider)] bg-white/[0.018] px-3 py-3 md:px-4',
+        view?.insufficient ? 'opacity-85' : '',
       )}
     >
-      <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">
-        <div className="min-w-0">
-          <p className="mb-2 text-[11px] font-medium text-white/48">当前市场观察</p>
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <TerminalChip
-              data-testid="market-decision-semantics-posture-chip"
-              variant={statusSummary.variant}
-              className="px-2.5 py-1 text-[10px]"
-            >
-              {statusSummary.label}
-            </TerminalChip>
-            <TerminalChip variant="neutral" className="px-2.5 py-1 text-[10px]">
-              置信度
-              <span className="tracking-normal">{confidenceSummary}</span>
-            </TerminalChip>
-            <TerminalChip variant="neutral" className="px-2.5 py-1 text-[10px]">
-              {view.postureLabel}
-            </TerminalChip>
-          </div>
-          <div className="mt-3 min-w-0 text-[11px] leading-5 text-white/58">
-            <p data-testid="market-decision-semantics-advice-boundary" className="text-sm font-medium text-white/82">
-              {statusSummary.headline}
-            </p>
-            <p className="mt-1">{statusSummary.detail}</p>
-            <p className="mt-1">
-              为什么是这个把握度：{confidenceSummary}，观察重心偏向 {view.exposureBiasLabel}。
-            </p>
-            <p className="mt-1">
-              证据边界：仅供研究观察，非投资建议。
-              {view.insufficient ? ' 当前可靠证据不足。' : ''}
-            </p>
-            {view.directionReadiness ? (
-              <div className="mt-3 flex min-w-0 flex-wrap gap-2">
-                <TerminalChip variant="success">可计分证据 {view.directionReadiness.scoreGradeCount}</TerminalChip>
-                <TerminalChip variant="info">观察证据 {view.directionReadiness.observationOnlyCount}</TerminalChip>
-                <TerminalChip variant={view.directionReadiness.missingCount > 0 ? 'caution' : 'neutral'}>
-                  缺失证据 {view.directionReadiness.missingCount}
-                </TerminalChip>
-              </div>
-            ) : null}
-            <TerminalDisclosure
-              data-testid="market-decision-debug-details"
-              title="技术细节 / Details"
-              summary="证据边界、claim boundary 与原始 reason code 默认折叠"
-              className="mt-3 bg-black/10"
-            >
-              <div className="grid gap-3">
-                {view.directionReadiness ? <MarketDirectionReadinessStrip view={view.directionReadiness} /> : null}
-                <div
-                  data-testid="market-decision-semantics-claim-boundaries"
-                  className="flex min-w-0 flex-wrap gap-1.5"
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-cyan-400/0 via-cyan-200/45 to-sky-400/0" aria-hidden="true" />
+      <div className="min-w-0">
+        <div className="flex min-w-0 flex-col gap-3 border-b border-[color:var(--wolfy-divider)] pb-4">
+          <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-medium tracking-[0.24em] text-white/38">市场判断摘要</p>
+              <p
+                data-testid="market-decision-semantics-advice-boundary"
+                className="mt-2 text-base font-semibold leading-6 text-white/90 md:text-lg"
+              >
+                {statusSummary.headline}
+              </p>
+              <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">{summarySentence}</p>
+            </div>
+            <div data-testid="market-command-chips" className="flex min-w-0 flex-wrap justify-end gap-2">
+              <TerminalChip
+                data-testid="market-decision-semantics-posture-chip"
+                variant={statusSummary.variant}
+                className="px-2.5 py-1 text-[10px]"
+              >
+                {statusSummary.label}
+              </TerminalChip>
+              <TerminalChip variant="neutral" className="px-2.5 py-1 text-[10px]">
+                置信度
+                <span className="tracking-normal">{confidenceSummary}</span>
+              </TerminalChip>
+              <TerminalChip variant={dataState.hasUnavailable || dataState.hasFallback ? 'caution' : 'neutral'} className="px-2.5 py-1 text-[10px]">
+                证据快照
+                <span className="tracking-normal">{snapshotLabel}</span>
+              </TerminalChip>
+              {visibleDecisionChips.map((chip) => (
+                <TerminalChip
+                  key={`${chip.label}-${chip.value}`}
+                  variant={chip.variant}
+                  className="px-2.5 py-1 text-[10px]"
                 >
-                  {view.claimBoundaries.map((boundary) => (
-                    <span
-                      key={boundary.key}
-                      className={cn(
-                        'rounded-md border px-2 py-1 text-[10px] font-semibold',
-                        boundary.allowed
-                          ? 'border-emerald-300/14 bg-emerald-300/[0.06] text-emerald-100/70'
-                          : 'border-amber-300/14 bg-amber-300/[0.06] text-amber-100/70',
-                      )}
-                    >
-                      {boundary.label} · {boundary.allowed ? '允许' : '禁止'}
-                      {boundary.reasonCode ? ` · ${marketIntelligenceReasonLabel(boundary.reasonCode)}` : ''}
-                    </span>
-                  ))}
-                </div>
-                <TerminalDenseList className="font-mono text-[10px] leading-4 text-white/46">
-                  {rawDebugCodes.length ? rawDebugCodes.map((code, index) => (
-                    <span key={`${code}-${index}`}>{code}</span>
-                  )) : <span>no_raw_codes</span>}
-                </TerminalDenseList>
-              </div>
-            </TerminalDisclosure>
+                  <span className="text-white/36">{chip.label}</span>
+                  <span className="tracking-normal">{chip.value}</span>
+                </TerminalChip>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex min-w-0 flex-wrap gap-2">
+            <TerminalChip variant={view?.directionReadiness?.scoreGradeCount ? 'success' : 'neutral'}>
+              可计分证据 {view?.directionReadiness?.scoreGradeCount ?? 0}
+            </TerminalChip>
+            <TerminalChip variant={view?.directionReadiness?.observationOnlyCount ? 'info' : 'neutral'}>
+              观察证据 {view?.directionReadiness?.observationOnlyCount ?? 0}
+            </TerminalChip>
+            <TerminalChip variant={view?.directionReadiness?.missingCount ? 'caution' : 'neutral'}>
+              缺失证据 {view?.directionReadiness?.missingCount ?? 0}
+            </TerminalChip>
+            <TerminalChip variant="neutral">观察重心 {view?.exposureBiasLabel || '待补齐'}</TerminalChip>
           </div>
         </div>
-        <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+
+        <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-3">
           <MarketDecisionSemanticsList
             testId="market-decision-semantics-supporting-evidence"
             label="支持证据"
@@ -451,13 +417,73 @@ const MarketDecisionSemanticsStrip: React.FC<{
             emptyLabel="暂无显式缺口"
             items={missingEvidence}
           />
-          <MarketDecisionSemanticsList
-            testId="market-decision-semantics-watch-next"
-            label="下一步观察"
-            emptyLabel="等待下一项可验证信号"
-            items={watchNext}
-          />
         </div>
+
+        <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+          <p className="text-[11px] font-medium text-white/48">下一步观察</p>
+          <div
+            data-testid="market-decision-semantics-watch-next"
+            className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-[11px] leading-5 text-white/60"
+          >
+            {watchNext.length ? watchNext.map((item) => (
+              <span key={item.key} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1">
+                <span className="font-semibold text-white/78">{item.label}</span>
+                {item.meta ? <span className="text-white/42"> · {item.meta}</span> : null}
+              </span>
+            )) : <span className="text-white/34">等待下一项可验证信号</span>}
+          </div>
+        </div>
+
+        <p className="mt-3 text-[11px] leading-5 text-white/42">
+          仅供研究观察，非投资建议。{view?.insufficient ? ' 当前可靠证据不足，暂不形成方向结论。' : ''}
+        </p>
+        <TerminalDisclosure
+          data-testid="market-decision-debug-details"
+          title="技术细节 / Details"
+          summary="方向 readiness、来源覆盖、运行快照与原始 reason code 默认折叠"
+          className="mt-3 bg-black/10"
+        >
+          <div className="grid gap-3">
+            <div className="rounded-lg border border-white/[0.06] bg-black/10 p-3">
+              <MarketRegimeSynthesisHeader view={regimeSynthesis} />
+            </div>
+            <MarketOverviewStatusStrip
+              temperatureSummary={temperatureSummary}
+              briefingSummary={briefingSummary}
+            />
+            <MarketOverviewDataStateStrip dataState={dataState} />
+            <OfficialMacroAuthorityDiagnostics
+              testId="market-overview-official-macro-diagnostics"
+              title="来源覆盖诊断"
+              view={officialMacroDiagnostics}
+            />
+            {view?.directionReadiness ? <MarketDirectionReadinessStrip view={view.directionReadiness} /> : null}
+            <div
+              data-testid="market-decision-semantics-claim-boundaries"
+              className="flex min-w-0 flex-wrap gap-1.5"
+            >
+              {(view?.claimBoundaries || []).map((boundary) => (
+                <span
+                  key={boundary.key}
+                  className={cn(
+                    'rounded-md border px-2 py-1 text-[10px] font-semibold',
+                    boundary.allowed
+                      ? 'border-emerald-300/14 bg-emerald-300/[0.06] text-emerald-100/70'
+                      : 'border-amber-300/14 bg-amber-300/[0.06] text-amber-100/70',
+                  )}
+                >
+                  {boundary.label} · {boundary.allowed ? '允许' : '禁止'}
+                  {boundary.reasonCode ? ` · ${marketIntelligenceReasonLabel(boundary.reasonCode)}` : ''}
+                </span>
+              ))}
+            </div>
+            <TerminalDenseList className="font-mono text-[10px] leading-4 text-white/46">
+              {rawDebugCodes.length ? rawDebugCodes.map((code, index) => (
+                <span key={`${code}-${index}`}>{code}</span>
+              )) : <span>暂无原始代码</span>}
+            </TerminalDenseList>
+          </div>
+        </TerminalDisclosure>
       </div>
     </section>
   );
@@ -669,37 +695,23 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
   onExportSummary,
   heroAnchors,
 }) => {
-  const regimeStripItems = [
-    { key: 'regime', label: '状态', value: temperatureSummary.label },
-    { key: 'temperature', label: '温度', value: temperatureSummary.valueText },
-    { key: 'confidence', label: '可信度', value: temperatureSummary.confidenceLabel },
-    {
-      key: 'coverage',
-      label: '覆盖',
-      value: `可用 ${dataState.availableCount} · 备用 ${dataState.fallbackCount} · 过期 ${dataState.staleCount}`,
-    },
-    {
-      key: 'updatedAt',
-      label: '更新时间',
-      value: dataState.updatedAtLabel || (dataState.isRefreshing ? '刷新中' : '待刷新'),
-    },
-  ];
-
   return (
     <section data-testid="market-overview-pulse-header" className="flex w-full min-w-0 flex-col gap-4">
       {heading}
       <section data-testid="market-overview-market-monitor" className="flex w-full min-w-0 flex-col gap-4">
-        <ConsoleStatusStrip
-          data-testid="market-overview-regime-strip"
-          items={regimeStripItems}
-        />
         <ConsoleBoard data-testid="market-overview-primary-board">
           <div data-testid="market-overview-top-stack" className="flex w-full min-w-0 flex-col">
-            <div className="border-b border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4">
-              <MarketRegimeSynthesisHeader view={regimeSynthesis} />
-            </div>
-            <MarketDecisionStrip text={decisionText} chips={decisionChips} reliable={decisionReliable} />
-            <MarketDecisionSemanticsStrip view={decisionSemantics} />
+            <MarketDecisionSemanticsStrip
+              view={decisionSemantics}
+              decisionText={decisionText}
+              decisionChips={decisionChips}
+              decisionReliable={decisionReliable}
+              dataState={dataState}
+              regimeSynthesis={regimeSynthesis}
+              temperatureSummary={temperatureSummary}
+              briefingSummary={briefingSummary}
+              officialMacroDiagnostics={officialMacroDiagnostics}
+            />
             <div className="border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4">
               <MarketOverviewCategoryControls
                 categoryTabs={categoryTabs}
@@ -709,29 +721,8 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
                 onExportSummary={onExportSummary}
               />
             </div>
-            <section
-              data-testid="market-overview-summary-band"
-              data-mobile-order="summary"
-              data-market-research-flow="trust"
-              className="min-w-0 border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4"
-            >
-              <MarketOverviewStatusStrip
-                temperatureSummary={temperatureSummary}
-                briefingSummary={briefingSummary}
-              />
-            </section>
-            <div className="border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4">
-              <OfficialMacroAuthorityDiagnostics
-                testId="market-overview-official-macro-diagnostics"
-                title="来源覆盖诊断"
-                view={officialMacroDiagnostics}
-              />
-            </div>
             <div data-market-research-flow="pulse" className="border-t border-[color:var(--wolfy-divider)]">
               <CrossAssetHeroRibbon anchors={heroAnchors} />
-            </div>
-            <div className="border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4">
-              <MarketOverviewDataStateStrip dataState={dataState} />
             </div>
           </div>
         </ConsoleBoard>
