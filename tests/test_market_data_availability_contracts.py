@@ -731,7 +731,7 @@ def test_liquidity_monitor_only_scores_reliable_non_fallback_signals(
         _cache_entry(
             source="yfinance_proxy",
             freshness="live",
-            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+            items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.2}],
             updated_at=now,
             as_of=now,
         ),
@@ -767,12 +767,15 @@ def test_liquidity_monitor_only_scores_reliable_non_fallback_signals(
     payload = service.get_liquidity_monitor()
     indicators = {item["key"]: item for item in payload["indicators"]}
 
-    assert payload["score"]["includedIndicatorCount"] >= 3
-    assert indicators["vix_pressure"]["includedInScore"] is True
-    assert indicators["us_etf_flow_proxy"]["includedInScore"] is True
+    assert payload["score"]["includedIndicatorCount"] == 0
+    assert indicators["vix_pressure"]["includedInScore"] is False
+    assert indicators["vix_pressure"]["scoreContribution"] == 0
+    assert indicators["us_etf_flow_proxy"]["includedInScore"] is False
+    assert indicators["us_etf_flow_proxy"]["scoreContribution"] == 0
     assert indicators["us_etf_flow_proxy"]["label"] == "US ETF 资金代理"
     assert indicators["us_etf_flow_proxy"]["status"] == "partial"
-    assert indicators["us_breadth_proxy"]["includedInScore"] is True
+    assert indicators["us_breadth_proxy"]["includedInScore"] is False
+    assert indicators["us_breadth_proxy"]["scoreContribution"] == 0
     assert indicators["us_breadth_proxy"]["label"] == "US 广度代理"
     assert indicators["us_breadth_proxy"]["status"] == "partial"
     assert indicators["cn_hk_flows"]["includedInScore"] is False
@@ -813,43 +816,43 @@ def test_liquidity_monitor_ignores_sentiment_cache_shape_variants(
             ),
             ttl_seconds=30,
         )
-        service.cache.set(
-            "funds_flow",
-            _cache_entry(
-                source="yfinance_proxy",
-                freshness="live",
-                items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
-                updated_at=now,
-                as_of=now,
-            ),
-            ttl_seconds=30,
-        )
-        service.cache.set(
-            "cn_flows",
-            _cache_entry(
-                source="fallback",
-                freshness="fallback",
-                is_fallback=True,
-                items=[{"symbol": "NORTHBOUND", "label": "北向资金", "value": 88.8}],
-                updated_at=now,
-                as_of=now,
-                warning="备用快照",
-            ),
-            ttl_seconds=30,
-        )
-        service.cache.set(
-            "futures",
-            _cache_entry(
-                source="fallback",
-                freshness="fallback",
-                is_fallback=True,
-                items=[{"symbol": "NQ", "label": "纳指期货", "changePercent": 1.5, "value": 18420.0}],
-                updated_at=now,
-                as_of=now,
-                warning="备用快照",
-            ),
-            ttl_seconds=30,
-        )
+    service.cache.set(
+        "funds_flow",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="live",
+            items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.2}],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "cn_flows",
+        _cache_entry(
+            source="fallback",
+            freshness="fallback",
+            is_fallback=True,
+            items=[{"symbol": "NORTHBOUND", "label": "北向资金", "value": 88.8}],
+            updated_at=now,
+            as_of=now,
+            warning="备用快照",
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "futures",
+        _cache_entry(
+            source="fallback",
+            freshness="fallback",
+            is_fallback=True,
+            items=[{"symbol": "NQ", "label": "纳指期货", "changePercent": 1.5, "value": 18420.0}],
+            updated_at=now,
+            as_of=now,
+            warning="备用快照",
+        ),
+        ttl_seconds=30,
+    )
 
     baseline = _make_service()
     seed_panels(baseline)

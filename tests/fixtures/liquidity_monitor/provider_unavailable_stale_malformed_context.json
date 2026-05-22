@@ -563,7 +563,7 @@
         "degradationReason": "fallback_source",
         "sourceAuthorityRouteRejected": false,
         "routeRejectedReasonCodes": [],
-        "activationHint": "激活现有 `funds_flow` snapshot 或 Market Overview 的 SPY / QQQ / IWM proxy；缺少 ETF 条目时保持不可用。；requiredProviderClass=authorized.us_etf_flow；missingProviderReason=requires_authorized.us_etf_flow；paidDataLikelyRequired=True；requiredRealSourceForScore=True；scoreExclusionReason=trust_gate_blocked；trust gate=unavailable / unavailable；缺少: ETF；scoreContributionAllowed=False；cap=unavailable_source；score capped"
+        "activationHint": "激活现有 `funds_flow` snapshot 或 Market Overview 的 SPY / QQQ / IWM quote-derived ETF flow proxy；缺少 ETF 条目时保持不可用。；requiredProviderClass=authorized.us_etf_flow；missingProviderReason=requires_authorized.us_etf_flow；paidDataLikelyRequired=True；requiredRealSourceForScore=True；scoreExclusionReason=trust_gate_blocked；trust gate=unavailable / unavailable；缺少: ETF；scoreContributionAllowed=False；cap=unavailable_source；score capped"
       }
     },
     {

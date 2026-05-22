@@ -557,7 +557,7 @@
         "inputs": [
           {
             "key": "ETF",
-            "label": "ETF flows",
+            "label": "ETF flow proxy",
             "source": "yfinance_proxy",
             "sourceLabel": "Yahoo Finance",
             "sourceType": "unofficial_proxy",
@@ -602,7 +602,7 @@
         "degradationReason": "partial_coverage",
         "sourceAuthorityRouteRejected": false,
         "routeRejectedReasonCodes": [],
-        "activationHint": "激活现有 `funds_flow` snapshot 或 Market Overview 的 SPY / QQQ / IWM proxy；缺少 ETF 条目时保持不可用。；requiredProviderClass=authorized.us_etf_flow；missingProviderReason=requires_authorized.us_etf_flow；paidDataLikelyRequired=True；requiredRealSourceForScore=True；scoreExclusionReason=proxy_only_missing_real_source；proxyObservationOnlyReason=proxy_only_missing_real_source；已激活: ETF；proxyOnly=True；scoreContributionAllowed=False；freshness=partial；cap=partial_coverage；score capped；source=yfinance_proxy"
+        "activationHint": "激活现有 `funds_flow` snapshot 或 Market Overview 的 SPY / QQQ / IWM quote-derived ETF flow proxy；缺少 ETF 条目时保持不可用。；requiredProviderClass=authorized.us_etf_flow；missingProviderReason=requires_authorized.us_etf_flow；paidDataLikelyRequired=True；requiredRealSourceForScore=True；scoreExclusionReason=proxy_only_missing_real_source；proxyObservationOnlyReason=proxy_only_missing_real_source；已激活: ETF；proxyOnly=True；scoreContributionAllowed=False；freshness=partial；cap=partial_coverage；score capped；source=yfinance_proxy"
       }
     },
     {

@@ -103,7 +103,7 @@ LIQUIDITY_SCORE_ROUTE_REQUESTS = {
     "us_etf_flow_proxy": {
         "market": "US",
         "assetType": "fund",
-        "capability": "etf_flow",
+        "capability": "us_etf_flow_daily",
         "freshnessNeed": "delayed",
         "symbol": "ETF",
     },
@@ -155,7 +155,7 @@ LIQUIDITY_INDICATOR_ACTIVATION_HINTS = {
     "usd_pressure": "官方 FRED trade-weighted USD 证据新鲜且授权时可计分；缺少 DTWEXBGS 时仅保留观察态。",
     "us_rates_pressure": "官方利率快照优先；没有 US2Y / US10Y / US30Y / SOFR 时只能退化为代理或不可用。",
     "fed_liquidity": "官方 FRED Fed liquidity 组需要 WALCL / RRPONTSYD / WTREGEN / WRESBAL 全量新鲜官方行；部分覆盖仅作观测。",
-    "us_etf_flow_proxy": "激活现有 `funds_flow` snapshot 或 Market Overview 的 SPY / QQQ / IWM proxy；缺少 ETF 条目时保持不可用。",
+    "us_etf_flow_proxy": "激活现有 `funds_flow` snapshot 或 Market Overview 的 SPY / QQQ / IWM quote-derived ETF flow proxy；缺少 ETF 条目时保持不可用。",
     "us_breadth_proxy": "激活现有 sector ETF breadth proxy；需要 SECTORS_UP、SECTORS_DOWN 和相对强弱代理。",
     "cn_hk_index_context": "CN / HK 指数上下文只能来自现有快照，缺少可用指数条目时保持不可用。",
     "cn_hk_flows": "No audited CN/HK flow provider；只有非 fallback 的 `cn_flows` 快照才会参与评分。",

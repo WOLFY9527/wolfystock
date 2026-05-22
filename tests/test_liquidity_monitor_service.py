@@ -368,7 +368,7 @@ def _seed_official_cached_macro_rates_context(
         _cache_entry(
             source="yfinance_proxy",
             freshness="live",
-            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+            items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.2}],
             updated_at=FROZEN_GOLDEN_NOW_ISO,
             as_of=FROZEN_GOLDEN_NOW_ISO,
         ),
@@ -485,7 +485,7 @@ def _seed_mixed_official_proxy_context(
         _cache_entry(
             source="yfinance_proxy",
             freshness="delayed",
-            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+            items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.2}],
             updated_at=FROZEN_GOLDEN_NOW_ISO,
             as_of=FROZEN_GOLDEN_NOW_ISO,
         ),
@@ -516,7 +516,7 @@ def _seed_missing_macro_rates_proxy_fallback_context(
         _cache_entry(
             source="yfinance_proxy",
             freshness="live",
-            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+            items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.2}],
             updated_at=FROZEN_GOLDEN_NOW_ISO,
             as_of=FROZEN_GOLDEN_NOW_ISO,
         ),
@@ -662,7 +662,7 @@ def _seed_credit_stress_observation_only_context(
         _cache_entry(
             source="yfinance_proxy",
             freshness="live",
-            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+            items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.2}],
             updated_at=FROZEN_GOLDEN_NOW_ISO,
             as_of=FROZEN_GOLDEN_NOW_ISO,
         ),
@@ -770,7 +770,7 @@ def _seed_delayed_proxy_fx_commodities_context(
         _cache_entry(
             source="yfinance_proxy",
             freshness="delayed",
-            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+            items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.2}],
             updated_at=FROZEN_GOLDEN_NOW_ISO,
             as_of=FROZEN_GOLDEN_NOW_ISO,
         ),
@@ -1644,7 +1644,7 @@ def test_unavailable_when_fewer_than_three_reliable_indicators(isolated_db: Data
         _cache_entry(
             source="yfinance_proxy",
             freshness="live",
-            items=[{"symbol": "ETF", "label": "ETF flows", "value": 0.8}],
+            items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 0.8}],
             updated_at=now,
             as_of=now,
         ),
@@ -1688,7 +1688,7 @@ def test_fallback_stale_mock_and_error_indicators_are_excluded_from_score(isolat
         _cache_entry(
             source="yfinance_proxy",
             freshness="live",
-            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+            items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.2}],
             updated_at=now,
             as_of=now,
         ),
@@ -1897,7 +1897,7 @@ def test_proxy_only_indicators_do_not_inflate_total_score(isolated_db: DatabaseM
         "funds_flow": _cache_entry(
             source="yfinance_proxy",
             freshness="live",
-            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.5}],
+            items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.5}],
             updated_at=now,
             as_of=now,
         ),
@@ -1960,7 +1960,7 @@ def test_derived_freshness_uses_weakest_input_freshness(isolated_db: DatabaseMan
         _cache_entry(
             source="yfinance_proxy",
             freshness="live",
-            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2, "asOf": live}],
+            items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.2, "asOf": live}],
             updated_at=live,
             as_of=live,
         ),
@@ -2107,7 +2107,7 @@ def test_fallback_static_liquidity_inputs_never_appear_live_in_diagnostics(
             source="fallback",
             freshness="fallback",
             is_fallback=True,
-            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+            items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.2}],
             updated_at=now,
             as_of=now,
             warning="备用快照",
@@ -2616,7 +2616,7 @@ def test_crypto_breadth_uses_btc_eth_bnb_vote_not_avg_change(isolated_db: Databa
         _cache_entry(
             source="yfinance_proxy",
             freshness="live",
-            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.0}],
+            items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.0}],
             updated_at=now,
             as_of=now,
         ),
@@ -2813,7 +2813,7 @@ def test_liquidity_provider_activation_diagnostics_classify_proxy_indicators_and
             items=[
                 {
                     "symbol": "ETF",
-                    "label": "ETF flows",
+                    "label": "ETF flow proxy",
                     "value": 1.2,
                     "source": "yfinance_proxy",
                     "sourceType": "unofficial_proxy",
@@ -3753,7 +3753,7 @@ def test_freshness_latest_as_of_uses_selected_official_snapshot_when_snapshot_wi
         _cache_entry(
             source="yfinance_proxy",
             freshness="delayed",
-            items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2, "updatedAt": earlier_official_as_of, "asOf": earlier_official_as_of}],
+            items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.2, "updatedAt": earlier_official_as_of, "asOf": earlier_official_as_of}],
             updated_at=earlier_official_as_of,
             as_of=earlier_official_as_of,
         ),
@@ -4039,7 +4039,7 @@ def test_official_credit_stress_observation_is_summary_only_and_does_not_change_
             _cache_entry(
                 source="yfinance_proxy",
                 freshness="live",
-                items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+                items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.2}],
                 updated_at=base_as_of,
                 as_of=base_as_of,
             ),

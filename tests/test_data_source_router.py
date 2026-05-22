@@ -499,6 +499,60 @@ def test_market_regime_and_liquidity_impulse_routes_surface_missing_authorized_u
     assert breadth_candidate.no_default_live_http_calls is True
 
 
+def test_liquidity_score_uses_canonical_us_etf_flow_daily_route() -> None:
+    plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="US",
+            asset_type="fund",
+            use_case="liquidity_score",
+            capability="us_etf_flow_daily",
+            freshness_need="daily",
+            scoring_allowed=True,
+            symbol="ETF",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+
+    assert _ids(plan.primary_candidates) == {"authorized.us_etf_flow"}
+    assert _ids(plan.observation_candidates) == set()
+    assert plan.cache_required is True
+    assert plan.score_contribution_allowed is True
+    assert plan.degradation_policy == "require_authorized_feed_or_explicit_missing"
+    assert {
+        "cache_required",
+        "missing_provider_configuration",
+        "authorization_required",
+        "freshness_floor_required",
+        "coverage_floor_required",
+    }.issubset(set(plan.reason_codes["plan"]))
+
+
+def test_legacy_etf_flow_alias_fails_closed_without_canonical_route() -> None:
+    plan = DataSourceRouter.resolve(
+        DataSourceRouteRequest(
+            market="US",
+            asset_type="fund",
+            use_case="liquidity_score",
+            capability="etf_flow",
+            freshness_need="daily",
+            scoring_allowed=True,
+            symbol="ETF",
+            allow_network=False,
+            reproducibility_required=False,
+        )
+    )
+
+    assert _ids(plan.primary_candidates) == set()
+    assert _ids(plan.observation_candidates) == set()
+    assert plan.score_contribution_allowed is False
+    assert plan.degradation_policy == "reject_legacy_capability_alias"
+    assert {
+        "legacy_capability_alias_rejected",
+        "canonical_capability_required",
+    }.issubset(set(plan.reason_codes["plan"]))
+
+
 def test_authorized_us_breadth_detail_routes_stay_missing_and_fail_closed_for_scoring() -> None:
     advancers_plan = DataSourceRouter.resolve(
         DataSourceRouteRequest(

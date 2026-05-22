@@ -165,6 +165,10 @@ _ROTATION_REAL_FLOW_PLAN_REASON_CODES = (
     "freshness_floor_required",
     "coverage_floor_required",
 )
+_LEGACY_CAPABILITY_ALIAS_PLAN_REASON_CODES = (
+    "legacy_capability_alias_rejected",
+    "canonical_capability_required",
+)
 
 
 def _text(value: str | None) -> str:
@@ -798,6 +802,18 @@ _ROUTE_POLICIES = MappingProxyType(
             freshness_floor="live",
             trust_floor="score_grade",
         ),
+        ("liquidity_score", "us_etf_flow_daily"): _RoutePolicy(
+            primary_provider_ids=("authorized.us_etf_flow",),
+            forbidden_provider_ids=_AUTHORIZED_US_FLOW_AND_BREADTH_FORBIDDEN_PROVIDER_IDS,
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=True,
+            degradation_policy="require_authorized_feed_or_explicit_missing",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="authorized_flow_or_missing",
+            plan_reason_codes=_AUTHORIZED_US_FLOW_AND_BREADTH_PLAN_REASON_CODES,
+        ),
         ("liquidity_score", "quote"): _RoutePolicy(
             forbidden_provider_ids=(
                 "coinbase_public",
@@ -966,6 +982,18 @@ class DataSourceRouter:
 
 
 def _select_policy(request: DataSourceRouteRequest) -> _RoutePolicy:
+    if _normalize(request.capability) == "etf_flow":
+        return _RoutePolicy(
+            cache_required=True,
+            background_refresh_required=True,
+            score_contribution_allowed=False,
+            degradation_policy="reject_legacy_capability_alias",
+            required_source_types=("cache_snapshot",),
+            freshness_floor="daily",
+            trust_floor="canonical_capability_required",
+            plan_reason_codes=_LEGACY_CAPABILITY_ALIAS_PLAN_REASON_CODES,
+        )
+
     key = (_normalize(request.use_case), _normalize(request.capability))
     policy = _ROUTE_POLICIES.get(key)
     if policy is not None:

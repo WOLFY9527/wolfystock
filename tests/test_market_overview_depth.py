@@ -160,6 +160,33 @@ def test_us_breadth_unavailable_returns_compact_unavailable_shape() -> None:
     assert payload["items"][0]["sourceLabel"] == "未接入"
 
 
+def test_us_funds_flow_quote_proxy_is_labeled_as_proxy_and_non_authoritative() -> None:
+    service = MarketOverviewService()
+    quotes = {
+        "SPY": {"value": 520.0, "change_pct": 0.6, "trend": [516.0, 520.0], "volume": 60_000_000},
+        "QQQ": {"value": 460.0, "change_pct": 1.1, "trend": [454.0, 460.0], "volume": 45_000_000},
+        "IWM": {"value": 210.0, "change_pct": -0.3, "trend": [211.0, 210.0], "volume": 22_000_000},
+    }
+
+    with patch.object(service, "_latest_quote", side_effect=lambda ticker: quotes[ticker]):
+        payload = service.get_funds_flow()
+
+    items = {item["symbol"]: item for item in payload["items"]}
+
+    assert payload["source"] == "yfinance_proxy"
+    assert payload["sourceType"] == "unofficial_public_api"
+    assert payload["observationOnly"] is True
+    assert payload["sourceAuthorityAllowed"] is False
+    assert payload["scoreContributionAllowed"] is False
+    assert items["ETF"]["label"] == "ETF flow proxy"
+    assert items["INSTITUTIONAL"]["label"] == "Institutional pressure proxy"
+    assert items["INDUSTRY"]["label"] == "Industry breadth proxy"
+    assert items["ETF"]["source"] == "yfinance_proxy"
+    assert items["ETF"]["observationOnly"] is True
+    assert items["ETF"]["sourceAuthorityAllowed"] is False
+    assert items["ETF"]["scoreContributionAllowed"] is False
+
+
 def test_market_refresh_failure_serves_stale_snapshot_with_provider_health() -> None:
     service = MarketOverviewService()
     quotes = {

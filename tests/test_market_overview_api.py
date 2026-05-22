@@ -58,7 +58,7 @@ class MarketOverviewApiTestCase(unittest.TestCase):
             "panel_name": "FundsFlowCard",
             "last_refresh_at": "2026-04-29T10:00:00",
             "status": "success",
-            "items": [{"symbol": "ETF", "label": "ETF flows", "value": 1.2, "unit": "B USD", "risk_direction": "decreasing"}],
+            "items": [{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.2, "unit": "B USD", "risk_direction": "decreasing"}],
             "log_session_id": "log-4",
         }
         service.get_macro.return_value = {

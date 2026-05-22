@@ -3771,9 +3771,9 @@ class MarketOverviewService:
 
     def _fetch_funds_flow(self) -> PanelPayload:
         symbols = {
-            "ETF": ("ETF flows", "SPY", "B USD"),
-            "INSTITUTIONAL": ("Institutional net flow", "QQQ", "B USD"),
-            "INDUSTRY": ("Industry flow breadth", "IWM", "score"),
+            "ETF": ("ETF flow proxy", "SPY", "B USD"),
+            "INSTITUTIONAL": ("Institutional pressure proxy", "QQQ", "B USD"),
+            "INDUSTRY": ("Industry breadth proxy", "IWM", "score"),
         }
         items = []
         for key, (label, ticker, unit) in symbols.items():
@@ -3793,8 +3793,21 @@ class MarketOverviewService:
                 "risk_direction": "decreasing" if value >= 0 else "increasing",
                 "trend": quote.get("trend", []),
                 "source": "yfinance_proxy",
+                "sourceType": "unofficial_public_api",
+                "observationOnly": True,
+                "sourceAuthorityAllowed": False,
+                "scoreContributionAllowed": False,
+                "sourceAuthorityReason": "quote_derived_etf_flow_proxy",
             })
-        return self._success_panel("FundsFlowCard", items)
+        return {
+            **self._success_panel("FundsFlowCard", items),
+            "source": "yfinance_proxy",
+            "sourceType": "unofficial_public_api",
+            "observationOnly": True,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "sourceAuthorityReason": "quote_derived_etf_flow_proxy",
+        }
 
     def _fetch_macro(self) -> PanelPayload:
         official_points = self._official_macro_points(
@@ -7706,9 +7719,42 @@ class MarketOverviewService:
                 {"symbol": "VXN", "label": "VXN", "value": 18.0, "unit": "pts", "change_pct": 0.0, "trend": [18.5, 18.0]},
             ],
             "funds_flow": [
-                {"symbol": "ETF", "label": "ETF flows", "value": 0.0, "unit": "B USD", "change_pct": 0.0, "trend": [0.0, 0.0]},
-                {"symbol": "INSTITUTIONAL", "label": "Institutional net flow", "value": 0.0, "unit": "B USD", "change_pct": 0.0, "trend": [0.0, 0.0]},
-                {"symbol": "INDUSTRY", "label": "Industry flow breadth", "value": 0.0, "unit": "score", "change_pct": 0.0, "trend": [0.0, 0.0]},
+                {
+                    "symbol": "ETF",
+                    "label": "ETF flow proxy",
+                    "value": 0.0,
+                    "unit": "B USD",
+                    "change_pct": 0.0,
+                    "trend": [0.0, 0.0],
+                    "observationOnly": True,
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "sourceAuthorityReason": "static_etf_flow_proxy_fallback",
+                },
+                {
+                    "symbol": "INSTITUTIONAL",
+                    "label": "Institutional pressure proxy",
+                    "value": 0.0,
+                    "unit": "B USD",
+                    "change_pct": 0.0,
+                    "trend": [0.0, 0.0],
+                    "observationOnly": True,
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "sourceAuthorityReason": "static_etf_flow_proxy_fallback",
+                },
+                {
+                    "symbol": "INDUSTRY",
+                    "label": "Industry breadth proxy",
+                    "value": 0.0,
+                    "unit": "score",
+                    "change_pct": 0.0,
+                    "trend": [0.0, 0.0],
+                    "observationOnly": True,
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "sourceAuthorityReason": "static_etf_flow_proxy_fallback",
+                },
             ],
             "macro": [
                 {"symbol": "US10Y", "label": "10Y yield", "value": 4.5, "unit": "%", "change_pct": 0.0, "trend": [4.48, 4.5]},
