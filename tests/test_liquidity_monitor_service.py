@@ -1913,10 +1913,14 @@ def test_proxy_only_indicators_do_not_inflate_total_score(isolated_db: DatabaseM
     assert payload["score"]["confidence"] == 0.12
     assert payload["score"]["includedIndicatorCount"] == 1
     assert indicators["crypto_spot_momentum"]["includedInScore"] is True
-    for key in ("vix_pressure", "usd_pressure", "us_rates_pressure", "us_etf_flow_proxy", "us_breadth_proxy"):
+    for key in ("vix_pressure", "us_rates_pressure", "us_etf_flow_proxy", "us_breadth_proxy"):
         assert indicators[key]["includedInScore"] is False
         assert indicators[key]["scoreContribution"] == 0
         assert indicators[key]["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
+    assert indicators["usd_pressure"]["includedInScore"] is False
+    assert indicators["usd_pressure"]["scoreContribution"] == 0
+    assert indicators["usd_pressure"]["coverageDiagnostics"]["scoreExclusionReason"] == "usd_pressure_missing_series"
+    assert indicators["usd_pressure"]["coverageDiagnostics"]["missingInputs"] == ["USD_TWI"]
 
 
 def test_derived_freshness_uses_weakest_input_freshness(isolated_db: DatabaseManager) -> None:
@@ -2627,7 +2631,7 @@ def test_crypto_breadth_uses_btc_eth_bnb_vote_not_avg_change(isolated_db: Databa
     assert "1/3" in indicators["crypto_spot_momentum"]["summary"]
 
 
-def test_usd_pressure_uses_reliable_fx_crosses_when_dxy_missing(isolated_db: DatabaseManager) -> None:
+def test_usd_pressure_ignores_reliable_fx_crosses_when_official_series_is_missing(isolated_db: DatabaseManager) -> None:
     service = _make_service()
     now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
     service.cache.set(
@@ -2651,8 +2655,10 @@ def test_usd_pressure_uses_reliable_fx_crosses_when_dxy_missing(isolated_db: Dat
 
     assert indicators["usd_pressure"]["includedInScore"] is False
     assert indicators["usd_pressure"]["scoreContribution"] == 0
-    assert indicators["usd_pressure"]["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
-    assert "USD/CNH" in indicators["usd_pressure"]["summary"]
+    assert indicators["usd_pressure"]["coverageDiagnostics"]["scoreExclusionReason"] == "usd_pressure_missing_series"
+    assert indicators["usd_pressure"]["coverageDiagnostics"]["missingInputs"] == ["USD_TWI"]
+    assert "DTWEXBGS" in indicators["usd_pressure"]["summary"]
+    assert "USD/CNH" not in indicators["usd_pressure"]["summary"]
 
 
 def test_us_rates_indicator_uses_treasury_basket_when_us10y_missing(isolated_db: DatabaseManager) -> None:
@@ -2833,7 +2839,6 @@ def test_liquidity_provider_activation_diagnostics_classify_proxy_indicators_and
 
     expectations = {
         "vix_pressure": ("official_public.vix_or_volatility", 8),
-        "usd_pressure": ("official_or_authorized.fx_dxy", 6),
         "us_rates_pressure": ("official_public.us_treasury_curve", 6),
         "us_etf_flow_proxy": ("authorized.us_etf_flow", 5),
         "us_breadth_proxy": ("official_or_authorized.us_market_breadth", 6),
@@ -2856,6 +2861,29 @@ def test_liquidity_provider_activation_diagnostics_classify_proxy_indicators_and
         assert indicators[key]["scoreContribution"] == 0
         assert diagnostics["scoreContribution"] == 0
         assert diagnostics["capReason"] == "partial_coverage"
+
+    usd_diagnostics = _activation(payload, "usd_pressure")
+    _assert_activation_fields(usd_diagnostics)
+    assert usd_diagnostics["requiredProviderClass"] == "official_public.usd_pressure"
+    assert usd_diagnostics["configuredProviderAvailable"] is True
+    assert usd_diagnostics["realSourceAvailable"] is False
+    assert usd_diagnostics["proxyOnly"] is False
+    assert usd_diagnostics["observationOnly"] is False
+    assert usd_diagnostics["scoreContributionAllowed"] is False
+    assert usd_diagnostics["scoreExclusionReason"] == "usd_pressure_missing_series"
+    assert usd_diagnostics["requiredRealSourceForScore"] is True
+    assert usd_diagnostics["proxyObservationOnlyReason"] is None
+    assert usd_diagnostics["sourceTier"] == "unavailable"
+    assert usd_diagnostics["trustLevel"] == "unavailable"
+    assert usd_diagnostics["missingInputs"] == ["USD_TWI"]
+    assert usd_diagnostics["missingProviderReason"] == "requires_official_public.usd_pressure"
+    usd_inputs = {str(item.get("key")): item for item in indicators["usd_pressure"]["evidence"]["inputs"]}
+    assert usd_inputs["USD_TWI"]["sourceTier"] == "official_public"
+    assert usd_inputs["USD_TWI"]["trustLevel"] == "unavailable"
+    assert indicators["usd_pressure"]["includedInScore"] is False
+    assert indicators["usd_pressure"]["scoreContribution"] == 0
+    assert usd_diagnostics["scoreContribution"] == 0
+    assert usd_diagnostics["capReason"] == "unavailable_source"
 
 
 def test_cn_flow_indicator_uses_reliable_flow_basket_and_cn_breadth_context(isolated_db: DatabaseManager) -> None:
@@ -3095,7 +3123,10 @@ def test_vix_indicator_uses_yfinance_proxy_when_volatility_panel_is_unavailable(
         "^VIX": _FakeHistoryFrame([18.0, 15.0], index=quote_index),
     }
 
+    requested_tickers: list[str] = []
+
     def _fake_quote_history(ticker: str) -> _FakeHistoryFrame:
+        requested_tickers.append(ticker)
         return quote_map.get(ticker, _FakeHistoryFrame([]))
 
     with patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", side_effect=_fake_quote_history, create=True):
@@ -3297,7 +3328,7 @@ def test_vix_indicator_normalizes_cached_yfinance_proxy_live_freshness(
     assert "新鲜度 live" not in str(indicator["summary"])
 
 
-def test_usd_pressure_uses_yfinance_dxy_proxy_when_fx_panel_is_unavailable(isolated_db: DatabaseManager) -> None:
+def test_usd_pressure_does_not_use_yfinance_dxy_proxy_when_official_series_is_missing(isolated_db: DatabaseManager) -> None:
     service = _make_service()
     quote_index = [
         datetime(2026, 5, 12, 16, 0, tzinfo=timezone.utc),
@@ -3307,24 +3338,35 @@ def test_usd_pressure_uses_yfinance_dxy_proxy_when_fx_panel_is_unavailable(isola
         "DX-Y.NYB": _FakeHistoryFrame([104.9, 104.2], index=quote_index),
     }
 
+    requested_tickers: list[str] = []
+
     def _fake_quote_history(ticker: str) -> _FakeHistoryFrame:
+        requested_tickers.append(ticker)
         return quote_map.get(ticker, _FakeHistoryFrame([]))
 
     with patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", side_effect=_fake_quote_history, create=True):
         payload = service.get_liquidity_monitor()
 
     indicators = {item["key"]: item for item in payload["indicators"]}
+    usd_pressure = indicators["usd_pressure"]
+    inputs = {str(item.get("key")): item for item in usd_pressure["evidence"]["inputs"]}
 
-    assert payload["sourceMetadata"]["externalProviderCalls"] is True
-    assert indicators["usd_pressure"]["includedInScore"] is False
-    assert indicators["usd_pressure"]["status"] == "partial"
-    assert indicators["usd_pressure"]["freshness"] == "delayed"
-    assert indicators["usd_pressure"]["scoreContribution"] == 0
-    assert indicators["usd_pressure"]["coverageDiagnostics"]["scoreContributionAllowed"] is False
-    assert indicators["usd_pressure"]["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
-    assert indicators["usd_pressure"]["coverageDiagnostics"]["capReason"] == "partial_coverage"
-    assert "DXY" in str(indicators["usd_pressure"]["summary"])
-    assert "Yahoo Finance" in str(indicators["usd_pressure"]["summary"])
+    assert "DX-Y.NYB" not in requested_tickers
+    assert usd_pressure["includedInScore"] is False
+    assert usd_pressure["status"] == "unavailable"
+    assert usd_pressure["freshness"] == "unavailable"
+    assert usd_pressure["scoreContribution"] == 0
+    assert usd_pressure["coverageDiagnostics"]["scoreContributionAllowed"] is False
+    assert usd_pressure["coverageDiagnostics"]["scoreExclusionReason"] == "usd_pressure_missing_series"
+    assert usd_pressure["coverageDiagnostics"]["missingInputs"] == ["USD_TWI"]
+    assert usd_pressure["coverageDiagnostics"]["missingProviderReason"] == "requires_official_public.usd_pressure"
+    assert inputs["USD_TWI"]["officialSeriesId"] == "DTWEXBGS"
+    assert inputs["USD_TWI"]["sourceAuthorityAllowed"] is False
+    assert inputs["USD_TWI"]["scoreContributionAllowed"] is False
+    assert inputs["USD_TWI"]["sourceAuthorityReason"] == "usd_pressure_missing_series"
+    assert "DTWEXBGS" in str(usd_pressure["summary"])
+    assert "DXY" not in str(usd_pressure["summary"])
+    assert "Yahoo Finance" not in str(usd_pressure["summary"])
 
 
 def test_us_rates_indicator_uses_yfinance_treasury_proxies_when_rates_panel_is_unavailable(isolated_db: DatabaseManager) -> None:
@@ -4314,6 +4356,130 @@ def test_fed_liquidity_indicator_remains_observation_only_when_series_is_missing
     assert diagnostics["missingProviderReason"] == "requires_official_public.fed_liquidity"
     assert "RESERVES" in diagnostics["activationHint"]
     assert "fed_liquidity_partial_coverage" in str(indicator["evidence"]["inputs"])
+
+
+def test_usd_pressure_scores_when_official_trade_weighted_usd_is_fresh(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = "2026-05-20T10:00:00+08:00"
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "USD_TWI",
+                    "label": "Trade-weighted USD",
+                    "value": 128.42,
+                    "changePercent": -0.25,
+                    "source": "fred",
+                    "sourceId": "fred:DTWEXBGS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED Nominal Broad U.S. Dollar Index",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "freshness": "cached",
+                    "asOf": now,
+                    "updatedAt": now,
+                    "isFallback": False,
+                    "isUnavailable": False,
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "sourceAuthorityReason": None,
+                    "sourceAuthorityRouteRejected": False,
+                    "routeRejectedReasonCodes": [],
+                    "officialSeriesId": "DTWEXBGS",
+                    "officialObservationDate": "2026-05-20",
+                    "officialAsOf": "2026-05-20",
+                }
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["usd_pressure"]
+    diagnostics = indicator["coverageDiagnostics"]
+    inputs = {str(item.get("key")): item for item in indicator["evidence"]["inputs"]}
+
+    assert indicator["includedInScore"] is True
+    assert indicator["scoreContribution"] == 6
+    assert "Trade-weighted USD" in indicator["summary"]
+    assert "DXY" not in indicator["summary"]
+    assert diagnostics["requiredProviderClass"] == "official_public.usd_pressure"
+    assert diagnostics["realSourceAvailable"] is True
+    assert diagnostics["proxyOnly"] is False
+    assert diagnostics["scoreContributionAllowed"] is True
+    assert diagnostics["sourceTier"] == "official_public"
+    assert diagnostics["sourceAuthorityReason"] is None
+    assert diagnostics["routeRejectedReasonCodes"] == []
+    assert inputs["USD_TWI"]["officialSeriesId"] == "DTWEXBGS"
+    assert inputs["USD_TWI"]["sourceAuthorityAllowed"] is True
+    assert inputs["USD_TWI"]["scoreContributionAllowed"] is True
+
+
+def test_usd_pressure_lists_official_trade_weighted_series_when_missing(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = "2026-05-20T10:00:00+08:00"
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "USD_TWI",
+                    "label": "Trade-weighted USD",
+                    "value": None,
+                    "changePercent": None,
+                    "source": "fred",
+                    "sourceId": "fred:DTWEXBGS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED Nominal Broad U.S. Dollar Index",
+                    "sourceTier": "official_public",
+                    "trustLevel": "unavailable",
+                    "freshness": "unavailable",
+                    "asOf": now,
+                    "updatedAt": now,
+                    "isFallback": False,
+                    "isUnavailable": True,
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "sourceAuthorityReason": "usd_pressure_missing_series",
+                    "routeRejectedReasonCodes": ["usd_pressure_missing_series"],
+                    "officialSeriesId": "DTWEXBGS",
+                    "officialObservationDate": None,
+                    "officialAsOf": None,
+                }
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["usd_pressure"]
+    diagnostics = indicator["coverageDiagnostics"]
+    inputs = {str(item.get("key")): item for item in indicator["evidence"]["inputs"]}
+
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert indicator["status"] == "unavailable"
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["missingInputs"] == ["USD_TWI"]
+    assert diagnostics["missingProviderReason"] == "requires_official_public.usd_pressure"
+    assert inputs["USD_TWI"]["officialSeriesId"] == "DTWEXBGS"
+    assert inputs["USD_TWI"]["sourceAuthorityAllowed"] is False
+    assert inputs["USD_TWI"]["scoreContributionAllowed"] is False
+    assert inputs["USD_TWI"]["sourceAuthorityReason"] == "usd_pressure_missing_series"
+    assert inputs["USD_TWI"]["routeRejectedReasonCodes"] == ["usd_pressure_missing_series"]
 
 
 LIQUIDITY_GOLDEN_SCENARIOS = (

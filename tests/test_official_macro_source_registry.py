@@ -23,6 +23,7 @@ EXPECTED_SOURCE_SERIES = {
     "FRED_DGS2": ("DGS2",),
     "FRED_DGS10": ("DGS10",),
     "FRED_DGS30": ("DGS30",),
+    "FRED_DTWEXBGS": ("DTWEXBGS",),
     "FRED_PPIACO": ("PPIACO",),
     "FRED_RRPONTSYD": ("RRPONTSYD",),
     "FRED_SOFR": ("SOFR",),
@@ -71,6 +72,7 @@ def test_transport_source_lookup_maps_runtime_source_ids_back_to_contracts() -> 
     fed_funds_contract = get_official_macro_source_for_transport_source("fred:DFF")
     cpi_contract = get_official_macro_source_for_transport_source("fred:CPIAUCSL")
     ppi_contract = get_official_macro_source_for_transport_source("fred:PPIACO")
+    usd_contract = get_official_macro_source_for_transport_source("fred:DTWEXBGS")
     walcl_contract = get_official_macro_source_for_transport_source("fred:WALCL")
     rrp_contract = get_official_macro_source_for_transport_source("fred:RRPONTSYD")
     tga_contract = get_official_macro_source_for_transport_source("fred:WTREGEN")
@@ -86,6 +88,8 @@ def test_transport_source_lookup_maps_runtime_source_ids_back_to_contracts() -> 
     assert cpi_contract.source_id == "FRED_CPIAUCSL"
     assert ppi_contract is not None
     assert ppi_contract.source_id == "FRED_PPIACO"
+    assert usd_contract is not None
+    assert usd_contract.source_id == "FRED_DTWEXBGS"
     assert walcl_contract is not None
     assert walcl_contract.source_id == "FRED_WALCL"
     assert rrp_contract is not None
@@ -171,6 +175,22 @@ def test_fed_liquidity_contracts_cover_required_official_fred_series() -> None:
         assert contract.delayed_eligible is True
         assert contract.observation_only is False
         assert any("Fed liquidity" in note for note in contract.notes)
+
+
+def test_usd_pressure_contract_uses_truthful_trade_weighted_label_not_ice_dxy() -> None:
+    contract = get_official_macro_source("fred_dtwexbgs")
+
+    assert contract is not None
+    assert contract.display_name == "FRED Nominal Broad U.S. Dollar Index"
+    assert contract.series_codes == ("DTWEXBGS",)
+    assert contract.source_type == "official_public"
+    assert contract.cadence == "business_daily"
+    assert contract.live_eligible is False
+    assert contract.delayed_eligible is True
+    assert contract.observation_only is False
+    assert any("trade-weighted" in note.lower() for note in contract.notes)
+    assert "ICE DXY" not in contract.display_name
+    assert any("not an ICE DXY" in note for note in contract.notes)
 
 
 def test_registry_import_has_no_runtime_or_provider_side_effects() -> None:

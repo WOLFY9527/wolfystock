@@ -29,6 +29,7 @@ from src.services.official_macro_transport import (
     build_treasury_daily_rates_request,
     run_fed_liquidity_live_smoke,
     run_official_macro_live_smoke,
+    run_usd_pressure_live_smoke,
     parse_fred_observation_points_payload,
     parse_fred_observations_payload,
     fetch_fred_observation_points,
@@ -403,6 +404,7 @@ def test_build_fred_observations_request_supports_credit_stress_series_without_e
         ("RRPONTSYD", 2),
         ("WTREGEN", 2),
         ("WRESBAL", 2),
+        ("DTWEXBGS", 2),
     ],
 )
 def test_build_fred_observations_request_supports_additional_official_macro_series_without_expanding_runtime_default_set(
@@ -505,6 +507,72 @@ def test_fed_liquidity_live_smoke_fails_closed_on_partial_or_stale_series() -> N
     assert summary["reason"] == "stale_series"
 
 
+def test_usd_pressure_live_smoke_reports_bounded_official_series_successfully() -> None:
+    now = datetime(2026, 5, 14, 12, 0, tzinfo=timezone.utc)
+    fred_requested: list[str] = []
+
+    def _fake_fetch_fred(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        fred_requested.append(series_id)
+        return [_macro_point(series_id, 128.42, "2026-05-13", freshness_hint="daily_trade_weighted_usd")]
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_fake_fetch_fred,
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_usd_pressure_live_smoke(now=now)
+
+    assert fred_requested == ["DTWEXBGS"]
+    _assert_smoke_summary_fields(summary)
+    assert summary | {} == {
+        "credentialsPresent": True,
+        "providerConstructed": True,
+        "probePassed": True,
+        "freshnessValid": True,
+        "sourceMetadataValid": True,
+        "sourceAuthorityAllowed": True,
+        "scoreContributionAllowed": True,
+        "fulfilledSeries": ["DTWEXBGS"],
+        "missingSeries": [],
+        "staleSeries": [],
+        "reason": None,
+        "attempts": 1,
+        "maxAttempts": 3,
+        "transientMissingSeries": [],
+        "finalAttemptMissingSeries": [],
+    }
+
+
+def test_usd_pressure_live_smoke_fails_closed_on_missing_or_stale_series() -> None:
+    now = datetime(2026, 5, 22, 12, 0, tzinfo=timezone.utc)
+    fred_requested: list[str] = []
+
+    def _fake_fetch_fred(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        fred_requested.append(series_id)
+        return [_macro_point(series_id, 127.8, "2026-05-01", freshness_hint="daily_trade_weighted_usd")]
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_fake_fetch_fred,
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_usd_pressure_live_smoke(now=now)
+
+    assert fred_requested == ["DTWEXBGS", "DTWEXBGS", "DTWEXBGS"]
+    _assert_smoke_summary_fields(summary)
+    assert summary["probePassed"] is False
+    assert summary["sourceAuthorityAllowed"] is False
+    assert summary["scoreContributionAllowed"] is False
+    assert summary["fulfilledSeries"] == []
+    assert summary["missingSeries"] == []
+    assert summary["staleSeries"] == ["DTWEXBGS"]
+    assert summary["reason"] == "stale_series"
+
+
 @pytest.mark.parametrize(
     ("series_id", "fixture_name", "expected_value", "expected_date", "expected_hint"),
     [
@@ -517,6 +585,7 @@ def test_fed_liquidity_live_smoke_fails_closed_on_partial_or_stale_series() -> N
         ("DGS30", "fred_dgs30.json", 4.89, "2026-05-13", "daily_rate"),
         ("PPIACO", "fred_ppiaco.json", 282.0, "2026-05-15", "monthly_inflation_index"),
         ("SOFR", "fred_sofr.json", 5.31, "2026-05-13", "daily_fixing"),
+        ("DTWEXBGS", "fred_dtwexbgs.json", 128.42, "2026-05-13", "daily_trade_weighted_usd"),
     ],
 )
 def test_parse_fred_observations_payload_from_fixtures(

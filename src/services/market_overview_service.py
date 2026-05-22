@@ -33,6 +33,7 @@ from src.services.official_macro_transport import (
     FED_LIQUIDITY_FRED_SERIES_IDS,
     MacroObservation,
     OfficialMacroTransportError,
+    USD_PRESSURE_FRED_SERIES_IDS,
     classify_official_macro_exception,
     fetch_fred_observation_points,
     fetch_treasury_daily_rate_observation_points,
@@ -110,6 +111,12 @@ OFFICIAL_DAILY_FRESHNESS_POLICIES = {
         "maxAcceptedBusinessLagDays": 2,
     },
     "DGS30": {
+        "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
+        "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
+        "maxAcceptedLagDays": 4,
+        "maxAcceptedBusinessLagDays": 2,
+    },
+    "DTWEXBGS": {
         "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
         "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
         "maxAcceptedLagDays": 4,
@@ -289,7 +296,7 @@ MARKET_TEMPERATURE_SCORE_DRIVING_SYMBOLS = {
     "breadth": frozenset({"ADV_RATIO", "LIMIT_UP", "LIMIT_DOWN"}),
     "flows": frozenset({"CN_ETF", "NORTHBOUND"}),
     "rates": frozenset({"VIX", "US10Y", "DR007", "SHIBOR"}),
-    "fx": frozenset({"DXY", "USDCNH", "WTI", "GOLD"}),
+    "fx": frozenset({"USD_TWI", "DXY", "USDCNH", "WTI", "GOLD"}),
     "futures": frozenset({"ES", "NQ", "YM", "RTY"}),
     "sentiment": frozenset({"FGI"}),
     "crypto": frozenset({"BTC", "ETH", "BNB"}),
@@ -737,6 +744,9 @@ class MarketOverviewService:
         "FED_RRP": ("RRPONTSYD", "Overnight reverse repo", "USD bn", "US"),
         "TGA": ("WTREGEN", "Treasury General Account", "USD mn", "US"),
         "RESERVES": ("WRESBAL", "Reserve balances", "USD mn", "US"),
+    }
+    USD_PRESSURE_SERIES = {
+        "USD_TWI": ("DTWEXBGS", "Trade-weighted USD", "idx", "US"),
     }
     US_SECTOR_ETFS = {
         "XLK": "Technology",
@@ -1900,6 +1910,7 @@ class MarketOverviewService:
             include_policy_and_inflation=cache_key == "macro",
             include_credit_stress=cache_key == "macro",
             include_fed_liquidity=cache_key == "macro",
+            include_usd_pressure=cache_key == "macro",
         )
         if cache_key == "volatility":
             return self._align_official_macro_volatility_payload(payload, official_points)
@@ -2059,6 +2070,12 @@ class MarketOverviewService:
             official_available = official_available or any(
                 not bool(item.get("isUnavailable")) for item in fed_items.values()
             )
+        usd_pressure_items = self._official_usd_pressure_items(official_points)
+        if usd_pressure_items:
+            item_map.update(usd_pressure_items)
+            official_available = official_available or any(
+                not bool(item.get("isUnavailable")) for item in usd_pressure_items.values()
+            )
 
         ordered_symbols = (
             "US2Y",
@@ -2066,6 +2083,7 @@ class MarketOverviewService:
             "US30Y",
             "SOFR",
             "VIX",
+            "USD_TWI",
             "DXY",
             "GOLD",
             "OIL",
@@ -2189,6 +2207,89 @@ class MarketOverviewService:
                 )
         return items
 
+    def _official_usd_pressure_items(
+        self,
+        official_points: Dict[str, List[MacroObservation]],
+    ) -> Dict[str, Dict[str, Any]]:
+        items: Dict[str, Dict[str, Any]] = {}
+
+        for symbol, (series_id, label, unit, market) in self.USD_PRESSURE_SERIES.items():
+            official_item, official_failure = self._official_macro_overlay_item(
+                symbol,
+                label,
+                official_points.get(series_id, []),
+                series_id=series_id,
+                unit=unit,
+                market=market,
+                change_scale=1.0,
+            )
+            if official_item:
+                freshness_evidence = get_freshness_status(
+                    official_item.get("asOf"),
+                    "macro_rate",
+                    str(official_item.get("source") or ""),
+                    False,
+                    source_type=str(official_item.get("sourceType") or ""),
+                    series_id=series_id,
+                    official_observation_date=official_item.get("officialObservationDate") or official_item.get("officialAsOf"),
+                )
+                items[symbol] = {
+                    **official_item,
+                    "usdPressureComponent": True,
+                    "requiredProviderClass": "official_public.usd_pressure",
+                    "providerAttempted": True,
+                    "providerClass": "official_daily",
+                    "officialOverlayAttempted": True,
+                    "officialOverlayAvailable": True,
+                    "officialOverlayFailureReason": None,
+                    "activationHint": "official_usd_pressure_overlay_active",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "freshness": freshness_evidence.get("freshness") or "unavailable",
+                    "sourceFreshnessEvidence": freshness_evidence,
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "sourceAuthorityReason": None,
+                    "routeRejectedReasonCodes": [],
+                }
+                continue
+
+            reason = (
+                official_failure
+                or self._official_macro_overlay_diagnostics.get(series_id)
+                or "usd_pressure_missing_series"
+            )
+            unavailable = self._official_macro_unavailable_item(
+                symbol,
+                label,
+                series_id,
+                unit=unit,
+                market=market,
+            )
+            unavailable.update(
+                {
+                    "usdPressureComponent": True,
+                    "requiredProviderClass": "official_public.usd_pressure",
+                    "providerAttempted": True,
+                    "providerClass": "official_daily",
+                    "officialOverlayAttempted": True,
+                    "officialOverlayAvailable": False,
+                    "officialOverlayFailureReason": reason,
+                    "activationHint": "official_usd_pressure_missing_fail_closed",
+                    "officialSeriesId": series_id,
+                    "sourceTier": "official_public",
+                    "trustLevel": "unavailable",
+                    "freshness": "unavailable",
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "sourceAuthorityReason": reason,
+                    "routeRejectedReasonCodes": [reason],
+                }
+            )
+            items[symbol] = unavailable
+
+        return items
+
     @staticmethod
     def _ordered_runtime_items(
         payload: Dict[str, Any],
@@ -2234,6 +2335,7 @@ class MarketOverviewService:
                 {"US10Y"},
                 {"US30Y"},
                 {"SOFR"},
+                {"USD_TWI"},
                 {"FED_ASSETS"},
                 {"FED_RRP"},
                 {"TGA"},
@@ -3665,6 +3767,7 @@ class MarketOverviewService:
             include_policy_and_inflation=True,
             include_credit_stress=True,
             include_fed_liquidity=True,
+            include_usd_pressure=True,
         )
         item_map = {
             str(item.get("symbol") or ""): item
@@ -3730,6 +3833,7 @@ class MarketOverviewService:
         if official_ppi:
             item_map["PPI"] = official_ppi
         item_map.update(self._official_fed_liquidity_items(official_points))
+        item_map.update(self._official_usd_pressure_items(official_points))
         item_map.setdefault("SOFR", self._official_macro_unavailable_item("SOFR", "SOFR", "SOFR", unit="%", market="US"))
         for symbol, (series_id, label, unit, market) in self.OFFICIAL_MACRO_SERIES.items():
             if symbol == "CREDIT" and symbol in item_map:
@@ -3741,6 +3845,7 @@ class MarketOverviewService:
             "US30Y",
             "SOFR",
             "VIX",
+            "USD_TWI",
             "DXY",
             "GOLD",
             "OIL",
@@ -4250,6 +4355,7 @@ class MarketOverviewService:
         include_policy_and_inflation: bool = False,
         include_credit_stress: bool = False,
         include_fed_liquidity: bool = False,
+        include_usd_pressure: bool = False,
         budget_seconds: Optional[float] = None,
     ) -> Dict[str, List[MacroObservation]]:
         points: Dict[str, List[MacroObservation]] = {}
@@ -4264,6 +4370,8 @@ class MarketOverviewService:
             fred_series_ids.append("BAMLH0A0HYM2")
         if include_fed_liquidity:
             fred_series_ids.extend(FED_LIQUIDITY_FRED_SERIES_IDS)
+        if include_usd_pressure:
+            fred_series_ids.extend(USD_PRESSURE_FRED_SERIES_IDS)
         for series_id in fred_series_ids:
             cached_points = self._cached_official_macro_series(series_id, fetched_at)
             if cached_points:
@@ -5969,6 +6077,26 @@ class MarketOverviewService:
             self._fallback_fx_commodities_snapshot,
             deadline=deadline,
         )
+        usd_pressure_items = [
+            self._guard_market_temperature_score_input(dict(item), panel_key="fx")
+            for item in macro.get("items", [])
+            if isinstance(item, dict)
+            and str(item.get("symbol") or "") in self.USD_PRESSURE_SERIES
+        ]
+        if usd_pressure_items:
+            existing_symbols = {
+                str(item.get("symbol") or "")
+                for item in fx.get("items", [])
+                if isinstance(item, dict)
+            }
+            fx["items"] = [
+                *fx.get("items", []),
+                *[
+                    item
+                    for item in usd_pressure_items
+                    if str(item.get("symbol") or "") not in existing_symbols
+                ],
+            ]
         futures = self._temperature_panel(
             "futures",
             lambda: self._cached_payload(
@@ -6285,7 +6413,7 @@ class MarketOverviewService:
                 asset_type = "macro_rate"
                 capability = "macro_rate"
         elif panel_key == "fx":
-            if symbol in {"DXY", "USDCNH"}:
+            if symbol in {"USD_TWI", "DXY", "USDCNH"}:
                 market = "forex"
                 asset_type = "forex"
             else:
@@ -6349,7 +6477,7 @@ class MarketOverviewService:
                 asset_type = "macro_rate"
         elif panel_key == "fx":
             capability = "fx"
-            if symbol in {"DXY", "USDCNH", "USDJPY", "EURUSD"}:
+            if symbol in {"USD_TWI", "DXY", "USDCNH", "USDJPY", "EURUSD"}:
                 market = "forex"
                 asset_type = "forex"
             else:
@@ -6625,7 +6753,9 @@ class MarketOverviewService:
         crypto_change = self._avg_change(inputs.get("crypto", {}).get("items", []), {"BTC", "ETH", "BNB"})
         etf_flow = self._item_value(inputs.get("flows", {}).get("items", []), "CN_ETF")
         us10y_change = self._item_change(inputs.get("rates", {}).get("items", []), "US10Y")
-        dxy_change = self._item_change(inputs.get("fx", {}).get("items", []), "DXY")
+        dxy_change = self._item_change(inputs.get("fx", {}).get("items", []), "USD_TWI")
+        if dxy_change is None:
+            dxy_change = self._item_change(inputs.get("fx", {}).get("items", []), "DXY")
         cn_index_change = self._avg_change(
             inputs.get("indices", {}).get("items", []),
             {"000001.SH", "399001.SZ", "399006.SZ", "000300.SH", "HSI", "HSTECH", "HSI.HK", "HSTECH.HK"},

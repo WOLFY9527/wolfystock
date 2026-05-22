@@ -54,7 +54,7 @@ SOURCE_TYPE_FRESHNESS_FLOOR = {
 OFFICIAL_PANEL_REQUIRED_SYMBOL_GROUPS = {
     "volatility": ({"VIX", "VIXCLS"},),
     "rates": ({"US2Y"}, {"US10Y"}, {"US30Y"}),
-    "macro": ({"VIX", "VIXCLS"}, {"US2Y"}, {"US10Y"}, {"US30Y"}),
+    "macro": ({"VIX", "VIXCLS"}, {"US2Y"}, {"US10Y"}, {"US30Y"}, {"USD_TWI"}),
 }
 LIQUIDITY_SCORE_ROUTE_REJECTED_REASON = "source_authority_router_rejected"
 LIQUIDITY_SCORE_ROUTE_PROVIDER_ALIASES = {
@@ -119,7 +119,7 @@ LIQUIDITY_INDICATOR_REQUIRED_INPUTS = {
     "crypto_spot_momentum": ("BTC", "ETH", "BNB"),
     "crypto_funding": ("BTC_FUNDING", "ETH_FUNDING"),
     "vix_pressure": ("VIX",),
-    "usd_pressure": ("DXY", "USDCNH", "USDJPY", "EURUSD"),
+    "usd_pressure": ("USD_TWI",),
     "us_rates_pressure": ("US2Y", "US10Y", "US30Y", "SOFR", "US10Y2Y", "US10Y3M"),
     "fed_liquidity": ("FED_ASSETS", "FED_RRP", "TGA", "RESERVES"),
     "us_etf_flow_proxy": ("ETF",),
@@ -151,7 +151,7 @@ LIQUIDITY_INDICATOR_ACTIVATION_HINTS = {
     "crypto_spot_momentum": "Binance 现货输入 fresh 时可直接计分；缺少 BTC / ETH / BNB 时保持不可用。",
     "crypto_funding": "仅在现有 Binance Futures funding 回填和 BTC / ETH 现货上下文可用时激活。",
     "vix_pressure": "现有宏观 / 波动率快照可用时激活；yfinance proxy 会被 trust gate 限制为延迟或部分。",
-    "usd_pressure": "现有 FX / commodities 快照可用时激活；缺少 DXY 时可退化到 USD/CNH、USD/JPY、EUR/USD 代理。",
+    "usd_pressure": "官方 FRED trade-weighted USD 证据新鲜且授权时可计分；缺少 DTWEXBGS 时仅保留观察态。",
     "us_rates_pressure": "官方利率快照优先；没有 US2Y / US10Y / US30Y / SOFR 时只能退化为代理或不可用。",
     "fed_liquidity": "官方 FRED Fed liquidity 组需要 WALCL / RRPONTSYD / WTREGEN / WRESBAL 全量新鲜官方行；部分覆盖仅作观测。",
     "us_etf_flow_proxy": "激活现有 `funds_flow` snapshot 或 Market Overview 的 SPY / QQQ / IWM proxy；缺少 ETF 条目时保持不可用。",
@@ -186,8 +186,8 @@ LIQUIDITY_INDICATOR_PROVIDER_ACTIVATION = {
         "requiresRealSourceForScore": True,
     },
     "usd_pressure": {
-        "requiredProviderClass": "official_or_authorized.fx_dxy",
-        "paidDataLikelyRequired": True,
+        "requiredProviderClass": "official_public.usd_pressure",
+        "paidDataLikelyRequired": False,
         "observationOnly": False,
         "proxyOnly": True,
         "scoreContributionAllowed": True,
@@ -291,7 +291,7 @@ class LiquidityMonitorService:
             self._crypto_spot_indicator(panels["crypto"]),
             self._crypto_funding_indicator(panels["crypto"]),
             self._vix_indicator(panels["volatility"], panels["macro"]),
-            self._usd_pressure_indicator(panels["fx_commodities"], panels["rates"]),
+            self._usd_pressure_indicator(panels["macro"]),
             self._us_rates_indicator(panels["rates"], panels["macro"]),
             self._fed_liquidity_indicator(panels["macro"]),
             self._us_etf_flow_indicator(panels["funds_flow"]),
@@ -749,59 +749,76 @@ class LiquidityMonitorService:
             ),
         )
 
-    def _usd_pressure_indicator(self, fx_panel: PanelState, rates_panel: PanelState) -> Dict[str, Any]:
-        components = self._extract_usd_pressure_components(fx_panel, rates_panel)
-        if not components:
-            proxy_panel = self._fetch_macro_proxy_panel(
-                "fx_commodities_proxy",
-                [{"symbol": "DXY", "label": "DXY", "ticker": "DX-Y.NYB", "unit": "idx"}],
+    def _usd_pressure_indicator(self, macro_panel: PanelState) -> Dict[str, Any]:
+        official_components = self._extract_official_usd_pressure_components(macro_panel)
+        score_grade_components = [
+            component
+            for component in official_components
+            if self._usd_pressure_component_score_grade(component)
+        ]
+        if score_grade_components:
+            components = score_grade_components
+            positive = sum(1 for component in components if float(component["signal"]) > 0)
+            negative = sum(1 for component in components if float(component["signal"]) < 0)
+            direction = self._direction_from_counts(positive, negative)
+            summary = " | ".join(
+                f"{component['label']} {self._signed_percent_text(float(component['change']))}"
+                for component in components
             )
-            if proxy_panel is not None:
-                fx_panel = proxy_panel
-                components = self._extract_usd_pressure_components(fx_panel, rates_panel)
-        if not components:
+            freshness = self._weakest_freshness([str(component["freshness"]) for component in components])
             return self._indicator(
                 "usd_pressure",
-                "DXY / 美元压力",
-                fx_panel,
-                "unavailable",
-                0,
+                "USD Pressure / 美元压力",
+                macro_panel,
+                "live",
+                -6 if direction > 0 else 6 if direction < 0 else 0,
                 6,
-                False,
-                self._summary_with_metadata(
-                    "仅在可靠 FX / 宏观缓存存在时启用",
-                    source="yfinance_proxy",
-                    source_label="Yahoo Finance",
-                    source_type="proxy_public",
-                    reason=self._panel_unavailable_reason(fx_panel, "DXY 代理不可用"),
+                True,
+                self._summary_with_component_metadata(summary, components, freshness=freshness),
+                freshness=freshness,
+                evidence=self._indicator_evidence(
+                    status="live",
+                    freshness=freshness,
+                    inputs=[
+                        self._source_confidence_input_from_component(component)
+                        for component in components
+                    ],
+                    expected_input_count=len(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["usd_pressure"]),
                 ),
             )
-        positive = sum(1 for component in components if float(component["signal"]) > 0)
-        negative = sum(1 for component in components if float(component["signal"]) < 0)
-        direction = self._direction_from_counts(positive, negative)
-        base_panel = fx_panel if any(component["panel"] is fx_panel for component in components) else rates_panel
-        summary = " | ".join(f"{component['label']} {self._signed_percent_text(float(component['change']))}" for component in components)
-        freshness = self._weakest_freshness([str(component["freshness"]) for component in components])
-        status = "live" if len(components) >= 2 and freshness in {"live", "cached"} else "partial"
+
+        official_components = official_components or [self._missing_official_usd_pressure_component(macro_panel)]
+        freshness = self._weakest_freshness([str(component.get("freshness") or "unavailable") for component in official_components])
+        reason = (
+            self._text(official_components[0].get("sourceAuthorityReason"))
+            or self._text(official_components[0].get("degradationReason"))
+            or "usd_pressure_missing_series"
+        )
+        evidence = self._indicator_evidence(
+            status="unavailable",
+            freshness=freshness,
+            inputs=[
+                self._source_confidence_input_from_component(component)
+                for component in official_components
+            ],
+            expected_input_count=len(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["usd_pressure"]),
+        )
+        evidence["degradationReason"] = reason
         return self._indicator(
             "usd_pressure",
-            "DXY / 美元压力",
-            base_panel,
-            status,
-            -6 if direction > 0 else 6 if direction < 0 else 0,
+            "USD Pressure / 美元压力",
+            macro_panel,
+            "unavailable",
+            0,
             6,
-            True,
-            self._summary_with_metadata(summary, item=components[0], freshness=freshness),
-            freshness=freshness,
-            evidence=self._indicator_evidence(
-                status=status,
+            False,
+            self._summary_with_component_metadata(
+                "DTWEXBGS 官方美元压力证据暂不可用",
+                official_components,
                 freshness=freshness,
-                inputs=[
-                    self._source_confidence_input_from_component(component)
-                    for component in components
-                ],
-                expected_input_count=max(2, len(components)) if components else 2,
             ),
+            freshness=freshness,
+            evidence=evidence,
         )
 
     def _us_rates_indicator(self, panel: PanelState, macro_panel: PanelState) -> Dict[str, Any]:
@@ -1305,6 +1322,90 @@ class LiquidityMonitorService:
                 }
             )
         return items
+
+    def _extract_official_usd_pressure_components(self, macro_panel: PanelState) -> List[Dict[str, Any]]:
+        raw_items = macro_panel.payload.get("items")
+        if not isinstance(raw_items, list):
+            return []
+
+        components: list[Dict[str, Any]] = []
+        for raw in raw_items:
+            if not isinstance(raw, dict):
+                continue
+            symbol = str(raw.get("symbol") or "")
+            official_series_id = str(raw.get("officialSeriesId") or raw.get("sourceId") or "")
+            if symbol != "USD_TWI" and "DTWEXBGS" not in official_series_id:
+                continue
+            value = self._numeric(raw.get("value") if raw.get("value") is not None else raw.get("price"))
+            change = self._change_value(raw)
+            component = {
+                "symbol": "USD_TWI",
+                "key": "USD_TWI",
+                "label": str(raw.get("label") or raw.get("name") or "Trade-weighted USD"),
+                "value": value,
+                "change": change,
+                "signal": change if change is not None else 0.0,
+                "unit": str(raw.get("unit") or ""),
+                **self._component_projection_meta(raw, macro_panel),
+            }
+            if raw.get("sourceAuthorityAllowed") is False:
+                component["sourceAuthorityAllowed"] = False
+            if raw.get("scoreContributionAllowed") is False:
+                component["scoreContributionAllowed"] = False
+            if raw.get("sourceAuthorityReason"):
+                component["sourceAuthorityReason"] = raw.get("sourceAuthorityReason")
+                component["degradationReason"] = raw.get("sourceAuthorityReason")
+            if raw.get("routeRejectedReasonCodes"):
+                component["routeRejectedReasonCodes"] = list(raw.get("routeRejectedReasonCodes") or [])
+            components.append(component)
+        return components
+
+    def _missing_official_usd_pressure_component(self, macro_panel: PanelState) -> Dict[str, Any]:
+        as_of = macro_panel.as_of or macro_panel.updated_at or self._now().isoformat(timespec="seconds")
+        return {
+            "symbol": "USD_TWI",
+            "key": "USD_TWI",
+            "label": "Trade-weighted USD",
+            "value": None,
+            "change": None,
+            "signal": 0.0,
+            "unit": "idx",
+            "source": "fred",
+            "sourceLabel": "FRED Nominal Broad U.S. Dollar Index",
+            "sourceType": "official_public",
+            "asOf": as_of,
+            "freshness": "unavailable",
+            "isFallback": False,
+            "isStale": False,
+            "isPartial": False,
+            "isUnavailable": True,
+            "sourceTier": "official_public",
+            "trustLevel": "unavailable",
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "sourceAuthorityReason": "usd_pressure_missing_series",
+            "sourceAuthorityRouteRejected": False,
+            "routeRejectedReasonCodes": ["usd_pressure_missing_series"],
+            "officialSeriesId": "DTWEXBGS",
+            "officialObservationDate": None,
+            "officialAsOf": None,
+            "degradationReason": "usd_pressure_missing_series",
+        }
+
+    @staticmethod
+    def _usd_pressure_component_score_grade(component: Dict[str, Any]) -> bool:
+        return bool(
+            component.get("sourceType") == "official_public"
+            and component.get("sourceAuthorityAllowed") is not False
+            and component.get("scoreContributionAllowed") is not False
+            and not component.get("isFallback")
+            and not component.get("isUnavailable")
+            and not component.get("isStale")
+            and str(component.get("freshness") or "") in RELIABLE_FRESHNESS
+            and LiquidityMonitorService._numeric(component.get("value")) is not None
+            and LiquidityMonitorService._numeric(component.get("change")) is not None
+            and str(component.get("officialSeriesId") or "") == "DTWEXBGS"
+        )
 
     def _extract_us_rates_components(self, panels: Iterable[PanelState]) -> List[Dict[str, Any]]:
         panels = tuple(panels)
@@ -2266,6 +2367,8 @@ class LiquidityMonitorService:
             score_exclusion_reason = "observation_only"
         elif required_real_source_for_score and proxy_only and not proxy_score_allowlisted:
             score_exclusion_reason = "proxy_only_missing_real_source"
+        elif key == "usd_pressure" and not real_source_available:
+            score_exclusion_reason = "usd_pressure_missing_series"
         elif key == "fed_liquidity" and not real_source_available:
             score_exclusion_reason = "fed_liquidity_required_series_missing_or_stale"
         elif not bool(trust.get("conclusionAllowed")):
@@ -2460,7 +2563,22 @@ class LiquidityMonitorService:
                     for item in inputs
                 )
             )
-        if key in {"vix_pressure", "usd_pressure", "us_rates_pressure", "cn_hk_index_context"}:
+        if key == "usd_pressure":
+            inputs = [item for item in evidence.get("inputs", []) if isinstance(item, dict)]
+            return (
+                {self._indicator_input_key(item) for item in inputs if self._indicator_input_key(item)}
+                == set(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["usd_pressure"])
+                and all(
+                    str(item.get("sourceType") or "") == "official_public"
+                    and item.get("sourceAuthorityAllowed") is not False
+                    and item.get("scoreContributionAllowed") is not False
+                    and not item.get("isUnavailable")
+                    and not item.get("isStale")
+                    and str(item.get("freshness") or "") in RELIABLE_FRESHNESS
+                    for item in inputs
+                )
+            )
+        if key in {"vix_pressure", "us_rates_pressure", "cn_hk_index_context"}:
             return (
                 str(trust.get("sourceTier") or "") == "official_public"
                 and not self._indicator_has_proxy_input(panel, evidence)

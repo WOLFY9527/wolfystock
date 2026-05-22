@@ -838,6 +838,10 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
                 MacroObservation("BAMLH0A0HYM2", 3.75, today, today, "fred:BAMLH0A0HYM2", "official_public", "daily_credit_stress"),
                 MacroObservation("BAMLH0A0HYM2", 3.80, previous, previous, "fred:BAMLH0A0HYM2", "official_public", "daily_credit_stress"),
             ],
+            "DTWEXBGS": [
+                MacroObservation("DTWEXBGS", 128.42, today, today, "fred:DTWEXBGS", "official_public", "daily_trade_weighted_usd"),
+                MacroObservation("DTWEXBGS", 128.10, previous, previous, "fred:DTWEXBGS", "official_public", "daily_trade_weighted_usd"),
+            ],
         }
 
         with (
@@ -853,6 +857,12 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
             if isinstance(item, dict) and item.get("symbol") in {"VIX", "SOFR", "FEDFUNDS", "CREDIT"}
         }
 
+        usd_items = {
+            str(item["symbol"]): item
+            for item in payload["items"]
+            if isinstance(item, dict) and item.get("symbol") == "USD_TWI"
+        }
+
         assert macro_items["VIX"]["sourceAuthorityAllowed"] is True
         assert macro_items["VIX"]["scoreContributionAllowed"] is True
         assert macro_items["SOFR"]["sourceAuthorityAllowed"] is True
@@ -862,6 +872,11 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         assert macro_items["CREDIT"]["sourceAuthorityAllowed"] is True
         assert macro_items["CREDIT"]["scoreContributionAllowed"] is False
         assert macro_items["CREDIT"]["observationOnly"] is True
+        assert usd_items["USD_TWI"]["label"] == "Trade-weighted USD"
+        assert usd_items["USD_TWI"]["sourceAuthorityAllowed"] is True
+        assert usd_items["USD_TWI"]["scoreContributionAllowed"] is True
+        assert usd_items["USD_TWI"]["officialSeriesId"] == "DTWEXBGS"
+        assert "DXY" not in usd_items["USD_TWI"]["sourceLabel"]
         for item in macro_items.values():
             assert item["sourceType"] == "official_public"
             assert item["sourceTier"] == "official_public"

@@ -33,6 +33,7 @@ FRED_SUPPORTED_SERIES_IDS = (
     "DGS2",
     "DGS10",
     "DGS30",
+    "DTWEXBGS",
     "PPIACO",
     "RRPONTSYD",
     "SOFR",
@@ -42,6 +43,7 @@ FRED_SUPPORTED_SERIES_IDS = (
 )
 FRED_DEFAULT_REQUEST_SERIES_IDS = ("VIXCLS", "DGS2", "DGS10", "DGS30", "SOFR")
 FED_LIQUIDITY_FRED_SERIES_IDS = ("WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL")
+USD_PRESSURE_FRED_SERIES_IDS = ("DTWEXBGS",)
 TREASURY_RATE_SYMBOLS = ("DGS2", "DGS10", "DGS30")
 TREASURY_COLUMN_ALIASES = {
     "DGS2": ("2 Yr", "2 YR", "2-Year", "2 Year"),
@@ -56,6 +58,7 @@ FRED_FRESHNESS_HINTS = {
     "DGS2": "daily_rate",
     "DGS10": "daily_rate",
     "DGS30": "daily_rate",
+    "DTWEXBGS": "daily_trade_weighted_usd",
     "PPIACO": "monthly_inflation_index",
     "RRPONTSYD": "daily_fed_rrp",
     "SOFR": "daily_fixing",
@@ -89,6 +92,11 @@ FED_LIQUIDITY_LIVE_SMOKE_AGGREGATE_BUDGET_SECONDS = 6.0
 FED_LIQUIDITY_LIVE_SMOKE_FRED_TIMEOUT_SECONDS = 1.0
 FED_LIQUIDITY_LIVE_SMOKE_MAX_ATTEMPTS = 3
 FED_LIQUIDITY_LIVE_SMOKE_RETRY_SLEEP_SECONDS = 0.05
+USD_PRESSURE_LIVE_SMOKE_SERIES_IDS = USD_PRESSURE_FRED_SERIES_IDS
+USD_PRESSURE_LIVE_SMOKE_AGGREGATE_BUDGET_SECONDS = 4.0
+USD_PRESSURE_LIVE_SMOKE_FRED_TIMEOUT_SECONDS = 1.0
+USD_PRESSURE_LIVE_SMOKE_MAX_ATTEMPTS = 3
+USD_PRESSURE_LIVE_SMOKE_RETRY_SLEEP_SECONDS = 0.05
 
 
 class OfficialMacroTransportError(RuntimeError):
@@ -651,6 +659,129 @@ def run_fed_liquidity_live_smoke(
     transient_missing_series = [
         series_id
         for series_id in FED_LIQUIDITY_LIVE_SMOKE_SERIES_IDS
+        if series_id in transient_missing_series_seen and results.get(series_id) == "fulfilled"
+    ]
+
+    return {
+        "credentialsPresent": credentials_present,
+        "providerConstructed": provider_constructed,
+        "probePassed": probe_passed,
+        "freshnessValid": freshness_valid,
+        "sourceMetadataValid": source_metadata_valid,
+        "sourceAuthorityAllowed": source_authority_allowed,
+        "scoreContributionAllowed": source_authority_allowed,
+        "fulfilledSeries": fulfilled_series,
+        "missingSeries": missing_series,
+        "staleSeries": stale_series,
+        "reason": reason,
+        "attempts": attempts_executed,
+        "maxAttempts": bounded_max_attempts,
+        "transientMissingSeries": transient_missing_series,
+        "finalAttemptMissingSeries": missing_series,
+    }
+
+
+def run_usd_pressure_live_smoke(
+    *,
+    now: datetime | None = None,
+    aggregate_budget_seconds: float = USD_PRESSURE_LIVE_SMOKE_AGGREGATE_BUDGET_SECONDS,
+    fred_timeout_seconds: float = USD_PRESSURE_LIVE_SMOKE_FRED_TIMEOUT_SECONDS,
+    max_attempts: int = USD_PRESSURE_LIVE_SMOKE_MAX_ATTEMPTS,
+    retry_sleep_seconds: float = USD_PRESSURE_LIVE_SMOKE_RETRY_SLEEP_SECONDS,
+) -> dict[str, Any]:
+    """Run a bounded FRED-only USD pressure readiness diagnostic."""
+
+    config_probe = fred_runtime_config_probe()
+    credentials_present = bool(config_probe.get("apiKeyPresent"))
+    provider_constructed = bool(credentials_present)
+    deadline = time.monotonic() + max(0.0, float(aggregate_budget_seconds))
+    bounded_max_attempts = max(1, min(int(max_attempts), 4))
+    bounded_retry_sleep_seconds = max(0.0, float(retry_sleep_seconds))
+
+    results: dict[str, str] = {series_id: "missing" for series_id in USD_PRESSURE_LIVE_SMOKE_SERIES_IDS}
+    attempts_executed = 0
+    transient_missing_series_seen: set[str] = set()
+
+    def remaining_timeout(cap: float) -> float | None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        return max(0.001, min(float(cap), remaining))
+
+    if credentials_present:
+        pending_series = list(USD_PRESSURE_LIVE_SMOKE_SERIES_IDS)
+        for attempt_index in range(bounded_max_attempts):
+            attempts_executed = attempt_index + 1
+            current_attempt_missing: list[str] = []
+            for series_id in pending_series:
+                timeout = remaining_timeout(fred_timeout_seconds)
+                if timeout is None:
+                    current_attempt_missing.append(series_id)
+                    continue
+                try:
+                    points = fetch_fred_observation_points(series_id, limit=2, timeout=timeout)
+                except Exception:
+                    points = []
+                series_status = _official_macro_smoke_series_status(series_id, points, now=now)
+                results[series_id] = series_status
+                if series_status == "missing":
+                    current_attempt_missing.append(series_id)
+            transient_missing_series_seen.update(current_attempt_missing)
+            pending_series = [
+                series_id
+                for series_id in USD_PRESSURE_LIVE_SMOKE_SERIES_IDS
+                if results.get(series_id) != "fulfilled"
+            ]
+            if not pending_series or attempts_executed >= bounded_max_attempts:
+                break
+            sleep_budget = remaining_timeout(bounded_retry_sleep_seconds)
+            if sleep_budget is None:
+                break
+            time.sleep(sleep_budget)
+    else:
+        attempts_executed = 1
+
+    if attempts_executed == 0:
+        attempts_executed = 1
+
+    fulfilled_series = [
+        series_id for series_id in USD_PRESSURE_LIVE_SMOKE_SERIES_IDS if results.get(series_id) == "fulfilled"
+    ]
+    stale_series = [
+        series_id for series_id in USD_PRESSURE_LIVE_SMOKE_SERIES_IDS if results.get(series_id) == "stale"
+    ]
+    missing_series = [
+        series_id
+        for series_id in USD_PRESSURE_LIVE_SMOKE_SERIES_IDS
+        if results.get(series_id) not in {"fulfilled", "stale"}
+    ]
+    invalid_metadata_detected = any(
+        results.get(series_id) == "invalid_metadata" for series_id in USD_PRESSURE_LIVE_SMOKE_SERIES_IDS
+    )
+    freshness_valid = not stale_series
+    source_metadata_valid = not invalid_metadata_detected
+    probe_passed = not missing_series and freshness_valid and source_metadata_valid
+    source_authority_allowed = bool(
+        credentials_present
+        and provider_constructed
+        and probe_passed
+        and freshness_valid
+        and source_metadata_valid
+    )
+
+    reason: str | None = None
+    if not credentials_present:
+        reason = "credentials"
+    elif not freshness_valid:
+        reason = "stale_series"
+    elif not source_metadata_valid:
+        reason = "source_metadata_invalid"
+    elif missing_series:
+        reason = "series_coverage"
+
+    transient_missing_series = [
+        series_id
+        for series_id in USD_PRESSURE_LIVE_SMOKE_SERIES_IDS
         if series_id in transient_missing_series_seen and results.get(series_id) == "fulfilled"
     ]
 

@@ -439,6 +439,10 @@ def test_temperature_inputs_preserve_official_macro_authority_metadata_after_rat
             MacroObservation("WRESBAL", 3260000.0, today, today, "fred:WRESBAL", "official_public", "weekly_fed_h41"),
             MacroObservation("WRESBAL", 3240000.0, previous, previous, "fred:WRESBAL", "official_public", "weekly_fed_h41"),
         ],
+        "DTWEXBGS": [
+            MacroObservation("DTWEXBGS", 128.42, today, today, "fred:DTWEXBGS", "official_public", "daily_trade_weighted_usd"),
+            MacroObservation("DTWEXBGS", 128.10, previous, previous, "fred:DTWEXBGS", "official_public", "daily_trade_weighted_usd"),
+        ],
     }
 
     def cached_payload(cache_key: str, _fetcher: object, fallback_factory: object) -> dict:
@@ -477,6 +481,21 @@ def test_temperature_inputs_preserve_official_macro_authority_metadata_after_rat
         assert item["freshness"] in {"cached", "delayed"}
         if symbol in {"FED_ASSETS", "FED_RRP", "TGA", "RESERVES"}:
             assert item["officialSeriesId"] in {"WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"}
+
+    fx_by_symbol = {
+        str(item["symbol"]): item
+        for item in inputs["fx"]["items"]
+        if isinstance(item, dict) and item.get("symbol") == "USD_TWI"
+    }
+    assert set(fx_by_symbol) == {"USD_TWI"}
+    usd_item = fx_by_symbol["USD_TWI"]
+    assert usd_item["label"] == "Trade-weighted USD"
+    assert usd_item["sourceType"] == "official_public"
+    assert usd_item["sourceTier"] == "official_public"
+    assert usd_item["sourceAuthorityAllowed"] is True
+    assert usd_item["scoreContributionAllowed"] is True
+    assert usd_item["officialSeriesId"] == "DTWEXBGS"
+    assert "DXY" not in str(usd_item.get("label"))
 
 
 def test_temperature_score_helpers_skip_explicit_non_scoring_inputs() -> None:
