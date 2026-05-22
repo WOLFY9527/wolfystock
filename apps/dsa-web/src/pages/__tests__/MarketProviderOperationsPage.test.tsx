@@ -290,14 +290,59 @@ const operationsMatrixPayload = {
       remediationHint: 'TUSHARE_TOKEN=super-secret-token',
       diagnosticOnly: true,
     },
+    {
+      providerId: 'polygon_us_grouped_daily',
+      providerName: 'Polygon grouped daily US equities (computed breadth)',
+      sourceLabel: 'Polygon grouped daily US equities (computed breadth)',
+      providerCategory: 'computed_breadth_projection',
+      sourceType: 'authorized_licensed_feed',
+      sourceTier: 'official_or_authorized_licensed_feed',
+      trustLevel: 'score_grade_for_computed_ad_metrics_when_fresh',
+      freshnessExpectation: 'polygon_grouped_daily_eod_recent_completed_us_weekday',
+      runtimeState: 'read_only_projection',
+      credentialState: 'present',
+      dependencyState: 'not_required',
+      enabledByDefault: false,
+      observationOnly: false,
+      scoreContributionAllowed: true,
+      sourceAuthorityAllowed: true,
+      scoreEligible: false,
+      inertMetadataOnly: true,
+      paidDataLikelyRequired: true,
+      keyRequired: true,
+      noDefaultLiveHttpCalls: true,
+      cacheRequired: true,
+      supportedCapabilities: ['us_advancers_decliners'],
+      affectedSurfaces: ['market_overview', 'liquidity_impulse'],
+      routerReasonCodes: [],
+      reasonCodes: ['polygon_high_low_history_unavailable'],
+      fulfilledMetrics: ['ADVANCERS', 'DECLINERS', 'UNCHANGED', 'ADVANCE_DECLINE_RATIO'],
+      missingMetrics: ['NEW_HIGHS', 'NEW_LOWS', 'HIGH_LOW_RATIO'],
+      coverageCount: null,
+      authorityBasis: 'computed_from_authorized_polygon_grouped_daily',
+      universe: 'polygon_us_grouped_daily_ex_otc',
+      officialExchangePublishedBreadth: false,
+      fullBreadthAuthority: false,
+      sourceFreshnessEvidence: {
+        freshness: 'delayed',
+        freshnessPolicy: 'polygon_grouped_daily_eod_recent_completed_us_weekday',
+        isFallback: false,
+        isPartial: true,
+        isUnavailable: false,
+      },
+      missingProviderReason: null,
+      degradationReason: null,
+      remediationHint: null,
+      diagnosticOnly: true,
+    },
   ],
   summary: {
-    totalRows: 2,
+    totalRows: 3,
     observationOnlyRows: 1,
-    inertMetadataOnlyRows: 1,
+    inertMetadataOnlyRows: 2,
     missingProviderRows: 1,
     scoreEligibleRows: 1,
-    paidDataLikelyRequiredRows: 0,
+    paidDataLikelyRequiredRows: 1,
   },
   metadata: {
     source: 'provider_fit_capability_readiness_router_contracts',
@@ -314,7 +359,7 @@ const operationsMatrixPayload = {
     secretValuesIncluded: false,
     rawProviderPayloadsIncluded: false,
     readinessStatus: 'partial',
-    rowCount: 2,
+    rowCount: 3,
     rawProviderUrl: 'https://secret-provider.example.com',
     localConfigPath: '/Users/example/provider',
   },
@@ -383,6 +428,9 @@ describe('MarketProviderOperationsPage', () => {
     expect(gapBoard).toHaveTextContent('P1 流动性方向');
     expect(gapBoard).toHaveTextContent('P3 区域 / 期货确认');
     expect(gapBoard).toHaveTextContent('Fed Liquidity');
+    expect(gapBoard).toHaveTextContent('Polygon grouped daily US equities');
+    expect(gapBoard).toHaveTextContent('AD-only');
+    expect(gapBoard).toHaveTextContent('High/low missing');
     expect(gapBoard).toHaveTextContent('当前为什么不可用');
     expect(gapBoard).toHaveTextContent('解锁能力');
     expect(gapBoard).toHaveTextContent('所需工作');
@@ -402,6 +450,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.queryByText(/token=/i)).not.toBeInTheDocument();
     expect(screen.queryByText('TUSHARE_TOKEN=super-secret-token')).not.toBeInTheDocument();
     expect(screen.queryByText('tickflow_permission_unavailable')).not.toBeInTheDocument();
+    expect(screen.queryByText('POLYGON_API_KEY')).not.toBeInTheDocument();
     expect(screen.queryByText('https://secret-provider.example.com')).not.toBeInTheDocument();
     expect(screen.queryByText('/Users/example/provider')).not.toBeInTheDocument();
 

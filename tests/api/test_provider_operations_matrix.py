@@ -356,6 +356,58 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
     }.issubset(set(rotation_flow["routerReasonCodes"]))
 
 
+def test_polygon_us_grouped_daily_projection_is_visible_without_secret_or_official_overclaim(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("POLYGON_API_KEY", "polygon-secret-token-value")
+
+    payload = ProviderOperationsMatrixService(
+        env=os.environ,
+        spec_finder=lambda _: None,
+    ).build_matrix()
+    text = json.dumps(payload, sort_keys=True)
+
+    assert "polygon-secret-token-value" not in text
+    assert "POLYGON_API_KEY" not in text
+
+    polygon = _row_by_id(payload, "polygon_us_grouped_daily")
+    assert polygon["sourceLabel"] == "Polygon grouped daily US equities (computed breadth)"
+    assert polygon["authorityBasis"] == "computed_from_authorized_polygon_grouped_daily"
+    assert polygon["universe"] == "polygon_us_grouped_daily_ex_otc"
+    assert polygon["sourceType"] == "authorized_licensed_feed"
+    assert polygon["sourceTier"] == "official_or_authorized_licensed_feed"
+    assert polygon["credentialState"] == "present"
+    assert polygon["keyRequired"] is True
+    assert polygon["diagnosticOnly"] is True
+    assert polygon["officialExchangePublishedBreadth"] is False
+    assert polygon["fullBreadthAuthority"] is False
+    assert polygon["sourceAuthorityAllowed"] is True
+    assert polygon["scoreContributionAllowed"] is True
+    assert polygon["fulfilledMetrics"] == [
+        "ADVANCERS",
+        "DECLINERS",
+        "UNCHANGED",
+        "ADVANCE_DECLINE_RATIO",
+    ]
+    assert polygon["missingMetrics"] == ["NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"]
+    assert polygon["reasonCodes"] == ["polygon_high_low_history_unavailable"]
+    assert polygon["coverageCount"] is None
+    assert polygon["sourceFreshnessEvidence"] == {
+        "freshness": "delayed",
+        "freshnessPolicy": "polygon_grouped_daily_eod_recent_completed_us_weekday",
+        "isFallback": False,
+        "isPartial": True,
+        "isUnavailable": False,
+    }
+
+    full_breadth = _row_by_id(payload, "official_or_authorized.us_market_breadth")
+    assert full_breadth["sourceType"] == "missing"
+    assert full_breadth["runtimeState"] == "missing_provider_configuration"
+    assert full_breadth["missingProviderReason"] == "authorized_us_market_breadth_feed_not_configured"
+    assert full_breadth["scoreContributionAllowed"] is False
+    assert full_breadth["scoreEligible"] is False
+
+
 def test_weak_and_proxy_providers_remain_non_score_grade() -> None:
     payload = ProviderOperationsMatrixService(env={}, spec_finder=lambda _: None).build_matrix()
 

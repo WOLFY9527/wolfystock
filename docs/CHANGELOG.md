@@ -1,4 +1,5 @@
 ## 2026-05-22
+- Provider Operations now shows Polygon grouped-daily breadth as an AD-only computed source with high/low metrics still missing.
 - Options Lab now uses scenario/readiness wording for non-decision-grade states and keeps gate-aware observation boundaries visible.
 - Settings data-source summaries and validation states now resolve localized labels instead of raw translation keys.
 - Admin user read and activity endpoints now require exact user-governance capabilities instead of coarse admin access.

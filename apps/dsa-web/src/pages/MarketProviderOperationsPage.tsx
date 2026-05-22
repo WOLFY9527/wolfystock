@@ -339,6 +339,7 @@ function matrixCacheRequired(row: ProviderOperationsMatrixRow): boolean {
 function matrixReasonCodes(row: ProviderOperationsMatrixRow): string[] {
   const reasons = [
     ...(row.routerReasonCodes || []),
+    ...(row.reasonCodes || []),
     row.missingProviderReason || null,
     row.degradationReason || null,
   ].filter((value, index, list): value is string => Boolean(value) && list.indexOf(value) === index);
@@ -413,11 +414,16 @@ function capabilityHaystack(row: ProviderOperationsMatrixRow): string[] {
     row.runtimeState,
     row.credentialState,
     row.dependencyState,
+    row.authorityBasis,
+    row.universe,
     row.missingProviderReason,
     row.degradationReason,
     ...(row.supportedCapabilities || []),
     ...(row.affectedSurfaces || []),
     ...(row.routerReasonCodes || []),
+    ...(row.reasonCodes || []),
+    ...(row.fulfilledMetrics || []),
+    ...(row.missingMetrics || []),
     ...(row.requiredSourceTiers || []),
   ]
     .map((value) => String(value || '').trim().toLowerCase())
@@ -463,6 +469,30 @@ function sourceGapBlocksScoreGrade(row: ProviderOperationsMatrixRow): boolean {
   return row.scoreEligible !== true || row.scoreContributionAllowed !== true || row.sourceAuthorityAllowed !== true;
 }
 
+function isPolygonBreadthProjection(row: ProviderOperationsMatrixRow): boolean {
+  return row.providerId === 'polygon_us_grouped_daily';
+}
+
+function sourceGapBadges(row: ProviderOperationsMatrixRow): Array<{ label: string; variant: 'neutral' | 'success' | 'caution' | 'danger' | 'info' }> {
+  if (!isPolygonBreadthProjection(row)) return [];
+  const fulfilled = new Set(row.fulfilledMetrics || []);
+  const missing = new Set(row.missingMetrics || []);
+  const badges: Array<{ label: string; variant: 'neutral' | 'success' | 'caution' | 'danger' | 'info' }> = [];
+  if (fulfilled.has('ADVANCERS') && fulfilled.has('DECLINERS')) {
+    badges.push({ label: 'AD-only', variant: 'info' });
+  }
+  if (missing.has('NEW_HIGHS') || missing.has('NEW_LOWS') || missing.has('HIGH_LOW_RATIO')) {
+    badges.push({ label: 'High/low missing', variant: 'caution' });
+  }
+  if (row.sourceFreshnessEvidence?.freshness) {
+    badges.push({ label: `EOD ${sanitizeCodeLabel(row.sourceFreshnessEvidence.freshness)}`, variant: 'neutral' });
+  }
+  if (row.coverageCount != null) {
+    badges.push({ label: `coverage ${formatNumber(row.coverageCount, 0)}`, variant: 'neutral' });
+  }
+  return badges;
+}
+
 function sourceGapRowsForCapability(rows: ProviderOperationsMatrixRow[], capability: SourceGapCapability): ProviderOperationsMatrixRow[] {
   return rows
     .filter((row) => capability.match(row))
@@ -471,7 +501,7 @@ function sourceGapRowsForCapability(rows: ProviderOperationsMatrixRow[], capabil
 }
 
 function sourceGapName(row: ProviderOperationsMatrixRow): string {
-  return row.providerName || row.providerId;
+  return row.sourceLabel || row.providerName || row.providerId;
 }
 
 function statusChipVariant(status: StatusTone): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
@@ -650,26 +680,36 @@ const SourceGapBoard: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ row
             </TerminalChip>
           </div>
           <div className="mt-3 grid gap-2">
-            {gapRows.length ? gapRows.map((row) => (
-              <div key={`${capability.id}-${row.providerId}`} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2">
-                <p className="truncate text-xs font-semibold text-white/78">{sourceGapName(row)}</p>
-                <p className="mt-1 text-[11px] leading-5 text-white/48">
-                  当前为什么不可用：{marketIntelligenceReasonLabel(row.missingProviderReason || row.degradationReason || row.runtimeState, 'zh')}
-                </p>
-                <p className="mt-1 text-[11px] leading-5 text-white/48">
-                  解锁能力：{sourceGapImpact(row)}
-                </p>
-                <p className="mt-1 text-[11px] leading-5 text-white/48">
-                  当前状态：{sourceGapCurrentState(row)}
-                </p>
-                <p className="mt-1 text-[11px] leading-5 text-white/48">
-                  所需工作：{sourceGapRequiredWork(row)}
-                </p>
-                <p className="mt-1 text-[11px] font-semibold text-amber-100/72">
-                  阻断评分级结论：{sourceGapBlocksScoreGrade(row) ? '是' : '否'}
-                </p>
-              </div>
-            )) : (
+            {gapRows.length ? gapRows.map((row) => {
+              const badges = sourceGapBadges(row);
+              return (
+                <div key={`${capability.id}-${row.providerId}`} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2">
+                  <p className="truncate text-xs font-semibold text-white/78">{sourceGapName(row)}</p>
+                  {badges.length ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {badges.map((badge) => (
+                        <TerminalChip key={`${row.providerId}-${badge.label}`} variant={badge.variant}>{badge.label}</TerminalChip>
+                      ))}
+                    </div>
+                  ) : null}
+                  <p className="mt-1 text-[11px] leading-5 text-white/48">
+                    当前为什么不可用：{marketIntelligenceReasonLabel(row.missingProviderReason || row.degradationReason || row.runtimeState, 'zh')}
+                  </p>
+                  <p className="mt-1 text-[11px] leading-5 text-white/48">
+                    解锁能力：{sourceGapImpact(row)}
+                  </p>
+                  <p className="mt-1 text-[11px] leading-5 text-white/48">
+                    当前状态：{sourceGapCurrentState(row)}
+                  </p>
+                  <p className="mt-1 text-[11px] leading-5 text-white/48">
+                    所需工作：{sourceGapRequiredWork(row)}
+                  </p>
+                  <p className="mt-1 text-[11px] font-semibold text-amber-100/72">
+                    阻断评分级结论：{sourceGapBlocksScoreGrade(row) ? '是' : '否'}
+                  </p>
+                </div>
+              );
+            }) : (
               <p className="text-[11px] leading-5 text-white/38">当前没有可见的阻断项。</p>
             )}
           </div>

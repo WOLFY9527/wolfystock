@@ -23,6 +23,16 @@ from src.services.market_data_readiness_diagnostics import (
     build_market_data_readiness_diagnostics,
 )
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
+from src.services.polygon_us_breadth_provider import (
+    POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
+    POLYGON_US_BREADTH_AUTHORITY_BASIS,
+    POLYGON_US_BREADTH_SOURCE,
+    POLYGON_US_BREADTH_SOURCE_LABEL,
+    POLYGON_US_BREADTH_SOURCE_TIER,
+    POLYGON_US_BREADTH_SOURCE_TYPE,
+    POLYGON_US_BREADTH_TRUST_LEVEL,
+    POLYGON_US_BREADTH_UNIVERSE,
+)
 from src.services.provider_capability_matrix import (
     ProviderCapability,
     ProviderCapabilitySupportContract,
@@ -65,6 +75,7 @@ _CREDENTIAL_ENV_KEYS_BY_PROVIDER = {
     "finnhub": ("FINNHUB_API_KEY", "FINNHUB_TOKEN"),
     "marketstack": ("MARKETSTACK_API_KEY",),
     "nasdaq_data_link": ("NASDAQ_DATA_LINK_API_KEY", "QUANDL_API_KEY"),
+    "polygon_us_grouped_daily": ("POLYGON_API_KEY",),
     "tushare_pro": ("TUSHARE_TOKEN",),
     "twelve_data": ("TWELVE_DATA_API_KEY",),
 }
@@ -80,6 +91,16 @@ _MISSING_FEED_PROVIDER_IDS = frozenset(
         "official_or_authorized.us_market_breadth",
     }
 )
+_NO_OPTIONAL_DEPENDENCY_PROVIDER_IDS = _MISSING_FEED_PROVIDER_IDS | {
+    "polygon_us_grouped_daily",
+}
+_POLYGON_US_BREADTH_AD_METRICS = (
+    "ADVANCERS",
+    "DECLINERS",
+    "UNCHANGED",
+    "ADVANCE_DECLINE_RATIO",
+)
+_POLYGON_US_BREADTH_HIGH_LOW_METRICS = ("NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO")
 
 
 @dataclass
@@ -99,9 +120,11 @@ class _ProviderAccumulator:
     paid_data_likely_required: bool = False
     key_required: bool = False
     no_default_live_http_calls: bool = True
+    cache_required: bool | None = None
     supported_capabilities: set[str] = field(default_factory=set)
     affected_surfaces: set[str] = field(default_factory=set)
     router_reason_codes: set[str] = field(default_factory=set)
+    reason_codes: list[str] = field(default_factory=list)
     contract_coverage_universes: set[str] = field(default_factory=set)
     contract_cadences: set[str] = field(default_factory=set)
     contract_freshness_floors: set[str] = field(default_factory=set)
@@ -111,6 +134,16 @@ class _ProviderAccumulator:
     missing_provider_reason: str | None = None
     degradation_reason: str | None = None
     remediation_hint: str | None = None
+    source_label: str | None = None
+    source_authority_allowed: bool | None = None
+    fulfilled_metrics: list[str] = field(default_factory=list)
+    missing_metrics: list[str] = field(default_factory=list)
+    authority_basis: str | None = None
+    universe: str | None = None
+    coverage_count: int | None = None
+    source_freshness_evidence: dict[str, Any] | None = None
+    official_exchange_published_breadth: bool | None = None
+    full_breadth_authority: bool | None = None
     capability_metadata_present: bool = False
     fit_metadata_present: bool = False
     support_contract_present: bool = False
@@ -184,6 +217,7 @@ class ProviderOperationsMatrixService:
             )
 
         self._merge_router_reason_codes(rows)
+        self._merge_polygon_us_breadth_projection(rows)
         self._merge_readiness(readiness, rows)
         return rows
 
@@ -347,6 +381,50 @@ class ProviderOperationsMatrixService:
                 row.router_reason_codes.update(codes)
                 row.affected_surfaces.add(use_case)
 
+    def _merge_polygon_us_breadth_projection(
+        self,
+        rows: dict[str, _ProviderAccumulator],
+    ) -> None:
+        row = self._row(rows, POLYGON_US_BREADTH_SOURCE)
+        row.provider_name = POLYGON_US_BREADTH_SOURCE_LABEL
+        row.source_label = POLYGON_US_BREADTH_SOURCE_LABEL
+        row.provider_category = "computed_breadth_projection"
+        row.source_type = POLYGON_US_BREADTH_SOURCE_TYPE
+        row.source_tier = POLYGON_US_BREADTH_SOURCE_TIER
+        row.trust_level = POLYGON_US_BREADTH_TRUST_LEVEL
+        row.freshness_expectation = "polygon_grouped_daily_eod_recent_completed_us_weekday"
+        row.runtime_state = "read_only_projection"
+        row.observation_only = False
+        row.score_contribution_allowed = True
+        row.source_authority_allowed = True
+        row.inert_metadata_only = True
+        row.paid_data_likely_required = True
+        row.key_required = True
+        row.cache_required = True
+        row.no_default_live_http_calls = True
+        row.supported_capabilities.update(
+            {
+                "us_advancers_decliners",
+                "us_market_breadth_eod_ad",
+            }
+        )
+        row.affected_surfaces.update({"market_overview", "liquidity_impulse"})
+        row.fulfilled_metrics = list(_POLYGON_US_BREADTH_AD_METRICS)
+        row.missing_metrics = list(_POLYGON_US_BREADTH_HIGH_LOW_METRICS)
+        row.reason_codes = [POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON]
+        row.authority_basis = POLYGON_US_BREADTH_AUTHORITY_BASIS
+        row.universe = POLYGON_US_BREADTH_UNIVERSE
+        row.coverage_count = None
+        row.source_freshness_evidence = {
+            "freshness": "delayed",
+            "freshnessPolicy": "polygon_grouped_daily_eod_recent_completed_us_weekday",
+            "isFallback": False,
+            "isPartial": True,
+            "isUnavailable": False,
+        }
+        row.official_exchange_published_breadth = False
+        row.full_breadth_authority = False
+
     def _merge_readiness(
         self,
         readiness: MarketDataReadinessDiagnostics,
@@ -392,6 +470,9 @@ class ProviderOperationsMatrixService:
             "providerId": row.provider_id,
             "providerName": row.provider_name
             or resolve_source_label(source=row.provider_id, source_type=source_type),
+            "sourceLabel": row.source_label
+            or row.provider_name
+            or resolve_source_label(source=row.provider_id, source_type=source_type),
             "providerCategory": row.provider_category or "metadata",
             "sourceType": source_type,
             "sourceTier": row.source_tier or source_type,
@@ -402,12 +483,14 @@ class ProviderOperationsMatrixService:
             "dependencyState": dependency_state,
             "enabledByDefault": row.enabled_by_default,
             "observationOnly": row.observation_only,
+            "sourceAuthorityAllowed": row.source_authority_allowed,
             "scoreContributionAllowed": row.score_contribution_allowed,
             "scoreEligible": score_eligible,
             "inertMetadataOnly": row.inert_metadata_only and not row.capability_metadata_present,
             "paidDataLikelyRequired": row.paid_data_likely_required,
             "keyRequired": row.key_required,
             "noDefaultLiveHttpCalls": row.no_default_live_http_calls,
+            "cacheRequired": row.cache_required,
             "contractCoverageUniverses": sorted(row.contract_coverage_universes),
             "contractCadences": sorted(row.contract_cadences),
             "contractFreshnessFloors": sorted(row.contract_freshness_floors),
@@ -417,6 +500,15 @@ class ProviderOperationsMatrixService:
             "supportedCapabilities": sorted(row.supported_capabilities),
             "affectedSurfaces": sorted(row.affected_surfaces),
             "routerReasonCodes": sorted(row.router_reason_codes),
+            "reasonCodes": list(row.reason_codes),
+            "fulfilledMetrics": list(row.fulfilled_metrics),
+            "missingMetrics": list(row.missing_metrics),
+            "authorityBasis": row.authority_basis,
+            "universe": row.universe,
+            "coverageCount": row.coverage_count,
+            "sourceFreshnessEvidence": row.source_freshness_evidence,
+            "officialExchangePublishedBreadth": row.official_exchange_published_breadth,
+            "fullBreadthAuthority": row.full_breadth_authority,
             "missingProviderReason": row.missing_provider_reason,
             "degradationReason": row.degradation_reason,
             "remediationHint": remediation_hint,
@@ -495,7 +587,11 @@ class ProviderOperationsMatrixService:
     def _dependency_state(self, row: _ProviderAccumulator) -> str:
         module_name = _OPTIONAL_MODULE_BY_PROVIDER.get(row.provider_id)
         if not module_name:
-            return "not_required" if row.provider_id in _MISSING_FEED_PROVIDER_IDS else "unknown"
+            return (
+                "not_required"
+                if row.provider_id in _NO_OPTIONAL_DEPENDENCY_PROVIDER_IDS
+                else "unknown"
+            )
         try:
             return "installed" if self.spec_finder(module_name) is not None else "missing"
         except (ImportError, ModuleNotFoundError, ValueError):

@@ -107,6 +107,7 @@ export interface MarketProviderOperationsResponse {
 export interface ProviderOperationsMatrixRow {
   providerId: string;
   providerName?: string | null;
+  sourceLabel?: string | null;
   providerCategory?: string | null;
   sourceType?: string | null;
   sourceTier?: string | null;
@@ -134,6 +135,22 @@ export interface ProviderOperationsMatrixRow {
   supportedCapabilities?: string[];
   affectedSurfaces?: string[];
   routerReasonCodes?: string[];
+  reasonCodes?: string[];
+  fulfilledMetrics?: string[];
+  missingMetrics?: string[];
+  authorityBasis?: string | null;
+  universe?: string | null;
+  coverageCount?: number | null;
+  sourceFreshnessEvidence?: {
+    freshness?: string | null;
+    freshnessPolicy?: string | null;
+    isFallback?: boolean | null;
+    isPartial?: boolean | null;
+    isUnavailable?: boolean | null;
+    [key: string]: unknown;
+  } | null;
+  officialExchangePublishedBreadth?: boolean | null;
+  fullBreadthAuthority?: boolean | null;
   missingProviderReason?: string | null;
   degradationReason?: string | null;
   remediationHint?: string | null;
