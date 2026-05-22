@@ -377,13 +377,18 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getByText('Set TUSHARE_TOKEN when local operators need Tushare-backed CN/HK market intelligence inputs.')).toBeInTheDocument();
     expect(screen.getByText('Representative US parquet files are missing for part of the requested symbol set.')).toBeInTheDocument();
     expect(screen.getByText('限制与快照摘要')).toBeInTheDocument();
-    expect(screen.getByText('Provider operations matrix')).toBeInTheDocument();
-    expect(screen.getByText('official_public.fed_liquidity')).toBeInTheDocument();
-    expect(screen.getAllByText('missing_provider_configuration').length).toBeGreaterThan(0);
-    expect(screen.getByText('cache_required')).toBeInTheDocument();
-    expect(screen.getByText('sourceAuthority=false')).toBeInTheDocument();
-    expect(screen.getByText('score=false')).toBeInTheDocument();
-    expect(screen.getByText('cache-required')).toBeInTheDocument();
+    const gapBoard = screen.getByTestId('market-provider-source-gap-board');
+    expect(gapBoard).toHaveTextContent('Source gap board');
+    expect(gapBoard).toHaveTextContent('Market direction');
+    expect(gapBoard).toHaveTextContent('Liquidity direction');
+    expect(gapBoard).toHaveTextContent('China/HK context');
+    expect(gapBoard).toHaveTextContent('Fed Liquidity');
+    expect(gapBoard).toHaveTextContent('current state');
+    expect(gapBoard).toHaveTextContent('impact');
+    expect(gapBoard).toHaveTextContent('required provider/runtime work');
+    expect(gapBoard).toHaveTextContent('blocks score-grade conclusions: yes');
+    expect(gapBoard).not.toHaveTextContent('missing_provider_configuration');
+    expect(screen.queryByText('official_public.fed_liquidity')).not.toBeInTheDocument();
     expect(screen.getAllByText('缓存状态').length).toBeGreaterThan(0);
     expect(screen.getAllByText('最近异常').length).toBeGreaterThan(0);
     expect(screen.getAllByText('查看 Admin Logs').length).toBeGreaterThan(0);
@@ -408,6 +413,16 @@ describe('MarketProviderOperationsPage', () => {
     expect(diagnosticsDisclosure).toHaveAttribute('open');
     expect(screen.getByRole('button', { name: '收起 二级细节：限制代码、快照摘要、追踪标识' })).toBeInTheDocument();
     expect(screen.getByText('cache_metadata_unavailable:rates')).toBeVisible();
+
+    const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
+    expect(matrixDisclosure).not.toHaveAttribute('open');
+    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 完整 provider matrix' }));
+    expect(matrixDisclosure).toHaveTextContent('official_public.fed_liquidity');
+    expect(matrixDisclosure).toHaveTextContent('missing_provider_configuration');
+    expect(matrixDisclosure).toHaveTextContent('cache_required');
+    expect(matrixDisclosure).toHaveTextContent('sourceAuthority=false');
+    expect(matrixDisclosure).toHaveTextContent('score=false');
+    expect(matrixDisclosure).toHaveTextContent('cache-required');
   });
 
   it('supports a compact representative symbol override for readiness checks', async () => {

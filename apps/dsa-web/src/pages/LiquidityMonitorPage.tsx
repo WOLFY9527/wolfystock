@@ -21,6 +21,7 @@ import {
   TerminalButton,
   TerminalChip,
   TerminalDenseTable,
+  TerminalDisclosure,
   TerminalGrid,
   TerminalMetric,
   TerminalNotice,
@@ -33,6 +34,7 @@ import { OfficialMacroAuthorityDiagnostics } from '../components/common/Official
 import { buildOfficialMacroAuthorityDiagnosticsView } from '../components/common/officialMacroAuthorityDiagnosticsData';
 import { formatDateTime, formatPercent, formatSignedNumber } from '../utils/format';
 import { cn } from '../utils/cn';
+import { sanitizeMarketGuidanceCopy } from '../utils/marketIntelligenceGuidance';
 
 const REGIME_LABELS: Record<LiquidityMonitorRegime, string> = {
   abundant: '充裕',
@@ -268,8 +270,8 @@ function buildEvidenceMeta(
   }
 
   if (item.source) parts.push(item.source);
-  if (item.observationOnly) parts.push('观察-only');
-  if (item.proxyOnly) parts.push('proxy-only');
+  if (item.observationOnly) parts.push('仅观察');
+  if (item.proxyOnly) parts.push('代理证据');
   if (item.scoreContributionAllowed === false) parts.push('不计分');
 
   return parts.filter(Boolean).join(' · ');
@@ -505,8 +507,12 @@ function buildCoverageReadinessSummary(
     : state === 'missing'
       ? '方向证据待返回'
       : '方向证据不足';
-  const summaryLead = state === 'insufficient' ? '当前仅有' : '当前有';
-  const summaryLine = `${summaryLead} ${scoreGradeCount} 项 score-grade 证据，${observationOnlyCount} 项仅观察，${missingOrUnavailableCount} 项缺失/不可用。`;
+  const summaryLead = state === 'insufficient'
+    ? '当前流动性方向不可完整使用'
+    : state === 'missing'
+      ? '当前流动性方向载荷未返回'
+      : '当前流动性方向可用于研究观察';
+  const summaryLine = `${summaryLead}：Score-grade evidence ${scoreGradeCount}，Observation-only evidence ${observationOnlyCount}，Missing evidence ${missingOrUnavailableCount}。`;
 
   return {
     state,
@@ -516,7 +522,7 @@ function buildCoverageReadinessSummary(
     observationOnlyCount,
     missingOrUnavailableCount,
     summaryLine,
-    blockingReasonsLine: `主要阻塞：${topBlockingReasons.length > 0 ? topBlockingReasons.join('；') : '当前没有额外阻塞。'}`,
+    blockingReasonsLine: `为什么不是完整方向结论：${topBlockingReasons.length > 0 ? topBlockingReasons.join('；') : '当前没有额外阻塞。'}`,
   };
 }
 
@@ -599,7 +605,7 @@ const LiquidityMonitorPage: React.FC = () => {
       />
 
       <TerminalNotice variant="info">
-        {data?.advisoryDisclosure || '仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。'}
+        {sanitizeMarketGuidanceCopy(data?.advisoryDisclosure, '仅用于观察市场流动性环境，非投资建议，不触发扫描、回测或组合动作。')}
       </TerminalNotice>
 
       {error ? <ApiErrorAlert error={error} /> : null}
@@ -658,10 +664,13 @@ const LiquidityMonitorPage: React.FC = () => {
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.stateLabel}</TerminalChip>
-                  <TerminalChip variant="success">{coverageSummary.scoreGradeCount} 项 score-grade</TerminalChip>
-                  <TerminalChip variant="info">{coverageSummary.observationOnlyCount} 项仅观察</TerminalChip>
+                  {coverageSummary.observationOnlyCount > 0 || coverageSummary.missingOrUnavailableCount > 0 ? (
+                    <TerminalChip variant="caution">部分可用</TerminalChip>
+                  ) : null}
+                  <TerminalChip variant="success">Score-grade evidence {coverageSummary.scoreGradeCount}</TerminalChip>
+                  <TerminalChip variant="info">Observation-only evidence {coverageSummary.observationOnlyCount}</TerminalChip>
                   <TerminalChip variant={coverageSummary.missingOrUnavailableCount > 0 ? 'caution' : 'neutral'}>
-                    {coverageSummary.missingOrUnavailableCount} 项缺失/不可用
+                    Missing evidence {coverageSummary.missingOrUnavailableCount}
                   </TerminalChip>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-white/64">{coverageSummary.summaryLine}</p>
@@ -669,9 +678,13 @@ const LiquidityMonitorPage: React.FC = () => {
               </div>
             </TerminalPanel>
 
-            <TerminalPanel>
-              <TerminalSectionHeader eyebrow="指标矩阵" title="Phase 1 监测条目" />
-              <TerminalDenseTable className="mt-4">
+            <TerminalDisclosure
+              data-testid="liquidity-monitor-indicator-disclosure"
+              title="完整指标矩阵"
+              summary={`${indicators.length} 个指标，默认折叠；上方先看方向可用性。`}
+              className="p-4"
+            >
+              <TerminalDenseTable>
                 <table className="w-full min-w-[760px] border-collapse text-left">
                   <thead className="border-b border-white/5 text-[10px] uppercase tracking-widest text-white/35">
                     <tr>
@@ -713,13 +726,13 @@ const LiquidityMonitorPage: React.FC = () => {
                   </tbody>
                 </table>
               </TerminalDenseTable>
-            </TerminalPanel>
+            </TerminalDisclosure>
           </div>
 
           <div className="flex flex-col gap-4 xl:col-span-4">
             <OfficialMacroAuthorityDiagnostics
               testId="liquidity-monitor-official-macro-diagnostics"
-              title="Authority diagnostics"
+              title="来源覆盖诊断"
               view={officialMacroDiagnostics}
             />
 

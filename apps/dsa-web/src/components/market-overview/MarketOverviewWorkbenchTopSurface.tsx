@@ -5,11 +5,12 @@ import {
   ConsoleStatusStrip,
   KeyLevelStrip,
 } from '../linear';
-import { TerminalChip, TerminalDenseList, TerminalNotice, TerminalPanel, TerminalSectionHeader } from '../terminal';
+import { TerminalChip, TerminalDenseList, TerminalDisclosure, TerminalNotice, TerminalPanel, TerminalSectionHeader } from '../terminal';
 import { cn } from '../../utils/cn';
 import { MarketRegimeSynthesisHeader, type MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
 import { OfficialMacroAuthorityDiagnostics } from '../common/OfficialMacroAuthorityDiagnostics';
 import type { OfficialMacroAuthorityDiagnosticsView } from '../common/officialMacroAuthorityDiagnosticsData';
+import { marketIntelligenceReasonLabel, marketIntelligenceReasonLabels } from '../../utils/marketIntelligenceGuidance';
 
 export type MarketOverviewDecisionChipView = {
   label: string;
@@ -258,7 +259,7 @@ const MarketDirectionReadinessStrip: React.FC<{
             data-testid="market-direction-readiness-reasons"
             className="min-w-0 break-words font-mono text-[10px] leading-4 text-amber-100/62 lg:max-w-[48%] lg:text-right"
           >
-            {view.blockingReasons.slice(0, 3).join(' · ')}
+            {marketIntelligenceReasonLabels(view.blockingReasons, 'zh', 3).join(' · ')}
           </p>
         ) : null}
       </div>
@@ -270,7 +271,7 @@ const MarketDirectionReadinessStrip: React.FC<{
               className="max-w-full truncate rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1"
             >
               {pillar.label}
-              {pillar.reasonCode && pillar.reasonCode !== 'score_grade_evidence' ? ` · ${pillar.reasonCode}` : ''}
+              {pillar.reasonCode && pillar.reasonCode !== 'score_grade_evidence' ? ` · ${marketIntelligenceReasonLabel(pillar.reasonCode)}` : ''}
             </span>
           ))}
         </div>
@@ -289,6 +290,20 @@ const MarketDecisionSemanticsStrip: React.FC<{
     return null;
   }
 
+  const supportingEvidence = [
+    ...view.styleTilts.slice(0, 1),
+    ...view.confirmationSignals,
+  ].slice(0, 3);
+  const counterEvidence = view.counterEvidence.slice(0, 3);
+  const missingEvidence = view.dataGaps.slice(0, 5);
+  const watchNext = (view.invalidationTriggers.length ? view.invalidationTriggers : view.dataGaps).slice(0, 3);
+  const capReasonLabels = marketIntelligenceReasonLabels(view.capReasons, 'zh', 3);
+  const rawDebugCodes = [
+    ...view.capReasons,
+    ...(view.directionReadiness?.blockingReasons || []),
+    ...view.claimBoundaries.map((boundary) => boundary.reasonCode || '').filter(Boolean),
+  ];
+
   return (
     <section
       data-testid="market-decision-semantics-strip"
@@ -300,6 +315,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
     >
       <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">
         <div className="min-w-0">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/36">当前市场观察</p>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <TerminalChip
               data-testid="market-decision-semantics-posture-chip"
@@ -321,8 +337,8 @@ const MarketDecisionSemanticsStrip: React.FC<{
               {view.notInvestmentAdvice ? '非投资建议' : '仅观察'} · {view.insufficient ? '可靠证据不足' : '观察姿态，仅作证据边界说明'}
             </p>
             {view.capReasons.length ? (
-              <p data-testid="market-decision-semantics-cap-reasons" className="mt-1 break-words font-mono text-white/44">
-                {view.capReasons.join(' · ')}
+              <p data-testid="market-decision-semantics-cap-reasons" className="mt-1 break-words text-white/48">
+                {capReasonLabels.join(' · ')}
               </p>
             ) : null}
             <MarketDirectionReadinessStrip view={view.directionReadiness} />
@@ -341,42 +357,48 @@ const MarketDecisionSemanticsStrip: React.FC<{
                   )}
                 >
                   {boundary.label} · {boundary.allowed ? '允许' : '禁止'}
-                  {boundary.reasonCode ? ` · ${boundary.reasonCode}` : ''}
+                  {boundary.reasonCode ? ` · ${marketIntelligenceReasonLabel(boundary.reasonCode)}` : ''}
                 </span>
               ))}
             </div>
+            <TerminalDisclosure
+              data-testid="market-decision-debug-details"
+              title="原始诊断代码"
+              summary="默认折叠"
+              className="mt-3 bg-black/10"
+            >
+              <TerminalDenseList className="font-mono text-[10px] leading-4 text-white/46">
+                {rawDebugCodes.length ? rawDebugCodes.map((code, index) => (
+                  <span key={`${code}-${index}`}>{code}</span>
+                )) : <span>no_raw_codes</span>}
+              </TerminalDenseList>
+            </TerminalDisclosure>
           </div>
         </div>
         <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           <MarketDecisionSemanticsList
-            testId="market-decision-semantics-style-tilts"
-            label="Style"
-            emptyLabel="无风格倾向"
-            items={view.styleTilts}
-          />
-          <MarketDecisionSemanticsList
-            testId="market-decision-semantics-confirmations"
-            label="Confirm"
-            emptyLabel="等待确认信号"
-            items={view.confirmationSignals}
-          />
-          <MarketDecisionSemanticsList
-            testId="market-decision-semantics-invalidations"
-            label="Invalidate"
-            emptyLabel="暂无失效条件"
-            items={view.invalidationTriggers}
+            testId="market-decision-semantics-supporting-evidence"
+            label="支持证据"
+            emptyLabel="等待评分级支持证据"
+            items={supportingEvidence}
           />
           <MarketDecisionSemanticsList
             testId="market-decision-semantics-counter-evidence"
-            label="Counter"
+            label="反证"
             emptyLabel="暂无反证"
-            items={view.counterEvidence}
+            items={counterEvidence}
           />
           <MarketDecisionSemanticsList
             testId="market-decision-semantics-data-gaps"
-            label="Gaps"
+            label="缺失证据"
             emptyLabel="暂无显式缺口"
-            items={view.dataGaps}
+            items={missingEvidence}
+          />
+          <MarketDecisionSemanticsList
+            testId="market-decision-semantics-watch-next"
+            label="后续观察"
+            emptyLabel="等待下一项可验证信号"
+            items={watchNext}
           />
         </div>
       </div>
@@ -644,7 +666,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
             <div className="border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4">
               <OfficialMacroAuthorityDiagnostics
                 testId="market-overview-official-macro-diagnostics"
-                title="Authority diagnostics"
+                title="来源覆盖诊断"
                 view={officialMacroDiagnostics}
               />
             </div>

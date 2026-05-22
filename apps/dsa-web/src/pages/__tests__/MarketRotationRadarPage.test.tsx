@@ -548,11 +548,17 @@ describe('MarketRotationRadarPage', () => {
     expect(panel).toHaveTextContent('IWM');
     expect(panel).toHaveTextContent('IGV');
     expect(panel).toHaveTextContent('SPY');
-    expect(panel).toHaveTextContent('bounded_etf_authority_active');
+    expect(panel).toHaveTextContent('Bounded ETF authority active');
+    expect(panel).not.toHaveTextContent('bounded_etf_authority_active');
     expect(panel).toHaveTextContent('Authority 6/6');
     expect(panel).toHaveTextContent('Score-Eligible 6/6');
     expect(panel.textContent || '').not.toMatch(/headline eligible|top theme|bullish|risk-on/i);
     expect(panel.textContent || '').not.toMatch(forbiddenTradingActionPattern);
+
+    const debug = within(panel).getByTestId('rotation-etf-raw-reason-codes');
+    expect(debug).not.toHaveAttribute('open');
+    fireEvent.click(within(debug).getByRole('button', { name: '展开 原始 reason codes' }));
+    expect(debug).toHaveTextContent('bounded_etf_authority_active');
   });
 
   it('keeps shell spacing on TerminalPageShell with the shared desktop rhythm', async () => {
@@ -692,15 +698,23 @@ describe('MarketRotationRadarPage', () => {
 
     render(<MarketRotationRadarPage />);
 
+    expect(await screen.findByTestId('rotation-radar-guidance')).toHaveTextContent('Theme library only / not a live rotation signal');
     const panel = await screen.findByTestId('rotation-radar-etf-leadership-panel');
     expect(panel).toHaveTextContent('Disabled');
-    expect(panel).toHaveTextContent('missing_required_windows');
-    expect(panel).toHaveTextContent('ineligible_bounded_etf');
+    expect(panel).toHaveTextContent('Required ETF windows are missing');
+    expect(panel).toHaveTextContent('Bounded ETF set is not eligible');
+    expect(panel).not.toHaveTextContent('missing_required_windows');
+    expect(panel).not.toHaveTextContent('ineligible_bounded_etf');
     expect(panel).toHaveTextContent('Authority 0/1');
     expect(panel).toHaveTextContent('Score-Eligible 0/1');
     expect(panel).not.toHaveTextContent('leadingSymbols');
     expect(panel.textContent || '').not.toMatch(/bullish|risk-on|outperform breakout/i);
     expect(panel.textContent || '').not.toMatch(forbiddenTradingActionPattern);
+
+    const debug = within(panel).getByTestId('rotation-etf-raw-reason-codes');
+    fireEvent.click(within(debug).getByRole('button', { name: '展开 原始 reason codes' }));
+    expect(debug).toHaveTextContent('missing_required_windows');
+    expect(debug).toHaveTextContent('ineligible_bounded_etf');
   });
 
   it('renders proxy-only evidence chips without real fund-flow claims', async () => {
@@ -822,9 +836,9 @@ describe('MarketRotationRadarPage', () => {
     expect(mechanics).toHaveAttribute('data-terminal-primitive', 'disclosure');
     expect(mechanics).toHaveTextContent('证据边界 / 来源说明');
     expect(mechanics).not.toHaveAttribute('open');
-    expect(screen.queryByText('不代表实时买卖信号，不触发交易、通知、组合或新的外部数据请求。')).not.toBeInTheDocument();
+    expect(screen.queryByText('不代表实时方向建议，不触发交易、通知、组合或新的外部数据请求。')).not.toBeInTheDocument();
     fireEvent.click(within(mechanics).getByRole('button', { name: '展开 证据边界 / 来源说明' }));
-    expect(screen.getByText('不代表实时买卖信号，不触发交易、通知、组合或新的外部数据请求。')).toBeInTheDocument();
+    expect(screen.getByText('不代表实时方向建议，不触发交易、通知、组合或新的外部数据请求。')).toBeInTheDocument();
     expect(mechanics).not.toHaveTextContent('schemaVersion');
   });
 });

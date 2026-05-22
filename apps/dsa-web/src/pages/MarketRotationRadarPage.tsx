@@ -40,6 +40,7 @@ import { formatDateTime } from '../utils/format';
 import { cn } from '../utils/cn';
 import { normalizeRotationEvidence } from '../utils/evidenceDisplay';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
+import { marketIntelligenceReasonLabel, sanitizeMarketGuidanceCopy } from '../utils/marketIntelligenceGuidance';
 
 const TOP_THEME_LIMIT = 10;
 const MARKET_OPTIONS = [
@@ -346,19 +347,19 @@ function shouldAllowMoneyFlowLanguage(theme?: MarketRotationTheme | null): boole
 }
 
 function conservativeFlowCopy(value?: string | null, allowMoneyFlowLanguage = false): string {
-  const fallback = '仅用于观察主题轮动与相对强弱，非买卖建议。';
+  const fallback = '仅用于观察主题轮动与相对强弱，非投资建议。';
   const text = String(value || '').trim();
   if (!text) return fallback;
   if (allowMoneyFlowLanguage) {
-    return sanitizeRotationText(text, fallback);
+    return sanitizeMarketGuidanceCopy(sanitizeRotationText(text, fallback), fallback);
   }
-  return sanitizeRotationText(
+  return sanitizeMarketGuidanceCopy(sanitizeRotationText(
     text
       .replaceAll('资金流向', '主题强弱')
       .replaceAll('资金轮动', '主题轮动')
       .replaceAll('资金流', '流向'),
     fallback,
-  );
+  ), fallback);
 }
 
 function compactConfidence(value?: number | null): string {
@@ -409,7 +410,7 @@ function isInternalRotationIssue(value?: string | null): boolean {
 function sanitizeRotationText(value?: string | null, fallback = '数据不足，结论仅供观察'): string {
   const text = String(value || '').trim();
   if (!text) return fallback;
-  return isInternalRotationIssue(text) ? sanitizeUserFacingDataIssue(text, 'zh') : text;
+  return sanitizeMarketGuidanceCopy(isInternalRotationIssue(text) ? sanitizeUserFacingDataIssue(text, 'zh') : text, fallback);
 }
 
 function sanitizeRotationNotes(notes?: string[]): string[] {
@@ -557,6 +558,8 @@ const EtfLeadershipDiagnosticsPanel: React.FC<{
   const enabled = diagnostics.enabled;
   const evidence = summarizeEtfEvidence(diagnostics);
   const reasonCodes = diagnostics.reasonCodes.length ? diagnostics.reasonCodes : ['fail_closed'];
+  const reasonLabels = marketIntelligenceReasonLabelsForRotation(reasonCodes);
+  const rawReasonCodes = Array.from(new Set([...reasonCodes, ...evidence.uniqueReasons].filter(Boolean)));
   return (
     <div data-testid="rotation-radar-etf-leadership-panel" className="min-w-0 px-1 py-3">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
@@ -598,22 +601,89 @@ const EtfLeadershipDiagnosticsPanel: React.FC<{
       </div>
 
       <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
-        {reasonCodes.map((code) => (
-          <TerminalChip key={code} variant={enabled ? 'info' : 'caution'}>{code}</TerminalChip>
+        {reasonLabels.map((label) => (
+          <TerminalChip key={label} variant={enabled ? 'info' : 'caution'}>{label}</TerminalChip>
         ))}
       </div>
 
       <TerminalNotice variant={enabled ? 'info' : 'caution'} className="mt-3 text-[11px] leading-5 text-white/56">
         {enabled
           ? `Evidence summary: Authority ${evidence.authorityAllowed}/${evidence.total}, Score-Eligible ${evidence.scoreEligible}/${evidence.total}, Source ${evidence.sourceLabel}.`
-          : `Fail-closed: reasonCodes 已保留展示。Authority ${evidence.authorityAllowed}/${evidence.total || 0}，Score-Eligible ${evidence.scoreEligible}/${evidence.total || 0}。`}
+          : `Fail-closed until ETF windows and authority checks pass. Authority ${evidence.authorityAllowed}/${evidence.total || 0}，Score-Eligible ${evidence.scoreEligible}/${evidence.total || 0}。`}
       </TerminalNotice>
-      {!enabled && evidence.uniqueReasons.length ? (
-        <p className="mt-2 text-[11px] leading-5 text-white/42">
-          Evidence row reasonCodes: {evidence.uniqueReasons.join(', ')}
-        </p>
-      ) : null}
+      <TerminalDisclosure
+        data-testid="rotation-etf-raw-reason-codes"
+        title="原始 reason codes"
+        summary="默认折叠"
+        className="mt-3 bg-black/10"
+      >
+        <div className="flex min-w-0 flex-wrap gap-1.5">
+          {rawReasonCodes.map((code) => (
+            <TerminalChip key={code} variant="neutral">{code}</TerminalChip>
+          ))}
+        </div>
+      </TerminalDisclosure>
     </div>
+  );
+};
+
+function marketIntelligenceReasonLabelsForRotation(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values
+    .map((value) => marketIntelligenceReasonLabel(value, 'en'))
+    .filter((label) => {
+      if (seen.has(label)) return false;
+      seen.add(label);
+      return true;
+    });
+}
+
+function rotationGuidance(payload: MarketRotationRadarResponse): {
+  title: string;
+  detail: string;
+  variant: 'neutral' | 'info' | 'caution' | 'danger';
+} {
+  const themes = payload.themes || [];
+  const taxonomyOnly = themes.length > 0 && themes.every(isTaxonomyOnlyTheme);
+  const hasRealFlowSignal = themes.some((theme) => resolveSignalType(theme) === 'real_flow' && theme.flowLanguageAllowed);
+  const etfDisabled = payload.etfLeadershipDiagnostics?.enabled === false;
+
+  if (taxonomyOnly || etfDisabled) {
+    return {
+      title: 'Theme library only / not a live rotation signal',
+      detail: taxonomyOnly
+        ? '当前仅展示静态主题库与分类上下文；缺少行情、ETF authority 或真实流向证据时，不展示为机会排名。'
+        : 'ETF authority / flow evidence is disabled, so the page remains a theme library and evidence gap view.',
+      variant: 'caution',
+    };
+  }
+
+  if (!hasRealFlowSignal) {
+    return {
+      title: 'Relative-strength context / not real flow confirmation',
+      detail: '当前可以观察报价支持的相对强弱，但不能升级为真实资金流或主题轮动结论。',
+      variant: 'info',
+    };
+  }
+
+  return {
+    title: 'Rotation evidence available for observation',
+    detail: '存在通过来源权限和评分门槛的轮动证据；页面仍只展示研究观察，不生成投资建议。',
+    variant: 'info',
+  };
+}
+
+const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> = ({ payload }) => {
+  const guidance = rotationGuidance(payload);
+  return (
+    <TerminalNotice
+      data-testid="rotation-radar-guidance"
+      variant={guidance.variant}
+      className="text-sm leading-6"
+    >
+      <span className="font-semibold text-white/82">{guidance.title}</span>
+      <span className="ml-2 text-white/56">{guidance.detail}</span>
+    </TerminalNotice>
   );
 };
 
@@ -1330,6 +1400,8 @@ const MarketRotationRadarPage: React.FC = () => {
               onRefresh={() => void loadRadar()}
             />
 
+            <RotationGuidancePanel payload={payload} />
+
             <SummaryBand payload={payload} />
 
             <LaneBand themes={payload.themes || []} />
@@ -1456,7 +1528,7 @@ const MarketRotationRadarPage: React.FC = () => {
                 <Gauge className="h-4 w-4 text-cyan-200/70" aria-hidden="true" />
                 <span>当前页面优先解释主题轮动、相对强弱与代理证据边界，不自动放大为真实资金流结论。</span>
                 <Signal className="ml-2 h-4 w-4 text-emerald-200/70" aria-hidden="true" />
-                <span>不代表实时买卖信号，不触发交易、通知、组合或新的外部数据请求。</span>
+                <span>不代表实时方向建议，不触发交易、通知、组合或新的外部数据请求。</span>
                 <Waves className="ml-2 h-4 w-4 text-white/40" aria-hidden="true" />
                 <span>{conservativeFlowCopy(payload.noAdviceDisclosure, shouldAllowMoneyFlowLanguage(selectedTheme))}</span>
               </div>

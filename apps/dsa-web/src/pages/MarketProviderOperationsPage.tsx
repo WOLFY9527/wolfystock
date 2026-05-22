@@ -36,6 +36,7 @@ import type { MarketProviderHealthStatus } from '../api/marketOverview';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { cn } from '../utils/cn';
 import { formatDateTime, formatNumber, formatPercent } from '../utils/format';
+import { marketIntelligenceReasonLabel } from '../utils/marketIntelligenceGuidance';
 
 type StatusTone = 'live' | 'cache' | 'stale' | 'fallback' | 'partial' | 'unavailable' | 'error' | 'refreshing';
 type TickflowProjection = {
@@ -344,6 +345,137 @@ function matrixReasonCodes(row: ProviderOperationsMatrixRow): string[] {
   return reasons.slice(0, 4);
 }
 
+type SourceGapCapability = {
+  id: string;
+  title: string;
+  match: (row: ProviderOperationsMatrixRow) => boolean;
+};
+
+const SOURCE_GAP_CAPABILITIES: SourceGapCapability[] = [
+  {
+    id: 'marketDirection',
+    title: 'Market direction',
+    match: (row) => capabilityHaystack(row).some((value) => (
+      value.includes('market_overview')
+      || value.includes('fed_liquidity')
+      || value.includes('macro')
+      || value.includes('rates')
+      || value.includes('credit')
+    )),
+  },
+  {
+    id: 'liquidityDirection',
+    title: 'Liquidity direction',
+    match: (row) => capabilityHaystack(row).some((value) => (
+      value.includes('liquidity_monitor')
+      || value.includes('liquidity_impulse')
+      || value.includes('liquidity')
+      || value.includes('funding')
+    )),
+  },
+  {
+    id: 'themeRotation',
+    title: 'Theme rotation',
+    match: (row) => capabilityHaystack(row).some((value) => (
+      value.includes('rotation')
+      || value.includes('theme')
+      || value.includes('etf')
+      || value.includes('flow')
+    )),
+  },
+  {
+    id: 'chinaHkContext',
+    title: 'China/HK context',
+    match: (row) => capabilityHaystack(row).some((value) => (
+      value.includes('cn')
+      || value.includes('hk')
+      || value.includes('china')
+      || value.includes('tushare')
+      || value.includes('tickflow')
+      || value.includes('baostock')
+    )),
+  },
+  {
+    id: 'futuresRisk',
+    title: 'Futures/risk confirmation',
+    match: (row) => capabilityHaystack(row).some((value) => (
+      value.includes('futures')
+      || value.includes('risk')
+      || value.includes('volatility')
+      || value.includes('vix')
+      || value.includes('options')
+    )),
+  },
+];
+
+function capabilityHaystack(row: ProviderOperationsMatrixRow): string[] {
+  return [
+    row.providerId,
+    row.providerName,
+    row.providerCategory,
+    row.sourceType,
+    row.sourceTier,
+    row.trustLevel,
+    row.runtimeState,
+    row.credentialState,
+    row.dependencyState,
+    row.missingProviderReason,
+    row.degradationReason,
+    ...(row.supportedCapabilities || []),
+    ...(row.affectedSurfaces || []),
+    ...(row.routerReasonCodes || []),
+    ...(row.requiredSourceTiers || []),
+  ]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function sourceGapCurrentState(row: ProviderOperationsMatrixRow): string {
+  const reasons = matrixReasonCodes(row);
+  const primary = row.runtimeState || row.credentialState || row.dependencyState || row.degradationReason || reasons[0];
+  return marketIntelligenceReasonLabel(primary, 'en');
+}
+
+function sourceGapImpact(row: ProviderOperationsMatrixRow): string {
+  if (row.sourceAuthorityAllowed === false) {
+    return 'Source authority is not available for score-grade conclusions.';
+  }
+  if (row.scoreContributionAllowed === false || row.scoreEligible === false) {
+    return 'Evidence can remain visible, but cannot support score-grade conclusions.';
+  }
+  if (row.observationOnly) {
+    return 'Evidence is observation-only until provider coverage and freshness gates pass.';
+  }
+  return 'Provider can support the capability once runtime coverage remains healthy.';
+}
+
+function sourceGapRequiredWork(row: ProviderOperationsMatrixRow): string {
+  if (row.credentialState === 'missing' || row.keyRequired) {
+    return 'Configure the required credential through the existing runtime path.';
+  }
+  if (row.runtimeState === 'missing_provider_configuration' || row.missingProviderReason) {
+    return 'Configure the existing provider/runtime contract and satisfy cache freshness gates.';
+  }
+  if (row.dependencyState === 'dependency_missing') {
+    return 'Install or enable the existing dependency before runtime evidence can be used.';
+  }
+  if (matrixCacheRequired(row)) {
+    return 'Populate the approved cache path and keep freshness above the configured floor.';
+  }
+  return 'Keep provider runtime, cache, and authority gates passing.';
+}
+
+function sourceGapBlocksScoreGrade(row: ProviderOperationsMatrixRow): boolean {
+  return row.scoreEligible !== true || row.scoreContributionAllowed !== true || row.sourceAuthorityAllowed !== true;
+}
+
+function sourceGapRowsForCapability(rows: ProviderOperationsMatrixRow[], capability: SourceGapCapability): ProviderOperationsMatrixRow[] {
+  return rows
+    .filter((row) => capability.match(row))
+    .filter((row) => sourceGapBlocksScoreGrade(row) || row.sourceType === 'missing' || row.inertMetadataOnly)
+    .slice(0, 4);
+}
+
 function statusChipVariant(status: StatusTone): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
   if (status === 'live') return 'success';
   if (status === 'cache' || status === 'refreshing' || status === 'partial') return 'info';
@@ -504,6 +636,48 @@ const ReadOnlyBadges: React.FC<{ response?: MarketProviderOperationsResponse | n
   );
 };
 
+const SourceGapBoard: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ rows }) => (
+  <div data-testid="market-provider-source-gap-board" className="mt-4 grid min-w-0 gap-3 xl:grid-cols-5">
+    {SOURCE_GAP_CAPABILITIES.map((capability) => {
+      const gapRows = sourceGapRowsForCapability(rows, capability);
+      return (
+        <TerminalNestedBlock key={capability.id} className="min-w-0 bg-black/10">
+          <div className="flex min-w-0 items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">Source gap board</p>
+              <p className="mt-1 truncate text-sm font-semibold text-white/82">{capability.title}</p>
+            </div>
+            <TerminalChip variant={gapRows.length ? 'caution' : 'success'}>
+              {gapRows.length ? `${gapRows.length} gaps` : 'clear'}
+            </TerminalChip>
+          </div>
+          <div className="mt-3 grid gap-2">
+            {gapRows.length ? gapRows.map((row) => (
+              <div key={`${capability.id}-${row.providerId}`} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2">
+                <p className="truncate text-xs font-semibold text-white/78">{row.providerName || row.providerId}</p>
+                <p className="mt-1 text-[11px] leading-5 text-white/48">
+                  current state: {sourceGapCurrentState(row)}
+                </p>
+                <p className="mt-1 text-[11px] leading-5 text-white/48">
+                  impact: {sourceGapImpact(row)}
+                </p>
+                <p className="mt-1 text-[11px] leading-5 text-white/48">
+                  required provider/runtime work: {sourceGapRequiredWork(row)}
+                </p>
+                <p className="mt-1 text-[11px] font-semibold text-amber-100/72">
+                  blocks score-grade conclusions: {sourceGapBlocksScoreGrade(row) ? 'yes' : 'no'}
+                </p>
+              </div>
+            )) : (
+              <p className="text-[11px] leading-5 text-white/38">No blocking source gap is visible for this capability.</p>
+            )}
+          </div>
+        </TerminalNestedBlock>
+      );
+    })}
+  </div>
+);
+
 const ProviderOperationsMatrixPanel: React.FC<{
   response: ProviderOperationsMatrixResponse | null;
   isLoading: boolean;
@@ -515,8 +689,8 @@ const ProviderOperationsMatrixPanel: React.FC<{
   return (
     <TerminalPanel as="section" className="col-span-12">
       <TerminalSectionHeader
-        eyebrow="静态契约"
-        title="Provider operations matrix"
+        eyebrow="能力缺口"
+        title="Source gap board"
         action={(
           <div className="flex flex-wrap gap-1.5">
             <TerminalChip variant="neutral">{formatNumber(summary.totalRows, 0)} rows</TerminalChip>
@@ -526,8 +700,9 @@ const ProviderOperationsMatrixPanel: React.FC<{
         )}
       />
       <p className="mt-2 text-[11px] leading-5 text-white/42">
-        只显示 provider/source 标识、source type/tier、runtime/readiness code、cache/gate 标记与 reason code；不展示 secret、原始 URL、原始 payload 或本地路径。
+        先按产品能力看缺口会解锁什么，再展开完整 provider matrix。缺口说明不触发 provider runtime，不展示 secret、原始 URL、原始 payload 或本地路径。
       </p>
+      <p className="mt-4 text-xs font-semibold text-white/54">Provider operations matrix</p>
 
       {error ? <ApiErrorAlert error={error} className="mt-4" /> : null}
 
@@ -544,75 +719,83 @@ const ProviderOperationsMatrixPanel: React.FC<{
       ) : null}
 
       {!isLoading && rows.length ? (
-        <div className="mt-4">
-          <TerminalDenseTable>
-            <table className="min-w-full table-fixed">
-              <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
-                <tr className="border-b border-white/5 text-left">
-                  <th className="px-3 py-3 font-medium">Provider</th>
-                  <th className="px-3 py-3 font-medium">Source</th>
-                  <th className="px-3 py-3 font-medium">Readiness</th>
-                  <th className="px-3 py-3 font-medium">Gates</th>
-                  <th className="px-3 py-3 font-medium">Reason codes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const reasonCodes = matrixReasonCodes(row);
-                  return (
-                    <tr key={row.providerId} className="border-b border-white/[0.04] align-top">
-                      <td className="px-3 py-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-white">{row.providerName || row.providerId}</p>
-                          <p className="mt-1 truncate font-mono text-[11px] text-white/42">{row.providerId}</p>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-1.5">
-                          {row.sourceType ? <TerminalChip variant="neutral">{sanitizeCodeLabel(row.sourceType)}</TerminalChip> : null}
-                          {row.sourceTier ? <TerminalChip variant="neutral">{sanitizeCodeLabel(row.sourceTier)}</TerminalChip> : null}
-                        </div>
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-1.5">
-                          {row.runtimeState ? <TerminalChip variant={matrixStateVariant(row.runtimeState)}>{sanitizeCodeLabel(row.runtimeState)}</TerminalChip> : null}
-                          {row.credentialState ? <TerminalChip variant={matrixStateVariant(row.credentialState)}>{sanitizeCodeLabel(row.credentialState)}</TerminalChip> : null}
-                          {row.dependencyState ? <TerminalChip variant={matrixStateVariant(row.dependencyState)}>{sanitizeCodeLabel(row.dependencyState)}</TerminalChip> : null}
-                        </div>
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-1.5">
-                          <TerminalChip variant={matrixCacheRequired(row) ? 'info' : 'neutral'}>
-                            {matrixCacheRequired(row) ? 'cache-required' : 'cache-optional'}
-                          </TerminalChip>
-                          <TerminalChip variant={matrixGateVariant(row.scoreContributionAllowed)}>
-                            {matrixGateLabel('score', row.scoreContributionAllowed === true)}
-                          </TerminalChip>
-                          {typeof row.sourceAuthorityAllowed === 'boolean' ? (
-                            <TerminalChip variant={matrixGateVariant(row.sourceAuthorityAllowed)}>
-                              {matrixGateLabel('sourceAuthority', row.sourceAuthorityAllowed)}
-                            </TerminalChip>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="px-3 py-3">
-                        {reasonCodes.length ? (
-                          <div className="flex flex-wrap gap-1.5">
-                            {reasonCodes.map((reason) => (
-                              <TerminalChip key={`${row.providerId}-${reason}`} variant="caution">{sanitizeCodeLabel(reason)}</TerminalChip>
-                            ))}
+        <>
+          <SourceGapBoard rows={rows} />
+          <TerminalDisclosure
+            data-testid="market-provider-matrix-disclosure"
+            title="完整 provider matrix"
+            summary="默认折叠，保留 source/type/runtime/gate/reason code 原始诊断"
+            className="mt-2 bg-black/10"
+          >
+            <TerminalDenseTable>
+              <table className="min-w-full table-fixed">
+                <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
+                  <tr className="border-b border-white/5 text-left">
+                    <th className="px-3 py-3 font-medium">Provider</th>
+                    <th className="px-3 py-3 font-medium">Source</th>
+                    <th className="px-3 py-3 font-medium">Readiness</th>
+                    <th className="px-3 py-3 font-medium">Gates</th>
+                    <th className="px-3 py-3 font-medium">Reason codes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => {
+                    const reasonCodes = matrixReasonCodes(row);
+                    return (
+                      <tr key={row.providerId} className="border-b border-white/[0.04] align-top">
+                        <td className="px-3 py-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-white">{row.providerName || row.providerId}</p>
+                            <p className="mt-1 truncate font-mono text-[11px] text-white/42">{row.providerId}</p>
                           </div>
-                        ) : (
-                          <p className="text-[11px] text-white/42">暂无数据</p>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </TerminalDenseTable>
-        </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-wrap gap-1.5">
+                            {row.sourceType ? <TerminalChip variant="neutral">{sanitizeCodeLabel(row.sourceType)}</TerminalChip> : null}
+                            {row.sourceTier ? <TerminalChip variant="neutral">{sanitizeCodeLabel(row.sourceTier)}</TerminalChip> : null}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-wrap gap-1.5">
+                            {row.runtimeState ? <TerminalChip variant={matrixStateVariant(row.runtimeState)}>{sanitizeCodeLabel(row.runtimeState)}</TerminalChip> : null}
+                            {row.credentialState ? <TerminalChip variant={matrixStateVariant(row.credentialState)}>{sanitizeCodeLabel(row.credentialState)}</TerminalChip> : null}
+                            {row.dependencyState ? <TerminalChip variant={matrixStateVariant(row.dependencyState)}>{sanitizeCodeLabel(row.dependencyState)}</TerminalChip> : null}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-wrap gap-1.5">
+                            <TerminalChip variant={matrixCacheRequired(row) ? 'info' : 'neutral'}>
+                              {matrixCacheRequired(row) ? 'cache-required' : 'cache-optional'}
+                            </TerminalChip>
+                            <TerminalChip variant={matrixGateVariant(row.scoreContributionAllowed)}>
+                              {matrixGateLabel('score', row.scoreContributionAllowed === true)}
+                            </TerminalChip>
+                            {typeof row.sourceAuthorityAllowed === 'boolean' ? (
+                              <TerminalChip variant={matrixGateVariant(row.sourceAuthorityAllowed)}>
+                                {matrixGateLabel('sourceAuthority', row.sourceAuthorityAllowed)}
+                              </TerminalChip>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          {reasonCodes.length ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {reasonCodes.map((reason) => (
+                                <TerminalChip key={`${row.providerId}-${reason}`} variant="caution">{sanitizeCodeLabel(reason)}</TerminalChip>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-white/42">暂无数据</p>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </TerminalDenseTable>
+          </TerminalDisclosure>
+        </>
       ) : null}
     </TerminalPanel>
   );

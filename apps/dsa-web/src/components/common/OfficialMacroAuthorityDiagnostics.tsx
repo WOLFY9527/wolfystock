@@ -13,8 +13,9 @@ export const OfficialMacroAuthorityDiagnostics: React.FC<{
   const officialCount = countRowsWithChip('Official');
   const proxyCount = countRowsWithChip('Proxy-only');
   const fallbackCount = countRowsWithChip('Fallback');
-  const unavailableCount = countRowsWithChip('Unavailable');
   const rejectedCount = countRowsWithChip('Rejected');
+  const observationOnlyCount = countRowsWithChip('Observation-only');
+  const scoreEligibleCount = countRowsWithChip('Score-eligible');
   const gapCount = view.rows.filter((row) => row.missing).length;
   const hasGapsOrRejections = gapCount > 0 || rejectedCount > 0;
 
@@ -25,29 +26,28 @@ export const OfficialMacroAuthorityDiagnostics: React.FC<{
           <TerminalSectionHeader
             eyebrow="官方宏观"
             title={title}
-            action={<TerminalChip variant="neutral">{`${resolvedCount} / ${view.scopeSeries.length}`}</TerminalChip>}
+            action={<TerminalChip variant="neutral">{`覆盖 ${resolvedCount}/${view.scopeSeries.length}`}</TerminalChip>}
           />
 
           <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
-            <TerminalChip variant="success">Official {officialCount}</TerminalChip>
-            <TerminalChip variant="caution">Proxy {proxyCount}</TerminalChip>
-            <TerminalChip variant="caution">Fallback {fallbackCount}</TerminalChip>
-            <TerminalChip variant="caution">Unavailable {unavailableCount}</TerminalChip>
+            <TerminalChip variant="success">评分级证据 {scoreEligibleCount}</TerminalChip>
+            <TerminalChip variant="info">官方覆盖 {officialCount}</TerminalChip>
+            <TerminalChip variant="caution">代理/观察 {proxyCount + observationOnlyCount}</TerminalChip>
+            <TerminalChip variant="caution">备用 {fallbackCount}</TerminalChip>
             <TerminalChip variant={hasGapsOrRejections ? 'danger' : 'neutral'}>
-              {hasGapsOrRejections ? `Gaps/rejections ${gapCount + rejectedCount}` : 'No gaps/rejections'}
+              {hasGapsOrRejections ? `缺口 ${gapCount + rejectedCount}` : '暂无缺口'}
             </TerminalChip>
           </div>
+        </summary>
 
-          <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
+        <div className="mt-3 grid min-w-0 gap-2">
+          <div className="flex min-w-0 flex-wrap gap-1.5">
             {view.scopeSeries.map((seriesId) => (
               <TerminalChip key={seriesId} variant="neutral" className="font-mono text-[10px]">
                 {seriesId}
               </TerminalChip>
             ))}
           </div>
-        </summary>
-
-        <div className="mt-3 grid min-w-0 gap-2">
           {view.rows.map((row) => (
             <div
               key={row.key}

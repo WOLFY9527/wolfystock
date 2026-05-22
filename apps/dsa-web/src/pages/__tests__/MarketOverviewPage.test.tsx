@@ -2129,14 +2129,21 @@ describe('MarketOverviewPage', () => {
     expect(posturePanel).toHaveTextContent('风险偏好观察');
     expect(posturePanel).toHaveTextContent('中');
     expect(posturePanel).toHaveTextContent('64');
+    expect(posturePanel).toHaveTextContent('当前市场观察');
+    expect(posturePanel).toHaveTextContent('支持证据');
+    expect(posturePanel).toHaveTextContent('反证');
+    expect(posturePanel).toHaveTextContent('缺失证据');
+    expect(posturePanel).toHaveTextContent('后续观察');
     expect(posturePanel).toHaveTextContent('Liquidity beta watch');
-    expect(posturePanel).toHaveTextContent('liquidity_alignment');
-    expect(posturePanel).toHaveTextContent('liquidity_stops_expanding');
+    expect(posturePanel).toHaveTextContent('Liquidity impulse should remain expanding.');
+    expect(posturePanel).toHaveTextContent('Remove the risk-on watch if liquidity turns mixed or contracting.');
+    expect(posturePanel).not.toHaveTextContent('liquidity_stops_expanding');
     expect(posturePanel).toHaveTextContent('US10Y');
     expect(posturePanel).toHaveTextContent('Fed liquidity');
-    expect(posturePanel).toHaveTextContent('counter_evidence_present');
+    expect(posturePanel).toHaveTextContent('反证已出现');
     expect(posturePanel).toHaveTextContent('非投资建议');
-    expect(posturePanel).toHaveTextContent('not_investment_advice');
+    expect(posturePanel).not.toHaveTextContent('counter_evidence_present');
+    expect(posturePanel).not.toHaveTextContent('not_investment_advice');
 
     const readinessStrip = within(posturePanel).getByTestId('market-direction-readiness-strip');
     expect(readinessStrip).toHaveTextContent('方向可用');
@@ -2144,6 +2151,12 @@ describe('MarketOverviewPage', () => {
     expect(readinessStrip).toHaveTextContent('观察级 0');
     expect(readinessStrip).toHaveTextContent('缺口 0');
     expect(readinessStrip).toHaveTextContent('Official macro/rates/volatility');
+
+    const debug = within(posturePanel).getByTestId('market-decision-debug-details');
+    expect(debug).not.toHaveAttribute('open');
+    fireEvent.click(within(debug).getByRole('button', { name: '展开 原始诊断代码' }));
+    expect(debug).toHaveTextContent('counter_evidence_present');
+    expect(debug).toHaveTextContent('not_investment_advice');
   });
 
   it('keeps data-insufficient posture conservative without trading advice language', async () => {
@@ -2157,10 +2170,13 @@ describe('MarketOverviewPage', () => {
 
     expect(posturePanel).toHaveTextContent('证据不足');
     expect(posturePanel).toHaveTextContent('可靠证据不足');
-    expect(posturePanel).toHaveTextContent('missing_scoring_pillars');
+    expect(posturePanel).toHaveTextContent('评分支柱缺失');
+    expect(posturePanel).toHaveTextContent('代理或观察级证据');
+    expect(posturePanel).not.toHaveTextContent('missing_scoring_pillars');
     expect(posturePanel).toHaveTextContent('BTC');
     expect(within(posturePanel).getByTestId('market-direction-readiness-strip')).toHaveTextContent('数据不足');
-    expect(within(posturePanel).getByTestId('market-direction-readiness-reasons')).toHaveTextContent('fallback_proxy_or_observation_only_evidence_present');
+    expect(within(posturePanel).getByTestId('market-direction-readiness-reasons')).toHaveTextContent('没有足够的评分级支柱');
+    expect(within(posturePanel).getByTestId('market-direction-readiness-reasons')).not.toHaveTextContent('fallback_proxy_or_observation_only_evidence_present');
     expect(text).not.toMatch(/买入|卖出|加仓|减仓|仓位|看多|看空|bullish|bearish|buy|sell|add|reduce|position-size/i);
   });
 
@@ -3336,16 +3352,16 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     const diagnostics = screen.getByTestId('market-overview-official-macro-diagnostics');
-    await waitFor(() => expect(diagnostics).toHaveTextContent('Official 3'));
+    await waitFor(() => expect(diagnostics).toHaveTextContent('评分级证据 2'));
     const details = diagnostics.querySelector('details');
     const summary = diagnostics.querySelector('summary');
     expect(details).not.toBeNull();
     expect(summary).not.toBeNull();
     expect(details).not.toHaveAttribute('open');
-    expect(diagnostics).toHaveTextContent('Proxy 1');
-    expect(diagnostics).toHaveTextContent('Fallback 1');
-    expect(diagnostics).toHaveTextContent('Unavailable 3');
-    expect(diagnostics).toHaveTextContent('Gaps/rejections 3');
+    expect(diagnostics).toHaveTextContent('官方覆盖 3');
+    expect(diagnostics).toHaveTextContent('代理/观察 2');
+    expect(diagnostics).toHaveTextContent('备用 1');
+    expect(diagnostics).toHaveTextContent('缺口 3');
     expect(diagnostics).toHaveTextContent('VIXCLS');
     expect(diagnostics).toHaveTextContent('SOFR');
     expect(diagnostics).toHaveTextContent('DFF');

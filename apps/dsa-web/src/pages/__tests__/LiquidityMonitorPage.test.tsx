@@ -451,7 +451,7 @@ const payload = {
     },
     notInvestmentAdvice: true,
   },
-  advisoryDisclosure: '仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。',
+  advisoryDisclosure: '仅用于观察市场流动性环境，非投资建议，不触发扫描、回测或组合动作。',
   sourceMetadata: {
     externalProviderCalls: false,
     providerRuntimeChanged: false,
@@ -477,7 +477,7 @@ describe('LiquidityMonitorPage', () => {
     expect(screen.getByText('69')).toBeInTheDocument();
     expect(screen.getByText('44%')).toBeInTheDocument();
     expect(screen.getAllByText('延迟').length).toBeGreaterThan(0);
-    expect(screen.getByText('仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。')).toBeInTheDocument();
+    expect(screen.getByText('仅用于观察市场流动性环境，非投资建议，不触发扫描、回测或组合动作。')).toBeInTheDocument();
   });
 
   it('renders the liquidity impulse synthesis header with evidence rows', async () => {
@@ -503,13 +503,14 @@ describe('LiquidityMonitorPage', () => {
 
     const summary = await screen.findByTestId('liquidity-monitor-coverage-summary');
     expect(summary).toHaveTextContent('方向证据可用');
-    expect(summary).toHaveTextContent('2 项 score-grade');
-    expect(summary).toHaveTextContent('1 项仅观察');
-    expect(summary).toHaveTextContent('2 项缺失/不可用');
-    expect(summary).toHaveTextContent('主要阻塞');
+    expect(summary).toHaveTextContent('Score-grade evidence 2');
+    expect(summary).toHaveTextContent('Observation-only evidence 1');
+    expect(summary).toHaveTextContent('Missing evidence 2');
+    expect(summary).toHaveTextContent('为什么不是完整方向结论');
     expect(summary).toHaveTextContent('覆盖不完整');
     expect(summary).toHaveTextContent('仅观察态');
     expect(summary).toHaveTextContent('仅在真实 funding 快照存在时显示');
+    expect(summary.textContent || '').not.toMatch(/score_contribution_not_allowed|source_authority_router_rejected/);
   });
 
   it('renders partial and unavailable indicators compactly', async () => {
@@ -519,6 +520,10 @@ describe('LiquidityMonitorPage', () => {
 
     await screen.findByRole('heading', { name: '流动性监测' });
     expect(screen.getAllByText('部分可用').length).toBeGreaterThan(0);
+    const indicatorDisclosure = screen.getByTestId('liquidity-monitor-indicator-disclosure');
+    expect(indicatorDisclosure).not.toHaveAttribute('open');
+    expect(screen.queryByText('Crypto 资金费率')).not.toBeInTheDocument();
+    fireEvent.click(within(indicatorDisclosure).getByRole('button', { name: '展开 完整指标矩阵' }));
     expect(screen.getByText('暂不可用')).toBeInTheDocument();
     expect(screen.getByText('Crypto 资金费率')).toBeVisible();
     expect(screen.getByText('仅在真实 funding 快照存在时显示')).toBeVisible();
@@ -535,11 +540,11 @@ describe('LiquidityMonitorPage', () => {
     expect(details).not.toBeNull();
     expect(summary).not.toBeNull();
     expect(details).not.toHaveAttribute('open');
-    expect(diagnostics).toHaveTextContent('Official 5');
-    expect(diagnostics).toHaveTextContent('Proxy 1');
-    expect(diagnostics).toHaveTextContent('Fallback 1');
-    expect(diagnostics).toHaveTextContent('Unavailable 1');
-    expect(diagnostics).toHaveTextContent('Gaps/rejections 1');
+    expect(diagnostics).toHaveTextContent('评分级证据 4');
+    expect(diagnostics).toHaveTextContent('官方覆盖 5');
+    expect(diagnostics).toHaveTextContent('代理/观察 2');
+    expect(diagnostics).toHaveTextContent('备用 1');
+    expect(diagnostics).toHaveTextContent('缺口 1');
     expect(diagnostics).toHaveTextContent('VIXCLS');
     expect(diagnostics).toHaveTextContent('SOFR');
     expect(diagnostics).toHaveTextContent('DFF');
@@ -620,7 +625,7 @@ describe('LiquidityMonitorPage', () => {
     expect(screen.getByTestId('liquidity-impulse-synthesis-state-chip')).toHaveTextContent('Proxy-only');
     expect(screen.getByTestId('liquidity-impulse-synthesis-summary')).toHaveTextContent('不升级为真实扩张或收缩结论');
     expect(screen.getByTestId('liquidity-monitor-coverage-summary')).toHaveTextContent('方向证据不足');
-    expect(screen.getByTestId('liquidity-monitor-coverage-summary')).toHaveTextContent('0 项 score-grade');
+    expect(screen.getByTestId('liquidity-monitor-coverage-summary')).toHaveTextContent('Score-grade evidence 0');
   });
 
   it('shows a missing synthesis payload honestly without fabricating a call', async () => {

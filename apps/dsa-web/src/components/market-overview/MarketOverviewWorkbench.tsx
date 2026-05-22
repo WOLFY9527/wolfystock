@@ -58,6 +58,7 @@ import { TerminalChip, TerminalGrid, TerminalPageShell, TerminalPanel } from '..
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
 import { buildOfficialMacroAuthorityDiagnosticsView } from '../common/officialMacroAuthorityDiagnosticsData';
+import { marketIntelligenceReasonLabel } from '../../utils/marketIntelligenceGuidance';
 
 const MARKET_OVERVIEW_GRID_FALLBACK_MIN_MS = 120;
 
@@ -975,6 +976,7 @@ function marketDecisionSemanticsLine(
 ): MarketOverviewDecisionSemanticsLineView {
   const label = (
     marketDecisionSemanticsText(item.label)
+    || marketDecisionSemanticsText(item.detail)
     || marketDecisionSemanticsText(item.signal)
     || marketDecisionSemanticsText(item.trigger)
     || marketDecisionSemanticsText(item.tilt)
@@ -982,9 +984,9 @@ function marketDecisionSemanticsLine(
     || `${fallbackPrefix} ${index + 1}`
   );
   const meta = [
-    marketDecisionSemanticsText(item.reason || item.reasonCode),
+    item.reason || item.reasonCode ? marketIntelligenceReasonLabel(marketDecisionSemanticsText(item.reason || item.reasonCode)) : '',
     marketDecisionSemanticsText(item.surface),
-    marketDecisionSemanticsText(item.detail),
+    marketDecisionSemanticsText(item.label) ? marketDecisionSemanticsText(item.detail) : '',
   ].filter(Boolean).join(' · ');
   return {
     key: `${fallbackPrefix}-${marketDecisionSemanticsText(item.key) || label}-${index}`,
