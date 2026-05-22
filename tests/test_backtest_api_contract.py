@@ -1925,6 +1925,52 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     },
                 ],
             },
+            "parameter_stability_evidence": {
+                "contract_kind": "backtest_parameter_stability_diagnostic_evidence",
+                "contract_version": "v1",
+                "state": "available",
+                "source": "stored_compare_summary",
+                "read_mode": "stored_first",
+                "diagnostic_only": True,
+                "decision_grade": False,
+                "parameter_keys": [
+                    "strategy_spec.signal.fast_period",
+                    "strategy_spec.signal.slow_period",
+                ],
+                "parameter_set_count": 2,
+                "metric_keys": ["total_return_pct", "max_drawdown_pct"],
+                "metric_dispersion": {
+                    "total_return_pct": {
+                        "state": "available",
+                        "count": 2,
+                        "min": 12.4,
+                        "max": 18.0,
+                        "mean": 15.2,
+                        "range": 5.6,
+                    }
+                },
+                "metric_missing_counts": {},
+                "compatible_run_coverage": {
+                    "requested_run_count": 3,
+                    "resolved_run_count": 2,
+                    "compatible_run_count": 2,
+                    "missing_run_count": 1,
+                    "skipped_run_count": 0,
+                    "compatible_run_ids": [101, 202],
+                    "missing_run_ids": [999],
+                    "skipped_run_ids": [],
+                },
+                "skipped_run_diagnostics": [],
+                "missing_run_diagnostics": [{"run_id": 999, "reason": "missing_run"}],
+                "authority": {
+                    "input_mode": "stored_compare_summary",
+                    "execution_count": 0,
+                    "strategy_execution_count": 0,
+                    "provider_calls_executed": False,
+                    "engine_math_changed": False,
+                    "strategy_parameters_mutated": False,
+                },
+            },
             "items": [
                 {
                     "metadata": {
@@ -2105,6 +2151,18 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(
             payload["heatmap_projection"]["cells"][0]["availability_state"],
             "available",
+        )
+        self.assertEqual(
+            payload["parameter_stability_evidence"]["contract_kind"],
+            "backtest_parameter_stability_diagnostic_evidence",
+        )
+        self.assertEqual(payload["parameter_stability_evidence"]["source"], "stored_compare_summary")
+        self.assertTrue(payload["parameter_stability_evidence"]["diagnostic_only"])
+        self.assertFalse(payload["parameter_stability_evidence"]["decision_grade"])
+        self.assertFalse(payload["parameter_stability_evidence"]["authority"]["provider_calls_executed"])
+        self.assertEqual(
+            payload["parameter_stability_evidence"]["compatible_run_coverage"]["missing_run_ids"],
+            [999],
         )
         self.assertEqual(len(payload["items"]), 2)
         self.assertEqual(payload["items"][0]["metadata"]["id"], 101)

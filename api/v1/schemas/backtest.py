@@ -1045,6 +1045,7 @@ class RuleBacktestCompareResponse(BaseModel):
     comparison_highlights: Optional[RuleBacktestCompareHighlightsSummary] = None
     parameter_comparison: Optional[RuleBacktestCompareParameterComparison] = None
     heatmap_projection: Optional[RuleBacktestCompareHeatmapProjection] = None
+    parameter_stability_evidence: Optional[Dict[str, Any]] = None
     items: List[RuleBacktestCompareRunItem] = Field(default_factory=list)
 
 

@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 from src.core.rule_backtest_engine import ExecutionModelConfig, ParsedStrategy, RuleBacktestEngine, RuleBacktestParser, _safe_float
 from src.repositories.rule_backtest_repo import RuleBacktestRepository
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
+from src.services.backtest_parameter_stability import build_parameter_stability_evidence_from_compare_summary
 from src.services.backtest_professional_readiness import build_backtest_professional_readiness
 from src.repositories.stock_repo import StockRepository
 from src.services.local_data_preflight_service import LocalDataPreflightService
@@ -942,7 +943,7 @@ class RuleBacktestService:
             parameter_comparison=parameter_comparison,
         )
 
-        return {
+        payload = {
             "comparison_source": "stored_rule_backtest_runs",
             "read_mode": "stored_first",
             "requested_run_ids": requested_run_ids,
@@ -965,6 +966,8 @@ class RuleBacktestService:
             "heatmap_projection": heatmap_projection,
             "items": items,
         }
+        payload["parameter_stability_evidence"] = build_parameter_stability_evidence_from_compare_summary(payload)
+        return payload
 
     def get_run_status(self, run_id: int) -> Optional[Dict[str, Any]]:
         row = self.repo.get_run(run_id, **self._owner_kwargs())

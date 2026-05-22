@@ -285,6 +285,68 @@
     },
     "diagnostics": ["partially_comparable_context"]
   },
+  "parameter_stability_evidence": {
+    "contract_kind": "backtest_parameter_stability_diagnostic_evidence",
+    "contract_version": "v1",
+    "state": "available",
+    "source": "stored_compare_summary",
+    "read_mode": "stored_first",
+    "diagnostic_only": true,
+    "decision_grade": false,
+    "parameter_keys": [
+      "strategy_spec.signal.fast_period",
+      "strategy_spec.signal.slow_period"
+    ],
+    "parameter_set_count": 2,
+    "metric_keys": ["total_return_pct", "max_drawdown_pct", "sharpe_ratio", "trade_count"],
+    "metric_dispersion": {
+      "total_return_pct": {
+        "state": "available",
+        "count": 2,
+        "min": 12.4,
+        "max": 14.6,
+        "mean": 13.5,
+        "range": 2.2
+      },
+      "max_drawdown_pct": {
+        "state": "available",
+        "count": 2,
+        "min": 5.2,
+        "max": 6.0,
+        "mean": 5.6,
+        "range": 0.8
+      },
+      "trade_count": {
+        "state": "available",
+        "count": 2,
+        "min": 4.0,
+        "max": 5.0,
+        "mean": 4.5,
+        "range": 1.0
+      }
+    },
+    "metric_missing_counts": {"sharpe_ratio": 2},
+    "compatible_run_coverage": {
+      "requested_run_count": 3,
+      "resolved_run_count": 2,
+      "compatible_run_count": 2,
+      "missing_run_count": 1,
+      "skipped_run_count": 0,
+      "compatible_run_ids": [7001, 7002],
+      "missing_run_ids": [7999],
+      "skipped_run_ids": []
+    },
+    "skipped_run_diagnostics": [],
+    "missing_run_diagnostics": [{"run_id": 7999, "reason": "missing_run"}],
+    "authority": {
+      "input_mode": "stored_compare_summary",
+      "execution_count": 0,
+      "strategy_execution_count": 0,
+      "provider_calls_executed": false,
+      "engine_math_changed": false,
+      "strategy_parameters_mutated": false
+    }
+  },
   "items": [
     {
       "metadata": {

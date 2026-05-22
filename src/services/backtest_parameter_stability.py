@@ -14,6 +14,7 @@ from typing import Any, Mapping, Sequence
 
 PARAMETER_STABILITY_CONTRACT_VERSION = "v1"
 PARAMETER_STABILITY_CONTRACT_KIND = "backtest_parameter_stability_surface_scaffold"
+PARAMETER_STABILITY_EVIDENCE_CONTRACT_KIND = "backtest_parameter_stability_diagnostic_evidence"
 
 DEFAULT_PARAMETER_STABILITY_METRIC_KEYS = (
     "total_return_pct",
@@ -251,6 +252,93 @@ def aggregate_parameter_stability_results(
     }
 
 
+def build_parameter_stability_evidence_from_compare_summary(
+    compare_summary: Mapping[str, Any],
+    *,
+    metric_keys: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Adapt an already-built stored compare summary into diagnostic evidence."""
+
+    payload = copy.deepcopy(dict(compare_summary or {}))
+    resolved_metric_keys = _normalize_metric_keys(metric_keys)
+    parameter_keys = _evidence_parameter_keys_from_compare_summary(payload)
+    items, skipped_run_diagnostics = _evidence_items_from_compare_summary(
+        compare_summary=payload,
+        parameter_keys=parameter_keys,
+    )
+    missing_run_ids = _normalize_int_list(payload.get("missing_run_ids"))
+    unavailable_diagnostics = _evidence_unavailable_run_diagnostics(payload.get("unavailable_runs"))
+    skipped_run_diagnostics = _dedupe_run_diagnostics([*skipped_run_diagnostics, *unavailable_diagnostics])
+    requested_run_ids = _normalize_int_list(payload.get("requested_run_ids"))
+    resolved_run_ids = _normalize_int_list(payload.get("resolved_run_ids"))
+    if not requested_run_ids:
+        requested_run_ids = _dedupe_ints(
+            [*resolved_run_ids, *[int(item["run_id"]) for item in items], *missing_run_ids]
+        )
+    if not resolved_run_ids:
+        resolved_run_ids = _dedupe_ints(
+            [*[int(item["run_id"]) for item in items], *[int(item["run_id"]) for item in skipped_run_diagnostics]]
+        )
+
+    return _build_diagnostic_evidence_from_items(
+        source="stored_compare_summary",
+        input_mode="stored_compare_summary",
+        read_mode=str(payload.get("read_mode") or "stored_first"),
+        parameter_keys=parameter_keys,
+        metric_keys=resolved_metric_keys,
+        items=items,
+        requested_run_ids=requested_run_ids,
+        resolved_run_ids=resolved_run_ids,
+        missing_run_ids=missing_run_ids,
+        skipped_run_diagnostics=skipped_run_diagnostics,
+    )
+
+
+def build_parameter_stability_evidence_from_scenario_summary(
+    scenario_summary: Mapping[str, Any],
+    *,
+    metric_keys: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Adapt an already-stored scenario summary into diagnostic evidence."""
+
+    payload = copy.deepcopy(dict(scenario_summary or {}))
+    resolved_metric_keys = _normalize_metric_keys(metric_keys)
+    scenarios = [dict(item or {}) for item in list(payload.get("scenarios") or []) if isinstance(item, Mapping)]
+    items: list[dict[str, Any]] = []
+    skipped_run_diagnostics: list[dict[str, Any]] = []
+
+    for index, scenario in enumerate(scenarios, start=1):
+        scenario_key = str(scenario.get("scenario_key") or scenario.get("name") or f"scenario_{index}")
+        status = str(scenario.get("state") or scenario.get("status") or "completed").strip().lower()
+        run_id = _safe_int(scenario.get("run_id")) or index
+        if status not in {"", "completed", "available"}:
+            skipped_run_diagnostics.append(
+                {"run_id": run_id, "reason": "scenario_not_completed", "status": status}
+            )
+            continue
+        items.append(
+            {
+                "run_id": run_id,
+                "parameter_values": {"scenario_key": scenario_key},
+                "metrics": copy.deepcopy(dict(scenario.get("metrics") or {})),
+            }
+        )
+
+    run_ids = [int(item["run_id"]) for item in items]
+    return _build_diagnostic_evidence_from_items(
+        source="stored_scenario_summary",
+        input_mode="stored_scenario_summary",
+        read_mode=str(payload.get("read_mode") or "stored_first"),
+        parameter_keys=["scenario_key"],
+        metric_keys=resolved_metric_keys,
+        items=items,
+        requested_run_ids=run_ids,
+        resolved_run_ids=run_ids,
+        missing_run_ids=[],
+        skipped_run_diagnostics=skipped_run_diagnostics,
+    )
+
+
 def build_parameter_stability_contract_metadata() -> dict[str, Any]:
     return {
         "contract_kind": PARAMETER_STABILITY_CONTRACT_KIND,
@@ -269,6 +357,365 @@ def build_parameter_stability_contract_metadata() -> dict[str, Any]:
         "runtime_defaults_changed": False,
         "portfolio_allocation_backtest_executed": False,
     }
+
+
+def _evidence_parameter_keys_from_compare_summary(compare_summary: Mapping[str, Any]) -> list[str]:
+    parameter_comparison = dict(compare_summary.get("parameter_comparison") or {})
+    raw_keys = [
+        *list(parameter_comparison.get("differing_parameter_keys") or []),
+        *list(parameter_comparison.get("missing_parameter_keys") or []),
+    ]
+
+    heatmap_projection = dict(compare_summary.get("heatmap_projection") or {})
+    axes = dict(heatmap_projection.get("axes") or {})
+    for axis_name in ("x", "y"):
+        axis = dict(axes.get(axis_name) or {})
+        raw_keys.append(axis.get("axis_key"))
+
+    seen: set[str] = set()
+    resolved: list[str] = []
+    for raw_key in raw_keys:
+        parameter_key = str(raw_key or "").strip()
+        if not parameter_key or parameter_key in seen:
+            continue
+        seen.add(parameter_key)
+        resolved.append(parameter_key)
+    return resolved
+
+
+def _evidence_items_from_compare_summary(
+    *,
+    compare_summary: Mapping[str, Any],
+    parameter_keys: Sequence[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    items: list[dict[str, Any]] = []
+    skipped_run_diagnostics: list[dict[str, Any]] = []
+    raw_items = [dict(item or {}) for item in list(compare_summary.get("items") or []) if isinstance(item, Mapping)]
+
+    for raw_item in raw_items:
+        metadata = dict(raw_item.get("metadata") or {})
+        run_id = _safe_int(metadata.get("id") or raw_item.get("run_id"))
+        if run_id is None:
+            continue
+        status = str(metadata.get("status") or raw_item.get("status") or "").strip().lower()
+        if status and status != "completed":
+            skipped_run_diagnostics.append(
+                {"run_id": run_id, "reason": "run_not_completed", "status": status}
+            )
+            continue
+
+        parsed_strategy = dict(raw_item.get("parsed_strategy") or {})
+        parameter_values = {
+            str(parameter_key): _json_safe(_nested_value(parsed_strategy, *str(parameter_key).split(".")))
+            for parameter_key in parameter_keys
+        }
+        if not parameter_values:
+            skipped_run_diagnostics.append({"run_id": run_id, "reason": "parameter_values_unavailable"})
+            continue
+
+        items.append(
+            {
+                "run_id": run_id,
+                "parameter_values": parameter_values,
+                "metrics": copy.deepcopy(dict(raw_item.get("metrics") or {})),
+            }
+        )
+
+    return items, skipped_run_diagnostics
+
+
+def _evidence_unavailable_run_diagnostics(value: Any) -> list[dict[str, Any]]:
+    diagnostics: list[dict[str, Any]] = []
+    for item in list(value or []):
+        if not isinstance(item, Mapping):
+            continue
+        run_id = _safe_int(item.get("id") or item.get("run_id"))
+        if run_id is None:
+            continue
+        reason = str(item.get("reason") or "run_unavailable").strip() or "run_unavailable"
+        status = str(item.get("status") or "").strip()
+        diagnostic = {"run_id": run_id, "reason": reason}
+        if status:
+            diagnostic["status"] = status
+        diagnostics.append(diagnostic)
+    return diagnostics
+
+
+def _build_diagnostic_evidence_from_items(
+    *,
+    source: str,
+    input_mode: str,
+    read_mode: str,
+    parameter_keys: Sequence[str],
+    metric_keys: Sequence[str],
+    items: Sequence[Mapping[str, Any]],
+    requested_run_ids: Sequence[int],
+    resolved_run_ids: Sequence[int],
+    missing_run_ids: Sequence[int],
+    skipped_run_diagnostics: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    resolved_parameter_keys = [str(key) for key in parameter_keys if str(key or "").strip()]
+    compatible_items, duplicate_diagnostics = _dedupe_evidence_items_by_parameter_set(items)
+    skipped_diagnostics = _dedupe_run_diagnostics([*list(skipped_run_diagnostics), *duplicate_diagnostics])
+    parameter_grid = _build_evidence_parameter_grid(
+        items=compatible_items,
+        parameter_keys=resolved_parameter_keys,
+    )
+    metric_keys_payload = _normalize_metric_keys(metric_keys)
+
+    if parameter_grid:
+        plan = build_parameter_stability_plan(
+            strategy_id=f"{source}_parameter_diagnostics",
+            dataset_id=source,
+            parameter_grid=parameter_grid,
+            metric_keys=metric_keys_payload,
+            min_completed_runs=2,
+        )
+        run_results = _build_evidence_run_results(plan=plan, items=compatible_items)
+        surface = aggregate_parameter_stability_results(
+            plan=plan,
+            run_results=run_results,
+            metric_keys=metric_keys_payload,
+        )
+    else:
+        plan = build_parameter_stability_plan(
+            strategy_id=f"{source}_parameter_diagnostics",
+            dataset_id=source,
+            parameter_grid={},
+            metric_keys=metric_keys_payload,
+            min_completed_runs=2,
+        )
+        surface = aggregate_parameter_stability_results(
+            plan=plan,
+            run_results=[],
+            metric_keys=metric_keys_payload,
+        )
+
+    compatible_run_ids = [int(item["run_id"]) for item in compatible_items]
+    normalized_missing_run_ids = _dedupe_ints(missing_run_ids)
+    missing_run_diagnostics = [
+        {"run_id": int(run_id), "reason": "missing_run"}
+        for run_id in normalized_missing_run_ids
+    ]
+    metric_surface = dict(surface.get("metric_surface") or {})
+    missing_parameter_set_diagnostics = [
+        {
+            "parameter_values": copy.deepcopy(dict(row.get("parameter_values") or {})),
+            "reason": "parameter_set_no_completed_run",
+        }
+        for row in list(metric_surface.get("rows") or [])
+        if dict(row).get("state") == "missing_result"
+    ]
+    state = _evidence_state(
+        helper_state=str(surface.get("state") or ""),
+        compatible_count=len(compatible_items),
+        parameter_key_count=len(resolved_parameter_keys),
+    )
+
+    return {
+        "contract_kind": PARAMETER_STABILITY_EVIDENCE_CONTRACT_KIND,
+        "contract_version": PARAMETER_STABILITY_CONTRACT_VERSION,
+        "state": state,
+        "source": source,
+        "read_mode": read_mode or "stored_first",
+        "diagnostic_only": True,
+        "decision_grade": False,
+        "parameter_keys": resolved_parameter_keys,
+        "parameter_set_count": len(compatible_items),
+        "metric_keys": list(metric_keys_payload),
+        "metric_dispersion": _build_metric_dispersion(metric_surface.get("metric_aggregates")),
+        "metric_missing_counts": {
+            str(key): int(value)
+            for key, value in dict(metric_surface.get("missing_metric_counts") or {}).items()
+            if int(value or 0) > 0
+        },
+        "compatible_run_coverage": {
+            "requested_run_count": len(_dedupe_ints(requested_run_ids)),
+            "resolved_run_count": len(_dedupe_ints(resolved_run_ids)),
+            "compatible_run_count": len(compatible_run_ids),
+            "missing_run_count": len(normalized_missing_run_ids),
+            "skipped_run_count": len(skipped_diagnostics),
+            "compatible_run_ids": compatible_run_ids,
+            "missing_run_ids": normalized_missing_run_ids,
+            "skipped_run_ids": [int(item["run_id"]) for item in skipped_diagnostics],
+        },
+        "skipped_run_diagnostics": skipped_diagnostics,
+        "missing_run_diagnostics": missing_run_diagnostics,
+        "missing_parameter_set_diagnostics": missing_parameter_set_diagnostics,
+        "authority": {
+            "input_mode": input_mode,
+            "execution_count": 0,
+            "strategy_execution_count": 0,
+            "provider_calls_executed": False,
+            "engine_math_changed": False,
+            "strategy_parameters_mutated": False,
+        },
+    }
+
+
+def _dedupe_evidence_items_by_parameter_set(
+    items: Sequence[Mapping[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    compatible_items: list[dict[str, Any]] = []
+    duplicate_diagnostics: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw_item in items:
+        item = copy.deepcopy(dict(raw_item or {}))
+        run_id = _safe_int(item.get("run_id"))
+        if run_id is None:
+            continue
+        parameter_values = copy.deepcopy(dict(item.get("parameter_values") or {}))
+        fingerprint = _canonical_json(parameter_values)
+        if fingerprint in seen:
+            duplicate_diagnostics.append({"run_id": run_id, "reason": "duplicate_parameter_set"})
+            continue
+        seen.add(fingerprint)
+        compatible_items.append(
+            {
+                "run_id": run_id,
+                "parameter_values": parameter_values,
+                "metrics": copy.deepcopy(dict(item.get("metrics") or {})),
+            }
+        )
+    return compatible_items, duplicate_diagnostics
+
+
+def _build_evidence_parameter_grid(
+    *,
+    items: Sequence[Mapping[str, Any]],
+    parameter_keys: Sequence[str],
+) -> dict[str, list[Any]]:
+    parameter_grid: dict[str, list[Any]] = {}
+    for parameter_key in parameter_keys:
+        values: list[Any] = []
+        seen: set[str] = set()
+        for item in items:
+            parameter_values = dict(item.get("parameter_values") or {})
+            value = _json_safe(parameter_values.get(parameter_key))
+            fingerprint = _canonical_json(value)
+            if fingerprint in seen:
+                continue
+            seen.add(fingerprint)
+            values.append(value)
+        if values:
+            parameter_grid[str(parameter_key)] = values
+    return parameter_grid
+
+
+def _build_evidence_run_results(
+    *,
+    plan: Mapping[str, Any],
+    items: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    grid_runs_by_fingerprint = {
+        _canonical_json(dict(row.get("parameter_values") or {})): dict(row)
+        for row in list(plan.get("grid_runs") or [])
+    }
+    run_results: list[dict[str, Any]] = []
+    for item in items:
+        parameter_values = copy.deepcopy(dict(item.get("parameter_values") or {}))
+        grid_row = grid_runs_by_fingerprint.get(_canonical_json(parameter_values))
+        if not grid_row:
+            continue
+        run_results.append(
+            {
+                "planned_run_id": str(grid_row.get("planned_run_id") or ""),
+                "state": "completed",
+                "external_run_id": str(item.get("run_id")),
+                "metrics": copy.deepcopy(dict(item.get("metrics") or {})),
+            }
+        )
+    return run_results
+
+
+def _build_metric_dispersion(value: Any) -> dict[str, dict[str, Any]]:
+    aggregates = dict(value or {}) if isinstance(value, Mapping) else {}
+    dispersion: dict[str, dict[str, Any]] = {}
+    for metric_key, raw_payload in aggregates.items():
+        payload = dict(raw_payload or {})
+        min_value = _safe_float(payload.get("min"))
+        max_value = _safe_float(payload.get("max"))
+        mean_value = _safe_float(payload.get("mean"))
+        count = int(payload.get("count") or 0)
+        if count <= 0 or min_value is None or max_value is None or mean_value is None:
+            continue
+        dispersion[str(metric_key)] = {
+            "state": "available",
+            "count": count,
+            "min": _round(min_value),
+            "max": _round(max_value),
+            "mean": _round(mean_value),
+            "range": _round(max_value - min_value),
+        }
+    return dispersion
+
+
+def _evidence_state(*, helper_state: str, compatible_count: int, parameter_key_count: int) -> str:
+    if parameter_key_count < 1:
+        return "insufficient_parameter_context"
+    if compatible_count < 2:
+        return "insufficient_completed_runs"
+    if helper_state in {"available", "insufficient_results"}:
+        return "available" if helper_state == "available" else "insufficient_completed_runs"
+    return helper_state or "insufficient_completed_runs"
+
+
+def _dedupe_run_diagnostics(diagnostics: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[int, str]] = set()
+    for raw_item in diagnostics:
+        item = dict(raw_item or {})
+        run_id = _safe_int(item.get("run_id"))
+        reason = str(item.get("reason") or "").strip()
+        if run_id is None or not reason:
+            continue
+        key = (run_id, reason)
+        if key in seen:
+            continue
+        seen.add(key)
+        payload = {"run_id": run_id, "reason": reason}
+        status = str(item.get("status") or "").strip()
+        if status:
+            payload["status"] = status
+        deduped.append(payload)
+    return deduped
+
+
+def _normalize_int_list(value: Any) -> list[int]:
+    if value is None:
+        return []
+    values = value if isinstance(value, Sequence) and not isinstance(value, (str, bytes)) else [value]
+    return _dedupe_ints([item for item in values if _safe_int(item) is not None])
+
+
+def _dedupe_ints(values: Sequence[Any]) -> list[int]:
+    deduped: list[int] = []
+    seen: set[int] = set()
+    for value in values:
+        normalized = _safe_int(value)
+        if normalized is None or normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(normalized)
+    return deduped
+
+
+def _safe_int(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _nested_value(payload: Mapping[str, Any], *path: str) -> Any:
+    current: Any = payload
+    for key in path:
+        if not isinstance(current, Mapping) or key not in current:
+            return None
+        current = current.get(key)
+    return current
 
 
 def _coerce_grid_spec(
@@ -853,10 +1300,13 @@ def _canonical_json(value: Any) -> str:
 
 __all__ = [
     "PARAMETER_STABILITY_CONTRACT_KIND",
+    "PARAMETER_STABILITY_EVIDENCE_CONTRACT_KIND",
     "PARAMETER_STABILITY_CONTRACT_VERSION",
     "DEFAULT_PARAMETER_STABILITY_METRIC_KEYS",
     "ParameterStabilityGridSpec",
     "aggregate_parameter_stability_results",
+    "build_parameter_stability_evidence_from_compare_summary",
+    "build_parameter_stability_evidence_from_scenario_summary",
     "build_parameter_stability_contract_metadata",
     "build_parameter_stability_plan",
 ]

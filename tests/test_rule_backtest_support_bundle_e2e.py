@@ -266,6 +266,8 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         normalized = serialized.lower()
         for marker in FORBIDDEN_EXPORT_TEXT_MARKERS:
             self.assertNotIn(marker.lower(), normalized)
+        for marker in FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS:
+            self.assertNotIn(marker.lower(), normalized)
 
         def walk(value: object) -> None:
             if isinstance(value, dict):

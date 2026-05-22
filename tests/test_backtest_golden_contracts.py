@@ -333,6 +333,13 @@ def test_compare_golden_fixture_is_stored_first_and_contains_no_recalculation_se
     assert compare["robustness_summary"]["overall_state"] == "partially_comparable"
     assert compare["comparison_profile"]["primary_profile"] == "same_strategy_parameter_variants"
     assert compare["comparison_highlights"]["highlights"]["total_return_pct"]["state"] == "limited_context_winner"
+    assert compare["parameter_stability_evidence"]["contract_kind"] == "backtest_parameter_stability_diagnostic_evidence"
+    assert compare["parameter_stability_evidence"]["source"] == "stored_compare_summary"
+    assert compare["parameter_stability_evidence"]["diagnostic_only"] is True
+    assert compare["parameter_stability_evidence"]["decision_grade"] is False
+    assert compare["parameter_stability_evidence"]["parameter_set_count"] == 2
+    assert compare["parameter_stability_evidence"]["authority"]["execution_count"] == 0
+    assert compare["parameter_stability_evidence"]["authority"]["provider_calls_executed"] is False
     assert compare["heatmap_projection"]["source"] == "stored_compare_projection"
     assert compare["heatmap_projection"]["read_mode"] == "stored_projection_only"
     assert compare["heatmap_projection"]["authority"]["execution_count"] == 0
@@ -353,6 +360,7 @@ def test_compare_golden_fixture_is_stored_first_and_contains_no_recalculation_se
     _assert_no_sensitive_public_payload(compare)
     _assert_no_live_provider_authority(compare)
     _assert_no_robustness_optimizer_semantics(compare["heatmap_projection"])
+    _assert_no_robustness_optimizer_semantics(compare["parameter_stability_evidence"])
 
 
 def test_compare_heatmap_golden_fixture_freezes_stored_compare_projection_vocabulary() -> None:

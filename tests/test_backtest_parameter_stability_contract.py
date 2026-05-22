@@ -9,6 +9,8 @@ from typing import Any
 from src.services.backtest_parameter_stability import (
     PARAMETER_STABILITY_CONTRACT_VERSION,
     aggregate_parameter_stability_results,
+    build_parameter_stability_evidence_from_compare_summary,
+    build_parameter_stability_evidence_from_scenario_summary,
     build_parameter_stability_plan,
 )
 
@@ -68,6 +70,23 @@ def _completed_results(plan: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def _assert_no_public_selection_terms(payload: dict[str, Any]) -> None:
+    serialized = str(payload).lower()
+    for forbidden in (
+        "optimizer",
+        "optimization",
+        "grid_search",
+        "grid search",
+        "winner",
+        "best",
+        "recommended",
+        "oos",
+        "out_of_sample",
+        "out-of-sample",
+    ):
+        assert forbidden not in serialized, forbidden
 
 
 def test_parameter_grid_expansion_is_deterministic_and_diagnostic_only() -> None:
@@ -268,3 +287,171 @@ def test_parameter_stability_helpers_do_not_mutate_inputs() -> None:
     assert parameter_grid == grid_snapshot
     assert run_results == results_snapshot
     assert plan == plan_snapshot
+
+
+def test_compare_summary_adapter_outputs_diagnostic_evidence_without_selection_terms() -> None:
+    compare_summary = {
+        "comparison_source": "stored_rule_backtest_runs",
+        "read_mode": "stored_first",
+        "requested_run_ids": [101, 202, 999],
+        "resolved_run_ids": [101, 202],
+        "comparable_run_ids": [101, 202],
+        "missing_run_ids": [999],
+        "unavailable_runs": [],
+        "parameter_comparison": {
+            "state": "same_family_comparable",
+            "differing_parameter_keys": [
+                "strategy_spec.signal.fast_period",
+                "strategy_spec.signal.slow_period",
+            ],
+        },
+        "items": [
+            {
+                "metadata": {"id": 101, "status": "completed"},
+                "parsed_strategy": {
+                    "strategy_spec": {
+                        "strategy_family": "moving_average_crossover",
+                        "strategy_type": "moving_average_crossover",
+                        "signal": {"fast_period": 5, "slow_period": 20},
+                    }
+                },
+                "metrics": {
+                    "total_return_pct": 12.4,
+                    "max_drawdown_pct": 5.2,
+                    "sharpe_ratio": 1.1,
+                },
+            },
+            {
+                "metadata": {"id": 202, "status": "completed"},
+                "parsed_strategy": {
+                    "strategy_spec": {
+                        "strategy_family": "moving_average_crossover",
+                        "strategy_type": "moving_average_crossover",
+                        "signal": {"fast_period": 10, "slow_period": 30},
+                    }
+                },
+                "metrics": {
+                    "total_return_pct": 14.6,
+                    "max_drawdown_pct": 6.0,
+                    "sharpe_ratio": 1.3,
+                },
+            },
+        ],
+    }
+
+    evidence = build_parameter_stability_evidence_from_compare_summary(compare_summary)
+
+    assert evidence["contract_kind"] == "backtest_parameter_stability_diagnostic_evidence"
+    assert evidence["contract_version"] == PARAMETER_STABILITY_CONTRACT_VERSION
+    assert evidence["source"] == "stored_compare_summary"
+    assert evidence["read_mode"] == "stored_first"
+    assert evidence["diagnostic_only"] is True
+    assert evidence["decision_grade"] is False
+    assert evidence["parameter_keys"] == [
+        "strategy_spec.signal.fast_period",
+        "strategy_spec.signal.slow_period",
+    ]
+    assert evidence["parameter_set_count"] == 2
+    assert evidence["compatible_run_coverage"] == {
+        "requested_run_count": 3,
+        "resolved_run_count": 2,
+        "compatible_run_count": 2,
+        "missing_run_count": 1,
+        "skipped_run_count": 0,
+        "compatible_run_ids": [101, 202],
+        "missing_run_ids": [999],
+        "skipped_run_ids": [],
+    }
+    assert evidence["missing_run_diagnostics"] == [{"run_id": 999, "reason": "missing_run"}]
+    assert evidence["metric_dispersion"]["total_return_pct"] == {
+        "state": "available",
+        "count": 2,
+        "min": 12.4,
+        "max": 14.6,
+        "mean": 13.5,
+        "range": 2.2,
+    }
+    assert evidence["metric_dispersion"]["max_drawdown_pct"]["range"] == 0.8
+    assert evidence["authority"] == {
+        "input_mode": "stored_compare_summary",
+        "execution_count": 0,
+        "strategy_execution_count": 0,
+        "provider_calls_executed": False,
+        "engine_math_changed": False,
+        "strategy_parameters_mutated": False,
+    }
+    assert "best_summary" not in evidence
+    _assert_no_public_selection_terms(evidence)
+
+
+def test_compare_summary_adapter_reports_skipped_and_missing_parameter_sets() -> None:
+    compare_summary = {
+        "requested_run_ids": [101, 202, 303],
+        "resolved_run_ids": [101, 202, 303],
+        "comparable_run_ids": [101, 202],
+        "missing_run_ids": [],
+        "parameter_comparison": {
+            "state": "partial",
+            "differing_parameter_keys": ["strategy_spec.signal.fast_period"],
+        },
+        "items": [
+            {
+                "metadata": {"id": 101, "status": "completed"},
+                "parsed_strategy": {"strategy_spec": {"signal": {"fast_period": 5}}},
+                "metrics": {"total_return_pct": 12.0, "max_drawdown_pct": 4.0},
+            },
+            {
+                "metadata": {"id": 202, "status": "completed"},
+                "parsed_strategy": {"strategy_spec": {"signal": {"fast_period": 10}}},
+                "metrics": {"total_return_pct": 13.0},
+            },
+            {
+                "metadata": {"id": 303, "status": "failed"},
+                "parsed_strategy": {"strategy_spec": {"signal": {"fast_period": 15}}},
+                "metrics": {"total_return_pct": 14.0, "max_drawdown_pct": 6.0},
+            },
+        ],
+    }
+
+    evidence = build_parameter_stability_evidence_from_compare_summary(compare_summary)
+
+    assert evidence["state"] == "available"
+    assert evidence["parameter_set_count"] == 2
+    assert evidence["compatible_run_coverage"]["skipped_run_ids"] == [303]
+    assert evidence["skipped_run_diagnostics"] == [
+        {"run_id": 303, "reason": "run_not_completed", "status": "failed"}
+    ]
+    assert evidence["metric_dispersion"]["max_drawdown_pct"] == {
+        "state": "available",
+        "count": 1,
+        "min": 4.0,
+        "max": 4.0,
+        "mean": 4.0,
+        "range": 0.0,
+    }
+    assert evidence["metric_missing_counts"]["max_drawdown_pct"] == 1
+    _assert_no_public_selection_terms(evidence)
+
+
+def test_scenario_summary_adapter_reuses_parameter_stability_helpers() -> None:
+    evidence = build_parameter_stability_evidence_from_scenario_summary(
+        {
+            "scenarios": [
+                {
+                    "scenario_key": "base_path",
+                    "metrics": {"total_return_pct": 5.0, "max_drawdown_pct": 2.0},
+                },
+                {
+                    "scenario_key": "stress_down",
+                    "metrics": {"total_return_pct": -3.0, "max_drawdown_pct": 8.0},
+                },
+            ],
+        }
+    )
+
+    assert evidence["source"] == "stored_scenario_summary"
+    assert evidence["parameter_keys"] == ["scenario_key"]
+    assert evidence["parameter_set_count"] == 2
+    assert evidence["metric_dispersion"]["total_return_pct"]["range"] == 8.0
+    assert evidence["authority"]["input_mode"] == "stored_scenario_summary"
+    _assert_no_public_selection_terms(evidence)

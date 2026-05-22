@@ -3587,6 +3587,7 @@ class RuleBacktestTestCase(unittest.TestCase):
             payload = service.compare_runs([101, 202, 303, 999999])
 
         projection = payload["heatmap_projection"]
+        evidence = payload["parameter_stability_evidence"]
         self.assertIsNotNone(projection)
         self.assertEqual(projection["contract_kind"], "rule_backtest_compare_heatmap_projection")
         self.assertEqual(projection["contract_version"], "v1")
@@ -3624,6 +3625,20 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(cells[(10, None)]["availability_state"], "ambiguous")
         self.assertEqual(cells[(10, None)]["source_run_ids"], [303])
         self.assertEqual(cells[(10, None)]["metrics"]["total_return_pct"]["state"], "ambiguous")
+        self.assertEqual(evidence["contract_kind"], "backtest_parameter_stability_diagnostic_evidence")
+        self.assertEqual(evidence["source"], "stored_compare_summary")
+        self.assertTrue(evidence["diagnostic_only"])
+        self.assertFalse(evidence["decision_grade"])
+        self.assertEqual(evidence["parameter_set_count"], 3)
+        self.assertEqual(evidence["compatible_run_coverage"]["requested_run_count"], 4)
+        self.assertEqual(evidence["compatible_run_coverage"]["resolved_run_count"], 3)
+        self.assertEqual(evidence["compatible_run_coverage"]["compatible_run_ids"], [101, 202, 303])
+        self.assertEqual(evidence["compatible_run_coverage"]["missing_run_ids"], [999999])
+        self.assertEqual(evidence["missing_run_diagnostics"], [{"run_id": 999999, "reason": "missing_run"}])
+        self.assertEqual(evidence["metric_dispersion"]["total_return_pct"]["range"], 5.5)
+        self.assertFalse(evidence["authority"]["provider_calls_executed"])
+        self.assertEqual(evidence["authority"]["execution_count"], 0)
+        self._assert_robustness_payload_avoids_optimizer_semantics(evidence)
 
     def test_compare_runs_omits_heatmap_projection_without_two_usable_axes(self) -> None:
         service = RuleBacktestService(self.db)
