@@ -335,6 +335,7 @@ def test_runtime_diagnostic_sanitizes_endpoint_and_provider_output(monkeypatch) 
 
 def test_runtime_diagnostic_keeps_polygon_breadth_probe_failure_fail_closed(monkeypatch) -> None:
     module = _load_script_module()
+    monkeypatch.setenv("POLYGON_API_KEY", "polygon-test-key")
 
     monkeypatch.setattr(
         module,
@@ -379,8 +380,10 @@ def test_runtime_diagnostic_keeps_polygon_breadth_probe_failure_fail_closed(monk
     payload = module.collect_diagnostic_bundle()
     serialized = json.dumps(payload, ensure_ascii=False)
 
+    assert "officialMacroDiagnostic" in payload
+    assert "alpacaRotationDiagnostic" in payload
     assert payload["polygonUsBreadthDiagnostic"] == {
-        "credentialsPresent": False,
+        "credentialsPresent": True,
         "probePassed": False,
         "observationDate": None,
         "freshnessValid": False,
@@ -400,5 +403,13 @@ def test_runtime_diagnostic_keeps_polygon_breadth_probe_failure_fail_closed(monk
         "reasonCodes": ["unexpected_error"],
     }
     assert payload["discrepancies"] == []
+    for reason_code in payload["polygonUsBreadthDiagnostic"]["reasonCodes"]:
+        lowered = reason_code.lower()
+        assert "http://" not in lowered
+        assert "https://" not in lowered
+        assert "api_key" not in lowered
+        assert "apikey" not in lowered
+        assert "secret" not in lowered
     assert "raw-secret" not in serialized
+    assert "polygon-test-key" not in serialized
     assert "api_key" not in serialized
