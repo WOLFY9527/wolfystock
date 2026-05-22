@@ -14,7 +14,7 @@ from unittest.mock import patch
 import pytest
 
 from api.v1.schemas.liquidity_monitor import LiquidityMonitorResponse
-from src.services.liquidity_monitor_service import LiquidityMonitorService
+from src.services.liquidity_monitor_service import LiquidityMonitorService, PanelState
 from src.services.market_cache import MarketCache
 from src.storage import DatabaseManager
 
@@ -4600,3 +4600,54 @@ def test_all_liquidity_golden_fixtures_are_explicitly_enumerated_and_sanitized()
     assert {path.name for path in fixture_paths} == set(LIQUIDITY_GOLDEN_FIXTURE_NAMES)
     for path in fixture_paths:
         _assert_no_sensitive_public_payload(json.loads(path.read_text(encoding="utf-8")))
+
+
+def test_coverage_diagnostics_projects_authorized_licensed_source_tier_from_shared_trust_gate(
+    isolated_db: DatabaseManager,
+) -> None:
+    del isolated_db
+    service = _make_service()
+    panel = PanelState(
+        key="funds_flow",
+        payload={
+            "source": "polygon_us_grouped_daily",
+            "sourceLabel": "Polygon grouped daily US equities",
+            "sourceType": "authorized_licensed_feed",
+        },
+        source="polygon_us_grouped_daily",
+        freshness="delayed",
+        as_of="2026-05-23T10:00:00+08:00",
+        updated_at="2026-05-23T10:00:00+08:00",
+        is_fallback=False,
+        is_stale=False,
+    )
+    evidence = service._indicator_evidence(
+        status="partial",
+        freshness="delayed",
+        expected_input_count=1,
+        inputs=[
+            service._source_confidence_input(
+                key="ETF",
+                label="ETF",
+                source="polygon_us_grouped_daily",
+                source_label="Polygon grouped daily US equities",
+                source_type="authorized_licensed_feed",
+                as_of="2026-05-23T10:00:00+08:00",
+                freshness="delayed",
+                coverage=1.0,
+                metadata={"sourceTier": "authorized_licensed_feed"},
+            )
+        ],
+    )
+
+    diagnostics = service._indicator_coverage_diagnostics(
+        "licensed_probe",
+        "Licensed Probe",
+        status="partial",
+        included=False,
+        score_contribution=0,
+        evidence=evidence,
+        panel=panel,
+    )
+
+    assert diagnostics["sourceTier"] == "authorized_licensed_feed"

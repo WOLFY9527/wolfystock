@@ -7,22 +7,14 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from src.contracts.source_confidence import MarketIntelligenceSourceTier
+
 
 FreshnessLabel = Literal["live", "cached", "delayed", "stale", "fallback", "mock", "error", "unavailable"]
 LiquidityRegime = Literal["abundant", "supportive", "neutral", "tight", "stress", "unavailable"]
 IndicatorStatus = Literal["live", "partial", "unavailable"]
 EvidenceFreshnessLabel = Literal["live", "fresh", "cached", "delayed", "stale", "partial", "fallback", "synthetic", "unavailable", "unknown"]
-SourceTierLabel = Literal[
-    "official_public",
-    "exchange_public",
-    "broker_authorized",
-    "unofficial_public_api",
-    "public_web_fallback",
-    "snapshot",
-    "static_fallback",
-    "synthetic",
-    "unavailable",
-]
+SourceTierLabel = MarketIntelligenceSourceTier
 TrustLevelLabel = Literal["reliable", "usable_with_caution", "weak", "unavailable"]
 
 
