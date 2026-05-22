@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { expectNoRawI18nKeys } from '../../../test-utils/i18nRawKeySentinel';
 import { AuthGuardOverlay } from '../AuthGuardOverlay';
 
 const { languageState } = vi.hoisted(() => ({
@@ -30,7 +31,7 @@ describe('AuthGuardOverlay', () => {
   });
 
   it('renders the centered auth guard shell in Chinese', () => {
-    render(
+    const { container } = render(
       <MemoryRouter initialEntries={['/zh/market-overview']}>
         <AuthGuardOverlay moduleName="市场总览" />
       </MemoryRouter>,
@@ -55,6 +56,7 @@ describe('AuthGuardOverlay', () => {
       'shadow-2xl',
     );
     expect(screen.getByRole('heading', { name: '登录解锁 市场总览' })).toBeInTheDocument();
+    expectNoRawI18nKeys(container);
     fireEvent.click(screen.getByRole('button', { name: '登录 / 创建账户' }));
     expect(navigate).toHaveBeenCalledWith('/zh/login');
   });
@@ -62,7 +64,7 @@ describe('AuthGuardOverlay', () => {
   it('renders the English CTA copy and opens the localized login route', () => {
     languageState.value = 'en';
 
-    render(
+    const { container } = render(
       <MemoryRouter initialEntries={['/en/portfolio']}>
         <AuthGuardOverlay moduleName="Portfolio" />
       </MemoryRouter>,
@@ -70,6 +72,7 @@ describe('AuthGuardOverlay', () => {
 
     expect(screen.getByRole('heading', { name: 'Sign in to unlock Portfolio' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign in / Create account' })).toHaveClass('bg-white', 'text-black', 'active:scale-95');
+    expectNoRawI18nKeys(container);
     fireEvent.click(screen.getByRole('button', { name: 'Sign in / Create account' }));
     expect(navigate).toHaveBeenCalledWith('/en/login');
   });

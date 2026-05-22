@@ -2,6 +2,7 @@ import type React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../i18n/core';
+import { expectNoRawI18nKeys } from '../../test-utils/i18nRawKeySentinel';
 import SettingsPage from '../SettingsPage';
 
 const zh = (key: string, vars?: Record<string, string | number | undefined>) => translate('zh', key, vars);
@@ -2739,6 +2740,7 @@ describe('SettingsPage', () => {
 
     const dataSection = screen.getByRole('heading', { name: '数据源配置' }).closest('section');
     expect(dataSection).not.toBeNull();
+    expectNoRawI18nKeys(dataSection as HTMLElement);
     expect(within(dataSection as HTMLElement).getByText('1. 数据路由')).toBeInTheDocument();
     expect(within(dataSection as HTMLElement).getByText('2. 数据源库')).toBeInTheDocument();
     expect(within(dataSection as HTMLElement).getByText('MARKET DATA')).toBeInTheDocument();

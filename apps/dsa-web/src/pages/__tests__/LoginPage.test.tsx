@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../i18n/core';
+import { expectNoRawI18nKeys } from '../../test-utils/i18nRawKeySentinel';
 import LoginPage from '../LoginPage';
 
 const { navigate, useSearchParamsMock, useAuthMock } = vi.hoisted(() => ({
@@ -145,7 +146,7 @@ describe('LoginPage', () => {
       setupState: 'enabled',
     });
 
-    renderPage();
+    const { container } = renderPage();
 
     expect(screen.getByRole('heading', { name: translate('en', 'auth.login.heroTitleLogin') })).toBeInTheDocument();
     expect(screen.queryByText(translate('en', 'auth.login.continueAfterLogin'))).not.toBeInTheDocument();
@@ -177,6 +178,7 @@ describe('LoginPage', () => {
       'hover:text-white/60',
     );
     expect(screen.getByRole('button', { name: translate('en', 'auth.login.submitLogin') })).toBeInTheDocument();
+    expectNoRawI18nKeys(container);
   });
 
   it('links the login page to the reset-password route', () => {

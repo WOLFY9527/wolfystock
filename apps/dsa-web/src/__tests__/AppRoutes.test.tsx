@@ -1,7 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppContent } from '../App';
+import { translate } from '../i18n/core';
+import { expectNoRawI18nKeys } from '../test-utils/i18nRawKeySentinel';
 import { isPreviewRoutePath } from '../utils/appRouteGuards';
 import type { AdminCapabilityFlags } from '../utils/adminCapabilities';
 
@@ -48,16 +50,19 @@ vi.mock('../hooks/useProductSurface', () => ({
   useProductSurface: () => useProductSurfaceMock(),
 }));
 
-vi.mock('../contexts/UiLanguageContext', () => ({
-  useI18n: () => ({
-    language: languageState.value,
-    setLanguage: (language: 'zh' | 'en') => {
-      languageState.value = language;
-      setLanguageMock(language);
-    },
-    t: (key: string) => key,
-  }),
-}));
+vi.mock('../contexts/UiLanguageContext', async () => {
+  const { translate } = await vi.importActual<typeof import('../i18n/core')>('../i18n/core');
+  return {
+    useI18n: () => ({
+      language: languageState.value,
+      setLanguage: (language: 'zh' | 'en') => {
+        languageState.value = language;
+        setLanguageMock(language);
+      },
+      t: (key: string, vars?: Record<string, string | number | undefined>) => translate(languageState.value, key, vars),
+    }),
+  };
+});
 
 vi.mock('../stores/agentChatStore', () => ({
   useAgentChatStore: Object.assign(
@@ -468,6 +473,32 @@ describe('AppContent route flows', () => {
     renderAt('/settings/system');
 
     await waitFor(() => expect(screen.getByText('system-settings-page')).toBeInTheDocument());
+  });
+
+  it('renders shell route labels without raw i18n keys or Decision Desk navigation', async () => {
+    languageState.value = 'en';
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: true,
+      isAdminMode: true,
+      adminCapabilities: fullCapabilities,
+    });
+
+    const { container } = renderAt('/en/settings/system');
+
+    await waitFor(() => expect(screen.getByText('system-settings-page')).toBeInTheDocument());
+    const primaryNav = screen.getByRole('navigation', { name: translate('en', 'shell.drawerTitle') });
+    expectNoRawI18nKeys(container);
+    expect(within(primaryNav).getByRole('link', { name: translate('en', 'nav.home') })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole('link', { name: translate('en', 'nav.marketOverview') })).toBeInTheDocument();
+    expect(within(primaryNav).queryByRole('link', { name: 'Decision Desk' })).not.toBeInTheDocument();
   });
 
   it('renders the localized market provider operations route for admin accounts', async () => {

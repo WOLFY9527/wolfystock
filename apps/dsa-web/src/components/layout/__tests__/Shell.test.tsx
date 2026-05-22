@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../../i18n/core';
 import { ThemeProvider } from '../../theme/ThemeProvider';
+import { expectNoRawI18nKeys } from '../../../test-utils/i18nRawKeySentinel';
 import { Shell } from '../Shell';
 import { ShellRailContext } from '../ShellRailContext';
 import { setAdminSurfaceMode } from '../../../hooks/useProductSurface';
@@ -139,6 +140,7 @@ describe('Shell', () => {
     );
 
     const primaryNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
+    expectNoRawI18nKeys(primaryNav);
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.home') })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.scanner') })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.portfolio') })).toBeInTheDocument();
@@ -147,6 +149,8 @@ describe('Shell', () => {
     expect(within(primaryNav).getByRole('link', { name: '轮动雷达' })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.backtest') })).toBeInTheDocument();
+    expect(within(primaryNav).queryByRole('link', { name: '决策台' })).not.toBeInTheDocument();
+    expect(within(primaryNav).queryByRole('link', { name: 'Decision Desk' })).not.toBeInTheDocument();
   });
 
   it('highlights the localized liquidity monitor nav item independently from market overview', async () => {
