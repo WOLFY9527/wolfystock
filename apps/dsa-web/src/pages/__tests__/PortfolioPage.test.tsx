@@ -1743,7 +1743,7 @@ describe('PortfolioPage FX refresh', () => {
 
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
     expect(totalAssetsCard.className).toContain('min-w-0');
-    expect(screen.getByTestId('portfolio-account-status-strip').className).toContain('rounded-lg');
+    expect(screen.getByTestId('portfolio-account-status-strip').className).toContain('rounded-[14px]');
     expect(screen.getByTestId('portfolio-account-status-strip').className).toContain('bg-[var(--wolfy-surface-console)]');
 
     const summaryBlock = screen.getByTestId('portfolio-trade-station-summary');

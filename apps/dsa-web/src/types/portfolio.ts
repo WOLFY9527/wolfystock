@@ -217,7 +217,156 @@ export interface PortfolioAnalyticsSummary {
   risk: PortfolioAnalyticsRiskSummary;
 }
 
-export interface PortfolioSnapshotResponse {
+export interface PortfolioEvidenceMetadata {
+  source?: string | null;
+  sourceLabel?: string | null;
+  freshness?: string | null;
+  freshnessLabel?: string | null;
+  asOf?: string | null;
+  isFallback?: boolean | null;
+  isStale?: boolean | null;
+  isPartial?: boolean | null;
+  isUnavailable?: boolean | null;
+  coverage?: Record<string, unknown> | null;
+  confidenceWeight?: number | null;
+  degradationReason?: string | null;
+  capReason?: string | null;
+  state?: string | null;
+  status?: string | null;
+}
+
+export interface PortfolioRiskDiagnosticIssue extends PortfolioEvidenceMetadata {
+  code?: string | null;
+  label?: string | null;
+  detail?: string | null;
+  accountIds?: number[];
+  severity?: string | null;
+  [key: string]: unknown;
+}
+
+export interface PortfolioRiskEvidenceSection extends PortfolioEvidenceMetadata {
+  summary?: string | null;
+  issues?: PortfolioRiskDiagnosticIssue[];
+  details?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface PortfolioRiskConfidenceCap extends PortfolioEvidenceMetadata {
+  value?: number | null;
+  decisionStatus?: string | null;
+  reasonCodes?: string[];
+  limitationLabels?: string[];
+  disabledClaims?: string[];
+  policyVersion?: string | null;
+  [key: string]: unknown;
+}
+
+export interface PortfolioRiskEvidenceEntity {
+  type?: string | null;
+  id?: string | null;
+  symbol?: string | null;
+  market?: string | null;
+  displayName?: string | null;
+  [key: string]: unknown;
+}
+
+export interface PortfolioRiskEvidenceItem extends PortfolioEvidenceMetadata {
+  key?: string | null;
+  criticality?: string | null;
+  valueClass?: string | null;
+  sourceRefIds?: string[];
+  freshnessClass?: string | null;
+  reasonCodes?: string[];
+  [key: string]: unknown;
+}
+
+export interface PortfolioRiskEvidenceSourceRef extends PortfolioEvidenceMetadata {
+  sourceRefId?: string | null;
+  provider?: string | null;
+  category?: string | null;
+  sourceClass?: string | null;
+  cacheHit?: boolean | null;
+  providerUsageEventIds?: string[];
+  sanitizedReasonCode?: string | null;
+  rawPayloadStored?: boolean | null;
+  [key: string]: unknown;
+}
+
+export interface PortfolioRiskExplainableFact {
+  factId?: string | null;
+  statement?: string | null;
+  sourceRefIds?: string[];
+  criticality?: string | null;
+  confidenceClass?: string | null;
+  userVisible?: boolean | null;
+  [key: string]: unknown;
+}
+
+export interface PortfolioRiskEvidenceFreshness extends PortfolioEvidenceMetadata {
+  [key: string]: unknown;
+}
+
+export interface PortfolioRiskEvidencePacket {
+  source?: string | null;
+  sourceLabel?: string | null;
+  freshnessLabel?: string | null;
+  asOf?: string | null;
+  isFallback?: boolean | null;
+  isStale?: boolean | null;
+  isPartial?: boolean | null;
+  isUnavailable?: boolean | null;
+  coverage?: Record<string, unknown> | null;
+  confidenceWeight?: number | null;
+  degradationReason?: string | null;
+  capReason?: string | null;
+  state?: string | null;
+  status?: string | null;
+  engine?: string | null;
+  entity?: PortfolioRiskEvidenceEntity | null;
+  runId?: string | null;
+  evidenceVersion?: string | null;
+  requiredEvidence?: PortfolioRiskEvidenceItem[];
+  optionalEvidence?: PortfolioRiskEvidenceItem[];
+  freshness?: PortfolioRiskEvidenceFreshness | null;
+  qualityFlags?: string[];
+  decisionStatus?: string | null;
+  confidenceCap?: PortfolioRiskConfidenceCap | null;
+  sourceRefs?: PortfolioRiskEvidenceSourceRef[];
+  explainableFacts?: PortfolioRiskExplainableFact[];
+  adminDiagnostics?: Record<string, unknown>;
+  limitationLabels?: string[];
+  [key: string]: unknown;
+}
+
+export interface PortfolioRiskDiagnostics extends PortfolioEvidenceMetadata {
+  holdingsLineage?: PortfolioRiskEvidenceSection | null;
+  cashLedgerCompleteness?: PortfolioRiskEvidenceSection | null;
+  transactionLineage?: PortfolioRiskEvidenceSection | null;
+  fxFreshness?: PortfolioRiskEvidenceSection | null;
+  costBasisCoverage?: PortfolioRiskEvidenceSection | null;
+  sourceAuthority?: PortfolioRiskEvidenceSection | null;
+  benchmarkFactorMapping?: PortfolioRiskEvidenceSection | null;
+  confidenceCap?: PortfolioRiskConfidenceCap | null;
+  evidencePacket?: PortfolioRiskEvidencePacket | null;
+  [key: string]: unknown;
+}
+
+export interface PortfolioRiskDiagnosticsStateFields {
+  sourceAuthorityState?: string | null;
+  fxFreshnessState?: string | null;
+  holdingsLineageState?: string | null;
+  cashLedgerCompletenessState?: string | null;
+  benchmarkMappingState?: string | null;
+  factorMappingState?: string | null;
+}
+
+export interface PortfolioRiskDiagnosticsResponseFields extends PortfolioRiskDiagnosticsStateFields {
+  riskDiagnostics?: PortfolioRiskDiagnostics | null;
+  portfolioRiskEvidence?: PortfolioRiskEvidencePacket | null;
+  confidenceCap?: PortfolioRiskConfidenceCap | null;
+}
+
+export interface PortfolioSnapshotResponse extends PortfolioEvidenceMetadata, PortfolioRiskDiagnosticsResponseFields {
   asOf: string;
   costMethod: PortfolioCostMethod;
   currency: string;
@@ -269,7 +418,7 @@ export interface PortfolioStopLossItem {
   isTriggered: boolean;
 }
 
-export interface PortfolioRiskResponse {
+export interface PortfolioRiskResponse extends PortfolioEvidenceMetadata, PortfolioRiskDiagnosticsResponseFields {
   asOf: string;
   accountId?: number | null;
   costMethod: PortfolioCostMethod;
