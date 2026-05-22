@@ -1,4 +1,5 @@
 ## 2026-05-22
+- Backtest robustness support exports now use neutral parameter-selection terminology instead of optimizer wording in public metadata.
 - Polygon EOD US breadth scoring now requires a valid previous-close comparison; open-close breadth remains observation-only and broad-market claims stay partial while high/low metrics are unavailable.
 
 - **Market Intelligence Polygon breadth runtime diagnostic** - The

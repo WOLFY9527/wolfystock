@@ -2251,13 +2251,13 @@ class RuleBacktestService:
         )
         contract_metadata = {
             "diagnostic_only": True,
-            "optimizer_executed": False,
+            "parameter_selection_executed": False,
             "parameter_sweep_executed": False,
             "provider_calls_executed": False,
             "portfolio_allocation_backtest_executed": False,
             "professional_quant_readiness_claimed": False,
             "walk_forward_validation_claimed": False,
-            "strategy_selection_mode": "reuse_input_strategy_without_optimizer_search",
+            "input_strategy_policy": "reuse_input_strategy_without_parameter_search",
         }
         walk_forward = dict(walk_forward)
         walk_forward["analysis_mode"] = "diagnostic_replay"

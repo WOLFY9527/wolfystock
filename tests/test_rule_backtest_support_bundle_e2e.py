@@ -379,7 +379,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
             self.assertIn("profile", http_payload)
             self.assertIn("source", http_payload)
             self.assertIsNone(http_payload["profile"])
-            self.assertIsNone(http_payload["source"])
+            self.assertEqual(http_payload["source"], "summary.robustness_analysis")
             self._assert_robustness_payload_avoids_optimizer_semantics(service_payload)
             self._assert_robustness_payload_avoids_optimizer_semantics(http_payload)
         else:

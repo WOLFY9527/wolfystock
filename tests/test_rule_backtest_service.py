@@ -219,9 +219,7 @@ class RuleBacktestTestCase(unittest.TestCase):
 
     @staticmethod
     def _assert_robustness_payload_avoids_optimizer_semantics(payload: dict) -> None:
-        filtered_payload = dict(payload)
-        filtered_payload.pop("contract_metadata", None)
-        serialized = json.dumps(filtered_payload, ensure_ascii=False, sort_keys=True).lower()
+        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True).lower()
         for needle in FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS:
             assert needle not in serialized, needle
 
@@ -233,13 +231,13 @@ class RuleBacktestTestCase(unittest.TestCase):
 
         contract_metadata = dict(payload.get("contract_metadata") or {})
         assert contract_metadata.get("diagnostic_only") is True
-        assert contract_metadata.get("optimizer_executed") is False
+        assert contract_metadata.get("parameter_selection_executed") is False
         assert contract_metadata.get("parameter_sweep_executed") is False
         assert contract_metadata.get("provider_calls_executed") is False
         assert contract_metadata.get("portfolio_allocation_backtest_executed") is False
         assert contract_metadata.get("professional_quant_readiness_claimed") is False
         assert contract_metadata.get("walk_forward_validation_claimed") is False
-        assert contract_metadata.get("strategy_selection_mode") == "reuse_input_strategy_without_optimizer_search"
+        assert contract_metadata.get("input_strategy_policy") == "reuse_input_strategy_without_parameter_search"
 
         walk_forward = dict(payload.get("walk_forward") or {})
         walk_forward_serialized = json.dumps(walk_forward, ensure_ascii=False, sort_keys=True).lower()
