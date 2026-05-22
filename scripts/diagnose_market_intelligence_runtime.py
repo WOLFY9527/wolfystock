@@ -18,8 +18,15 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.services.official_macro_transport import run_official_macro_live_smoke
+from src.services.polygon_us_breadth_provider import (
+    diagnostic_summary as polygon_us_breadth_diagnostic_summary,
+    run_polygon_us_breadth_activation,
+)
 from src.services.rotation_radar_quote_provider import run_rotation_radar_alpaca_live_smoke
-from src.services.us_breadth_contracts import build_us_breadth_missing_authority_diagnostic
+from src.services.us_breadth_contracts import (
+    US_BREADTH_SYMBOLS,
+    build_us_breadth_missing_authority_diagnostic,
+)
 
 
 DEFAULT_TIMEOUT_SECONDS = 3.0
@@ -49,10 +56,40 @@ def _sanitize_reason(value: Any) -> str | None:
     return text
 
 
+def _sanitize_reason_code(value: Any) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    lowered = text.lower()
+    blocked_tokens = ("token", "secret", "cookie", "header", "bearer", "apikey", "api_key", "authorization")
+    if any(token in lowered for token in blocked_tokens):
+        return REDACTED
+    if len(text) > 64 or any(character.lower() not in _SAFE_REASON_CHARS for character in text):
+        return REDACTED
+    return text
+
+
 def _string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if str(item or "").strip()]
+
+
+def _sanitized_string_list(value: Any) -> list[str]:
+    sanitized: list[str] = []
+    for item in _string_list(value):
+        reason = _sanitize_reason_code(item)
+        if reason:
+            sanitized.append(reason)
+    return sanitized
+
+
+def _non_negative_int(value: Any) -> int:
+    try:
+        parsed = int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, parsed)
 
 
 def _compact_official_macro_diagnostic(payload: dict[str, Any]) -> dict[str, Any]:
@@ -85,6 +122,43 @@ def _compact_alpaca_rotation_diagnostic(payload: dict[str, Any]) -> dict[str, An
         "staleWindows": _string_list(payload.get("staleWindows")),
         "reason": _sanitize_reason(payload.get("reason")),
     }
+
+
+def _compact_polygon_us_breadth_diagnostic(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "credentialsPresent": bool(payload.get("credentialsPresent", False)),
+        "probePassed": bool(payload.get("probePassed", False)),
+        "observationDate": payload.get("observationDate") if payload.get("observationDate") else None,
+        "freshnessValid": bool(payload.get("freshnessValid", False)),
+        "coverageCount": _non_negative_int(payload.get("coverageCount")),
+        "sourceAuthorityAllowed": bool(payload.get("sourceAuthorityAllowed", False)),
+        "scoreContributionAllowed": bool(payload.get("scoreContributionAllowed", False)),
+        "fulfilledMetrics": _string_list(payload.get("fulfilledMetrics")),
+        "missingMetrics": _string_list(payload.get("missingMetrics")),
+        "reasonCodes": _sanitized_string_list(payload.get("reasonCodes")),
+    }
+
+
+def _collect_polygon_us_breadth_diagnostic() -> dict[str, Any]:
+    try:
+        return _compact_polygon_us_breadth_diagnostic(
+            polygon_us_breadth_diagnostic_summary(run_polygon_us_breadth_activation())
+        )
+    except Exception:
+        return _compact_polygon_us_breadth_diagnostic(
+            {
+                "credentialsPresent": bool(str(os.getenv("POLYGON_API_KEY") or "").strip()),
+                "probePassed": False,
+                "observationDate": None,
+                "freshnessValid": False,
+                "coverageCount": 0,
+                "sourceAuthorityAllowed": False,
+                "scoreContributionAllowed": False,
+                "fulfilledMetrics": [],
+                "missingMetrics": list(US_BREADTH_SYMBOLS),
+                "reasonCodes": ["unexpected_error"],
+            }
+        )
 
 
 def _normalize_request_base_url(base_url: str) -> str:
@@ -254,9 +328,11 @@ def collect_diagnostic_bundle(
 ) -> dict[str, Any]:
     official_macro_diagnostic = _compact_official_macro_diagnostic(run_official_macro_live_smoke())
     alpaca_rotation_diagnostic = _compact_alpaca_rotation_diagnostic(run_rotation_radar_alpaca_live_smoke())
+    polygon_us_breadth_diagnostic = _collect_polygon_us_breadth_diagnostic()
     result: dict[str, Any] = {
         "officialMacroDiagnostic": official_macro_diagnostic,
         "alpacaRotationDiagnostic": alpaca_rotation_diagnostic,
+        "polygonUsBreadthDiagnostic": polygon_us_breadth_diagnostic,
         "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
         "discrepancies": [],
     }
@@ -343,6 +419,7 @@ def main(argv: list[str] | None = None) -> int:
         fallback = {
             "officialMacroDiagnostic": _compact_official_macro_diagnostic({}),
             "alpacaRotationDiagnostic": _compact_alpaca_rotation_diagnostic({}),
+            "polygonUsBreadthDiagnostic": _collect_polygon_us_breadth_diagnostic(),
             "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
             "discrepancies": [],
         }

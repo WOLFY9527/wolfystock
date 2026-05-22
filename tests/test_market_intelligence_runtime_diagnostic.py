@@ -57,6 +57,33 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         module,
+        "run_polygon_us_breadth_activation",
+        lambda: {
+            "credentialsPresent": False,
+            "providerConstructed": False,
+            "probePassed": False,
+            "observationDate": None,
+            "freshnessValid": False,
+            "coverageCount": 0,
+            "sourceMetadataValid": True,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "fulfilledMetrics": [],
+            "missingMetrics": [
+                "ADVANCERS",
+                "DECLINERS",
+                "UNCHANGED",
+                "ADVANCE_DECLINE_RATIO",
+                "NEW_HIGHS",
+                "NEW_LOWS",
+                "HIGH_LOW_RATIO",
+            ],
+            "reasonCodes": ["authorized_us_market_breadth_feed_not_configured"],
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module,
         "_fetch_json",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("endpoint fetch should not run")),
     )
@@ -90,6 +117,26 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
             "staleWindows": [],
             "reason": "credentials",
         },
+        "polygonUsBreadthDiagnostic": {
+            "credentialsPresent": False,
+            "probePassed": False,
+            "observationDate": None,
+            "freshnessValid": False,
+            "coverageCount": 0,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "fulfilledMetrics": [],
+            "missingMetrics": [
+                "ADVANCERS",
+                "DECLINERS",
+                "UNCHANGED",
+                "ADVANCE_DECLINE_RATIO",
+                "NEW_HIGHS",
+                "NEW_LOWS",
+                "HIGH_LOW_RATIO",
+            ],
+            "reasonCodes": ["authorized_us_market_breadth_feed_not_configured"],
+        },
         "usBreadthAuthorityDiagnostic": {
             "providerConstructed": False,
             "probePassed": False,
@@ -101,6 +148,7 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
             "missingMetrics": [
                 "ADVANCERS",
                 "DECLINERS",
+                "UNCHANGED",
                 "ADVANCE_DECLINE_RATIO",
                 "NEW_HIGHS",
                 "NEW_LOWS",
@@ -155,6 +203,26 @@ def test_runtime_diagnostic_sanitizes_endpoint_and_provider_output(monkeypatch) 
             "reason": "header=alpaca-secret",
             "apiKey": "alpaca-secret",
         },
+    )
+    monkeypatch.setattr(
+        module,
+        "run_polygon_us_breadth_activation",
+        lambda: {
+            "credentialsPresent": True,
+            "providerConstructed": True,
+            "probePassed": False,
+            "observationDate": "2026-05-21",
+            "freshnessValid": False,
+            "coverageCount": 0,
+            "sourceMetadataValid": True,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "fulfilledMetrics": [],
+            "missingMetrics": ["ADVANCERS"],
+            "reasonCodes": ["api_key=polygon-secret", "polygon_eod_stale"],
+            "requestUrl": "https://api.polygon.io/raw?apiKey=polygon-secret",
+        },
+        raising=False,
     )
 
     endpoint_payloads = {
@@ -245,6 +313,7 @@ def test_runtime_diagnostic_sanitizes_endpoint_and_provider_output(monkeypatch) 
     assert payload["runtimeReadiness"]["rotationRadar"]["available"] is False
     assert payload["runtimeReadiness"]["marketTemperature"]["temperatureAvailable"] is False
     assert payload["runtimeReadiness"]["dataReadiness"]["readinessStatus"] == "misconfigured"
+    assert payload["polygonUsBreadthDiagnostic"]["reasonCodes"] == ["redacted", "polygon_eod_stale"]
     assert {"code": "diagnostic_pass_runtime_unavailable", "diagnostic": "officialMacroDiagnostic", "runtimeSurface": "marketOverviewMacro"} in payload["discrepancies"]
     assert {"code": "diagnostic_pass_runtime_unavailable", "diagnostic": "alpacaRotationDiagnostic", "runtimeSurface": "rotationRadar"} in payload["discrepancies"]
 
@@ -252,11 +321,84 @@ def test_runtime_diagnostic_sanitizes_endpoint_and_provider_output(monkeypatch) 
         "top-secret",
         "fred-secret",
         "alpaca-secret",
+        "polygon-secret",
         "Authorization",
         "Cookie",
         "X-Api-Key",
+        "requestUrl",
         "/private/path/should/not/appear",
         "rawPayload",
         "rawHeaders",
     ):
         assert blocked not in serialized
+
+
+def test_runtime_diagnostic_keeps_polygon_breadth_probe_failure_fail_closed(monkeypatch) -> None:
+    module = _load_script_module()
+
+    monkeypatch.setattr(
+        module,
+        "run_official_macro_live_smoke",
+        lambda: {
+            "credentialsPresent": False,
+            "providerConstructed": False,
+            "probePassed": False,
+            "freshnessValid": False,
+            "sourceMetadataValid": False,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "fulfilledSeries": [],
+            "missingSeries": ["VIXCLS"],
+            "staleSeries": [],
+            "reason": "credentials",
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "run_rotation_radar_alpaca_live_smoke",
+        lambda: {
+            "credentialsPresent": False,
+            "providerConstructed": False,
+            "probePassed": False,
+            "freshnessValid": False,
+            "sourceMetadataValid": False,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "fulfilledWindows": [],
+            "missingWindows": ["5m", "15m", "60m", "1d"],
+            "staleWindows": [],
+            "reason": "credentials",
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "run_polygon_us_breadth_activation",
+        lambda: (_ for _ in ()).throw(RuntimeError("polygon api_key=raw-secret")),
+    )
+
+    payload = module.collect_diagnostic_bundle()
+    serialized = json.dumps(payload, ensure_ascii=False)
+
+    assert payload["polygonUsBreadthDiagnostic"] == {
+        "credentialsPresent": False,
+        "probePassed": False,
+        "observationDate": None,
+        "freshnessValid": False,
+        "coverageCount": 0,
+        "sourceAuthorityAllowed": False,
+        "scoreContributionAllowed": False,
+        "fulfilledMetrics": [],
+        "missingMetrics": [
+            "ADVANCERS",
+            "DECLINERS",
+            "UNCHANGED",
+            "ADVANCE_DECLINE_RATIO",
+            "NEW_HIGHS",
+            "NEW_LOWS",
+            "HIGH_LOW_RATIO",
+        ],
+        "reasonCodes": ["unexpected_error"],
+    }
+    assert payload["discrepancies"] == []
+    assert "raw-secret" not in serialized
+    assert "api_key" not in serialized

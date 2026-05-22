@@ -1,5 +1,11 @@
 ## 2026-05-22
 
+- **Market Intelligence Polygon breadth runtime diagnostic** - The
+  sanitized `scripts/diagnose_market_intelligence_runtime.py` bundle now
+  includes compact Polygon US breadth activation status with credential
+  presence, probe/freshness/coverage gates, fulfilled and missing metrics, and
+  redacted reason codes. Missing or failing Polygon activation remains
+  fail-closed and does not fail the broader runtime diagnostic.
 - **Polygon EOD computed US breadth adapter** - Market Overview can now use
   backend-only `POLYGON_API_KEY` to fetch Polygon grouped daily US stocks data
   and compute EOD advancers, decliners, unchanged, and advance/decline ratio
