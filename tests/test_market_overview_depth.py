@@ -59,6 +59,31 @@ class _HistoryFrame:
         return key in self._columns
 
 
+def _missing_us_breadth_activation() -> dict[str, object]:
+    return {
+        "credentialsPresent": False,
+        "providerConstructed": False,
+        "probePassed": False,
+        "freshnessValid": False,
+        "sourceMetadataValid": True,
+        "sourceAuthorityAllowed": False,
+        "scoreContributionAllowed": False,
+        "broadMarketClaimAllowed": False,
+        "fulfilledMetrics": [],
+        "missingMetrics": [
+            "ADVANCERS",
+            "DECLINERS",
+            "UNCHANGED",
+            "ADVANCE_DECLINE_RATIO",
+            "NEW_HIGHS",
+            "NEW_LOWS",
+            "HIGH_LOW_RATIO",
+        ],
+        "staleMetrics": [],
+        "reasonCodes": ["authorized_us_market_breadth_feed_not_configured"],
+    }
+
+
 def test_us_breadth_sector_proxy_returns_stable_shape_with_metadata() -> None:
     service = MarketOverviewService()
     quotes = {
@@ -71,7 +96,10 @@ def test_us_breadth_sector_proxy_returns_stable_shape_with_metadata() -> None:
         "IWM": {"value": 210.0, "change_pct": -0.3, "trend": [211.0, 210.0], "volume": 22_000_000},
     }
 
-    with patch.object(service, "_latest_quote", side_effect=lambda ticker: quotes[ticker]):
+    with (
+        patch("src.services.market_overview_service.run_polygon_us_breadth_activation", return_value=_missing_us_breadth_activation()),
+        patch.object(service, "_latest_quote", side_effect=lambda ticker: quotes[ticker]),
+    ):
         payload = service.get_us_breadth()
 
     symbols = {item["symbol"] for item in payload["items"]}
@@ -87,21 +115,49 @@ def test_us_breadth_sector_proxy_returns_stable_shape_with_metadata() -> None:
     assert payload["providerHealth"]["sourceLabel"] == "Yahoo Finance"
     assert payload["providerHealth"]["card"] == "us_breadth"
     assert payload["items"][0]["sourceLabel"] == "Yahoo Finance"
-    assert payload["items"][0]["sourceType"] == "unofficial_public_api"
+    assert payload["items"][0]["sourceType"] == "unofficial_proxy"
 
 
-def test_us_breadth_unavailable_returns_compact_fallback_shape() -> None:
+def test_us_breadth_unavailable_returns_compact_unavailable_shape() -> None:
     service = MarketOverviewService()
 
-    with patch.object(service, "_latest_quote", side_effect=RuntimeError("yfinance unavailable")):
+    with (
+        patch("src.services.market_overview_service.run_polygon_us_breadth_activation", return_value=_missing_us_breadth_activation()),
+        patch.object(service, "_latest_quote", side_effect=RuntimeError("yfinance unavailable")),
+    ):
         payload = service.get_us_breadth()
 
     assert payload["source"] == "unavailable"
-    assert payload["freshness"] == "fallback"
+    assert payload["sourceType"] == "missing"
+    assert payload["freshness"] == "unavailable"
+    assert payload["breadthClaimType"] == "missing_unavailable_breadth"
     assert payload["isFallback"] is True
+    assert payload["fallbackUsed"] is True
+    assert payload["sourceAuthorityAllowed"] is False
+    assert payload["scoreContributionAllowed"] is False
+    assert payload["broadMarketClaimAllowed"] is False
+    assert payload["sourceAuthorityReason"] == "authorized_us_market_breadth_feed_not_configured"
+    assert payload["routeRejectedReasonCodes"] == ["authorized_us_market_breadth_feed_not_configured"]
     assert payload["providerHealth"]["status"] == "unavailable"
-    assert any(item["symbol"] == "SECTOR_PROXY_UNAVAILABLE" for item in payload["items"])
-    assert "未接入" in payload["items"][0]["label"] or "暂不可用" in payload["items"][0]["label"]
+    assert payload["authorityDiagnostics"]["reason"] == "authorized_us_market_breadth_feed_not_configured"
+    assert payload["authorityDiagnostics"]["missingMetrics"] == [
+        "ADVANCERS",
+        "DECLINERS",
+        "UNCHANGED",
+        "ADVANCE_DECLINE_RATIO",
+        "NEW_HIGHS",
+        "NEW_LOWS",
+        "HIGH_LOW_RATIO",
+    ]
+    assert [item["symbol"] for item in payload["items"]] == [
+        "US_BREADTH_UNAVAILABLE",
+        "ADVANCE_DECLINE_UNAVAILABLE",
+        "HIGH_LOW_UNAVAILABLE",
+    ]
+    assert all(item["scoreContributionAllowed"] is False for item in payload["items"])
+    assert all(item["broadMarketClaimAllowed"] is False for item in payload["items"])
+    assert payload["items"][0]["label"] == "US breadth missing/unavailable"
+    assert payload["items"][0]["sourceLabel"] == "未接入"
 
 
 def test_market_refresh_failure_serves_stale_snapshot_with_provider_health() -> None:
@@ -249,6 +305,7 @@ def test_us_breadth_reuses_shared_yfinance_quotes_within_public_request() -> Non
         )
 
     with (
+        patch("src.services.market_overview_service.run_polygon_us_breadth_activation", return_value=_missing_us_breadth_activation()),
         patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", side_effect=fake_history_frame),
         patch("src.services.market_overview_service.ExecutionLogService") as log_service,
     ):
