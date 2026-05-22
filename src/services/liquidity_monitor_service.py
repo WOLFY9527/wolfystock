@@ -28,7 +28,7 @@ ADVISORY_DISCLOSURE = "仅用于观察市场流动性环境，非买卖建议，
 FRESHNESS_ORDER = {"live": 0, "cached": 1, "delayed": 2, "stale": 3, "fallback": 4, "mock": 5, "error": 6, "unavailable": 7}
 EVIDENCE_FRESHNESS_ORDER = {**FRESHNESS_ORDER, "fresh": 0, "partial": 2.5, "synthetic": 5}
 RELIABLE_FRESHNESS = {"live", "cached", "delayed"}
-POSSIBLE_WEIGHT = 43
+POSSIBLE_WEIGHT = 49
 CRYPTO_FUNDING_BACKFILL_MAX_AGE = timedelta(hours=12)
 SOURCE_CONFIDENCE_BY_TYPE = {
     "official_public": 1.0,
@@ -92,6 +92,13 @@ LIQUIDITY_SCORE_ROUTE_REQUESTS = {
         "freshnessNeed": "delayed",
         "symbol": "US10Y",
     },
+    "fed_liquidity": {
+        "market": "US",
+        "assetType": "macro",
+        "capability": "fed_liquidity",
+        "freshnessNeed": "delayed",
+        "symbol": "WALCL",
+    },
     "us_etf_flow_proxy": {
         "market": "US",
         "assetType": "fund",
@@ -114,6 +121,7 @@ LIQUIDITY_INDICATOR_REQUIRED_INPUTS = {
     "vix_pressure": ("VIX",),
     "usd_pressure": ("DXY", "USDCNH", "USDJPY", "EURUSD"),
     "us_rates_pressure": ("US2Y", "US10Y", "US30Y", "SOFR", "US10Y2Y", "US10Y3M"),
+    "fed_liquidity": ("FED_ASSETS", "FED_RRP", "TGA", "RESERVES"),
     "us_etf_flow_proxy": ("ETF",),
     "us_breadth_proxy": ("SECTORS_UP", "SECTORS_DOWN", "RSP_SPY", "IWM_SPY", "QQQ_SPY"),
     "cn_hk_index_context": ("000001.SH", "399001.SZ", "HSI.HK", "HSTECH.HK", "CN00Y"),
@@ -145,6 +153,7 @@ LIQUIDITY_INDICATOR_ACTIVATION_HINTS = {
     "vix_pressure": "现有宏观 / 波动率快照可用时激活；yfinance proxy 会被 trust gate 限制为延迟或部分。",
     "usd_pressure": "现有 FX / commodities 快照可用时激活；缺少 DXY 时可退化到 USD/CNH、USD/JPY、EUR/USD 代理。",
     "us_rates_pressure": "官方利率快照优先；没有 US2Y / US10Y / US30Y / SOFR 时只能退化为代理或不可用。",
+    "fed_liquidity": "官方 FRED Fed liquidity 组需要 WALCL / RRPONTSYD / WTREGEN / WRESBAL 全量新鲜官方行；部分覆盖仅作观测。",
     "us_etf_flow_proxy": "激活现有 `funds_flow` snapshot 或 Market Overview 的 SPY / QQQ / IWM proxy；缺少 ETF 条目时保持不可用。",
     "us_breadth_proxy": "激活现有 sector ETF breadth proxy；需要 SECTORS_UP、SECTORS_DOWN 和相对强弱代理。",
     "cn_hk_index_context": "CN / HK 指数上下文只能来自现有快照，缺少可用指数条目时保持不可用。",
@@ -189,6 +198,14 @@ LIQUIDITY_INDICATOR_PROVIDER_ACTIVATION = {
         "paidDataLikelyRequired": False,
         "observationOnly": False,
         "proxyOnly": True,
+        "scoreContributionAllowed": True,
+        "requiresRealSourceForScore": True,
+    },
+    "fed_liquidity": {
+        "requiredProviderClass": "official_public.fed_liquidity",
+        "paidDataLikelyRequired": False,
+        "observationOnly": False,
+        "proxyOnly": False,
         "scoreContributionAllowed": True,
         "requiresRealSourceForScore": True,
     },
@@ -276,6 +293,7 @@ class LiquidityMonitorService:
             self._vix_indicator(panels["volatility"], panels["macro"]),
             self._usd_pressure_indicator(panels["fx_commodities"], panels["rates"]),
             self._us_rates_indicator(panels["rates"], panels["macro"]),
+            self._fed_liquidity_indicator(panels["macro"]),
             self._us_etf_flow_indicator(panels["funds_flow"]),
             self._us_breadth_indicator(panels["us_breadth"]),
             self._cn_hk_index_indicator(panels["cn_indices"]),
@@ -881,6 +899,82 @@ class LiquidityMonitorService:
             ),
         )
 
+    def _fed_liquidity_indicator(self, panel: PanelState) -> Dict[str, Any]:
+        components = self._extract_fed_liquidity_components(panel)
+        score_grade_components = [
+            component
+            for component in components
+            if self._fed_liquidity_component_score_grade(component)
+        ]
+        all_required_ready = len(score_grade_components) == len(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["fed_liquidity"])
+        if not components:
+            return self._indicator(
+                "fed_liquidity",
+                "Fed Liquidity / 美联储流动性",
+                panel,
+                "unavailable",
+                0,
+                6,
+                False,
+                self._summary_with_metadata(
+                    "缺少 WALCL / RRPONTSYD / WTREGEN / WRESBAL 官方 FRED 证据",
+                    source="fred",
+                    source_label="FRED",
+                    source_type="official_public",
+                    reason=self._panel_unavailable_reason(panel, "fed_liquidity_official_rows_missing"),
+                ),
+            )
+
+        positive = 0
+        negative = 0
+        summary_parts: list[str] = []
+        for component in score_grade_components if all_required_ready else components:
+            change = self._numeric(component.get("change"))
+            if change is None:
+                change = self._numeric(component.get("changePercent"))
+            if change is not None:
+                signal = self._fed_liquidity_signal(component["symbol"], change)
+                if signal > 0:
+                    positive += 1
+                elif signal < 0:
+                    negative += 1
+            freshness_note = str(component.get("freshness") or "unavailable")
+            summary_parts.append(
+                f"{component['symbol']} {self._signed_percent_text(change)} ({freshness_note})"
+            )
+
+        direction = self._direction_from_counts(positive, negative)
+        contribution = 6 if direction > 0 else -6 if direction < 0 else 0
+        freshness = self._weakest_freshness([str(component.get("freshness") or "unavailable") for component in components])
+        status = "live" if all_required_ready else "partial"
+        included = all_required_ready
+        degradation_reason = None if all_required_ready else "fed_liquidity_required_series_missing_or_stale"
+        evidence_inputs = [
+            self._source_confidence_input_from_component(component)
+            for component in components
+        ]
+        evidence = self._indicator_evidence(
+            status=status,
+            freshness=freshness,
+            inputs=evidence_inputs,
+            expected_input_count=len(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["fed_liquidity"]),
+        )
+        if degradation_reason:
+            evidence["degradationReason"] = degradation_reason
+
+        return self._indicator(
+            "fed_liquidity",
+            "Fed Liquidity / 美联储流动性",
+            panel,
+            status,
+            contribution,
+            6,
+            included,
+            self._summary_with_component_metadata(" | ".join(summary_parts), components, freshness=freshness),
+            freshness=freshness,
+            evidence=evidence,
+        )
+
     def _us_etf_flow_indicator(self, panel: PanelState) -> Dict[str, Any]:
         item = self._first_reliable_item(panel, {"ETF"})
         if item is None:
@@ -1267,6 +1361,67 @@ class LiquidityMonitorService:
                 }
             )
         return items
+
+    def _extract_fed_liquidity_components(self, panel: PanelState) -> List[Dict[str, Any]]:
+        raw_items = panel.payload.get("items")
+        if not isinstance(raw_items, list):
+            return []
+
+        required_symbols = set(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["fed_liquidity"])
+        components: list[Dict[str, Any]] = []
+        for raw in raw_items:
+            if not isinstance(raw, dict):
+                continue
+            symbol = str(raw.get("symbol") or "")
+            if symbol not in required_symbols:
+                continue
+            value = self._numeric(raw.get("value") if raw.get("value") is not None else raw.get("price"))
+            change = self._change_value(raw)
+            component = {
+                "symbol": symbol,
+                "key": symbol,
+                "label": str(raw.get("label") or raw.get("name") or symbol),
+                "value": value,
+                "change": change,
+                "unit": str(raw.get("unit") or ""),
+                **self._component_projection_meta(raw, panel),
+            }
+            if raw.get("sourceAuthorityAllowed") is False:
+                component["sourceAuthorityAllowed"] = False
+            if raw.get("scoreContributionAllowed") is False:
+                component["scoreContributionAllowed"] = False
+            if raw.get("sourceAuthorityReason"):
+                component["sourceAuthorityReason"] = raw.get("sourceAuthorityReason")
+                component["degradationReason"] = raw.get("sourceAuthorityReason")
+            if raw.get("routeRejectedReasonCodes"):
+                component["routeRejectedReasonCodes"] = list(raw.get("routeRejectedReasonCodes") or [])
+            components.append(component)
+        return components
+
+    @staticmethod
+    def _fed_liquidity_component_score_grade(component: Dict[str, Any]) -> bool:
+        return bool(
+            component.get("sourceType") == "official_public"
+            and component.get("sourceAuthorityAllowed") is not False
+            and component.get("scoreContributionAllowed") is not False
+            and not component.get("isFallback")
+            and not component.get("isUnavailable")
+            and not component.get("isStale")
+            and str(component.get("freshness") or "") in RELIABLE_FRESHNESS
+            and LiquidityMonitorService._numeric(component.get("value")) is not None
+            and (
+                LiquidityMonitorService._numeric(component.get("change")) is not None
+                or LiquidityMonitorService._numeric(component.get("changePercent")) is not None
+            )
+        )
+
+    @staticmethod
+    def _fed_liquidity_signal(symbol: str, change: float) -> int:
+        if symbol in {"FED_ASSETS", "RESERVES"}:
+            return 1 if change > 0 else -1 if change < 0 else 0
+        if symbol in {"FED_RRP", "TGA"}:
+            return 1 if change < 0 else -1 if change > 0 else 0
+        return 0
 
     def _extract_credit_stress_observation(self, panel: PanelState) -> Optional[Dict[str, Any]]:
         item = self._first_reliable_item(panel, {"CREDIT"})
@@ -2011,7 +2166,7 @@ class LiquidityMonitorService:
     ) -> Dict[str, Any]:
         inputs = [dict(item) for item in evidence.get("inputs", []) if isinstance(item, dict)]
         required_inputs = self._indicator_required_inputs(key, inputs, panel)
-        fulfilled_inputs = self._indicator_fulfilled_inputs(required_inputs, inputs, panel, status)
+        fulfilled_inputs = self._indicator_fulfilled_inputs(key, required_inputs, inputs, panel, status)
         missing_inputs = [item for item in required_inputs if item not in fulfilled_inputs]
         coverage = self._indicator_coverage(required_inputs, fulfilled_inputs, evidence, status)
         trust_sources = inputs or [self._source_confidence_input_from_panel(
@@ -2111,6 +2266,8 @@ class LiquidityMonitorService:
             score_exclusion_reason = "observation_only"
         elif required_real_source_for_score and proxy_only and not proxy_score_allowlisted:
             score_exclusion_reason = "proxy_only_missing_real_source"
+        elif key == "fed_liquidity" and not real_source_available:
+            score_exclusion_reason = "fed_liquidity_required_series_missing_or_stale"
         elif not bool(trust.get("conclusionAllowed")):
             score_exclusion_reason = "trust_gate_blocked"
         score_contribution_allowed = bool(
@@ -2287,6 +2444,22 @@ class LiquidityMonitorService:
                 str(trust.get("sourceTier") or "") == "exchange_public"
                 and self._indicator_source_seen(evidence, panel, {"binance", "binance_ws"})
             )
+        if key == "fed_liquidity":
+            inputs = [item for item in evidence.get("inputs", []) if isinstance(item, dict)]
+            required = set(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["fed_liquidity"])
+            return (
+                {self._indicator_input_key(item) for item in inputs if self._indicator_input_key(item)}
+                == required
+                and all(
+                    str(item.get("sourceType") or "") == "official_public"
+                    and item.get("sourceAuthorityAllowed") is not False
+                    and item.get("scoreContributionAllowed") is not False
+                    and not item.get("isUnavailable")
+                    and not item.get("isStale")
+                    and str(item.get("freshness") or "") in RELIABLE_FRESHNESS
+                    for item in inputs
+                )
+            )
         if key in {"vix_pressure", "usd_pressure", "us_rates_pressure", "cn_hk_index_context"}:
             return (
                 str(trust.get("sourceTier") or "") == "official_public"
@@ -2337,6 +2510,7 @@ class LiquidityMonitorService:
 
     def _indicator_fulfilled_inputs(
         self,
+        indicator_key: str,
         required_inputs: tuple[str, ...],
         inputs: List[Dict[str, Any]],
         panel: PanelState,
@@ -2345,14 +2519,24 @@ class LiquidityMonitorService:
         required = set(required_inputs)
         seen: list[str] = []
         for item in inputs:
-            key = self._indicator_input_key(item)
-            if key and key in required and key not in seen:
-                seen.append(key)
+            input_key = self._indicator_input_key(item)
+            if not input_key or input_key not in required or input_key in seen:
+                continue
+            if self._indicator_input_is_fulfilled(item):
+                seen.append(input_key)
         if seen:
             return seen
         if status != "unavailable" and panel.key in required:
             return [panel.key]
         return []
+
+    @staticmethod
+    def _indicator_input_is_fulfilled(item: Dict[str, Any]) -> bool:
+        if bool(item.get("isUnavailable")) or bool(item.get("isStale")):
+            return False
+        if str(item.get("freshness") or "").lower() in {"stale", "fallback", "mock", "unavailable", "error"}:
+            return False
+        return True
 
     def _indicator_coverage(
         self,

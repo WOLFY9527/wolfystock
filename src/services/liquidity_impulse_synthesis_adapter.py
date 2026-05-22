@@ -20,6 +20,7 @@ from src.services.liquidity_impulse_synthesis_service import (
 _INDICATOR_PILLARS: dict[str, str] = {
     "usd_pressure": "dollar_pressure",
     "us_rates_pressure": "rates_pressure",
+    "fed_liquidity": "fed_liquidity",
     "vix_pressure": "volatility_stress",
     "crypto_spot_momentum": "crypto_liquidity_beta",
     "crypto_funding": "funding_stress",
@@ -129,6 +130,19 @@ def _direction_and_magnitude(key: str, indicator: Mapping[str, Any]) -> tuple[st
             _labeled_metric(summary, "US2Y"),
             _labeled_metric(summary, "US10Y"),
             _labeled_metric(summary, "US30Y"),
+        )
+    if key == "fed_liquidity":
+        direction = _vote_direction(
+            _labeled_metric(summary, "FED_ASSETS"),
+            _scaled_metric(_labeled_metric(summary, "FED_RRP"), -1.0),
+            _scaled_metric(_labeled_metric(summary, "TGA"), -1.0),
+            _labeled_metric(summary, "RESERVES"),
+        )
+        return direction or _score_direction(key, score_contribution), _mean_abs(
+            _labeled_metric(summary, "FED_ASSETS"),
+            _labeled_metric(summary, "FED_RRP"),
+            _labeled_metric(summary, "TGA"),
+            _labeled_metric(summary, "RESERVES"),
         )
     if key == "us_etf_flow_proxy":
         metric = _first_signed_metric(summary)

@@ -27,6 +27,7 @@ from src.services.official_macro_transport import (
     build_fred_observations_request,
     build_supported_fred_requests,
     build_treasury_daily_rates_request,
+    run_fed_liquidity_live_smoke,
     run_official_macro_live_smoke,
     parse_fred_observation_points_payload,
     parse_fred_observations_payload,
@@ -398,6 +399,10 @@ def test_build_fred_observations_request_supports_credit_stress_series_without_e
         ("DFF", 2),
         ("CPIAUCSL", 13),
         ("PPIACO", 13),
+        ("WALCL", 2),
+        ("RRPONTSYD", 2),
+        ("WTREGEN", 2),
+        ("WRESBAL", 2),
     ],
 )
 def test_build_fred_observations_request_supports_additional_official_macro_series_without_expanding_runtime_default_set(
@@ -419,6 +424,85 @@ def test_build_fred_observations_request_supports_additional_official_macro_seri
 def test_build_fred_observations_request_rejects_unsupported_series() -> None:
     with pytest.raises(ValueError, match="unsupported FRED series"):
         build_fred_observations_request("DXY")
+
+
+def test_fed_liquidity_live_smoke_reports_bounded_official_series_successfully() -> None:
+    now = datetime(2026, 5, 14, 12, 0, tzinfo=timezone.utc)
+    fred_requested: list[str] = []
+
+    def _fake_fetch_fred(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        fred_requested.append(series_id)
+        values = {
+            "WALCL": 7485000.0,
+            "RRPONTSYD": 432.2,
+            "WTREGEN": 812000.0,
+            "WRESBAL": 3260000.0,
+        }
+        return [_macro_point(series_id, values[series_id], "2026-05-13")]
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_fake_fetch_fred,
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_fed_liquidity_live_smoke(now=now)
+
+    assert fred_requested == ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    _assert_smoke_summary_fields(summary)
+    assert summary | {} == {
+        "credentialsPresent": True,
+        "providerConstructed": True,
+        "probePassed": True,
+        "freshnessValid": True,
+        "sourceMetadataValid": True,
+        "sourceAuthorityAllowed": True,
+        "scoreContributionAllowed": True,
+        "fulfilledSeries": ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"],
+        "missingSeries": [],
+        "staleSeries": [],
+        "reason": None,
+        "attempts": 1,
+        "maxAttempts": 3,
+        "transientMissingSeries": [],
+        "finalAttemptMissingSeries": [],
+    }
+
+
+def test_fed_liquidity_live_smoke_fails_closed_on_partial_or_stale_series() -> None:
+    now = datetime(2026, 5, 22, 12, 0, tzinfo=timezone.utc)
+    fred_requested: list[str] = []
+
+    def _fake_fetch_fred(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        fred_requested.append(series_id)
+        points = {
+            "WALCL": [_macro_point("WALCL", 7485000.0, "2026-05-20")],
+            "RRPONTSYD": [_macro_point("RRPONTSYD", 432.2, "2026-05-20")],
+            "WTREGEN": [_macro_point("WTREGEN", 812000.0, "2026-05-01")],
+            "WRESBAL": [],
+        }
+        return list(points[series_id])
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_fake_fetch_fred,
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_fed_liquidity_live_smoke(now=now)
+
+    assert fred_requested.count("WRESBAL") == 3
+    assert set(fred_requested) == {"WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"}
+    _assert_smoke_summary_fields(summary)
+    assert summary["probePassed"] is False
+    assert summary["sourceAuthorityAllowed"] is False
+    assert summary["scoreContributionAllowed"] is False
+    assert summary["fulfilledSeries"] == ["WALCL", "RRPONTSYD"]
+    assert summary["missingSeries"] == ["WRESBAL"]
+    assert summary["staleSeries"] == ["WTREGEN"]
+    assert summary["reason"] == "stale_series"
 
 
 @pytest.mark.parametrize(

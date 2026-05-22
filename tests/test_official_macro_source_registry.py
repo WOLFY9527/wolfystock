@@ -24,7 +24,11 @@ EXPECTED_SOURCE_SERIES = {
     "FRED_DGS10": ("DGS10",),
     "FRED_DGS30": ("DGS30",),
     "FRED_PPIACO": ("PPIACO",),
+    "FRED_RRPONTSYD": ("RRPONTSYD",),
     "FRED_SOFR": ("SOFR",),
+    "FRED_WALCL": ("WALCL",),
+    "FRED_WRESBAL": ("WRESBAL",),
+    "FRED_WTREGEN": ("WTREGEN",),
     "TREASURY_DAILY_RATES": ("BC_2YEAR", "BC_10YEAR", "BC_30YEAR"),
     "NYFED_SOFR": ("SOFR",),
 }
@@ -67,6 +71,10 @@ def test_transport_source_lookup_maps_runtime_source_ids_back_to_contracts() -> 
     fed_funds_contract = get_official_macro_source_for_transport_source("fred:DFF")
     cpi_contract = get_official_macro_source_for_transport_source("fred:CPIAUCSL")
     ppi_contract = get_official_macro_source_for_transport_source("fred:PPIACO")
+    walcl_contract = get_official_macro_source_for_transport_source("fred:WALCL")
+    rrp_contract = get_official_macro_source_for_transport_source("fred:RRPONTSYD")
+    tga_contract = get_official_macro_source_for_transport_source("fred:WTREGEN")
+    reserve_contract = get_official_macro_source_for_transport_source("fred:WRESBAL")
 
     assert treasury_contract is not None
     assert treasury_contract.source_id == "TREASURY_DAILY_RATES"
@@ -78,6 +86,14 @@ def test_transport_source_lookup_maps_runtime_source_ids_back_to_contracts() -> 
     assert cpi_contract.source_id == "FRED_CPIAUCSL"
     assert ppi_contract is not None
     assert ppi_contract.source_id == "FRED_PPIACO"
+    assert walcl_contract is not None
+    assert walcl_contract.source_id == "FRED_WALCL"
+    assert rrp_contract is not None
+    assert rrp_contract.source_id == "FRED_RRPONTSYD"
+    assert tga_contract is not None
+    assert tga_contract.source_id == "FRED_WTREGEN"
+    assert reserve_contract is not None
+    assert reserve_contract.source_id == "FRED_WRESBAL"
 
 
 def test_official_macro_contracts_project_to_non_live_daily_observation_provenance() -> None:
@@ -134,6 +150,27 @@ def test_new_macro_contracts_cover_daily_policy_rate_and_monthly_inflation_relea
     assert ppi.cadence == "monthly"
     assert ppi.live_eligible is False
     assert ppi.delayed_eligible is True
+
+
+def test_fed_liquidity_contracts_cover_required_official_fred_series() -> None:
+    expected = {
+        "FRED_WALCL": ("WALCL", "weekly"),
+        "FRED_RRPONTSYD": ("RRPONTSYD", "business_daily"),
+        "FRED_WTREGEN": ("WTREGEN", "weekly"),
+        "FRED_WRESBAL": ("WRESBAL", "weekly"),
+    }
+
+    for source_id, (series_id, cadence) in expected.items():
+        contract = get_official_macro_source(source_id)
+
+        assert contract is not None
+        assert contract.series_codes == (series_id,)
+        assert contract.source_type == "official_public"
+        assert contract.cadence == cadence
+        assert contract.live_eligible is False
+        assert contract.delayed_eligible is True
+        assert contract.observation_only is False
+        assert any("Fed liquidity" in note for note in contract.notes)
 
 
 def test_registry_import_has_no_runtime_or_provider_side_effects() -> None:

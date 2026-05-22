@@ -423,6 +423,22 @@ def test_temperature_inputs_preserve_official_macro_authority_metadata_after_rat
             MacroObservation("SOFR", 5.31, today, today, "fred:SOFR", "official_public", "daily_fixing"),
             MacroObservation("SOFR", 5.30, previous, previous, "fred:SOFR", "official_public", "daily_fixing"),
         ],
+        "WALCL": [
+            MacroObservation("WALCL", 7485000.0, today, today, "fred:WALCL", "official_public", "weekly_fed_h41"),
+            MacroObservation("WALCL", 7475000.0, previous, previous, "fred:WALCL", "official_public", "weekly_fed_h41"),
+        ],
+        "RRPONTSYD": [
+            MacroObservation("RRPONTSYD", 432.2, today, today, "fred:RRPONTSYD", "official_public", "daily_fed_rrp"),
+            MacroObservation("RRPONTSYD", 455.0, previous, previous, "fred:RRPONTSYD", "official_public", "daily_fed_rrp"),
+        ],
+        "WTREGEN": [
+            MacroObservation("WTREGEN", 812000.0, today, today, "fred:WTREGEN", "official_public", "weekly_fed_h41"),
+            MacroObservation("WTREGEN", 826000.0, previous, previous, "fred:WTREGEN", "official_public", "weekly_fed_h41"),
+        ],
+        "WRESBAL": [
+            MacroObservation("WRESBAL", 3260000.0, today, today, "fred:WRESBAL", "official_public", "weekly_fed_h41"),
+            MacroObservation("WRESBAL", 3240000.0, previous, previous, "fred:WRESBAL", "official_public", "weekly_fed_h41"),
+        ],
     }
 
     def cached_payload(cache_key: str, _fetcher: object, fallback_factory: object) -> dict:
@@ -430,6 +446,8 @@ def test_temperature_inputs_preserve_official_macro_authority_metadata_after_rat
             return service._fetch_rates_snapshot()
         if cache_key == "volatility":
             return service._fetch_volatility()
+        if cache_key == "macro":
+            return service._fetch_macro()
         return fallback_factory()  # type: ignore[operator]
 
     with (
@@ -443,10 +461,12 @@ def test_temperature_inputs_preserve_official_macro_authority_metadata_after_rat
     rates_by_symbol = {
         str(item["symbol"]): item
         for item in inputs["rates"]["items"]
-        if isinstance(item, dict) and item.get("symbol") in {"VIX", "US2Y", "US10Y", "US30Y", "SOFR"}
+        if isinstance(item, dict)
+        and item.get("symbol")
+        in {"VIX", "US2Y", "US10Y", "US30Y", "SOFR", "FED_ASSETS", "FED_RRP", "TGA", "RESERVES"}
     }
 
-    assert set(rates_by_symbol) == {"VIX", "US2Y", "US10Y", "US30Y", "SOFR"}
+    assert set(rates_by_symbol) == {"VIX", "US2Y", "US10Y", "US30Y", "SOFR", "FED_ASSETS", "FED_RRP", "TGA", "RESERVES"}
     for symbol, item in rates_by_symbol.items():
         assert item["sourceType"] == "official_public"
         assert item["sourceTier"] == "official_public"
@@ -455,6 +475,8 @@ def test_temperature_inputs_preserve_official_macro_authority_metadata_after_rat
         assert item["sourceAuthorityReason"] is None
         assert item["routeRejectedReasonCodes"] == []
         assert item["freshness"] in {"cached", "delayed"}
+        if symbol in {"FED_ASSETS", "FED_RRP", "TGA", "RESERVES"}:
+            assert item["officialSeriesId"] in {"WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"}
 
 
 def test_temperature_score_helpers_skip_explicit_non_scoring_inputs() -> None:

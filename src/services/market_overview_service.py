@@ -30,6 +30,7 @@ from src.services.market_data_source_registry import resolve_source_label
 from src.services.market_rotation_radar_service import MarketRotationRadarService
 from src.services.official_macro_source_registry import get_official_macro_source_for_transport_source
 from src.services.official_macro_transport import (
+    FED_LIQUIDITY_FRED_SERIES_IDS,
     MacroObservation,
     OfficialMacroTransportError,
     classify_official_macro_exception,
@@ -76,6 +77,7 @@ FALLBACK_WARNING = "备用示例数据，不代表当前行情"
 INSUFFICIENT_MARKET_DATA_WARNING = "当前真实数据不足，市场温度仅供界面演示"
 OFFICIAL_MACRO_UNAVAILABLE_WARNING = "部分官方宏观指标暂不可用"
 OFFICIAL_DAILY_FRESHNESS_POLICY_ID = "official_daily_us_weekday_t_plus_1"
+OFFICIAL_WEEKLY_FED_LIQUIDITY_FRESHNESS_POLICY_ID = "official_weekly_fed_liquidity_t_plus_7"
 OFFICIAL_DAILY_FRESHNESS_DETAIL_KEYS = (
     "officialObservationDate",
     "officialAsOf",
@@ -130,6 +132,30 @@ OFFICIAL_DAILY_FRESHNESS_POLICIES = {
         "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
         "maxAcceptedLagDays": 4,
         "maxAcceptedBusinessLagDays": 2,
+    },
+    "RRPONTSYD": {
+        "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
+        "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
+        "maxAcceptedLagDays": 4,
+        "maxAcceptedBusinessLagDays": 2,
+    },
+    "WALCL": {
+        "freshnessPolicy": OFFICIAL_WEEKLY_FED_LIQUIDITY_FRESHNESS_POLICY_ID,
+        "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
+        "maxAcceptedLagDays": 10,
+        "maxAcceptedBusinessLagDays": 7,
+    },
+    "WTREGEN": {
+        "freshnessPolicy": OFFICIAL_WEEKLY_FED_LIQUIDITY_FRESHNESS_POLICY_ID,
+        "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
+        "maxAcceptedLagDays": 10,
+        "maxAcceptedBusinessLagDays": 7,
+    },
+    "WRESBAL": {
+        "freshnessPolicy": OFFICIAL_WEEKLY_FED_LIQUIDITY_FRESHNESS_POLICY_ID,
+        "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
+        "maxAcceptedLagDays": 10,
+        "maxAcceptedBusinessLagDays": 7,
     },
 }
 OFFICIAL_OVERLAY_FAILURE_REASONS = {
@@ -705,6 +731,12 @@ class MarketOverviewService:
         "CPI": ("CPIAUCSL", "CPI", "YoY %", "US"),
         "PPI": ("PPIACO", "PPI", "YoY %", "US"),
         "CREDIT": ("BAMLH0A0HYM2", "Credit spreads", "bps", None),
+    }
+    FED_LIQUIDITY_SERIES = {
+        "FED_ASSETS": ("WALCL", "Fed total assets", "USD mn", "US"),
+        "FED_RRP": ("RRPONTSYD", "Overnight reverse repo", "USD bn", "US"),
+        "TGA": ("WTREGEN", "Treasury General Account", "USD mn", "US"),
+        "RESERVES": ("WRESBAL", "Reserve balances", "USD mn", "US"),
     }
     US_SECTOR_ETFS = {
         "XLK": "Technology",
@@ -1867,6 +1899,7 @@ class MarketOverviewService:
         official_points = self._official_macro_points(
             include_policy_and_inflation=cache_key == "macro",
             include_credit_stress=cache_key == "macro",
+            include_fed_liquidity=cache_key == "macro",
         )
         if cache_key == "volatility":
             return self._align_official_macro_volatility_payload(payload, official_points)
@@ -2020,11 +2053,141 @@ class MarketOverviewService:
                     series_id=series_id,
                 )
 
-        ordered_symbols = ("US2Y", "US10Y", "US30Y", "SOFR", "VIX", "DXY", "GOLD", "OIL", "FEDFUNDS", "CPI", "PPI", "CREDIT")
+        fed_items = self._official_fed_liquidity_items(official_points)
+        if fed_items:
+            item_map.update(fed_items)
+            official_available = official_available or any(
+                not bool(item.get("isUnavailable")) for item in fed_items.values()
+            )
+
+        ordered_symbols = (
+            "US2Y",
+            "US10Y",
+            "US30Y",
+            "SOFR",
+            "VIX",
+            "DXY",
+            "GOLD",
+            "OIL",
+            "FEDFUNDS",
+            "CPI",
+            "PPI",
+            "CREDIT",
+            "FED_ASSETS",
+            "FED_RRP",
+            "TGA",
+            "RESERVES",
+        )
         aligned = {**payload, "items": self._ordered_runtime_items(payload, item_map, ordered_symbols)}
         if official_available:
             self._mark_official_macro_runtime_payload(aligned)
         return aligned
+
+    def _official_fed_liquidity_items(
+        self,
+        official_points: Dict[str, List[MacroObservation]],
+    ) -> Dict[str, Dict[str, Any]]:
+        items: Dict[str, Dict[str, Any]] = {}
+        failures: Dict[str, str] = {}
+
+        for symbol, (series_id, label, unit, market) in self.FED_LIQUIDITY_SERIES.items():
+            official_item, official_failure = self._official_macro_overlay_item(
+                symbol,
+                label,
+                official_points.get(series_id, []),
+                series_id=series_id,
+                unit=unit,
+                market=market,
+                change_scale=1.0,
+            )
+            if official_item:
+                freshness_evidence = get_freshness_status(
+                    official_item.get("asOf"),
+                    "macro_rate",
+                    str(official_item.get("source") or ""),
+                    False,
+                    source_type=str(official_item.get("sourceType") or ""),
+                    series_id=series_id,
+                    official_observation_date=official_item.get("officialObservationDate") or official_item.get("officialAsOf"),
+                )
+                items[symbol] = {
+                    **official_item,
+                    "fedLiquidityComponent": True,
+                    "requiredProviderClass": "official_public.fed_liquidity",
+                    "providerAttempted": True,
+                    "providerClass": "official_daily",
+                    "officialOverlayAttempted": True,
+                    "officialOverlayAvailable": True,
+                    "officialOverlayFailureReason": None,
+                    "activationHint": "official_daily_overlay_active",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "freshness": freshness_evidence.get("freshness") or "unavailable",
+                    "sourceFreshnessEvidence": freshness_evidence,
+                }
+                continue
+
+            reason = (
+                official_failure
+                or self._official_macro_overlay_diagnostics.get(series_id)
+                or "missing_series"
+            )
+            failures[symbol] = reason
+            unavailable = self._official_macro_unavailable_item(
+                symbol,
+                label,
+                series_id,
+                unit=unit,
+                market=market,
+            )
+            unavailable.update(
+                {
+                    "fedLiquidityComponent": True,
+                    "requiredProviderClass": "official_public.fed_liquidity",
+                    "providerAttempted": True,
+                    "providerClass": "official_daily",
+                    "officialOverlayAttempted": True,
+                    "officialOverlayAvailable": False,
+                    "officialOverlayFailureReason": reason,
+                    "activationHint": "official_fed_liquidity_missing_fail_closed",
+                    "officialSeriesId": series_id,
+                    "sourceTier": "official_public",
+                    "trustLevel": "unavailable",
+                    "freshness": "unavailable",
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "sourceAuthorityReason": reason,
+                    "routeRejectedReasonCodes": [reason],
+                }
+            )
+            items[symbol] = unavailable
+
+        if not items:
+            return {}
+
+        group_ready = len(items) == len(self.FED_LIQUIDITY_SERIES) and not failures
+        reason_codes = sorted(set(failures.values())) if failures else []
+        for symbol, item in items.items():
+            if group_ready:
+                item.update(
+                    {
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": True,
+                        "sourceAuthorityReason": None,
+                        "routeRejectedReasonCodes": [],
+                    }
+                )
+                continue
+            if not item.get("isUnavailable"):
+                item.update(
+                    {
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": False,
+                        "sourceAuthorityReason": "fed_liquidity_partial_coverage",
+                        "routeRejectedReasonCodes": reason_codes or ["fed_liquidity_partial_coverage"],
+                    }
+                )
+        return items
 
     @staticmethod
     def _ordered_runtime_items(
@@ -2065,7 +2228,17 @@ class MarketOverviewService:
         required_groups = {
             "volatility": ({"VIX", "VIXCLS"},),
             "rates": ({"US2Y"}, {"US10Y"}, {"US30Y"}, {"SOFR"}),
-            "macro": ({"VIX", "VIXCLS"}, {"US2Y"}, {"US10Y"}, {"US30Y"}, {"SOFR"}),
+            "macro": (
+                {"VIX", "VIXCLS"},
+                {"US2Y"},
+                {"US10Y"},
+                {"US30Y"},
+                {"SOFR"},
+                {"FED_ASSETS"},
+                {"FED_RRP"},
+                {"TGA"},
+                {"RESERVES"},
+            ),
         }.get(cache_key)
         items = payload.get("items")
         if not required_groups or not isinstance(items, list):
@@ -2092,6 +2265,8 @@ class MarketOverviewService:
         if bool(item.get("isFallback") or item.get("fallbackUsed") or item.get("isUnavailable") or item.get("isPartial")):
             return False
         if item.get("sourceAuthorityAllowed") is False:
+            return False
+        if item.get("scoreContributionAllowed") is False:
             return False
         return _has_valid_market_value(item)
 
@@ -3486,7 +3661,11 @@ class MarketOverviewService:
         return self._success_panel("FundsFlowCard", items)
 
     def _fetch_macro(self) -> PanelPayload:
-        official_points = self._official_macro_points(include_policy_and_inflation=True, include_credit_stress=True)
+        official_points = self._official_macro_points(
+            include_policy_and_inflation=True,
+            include_credit_stress=True,
+            include_fed_liquidity=True,
+        )
         item_map = {
             str(item.get("symbol") or ""): item
             for item in self._quote_items(self.MACRO_SYMBOLS)
@@ -3550,12 +3729,30 @@ class MarketOverviewService:
         official_ppi = self._official_macro_yoy_item("PPI", "PPI", official_points.get("PPIACO", []), unit="YoY %", market="US")
         if official_ppi:
             item_map["PPI"] = official_ppi
+        item_map.update(self._official_fed_liquidity_items(official_points))
         item_map.setdefault("SOFR", self._official_macro_unavailable_item("SOFR", "SOFR", "SOFR", unit="%", market="US"))
         for symbol, (series_id, label, unit, market) in self.OFFICIAL_MACRO_SERIES.items():
             if symbol == "CREDIT" and symbol in item_map:
                 continue
             item_map.setdefault(symbol, self._official_macro_unavailable_item(symbol, label, series_id, unit=unit, market=market))
-        ordered_symbols = ["US2Y", "US10Y", "US30Y", "SOFR", "VIX", "DXY", "GOLD", "OIL", "FEDFUNDS", "CPI", "PPI", "CREDIT"]
+        ordered_symbols = [
+            "US2Y",
+            "US10Y",
+            "US30Y",
+            "SOFR",
+            "VIX",
+            "DXY",
+            "GOLD",
+            "OIL",
+            "FEDFUNDS",
+            "CPI",
+            "PPI",
+            "CREDIT",
+            "FED_ASSETS",
+            "FED_RRP",
+            "TGA",
+            "RESERVES",
+        ]
         items = [item_map[symbol] for symbol in ordered_symbols if symbol in item_map]
         payload = self._success_panel("MacroIndicatorsCard", items)
         payload["source"] = "mixed"
@@ -4052,6 +4249,7 @@ class MarketOverviewService:
         *,
         include_policy_and_inflation: bool = False,
         include_credit_stress: bool = False,
+        include_fed_liquidity: bool = False,
         budget_seconds: Optional[float] = None,
     ) -> Dict[str, List[MacroObservation]]:
         points: Dict[str, List[MacroObservation]] = {}
@@ -4064,6 +4262,8 @@ class MarketOverviewService:
             fred_series_ids.extend(["DFF", "CPIAUCSL", "PPIACO"])
         if include_credit_stress:
             fred_series_ids.append("BAMLH0A0HYM2")
+        if include_fed_liquidity:
+            fred_series_ids.extend(FED_LIQUIDITY_FRED_SERIES_IDS)
         for series_id in fred_series_ids:
             cached_points = self._cached_official_macro_series(series_id, fetched_at)
             if cached_points:
@@ -5739,6 +5939,26 @@ class MarketOverviewService:
             deadline=deadline,
         )
         rates["items"] = [*rates.get("items", []), *volatility.get("items", [])]
+        macro = self._temperature_panel(
+            "macro",
+            lambda: self._cached_payload(
+                "macro",
+                self._fetch_macro,
+                lambda: self._fallback_overview_panel("macro", "MacroIndicatorsCard", "数据源刷新超时，当前显示备用快照"),
+            ),
+            lambda: self._fallback_overview_panel("macro", "MacroIndicatorsCard", "数据源刷新超时，当前显示备用快照"),
+            deadline=deadline,
+        )
+        fed_liquidity_items = [
+            item
+            for item in macro.get("items", [])
+            if isinstance(item, dict)
+            and str(item.get("symbol") or "") in self.FED_LIQUIDITY_SERIES
+            and item.get("sourceAuthorityAllowed") is True
+            and item.get("scoreContributionAllowed") is True
+        ]
+        if fed_liquidity_items:
+            rates["items"] = [*rates.get("items", []), *fed_liquidity_items]
         fx = self._temperature_panel(
             "fx",
             lambda: self._cached_payload(

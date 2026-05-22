@@ -1910,7 +1910,7 @@ def test_proxy_only_indicators_do_not_inflate_total_score(isolated_db: DatabaseM
 
     assert payload["score"]["value"] == 50
     assert payload["score"]["regime"] == "unavailable"
-    assert payload["score"]["confidence"] == 0.14
+    assert payload["score"]["confidence"] == 0.12
     assert payload["score"]["includedIndicatorCount"] == 1
     assert indicators["crypto_spot_momentum"]["includedInScore"] is True
     for key in ("vix_pressure", "usd_pressure", "us_rates_pressure", "us_etf_flow_proxy", "us_breadth_proxy"):
@@ -4076,9 +4076,9 @@ def test_official_credit_stress_observation_is_summary_only_and_does_not_change_
     assert baseline["score"] == with_credit["score"] == {
         "value": 50,
         "regime": "unavailable",
-        "confidence": 0.14,
+        "confidence": 0.12,
         "includedIndicatorCount": 1,
-        "possibleIndicatorWeight": 43,
+        "possibleIndicatorWeight": 49,
         "includedIndicatorWeight": 6,
     }
     assert baseline_indicator["includedInScore"] is True
@@ -4089,6 +4089,231 @@ def test_official_credit_stress_observation_is_summary_only_and_does_not_change_
     assert with_credit_indicator["scoreWeight"] == 6
     assert with_credit_indicator["scoreContribution"] == 4
     assert "CREDIT +341.00bps" in str(with_credit_indicator["summary"])
+
+
+def test_fed_liquidity_indicator_scores_only_when_full_official_group_is_fresh(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    base_as_of = "2026-05-20T16:15:00+08:00"
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "FED_ASSETS",
+                    "label": "Fed total assets",
+                    "value": 7485000.0,
+                    "changePercent": 0.13,
+                    "source": "fred",
+                    "sourceId": "fred:WALCL",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED Federal Reserve Total Assets",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "officialSeriesId": "WALCL",
+                    "officialObservationDate": "2026-05-20",
+                    "officialAsOf": "2026-05-20",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "routeRejectedReasonCodes": [],
+                    "unit": "USD mn",
+                    "freshness": "cached",
+                    "asOf": base_as_of,
+                    "updatedAt": base_as_of,
+                },
+                {
+                    "symbol": "FED_RRP",
+                    "label": "Overnight reverse repo",
+                    "value": 432.2,
+                    "changePercent": -5.01,
+                    "source": "fred",
+                    "sourceId": "fred:RRPONTSYD",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED Overnight Reverse Repurchase Agreements",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "officialSeriesId": "RRPONTSYD",
+                    "officialObservationDate": "2026-05-20",
+                    "officialAsOf": "2026-05-20",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "routeRejectedReasonCodes": [],
+                    "unit": "USD bn",
+                    "freshness": "cached",
+                    "asOf": base_as_of,
+                    "updatedAt": base_as_of,
+                },
+                {
+                    "symbol": "TGA",
+                    "label": "Treasury General Account",
+                    "value": 812000.0,
+                    "changePercent": -1.69,
+                    "source": "fred",
+                    "sourceId": "fred:WTREGEN",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED Treasury General Account",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "officialSeriesId": "WTREGEN",
+                    "officialObservationDate": "2026-05-20",
+                    "officialAsOf": "2026-05-20",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "routeRejectedReasonCodes": [],
+                    "unit": "USD mn",
+                    "freshness": "cached",
+                    "asOf": base_as_of,
+                    "updatedAt": base_as_of,
+                },
+                {
+                    "symbol": "RESERVES",
+                    "label": "Reserve balances",
+                    "value": 3260000.0,
+                    "changePercent": 0.62,
+                    "source": "fred",
+                    "sourceId": "fred:WRESBAL",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED Reserve Balances",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "officialSeriesId": "WRESBAL",
+                    "officialObservationDate": "2026-05-20",
+                    "officialAsOf": "2026-05-20",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "routeRejectedReasonCodes": [],
+                    "unit": "USD mn",
+                    "freshness": "cached",
+                    "asOf": base_as_of,
+                    "updatedAt": base_as_of,
+                },
+            ],
+            updated_at=base_as_of,
+            as_of=base_as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["fed_liquidity"]
+    diagnostics = indicator["coverageDiagnostics"]
+
+    assert indicator["includedInScore"] is True
+    assert indicator["scoreContribution"] == 6
+    assert indicator["status"] == "live"
+    assert diagnostics["requiredProviderClass"] == "official_public.fed_liquidity"
+    assert diagnostics["requiredInputs"] == ["FED_ASSETS", "FED_RRP", "TGA", "RESERVES"]
+    assert diagnostics["missingInputs"] == []
+    assert diagnostics["sourceTier"] == "official_public"
+    assert diagnostics["trustLevel"] == "reliable"
+    assert diagnostics["realSourceAvailable"] is True
+    assert diagnostics["scoreContributionAllowed"] is True
+    assert diagnostics["sourceAuthorityRouteRejected"] is False
+    assert {item["officialSeriesId"] for item in indicator["evidence"]["inputs"]} == {
+        "WALCL",
+        "RRPONTSYD",
+        "WTREGEN",
+        "WRESBAL",
+    }
+    assert "FRED" in str(indicator["summary"])
+    assert "Yahoo Finance" not in str(indicator["summary"])
+
+
+def test_fed_liquidity_indicator_remains_observation_only_when_series_is_missing(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    base_as_of = "2026-05-20T16:15:00+08:00"
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "FED_ASSETS",
+                    "label": "Fed total assets",
+                    "value": 7485000.0,
+                    "changePercent": 0.13,
+                    "source": "fred",
+                    "sourceId": "fred:WALCL",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED Federal Reserve Total Assets",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "officialSeriesId": "WALCL",
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "sourceAuthorityReason": "fed_liquidity_partial_coverage",
+                    "routeRejectedReasonCodes": ["fed_liquidity_missing_series"],
+                    "freshness": "cached",
+                    "asOf": base_as_of,
+                    "updatedAt": base_as_of,
+                },
+                {
+                    "symbol": "FED_RRP",
+                    "label": "Overnight reverse repo",
+                    "value": 432.2,
+                    "changePercent": -5.01,
+                    "source": "fred",
+                    "sourceId": "fred:RRPONTSYD",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED Overnight Reverse Repurchase Agreements",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "officialSeriesId": "RRPONTSYD",
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "sourceAuthorityReason": "fed_liquidity_partial_coverage",
+                    "routeRejectedReasonCodes": ["fed_liquidity_missing_series"],
+                    "freshness": "cached",
+                    "asOf": base_as_of,
+                    "updatedAt": base_as_of,
+                },
+                {
+                    "symbol": "TGA",
+                    "label": "Treasury General Account",
+                    "value": 812000.0,
+                    "changePercent": -1.69,
+                    "source": "fred",
+                    "sourceId": "fred:WTREGEN",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED Treasury General Account",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "officialSeriesId": "WTREGEN",
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "sourceAuthorityReason": "fed_liquidity_partial_coverage",
+                    "routeRejectedReasonCodes": ["fed_liquidity_missing_series"],
+                    "freshness": "cached",
+                    "asOf": base_as_of,
+                    "updatedAt": base_as_of,
+                },
+            ],
+            updated_at=base_as_of,
+            as_of=base_as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["fed_liquidity"]
+    diagnostics = indicator["coverageDiagnostics"]
+
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert indicator["status"] == "partial"
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["scoreExclusionReason"] == "fed_liquidity_required_series_missing_or_stale"
+    assert diagnostics["missingInputs"] == ["RESERVES"]
+    assert diagnostics["realSourceAvailable"] is False
+    assert diagnostics["missingProviderReason"] == "requires_official_public.fed_liquidity"
+    assert "RESERVES" in diagnostics["activationHint"]
+    assert "fed_liquidity_partial_coverage" in str(indicator["evidence"]["inputs"])
 
 
 LIQUIDITY_GOLDEN_SCENARIOS = (
@@ -4128,9 +4353,9 @@ def test_liquidity_monitor_credit_stress_fixture_remains_observation_only_and_pr
     assert baseline["score"] == with_credit["score"] == {
         "value": 50,
         "regime": "unavailable",
-        "confidence": 0.33,
+        "confidence": 0.29,
         "includedIndicatorCount": 2,
-        "possibleIndicatorWeight": 43,
+        "possibleIndicatorWeight": 49,
         "includedIndicatorWeight": 14,
     }
     assert "CREDIT" not in str(baseline_indicator["summary"])
