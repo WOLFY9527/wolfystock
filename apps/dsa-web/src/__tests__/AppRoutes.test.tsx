@@ -98,12 +98,12 @@ vi.mock('../pages/ScannerSurfacePage', () => ({
   default: () => <div>scanner-surface-page</div>,
 }));
 
-vi.mock('../pages/ChatPage', () => ({
-  default: () => <div>chat-page</div>,
-}));
-
 vi.mock('../pages/PortfolioPage', () => ({
   default: () => <div>portfolio-page</div>,
+}));
+
+vi.mock('../pages/MarketOverviewPage', () => ({
+  default: () => <div>market-overview-page</div>,
 }));
 
 vi.mock('../pages/MarketRotationRadarPage', () => ({
@@ -300,7 +300,7 @@ describe('AppContent route flows', () => {
   );
 
   it.each([
-    ['/chat', 'auth-guard:Decision Desk'],
+    ['/market-overview', 'auth-guard:Market Overview'],
     ['/portfolio', 'auth-guard:Portfolio'],
     ['/backtest', 'auth-guard:Backtest'],
   ])(
@@ -313,6 +313,36 @@ describe('AppContent route flows', () => {
       expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
     },
   );
+
+  it('redirects legacy /chat guest access to the market overview surface', async () => {
+    renderAtWithLocationProbe('/chat');
+
+    expect(await screen.findByText('auth-guard:Market Overview')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/market-overview'));
+    expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
+  });
+
+  it('redirects locale-prefixed /chat access to the localized market overview surface', async () => {
+    languageState.value = 'en';
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: false,
+      isAdminMode: false,
+      adminCapabilities: noCapabilities,
+    });
+
+    renderAtWithLocationProbe('/en/chat');
+
+    expect(await screen.findByText('market-overview-page')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/en/market-overview'));
+  });
 
   it('redirects locale-prefixed guest settings access to the locale guest page', async () => {
     languageState.value = 'en';

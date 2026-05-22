@@ -66,61 +66,6 @@ export interface AgentProviderHealthResponse {
   providers: AgentProviderHealthItem[];
 }
 
-export type StockEvidenceStatus = 'available' | 'partial' | 'missing' | 'stale' | 'fallback' | 'unknown' | 'error';
-
-export interface AgentStockEvidenceItem {
-  symbol: string;
-  market?: string;
-  quote?: {
-    status: StockEvidenceStatus;
-    price?: number | null;
-    changePct?: number | null;
-    currency?: string | null;
-    provider?: string | null;
-    updatedAt?: string | null;
-  };
-  technical?: {
-    status: StockEvidenceStatus;
-    trend?: string | null;
-    ma5?: number | null;
-    ma10?: number | null;
-    ma20?: number | null;
-    ma60?: number | null;
-    rsi14?: number | null;
-    support?: number | null;
-    resistance?: number | null;
-    provider?: string | null;
-    updatedAt?: string | null;
-  };
-  fundamental?: {
-    status: StockEvidenceStatus;
-    marketCap?: number | null;
-    peTtm?: number | null;
-    pb?: number | null;
-    beta?: number | null;
-    revenueTtm?: number | null;
-    netIncomeTtm?: number | null;
-    fcfTtm?: number | null;
-    provider?: string | null;
-    updatedAt?: string | null;
-    missingFields?: string[];
-  };
-  news?: {
-    status: StockEvidenceStatus;
-    latestHeadline?: string | null;
-    provider?: string | null;
-  };
-}
-
-export interface AgentStockEvidenceResponse {
-  symbols: string[];
-  items: AgentStockEvidenceItem[];
-  meta?: {
-    generatedAt?: string | null;
-    source?: string;
-  };
-}
-
 export interface SkillsResponse {
   skills: SkillInfo[];
   default_skill_id: string;
@@ -162,13 +107,6 @@ export const agentApi = {
   },
   async getProviderHealth(): Promise<AgentProviderHealthResponse> {
     const response = await apiClient.get<AgentProviderHealthResponse>('/api/v1/agent/provider-health');
-    return response.data;
-  },
-  async getStockEvidence(symbols: string[]): Promise<AgentStockEvidenceResponse> {
-    const response = await apiClient.get<AgentStockEvidenceResponse>('/api/v1/agent/stock-evidence', {
-      params: { symbols: symbols.slice(0, 3).join(',') },
-      timeout: 15000,
-    });
     return response.data;
   },
   async getChatSessions(limit = 50): Promise<ChatSessionItem[]> {

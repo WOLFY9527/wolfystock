@@ -1,6 +1,6 @@
 /**
  * WolfyStock shell phase 1 preserves routing, archive access, language
- * toggling, completion badge, and logout confirmation while aligning nav
+ * toggling and logout confirmation while aligning nav
  * controls to the shared Linear OS tokens.
  */
 import React, { useEffect, useRef, useState } from 'react';
@@ -20,7 +20,6 @@ import {
   Home,
   LogIn,
   LogOut,
-  MessageSquareText,
   Radar,
   ListChecks,
   Settings2,
@@ -33,7 +32,6 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { buildLoginPath, useProductSurface } from '../../hooks/useProductSurface';
-import { useAgentChatStore } from '../../stores/agentChatStore';
 import { cn } from '../../utils/cn';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../../utils/localeRouting';
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
@@ -52,7 +50,6 @@ type NavItem = {
   label?: string;
   to: string;
   icon: React.ComponentType<{ className?: string }>;
-  badge?: 'completion';
 };
 
 type AdminNavItem = {
@@ -83,7 +80,6 @@ const BrandWordmark: React.FC<{
 const NAV_ITEMS: NavItem[] = [
   { key: 'home', labelKey: 'nav.home', to: '/', icon: Home },
   { key: 'scanner', labelKey: 'nav.scanner', to: '/scanner', icon: Radar },
-  { key: 'chat', labelKey: 'nav.chat', to: '/chat', icon: MessageSquareText, badge: 'completion' },
   { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', icon: BriefcaseBusiness },
   { key: 'market-overview', labelKey: 'nav.marketOverview', to: '/market-overview', icon: Activity },
   { key: 'liquidity-monitor', label: '流动性监测', to: '/market/liquidity-monitor', icon: Gauge },
@@ -96,23 +92,10 @@ const NAV_ITEMS: NavItem[] = [
 const HEADER_UTILITY_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-white/42 transition-colors hover:text-white/78';
 const HEADER_UTILITY_DANGER_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-white/38 transition-colors hover:text-red-300/90';
 
-function NavLabel({
-  label,
-  showBadge,
-}: {
-  label: string;
-  showBadge: boolean;
-}) {
+function NavLabel({ label }: { label: string }) {
   return (
     <span className="relative inline-flex min-w-0 items-center gap-2">
       <span>{label}</span>
-      {showBadge ? (
-        <span
-          data-testid="chat-completion-badge"
-          className="shell-nav-dot"
-          aria-label={label}
-        />
-      ) : null}
     </span>
   );
 }
@@ -150,7 +133,6 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     canReadUsers,
   } = useProductSurface();
   const { language, t, toggleLanguage } = useI18n();
-  const completionBadge = useAgentChatStore((state) => state.completionBadge);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showAdminMenu, setShowAdminMenu] = useState(false);
   const adminMenuRef = useRef<HTMLDivElement | null>(null);
@@ -227,7 +209,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     };
   }, [showAdminMenu]);
 
-  const navLinks = NAV_ITEMS.map(({ key, labelKey, label: fixedLabel, to, icon: Icon, badge }) => {
+  const navLinks = NAV_ITEMS.map(({ key, labelKey, label: fixedLabel, to, icon: Icon }) => {
     const label = fixedLabel ?? t(labelKey || key);
     const linkTarget = routeLocale ? buildLocalizedPath(to, routeLocale) : to;
     return (
@@ -253,7 +235,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
           </span>
         ) : null}
         <span className={isDrawer ? 'shell-nav-item__label' : 'shell-header-link__label'}>
-          <NavLabel label={label} showBadge={badge === 'completion' && completionBadge} />
+          <NavLabel label={label} />
         </span>
       </NavLink>
     );

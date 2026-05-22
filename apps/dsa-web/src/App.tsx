@@ -33,7 +33,6 @@ const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const PreviewReportPage = lazy(() => import('./pages/PreviewReportPage'));
 const PreviewFullReportDrawerPage = lazy(() => import('./pages/PreviewFullReportDrawerPage'));
-const ChatPage = lazy(() => import('./pages/ChatPage'));
 const PortfolioPage = lazy(() => import('./pages/PortfolioPage'));
 const MarketOverviewPage = lazy(() => import('./pages/MarketOverviewPage'));
 const LiquidityMonitorPage = lazy(() => import('./pages/LiquidityMonitorPage'));
@@ -192,10 +191,10 @@ export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = (
   const routePathname = stripLocalePrefix(location.pathname);
   let moduleName = language === 'en' ? 'Premium module' : '高级模块';
 
-  if (routePathname.startsWith('/chat')) {
-    moduleName = language === 'en' ? 'Decision Desk' : '决策台';
-  } else if (routePathname.startsWith('/portfolio')) {
+  if (routePathname.startsWith('/portfolio')) {
     moduleName = language === 'en' ? 'Portfolio' : '持仓管理';
+  } else if (routePathname.startsWith('/market-overview')) {
+    moduleName = language === 'en' ? 'Market Overview' : '市场总览';
   } else if (routePathname.startsWith('/watchlist')) {
     moduleName = language === 'en' ? 'Watchlist' : '观察列表';
   } else if (routePathname.startsWith('/backtest')) {
@@ -388,7 +387,7 @@ export const AppContent: React.FC = () => {
               <Route path="/" element={<HomeSurfacePage />} />
               <Route path="/guest" element={guestHomeElement} />
               <Route path="/scanner" element={<ScannerSurfacePage />} />
-              <Route path="/chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
+              <Route path="/chat" element={<Navigate to="/market-overview" replace />} />
               <Route path="/portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
               <Route path="/market-overview" element={<RegisteredSurfaceRoute><MarketOverviewPage /></RegisteredSurfaceRoute>} />
               <Route path="/market/liquidity-monitor" element={<LiquidityMonitorPage />} />
@@ -415,7 +414,7 @@ export const AppContent: React.FC = () => {
               <Route index element={<HomeSurfacePage />} />
               <Route path="guest" element={guestHomeElement} />
               <Route path="scanner" element={<ScannerSurfacePage />} />
-              <Route path="chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
+              <Route path="chat" element={<Navigate to="../market-overview" replace />} />
               <Route path="portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
               <Route path="market-overview" element={<RegisteredSurfaceRoute><MarketOverviewPage /></RegisteredSurfaceRoute>} />
               <Route path="market/liquidity-monitor" element={<LiquidityMonitorPage />} />

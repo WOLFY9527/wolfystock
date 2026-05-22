@@ -743,47 +743,6 @@ function agentProviderHealthPayload() {
   };
 }
 
-function agentStockEvidencePayload() {
-  return {
-    symbols: ['ORCL'],
-    items: [
-      {
-        symbol: 'ORCL',
-        market: 'US',
-        quote: {
-          status: 'stale',
-          price: 128.42,
-          change_pct: 0.97,
-          currency: 'USD',
-          provider: 'playwright_fixture_stale_quote',
-          updated_at: '2026-05-03T20:00:00Z',
-        },
-        technical: {
-          status: 'fallback',
-          trend: 'neutral',
-          ma20: 123.4,
-          rsi14: 58.2,
-          provider: 'fallback_technical_fixture',
-          updated_at: '2026-05-02',
-        },
-        fundamental: {
-          status: 'partial',
-          pe_ttm: 35.21,
-          pb: 11.13,
-          provider: 'analysis_history',
-          missing_fields: ['marketCap', 'revenueTtm'],
-          updated_at: '2026-05-02T12:00:00Z',
-        },
-        news: {
-          status: 'error',
-          provider: 'provider_unavailable',
-        },
-      },
-    ],
-    meta: { source: 'read_only_playwright_fixture', generated_at: timestamp },
-  };
-}
-
 function portfolioSnapshotPayload() {
   return {
     as_of: '2026-05-06',
@@ -1176,10 +1135,6 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
 
     if (method === 'GET' && path === '/api/v1/agent/provider-health') {
       return fulfillJson(route, agentProviderHealthPayload());
-    }
-
-    if (method === 'GET' && path === '/api/v1/agent/stock-evidence') {
-      return fulfillJson(route, agentStockEvidencePayload());
     }
 
     if (method === 'GET' && path === '/api/v1/agent/chat/sessions') {

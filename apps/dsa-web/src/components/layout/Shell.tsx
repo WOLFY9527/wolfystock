@@ -18,17 +18,11 @@ type ShellProps = {
   children?: React.ReactNode;
 };
 
-function resolveRailTitle(pathname: string, t: (key: string) => string): string {
-  if (pathname.startsWith('/chat')) {
-    return t('shell.chatArchiveTitle');
-  }
+function resolveRailTitle(t: (key: string) => string): string {
   return t('shell.archiveTitle');
 }
 
-function resolveRailDescription(pathname: string, t: (key: string) => string): string {
-  if (pathname.startsWith('/chat')) {
-    return t('shell.chatArchiveDesc');
-  }
+function resolveRailDescription(t: (key: string) => string): string {
   return t('shell.archiveDesc');
 }
 
@@ -41,9 +35,6 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, l
   }
   if (pathname.startsWith('/scanner')) {
     return t('nav.scanner');
-  }
-  if (pathname.startsWith('/chat')) {
-    return t('nav.chat');
   }
   if (pathname.startsWith('/portfolio')) {
     return t('nav.portfolio');
@@ -91,17 +82,16 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, l
 }
 
 const ShellRailPanel: React.FC<{
-  pathname: string;
   railContent: React.ReactNode;
-}> = ({ pathname, railContent }) => {
+}> = ({ railContent }) => {
   const { t } = useI18n();
 
   return (
     <section className="shell-context-panel">
       <div className="shell-context-panel__header">
         <p className="shell-context-panel__eyebrow">{t('shell.archiveEyebrow')}</p>
-        <h2 className="shell-context-panel__title">{resolveRailTitle(pathname, t)}</h2>
-        <p className="shell-context-panel__body">{resolveRailDescription(pathname, t)}</p>
+        <h2 className="shell-context-panel__title">{resolveRailTitle(t)}</h2>
+        <p className="shell-context-panel__body">{resolveRailDescription(t)}</p>
       </div>
       <div className="shell-context-panel__content">
         {railContent}
@@ -116,7 +106,6 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const surfacePathname = stripLocalePrefix(location.pathname);
   const isHomeRoute = surfacePathname === '/' || surfacePathname === '';
   const isBacktestRoute = surfacePathname.startsWith('/backtest');
-  const isChatRoute = surfacePathname.startsWith('/chat');
   const isMarketOverviewRoute = surfacePathname.startsWith('/market-overview');
   const isLiquidityMonitorRoute = surfacePathname.startsWith('/market/liquidity-monitor');
   const isRotationRadarRoute = surfacePathname.startsWith('/market/rotation-radar');
@@ -134,7 +123,6 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const shellFrameOverflowClass = '';
   const isWideRoute = surfacePathname === '/'
     || surfacePathname.startsWith('/scanner')
-    || isChatRoute
     || surfacePathname.startsWith('/portfolio')
     || isMarketOverviewRoute
     || isLiquidityMonitorRoute
@@ -300,10 +288,10 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         </header>
 
         <div
-          className={`shell-content-frame flex flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isPageScrollRoute ? ' shell-content-frame--page-scroll' : ''}${isHomeRoute ? ' shell-content-frame--home' : ''}${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isChatRoute ? ' shell-content-frame--chat' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}${isSystemControlRoute ? ' shell-content-frame--system-control' : ''}`}
+          className={`shell-content-frame flex flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isPageScrollRoute ? ' shell-content-frame--page-scroll' : ''}${isHomeRoute ? ' shell-content-frame--home' : ''}${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}${isSystemControlRoute ? ' shell-content-frame--system-control' : ''}`}
         >
-          <main className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full${isChatRoute ? ' p-0 shell-main-column--chat' : isSystemControlRoute ? ' p-0 shell-main-column--system-control' : isHomeRoute ? ' px-4 pt-3 pb-8 md:px-6 lg:pt-4 xl:px-8 shell-main-column--home' : ' px-6 pt-6 pb-12 md:px-8 xl:px-12'}${shellFrameOverflowClass}${isPageScrollRoute ? ' shell-main-column--page-scroll' : ''}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
-            <div key={location.pathname} className={`theme-page-transition flex min-h-0 min-w-0 w-full flex-col${isScannerRoute || isHomeRoute ? '' : ' h-full'}${isPageScrollRoute ? ' theme-page-transition--page-scroll' : ''}${isChatRoute ? ' theme-page-transition--chat' : ''}${isSystemControlRoute ? ' theme-page-transition--system-control' : ''}`}>
+          <main className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full${isSystemControlRoute ? ' p-0 shell-main-column--system-control' : isHomeRoute ? ' px-4 pt-3 pb-8 md:px-6 lg:pt-4 xl:px-8 shell-main-column--home' : ' px-6 pt-6 pb-12 md:px-8 xl:px-12'}${shellFrameOverflowClass}${isPageScrollRoute ? ' shell-main-column--page-scroll' : ''}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
+            <div key={location.pathname} className={`theme-page-transition flex min-h-0 min-w-0 w-full flex-col${isScannerRoute || isHomeRoute ? '' : ' h-full'}${isPageScrollRoute ? ' theme-page-transition--page-scroll' : ''}${isSystemControlRoute ? ' theme-page-transition--system-control' : ''}`}>
               {children ?? <Outlet />}
             </div>
           </main>
@@ -329,17 +317,17 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         ) : null}
 
         {hasRailContent ? (
-          <Drawer
-            isOpen={isRailVisible}
-            onClose={closeRail}
-            title={resolveRailTitle(location.pathname, t)}
-            width="max-w-[min(92vw,31rem)]"
-            zIndex={95}
-            side="right"
-          >
-            <ShellRailPanel pathname={location.pathname} railContent={railContent!} />
-          </Drawer>
-        ) : null}
+        <Drawer
+          isOpen={isRailVisible}
+          onClose={closeRail}
+          title={resolveRailTitle(t)}
+          width="max-w-[min(92vw,31rem)]"
+          zIndex={95}
+          side="right"
+        >
+          <ShellRailPanel railContent={railContent!} />
+        </Drawer>
+      ) : null}
       </div>
     </ShellRailContext.Provider>
   );

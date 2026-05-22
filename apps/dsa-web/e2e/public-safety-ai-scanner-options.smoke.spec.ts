@@ -44,26 +44,6 @@ async function expectSurfaceSafety(page: Page) {
 }
 
 appTest.describe('AI and scanner public safety surfaces', () => {
-  appTest('AI research desk shows degraded provider/evidence states without advice or raw internals', async ({ page }) => {
-    for (const viewport of viewports) {
-      await page.setViewportSize(viewport);
-      await signIn(page, '/chat');
-
-      await expect(page.getByRole('heading', { name: 'WOLFY AI 研究台' })).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByTestId('chat-engine-section')).toContainText('OpenAI 未配置');
-      await expect(page.getByTestId('chat-engine-section')).toContainText('Gemini 离线');
-
-      await page.getByPlaceholder('例如：分析 600519 / 茅台当前观察条件是什么？（回车发送，Shift+回车换行）').fill('ORCL 走势怎样？');
-      await expect(page.getByTestId('chat-evidence-panel')).toContainText('行情');
-      await expect(page.getByTestId('chat-evidence-panel')).toContainText('陈旧');
-      await expect(page.getByTestId('chat-evidence-panel')).toContainText('备用');
-      await expect(page.getByTestId('chat-evidence-panel')).toContainText('部分');
-      await expect(page.getByTestId('chat-evidence-panel')).toContainText('异常');
-      await expect(page.getByText('AI 洞察仅供研究参考，不构成投资建议。请自行评估风险承受能力。')).toBeVisible();
-      await expectSurfaceSafety(page);
-    }
-  });
-
   appTest('scanner exposes limited-data states while keeping diagnostics collapsed by default', async ({ page }) => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);

@@ -429,8 +429,6 @@ test.describe('web deployment smoke', () => {
     await expectBentoRoute(page, '/scanner', 'user-scanner-bento-page', 'user-scanner-bento-hero', /市场扫描|Market Scanner|我的手动扫描|My scanner run/);
     await expectPortfolioRoute(page, '/portfolio');
     await expectBentoRoute(page, '/backtest', 'backtest-bento-page', 'backtest-bento-hero', /回测|Backtest|普通版配置|Configuration page/);
-    await expectBentoRoute(page, '/chat', 'chat-bento-page', 'chat-bento-hero', /问股|Stock Chat|量化研究|Quant Research/);
-    await expectGlowText(page, 'chat-bento-hero-skill-value');
 
     await page.goto('/settings/system');
     await waitForAppShell(page);
@@ -449,7 +447,6 @@ test.describe('web deployment smoke', () => {
     await expectBentoRoute(page, '/scanner', 'user-scanner-bento-page', 'user-scanner-bento-hero', /市场扫描|Market Scanner/);
     await expectPortfolioRoute(page, '/portfolio');
     await expectBentoRoute(page, '/backtest', 'backtest-bento-page', 'backtest-bento-hero', /回测|Backtest/);
-    await expectBentoRoute(page, '/chat', 'chat-bento-page', 'chat-bento-hero', /问股|Stock Chat|量化研究|Quant Research/);
   });
 
   test('segment pages keep drawer toggles, glow text, and locale-ready Bento shells', async ({ page }) => {
@@ -486,18 +483,6 @@ test.describe('web deployment smoke', () => {
     await expect(page.locator('[data-testid="backtest-bento-page"]')).toBeVisible({ timeout: 15_000 });
     await expectGlowText(page, 'backtest-bento-hero-module-value');
     await expectDrawerToggle(page, 'backtest-bento-drawer-trigger', 'backtest-bento-drawer');
-
-    await page.goto('/chat');
-    await waitForAppShell(page);
-    await expect(page.locator('[data-testid="chat-bento-page"]')).toBeVisible({ timeout: 15_000 });
-    const chatHeroGlowVisible = await hasGlowText(page, 'chat-bento-hero-skill-value');
-    if (!chatHeroGlowVisible) {
-      test.info().annotations.push({
-        type: 'environment-limited',
-        description: 'Current chat viewport kept the hero skill metric off-screen or collapsed; page shell and drawer remained reachable.',
-      });
-    }
-    await expectDrawerToggle(page, 'chat-bento-drawer-trigger', 'chat-bento-drawer');
 
     await page.goto('/settings/system');
     await waitForAppShell(page);

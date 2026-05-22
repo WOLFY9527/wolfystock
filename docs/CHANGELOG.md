@@ -1,5 +1,10 @@
 ## 2026-05-22
 
+- **Standalone Decision Desk route removal** - Removed the frontend `/chat`
+  Decision Desk surface and primary navigation entry to reduce duplicate
+  product surface area. Legacy `/chat` now redirects to Market Overview, while
+  shared report, evidence, Options Lab decision, and Market Intelligence
+  systems remain intact.
 - **US breadth authority foundation** - `/api/v1/market/us-breadth`,
   Liquidity Monitor, and the Market Intelligence runtime diagnostic now expose
   explicit US breadth authority metadata. The existing yfinance sector ETF

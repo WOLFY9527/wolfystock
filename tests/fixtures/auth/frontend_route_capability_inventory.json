@@ -73,11 +73,6 @@
   ],
   "registered_surface_routes": [
     {
-      "route_id": "chat",
-      "path": "/chat",
-      "localized_path": "chat"
-    },
-    {
       "route_id": "portfolio",
       "path": "/portfolio",
       "localized_path": "portfolio"
@@ -121,10 +116,10 @@
       "test_probe": "renderAt('/scanner')"
     },
     {
-      "route_id": "chat",
-      "path": "/chat",
-      "localized_path": "chat",
-      "test_probe": "['/chat', 'auth-guard:Decision Desk']"
+      "route_id": "market_overview",
+      "path": "/market-overview",
+      "localized_path": "market-overview",
+      "test_probe": "['/market-overview', 'auth-guard:Market Overview']"
     },
     {
       "route_id": "portfolio",

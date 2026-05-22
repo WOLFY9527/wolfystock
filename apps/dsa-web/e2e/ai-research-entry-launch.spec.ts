@@ -91,12 +91,6 @@ async function installAiResearchHarness(page: Page) {
         providers: [{ id: 'wolfy', label: 'Wolfy', status: 'available', model: 'research-auto', selected: true }],
       });
     }
-    if (method === 'GET' && path === '/api/v1/agent/chat/sessions') {
-      return fulfillJson(route, { sessions: [] });
-    }
-    if (method === 'GET' && path === '/api/v1/agent/stock-evidence') {
-      return fulfillJson(route, { symbols: [], items: [], meta: { generatedAt: '2026-05-09T00:00:00Z', source: 'fixture' } });
-    }
     if (method === 'GET' && path === '/api/v1/watchlist') {
       return fulfillJson(route, { items: [] });
     }
@@ -129,7 +123,7 @@ test.describe('AI research entry launch surfaces', () => {
     await installAiResearchHarness(page);
   });
 
-  test('home, chat, and report drawer stay research-first across launch viewports', async ({ page }) => {
+  test('home and report drawer stay research-first across launch viewports', async ({ page }) => {
     const consoleErrors: string[] = [];
     page.on('console', (message) => {
       if (message.type() === 'error' && !message.text().includes('favicon.ico')) {
@@ -159,14 +153,6 @@ test.describe('AI research entry launch surfaces', () => {
       await expect(page.getByTestId('home-bento-full-report-drawer')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('home-bento-report-executive-summary')).toBeVisible();
       await expect(page.getByTestId('home-bento-full-report-technical-details')).not.toHaveAttribute('open');
-      await expectNoHorizontalOverflow(page);
-      await expectCleanLaunchText(page);
-
-      await page.goto('/zh/chat');
-      await page.waitForLoadState('domcontentloaded');
-      await expect(page.getByTestId('chat-research-entry-grid')).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByTestId('chat-composer-omnibar')).toBeVisible();
-      await expect(page.getByTestId('chat-context-brief-rail')).toContainText('只读证据');
       await expectNoHorizontalOverflow(page);
       await expectCleanLaunchText(page);
     }

@@ -35,7 +35,6 @@ export const uxDensityViewports: UxDensityViewport[] = [
 
 export const uxDensityRoutes: UxDensityRoute[] = [
   { path: '/zh', label: 'Home', harness: 'public' },
-  { path: '/zh/chat', label: 'Chat', harness: 'public' },
   { path: '/zh/scanner', label: 'Scanner', harness: 'public' },
   { path: '/zh/watchlist', label: 'Watchlist', harness: 'public' },
   { path: '/zh/market-overview', label: 'Market Overview', harness: 'public' },
