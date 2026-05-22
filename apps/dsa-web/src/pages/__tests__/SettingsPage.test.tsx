@@ -1099,6 +1099,18 @@ describe('SettingsPage', () => {
     });
   });
 
+  it('defines product-facing Settings fallback labels in zh and en', () => {
+    [
+      'settings.globalSummaryProviders',
+      'settings.globalSummaryDataSources',
+      'settings.dataSourceValidationConnectivityFailed',
+      'settings.dataSourceValidationConnectivitySuccess',
+    ].forEach((key) => {
+      expect(translate('zh', key)).not.toBe(key);
+      expect(translate('en', key)).not.toBe(key);
+    });
+  });
+
   it('renders category navigation and auth settings modules', async () => {
     const { container } = render(<SettingsPage />);
 
@@ -1115,7 +1127,9 @@ describe('SettingsPage', () => {
     expect(load).toHaveBeenCalled();
 
     fireEvent.click(screen.getByTestId('settings-bento-drawer-trigger'));
-    expect(await screen.findByTestId('settings-bento-drawer')).toBeInTheDocument();
+    const briefDrawer = await screen.findByTestId('settings-bento-drawer');
+    expect(briefDrawer).toBeInTheDocument();
+    expectNoRawI18nKeys(briefDrawer);
     expect(screen.getByRole('dialog', { name: '系统控制面' })).toBeInTheDocument();
   });
 
