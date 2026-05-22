@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import asyncio
+import collections
+import inspect
 import json
 import logging
 import os
@@ -18,6 +20,7 @@ from src.services.market_cache import MARKET_CACHE_TTLS, market_cache
 
 logger = logging.getLogger(__name__)
 CN_TZ = timezone(timedelta(hours=8))
+_SAFE_WEBSOCKET_CLIENT_CONNECTION_CLASS: Any = ...
 
 
 def _now() -> datetime:
@@ -49,6 +52,50 @@ def _clean_number(value: Any) -> Optional[float]:
     except (TypeError, ValueError):
         return None
     return number if number == number else None
+
+
+def _get_safe_websocket_client_connection_class() -> Optional[type[Any]]:
+    global _SAFE_WEBSOCKET_CLIENT_CONNECTION_CLASS
+    if _SAFE_WEBSOCKET_CLIENT_CONNECTION_CLASS is ...:
+        try:
+            from websockets.asyncio.client import ClientConnection
+        except Exception:
+            _SAFE_WEBSOCKET_CLIENT_CONNECTION_CLASS = None
+            return None
+
+        class SafeCryptoRealtimeClientConnection(ClientConnection):
+            def connection_lost(self, exc: Exception | None) -> None:
+                if hasattr(self, "recv_messages"):
+                    super().connection_lost(exc)
+                    return
+
+                # websockets 16 may call connection_lost() before connection_made()
+                # completes on some degraded connect/reset paths.
+                if not hasattr(self, "recv_exc"):
+                    self.recv_exc = None
+                self.protocol.receive_eof()
+                self.set_recv_exc(exc)
+                self.terminate_pending_pings()
+
+                if self.keepalive_task is not None:
+                    self.keepalive_task.cancel()
+
+                if not self.connection_lost_waiter.done():
+                    self.connection_lost_waiter.set_result(None)
+
+                if getattr(self, "paused", False):
+                    self.paused = False
+                    for waiter in getattr(self, "drain_waiters", collections.deque()):
+                        if waiter.done():
+                            continue
+                        if exc is None:
+                            waiter.set_result(None)
+                        else:
+                            waiter.set_exception(exc)
+
+        _SAFE_WEBSOCKET_CLIENT_CONNECTION_CLASS = SafeCryptoRealtimeClientConnection
+
+    return _SAFE_WEBSOCKET_CLIENT_CONNECTION_CLASS
 
 
 class CryptoRealtimeProvider(ABC):
@@ -84,7 +131,7 @@ class BinanceWsProvider(CryptoRealtimeProvider):
 
         stream_path = "/".join(self.streams)
         url = f"wss://stream.binance.com:9443/stream?streams={stream_path}"
-        async with websockets.connect(url, ping_interval=20, ping_timeout=20, close_timeout=5, ssl=self._ssl_context()) as websocket:
+        async with websockets.connect(url, **self._build_connect_kwargs(websockets.connect)) as websocket:
             async for raw_message in websocket:
                 payload = json.loads(raw_message)
                 data = payload.get("data") if isinstance(payload, dict) else None
@@ -93,6 +140,22 @@ class BinanceWsProvider(CryptoRealtimeProvider):
                 tick = self._parse_ticker(data)
                 if tick:
                     yield tick
+
+    def _build_connect_kwargs(self, connect_callable: Any) -> Dict[str, Any]:
+        connect_kwargs: Dict[str, Any] = {
+            "ping_interval": 20,
+            "ping_timeout": 20,
+            "close_timeout": 5,
+            "ssl": self._ssl_context(),
+        }
+        try:
+            parameters = inspect.signature(connect_callable).parameters
+        except (TypeError, ValueError):
+            parameters = {}
+        safe_connection_class = _get_safe_websocket_client_connection_class()
+        if safe_connection_class is not None and "create_connection" in parameters:
+            connect_kwargs["create_connection"] = safe_connection_class
+        return connect_kwargs
 
     def _ssl_context(self) -> ssl.SSLContext:
         try:
