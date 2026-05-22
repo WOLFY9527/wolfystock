@@ -24,7 +24,7 @@ from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER, normali
 from src.repositories.scanner_repo import ScannerRepository
 from src.repositories.stock_repo import StockRepository
 from src.contracts.source_confidence import coerce_source_confidence_contract
-from src.services.market_data_source_registry import resolve_source_label
+from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
 from src.services.data_source_router import CapabilityResolver, DataSourceRouteRequest, DataSourceRouter
 from src.services.scanner_ai_service import ScannerAiInterpretationService
 from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION, build_scanner_evidence_packet
@@ -58,6 +58,35 @@ MAX_HK_SCANNER_SUPPLEMENT_TARGET = 60
 SCANNER_DETAIL_HISTORY_MAX_WORKERS = 4
 SCANNER_SCORE_CAP_FALLBACK_SOURCES = {"fallback", "history_only_us_scan", "history_only_hk_scan", "mock", "synthetic"}
 SCANNER_SCORE_CAP_PARTIAL_SOURCES = {"local_partial_fallback"}
+SCANNER_PROXY_QUOTE_CONFIDENCE_CAP = 0.75
+SCANNER_PROXY_QUOTE_CAP_REASON = "proxy_quote_source_capped"
+SCANNER_PROXY_QUOTE_DEGRADATION_REASON = "public_proxy_not_score_grade"
+SCANNER_PROXY_QUOTE_SOURCES = frozenset(
+    {
+        "yahoo",
+        "yahoo_finance",
+        "yahooquery",
+        "yfinance",
+        "yfinance_current_baseline",
+        "yfinance_proxy",
+    }
+)
+SCANNER_PROXY_QUOTE_SOURCE_TYPES = frozenset(
+    {
+        "public_proxy",
+        "proxy_public",
+        "unofficial_proxy",
+        "unofficial_public_api",
+        "public_web_fallback",
+    }
+)
+SCANNER_PROXY_QUOTE_SOURCE_TIERS = frozenset(
+    {
+        "third_party_free_api",
+        "unofficial_public_api",
+        "public_web_fallback",
+    }
+)
 SCANNER_OBSERVATION_ROUTE_REJECTED_REASON = "scanner_observation_route_rejected"
 SCANNER_OBSERVATION_AUTHORITY_REJECTED_REASON = "scanner_observation_authority_claim_rejected"
 SCANNER_OBSERVATION_METADATA_MISSING_REASON = "scanner_observation_metadata_missing"
@@ -416,6 +445,16 @@ def _normalize_cn_provider_id(value: Any) -> Optional[str]:
     if "pytdx" in compact:
         return "pytdx"
     return None
+
+
+def _compact_source_marker(value: Any) -> str:
+    return "".join(ch for ch in str(value or "").strip().lower() if ch.isalnum())
+
+
+def _append_reason_code(reason_codes: List[str], code: Optional[str]) -> None:
+    text = str(code or "").strip()
+    if text and text not in reason_codes:
+        reason_codes.append(text)
 
 
 class MarketScannerService:
@@ -5881,6 +5920,44 @@ class MarketScannerService:
     def _has_numeric_signal(value: Any) -> bool:
         return _safe_float(value, default=np.nan) == _safe_float(value, default=np.nan)  # NaN-safe presence check
 
+    @staticmethod
+    def _quote_source_type(quote_diag: Mapping[str, Any], quote_source: str) -> str:
+        explicit_type = quote_diag.get("sourceType") or quote_diag.get("source_type")
+        return resolve_source_type(
+            quote_source,
+            source_type=explicit_type,
+            freshness="live" if quote_diag.get("available") else "unknown",
+        )
+
+    @staticmethod
+    def _is_proxy_quote_context(quote_diag: Mapping[str, Any], *, quote_source_type: str) -> bool:
+        if not quote_diag.get("available"):
+            return False
+
+        quote_source = str(quote_diag.get("source") or "").strip().lower()
+        raw_source_type = str(quote_diag.get("sourceType") or quote_diag.get("source_type") or "").strip().lower()
+        source_tier = str(quote_diag.get("sourceTier") or quote_diag.get("source_tier") or "").strip().lower()
+        source_label = str(quote_diag.get("sourceLabel") or quote_diag.get("source_label") or "").strip().lower()
+
+        if quote_source in SCANNER_PROXY_QUOTE_SOURCES:
+            return True
+        if quote_source_type in SCANNER_PROXY_QUOTE_SOURCE_TYPES or raw_source_type in SCANNER_PROXY_QUOTE_SOURCE_TYPES:
+            return True
+        if source_tier in SCANNER_PROXY_QUOTE_SOURCE_TIERS:
+            return True
+
+        compact_label = _compact_source_marker(source_label)
+        return any(
+            marker in compact_label
+            for marker in (
+                "yahoo",
+                "yahoofinance",
+                "yfinance",
+                "publicproxy",
+                "unofficialproxy",
+            )
+        )
+
     def _score_cap_missing_evidence(self, candidate: Dict[str, Any]) -> List[str]:
         diagnostics = dict(candidate.get("_diagnostics") or {})
         history_diag = dict(diagnostics.get("history") or {})
@@ -5918,6 +5995,11 @@ class MarketScannerService:
 
         quote_source = str(quote_diag.get("source") or "").strip().lower()
         history_source = str(history_diag.get("source") or candidate.get("history_source") or "").strip().lower()
+        quote_source_type = self._quote_source_type(quote_diag, quote_source) if quote_source else ""
+        is_proxy_quote = self._is_proxy_quote_context(
+            quote_diag,
+            quote_source_type=quote_source_type,
+        )
         quote_context_present = bool(quote_diag) or "quote_available" in candidate or "quote_available" in diagnostics
         is_fallback = (
             (quote_context_present and not quote_diag.get("available"))
@@ -5934,26 +6016,49 @@ class MarketScannerService:
         elif is_partial:
             degradation_reason = "partial_coverage"
 
+        cap_reason = degradation_reason
+        confidence_weight = 1.0
+        reason_codes: List[str] = []
+        if cap_reason:
+            _append_reason_code(reason_codes, cap_reason)
+        if is_proxy_quote:
+            _append_reason_code(reason_codes, SCANNER_PROXY_QUOTE_CAP_REASON)
+            _append_reason_code(reason_codes, SCANNER_PROXY_QUOTE_DEGRADATION_REASON)
+            if cap_reason is None:
+                cap_reason = SCANNER_PROXY_QUOTE_CAP_REASON
+                degradation_reason = SCANNER_PROXY_QUOTE_DEGRADATION_REASON
+                confidence_weight = SCANNER_PROXY_QUOTE_CONFIDENCE_CAP
+
         confidence_source = quote_source or history_source or "scanner"
-        confidence_source_label = confidence_source
+        confidence_source_label = resolve_source_label(
+            confidence_source,
+            source_type=quote_source_type if quote_source else None,
+            source_label=quote_diag.get("sourceLabel") or quote_diag.get("source_label"),
+        )
         if quote_context_present and not quote_diag.get("available"):
             confidence_source = history_source or "quote_context_missing"
-            confidence_source_label = confidence_source
+            confidence_source_label = resolve_source_label(confidence_source)
 
         confidence_contract = coerce_source_confidence_contract(
             {
                 "source": confidence_source,
                 "sourceLabel": confidence_source_label,
-                "freshness": "live" if quote_diag.get("available") else "unknown",
+                "freshness": "delayed" if is_proxy_quote else "live" if quote_diag.get("available") else "unknown",
                 "isFallback": is_fallback,
                 "isStale": is_stale,
                 "isPartial": is_partial,
-                "confidenceWeight": 1.0,
+                "confidenceWeight": confidence_weight,
                 "coverage": evidence_coverage,
                 "degradationReason": degradation_reason,
-                "capReason": degradation_reason,
+                "capReason": cap_reason,
             }
         ).to_dict()
+        if quote_source_type:
+            confidence_contract["sourceType"] = quote_source_type
+        score_grade_allowed = not bool(cap_reason) and not is_proxy_quote
+        confidence_contract["scoreContributionAllowed"] = score_grade_allowed
+        confidence_contract["sourceAuthorityAllowed"] = score_grade_allowed
+        confidence_contract["observationOnly"] = not score_grade_allowed
 
         raw_score = round(_clamp(_safe_float(candidate.get("raw_score"), default=_safe_float(candidate.get("score"))), 0.0, 100.0), 1)
         score_cap = round(_clamp(float(confidence_contract.get("confidenceWeight") or 0.0) * 100.0, 0.0, 100.0), 1)
@@ -5975,6 +6080,8 @@ class MarketScannerService:
             "degradation_reason": confidence_contract.get("degradationReason"),
             "cap_applied": cap_applied,
             "missing_evidence": missing_evidence,
+            "reason_codes": reason_codes,
+            "score_grade_allowed": score_grade_allowed,
             "source_confidence": confidence_contract,
         }
         candidate["_diagnostics"] = diagnostics

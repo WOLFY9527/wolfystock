@@ -22,7 +22,7 @@ from src.core.scanner_profile import get_scanner_profile
 from src.core.scanner_theme_registry import create_ai_scanner_theme, get_scanner_theme
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
-from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION
+from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION, build_scanner_evidence_packet
 from src.storage import DatabaseManager, MarketScannerRun
 
 
@@ -1162,7 +1162,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(partial_explainability["score_confidence"], 0.7)
         self.assertIn("risk", partial_explainability["missing_evidence"])
 
-    def test_apply_score_caps_and_explainability_preserves_strong_scores(self) -> None:
+    def test_apply_score_caps_and_explainability_caps_public_proxy_quote_sources(self) -> None:
         service = MarketScannerService(
             self.db,
             data_manager=FakeScannerDataManager(),
@@ -1201,6 +1201,81 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 "quote_context": {
                     "available": True,
                     "source": "yfinance",
+                    "sourceLabel": "Yahoo Finance public proxy",
+                },
+            },
+        }
+
+        service._apply_score_caps_and_explainability(candidate)
+        packet = build_scanner_evidence_packet(
+            candidate,
+            context={
+                "market": "us",
+                "score_explainability": candidate["_diagnostics"]["score_explainability"],
+            },
+        )
+
+        explainability = candidate["_diagnostics"]["score_explainability"]
+        self.assertEqual(candidate["raw_score"], 82.2)
+        self.assertEqual(candidate["final_score"], 75.0)
+        self.assertEqual(candidate["score"], 75.0)
+        self.assertTrue(explainability["cap_applied"])
+        self.assertEqual(explainability["cap_reason"], "proxy_quote_source_capped")
+        self.assertEqual(explainability["degradation_reason"], "public_proxy_not_score_grade")
+        self.assertEqual(explainability["score_confidence"], 0.75)
+        self.assertFalse(explainability["score_grade_allowed"])
+        self.assertFalse(explainability["source_confidence"]["scoreContributionAllowed"])
+        self.assertEqual(explainability["source_confidence"]["capReason"], "proxy_quote_source_capped")
+        self.assertIn("proxy_quote_source_capped", explainability["reason_codes"])
+        self.assertIn("public_proxy_not_score_grade", explainability["reason_codes"])
+        self.assertEqual(packet["scoreConfidence"], 0.75)
+        self.assertEqual(packet["capReason"], "proxy_quote_source_capped")
+        self.assertEqual(packet["degradationReason"], "public_proxy_not_score_grade")
+        self.assertIn("proxy_quote_source_capped", packet["adminReasonCodes"])
+        self.assertIn("public_proxy_not_score_grade", packet["adminReasonCodes"])
+        self.assertIn("仅供观察", packet["userFacingLabels"])
+        self.assertIn("需人工复核", packet["userFacingLabels"])
+
+    def test_apply_score_caps_and_explainability_preserves_authorized_non_proxy_scores(self) -> None:
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeScannerDataManager(),
+        )
+        candidate = {
+            "symbol": "MSFT",
+            "name": "Microsoft",
+            "score": 82.2,
+            "reason_summary": "证据完整。",
+            "ret_5d": 4.1,
+            "ret_20d": 12.7,
+            "avg_amount_20": 1.2e10,
+            "amount": 1.1e10,
+            "avg_volume_20": 22_000_000,
+            "volume_expansion_20": 1.2,
+            "atr20_pct": 3.7,
+            "_relative_strength_pct": 0.81,
+            "boards": ["软件"],
+            "_component_scores": {
+                "trend": 18.0,
+                "momentum": 12.0,
+                "liquidity": 15.2,
+                "activity": 9.8,
+                "volatility_quality": 7.4,
+                "relative_strength": 8.1,
+                "benchmark_relative": 6.5,
+                "gap_context": 5.2,
+                "penalties": 0.0,
+            },
+            "_diagnostics": {
+                "history": {
+                    "source": "local_db",
+                    "latest_trade_date": "2026-05-16",
+                    "rows": 130,
+                },
+                "quote_context": {
+                    "available": True,
+                    "source": "alpaca",
+                    "sourceType": "broker_authorized",
                 },
             },
         }
@@ -1215,6 +1290,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertIsNone(explainability["cap_reason"])
         self.assertIsNone(explainability["degradation_reason"])
         self.assertEqual(explainability["score_confidence"], 1.0)
+        self.assertTrue(explainability["score_grade_allowed"])
 
     def test_run_scan_attaches_additive_evidence_packet_without_extra_provider_calls(self) -> None:
         seed_us_local_history(self.stock_repo)

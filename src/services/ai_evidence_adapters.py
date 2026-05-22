@@ -68,6 +68,16 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _optional_float(value: Any) -> float | None:
+    try:
+        if value is None or value == "":
+            return None
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number == number else None
+
+
 def _append_unique(target: list[str], value: Any) -> None:
     text = _text(value)
     if text and text not in target:
@@ -445,6 +455,8 @@ def scanner_evidence_to_ai_packet(value: Any) -> AiEvidencePacket:
     rank = raw.get("rank")
     score = raw.get("score")
     reason_codes = [_text(code) for code in _items(raw.get("adminReasonCodes")) if _text(code)]
+    _append_unique(reason_codes, raw.get("capReason"))
+    _append_unique(reason_codes, raw.get("degradationReason"))
     warning_flags = [_text(code) for code in _items(raw.get("warningFlags")) if _text(code)]
     user_labels = [_text(code) for code in _items(raw.get("userFacingLabels")) if _text(code)]
     quote_ref_id = "scanner_quote"
@@ -484,6 +496,12 @@ def scanner_evidence_to_ai_packet(value: Any) -> AiEvidencePacket:
     if _text(raw.get("dataQualityState")) in {"partial", "missing", "insufficient"} or warning_flags:
         decision_status = AiEvidenceDecisionStatus.CAUTION
         cap_value = min(cap_value, 75)
+    score_confidence = _optional_float(raw.get("scoreConfidence"))
+    if score_confidence is not None:
+        cap_value = min(cap_value, int(round(max(0.0, min(1.0, score_confidence)) * 100.0)))
+    confidence_reason_codes = ["scanner_evidence_metadata_only"]
+    for code in reason_codes:
+        _append_unique(confidence_reason_codes, code)
     optional_evidence = []
     if "external_optional_unavailable" in reason_codes:
         _append_unique(quality_flags, "optional_enrichment_missing")
@@ -560,7 +578,7 @@ def scanner_evidence_to_ai_packet(value: Any) -> AiEvidencePacket:
         decision_status=decision_status,
         confidence_cap=AiEvidenceConfidenceCap(
             value=cap_value,
-            reason_codes=["scanner_evidence_metadata_only"],
+            reason_codes=confidence_reason_codes,
         ),
         source_refs=source_refs,
         explainable_facts=[

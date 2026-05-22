@@ -191,6 +191,15 @@ def build_scanner_evidence_packet(candidate: Dict[str, Any], context: Optional[D
         _append_unique(admin_reason_codes, "provider_unavailable")
     for raw_code in context_payload.get("internal_reason_codes") or []:
         _append_unique(admin_reason_codes, _SANITIZED_REASON_CODES.get(str(raw_code).strip(), None))
+    for raw_code in explainability.get("reason_codes") or []:
+        _append_unique(admin_reason_codes, str(raw_code).strip())
+    _append_unique(admin_reason_codes, str(explainability.get("cap_reason") or "").strip())
+    _append_unique(admin_reason_codes, str(explainability.get("degradation_reason") or "").strip())
+
+    proxy_capped = any(
+        code in {"proxy_quote_source_capped", "public_proxy_not_score_grade"}
+        for code in admin_reason_codes
+    )
 
     user_labels: List[str] = []
     if "history_insufficient" in admin_reason_codes:
@@ -201,6 +210,9 @@ def build_scanner_evidence_packet(candidate: Dict[str, Any], context: Optional[D
         _append_unique(user_labels, "需人工复核")
     if history_state == "stale" or admin_reason_codes:
         _append_unique(user_labels, "依据需复核")
+    if proxy_capped:
+        _append_unique(user_labels, "仅供观察")
+        _append_unique(user_labels, "需人工复核")
     if liquidity_state != "complete":
         _append_unique(user_labels, "流动性不足")
     if trend_state != "complete":
@@ -219,7 +231,7 @@ def build_scanner_evidence_packet(candidate: Dict[str, Any], context: Optional[D
         data_quality_state = "insufficient"
     elif history_state == "missing":
         data_quality_state = "missing"
-    elif history_state == "stale" or quote_state != "complete" or missing_evidence:
+    elif history_state == "stale" or quote_state != "complete" or missing_evidence or proxy_capped:
         data_quality_state = "partial"
 
     packet = ScannerEvidencePacket(

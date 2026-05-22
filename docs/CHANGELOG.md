@@ -1,4 +1,5 @@
 ## 2026-05-22
+- Scanner ranking evidence now caps public proxy quote sources below full confidence.
 - Market Overview now discloses Polygon EOD computed AD breadth and missing high/low metrics instead of showing old proxy language.
 - Scanner candidate results now restore the bounded scroll-region contract for first-screen density.
 - Provider Operations now shows Polygon grouped-daily breadth as an AD-only computed source with high/low metrics still missing.

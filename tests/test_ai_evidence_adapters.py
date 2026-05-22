@@ -52,6 +52,45 @@ def test_scanner_adapter_returns_valid_packet_and_keeps_rank_as_metadata_only() 
     assert "recommend" not in serialized.lower()
 
 
+def test_scanner_proxy_capped_evidence_keeps_ai_confidence_below_score_grade() -> None:
+    payload = {
+        "symbol": "MSFT",
+        "name": "Microsoft",
+        "diagnostics": {
+            "evidence_packet": {
+                "symbol": "MSFT",
+                "market": "us",
+                "rank": 1,
+                "score": 75.0,
+                "rawScore": 82.2,
+                "finalScore": 75.0,
+                "scoreConfidence": 0.75,
+                "evidenceCoverage": 1.0,
+                "capReason": "proxy_quote_source_capped",
+                "degradationReason": "public_proxy_not_score_grade",
+                "evidenceVersion": "scanner_evidence_v1",
+                "dataQualityState": "complete",
+                "freshnessState": "complete",
+                "freshnessDetail": {
+                    "quoteState": "complete",
+                    "historyState": "complete",
+                    "latestTradeDate": "2026-05-16",
+                },
+                "missingEvidence": [],
+                "userFacingLabels": ["仅供观察", "需人工复核"],
+                "warningFlags": [],
+                "adminReasonCodes": ["proxy_quote_source_capped", "public_proxy_not_score_grade"],
+            },
+        },
+    }
+
+    packet = scanner_evidence_to_ai_packet(payload)
+
+    assert packet.confidence_cap.value == 75
+    assert "proxy_quote_source_capped" in packet.confidence_cap.reason_codes
+    assert "public_proxy_not_score_grade" in packet.confidence_cap.reason_codes
+
+
 def test_rotation_proxy_only_input_never_emits_real_fund_flow_wording() -> None:
     payload = _fixture("rotation_proxy_only_packet.json")
 
