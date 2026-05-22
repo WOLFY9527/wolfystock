@@ -13,6 +13,11 @@
       "unit": "stocks"
     },
     {
+      "symbol": "UNCHANGED",
+      "value": 180,
+      "unit": "stocks"
+    },
+    {
       "symbol": "ADVANCE_DECLINE_RATIO",
       "value": 2.154,
       "unit": "ratio"

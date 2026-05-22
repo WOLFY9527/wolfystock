@@ -7,6 +7,7 @@ from typing import Any, Dict
 
 
 CANONICAL_SOURCE_TYPES = {
+    "authorized_licensed_feed",
     "exchange_public",
     "official_public",
     "public_proxy",
@@ -72,6 +73,7 @@ SOURCE_TYPE_BY_SOURCE = {
     "official_public.fed_liquidity": "missing",
     "official_or_authorized.fx_dxy": "missing",
     "official_or_authorized.us_market_breadth": "missing",
+    "polygon_us_grouped_daily": "authorized_licensed_feed",
     "pandas_datareader_fred": "official_public",
     "pandas_datareader_oecd": "official_public",
     "pandas_datareader_stooq": "public_proxy",
@@ -107,6 +109,7 @@ SOURCE_TYPE_BY_SOURCE = {
 
 SOURCE_TYPE_ALIASES = {
     "": "missing",
+    "authorized_licensed_feed": "authorized_licensed_feed",
     "cache": "cache_snapshot",
     "cache_snapshot": "cache_snapshot",
     "cached": "cache_snapshot",
@@ -184,6 +187,7 @@ SOURCE_LABEL_BY_SOURCE = {
     "official_public.fed_liquidity": "未接入",
     "official_or_authorized.fx_dxy": "未接入",
     "official_or_authorized.us_market_breadth": "未接入",
+    "polygon_us_grouped_daily": "Polygon grouped daily US equities",
     "pandas_datareader_fred": "FRED",
     "pandas_datareader_oecd": "OECD",
     "pandas_datareader_stooq": "Stooq",
@@ -222,6 +226,7 @@ SOURCE_LABEL_BY_TYPE = {
     "malformed_fixture": "Malformed Fixture",
     "missing": "未接入",
     "official_public": "公开数据",
+    "authorized_licensed_feed": "授权数据",
     "public_proxy": "公开代理",
     "synthetic_fixture": "Synthetic Fixture",
     "unofficial_proxy": "Yahoo Finance",

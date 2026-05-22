@@ -61,6 +61,9 @@ FUTURE_AUTHORIZED_SUPPORT_CONTRACTS = {
     ("authorized.us_etf_flow", "us_etf_creation_redemption"),
     ("authorized.us_etf_flow", "us_sector_etf_flow"),
     ("official_or_authorized.us_market_breadth", "us_market_breadth_constituents"),
+    ("official_or_authorized.us_market_breadth", "us_advancers_decliners"),
+    ("official_or_authorized.us_market_breadth", "us_new_highs_lows"),
+    ("official_or_authorized.us_market_breadth", "us_above_ma_breadth"),
     ("official_or_authorized.us_market_breadth", "us_sector_breadth"),
 }
 
@@ -178,6 +181,18 @@ def test_future_authorized_us_flow_and_breadth_contracts_stay_metadata_only_and_
         (
             "official_or_authorized.us_market_breadth",
             "us_sector_breadth",
+        ): "authorized_us_market_breadth_feed_not_configured",
+        (
+            "official_or_authorized.us_market_breadth",
+            "us_advancers_decliners",
+        ): "authorized_us_market_breadth_feed_not_configured",
+        (
+            "official_or_authorized.us_market_breadth",
+            "us_new_highs_lows",
+        ): "authorized_us_market_breadth_feed_not_configured",
+        (
+            "official_or_authorized.us_market_breadth",
+            "us_above_ma_breadth",
         ): "authorized_us_market_breadth_feed_not_configured",
     }
 

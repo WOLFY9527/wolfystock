@@ -21,6 +21,7 @@ from src.services.provider_unavailable_reason_buckets import (
 US_BREADTH_SYMBOLS = (
     "ADVANCERS",
     "DECLINERS",
+    "UNCHANGED",
     "ADVANCE_DECLINE_RATIO",
     "NEW_HIGHS",
     "NEW_LOWS",
@@ -37,6 +38,11 @@ US_BREADTH_SCORE_GRADE_ACTIVATION_GATE = (
 US_BREADTH_MISSING_PROVIDER_REASON = "authorized_us_market_breadth_feed_not_configured"
 US_BREADTH_REPRESENTATIVE_SAMPLE_REASON = "representative_sample_not_full_market_breadth"
 US_BREADTH_PROXY_PLACEHOLDER_REASON = "proxy_or_placeholder_not_authorized_breadth"
+POLYGON_US_BREADTH_UNAUTHORIZED_REASON = "polygon_unauthorized"
+POLYGON_US_BREADTH_RESPONSE_INVALID_REASON = "polygon_response_invalid"
+POLYGON_US_BREADTH_COVERAGE_BELOW_THRESHOLD_REASON = "polygon_coverage_below_threshold"
+POLYGON_US_BREADTH_EOD_STALE_REASON = "polygon_eod_stale"
+POLYGON_US_BREADTH_HIGH_LOW_HISTORY_UNAVAILABLE_REASON = "polygon_high_low_history_unavailable"
 
 SAFE_UNAVAILABLE_REASON_BUCKETS = (
     "provider_not_selected",
@@ -109,6 +115,16 @@ _CONTRACTS = (
     UsBreadthContract(
         symbol="DECLINERS",
         display_name="Decliners",
+        expected_unit="stocks",
+        expected_cadence="trading_session_snapshot",
+        source_class=_SOURCE_CLASS_DISABLED,
+        freshness_window="Same-session delayed breadth statistics only after an approved US breadth provider audit.",
+        entitlement_config_category="us_breadth_advance_decline_dataset_access",
+        safe_fallback_reason_buckets=_DEFAULT_REASON_BUCKETS,
+    ),
+    UsBreadthContract(
+        symbol="UNCHANGED",
+        display_name="Unchanged",
         expected_unit="stocks",
         expected_cadence="trading_session_snapshot",
         source_class=_SOURCE_CLASS_DISABLED,

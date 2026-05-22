@@ -158,6 +158,7 @@ python3 scripts/smoke_backtest_rule.py
 | `SEARXNG_BASE_URLS` | SearXNG 自建实例（无配额兜底，需在 settings.yml 启用 format: json）；留空时默认自动发现公共实例 | 可选 |
 | `SEARXNG_PUBLIC_INSTANCES_ENABLED` | 是否在 `SEARXNG_BASE_URLS` 为空时自动从 `searx.space` 获取公共实例（默认 `true`） | 可选 |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | 可选 |
+| `POLYGON_API_KEY` | Polygon API Key；仅后端读取，用于美股 EOD computed breadth，不是官方 NYSE/Nasdaq breadth | 可选 |
 | `TWELVE_DATA_API_KEY` | Twelve Data 单 Key；用于港股 Scanner quote/history 补强 | 可选 |
 | `TWELVE_DATA_API_KEYS` | Twelve Data 多 Key（逗号分隔）；优先级高于 `TWELVE_DATA_API_KEY` | 可选 |
 | `ALPACA_API_KEY_ID` | Alpaca Key ID；用于美股 Scanner market-data 补强 | 可选 |
@@ -288,6 +289,7 @@ python3 scripts/smoke_backtest_rule.py
 |--------|------|--------|:----:|
 | `TUSHARE_TOKEN` | Tushare Pro Token | - | 可选 |
 | `TICKFLOW_API_KEY` | TickFlow API Key；配置后 A 股大盘复盘指数优先尝试 TickFlow，若套餐支持标的池查询则市场统计也会优先尝试 TickFlow | - | 可选 |
+| `POLYGON_API_KEY` | Polygon API Key；仅后端读取，用于 Market Overview 美股 EOD computed breadth 的 grouped daily 全市场数据，不是官方 NYSE/Nasdaq published breadth | - | 可选 |
 | `TWELVE_DATA_API_KEY` | Twelve Data 单 Key；用于港股 Scanner quote / daily history 补强 | - | 可选 |
 | `TWELVE_DATA_API_KEYS` | Twelve Data 多 Key（逗号分隔）；优先级高于 `TWELVE_DATA_API_KEY` | - | 可选 |
 | `ALPACA_API_KEY_ID` | Alpaca Key ID；用于美股 Scanner quote / daily history 补强 | - | 可选 |
@@ -314,6 +316,7 @@ python3 scripts/smoke_backtest_rule.py
 > - TickFlow 能力按套餐权限分层：有限权限套餐仍可使用主指数查询；支持 `CN_Equity_A` 标的池查询的套餐才会启用 TickFlow 市场统计。
 > - 官方 quickstart 已文档化 `quotes.get(universes=["CN_Equity_A"])`，但线上 smoke test 进一步确认：`TICKFLOW_API_KEY` 不等于一定具备该权限，且 `quotes.get(symbols=[...])` 单次存在标的数量限制。
 > - TickFlow 实际返回的 `change_pct` / `amplitude` 为比例值；系统已在接入层统一转换为百分比值，确保与现有数据源字段语义一致。
+> - 配置 `POLYGON_API_KEY` 后，Market Overview 美股 breadth 仅使用 Polygon grouped daily EOD 数据计算 advance/decline/unchanged；52 周新高/新低在未接入有界历史回看前保持缺失且不参与评分。
 > - 字段契约：
 >   - `fundamental_context.boards.data` = `sector_rankings`（板块涨跌榜，结构 `{top, bottom}`）；
 >   - `fundamental_context.earnings.data.financial_report` = 财报摘要（报告期、营收、归母净利润、经营现金流、ROE）；

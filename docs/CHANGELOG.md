@@ -1,5 +1,12 @@
 ## 2026-05-22
 
+- **Polygon EOD computed US breadth adapter** - Market Overview can now use
+  backend-only `POLYGON_API_KEY` to fetch Polygon grouped daily US stocks data
+  and compute EOD advancers, decliners, unchanged, and advance/decline ratio
+  for the `polygon_us_grouped_daily_ex_otc` universe. The payload labels this
+  as computed from authorized Polygon grouped daily data, not official
+  NYSE/Nasdaq published breadth; 52-week high/low metrics remain unavailable
+  and non-scoring until a bounded historical lookback exists.
 - **Standalone Decision Desk route removal** - Removed the frontend `/chat`
   Decision Desk surface and primary navigation entry to reduce duplicate
   product surface area. Legacy `/chat` now redirects to Market Overview, while

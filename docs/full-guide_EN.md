@@ -151,6 +151,7 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 | `SEARXNG_PUBLIC_INSTANCES_ENABLED` | Auto-discover public SearXNG instances from `searx.space` when `SEARXNG_BASE_URLS` is empty (default `true`) | Optional |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638) Token | Optional |
 | `TICKFLOW_API_KEY` | [TickFlow](https://tickflow.org) API key for CN market review index enhancement; market breadth also uses TickFlow when the plan supports universe queries | Optional |
+| `POLYGON_API_KEY` | Polygon API key, backend only; enables US EOD computed breadth, not official NYSE/Nasdaq breadth | Optional |
 | `TWELVE_DATA_API_KEY` | Twelve Data API key for HK scanner quote/history enrichment | Optional |
 | `TWELVE_DATA_API_KEYS` | Comma-separated Twelve Data API keys; takes priority over `TWELVE_DATA_API_KEY` | Optional |
 | `ALPACA_API_KEY_ID` | Alpaca key ID for US scanner market-data enrichment | Optional |
@@ -270,6 +271,7 @@ Default schedule: Every weekday at **18:00 (Beijing Time)** automatic execution.
 |--------|------|--------|:----:|
 | `TUSHARE_TOKEN` | Tushare Pro Token | - | Optional |
 | `TICKFLOW_API_KEY` | TickFlow API key; CN market review indices prefer TickFlow when configured, and market breadth does so only when the plan supports universe queries | - | Optional |
+| `POLYGON_API_KEY` | Polygon API key, backend only; used by Market Overview for US EOD computed breadth from grouped daily full-market data, not official NYSE/Nasdaq published breadth | - | Optional |
 | `TWELVE_DATA_API_KEY` | Twelve Data single-key config for HK scanner quote / daily-history enrichment | - | Optional |
 | `TWELVE_DATA_API_KEYS` | Comma-separated Twelve Data API keys; takes priority over `TWELVE_DATA_API_KEY` | - | Optional |
 | `ALPACA_API_KEY_ID` | Alpaca key ID for US scanner quote / daily-history enrichment | - | Optional |
@@ -337,6 +339,7 @@ export SSL_CERT_FILE="$(python -c 'import certifi; print(certifi.where())')"
 > - TickFlow behavior is capability-based rather than just key-based: limited plans can still enhance main CN indices, while plans with `CN_Equity_A` universe query support also enhance market breadth.
 > - The official quickstart documents `quotes.get(universes=["CN_Equity_A"])`, but online smoke tests confirmed two additional real-world constraints: universe access depends on plan permissions, and `quotes.get(symbols=[...])` has a per-request symbol limit.
 > - TickFlow currently returns `change_pct` / `amplitude` as ratio values; this integration normalizes them to the project's percent convention so they match AkShare / Tushare / efinance semantics.
+> - When `POLYGON_API_KEY` is configured, Market Overview US breadth only computes advance/decline/unchanged from Polygon grouped daily EOD data; 52-week highs/lows remain unavailable and non-scoring until a bounded historical lookback exists.
 > - Per-stock analysis, realtime quote priority, and sector rankings fallback remain unchanged.
 
 ---

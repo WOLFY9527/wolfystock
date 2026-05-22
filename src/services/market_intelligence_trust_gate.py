@@ -12,6 +12,7 @@ MARKET_INTELLIGENCE_TRUST_GATE_VERSION = "market_intelligence_trust_gate_v1"
 
 
 class MarketIntelligenceSourceTier(str, Enum):
+    AUTHORIZED_LICENSED = "authorized_licensed_feed"
     OFFICIAL_PUBLIC = "official_public"
     EXCHANGE_PUBLIC = "exchange_public"
     BROKER_AUTHORIZED = "broker_authorized"
@@ -31,6 +32,7 @@ class MarketIntelligenceTrustLevel(str, Enum):
 
 
 _RELIABLE_CAPABLE_TIERS = {
+    MarketIntelligenceSourceTier.AUTHORIZED_LICENSED,
     MarketIntelligenceSourceTier.OFFICIAL_PUBLIC,
     MarketIntelligenceSourceTier.EXCHANGE_PUBLIC,
     MarketIntelligenceSourceTier.BROKER_AUTHORIZED,
@@ -44,6 +46,8 @@ _WEAK_TIERS = {
 _SOURCE_TYPE_TO_TIER = {
     "official_api": MarketIntelligenceSourceTier.OFFICIAL_PUBLIC,
     "official_public": MarketIntelligenceSourceTier.OFFICIAL_PUBLIC,
+    "authorized_licensed_feed": MarketIntelligenceSourceTier.AUTHORIZED_LICENSED,
+    "official_or_authorized_licensed_feed": MarketIntelligenceSourceTier.AUTHORIZED_LICENSED,
     "exchange_public": MarketIntelligenceSourceTier.EXCHANGE_PUBLIC,
     "broker_authorized": MarketIntelligenceSourceTier.BROKER_AUTHORIZED,
     "public": MarketIntelligenceSourceTier.UNOFFICIAL_PUBLIC_API,
@@ -74,6 +78,7 @@ _SOURCE_TYPE_TO_TIER = {
 }
 _SOURCE_TO_TIER = {
     "fred": MarketIntelligenceSourceTier.OFFICIAL_PUBLIC,
+    "polygon_us_grouped_daily": MarketIntelligenceSourceTier.AUTHORIZED_LICENSED,
     "treasury": MarketIntelligenceSourceTier.OFFICIAL_PUBLIC,
     "tusharefetcher": MarketIntelligenceSourceTier.OFFICIAL_PUBLIC,
     "eastmoney": MarketIntelligenceSourceTier.OFFICIAL_PUBLIC,
@@ -102,6 +107,7 @@ _SOURCE_TO_TIER = {
     "missing": MarketIntelligenceSourceTier.UNAVAILABLE,
 }
 _TIER_SCORE_CAP = {
+    MarketIntelligenceSourceTier.AUTHORIZED_LICENSED: 1.0,
     MarketIntelligenceSourceTier.OFFICIAL_PUBLIC: 1.0,
     MarketIntelligenceSourceTier.EXCHANGE_PUBLIC: 1.0,
     MarketIntelligenceSourceTier.BROKER_AUTHORIZED: 1.0,
@@ -113,6 +119,7 @@ _TIER_SCORE_CAP = {
     MarketIntelligenceSourceTier.UNAVAILABLE: 0.0,
 }
 _TIER_RANK = {
+    MarketIntelligenceSourceTier.AUTHORIZED_LICENSED: 0,
     MarketIntelligenceSourceTier.OFFICIAL_PUBLIC: 0,
     MarketIntelligenceSourceTier.EXCHANGE_PUBLIC: 0,
     MarketIntelligenceSourceTier.BROKER_AUTHORIZED: 0,

@@ -145,7 +145,7 @@ def get_rotation_radar(
     ).get_rotation_radar(market=market)
 
 
-@router.get("/us-breadth", summary="Get US sector ETF breadth proxy snapshot")
+@router.get("/us-breadth", summary="Get US market breadth snapshot")
 def get_us_breadth(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
     return MarketOverviewService().get_us_breadth(actor=_actor(current_user))
 

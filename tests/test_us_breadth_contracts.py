@@ -157,6 +157,13 @@ def test_parse_mocked_us_breadth_fixture_returns_complete_contract_set() -> None
             "unavailableReason": None,
         },
         {
+            "symbol": "UNCHANGED",
+            "value": 180.0,
+            "asOf": "2026-05-14T09:30:00-04:00",
+            "isEvidence": True,
+            "unavailableReason": None,
+        },
+        {
             "symbol": "ADVANCE_DECLINE_RATIO",
             "value": 2.154,
             "asOf": "2026-05-14T09:30:00-04:00",

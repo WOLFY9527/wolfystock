@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 from unittest.mock import Mock, patch
 
 from api.v1.endpoints import market
@@ -15,6 +16,7 @@ from src.services.market_overview_service import MarketOverviewService
 def setup_function() -> None:
     market_cache.clear()
     MarketOverviewService._market_data_cache.clear()
+    os.environ.pop("POLYGON_API_KEY", None)
 
 
 def teardown_function() -> None:
@@ -68,6 +70,71 @@ def test_market_us_breadth_current_proxy_snapshot_stays_proxy_not_exchange_bread
     assert payload["items"][0]["sourceType"] == "unofficial_proxy"
     assert all(item["scoreContributionAllowed"] is False for item in payload["items"])
     assert all(item["broadMarketClaimAllowed"] is False for item in payload["items"])
+
+
+def test_market_us_breadth_uses_polygon_computed_ad_when_authority_gate_passes() -> None:
+    service = MarketOverviewService()
+    activation = {
+        "credentialsPresent": True,
+        "providerConstructed": True,
+        "probePassed": True,
+        "observationDate": "2026-05-21",
+        "previousObservationDate": "2026-05-20",
+        "asOf": "2026-05-21",
+        "freshnessValid": True,
+        "coverageCount": 12000,
+        "sourceMetadataValid": True,
+        "sourceAuthorityAllowed": True,
+        "scoreContributionAllowed": True,
+        "fulfilledMetrics": [
+            "ADVANCERS",
+            "DECLINERS",
+            "UNCHANGED",
+            "ADVANCE_DECLINE_RATIO",
+        ],
+        "missingMetrics": ["NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"],
+        "reasonCodes": ["polygon_high_low_history_unavailable"],
+        "metrics": {
+            "advancers": 7000,
+            "decliners": 4000,
+            "unchanged": 1000,
+            "advanceDeclineRatio": 1.75,
+            "newHighs": None,
+            "newLows": None,
+            "highLowRatio": None,
+        },
+        "source": "polygon_us_grouped_daily",
+        "sourceLabel": "Polygon grouped daily US equities (computed breadth)",
+        "sourceType": "authorized_licensed_feed",
+        "sourceTier": "official_or_authorized_licensed_feed",
+        "trustLevel": "score_grade_for_computed_ad_metrics_when_fresh",
+        "authorityBasis": "computed_from_authorized_polygon_grouped_daily",
+        "universe": "polygon_us_grouped_daily_ex_otc",
+    }
+
+    with patch(
+        "src.services.market_overview_service.run_polygon_us_breadth_activation",
+        return_value=activation,
+    ):
+        payload = service._fetch_us_breadth_snapshot()
+
+    by_symbol = {item["symbol"]: item for item in payload["items"]}
+    assert payload["source"] == "polygon_us_grouped_daily"
+    assert payload["sourceLabel"] == "Polygon grouped daily US equities (computed breadth)"
+    assert payload["breadthClaimType"] == "computed_authorized_polygon_grouped_daily_breadth"
+    assert payload["officialExchangePublishedBreadth"] is False
+    assert payload["representativeSample"] is False
+    assert payload["sourceAuthorityAllowed"] is True
+    assert payload["scoreContributionAllowed"] is True
+    assert payload["isPartial"] is True
+    assert payload["authorityDiagnostics"]["reasonCodes"] == ["polygon_high_low_history_unavailable"]
+    assert by_symbol["ADVANCERS"]["value"] == 7000
+    assert by_symbol["DECLINERS"]["value"] == 4000
+    assert by_symbol["UNCHANGED"]["value"] == 1000
+    assert by_symbol["ADVANCE_DECLINE_RATIO"]["value"] == 1.75
+    assert by_symbol["NEW_HIGHS"]["value"] is None
+    assert by_symbol["NEW_HIGHS"]["scoreContributionAllowed"] is False
+    assert by_symbol["NEW_HIGHS"]["sourceAuthorityReason"] == "polygon_high_low_history_unavailable"
 
 
 def test_market_us_breadth_proxy_snapshot_projects_to_unofficial_proxy_not_exchange_public() -> None:

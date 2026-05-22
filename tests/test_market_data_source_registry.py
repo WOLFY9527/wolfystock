@@ -179,6 +179,7 @@ def test_provider_fit_source_aliases_are_additive_and_truthful_for_new_audited_i
         "official_public.cn_money_market_rates": ("missing", "未接入"),
         "official_or_authorized.fx_dxy": ("missing", "未接入"),
         "sec_edgar": ("official_public", "SEC EDGAR"),
+        "polygon_us_grouped_daily": ("authorized_licensed_feed", "Polygon grouped daily US equities"),
         "pandas_datareader_fred": ("official_public", "FRED"),
         "pandas_datareader_oecd": ("official_public", "OECD"),
         "pandas_datareader_world_bank": ("official_public", "World Bank"),
@@ -222,6 +223,17 @@ def test_future_authorized_us_flow_and_breadth_provider_classes_do_not_project_a
         assert provenance["sourceType"] == "missing"
         assert provenance["sourceLabel"] == "未接入"
         assert provenance["freshnessLabel"] == "不可用"
+
+
+def test_polygon_grouped_daily_is_authorized_vendor_feed_not_official_exchange_breadth() -> None:
+    provenance = project_source_provenance(
+        source="polygon_us_grouped_daily",
+        freshness="delayed",
+    )
+
+    assert provenance["sourceType"] == "authorized_licensed_feed"
+    assert provenance["sourceLabel"] == "Polygon grouped daily US equities"
+    assert provenance["sourceType"] not in {"official_public", "exchange_public", "unofficial_proxy"}
 
 
 def test_scanner_local_sources_keep_specific_cache_labels() -> None:

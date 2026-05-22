@@ -57,6 +57,18 @@ from src.services.us_breadth_contracts import (
     build_us_breadth_missing_authority_diagnostic,
     representative_sample_breadth_metadata,
 )
+from src.services.polygon_us_breadth_provider import (
+    POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
+    POLYGON_US_BREADTH_AUTHORITY_BASIS,
+    POLYGON_US_BREADTH_SOURCE,
+    POLYGON_US_BREADTH_SOURCE_LABEL,
+    POLYGON_US_BREADTH_SOURCE_TIER,
+    POLYGON_US_BREADTH_SOURCE_TYPE,
+    POLYGON_US_BREADTH_TRUST_LEVEL,
+    POLYGON_US_BREADTH_UNIVERSE,
+    diagnostic_summary as polygon_us_breadth_diagnostic_summary,
+    run_polygon_us_breadth_activation,
+)
 from src.services.market_overview_yfinance_transport import (
     fetch_yfinance_quote_history_frame,
     fetch_yfinance_spy_atr_history_frame,
@@ -201,6 +213,7 @@ CONFIDENCE_BY_FRESHNESS = {
 }
 
 SOURCE_TYPE_CONFIDENCE = {
+    "authorized_licensed_feed": 1.0,
     "official_api": 1.0,
     "official_public": 1.0,
     "exchange_public": 1.0,
@@ -229,6 +242,7 @@ SOURCE_TYPE_BY_SOURCE = {
     "cnn": "public_api",
     "computed": "computed_from_real",
     "treasury": "official_public",
+    "polygon_us_grouped_daily": "authorized_licensed_feed",
 }
 
 SOURCE_LABELS = {
@@ -251,6 +265,7 @@ SOURCE_LABELS = {
     "fallback": resolve_source_label("fallback"),
     "mock": resolve_source_label("mock"),
     "public": "公开数据",
+    "polygon_us_grouped_daily": "Polygon grouped daily US equities",
     "unavailable": resolve_source_label("unavailable"),
 }
 
@@ -4053,6 +4068,11 @@ class MarketOverviewService:
         }
 
     def _fetch_us_breadth_snapshot(self) -> Dict[str, Any]:
+        polygon_activation = run_polygon_us_breadth_activation()
+        authority_diagnostic = self._polygon_us_breadth_authority_diagnostic(polygon_activation)
+        if polygon_activation.get("sourceAuthorityAllowed"):
+            return self._polygon_us_breadth_snapshot(polygon_activation, authority_diagnostic)
+
         representative_meta = representative_sample_breadth_metadata()
         quote_items: List[Dict[str, Any]] = []
         for ticker, label in self.US_SECTOR_ETFS.items():
@@ -4084,7 +4104,7 @@ class MarketOverviewService:
                 **representative_meta,
             })
         if not quote_items:
-            return self._fallback_us_breadth_snapshot()
+            return self._fallback_us_breadth_snapshot(authority_diagnostic=authority_diagnostic)
 
         sorted_by_change = sorted(quote_items, key=lambda item: float(item.get("changePercent") or 0), reverse=True)
         sectors_up = sum(1 for item in quote_items if float(item.get("changePercent") or 0) > 0)
@@ -4116,7 +4136,7 @@ class MarketOverviewService:
                 "US breadth missing/unavailable; sector ETF and relative-pressure rows "
                 "are representative observations, not full-market breadth."
             ),
-            "authorityDiagnostics": build_us_breadth_missing_authority_diagnostic(),
+            "authorityDiagnostics": authority_diagnostic,
             **representative_meta,
             "items": [
                 {
@@ -4132,6 +4152,236 @@ class MarketOverviewService:
                 for item in items
             ],
             "fallbackUsed": False,
+        }
+
+    def _polygon_us_breadth_authority_diagnostic(
+        self,
+        activation: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        diagnostic = polygon_us_breadth_diagnostic_summary(activation)
+        reason_codes = list(diagnostic.get("reasonCodes") or [])
+        reason = reason_codes[0] if reason_codes else None
+        if reason == US_BREADTH_MISSING_PROVIDER_REASON:
+            return {
+                **build_us_breadth_missing_authority_diagnostic(),
+                **diagnostic,
+                "reason": US_BREADTH_MISSING_PROVIDER_REASON,
+            }
+        return {
+            **diagnostic,
+            "reason": reason,
+            "sourceLabel": POLYGON_US_BREADTH_SOURCE_LABEL,
+            "sourceTier": POLYGON_US_BREADTH_SOURCE_TIER,
+            "trustLevel": POLYGON_US_BREADTH_TRUST_LEVEL,
+            "authorityBasis": POLYGON_US_BREADTH_AUTHORITY_BASIS,
+            "universe": POLYGON_US_BREADTH_UNIVERSE,
+        }
+
+    def _polygon_us_breadth_snapshot(
+        self,
+        activation: Mapping[str, Any],
+        authority_diagnostic: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        updated_at = _now_iso()
+        as_of = str(activation.get("asOf") or activation.get("observationDate") or updated_at)
+        fulfilled_metrics = list(activation.get("fulfilledMetrics") or [])
+        missing_metrics = list(activation.get("missingMetrics") or [])
+        reason_codes = list(activation.get("reasonCodes") or [])
+        metric_coverage_ratio = round(len(fulfilled_metrics) / max(1, len(fulfilled_metrics) + len(missing_metrics)), 3)
+        source_meta = {
+            "breadthClaimType": "computed_authorized_polygon_grouped_daily_breadth",
+            "representativeSample": False,
+            "officialExchangePublishedBreadth": False,
+            "broadMarketClaimAllowed": True,
+            "observationOnly": False,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "sourceAuthorityReason": None,
+            "sourceAuthorityRouteRejected": False,
+            "routeRejectedReasonCodes": reason_codes,
+            "source": POLYGON_US_BREADTH_SOURCE,
+            "sourceLabel": POLYGON_US_BREADTH_SOURCE_LABEL,
+            "sourceType": POLYGON_US_BREADTH_SOURCE_TYPE,
+            "sourceTier": POLYGON_US_BREADTH_SOURCE_TIER,
+            "trustLevel": POLYGON_US_BREADTH_TRUST_LEVEL,
+            "authorityBasis": POLYGON_US_BREADTH_AUTHORITY_BASIS,
+            "universe": POLYGON_US_BREADTH_UNIVERSE,
+            "coverageCount": activation.get("coverageCount"),
+            "coverageThreshold": activation.get("coverageThreshold"),
+            "metricCoverageRatio": metric_coverage_ratio,
+            "sourceFreshnessEvidence": {
+                "freshness": "delayed",
+                "isFallback": False,
+                "isStale": False,
+                "isPartial": bool(missing_metrics),
+                "isUnavailable": False,
+                "observationDate": activation.get("observationDate"),
+                "freshnessPolicy": "polygon_grouped_daily_eod_recent_completed_us_weekday",
+            },
+        }
+        metrics = activation.get("metrics") if isinstance(activation.get("metrics"), Mapping) else {}
+        detail = "Computed from Polygon grouped daily adjusted US equities, OTC excluded"
+        items = [
+            self._polygon_us_breadth_metric_item(
+                "Advancers",
+                "ADVANCERS",
+                metrics.get("advancers"),
+                "stocks",
+                as_of,
+                updated_at,
+                source_meta,
+                detail=detail,
+            ),
+            self._polygon_us_breadth_metric_item(
+                "Decliners",
+                "DECLINERS",
+                metrics.get("decliners"),
+                "stocks",
+                as_of,
+                updated_at,
+                source_meta,
+                detail=detail,
+            ),
+            self._polygon_us_breadth_metric_item(
+                "Unchanged",
+                "UNCHANGED",
+                metrics.get("unchanged"),
+                "stocks",
+                as_of,
+                updated_at,
+                source_meta,
+                detail=detail,
+            ),
+            self._polygon_us_breadth_metric_item(
+                "Advance/Decline Ratio",
+                "ADVANCE_DECLINE_RATIO",
+                metrics.get("advanceDeclineRatio"),
+                "ratio",
+                as_of,
+                updated_at,
+                source_meta,
+                detail=detail,
+            ),
+        ]
+        items.extend(
+            self._polygon_unavailable_breadth_metric_item(label, symbol, as_of, updated_at, source_meta)
+            for label, symbol in (
+                ("New Highs", "NEW_HIGHS"),
+                ("New Lows", "NEW_LOWS"),
+                ("High/Low Ratio", "HIGH_LOW_RATIO"),
+            )
+        )
+        return {
+            **source_meta,
+            "updatedAt": updated_at,
+            "asOf": as_of,
+            "observationDate": activation.get("observationDate"),
+            "previousObservationDate": activation.get("previousObservationDate"),
+            "freshness": "delayed",
+            "coverage": metric_coverage_ratio,
+            "isPartial": bool(missing_metrics),
+            "isFallback": False,
+            "fallbackUsed": False,
+            "warning": (
+                "US breadth uses computed Polygon grouped-daily AD metrics; "
+                "52-week high/low breadth is unavailable without historical lookback."
+            ),
+            "explanation": (
+                "This is computed from Polygon's authorized grouped daily US equity feed "
+                "with adjusted prices and OTC excluded; it is not official NYSE/Nasdaq "
+                "published breadth."
+            ),
+            "authorityDiagnostics": dict(authority_diagnostic),
+            "fulfilledMetrics": fulfilled_metrics,
+            "missingMetrics": missing_metrics,
+            "missingMetricReasons": {
+                symbol: POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON
+                for symbol in ("NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO")
+                if symbol in missing_metrics
+            },
+            "items": items,
+        }
+
+    def _polygon_us_breadth_metric_item(
+        self,
+        label: str,
+        symbol: str,
+        value: Any,
+        unit: str,
+        as_of: str,
+        updated_at: str,
+        source_meta: Mapping[str, Any],
+        *,
+        detail: str,
+    ) -> Dict[str, Any]:
+        numeric_value = self._clean_number(value)
+        if numeric_value is None:
+            return self._polygon_unavailable_breadth_metric_item(label, symbol, as_of, updated_at, source_meta)
+        item = self._breadth_metric_item(
+            label,
+            symbol,
+            numeric_value,
+            unit,
+            as_of,
+            updated_at,
+            POLYGON_US_BREADTH_SOURCE,
+            POLYGON_US_BREADTH_SOURCE_LABEL,
+            POLYGON_US_BREADTH_SOURCE_TYPE,
+            detail=detail,
+        )
+        return {
+            **item,
+            **source_meta,
+            "scoreContributionAllowed": True,
+            "sourceAuthorityAllowed": True,
+            "sourceAuthorityReason": None,
+            "sourceFreshnessEvidence": {
+                **dict(source_meta.get("sourceFreshnessEvidence") or {}),
+                "isPartial": False,
+            },
+        }
+
+    def _polygon_unavailable_breadth_metric_item(
+        self,
+        label: str,
+        symbol: str,
+        as_of: str,
+        updated_at: str,
+        source_meta: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        item = self._unavailable_item(
+            label,
+            symbol,
+            "History unavailable",
+            updated_at,
+            detail="52-week high/low breadth requires bounded historical grouped-daily lookback.",
+        )
+        return {
+            **item,
+            "source": POLYGON_US_BREADTH_SOURCE,
+            "sourceLabel": POLYGON_US_BREADTH_SOURCE_LABEL,
+            "sourceType": POLYGON_US_BREADTH_SOURCE_TYPE,
+            "sourceTier": POLYGON_US_BREADTH_SOURCE_TIER,
+            "trustLevel": POLYGON_US_BREADTH_TRUST_LEVEL,
+            "authorityBasis": POLYGON_US_BREADTH_AUTHORITY_BASIS,
+            "universe": POLYGON_US_BREADTH_UNIVERSE,
+            "asOf": as_of,
+            "updatedAt": updated_at,
+            "isFallback": False,
+            "isUnavailable": True,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "sourceAuthorityReason": POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
+            "routeRejectedReasonCodes": [POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON],
+            "degradationReason": POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
+            "sourceFreshnessEvidence": {
+                "freshness": "unavailable",
+                "isFallback": False,
+                "isStale": False,
+                "isPartial": False,
+                "isUnavailable": True,
+                "warning": "52-week high/low breadth history unavailable",
+            },
         }
 
     def _us_relative_pressure_items(self) -> List[Dict[str, Any]]:
@@ -5866,7 +6116,11 @@ class MarketOverviewService:
         ]
         return self._card_snapshot(items, explanation="上涨家数占优，市场赚钱效应较好。")
 
-    def _fallback_us_breadth_snapshot(self) -> Dict[str, Any]:
+    def _fallback_us_breadth_snapshot(
+        self,
+        *,
+        authority_diagnostic: Optional[Mapping[str, Any]] = None,
+    ) -> Dict[str, Any]:
         updated_at = _now_iso()
         missing_meta = {
             "breadthClaimType": "missing_unavailable_breadth",
@@ -5904,7 +6158,7 @@ class MarketOverviewService:
             "fallbackUsed": True,
             "isFallback": True,
             "warning": "US breadth missing/unavailable: official or authorized breadth provider is not configured.",
-            "authorityDiagnostics": build_us_breadth_missing_authority_diagnostic(),
+            "authorityDiagnostics": dict(authority_diagnostic or build_us_breadth_missing_authority_diagnostic()),
             **missing_meta,
             "items": [{**item, **missing_meta} for item in items],
         }
