@@ -22,6 +22,7 @@ APP_ROUTES_TEST_TSX = REPO_ROOT / "apps" / "dsa-web" / "src" / "__tests__" / "Ap
 AUTH_GUARD_TEST_TSX = REPO_ROOT / "apps" / "dsa-web" / "src" / "components" / "auth" / "__tests__" / "AuthGuardOverlay.test.tsx"
 AUTH_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "auth.py"
 ADMIN_LOGS_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "admin_logs.py"
+ADMIN_USERS_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "admin_users.py"
 MARKET_PROVIDER_OPERATIONS_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "market_provider_operations.py"
 
 BACKEND_FIXTURE = FIXTURE_DIR / "backend_route_capability_inventory.json"
@@ -94,30 +95,17 @@ EXPECTED_TRANSITIONAL_ADMIN_USER_ALLOWLIST = {
             ("POST", "/api/v1/quant/duckdb/validate-factor-path"),
         ],
     },
-    "admin.users.legacy_read": {
-        "surface": "admin_user_governance",
-        "note_fragment": "core admin user read routes",
-        "routes": [
-            ("GET", "/api/v1/admin/users"),
-            ("GET", "/api/v1/admin/users/{user_id}"),
-            ("GET", "/api/v1/admin/users/{user_id}/activity"),
-        ],
-    },
-    "admin.activity.legacy_read": {
-        "surface": "admin_activity",
-        "note_fragment": "admin activity feed",
-        "routes": [("GET", "/api/v1/admin/activity")],
-    },
 }
 EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS = {
     "agent.admin_send": 1,
     "scanner.admin_watchlists_and_status": 3,
     "usage.admin_summary": 1,
     "quant.duckdb.admin_surface": 9,
-    "admin.users.legacy_read": 3,
+    "admin.users.read": 2,
+    "admin.users.activity_read": 1,
     "admin.users.portfolio_read": 4,
     "admin.users.security_write": 3,
-    "admin.activity.legacy_read": 1,
+    "admin.activity.read": 1,
     "admin.logs.read": 7,
     "admin.logs.write": 1,
     "admin.notifications.read": 2,
@@ -379,8 +367,20 @@ def test_admin_observability_route_inventory_keeps_capabilities_and_transitional
 
     admin_logs_read = groups["admin.logs.read"]
     admin_logs_write = groups["admin.logs.write"]
+    admin_users_read = groups["admin.users.read"]
+    admin_users_activity_read = groups["admin.users.activity_read"]
+    admin_activity_read = groups["admin.activity.read"]
     provider_observability = groups["admin.providers.read"]
 
+    assert admin_users_read["auth_dependency_label"] == "admin_capability"
+    assert admin_users_read["capability_label"] == "users:read"
+    assert admin_users_read["transitional_note"] is None
+    assert admin_users_activity_read["auth_dependency_label"] == "admin_capability"
+    assert admin_users_activity_read["capability_label"] == "users:activity:read"
+    assert admin_users_activity_read["transitional_note"] is None
+    assert admin_activity_read["auth_dependency_label"] == "admin_capability"
+    assert admin_activity_read["capability_label"] == "users:activity:read"
+    assert admin_activity_read["transitional_note"] is None
     assert admin_logs_read["auth_dependency_label"] == "admin_capability"
     assert admin_logs_read["capability_label"] == "ops:logs:read"
     assert admin_logs_write["auth_dependency_label"] == "admin_capability"
@@ -389,9 +389,12 @@ def test_admin_observability_route_inventory_keeps_capabilities_and_transitional
     assert provider_observability["capability_label"] == "ops:providers:read"
     assert provider_observability["transitional_note"] is None
 
+    admin_users_source = ADMIN_USERS_ENDPOINT_TS.read_text(encoding="utf-8")
     admin_logs_source = ADMIN_LOGS_ENDPOINT_TS.read_text(encoding="utf-8")
     market_provider_source = MARKET_PROVIDER_OPERATIONS_ENDPOINT_TS.read_text(encoding="utf-8")
 
+    assert 'require_admin_capability("users:read")' in admin_users_source
+    assert 'require_admin_capability("users:activity:read")' in admin_users_source
     assert 'require_admin_capability("ops:logs:read")' in admin_logs_source
     assert 'require_admin_capability("ops:logs:write")' in admin_logs_source
     assert 'require_admin_capability("ops:providers:read")' in market_provider_source

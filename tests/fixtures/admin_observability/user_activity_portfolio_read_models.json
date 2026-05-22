@@ -358,18 +358,18 @@
     "read_only": true,
     "auth_surfaces": [
       {
-        "surface": "admin_users_legacy_read",
-        "auth_dependency_label": "admin_user",
-        "capability_label": null,
+        "surface": "admin_users_read",
+        "auth_dependency_label": "admin_capability",
+        "capability_label": "users:read",
         "frontend_capability_flag": "canReadUsers",
-        "transitional_gap": "Backend route inventory still uses coarse admin gating."
+        "transitional_gap": null
       },
       {
-        "surface": "admin_activity_legacy_read",
-        "auth_dependency_label": "admin_user",
-        "capability_label": null,
+        "surface": "admin_activity_read",
+        "auth_dependency_label": "admin_capability",
+        "capability_label": "users:activity:read",
         "frontend_capability_flag": "canReadUserActivity",
-        "transitional_gap": "Backend activity route remains coarse-admin gated."
+        "transitional_gap": null
       },
       {
         "surface": "admin_portfolio_observability",

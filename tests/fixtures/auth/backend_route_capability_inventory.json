@@ -100,13 +100,22 @@
       "transitional_note": "DuckDB admin routes remain protected by coarse admin gating."
     },
     {
-      "route_id": "admin.users.legacy_read",
-      "path_pattern": "^/api/v1/admin/users(?:/\\{user_id\\}(?:/activity)?)?$",
+      "route_id": "admin.users.read",
+      "path_pattern": "^/api/v1/admin/users(?:/\\{user_id\\})?$",
       "methods": ["GET"],
       "surface": "admin_user_governance",
-      "auth_dependency_label": "admin_user",
-      "capability_label": null,
-      "transitional_note": "Core admin user read routes still use require_admin_user without a narrow capability label."
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "users:read",
+      "transitional_note": null
+    },
+    {
+      "route_id": "admin.users.activity_read",
+      "path_pattern": "^/api/v1/admin/users/\\{user_id\\}/activity$",
+      "methods": ["GET"],
+      "surface": "admin_activity",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "users:activity:read",
+      "transitional_note": null
     },
     {
       "route_id": "admin.users.portfolio_read",
@@ -127,13 +136,13 @@
       "transitional_note": "Capability is discoverable through a wrapper helper that also enforces recent admin reauthentication."
     },
     {
-      "route_id": "admin.activity.legacy_read",
+      "route_id": "admin.activity.read",
       "path_pattern": "^/api/v1/admin/activity$",
       "methods": ["GET"],
       "surface": "admin_activity",
-      "auth_dependency_label": "admin_user",
-      "capability_label": null,
-      "transitional_note": "Admin activity feed remains coarse-admin gated."
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "users:activity:read",
+      "transitional_note": null
     },
     {
       "route_id": "admin.logs.read",

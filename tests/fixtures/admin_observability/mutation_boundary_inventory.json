@@ -43,12 +43,22 @@
     {
       "surface": "admin_user_observability",
       "route": "GET /api/v1/admin/users",
-      "auth_dependency_label": "admin_user",
-      "capability_label": null,
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "users:read",
       "frontend_capability_flag": "canReadUsers",
       "mutation_authority": false,
       "payload_fixture": "user_activity_portfolio_read_models.json",
-      "transitional_gap": "Backend route inventory still uses coarse admin gating."
+      "transitional_gap": null
+    },
+    {
+      "surface": "admin_activity_observability",
+      "route": "GET /api/v1/admin/activity",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "users:activity:read",
+      "frontend_capability_flag": "canReadUserActivity",
+      "mutation_authority": false,
+      "payload_fixture": "user_activity_portfolio_read_models.json",
+      "transitional_gap": null
     },
     {
       "surface": "admin_portfolio_observability",
@@ -114,20 +124,7 @@
       "ai_routing_policy",
       "auth_enforcement"
     ],
-    "transitional_gaps": [
-      {
-        "surface": "admin_users_legacy_read",
-        "backend_auth_dependency": "admin_user",
-        "backend_capability_label": null,
-        "frontend_capability_flag": "canReadUsers"
-      },
-      {
-        "surface": "admin_activity_legacy_read",
-        "backend_auth_dependency": "admin_user",
-        "backend_capability_label": null,
-        "frontend_capability_flag": "canReadUserActivity"
-      }
-    ]
+    "transitional_gaps": []
   },
   "sanitization_rules": [
     "no_raw_provider_details",

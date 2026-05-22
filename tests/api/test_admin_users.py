@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user
+from src.auth import is_auth_enabled
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.storage import AppUser, AppUserSession, DatabaseManager
 
@@ -41,7 +42,7 @@ FORBIDDEN_PRIVACY_EXPORT_MARKERS = (
 )
 
 
-def _admin_user() -> CurrentUser:
+def _admin_user(*, admin_capabilities: tuple[str, ...] = ("users:read",)) -> CurrentUser:
     return CurrentUser(
         user_id=BOOTSTRAP_ADMIN_USER_ID,
         username="admin",
@@ -51,7 +52,12 @@ def _admin_user() -> CurrentUser:
         is_authenticated=True,
         transitional=False,
         auth_enabled=True,
+        admin_capabilities=admin_capabilities,
     )
+
+
+def _admin_without_users_read() -> CurrentUser:
+    return _admin_user(admin_capabilities=("users:activity:read",))
 
 
 def _regular_user() -> CurrentUser:
@@ -154,6 +160,9 @@ class AdminUsersApiTestCase(unittest.TestCase):
     def _as_user(self) -> None:
         self.app.dependency_overrides[get_current_user] = _regular_user
 
+    def _as_admin_without_users_read(self) -> None:
+        self.app.dependency_overrides[get_current_user] = _admin_without_users_read
+
     @staticmethod
     def _json_text(response) -> str:
         return json.dumps(response.json(), ensure_ascii=False)
@@ -171,11 +180,30 @@ class AdminUsersApiTestCase(unittest.TestCase):
 
     def test_admin_required_for_user_directory(self) -> None:
         unauthenticated = self.client.get("/api/v1/admin/users")
-        self.assertEqual(unauthenticated.status_code, 401)
+        self.assertEqual(unauthenticated.status_code, 401 if is_auth_enabled() else 200)
 
         self._as_user()
         forbidden = self.client.get("/api/v1/admin/users")
         self.assertEqual(forbidden.status_code, 403)
+
+    def test_user_directory_requires_users_read_capability(self) -> None:
+        self._as_admin_without_users_read()
+        list_forbidden = self.client.get("/api/v1/admin/users")
+        detail_forbidden = self.client.get("/api/v1/admin/users/user-1")
+
+        self.assertEqual(list_forbidden.status_code, 403)
+        self.assertEqual(detail_forbidden.status_code, 403)
+        self.assertEqual(list_forbidden.json()["detail"]["error"], "admin_capability_required")
+        self.assertEqual(detail_forbidden.json()["detail"]["error"], "admin_capability_required")
+        self.assertNotIn("users:read", list_forbidden.text)
+        self.assertNotIn("users:read", detail_forbidden.text)
+
+        self._as_admin()
+        list_allowed = self.client.get("/api/v1/admin/users")
+        detail_allowed = self.client.get("/api/v1/admin/users/user-1")
+
+        self.assertEqual(list_allowed.status_code, 200)
+        self.assertEqual(detail_allowed.status_code, 200)
 
     def test_admin_can_list_users_with_filters_pagination_and_safe_projection(self) -> None:
         self._as_admin()

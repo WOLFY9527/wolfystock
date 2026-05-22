@@ -20,7 +20,7 @@ from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.storage import AnalysisHistory, DatabaseManager
 
 
-def _admin_user() -> CurrentUser:
+def _admin_user(*, admin_capabilities: tuple[str, ...] = ("users:activity:read",)) -> CurrentUser:
     return CurrentUser(
         user_id=BOOTSTRAP_ADMIN_USER_ID,
         username="admin",
@@ -30,7 +30,12 @@ def _admin_user() -> CurrentUser:
         is_authenticated=True,
         transitional=False,
         auth_enabled=True,
+        admin_capabilities=admin_capabilities,
     )
+
+
+def _admin_without_user_activity_read() -> CurrentUser:
+    return _admin_user(admin_capabilities=("users:read",))
 
 
 def _regular_user() -> CurrentUser:
@@ -182,6 +187,9 @@ class AdminUserActivityApiTestCase(unittest.TestCase):
     def _as_user(self) -> None:
         self.app.dependency_overrides[get_current_user] = _regular_user
 
+    def _as_admin_without_user_activity_read(self) -> None:
+        self.app.dependency_overrides[get_current_user] = _admin_without_user_activity_read
+
     @staticmethod
     def _json_text(response) -> str:
         return json.dumps(response.json(), ensure_ascii=False)
@@ -193,6 +201,25 @@ class AdminUserActivityApiTestCase(unittest.TestCase):
         self._as_user()
         forbidden = self.client.get("/api/v1/admin/activity")
         self.assertEqual(forbidden.status_code, 403)
+
+    def test_activity_routes_require_user_activity_read_capability(self) -> None:
+        self._as_admin_without_user_activity_read()
+        user_activity_forbidden = self.client.get("/api/v1/admin/users/user-1/activity")
+        global_activity_forbidden = self.client.get("/api/v1/admin/activity")
+
+        self.assertEqual(user_activity_forbidden.status_code, 403)
+        self.assertEqual(global_activity_forbidden.status_code, 403)
+        self.assertEqual(user_activity_forbidden.json()["detail"]["error"], "admin_capability_required")
+        self.assertEqual(global_activity_forbidden.json()["detail"]["error"], "admin_capability_required")
+        self.assertNotIn("users:activity:read", user_activity_forbidden.text)
+        self.assertNotIn("users:activity:read", global_activity_forbidden.text)
+
+        self._as_admin()
+        user_activity_allowed = self.client.get("/api/v1/admin/users/user-1/activity")
+        global_activity_allowed = self.client.get("/api/v1/admin/activity")
+
+        self.assertEqual(user_activity_allowed.status_code, 200)
+        self.assertEqual(global_activity_allowed.status_code, 200)
 
     def test_user_targeted_timeline_is_scoped_and_redacted(self) -> None:
         self._as_admin()

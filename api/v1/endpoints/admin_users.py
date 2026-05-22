@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.deps import CurrentUser, require_admin_user
+from api.deps import CurrentUser, require_admin_capability
 from api.v1.schemas.admin_activity import AdminActivityEvent, AdminActivityResponse, AdminActivityWindow
 from api.v1.schemas.admin_users import (
     AdminDataLinks,
@@ -149,7 +149,7 @@ def list_admin_users(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0, le=10000),
     sort: str = Query(default="created_at_desc"),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("users:read")),
 ) -> AdminUserListResponse:
     role = _validate_value(role, ROLE_VALUES, name="role")
     status = _validate_value(status, USER_STATUS_VALUES, name="status") or "all"
@@ -193,7 +193,7 @@ def get_admin_user_detail(
     include_sessions: bool = Query(default=True),
     session_limit: int = Query(default=20, ge=1, le=50),
     session_status: str = Query(default="all"),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("users:read")),
 ) -> AdminUserDetailResponse:
     normalized_user_id = str(user_id or "").strip()
     if not normalized_user_id or len(normalized_user_id) > 64:
@@ -252,7 +252,7 @@ def list_admin_user_activity(
     include_admin: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=10000),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("users:activity:read")),
 ) -> AdminActivityResponse:
     normalized_user_id = str(user_id or "").strip()
     if not normalized_user_id or len(normalized_user_id) > 64:
@@ -313,7 +313,7 @@ def list_admin_activity(
     include_admin: bool = Query(default=True),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=10000),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("users:activity:read")),
 ) -> AdminActivityResponse:
     if actor_type:
         actor_type = _validate_value(actor_type, ACTOR_TYPE_VALUES, name="actor_type")
