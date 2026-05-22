@@ -10,7 +10,6 @@ const {
   changePassword,
   logout,
   resetDashboardState,
-  resetAgentChatState,
   resetAdminSurfaceMode,
 } = vi.hoisted(() => ({
   getStatus: vi.fn(),
@@ -19,7 +18,6 @@ const {
   changePassword: vi.fn(),
   logout: vi.fn(),
   resetDashboardState: vi.fn(),
-  resetAgentChatState: vi.fn(),
   resetAdminSurfaceMode: vi.fn(),
 }));
 
@@ -41,11 +39,6 @@ vi.mock('../../stores', () => ({
   useStockPoolStore: {
     getState: () => ({
       resetDashboardState,
-    }),
-  },
-  useAgentChatStore: {
-    getState: () => ({
-      resetSessionState: resetAgentChatState,
     }),
   },
 }));
@@ -176,7 +169,6 @@ describe('AuthContext', () => {
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-out'));
     expect(resetDashboardState).toHaveBeenCalled();
-    expect(resetAgentChatState).toHaveBeenCalled();
     expect(resetAdminSurfaceMode).toHaveBeenCalled();
     expect(logout).toHaveBeenCalledTimes(1);
     expect(getStatus).toHaveBeenCalledTimes(1);
@@ -243,7 +235,6 @@ describe('AuthContext', () => {
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-out'));
     expect(resetDashboardState).toHaveBeenCalled();
-    expect(resetAgentChatState).toHaveBeenCalled();
     expect(resetAdminSurfaceMode).toHaveBeenCalled();
     expect(getStatus).toHaveBeenCalledTimes(1);
     await new Promise((resolve) => window.setTimeout(resolve, 120));

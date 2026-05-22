@@ -11,7 +11,6 @@ const routes = [
   { path: '/', slug: 'home', expected: [/WolfyStock/, /Command Center|决策面板|Guest Preview Mode|游客预览模式/] },
   { path: '/login', slug: 'login', expected: [/WolfyStock/, /账户|account|Sign in|登录/] },
   { path: '/scanner', slug: 'scanner', expected: [/市场扫描|Market Scanner|我的候选|My candidates/] },
-  { path: '/chat', slug: 'chat', expected: [/问股|Stock Chat|量化研究|Quant Research/] },
   { path: '/portfolio', slug: 'portfolio', expected: [/Trade Station|总资产|Total Assets|Current Holdings/] },
   { path: '/backtest', slug: 'backtest', expected: [/回测|Backtest|基础参数|Basic parameters/] },
   { path: '/__preview/report', slug: 'preview-report', expected: [/报告预览|Report Preview|回测报告|Backtest Report/] },
@@ -101,7 +100,7 @@ async function runRouteCheck(page, profile, route) {
 }
 
 async function runSpaReplay(page, browserName) {
-  const steps = ['/', '/scanner', '/chat', '/portfolio', '/__preview/report'];
+  const steps = ['/', '/scanner', '/portfolio', '/__preview/report'];
   const errors = [];
 
   page.on('pageerror', (error) => errors.push(String(error)));

@@ -74,7 +74,6 @@ router defines localized branches.
 | `/` | ResearchConsole | Home analysis and report workflow |
 | `/guest` | Guest surface | Guest preview and paywall path |
 | `/scanner` | RankingBoard | Scanner run/results/watchlist handoff |
-| `/chat` | Research/chat surface | Ask-stock and AI conversation workflow |
 | `/portfolio` | RiskConsole / LedgerBoard | Portfolio holdings, risk, ledger, sync/import |
 | `/market-overview` | MarketMonitor | Market regime and comparative panels |
 | `/market/liquidity-monitor` | MarketMonitor | Liquidity diagnostics |

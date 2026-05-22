@@ -7,10 +7,9 @@ import { expectNoRawI18nKeys } from '../test-utils/i18nRawKeySentinel';
 import { isPreviewRoutePath } from '../utils/appRouteGuards';
 import type { AdminCapabilityFlags } from '../utils/adminCapabilities';
 
-const { useAuthMock, useProductSurfaceMock, setCurrentRouteMock, setLanguageMock, languageState } = vi.hoisted(() => ({
+const { useAuthMock, useProductSurfaceMock, setLanguageMock, languageState } = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
   useProductSurfaceMock: vi.fn(),
-  setCurrentRouteMock: vi.fn(),
   setLanguageMock: vi.fn(),
   languageState: { value: 'zh' as 'zh' | 'en' },
 }));
@@ -63,13 +62,6 @@ vi.mock('../contexts/UiLanguageContext', async () => {
     }),
   };
 });
-
-vi.mock('../stores/agentChatStore', () => ({
-  useAgentChatStore: Object.assign(
-    (selector?: (state: Record<string, unknown>) => unknown) => (selector ? selector({}) : {}),
-    { getState: () => ({ setCurrentRoute: setCurrentRouteMock }) },
-  ),
-}));
 
 vi.mock('../components/common', async () => {
   const React = await vi.importActual<typeof import('react')>('react');

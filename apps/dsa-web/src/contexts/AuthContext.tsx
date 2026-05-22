@@ -4,7 +4,7 @@ import { createParsedApiError, getParsedApiError, type ParsedApiError } from '..
 import type { CurrentUser } from '../api/auth';
 import { authApi } from '../api/auth';
 import { resetAdminSurfaceMode } from '../hooks/productSurfaceMode';
-import { useAgentChatStore, useStockPoolStore } from '../stores';
+import { useStockPoolStore } from '../stores';
 import { hardRedirect } from '../utils/browserRedirect';
 
 const LOCAL_STORAGE_KEYS_TO_CLEAR = [
@@ -108,7 +108,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setCurrentUser(null);
     setLoadError(null);
     useStockPoolStore.getState().resetDashboardState();
-    useAgentChatStore.getState().resetSessionState();
     resetAdminSurfaceMode();
   }, []);
 

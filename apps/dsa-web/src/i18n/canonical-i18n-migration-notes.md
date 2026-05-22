@@ -23,10 +23,6 @@ This inventory marks the remaining inline EN/ZH copy found in the final frontend
 - `src/pages/DeterministicBacktestResultPage.tsx:727`-`959`: page title, summary shell, active-run status, next-step, and export copy.
 - `src/pages/DeterministicBacktestResultPage.tsx:1050`-`1740`: cancel dialog, banners, controls, parameter sections, scenario comparison, reusable setup, history comparison, and invalid-run copy.
 
-## Chat Page Copy
-
-- `src/pages/ChatPage.tsx:48`-`58`: skill alias seed labels used to map backend-returned skill names into `chat.skills.labels.*`.
-
 ## Preview Pages
 
 - `src/pages/PreviewReportPage.tsx`: no remaining shell copy outside `previewReport.*`; dynamic report body may still include mixed-language fixture content from `src/dev/reportPreviewFixture.ts`.

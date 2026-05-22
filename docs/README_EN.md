@@ -454,7 +454,7 @@ Enable the FastAPI service for configuration management and triggering analysis 
 - 📝 **Configuration Management** - View/modify watchlist
 - 🚀 **Quick Analysis** - Trigger analysis via API
 - 📊 **Real-time Progress** - Analysis task status updates in real-time, supports parallel tasks
-- 🤖 **Agent Strategy Chat** - Multi-turn strategy Q&A via `/chat` (enable with `AGENT_MODE=true`)
+- 🤖 **Agent Strategy APIs** - Backend multi-turn strategy Q&A endpoints when `AGENT_MODE=true`
 - 📈 **Backtest Validation** - Evaluate historical analysis accuracy, query direction win rate and simulated returns
 
 ### API Endpoints

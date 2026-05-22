@@ -47,7 +47,7 @@ This audit is evidence-based but inspection-driven. No production load test, ben
 | Backtest | `src/services/backtest_service.py`, `src/services/rule_backtest_service.py`, `src/core/rule_backtest_engine.py`, `src/repositories/backtest_repo.py`, `src/repositories/rule_backtest_repo.py` | Historical evaluation and deterministic rule backtest workflows | Domain split is mostly right; some services are oversized |
 | Portfolio | `src/services/portfolio_service.py`, `src/repositories/portfolio_repo.py` | Owner-scoped accounts, ledger events, broker overlay sync, snapshots | Snapshot read path is too expensive |
 | Analysis / reporting | `src/core/pipeline.py`, `src/analyzer.py`, `src/search_service.py`, `src/services/report_renderer.py` | AI analysis orchestration, news/search, report generation, notifications | Performance and maintainability risks sit in pipeline/search/report size |
-| Agent / chat | `src/agent/*`, `api/v1/endpoints/agent.py`, `apps/dsa-web/src/pages/ChatPage.tsx` | Ask Stock chat, skills, multi-agent compatibility, conversation persistence | Good factory caching exists, but legacy naming/aliases remain |
+| Agent / chat | `src/agent/*`, `api/v1/endpoints/agent.py` | Backend Ask Stock chat APIs, skills, multi-agent compatibility, conversation persistence | The standalone web ChatPage has been removed; preserve backend API compatibility while avoiding frontend route residue |
 | Web frontend | `apps/dsa-web/src/App.tsx`, `apps/dsa-web/src/pages/*.tsx` | Guest/user/admin product surfaces and operator UI | User/admin separation is good; Settings surface is overgrown |
 | Desktop | `apps/dsa-desktop/main.js` | Electron shell over the web app | Not a primary optimization hotspot in this pass |
 | Deployment / CI | `docker/Dockerfile`, `docker/docker-compose.yml`, `.github/workflows/*.yml`, `docs/DEPLOY.md` | Container build, compose deployment, CI gates, release workflows | Readiness semantics and runbook drift matter before deployment |
@@ -262,7 +262,7 @@ Priority: must clarify before deployment, removal can wait.
 - Scanner should remain a first-class product surface.
 - Backtest should remain separate from scanner.
 - Portfolio should remain owner-scoped and separate from admin/system settings.
-- Ask Stock chat should remain available as its own flow; the issue is vocabulary drift and maintainability, not feature value.
+- Backend Ask Stock APIs should remain available; the standalone web route is no longer an active product surface.
 
 ## Performance Bottlenecks
 

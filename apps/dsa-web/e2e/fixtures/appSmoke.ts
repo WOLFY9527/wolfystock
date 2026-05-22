@@ -709,40 +709,6 @@ function analysisTasksPayload() {
   };
 }
 
-function agentSkillsPayload() {
-  return {
-    skills: [
-      { id: 'bull_trend', name: '趋势分析', description: '测试技能' },
-      { id: 'ma_cross', name: '均线金叉', description: '均线测试' },
-      { id: 'volume_breakout', name: '放量突破', description: '突破测试' },
-      { id: 'leader_strategy', name: '龙头策略', description: '龙头测试' },
-    ],
-    default_skill_id: 'bull_trend',
-  };
-}
-
-function agentModelsPayload() {
-  return {
-    models: [
-      { deployment_id: 'auto', model: 'deepseek-chat', provider: 'DeepSeek', source: 'env', is_primary: true },
-    ],
-  };
-}
-
-function agentProviderHealthPayload() {
-  return {
-    routingMode: 'AUTO',
-    currentProvider: 'DeepSeek',
-    currentModel: 'deepseek-chat',
-    providers: [
-      { id: 'deepseek', label: 'DeepSeek', status: 'available', model: 'deepseek-chat', selected: true },
-      { id: 'openai', label: 'OpenAI', status: 'not_configured' },
-      { id: 'gemini', label: 'Gemini', status: 'offline' },
-      { id: 'local', label: 'Local', status: 'unknown' },
-    ],
-  };
-}
-
 function portfolioSnapshotPayload() {
   return {
     as_of: '2026-05-06',
@@ -1119,34 +1085,6 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
     if (method === 'POST' && path.startsWith('/api/v1/auth/login')) {
       isLoggedIn = true;
       return fulfillJson(route, { ok: true });
-    }
-
-    if (method === 'GET' && path === '/api/v1/agent/status') {
-      return fulfillJson(route, { enabled: false });
-    }
-
-    if (method === 'GET' && path === '/api/v1/agent/skills') {
-      return fulfillJson(route, agentSkillsPayload());
-    }
-
-    if (method === 'GET' && path === '/api/v1/agent/models') {
-      return fulfillJson(route, agentModelsPayload());
-    }
-
-    if (method === 'GET' && path === '/api/v1/agent/provider-health') {
-      return fulfillJson(route, agentProviderHealthPayload());
-    }
-
-    if (method === 'GET' && path === '/api/v1/agent/chat/sessions') {
-      return fulfillJson(route, {
-        sessions: [
-          { session_id: 'session-1', title: 'Fixture safety chat', message_count: 0, created_at: timestamp, last_active: timestamp },
-        ],
-      });
-    }
-
-    if (method === 'GET' && path === '/api/v1/agent/chat/sessions/session-1') {
-      return fulfillJson(route, { messages: [] });
     }
 
     if (method === 'GET' && path === '/api/v1/scanner/themes') {

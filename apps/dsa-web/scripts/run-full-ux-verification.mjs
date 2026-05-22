@@ -33,7 +33,6 @@ const TABLE_GROUPS = {
   auth: ['app_users', 'app_user_sessions'],
   analysis: ['analysis_history'],
   scanner: ['market_scanner_runs', 'market_scanner_candidates'],
-  chat: ['conversation_sessions', 'conversation_messages'],
   portfolio: ['portfolio_accounts', 'portfolio_trades', 'portfolio_cash_ledger', 'portfolio_corporate_actions'],
   backtest: ['backtest_runs', 'backtest_results', 'rule_backtest_runs'],
 };
@@ -55,7 +54,6 @@ const NORMAL_BACKTEST_TEMPLATE_STRATEGIES = {
 const VERIFY_ROUTES = [
   { slug: 'home', path: '/' },
   { slug: 'scanner', path: '/scanner' },
-  { slug: 'chat', path: '/chat' },
   { slug: 'portfolio', path: '/portfolio' },
   { slug: 'backtest', path: '/backtest' },
   { slug: 'preview-report', path: '/__preview/report' },
@@ -63,10 +61,12 @@ const VERIFY_ROUTES = [
   { slug: 'settings', path: '/settings' },
 ];
 
+const verificationPassword = process.env.DSA_UX_VERIFY_PASSWORD || 'mock-password';
+
 const verificationUser = {
   username: `ux_${Date.now().toString(36)}`,
   displayName: 'UX Verify',
-  password: '852258',
+  password: verificationPassword,
 };
 
 const report = {
@@ -481,21 +481,6 @@ async function verifyScanner(page, browserName, viewportName, flow, slugPrefix =
   flow.screenshots.push(await takeScreenshot(page, browserName, viewportName, slugPrefix));
 }
 
-async function verifyChat(page, browserName, viewportName, flow, slugPrefix = 'chat') {
-  await page.goto(`${baseUrl}/chat`, { waitUntil: 'domcontentloaded' });
-  await page.locator('[data-testid="chat-bento-page"]').waitFor({ state: 'visible', timeout: actionTimeoutMs });
-  pushUiCheck(flow, 'chat composer visible', await page.locator('[data-testid="chat-composer-omnibar"]').isVisible().catch(() => false));
-  const briefTrigger = page.locator('[data-testid="chat-bento-brief-trigger"]');
-  pushUiCheck(flow, 'chat brief trigger visible', await briefTrigger.isVisible().catch(() => false));
-  if (await briefTrigger.isVisible().catch(() => false)) {
-    await briefTrigger.click();
-    await page.getByRole('dialog').waitFor({ state: 'visible', timeout: actionTimeoutMs }).catch(() => undefined);
-    pushUiCheck(flow, 'chat brief drawer opens', await page.getByRole('dialog').isVisible().catch(() => false));
-    await page.keyboard.press('Escape').catch(() => undefined);
-  }
-  flow.screenshots.push(await takeScreenshot(page, browserName, viewportName, slugPrefix));
-}
-
 async function verifyPortfolio(page, browserName, viewportName, flow, slugPrefix = 'portfolio') {
   await page.goto(`${baseUrl}/portfolio`, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="portfolio-bento-page"]').waitFor({ state: 'visible', timeout: actionTimeoutMs });
@@ -636,27 +621,6 @@ async function runPrimaryDesktopFlow(page, browserName, viewportName) {
     const after = readDbSnapshot(TABLE_GROUPS.scanner);
     attachDbDelta(flow, before, after);
     await verifyScanner(page, browserName, viewportName, flow, 'scanner-run');
-  });
-
-  await recordFlow('chat-query', async (flow) => {
-    const before = readDbSnapshot(TABLE_GROUPS.chat);
-    await page.goto(`${baseUrl}/chat`, { waitUntil: 'domcontentloaded' });
-    const composer = page.locator('[data-testid="chat-composer-omnibar"] textarea');
-    await composer.fill('TSLA today trend? give a short trading view.');
-    await page.locator('[data-testid="chat-composer-omnibar"] button').last().click();
-    try {
-      await withTimeout('chat assistant reply', async () => {
-        await page.locator('[data-testid^="chat-assistant-message-"]').last().waitFor({ state: 'visible', timeout: actionTimeoutMs });
-      });
-    } catch (error) {
-      flow.warnings.push(String(error));
-    }
-    const after = readDbSnapshot(TABLE_GROUPS.chat);
-    attachDbDelta(flow, before, after);
-    pushUiCheck(flow, 'chat reply or progress visible', (
-      await page.locator('[data-testid^="chat-assistant-message-"]').count().catch(() => 0)
-    ) > 0 || await page.locator('[data-testid="chat-message-stream"]').isVisible().catch(() => false));
-    flow.screenshots.push(await takeScreenshot(page, browserName, viewportName, 'chat-query'));
   });
 
   await recordFlow('portfolio-actions', async (flow) => {
@@ -809,11 +773,10 @@ async function runSurfaceVerification(browserProfile, viewport) {
   page.setDefaultNavigationTimeout(actionTimeoutMs);
   await loginViaUi(page, verificationUser);
 
-  const flow = await recordFlow(`surface-check-${browserProfile.name}-${viewport.name}`, async (record) => {
-    await verifyHome(page, browserProfile.name, viewport.name, record, 'home');
-    await verifyScanner(page, browserProfile.name, viewport.name, record, 'scanner');
-    await verifyChat(page, browserProfile.name, viewport.name, record, 'chat');
-    await verifyPortfolio(page, browserProfile.name, viewport.name, record, 'portfolio');
+    const flow = await recordFlow(`surface-check-${browserProfile.name}-${viewport.name}`, async (record) => {
+      await verifyHome(page, browserProfile.name, viewport.name, record, 'home');
+      await verifyScanner(page, browserProfile.name, viewport.name, record, 'scanner');
+      await verifyPortfolio(page, browserProfile.name, viewport.name, record, 'portfolio');
     await verifyBacktest(page, browserProfile.name, viewport.name, record, 'backtest');
     await verifyPreviewRoutes(page, browserProfile.name, viewport.name, record);
     await verifySettings(page, browserProfile.name, viewport.name, record, 'settings');

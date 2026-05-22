@@ -26,7 +26,7 @@ Market Scanner 是 WolfyStock 的独立产品能力，用于在盘前回答：
 补充说明：
 
 - 未登录访问 `/scanner` 时，前端不再渲染单独的“扫描器预告”页面，而是直接复用全局 `PremiumPaywall`。
-- 这让 `/scanner`、`/chat`、`/portfolio`、`/backtest` 在 guest session 下统一为同一套毛玻璃拦截体验；真实扫描运行与个人历史仍只在登录后开放。
+- 这让 `/scanner`、`/portfolio`、`/backtest` 在 guest session 下统一为同一套毛玻璃拦截体验；真实扫描运行与个人历史仍只在登录后开放。
 
 ## 当前实现范围
 

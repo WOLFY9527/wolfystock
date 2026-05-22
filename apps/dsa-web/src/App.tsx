@@ -16,7 +16,6 @@ import type { UiLanguage } from './i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from './utils/localeRouting';
 import { isPreviewRoutePath } from './utils/appRouteGuards';
 import { canAccessAdminPath } from './utils/adminCapabilities';
-import { useAgentChatStore } from './stores/agentChatStore';
 
 const APP_BOOT_SPLASH_MIN_MS = 950;
 const APP_BOOT_SPLASH_FADE_MS = 380;
@@ -284,10 +283,6 @@ export const AppContent: React.FC = () => {
     || routePathname === '/admin/cost-observability'
     || routePathname.startsWith('/admin/cost-observability/')
   );
-
-  useEffect(() => {
-    useAgentChatStore.getState().setCurrentRoute(location.pathname);
-  }, [location.pathname]);
 
   useEffect(() => {
     if (routeLocale) {

@@ -27,7 +27,7 @@ Current entry points:
 Additional note:
 
 - Anonymous visits to `/scanner` no longer render a separate teaser page. The route now resolves directly to the shared `PremiumPaywall`.
-- This keeps `/scanner`, `/chat`, `/portfolio`, and `/backtest` on one consistent glass paywall experience for guest sessions, while real scanner runs and personal history remain available only after sign-in.
+- This keeps `/scanner`, `/portfolio`, and `/backtest` on one consistent glass paywall experience for guest sessions, while real scanner runs and personal history remain available only after sign-in.
 
 ## Scope In This Phase
 
