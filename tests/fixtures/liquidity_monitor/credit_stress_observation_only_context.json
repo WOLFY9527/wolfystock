@@ -651,12 +651,22 @@
             "source": "yfinance_proxy",
             "sourceLabel": "Yahoo Finance",
             "sourceType": "unofficial_proxy",
+            "sourceTier": "unofficial_proxy",
+            "trustLevel": "usable_with_caution",
             "asOf": "2026-05-07T10:00:00+08:00",
             "freshness": "delayed",
             "isFallback": false,
             "isStale": false,
             "isPartial": false,
             "isUnavailable": false,
+            "observationOnly": true,
+            "sourceAuthorityAllowed": false,
+            "scoreContributionAllowed": false,
+            "sourceAuthorityReason": "representative_sample_not_full_market_breadth",
+            "sourceAuthorityRouteRejected": false,
+            "routeRejectedReasonCodes": [
+              "representative_sample_not_full_market_breadth"
+            ],
             "coverage": 1.0,
             "confidenceWeight": 0.7
           },
@@ -666,12 +676,22 @@
             "source": "yfinance_proxy",
             "sourceLabel": "Yahoo Finance",
             "sourceType": "unofficial_proxy",
+            "sourceTier": "unofficial_proxy",
+            "trustLevel": "usable_with_caution",
             "asOf": "2026-05-07T10:00:00+08:00",
             "freshness": "delayed",
             "isFallback": false,
             "isStale": false,
             "isPartial": false,
             "isUnavailable": false,
+            "observationOnly": true,
+            "sourceAuthorityAllowed": false,
+            "scoreContributionAllowed": false,
+            "sourceAuthorityReason": "representative_sample_not_full_market_breadth",
+            "sourceAuthorityRouteRejected": false,
+            "routeRejectedReasonCodes": [
+              "representative_sample_not_full_market_breadth"
+            ],
             "coverage": 1.0,
             "confidenceWeight": 0.7
           }
@@ -715,8 +735,11 @@
         "capReason": "partial_coverage",
         "degradationReason": "partial_coverage",
         "sourceAuthorityRouteRejected": false,
-        "routeRejectedReasonCodes": [],
-        "activationHint": "激活现有 sector ETF breadth proxy；需要 SECTORS_UP、SECTORS_DOWN 和相对强弱代理。；requiredProviderClass=official_or_authorized.us_market_breadth；missingProviderReason=requires_official_or_authorized.us_market_breadth；paidDataLikelyRequired=True；requiredRealSourceForScore=True；scoreExclusionReason=proxy_only_missing_real_source；proxyObservationOnlyReason=proxy_only_missing_real_source；缺少: RSP_SPY, IWM_SPY, QQQ_SPY；proxyOnly=True；scoreContributionAllowed=False；freshness=partial；cap=partial_coverage；score capped；source=yfinance_proxy"
+        "sourceAuthorityReason": "representative_sample_not_full_market_breadth",
+        "routeRejectedReasonCodes": [
+          "representative_sample_not_full_market_breadth"
+        ],
+        "activationHint": "激活现有 sector ETF breadth proxy；需要 SECTORS_UP、SECTORS_DOWN 和相对强弱代理。；requiredProviderClass=official_or_authorized.us_market_breadth；missingProviderReason=requires_official_or_authorized.us_market_breadth；paidDataLikelyRequired=True；requiredRealSourceForScore=True；scoreExclusionReason=proxy_only_missing_real_source；proxyObservationOnlyReason=proxy_only_missing_real_source；routeRejectedReasonCodes=representative_sample_not_full_market_breadth；缺少: RSP_SPY, IWM_SPY, QQQ_SPY；proxyOnly=True；scoreContributionAllowed=False；freshness=partial；cap=partial_coverage；score capped；source=yfinance_proxy"
       }
     },
     {

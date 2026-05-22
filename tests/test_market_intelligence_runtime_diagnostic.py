@@ -90,6 +90,28 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
             "staleWindows": [],
             "reason": "credentials",
         },
+        "usBreadthAuthorityDiagnostic": {
+            "providerConstructed": False,
+            "probePassed": False,
+            "freshnessValid": False,
+            "sourceMetadataValid": True,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "fulfilledMetrics": [],
+            "missingMetrics": [
+                "ADVANCERS",
+                "DECLINERS",
+                "ADVANCE_DECLINE_RATIO",
+                "NEW_HIGHS",
+                "NEW_LOWS",
+                "HIGH_LOW_RATIO",
+            ],
+            "staleMetrics": [],
+            "reason": "authorized_us_market_breadth_feed_not_configured",
+            "sourceLabel": "Official or Authorized US Market Breadth",
+            "sourceTier": "official_or_authorized_licensed_feed",
+            "trustLevel": "score_grade_when_configured",
+        },
         "discrepancies": [],
     }
 
@@ -189,6 +211,20 @@ def test_runtime_diagnostic_sanitizes_endpoint_and_provider_output(monkeypatch) 
             ],
             "path": "/private/path/should/not/appear",
         },
+        "/api/v1/market/us-breadth": {
+            "source": "yfinance_proxy",
+            "sourceType": "unofficial_proxy",
+            "freshness": "delayed",
+            "breadthClaimType": "representative_sample_breadth",
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "sourceAuthorityReason": "representative_sample_not_full_market_breadth",
+            "items": [
+                {"symbol": "SECTORS_UP", "value": 6, "source": "yfinance_proxy"},
+                {"symbol": "RSP_SPY", "value": -0.4, "source": "yfinance_proxy"},
+            ],
+            "providerHealth": {"status": "cache"},
+        },
     }
 
     def fake_fetch_json(base_url: str, path: str, timeout_seconds: float):
@@ -202,6 +238,10 @@ def test_runtime_diagnostic_sanitizes_endpoint_and_provider_output(monkeypatch) 
 
     assert payload["endpointReachability"]["baseUrl"] == "http://127.0.0.1:8000"
     assert payload["runtimeReadiness"]["marketOverviewMacro"]["available"] is False
+    assert payload["runtimeReadiness"]["usBreadth"]["available"] is False
+    assert payload["runtimeReadiness"]["usBreadth"]["breadthClaimType"] == "representative_sample_breadth"
+    assert payload["runtimeReadiness"]["usBreadth"]["sourceAuthorityAllowed"] is False
+    assert payload["runtimeReadiness"]["usBreadth"]["scoreContributionAllowed"] is False
     assert payload["runtimeReadiness"]["rotationRadar"]["available"] is False
     assert payload["runtimeReadiness"]["marketTemperature"]["temperatureAvailable"] is False
     assert payload["runtimeReadiness"]["dataReadiness"]["readinessStatus"] == "misconfigured"

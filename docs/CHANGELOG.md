@@ -1,5 +1,12 @@
 ## 2026-05-22
 
+- **US breadth authority foundation** - `/api/v1/market/us-breadth`,
+  Liquidity Monitor, and the Market Intelligence runtime diagnostic now expose
+  explicit US breadth authority metadata. The existing yfinance sector ETF
+  rows are labeled as representative sample observations, not full-market
+  breadth, while the missing `official_or_authorized.us_market_breadth`
+  provider remains diagnostic-visible and non-scoring. No provider order,
+  DataFetcherManager path, frontend design, or broad-universe fanout changed.
 - **Official USD pressure freshness calibration** - `DTWEXBGS` freshness now
   follows the Federal Reserve H.10 weekly release cadence for daily
   trade-weighted USD rows instead of the generic daily macro window. The USD

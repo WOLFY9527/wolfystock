@@ -50,13 +50,24 @@ def test_market_us_breadth_current_proxy_snapshot_stays_proxy_not_exchange_bread
 
     symbols = {item["symbol"] for item in payload["items"]}
     assert payload["source"] == "yfinance_proxy"
+    assert payload["sourceType"] == "unofficial_proxy"
     assert payload["isFallback"] is False
-    assert payload["freshness"] in {"live", "delayed", "cached", "stale"}
+    assert payload["freshness"] in {"delayed", "cached", "stale"}
+    assert payload["breadthClaimType"] == "representative_sample_breadth"
+    assert payload["representativeSample"] is True
+    assert payload["broadMarketClaimAllowed"] is False
+    assert payload["sourceAuthorityAllowed"] is False
+    assert payload["scoreContributionAllowed"] is False
+    assert payload["sourceAuthorityReason"] == "representative_sample_not_full_market_breadth"
+    assert "representative_sample_not_full_market_breadth" in payload["routeRejectedReasonCodes"]
+    assert payload["authorityDiagnostics"]["reason"] == "authorized_us_market_breadth_feed_not_configured"
     assert "SECTORS_UP" in symbols
     assert "RSP_SPY" in symbols
     assert "ADVANCERS" not in symbols
     assert "NEW_HIGHS" not in symbols
-    assert payload["items"][0]["sourceType"] == "unofficial_public_api"
+    assert payload["items"][0]["sourceType"] == "unofficial_proxy"
+    assert all(item["scoreContributionAllowed"] is False for item in payload["items"])
+    assert all(item["broadMarketClaimAllowed"] is False for item in payload["items"])
 
 
 def test_market_us_breadth_proxy_snapshot_projects_to_unofficial_proxy_not_exchange_public() -> None:
@@ -121,8 +132,13 @@ def test_market_us_breadth_fallback_stays_non_live_and_sanitized() -> None:
         is_stale=bool(payload.get("isStale")),
     )
     assert payload["source"] == "unavailable"
-    assert payload["freshness"] == "fallback"
+    assert payload["sourceType"] == "missing"
+    assert payload["freshness"] == "unavailable"
     assert payload["isFallback"] is True
+    assert payload["sourceAuthorityAllowed"] is False
+    assert payload["scoreContributionAllowed"] is False
+    assert payload["sourceAuthorityReason"] == "authorized_us_market_breadth_feed_not_configured"
+    assert "US breadth missing/unavailable" in payload["warning"]
     assert payload["providerHealth"]["status"] == "unavailable"
     assert payload["providerHealth"]["status"] != "live"
     assert provenance["sourceType"] == "fallback_static"

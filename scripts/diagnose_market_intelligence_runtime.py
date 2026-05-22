@@ -19,6 +19,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.services.official_macro_transport import run_official_macro_live_smoke
 from src.services.rotation_radar_quote_provider import run_rotation_radar_alpaca_live_smoke
+from src.services.us_breadth_contracts import build_us_breadth_missing_authority_diagnostic
 
 
 DEFAULT_TIMEOUT_SECONDS = 3.0
@@ -28,6 +29,7 @@ _BLOCKED_REASON_TOKENS = ("token", "secret", "auth", "cookie", "header", "bearer
 _SAFE_REASON_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789_:-")
 _ENDPOINTS: tuple[tuple[str, str], ...] = (
     ("marketOverviewMacro", "/api/v1/market-overview/macro"),
+    ("usBreadth", "/api/v1/market/us-breadth"),
     ("liquidityMonitor", "/api/v1/market/liquidity-monitor"),
     ("rotationRadar", "/api/v1/market/rotation-radar?market=US"),
     ("marketTemperature", "/api/v1/market/temperature"),
@@ -152,6 +154,23 @@ def _summarize_liquidity_monitor(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _summarize_us_breadth(payload: dict[str, Any]) -> dict[str, Any]:
+    items = payload.get("items") if isinstance(payload.get("items"), list) else []
+    provider_status = str(dict(payload.get("providerHealth") or {}).get("status") or "unknown")
+    source_authority_allowed = bool(payload.get("sourceAuthorityAllowed", False))
+    score_contribution_allowed = bool(payload.get("scoreContributionAllowed", False))
+    return {
+        "available": bool(source_authority_allowed and score_contribution_allowed),
+        "providerHealthStatus": provider_status,
+        "freshness": str(payload.get("freshness") or "unknown"),
+        "breadthClaimType": str(payload.get("breadthClaimType") or "unknown"),
+        "sourceAuthorityAllowed": source_authority_allowed,
+        "scoreContributionAllowed": score_contribution_allowed,
+        "sourceAuthorityReason": _sanitize_reason(payload.get("sourceAuthorityReason")),
+        "itemCount": len(items),
+    }
+
+
 def _summarize_rotation_radar(payload: dict[str, Any]) -> dict[str, Any]:
     metadata = dict(payload.get("metadata") or {})
     quote_provider = dict(metadata.get("quoteProvider") or {})
@@ -195,6 +214,7 @@ def _summarize_data_readiness(payload: dict[str, Any]) -> dict[str, Any]:
 
 _ENDPOINT_SUMMARIZERS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "marketOverviewMacro": _summarize_market_overview_macro,
+    "usBreadth": _summarize_us_breadth,
     "liquidityMonitor": _summarize_liquidity_monitor,
     "rotationRadar": _summarize_rotation_radar,
     "marketTemperature": _summarize_market_temperature,
@@ -237,6 +257,7 @@ def collect_diagnostic_bundle(
     result: dict[str, Any] = {
         "officialMacroDiagnostic": official_macro_diagnostic,
         "alpacaRotationDiagnostic": alpaca_rotation_diagnostic,
+        "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
         "discrepancies": [],
     }
 
@@ -322,6 +343,7 @@ def main(argv: list[str] | None = None) -> int:
         fallback = {
             "officialMacroDiagnostic": _compact_official_macro_diagnostic({}),
             "alpacaRotationDiagnostic": _compact_alpaca_rotation_diagnostic({}),
+            "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
             "discrepancies": [],
         }
         print(json.dumps(fallback, ensure_ascii=False, sort_keys=True))

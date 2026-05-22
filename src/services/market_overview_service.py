@@ -52,6 +52,11 @@ from src.services.market_overview_sina_transport import fetch_sina_cn_index_rows
 from src.services.market_overview_tickflow_breadth_provider import (
     fetch_tickflow_cn_breadth_snapshot,
 )
+from src.services.us_breadth_contracts import (
+    US_BREADTH_MISSING_PROVIDER_REASON,
+    build_us_breadth_missing_authority_diagnostic,
+    representative_sample_breadth_metadata,
+)
 from src.services.market_overview_yfinance_transport import (
     fetch_yfinance_quote_history_frame,
     fetch_yfinance_spy_atr_history_frame,
@@ -4048,6 +4053,7 @@ class MarketOverviewService:
         }
 
     def _fetch_us_breadth_snapshot(self) -> Dict[str, Any]:
+        representative_meta = representative_sample_breadth_metadata()
         quote_items: List[Dict[str, Any]] = []
         for ticker, label in self.US_SECTOR_ETFS.items():
             try:
@@ -4073,7 +4079,9 @@ class MarketOverviewService:
                 "hover_details": ["Sector ETF proxy"],
                 "source": "yfinance_proxy",
                 "sourceLabel": "Yahoo Finance",
+                "sourceType": "unofficial_proxy",
                 "isFallback": False,
+                **representative_meta,
             })
         if not quote_items:
             return self._fallback_us_breadth_snapshot()
@@ -4096,21 +4104,34 @@ class MarketOverviewService:
         return {
             "source": "yfinance_proxy",
             "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_proxy",
             "updatedAt": updated_at,
             "asOf": updated_at,
+            "freshness": "delayed",
+            "warning": (
+                "US breadth missing/unavailable: official or authorized breadth "
+                "provider is not configured; showing representative sector ETF proxy only."
+            ),
+            "explanation": (
+                "US breadth missing/unavailable; sector ETF and relative-pressure rows "
+                "are representative observations, not full-market breadth."
+            ),
+            "authorityDiagnostics": build_us_breadth_missing_authority_diagnostic(),
+            **representative_meta,
             "items": [
                 {
                     **item,
+                    **representative_meta,
                     "updatedAt": updated_at,
                     "asOf": updated_at,
                     "source": item.get("source") or "computed",
                     "sourceLabel": item.get("sourceLabel") or "系统计算",
+                    "sourceType": item.get("sourceType") or "unofficial_proxy",
                     "isFallback": False,
                 }
                 for item in items
             ],
             "fallbackUsed": False,
-            "warning": None,
         }
 
     def _us_relative_pressure_items(self) -> List[Dict[str, Any]]:
@@ -5847,20 +5868,45 @@ class MarketOverviewService:
 
     def _fallback_us_breadth_snapshot(self) -> Dict[str, Any]:
         updated_at = _now_iso()
+        missing_meta = {
+            "breadthClaimType": "missing_unavailable_breadth",
+            "representativeSample": False,
+            "broadMarketClaimAllowed": False,
+            "observationOnly": True,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "sourceAuthorityReason": US_BREADTH_MISSING_PROVIDER_REASON,
+            "sourceAuthorityRouteRejected": False,
+            "routeRejectedReasonCodes": [US_BREADTH_MISSING_PROVIDER_REASON],
+            "sourceType": "missing",
+            "sourceTier": "official_or_authorized_licensed_feed",
+            "trustLevel": "unavailable",
+            "degradationReason": US_BREADTH_MISSING_PROVIDER_REASON,
+            "sourceFreshnessEvidence": {
+                "freshness": "unavailable",
+                "isUnavailable": True,
+                "isFallback": True,
+                "warning": "US breadth missing/unavailable",
+            },
+        }
+        items = [
+            self._unavailable_item("US breadth missing/unavailable", "US_BREADTH_UNAVAILABLE", "未接入", updated_at, detail="Official or authorized US market breadth provider is not configured"),
+            self._unavailable_item("Advance / decline", "ADVANCE_DECLINE_UNAVAILABLE", "未接入", updated_at),
+            self._unavailable_item("52W high / low", "HIGH_LOW_UNAVAILABLE", "未接入", updated_at),
+        ]
         return {
             "source": "unavailable",
             "sourceLabel": "未接入",
+            "sourceType": "missing",
             "updatedAt": updated_at,
             "asOf": updated_at,
-            "freshness": "fallback",
+            "freshness": "unavailable",
             "fallbackUsed": True,
             "isFallback": True,
-            "warning": "Sector ETF breadth proxy 数据暂不可用",
-            "items": [
-                self._unavailable_item("数据暂不可用", "SECTOR_PROXY_UNAVAILABLE", "数据暂不可用", updated_at, detail="Sector ETF proxy 暂不可用"),
-                self._unavailable_item("Advance / decline", "ADVANCE_DECLINE_UNAVAILABLE", "未接入", updated_at),
-                self._unavailable_item("52W high / low", "HIGH_LOW_UNAVAILABLE", "未接入", updated_at),
-            ],
+            "warning": "US breadth missing/unavailable: official or authorized breadth provider is not configured.",
+            "authorityDiagnostics": build_us_breadth_missing_authority_diagnostic(),
+            **missing_meta,
+            "items": [{**item, **missing_meta} for item in items],
         }
 
     def _fallback_cn_flows_snapshot(self) -> Dict[str, Any]:

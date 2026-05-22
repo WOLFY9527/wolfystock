@@ -27,6 +27,17 @@ US_BREADTH_SYMBOLS = (
     "HIGH_LOW_RATIO",
 )
 
+US_BREADTH_AUTHORITY_PROVIDER_ID = "official_or_authorized.us_market_breadth"
+US_BREADTH_AUTHORITY_SOURCE_LABEL = "Official or Authorized US Market Breadth"
+US_BREADTH_AUTHORITY_SOURCE_TIER = "official_or_authorized_licensed_feed"
+US_BREADTH_SCORE_GRADE_TRUST_LEVEL = "score_grade_when_configured"
+US_BREADTH_SCORE_GRADE_ACTIVATION_GATE = (
+    "configured_official_or_authorized_feed_and_daily_freshness_and_min_coverage"
+)
+US_BREADTH_MISSING_PROVIDER_REASON = "authorized_us_market_breadth_feed_not_configured"
+US_BREADTH_REPRESENTATIVE_SAMPLE_REASON = "representative_sample_not_full_market_breadth"
+US_BREADTH_PROXY_PLACEHOLDER_REASON = "proxy_or_placeholder_not_authorized_breadth"
+
 SAFE_UNAVAILABLE_REASON_BUCKETS = (
     "provider_not_selected",
     "missing_credentials",
@@ -50,6 +61,20 @@ class UsBreadthContract:
     freshness_window: str
     entitlement_config_category: str
     safe_fallback_reason_buckets: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class UsBreadthSourceContract:
+    claim_class: str
+    provider_id: str
+    source_label: str
+    source_tier: str
+    trust_level: str
+    source_authority_allowed: bool
+    score_contribution_allowed: bool
+    broad_market_claim_allowed: bool
+    activation_gate: str
+    source_authority_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -135,6 +160,60 @@ _CONTRACTS = (
 
 _CONTRACTS_BY_SYMBOL = MappingProxyType({item.symbol: item for item in _CONTRACTS})
 
+_SOURCE_CONTRACTS = (
+    UsBreadthSourceContract(
+        claim_class="authorized_score_grade_breadth",
+        provider_id=US_BREADTH_AUTHORITY_PROVIDER_ID,
+        source_label=US_BREADTH_AUTHORITY_SOURCE_LABEL,
+        source_tier=US_BREADTH_AUTHORITY_SOURCE_TIER,
+        trust_level=US_BREADTH_SCORE_GRADE_TRUST_LEVEL,
+        source_authority_allowed=True,
+        score_contribution_allowed=True,
+        broad_market_claim_allowed=True,
+        activation_gate=US_BREADTH_SCORE_GRADE_ACTIVATION_GATE,
+    ),
+    UsBreadthSourceContract(
+        claim_class="representative_sample_breadth",
+        provider_id="bounded_representative_sample",
+        source_label="Representative US Breadth Sample",
+        source_tier="representative_sample",
+        trust_level="observation_only",
+        source_authority_allowed=False,
+        score_contribution_allowed=False,
+        broad_market_claim_allowed=False,
+        activation_gate="sample_universe_documented_authorized_and_coverage_qualified",
+        source_authority_reason=US_BREADTH_REPRESENTATIVE_SAMPLE_REASON,
+    ),
+    UsBreadthSourceContract(
+        claim_class="proxy_placeholder_fallback_breadth",
+        provider_id="yfinance_proxy",
+        source_label="Yahoo Finance",
+        source_tier="unofficial_proxy",
+        trust_level="usable_with_caution",
+        source_authority_allowed=False,
+        score_contribution_allowed=False,
+        broad_market_claim_allowed=False,
+        activation_gate="not_score_grade_proxy_placeholder_or_fallback",
+        source_authority_reason=US_BREADTH_PROXY_PLACEHOLDER_REASON,
+    ),
+    UsBreadthSourceContract(
+        claim_class="missing_unavailable_breadth",
+        provider_id=US_BREADTH_AUTHORITY_PROVIDER_ID,
+        source_label=US_BREADTH_AUTHORITY_SOURCE_LABEL,
+        source_tier=US_BREADTH_AUTHORITY_SOURCE_TIER,
+        trust_level="unavailable",
+        source_authority_allowed=False,
+        score_contribution_allowed=False,
+        broad_market_claim_allowed=False,
+        activation_gate=US_BREADTH_SCORE_GRADE_ACTIVATION_GATE,
+        source_authority_reason=US_BREADTH_MISSING_PROVIDER_REASON,
+    ),
+)
+
+_SOURCE_CONTRACTS_BY_CLAIM = MappingProxyType(
+    {item.claim_class: item for item in _SOURCE_CONTRACTS}
+)
+
 
 def list_us_breadth_contracts() -> tuple[UsBreadthContract, ...]:
     """Return deterministic US breadth contracts for future provider wiring."""
@@ -147,6 +226,54 @@ def get_us_breadth_contract(symbol: str | None) -> UsBreadthContract | None:
     if not normalized:
         return None
     return _CONTRACTS_BY_SYMBOL.get(normalized)
+
+
+def list_us_breadth_source_contracts() -> tuple[UsBreadthSourceContract, ...]:
+    """Return source-claim contracts for US breadth authority gates."""
+    return tuple(_SOURCE_CONTRACTS)
+
+
+def get_us_breadth_source_contract(claim_class: str | None) -> UsBreadthSourceContract | None:
+    normalized = _text(claim_class).lower()
+    if not normalized:
+        return None
+    return _SOURCE_CONTRACTS_BY_CLAIM.get(normalized)
+
+
+def build_us_breadth_missing_authority_diagnostic() -> dict[str, Any]:
+    """Return a sanitized fail-closed diagnostic for the missing authority feed."""
+    return {
+        "providerConstructed": False,
+        "probePassed": False,
+        "freshnessValid": False,
+        "sourceMetadataValid": True,
+        "sourceAuthorityAllowed": False,
+        "scoreContributionAllowed": False,
+        "fulfilledMetrics": [],
+        "missingMetrics": list(US_BREADTH_SYMBOLS),
+        "staleMetrics": [],
+        "reason": US_BREADTH_MISSING_PROVIDER_REASON,
+        "sourceLabel": US_BREADTH_AUTHORITY_SOURCE_LABEL,
+        "sourceTier": US_BREADTH_AUTHORITY_SOURCE_TIER,
+        "trustLevel": US_BREADTH_SCORE_GRADE_TRUST_LEVEL,
+    }
+
+
+def representative_sample_breadth_metadata() -> dict[str, Any]:
+    """Return metadata that prevents representative samples from broad claims."""
+    return {
+        "breadthClaimType": "representative_sample_breadth",
+        "representativeSample": True,
+        "broadMarketClaimAllowed": False,
+        "observationOnly": True,
+        "sourceTier": "unofficial_proxy",
+        "trustLevel": "usable_with_caution",
+        "sourceAuthorityAllowed": False,
+        "scoreContributionAllowed": False,
+        "sourceAuthorityReason": US_BREADTH_REPRESENTATIVE_SAMPLE_REASON,
+        "sourceAuthorityRouteRejected": False,
+        "routeRejectedReasonCodes": [US_BREADTH_REPRESENTATIVE_SAMPLE_REASON],
+    }
 
 
 def build_unavailable_us_breadth_observations(

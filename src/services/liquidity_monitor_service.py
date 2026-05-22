@@ -19,6 +19,7 @@ from src.services.market_cache import MarketCache, market_cache
 from src.services.market_data_source_registry import project_source_provenance, resolve_source_type
 from src.services.market_overview_binance_transport import fetch_binance_funding_row
 from src.services.market_overview_yfinance_transport import fetch_yfinance_quote_history_frame
+from src.services.us_breadth_contracts import representative_sample_breadth_metadata
 from src.services.vix_metadata import normalize_vix_quote_metadata
 from src.storage import DatabaseManager
 
@@ -1549,6 +1550,7 @@ class LiquidityMonitorService:
         symbol_map = self._reliable_symbol_map(panel, {"SECTORS_UP", "SECTORS_DOWN", "RSP_SPY", "IWM_SPY", "QQQ_SPY"})
         up = symbol_map.get("SECTORS_UP")
         down = symbol_map.get("SECTORS_DOWN")
+        representative_meta = representative_sample_breadth_metadata()
         proxies = []
         positive_votes = 0
         negative_votes = 0
@@ -1566,6 +1568,9 @@ class LiquidityMonitorService:
         if up is None or down is None:
             up_value = None
             down_value = None
+        else:
+            up = {**up, **representative_meta}
+            down = {**down, **representative_meta}
         freshness_values = [self._item_freshness(item, panel) for item in (up, down) if item is not None]
         for symbol, label in (("RSP_SPY", "RSP/SPY"), ("IWM_SPY", "IWM/SPY"), ("QQQ_SPY", "QQQ/SPY")):
             item = symbol_map.get(symbol)
@@ -1583,6 +1588,7 @@ class LiquidityMonitorService:
             freshness_values.append(self._item_freshness(item, panel))
             proxies.append({"symbol": symbol, "label": label, "value": value})
             proxies[-1].update(self._component_projection_meta(item, panel))
+            proxies[-1].update(representative_meta)
         if up_value is None or down_value is None:
             if not proxies:
                 return None
@@ -2394,6 +2400,9 @@ class LiquidityMonitorService:
             if source_authority_route_rejected:
                 score_contribution_allowed = False
                 score_exclusion_reason = score_exclusion_reason or LIQUIDITY_SCORE_ROUTE_REJECTED_REASON
+        if key == "us_breadth_proxy" and source_authority_reason is None:
+            source_authority_reason = self._first_input_source_authority_reason(evidence)
+            route_rejected_reason_codes = self._first_input_route_rejected_reason_codes(evidence)
         missing_provider_reason = None
         if required_provider_class and not real_source_available:
             missing_provider_reason = f"requires_{required_provider_class}"
@@ -2413,6 +2422,32 @@ class LiquidityMonitorService:
             "sourceAuthorityReason": source_authority_reason,
             "routeRejectedReasonCodes": route_rejected_reason_codes,
         }
+
+    @staticmethod
+    def _first_input_source_authority_reason(evidence: Dict[str, Any]) -> str | None:
+        inputs = evidence.get("inputs")
+        if not isinstance(inputs, list):
+            return None
+        for item in inputs:
+            if not isinstance(item, dict):
+                continue
+            reason = str(item.get("sourceAuthorityReason") or "").strip()
+            if reason:
+                return reason
+        return None
+
+    @staticmethod
+    def _first_input_route_rejected_reason_codes(evidence: Dict[str, Any]) -> list[str]:
+        inputs = evidence.get("inputs")
+        if not isinstance(inputs, list):
+            return []
+        for item in inputs:
+            if not isinstance(item, dict):
+                continue
+            codes = item.get("routeRejectedReasonCodes")
+            if isinstance(codes, list):
+                return [str(code) for code in codes if str(code or "").strip()]
+        return []
 
     @staticmethod
     def _usd_pressure_unavailable_reason(evidence: Dict[str, Any]) -> str:

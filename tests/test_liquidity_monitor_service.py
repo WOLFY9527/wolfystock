@@ -2716,7 +2716,16 @@ def test_us_breadth_indicator_uses_relative_proxy_votes(isolated_db: DatabaseMan
     assert indicators["us_breadth_proxy"]["scoreContribution"] == 0
     assert indicators["us_breadth_proxy"]["coverageDiagnostics"]["scoreExclusionReason"] == "proxy_only_missing_real_source"
     assert indicators["us_breadth_proxy"]["coverageDiagnostics"]["capReason"] == "partial_coverage"
+    assert indicators["us_breadth_proxy"]["coverageDiagnostics"]["sourceAuthorityReason"] == "representative_sample_not_full_market_breadth"
     assert "RSP/SPY" in indicators["us_breadth_proxy"]["summary"]
+    evidence_inputs = {
+        item["key"]: item
+        for item in indicators["us_breadth_proxy"]["evidence"]["inputs"]
+    }
+    assert evidence_inputs["SECTORS_UP"]["sourceAuthorityAllowed"] is False
+    assert evidence_inputs["SECTORS_UP"]["scoreContributionAllowed"] is False
+    assert evidence_inputs["SECTORS_UP"]["sourceAuthorityReason"] == "representative_sample_not_full_market_breadth"
+    assert "representative_sample_not_full_market_breadth" in evidence_inputs["RSP_SPY"]["routeRejectedReasonCodes"]
 
 
 def test_liquidity_provider_activation_diagnostics_classify_proxy_indicators_and_cap_score(

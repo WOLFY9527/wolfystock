@@ -15,7 +15,10 @@ from src.services.market_data_source_registry import CANONICAL_SOURCE_TYPES
 from src.services.us_breadth_contracts import (
     SAFE_UNAVAILABLE_REASON_BUCKETS,
     US_BREADTH_SYMBOLS,
+    build_us_breadth_missing_authority_diagnostic,
+    get_us_breadth_source_contract,
     get_us_breadth_contract,
+    list_us_breadth_source_contracts,
     list_us_breadth_contracts,
     parse_mocked_us_breadth_payload,
 )
@@ -67,6 +70,60 @@ def test_us_breadth_contracts_remain_inert_disabled_live_stubs() -> None:
         assert contract.freshness_window
         assert contract.entitlement_config_category
         assert contract.safe_fallback_reason_buckets == SAFE_UNAVAILABLE_REASON_BUCKETS
+
+
+def test_us_breadth_source_contracts_distinguish_score_grade_sample_proxy_and_missing() -> None:
+    contracts = {item.claim_class: item for item in list_us_breadth_source_contracts()}
+
+    assert set(contracts) == {
+        "authorized_score_grade_breadth",
+        "representative_sample_breadth",
+        "proxy_placeholder_fallback_breadth",
+        "missing_unavailable_breadth",
+    }
+
+    authorized = contracts["authorized_score_grade_breadth"]
+    assert authorized.provider_id == "official_or_authorized.us_market_breadth"
+    assert authorized.source_authority_allowed is True
+    assert authorized.score_contribution_allowed is True
+    assert authorized.broad_market_claim_allowed is True
+    assert authorized.activation_gate == "configured_official_or_authorized_feed_and_daily_freshness_and_min_coverage"
+
+    representative = get_us_breadth_source_contract("representative_sample_breadth")
+    assert representative is not None
+    assert representative.source_authority_allowed is False
+    assert representative.score_contribution_allowed is False
+    assert representative.broad_market_claim_allowed is False
+    assert representative.source_authority_reason == "representative_sample_not_full_market_breadth"
+
+    for claim_class in ("proxy_placeholder_fallback_breadth", "missing_unavailable_breadth"):
+        contract = contracts[claim_class]
+        assert contract.source_authority_allowed is False
+        assert contract.score_contribution_allowed is False
+        assert contract.broad_market_claim_allowed is False
+
+
+def test_us_breadth_missing_authority_diagnostic_is_sanitized_and_fail_closed() -> None:
+    diagnostic = build_us_breadth_missing_authority_diagnostic()
+
+    assert diagnostic["providerConstructed"] is False
+    assert diagnostic["probePassed"] is False
+    assert diagnostic["freshnessValid"] is False
+    assert diagnostic["sourceMetadataValid"] is True
+    assert diagnostic["sourceAuthorityAllowed"] is False
+    assert diagnostic["scoreContributionAllowed"] is False
+    assert diagnostic["fulfilledMetrics"] == []
+    assert diagnostic["missingMetrics"] == list(US_BREADTH_SYMBOLS)
+    assert diagnostic["staleMetrics"] == []
+    assert diagnostic["reason"] == "authorized_us_market_breadth_feed_not_configured"
+    assert diagnostic["sourceLabel"] == "Official or Authorized US Market Breadth"
+    assert diagnostic["sourceTier"] == "official_or_authorized_licensed_feed"
+    assert diagnostic["trustLevel"] == "score_grade_when_configured"
+
+    serialized = json.dumps(diagnostic, ensure_ascii=False, sort_keys=True)
+    assert "SECRET" not in serialized
+    assert "Authorization" not in serialized
+    assert "providerPayload" not in serialized
 
 
 def test_get_us_breadth_contract_is_case_insensitive() -> None:

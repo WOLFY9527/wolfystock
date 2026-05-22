@@ -48,6 +48,10 @@ signal tables, source/risk rails, or liquidity-related freshness disclosure.
   `authorized.us_etf_flow` / `official_or_authorized.us_market_breadth`
   as missing real provider classes; yfinance proxy evidence may only stay
   delayed/capped rather than full-strength.
+- US breadth sector ETF rows are representative sample observations only.
+  They must carry `sourceAuthorityAllowed=false`,
+  `scoreContributionAllowed=false`, and no broad-market breadth claim until an
+  authorized provider satisfies freshness and coverage gates.
 - VIX, DXY, and US Treasury yfinance proxy inputs may remain visible only as
   delayed/capped proxy diagnostics until official or authorized adapters are
   active. Binance spot crypto remains eligible as `exchange_public.crypto_spot`
