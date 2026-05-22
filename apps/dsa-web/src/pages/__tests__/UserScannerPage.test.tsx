@@ -987,20 +987,21 @@ describe('UserScannerPage', () => {
     });
   });
 
-  it('keeps scanner page wrappers scroll-safe for natural document scrolling', async () => {
+  it('keeps scanner page wrappers document-scrollable while bounding candidates internally', async () => {
     renderUserScannerPage();
 
     await screen.findByTestId('scanner-run-button');
+    const candidateScrollRegion = screen.getByTestId('scanner-candidate-scroll-region');
 
     expect(screen.getByTestId('scanner-ranking-board-page')).not.toHaveClass('xl:overflow-hidden', 'xl:h-[calc(100vh-96px)]');
     expect(screen.getByTestId('user-scanner-workspace')).not.toHaveClass('h-full', 'overflow-hidden');
     expect(screen.queryByTestId('scanner-results-pane')).not.toBeInTheDocument();
     expect(screen.queryByTestId('scanner-control-rail')).not.toBeInTheDocument();
     expect(screen.getByTestId('scanner-launch-bar')).not.toHaveClass('overflow-hidden', 'max-h-[calc(100vh-120px)]', 'xl:h-full', 'xl:max-h-[calc(100vh-120px)]', 'xl:sticky');
-    expect(screen.getByTestId('scanner-candidate-scroll-region')).not.toHaveClass('overflow-y-auto', 'flex-1');
-    expect(screen.getByTestId('scanner-candidate-scroll-region')).not.toHaveClass('order-1');
+    expect(candidateScrollRegion).toHaveClass('max-h-[min(52vh,34rem)]', 'overflow-y-auto', 'overscroll-y-contain', 'ui-scroll-y-quiet');
+    expect(candidateScrollRegion).not.toHaveClass('flex-1', 'order-1', 'overflow-x-auto');
     expect(screen.getByTestId('scanner-ranked-list')).toHaveClass('overflow-x-auto');
-    expect(screen.getByTestId('scanner-ranked-list')).not.toHaveClass('overflow-hidden', 'no-scrollbar');
+    expect(screen.getByTestId('scanner-ranked-list')).not.toHaveClass('overflow-hidden', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('scanner-result-table')).toHaveClass('contents', 'md:block', 'md:min-w-[1220px]');
   });
 
@@ -1043,6 +1044,8 @@ describe('UserScannerPage', () => {
     expect(compactFilterBar).toBeInTheDocument();
     expect(primaryWorkRegion).toContainElement(screen.getByTestId('scanner-ranked-list'));
     expect(primaryWorkRegion).toContainElement(screen.getByTestId('scanner-result-table'));
+    expect(primaryWorkRegion).toContainElement(screen.getByTestId('scanner-candidate-scroll-region'));
+    expect(screen.getByTestId('scanner-candidate-scroll-region')).toContainElement(screen.getByTestId('scanner-candidate-row-WULF'));
     expect(contextRail).toContainElement(screen.getByTestId('scanner-inline-detail-panel'));
     expect(contextRail).toContainElement(screen.getByTestId('scanner-candidate-inspector'));
     expect(secondaryDeck).toContainElement(screen.getByTestId('scanner-diagnostics-disclosure'));

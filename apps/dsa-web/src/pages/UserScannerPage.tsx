@@ -2628,7 +2628,7 @@ const UserScannerPage: React.FC = () => {
                                 <span>{language === 'en' ? 'Watch / risk' : '观察 / 风险'}</span>
                                 <span className="text-right">{language === 'en' ? 'Actions' : '操作'}</span>
                               </div>
-                              <div data-testid="scanner-candidate-scroll-region" className="min-w-0">
+                              <div data-testid="scanner-candidate-scroll-region" className="min-w-0 max-h-[min(52vh,34rem)] overflow-y-auto overscroll-y-contain no-scrollbar ui-scroll-y-quiet [-webkit-overflow-scrolling:touch]">
                                 {workbenchDiagnostics.map((candidate) => {
                                   const activeRunDetail = runDetail;
                                   if (!activeRunDetail) return null;
