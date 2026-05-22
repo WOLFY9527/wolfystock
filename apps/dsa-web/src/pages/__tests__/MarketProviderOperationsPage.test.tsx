@@ -396,7 +396,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(pageRoot.className).not.toContain('bg-black');
   });
 
-  it('renders Chinese-first operator hierarchy and keeps diagnostics available without exposing raw secrets', async () => {
+  it('renders Chinese-first operator hierarchy and keeps diagnostics available without exposing raw secrets or backend credential names', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 
     render(<MarketProviderOperationsPage />);
@@ -431,6 +431,8 @@ describe('MarketProviderOperationsPage', () => {
     expect(gapBoard).toHaveTextContent('Polygon grouped daily US equities');
     expect(gapBoard).toHaveTextContent('AD-only');
     expect(gapBoard).toHaveTextContent('High/low missing');
+    expect(gapBoard).not.toHaveTextContent('NYSE');
+    expect(gapBoard).not.toHaveTextContent('Nasdaq');
     expect(gapBoard).toHaveTextContent('当前为什么不可用');
     expect(gapBoard).toHaveTextContent('解锁能力');
     expect(gapBoard).toHaveTextContent('所需工作');
@@ -450,7 +452,6 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.queryByText(/token=/i)).not.toBeInTheDocument();
     expect(screen.queryByText('TUSHARE_TOKEN=super-secret-token')).not.toBeInTheDocument();
     expect(screen.queryByText('tickflow_permission_unavailable')).not.toBeInTheDocument();
-    expect(screen.queryByText('POLYGON_API_KEY')).not.toBeInTheDocument();
     expect(screen.queryByText('https://secret-provider.example.com')).not.toBeInTheDocument();
     expect(screen.queryByText('/Users/example/provider')).not.toBeInTheDocument();
 
@@ -469,6 +470,9 @@ describe('MarketProviderOperationsPage', () => {
     expect(matrixDisclosure).toHaveTextContent('official_public.fed_liquidity');
     expect(matrixDisclosure).toHaveTextContent('missing_provider_configuration');
     expect(matrixDisclosure).toHaveTextContent('cache_required');
+    expect(matrixDisclosure).toHaveTextContent('polygon_us_grouped_daily');
+    expect(matrixDisclosure).toHaveTextContent('present');
+    expect(matrixDisclosure).toHaveTextContent('polygon_high_low_history_unavailable');
     expect(matrixDisclosure).toHaveTextContent('sourceAuthority=false');
     expect(matrixDisclosure).toHaveTextContent('score=false');
     expect(matrixDisclosure).toHaveTextContent('cache-required');
