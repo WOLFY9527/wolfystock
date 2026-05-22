@@ -17,6 +17,8 @@ from src.services.provider_capability_matrix import get_provider_fit_metadata
 
 EXPECTED_PROVIDER_IDS = {
     "authorized.us_etf_flow",
+    "authorized.cn_hk_connect_flow",
+    "authorized.real_sector_theme_flow",
     "finnhub",
     "alpha_vantage",
     "twelve_data",
@@ -40,6 +42,10 @@ EXPECTED_PROVIDER_IDS = {
     "binance_public",
     "coinbase_public",
     "fred_existing_baseline",
+    "exchange_or_broker_authorized.index_futures",
+    "official_public.cn_money_market_rates",
+    "official_public.fed_liquidity",
+    "official_or_authorized.fx_dxy",
     "official_or_authorized.us_market_breadth",
     "treasury_existing_baseline",
 }
@@ -75,10 +81,14 @@ def test_provider_fit_advisor_key_required_entries_remain_secret_safe() -> None:
 
     assert key_required_ids == {
         "authorized.us_etf_flow",
+        "authorized.cn_hk_connect_flow",
+        "authorized.real_sector_theme_flow",
         "alpha_vantage",
+        "exchange_or_broker_authorized.index_futures",
         "finnhub",
         "marketstack",
         "nasdaq_data_link",
+        "official_or_authorized.fx_dxy",
         "official_or_authorized.us_market_breadth",
         "tushare_pro",
         "twelve_data",
@@ -91,42 +101,94 @@ def test_provider_fit_advisor_key_required_entries_remain_secret_safe() -> None:
 
 
 def test_provider_fit_advisor_paid_or_plan_dependent_entries_do_not_become_runtime_safe() -> None:
-    for provider_id in (
-        "authorized.us_etf_flow",
-        "alpha_vantage",
-        "finnhub",
-        "marketstack",
-        "nasdaq_data_link",
-        "official_or_authorized.us_market_breadth",
-        "tushare_pro",
-        "twelve_data",
-    ):
+    expected_paid_flags = {
+        "authorized.us_etf_flow": True,
+        "authorized.cn_hk_connect_flow": True,
+        "authorized.real_sector_theme_flow": True,
+        "alpha_vantage": True,
+        "exchange_or_broker_authorized.index_futures": True,
+        "finnhub": True,
+        "marketstack": True,
+        "nasdaq_data_link": True,
+        "official_public.cn_money_market_rates": False,
+        "official_public.fed_liquidity": False,
+        "official_or_authorized.fx_dxy": True,
+        "official_or_authorized.us_market_breadth": True,
+        "tushare_pro": True,
+        "twelve_data": True,
+    }
+
+    for provider_id, paid_required in expected_paid_flags.items():
         entry = get_provider_fit_advisor_entry(provider_id)
 
         assert entry is not None
-        assert entry.paid_data_likely_required is True
+        assert entry.paid_data_likely_required is paid_required
         assert entry.adoption_status == "paid_required"
         assert entry.recommended_next_step == "require_license_review"
         assert entry.score_contribution_allowed is False
         assert entry.enabled_by_default is False
 
 
-def test_provider_fit_advisor_future_authorized_flow_and_breadth_stay_license_gated() -> None:
+def test_provider_fit_advisor_missing_authority_contracts_stay_fail_closed_and_precise() -> None:
     expected = {
-        "authorized.us_etf_flow": "authorized_us_etf_flow_feed_not_configured",
-        "official_or_authorized.us_market_breadth": "authorized_us_market_breadth_feed_not_configured",
+        "authorized.us_etf_flow": {
+            "missing_reason": "authorized_us_etf_flow_feed_not_configured",
+            "paid_data_likely_required": True,
+            "key_required": True,
+        },
+        "authorized.cn_hk_connect_flow": {
+            "missing_reason": "authorized_cn_hk_connect_flow_feed_not_configured",
+            "paid_data_likely_required": True,
+            "key_required": True,
+        },
+        "authorized.real_sector_theme_flow": {
+            "missing_reason": "authorized_real_sector_theme_flow_not_configured",
+            "paid_data_likely_required": True,
+            "key_required": True,
+        },
+        "exchange_or_broker_authorized.index_futures": {
+            "missing_reason": "authorized_index_futures_feed_not_configured",
+            "paid_data_likely_required": True,
+            "key_required": True,
+        },
+        "official_public.cn_money_market_rates": {
+            "missing_reason": "official_cn_money_market_rates_contract_not_configured",
+            "paid_data_likely_required": False,
+            "key_required": False,
+        },
+        "official_public.fed_liquidity": {
+            "missing_reason": "official_fed_liquidity_contract_not_configured",
+            "paid_data_likely_required": False,
+            "key_required": False,
+        },
+        "official_or_authorized.fx_dxy": {
+            "missing_reason": "authorized_dxy_feed_not_configured",
+            "paid_data_likely_required": True,
+            "key_required": True,
+        },
+        "official_or_authorized.us_market_breadth": {
+            "missing_reason": "authorized_us_market_breadth_feed_not_configured",
+            "paid_data_likely_required": True,
+            "key_required": True,
+        },
     }
 
-    for provider_id, missing_reason in expected.items():
+    for provider_id, contract in expected.items():
         entry = get_provider_fit_advisor_entry(provider_id)
 
         assert entry is not None
-        assert entry.paid_data_likely_required is True
-        assert entry.key_required is True
+        assert entry.paid_data_likely_required is contract["paid_data_likely_required"]
+        assert entry.key_required is contract["key_required"]
+        assert entry.cache_required is True
+        assert entry.background_refresh_recommended is True
+        assert entry.observation_only is True
+        assert entry.score_contribution_allowed is False
+        assert entry.network_call_executed is False
         assert entry.no_default_live_http_calls is True
         assert entry.adoption_status == "paid_required"
         assert entry.recommended_next_step == "require_license_review"
-        assert entry.missing_provider_reason == missing_reason
+        assert entry.missing_provider_reason == contract["missing_reason"]
+        assert entry.missing_provider_reason == get_provider_fit_metadata(provider_id).missing_provider_reason
 
 
 def test_provider_fit_advisor_openbb_stays_reference_only_not_source_of_truth() -> None:
