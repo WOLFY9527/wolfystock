@@ -1,5 +1,11 @@
 ## 2026-05-22
 
+- **Official USD pressure freshness calibration** - `DTWEXBGS` freshness now
+  follows the Federal Reserve H.10 weekly release cadence for daily
+  trade-weighted USD rows instead of the generic daily macro window. The USD
+  pressure diagnostic exposes sanitized latest observation, as-of, policy, and
+  lag fields; stale, malformed, missing, proxy, fallback, or metadata-invalid
+  rows still fail closed and remain non-scoring.
 - **Rotation Radar ETF authority alignment** - Rotation Radar quote-provider
   authority now follows the bounded Alpaca ETF activation gate before exposing
   score-grade authority flags. Fresh bounded ETF windows can populate the

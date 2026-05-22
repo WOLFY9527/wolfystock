@@ -184,7 +184,8 @@ def test_usd_pressure_contract_uses_truthful_trade_weighted_label_not_ice_dxy() 
     assert contract.display_name == "FRED Nominal Broad U.S. Dollar Index"
     assert contract.series_codes == ("DTWEXBGS",)
     assert contract.source_type == "official_public"
-    assert contract.cadence == "business_daily"
+    assert contract.cadence == "h10_weekly_release_daily_observations"
+    assert "weekly Federal Reserve H.10 release" in contract.expected_freshness_window
     assert contract.live_eligible is False
     assert contract.delayed_eligible is True
     assert contract.observation_only is False

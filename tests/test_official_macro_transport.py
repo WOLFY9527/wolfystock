@@ -508,12 +508,12 @@ def test_fed_liquidity_live_smoke_fails_closed_on_partial_or_stale_series() -> N
 
 
 def test_usd_pressure_live_smoke_reports_bounded_official_series_successfully() -> None:
-    now = datetime(2026, 5, 14, 12, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 5, 22, 12, 0, tzinfo=timezone.utc)
     fred_requested: list[str] = []
 
     def _fake_fetch_fred(series_id: str, *, limit: int = 2, timeout: float = 0.0):
         fred_requested.append(series_id)
-        return [_macro_point(series_id, 128.42, "2026-05-13", freshness_hint="daily_trade_weighted_usd")]
+        return [_macro_point(series_id, 128.42, "2026-05-15", freshness_hint="daily_trade_weighted_usd")]
 
     with patch(
         "src.services.official_macro_transport.fetch_fred_observation_points",
@@ -542,10 +542,48 @@ def test_usd_pressure_live_smoke_reports_bounded_official_series_successfully() 
         "maxAttempts": 3,
         "transientMissingSeries": [],
         "finalAttemptMissingSeries": [],
+        "latestObservationDate": "2026-05-15",
+        "latestAsOf": "2026-05-15",
+        "freshnessPolicy": "official_h10_weekly_batch_t_plus_7",
+        "maxAcceptedLagDays": 10,
+        "maxAcceptedBusinessLagDays": 7,
+        "seriesLagDays": 7,
     }
 
 
-def test_usd_pressure_live_smoke_fails_closed_on_missing_or_stale_series() -> None:
+def test_usd_pressure_live_smoke_fails_closed_on_missing_series() -> None:
+    now = datetime(2026, 5, 22, 12, 0, tzinfo=timezone.utc)
+    fred_requested: list[str] = []
+
+    def _fake_fetch_fred(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        fred_requested.append(series_id)
+        return []
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_fake_fetch_fred,
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_usd_pressure_live_smoke(now=now)
+
+    assert fred_requested == ["DTWEXBGS", "DTWEXBGS", "DTWEXBGS"]
+    _assert_smoke_summary_fields(summary)
+    assert summary["probePassed"] is False
+    assert summary["freshnessValid"] is True
+    assert summary["sourceMetadataValid"] is True
+    assert summary["sourceAuthorityAllowed"] is False
+    assert summary["scoreContributionAllowed"] is False
+    assert summary["fulfilledSeries"] == []
+    assert summary["missingSeries"] == ["DTWEXBGS"]
+    assert summary["staleSeries"] == []
+    assert summary["reason"] == "series_coverage"
+    assert "latestObservationDate" not in summary
+    assert "freshnessPolicy" not in summary
+
+
+def test_usd_pressure_live_smoke_fails_closed_on_stale_series() -> None:
     now = datetime(2026, 5, 22, 12, 0, tzinfo=timezone.utc)
     fred_requested: list[str] = []
 
@@ -571,6 +609,84 @@ def test_usd_pressure_live_smoke_fails_closed_on_missing_or_stale_series() -> No
     assert summary["missingSeries"] == []
     assert summary["staleSeries"] == ["DTWEXBGS"]
     assert summary["reason"] == "stale_series"
+    assert summary["latestObservationDate"] == "2026-05-01"
+    assert summary["latestAsOf"] == "2026-05-01"
+    assert summary["freshnessPolicy"] == "official_h10_weekly_batch_t_plus_7"
+    assert summary["maxAcceptedLagDays"] == 10
+    assert summary["maxAcceptedBusinessLagDays"] == 7
+    assert summary["seriesLagDays"] == 21
+
+
+def test_usd_pressure_live_smoke_fails_closed_on_malformed_observation_date() -> None:
+    now = datetime(2026, 5, 22, 12, 0, tzinfo=timezone.utc)
+
+    def _fake_fetch_fred(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        return [_macro_point(series_id, 128.42, "not-a-date", freshness_hint="daily_trade_weighted_usd")]
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_fake_fetch_fred,
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_usd_pressure_live_smoke(now=now)
+
+    _assert_smoke_summary_fields(summary)
+    assert summary["probePassed"] is False
+    assert summary["freshnessValid"] is False
+    assert summary["sourceMetadataValid"] is True
+    assert summary["sourceAuthorityAllowed"] is False
+    assert summary["scoreContributionAllowed"] is False
+    assert summary["fulfilledSeries"] == []
+    assert summary["missingSeries"] == []
+    assert summary["staleSeries"] == ["DTWEXBGS"]
+    assert summary["reason"] == "stale_series"
+    assert "latestObservationDate" not in summary
+    assert "latestAsOf" not in summary
+    assert summary["freshnessPolicy"] == "official_h10_weekly_batch_t_plus_7"
+    assert summary["maxAcceptedLagDays"] == 10
+    assert summary["maxAcceptedBusinessLagDays"] == 7
+    assert "seriesLagDays" not in summary
+
+
+def test_usd_pressure_live_smoke_fails_closed_on_invalid_source_metadata() -> None:
+    now = datetime(2026, 5, 22, 12, 0, tzinfo=timezone.utc)
+
+    def _fake_fetch_fred(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        return [
+            _macro_point(
+                series_id,
+                128.42,
+                "2026-05-15",
+                source_id="yfinance_proxy",
+                source_type="unofficial_proxy",
+                freshness_hint="daily_trade_weighted_usd",
+            )
+        ]
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_fake_fetch_fred,
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_usd_pressure_live_smoke(now=now)
+
+    _assert_smoke_summary_fields(summary)
+    assert summary["probePassed"] is False
+    assert summary["freshnessValid"] is True
+    assert summary["sourceMetadataValid"] is False
+    assert summary["sourceAuthorityAllowed"] is False
+    assert summary["scoreContributionAllowed"] is False
+    assert summary["fulfilledSeries"] == []
+    assert summary["missingSeries"] == ["DTWEXBGS"]
+    assert summary["staleSeries"] == []
+    assert summary["reason"] == "source_metadata_invalid"
+    assert summary["latestObservationDate"] == "2026-05-15"
+    assert summary["latestAsOf"] == "2026-05-15"
+    assert "freshnessPolicy" not in summary
 
 
 @pytest.mark.parametrize(

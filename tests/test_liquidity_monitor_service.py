@@ -4482,6 +4482,62 @@ def test_usd_pressure_lists_official_trade_weighted_series_when_missing(
     assert inputs["USD_TWI"]["routeRejectedReasonCodes"] == ["usd_pressure_missing_series"]
 
 
+def test_usd_pressure_reports_official_stale_reason_when_trade_weighted_row_is_stale(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = "2026-05-22T10:00:00+08:00"
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "USD_TWI",
+                    "label": "Trade-weighted USD",
+                    "value": None,
+                    "changePercent": None,
+                    "source": "fred",
+                    "sourceId": "fred:DTWEXBGS",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED Nominal Broad U.S. Dollar Index",
+                    "sourceTier": "official_public",
+                    "trustLevel": "unavailable",
+                    "freshness": "stale",
+                    "asOf": "2026-05-01",
+                    "updatedAt": now,
+                    "isFallback": False,
+                    "isUnavailable": True,
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "sourceAuthorityReason": "official_usd_pressure_stale",
+                    "routeRejectedReasonCodes": ["official_usd_pressure_stale"],
+                    "officialSeriesId": "DTWEXBGS",
+                    "officialObservationDate": "2026-05-01",
+                    "officialAsOf": "2026-05-01",
+                }
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["usd_pressure"]
+    diagnostics = indicator["coverageDiagnostics"]
+    inputs = {str(item.get("key")): item for item in indicator["evidence"]["inputs"]}
+
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["scoreExclusionReason"] == "official_usd_pressure_stale"
+    assert diagnostics["missingInputs"] == ["USD_TWI"]
+    assert inputs["USD_TWI"]["sourceAuthorityReason"] == "official_usd_pressure_stale"
+    assert inputs["USD_TWI"]["scoreContributionAllowed"] is False
+
+
 LIQUIDITY_GOLDEN_SCENARIOS = (
     ("official_cached_macro_rates_context.json", _seed_official_cached_macro_rates_context),
     ("mixed_official_proxy_context.json", _seed_mixed_official_proxy_context),

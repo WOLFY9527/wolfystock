@@ -79,6 +79,7 @@ INSUFFICIENT_MARKET_DATA_WARNING = "当前真实数据不足，市场温度仅�
 OFFICIAL_MACRO_UNAVAILABLE_WARNING = "部分官方宏观指标暂不可用"
 OFFICIAL_DAILY_FRESHNESS_POLICY_ID = "official_daily_us_weekday_t_plus_1"
 OFFICIAL_WEEKLY_FED_LIQUIDITY_FRESHNESS_POLICY_ID = "official_weekly_fed_liquidity_t_plus_7"
+OFFICIAL_USD_PRESSURE_FRESHNESS_POLICY_ID = "official_h10_weekly_batch_t_plus_7"
 OFFICIAL_DAILY_FRESHNESS_DETAIL_KEYS = (
     "officialObservationDate",
     "officialAsOf",
@@ -117,10 +118,10 @@ OFFICIAL_DAILY_FRESHNESS_POLICIES = {
         "maxAcceptedBusinessLagDays": 2,
     },
     "DTWEXBGS": {
-        "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
-        "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
-        "maxAcceptedLagDays": 4,
-        "maxAcceptedBusinessLagDays": 2,
+        "freshnessPolicy": OFFICIAL_USD_PRESSURE_FRESHNESS_POLICY_ID,
+        "calendarAssumption": "Federal Reserve H.10 weekly Monday release; daily rows through prior Friday; holidays not modeled",
+        "maxAcceptedLagDays": 10,
+        "maxAcceptedBusinessLagDays": 7,
     },
     "SOFR": {
         "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
@@ -502,7 +503,17 @@ def _official_daily_freshness_details(
         or _parse_official_observation_date(as_of)
     )
     if observation_date is None:
-        return {}
+        details: Dict[str, Any] = {
+            "freshnessPolicy": str(policy["freshnessPolicy"]),
+            "calendarAssumption": str(policy["calendarAssumption"]),
+            "maxAcceptedLagDays": int(policy["maxAcceptedLagDays"]),
+            "maxAcceptedBusinessLagDays": int(policy["maxAcceptedBusinessLagDays"]),
+            "freshnessDecision": "stale_official_row",
+            "staleReason": "official observation date missing or malformed",
+        }
+        if as_of:
+            details["officialAsOf"] = str(as_of)
+        return details
     current = (now or datetime.now(CN_TZ)).astimezone(US_EASTERN_TZ)
     current_date = current.date()
     calendar_lag_days = max(0, (current_date - observation_date).days)
@@ -2259,6 +2270,8 @@ class MarketOverviewService:
                 or self._official_macro_overlay_diagnostics.get(series_id)
                 or "usd_pressure_missing_series"
             )
+            if reason == "stale_official_row":
+                reason = "official_usd_pressure_stale"
             unavailable = self._official_macro_unavailable_item(
                 symbol,
                 label,

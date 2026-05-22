@@ -701,6 +701,8 @@ def run_usd_pressure_live_smoke(
     results: dict[str, str] = {series_id: "missing" for series_id in USD_PRESSURE_LIVE_SMOKE_SERIES_IDS}
     attempts_executed = 0
     transient_missing_series_seen: set[str] = set()
+    latest_points: dict[str, MacroObservation] = {}
+    freshness_evidence_by_series: dict[str, Mapping[str, Any]] = {}
 
     def remaining_timeout(cap: float) -> float | None:
         remaining = deadline - time.monotonic()
@@ -722,6 +724,14 @@ def run_usd_pressure_live_smoke(
                     points = fetch_fred_observation_points(series_id, limit=2, timeout=timeout)
                 except Exception:
                     points = []
+                latest_point = _official_macro_smoke_latest_point(points)
+                if latest_point is not None:
+                    latest_points[series_id] = latest_point
+                    freshness_evidence_by_series[series_id] = _official_macro_smoke_freshness_evidence(
+                        series_id,
+                        latest_point,
+                        now=now,
+                    )
                 series_status = _official_macro_smoke_series_status(series_id, points, now=now)
                 results[series_id] = series_status
                 if series_status == "missing":
@@ -785,7 +795,7 @@ def run_usd_pressure_live_smoke(
         if series_id in transient_missing_series_seen and results.get(series_id) == "fulfilled"
     ]
 
-    return {
+    summary = {
         "credentialsPresent": credentials_present,
         "providerConstructed": provider_constructed,
         "probePassed": probe_passed,
@@ -802,6 +812,8 @@ def run_usd_pressure_live_smoke(
         "transientMissingSeries": transient_missing_series,
         "finalAttemptMissingSeries": missing_series,
     }
+    summary.update(_usd_pressure_live_smoke_latest_diagnostics(latest_points, freshness_evidence_by_series))
+    return summary
 
 
 def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) -> bytes:
@@ -1023,7 +1035,7 @@ def _official_macro_smoke_series_status(
     *,
     now: datetime | None = None,
 ) -> str:
-    latest = next((point for point in points if point.value is not None), None)
+    latest = _official_macro_smoke_latest_point(points)
     if latest is None:
         return "missing"
     if not _official_macro_smoke_source_metadata_valid(series_id, latest):
@@ -1069,6 +1081,65 @@ def _official_macro_smoke_is_stale(
     except Exception:
         return True
     return str(freshness.get("freshness") or "").strip().lower() == "stale"
+
+
+def _official_macro_smoke_latest_point(points: Sequence[MacroObservation]) -> MacroObservation | None:
+    return next((point for point in points if point.value is not None), None)
+
+
+def _official_macro_smoke_freshness_evidence(
+    series_id: str,
+    point: MacroObservation,
+    *,
+    now: datetime | None = None,
+) -> Mapping[str, Any]:
+    try:
+        from src.services.market_overview_service import get_freshness_status
+
+        evidence = get_freshness_status(
+            point.as_of or point.date,
+            "macro_rate",
+            _provider_name(point.source_id),
+            False,
+            source_type=point.source_type,
+            series_id=series_id,
+            official_observation_date=point.date,
+            now=now,
+        )
+    except Exception:
+        return {}
+    return evidence if isinstance(evidence, Mapping) else {}
+
+
+def _usd_pressure_live_smoke_latest_diagnostics(
+    latest_points: Mapping[str, MacroObservation],
+    freshness_evidence_by_series: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    series_id = USD_PRESSURE_LIVE_SMOKE_SERIES_IDS[0] if USD_PRESSURE_LIVE_SMOKE_SERIES_IDS else ""
+    point = latest_points.get(series_id)
+    if point is None:
+        return {}
+    evidence = freshness_evidence_by_series.get(series_id, {})
+    diagnostics: dict[str, Any] = {}
+    latest_observation_date = _safe_iso_date_text(point.date)
+    latest_as_of = _safe_iso_date_text(point.as_of)
+    if latest_observation_date:
+        diagnostics["latestObservationDate"] = latest_observation_date
+    if latest_as_of:
+        diagnostics["latestAsOf"] = latest_as_of
+    freshness_policy = _text(evidence.get("freshnessPolicy"))
+    if freshness_policy:
+        diagnostics["freshnessPolicy"] = freshness_policy
+    max_accepted_lag_days = _int_or_none(evidence.get("maxAcceptedLagDays"))
+    if max_accepted_lag_days is not None:
+        diagnostics["maxAcceptedLagDays"] = max_accepted_lag_days
+    max_accepted_business_lag_days = _int_or_none(evidence.get("maxAcceptedBusinessLagDays"))
+    if max_accepted_business_lag_days is not None:
+        diagnostics["maxAcceptedBusinessLagDays"] = max_accepted_business_lag_days
+    series_lag_days = _int_or_none(evidence.get("calendarLagDays"))
+    if series_lag_days is not None:
+        diagnostics["seriesLagDays"] = series_lag_days
+    return diagnostics
 
 
 def _requested_series(request: MacroTransportRequest) -> str | None:
@@ -1181,6 +1252,17 @@ def _normalize_iso_date(value: Any) -> str | None:
     try:
         return datetime.strptime(text, "%Y-%m-%d").date().isoformat()
     except ValueError:
+        return None
+
+
+def _safe_iso_date_text(value: Any) -> str | None:
+    return _normalize_iso_date(value)
+
+
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
         return None
 
 

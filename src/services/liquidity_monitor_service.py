@@ -2368,7 +2368,7 @@ class LiquidityMonitorService:
         elif required_real_source_for_score and proxy_only and not proxy_score_allowlisted:
             score_exclusion_reason = "proxy_only_missing_real_source"
         elif key == "usd_pressure" and not real_source_available:
-            score_exclusion_reason = "usd_pressure_missing_series"
+            score_exclusion_reason = self._usd_pressure_unavailable_reason(evidence)
         elif key == "fed_liquidity" and not real_source_available:
             score_exclusion_reason = "fed_liquidity_required_series_missing_or_stale"
         elif not bool(trust.get("conclusionAllowed")):
@@ -2413,6 +2413,23 @@ class LiquidityMonitorService:
             "sourceAuthorityReason": source_authority_reason,
             "routeRejectedReasonCodes": route_rejected_reason_codes,
         }
+
+    @staticmethod
+    def _usd_pressure_unavailable_reason(evidence: Dict[str, Any]) -> str:
+        inputs = evidence.get("inputs")
+        if isinstance(inputs, list):
+            for item in inputs:
+                if not isinstance(item, dict):
+                    continue
+                reason = str(
+                    item.get("sourceAuthorityReason")
+                    or item.get("degradationReason")
+                    or item.get("capReason")
+                    or ""
+                ).strip()
+                if reason:
+                    return reason
+        return "usd_pressure_missing_series"
 
     def _liquidity_score_source_authority_route(
         self,
