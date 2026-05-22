@@ -20,6 +20,9 @@ hierarchy, or portfolio public-safety wording.
 
 - Portfolio UI leads with holdings, P&L, exposure, FX/read-only sync state, and
   data confidence before manual forms.
+- Holding valuation price disclosure must distinguish live quote snapshots,
+  broker-sync snapshots, and avg-cost fallback estimates without changing
+  ledger/accounting math or mutation behavior.
 - Manual mutations are ledger/accounting records, not broker order execution.
 - Avoid default launch copy such as `买入`, `卖出`, `提交交易`, `下单`, or
   `立即交易` unless explicitly safety-reviewed.

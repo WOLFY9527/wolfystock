@@ -258,6 +258,12 @@ class PortfolioPositionItem(BaseModel):
     avg_cost: float
     total_cost: float
     last_price: float
+    price_source: Optional[str] = None
+    price_source_label: Optional[str] = None
+    price_as_of: Optional[str] = None
+    is_price_fallback: Optional[bool] = None
+    price_fallback_reason: Optional[str] = None
+    valuation_confidence: Optional[float] = None
     market_value_base: float
     unrealized_pnl_base: float
     valuation_currency: str

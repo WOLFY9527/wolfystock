@@ -1879,6 +1879,79 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertEqual(set(batch_lookup.call_args.kwargs["symbols"]), {"600519", "000001"})
         self.assertEqual(batch_lookup.call_args.kwargs["as_of"], date(2026, 1, 1))
 
+    def test_snapshot_discloses_avg_cost_price_fallback_without_mutating_ledger(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=10000,
+            currency="CNY",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="600519",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="cn",
+            currency="CNY",
+        )
+
+        before_counts = self._ledger_counts()
+        snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
+        after_counts = self._ledger_counts()
+
+        position = snapshot["accounts"][0]["positions"][0]
+        self.assertEqual(before_counts, after_counts)
+        self.assertAlmostEqual(position["avg_cost"], 100.0, places=6)
+        self.assertAlmostEqual(position["last_price"], 100.0, places=6)
+        self.assertAlmostEqual(position["market_value_base"], 1000.0, places=6)
+        self.assertAlmostEqual(position["unrealized_pnl_base"], 0.0, places=6)
+        self.assertEqual(position["price_source"], "avg_cost_fallback")
+        self.assertEqual(position["price_source_label"], "Average cost fallback")
+        self.assertIsNone(position["price_as_of"])
+        self.assertTrue(position["is_price_fallback"])
+        self.assertEqual(position["price_fallback_reason"], "current_quote_unavailable")
+        self.assertLess(position["valuation_confidence"], 0.5)
+
+    def test_snapshot_marks_live_close_prices_without_fallback_disclosure(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=10000,
+            currency="CNY",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="600519",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="cn",
+            currency="CNY",
+        )
+        self._save_close("600519", date(2026, 1, 2), 125.0)
+
+        snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
+
+        position = snapshot["accounts"][0]["positions"][0]
+        self.assertAlmostEqual(position["last_price"], 125.0, places=6)
+        self.assertAlmostEqual(position["market_value_base"], 1250.0, places=6)
+        self.assertAlmostEqual(position["unrealized_pnl_base"], 250.0, places=6)
+        self.assertEqual(position["price_source"], "daily_close_quote")
+        self.assertEqual(position["price_source_label"], "Daily close quote")
+        self.assertEqual(position["price_as_of"], "2026-01-02")
+        self.assertFalse(position["is_price_fallback"])
+        self.assertIsNone(position["price_fallback_reason"])
+        self.assertGreaterEqual(position["valuation_confidence"], 1.0)
+
     def test_repeated_snapshot_read_reuses_cached_snapshot_without_replay_or_writeback(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
         aid = account["id"]

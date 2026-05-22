@@ -146,6 +146,55 @@ type PortfolioLanguage = 'zh' | 'en';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
 
+function positionPriceStateLabel(position: Pick<PortfolioPositionItem, 'isPriceFallback'>, language: PortfolioLanguage): string {
+  if (position.isPriceFallback) {
+    return language === 'zh' ? '估算价格' : 'Estimated price';
+  }
+  return language === 'zh' ? '现价快照' : 'Live quote';
+}
+
+function positionPriceSourceHint(
+  position: Pick<PortfolioPositionItem, 'priceSource' | 'priceSourceLabel'>,
+  language: PortfolioLanguage,
+): string {
+  switch (position.priceSource) {
+    case 'avg_cost_fallback':
+      return language === 'zh' ? '均价回退' : 'Avg-cost fallback';
+    case 'broker_sync_snapshot':
+      return language === 'zh' ? '同步快照' : 'Synced snapshot';
+    case 'daily_close_quote':
+      return language === 'zh' ? '收盘报价' : 'Daily close quote';
+    default:
+      return position.priceSourceLabel || (language === 'zh' ? '价格来源待确认' : 'Price source pending');
+  }
+}
+
+function positionPriceFallbackReasonLabel(
+  position: Pick<PortfolioPositionItem, 'priceFallbackReason'>,
+  language: PortfolioLanguage,
+): string | null {
+  if (position.priceFallbackReason === 'current_quote_unavailable') {
+    return language === 'zh' ? '现价缺失' : 'Current quote unavailable';
+  }
+  return null;
+}
+
+function positionPriceDisclosure(position: PortfolioPositionItem, language: PortfolioLanguage): string {
+  const sourceHint = positionPriceSourceHint(position, language);
+  const fallbackReason = positionPriceFallbackReasonLabel(position, language);
+  const confidence = typeof position.valuationConfidence === 'number' && position.valuationConfidence < 1
+    ? `${language === 'zh' ? '置信度' : 'Confidence'} ${Math.round(position.valuationConfidence * 100)}%`
+    : null;
+  return [
+    positionPriceStateLabel(position, language),
+    sourceHint,
+    position.priceSourceLabel && position.priceSourceLabel !== sourceHint ? position.priceSourceLabel : null,
+    fallbackReason,
+    position.priceAsOf || null,
+    confidence,
+  ].filter(Boolean).join(' · ');
+}
+
 function PortfolioSegmentedControl({
   value,
   options,
@@ -2068,6 +2117,9 @@ const PortfolioPage: React.FC = () => {
                                 <td className="px-3 py-2 font-mono">
                                   {formatMoney(row.marketValueBase, row.valuationCurrency)}
                                   {row.valuationCurrency !== displayCurrency ? <div className="mt-1 text-[11px] text-white/35">{renderConvertedDisplay(row.marketValueBase, row.valuationCurrency)}</div> : null}
+                                  <div className={`mt-1 text-[11px] ${row.isPriceFallback ? 'text-amber-300' : 'text-white/35'}`}>
+                                    {`${formatMoney(row.lastPrice, row.currency)} · ${positionPriceDisclosure(row, language)}`}
+                                  </div>
                                 </td>
                                 <td className={`px-3 py-2 font-mono ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                   {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}

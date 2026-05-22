@@ -122,6 +122,7 @@ function makeSnapshot(options: {
   fxStale?: boolean;
   accountCount?: number;
   includePosition?: boolean;
+  positionOverrides?: Record<string, unknown>;
   fxRates?: Array<{
     fromCurrency: string;
     toCurrency: string;
@@ -154,6 +155,13 @@ function makeSnapshot(options: {
       displayUnrealizedPnl: 100,
       displayCurrency: 'USD',
       displayFxStatus: 'live' as const,
+      priceSource: 'daily_close_quote',
+      priceSourceLabel: 'Daily close quote',
+      priceAsOf: '2026-03-19',
+      isPriceFallback: false,
+      priceFallbackReason: null,
+      valuationConfidence: 1,
+      ...options.positionOverrides,
     },
   ] : [];
   const analytics = {
@@ -730,6 +738,48 @@ describe('PortfolioPage FX refresh', () => {
     expect(risk).toHaveTextContent('最大币种');
     expect(risk).toHaveTextContent('最大市场');
     expect(risk).toHaveTextContent('单一标的占比较高');
+  });
+
+  it('visibly marks avg-cost fallback prices as estimated rather than live', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({
+      includePosition: true,
+      fxStale: false,
+      positionOverrides: {
+        lastPrice: 150,
+        marketValueBase: 1500,
+        unrealizedPnlBase: 0,
+        unrealizedPnlPct: 0,
+        priceSource: 'avg_cost_fallback',
+        priceSourceLabel: 'Average cost fallback',
+        priceAsOf: null,
+        isPriceFallback: true,
+        priceFallbackReason: 'current_quote_unavailable',
+        valuationConfidence: 0.25,
+      },
+    }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const holdings = screen.getByTestId('portfolio-current-holdings-panel');
+    expect(holdings).toHaveTextContent('估算价格');
+    expect(holdings).toHaveTextContent('均价回退');
+    expect(holdings).toHaveTextContent('Average cost fallback');
+    expect(holdings).not.toHaveTextContent('现价快照');
+  });
+
+  it('does not mark live quote prices as fallback estimates', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: false }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const holdings = screen.getByTestId('portfolio-current-holdings-panel');
+    expect(holdings).toHaveTextContent('现价快照');
+    expect(holdings).not.toHaveTextContent('估算价格');
+    expect(holdings).not.toHaveTextContent('均价回退');
   });
 
   it('renders portfolio risk drilldown explainability without raw debug labels', async () => {

@@ -380,6 +380,55 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(payload["analytics"]["exposure"]["by_symbol"][0]["symbol"], "AAPL")
         self.assertEqual(payload["analytics"]["risk"]["largest_position"]["symbol"], "AAPL")
 
+    def test_snapshot_api_exposes_position_price_fallback_metadata(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Main", "broker": "Demo", "market": "cn", "base_currency": "CNY"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+
+        cash_resp = self.client.post(
+            "/api/v1/portfolio/cash-ledger",
+            json={
+                "account_id": account_id,
+                "event_date": "2026-01-01",
+                "direction": "in",
+                "amount": 10000,
+                "currency": "CNY",
+            },
+        )
+        self.assertEqual(cash_resp.status_code, 200)
+
+        trade_resp = self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account_id,
+                "symbol": "600519",
+                "trade_date": "2026-01-02",
+                "side": "buy",
+                "quantity": 10,
+                "price": 100.0,
+                "market": "cn",
+                "currency": "CNY",
+            },
+        )
+        self.assertEqual(trade_resp.status_code, 200)
+
+        snapshot_resp = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"account_id": account_id, "as_of": "2026-01-02", "cost_method": "fifo"},
+        )
+        self.assertEqual(snapshot_resp.status_code, 200)
+
+        position = snapshot_resp.json()["accounts"][0]["positions"][0]
+        self.assertEqual(position["price_source"], "avg_cost_fallback")
+        self.assertEqual(position["price_source_label"], "Average cost fallback")
+        self.assertIsNone(position["price_as_of"])
+        self.assertTrue(position["is_price_fallback"])
+        self.assertEqual(position["price_fallback_reason"], "current_quote_unavailable")
+        self.assertLess(position["valuation_confidence"], 0.5)
+
     def test_snapshot_invalid_cost_method_returns_400(self) -> None:
         resp = self.client.get("/api/v1/portfolio/snapshot", params={"cost_method": "bad"})
         self.assertEqual(resp.status_code, 400)

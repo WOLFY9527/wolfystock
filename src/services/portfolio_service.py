@@ -42,6 +42,13 @@ PORTFOLIO_FX_REFRESH_DISABLED_REASON = "portfolio_fx_update_disabled"
 FX_STATUS_LIVE = "live"
 FX_STATUS_STALE = "stale"
 FX_STATUS_UNAVAILABLE = "unavailable"
+PORTFOLIO_PRICE_SOURCE_DAILY_CLOSE = "daily_close_quote"
+PORTFOLIO_PRICE_SOURCE_BROKER_SYNC_SNAPSHOT = "broker_sync_snapshot"
+PORTFOLIO_PRICE_SOURCE_AVG_COST_FALLBACK = "avg_cost_fallback"
+PORTFOLIO_PRICE_FALLBACK_REASON_CURRENT_QUOTE_UNAVAILABLE = "current_quote_unavailable"
+PORTFOLIO_PRICE_CONFIDENCE_LIVE = 1.0
+PORTFOLIO_PRICE_CONFIDENCE_SYNC = 0.85
+PORTFOLIO_PRICE_CONFIDENCE_FALLBACK = 0.25
 
 
 class PortfolioConflictError(Exception):
@@ -3182,21 +3189,30 @@ class PortfolioService:
         cost_method: str,
         as_of_date: date,
     ) -> Dict[str, Any]:
-        positions = [
-            {
-                "symbol": item["symbol"],
-                "market": item["market"],
-                "currency": item["currency"],
-                "quantity": float(item["quantity"]),
-                "avg_cost": float(item["avg_cost"]),
-                "total_cost": round(float(item["quantity"]) * float(item["avg_cost"]), 8),
-                "last_price": float(item["last_price"]),
-                "market_value_base": float(item["market_value_base"]),
-                "unrealized_pnl_base": float(item["unrealized_pnl_base"]),
-                "valuation_currency": item["valuation_currency"],
-            }
-            for item in list(sync_state.get("positions") or [])
-        ]
+        snapshot_date = str(sync_state.get("snapshot_date") or "").strip() or as_of_date.isoformat()
+        positions = []
+        for item in list(sync_state.get("positions") or []):
+            positions.append(
+                {
+                    "symbol": item["symbol"],
+                    "market": item["market"],
+                    "currency": item["currency"],
+                    "quantity": float(item["quantity"]),
+                    "avg_cost": float(item["avg_cost"]),
+                    "total_cost": round(float(item["quantity"]) * float(item["avg_cost"]), 8),
+                    "last_price": float(item["last_price"]),
+                    "market_value_base": float(item["market_value_base"]),
+                    "unrealized_pnl_base": float(item["unrealized_pnl_base"]),
+                    "valuation_currency": item["valuation_currency"],
+                    **self._build_position_price_metadata(
+                        price_source=PORTFOLIO_PRICE_SOURCE_BROKER_SYNC_SNAPSHOT,
+                        price_as_of=snapshot_date,
+                        is_price_fallback=False,
+                        price_fallback_reason=None,
+                        valuation_confidence=PORTFOLIO_PRICE_CONFIDENCE_SYNC,
+                    ),
+                }
+            )
         payload = {
             "account_id": account.id,
             "account_name": account.name,
@@ -3267,8 +3283,10 @@ class PortfolioService:
         if snapshot_updated_at is None:
             return None
 
-        payload_raw = self._parse_snapshot_payload(getattr(snapshot_row, "payload", None))
         positions_cache = [self._cached_position_row_to_dict(row) for row in cached["positions"]]
+        payload_raw = self._parse_snapshot_payload(getattr(snapshot_row, "payload", None))
+        if positions_cache and self._snapshot_payload_missing_price_disclosure(payload_raw):
+            return None
         latest_market_update = self.repo.get_latest_market_data_update(
             symbols=[item["symbol"] for item in positions_cache],
             as_of=as_of_date,
@@ -3367,9 +3385,28 @@ class PortfolioService:
                     }
                 )
 
-            last_price = latest_closes.get(symbol)
-            if last_price is None or last_price <= 0:
-                last_price = avg_cost
+            raw_last_price = latest_closes.get(symbol)
+            is_price_fallback = raw_last_price is None or raw_last_price <= 0
+            last_price = avg_cost if is_price_fallback else float(raw_last_price)
+            price_metadata = self._build_position_price_metadata(
+                price_source=(
+                    PORTFOLIO_PRICE_SOURCE_AVG_COST_FALLBACK
+                    if is_price_fallback
+                    else PORTFOLIO_PRICE_SOURCE_DAILY_CLOSE
+                ),
+                price_as_of=None if is_price_fallback else as_of_date.isoformat(),
+                is_price_fallback=is_price_fallback,
+                price_fallback_reason=(
+                    PORTFOLIO_PRICE_FALLBACK_REASON_CURRENT_QUOTE_UNAVAILABLE
+                    if is_price_fallback
+                    else None
+                ),
+                valuation_confidence=(
+                    PORTFOLIO_PRICE_CONFIDENCE_FALLBACK
+                    if is_price_fallback
+                    else PORTFOLIO_PRICE_CONFIDENCE_LIVE
+                ),
+            )
             if (
                 fx_currencies_used is not None
                 and self._normalize_currency(currency) != self._normalize_currency(account.base_currency)
@@ -3418,6 +3455,7 @@ class PortfolioService:
                     "display_unrealized_pnl": round(unrealized_base, 8),
                     "display_currency": account.base_currency,
                     "display_fx_status": display_fx_status,
+                    **price_metadata,
                 }
             )
 
@@ -3425,6 +3463,41 @@ class PortfolioService:
             total_cost_base += cost_base
 
         return position_rows, lot_rows, market_value_base, total_cost_base, fx_stale
+
+    @staticmethod
+    def _build_position_price_metadata(
+        *,
+        price_source: str,
+        price_as_of: Optional[str],
+        is_price_fallback: bool,
+        price_fallback_reason: Optional[str],
+        valuation_confidence: Optional[float],
+    ) -> Dict[str, Any]:
+        source_labels = {
+            PORTFOLIO_PRICE_SOURCE_DAILY_CLOSE: "Daily close quote",
+            PORTFOLIO_PRICE_SOURCE_BROKER_SYNC_SNAPSHOT: "Broker sync snapshot",
+            PORTFOLIO_PRICE_SOURCE_AVG_COST_FALLBACK: "Average cost fallback",
+        }
+        confidence = None if valuation_confidence is None else round(float(valuation_confidence), 2)
+        return {
+            "price_source": price_source,
+            "price_source_label": source_labels.get(price_source, price_source),
+            "price_as_of": price_as_of,
+            "is_price_fallback": bool(is_price_fallback),
+            "price_fallback_reason": price_fallback_reason,
+            "valuation_confidence": confidence,
+        }
+
+    @staticmethod
+    def _snapshot_payload_missing_price_disclosure(payload: Dict[str, Any]) -> bool:
+        positions = list((payload or {}).get("positions") or [])
+        if not positions:
+            return False
+        required_fields = ("price_source", "price_source_label", "is_price_fallback")
+        return any(
+            not isinstance(position, dict) or any(field not in position for field in required_fields)
+            for position in positions
+        )
 
     @staticmethod
     def _consume_fifo_lots(
@@ -3867,6 +3940,8 @@ class PortfolioService:
     ) -> Dict[str, Any]:
         public_payload = dict(payload or self._parse_snapshot_payload(getattr(snapshot_row, "payload", None)))
         public_payload.pop("_cache_meta", None)
+        payload_positions = list(public_payload.get("positions") or [])
+        resolved_positions = payload_positions if payload_positions else positions
         public_payload.update(
             {
                 "account_id": int(account.id),
@@ -3885,7 +3960,7 @@ class PortfolioService:
                 "fee_total": round(float(snapshot_row.fee_total or 0.0), 6),
                 "tax_total": round(float(snapshot_row.tax_total or 0.0), 6),
                 "fx_stale": bool(snapshot_row.fx_stale),
-                "positions": positions,
+                "positions": resolved_positions,
             }
         )
         return public_payload

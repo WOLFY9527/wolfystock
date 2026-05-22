@@ -97,6 +97,12 @@ export interface PortfolioPositionItem {
   avgCost: number;
   totalCost: number;
   lastPrice: number;
+  priceSource?: string | null;
+  priceSourceLabel?: string | null;
+  priceAsOf?: string | null;
+  isPriceFallback?: boolean | null;
+  priceFallbackReason?: string | null;
+  valuationConfidence?: number | null;
   marketValueBase: number;
   unrealizedPnlBase: number;
   valuationCurrency: string;
