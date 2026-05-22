@@ -46,6 +46,13 @@ export interface MarketDataMeta {
   sourceAuthorityReason?: string | null;
   sourceAuthorityRouteRejected?: boolean;
   routeRejectedReasonCodes?: string[];
+  reasonCodes?: string[];
+  breadthClaimType?: string | null;
+  officialExchangePublishedBreadth?: boolean;
+  fulfilledMetrics?: string[];
+  missingMetrics?: string[];
+  metricCoverageRatio?: number | null;
+  broadMarketClaimAllowed?: boolean;
   officialSeriesId?: string | null;
   officialObservationDate?: string | null;
   officialAsOf?: string | null;

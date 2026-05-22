@@ -359,6 +359,78 @@ const usBreadthPanel = () => denseQuotePanel('UsBreadthCard', [
   quoteItem('IWM_SPY', 'IWM vs SPY', -0.8, -0.8),
 ], 'yahoo');
 
+const polygonUsBreadthPanel = () => ({
+  ...denseQuotePanel('UsBreadthCard', [
+    {
+      ...quoteItem('ADVANCERS', '上涨家数', 2874, 0, 'polygon'),
+      unit: '家',
+      sourceLabel: 'Polygon grouped daily',
+      sourceType: 'authorized_computed',
+      sourceTier: 'authorized_market_data',
+      trustLevel: 'score_grade_partial',
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+    },
+    {
+      ...quoteItem('DECLINERS', '下跌家数', 1986, 0, 'polygon'),
+      unit: '家',
+      sourceLabel: 'Polygon grouped daily',
+      sourceType: 'authorized_computed',
+      sourceTier: 'authorized_market_data',
+      trustLevel: 'score_grade_partial',
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+    },
+    {
+      ...quoteItem('UNCHANGED', '平盘家数', 214, 0, 'polygon'),
+      unit: '家',
+      sourceLabel: 'Polygon grouped daily',
+      sourceType: 'authorized_computed',
+      sourceTier: 'authorized_market_data',
+      trustLevel: 'score_grade_partial',
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+    },
+    {
+      ...quoteItem('ADVANCE_DECLINE_RATIO', '上涨/下跌比', 1.45, 0, 'polygon'),
+      unit: '',
+      sourceLabel: 'Polygon grouped daily',
+      sourceType: 'authorized_computed',
+      sourceTier: 'authorized_market_data',
+      trustLevel: 'score_grade_partial',
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+    },
+  ], 'polygon'),
+  source: 'computed_from_authorized_polygon_grouped_daily',
+  sourceLabel: 'Polygon grouped daily',
+  sourceType: 'authorized_computed',
+  freshness: 'delayed' as const,
+  isFallback: false,
+  isPartial: true,
+  breadthClaimType: 'computed_from_authorized_eod_grouped_daily',
+  officialExchangePublishedBreadth: false,
+  fulfilledMetrics: ['ADVANCERS', 'DECLINERS', 'UNCHANGED', 'ADVANCE_DECLINE_RATIO'],
+  missingMetrics: ['NEW_HIGHS', 'NEW_LOWS', 'HIGH_LOW_RATIO'],
+  metricCoverageRatio: 4 / 7,
+  sourceAuthorityAllowed: true,
+  scoreContributionAllowed: true,
+  broadMarketClaimAllowed: true,
+  reasonCodes: ['polygon_high_low_history_unavailable'],
+  providerHealth: {
+    provider: 'polygon',
+    status: 'partial' as const,
+    asOf: '2026-05-21',
+    updatedAt: '2026-05-22T04:00:00Z',
+    latencyMs: 120,
+    isFallback: false,
+    isStale: false,
+    isRefreshing: false,
+    sourceLabel: 'Polygon grouped daily',
+  },
+  warning: 'High/low breadth unavailable.',
+});
+
 const usBreadthUnavailablePanel = () => ({
   ...snapshotPanel('UsBreadthCard', 'SECTOR_PROXY_UNAVAILABLE', '数据暂不可用'),
   source: 'unavailable',
@@ -1964,6 +2036,7 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     const exportButton = await screen.findByTestId('market-overview-export-summary');
+    await waitFor(() => expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent('风险偏暖'));
     fireEvent.click(exportButton);
 
     await waitFor(() => expect(writeTextMock).toHaveBeenCalledTimes(1));
@@ -2694,7 +2767,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it('renders US breadth and sector health from the depth endpoint', async () => {
-    vi.mocked(marketApi.getUsBreadth).mockResolvedValueOnce(usBreadthPanel());
+    vi.mocked(marketApi.getUsBreadth).mockResolvedValue(usBreadthPanel());
 
     render(<MarketOverviewPage />);
 
@@ -2703,11 +2776,35 @@ describe('MarketOverviewPage', () => {
     const breadthCard = await screen.findByTestId('market-overview-card-usBreadth');
     expect(within(breadthCard).getByRole('heading', { name: /美股宽度|宽度代理/i })).toBeInTheDocument();
     expect(breadthCard).toHaveTextContent(/行业 ETF 代理/);
-    expect(breadthCard).toHaveTextContent(/Sectors Up|Strongest XLK|RSP vs SPY/);
+    await waitFor(() => expect(breadthCard).toHaveTextContent(/Sectors Up|Strongest XLK|RSP vs SPY/));
     expect(breadthCard).not.toHaveTextContent(/未接入/);
 
     const sectorCard = screen.getByTestId('market-overview-card-usSectorRotation');
     await waitFor(() => expect(sectorCard).toHaveTextContent(/Sector Health|Strongest XLK|Weakest XLE/));
+  });
+
+  it('renders Polygon EOD computed US breadth with visible partial high-low gaps', async () => {
+    vi.mocked(marketApi.getUsBreadth).mockResolvedValue(polygonUsBreadthPanel());
+
+    render(<MarketOverviewPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '美股' }));
+
+    const breadthCard = await screen.findByTestId('market-overview-card-usBreadth');
+    await waitFor(() => expect(breadthCard).toHaveTextContent(/Polygon EOD 计算宽度/));
+
+    expect(breadthCard).toHaveTextContent(/AD 指标可用/);
+    expect(breadthCard).toHaveTextContent(/高低点宽度缺失/);
+    expect(breadthCard).toHaveTextContent(/非 NYSE\/Nasdaq 官方发布宽度/);
+    expect(breadthCard).toHaveTextContent(/上涨家数|ADVANCERS/);
+    expect(breadthCard).toHaveTextContent(/下跌家数|DECLINERS/);
+    expect(breadthCard).toHaveTextContent(/平盘家数|UNCHANGED/);
+    expect(breadthCard).toHaveTextContent(/上涨\/下跌比|ADVANCE_DECLINE_RATIO/);
+    expect(breadthCard).toHaveTextContent(/NEW_HIGHS/);
+    expect(breadthCard).toHaveTextContent(/NEW_LOWS/);
+    expect(breadthCard).toHaveTextContent(/HIGH_LOW_RATIO/);
+    expect(breadthCard).not.toHaveTextContent(/行业 ETF 代理|RSP vs SPY|IWM vs SPY/);
+    expect(breadthCard.textContent || '').not.toMatch(/买入|卖出|加仓|减仓|buy|sell|add|reduce/i);
   });
 
   it('keeps US breadth unavailable state compact and honest', async () => {
@@ -3126,6 +3223,21 @@ describe('MarketOverviewPage', () => {
   });
 
   it('refreshes only the requested panel when a card refresh icon is clicked', async () => {
+    vi.mocked(marketApi.getFutures).mockResolvedValue({
+      ...futuresPayload(),
+      source: 'computed',
+      sourceLabel: '系统计算',
+      freshness: 'cached' as const,
+      isFallback: false,
+      items: futuresPayload().items.map((item) => ({
+        ...item,
+        source: 'computed',
+        sourceLabel: '系统计算',
+        freshness: 'cached' as const,
+        isFallback: false,
+      })),
+    });
+
     render(<MarketOverviewPage />);
 
     await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));

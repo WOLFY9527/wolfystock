@@ -26,12 +26,31 @@ type MarketSnapshotItem = {
   freshness?: MarketDataMeta['freshness'];
   isFallback?: boolean;
   isStale?: boolean;
+  isPartial?: boolean;
+  isUnavailable?: boolean;
   isRefreshing?: boolean;
   isFromSnapshot?: boolean;
   lastSuccessfulAt?: string;
   refreshError?: string | null;
   lastError?: string | null;
   delayMinutes?: number;
+  sourceTier?: string | null;
+  trustLevel?: string | null;
+  observationOnly?: boolean;
+  sourceAuthorityAllowed?: boolean;
+  scoreContributionAllowed?: boolean;
+  sourceAuthorityReason?: string | null;
+  sourceAuthorityRouteRejected?: boolean;
+  routeRejectedReasonCodes?: string[];
+  reasonCodes?: string[];
+  breadthClaimType?: string | null;
+  officialExchangePublishedBreadth?: boolean;
+  fulfilledMetrics?: string[];
+  missingMetrics?: string[];
+  metricCoverageRatio?: number | null;
+  broadMarketClaimAllowed?: boolean;
+  degradationReason?: string | null;
+  degradationReasons?: string[];
   warning?: string | null;
   market?: string | null;
   explanation?: string | null;
@@ -53,12 +72,31 @@ type MarketSnapshotPayload = {
   freshness?: MarketDataMeta['freshness'];
   isFallback?: boolean;
   isStale?: boolean;
+  isPartial?: boolean;
+  isUnavailable?: boolean;
   isRefreshing?: boolean;
   isFromSnapshot?: boolean;
   lastSuccessfulAt?: string;
   refreshError?: string | null;
   lastError?: string | null;
   delayMinutes?: number;
+  sourceTier?: string | null;
+  trustLevel?: string | null;
+  observationOnly?: boolean;
+  sourceAuthorityAllowed?: boolean;
+  scoreContributionAllowed?: boolean;
+  sourceAuthorityReason?: string | null;
+  sourceAuthorityRouteRejected?: boolean;
+  routeRejectedReasonCodes?: string[];
+  reasonCodes?: string[];
+  breadthClaimType?: string | null;
+  officialExchangePublishedBreadth?: boolean;
+  fulfilledMetrics?: string[];
+  missingMetrics?: string[];
+  metricCoverageRatio?: number | null;
+  broadMarketClaimAllowed?: boolean;
+  degradationReason?: string | null;
+  degradationReasons?: string[];
   warning?: string | null;
   logSessionId?: string | null;
 };
@@ -89,12 +127,31 @@ function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
     freshness: item.freshness,
     isFallback: item.isFallback,
     isStale: item.isStale,
+    isPartial: item.isPartial,
+    isUnavailable: item.isUnavailable,
     isRefreshing: item.isRefreshing,
     isFromSnapshot: item.isFromSnapshot,
     lastSuccessfulAt: item.lastSuccessfulAt,
     refreshError: item.refreshError,
     lastError: item.lastError,
     delayMinutes: item.delayMinutes,
+    sourceTier: item.sourceTier || undefined,
+    trustLevel: item.trustLevel || undefined,
+    observationOnly: item.observationOnly,
+    sourceAuthorityAllowed: item.sourceAuthorityAllowed,
+    scoreContributionAllowed: item.scoreContributionAllowed,
+    sourceAuthorityReason: item.sourceAuthorityReason,
+    sourceAuthorityRouteRejected: item.sourceAuthorityRouteRejected,
+    routeRejectedReasonCodes: item.routeRejectedReasonCodes,
+    reasonCodes: item.reasonCodes,
+    breadthClaimType: item.breadthClaimType,
+    officialExchangePublishedBreadth: item.officialExchangePublishedBreadth,
+    fulfilledMetrics: item.fulfilledMetrics,
+    missingMetrics: item.missingMetrics,
+    metricCoverageRatio: item.metricCoverageRatio,
+    broadMarketClaimAllowed: item.broadMarketClaimAllowed,
+    degradationReason: item.degradationReason,
+    degradationReasons: item.degradationReasons,
     warning: item.warning,
     hoverDetails,
   };
@@ -117,12 +174,31 @@ function normalizeMarketSnapshotPayload(rawPayload: Record<string, unknown>, pan
     freshness: payload.freshness,
     isFallback: payload.isFallback ?? payload.fallbackUsed,
     isStale: payload.isStale,
+    isPartial: payload.isPartial,
+    isUnavailable: payload.isUnavailable,
     isRefreshing: payload.isRefreshing,
     isFromSnapshot: payload.isFromSnapshot,
     lastSuccessfulAt: payload.lastSuccessfulAt,
     refreshError: payload.refreshError,
     lastError: payload.lastError,
     delayMinutes: payload.delayMinutes,
+    sourceTier: payload.sourceTier || undefined,
+    trustLevel: payload.trustLevel || undefined,
+    observationOnly: payload.observationOnly,
+    sourceAuthorityAllowed: payload.sourceAuthorityAllowed,
+    scoreContributionAllowed: payload.scoreContributionAllowed,
+    sourceAuthorityReason: payload.sourceAuthorityReason,
+    sourceAuthorityRouteRejected: payload.sourceAuthorityRouteRejected,
+    routeRejectedReasonCodes: payload.routeRejectedReasonCodes,
+    reasonCodes: payload.reasonCodes,
+    breadthClaimType: payload.breadthClaimType,
+    officialExchangePublishedBreadth: payload.officialExchangePublishedBreadth,
+    fulfilledMetrics: payload.fulfilledMetrics,
+    missingMetrics: payload.missingMetrics,
+    metricCoverageRatio: payload.metricCoverageRatio,
+    broadMarketClaimAllowed: payload.broadMarketClaimAllowed,
+    degradationReason: payload.degradationReason,
+    degradationReasons: payload.degradationReasons,
     warning: payload.warning,
     items: Array.isArray(payload.items) ? payload.items.map(normalizeItem) : [],
   };

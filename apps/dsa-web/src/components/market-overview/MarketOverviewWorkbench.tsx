@@ -226,6 +226,15 @@ const DENSE_QUOTE_MODULES = new Set<MarketOverviewModuleId>([
   'cryptoRiskContext',
 ]);
 
+const US_BREADTH_AD_SYMBOLS = ['ADVANCERS', 'DECLINERS', 'UNCHANGED', 'ADVANCE_DECLINE_RATIO'];
+const US_BREADTH_HIGH_LOW_SYMBOLS = ['NEW_HIGHS', 'NEW_LOWS', 'HIGH_LOW_RATIO'];
+const US_BREADTH_PROXY_SYMBOLS = ['SECTORS_UP', 'SECTORS_DOWN', 'STRONGEST_SECTOR', 'WEAKEST_SECTOR', 'RSP_SPY', 'IWM_SPY', 'QQQ_SPY', 'SECTOR_PROXY_UNAVAILABLE'];
+const US_BREADTH_HIGH_LOW_LABELS: Record<string, string> = {
+  NEW_HIGHS: 'NEW_HIGHS',
+  NEW_LOWS: 'NEW_LOWS',
+  HIGH_LOW_RATIO: 'HIGH_LOW_RATIO',
+};
+
 function buildCategoryLayout(tab: MarketOverviewTab): MarketOverviewLayoutRow[] {
   const config = MARKET_OVERVIEW_TAB_CONFIG[tab];
   const rows: MarketOverviewLayoutRow[] = [];
@@ -389,6 +398,7 @@ function buildFilteredPanel(
   const items = sourcePanel?.items.filter((item) => symbolSet.has(item.symbol)) || [];
   const updatedAt = sourcePanel?.updatedAt || new Date(0).toISOString();
   return {
+    ...(sourcePanel || {}),
     panelName,
     lastRefreshAt: sourcePanel?.lastRefreshAt || updatedAt,
     status: sourcePanel?.status || 'success',
@@ -401,6 +411,95 @@ function buildFilteredPanel(
     isStale: sourcePanel?.isStale,
     warning: sourcePanel?.warning,
     items: items.length > 0 ? items : fallbackItems,
+  };
+}
+
+function isPolygonComputedUsBreadth(panel?: MarketOverviewPanel): boolean {
+  const sourceText = [
+    panel?.source,
+    panel?.sourceLabel,
+    panel?.sourceType,
+    panel?.breadthClaimType,
+  ].filter(Boolean).join(' ').toLowerCase();
+  const itemSymbols = new Set((panel?.items || []).map((item) => item.symbol));
+  const fulfilledMetrics = new Set(panel?.fulfilledMetrics || []);
+  const hasAdMetrics = US_BREADTH_AD_SYMBOLS.some((symbol) => itemSymbols.has(symbol) || fulfilledMetrics.has(symbol));
+  return hasAdMetrics && sourceText.includes('polygon');
+}
+
+function missingUsBreadthMetricItem(symbol: string, panel?: MarketOverviewPanel): MarketOverviewItem {
+  const message = '高低点宽度缺失';
+  return {
+    ...unavailableMarketItem(symbol, US_BREADTH_HIGH_LOW_LABELS[symbol] || symbol, message),
+    source: panel?.source || 'computed_from_authorized_polygon_grouped_daily',
+    sourceLabel: panel?.sourceLabel || 'Polygon grouped daily',
+    sourceType: panel?.sourceType,
+    sourceTier: panel?.sourceTier,
+    trustLevel: panel?.trustLevel,
+    asOf: panel?.asOf,
+    updatedAt: panel?.updatedAt,
+    providerHealth: panel?.providerHealth,
+    isFallback: false,
+    isPartial: true,
+    isUnavailable: true,
+    sourceAuthorityAllowed: false,
+    scoreContributionAllowed: false,
+    sourceAuthorityReason: panel?.sourceAuthorityReason || 'polygon_high_low_history_unavailable',
+    reasonCodes: panel?.reasonCodes,
+    warning: message,
+    hoverDetails: [message, '未伪造 NEW_HIGHS / NEW_LOWS / HIGH_LOW_RATIO'],
+  };
+}
+
+function buildUsBreadthPanel(sourcePanel: MarketOverviewPanel | undefined): MarketOverviewPanel {
+  if (!isPolygonComputedUsBreadth(sourcePanel)) {
+    return buildFilteredPanel(
+      sourcePanel,
+      'UsBreadthProxyModule',
+      US_BREADTH_PROXY_SYMBOLS,
+    );
+  }
+
+  const panel = buildFilteredPanel(
+    sourcePanel,
+    'UsBreadthPolygonModule',
+    [...US_BREADTH_AD_SYMBOLS, ...US_BREADTH_HIGH_LOW_SYMBOLS],
+  );
+  const existingSymbols = new Set(panel.items.map((item) => item.symbol));
+  const missingMetricSymbols = Array.from(new Set(sourcePanel?.missingMetrics || []))
+    .filter((symbol) => US_BREADTH_HIGH_LOW_SYMBOLS.includes(symbol) && !existingSymbols.has(symbol));
+
+  return {
+    ...panel,
+    sourceLabel: panel.sourceLabel || 'Polygon grouped daily',
+    isPartial: panel.isPartial ?? missingMetricSymbols.length > 0,
+    items: [
+      ...panel.items,
+      ...missingMetricSymbols.map((symbol) => missingUsBreadthMetricItem(symbol, sourcePanel)),
+    ],
+  };
+}
+
+function buildUsBreadthDisclosure(panel?: MarketOverviewPanel): {
+  eyebrow: string;
+  description: string;
+  sourceLabel: string;
+  notice: string;
+} {
+  if (isPolygonComputedUsBreadth(panel)) {
+    const highLowMissing = (panel?.missingMetrics || []).some((symbol) => US_BREADTH_HIGH_LOW_SYMBOLS.includes(symbol));
+    return {
+      eyebrow: 'Polygon EOD',
+      description: `Polygon EOD 计算宽度 · AD 指标可用${highLowMissing ? ' · 高低点宽度缺失' : ''}`,
+      sourceLabel: 'Polygon EOD 计算宽度',
+      notice: '非 NYSE/Nasdaq 官方发布宽度',
+    };
+  }
+  return {
+    eyebrow: '宽度代理',
+    description: '行业 ETF 代理（代表性 / 非评分）',
+    sourceLabel: '行业 ETF 代理（非评分）',
+    notice: '代表性行业 ETF 代理，非完整市场宽度，非评分',
   };
 }
 
@@ -1575,6 +1674,7 @@ const ContextMetricModuleCard: React.FC<{
   description: string;
   panel: MarketOverviewPanel;
   sourceLabel: string;
+  notice?: string;
   refreshing?: boolean;
   onRefresh?: () => void;
 }> = ({
@@ -1584,6 +1684,7 @@ const ContextMetricModuleCard: React.FC<{
   description,
   panel,
   sourceLabel,
+  notice,
   refreshing = false,
   onRefresh,
 }) => {
@@ -1603,6 +1704,7 @@ const ContextMetricModuleCard: React.FC<{
             <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{eyebrow}</p>
             <h2 className="mt-1 truncate text-sm font-semibold text-white/84">{title}</h2>
             <p className="mt-1 line-clamp-1 text-[11px] leading-4 text-white/42">{description}</p>
+            {notice ? <p className="mt-1 truncate text-[10px] leading-4 text-white/38">{notice}</p> : null}
           </div>
           {onRefresh ? (
             <MarketOverviewRefreshButton
@@ -1727,6 +1829,9 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
       </div>
     </div>
   );
+
+  const usBreadthModulePanel = buildUsBreadthPanel(panels.usBreadth);
+  const usBreadthDisclosure = buildUsBreadthDisclosure(panels.usBreadth);
 
   const moduleNodes: Record<MarketOverviewModuleId, React.ReactNode> = {
     globalIndices: globalIndicesCard,
@@ -1876,14 +1981,11 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
       <ContextMetricModuleCard
         moduleId="usBreadth"
         title="美股宽度"
-        eyebrow="宽度代理"
-        description="行业 ETF 代理 / RSP vs SPY / IWM vs SPY"
-        panel={buildFilteredPanel(
-          panels.usBreadth,
-          'UsBreadthProxyModule',
-          ['SECTORS_UP', 'SECTORS_DOWN', 'STRONGEST_SECTOR', 'WEAKEST_SECTOR', 'RSP_SPY', 'IWM_SPY', 'QQQ_SPY', 'SECTOR_PROXY_UNAVAILABLE'],
-        )}
-        sourceLabel="行业 ETF 代理"
+        eyebrow={usBreadthDisclosure.eyebrow}
+        description={usBreadthDisclosure.description}
+        notice={usBreadthDisclosure.notice}
+        panel={usBreadthModulePanel}
+        sourceLabel={usBreadthDisclosure.sourceLabel}
         refreshing={refreshingPanel === 'usBreadth'}
         onRefresh={() => {
           onRefreshPanel('usBreadth');

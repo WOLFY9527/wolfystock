@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import apiClient from '../index';
 import * as marketModule from '../market';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('market API path join hygiene', () => {
   it('normalizes market endpoint joins without introducing double slashes', () => {
@@ -124,5 +129,93 @@ describe('market temperature evidence normalization', () => {
     expect(semantics?.claimBoundaries).toEqual([
       expect.objectContaining({ claim: 'direct_trade_action', allowed: false }),
     ]);
+  });
+});
+
+describe('market snapshot normalization', () => {
+  it('preserves US breadth authority and partial coverage metadata', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        source: 'computed_from_authorized_polygon_grouped_daily',
+        source_label: 'Polygon grouped daily',
+        source_type: 'authorized_computed',
+        freshness: 'delayed',
+        is_partial: true,
+        breadth_claim_type: 'computed_from_authorized_eod_grouped_daily',
+        official_exchange_published_breadth: false,
+        fulfilled_metrics: ['ADVANCERS', 'DECLINERS', 'UNCHANGED', 'ADVANCE_DECLINE_RATIO'],
+        missing_metrics: ['NEW_HIGHS', 'NEW_LOWS', 'HIGH_LOW_RATIO'],
+        metric_coverage_ratio: 4 / 7,
+        source_authority_allowed: true,
+        score_contribution_allowed: true,
+        broad_market_claim_allowed: true,
+        source_authority_reason: 'authorized_polygon_eod_grouped_daily',
+        reason_codes: ['polygon_high_low_history_unavailable'],
+        route_rejected_reason_codes: ['official_exchange_published_breadth_unavailable'],
+        provider_health: {
+          provider: 'polygon',
+          status: 'partial',
+          is_fallback: false,
+          is_stale: false,
+          is_refreshing: false,
+          source_label: 'Polygon grouped daily',
+        },
+        warning: 'High/low breadth unavailable.',
+        updated_at: '2026-05-22T04:00:00Z',
+        as_of: '2026-05-21',
+        items: [
+          {
+            symbol: 'ADVANCERS',
+            label: 'Advancers',
+            value: 2874,
+            source_authority_allowed: true,
+            score_contribution_allowed: true,
+            fulfilled_metrics: ['ADVANCERS'],
+            missing_metrics: ['NEW_HIGHS', 'NEW_LOWS', 'HIGH_LOW_RATIO'],
+            reason_codes: ['polygon_high_low_history_unavailable'],
+            provider_health: {
+              provider: 'polygon',
+              status: 'partial',
+              is_fallback: false,
+              is_stale: false,
+              is_refreshing: false,
+              source_label: 'Polygon grouped daily',
+            },
+          },
+        ],
+      },
+    });
+
+    const panel = await marketModule.marketApi.getUsBreadth();
+
+    expect(panel).toMatchObject({
+      source: 'computed_from_authorized_polygon_grouped_daily',
+      sourceLabel: 'Polygon grouped daily',
+      sourceType: 'authorized_computed',
+      freshness: 'delayed',
+      isPartial: true,
+      breadthClaimType: 'computed_from_authorized_eod_grouped_daily',
+      officialExchangePublishedBreadth: false,
+      fulfilledMetrics: ['ADVANCERS', 'DECLINERS', 'UNCHANGED', 'ADVANCE_DECLINE_RATIO'],
+      missingMetrics: ['NEW_HIGHS', 'NEW_LOWS', 'HIGH_LOW_RATIO'],
+      metricCoverageRatio: 4 / 7,
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+      broadMarketClaimAllowed: true,
+      sourceAuthorityReason: 'authorized_polygon_eod_grouped_daily',
+      reasonCodes: ['polygon_high_low_history_unavailable'],
+      routeRejectedReasonCodes: ['official_exchange_published_breadth_unavailable'],
+      providerHealth: expect.objectContaining({ provider: 'polygon', status: 'partial' }),
+      warning: 'High/low breadth unavailable.',
+    });
+    expect(panel.items[0]).toMatchObject({
+      symbol: 'ADVANCERS',
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+      fulfilledMetrics: ['ADVANCERS'],
+      missingMetrics: ['NEW_HIGHS', 'NEW_LOWS', 'HIGH_LOW_RATIO'],
+      reasonCodes: ['polygon_high_low_history_unavailable'],
+      providerHealth: expect.objectContaining({ provider: 'polygon', status: 'partial' }),
+    });
   });
 });
