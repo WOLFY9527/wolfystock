@@ -142,6 +142,20 @@ type Bucket = {
   fallback: string;
 };
 
+type CapitalRotationSummaryCard = {
+  key: string;
+  label: string;
+  value: string;
+  detail: string;
+  variant: 'success' | 'info' | 'caution' | 'neutral' | 'danger';
+};
+
+type CapitalRotationSummaryView = {
+  modeLabel: string;
+  modeDetail: string;
+  cards: CapitalRotationSummaryCard[];
+};
+
 type DataStateFields = {
   freshness?: MarketRotationTheme['freshness'];
   isFallback?: boolean;
@@ -679,6 +693,103 @@ function rotationGuidance(payload: MarketRotationRadarResponse): {
     variant: 'info',
   };
 }
+
+function themeNamesSummary(themes: MarketRotationTheme[], fallback: string): string {
+  return themes.length ? themes.map((theme) => theme.name).join(' / ') : fallback;
+}
+
+function deriveCapitalRotationSummary(payload: MarketRotationRadarResponse): CapitalRotationSummaryView {
+  const themes = payload.themes || [];
+  const libraryMode = isRotationLibraryMode(payload);
+  const confirmedLeaders = libraryMode ? [] : deriveTopThemes(themes.filter((theme) => (
+    !isTaxonomyOnlyTheme(theme)
+    && resolveSignalType(theme) === 'real_flow'
+    && theme.flowLanguageAllowed === true
+    && resolveEvidenceQuality(theme) === 'score_grade_real_flow'
+    && (theme.stage === 'confirmed_rotation' || theme.stage === 'extended_watch')
+  )), 3);
+  const candidateThemes = libraryMode ? [] : deriveTopThemes(themes.filter((theme) => (
+    !isTaxonomyOnlyTheme(theme)
+    && !confirmedLeaders.some((leader) => leader.id === theme.id)
+    && (theme.stage === 'confirmed_rotation' || theme.stage === 'early_watch' || theme.stage === 'extended_watch')
+    && (resolveSignalType(theme) === 'relative_strength' || resolveSignalType(theme) === 'momentum_proxy')
+    && resolveEvidenceQuality(theme) !== 'insufficient'
+  )), 3);
+  const coolingThemes = libraryMode ? [] : deriveWeakeningThemes(themes).filter((theme) => !isTaxonomyOnlyTheme(theme)).slice(0, 3);
+  const taxonomyThemes = themes.filter(isTaxonomyOnlyTheme).slice(0, 3);
+  const modeLabel = libraryMode
+    ? '当前不是实时轮动信号'
+    : confirmedLeaders.length
+      ? '真实流向确认'
+      : '仅候选观察';
+  const modeDetail = libraryMode
+    ? '当前仅展示 taxonomy-only library，不能视为确认资本流向。'
+    : confirmedLeaders.length
+      ? '已出现真实流向级证据，仍保持观察边界。'
+      : '当前主题仅进入候选观察，未确认真实资本流向。';
+
+  return {
+    modeLabel,
+    modeDetail,
+    cards: [
+      {
+        key: 'confirmed',
+        label: '确认主线',
+        value: themeNamesSummary(confirmedLeaders, '暂无真实流向确认'),
+        detail: confirmedLeaders.length ? 'Confirmed mainline' : '没有把候选或代理证据升级为确认主线。',
+        variant: confirmedLeaders.length ? 'success' : 'caution',
+      },
+      {
+        key: 'candidate',
+        label: '候选观察',
+        value: themeNamesSummary(candidateThemes, '暂无候选主题'),
+        detail: candidateThemes.length ? 'Candidate watchlist，等待 flow / breadth confirmation。' : '当前没有可排序候选。',
+        variant: candidateThemes.length ? 'info' : 'neutral',
+      },
+      {
+        key: 'cooling',
+        label: '降温 / 走弱',
+        value: themeNamesSummary(coolingThemes, '暂无降温主题'),
+        detail: coolingThemes.length ? 'Cooling or weak themes，继续作为反证观察。' : '未见明显退潮列表。',
+        variant: coolingThemes.length ? 'caution' : 'neutral',
+      },
+      {
+        key: 'taxonomy',
+        label: '分类库',
+        value: themeNamesSummary(taxonomyThemes, '暂无 taxonomy-only 条目'),
+        detail: taxonomyThemes.length ? 'Taxonomy-only library，不是确认方向。' : '当前不是主题库模式。',
+        variant: taxonomyThemes.length ? 'caution' : 'neutral',
+      },
+    ],
+  };
+}
+
+const CapitalRotationSummaryPanel: React.FC<{ view: CapitalRotationSummaryView }> = ({ view }) => (
+  <TerminalPanel data-testid="rotation-capital-summary" className="relative overflow-hidden">
+    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-cyan-400/0 via-cyan-200/40 to-sky-400/0" aria-hidden="true" />
+    <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="min-w-0">
+        <p className="text-[10px] font-medium tracking-[0.24em] text-white/38">Capital Rotation Summary</p>
+        <h2 className="mt-2 text-base font-semibold leading-6 text-white/90 md:text-lg">{view.modeLabel}</h2>
+        <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">{view.modeDetail}</p>
+      </div>
+    </div>
+    <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-4">
+      {view.cards.map((card) => (
+        <div key={card.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+          <div className="flex min-w-0 items-start justify-between gap-2">
+            <p className="text-[11px] font-medium text-white/48">{card.label}</p>
+            <TerminalChip variant={card.variant} className="px-1.5 py-0.5 text-[10px]">
+              {card.key === 'taxonomy' ? 'library' : card.key}
+            </TerminalChip>
+          </div>
+          <p className="mt-2 break-words text-sm font-semibold leading-5 text-white/84">{card.value}</p>
+          <p className="mt-2 text-[11px] leading-5 text-white/52">{card.detail}</p>
+        </div>
+      ))}
+    </div>
+  </TerminalPanel>
+);
 
 const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> = ({ payload }) => {
   const guidance = rotationGuidance(payload);
@@ -1444,6 +1555,10 @@ const MarketRotationRadarPage: React.FC = () => {
   );
   const pageLane = useMemo(() => summarizeLane(payload?.themes || []), [payload?.themes]);
   const libraryMode = useMemo(() => (payload ? isRotationLibraryMode(payload) : false), [payload]);
+  const capitalRotationSummary = useMemo(
+    () => (payload ? deriveCapitalRotationSummary(payload) : null),
+    [payload],
+  );
 
   return (
     <div
@@ -1476,6 +1591,8 @@ const MarketRotationRadarPage: React.FC = () => {
                 <span>{sanitizeRotationText(payload.warning)}</span>
               </TerminalNotice>
             ) : null}
+
+            {capitalRotationSummary ? <CapitalRotationSummaryPanel view={capitalRotationSummary} /> : null}
 
             <CommandBar
               selectedMarket={selectedMarket}

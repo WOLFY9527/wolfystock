@@ -58,7 +58,7 @@ import { TerminalChip, TerminalGrid, TerminalPageShell, TerminalPanel } from '..
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
 import { buildOfficialMacroAuthorityDiagnosticsView } from '../common/officialMacroAuthorityDiagnosticsData';
-import { marketIntelligenceReasonLabel } from '../../utils/marketIntelligenceGuidance';
+import { buildMarketDirectionalSummary, marketIntelligenceReasonLabel } from '../../utils/marketIntelligenceGuidance';
 
 const MARKET_OVERVIEW_GRID_FALLBACK_MIN_MS = 120;
 
@@ -2257,6 +2257,17 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     panels.temperature.marketDecisionSemantics,
     language,
   );
+  const directionalSummaryView = buildMarketDirectionalSummary({
+    temperature: panels.temperature,
+    briefing: panels.briefing,
+    panels: {
+      sectorRotation: panels.sectorRotation,
+      fundsFlow: panels.fundsFlow,
+      crypto: panels.crypto,
+    },
+    decisionReliable,
+    locale: language,
+  });
   const dataStateStatuses = collectDataStateMeta(panels).map(resolveProviderStatus);
   const fallbackCount = dataQuality.counts.fallback + dataQuality.counts.mock;
   const unavailableCount = dataStateStatuses.filter((status) => status === 'partial' || status === 'unavailable' || status === 'error').length + refreshErrorCount;
@@ -2392,6 +2403,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
       <TerminalPageShell data-testid="market-overview-workbench" className="flex min-h-0 flex-1 py-5 md:py-6">
         <MarketOverviewWorkbenchTopSurface
           heading={heading}
+          directionalSummary={directionalSummaryView}
           regimeSynthesis={regimeSynthesisView}
           decisionText={marketDecision.text}
           decisionChips={marketDecision.chips}

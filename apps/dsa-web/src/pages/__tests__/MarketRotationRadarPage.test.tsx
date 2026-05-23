@@ -493,6 +493,14 @@ describe('MarketRotationRadarPage', () => {
     expect(page).toHaveTextContent('主题轮动雷达');
     expect(page.className).not.toContain('bg-[#030303]');
     expect(page.querySelector('[data-terminal-primitive="page-shell"]')).not.toBeNull();
+    expect(screen.getByTestId('rotation-capital-summary')).toHaveTextContent('Capital Rotation Summary');
+    expect(screen.getByTestId('rotation-capital-summary')).toHaveTextContent('确认主线');
+    expect(screen.getByTestId('rotation-capital-summary')).toHaveTextContent('暂无真实流向确认');
+    expect(screen.getByTestId('rotation-capital-summary')).toHaveTextContent('候选观察');
+    expect(screen.getByTestId('rotation-capital-summary')).toHaveTextContent('AI 应用');
+    expect(screen.getByTestId('rotation-capital-summary')).toHaveTextContent('分类库');
+    expect(screen.getByTestId('rotation-capital-summary')).not.toHaveTextContent('AI算力');
+    expect(screen.getByTestId('rotation-capital-summary').textContent || '').not.toMatch(forbiddenTradingActionPattern);
     expect(screen.getByTestId('rotation-radar-summary-band')).toHaveAttribute('data-terminal-primitive', 'panel');
     expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('当前状态');
     expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('当前可用 / 观察信号');
@@ -579,6 +587,16 @@ describe('MarketRotationRadarPage', () => {
     fireEvent.click(screen.getByTestId('rotation-market-tab-CN'));
 
     await waitFor(() => expect(marketRotationApi.getRotationRadar).toHaveBeenLastCalledWith('CN'));
+    const taxonomySummary = screen.getByTestId('rotation-capital-summary');
+    expect(taxonomySummary).toHaveTextContent('Capital Rotation Summary');
+    expect(taxonomySummary).toHaveTextContent('确认主线');
+    expect(taxonomySummary).toHaveTextContent('暂无真实流向确认');
+    expect(taxonomySummary).toHaveTextContent('候选观察');
+    expect(taxonomySummary).toHaveTextContent('暂无候选主题');
+    expect(taxonomySummary).toHaveTextContent('分类库');
+    expect(taxonomySummary).toHaveTextContent('AI算力');
+    expect(taxonomySummary).toHaveTextContent('当前不是实时轮动信号');
+    expect(taxonomySummary.textContent || '').not.toMatch(/rotationRadar\./);
     expect(screen.getByTestId('rotation-market-tab-CN')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('rotation-radar-leader-list')).toHaveTextContent(/暂无可展示主题|按主题分类浏览/);
     expect(within(screen.getByTestId('rotation-radar-leader-list')).queryAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(0);

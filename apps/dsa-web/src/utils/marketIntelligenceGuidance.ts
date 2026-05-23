@@ -1,4 +1,43 @@
+import type { MarketOverviewPanel } from '../api/marketOverview';
+import type { MarketBriefingResponse, MarketDecisionSemantics, MarketRegimeSynthesis, MarketTemperatureResponse } from '../api/market';
+import type { LiquidityMonitorResponse } from '../api/liquidityMonitor';
+
 export type MarketIntelligenceGuidanceLocale = 'zh' | 'en';
+
+export type DirectionSummaryVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+
+export type MarketDirectionalSummary = {
+  title: string;
+  currentLabel: string;
+  confidenceLabel: string;
+  regimePhrase: string;
+  actionFrame: string;
+  biasVariant: DirectionSummaryVariant;
+  confidenceVariant: DirectionSummaryVariant;
+  supportingTitle: string;
+  supportingDrivers: string[];
+  blockingTitle: string;
+  blockingDrivers: string[];
+  watchTitle: string;
+  watchItems: string[];
+};
+
+export type LiquidityRegimeGaugeSummary = {
+  title: string;
+  stateLabel: string;
+  degreeLabel: string;
+  trendLabel: string;
+  usableEvidenceLabel: string;
+  blockedEvidenceLabel: string;
+  implicationLines: string[];
+  stateVariant: DirectionSummaryVariant;
+};
+
+type MarketDirectionalPanels = {
+  sectorRotation?: MarketOverviewPanel;
+  fundsFlow?: MarketOverviewPanel;
+  crypto?: MarketOverviewPanel;
+};
 
 const ZH_REASON_LABELS: Record<string, string> = {
   allocation_or_suitability_guidance: '适配边界',
@@ -160,4 +199,275 @@ export function sanitizeMarketGuidanceCopy(value?: string | null, fallback = '�
     .replace(/\badd\b/gi, 'adjust')
     .replace(/\breduce\b/gi, 'adjust')
     .replace(/position[-\s]?size/gi, 'execution sizing');
+}
+
+function uniqueLimited(items: Array<string | null | undefined>, limit: number, fallback: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  items.forEach((item) => {
+    const value = String(item || '').trim();
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    result.push(value);
+  });
+  return result.length ? result.slice(0, limit) : [fallback];
+}
+
+function confidenceBand(
+  label?: string | null,
+  value?: number | null,
+): 'high' | 'medium' | 'low' | 'unavailable' {
+  if (label === 'high' || label === 'medium' || label === 'low') {
+    return label;
+  }
+  if (label === 'insufficient') {
+    return 'low';
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 'unavailable';
+  }
+  if (value >= 0.75) return 'high';
+  if (value >= 0.45) return 'medium';
+  if (value > 0) return 'low';
+  return 'unavailable';
+}
+
+function confidenceDisplay(
+  band: 'high' | 'medium' | 'low' | 'unavailable',
+  locale: MarketIntelligenceGuidanceLocale,
+): string {
+  const labels = locale === 'en'
+    ? { high: 'high', medium: 'medium', low: 'low', unavailable: 'unavailable' }
+    : { high: '高', medium: '中', low: '低', unavailable: '不可用' };
+  return labels[band];
+}
+
+function marketDirectionalPhrase(
+  bias: 'bullish' | 'bearish' | 'neutral' | 'mixed' | 'insufficient_evidence',
+  locale: MarketIntelligenceGuidanceLocale,
+): string {
+  const labels = locale === 'en'
+    ? {
+      bullish: 'bullish watch',
+      bearish: 'bearish watch',
+      neutral: 'neutral',
+      mixed: 'mixed, cautious',
+      insufficient_evidence: 'insufficient evidence',
+    }
+    : {
+      bullish: '偏多观察',
+      bearish: '偏弱观察',
+      neutral: '中性',
+      mixed: '中性偏谨慎',
+      insufficient_evidence: '证据不足',
+    };
+  return labels[bias];
+}
+
+function marketActionFrame(
+  bias: 'bullish' | 'bearish' | 'neutral' | 'mixed' | 'insufficient_evidence',
+  locale: MarketIntelligenceGuidanceLocale,
+): string {
+  if (locale === 'en') {
+    if (bias === 'insufficient_evidence') return 'No strong directional call';
+    if (bias === 'mixed') return 'Wait for confirmation';
+    return 'Observe mainlines';
+  }
+  if (bias === 'insufficient_evidence') return '不支持强方向判断';
+  if (bias === 'mixed') return '等待确认';
+  return '观察主线';
+}
+
+function localizedEvidenceLabel(value: string | null | undefined, locale: MarketIntelligenceGuidanceLocale): string {
+  const label = String(value || '').trim();
+  if (locale !== 'en') {
+    return label;
+  }
+  const labels: Record<string, string> = {
+    标普500: 'S&P 500',
+    比特币: 'Bitcoin',
+    美国10年期国债收益率: 'US 10Y',
+    美元指数: 'US Dollar Index',
+    A股宽度: 'CN breadth',
+    小盘股轮动: 'Small-cap rotation',
+    备用或代理证据偏多: 'Fallback/proxy evidence present',
+    简报置信度不足: 'Briefing confidence unavailable',
+  };
+  return labels[label] || label;
+}
+
+function evidenceQualityNumber(synthesis?: MarketRegimeSynthesis, key?: string): number | undefined {
+  const value = key ? synthesis?.evidenceQuality?.[key] : undefined;
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function deriveMarketBias(
+  temperature: MarketTemperatureResponse,
+  decisionReliable: boolean,
+  synthesis?: MarketRegimeSynthesis,
+  semantics?: MarketDecisionSemantics,
+): 'bullish' | 'bearish' | 'neutral' | 'mixed' | 'insufficient_evidence' {
+  const confidence = temperature.confidence ?? synthesis?.confidence;
+  const scoreGradeCount = semantics?.directionReadiness?.scoreGradePillars.count
+    ?? evidenceQualityNumber(synthesis, 'scoringEvidenceCount')
+    ?? 0;
+  const missingCount = semantics?.directionReadiness?.missingPillars.count
+    ?? evidenceQualityNumber(synthesis, 'dataGapCount')
+    ?? synthesis?.dataGaps.length
+    ?? 0;
+  const insufficient = Boolean(
+    !decisionReliable
+    || temperature.conclusionAllowed === false
+    || temperature.temperatureAvailable === false
+    || temperature.isReliable === false
+    || semantics?.posture === 'data_insufficient'
+    || semantics?.directionReadiness?.status === 'data_insufficient'
+    || synthesis?.primaryRegime === 'data_insufficient'
+    || confidenceBand(synthesis?.confidenceLabel, confidence) === 'low'
+    || confidenceBand(synthesis?.confidenceLabel, confidence) === 'unavailable'
+    || scoreGradeCount < 3
+  );
+  if (insufficient) {
+    return 'insufficient_evidence';
+  }
+
+  const primaryRegime = String(synthesis?.primaryRegime || '').toLowerCase();
+  const posture = String(semantics?.posture || '').toLowerCase();
+  const counterCount = synthesis?.counterEvidence.length ?? 0;
+  const driverCount = synthesis?.topDrivers.length ?? 0;
+  if (missingCount > 0 || counterCount >= Math.max(2, driverCount)) {
+    return 'mixed';
+  }
+  if (/risk_on|liquidity_expansion|goldilocks|offensive/.test(`${primaryRegime} ${posture}`)) {
+    return 'bullish';
+  }
+  if (/risk_off|stress|contraction|defensive|tight/.test(`${primaryRegime} ${posture}`)) {
+    return 'bearish';
+  }
+
+  const overallScore = temperature.scores?.overall?.value;
+  if (typeof overallScore === 'number' && Number.isFinite(overallScore)) {
+    if (overallScore >= 60) return 'bullish';
+    if (overallScore <= 40) return 'bearish';
+  }
+  return 'neutral';
+}
+
+export function buildMarketDirectionalSummary({
+  temperature,
+  briefing,
+  panels,
+  decisionReliable,
+  locale,
+}: {
+  temperature: MarketTemperatureResponse;
+  briefing: MarketBriefingResponse;
+  panels: MarketDirectionalPanels;
+  decisionReliable: boolean;
+  locale: MarketIntelligenceGuidanceLocale;
+}): MarketDirectionalSummary {
+  const synthesis = temperature.marketRegimeSynthesis;
+  const semantics = temperature.marketDecisionSemantics;
+  const bias = deriveMarketBias(temperature, decisionReliable, synthesis, semantics);
+  const confidence = confidenceBand(
+    semantics?.postureConfidence.label || synthesis?.confidenceLabel,
+    temperature.confidence ?? synthesis?.confidence,
+  );
+  const fallbackPressure = (temperature.fallbackInputCount ?? 0) + (temperature.excludedInputCount ?? 0);
+  const supportFromSynthesis = synthesis?.topDrivers.map((item) => localizedEvidenceLabel(item.label, locale)) || [];
+  const supportFromSemantics = [
+    ...(semantics?.styleTilts || []).map((item) => item.label || item.detail),
+    ...(semantics?.confirmationSignals || []).map((item) => item.label || item.detail || item.signal),
+  ].map((item) => (typeof item === 'string' ? item : ''));
+  const blockingDrivers = uniqueLimited([
+    ...(synthesis?.counterEvidence || []).map((item) => localizedEvidenceLabel(item.label || item.key, locale)),
+    ...(synthesis?.dataGaps || []).map((item) => localizedEvidenceLabel(item.label || item.key, locale)),
+    ...(semantics?.dataGaps || []).map((item) => localizedEvidenceLabel(item.label || item.key, locale)),
+    ...(semantics?.postureConfidence.capReasons || []).map((reason) => marketIntelligenceReasonLabel(reason, locale)),
+    fallbackPressure > 0 ? (locale === 'en' ? 'fallback/proxy evidence present' : '备用或代理证据偏多') : '',
+    briefing.isReliable === false || briefing.isFallback ? (locale === 'en' ? 'briefing confidence unavailable' : '简报置信度不足') : '',
+  ], 3, locale === 'en' ? 'No major blocker returned' : '暂无高亮阻塞');
+  const watchItems = uniqueLimited([
+    ...(panels.sectorRotation?.items || []).map((item) => localizedEvidenceLabel(item.label || item.symbol, locale)),
+    ...(panels.fundsFlow?.items || []).map((item) => localizedEvidenceLabel(item.label || item.symbol, locale)),
+    ...(panels.crypto?.items || []).map((item) => localizedEvidenceLabel(item.label || item.symbol, locale)),
+  ], 3, locale === 'en' ? 'Wait for confirmed themes' : '等待确认主线');
+
+  return {
+    title: 'Market Bias / Direction Summary',
+    currentLabel: locale === 'en'
+      ? `Current market: ${marketDirectionalPhrase(bias, locale)}`
+      : `当前市场：${marketDirectionalPhrase(bias, locale)}`,
+    confidenceLabel: locale === 'en'
+      ? `Evidence strength: ${confidenceDisplay(confidence, locale)}`
+      : `证据强度：${confidenceDisplay(confidence, locale)}`,
+    regimePhrase: synthesis?.primaryRegime && bias !== 'insufficient_evidence'
+      ? marketDirectionalPhrase(bias, locale)
+      : marketDirectionalPhrase(bias, locale),
+    actionFrame: marketActionFrame(bias, locale),
+    biasVariant: bias === 'bullish' ? 'success' : bias === 'bearish' ? 'danger' : bias === 'insufficient_evidence' || bias === 'mixed' ? 'caution' : 'info',
+    confidenceVariant: confidence === 'high' ? 'success' : confidence === 'medium' ? 'info' : 'caution',
+    supportingTitle: locale === 'en' ? 'Supporting drivers' : '支持驱动',
+    supportingDrivers: uniqueLimited([...supportFromSynthesis, ...supportFromSemantics], 3, locale === 'en' ? 'No score-grade driver returned' : '暂无评分级支持证据'),
+    blockingTitle: locale === 'en' ? 'Blocking / risk drivers' : '主要拖累',
+    blockingDrivers,
+    watchTitle: locale === 'en' ? 'Observable directions' : '可观察方向',
+    watchItems,
+  };
+}
+
+export function buildLiquidityRegimeGaugeSummary({
+  data,
+  synthesisPromotable,
+  usableEvidenceCount,
+  missingOrBlockedCount,
+}: {
+  data: LiquidityMonitorResponse;
+  synthesisPromotable: boolean;
+  usableEvidenceCount: number;
+  missingOrBlockedCount: number;
+}): LiquidityRegimeGaugeSummary {
+  const confidence = confidenceBand(undefined, data.score.confidence);
+  const evidenceInsufficient = !synthesisPromotable
+    || confidence === 'low'
+    || confidence === 'unavailable'
+    || usableEvidenceCount <= 0
+    || data.score.regime === 'unavailable';
+  const regime = data.score.regime;
+  const state = evidenceInsufficient
+    ? '证据不足'
+    : regime === 'abundant' || regime === 'supportive'
+      ? '宽松'
+      : regime === 'tight'
+        ? '偏紧'
+        : regime === 'stress'
+          ? '紧张'
+          : '中性';
+  const trend = evidenceInsufficient
+    ? '未知'
+    : data.liquidityImpulseSynthesis?.liquidityImpulse === 'expanding_liquidity'
+      ? '改善'
+      : data.liquidityImpulseSynthesis?.liquidityImpulse === 'contracting_liquidity'
+        ? '走弱'
+        : data.liquidityImpulseSynthesis?.liquidityImpulse === 'balanced_liquidity'
+          ? '持平'
+          : '未知';
+  const implicationLines = evidenceInsufficient
+    ? ['流动性证据不足', '仅可作为观察背景']
+    : state === '宽松'
+      ? ['流动性背景偏支持', '仍需等待价格与广度确认']
+      : state === '偏紧' || state === '紧张'
+        ? ['流动性不能作为风险增强理由', '优先观察压力是否缓和']
+        : ['流动性仅可作为观察背景', '等待确认'];
+
+  return {
+    title: 'Liquidity Regime Gauge',
+    stateLabel: `流动性状态：${state}`,
+    degreeLabel: `刻度 ${Number.isFinite(data.score.value) ? Math.round(data.score.value) : 0} / 100`,
+    trendLabel: `趋势：${trend}`,
+    usableEvidenceLabel: `可用证据 ${usableEvidenceCount}`,
+    blockedEvidenceLabel: `缺失或阻塞 ${missingOrBlockedCount}`,
+    implicationLines,
+    stateVariant: evidenceInsufficient ? 'caution' : state === '宽松' ? 'success' : state === '偏紧' || state === '紧张' ? 'danger' : 'info',
+  };
 }

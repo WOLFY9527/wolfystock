@@ -530,6 +530,59 @@ describe('LiquidityMonitorPage', () => {
     expect(summary.textContent || '').not.toMatch(/score_contribution_not_allowed|source_authority_router_rejected/);
   });
 
+  it('renders a liquidity regime gauge and keeps proxy-only evidence insufficient', async () => {
+    getLiquidityMonitor.mockResolvedValueOnce({
+      ...payload,
+      liquidityImpulseSynthesis: {
+        ...payload.liquidityImpulseSynthesis,
+        liquidityImpulse: 'expanding_liquidity',
+        impulseLabel: 'Liquidity appears to be expanding',
+        subtype: 'crypto_beta_expansion',
+        confidence: 0.33,
+        confidenceLabel: 'low',
+        dominantDrivers: [
+          {
+            key: 'liquidity_monitor:btc',
+            label: 'BTC',
+            pillar: 'crypto_liquidity_beta',
+            direction: 'supports_expansion',
+            signal: 0.44,
+            impact: 0.22,
+            source: 'coinbase',
+            proxyOnly: true,
+            scoreContributionAllowed: false,
+            observationOnly: true,
+          },
+        ],
+        counterEvidence: [],
+        dataGaps: [],
+        evidenceQuality: {
+          scoringEvidenceCount: 1,
+          scoringPillarCount: 1,
+          discountedEvidenceCount: 1,
+          dataGapCount: 0,
+          proxyOnlyScoringCount: 1,
+          realScoringEvidenceCount: 0,
+          allScoringEvidenceProxyOnly: true,
+        },
+      },
+    });
+
+    render(<LiquidityMonitorPage />);
+
+    const gauge = await screen.findByTestId('liquidity-regime-gauge');
+    expect(gauge).toHaveTextContent('Liquidity Regime Gauge');
+    expect(gauge).toHaveTextContent('流动性状态：证据不足');
+    expect(gauge).toHaveTextContent('刻度 69 / 100');
+    expect(gauge).toHaveTextContent('趋势：未知');
+    expect(gauge).toHaveTextContent('可用证据 1');
+    expect(gauge).toHaveTextContent('缺失或阻塞 2');
+    expect(gauge).toHaveTextContent('流动性证据不足');
+    expect(gauge).toHaveTextContent('仅可作为观察背景');
+    expect(gauge.textContent || '').not.toMatch(/买入|卖出|建议买入|建议卖出|buy now|sell now|recommend/i);
+    expect(gauge.textContent || '').not.toMatch(/liquidityMonitor\./);
+  });
+
   it('renders partial and unavailable indicators compactly', async () => {
     getLiquidityMonitor.mockResolvedValueOnce(payload);
 

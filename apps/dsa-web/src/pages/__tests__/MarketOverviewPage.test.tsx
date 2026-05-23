@@ -2138,11 +2138,32 @@ describe('MarketOverviewPage', () => {
     renderMarketOverviewWithLanguage('en');
 
     expect((await screen.findAllByText('S&P 500')).length).toBeGreaterThan(0);
+    expect(await screen.findByTestId('market-overview-direction-summary')).toHaveTextContent('Market Bias / Direction Summary');
+    expect(screen.getByTestId('market-overview-direction-summary')).toHaveTextContent('Current market:');
     fireEvent.click(screen.getByRole('button', { name: 'US' }));
     expect(screen.getAllByText('Nasdaq 100').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Bitcoin').length).toBeGreaterThan(0);
     expect(screen.queryByText('标普500')).not.toBeInTheDocument();
     expect(screen.queryByText('比特币')).not.toBeInTheDocument();
+  });
+
+  it('renders a top directional summary for mixed low-confidence evidence', async () => {
+    vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(limitedRealTemperaturePayload());
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
+
+    render(<MarketOverviewPage />);
+
+    const summary = await screen.findByTestId('market-overview-direction-summary');
+    expect(summary).toHaveTextContent('Market Bias / Direction Summary');
+    expect(summary).toHaveTextContent('当前市场：证据不足');
+    expect(summary).toHaveTextContent('证据强度：低');
+    expect(summary).toHaveTextContent('不支持强方向判断');
+    expect(summary).toHaveTextContent('主要拖累');
+    expect(summary).toHaveTextContent('A股宽度');
+    expect(summary).toHaveTextContent('比特币');
+    expect(summary).toHaveTextContent('可观察方向');
+    expect(summary.textContent || '').not.toMatch(/买入|卖出|加仓|减仓|仓位|建议买入|建议卖出|buy now|sell now|recommend/i);
+    expect(summary.textContent || '').not.toMatch(/marketOverviewPage\./);
   });
 
   it('downgrades unreliable market temperature and briefing copy', async () => {

@@ -33,7 +33,7 @@ import { OfficialMacroAuthorityDiagnostics } from '../components/common/Official
 import { buildOfficialMacroAuthorityDiagnosticsView } from '../components/common/officialMacroAuthorityDiagnosticsData';
 import { formatDateTime, formatPercent, formatSignedNumber } from '../utils/format';
 import { cn } from '../utils/cn';
-import { sanitizeMarketGuidanceCopy } from '../utils/marketIntelligenceGuidance';
+import { buildLiquidityRegimeGaugeSummary, sanitizeMarketGuidanceCopy, type LiquidityRegimeGaugeSummary } from '../utils/marketIntelligenceGuidance';
 
 const REGIME_LABELS: Record<LiquidityMonitorRegime, string> = {
   abundant: '充裕',
@@ -574,12 +574,13 @@ function buildLiquidityNextWatch(
 const LiquidityGuidancePanel: React.FC<{
   coverageSummary: LiquidityCoverageReadinessSummary;
   synthesisView: LiquidityImpulseSynthesisHeaderView;
+  regimeGauge: LiquidityRegimeGaugeSummary;
   indicators: LiquidityMonitorIndicator[];
   data: LiquidityMonitorResponse;
   selectedIndicator: LiquidityMonitorIndicator | null;
   officialMacroDiagnostics: ReturnType<typeof buildOfficialMacroAuthorityDiagnosticsView>;
   onSelectIndicator: (key: string) => void;
-}> = ({ coverageSummary, synthesisView, indicators, data, selectedIndicator, officialMacroDiagnostics, onSelectIndicator }) => {
+}> = ({ coverageSummary, synthesisView, regimeGauge, indicators, data, selectedIndicator, officialMacroDiagnostics, onSelectIndicator }) => {
   const scoring = summarizeIndicatorBucket(
     indicators,
     (indicator) => indicator.coverageDiagnostics?.scoreContributionAllowed === true || indicator.includedInScore,
@@ -600,6 +601,52 @@ const LiquidityGuidancePanel: React.FC<{
   return (
     <TerminalPanel data-testid="liquidity-monitor-guidance-panel" className="relative overflow-hidden">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-cyan-300/0 via-cyan-200/40 to-sky-300/0" aria-hidden="true" />
+      <section data-testid="liquidity-regime-gauge" className="min-w-0 border-b border-white/[0.06] pb-4">
+        <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-[10px] font-medium tracking-[0.24em] text-white/38">{regimeGauge.title}</p>
+            <h2 className="mt-2 text-base font-semibold leading-6 text-white/90 md:text-lg">{regimeGauge.stateLabel}</h2>
+          </div>
+          <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
+            <TerminalChip variant={regimeGauge.stateVariant}>{regimeGauge.degreeLabel}</TerminalChip>
+            <TerminalChip variant="neutral">{regimeGauge.trendLabel}</TerminalChip>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1.15fr_1fr_1fr]">
+          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+            <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+              <div
+                className={cn(
+                  'h-full rounded-full',
+                  regimeGauge.stateVariant === 'success'
+                    ? 'bg-emerald-300/70'
+                    : regimeGauge.stateVariant === 'danger'
+                      ? 'bg-rose-300/70'
+                      : regimeGauge.stateVariant === 'caution'
+                        ? 'bg-amber-300/70'
+                        : 'bg-cyan-200/70',
+                )}
+                style={{ width: `${Math.max(0, Math.min(100, Number(regimeGauge.degreeLabel.match(/\d+/)?.[0] || 0)))}%` }}
+                aria-hidden="true"
+              />
+            </div>
+            <p className="mt-2 text-[11px] leading-5 text-white/58">{regimeGauge.degreeLabel}</p>
+          </div>
+          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+            <p className="text-[11px] font-medium text-white/48">证据覆盖</p>
+            <p className="mt-2 text-sm font-semibold text-white/84">{regimeGauge.usableEvidenceLabel}</p>
+            <p className="mt-1 text-sm font-semibold text-amber-200">{regimeGauge.blockedEvidenceLabel}</p>
+          </div>
+          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+            <p className="text-[11px] font-medium text-white/48">使用边界</p>
+            <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+              {regimeGauge.implicationLines.map((line) => (
+                <TerminalChip key={line} variant={regimeGauge.stateVariant}>{line}</TerminalChip>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
       <TerminalSectionHeader
         eyebrow="流动性判断摘要"
         title={`流动性方向：${coverageSummary.directionLabel}`}
@@ -792,6 +839,12 @@ const LiquidityMonitorPage: React.FC = () => {
   const selectedIndicator = indicators.find((item) => item.key === selectedKey) || indicators[0] || null;
   const synthesisView = buildLiquidityImpulseSynthesisView(data?.liquidityImpulseSynthesis);
   const coverageSummary = buildCoverageReadinessSummary(data, synthesisView);
+  const regimeGauge = data ? buildLiquidityRegimeGaugeSummary({
+    data,
+    synthesisPromotable: synthesisView.state === 'ready',
+    usableEvidenceCount: coverageSummary.scoreGradeCount,
+    missingOrBlockedCount: coverageSummary.missingOrUnavailableCount,
+  }) : null;
   const officialMacroDiagnostics = buildOfficialMacroAuthorityDiagnosticsView(
     indicators.flatMap((indicator) => (
       indicator.evidence?.inputs?.map((input) => ({
@@ -842,12 +895,13 @@ const LiquidityMonitorPage: React.FC = () => {
         </TerminalPanel>
       ) : null}
 
-      {data ? (
+      {data && regimeGauge ? (
         <TerminalGrid>
           <div className="flex flex-col gap-4 xl:col-span-12">
             <LiquidityGuidancePanel
               coverageSummary={coverageSummary}
               synthesisView={synthesisView}
+              regimeGauge={regimeGauge}
               indicators={indicators}
               data={data}
               selectedIndicator={selectedIndicator}

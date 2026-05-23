@@ -9,7 +9,7 @@ import { cn } from '../../utils/cn';
 import { MarketRegimeSynthesisHeader, type MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
 import { OfficialMacroAuthorityDiagnostics } from '../common/OfficialMacroAuthorityDiagnostics';
 import type { OfficialMacroAuthorityDiagnosticsView } from '../common/officialMacroAuthorityDiagnosticsData';
-import { joinMarketReasonLabels, marketIntelligenceReasonLabel, marketIntelligenceReasonLabels } from '../../utils/marketIntelligenceGuidance';
+import { joinMarketReasonLabels, marketIntelligenceReasonLabel, marketIntelligenceReasonLabels, type MarketDirectionalSummary } from '../../utils/marketIntelligenceGuidance';
 
 export type MarketOverviewDecisionChipView = {
   label: string;
@@ -115,6 +115,7 @@ export type MarketOverviewDecisionSemanticsView = {
 
 type MarketOverviewWorkbenchTopSurfaceProps = {
   heading: React.ReactNode;
+  directionalSummary: MarketDirectionalSummary;
   regimeSynthesis: MarketRegimeSynthesisHeaderView;
   decisionText: string;
   decisionChips: MarketOverviewDecisionChipView[];
@@ -131,6 +132,46 @@ type MarketOverviewWorkbenchTopSurfaceProps = {
   onExportSummary: () => void;
   heroAnchors: MarketOverviewHeroAnchorView[];
 };
+
+const MarketOverviewDirectionSummary: React.FC<{ summary: MarketDirectionalSummary }> = ({ summary }) => (
+  <section
+    data-testid="market-overview-direction-summary"
+    className="relative overflow-hidden border-t border-[color:var(--wolfy-divider)] bg-white/[0.022] px-3 py-3 md:px-4"
+  >
+    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-cyan-400/0 via-cyan-200/38 to-sky-400/0" aria-hidden="true" />
+    <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="min-w-0">
+        <p className="text-[10px] font-medium tracking-[0.24em] text-white/38">{summary.title}</p>
+        <h2 className="mt-2 text-base font-semibold leading-6 text-white/92 md:text-lg">
+          {summary.currentLabel}
+        </h2>
+        <div className="mt-2 flex min-w-0 flex-wrap gap-2">
+          <TerminalChip variant={summary.biasVariant}>{summary.regimePhrase}</TerminalChip>
+          <TerminalChip variant={summary.confidenceVariant}>{summary.confidenceLabel}</TerminalChip>
+          <TerminalChip variant={summary.biasVariant}>{summary.actionFrame}</TerminalChip>
+        </div>
+      </div>
+    </div>
+    <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-3">
+      {[
+        { key: 'supporting', title: summary.supportingTitle, items: summary.supportingDrivers, tone: 'text-emerald-200' },
+        { key: 'blocking', title: summary.blockingTitle, items: summary.blockingDrivers, tone: 'text-amber-200' },
+        { key: 'watch', title: summary.watchTitle, items: summary.watchItems, tone: 'text-cyan-100' },
+      ].map((block) => (
+        <div key={block.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+          <p className="text-[11px] font-medium text-white/48">{block.title}</p>
+          <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+            {block.items.map((item) => (
+              <span key={item} className={cn('max-w-full truncate rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[11px] font-semibold', block.tone)}>
+                {item}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  </section>
+);
 
 const CrossAssetHeroRibbon: React.FC<{ anchors: MarketOverviewHeroAnchorView[] }> = ({ anchors }) => (
   <KeyLevelStrip
@@ -281,6 +322,7 @@ function directionUsabilitySummary(view: MarketOverviewDecisionSemanticsView): {
 }
 
 const MarketDecisionSemanticsStrip: React.FC<{
+  directionalSummary: MarketDirectionalSummary;
   view?: MarketOverviewDecisionSemanticsView;
   decisionText: string;
   decisionChips: MarketOverviewDecisionChipView[];
@@ -291,6 +333,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
   briefingSummary: MarketOverviewBriefingSummaryView;
   officialMacroDiagnostics: OfficialMacroAuthorityDiagnosticsView;
 }> = ({
+  directionalSummary,
   view,
   decisionText,
   decisionChips,
@@ -343,6 +386,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
     >
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-cyan-400/0 via-cyan-200/45 to-sky-400/0" aria-hidden="true" />
       <div className="min-w-0">
+        <MarketOverviewDirectionSummary summary={directionalSummary} />
         <div className="flex min-w-0 flex-col gap-3 border-b border-[color:var(--wolfy-divider)] pb-4">
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
@@ -679,6 +723,7 @@ const MarketOverviewCategoryControls: React.FC<{
 
 export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbenchTopSurfaceProps> = ({
   heading,
+  directionalSummary,
   regimeSynthesis,
   decisionText,
   decisionChips,
@@ -702,6 +747,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
         <ConsoleBoard data-testid="market-overview-primary-board">
           <div data-testid="market-overview-top-stack" className="flex w-full min-w-0 flex-col">
             <MarketDecisionSemanticsStrip
+              directionalSummary={directionalSummary}
               view={decisionSemantics}
               decisionText={decisionText}
               decisionChips={decisionChips}
