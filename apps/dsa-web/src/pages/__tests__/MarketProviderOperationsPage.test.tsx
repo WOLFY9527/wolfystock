@@ -335,14 +335,143 @@ const operationsMatrixPayload = {
       remediationHint: null,
       diagnosticOnly: true,
     },
+    {
+      providerId: 'official_public.cn_money_market_cache',
+      providerName: 'CN money-market official-public cache',
+      sourceLabel: 'CN money-market official-public cache',
+      providerCategory: 'capability_support_contract',
+      sourceType: 'official_public',
+      sourceTier: 'official_public',
+      trustLevel: 'observation_grade',
+      freshnessExpectation: 'daily',
+      runtimeState: 'cache_ready_only',
+      credentialState: 'not_required',
+      dependencyState: 'not_required',
+      enabledByDefault: false,
+      observationOnly: false,
+      scoreContributionAllowed: false,
+      sourceAuthorityAllowed: true,
+      scoreEligible: false,
+      inertMetadataOnly: true,
+      paidDataLikelyRequired: false,
+      keyRequired: false,
+      noDefaultLiveHttpCalls: true,
+      cacheRequired: true,
+      supportedCapabilities: ['cn_money_market'],
+      affectedSurfaces: ['market_overview'],
+      routerReasonCodes: ['cache_required'],
+      reasonCodes: [],
+      fulfilledMetrics: ['money_market_levels'],
+      missingMetrics: [],
+      authorityBasis: 'official_public_cache_snapshot',
+      universe: 'cn_money_market',
+      coverageCount: 1,
+      sourceFreshnessEvidence: {
+        freshness: 'delayed',
+        freshnessPolicy: 'daily_cache_snapshot',
+        isFallback: false,
+        isPartial: false,
+        isUnavailable: false,
+      },
+      missingProviderReason: null,
+      degradationReason: 'cache_only_contract',
+      remediationHint: 'Refresh /var/cache/cn-money-market before runtime.',
+      diagnosticOnly: true,
+    },
+    {
+      providerId: 'cache.cn_hk_connect_daily',
+      providerName: 'CN/HK connect cache',
+      sourceLabel: 'CN/HK connect cache',
+      providerCategory: 'capability_support_contract',
+      sourceType: 'official_public',
+      sourceTier: 'official_public',
+      trustLevel: 'observation_grade',
+      freshnessExpectation: 'daily',
+      runtimeState: 'cache_ready_only',
+      credentialState: 'not_required',
+      dependencyState: 'not_required',
+      enabledByDefault: false,
+      observationOnly: true,
+      scoreContributionAllowed: false,
+      sourceAuthorityAllowed: true,
+      scoreEligible: false,
+      inertMetadataOnly: true,
+      paidDataLikelyRequired: false,
+      keyRequired: false,
+      noDefaultLiveHttpCalls: true,
+      cacheRequired: true,
+      supportedCapabilities: ['northbound_southbound_connect_flow'],
+      affectedSurfaces: ['rotation_radar'],
+      routerReasonCodes: ['cache_required'],
+      reasonCodes: [],
+      fulfilledMetrics: ['northbound_flow'],
+      missingMetrics: ['southbound_flow'],
+      authorityBasis: 'official_public_cache_snapshot',
+      universe: 'cn_hk_connect',
+      coverageCount: 1,
+      sourceFreshnessEvidence: {
+        freshness: 'delayed',
+        freshnessPolicy: 'daily_cache_snapshot',
+        isFallback: false,
+        isPartial: true,
+        isUnavailable: false,
+      },
+      missingProviderReason: null,
+      degradationReason: 'cache_only_contract',
+      remediationHint: 'Read /tmp/connect-cache before runtime.',
+      diagnosticOnly: true,
+    },
+    {
+      providerId: 'authorized.cn_index_futures_feed',
+      providerName: 'Index futures authorized feed',
+      sourceLabel: 'Index futures authorized feed',
+      providerCategory: 'runtime_capability',
+      sourceType: 'authorized_licensed_feed',
+      sourceTier: 'authorized_licensed_feed',
+      trustLevel: 'score_grade_when_fresh',
+      freshnessExpectation: 'intraday',
+      runtimeState: 'missing_provider_configuration',
+      credentialState: 'missing',
+      dependencyState: 'not_required',
+      enabledByDefault: false,
+      observationOnly: false,
+      scoreContributionAllowed: false,
+      sourceAuthorityAllowed: false,
+      scoreEligible: false,
+      inertMetadataOnly: false,
+      paidDataLikelyRequired: true,
+      keyRequired: true,
+      noDefaultLiveHttpCalls: true,
+      cacheRequired: false,
+      supportedCapabilities: ['cn_index_futures'],
+      affectedSurfaces: ['liquidity_monitor', 'options_lab'],
+      routerReasonCodes: ['credential_missing'],
+      reasonCodes: [],
+      fulfilledMetrics: [],
+      missingMetrics: ['if_main_contract', 'ih_main_contract'],
+      authorityBasis: 'authorized_feed_contract',
+      universe: 'cn_index_futures',
+      coverageCount: null,
+      sourceFreshnessEvidence: {
+        freshness: 'unavailable',
+        freshnessPolicy: 'authorized_intraday_feed',
+        isFallback: false,
+        isPartial: false,
+        isUnavailable: true,
+      },
+      missingProviderReason: 'authorized_feed_missing',
+      degradationReason: 'credential_missing',
+      remediationHint: 'Load token from /opt/feeds/index-futures before runtime.',
+      diagnosticOnly: true,
+    },
   ],
   summary: {
-    totalRows: 3,
-    observationOnlyRows: 1,
-    inertMetadataOnlyRows: 2,
-    missingProviderRows: 1,
+    totalRows: 6,
+    observationOnlyRows: 2,
+    inertMetadataOnlyRows: 4,
+    missingProviderRows: 2,
     scoreEligibleRows: 1,
-    paidDataLikelyRequiredRows: 1,
+    paidDataLikelyRequiredRows: 2,
   },
   metadata: {
     source: 'provider_fit_capability_readiness_router_contracts',
@@ -476,6 +605,48 @@ describe('MarketProviderOperationsPage', () => {
     expect(matrixDisclosure).toHaveTextContent('sourceAuthority=false');
     expect(matrixDisclosure).toHaveTextContent('score=false');
     expect(matrixDisclosure).toHaveTextContent('cache-required');
+  });
+
+  it('renders a provider setup checklist with grouped affected surfaces, safe badges, and curated guidance only', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+
+    render(<MarketProviderOperationsPage />);
+
+    expect(await screen.findByText('Provider Setup Checklist')).toBeInTheDocument();
+    const checklist = screen.getByTestId('market-provider-setup-checklist');
+    expect(checklist).toHaveTextContent('Market Overview');
+    expect(checklist).toHaveTextContent('Liquidity Monitor');
+    expect(checklist).toHaveTextContent('Rotation Radar');
+    expect(checklist).toHaveTextContent('Scanner');
+    expect(checklist).toHaveTextContent('Options Lab');
+    expect(checklist).toHaveTextContent('Provider Ops / system diagnostics');
+    expect(checklist).toHaveTextContent('credential required');
+    expect(checklist).toHaveTextContent('paid likely');
+    expect(checklist).toHaveTextContent('cache required');
+    expect(checklist).toHaveTextContent('official-public cache-only');
+    expect(checklist).toHaveTextContent('disabled by default');
+    expect(checklist).toHaveTextContent('aggregate-supported');
+    expect(checklist).toHaveTextContent('observation-only');
+    expect(checklist).toHaveTextContent('score-blocked');
+    expect(checklist).toHaveTextContent('missing provider');
+    expect(checklist).toHaveTextContent('Use the existing Tushare credential setup and keep secret values out of this page.');
+    expect(checklist).toHaveTextContent('Keep Polygon grouped-daily breadth on the approved credential-plus-cache path before using it for primary US posture context.');
+    expect(checklist).toHaveTextContent('Sync the approved local US parquet/cache coverage before expecting representative history checks to clear.');
+    expect(checklist).toHaveTextContent('Refresh the approved official-public money-market cache snapshot; this page stays read-only.');
+    expect(checklist).toHaveTextContent('Refresh the CN/HK connect cache snapshot so rotation context is available without live provider calls.');
+    expect(checklist).toHaveTextContent('Add the existing Fed liquidity aggregate evidence cache so broad liquidity context is visible without implying a trade signal.');
+    expect(checklist).toHaveTextContent('Complete the existing authorized feed setup for index futures before relying on it for futures confirmation.');
+    expect(checklist).not.toHaveTextContent('polygon_high_low_history_unavailable');
+    expect(checklist).not.toHaveTextContent('missing_provider_configuration');
+    expect(checklist).not.toHaveTextContent('cache_only_contract');
+    expect(checklist).not.toHaveTextContent('authorized_feed_missing');
+    expect(checklist).not.toHaveTextContent('https://secret-provider.example.com');
+    expect(checklist).not.toHaveTextContent('/Users/example/provider');
+    expect(checklist).not.toHaveTextContent('/var/cache/cn-money-market');
+    expect(checklist).not.toHaveTextContent('/tmp/connect-cache');
+    expect(checklist).not.toHaveTextContent('/opt/feeds/index-futures');
+    expect(checklist).not.toHaveTextContent('super-secret-token');
+    expect(screen.getByRole('button', { name: '展开 完整 provider matrix' })).toBeInTheDocument();
   });
 
   it('supports a compact representative symbol override for readiness checks', async () => {

@@ -352,6 +352,20 @@ type SourceGapCapability = {
   match: (row: ProviderOperationsMatrixRow) => boolean;
 };
 
+type SetupChecklistBadge = {
+  label: string;
+  variant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+};
+
+type SetupChecklistEntry = {
+  key: string;
+  surface: string;
+  title: string;
+  whyItMatters: string;
+  safeNextStep: string;
+  badges: SetupChecklistBadge[];
+};
+
 const SOURCE_GAP_CAPABILITIES: SourceGapCapability[] = [
   {
     id: 'p0MarketDirection',
@@ -402,6 +416,17 @@ const SOURCE_GAP_CAPABILITIES: SourceGapCapability[] = [
     )),
   },
 ];
+
+const CHECKLIST_SURFACE_ORDER = [
+  'Market Overview',
+  'Liquidity Monitor',
+  'Rotation Radar',
+  'Scanner',
+  'Portfolio',
+  'Options Lab',
+  'Backtest',
+  'Provider Ops / system diagnostics',
+] as const;
 
 function capabilityHaystack(row: ProviderOperationsMatrixRow): string[] {
   return [
@@ -502,6 +527,224 @@ function sourceGapRowsForCapability(rows: ProviderOperationsMatrixRow[], capabil
 
 function sourceGapName(row: ProviderOperationsMatrixRow): string {
   return row.sourceLabel || row.providerName || row.providerId;
+}
+
+function checklistSurfaceLabel(surface: string): string | null {
+  const normalized = String(surface || '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'market_overview') return 'Market Overview';
+  if (normalized === 'liquidity_monitor' || normalized === 'liquidity_impulse') return 'Liquidity Monitor';
+  if (normalized === 'rotation_radar') return 'Rotation Radar';
+  if (normalized === 'scanner') return 'Scanner';
+  if (normalized === 'portfolio') return 'Portfolio';
+  if (normalized === 'options_lab') return 'Options Lab';
+  if (normalized === 'backtest') return 'Backtest';
+  if (normalized === 'provider_ops' || normalized === 'system_diagnostics' || normalized === 'stock_history') {
+    return 'Provider Ops / system diagnostics';
+  }
+  return null;
+}
+
+function resolveChecklistSurfaces(surfaces: string[] | undefined): string[] {
+  const labels = (surfaces || [])
+    .map((surface) => checklistSurfaceLabel(surface))
+    .filter((surface, index, list): surface is string => Boolean(surface) && list.indexOf(surface) === index);
+  return labels.length ? labels : ['Provider Ops / system diagnostics'];
+}
+
+function pushChecklistBadge(
+  badges: SetupChecklistBadge[],
+  condition: boolean,
+  label: SetupChecklistBadge['label'],
+  variant: SetupChecklistBadge['variant'],
+): void {
+  if (!condition || badges.some((badge) => badge.label === label)) return;
+  badges.push({ label, variant });
+}
+
+function checklistBadgesForMatrixRow(row: ProviderOperationsMatrixRow): SetupChecklistBadge[] {
+  const badges: SetupChecklistBadge[] = [];
+  pushChecklistBadge(badges, row.keyRequired === true || row.credentialState === 'missing', 'credential required', 'caution');
+  pushChecklistBadge(badges, row.paidDataLikelyRequired === true, 'paid likely', 'caution');
+  pushChecklistBadge(badges, matrixCacheRequired(row), 'cache required', 'info');
+  pushChecklistBadge(
+    badges,
+    row.sourceTier === 'official_public' && matrixCacheRequired(row) && row.noDefaultLiveHttpCalls === true,
+    'official-public cache-only',
+    'neutral',
+  );
+  pushChecklistBadge(badges, row.enabledByDefault === false, 'disabled by default', 'neutral');
+  pushChecklistBadge(
+    badges,
+    row.providerId === 'official_public.fed_liquidity' || (row.supportedCapabilities || []).includes('fed_liquidity'),
+    'aggregate-supported',
+    'info',
+  );
+  pushChecklistBadge(badges, row.observationOnly === true, 'observation-only', 'info');
+  pushChecklistBadge(badges, sourceGapBlocksScoreGrade(row), 'score-blocked', 'caution');
+  pushChecklistBadge(
+    badges,
+    row.sourceType === 'missing' || row.runtimeState === 'missing_provider_configuration' || Boolean(row.missingProviderReason),
+    'missing provider',
+    'danger',
+  );
+  return badges;
+}
+
+function checklistBadgesForReadinessCheck(check: MarketDataReadinessCheck): SetupChecklistBadge[] {
+  const badges: SetupChecklistBadge[] = [];
+  pushChecklistBadge(badges, check.secretConfigured === false, 'credential required', 'caution');
+  pushChecklistBadge(
+    badges,
+    check.id === 'local_us_parquet_representative_files' || check.id.includes('cache') || check.id.includes('parquet'),
+    'cache required',
+    'info',
+  );
+  return badges;
+}
+
+function defaultChecklistWhyItMatters(title: string): string {
+  return `${title} already appears in Provider Ops because a visible readiness or source-truth dependency can affect that surface. It does not promise investment accuracy.`;
+}
+
+function defaultChecklistNextStep(title: string): string {
+  return `Follow the existing ${title} setup path outside this read-only page, then return to confirm the current readiness state.`;
+}
+
+function checklistCopyForMatrixRow(row: ProviderOperationsMatrixRow): Pick<SetupChecklistEntry, 'title' | 'whyItMatters' | 'safeNextStep'> {
+  if (row.providerId === 'polygon_us_grouped_daily') {
+    return {
+      title: sourceGapName(row),
+      whyItMatters: 'Grouped-daily breadth helps frame broad US posture context, but incomplete breadth metrics must stay out of primary score-grade claims. It does not promise market accuracy.',
+      safeNextStep: 'Keep Polygon grouped-daily breadth on the approved credential-plus-cache path before using it for primary US posture context.',
+    };
+  }
+  if (row.providerId === 'official_public.fed_liquidity') {
+    return {
+      title: sourceGapName(row),
+      whyItMatters: 'Fed aggregate evidence helps frame broad liquidity posture, but it should remain contextual evidence rather than a direct trade signal.',
+      safeNextStep: 'Add the existing Fed liquidity aggregate evidence cache so broad liquidity context is visible without implying a trade signal.',
+    };
+  }
+  if (row.providerId === 'official_public.cn_money_market_cache') {
+    return {
+      title: sourceGapName(row),
+      whyItMatters: 'Official-public money-market context can help operators interpret short-term liquidity conditions, but cache snapshots remain observational and do not guarantee precision.',
+      safeNextStep: 'Refresh the approved official-public money-market cache snapshot; this page stays read-only.',
+    };
+  }
+  if (row.providerId === 'cache.cn_hk_connect_daily') {
+    return {
+      title: sourceGapName(row),
+      whyItMatters: 'CN/HK connect cache snapshots help compare regional rotation context without opening new live routes or claiming full flow coverage.',
+      safeNextStep: 'Refresh the CN/HK connect cache snapshot so rotation context is available without live provider calls.',
+    };
+  }
+  if (row.providerId === 'authorized.cn_index_futures_feed') {
+    return {
+      title: sourceGapName(row),
+      whyItMatters: 'Index futures confirmation can support regional risk context, but it belongs behind the existing licensed setup and current score gates.',
+      safeNextStep: 'Complete the existing authorized feed setup for index futures before relying on it for futures confirmation.',
+    };
+  }
+  if (row.providerId === 'tushare_pro') {
+    return {
+      title: sourceGapName(row),
+      whyItMatters: 'Tushare-backed coverage helps fill CN/HK daily context where the current product surface expects it, but it still does not guarantee better signals.',
+      safeNextStep: 'Use the existing Tushare credential setup and keep secret values out of this page.',
+    };
+  }
+  const title = sourceGapName(row);
+  return {
+    title,
+    whyItMatters: defaultChecklistWhyItMatters(title),
+    safeNextStep: defaultChecklistNextStep(title),
+  };
+}
+
+function checklistCopyForReadinessCheck(check: MarketDataReadinessCheck): Pick<SetupChecklistEntry, 'title' | 'whyItMatters' | 'safeNextStep'> {
+  if (check.id === 'tushare_token') {
+    return {
+      title: 'Tushare',
+      whyItMatters: 'Tushare-backed coverage helps fill CN/HK market context where existing surfaces expect it, but it does not guarantee better signal quality or investment accuracy.',
+      safeNextStep: 'Use the existing Tushare credential setup and keep secret values out of this page.',
+    };
+  }
+  if (check.id === 'local_us_parquet_representative_files') {
+    return {
+      title: 'Local US parquet/cache',
+      whyItMatters: 'Representative local US history coverage affects whether offline history checks can confirm what the system already has on disk. Missing files reduce what operators can verify.',
+      safeNextStep: 'Sync the approved local US parquet/cache coverage before expecting representative history checks to clear.',
+    };
+  }
+  const title = sanitizeCodeLabel(check.id);
+  return {
+    title,
+    whyItMatters: defaultChecklistWhyItMatters(title),
+    safeNextStep: defaultChecklistNextStep(title),
+  };
+}
+
+function shouldIncludeChecklistMatrixRow(row: ProviderOperationsMatrixRow): boolean {
+  return row.keyRequired === true
+    || row.paidDataLikelyRequired === true
+    || matrixCacheRequired(row)
+    || row.enabledByDefault === false
+    || row.observationOnly === true
+    || row.scoreEligible !== true
+    || row.scoreContributionAllowed !== true
+    || row.sourceAuthorityAllowed !== true
+    || row.runtimeState === 'missing_provider_configuration'
+    || Boolean(row.missingProviderReason);
+}
+
+function shouldIncludeChecklistReadinessCheck(check: MarketDataReadinessCheck): boolean {
+  return check.status !== 'ready'
+    || check.secretConfigured === false
+    || check.id === 'local_us_parquet_representative_files';
+}
+
+function buildSetupChecklistEntries(
+  rows: ProviderOperationsMatrixRow[],
+  checks: MarketDataReadinessCheck[],
+): SetupChecklistEntry[] {
+  const entries: SetupChecklistEntry[] = [];
+
+  rows
+    .filter(shouldIncludeChecklistMatrixRow)
+    .forEach((row) => {
+      const copy = checklistCopyForMatrixRow(row);
+      const badges = checklistBadgesForMatrixRow(row);
+      resolveChecklistSurfaces(row.affectedSurfaces).forEach((surface) => {
+        entries.push({
+          key: `matrix:${row.providerId}:${surface}`,
+          surface,
+          title: copy.title,
+          whyItMatters: copy.whyItMatters,
+          safeNextStep: copy.safeNextStep,
+          badges,
+        });
+      });
+    });
+
+  checks
+    .filter(shouldIncludeChecklistReadinessCheck)
+    .forEach((check) => {
+      const copy = checklistCopyForReadinessCheck(check);
+      const badges = checklistBadgesForReadinessCheck(check);
+      resolveChecklistSurfaces(check.affectsSurfaces).forEach((surface) => {
+        entries.push({
+          key: `readiness:${check.id}:${surface}`,
+          surface,
+          title: copy.title,
+          whyItMatters: copy.whyItMatters,
+          safeNextStep: copy.safeNextStep,
+          badges,
+        });
+      });
+    });
+
+  return entries;
 }
 
 function statusChipVariant(status: StatusTone): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
@@ -719,13 +962,94 @@ const SourceGapBoard: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ row
   </div>
 );
 
+const ProviderSetupChecklistPanel: React.FC<{
+  rows: ProviderOperationsMatrixRow[];
+  checks: MarketDataReadinessCheck[];
+  isLoading: boolean;
+}> = ({ rows, checks, isLoading }) => {
+  const entries = useMemo(() => buildSetupChecklistEntries(rows, checks), [rows, checks]);
+  const groups = useMemo(
+    () => CHECKLIST_SURFACE_ORDER
+      .map((surface) => ({
+        surface,
+        items: entries
+          .filter((entry) => entry.surface === surface)
+          .sort((left, right) => left.title.localeCompare(right.title)),
+      }))
+      .filter((group) => group.items.length > 0),
+    [entries],
+  );
+
+  return (
+    <TerminalNestedBlock data-testid="market-provider-setup-checklist" className="mt-4 bg-black/10 px-3 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">Setup</p>
+          <p className="mt-1 text-sm font-semibold text-white/82">Provider Setup Checklist</p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <TerminalChip variant="neutral">{formatNumber(groups.length, 0)} surfaces</TerminalChip>
+          <TerminalChip variant="info">{formatNumber(entries.length, 0)} setup items</TerminalChip>
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] leading-5 text-white/48">
+        Read-only setup view for which existing provider gaps affect which product surface, what kind of dependency is missing, and the next safe setup step. It does not promise investment accuracy.
+      </p>
+
+      {isLoading && !entries.length ? (
+        <p className="mt-3 text-[11px] leading-5 text-white/38">正在汇总 checklist；仍然只读，不触发 provider runtime。</p>
+      ) : null}
+
+      {!isLoading && !groups.length ? (
+        <p className="mt-3 text-[11px] leading-5 text-white/38">当前没有额外的 setup 阻断项；完整 matrix 与 diagnostics 仍保留在下方。</p>
+      ) : null}
+
+      {groups.length ? (
+        <div className="mt-3 grid gap-3 xl:grid-cols-2">
+          {groups.map((group) => (
+            <div key={group.surface} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-white/82">{group.surface}</p>
+                <TerminalChip variant="neutral">{formatNumber(group.items.length, 0)} items</TerminalChip>
+              </div>
+              <div className="mt-3 space-y-2">
+                {group.items.map((entry) => (
+                  <div key={entry.key} className="rounded-md border border-white/[0.05] bg-black/10 px-3 py-2.5">
+                    <p className="text-xs font-semibold text-white/78">{entry.title}</p>
+                    {entry.badges.length ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {entry.badges.map((badge) => (
+                          <TerminalChip key={`${entry.key}-${badge.label}`} variant={badge.variant}>{badge.label}</TerminalChip>
+                        ))}
+                      </div>
+                    ) : null}
+                    <p className="mt-2 text-[11px] leading-5 text-white/54">
+                      Why it matters: {entry.whyItMatters}
+                    </p>
+                    <p className="mt-1 text-[11px] leading-5 text-white/62">
+                      Safe next step: {entry.safeNextStep}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </TerminalNestedBlock>
+  );
+};
+
 const ProviderOperationsMatrixPanel: React.FC<{
   response: ProviderOperationsMatrixResponse | null;
+  readiness: MarketDataReadinessResponse | null;
   isLoading: boolean;
+  isReadinessLoading: boolean;
   error: ParsedApiError | null;
-}> = ({ response, isLoading, error }) => {
+}> = ({ response, readiness, isLoading, isReadinessLoading, error }) => {
   const rows = response?.rows ?? EMPTY_PROVIDER_MATRIX_ROWS;
   const summary = response?.summary ?? MATRIX_SUMMARY_DEFAULTS;
+  const checks = readiness?.checks ?? EMPTY_READINESS_CHECKS;
 
   return (
     <TerminalPanel as="section" className="col-span-12">
@@ -756,6 +1080,12 @@ const ProviderOperationsMatrixPanel: React.FC<{
         <div className="mt-4">
           <TerminalEmptyState title="暂无 provider matrix 行">接口未返回 row 时，不前端推断 provider readiness 或 source 权限。</TerminalEmptyState>
         </div>
+      ) : null}
+
+      {!isLoading && (rows.length || checks.length) ? (
+        <>
+          <ProviderSetupChecklistPanel rows={rows} checks={checks} isLoading={isLoading || isReadinessLoading} />
+        </>
       ) : null}
 
       {!isLoading && rows.length ? (
@@ -1401,7 +1731,13 @@ const MarketProviderOperationsPage: React.FC = () => {
         {error && !response && !isLoading ? <EmptyErrorState /> : null}
         {!isLoading ? (
           <TerminalGrid>
-            <ProviderOperationsMatrixPanel response={matrixResponse} isLoading={isMatrixLoading} error={matrixError} />
+            <ProviderOperationsMatrixPanel
+              response={matrixResponse}
+              readiness={readiness}
+              isLoading={isMatrixLoading}
+              isReadinessLoading={isReadinessLoading}
+              error={matrixError}
+            />
             {response ? (
               <>
                 <ProviderOperationsTable items={items} selectedKey={effectiveSelectedProviderKey} onSelect={setSelectedProviderKey} />
