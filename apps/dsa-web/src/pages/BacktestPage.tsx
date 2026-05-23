@@ -6,7 +6,7 @@ import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getApiErrorMessage, getParsedApiError } from '../api/error';
 import type { RuleWizardStep } from '../components/backtest/DeterministicBacktestFlow';
-import NormalBacktestWorkspace from '../components/backtest/NormalBacktestWorkspace';
+import type { NormalStrategyTemplate } from '../components/backtest/pointAndShootTemplateOptions';
 import {
   getDefaultRuleDateRange,
   getPeriodicNumber,
@@ -15,10 +15,6 @@ import {
   getStrategyPreviewSpec,
   parsePositiveInt,
 } from '../components/backtest/shared';
-import {
-  buildPointAndShootStrategyText,
-  type NormalStrategyTemplate,
-} from '../components/backtest/strategyCatalog';
 import type {
   AssumptionMap,
   BacktestResultItem,
@@ -53,6 +49,7 @@ const PRO_WALK_FORWARD_PRESET = {
   step: 12,
   maxWindows: 4,
 } as const;
+const NormalBacktestWorkspace = lazy(() => import('../components/backtest/NormalBacktestWorkspace'));
 const HistoricalEvaluationPanel = lazy(() => import('../components/backtest/HistoricalEvaluationPanel'));
 const ProBacktestWorkspace = lazy(() => import('../components/backtest/ProBacktestWorkspace'));
 
@@ -247,12 +244,6 @@ const BacktestPage: React.FC = () => {
   }), [normalizedCode, ruleEndDate, ruleFeeBps, ruleInitialCapital, ruleSlippageBps, ruleStartDate, ruleStrategyText]);
 
   const isRuleParseStale = Boolean(ruleParsedStrategy && ruleParseSignature && ruleParseSignature !== currentRuleParseSignature);
-  const normalStrategyPreview = useMemo(() => buildPointAndShootStrategyText(language, normalStrategyTemplate, {
-    code: normalizedCode,
-    startDate: ruleStartDate,
-    endDate: ruleEndDate,
-    initialCapital: ruleInitialCapital,
-  }), [language, normalStrategyTemplate, normalizedCode, ruleEndDate, ruleInitialCapital, ruleStartDate]);
 
   const historicalAssumptions = runResult?.executionAssumptions
     || overallPerf?.executionAssumptions
@@ -1065,6 +1056,7 @@ const BacktestPage: React.FC = () => {
       return;
     }
 
+    const { buildPointAndShootStrategyText } = await import('../components/backtest/strategyCatalog');
     const strategyText = buildPointAndShootStrategyText(language, normalStrategyTemplate, {
       code: normalizedCode,
       startDate: ruleStartDate,
@@ -1455,7 +1447,6 @@ const BacktestPage: React.FC = () => {
                     onBenchmarkCodeChange={setRuleBenchmarkCode}
                     strategyTemplate={normalStrategyTemplate}
                     onStrategyTemplateChange={setNormalStrategyTemplate}
-                    templatePreview={normalStrategyPreview}
                     onLaunch={handleLaunchNormalRuleBacktest}
                     isLaunching={isLaunchingNormalRuleBacktest || isSubmittingRuleBacktest || isParsingRuleStrategy}
                     parseError={ruleParseError}

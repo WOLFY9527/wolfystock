@@ -947,6 +947,7 @@ describe('BacktestPage', () => {
     renderBacktestRoutes();
 
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId('normal-backtest-workspace')).toBeInTheDocument();
 
     const templateSelect = screen.getByLabelText('策略模板');
     const optionLabels = within(templateSelect).getAllByRole('option').map((option) => option.textContent?.trim());

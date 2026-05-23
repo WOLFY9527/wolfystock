@@ -1,4 +1,5 @@
 import type React from 'react';
+import { Suspense, lazy } from 'react';
 import { Play } from 'lucide-react';
 import { ApiErrorAlert, GlassCard } from '../../components/common';
 import type { ParsedApiError } from '../../api/error';
@@ -8,11 +9,13 @@ import {
   type RuleBenchmarkMode,
 } from './shared';
 import {
-  POINT_AND_SHOOT_TEMPLATES,
-  getStrategyCatalogEntry,
-  type BacktestLanguage,
+  POINT_AND_SHOOT_TEMPLATE_OPTIONS,
+  getPointAndShootTemplateName,
   type NormalStrategyTemplate,
-} from './strategyCatalog';
+} from './pointAndShootTemplateOptions';
+import type { BacktestLanguage } from './strategyCatalog';
+
+const NormalBacktestTemplateInsights = lazy(() => import('./NormalBacktestTemplateInsights'));
 
 type NormalBacktestWorkspaceProps = {
   language: BacktestLanguage;
@@ -34,7 +37,6 @@ type NormalBacktestWorkspaceProps = {
   onBenchmarkCodeChange: (value: string) => void;
   strategyTemplate: NormalStrategyTemplate;
   onStrategyTemplateChange: (value: NormalStrategyTemplate) => void;
-  templatePreview: string;
   onLaunch: () => Promise<void>;
   isLaunching: boolean;
   parseError: ParsedApiError | null;
@@ -65,16 +67,12 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
   onBenchmarkCodeChange,
   strategyTemplate,
   onStrategyTemplateChange,
-  templatePreview,
   onLaunch,
   isLaunching,
   parseError,
   runError,
 }) => {
-  const currentTemplate = getStrategyCatalogEntry(strategyTemplate);
-  const templateName = currentTemplate?.name[language] || '';
-  const templateDescription = currentTemplate?.description[language] || '';
-  const templateLogicSummary = currentTemplate?.logicSummary[language] || '';
+  const templateName = getPointAndShootTemplateName(strategyTemplate, language);
 
   return (
     <section
@@ -228,7 +226,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                   onChange={(event) => onStrategyTemplateChange(event.target.value as NormalStrategyTemplate)}
                   aria-label={language === 'en' ? 'Strategy template' : '策略模板'}
                 >
-                  {POINT_AND_SHOOT_TEMPLATES.map((item) => (
+                  {POINT_AND_SHOOT_TEMPLATE_OPTIONS.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name[language]}
                     </option>
@@ -238,18 +236,42 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
             </div>
           </div>
 
-          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-            <div className="min-w-0 rounded-[24px] border border-white/5 bg-black/20 p-5">
-              <p className={LABEL_CLASS}>{language === 'en' ? 'Selected template' : '模板摘要'}</p>
-              <h3 className="mt-2 text-base font-semibold text-white">{templateName}</h3>
-              <p className="mt-2 text-sm leading-6 text-white/60">{templateDescription}</p>
-              <p className="mt-3 text-sm leading-6 text-white/48">{templateLogicSummary}</p>
-            </div>
-            <div className="min-w-0 rounded-[24px] border border-white/5 bg-black/20 p-5">
-              <p className={LABEL_CLASS}>{language === 'en' ? 'Compile preview' : '编译预览'}</p>
-              <p className="mt-2 text-sm leading-7 text-white/72">{templatePreview}</p>
-            </div>
-          </div>
+          <Suspense
+            fallback={(
+              <div
+                data-testid="normal-backtest-template-insights-loading"
+                aria-busy="true"
+                className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"
+              >
+                <div className="min-w-0 rounded-[24px] border border-white/5 bg-black/20 p-5">
+                  <p className={LABEL_CLASS}>{language === 'en' ? 'Loading template insights' : '正在加载模板信息'}</p>
+                  <div className="mt-4 h-5 w-40 rounded-full bg-white/10" aria-hidden="true" />
+                  <div className="mt-3 space-y-2" aria-hidden="true">
+                    <div className="h-4 rounded-full bg-white/10" />
+                    <div className="h-4 w-4/5 rounded-full bg-white/10" />
+                    <div className="h-4 w-3/5 rounded-full bg-white/10" />
+                  </div>
+                </div>
+                <div className="min-w-0 rounded-[24px] border border-white/5 bg-black/20 p-5">
+                  <p className={LABEL_CLASS}>{language === 'en' ? 'Preparing compile preview' : '正在准备编译预览'}</p>
+                  <div className="mt-4 space-y-2" aria-hidden="true">
+                    <div className="h-4 rounded-full bg-white/10" />
+                    <div className="h-4 rounded-full bg-white/10" />
+                    <div className="h-4 w-2/3 rounded-full bg-white/10" />
+                  </div>
+                </div>
+              </div>
+            )}
+          >
+            <NormalBacktestTemplateInsights
+              language={language}
+              strategyTemplate={strategyTemplate}
+              code={code}
+              startDate={startDate}
+              endDate={endDate}
+              initialCapital={initialCapital}
+            />
+          </Suspense>
 
           <div
             data-testid="normal-backtest-cta-row"
