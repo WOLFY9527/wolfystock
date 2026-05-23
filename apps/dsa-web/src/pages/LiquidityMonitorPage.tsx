@@ -33,7 +33,16 @@ import { OfficialMacroAuthorityDiagnostics } from '../components/common/Official
 import { buildOfficialMacroAuthorityDiagnosticsView } from '../components/common/officialMacroAuthorityDiagnosticsData';
 import { formatDateTime, formatPercent, formatSignedNumber } from '../utils/format';
 import { cn } from '../utils/cn';
-import { buildLiquidityRegimeGaugeSummary, sanitizeMarketGuidanceCopy, type LiquidityRegimeGaugeSummary } from '../utils/marketIntelligenceGuidance';
+import {
+  MARKET_DECISION_NOT_READY_NOTICE,
+  buildLiquidityRegimeGaugeSummary,
+  decisionReadinessStateLabel,
+  decisionReadinessVariant,
+  sanitizeMarketGuidanceCopy,
+  type DecisionReadinessState,
+  type DecisionReadinessSummary,
+  type LiquidityRegimeGaugeSummary,
+} from '../utils/marketIntelligenceGuidance';
 
 const REGIME_LABELS: Record<LiquidityMonitorRegime, string> = {
   abundant: '充裕',
@@ -179,6 +188,7 @@ const LIQUIDITY_BLOCKING_REASON_LABELS: Record<string, string> = {
   source_authority_router_rejected: '来源权限未通过',
   provider_forbidden_for_use_case: '当前用例禁止该来源',
   provider_observation_only: '提供方仅允许观察',
+  provider_unavailable: '数据源不可用',
   trust_gate_blocked: '信任门禁阻断',
   provider_absent: '所需提供方未配置',
   unavailable_source: '来源不可用',
@@ -196,6 +206,7 @@ type LiquidityCoverageReadinessSummary = {
   missingOrUnavailableCount: number;
   summaryLine: string;
   blockingReasonsLine: string;
+  blockingReasons: string[];
 };
 
 type LiquidityIndicatorBucketSummary = {
@@ -530,6 +541,7 @@ function buildCoverageReadinessSummary(
     missingOrUnavailableCount,
     summaryLine,
     blockingReasonsLine: `为什么不是完整方向结论：${topBlockingReasons.length > 0 ? topBlockingReasons.join('；') : '当前没有额外阻塞。'}`,
+    blockingReasons: topBlockingReasons,
   };
 }
 
@@ -571,16 +583,126 @@ function buildLiquidityNextWatch(
   return parts.length ? parts.join('；') : '等待新的评分级证据进入可计分范围。';
 }
 
+function uniqueReadinessItems(items: Array<string | null | undefined>, limit: number, fallback: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  items.forEach((item) => {
+    const value = String(item || '').trim();
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    result.push(value);
+  });
+  return result.length ? result.slice(0, limit) : [fallback];
+}
+
+function evidenceQualityNumber(data: LiquidityMonitorResponse, key: string): number {
+  const value = data.liquidityImpulseSynthesis?.evidenceQuality?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function buildLiquidityDecisionReadiness(
+  data: LiquidityMonitorResponse,
+  coverageSummary: LiquidityCoverageReadinessSummary,
+  synthesisView: LiquidityImpulseSynthesisHeaderView,
+  indicators: LiquidityMonitorIndicator[],
+): DecisionReadinessSummary {
+  const scoringEvidenceCount = Math.max(
+    coverageSummary.scoreGradeCount,
+    data.score.includedIndicatorCount || 0,
+    evidenceQualityNumber(data, 'scoringEvidenceCount'),
+  );
+  const confidence = Math.max(data.score.confidence || 0, data.liquidityImpulseSynthesis?.confidence || 0);
+  const state: DecisionReadinessState = synthesisView.state === 'ready'
+    && scoringEvidenceCount >= 2
+    && confidence >= 0.45
+    && data.score.regime !== 'unavailable'
+    ? 'ready'
+    : scoringEvidenceCount <= 0 && data.score.regime === 'unavailable'
+      ? 'unavailable'
+      : scoringEvidenceCount > 0 || coverageSummary.observationOnlyCount > 0 || synthesisView.state === 'insufficient'
+        ? 'observe'
+      : 'unavailable';
+  const missingIndicators = topIndicatorNames(indicators, isMissingOrUnavailableIndicator, 3);
+  const synthesisGaps = data.liquidityImpulseSynthesis?.dataGaps.map((item) => evidenceItemDisplayLabel(item)) || [];
+  const proxyOnly = synthesisView.state !== 'ready' && /proxy/i.test(synthesisView.stateChipLabel);
+  const blockers = [
+    ...coverageSummary.blockingReasons,
+    proxyOnly ? 'Proxy-only 证据不能升级方向' : '',
+    synthesisView.state === 'missing' ? '流动性脉冲载荷缺失' : '',
+    data.score.regime === 'unavailable' ? '流动性分数不可用' : '',
+    data.freshness.weakestIndicatorFreshness === 'fallback' || data.freshness.weakestIndicatorFreshness === 'stale'
+      ? '存在 fallback/stale 负担'
+      : '',
+  ];
+  const nextEvidence = [
+    ...missingIndicators.map((name) => `补齐 ${name}`),
+    ...synthesisGaps,
+    state === 'ready' ? '继续确认反证是否进入评分级' : '',
+  ];
+
+  return {
+    state,
+    stateLabel: decisionReadinessStateLabel(state),
+    stateVariant: decisionReadinessVariant(state),
+    qualityLabel: `证据质量：可计分 ${scoringEvidenceCount}/${Math.max(indicators.length, 1)} · 观察 ${coverageSummary.observationOnlyCount} · 缺失 ${coverageSummary.missingOrUnavailableCount}`,
+    blockers: uniqueReadinessItems(blockers, 4, state === 'ready' ? '暂无关键阻塞' : '关键来源仍待补齐'),
+    nextEvidence: uniqueReadinessItems(nextEvidence, 3, '等待新的评分级证据'),
+    conclusion: state === 'ready'
+      ? '当前证据可支持流动性方向的研究判断。'
+      : MARKET_DECISION_NOT_READY_NOTICE,
+  };
+}
+
+const DecisionReadinessBand: React.FC<{
+  summary: DecisionReadinessSummary;
+}> = ({ summary }) => (
+  <section
+    data-testid="liquidity-decision-readiness"
+    className="min-w-0 border-b border-white/[0.06] pb-4"
+  >
+    <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold text-white/45">判断可用性</p>
+        <h2 className="mt-1 text-base font-semibold leading-6 text-white/92 md:text-lg">{summary.stateLabel}</h2>
+        <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">{summary.conclusion}</p>
+      </div>
+      <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
+        <TerminalChip variant={summary.stateVariant}>{summary.stateLabel}</TerminalChip>
+        <TerminalChip variant="neutral">{summary.qualityLabel}</TerminalChip>
+      </div>
+    </div>
+    <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
+      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+        <p className="text-[11px] font-medium text-white/48">阻塞项</p>
+        <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+          {summary.blockers.map((item) => (
+            <TerminalChip key={item} variant={summary.state === 'ready' ? 'neutral' : 'caution'}>{item}</TerminalChip>
+          ))}
+        </div>
+      </div>
+      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+        <p className="text-[11px] font-medium text-white/48">提升证据</p>
+        <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+          {summary.nextEvidence.map((item) => (
+            <TerminalChip key={item} variant="info">{item}</TerminalChip>
+          ))}
+        </div>
+      </div>
+    </div>
+  </section>
+);
+
 const LiquidityGuidancePanel: React.FC<{
   coverageSummary: LiquidityCoverageReadinessSummary;
   synthesisView: LiquidityImpulseSynthesisHeaderView;
   regimeGauge: LiquidityRegimeGaugeSummary;
+  readinessSummary: DecisionReadinessSummary;
   indicators: LiquidityMonitorIndicator[];
   data: LiquidityMonitorResponse;
   selectedIndicator: LiquidityMonitorIndicator | null;
   officialMacroDiagnostics: ReturnType<typeof buildOfficialMacroAuthorityDiagnosticsView>;
   onSelectIndicator: (key: string) => void;
-}> = ({ coverageSummary, synthesisView, regimeGauge, indicators, data, selectedIndicator, officialMacroDiagnostics, onSelectIndicator }) => {
+}> = ({ coverageSummary, synthesisView, regimeGauge, readinessSummary, indicators, data, selectedIndicator, officialMacroDiagnostics, onSelectIndicator }) => {
   const scoring = summarizeIndicatorBucket(
     indicators,
     (indicator) => indicator.coverageDiagnostics?.scoreContributionAllowed === true || indicator.includedInScore,
@@ -601,7 +723,8 @@ const LiquidityGuidancePanel: React.FC<{
   return (
     <TerminalPanel data-testid="liquidity-monitor-guidance-panel" className="relative overflow-hidden">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-cyan-300/0 via-cyan-200/40 to-sky-300/0" aria-hidden="true" />
-      <section data-testid="liquidity-regime-gauge" className="min-w-0 border-b border-white/[0.06] pb-4">
+      <DecisionReadinessBand summary={readinessSummary} />
+      <section data-testid="liquidity-regime-gauge" className="min-w-0 border-b border-white/[0.06] py-4">
         <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <p className="text-[10px] font-medium tracking-[0.24em] text-white/38">{regimeGauge.title}</p>
@@ -839,6 +962,7 @@ const LiquidityMonitorPage: React.FC = () => {
   const selectedIndicator = indicators.find((item) => item.key === selectedKey) || indicators[0] || null;
   const synthesisView = buildLiquidityImpulseSynthesisView(data?.liquidityImpulseSynthesis);
   const coverageSummary = buildCoverageReadinessSummary(data, synthesisView);
+  const readinessSummary = data ? buildLiquidityDecisionReadiness(data, coverageSummary, synthesisView, indicators) : null;
   const regimeGauge = data ? buildLiquidityRegimeGaugeSummary({
     data,
     synthesisPromotable: synthesisView.state === 'ready',
@@ -892,16 +1016,20 @@ const LiquidityMonitorPage: React.FC = () => {
       {loading && !data ? (
         <TerminalPanel>
           <TerminalSectionHeader eyebrow="快照" title="读取中" />
+          <div data-testid="liquidity-decision-readiness" className="mt-3 text-sm text-white/58">
+            判断可用性：{decisionReadinessStateLabel('waiting')}
+          </div>
         </TerminalPanel>
       ) : null}
 
-      {data && regimeGauge ? (
+      {data && regimeGauge && readinessSummary ? (
         <TerminalGrid>
           <div className="flex flex-col gap-4 xl:col-span-12">
             <LiquidityGuidancePanel
               coverageSummary={coverageSummary}
               synthesisView={synthesisView}
               regimeGauge={regimeGauge}
+              readinessSummary={readinessSummary}
               indicators={indicators}
               data={data}
               selectedIndicator={selectedIndicator}

@@ -908,6 +908,37 @@ describe('MarketRotationRadarPage', () => {
     expect(bodyText).not.toMatch(rawI18nKeyPattern);
   });
 
+  it('distinguishes rotation readiness for confirmed flow, candidate-only, and taxonomy evidence', async () => {
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(realFlowConfirmedFixture());
+
+    const readyView = render(<MarketRotationRadarPage />);
+    const readyBand = await screen.findByTestId('rotation-decision-readiness');
+    expect(readyBand).toHaveTextContent('判断可用性');
+    expect(readyBand).toHaveTextContent('可判断');
+    expect(readyBand).toHaveTextContent('确认 1');
+    expect(readyBand).toHaveTextContent('ETF可计分');
+    expect(readyBand.textContent || '').not.toMatch(forbiddenTradingActionPattern);
+    readyView.unmount();
+
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(etfDisabledCandidateFixture());
+
+    const observationView = render(<MarketRotationRadarPage />);
+    const observationBand = await screen.findByTestId('rotation-decision-readiness');
+    expect(observationBand).toHaveTextContent('仅观察');
+    expect(observationBand).toHaveTextContent('当前只适合作为观察，不应用作方向判断');
+    expect(observationBand).toHaveTextContent('真实流向确认缺失');
+    observationView.unmount();
+
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(taxonomyMarketFixture('CN'));
+
+    render(<MarketRotationRadarPage />);
+    const unavailableBand = await screen.findByTestId('rotation-decision-readiness');
+    expect(unavailableBand).toHaveTextContent('不可判断');
+    expect(unavailableBand).toHaveTextContent('仅有主题分类');
+    expect(unavailableBand).toHaveTextContent('当前只适合作为观察，不应用作方向判断');
+    expect(unavailableBand.textContent || '').not.toMatch(forbiddenTradingActionPattern);
+  });
+
   it('renders proxy-only evidence chips without real fund-flow claims', async () => {
     render(<MarketRotationRadarPage />);
 

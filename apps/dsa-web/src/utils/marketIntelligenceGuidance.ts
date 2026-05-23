@@ -6,6 +6,50 @@ export type MarketIntelligenceGuidanceLocale = 'zh' | 'en';
 
 export type DirectionSummaryVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info';
 
+export type DecisionReadinessState = 'ready' | 'observe' | 'unavailable' | 'waiting';
+
+export type DecisionReadinessSummary = {
+  state: DecisionReadinessState;
+  stateLabel: string;
+  stateVariant: DirectionSummaryVariant;
+  qualityLabel: string;
+  blockers: string[];
+  nextEvidence: string[];
+  conclusion: string;
+};
+
+export const MARKET_DECISION_NOT_READY_NOTICE = '当前只适合作为观察，不应用作方向判断';
+
+export function decisionReadinessStateLabel(state: DecisionReadinessState): string {
+  switch (state) {
+    case 'ready':
+      return '可判断';
+    case 'observe':
+      return '仅观察';
+    case 'unavailable':
+      return '不可判断';
+    case 'waiting':
+      return '等待数据';
+    default:
+      return '不可判断';
+  }
+}
+
+export function decisionReadinessVariant(state: DecisionReadinessState): DirectionSummaryVariant {
+  switch (state) {
+    case 'ready':
+      return 'success';
+    case 'observe':
+      return 'info';
+    case 'unavailable':
+      return 'danger';
+    case 'waiting':
+      return 'neutral';
+    default:
+      return 'neutral';
+  }
+}
+
 export type MarketDirectionalSummary = {
   title: string;
   currentLabel: string;

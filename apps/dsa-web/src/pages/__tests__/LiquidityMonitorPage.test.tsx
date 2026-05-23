@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LiquidityMonitorPage from '../LiquidityMonitorPage';
 
@@ -528,6 +528,128 @@ describe('LiquidityMonitorPage', () => {
     expect(guidancePanel).toHaveTextContent('优先补齐');
     expect(guidancePanel).not.toHaveTextContent('score-contributing coverage');
     expect(summary.textContent || '').not.toMatch(/score_contribution_not_allowed|source_authority_router_rejected/);
+  });
+
+  it('renders liquidity decision readiness blockers for ready, observation-only, and unavailable evidence', async () => {
+    getLiquidityMonitor.mockResolvedValueOnce(payload);
+    const readyView = render(<LiquidityMonitorPage />);
+
+    const readyBand = await screen.findByTestId('liquidity-decision-readiness');
+    expect(readyBand).toHaveTextContent('判断可用性');
+    await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('可判断'));
+    const resolvedReadyBand = screen.getByTestId('liquidity-decision-readiness');
+    expect(resolvedReadyBand).toHaveTextContent('证据质量');
+    expect(resolvedReadyBand).toHaveTextContent('阻塞项');
+    expect(resolvedReadyBand).toHaveTextContent('提升证据');
+    expect(resolvedReadyBand.textContent || '').not.toMatch(/买入|卖出|buy now|sell now|recommend/i);
+    readyView.unmount();
+
+    getLiquidityMonitor.mockResolvedValueOnce({
+      ...payload,
+      liquidityImpulseSynthesis: {
+        ...payload.liquidityImpulseSynthesis,
+        liquidityImpulse: 'expanding_liquidity',
+        impulseLabel: 'Liquidity appears to be expanding',
+        subtype: 'crypto_beta_expansion',
+        confidence: 0.33,
+        confidenceLabel: 'low',
+        dominantDrivers: [
+          {
+            key: 'liquidity_monitor:btc',
+            label: 'BTC',
+            pillar: 'crypto_liquidity_beta',
+            direction: 'supports_expansion',
+            signal: 0.44,
+            impact: 0.22,
+            source: 'coinbase',
+            proxyOnly: true,
+            scoreContributionAllowed: false,
+            observationOnly: true,
+          },
+        ],
+        counterEvidence: [],
+        dataGaps: [],
+        evidenceQuality: {
+          scoringEvidenceCount: 1,
+          scoringPillarCount: 1,
+          discountedEvidenceCount: 1,
+          dataGapCount: 0,
+          proxyOnlyScoringCount: 1,
+          realScoringEvidenceCount: 0,
+          allScoringEvidenceProxyOnly: true,
+        },
+      },
+    });
+
+    const observationView = render(<LiquidityMonitorPage />);
+    await screen.findByTestId('liquidity-decision-readiness');
+    await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('仅观察'));
+    const observationBand = screen.getByTestId('liquidity-decision-readiness');
+    expect(observationBand).toHaveTextContent('当前只适合作为观察，不应用作方向判断');
+    expect(observationBand).toHaveTextContent(/Proxy-only|代理/);
+    observationView.unmount();
+
+    getLiquidityMonitor.mockResolvedValueOnce({
+      ...payload,
+      score: {
+        ...payload.score,
+        value: 0,
+        regime: 'unavailable',
+        confidence: 0,
+        includedIndicatorCount: 0,
+        includedIndicatorWeight: 0,
+      },
+      indicators: payload.indicators.map((indicator) => ({
+        ...indicator,
+        status: 'unavailable',
+        freshness: 'unavailable',
+        includedInScore: false,
+        scoreContribution: 0,
+        coverageDiagnostics: {
+          ...(indicator.coverageDiagnostics || {
+            indicatorId: indicator.key,
+            indicatorName: indicator.label,
+            requiredInputs: [],
+            fulfilledInputs: [],
+            missingInputs: [],
+          }),
+          configuredProviderAvailable: false,
+          realSourceAvailable: false,
+          scoreContributionAllowed: false,
+          scoreExclusionReason: 'provider_unavailable',
+          missingInputs: ['required_source'],
+        },
+      })),
+      liquidityImpulseSynthesis: {
+        ...payload.liquidityImpulseSynthesis,
+        liquidityImpulse: 'data_insufficient',
+        confidence: 0,
+        confidenceLabel: 'insufficient',
+        dominantDrivers: [],
+        counterEvidence: [],
+        dataGaps: [
+          {
+            key: 'liquidity_monitor:funding',
+            label: 'Funding',
+            reason: 'provider_unavailable',
+            scoreContributionAllowed: false,
+          },
+        ],
+        evidenceQuality: {
+          scoringEvidenceCount: 0,
+          scoringPillarCount: 0,
+          discountedEvidenceCount: 0,
+          dataGapCount: 1,
+        },
+      },
+    });
+
+    render(<LiquidityMonitorPage />);
+    await screen.findByTestId('liquidity-decision-readiness');
+    await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('不可判断'));
+    const unavailableBand = screen.getByTestId('liquidity-decision-readiness');
+    expect(unavailableBand).toHaveTextContent('当前只适合作为观察，不应用作方向判断');
+    expect(unavailableBand).toHaveTextContent(/数据源不可用|来源不可用|Provider unavailable/);
   });
 
   it('renders a liquidity regime gauge and keeps proxy-only evidence insufficient', async () => {

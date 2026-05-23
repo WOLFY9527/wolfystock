@@ -11,7 +11,16 @@ import type { MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHea
 import type { OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';
 import { TrustDisclosureChips } from '../evidence/TrustDisclosureChips';
 import type { TrustDisclosureBucket } from '../../utils/trustDisclosure';
-import { joinMarketReasonLabels, type MarketDirectionalSummary } from '../../utils/marketIntelligenceGuidance';
+import {
+  MARKET_DECISION_NOT_READY_NOTICE,
+  decisionReadinessStateLabel,
+  decisionReadinessVariant,
+  joinMarketReasonLabels,
+  marketIntelligenceReasonLabel,
+  type DecisionReadinessState,
+  type DecisionReadinessSummary,
+  type MarketDirectionalSummary,
+} from '../../utils/marketIntelligenceGuidance';
 
 const MARKET_OVERVIEW_DEBUG_DETAILS_FALLBACK_MIN_MS = 120;
 
@@ -271,6 +280,141 @@ function directionUsabilitySummary(view: MarketOverviewDecisionSemanticsView): {
   };
 }
 
+function uniqueReadinessItems(items: Array<string | null | undefined>, limit: number, fallback: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  items.forEach((item) => {
+    const value = String(item || '').trim();
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    result.push(value);
+  });
+  return result.length ? result.slice(0, limit) : [fallback];
+}
+
+function overviewReadinessState(params: {
+  view?: MarketOverviewDecisionSemanticsView;
+  decisionReliable: boolean;
+  dataState: MarketOverviewDataStateStripView;
+}): DecisionReadinessState {
+  const { view, decisionReliable, dataState } = params;
+  const readiness = view?.directionReadiness;
+  const scoreGradeCount = readiness?.scoreGradeCount ?? (decisionReliable ? 3 : 0);
+  const observationOnlyCount = readiness?.observationOnlyCount ?? 0;
+  const missingCount = readiness?.missingCount ?? 0;
+
+  if (dataState.isRefreshing && dataState.availableCount === 0) {
+    return 'waiting';
+  }
+  if (
+    readiness?.status === 'direction_ready'
+    && decisionReliable
+    && !view?.insufficient
+    && scoreGradeCount >= 3
+  ) {
+    return 'ready';
+  }
+  if (
+    readiness?.status === 'data_insufficient'
+    && scoreGradeCount <= 0
+    && (missingCount > 0 || dataState.hasFallback || dataState.hasUnavailable)
+  ) {
+    return 'unavailable';
+  }
+  if (
+    readiness?.status === 'partial_context_only'
+    || scoreGradeCount > 0
+    || observationOnlyCount > 0
+    || dataState.availableCount > 0
+  ) {
+    return 'observe';
+  }
+  return 'unavailable';
+}
+
+function buildOverviewDecisionReadiness(params: {
+  view?: MarketOverviewDecisionSemanticsView;
+  decisionReliable: boolean;
+  dataState: MarketOverviewDataStateStripView;
+  decisionText: string;
+}): DecisionReadinessSummary {
+  const { view, decisionReliable, dataState, decisionText } = params;
+  const readiness = view?.directionReadiness;
+  const state = overviewReadinessState({ view, decisionReliable, dataState });
+  const scoreGradeCount = readiness?.scoreGradeCount ?? (decisionReliable ? 3 : 0);
+  const observationOnlyCount = readiness?.observationOnlyCount ?? 0;
+  const missingCount = readiness?.missingCount ?? 0;
+  const rawBlockers = [
+    ...(view?.capReasons || []).map((reason) => marketIntelligenceReasonLabel(reason)),
+    ...(readiness?.blockingReasons || []).map((reason) => marketIntelligenceReasonLabel(reason)),
+    ...(readiness?.missingPillars || []).map((pillar) => pillar.label),
+    ...(view?.dataGaps || []).map((gap) => gap.label),
+    dataState.hasFallback ? '存在 fallback / proxy 负担' : '',
+    dataState.staleCount > 0 ? '存在过期数据' : '',
+    dataState.hasUnavailable ? '存在不可用来源' : '',
+  ];
+  const nextEvidence = [
+    ...(readiness?.missingPillars || []).map((pillar) => pillar.label),
+    ...(view?.dataGaps || []).map((gap) => gap.label),
+    ...(view?.invalidationTriggers || []).map((item) => item.label),
+    state === 'ready' ? '继续确认反证是否进入评分级' : '',
+  ];
+
+  return {
+    state,
+    stateLabel: decisionReadinessStateLabel(state),
+    stateVariant: decisionReadinessVariant(state),
+    qualityLabel: `评分级 ${scoreGradeCount} · 观察 ${observationOnlyCount} · 缺失 ${missingCount}`,
+    blockers: uniqueReadinessItems(rawBlockers, 4, state === 'ready' ? '暂无关键阻塞' : '关键证据仍待补齐'),
+    nextEvidence: uniqueReadinessItems(nextEvidence, 3, '补齐评分级来源覆盖'),
+    conclusion: state === 'ready'
+      ? decisionText
+      : MARKET_DECISION_NOT_READY_NOTICE,
+  };
+}
+
+const DecisionReadinessBand: React.FC<{
+  testId: string;
+  summary: DecisionReadinessSummary;
+}> = ({ testId, summary }) => (
+  <section
+    data-testid={testId}
+    className="min-w-0 border-b border-[color:var(--wolfy-divider)] bg-white/[0.014] px-3 py-3 md:px-4"
+  >
+    <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold text-white/45">判断可用性</p>
+        <h2 className="mt-1 text-base font-semibold leading-6 text-white/92 md:text-lg">
+          {summary.stateLabel}
+        </h2>
+        <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">{summary.conclusion}</p>
+      </div>
+      <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
+        <TerminalChip variant={summary.stateVariant}>{summary.stateLabel}</TerminalChip>
+        <TerminalChip variant="neutral">{summary.qualityLabel}</TerminalChip>
+      </div>
+    </div>
+    <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-2">
+      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+        <p className="text-[11px] font-medium text-white/48">阻塞项</p>
+        <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+          {summary.blockers.map((item) => (
+            <TerminalChip key={item} variant={summary.state === 'ready' ? 'neutral' : 'caution'}>{item}</TerminalChip>
+          ))}
+        </div>
+      </div>
+      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+        <p className="text-[11px] font-medium text-white/48">下一项证据</p>
+        <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+          {summary.nextEvidence.map((item) => (
+            <TerminalChip key={item} variant="info">{item}</TerminalChip>
+          ))}
+        </div>
+      </div>
+    </div>
+  </section>
+);
+
 const MarketDecisionSemanticsStrip: React.FC<{
   directionalSummary: MarketDirectionalSummary;
   view?: MarketOverviewDecisionSemanticsView;
@@ -321,6 +465,12 @@ const MarketDecisionSemanticsStrip: React.FC<{
   const summarySentence = decisionReliable
     ? decisionText
     : `${statusSummary.detail} ${decisionText}`.trim();
+  const readinessSummary = buildOverviewDecisionReadiness({
+    view,
+    decisionReliable,
+    dataState,
+    decisionText,
+  });
   const snapshotLabel = dataState.updatedAtLabel
     ? `更新 ${dataState.updatedAtLabel}`
     : (dataState.isRefreshing ? '刷新中' : '待刷新');
@@ -344,6 +494,10 @@ const MarketDecisionSemanticsStrip: React.FC<{
     >
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-cyan-400/0 via-cyan-200/45 to-sky-400/0" aria-hidden="true" />
       <div className="min-w-0">
+        <DecisionReadinessBand
+          testId="market-overview-decision-readiness"
+          summary={readinessSummary}
+        />
         <MarketOverviewDirectionSummary summary={directionalSummary} />
         <div className="flex min-w-0 flex-col gap-3 border-b border-[color:var(--wolfy-divider)] pb-4">
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">

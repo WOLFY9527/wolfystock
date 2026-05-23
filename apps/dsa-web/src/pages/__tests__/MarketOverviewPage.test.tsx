@@ -2164,7 +2164,10 @@ describe('MarketOverviewPage', () => {
 
     render(<MarketOverviewPage />);
 
-    const summary = await screen.findByTestId('market-overview-direction-summary');
+    await waitFor(() => {
+      expect(screen.getByTestId('market-overview-direction-summary')).toHaveTextContent('证据强度：低');
+    });
+    const summary = screen.getByTestId('market-overview-direction-summary');
     expect(summary).toHaveTextContent('Market Bias / Direction Summary');
     expect(summary).toHaveTextContent('当前市场：证据不足');
     expect(summary).toHaveTextContent('证据强度：低');
@@ -2175,6 +2178,89 @@ describe('MarketOverviewPage', () => {
     expect(summary).toHaveTextContent('可观察方向');
     expect(summary.textContent || '').not.toMatch(/买入|卖出|加仓|减仓|仓位|建议买入|建议卖出|buy now|sell now|recommend/i);
     expect(summary.textContent || '').not.toMatch(/marketOverviewPage\./);
+  });
+
+  it('renders decision readiness states for ready, observation-only, and unavailable overview evidence', async () => {
+    const readyView = render(<MarketOverviewPage />);
+
+    const readyBand = await screen.findByTestId('market-overview-decision-readiness');
+    expect(readyBand).toHaveTextContent('判断可用性');
+    expect(readyBand).toHaveTextContent('可判断');
+    expect(readyBand).toHaveTextContent('评分级 3');
+    expect(readyBand).toHaveTextContent('下一项证据');
+    expect(readyBand.textContent || '').not.toMatch(/买入|卖出|buy now|sell now|recommend/i);
+    readyView.unmount();
+
+    vi.clearAllMocks();
+    vi.mocked(marketApi.getTemperature).mockResolvedValueOnce({
+      ...temperaturePayload(),
+      confidence: 0.42,
+      reliableInputCount: 2,
+      reliablePanelCount: 2,
+      isReliable: false,
+      temperatureAvailable: true,
+      conclusionAllowed: false,
+      marketDecisionSemantics: {
+        ...marketDecisionSemanticsPayload(),
+        posture: 'neutral',
+        postureConfidence: {
+          value: 42,
+          label: 'low',
+          capReasons: ['insufficient_score_grade_evidence'],
+        },
+        directionReadiness: {
+          status: 'partial_context_only',
+          confidenceLabel: 'low',
+          scoreGradePillars: {
+            count: 1,
+            items: [
+              { pillar: 'official_macro_rates_volatility', label: 'Official macro/rates/volatility', reasonCode: 'score_grade_evidence' },
+            ],
+          },
+          observationOnlyPillars: {
+            count: 2,
+            items: [
+              { pillar: 'rotation_or_risk_participation', label: 'Rotation/risk participation', reasonCode: 'observation_only_evidence' },
+              { pillar: 'liquidity_conditions', label: 'Liquidity/conditions', reasonCode: 'fallback_or_proxy_evidence' },
+            ],
+          },
+          missingPillars: {
+            count: 1,
+            items: [
+              { pillar: 'breadth_health', label: 'Breadth health', reasonCode: 'missing_scoring_evidence' },
+            ],
+          },
+          blockingReasons: ['insufficient_score_grade_evidence'],
+          claimBoundaries: [
+            { claim: 'market_direction_readiness_context', allowed: false, reasonCode: 'partial_context_only' },
+          ],
+          notInvestmentAdvice: true,
+        },
+      },
+    });
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
+
+    const observationView = render(<MarketOverviewPage />);
+    await screen.findByTestId('market-overview-decision-readiness');
+    await waitFor(() => expect(screen.getByTestId('market-overview-decision-readiness')).toHaveTextContent('仅观察'));
+    const observationBand = screen.getByTestId('market-overview-decision-readiness');
+    expect(observationBand).toHaveTextContent('仅观察');
+    expect(observationBand).toHaveTextContent('当前只适合作为观察，不应用作方向判断');
+    expect(observationBand).toHaveTextContent('评分级 1');
+    observationView.unmount();
+
+    vi.clearAllMocks();
+    vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(unreliableTemperaturePayload());
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
+
+    const unavailableView = render(<MarketOverviewPage />);
+    await screen.findByTestId('market-overview-decision-readiness');
+    await waitFor(() => expect(screen.getByTestId('market-overview-decision-readiness')).toHaveTextContent('不可判断'));
+    const unavailableBand = screen.getByTestId('market-overview-decision-readiness');
+    expect(unavailableBand).toHaveTextContent('不可判断');
+    expect(unavailableBand).toHaveTextContent('当前只适合作为观察，不应用作方向判断');
+    expect(unavailableBand).toHaveTextContent('缺失 1');
+    unavailableView.unmount();
   });
 
   it('downgrades unreliable market temperature and briefing copy', async () => {
@@ -2195,7 +2281,9 @@ describe('MarketOverviewPage', () => {
     expect(within(details).getByText(/可靠输入不足，暂不生成综合判断/i)).toBeInTheDocument();
     expect(within(details).getByText(/信号可信：数据不足/i)).toBeInTheDocument();
     expect(screen.queryByText(/综合市场温度/i)).not.toBeInTheDocument();
-    expect(within(details).getByTestId('market-regime-synthesis-title')).toHaveTextContent('数据不足');
+    await waitFor(() => {
+      expect(within(details).getByTestId('market-regime-synthesis-title')).toHaveTextContent('数据不足');
+    });
     expect(within(details).getByTestId('market-regime-synthesis-state-chip')).toHaveTextContent('数据不足');
     expect(within(details).getByTestId('market-regime-synthesis-confidence-chip')).toHaveTextContent('数据不足 · 22%');
     expect(within(details).getByTestId('market-regime-synthesis-summary')).toHaveTextContent('当前覆盖或置信度不足');

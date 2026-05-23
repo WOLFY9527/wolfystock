@@ -40,7 +40,15 @@ import { formatDateTime } from '../utils/format';
 import { cn } from '../utils/cn';
 import { normalizeRotationEvidence } from '../utils/evidenceDisplay';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
-import { marketIntelligenceReasonLabel, sanitizeMarketGuidanceCopy } from '../utils/marketIntelligenceGuidance';
+import {
+  MARKET_DECISION_NOT_READY_NOTICE,
+  decisionReadinessStateLabel,
+  decisionReadinessVariant,
+  marketIntelligenceReasonLabel,
+  sanitizeMarketGuidanceCopy,
+  type DecisionReadinessState,
+  type DecisionReadinessSummary,
+} from '../utils/marketIntelligenceGuidance';
 
 const TOP_THEME_LIMIT = 10;
 const MARKET_OPTIONS = [
@@ -764,6 +772,68 @@ function rotationGuidance(payload: MarketRotationRadarResponse): {
   };
 }
 
+function uniqueReadinessItems(items: Array<string | null | undefined>, limit: number, fallback: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  items.forEach((item) => {
+    const value = String(item || '').trim();
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    result.push(value);
+  });
+  return result.length ? result.slice(0, limit) : [fallback];
+}
+
+function buildRotationDecisionReadiness(payload: MarketRotationRadarResponse): DecisionReadinessSummary {
+  const tiers = deriveRotationTiers(payload);
+  const confirmedCount = tiers.confirmedLeaders.length;
+  const candidateCount = tiers.candidateThemes.length;
+  const scoreEligibleCount = rotationScoreEligibleCount(payload);
+  const totalEtfEvidence = payload.etfLeadershipDiagnostics.evidence.length
+    || payload.etfLeadershipDiagnostics.eligibleSymbols.length
+    || 0;
+  const scopeThemes = resolveSummaryThemes(payload.themes || [], payload.summary.strongestThemes || []);
+  const primaryThemes = derivePrimaryDisplayThemes(payload, tiers);
+  const summaryThemes = primaryThemes.length ? primaryThemes : scopeThemes.length ? scopeThemes : payload.themes || [];
+  const state: DecisionReadinessState = confirmedCount > 0
+    && scoreEligibleCount > 0
+    && !payload.isFallback
+    && !payload.isStale
+    ? 'ready'
+    : tiers.libraryMode || payload.isFallback || payload.isStale || payload.themes.length === 0
+      ? 'unavailable'
+      : candidateCount > 0 || scoreEligibleCount > 0
+        ? 'observe'
+        : 'unavailable';
+  const blockers = [
+    confirmedCount === 0 ? '真实流向确认缺失' : '',
+    scoreEligibleCount === 0 ? 'ETF authority 未满足可用条件' : '',
+    tiers.libraryMode ? '仅有主题分类' : '',
+    payload.isFallback ? '存在 fallback 载荷' : '',
+    payload.isStale ? '存在过期载荷' : '',
+    summarizeGap(summaryThemes),
+  ];
+  const nextEvidence = [
+    scoreEligibleCount === 0 ? 'ETF authority' : '',
+    confirmedCount === 0 ? '真实资金流证据' : '',
+    confirmedCount === 0 ? 'breadth confirmation' : '',
+    ...summaryThemes.flatMap((theme) => themeDataGaps(theme).slice(0, 1)).map(formatGapLabel),
+    state === 'ready' ? '继续确认反证与扩散质量' : '',
+  ];
+
+  return {
+    state,
+    stateLabel: decisionReadinessStateLabel(state),
+    stateVariant: decisionReadinessVariant(state),
+    qualityLabel: `证据质量：确认 ${confirmedCount} · 候选 ${candidateCount} · ETF可计分 ${scoreEligibleCount}/${totalEtfEvidence}`,
+    blockers: uniqueReadinessItems(blockers, 4, state === 'ready' ? '暂无关键阻塞' : '关键证据仍待补齐'),
+    nextEvidence: uniqueReadinessItems(nextEvidence, 3, '等待新的 score-grade 轮动证据'),
+    conclusion: state === 'ready'
+      ? '当前证据可支持主题轮动方向的研究判断。'
+      : MARKET_DECISION_NOT_READY_NOTICE,
+  };
+}
+
 function themeNamesSummary(themes: MarketRotationTheme[], fallback: string): string {
   return themes.length ? themes.map((theme) => theme.name).join(' / ') : fallback;
 }
@@ -846,6 +916,40 @@ const CapitalRotationSummaryPanel: React.FC<{ view: CapitalRotationSummaryView }
           <p className="mt-2 text-[11px] leading-5 text-white/52">{card.detail}</p>
         </div>
       ))}
+    </div>
+  </TerminalPanel>
+);
+
+const RotationDecisionReadinessPanel: React.FC<{ summary: DecisionReadinessSummary }> = ({ summary }) => (
+  <TerminalPanel data-testid="rotation-decision-readiness" className="relative overflow-hidden">
+    <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold text-white/45">判断可用性</p>
+        <h2 className="mt-1 text-base font-semibold leading-6 text-white/92 md:text-lg">{summary.stateLabel}</h2>
+        <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">{summary.conclusion}</p>
+      </div>
+      <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
+        <TerminalChip variant={summary.stateVariant}>{summary.stateLabel}</TerminalChip>
+        <TerminalChip variant="neutral">{summary.qualityLabel}</TerminalChip>
+      </div>
+    </div>
+    <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
+      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+        <p className="text-[11px] font-medium text-white/48">阻塞项</p>
+        <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+          {summary.blockers.map((item) => (
+            <TerminalChip key={item} variant={summary.state === 'ready' ? 'neutral' : 'caution'}>{item}</TerminalChip>
+          ))}
+        </div>
+      </div>
+      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+        <p className="text-[11px] font-medium text-white/48">提升证据</p>
+        <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+          {summary.nextEvidence.map((item) => (
+            <TerminalChip key={item} variant="info">{item}</TerminalChip>
+          ))}
+        </div>
+      </div>
     </div>
   </TerminalPanel>
 );
@@ -1628,6 +1732,10 @@ const MarketRotationRadarPage: React.FC = () => {
     () => (payload ? deriveCapitalRotationSummary(payload) : null),
     [payload],
   );
+  const decisionReadinessSummary = useMemo(
+    () => (payload ? buildRotationDecisionReadiness(payload) : null),
+    [payload],
+  );
   const primaryTierLabel = libraryMode ? '主题库浏览' : rotationTiers?.confirmedLeaders.length ? '确认主线' : '候选观察';
 
   return (
@@ -1661,6 +1769,8 @@ const MarketRotationRadarPage: React.FC = () => {
                 <span>{sanitizeRotationText(payload.warning)}</span>
               </TerminalNotice>
             ) : null}
+
+            {decisionReadinessSummary ? <RotationDecisionReadinessPanel summary={decisionReadinessSummary} /> : null}
 
             {capitalRotationSummary ? <CapitalRotationSummaryPanel view={capitalRotationSummary} /> : null}
 
