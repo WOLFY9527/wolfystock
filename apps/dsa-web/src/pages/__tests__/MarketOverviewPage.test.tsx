@@ -1459,16 +1459,27 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-side-rail')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '展开 技术细节 / Details' })).toBeInTheDocument();
     expect(screen.queryByTestId('market-regime-synthesis-header')).not.toBeInTheDocument();
-    const details = expandMarketDecisionDetails();
-    expect(within(details).getByTestId('market-regime-synthesis-header')).toBeInTheDocument();
-    expect(within(details).getByTestId('market-overview-temperature-summary')).toBeInTheDocument();
-    expect(within(details).getByTestId('market-overview-official-macro-diagnostics')).toBeInTheDocument();
 
     const usTab = screen.getByRole('button', { name: '美股' });
     fireEvent.click(usTab);
 
     expect(usTab).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('market-overview-export-summary')).toBeInTheDocument();
+  });
+
+  it('lazy loads technical diagnostics only after the disclosure opens', async () => {
+    renderMarketOverviewWorkbench();
+
+    expect(screen.queryByTestId('market-decision-debug-loading')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('market-regime-synthesis-header')).not.toBeInTheDocument();
+
+    const details = expandMarketDecisionDetails();
+
+    expect(within(details).getByTestId('market-decision-debug-loading')).toHaveAttribute('aria-busy', 'true');
+    expect(within(details).queryByTestId('market-regime-synthesis-header')).not.toBeInTheDocument();
+
+    expect(await within(details).findByTestId('market-regime-synthesis-header')).toBeInTheDocument();
+    expect(within(details).getByTestId('market-overview-official-macro-diagnostics')).toBeInTheDocument();
   });
 
   afterEach(() => {

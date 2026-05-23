@@ -57,7 +57,7 @@ import {
 import { TerminalChip, TerminalGrid, TerminalPageShell, TerminalPanel } from '../terminal';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
-import { buildOfficialMacroAuthorityDiagnosticsView } from '../common/officialMacroAuthorityDiagnosticsData';
+import type { OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';
 import { buildMarketDirectionalSummary, marketIntelligenceReasonLabel } from '../../utils/marketIntelligenceGuidance';
 
 const MARKET_OVERVIEW_GRID_FALLBACK_MIN_MS = 120;
@@ -2271,7 +2271,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
   const dataStateStatuses = collectDataStateMeta(panels).map(resolveProviderStatus);
   const fallbackCount = dataQuality.counts.fallback + dataQuality.counts.mock;
   const unavailableCount = dataStateStatuses.filter((status) => status === 'partial' || status === 'unavailable' || status === 'error').length + refreshErrorCount;
-  const officialMacroDiagnostics = buildOfficialMacroAuthorityDiagnosticsView(
+  const officialMacroRecords: OfficialMacroAuthorityRecord[] =
     (panels.macro?.items || []).map((item) => ({
       key: item.symbol,
       label: item.label,
@@ -2292,8 +2292,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
       officialSeriesId: item.officialSeriesId,
       officialObservationDate: item.officialObservationDate,
       officialAsOf: item.officialAsOf,
-    })),
-  );
+    }));
   const dataStateView: MarketOverviewDataStateStripView = {
     availableCount: dataQuality.counts.live + dataQuality.counts.delayed + dataQuality.counts.cached,
     fallbackCount,
@@ -2412,7 +2411,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
           dataState={dataStateView}
           temperatureSummary={temperatureSummary}
           briefingSummary={briefingSummary}
-          officialMacroDiagnostics={officialMacroDiagnostics}
+          officialMacroRecords={officialMacroRecords}
           categoryTabs={categoryTabs}
           activeCategory={activeCategory}
           onCategoryChange={setActiveCategory}

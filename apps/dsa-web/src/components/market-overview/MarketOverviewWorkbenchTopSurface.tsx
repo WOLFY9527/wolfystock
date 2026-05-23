@@ -1,17 +1,27 @@
 import type React from 'react';
+import { Suspense, lazy } from 'react';
 import type { MarketOverviewTab } from '../../pages/MarketOverviewTabConfig';
 import {
   ConsoleBoard,
   KeyLevelStrip,
 } from '../linear';
-import { TerminalChip, TerminalDenseList, TerminalDisclosure, TerminalNotice, TerminalPanel, TerminalSectionHeader } from '../terminal';
+import { TerminalChip, TerminalDisclosure } from '../terminal';
 import { cn } from '../../utils/cn';
-import { MarketRegimeSynthesisHeader, type MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
-import { OfficialMacroAuthorityDiagnostics } from '../common/OfficialMacroAuthorityDiagnostics';
-import type { OfficialMacroAuthorityDiagnosticsView } from '../common/officialMacroAuthorityDiagnosticsData';
+import type { MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
+import type { OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';
 import { TrustDisclosureChips } from '../evidence/TrustDisclosureChips';
 import type { TrustDisclosureBucket } from '../../utils/trustDisclosure';
-import { joinMarketReasonLabels, marketIntelligenceReasonLabel, marketIntelligenceReasonLabels, type MarketDirectionalSummary } from '../../utils/marketIntelligenceGuidance';
+import { joinMarketReasonLabels, type MarketDirectionalSummary } from '../../utils/marketIntelligenceGuidance';
+
+const MARKET_OVERVIEW_DEBUG_DETAILS_FALLBACK_MIN_MS = 120;
+
+const LazyMarketOverviewDecisionDebugDetails = lazy(async () => {
+  const [module] = await Promise.all([
+    import('./MarketOverviewDecisionDebugDetails'),
+    new Promise((resolve) => setTimeout(resolve, MARKET_OVERVIEW_DEBUG_DETAILS_FALLBACK_MIN_MS)),
+  ]);
+  return { default: module.MarketOverviewDecisionDebugDetails };
+});
 
 export type MarketOverviewDecisionChipView = {
   label: string;
@@ -126,7 +136,7 @@ type MarketOverviewWorkbenchTopSurfaceProps = {
   dataState: MarketOverviewDataStateStripView;
   temperatureSummary: MarketOverviewTemperatureSummaryView;
   briefingSummary: MarketOverviewBriefingSummaryView;
-  officialMacroDiagnostics: OfficialMacroAuthorityDiagnosticsView;
+  officialMacroRecords: OfficialMacroAuthorityRecord[];
   categoryTabs: MarketOverviewCategoryTabView[];
   activeCategory: MarketOverviewTab;
   onCategoryChange: (tab: MarketOverviewTab) => void;
@@ -221,68 +231,6 @@ const MarketDecisionSemanticsList: React.FC<{
   </div>
 );
 
-const MarketDirectionReadinessStrip: React.FC<{
-  view?: MarketOverviewDirectionReadinessView;
-}> = ({ view }) => {
-  if (!view) {
-    return null;
-  }
-
-  const pillarSummary = [
-    ...view.scoreGradePillars,
-    ...view.observationOnlyPillars,
-    ...view.missingPillars,
-  ].slice(0, 3);
-
-  return (
-    <div
-      data-testid="market-direction-readiness-strip"
-      className="mt-3 min-w-0 rounded-md border border-white/[0.07] bg-black/10 px-3 py-2"
-    >
-      <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <TerminalChip
-            variant={view.statusVariant}
-            className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest"
-          >
-            {view.statusLabel}
-          </TerminalChip>
-          <TerminalChip variant="neutral" className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest">
-            {view.confidenceLabel}
-          </TerminalChip>
-          <span className="font-mono text-[11px] text-white/55">
-            评分级 {view.scoreGradeCount} · 仅观察 {view.observationOnlyCount} · 证据不足 {view.missingCount}
-          </span>
-        </div>
-        {view.blockingReasons.length ? (
-          <p
-            data-testid="market-direction-readiness-reasons"
-            className="min-w-0 break-words font-mono text-[10px] leading-4 text-amber-100/62 lg:max-w-[48%] lg:text-right"
-          >
-            {marketIntelligenceReasonLabels(view.blockingReasons, 'zh', 3).join(' · ')}
-          </p>
-        ) : null}
-      </div>
-      {pillarSummary.length ? (
-        <div className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-[10px] font-semibold text-white/48">
-          {pillarSummary.map((pillar) => (
-            <span
-              key={pillar.key}
-              className="max-w-full truncate rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1"
-            >
-              {pillar.label}
-              {pillar.reasonCode && pillar.reasonCode !== 'score_grade_evidence' ? ` · ${marketIntelligenceReasonLabel(pillar.reasonCode)}` : ''}
-            </span>
-          ))}
-        </div>
-      ) : null}
-      {view.notInvestmentAdvice ? (
-        <p className="mt-2 text-[10px] font-semibold text-white/34">非投资建议</p>
-      ) : null}
-    </div>
-  );
-};
-
 function directionUsabilitySummary(view: MarketOverviewDecisionSemanticsView): {
   label: string;
   variant: 'success' | 'info' | 'caution';
@@ -333,7 +281,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
   regimeSynthesis: MarketRegimeSynthesisHeaderView;
   temperatureSummary: MarketOverviewTemperatureSummaryView;
   briefingSummary: MarketOverviewBriefingSummaryView;
-  officialMacroDiagnostics: OfficialMacroAuthorityDiagnosticsView;
+  officialMacroRecords: OfficialMacroAuthorityRecord[];
 }> = ({
   directionalSummary,
   view,
@@ -344,7 +292,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
   regimeSynthesis,
   temperatureSummary,
   briefingSummary,
-  officialMacroDiagnostics,
+  officialMacroRecords,
 }) => {
   const supportingEvidence = view ? [
     ...view.styleTilts.slice(0, 1),
@@ -501,196 +449,37 @@ const MarketDecisionSemanticsStrip: React.FC<{
           summary="方向 readiness、来源覆盖、运行快照与原始 reason code 默认折叠"
           className="mt-3 bg-black/10"
         >
-          <div className="grid gap-3">
-            <div className="rounded-lg border border-white/[0.06] bg-black/10 p-3">
-              <MarketRegimeSynthesisHeader view={regimeSynthesis} />
-            </div>
-            <MarketOverviewStatusStrip
+          <Suspense fallback={<MarketDecisionDebugLoadingFallback />}>
+            <LazyMarketOverviewDecisionDebugDetails
+              regimeSynthesis={regimeSynthesis}
               temperatureSummary={temperatureSummary}
               briefingSummary={briefingSummary}
+              dataState={dataState}
+              officialMacroRecords={officialMacroRecords}
+              directionReadiness={view?.directionReadiness}
+              claimBoundaries={view?.claimBoundaries || []}
+              rawDebugCodes={rawDebugCodes}
             />
-            <MarketOverviewDataStateStrip dataState={dataState} />
-            <OfficialMacroAuthorityDiagnostics
-              testId="market-overview-official-macro-diagnostics"
-              title="来源覆盖诊断"
-              view={officialMacroDiagnostics}
-            />
-            {view?.directionReadiness ? <MarketDirectionReadinessStrip view={view.directionReadiness} /> : null}
-            <div
-              data-testid="market-decision-semantics-claim-boundaries"
-              className="flex min-w-0 flex-wrap gap-1.5"
-            >
-              {(view?.claimBoundaries || []).map((boundary) => (
-                <span
-                  key={boundary.key}
-                  className={cn(
-                    'rounded-md border px-2 py-1 text-[10px] font-semibold',
-                    boundary.allowed
-                      ? 'border-emerald-300/14 bg-emerald-300/[0.06] text-emerald-100/70'
-                      : 'border-amber-300/14 bg-amber-300/[0.06] text-amber-100/70',
-                  )}
-                >
-                  {boundary.label} · {boundary.allowed ? '允许' : '禁止'}
-                  {boundary.reasonCode ? ` · ${marketIntelligenceReasonLabel(boundary.reasonCode)}` : ''}
-                </span>
-              ))}
-            </div>
-            <TerminalDenseList className="font-mono text-[10px] leading-4 text-white/46">
-              {rawDebugCodes.length ? rawDebugCodes.map((code, index) => (
-                <span key={`${code}-${index}`}>{code}</span>
-              )) : <span>暂无原始代码</span>}
-            </TerminalDenseList>
-          </div>
+          </Suspense>
         </TerminalDisclosure>
       </div>
     </section>
   );
 };
 
-const CompactStatusTile: React.FC<{
-  testId: string;
-  eyebrow: string;
-  title: string;
-  value: string;
-  meta: React.ReactNode;
-  tone?: string;
-}> = ({ testId, eyebrow, title, value, meta, tone = 'text-white' }) => (
-  <TerminalPanel
-    as="section"
-    dense
-    data-testid={testId}
-    className="min-w-0"
+const MarketDecisionDebugLoadingFallback: React.FC = () => (
+  <div
+    data-testid="market-decision-debug-loading"
+    role="status"
+    aria-live="polite"
+    aria-busy="true"
+    className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3"
   >
-    <TerminalSectionHeader
-      eyebrow={eyebrow}
-      title={title}
-      action={<p className={cn('shrink-0 text-right font-mono text-lg font-semibold leading-none tabular-nums', tone)}>{value}</p>}
-    />
-    <div className="mt-2 min-w-0 text-xs leading-5 text-white/45">{meta}</div>
-  </TerminalPanel>
-);
-
-const MarketTemperatureCompactSummary: React.FC<{ summary: MarketOverviewTemperatureSummaryView }> = ({ summary }) => (
-  <CompactStatusTile
-    testId="market-overview-temperature-summary"
-    eyebrow="温度"
-    title="市场温度"
-    value={summary.valueText}
-    tone={summary.toneClass}
-    meta={(
-      <div data-testid="market-temperature-strip" className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="font-semibold text-white/68">{summary.label}</span>
-        <span>信号可信：{summary.confidenceLabel}</span>
-        <span className="font-mono tabular-nums">
-          真实 {summary.reliableInputCount} · 备用 {summary.fallbackInputCount} · 排除 {summary.excludedInputCount}
-        </span>
-        {!summary.reliable ? (
-          <span data-testid="market-temperature-unreliable-summary">
-            {summary.label === '可靠输入不足' ? '可靠输入不足，暂不生成综合判断' : '暂不判定，暂不生成综合判断'}
-          </span>
-        ) : null}
-      </div>
-    )}
-  />
-);
-
-const MarketBriefingCompactSummary: React.FC<{ summary: MarketOverviewBriefingSummaryView }> = ({ summary }) => (
-  <CompactStatusTile
-    testId="market-overview-briefing-summary"
-    eyebrow="简报"
-    title="今日市场解读"
-    value={summary.confidenceLabel}
-    tone={summary.toneClass}
-    meta={(
-      <div className="min-w-0">
-        <p data-testid="market-briefing-card" className="truncate text-white/55">{summary.leadMessage}</p>
-        {summary.warning ? <p data-testid="market-briefing-warning" className="truncate text-amber-200/70">{summary.warning}</p> : null}
-      </div>
-    )}
-  />
-);
-
-const MarketOverviewStatusStrip: React.FC<{
-  temperatureSummary: MarketOverviewTemperatureSummaryView;
-  briefingSummary: MarketOverviewBriefingSummaryView;
-}> = ({ temperatureSummary, briefingSummary }) => (
-  <section
-    data-testid="market-overview-status-strip"
-    className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[1fr_1.35fr]"
-  >
-    <MarketTemperatureCompactSummary summary={temperatureSummary} />
-    <MarketBriefingCompactSummary summary={briefingSummary} />
-  </section>
-);
-
-const MarketOverviewDataStateStrip: React.FC<{
-  dataState: MarketOverviewDataStateStripView;
-}> = ({ dataState }) => (
-  <TerminalNotice
-    variant={dataState.variant}
-    data-testid="market-overview-cache-status"
-    data-market-research-flow="cache"
-    data-mobile-order="cache-status"
-    className="min-w-0"
-  >
-    <div
-      data-testid="market-overview-data-state-strip"
-      className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between"
-    >
-      <div className="min-w-0 flex-1">
-        <TerminalSectionHeader eyebrow="状态" title="数据状态" />
-        <TerminalDenseList
-          data-testid="market-overview-data-state-summary"
-          className="mt-2 min-w-0 text-[11px] leading-4 text-white/45"
-        >
-          <span className="truncate font-mono">
-            可用 {dataState.availableCount} · 备用数据 {dataState.fallbackCount} · 数据过期 {dataState.staleCount}
-            {dataState.hasUnavailable ? ` · 证据不足 ${dataState.unavailableCount}` : ''}
-          </span>
-        </TerminalDenseList>
-      </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-2 xl:max-w-[60%] xl:justify-end">
-        <TrustDisclosureChips
-          buckets={[
-            dataState.hasFallback ? 'fallback' : null,
-            dataState.staleCount > 0 ? 'stale' : null,
-            dataState.hasUnavailable ? 'insufficient' : null,
-          ]}
-          chipClassName="text-[11px]"
-        />
-        {dataState.isRefreshing || dataState.needsRefresh ? (
-          <TerminalChip
-            data-testid="market-overview-data-state-refresh-chip"
-            variant={dataState.isRefreshing ? 'info' : 'caution'}
-          >
-            {dataState.isRefreshing ? '刷新中' : '待刷新'}
-          </TerminalChip>
-        ) : null}
-        {dataState.hasFallback ? (
-          <TerminalChip
-            data-testid="market-overview-data-state-fallback-chip"
-            variant="caution"
-          >
-            备用数据
-          </TerminalChip>
-        ) : null}
-        {dataState.hasUnavailable ? (
-          <TerminalChip
-            data-testid="market-overview-data-state-unavailable-chip"
-            variant="caution"
-          >
-            部分外部数据暂不可用
-          </TerminalChip>
-        ) : null}
-        <TerminalChip
-          data-testid="market-overview-data-state-updated-chip"
-          variant={dataState.updatedAtLabel ? 'neutral' : 'info'}
-        >
-          {dataState.updatedAtLabel ? <>更新时间 <span className="font-mono">{dataState.updatedAtLabel}</span></> : '待刷新'}
-        </TerminalChip>
-      </div>
-    </div>
-  </TerminalNotice>
+    <p className="text-[11px] font-semibold text-white/72">正在加载技术细节</p>
+    <p className="mt-1 text-[11px] leading-5 text-white/42">
+      保留当前方向摘要，补充 readiness、来源覆盖与 reason code。
+    </p>
+  </div>
 );
 
 const MarketOverviewCategoryControls: React.FC<{
@@ -754,7 +543,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
   dataState,
   temperatureSummary,
   briefingSummary,
-  officialMacroDiagnostics,
+  officialMacroRecords,
   categoryTabs,
   activeCategory,
   onCategoryChange,
@@ -778,7 +567,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
               regimeSynthesis={regimeSynthesis}
               temperatureSummary={temperatureSummary}
               briefingSummary={briefingSummary}
-              officialMacroDiagnostics={officialMacroDiagnostics}
+              officialMacroRecords={officialMacroRecords}
             />
             <div className="border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4">
               <MarketOverviewCategoryControls
