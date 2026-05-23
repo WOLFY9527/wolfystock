@@ -162,6 +162,14 @@ type DataStateFields = {
   isStale?: boolean;
 };
 
+type RotationTierView = {
+  libraryMode: boolean;
+  confirmedLeaders: MarketRotationTheme[];
+  candidateThemes: MarketRotationTheme[];
+  coolingThemes: MarketRotationTheme[];
+  taxonomyThemes: MarketRotationTheme[];
+};
+
 function scoreTone(score: number): string {
   if (score >= 75) {
     return 'text-emerald-300 drop-shadow-[0_0_10px_rgba(52,211,153,0.34)]';
@@ -365,15 +373,15 @@ function conservativeFlowCopy(value?: string | null, allowMoneyFlowLanguage = fa
   const text = String(value || '').trim();
   if (!text) return fallback;
   if (allowMoneyFlowLanguage) {
-    return sanitizeMarketGuidanceCopy(sanitizeRotationText(text, fallback), fallback);
+    return sanitizeTradingActionWords(sanitizeMarketGuidanceCopy(sanitizeRotationText(text, fallback), fallback));
   }
-  return sanitizeMarketGuidanceCopy(sanitizeRotationText(
+  return sanitizeTradingActionWords(sanitizeMarketGuidanceCopy(sanitizeRotationText(
     text
       .replaceAll('资金流向', '主题强弱')
       .replaceAll('资金轮动', '主题轮动')
       .replaceAll('资金流', '流向'),
     fallback,
-  ), fallback);
+  ), fallback));
 }
 
 function compactConfidence(value?: number | null): string {
@@ -421,10 +429,20 @@ function isInternalRotationIssue(value?: string | null): boolean {
   return /provider|timeout|schema|debug|raw|trace|cache|not_enough|unavailable|missing|insufficient|technical_indicators|fundamentals|earnings|optional_news/.test(normalized);
 }
 
+function sanitizeTradingActionWords(value: string): string {
+  return value
+    .replaceAll('买卖信号', '方向结论')
+    .replaceAll('买卖建议', '投资建议')
+    .replaceAll('买卖', '投资动作')
+    .replace(/\brecommendations?\b/gi, 'research framing')
+    .replace(/\brecommended\b/gi, 'research-framed')
+    .replace(/\brecommend\b/gi, 'research frame');
+}
+
 function sanitizeRotationText(value?: string | null, fallback = '数据不足，结论仅供观察'): string {
   const text = String(value || '').trim();
   if (!text) return fallback;
-  return sanitizeMarketGuidanceCopy(isInternalRotationIssue(text) ? sanitizeUserFacingDataIssue(text, 'zh') : text, fallback);
+  return sanitizeTradingActionWords(sanitizeMarketGuidanceCopy(isInternalRotationIssue(text) ? sanitizeUserFacingDataIssue(text, 'zh') : text, fallback));
 }
 
 function sanitizeRotationNotes(notes?: string[]): string[] {
@@ -479,7 +497,8 @@ function deriveWeakeningThemes(themes: MarketRotationTheme[]): MarketRotationThe
 }
 
 function deriveParticipationBuckets(themes: MarketRotationTheme[]): Bucket[] {
-  const sorted = deriveTopThemes(themes, themes.length);
+  const sortableThemes = themes.filter((theme) => !isTaxonomyOnlyTheme(theme));
+  const sorted = deriveTopThemes(sortableThemes, sortableThemes.length);
   const rising = sorted
     .filter((theme) => theme.rotationScore >= 62 && Number(theme.volume?.averageRelativeVolume) >= 1.05 && Number(theme.relativeStrength?.averageRelativeStrengthPercent) > 0)
     .slice(0, 4);
@@ -492,7 +511,7 @@ function deriveParticipationBuckets(themes: MarketRotationTheme[]): Bucket[] {
 
   return [
     { id: 'rising', title: '新近走强', tone: 'text-emerald-200', items: rising, fallback: '暂无扩张确认' },
-    { id: 'weakening', title: '走弱降温', tone: 'text-amber-200', items: deriveWeakeningThemes(themes), fallback: '暂无降温列表' },
+    { id: 'weakening', title: '走弱降温', tone: 'text-amber-200', items: deriveWeakeningThemes(sortableThemes), fallback: '暂无降温列表' },
     { id: 'broad', title: '广泛参与', tone: 'text-cyan-200', items: broad, fallback: '广度待补齐' },
     { id: 'narrow', title: '窄幅龙头', tone: 'text-rose-200', items: narrow, fallback: '未见明显集中' },
   ];
@@ -658,8 +677,53 @@ function rotationScoreEligibleCount(payload: MarketRotationRadarResponse): numbe
 
 function isRotationLibraryMode(payload: MarketRotationRadarResponse): boolean {
   const themes = payload.themes || [];
-  const taxonomyOnly = themes.length > 0 && themes.every(isTaxonomyOnlyTheme);
-  return taxonomyOnly || payload.etfLeadershipDiagnostics?.enabled === false || rotationScoreEligibleCount(payload) === 0;
+  return themes.length > 0 && themes.every(isTaxonomyOnlyTheme);
+}
+
+function isConfirmedRealFlowLeader(theme: MarketRotationTheme): boolean {
+  return !isTaxonomyOnlyTheme(theme)
+    && resolveSignalType(theme) === 'real_flow'
+    && theme.flowLanguageAllowed === true
+    && resolveEvidenceQuality(theme) === 'score_grade_real_flow'
+    && (theme.stage === 'confirmed_rotation' || theme.stage === 'extended_watch');
+}
+
+function isCandidateWatchTheme(theme: MarketRotationTheme, confirmedIds: Set<string>): boolean {
+  const signalType = resolveSignalType(theme);
+  return !isTaxonomyOnlyTheme(theme)
+    && !confirmedIds.has(theme.id)
+    && (theme.stage === 'confirmed_rotation' || theme.stage === 'early_watch' || theme.stage === 'extended_watch')
+    && (signalType === 'relative_strength' || signalType === 'momentum_proxy')
+    && resolveEvidenceQuality(theme) !== 'insufficient';
+}
+
+function deriveRotationTiers(payload: MarketRotationRadarResponse): RotationTierView {
+  const themes = payload.themes || [];
+  const confirmedLeaders = deriveTopThemes(themes.filter(isConfirmedRealFlowLeader), 3);
+  const confirmedIds = new Set(confirmedLeaders.map((theme) => theme.id));
+  return {
+    libraryMode: isRotationLibraryMode(payload),
+    confirmedLeaders,
+    candidateThemes: deriveTopThemes(themes.filter((theme) => isCandidateWatchTheme(theme, confirmedIds)), 3),
+    coolingThemes: deriveWeakeningThemes(themes).filter((theme) => !isTaxonomyOnlyTheme(theme)).slice(0, 3),
+    taxonomyThemes: themes.filter(isTaxonomyOnlyTheme).slice(0, 3),
+  };
+}
+
+function derivePrimaryDisplayThemes(
+  payload: MarketRotationRadarResponse,
+  tiers = deriveRotationTiers(payload),
+): MarketRotationTheme[] {
+  if (tiers.libraryMode) {
+    return resolveSummaryThemes(payload.themes || [], payload.summary.strongestThemes || []);
+  }
+  if (tiers.confirmedLeaders.length) {
+    return tiers.confirmedLeaders;
+  }
+  if (tiers.candidateThemes.length) {
+    return tiers.candidateThemes;
+  }
+  return resolveSummaryThemes(payload.themes || [], payload.summary.strongestThemes || []);
 }
 
 function rotationGuidance(payload: MarketRotationRadarResponse): {
@@ -667,11 +731,9 @@ function rotationGuidance(payload: MarketRotationRadarResponse): {
   detail: string;
   variant: 'neutral' | 'info' | 'caution' | 'danger';
 } {
-  const themes = payload.themes || [];
-  const hasRealFlowSignal = themes.some((theme) => resolveSignalType(theme) === 'real_flow' && theme.flowLanguageAllowed);
-  const libraryMode = isRotationLibraryMode(payload);
+  const tiers = deriveRotationTiers(payload);
 
-  if (libraryMode) {
+  if (tiers.libraryMode) {
     return {
       title: '主题库模式：当前不是实时轮动信号',
       detail: '当前仅展示主题分类与观察线索，缺少 ETF authority / flow / breadth confirmation。',
@@ -679,17 +741,25 @@ function rotationGuidance(payload: MarketRotationRadarResponse): {
     };
   }
 
-  if (!hasRealFlowSignal) {
+  if (tiers.confirmedLeaders.length) {
     return {
-      title: '当前不能判断主题轮动',
-      detail: '当前仅展示主题分类与观察线索，缺少 ETF authority / flow / breadth confirmation。',
+      title: '主题轮动可继续观察',
+      detail: '已出现可用证据，但页面仍只提供研究观察，不放大为交易含义。',
+      variant: 'info',
+    };
+  }
+
+  if (tiers.candidateThemes.length) {
+    return {
+      title: '暂无真实流向确认，保留候选观察',
+      detail: 'ETF authority 或 score-grade flow 未确认时，代理/动量证据只进入候选观察。',
       variant: 'info',
     };
   }
 
   return {
-    title: '主题轮动可继续观察',
-    detail: '已出现可用证据，但页面仍只提供研究观察，不放大为交易含义。',
+    title: '当前不能判断主题轮动',
+    detail: '当前仅展示主题分类与观察线索，缺少 ETF authority / flow / breadth confirmation。',
     variant: 'info',
   };
 }
@@ -699,24 +769,13 @@ function themeNamesSummary(themes: MarketRotationTheme[], fallback: string): str
 }
 
 function deriveCapitalRotationSummary(payload: MarketRotationRadarResponse): CapitalRotationSummaryView {
-  const themes = payload.themes || [];
-  const libraryMode = isRotationLibraryMode(payload);
-  const confirmedLeaders = libraryMode ? [] : deriveTopThemes(themes.filter((theme) => (
-    !isTaxonomyOnlyTheme(theme)
-    && resolveSignalType(theme) === 'real_flow'
-    && theme.flowLanguageAllowed === true
-    && resolveEvidenceQuality(theme) === 'score_grade_real_flow'
-    && (theme.stage === 'confirmed_rotation' || theme.stage === 'extended_watch')
-  )), 3);
-  const candidateThemes = libraryMode ? [] : deriveTopThemes(themes.filter((theme) => (
-    !isTaxonomyOnlyTheme(theme)
-    && !confirmedLeaders.some((leader) => leader.id === theme.id)
-    && (theme.stage === 'confirmed_rotation' || theme.stage === 'early_watch' || theme.stage === 'extended_watch')
-    && (resolveSignalType(theme) === 'relative_strength' || resolveSignalType(theme) === 'momentum_proxy')
-    && resolveEvidenceQuality(theme) !== 'insufficient'
-  )), 3);
-  const coolingThemes = libraryMode ? [] : deriveWeakeningThemes(themes).filter((theme) => !isTaxonomyOnlyTheme(theme)).slice(0, 3);
-  const taxonomyThemes = themes.filter(isTaxonomyOnlyTheme).slice(0, 3);
+  const {
+    libraryMode,
+    confirmedLeaders,
+    candidateThemes,
+    coolingThemes,
+    taxonomyThemes,
+  } = deriveRotationTiers(payload);
   const modeLabel = libraryMode
     ? '当前不是实时轮动信号'
     : confirmedLeaders.length
@@ -743,7 +802,7 @@ function deriveCapitalRotationSummary(payload: MarketRotationRadarResponse): Cap
         key: 'candidate',
         label: '候选观察',
         value: themeNamesSummary(candidateThemes, '暂无候选主题'),
-        detail: candidateThemes.length ? 'Candidate watchlist，等待 flow / breadth confirmation。' : '当前没有可排序候选。',
+        detail: candidateThemes.length ? 'Candidate watchlist，等待 real-flow / breadth confirmation。' : '当前没有可排序候选。',
         variant: candidateThemes.length ? 'info' : 'neutral',
       },
       {
@@ -793,17 +852,23 @@ const CapitalRotationSummaryPanel: React.FC<{ view: CapitalRotationSummaryView }
 
 const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> = ({ payload }) => {
   const guidance = rotationGuidance(payload);
-  const libraryMode = isRotationLibraryMode(payload);
+  const tiers = deriveRotationTiers(payload);
+  const libraryMode = tiers.libraryMode;
   const scopeThemes = resolveSummaryThemes(payload.themes || [], payload.summary.strongestThemes || []);
-  const summaryThemes = scopeThemes.length ? scopeThemes : payload.themes || [];
+  const primaryThemes = derivePrimaryDisplayThemes(payload, tiers);
+  const summaryThemes = primaryThemes.length ? primaryThemes : scopeThemes.length ? scopeThemes : payload.themes || [];
   const dominantLane = summarizeLane(summaryThemes);
-  const topThemeTitle = summaryTitle(payload.summary.strongestThemes, libraryMode ? '按主题分类浏览' : '等待真实行情');
+  const topThemeTitle = libraryMode
+    ? summaryTitle(payload.summary.strongestThemes, '按主题分类浏览')
+    : themeNamesSummary(primaryThemes, '等待真实行情');
   const upgradeLine = '需要 ETF authority / flow / breadth confirmation 才能升级为实时轮动信号。';
   const nextWatch = libraryMode
     ? `优先补齐 ${summarizeGap(summaryThemes)}，再确认 ETF authority、流向与广度是否同时过关。`
     : payload.summary.watchlistSignals?.length
       ? `${payload.summary.watchlistSignals[0].themeName} · ${payload.summary.watchlistSignals[0].signalLabel || payload.summary.watchlistSignals[0].label || '观察线索'}`
-      : '继续核对是否有新的实时轮动确认。';
+      : tiers.candidateThemes.length
+        ? `${tiers.candidateThemes[0].name} · 候选观察，等待真实流向确认`
+        : '继续核对是否有新的实时轮动确认。';
 
   return (
     <TerminalPanel
@@ -830,9 +895,13 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
         <div data-testid="rotation-radar-summary-band" data-terminal-primitive="panel" className="contents">
         <div className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
           <p className="text-[11px] font-medium text-white/48">当前状态</p>
-          <p className="mt-2 text-sm font-semibold text-white/82">{libraryMode ? '当前不是实时轮动信号' : '当前可继续观察主题轮动'}</p>
+          <p className="mt-2 text-sm font-semibold text-white/82">{libraryMode ? '当前不是实时轮动信号' : tiers.confirmedLeaders.length ? '当前可继续观察主题轮动' : '当前仅候选观察'}</p>
           <p className="mt-2 text-[11px] leading-5 text-white/58">
-            {libraryMode ? '主题库不是机会榜，不是实时排名，只保留分类浏览与观察线索。' : '页面只解释研究证据，不放大为交易含义。'}
+            {libraryMode
+              ? '主题库不是机会榜，不是实时排名，只保留分类浏览与观察线索。'
+              : tiers.confirmedLeaders.length
+                ? '页面只解释研究证据，不放大为交易含义。'
+                : '代理/动量证据只进入候选观察，不放大为确认主线。'}
           </p>
         </div>
         <div className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
@@ -994,15 +1063,17 @@ const CommandBar: React.FC<{
 const SummaryBand: React.FC<{
   payload: MarketRotationRadarResponse;
 }> = ({ payload }) => {
-  const libraryMode = isRotationLibraryMode(payload);
+  const tiers = deriveRotationTiers(payload);
+  const libraryMode = tiers.libraryMode;
   const scopeThemes = resolveSummaryThemes(payload.themes || [], payload.summary.strongestThemes || []);
-  const summaryThemes = scopeThemes.length ? scopeThemes : payload.themes || [];
+  const primaryThemes = derivePrimaryDisplayThemes(payload, tiers);
+  const summaryThemes = primaryThemes.length ? primaryThemes : scopeThemes.length ? scopeThemes : payload.themes || [];
   const dominantLane = summarizeLane(summaryThemes);
   const items = [
     { key: 'market', label: '市场', value: marketLabel(payload.market || 'US') },
     { key: 'source', label: '来源', value: payload.sourceLabel || '待确认' },
-    { key: 'mode', label: '模式', value: libraryMode ? '主题库模式' : '轮动观察' },
-    { key: 'top', label: libraryMode ? '分类浏览' : '重点主题', value: summaryTitle(payload.summary.strongestThemes, libraryMode ? '按主题分类浏览' : '等待真实行情') },
+    { key: 'mode', label: '模式', value: libraryMode ? '主题库模式' : tiers.confirmedLeaders.length ? '确认主线' : tiers.candidateThemes.length ? '候选观察' : '轮动观察' },
+    { key: 'top', label: libraryMode ? '分类浏览' : tiers.confirmedLeaders.length ? '确认主线' : '候选观察', value: libraryMode ? summaryTitle(payload.summary.strongestThemes, '按主题分类浏览') : themeNamesSummary(primaryThemes, '等待真实行情') },
     { key: 'lane', label: '证据边界', value: dominantLane.label },
     { key: 'quality', label: '证据质量', value: summarizeEvidenceQuality(summaryThemes) },
     { key: 'gaps', label: '主要缺口', value: summarizeGap(summaryThemes) },
@@ -1071,12 +1142,11 @@ const LaneBand: React.FC<{ themes: MarketRotationTheme[]; libraryMode: boolean }
 const LeaderRow: React.FC<{
   theme: MarketRotationTheme;
   rank: number;
-  libraryMode: boolean;
   selected: boolean;
   onSelect: () => void;
-}> = ({ theme, rank, libraryMode, selected, onSelect }) => {
+}> = ({ theme, rank, selected, onSelect }) => {
   const taxonomyOnly = isTaxonomyOnlyTheme(theme);
-  const displayAsLibrary = libraryMode || taxonomyOnly;
+  const displayAsLibrary = taxonomyOnly;
   const evidenceSummary = rotationEvidenceSummary(theme);
   const gaps = themeDataGaps(theme);
   return (
@@ -1123,10 +1193,9 @@ const LeaderRow: React.FC<{
 
 const LaggardRow: React.FC<{
   theme: MarketRotationTheme;
-  libraryMode: boolean;
   selected: boolean;
   onSelect: () => void;
-}> = ({ theme, libraryMode, selected, onSelect }) => (
+}> = ({ theme, selected, onSelect }) => (
   <button
     type="button"
     data-testid={`rotation-radar-laggard-row-${theme.id}`}
@@ -1139,21 +1208,20 @@ const LaggardRow: React.FC<{
       <span className="min-w-0">
         <span className="block truncate text-sm font-semibold text-white/78">{theme.name}</span>
         <span className="mt-1 block truncate text-[11px] text-white/38">
-        {libraryMode || isTaxonomyOnlyTheme(theme) ? '主题库观察线索' : `${laneMeta(theme).label} · ${mapDataStateLabel(theme)}`}
+        {isTaxonomyOnlyTheme(theme) ? '主题库观察线索' : `${laneMeta(theme).label} · ${mapDataStateLabel(theme)}`}
         </span>
       </span>
-    <span className={cn('text-right font-mono text-sm font-semibold tabular-nums', libraryMode || isTaxonomyOnlyTheme(theme) ? 'text-white/44' : scoreTone(theme.rotationScore))}>
-      {libraryMode || isTaxonomyOnlyTheme(theme) ? '主题库' : theme.rotationScore}
+    <span className={cn('text-right font-mono text-sm font-semibold tabular-nums', isTaxonomyOnlyTheme(theme) ? 'text-white/44' : scoreTone(theme.rotationScore))}>
+      {isTaxonomyOnlyTheme(theme) ? '主题库' : theme.rotationScore}
     </span>
   </button>
 );
 
 const CompactThemeRow: React.FC<{
   theme: MarketRotationTheme;
-  libraryMode: boolean;
   selected: boolean;
   onSelect: () => void;
-}> = ({ theme, libraryMode, selected, onSelect }) => (
+}> = ({ theme, selected, onSelect }) => (
   <button
     type="button"
     data-testid={`rotation-radar-universe-row-${theme.id}`}
@@ -1167,8 +1235,8 @@ const CompactThemeRow: React.FC<{
       <span className="block truncate font-semibold text-white/76">{theme.name}</span>
       <span className="block truncate text-[10px] text-white/35">{theme.englishName || theme.focus || theme.benchmark}</span>
     </span>
-    <span className={cn('text-right font-mono font-semibold tabular-nums', libraryMode || isTaxonomyOnlyTheme(theme) ? 'text-white/44' : scoreTone(theme.rotationScore))}>
-      {libraryMode || isTaxonomyOnlyTheme(theme) ? '主题库' : theme.rotationScore}
+    <span className={cn('text-right font-mono font-semibold tabular-nums', isTaxonomyOnlyTheme(theme) ? 'text-white/44' : scoreTone(theme.rotationScore))}>
+      {isTaxonomyOnlyTheme(theme) ? '主题库' : theme.rotationScore}
     </span>
     <span className="text-right text-[11px] text-white/42">{laneMeta(theme).label}</span>
   </button>
@@ -1538,11 +1606,12 @@ const MarketRotationRadarPage: React.FC = () => {
     void loadRadar(selectedMarket);
   }, [loadRadar, selectedMarket]);
 
+  const rotationTiers = useMemo(() => (payload ? deriveRotationTiers(payload) : null), [payload]);
   const headlineThemes = useMemo(
-    () => resolveSummaryThemes(payload?.themes || [], payload?.summary.strongestThemes || []),
-    [payload?.themes, payload?.summary.strongestThemes],
+    () => (payload && rotationTiers ? derivePrimaryDisplayThemes(payload, rotationTiers) : []),
+    [payload, rotationTiers],
   );
-  const weakeningThemes = useMemo(() => deriveWeakeningThemes(payload?.themes || []), [payload?.themes]);
+  const weakeningThemes = useMemo(() => rotationTiers?.coolingThemes || [], [rotationTiers]);
   const filteredThemes = useMemo(
     () => (payload?.themes || []).filter((theme) => matchesSearch(theme, searchQuery)),
     [payload?.themes, searchQuery],
@@ -1554,11 +1623,12 @@ const MarketRotationRadarPage: React.FC = () => {
     [payload, selectedThemeId],
   );
   const pageLane = useMemo(() => summarizeLane(payload?.themes || []), [payload?.themes]);
-  const libraryMode = useMemo(() => (payload ? isRotationLibraryMode(payload) : false), [payload]);
+  const libraryMode = rotationTiers?.libraryMode || false;
   const capitalRotationSummary = useMemo(
     () => (payload ? deriveCapitalRotationSummary(payload) : null),
     [payload],
   );
+  const primaryTierLabel = libraryMode ? '主题库浏览' : rotationTiers?.confirmedLeaders.length ? '确认主线' : '候选观察';
 
   return (
     <div
@@ -1608,12 +1678,21 @@ const MarketRotationRadarPage: React.FC = () => {
             <RotationGuidancePanel payload={payload} />
 
             <TerminalGrid className="gap-4" data-workbench-split="8:4">
-              <section className="min-w-0 space-y-4 xl:col-span-8" aria-label={libraryMode ? '主题分类与观察线索' : '今日主题强弱 Top-N'}>
+              <section className="min-w-0 space-y-4 xl:col-span-8" aria-label={libraryMode ? '主题分类与观察线索' : primaryTierLabel}>
                 <DataWorkbenchFrame data-testid="rotation-radar-leader-list">
                   <div className="grid min-w-0 gap-0 md:grid-cols-[minmax(0,1.55fr)_minmax(260px,0.65fr)]">
                     <section className="min-w-0 border-b border-white/[0.05] md:border-b-0 md:border-r md:border-white/[0.05]">
                       <div className="flex min-w-0 items-start justify-between gap-3 border-b border-white/[0.05] px-3 py-3">
-                        <TerminalSectionHeader eyebrow={libraryMode ? '主题库浏览' : '领先主题'} title={headlineThemes.length ? (libraryMode ? `${headlineThemes.length} 个主题分类条目` : `Top ${headlineThemes.length} 主题强弱`) : (libraryMode ? '暂无可展示主题' : '暂无头部排名')} />
+                        <TerminalSectionHeader
+                          eyebrow={primaryTierLabel}
+                          title={headlineThemes.length
+                            ? (libraryMode
+                              ? `${headlineThemes.length} 个主题分类条目`
+                              : rotationTiers?.confirmedLeaders.length
+                                ? `Top ${headlineThemes.length} 真实流向确认`
+                                : `Top ${headlineThemes.length} 候选观察`)
+                            : (libraryMode ? '暂无可展示主题' : '暂无头部排名')}
+                        />
                         <div className="hidden min-w-0 grid-cols-[4.75rem_4.75rem_4.5rem] gap-2 text-right text-[10px] font-semibold uppercase text-white/32 md:grid">
                           <span>相对</span>
                           <span>量能</span>
@@ -1627,7 +1706,6 @@ const MarketRotationRadarPage: React.FC = () => {
                               key={theme.id}
                               theme={theme}
                               rank={index + 1}
-                              libraryMode={libraryMode}
                               selected={selectedTheme?.id === theme.id}
                               onSelect={() => {
                                 setSelectedThemeId(theme.id);
@@ -1655,7 +1733,6 @@ const MarketRotationRadarPage: React.FC = () => {
                             <LaggardRow
                               key={theme.id}
                               theme={theme}
-                              libraryMode={libraryMode}
                               selected={selectedTheme?.id === theme.id}
                               onSelect={() => {
                                 setSelectedThemeId(theme.id);
@@ -1689,7 +1766,6 @@ const MarketRotationRadarPage: React.FC = () => {
                           <CompactThemeRow
                             key={theme.id}
                             theme={theme}
-                            libraryMode={libraryMode}
                             selected={selectedTheme?.id === theme.id}
                             onSelect={() => {
                               setSelectedThemeId(theme.id);

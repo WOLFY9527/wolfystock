@@ -11,7 +11,9 @@ vi.mock('../../api/marketRotation', () => ({
 }));
 
 const forbiddenTradingActionPattern =
-  /买入按钮|建议买入|建议卖出|卖出指令|立即交易|下单|提交订单|订单载荷|开仓|平仓|加仓|减仓|持仓建议|仓位建议|决策级|decision[-\s]?grade|buy now|sell now|place order|submit order|best contract|guaranteed/i;
+  /买入按钮|建议买入|建议卖出|买卖|卖出指令|立即交易|下单|提交订单|订单载荷|开仓|平仓|加仓|减仓|持仓建议|仓位建议|决策级|decision[-\s]?grade|buy now|sell now|place order|submit order|best contract|guaranteed|recommend(?:ation|ations|ed|s)?/i;
+
+const rawI18nKeyPattern = /\b(?:rotationRadar|marketRotationRadar|marketIntelligence)\.[A-Za-z0-9_.-]+/;
 
 const radarFixture = (): MarketRotationRadarResponse => ({
   endpoint: '/api/v1/market/rotation-radar',
@@ -475,6 +477,113 @@ function taxonomyMarketFixture(market: 'CN' | 'HK' | 'CRYPTO'): MarketRotationRa
   return fixture;
 }
 
+function etfDisabledCandidateFixture(): MarketRotationRadarResponse {
+  const fixture = radarFixture();
+  fixture.etfLeadershipDiagnostics = {
+    enabled: false,
+    source: 'alpaca_etf_authority_spine',
+    asOf: '2026-05-07T09:45:00Z',
+    eligibleSymbols: ['SPY', 'QQQ', 'IWM', 'SOXX', 'IGV'],
+    leadingSymbols: [],
+    laggingSymbols: [],
+    leadershipSpread: null,
+    confidenceLabel: 'disabled',
+    reasonCodes: ['missing_required_windows', 'ineligible_bounded_etf'],
+    evidence: [
+      {
+        symbol: 'SMH',
+        sourceLabel: 'Alpaca SIP',
+        freshness: 'live',
+        sourceAuthorityAllowed: false,
+        scoreContributionAllowed: false,
+        reasonCodes: ['missing_required_windows', 'entitlement'],
+      },
+    ],
+  };
+  fixture.summary = {
+    ...fixture.summary,
+    strongestThemes: [],
+    acceleratingThemes: [],
+    headlineEligibleThemeCount: 0,
+    noHeadlineReason: '没有可用于头部排名；ETF authority fail-closed。',
+    headlineWarning: '当前头部主题未满足 score-grade real-flow 条件。',
+  };
+  fixture.themes = [
+    {
+      ...fixture.themes[0],
+      sourceAuthorityAllowed: false,
+      evidenceQuality: 'degraded_proxy',
+      dataGaps: ['true_flow_data_missing', 'source_authority_rejected'],
+      rankingLane: 'observation',
+      headlineEligible: false,
+      scoreContributionAllowed: false,
+    },
+  ];
+  return fixture;
+}
+
+function realFlowConfirmedFixture(): MarketRotationRadarResponse {
+  const fixture = radarFixture();
+  const confirmed: MarketRotationRadarResponse['themes'][number] = {
+    ...fixture.themes[0],
+    id: 'real_flow_semis',
+    name: '半导体真实流向',
+    englishName: 'Semiconductor Real Flow',
+    signalType: 'real_flow',
+    flowEvidenceType: 'real_flow',
+    flowLanguageAllowed: true,
+    sourceAuthorityAllowed: true,
+    evidenceQuality: 'score_grade_real_flow',
+    dataGaps: [],
+    stage: 'confirmed_rotation',
+    rankingLane: 'headline',
+    headlineEligible: true,
+    scoreContributionAllowed: true,
+    rotationScore: 86,
+    confidence: 0.81,
+    stageExplanation: '真实流向、广度与持续证据同时满足阈值。',
+    rotationStateEvidence: {
+      state: 'confirmed_rotation',
+      stateLabel: '真实流向确认',
+      flowEvidenceType: 'real_flow',
+      flowLanguageAllowed: true,
+      requiredDataStatus: {
+        hasSufficientEvidence: true,
+        summaryLabel: '真实流向可用',
+      },
+      riskLabels: [],
+    },
+  };
+  const candidate: MarketRotationRadarResponse['themes'][number] = {
+    ...fixture.themes[0],
+    id: 'proxy_ai',
+    name: 'AI 代理候选',
+    englishName: 'AI Proxy Candidate',
+    signalType: 'momentum_proxy',
+    flowEvidenceType: 'proxy_only',
+    flowLanguageAllowed: false,
+    sourceAuthorityAllowed: false,
+    evidenceQuality: 'degraded_proxy',
+    dataGaps: ['true_flow_data_missing', 'source_authority_rejected'],
+    stage: 'early_watch',
+    rankingLane: 'observation',
+    headlineEligible: false,
+    scoreContributionAllowed: false,
+    rotationScore: 74,
+    confidence: 0.62,
+  };
+  fixture.themes = [confirmed, candidate];
+  fixture.summary = {
+    ...fixture.summary,
+    strongestThemes: [confirmed],
+    acceleratingThemes: [confirmed],
+    observationThemes: [candidate],
+    fadingThemes: [],
+    watchlistSignals: [],
+  };
+  return fixture;
+}
+
 describe('MarketRotationRadarPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -688,34 +797,35 @@ describe('MarketRotationRadarPage', () => {
     expect(screen.getByText('部分外部数据暂不可用').closest('[data-terminal-primitive="notice"]')).not.toBeNull();
   });
 
-  it('shows disabled ETF leadership reason codes without market-direction wording', async () => {
-    const fixture = radarFixture();
-    fixture.etfLeadershipDiagnostics = {
-      enabled: false,
-      source: 'alpaca_etf_authority_spine',
-      asOf: '2026-05-07T09:45:00Z',
-      eligibleSymbols: ['SPY', 'QQQ', 'IWM', 'SOXX', 'IGV'],
-      leadingSymbols: [],
-      laggingSymbols: [],
-      leadershipSpread: null,
-      confidenceLabel: 'disabled',
-      reasonCodes: ['missing_required_windows', 'ineligible_bounded_etf'],
-      evidence: [
-        {
-          symbol: 'SMH',
-          sourceLabel: 'Alpaca SIP',
-          freshness: 'live',
-          sourceAuthorityAllowed: false,
-          scoreContributionAllowed: false,
-          reasonCodes: ['missing_required_windows', 'entitlement'],
-        },
-      ],
-    };
+  it('keeps ETF-disabled non-taxonomy evidence in the candidate watchlist', async () => {
+    const fixture = etfDisabledCandidateFixture();
     vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(fixture);
 
     render(<MarketRotationRadarPage />);
 
-    expect(await screen.findByTestId('rotation-radar-guidance')).toHaveTextContent('主题库模式：当前不是实时轮动信号');
+    expect(await screen.findByTestId('rotation-radar-guidance')).toHaveTextContent('暂无真实流向确认，保留候选观察');
+    expect(screen.getByTestId('rotation-radar-guidance')).not.toHaveTextContent('主题库模式');
+    const capitalSummary = screen.getByTestId('rotation-capital-summary');
+    expect(capitalSummary).toHaveTextContent('仅候选观察');
+    expect(capitalSummary).toHaveTextContent('确认主线');
+    expect(capitalSummary).toHaveTextContent('暂无真实流向确认');
+    expect(capitalSummary).toHaveTextContent('候选观察');
+    expect(capitalSummary).toHaveTextContent('AI 应用');
+    expect(capitalSummary).toHaveTextContent('分类库');
+    expect(capitalSummary).toHaveTextContent('暂无 taxonomy-only 条目');
+
+    const leaderList = screen.getByTestId('rotation-radar-leader-list');
+    expect(leaderList).toHaveTextContent('候选观察');
+    expect(within(leaderList).getByTestId('rotation-radar-leader-row-ai_applications')).toHaveTextContent('AI 应用');
+    expect(within(leaderList).getByTestId('rotation-radar-leader-row-ai_applications')).toHaveTextContent('78');
+    expect(within(leaderList).getByTestId('rotation-radar-leader-row-ai_applications')).not.toHaveTextContent('主题库');
+
+    const detail = screen.getByTestId('rotation-theme-detail-panel');
+    expect(detail).toHaveTextContent('相对强弱');
+    expect(detail).toHaveTextContent('受限代理级');
+    expect(detail).toHaveTextContent('需要权威来源');
+    expect(detail).not.toHaveTextContent('主题库不是机会榜');
+
     const disclosure = await screen.findByTestId('rotation-etf-diagnostics-disclosure');
     fireEvent.click(within(disclosure).getByRole('button', { name: '展开 ETF authority 技术细节' }));
     const panel = await screen.findByTestId('rotation-radar-etf-leadership-panel');
@@ -734,6 +844,68 @@ describe('MarketRotationRadarPage', () => {
     fireEvent.click(within(debug).getByRole('button', { name: '展开 原始 reason codes' }));
     expect(debug).toHaveTextContent('missing_required_windows');
     expect(debug).toHaveTextContent('ineligible_bounded_etf');
+
+    const bodyText = document.body.textContent || '';
+    expect(bodyText).not.toMatch(forbiddenTradingActionPattern);
+    expect(bodyText).not.toMatch(rawI18nKeyPattern);
+  });
+
+  it('keeps full taxonomy-only markets in library framing only', async () => {
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(taxonomyMarketFixture('CN'));
+
+    render(<MarketRotationRadarPage />);
+
+    expect(await screen.findByTestId('rotation-radar-guidance')).toHaveTextContent('主题库模式：当前不是实时轮动信号');
+    const capitalSummary = screen.getByTestId('rotation-capital-summary');
+    expect(capitalSummary).toHaveTextContent('确认主线');
+    expect(capitalSummary).toHaveTextContent('暂无真实流向确认');
+    expect(capitalSummary).toHaveTextContent('候选观察');
+    expect(capitalSummary).toHaveTextContent('暂无候选主题');
+    expect(capitalSummary).toHaveTextContent('分类库');
+    expect(capitalSummary).toHaveTextContent('AI算力');
+    expect(capitalSummary).not.toHaveTextContent('仅候选观察');
+
+    const leaderList = screen.getByTestId('rotation-radar-leader-list');
+    expect(leaderList).toHaveTextContent(/暂无可展示主题|按主题分类浏览/);
+    expect(within(leaderList).queryAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(0);
+    expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('主题库');
+
+    const detail = screen.getByTestId('rotation-theme-detail-panel');
+    expect(detail).toHaveTextContent('当前不能判断主题轮动');
+    expect(detail).toHaveTextContent('分类映射');
+    expect(detail).toHaveTextContent('寒武纪');
+
+    const bodyText = document.body.textContent || '';
+    expect(bodyText).not.toMatch(forbiddenTradingActionPattern);
+    expect(bodyText).not.toMatch(rawI18nKeyPattern);
+  });
+
+  it('puts score-grade real-flow evidence in confirmed leaders without promoting proxy candidates', async () => {
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(realFlowConfirmedFixture());
+
+    render(<MarketRotationRadarPage />);
+
+    expect(await screen.findByTestId('rotation-radar-guidance')).toHaveTextContent('主题轮动可继续观察');
+    const capitalSummary = screen.getByTestId('rotation-capital-summary');
+    expect(capitalSummary).toHaveTextContent('真实流向确认');
+    expect(capitalSummary).toHaveTextContent('确认主线');
+    expect(capitalSummary).toHaveTextContent('半导体真实流向');
+    expect(capitalSummary).toHaveTextContent('候选观察');
+    expect(capitalSummary).toHaveTextContent('AI 代理候选');
+
+    const leaderList = screen.getByTestId('rotation-radar-leader-list');
+    expect(within(leaderList).getByTestId('rotation-radar-leader-row-real_flow_semis')).toHaveTextContent('半导体真实流向');
+    expect(within(leaderList).getByTestId('rotation-radar-leader-row-real_flow_semis')).toHaveTextContent('86');
+    expect(within(leaderList).queryByTestId('rotation-radar-leader-row-proxy_ai')).not.toBeInTheDocument();
+
+    const detail = screen.getByTestId('rotation-theme-detail-panel');
+    expect(detail).toHaveTextContent('真实流向确认');
+    expect(detail).toHaveTextContent('真实流向级');
+    expect(detail).not.toHaveTextContent('AI 代理候选 当前具备真实资金流证据');
+
+    const bodyText = document.body.textContent || '';
+    expect(bodyText).not.toMatch(forbiddenTradingActionPattern);
+    expect(bodyText).not.toMatch(rawI18nKeyPattern);
   });
 
   it('renders proxy-only evidence chips without real fund-flow claims', async () => {
