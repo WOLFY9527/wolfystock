@@ -17,6 +17,7 @@ import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { watchlistApi } from '../api/watchlist';
 import { AuthGuardOverlay } from '../components/auth/AuthGuardOverlay';
 import { ApiErrorAlert, Input, Select } from '../components/common';
+import { TrustDisclosureChips } from '../components/evidence/TrustDisclosureChips';
 import {
   ConsoleBoard,
   ConsoleContextRail,
@@ -41,6 +42,7 @@ import type { WatchlistItem } from '../types/watchlist';
 import type { RuleBacktestRunResponse } from '../types/backtest';
 import { describeBooleanEnabled, describeDisplayStatus, type DisplayStatusTone } from '../utils/displayStatus';
 import { buildLocalizedPath } from '../utils/localeRouting';
+import { resolveTrustDisclosureBuckets, trustDisclosureLabel, type TrustDisclosureBucket } from '../utils/trustDisclosure';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 
 type SortKey = 'newest' | 'scannerScore' | 'backtestReturn' | 'historicalHitRate' | 'recentlyScored' | 'recentlyBacktested' | 'symbol' | 'market';
@@ -240,7 +242,12 @@ function normalizeToken(value?: string | null): string {
 function formatTrustToken(value?: string | null): string | null {
   const token = normalizeToken(value);
   if (!token) return null;
+  const canonicalBuckets = resolveTrustDisclosureBuckets({ terms: [token] });
+  if (canonicalBuckets.length) {
+    return canonicalBuckets.map((bucket) => trustDisclosureLabel(bucket)).join(' / ');
+  }
   if (token === 'llm') return 'LLM';
+  if (token === 'scanner' || token === 'scanner_run') return '扫描器';
   return token.replaceAll(/[_-]+/g, ' ');
 }
 
@@ -269,11 +276,11 @@ function hasMissingTrustContext(item: WatchlistItem): boolean {
 function formatTrustStateLabel(state: WatchlistTrustState, language: 'zh' | 'en'): string {
   if (language === 'en') {
     if (state === 'fresh') return 'Signal fresh';
-    if (state === 'stale') return 'Signal stale';
+    if (state === 'stale') return 'Stale data';
     return 'Signal unknown';
   }
   if (state === 'fresh') return '信号最新';
-  if (state === 'stale') return '信号过期';
+  if (state === 'stale') return '数据过期';
   return '信号未知';
 }
 
@@ -296,6 +303,21 @@ function formatTrustScannerRunLabel(value: number | null | undefined, language: 
 function formatTrustUpdatedLabel(value: string | null | undefined, language: 'zh' | 'en'): string | null {
   if (!value) return null;
   return `${language === 'en' ? 'Updated' : '更新'} ${formatDateTime(value, language)}`;
+}
+
+function watchlistTrustDisclosureBuckets(item: WatchlistItem): TrustDisclosureBucket[] {
+  const buckets: Array<TrustDisclosureBucket | null> = [
+    getTrustState(item) === 'stale' ? 'stale' : null,
+  ];
+  const terms = [
+    item.scoreSource,
+    item.scoreStatus,
+    item.intelligence?.scanner?.status,
+    item.intelligence?.scanner?.reason,
+    item.intelligence?.strategySimulation?.status,
+  ];
+  resolveTrustDisclosureBuckets({ terms }).forEach((bucket) => buckets.push(bucket));
+  return Array.from(new Set(buckets.filter((bucket): bucket is TrustDisclosureBucket => Boolean(bucket))));
 }
 
 function formatBacktestStatus(item: WatchlistItem, failure?: BatchFailure): string {
@@ -1256,6 +1278,7 @@ const WatchlistPage: React.FC = () => {
                     const trustScoreSourceLabel = formatTrustScoreSourceLabel(item.scoreSource, language);
                     const trustScannerRunLabel = formatTrustScannerRunLabel(item.scannerRunId, language);
                     const trustUpdatedLabel = formatTrustUpdatedLabel(getTrustUpdatedTime(item), language);
+                    const trustDisclosureBuckets = watchlistTrustDisclosureBuckets(item);
                     const showUnknownTrustNotice = hasMissingTrustContext(item);
                     const scoreFreshnessVariant = item.scoreStatus === 'fresh'
                       ? 'success'
@@ -1376,7 +1399,11 @@ const WatchlistPage: React.FC = () => {
 
                           <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px]">
                             <div data-testid={`watchlist-trust-strip-${item.symbol}`} className="flex min-w-0 flex-wrap items-center gap-1.5">
-                              <TerminalChip variant={trustStateVariant}>{trustStateLabel}</TerminalChip>
+                              {trustState !== 'stale' ? <TerminalChip variant={trustStateVariant}>{trustStateLabel}</TerminalChip> : null}
+                              <TrustDisclosureChips
+                                buckets={trustDisclosureBuckets}
+                                chipClassName="text-[11px]"
+                              />
                               <TerminalChip variant="neutral">{trustSourceLabel}</TerminalChip>
                               {trustScoreSourceLabel ? (
                                 <TerminalChip variant={isFallbackTrustSource(item.scoreSource) ? 'caution' : 'neutral'}>

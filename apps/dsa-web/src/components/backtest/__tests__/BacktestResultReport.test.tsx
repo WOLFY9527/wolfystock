@@ -480,8 +480,12 @@ describe('BacktestResultReport', () => {
 
     const timeline = screen.getByTestId('backtest-report-event-timeline');
     expect(timeline).toHaveAttribute('data-visible-events', '4');
-    expect(within(timeline).getAllByText('买入')).toHaveLength(2);
-    expect(within(timeline).getAllByText('卖出')).toHaveLength(2);
+    expect(timeline).toHaveTextContent('模拟买入事件 / 模拟卖出事件');
+    expect(timeline).toHaveTextContent('模拟事件仅用于回测复盘，不构成交易指令。');
+    expect(within(timeline).getAllByText('模拟买入事件')).toHaveLength(2);
+    expect(within(timeline).getAllByText('模拟卖出事件')).toHaveLength(2);
+    expect(within(timeline).queryByText('买入')).not.toBeInTheDocument();
+    expect(within(timeline).queryByText('卖出')).not.toBeInTheDocument();
 
     const risk = screen.getByTestId('backtest-report-risk-diagnostics');
     expect(within(risk).getByText('最差交易')).toBeInTheDocument();

@@ -946,10 +946,14 @@ describe('UserScannerPage', () => {
 
     const row = await screen.findByTestId('scanner-result-row-WULF');
     expect(within(row).getAllByText('60/100').length).toBeGreaterThan(0);
-    expect(within(row).getAllByText(/分数已封顶|Score capped/i).length).toBeGreaterThan(0);
-    expect(within(row).getAllByText(/仅观察|Observe only/i).length).toBeGreaterThan(0);
-    expect(within(row).getAllByText(/Fallback|备用/i).length).toBeGreaterThan(0);
-    expect(within(row).getAllByText(/数据源不足|Data thin/i).length).toBeGreaterThan(0);
+    const trustStrip = within(row).getByTestId('scanner-score-trust-WULF');
+    expect(trustStrip).toHaveTextContent('置信度受限');
+    expect(trustStrip).toHaveTextContent('仅观察');
+    expect(trustStrip).toHaveTextContent('备用数据');
+    expect(trustStrip).toHaveTextContent('数据过期');
+    expect(trustStrip).toHaveTextContent('覆盖不完整');
+    expect(trustStrip).toHaveTextContent('不构成买卖建议');
+    expect(trustStrip).not.toHaveTextContent(/\b(Fallback|Proxy|Stale|Partial|Observe only|Score capped|Data thin)\b/i);
     expect(container).not.toHaveTextContent(/买入|卖出|加仓|减仓|recommend(?:ation)?/i);
     expectNoRawI18nKeys(container);
   });

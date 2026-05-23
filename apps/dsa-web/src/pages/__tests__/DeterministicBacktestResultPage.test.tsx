@@ -429,6 +429,45 @@ describe('DeterministicBacktestResultPage', () => {
     });
   }, 10000);
 
+  it('labels backtest timeline entries as simulated trade events', async () => {
+    const currentRun = makeResultRun({
+      id: 99,
+      runAt: '2026-04-07T08:00:00Z',
+      trades: [
+        {
+          code: 'ORCL',
+          tradeIndex: 1,
+          entryDate: '2026-03-04',
+          exitDate: '2026-03-24',
+          entryPrice: 103,
+          exitPrice: 115,
+          quantity: 900,
+          returnPct: 11.5,
+          entryReason: 'signal_entry',
+          exitReason: 'signal_exit',
+        },
+      ],
+    });
+
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    renderResultPage();
+
+    const timeline = await screen.findByTestId('backtest-report-event-timeline');
+    expect(timeline).toHaveTextContent('模拟买入事件 / 模拟卖出事件');
+    expect(timeline).toHaveTextContent('模拟事件仅用于回测复盘，不构成交易指令。');
+    expect(within(timeline).getByText('模拟买入事件')).toBeInTheDocument();
+    expect(within(timeline).getByText('模拟卖出事件')).toBeInTheDocument();
+    expect(within(timeline).queryByText('买入')).not.toBeInTheDocument();
+    expect(within(timeline).queryByText('卖出')).not.toBeInTheDocument();
+  }, 10000);
+
   it('polls processing runs on the result page and then renders the completed analysis workspace', async () => {
     const queuedRun = makeResultRun({
       status: 'queued',

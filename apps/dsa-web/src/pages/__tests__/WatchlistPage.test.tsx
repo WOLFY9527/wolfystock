@@ -547,7 +547,7 @@ describe('WatchlistPage', () => {
     expect(within(row).getByTestId('watchlist-no-evidence-note-MARA')).toHaveTextContent('补齐证据');
   });
 
-  it('discloses stale trust state with source, fallback, and scanner run context', async () => {
+  it('discloses stale trust state with source, fallback, proxy, and scanner run context', async () => {
     listWatchlistItems.mockResolvedValue({
       items: [makeItem({
         id: 10,
@@ -557,7 +557,7 @@ describe('WatchlistPage', () => {
         scannerRank: null,
         scannerScore: 81,
         lastScoredAt: '2026-04-20T12:30:00Z',
-        scoreSource: 'fallback',
+        scoreSource: 'proxy_fallback',
         scoreStatus: 'stale',
         intelligence: {
           scanner: {
@@ -577,11 +577,13 @@ describe('WatchlistPage', () => {
 
     const row = await screen.findByTestId('watchlist-row-BABA');
     const trustStrip = within(row).getByTestId('watchlist-trust-strip-BABA');
-    expect(trustStrip).toHaveTextContent('信号过期');
+    expect(trustStrip).toHaveTextContent('数据过期');
+    expect(trustStrip).toHaveTextContent('备用数据');
+    expect(trustStrip).toHaveTextContent('代理证据');
     expect(trustStrip).toHaveTextContent('来源 portfolio');
-    expect(trustStrip).toHaveTextContent('评分源 fallback');
     expect(trustStrip).toHaveTextContent('扫描批次 #77');
     expect(trustStrip.textContent).toMatch(/更新/);
+    expect(trustStrip).not.toHaveTextContent(/proxy_fallback|proxy fallback|fallback|proxy|信号过期/i);
   });
 
   it('shows unknown trust disclosure when source and freshness fields are absent', async () => {

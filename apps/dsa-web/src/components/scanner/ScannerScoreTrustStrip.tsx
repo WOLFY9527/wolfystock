@@ -2,6 +2,8 @@ import type {
   ScannerCandidate,
   ScannerCandidateDiagnostic,
 } from '../../types/scanner';
+import type { TrustDisclosureBucket } from '../../utils/trustDisclosure';
+import { TrustDisclosureChips } from '../evidence/TrustDisclosureChips';
 import { TerminalChip } from '../terminal';
 
 type TrustSource = ScannerCandidate | ScannerCandidateDiagnostic | null | undefined;
@@ -65,16 +67,16 @@ function normalizeKey(value?: string | null): string {
 function localizeReason(reason: string | null, language: 'zh' | 'en') {
   const normalized = normalizeKey(reason);
   const labels: Record<string, { zh: string; en: string }> = {
-    fallback_source: { zh: '数据源不足', en: 'Data thin' },
-    stale_source: { zh: '数据已过期', en: 'Stale data' },
-    partial_coverage: { zh: '覆盖不足', en: 'Partial coverage' },
-    proxy_quote_source_capped: { zh: '代理数据受限', en: 'Proxy data capped' },
+    fallback_source: { zh: '置信度受限', en: 'Confidence limited' },
+    stale_source: { zh: '数据过期', en: 'Stale data' },
+    partial_coverage: { zh: '覆盖不完整', en: 'Partial coverage' },
+    proxy_quote_source_capped: { zh: '代理证据', en: 'Proxy evidence' },
     public_proxy_not_score_grade: { zh: '仅观察', en: 'Observe only' },
     observation_only: { zh: '仅观察', en: 'Observe only' },
-    cache_stale: { zh: '数据已过期', en: 'Stale data' },
-    provider_timeout: { zh: '数据源不足', en: 'Data thin' },
-    quote_unavailable: { zh: '数据源不足', en: 'Data thin' },
-    history_insufficient: { zh: '数据源不足', en: 'Data thin' },
+    cache_stale: { zh: '数据过期', en: 'Stale data' },
+    provider_timeout: { zh: '证据不足', en: 'Insufficient evidence' },
+    quote_unavailable: { zh: '证据不足', en: 'Insufficient evidence' },
+    history_insufficient: { zh: '证据不足', en: 'Insufficient evidence' },
   };
   if (labels[normalized]) return labels[normalized][language];
   if (!normalized) return null;
@@ -83,12 +85,22 @@ function localizeReason(reason: string | null, language: 'zh' | 'en') {
 
 function localizeFreshness(value: string | null, language: 'zh' | 'en') {
   const normalized = normalizeKey(value);
-  if (normalized === 'fallback') return language === 'en' ? 'Fallback' : 'Fallback';
-  if (normalized === 'stale') return language === 'en' ? 'Stale' : 'Stale';
-  if (normalized === 'partial') return language === 'en' ? 'Partial' : 'Partial';
+  if (normalized === 'fallback') return language === 'en' ? 'Fallback data' : '备用数据';
+  if (normalized === 'stale') return language === 'en' ? 'Stale data' : '数据过期';
+  if (normalized === 'partial') return language === 'en' ? 'Partial coverage' : '覆盖不完整';
   if (normalized === 'delayed') return language === 'en' ? 'Delayed' : '延迟';
   if (normalized === 'fresh' || normalized === 'live') return language === 'en' ? 'Live' : '较新';
   if (!normalized) return null;
+  return value;
+}
+
+function displaySourceLabel(value: string | null, language: 'zh' | 'en'): string | null {
+  if (!value) return null;
+  const normalized = normalizeKey(value);
+  if (normalized.includes('fallback')) return language === 'en' ? 'Fallback data' : '备用数据';
+  if (normalized.includes('proxy')) return language === 'en' ? 'Proxy evidence' : '代理证据';
+  if (normalized.includes('stale')) return language === 'en' ? 'Stale data' : '数据过期';
+  if (normalized.includes('partial')) return language === 'en' ? 'Partial coverage' : '覆盖不完整';
   return value;
 }
 
@@ -132,7 +144,7 @@ function confidenceTier(scoreConfidence: number | null, hasCap: boolean) {
 function confidenceChip(tier: string, language: 'zh' | 'en') {
   if (tier === 'capped') {
     return {
-      label: language === 'en' ? 'Score capped' : '分数已封顶',
+      label: language === 'en' ? 'Confidence limited' : '置信度受限',
       variant: 'caution' as const,
     };
   }
@@ -150,13 +162,13 @@ function confidenceChip(tier: string, language: 'zh' | 'en') {
   }
   if (tier === 'low') {
     return {
-      label: language === 'en' ? 'Low confidence' : '低置信',
+      label: language === 'en' ? 'Confidence limited' : '置信度受限',
       variant: 'caution' as const,
     };
   }
   return {
-    label: language === 'en' ? 'Confidence unknown' : '置信未知',
-    variant: 'neutral' as const,
+    label: language === 'en' ? 'Confidence limited' : '置信度受限',
+    variant: 'caution' as const,
   };
 }
 
@@ -203,30 +215,44 @@ export function ScannerScoreTrustStrip({
     || /proxy/.test(normalizeKey(getString(sourceConfidence, 'source', 'sourceLabel', 'source_label')));
   const proxyFlag = getBoolean(sourceConfidence, 'proxyOnly', 'proxy_only') ?? inferredProxyFlag;
   const sourceLabel = getString(sourceConfidence, 'sourceLabel', 'source_label', 'source');
+  const quoteFreshnessRaw = getString(getRecord(evidencePacket, 'freshnessDetail', 'freshness_detail'), 'quoteState', 'quote_state')
+    ?? getString(sourceConfidence, 'freshness');
+  const historyFreshnessRaw = getString(getRecord(evidencePacket, 'freshnessDetail', 'freshness_detail'), 'historyState', 'history_state');
   const quoteFreshness = localizeFreshness(
-    getString(getRecord(evidencePacket, 'freshnessDetail', 'freshness_detail'), 'quoteState', 'quote_state')
-      ?? getString(sourceConfidence, 'freshness'),
+    quoteFreshnessRaw,
     language,
   );
   const historyFreshness = localizeFreshness(
-    getString(getRecord(evidencePacket, 'freshnessDetail', 'freshness_detail'), 'historyState', 'history_state'),
+    historyFreshnessRaw,
     language,
   );
   const freshnessLabel = unique([quoteFreshness, historyFreshness].filter((item): item is string => Boolean(item))).join(' / ');
-  const confidenceBadge = confidenceChip(confidenceTier(scoreConfidence, Boolean(capReason)), language);
+  const confidenceTierValue = confidenceTier(scoreConfidence, Boolean(capReason));
+  const confidenceBadge = confidenceChip(confidenceTierValue, language);
+  const confidenceLimited = ['capped', 'low', 'unknown'].includes(confidenceTierValue);
   const cautionReason = localizeReason(capReason, language) || localizeReason(degradationReason, language);
-  const cautionLabels = unique([
-    observationOnly ? (language === 'en' ? 'Observe only' : '仅观察') : null,
-    fallbackFlag ? 'Fallback' : null,
-    proxyFlag ? 'Proxy' : null,
-    staleFlag ? 'Stale' : null,
-    partialFlag ? 'Partial' : null,
+  const trustBuckets: Array<TrustDisclosureBucket | null> = [
+    confidenceLimited ? 'confidence' : null,
+    observationOnly ? 'observe-only' : null,
+    fallbackFlag ? 'fallback' : null,
+    proxyFlag ? 'proxy' : null,
+    staleFlag ? 'stale' : null,
+    partialFlag ? 'partial' : null,
+    observationOnly || capReason ? 'non-advice' : null,
+  ];
+  const trustTerms = [
+    capReason,
+    degradationReason,
+    sourceLabel,
+    quoteFreshnessRaw,
+    historyFreshnessRaw,
     ...getStringArray(evidencePacket, 'userFacingLabels', 'warningFlags')
       .filter((label) => ['fallback', 'proxy', 'stale', 'partial'].includes(normalizeKey(label))),
-  ].filter((item): item is string => Boolean(item)));
+  ];
+  const displaySource = displaySourceLabel(sourceLabel, language);
   const summaryParts = unique([
     cautionReason,
-    sourceLabel ? `${language === 'en' ? 'Source' : '来源'} ${sourceLabel}` : null,
+    displaySource ? `${language === 'en' ? 'Source' : '来源'} ${displaySource}` : null,
     freshnessLabel ? `${language === 'en' ? 'Freshness' : '时效'} ${freshnessLabel}` : null,
     scoreConfidence != null ? `${language === 'en' ? 'Confidence' : '可信'} ${scoreConfidence.toFixed(2)}` : null,
     observationOnly || capReason ? (language === 'en' ? 'Not trading advice' : '不构成买卖建议') : null,
@@ -236,18 +262,16 @@ export function ScannerScoreTrustStrip({
   return (
     <div data-testid={testId} className={resolvedClassName}>
       <div className="flex min-w-0 flex-wrap items-center gap-1">
-        <TerminalChip variant={confidenceBadge.variant} className="px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.02em]">
-          {confidenceBadge.label}
-        </TerminalChip>
-        {cautionLabels.map((label) => (
-          <TerminalChip
-            key={label}
-            variant={label === 'Observe only' || label === '仅观察' ? 'caution' : 'neutral'}
-            className="px-1.5 py-0.5 text-[10px] font-semibold"
-          >
-            {label}
+        {!confidenceLimited ? (
+          <TerminalChip variant={confidenceBadge.variant} className="px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.02em]">
+            {confidenceBadge.label}
           </TerminalChip>
-        ))}
+        ) : null}
+        <TrustDisclosureChips
+          buckets={trustBuckets}
+          terms={trustTerms}
+          chipClassName="px-1.5 py-0.5 text-[10px] font-semibold"
+        />
       </div>
       {summaryParts.length ? (
         <p className="text-[11px] leading-relaxed text-white/46">

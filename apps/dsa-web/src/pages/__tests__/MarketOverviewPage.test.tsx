@@ -2223,8 +2223,8 @@ describe('MarketOverviewPage', () => {
     const readinessStrip = within(posturePanel).getByTestId('market-direction-readiness-strip');
     expect(readinessStrip).toHaveTextContent('方向可用');
     expect(readinessStrip).toHaveTextContent('评分级 3');
-    expect(readinessStrip).toHaveTextContent('观察级 0');
-    expect(readinessStrip).toHaveTextContent('缺口 0');
+    expect(readinessStrip).toHaveTextContent('仅观察 0');
+    expect(readinessStrip).toHaveTextContent('证据不足 0');
     expect(readinessStrip).toHaveTextContent('Official macro/rates/volatility');
     expect(debug).toHaveTextContent('counter_evidence_present');
     expect(debug).toHaveTextContent('not_investment_advice');
@@ -2243,6 +2243,10 @@ describe('MarketOverviewPage', () => {
     expect(posturePanel).toHaveTextContent('当前不能形成可靠方向判断');
     expect(posturePanel).toHaveTextContent('当前可靠证据不足');
     expect(posturePanel).toHaveTextContent('缺少评分级证据');
+    expect(posturePanel).toHaveTextContent('置信度受限');
+    expect(posturePanel).toHaveTextContent('仅观察');
+    expect(posturePanel).toHaveTextContent('证据不足');
+    expect(posturePanel).toHaveTextContent('不构成买卖建议');
     expect(posturePanel).toHaveTextContent(/观察证据|仅作观察|需要权威来源/);
     expect(posturePanel).not.toHaveTextContent('missing_scoring_pillars');
     expect(posturePanel).toHaveTextContent('BTC');

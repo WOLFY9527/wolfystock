@@ -1003,14 +1003,15 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
             <div>
               <p className={LABEL_CLASS}>持仓时间线</p>
-              <h3 className="mt-1 text-sm font-semibold text-white">买入 / 卖出事件</h3>
+              <h3 className="mt-1 text-sm font-semibold text-white">模拟买入事件 / 模拟卖出事件</h3>
+              <p className="mt-1 text-xs leading-5 text-white/42">模拟事件仅用于回测复盘，不构成交易指令。</p>
             </div>
             <span className="font-mono text-xs text-white/38">前 {EVENT_ROW_LIMIT} 条</span>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {tradeEvents.length ? tradeEvents.map((event, index) => (
               <div key={`${event.date}-${event.type}-${index}`} className="grid min-w-0 grid-cols-[auto_1fr] gap-3 rounded-xl border border-white/5 bg-black/20 p-3">
-                <div className={`font-mono text-[10px] font-bold ${valueToneClass(event.tone)}`}>{event.type === 'ENTRY' ? '买入' : '卖出'}</div>
+                <div className={`font-mono text-[10px] font-bold ${valueToneClass(event.tone)}`}>{event.type === 'ENTRY' ? '模拟买入事件' : '模拟卖出事件'}</div>
                 <div className="min-w-0">
                   <p className="truncate font-mono text-xs text-white/72">{event.date}</p>
                   <p className="mt-1 truncate text-xs text-white/42">{event.label}</p>

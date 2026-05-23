@@ -9,6 +9,8 @@ import { cn } from '../../utils/cn';
 import { MarketRegimeSynthesisHeader, type MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
 import { OfficialMacroAuthorityDiagnostics } from '../common/OfficialMacroAuthorityDiagnostics';
 import type { OfficialMacroAuthorityDiagnosticsView } from '../common/officialMacroAuthorityDiagnosticsData';
+import { TrustDisclosureChips } from '../evidence/TrustDisclosureChips';
+import type { TrustDisclosureBucket } from '../../utils/trustDisclosure';
 import { joinMarketReasonLabels, marketIntelligenceReasonLabel, marketIntelligenceReasonLabels, type MarketDirectionalSummary } from '../../utils/marketIntelligenceGuidance';
 
 export type MarketOverviewDecisionChipView = {
@@ -249,7 +251,7 @@ const MarketDirectionReadinessStrip: React.FC<{
             {view.confidenceLabel}
           </TerminalChip>
           <span className="font-mono text-[11px] text-white/55">
-            评分级 {view.scoreGradeCount} · 观察级 {view.observationOnlyCount} · 缺口 {view.missingCount}
+            评分级 {view.scoreGradeCount} · 仅观察 {view.observationOnlyCount} · 证据不足 {view.missingCount}
           </span>
         </div>
         {view.blockingReasons.length ? (
@@ -374,6 +376,14 @@ const MarketDecisionSemanticsStrip: React.FC<{
   const snapshotLabel = dataState.updatedAtLabel
     ? `更新 ${dataState.updatedAtLabel}`
     : (dataState.isRefreshing ? '刷新中' : '待刷新');
+  const trustBuckets: Array<TrustDisclosureBucket | null> = [
+    (!decisionReliable || view?.insufficient || statusSummary.variant === 'caution') ? 'confidence' : null,
+    dataState.hasFallback ? 'fallback' : null,
+    dataState.staleCount > 0 ? 'stale' : null,
+    (view?.directionReadiness?.observationOnlyCount ?? 0) > 0 ? 'observe-only' : null,
+    view?.insufficient || dataState.hasUnavailable || (view?.directionReadiness?.missingCount ?? 0) > 0 ? 'insufficient' : null,
+    view?.notInvestmentAdvice ? 'non-advice' : null,
+  ];
 
   return (
     <section
@@ -425,6 +435,10 @@ const MarketDecisionSemanticsStrip: React.FC<{
                   <span className="tracking-normal">{chip.value}</span>
                 </TerminalChip>
               ))}
+              <TrustDisclosureChips
+                buckets={trustBuckets}
+                chipClassName="px-2.5 py-1 text-[10px]"
+              />
             </div>
           </div>
 
@@ -630,12 +644,20 @@ const MarketOverviewDataStateStrip: React.FC<{
           className="mt-2 min-w-0 text-[11px] leading-4 text-white/45"
         >
           <span className="truncate font-mono">
-            可用 {dataState.availableCount} · 备用 {dataState.fallbackCount} · 过期 {dataState.staleCount}
-            {dataState.hasUnavailable ? ` · 缺口 ${dataState.unavailableCount}` : ''}
+            可用 {dataState.availableCount} · 备用数据 {dataState.fallbackCount} · 数据过期 {dataState.staleCount}
+            {dataState.hasUnavailable ? ` · 证据不足 ${dataState.unavailableCount}` : ''}
           </span>
         </TerminalDenseList>
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-2 xl:max-w-[60%] xl:justify-end">
+        <TrustDisclosureChips
+          buckets={[
+            dataState.hasFallback ? 'fallback' : null,
+            dataState.staleCount > 0 ? 'stale' : null,
+            dataState.hasUnavailable ? 'insufficient' : null,
+          ]}
+          chipClassName="text-[11px]"
+        />
         {dataState.isRefreshing || dataState.needsRefresh ? (
           <TerminalChip
             data-testid="market-overview-data-state-refresh-chip"
