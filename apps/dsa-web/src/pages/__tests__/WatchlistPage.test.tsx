@@ -547,6 +547,69 @@ describe('WatchlistPage', () => {
     expect(within(row).getByTestId('watchlist-no-evidence-note-MARA')).toHaveTextContent('补齐证据');
   });
 
+  it('discloses stale trust state with source, fallback, and scanner run context', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [makeItem({
+        id: 10,
+        symbol: 'BABA',
+        source: 'portfolio',
+        scannerRunId: 77,
+        scannerRank: null,
+        scannerScore: 81,
+        lastScoredAt: '2026-04-20T12:30:00Z',
+        scoreSource: 'fallback',
+        scoreStatus: 'stale',
+        intelligence: {
+          scanner: {
+            lastScore: 81,
+            lastRank: null,
+            status: 'selected',
+            reason: 'Fallback score snapshot.',
+            lastScannedAt: '2026-04-20T12:30:00Z',
+          },
+          strategySimulation: { status: 'unknown' },
+          backtest: {},
+        },
+      })],
+    });
+
+    renderWatchlist();
+
+    const row = await screen.findByTestId('watchlist-row-BABA');
+    const trustStrip = within(row).getByTestId('watchlist-trust-strip-BABA');
+    expect(trustStrip).toHaveTextContent('信号过期');
+    expect(trustStrip).toHaveTextContent('来源 portfolio');
+    expect(trustStrip).toHaveTextContent('评分源 fallback');
+    expect(trustStrip).toHaveTextContent('扫描批次 #77');
+    expect(trustStrip.textContent).toMatch(/更新/);
+  });
+
+  it('shows unknown trust disclosure when source and freshness fields are absent', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [makeItem({
+        id: 11,
+        symbol: 'SHOP',
+        source: '',
+        scannerRunId: null,
+        scannerRank: null,
+        scannerScore: null,
+        lastScoredAt: null,
+        scoreSource: null,
+        scoreStatus: null,
+        themeId: null,
+        universeType: null,
+        intelligence: undefined,
+      })],
+    });
+
+    renderWatchlist();
+
+    const row = await screen.findByTestId('watchlist-row-SHOP');
+    const trustStrip = within(row).getByTestId('watchlist-trust-strip-SHOP');
+    expect(trustStrip).toHaveTextContent('信号未知');
+    expect(trustStrip).toHaveTextContent('来源未知 / 需要刷新');
+  });
+
   it('sorts by backtest return and historical hit rate', async () => {
     renderWatchlist();
     await screen.findByTestId('watchlist-row-NVDA');

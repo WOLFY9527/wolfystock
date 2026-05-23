@@ -49,6 +49,7 @@ type BatchStatus = 'requested' | 'running' | 'completed' | 'failed' | 'skipped';
 type Notice = { tone: 'success' | 'warning' | 'danger'; message: string } | null;
 type FailureReason = '数据不足' | '行情缺失' | '服务暂不可用' | '回测失败' | '扫描失败' | '超时' | '未知错误';
 type BatchFailure = { label: FailureReason; detail?: string };
+type WatchlistTrustState = 'fresh' | 'stale' | 'unknown';
 type BatchProgress = {
   kind: 'scan' | 'backtest';
   total: number;
@@ -188,6 +189,10 @@ function getLatestIntelligenceTime(item: WatchlistItem): string | null {
   return values.sort((left, right) => getTime(right) - getTime(left))[0] || null;
 }
 
+function getTrustUpdatedTime(item: WatchlistItem): string | null {
+  return item.lastScoredAt || item.intelligence?.scanner?.lastScannedAt || null;
+}
+
 function formatFreshness(value?: string | null): string {
   if (!value) return '时间未知';
   const parsed = new Date(value).getTime();
@@ -226,6 +231,71 @@ function formatScannerReason(reason?: string | null, language: 'zh' | 'en' = 'zh
     return null;
   }
   return raw;
+}
+
+function normalizeToken(value?: string | null): string {
+  return normalizeText(value).toLowerCase();
+}
+
+function formatTrustToken(value?: string | null): string | null {
+  const token = normalizeToken(value);
+  if (!token) return null;
+  if (token === 'llm') return 'LLM';
+  return token.replaceAll(/[_-]+/g, ' ');
+}
+
+function getTrustState(item: WatchlistItem): WatchlistTrustState {
+  const status = normalizeToken(item.scoreStatus);
+  if (status === 'fresh') return 'fresh';
+  if (['stale', 'data_failed', 'provider_down', 'provider_error', 'failed', 'error', 'fallback', 'partial'].includes(status)) {
+    return 'stale';
+  }
+  return 'unknown';
+}
+
+function isFallbackTrustSource(value?: string | null): boolean {
+  const token = normalizeToken(value);
+  return token.includes('fallback') || token.includes('proxy');
+}
+
+function hasMissingTrustContext(item: WatchlistItem): boolean {
+  return !normalizeText(item.source)
+    && getTrustState(item) === 'unknown'
+    && !normalizeText(item.scoreSource)
+    && item.scannerRunId == null
+    && !getTrustUpdatedTime(item);
+}
+
+function formatTrustStateLabel(state: WatchlistTrustState, language: 'zh' | 'en'): string {
+  if (language === 'en') {
+    if (state === 'fresh') return 'Signal fresh';
+    if (state === 'stale') return 'Signal stale';
+    return 'Signal unknown';
+  }
+  if (state === 'fresh') return '信号最新';
+  if (state === 'stale') return '信号过期';
+  return '信号未知';
+}
+
+function formatTrustSourceLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
+  const prefix = language === 'en' ? 'Origin' : '来源';
+  return `${prefix} ${formatTrustToken(value) || (language === 'en' ? 'unknown' : '未知')}`;
+}
+
+function formatTrustScoreSourceLabel(value: string | null | undefined, language: 'zh' | 'en'): string | null {
+  const formatted = formatTrustToken(value);
+  if (!formatted) return null;
+  return `${language === 'en' ? 'Score source' : '评分源'} ${formatted}`;
+}
+
+function formatTrustScannerRunLabel(value: number | null | undefined, language: 'zh' | 'en'): string | null {
+  if (value == null) return null;
+  return `${language === 'en' ? 'Scanner run' : '扫描批次'} #${value}`;
+}
+
+function formatTrustUpdatedLabel(value: string | null | undefined, language: 'zh' | 'en'): string | null {
+  if (!value) return null;
+  return `${language === 'en' ? 'Updated' : '更新'} ${formatDateTime(value, language)}`;
 }
 
 function formatBacktestStatus(item: WatchlistItem, failure?: BatchFailure): string {
@@ -370,12 +440,15 @@ function getCopy(language: 'zh' | 'en') {
       rank: 'Rank',
       lastScored: 'Last scored',
       scoreFreshness: 'Score freshness',
+      signalTrust: 'Signal trust',
+      trustUpdated: 'Trust updated',
       refreshScores: 'Refresh scores',
       refreshingScores: 'Refreshing...',
       autoRefresh: 'Auto refresh',
       enabled: 'Enabled',
       stale: 'Stale',
       fresh: 'Fresh',
+      sourceUnknownNeedsRefresh: 'Source unknown / needs refresh',
       added: 'Added',
       actions: 'Actions',
       analyze: 'Analyze',
@@ -461,12 +534,15 @@ function getCopy(language: 'zh' | 'en') {
     rank: '排名',
     lastScored: '评分时间',
     scoreFreshness: '评分状态',
+    signalTrust: '信号状态',
+    trustUpdated: '信号更新时间',
     refreshScores: '刷新评分',
     refreshingScores: '刷新中...',
     autoRefresh: '自动刷新',
     enabled: '已启用',
     stale: '过期',
     fresh: '最新',
+    sourceUnknownNeedsRefresh: '来源未知 / 需要刷新',
     added: '加入时间',
     actions: '操作',
     analyze: '分析',
@@ -1174,9 +1250,21 @@ const WatchlistPage: React.FC = () => {
                     const scannerStatusLabel = formatScannerStatus(item);
                     const backtestStatusLabel = formatBacktestStatus(item, batchFailure);
                     const isActive = activeItem?.id === item.id;
+                    const trustState = getTrustState(item);
+                    const trustStateLabel = formatTrustStateLabel(trustState, language);
+                    const trustSourceLabel = formatTrustSourceLabel(item.source, language);
+                    const trustScoreSourceLabel = formatTrustScoreSourceLabel(item.scoreSource, language);
+                    const trustScannerRunLabel = formatTrustScannerRunLabel(item.scannerRunId, language);
+                    const trustUpdatedLabel = formatTrustUpdatedLabel(getTrustUpdatedTime(item), language);
+                    const showUnknownTrustNotice = hasMissingTrustContext(item);
                     const scoreFreshnessVariant = item.scoreStatus === 'fresh'
                       ? 'success'
                       : item.scoreStatus === 'stale'
+                        ? 'caution'
+                        : 'neutral';
+                    const trustStateVariant = trustState === 'fresh'
+                      ? 'success'
+                      : trustState === 'stale'
                         ? 'caution'
                         : 'neutral';
                     const scannerStatusVariant = scannerStatusLabel === '扫描失败'
@@ -1287,6 +1375,22 @@ const WatchlistPage: React.FC = () => {
                           </div>
 
                           <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px]">
+                            <div data-testid={`watchlist-trust-strip-${item.symbol}`} className="flex min-w-0 flex-wrap items-center gap-1.5">
+                              <TerminalChip variant={trustStateVariant}>{trustStateLabel}</TerminalChip>
+                              <TerminalChip variant="neutral">{trustSourceLabel}</TerminalChip>
+                              {trustScoreSourceLabel ? (
+                                <TerminalChip variant={isFallbackTrustSource(item.scoreSource) ? 'caution' : 'neutral'}>
+                                  {trustScoreSourceLabel}
+                                </TerminalChip>
+                              ) : null}
+                              {trustScannerRunLabel ? <TerminalChip variant="neutral">{trustScannerRunLabel}</TerminalChip> : null}
+                              {trustUpdatedLabel ? <TerminalChip variant="neutral" className="font-mono">{trustUpdatedLabel}</TerminalChip> : null}
+                              {showUnknownTrustNotice ? (
+                                <TerminalNotice variant="caution" className="px-2.5 py-1 text-[11px] leading-5">
+                                  {copy.sourceUnknownNeedsRefresh}
+                                </TerminalNotice>
+                              ) : null}
+                            </div>
                             {!hasAnyEvidence ? (
                               <>
                                 <TerminalChip variant="neutral">{copy.noEvidence}</TerminalChip>
@@ -1465,9 +1569,12 @@ const WatchlistPage: React.FC = () => {
                         <div className="divide-y divide-[color:var(--wolfy-divider)]">
                           {[
                             { label: copy.source, value: activeItem.source || '--' },
+                            { label: copy.signalTrust, value: formatTrustStateLabel(getTrustState(activeItem), language) },
+                            { label: language === 'en' ? 'Score source' : '评分源', value: formatTrustToken(activeItem.scoreSource) || '--' },
+                            { label: language === 'en' ? 'Scanner run' : '扫描批次', value: activeItem.scannerRunId != null ? `#${activeItem.scannerRunId}` : '--' },
                             { label: copy.lastScored, value: formatDateTime(activeItem.lastScoredAt, language) },
                             { label: copy.added, value: formatDateTime(activeItem.createdAt || activeItem.updatedAt, language) },
-                            { label: copy.scoreFreshness, value: formatFreshness(activeItem.lastScoredAt || activeScanner?.lastScannedAt) },
+                            { label: copy.trustUpdated, value: formatTrustUpdatedLabel(getTrustUpdatedTime(activeItem), language) || '--' },
                             { label: copy.latestUpdate, value: activeLatestTime ? formatDateTime(activeLatestTime, language) : '--' },
                           ].map((row) => (
                             <div key={String(row.label)} className="flex min-w-0 items-start justify-between gap-4 py-2.5 text-[11px]">
