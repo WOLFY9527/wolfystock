@@ -63,6 +63,27 @@ _SURFACE_ALIASES = {
 _LOCAL_PATH_RE = re.compile(
     r"(?i)(?:file://)?/(?:users|home|private|tmp|var|volumes)/[^\s,;]+|[a-z]:\\[^\s,;]+"
 )
+_ROLLUP_UNSAFE_TOKEN_MARKER_RE = re.compile(
+    r"(?i)(?:^|_)(?:api_?key|apikey|access_token|refresh_token|session_token|session_cookie|cookie|token|authorization|bearer|credential|private_key|secret|password|dsn|database_url|connection_string|raw_payload|raw_response|traceback)(?:_|$)"
+)
+_ROLLUP_SECRET_VALUE_RE = re.compile(
+    r"(?i)(?:^|[^A-Za-z0-9_])(?:sk|pk|gh[pousr]|xox[baprs]|ya29|eyj)[-_A-Za-z0-9]{8,}"
+)
+_ROLLUP_SAFE_SENSITIVE_REASON_CODES = {
+    "auth_error",
+    "credential_missing",
+    "credentials_missing",
+    "expired_token",
+    "forbidden",
+    "invalid_token",
+    "missing_api_key",
+    "missing_credentials",
+    "not_configured",
+    "provider_403",
+    "provider_auth_error",
+    "token_expired",
+    "unauthorized",
+}
 _OPERATOR_ISSUE_GUIDANCE = {
     "provider_unavailable": (
         "Provider unavailable",
@@ -121,6 +142,52 @@ class AdminOperatorIssueRollupService:
         return fallback
 
     @classmethod
+    def _unsafe_rollup_token(cls, value: Any, token: str) -> bool:
+        if token in _ROLLUP_SAFE_SENSITIVE_REASON_CODES:
+            return False
+        text_value = cls._text(value)
+        lower_value = text_value.lower()
+        compact_token = token.replace("_", "")
+        if _LOCAL_PATH_RE.search(text_value):
+            return True
+        if "/" in token or "\\" in text_value or "://" in lower_value or text_value.startswith(("/", "~/")):
+            return True
+        if "***" in text_value or "redacted_path" in lower_value:
+            return True
+        if _ROLLUP_SECRET_VALUE_RE.search(text_value):
+            return True
+        if _ROLLUP_UNSAFE_TOKEN_MARKER_RE.search(token):
+            return True
+        if len(compact_token) >= 32 and re.fullmatch(r"[a-z0-9]+", compact_token):
+            return True
+        return False
+
+    @classmethod
+    def _safe_rollup_token(cls, value: Any, *, fallback: str = "unknown") -> str:
+        token = AdminDataMissingDrilldownService._normalize_token(value)
+        if not token:
+            return fallback
+        if token in _ROLLUP_SAFE_SENSITIVE_REASON_CODES:
+            return token
+        if cls._unsafe_rollup_token(value, token):
+            return fallback
+        if re.fullmatch(r"[a-z0-9_]{1,80}", token):
+            return token
+        return fallback
+
+    @classmethod
+    def _safe_rollup_label(cls, value: Any, *, fallback: str = "redacted", max_length: int = 180) -> Optional[str]:
+        if not cls._text(value):
+            return None
+        token = cls._safe_rollup_token(value, fallback="")
+        if not token:
+            return fallback
+        label = cls._safe_display(value, max_length=max_length)
+        if not label:
+            return fallback
+        return label
+
+    @classmethod
     def _parse_iso(cls, value: Any) -> Optional[datetime]:
         return AdminDataMissingDrilldownService._parse_iso(value)
 
@@ -152,19 +219,20 @@ class AdminOperatorIssueRollupService:
             or business.get("channel")
         )
         return (
-            cls._safe_display(provider),
-            cls._safe_display(source),
-            cls._safe_display(model),
-            cls._safe_display(channel),
+            cls._safe_rollup_label(provider),
+            cls._safe_rollup_label(source),
+            cls._safe_rollup_label(model),
+            cls._safe_rollup_label(channel),
         )
 
     @classmethod
     def _event_type(cls, event: Dict[str, Any], detail: Dict[str, Any]) -> Optional[str]:
-        return cls._safe_display(
+        return cls._safe_rollup_label(
             detail.get("event_name")
             or detail.get("event_type")
             or event.get("event_name")
             or event.get("step"),
+            fallback="redacted",
             max_length=120,
         )
 
@@ -255,8 +323,8 @@ class AdminOperatorIssueRollupService:
 
     @classmethod
     def _issue_id(cls, key: Tuple[Any, ...]) -> str:
-        raw = "|".join(cls._text(part) for part in key)
-        token = re.sub(r"[^a-zA-Z0-9_.:/|-]+", "_", raw).strip("_")
+        raw = "|".join(cls._safe_rollup_token(part, fallback="unknown") for part in key)
+        token = re.sub(r"[^a-z0-9_|-]+", "_", raw).strip("_|")
         return token[:220] or "operator_issue"
 
     def list_items(
@@ -298,8 +366,12 @@ class AdminOperatorIssueRollupService:
                     continue
                 safe_event = sanitize_metadata(event)
                 detail = safe_event.get("detail") if isinstance(safe_event.get("detail"), dict) else {}
-                reason_code = AdminDataMissingDrilldownService._normalize_reason_code(safe_event, detail)
-                freshness_status = AdminDataMissingDrilldownService._freshness_status(safe_event, detail, reason_code)
+                raw_reason_code = AdminDataMissingDrilldownService._normalize_reason_code(safe_event, detail)
+                reason_code = self._safe_rollup_token(raw_reason_code, fallback="unknown")
+                freshness_status = self._safe_rollup_token(
+                    AdminDataMissingDrilldownService._freshness_status(safe_event, detail, reason_code),
+                    fallback="unknown",
+                )
                 event_type = self._event_type(safe_event, detail)
                 issue_class = self._classify_issue(
                     event=safe_event,
@@ -311,14 +383,20 @@ class AdminOperatorIssueRollupService:
                 if not issue_class:
                     continue
 
-                surface = AdminDataMissingDrilldownService._affected_surface(
-                    summary=summary,
-                    detail=session_detail,
-                    event_detail=detail,
+                surface = self._safe_rollup_token(
+                    AdminDataMissingDrilldownService._affected_surface(
+                        summary=summary,
+                        detail=session_detail,
+                        event_detail=detail,
+                    ),
+                    fallback="system",
                 )
-                domain = AdminDataMissingDrilldownService._infer_missing_domain(safe_event, detail) or self._safe_token(detail.get("domain"))
+                domain = self._safe_rollup_token(
+                    AdminDataMissingDrilldownService._infer_missing_domain(safe_event, detail) or detail.get("domain"),
+                    fallback="unknown",
+                )
                 provider, source, model, channel = self._provider_source_model_channel(summary=summary, detail=detail)
-                status = self._safe_token(safe_event.get("status"))
+                status = self._safe_rollup_token(safe_event.get("status"), fallback="unknown")
                 severity = self._severity(issue_class=issue_class, event=safe_event, detail=detail)
                 key = (
                     issue_class,

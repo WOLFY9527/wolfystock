@@ -721,6 +721,91 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertNotIn("/Users/alice", dumped)
         self.assertNotIn("raw_response", dumped.lower())
 
+    def test_operator_issue_rollup_redacts_path_like_dimensions_and_metadata_tokens(self) -> None:
+        now = datetime.now()
+        self._record_event(
+            session_id="rollup-path-domain",
+            event_name="ProviderUnavailable",
+            level="ERROR",
+            category="data_source",
+            message="provider unavailable",
+            status="failed",
+            target="finnhub",
+            detail={
+                "surface": "market_overview",
+                "domain": "/Users/alice/.env",
+                "provider": "finnhub",
+                "source": "market_overview",
+                "reason_code": "provider_unavailable",
+                "freshness_status": "missing",
+            },
+            event_at=now - timedelta(minutes=3),
+        )
+        self._record_event(
+            session_id="rollup-path-reason",
+            event_name="ProviderUnavailable",
+            level="ERROR",
+            category="data_source",
+            message="provider unavailable",
+            status="failed",
+            target="finnhub",
+            detail={
+                "surface": "market_overview",
+                "domain": "quote",
+                "provider": "finnhub",
+                "source": "market_overview",
+                "reason_code": "/Users/alice/.env",
+                "freshness_status": "missing",
+            },
+            event_at=now - timedelta(minutes=2),
+        )
+        self._record_event(
+            session_id="rollup-secret-labels",
+            event_name="ExternalSourceTimeout",
+            level="WARNING",
+            category="data_source",
+            message="provider timeout",
+            status="timed_out",
+            target="finnhub",
+            detail={
+                "surface": "market_overview",
+                "domain": "quote",
+                "provider": "/home/bob/.ssh/id_rsa",
+                "source": "Bearer FAKESECRETTOKEN1234567890",
+                "model": "model-token-FAKESECRETTOKEN1234567890",
+                "channel": "session_token=FAKE_SESSION_TOKEN",
+                "reason_code": "provider_timeout",
+                "freshness_status": "missing",
+                "metadata": {
+                    "localPath": "/Users/alice/.env",
+                    "safeLabel": "operator-visible",
+                },
+            },
+            event_at=now - timedelta(minutes=1),
+        )
+
+        with patch("src.services.admin_logs_service.get_db", return_value=self.db):
+            payload = admin_logs.list_operator_issue_rollup(since="", limit=10, _=_admin_user())
+
+        self.assertGreaterEqual(payload.total, 2)
+        dumped = str(payload.model_dump()).lower()
+        for forbidden in (
+            "/users/alice",
+            "/home/bob",
+            "alice",
+            "id_rsa",
+            "fakesecrettoken",
+            "fake_session_token",
+            "model-token",
+        ):
+            self.assertNotIn(forbidden, dumped)
+        for item in payload.items:
+            self.assertNotIn("/", item.issue_id)
+            self.assertNotIn("/", item.reason_code)
+            self.assertNotIn("alice", item.issue_id.lower())
+            self.assertNotIn("alice", item.reason_code.lower())
+            self.assertTrue(all("/" not in domain and "alice" not in domain.lower() for domain in item.affected_domains))
+
     def test_session_detail_keeps_actor_session_attribution_and_readable_summary_fields_explicit(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()
@@ -1642,6 +1727,17 @@ class AdminLogsApiTestCase(unittest.TestCase):
         client = TestClient(app)
 
         response = client.get("/api/v1/admin/logs/data-missing-drilldown")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"]["error"], "admin_capability_required")
+
+    def test_operator_issue_rollup_requires_logs_read_capability(self) -> None:
+        app = FastAPI()
+        app.include_router(admin_logs.router, prefix="/api/v1/admin/logs")
+        app.dependency_overrides[get_current_user] = lambda: _admin_user()
+        client = TestClient(app)
+
+        response = client.get("/api/v1/admin/logs/operator-issue-rollup")
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["detail"]["error"], "admin_capability_required")
