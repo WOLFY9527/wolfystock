@@ -1360,7 +1360,8 @@ describe('UserScannerPage', () => {
 
     const exportBlob = createObjectUrlMock.mock.calls[0]?.[0] as Blob;
     const exportText = await exportBlob.text();
-    expect(exportText).toContain('rank,symbol,name,scannerScore,entryRange,target,stop,reason,risk,universeType,theme,generatedAt,runId');
+    expect(exportText).toContain('rank,symbol,name,scannerScore,observationZone,referenceRange,riskBoundary,reason,risk,universeType,theme,generatedAt,runId');
+    expect(exportText).not.toContain('entryRange,target,stop');
     expect(exportText).toContain('1,NVDA');
   });
 

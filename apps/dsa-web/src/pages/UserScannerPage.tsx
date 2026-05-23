@@ -1293,9 +1293,9 @@ type ScannerExportRow = {
   symbol: string;
   name: string;
   scannerScore: number;
-  entryRange: string;
-  target: string;
-  stop: string;
+  observationZone: string;
+  referenceRange: string;
+  riskBoundary: string;
   reason: string;
   risk: string;
   universeType: string;
@@ -1314,9 +1314,9 @@ function buildScannerExportRow(
     symbol: candidate.symbol,
     name: candidate.companyName || candidate.name,
     scannerScore: candidate.score,
-    entryRange: getEntryRange(candidate) || '',
-    target: getTargetPrice(candidate) || '',
-    stop: getStopLoss(candidate) || '',
+    observationZone: getEntryRange(candidate) || '',
+    referenceRange: getTargetPrice(candidate) || '',
+    riskBoundary: getStopLoss(candidate) || '',
     reason: getKeyReason(candidate, runDetail, language),
     risk: getRiskSummary(candidate, language),
     universeType: runDetail.universeType || '',
@@ -1327,7 +1327,7 @@ function buildScannerExportRow(
 }
 
 function buildScannerCsv(rows: ScannerExportRow[]): string {
-  const headers = ['rank', 'symbol', 'name', 'scannerScore', 'entryRange', 'target', 'stop', 'reason', 'risk', 'universeType', 'theme', 'generatedAt', 'runId'];
+  const headers = ['rank', 'symbol', 'name', 'scannerScore', 'observationZone', 'referenceRange', 'riskBoundary', 'reason', 'risk', 'universeType', 'theme', 'generatedAt', 'runId'];
   return [
     headers.join(','),
     ...rows.map((row) => headers.map((header) => csvEscape(row[header as keyof ScannerExportRow])).join(',')),
