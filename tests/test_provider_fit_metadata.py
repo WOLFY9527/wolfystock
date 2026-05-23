@@ -372,7 +372,12 @@ def test_official_liquidity_contract_supports_and_scoring_gates_stay_missing_and
         scoring = get_provider_scoring_contract(provider_id, capability)
 
         assert support is not None
-        assert support.source_type == "missing"
+        expected_source_type = (
+            "official_public"
+            if provider_id == "official_public.fed_liquidity"
+            else "missing"
+        )
+        assert support.source_type == expected_source_type
         assert support.source_tier == "official_public"
         assert support.observation_only is True
         assert support.score_contribution_allowed is False

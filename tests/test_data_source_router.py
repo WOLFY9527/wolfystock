@@ -693,7 +693,7 @@ def test_official_fed_liquidity_contract_routes_stay_missing_cache_required_and_
     }.issubset(_ids(plan.forbidden_providers))
 
     candidate = plan.primary_candidates[0]
-    assert candidate.source_type == "missing"
+    assert candidate.source_type == "official_public"
     assert candidate.source_tier == "official_public"
     assert candidate.observation_only is True
     assert candidate.score_contribution_allowed is False
@@ -920,7 +920,7 @@ def test_route_diagnostic_snapshot_serializes_official_liquidity_contract_fields
             "providerId": "official_public.fed_liquidity",
             "providerName": "Official Fed Liquidity",
             "capability": "fed_liquidity",
-            "sourceType": "missing",
+            "sourceType": "official_public",
             "sourceTier": "official_public",
             "trustLevel": "score_grade_when_configured",
             "freshnessExpectation": "daily_or_weekly_public_release_lag",

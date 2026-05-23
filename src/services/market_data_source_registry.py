@@ -245,6 +245,8 @@ FRESHNESS_LABELS = {
 
 _OFFICIAL_CN_MONEY_MARKET_RATES_SOURCE = "official_public.cn_money_market_rates"
 _OFFICIAL_CN_MONEY_MARKET_RATES_LABEL = "Official CN Money Market Rates"
+_OFFICIAL_FED_LIQUIDITY_SOURCE = "official_public.fed_liquidity"
+_OFFICIAL_FED_LIQUIDITY_LABEL = "Official Fed Liquidity"
 
 
 def _text(value: Any) -> str:
@@ -270,6 +272,13 @@ def resolve_source_type(
     if is_fallback or normalized_freshness in {"fallback", "mock"} or normalized_source == "fallback":
         return "fallback_static"
     if _is_official_cn_money_market_cache_diagnostic(
+        normalized_source,
+        normalized_type,
+        normalized_freshness,
+        no_external_calls=no_external_calls,
+    ):
+        return "official_public"
+    if _is_official_fed_liquidity_bundle_diagnostic(
         normalized_source,
         normalized_type,
         normalized_freshness,
@@ -327,6 +336,8 @@ def resolve_source_label(
         return SOURCE_LABEL_BY_SOURCE[normalized_source]
     if normalized_source == _OFFICIAL_CN_MONEY_MARKET_RATES_SOURCE and resolved_type == "official_public":
         return _OFFICIAL_CN_MONEY_MARKET_RATES_LABEL
+    if normalized_source == _OFFICIAL_FED_LIQUIDITY_SOURCE and resolved_type == "official_public":
+        return _OFFICIAL_FED_LIQUIDITY_LABEL
     if resolved_type in {"cache_snapshot", "fallback_static", "missing"}:
         return SOURCE_LABEL_BY_TYPE.get(resolved_type, "公开数据")
     return SOURCE_LABEL_BY_TYPE.get(resolved_type, "公开数据")
@@ -344,6 +355,21 @@ def _is_official_cn_money_market_cache_diagnostic(
         and normalized_type == "official_public"
         and no_external_calls
         and normalized_freshness in {"cached", "delayed", "fresh"}
+    )
+
+
+def _is_official_fed_liquidity_bundle_diagnostic(
+    normalized_source: str,
+    normalized_type: str,
+    normalized_freshness: str,
+    *,
+    no_external_calls: bool,
+) -> bool:
+    return bool(
+        normalized_source == _OFFICIAL_FED_LIQUIDITY_SOURCE
+        and normalized_type == "official_public"
+        and no_external_calls
+        and normalized_freshness in {"cached", "delayed", "partial", "stale", "unavailable", "fresh"}
     )
 
 

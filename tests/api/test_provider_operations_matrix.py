@@ -97,6 +97,46 @@ def _cn_money_market_cache_payload() -> dict:
     }
 
 
+def _fed_liquidity_runtime_row(
+    series_id: str,
+    *,
+    value: float = 1.0,
+    freshness: str = "delayed",
+    freshness_policy: str | None = None,
+    source_authority_allowed: bool = True,
+    score_contribution_allowed: bool = True,
+    is_fallback: bool = False,
+    is_unavailable: bool = False,
+    is_stale: bool = False,
+) -> dict:
+    policy = freshness_policy
+    if policy is None:
+        policy = (
+            "official_daily_us_weekday_t_plus_1"
+            if series_id == "RRPONTSYD"
+            else "official_weekly_fed_liquidity_t_plus_7"
+        )
+    return {
+        "officialSeriesId": series_id,
+        "value": value,
+        "sourceType": "official_public",
+        "sourceTier": "official_public",
+        "freshness": freshness,
+        "isFallback": is_fallback,
+        "isUnavailable": is_unavailable,
+        "isStale": is_stale,
+        "sourceAuthorityAllowed": source_authority_allowed,
+        "scoreContributionAllowed": score_contribution_allowed,
+        "sourceFreshnessEvidence": {
+            "freshness": freshness,
+            "freshnessPolicy": policy,
+            "isFallback": is_fallback,
+            "isUnavailable": is_unavailable,
+            "isStale": is_stale,
+        },
+    }
+
+
 def test_endpoint_requires_admin_provider_read_capability() -> None:
     user_client = _client_for(_regular_user)
     user_response = user_client.get("/api/v1/admin/providers/operations-matrix")
@@ -202,16 +242,18 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
     }.issubset(set(breadth["routerReasonCodes"]))
 
     fed = _row_by_id(payload, "official_public.fed_liquidity")
-    assert fed["sourceType"] == "missing"
+    assert fed["sourceType"] == "official_public"
     assert fed["sourceTier"] == "official_public"
-    assert fed["runtimeState"] == "missing_provider_configuration"
+    assert fed["runtimeState"] == "aggregate_supported_runtime_evidence_missing"
     assert fed["credentialState"] == "not_required"
     assert fed["dependencyState"] == "not_required"
-    assert fed["missingProviderReason"] == "official_fed_liquidity_contract_not_configured"
+    assert fed["missingProviderReason"] is None
     assert fed["paidDataLikelyRequired"] is False
     assert fed["keyRequired"] is False
     assert fed["scoreContributionAllowed"] is False
     assert fed["scoreEligible"] is False
+    assert fed["observationOnly"] is True
+    assert fed["sourceAuthorityAllowed"] is False
     assert fed["supportedCapabilities"] == ["fed_liquidity"]
     assert fed["contractCadences"] == ["daily_weekly"]
     assert fed["contractFreshnessFloors"] == ["delayed"]
@@ -222,6 +264,35 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
     ]
     assert fed["contractCoverageUniverses"] == ["rrp_tga_reserve_balances_release_bundle"]
     assert {"market_overview", "liquidity_impulse"}.issubset(set(fed["affectedSurfaces"]))
+    assert fed["fulfilledMetrics"] == []
+    assert fed["missingMetrics"] == ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    assert fed["coverageCount"] == 0
+    assert fed["reasonCodes"] == [
+        "official_macro_transport_supported",
+        "missing_official_macro_row",
+    ]
+    assert fed["sourceFreshnessEvidence"] == {
+        "aggregateSupported": True,
+        "externalProviderCalls": False,
+        "freshness": "unavailable",
+        "freshnessPolicies": {
+            "RRPONTSYD": "official_daily_us_weekday_t_plus_1",
+            "WALCL": "official_weekly_fed_liquidity_t_plus_7",
+            "WRESBAL": "official_weekly_fed_liquidity_t_plus_7",
+            "WTREGEN": "official_weekly_fed_liquidity_t_plus_7",
+        },
+        "isFallback": False,
+        "isPartial": False,
+        "isUnavailable": True,
+        "requiredSeries": ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"],
+        "supportedSourceIds": [
+            "FRED_WALCL",
+            "FRED_RRPONTSYD",
+            "FRED_WTREGEN",
+            "FRED_WRESBAL",
+        ],
+        "runtimeEvidence": "missing",
+    }
     assert {
         "missing_provider_configuration",
         "cache_required",
@@ -426,6 +497,69 @@ def test_cn_hk_connect_flow_provider_ops_reports_explicit_disabled_cache_config(
     assert cn_hk_flow["scoreContributionAllowed"] is False
     assert cn_hk_flow["scoreEligible"] is False
     assert "provider_disabled" in cn_hk_flow["reasonCodes"]
+
+
+def test_fed_liquidity_provider_ops_projects_aggregate_bundle_without_key_or_secret_exposure() -> None:
+    payload = ProviderOperationsMatrixService(
+        env={"FRED_API_KEY": "super-secret-token-value"},
+        spec_finder=lambda _: None,
+    ).build_matrix()
+
+    fed = _row_by_id(payload, "official_public.fed_liquidity")
+
+    assert fed["sourceType"] == "official_public"
+    assert fed["credentialState"] == "not_required"
+    assert fed["keyRequired"] is False
+    assert fed["reasonCodes"][0] == "official_macro_transport_supported"
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    assert "super-secret-token-value" not in serialized
+    assert "FRED_API_KEY" not in serialized
+
+
+def test_fed_liquidity_provider_ops_projection_remains_non_scoring_for_partial_or_stale_rows() -> None:
+    projection = ProviderOperationsMatrixService._project_official_fed_liquidity_runtime_bundle(
+        [
+            _fed_liquidity_runtime_row("WALCL"),
+            _fed_liquidity_runtime_row("RRPONTSYD"),
+            _fed_liquidity_runtime_row(
+                "WTREGEN",
+                freshness="stale",
+                score_contribution_allowed=False,
+                is_stale=True,
+            ),
+        ]
+    )
+
+    assert projection["runtimeState"] == "aggregate_supported_runtime_evidence_partial"
+    assert projection["observationOnly"] is True
+    assert projection["sourceAuthorityAllowed"] is False
+    assert projection["scoreContributionAllowed"] is False
+    assert projection["fulfilledMetrics"] == ["WALCL", "RRPONTSYD"]
+    assert projection["missingMetrics"] == ["WTREGEN", "WRESBAL"]
+    assert projection["degradationReason"] == "fed_liquidity_required_series_missing_or_stale"
+    assert "stale_official_macro_evidence" in projection["reasonCodes"]
+    assert "missing_official_macro_row" in projection["reasonCodes"]
+
+
+def test_fed_liquidity_provider_ops_projection_allows_score_only_for_full_existing_gated_rows() -> None:
+    projection = ProviderOperationsMatrixService._project_official_fed_liquidity_runtime_bundle(
+        [
+            _fed_liquidity_runtime_row("WALCL"),
+            _fed_liquidity_runtime_row("RRPONTSYD"),
+            _fed_liquidity_runtime_row("WTREGEN"),
+            _fed_liquidity_runtime_row("WRESBAL"),
+        ]
+    )
+
+    assert projection["runtimeState"] == "aggregate_supported_runtime_evidence_ready"
+    assert projection["observationOnly"] is False
+    assert projection["sourceAuthorityAllowed"] is True
+    assert projection["scoreContributionAllowed"] is True
+    assert projection["trustLevel"] == "score_grade"
+    assert projection["fulfilledMetrics"] == ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    assert projection["missingMetrics"] == []
+    assert projection["coverageCount"] == 4
+    assert projection["degradationReason"] is None
 
 
 def test_cn_money_market_provider_ops_surfaces_valid_cache_diagnostic_without_paths_or_scoring(tmp_path) -> None:

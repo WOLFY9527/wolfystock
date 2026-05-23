@@ -539,7 +539,7 @@ _PROVIDER_CAPABILITY_SUPPORT_CONTRACTS = (
         "official_public.fed_liquidity",
         "fed_liquidity",
         provider_name="Official Fed Liquidity",
-        source_type="missing",
+        source_type="official_public",
         source_tier="official_public",
         trust_level="score_grade_when_configured",
         freshness_expectation="daily_or_weekly_public_release_lag",

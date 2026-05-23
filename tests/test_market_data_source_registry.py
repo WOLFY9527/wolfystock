@@ -246,6 +246,27 @@ def test_valid_cn_money_market_cache_diagnostic_projects_as_official_public_with
     assert unqualified_live["sourceLabel"] == "未接入"
 
 
+def test_valid_fed_liquidity_bundle_diagnostic_projects_as_official_public_without_live_promotion() -> None:
+    valid_bundle = project_source_provenance(
+        source="official_public.fed_liquidity",
+        source_type="official_public",
+        source_label="Official Fed Liquidity bundle",
+        freshness="delayed",
+        no_external_calls=True,
+    )
+    unqualified_live = project_source_provenance(
+        source="official_public.fed_liquidity",
+        source_type="official_public",
+        freshness="live",
+    )
+
+    assert valid_bundle["sourceType"] == "official_public"
+    assert valid_bundle["sourceLabel"] == "Official Fed Liquidity bundle"
+    assert valid_bundle["freshnessLabel"] == "延迟"
+    assert unqualified_live["sourceType"] == "missing"
+    assert unqualified_live["sourceLabel"] == "未接入"
+
+
 def test_polygon_grouped_daily_is_authorized_vendor_feed_not_official_exchange_breadth() -> None:
     provenance = project_source_provenance(
         source="polygon_us_grouped_daily",
