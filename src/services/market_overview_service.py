@@ -20,6 +20,11 @@ from data_provider.coinbase_public_provider import (
     COINBASE_PUBLIC_VENUE,
 )
 from src.contracts.source_confidence import coerce_source_confidence_contract
+from src.services.cn_hk_connect_flow_provider import AuthorizedCnHkConnectFlowCacheProvider
+from src.services.cn_hk_flow_contracts import (
+    CnHkFlowProviderUnavailable,
+    build_authorized_cn_hk_connect_flow_snapshot,
+)
 from src.services.cn_provider_health_service import CNProviderHealthService
 from src.services.data_source_router import CapabilityResolver, DataSourceRouteRequest, DataSourceRouter
 from src.services.data_source_router_diagnostics import build_data_source_route_diagnostic_snapshot
@@ -709,11 +714,20 @@ class MarketOverviewService:
     _market_data_cache: Dict[str, Dict[str, Any]] = {}
     _market_cache = market_cache
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        cn_hk_connect_flow_provider: Optional[Callable[[], Any]] = None,
+    ) -> None:
         self._official_macro_micro_cache: Dict[str, tuple[float, List[MacroObservation]]] = {}
         self._official_macro_overlay_diagnostics: Dict[str, str] = {}
         self._official_macro_overlay_diagnostic_details: Dict[str, Dict[str, Any]] = {}
         self._quote_request_memo: Optional[Dict[str, tuple[bool, Any]]] = None
+        self._cn_hk_connect_flow_provider = (
+            cn_hk_connect_flow_provider
+            if cn_hk_connect_flow_provider is not None
+            else AuthorizedCnHkConnectFlowCacheProvider()
+        )
 
     INDEX_SYMBOLS = {
         "SPX": ("S&P 500", "^GSPC"),
@@ -4482,7 +4496,13 @@ class MarketOverviewService:
         return items
 
     def _fetch_cn_flows_snapshot(self) -> Dict[str, Any]:
-        return self._fallback_cn_flows_snapshot()
+        try:
+            provider_payload = self._cn_hk_connect_flow_provider()
+            return build_authorized_cn_hk_connect_flow_snapshot(provider_payload)
+        except CnHkFlowProviderUnavailable:
+            raise
+        except Exception as exc:
+            raise CnHkFlowProviderUnavailable("malformed_payload") from exc
 
     def _fetch_sector_rotation_snapshot(self) -> Dict[str, Any]:
         radar_payload = MarketRotationRadarService(

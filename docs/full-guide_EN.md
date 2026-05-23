@@ -152,6 +152,9 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638) Token | Optional |
 | `TICKFLOW_API_KEY` | [TickFlow](https://tickflow.org) API key for CN market review index enhancement; market breadth also uses TickFlow when the plan supports universe queries | Optional |
 | `POLYGON_API_KEY` | Polygon API key, backend only; enables US EOD computed breadth, not official NYSE/Nasdaq breadth | Optional |
+| `CN_HK_CONNECT_FLOW_PROVIDER_ENABLED` | Authorized CN/HK Connect Flow cache diagnostics switch; disabled by default and never starts live provider requests | Optional |
+| `CN_HK_CONNECT_FLOW_CACHE_PATH` | Local JSON cache path for authorized CN/HK Connect Flow diagnostics | Optional |
+| `CN_HK_CONNECT_FLOW_API_KEY` | Authorized CN/HK Connect Flow credential placeholder; the current diagnostic path does not read or return this value | Optional |
 | `TWELVE_DATA_API_KEY` | Twelve Data API key for HK scanner quote/history enrichment | Optional |
 | `TWELVE_DATA_API_KEYS` | Comma-separated Twelve Data API keys; takes priority over `TWELVE_DATA_API_KEY` | Optional |
 | `ALPACA_API_KEY_ID` | Alpaca key ID for US scanner market-data enrichment | Optional |
@@ -272,6 +275,9 @@ Default schedule: Every weekday at **18:00 (Beijing Time)** automatic execution.
 | `TUSHARE_TOKEN` | Tushare Pro Token | - | Optional |
 | `TICKFLOW_API_KEY` | TickFlow API key; CN market review indices prefer TickFlow when configured, and market breadth does so only when the plan supports universe queries | - | Optional |
 | `POLYGON_API_KEY` | Polygon API key, backend only; used by Market Overview for US EOD computed breadth from grouped daily full-market data, not official NYSE/Nasdaq published breadth | - | Optional |
+| `CN_HK_CONNECT_FLOW_PROVIDER_ENABLED` | Authorized CN/HK Connect Flow cache diagnostics switch; disabled by default and never starts live provider requests | `false` | Optional |
+| `CN_HK_CONNECT_FLOW_CACHE_PATH` | Local JSON cache path for authorized CN/HK Connect Flow diagnostics; read only when the switch above is `true` | - | Optional |
+| `CN_HK_CONNECT_FLOW_API_KEY` | Authorized CN/HK Connect Flow credential placeholder; the current diagnostic path does not read or return this value | - | Optional |
 | `TWELVE_DATA_API_KEY` | Twelve Data single-key config for HK scanner quote / daily-history enrichment | - | Optional |
 | `TWELVE_DATA_API_KEYS` | Comma-separated Twelve Data API keys; takes priority over `TWELVE_DATA_API_KEY` | - | Optional |
 | `ALPACA_API_KEY_ID` | Alpaca key ID for US scanner quote / daily-history enrichment | - | Optional |
@@ -340,6 +346,7 @@ export SSL_CERT_FILE="$(python -c 'import certifi; print(certifi.where())')"
 > - The official quickstart documents `quotes.get(universes=["CN_Equity_A"])`, but online smoke tests confirmed two additional real-world constraints: universe access depends on plan permissions, and `quotes.get(symbols=[...])` has a per-request symbol limit.
 > - TickFlow currently returns `change_pct` / `amplitude` as ratio values; this integration normalizes them to the project's percent convention so they match AkShare / Tushare / efinance semantics.
 > - When `POLYGON_API_KEY` is configured, Market Overview US breadth only uses Polygon grouped daily EOD data for advance/decline/unchanged. 52-week highs/lows are computed only when same-source Polygon grouped daily history passes the 252 completed-session, coverage, and previous-close gates; otherwise they remain unavailable and are not relabeled as official NYSE/Nasdaq breadth.
+> - `authorized.cn_hk_connect_flow` currently supports only the disabled-by-default local-cache diagnostic path. Even with a valid cache, it remains `observationOnly=true` / `scoreContributionAllowed=false`, and Liquidity Monitor does not score it.
 > - Per-stock analysis, realtime quote priority, and sector rankings fallback remain unchanged.
 
 ---

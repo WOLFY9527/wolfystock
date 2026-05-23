@@ -18,6 +18,11 @@ from src.services.data_source_router import (
     DataSourceRouteRequest,
     DataSourceRouter,
 )
+from src.services.cn_hk_connect_flow_provider import (
+    CN_HK_CONNECT_FLOW_CACHE_PATH_ENV,
+    CN_HK_CONNECT_FLOW_PROVIDER_ENABLED_ENV,
+)
+from src.services.cn_hk_flow_contracts import AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID
 from src.services.market_data_readiness_diagnostics import (
     MarketDataReadinessDiagnostics,
     build_market_data_readiness_diagnostics,
@@ -72,6 +77,7 @@ _OPTIONAL_MODULE_BY_PROVIDER = {
 }
 _CREDENTIAL_ENV_KEYS_BY_PROVIDER = {
     "alpha_vantage": ("ALPHA_VANTAGE_API_KEY", "ALPHAVANTAGE_API_KEY"),
+    AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID: (CN_HK_CONNECT_FLOW_CACHE_PATH_ENV,),
     "finnhub": ("FINNHUB_API_KEY", "FINNHUB_TOKEN"),
     "marketstack": ("MARKETSTACK_API_KEY",),
     "nasdaq_data_link": ("NASDAQ_DATA_LINK_API_KEY", "QUANDL_API_KEY"),
@@ -217,6 +223,7 @@ class ProviderOperationsMatrixService:
             )
 
         self._merge_router_reason_codes(rows)
+        self._merge_authorized_cn_hk_connect_flow_projection(rows)
         self._merge_polygon_us_breadth_projection(rows)
         self._merge_readiness(readiness, rows)
         return rows
@@ -425,6 +432,22 @@ class ProviderOperationsMatrixService:
         row.official_exchange_published_breadth = False
         row.full_breadth_authority = False
 
+    def _merge_authorized_cn_hk_connect_flow_projection(
+        self,
+        rows: dict[str, _ProviderAccumulator],
+    ) -> None:
+        row = self._row(rows, AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID)
+        row.no_default_live_http_calls = True
+        row.cache_required = True
+        row.observation_only = True
+        row.score_contribution_allowed = False
+        enabled_raw = _text(self.env.get(CN_HK_CONNECT_FLOW_PROVIDER_ENABLED_ENV))
+        cache_path_present = bool(_text(self.env.get(CN_HK_CONNECT_FLOW_CACHE_PATH_ENV)))
+        if enabled_raw and not _env_bool(enabled_raw, default=False) and cache_path_present:
+            row.reason_codes = ["provider_disabled"]
+        elif enabled_raw and _env_bool(enabled_raw, default=False) and cache_path_present:
+            row.reason_codes = ["cache_only_diagnostic", "score_contribution_disabled"]
+
     def _merge_readiness(
         self,
         readiness: MarketDataReadinessDiagnostics,
@@ -597,12 +620,16 @@ class ProviderOperationsMatrixService:
         except (ImportError, ModuleNotFoundError, ValueError):
             return "missing"
 
-    @staticmethod
     def _runtime_state(
+        self,
         row: _ProviderAccumulator,
         credential_state: str,
         dependency_state: str,
     ) -> str:
+        if row.provider_id == AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID:
+            configured_state = self._cn_hk_connect_flow_runtime_state(credential_state)
+            if configured_state is not None:
+                return configured_state
         if row.provider_id in _MISSING_FEED_PROVIDER_IDS:
             return "missing_provider_configuration"
         if credential_state == "missing":
@@ -614,6 +641,17 @@ class ProviderOperationsMatrixService:
         if row.observation_only:
             return "observation_only"
         return row.runtime_state or "metadata_only"
+
+    def _cn_hk_connect_flow_runtime_state(self, credential_state: str) -> str | None:
+        enabled_raw = _text(self.env.get(CN_HK_CONNECT_FLOW_PROVIDER_ENABLED_ENV))
+        enabled_configured = bool(enabled_raw)
+        enabled = _env_bool(enabled_raw, default=False)
+        cache_path_present = credential_state == "present"
+        if enabled_configured and not enabled and cache_path_present:
+            return "disabled"
+        if enabled and cache_path_present:
+            return "configured_cache_only_diagnostic"
+        return None
 
     @staticmethod
     def _score_eligible(row: _ProviderAccumulator, source_type: str) -> bool:
@@ -661,6 +699,21 @@ class ProviderOperationsMatrixService:
                 1 for row in rows if row["paidDataLikelyRequired"]
             ),
         }
+
+
+def _env_bool(value: str, *, default: bool) -> bool:
+    normalized = value.strip().lower()
+    if not normalized:
+        return default
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _text(value: Any) -> str:
+    return str(value or "").strip()
 
 
 __all__ = ["ProviderOperationsMatrixService"]

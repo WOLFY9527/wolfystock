@@ -150,6 +150,9 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | Optional |
 | `TICKFLOW_API_KEY` | [TickFlow](https://tickflow.org) API key (CN market review index enhancement; breadth also uses TickFlow when the plan supports universe queries) | Optional |
 | `POLYGON_API_KEY` | Polygon API key, backend only; enables US EOD computed breadth from grouped daily full-market data, not official NYSE/Nasdaq published breadth | Optional |
+| `CN_HK_CONNECT_FLOW_PROVIDER_ENABLED` | Authorized CN/HK Connect Flow cache diagnostics switch; disabled by default and never starts live provider requests | Optional |
+| `CN_HK_CONNECT_FLOW_CACHE_PATH` | Local JSON cache path for authorized CN/HK Connect Flow diagnostics | Optional |
+| `CN_HK_CONNECT_FLOW_API_KEY` | Authorized CN/HK Connect Flow credential placeholder; the current diagnostic path does not read or return this value | Optional |
 | `TWELVE_DATA_API_KEY` | Twelve Data API key for HK scanner quote/history enrichment | Optional |
 | `TWELVE_DATA_API_KEYS` | Comma-separated Twelve Data API keys; takes priority over `TWELVE_DATA_API_KEY` | Optional |
 | `ALPACA_API_KEY_ID` | Alpaca key ID for US scanner market-data enrichment | Optional |

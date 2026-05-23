@@ -159,6 +159,9 @@ python3 scripts/smoke_backtest_rule.py
 | `SEARXNG_PUBLIC_INSTANCES_ENABLED` | 是否在 `SEARXNG_BASE_URLS` 为空时自动从 `searx.space` 获取公共实例（默认 `true`） | 可选 |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | 可选 |
 | `POLYGON_API_KEY` | Polygon API Key；仅后端读取，用于美股 EOD computed breadth，不是官方 NYSE/Nasdaq breadth | 可选 |
+| `CN_HK_CONNECT_FLOW_PROVIDER_ENABLED` | 授权 CN/HK Connect Flow 缓存诊断开关；默认关闭，不发起实时 provider 请求 | 可选 |
+| `CN_HK_CONNECT_FLOW_CACHE_PATH` | 授权 CN/HK Connect Flow 本地 JSON 缓存路径 | 可选 |
+| `CN_HK_CONNECT_FLOW_API_KEY` | 授权 CN/HK Connect Flow 凭据占位；当前诊断路径不读取、不回显 | 可选 |
 | `TWELVE_DATA_API_KEY` | Twelve Data 单 Key；用于港股 Scanner quote/history 补强 | 可选 |
 | `TWELVE_DATA_API_KEYS` | Twelve Data 多 Key（逗号分隔）；优先级高于 `TWELVE_DATA_API_KEY` | 可选 |
 | `ALPACA_API_KEY_ID` | Alpaca Key ID；用于美股 Scanner market-data 补强 | 可选 |
@@ -290,6 +293,9 @@ python3 scripts/smoke_backtest_rule.py
 | `TUSHARE_TOKEN` | Tushare Pro Token | - | 可选 |
 | `TICKFLOW_API_KEY` | TickFlow API Key；配置后 A 股大盘复盘指数优先尝试 TickFlow，若套餐支持标的池查询则市场统计也会优先尝试 TickFlow | - | 可选 |
 | `POLYGON_API_KEY` | Polygon API Key；仅后端读取，用于 Market Overview 美股 EOD computed breadth 的 grouped daily 全市场数据，不是官方 NYSE/Nasdaq published breadth | - | 可选 |
+| `CN_HK_CONNECT_FLOW_PROVIDER_ENABLED` | 授权 CN/HK Connect Flow 缓存诊断开关；默认关闭，不发起实时 provider 请求 | `false` | 可选 |
+| `CN_HK_CONNECT_FLOW_CACHE_PATH` | 授权 CN/HK Connect Flow 本地 JSON 缓存路径；仅在上方开关为 `true` 时读取 | - | 可选 |
+| `CN_HK_CONNECT_FLOW_API_KEY` | 授权 CN/HK Connect Flow 凭据占位；当前诊断路径不读取、不回显，仅供运营环境记录 | - | 可选 |
 | `TWELVE_DATA_API_KEY` | Twelve Data 单 Key；用于港股 Scanner quote / daily history 补强 | - | 可选 |
 | `TWELVE_DATA_API_KEYS` | Twelve Data 多 Key（逗号分隔）；优先级高于 `TWELVE_DATA_API_KEY` | - | 可选 |
 | `ALPACA_API_KEY_ID` | Alpaca Key ID；用于美股 Scanner quote / daily history 补强 | - | 可选 |
@@ -317,6 +323,7 @@ python3 scripts/smoke_backtest_rule.py
 > - 官方 quickstart 已文档化 `quotes.get(universes=["CN_Equity_A"])`，但线上 smoke test 进一步确认：`TICKFLOW_API_KEY` 不等于一定具备该权限，且 `quotes.get(symbols=[...])` 单次存在标的数量限制。
 > - TickFlow 实际返回的 `change_pct` / `amplitude` 为比例值；系统已在接入层统一转换为百分比值，确保与现有数据源字段语义一致。
 > - 配置 `POLYGON_API_KEY` 后，Market Overview 美股 breadth 仅使用 Polygon grouped daily EOD 数据计算 advance/decline/unchanged；52 周新高/新低只在同源 Polygon grouped daily 历史满足 252 个已完成交易日、覆盖率和前收盘匹配门槛时计算，否则保持缺失且不伪造为官方 NYSE/Nasdaq breadth。
+> - `authorized.cn_hk_connect_flow` 当前只支持禁用默认、缓存读取的诊断路径；即使缓存有效，也保持 `observationOnly=true` / `scoreContributionAllowed=false`，Liquidity Monitor 不计分。
 > - 字段契约：
 >   - `fundamental_context.boards.data` = `sector_rankings`（板块涨跌榜，结构 `{top, bottom}`）；
 >   - `fundamental_context.earnings.data.financial_report` = 财报摘要（报告期、营收、归母净利润、经营现金流、ROE）；

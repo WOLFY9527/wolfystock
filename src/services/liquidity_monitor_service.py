@@ -2728,6 +2728,13 @@ class LiquidityMonitorService:
                     "official_public",
                 },
             )
+        if key == "cn_hk_flows":
+            return self._indicator_required_inputs_have_diagnostic_authority(
+                evidence,
+                required_inputs={"NORTHBOUND", "SOUTHBOUND"},
+                allowed_source_types={"authorized_licensed_feed"},
+                allowed_source_tiers={"authorized_licensed_feed"},
+            )
         if key in {"vix_pressure", "us_rates_pressure", "cn_hk_index_context"}:
             return (
                 str(trust.get("sourceTier") or "") == "official_public"
@@ -2758,6 +2765,50 @@ class LiquidityMonitorService:
                 allowed_source_tiers=allowed_source_tiers,
             )
             for item in keyed_inputs.values()
+        )
+
+    def _indicator_required_inputs_have_diagnostic_authority(
+        self,
+        evidence: Dict[str, Any],
+        *,
+        required_inputs: set[str],
+        allowed_source_types: set[str],
+        allowed_source_tiers: set[str],
+    ) -> bool:
+        inputs = [item for item in evidence.get("inputs", []) if isinstance(item, dict)]
+        keyed_inputs = {
+            self._indicator_input_key(item): item
+            for item in inputs
+            if self._indicator_input_key(item) in required_inputs
+        }
+        if set(keyed_inputs) != required_inputs:
+            return False
+        return all(
+            self._indicator_input_has_diagnostic_authority(
+                item,
+                allowed_source_types=allowed_source_types,
+                allowed_source_tiers=allowed_source_tiers,
+            )
+            for item in keyed_inputs.values()
+        )
+
+    @staticmethod
+    def _indicator_input_has_diagnostic_authority(
+        item: Dict[str, Any],
+        *,
+        allowed_source_types: set[str],
+        allowed_source_tiers: set[str],
+    ) -> bool:
+        source_type = str(item.get("sourceType") or "").lower()
+        source_tier = str(item.get("sourceTier") or "").lower()
+        has_allowed_authority = source_type in allowed_source_types or source_tier in allowed_source_tiers
+        return bool(
+            has_allowed_authority
+            and item.get("sourceAuthorityAllowed") is not False
+            and not item.get("isFallback")
+            and not item.get("isUnavailable")
+            and not item.get("isStale")
+            and str(item.get("freshness") or "") in RELIABLE_FRESHNESS
         )
 
     @staticmethod

@@ -14,6 +14,7 @@ from unittest.mock import patch
 import pytest
 
 from api.v1.schemas.liquidity_monitor import LiquidityMonitorResponse
+from src.services.cn_hk_flow_contracts import AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID
 from src.services.liquidity_monitor_service import LiquidityMonitorService, PanelState
 from src.services.market_cache import MarketCache
 from src.storage import DatabaseManager
@@ -3373,6 +3374,78 @@ def test_cn_flow_indicator_uses_reliable_flow_basket_and_cn_breadth_context(isol
     assert diagnostics["missingProviderReason"] == "requires_authorized.cn_hk_connect_flow"
     assert diagnostics["paidDataLikelyRequired"] is True
     assert "宽度" in indicators["cn_hk_flows"]["summary"]
+
+
+def test_authorized_cn_hk_flow_diagnostics_remain_observation_only_and_non_scoring(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 23, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    cn_flow_payload = _cache_entry(
+        source=AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
+        freshness="delayed",
+        items=[
+            {
+                "symbol": "NORTHBOUND",
+                "label": "Northbound",
+                "value": 42.6,
+                "source": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
+                "sourceType": "authorized_licensed_feed",
+                "sourceTier": "authorized_licensed_feed",
+                "observationOnly": True,
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": False,
+            },
+            {
+                "symbol": "SOUTHBOUND",
+                "label": "Southbound",
+                "value": -18.4,
+                "source": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
+                "sourceType": "authorized_licensed_feed",
+                "sourceTier": "authorized_licensed_feed",
+                "observationOnly": True,
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": False,
+            },
+        ],
+        updated_at=now,
+        as_of=now,
+    )
+    cn_flow_payload.update(
+        {
+            "providerId": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
+            "sourceType": "authorized_licensed_feed",
+            "sourceTier": "authorized_licensed_feed",
+            "cacheOnly": True,
+            "observationOnly": True,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": False,
+            "coverageRatio": 0.4,
+            "fulfilledMetrics": ["NORTHBOUND", "SOUTHBOUND"],
+            "missingMetrics": ["MAINLAND_MAIN", "CN_ETF", "MARGIN_BALANCE"],
+        }
+    )
+    service.cache.set("cn_flows", cn_flow_payload, ttl_seconds=30)
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["cn_hk_flows"]
+    diagnostics = indicator["coverageDiagnostics"]
+
+    assert indicator["status"] == "partial"
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    _assert_activation_fields(diagnostics)
+    assert diagnostics["requiredProviderClass"] == AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID
+    assert diagnostics["configuredProviderAvailable"] is True
+    assert diagnostics["realSourceAvailable"] is True
+    assert diagnostics["observationOnly"] is True
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["scoreExclusionReason"] == "observation_only"
+    assert diagnostics["missingProviderReason"] is None
+    assert diagnostics["sourceTier"] == "authorized_licensed_feed"
+    evidence_inputs = indicator["evidence"]["inputs"]
+    assert {item["key"] for item in evidence_inputs} == {"NORTHBOUND", "SOUTHBOUND"}
+    assert all(item["scoreContributionAllowed"] is False for item in evidence_inputs)
 
 
 def test_liquidity_provider_activation_keeps_cn_money_and_futures_observation_only(

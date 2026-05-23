@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """Inert CN/HK flow contracts and mocked fixture parsers.
 
-This module is metadata and fixture parsing only. It must not import provider
-clients, call networks, read credentials, or change Market Overview runtime,
-MarketCache behavior, liquidity scoring, rotation radar semantics, or API
-response shapes.
+This module is metadata and cache-payload projection only. It must not import
+provider clients, call networks, read credentials, mutate MarketCache, change
+liquidity scoring, or alter provider ordering.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
@@ -19,6 +19,14 @@ from src.services.provider_unavailable_reason_buckets import (
     safe_unavailable_reason_bucket,
 )
 
+
+AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID = "authorized.cn_hk_connect_flow"
+AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_NAME = "Authorized CN/HK Connect Flow"
+AUTHORIZED_CN_HK_CONNECT_FLOW_SOURCE_TYPE = "authorized_licensed_feed"
+AUTHORIZED_CN_HK_CONNECT_FLOW_SOURCE_TIER = "authorized_licensed_feed"
+AUTHORIZED_CN_HK_CONNECT_FLOW_CACHE_ONLY_MODE = "cache_only"
+AUTHORIZED_CN_HK_CONNECT_FLOW_REQUIRED_SYMBOLS = ("NORTHBOUND", "SOUTHBOUND")
+AUTHORIZED_CN_HK_CONNECT_FLOW_MAX_DELAY_MINUTES = 24 * 60
 
 CN_HK_FLOW_SYMBOLS = (
     "NORTHBOUND",
@@ -34,11 +42,48 @@ SAFE_UNAVAILABLE_REASON_BUCKETS = (
     "permission_denied",
     "empty_payload",
     "malformed_payload",
+    "disabled_provider",
+    "stale_data",
+    "low_coverage",
 )
 
 _SOURCE_CLASS_DISABLED = "disabled_live_stub"
 _DEFAULT_REASON_BUCKETS = tuple(SAFE_UNAVAILABLE_REASON_BUCKETS)
 _REQUIRED_SYMBOLS = frozenset(CN_HK_FLOW_SYMBOLS)
+_AUTHORIZED_REQUIRED_SYMBOLS = frozenset(AUTHORIZED_CN_HK_CONNECT_FLOW_REQUIRED_SYMBOLS)
+_AUTHORIZED_ALL_SYMBOLS = frozenset(CN_HK_FLOW_SYMBOLS)
+_AUTHORIZED_MIN_COVERAGE_RATIO = len(_AUTHORIZED_REQUIRED_SYMBOLS) / len(_AUTHORIZED_ALL_SYMBOLS)
+_CN_TZ = timezone(timedelta(hours=8))
+_AUTHORIZED_UNAVAILABLE_REASON_BUCKET_RULES = (
+    (
+        "disabled_provider",
+        (
+            "disabled_provider",
+            "provider_disabled",
+            "disabled",
+            "not enabled",
+            "not_enabled",
+        ),
+    ),
+    *NO_PROVIDER_SELECTION_REASON_BUCKET_RULES,
+    (
+        "stale_data",
+        (
+            "stale_data",
+            "stale",
+            "expired",
+        ),
+    ),
+    (
+        "low_coverage",
+        (
+            "low_coverage",
+            "coverage",
+            "missing required",
+        ),
+    ),
+)
+_AUTHORIZED_SUCCESS_REASON_CODE = "authorized_cn_hk_connect_flow_diagnostic_only"
 
 
 @dataclass(frozen=True)
@@ -68,6 +113,31 @@ class ParsedCnHkFlowObservation:
             "asOf": self.as_of,
             "isEvidence": self.is_evidence,
             "unavailableReason": self.unavailable_reason,
+        }
+
+
+class CnHkFlowProviderUnavailable(RuntimeError):
+    """Sanitized fail-closed unavailable state for the authorized flow path."""
+
+    def __init__(self, reason_codes: Sequence[str] | str) -> None:
+        if isinstance(reason_codes, str):
+            reason_values = (reason_codes,)
+        else:
+            reason_values = tuple(reason_codes)
+        sanitized = tuple(dict.fromkeys(_safe_reason_bucket(reason) for reason in reason_values))
+        self.reason_codes = sanitized or ("malformed_payload",)
+        super().__init__(
+            f"{AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID}_unavailable:"
+            f"{','.join(self.reason_codes)}"
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "providerId": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
+            "available": False,
+            "reasonCodes": list(self.reason_codes),
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
         }
 
 
@@ -209,11 +279,256 @@ def parse_mocked_cn_hk_flow_payload(payload: Any) -> tuple[ParsedCnHkFlowObserva
     return tuple(parsed[symbol] for symbol in CN_HK_FLOW_SYMBOLS)
 
 
+def build_authorized_cn_hk_connect_flow_snapshot(
+    payload: Any,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Project a cache-only authorized CN/HK flow payload into endpoint diagnostics.
+
+    The input must already be an injected/cache result. This function never
+    fetches providers, reads credentials, or promotes the data to scoring use.
+    """
+    now_dt = _normalize_datetime(now) or datetime.now(_CN_TZ)
+    reason = _authorized_explicit_reason_bucket(payload)
+    if reason is not None:
+        raise CnHkFlowProviderUnavailable(reason)
+    if not isinstance(payload, Mapping):
+        raise CnHkFlowProviderUnavailable("malformed_payload")
+
+    _validate_authorized_source_metadata(payload)
+    observations = payload.get("observations")
+    if not isinstance(observations, Sequence) or isinstance(observations, (str, bytes)):
+        raise CnHkFlowProviderUnavailable("malformed_payload")
+    if not observations:
+        raise CnHkFlowProviderUnavailable("empty_payload")
+
+    as_of_text = _extract_as_of(payload)
+    as_of_dt = _parse_datetime(as_of_text)
+    if as_of_dt is None:
+        raise CnHkFlowProviderUnavailable("malformed_payload")
+    delay_minutes = _delay_minutes(as_of_dt, now_dt)
+    if delay_minutes > AUTHORIZED_CN_HK_CONNECT_FLOW_MAX_DELAY_MINUTES:
+        raise CnHkFlowProviderUnavailable("stale_data")
+
+    freshness = _authorized_freshness(payload)
+    parsed = _parse_authorized_observations(observations, as_of_text=as_of_text)
+    coverage_ratio = round(len(parsed) / len(CN_HK_FLOW_SYMBOLS), 2)
+    if not _AUTHORIZED_REQUIRED_SYMBOLS.issubset(parsed) or coverage_ratio < _AUTHORIZED_MIN_COVERAGE_RATIO:
+        raise CnHkFlowProviderUnavailable("low_coverage")
+
+    fulfilled_metrics = [symbol for symbol in CN_HK_FLOW_SYMBOLS if symbol in parsed]
+    missing_metrics = [symbol for symbol in CN_HK_FLOW_SYMBOLS if symbol not in parsed]
+    trading_date = _text(payload.get("tradingDate") or payload.get("trading_date") or as_of_text[:10])
+    session = _text(payload.get("session") or payload.get("tradingSession") or payload.get("trading_session"))
+    source_freshness_evidence = {
+        "providerId": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
+        "source": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
+        "freshness": freshness,
+        "asOf": as_of_text,
+        "tradingDate": trading_date or None,
+        "session": session or None,
+        "delayMinutes": delay_minutes,
+        "cacheOnly": True,
+        "externalProviderCalls": False,
+        "isFallback": False,
+        "isStale": False,
+        "isPartial": coverage_ratio < 1.0,
+        "isUnavailable": False,
+    }
+    items = [
+        _authorized_metric_item(
+            parsed[symbol],
+            freshness=freshness,
+            trading_date=trading_date,
+            session=session,
+            source_freshness_evidence=source_freshness_evidence,
+        )
+        for symbol in fulfilled_metrics
+    ]
+    return {
+        "providerId": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
+        "providerName": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_NAME,
+        "source": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
+        "sourceLabel": f"{AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_NAME} diagnostic cache",
+        "sourceType": AUTHORIZED_CN_HK_CONNECT_FLOW_SOURCE_TYPE,
+        "sourceTier": AUTHORIZED_CN_HK_CONNECT_FLOW_SOURCE_TIER,
+        "retrievalMode": AUTHORIZED_CN_HK_CONNECT_FLOW_CACHE_ONLY_MODE,
+        "cacheOnly": True,
+        "externalProviderCalls": False,
+        "updatedAt": _text(payload.get("updatedAt") or payload.get("updated_at") or as_of_text),
+        "asOf": as_of_text,
+        "tradingDate": trading_date or None,
+        "session": session or None,
+        "freshness": freshness,
+        "sourceFreshnessEvidence": source_freshness_evidence,
+        "items": items,
+        "fulfilledMetrics": fulfilled_metrics,
+        "missingMetrics": missing_metrics,
+        "coverageRatio": coverage_ratio,
+        "coverage": coverage_ratio,
+        "isPartial": coverage_ratio < 1.0,
+        "fallbackUsed": False,
+        "isFallback": False,
+        "isUnavailable": False,
+        "observationOnly": True,
+        "sourceAuthorityAllowed": True,
+        "scoreContributionAllowed": False,
+        "reasonCodes": [_AUTHORIZED_SUCCESS_REASON_CODE],
+        "warning": "Authorized CN/HK connect-flow diagnostic cache; scoring remains disabled.",
+    }
+
+
 def _explicit_reason_bucket(payload: Any) -> str | None:
     return explicit_unavailable_reason_bucket(
         payload,
         reason_bucket_rules=NO_PROVIDER_SELECTION_REASON_BUCKET_RULES,
     )
+
+
+def _authorized_explicit_reason_bucket(payload: Any) -> str | None:
+    if isinstance(payload, Mapping):
+        if payload.get("enabled") is False or payload.get("providerEnabled") is False:
+            return "disabled_provider"
+    return explicit_unavailable_reason_bucket(
+        payload,
+        reason_bucket_rules=_AUTHORIZED_UNAVAILABLE_REASON_BUCKET_RULES,
+    )
+
+
+def _validate_authorized_source_metadata(payload: Mapping[str, Any]) -> None:
+    provider_id = _text(payload.get("providerId") or payload.get("provider_id") or payload.get("source")).lower()
+    if provider_id != AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID:
+        raise CnHkFlowProviderUnavailable("malformed_payload")
+    source = _text(payload.get("source") or payload.get("providerId") or payload.get("provider_id")).lower()
+    if source != AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID:
+        raise CnHkFlowProviderUnavailable("malformed_payload")
+    source_type = _text(payload.get("sourceType") or payload.get("source_type")).lower()
+    source_tier = _text(payload.get("sourceTier") or payload.get("source_tier")).lower()
+    if source_type != AUTHORIZED_CN_HK_CONNECT_FLOW_SOURCE_TYPE:
+        raise CnHkFlowProviderUnavailable("malformed_payload")
+    if source_tier != AUTHORIZED_CN_HK_CONNECT_FLOW_SOURCE_TIER:
+        raise CnHkFlowProviderUnavailable("malformed_payload")
+
+
+def _parse_authorized_observations(
+    observations: Sequence[Any],
+    *,
+    as_of_text: str,
+) -> dict[str, ParsedCnHkFlowObservation]:
+    parsed: dict[str, ParsedCnHkFlowObservation] = {}
+    for raw_item in observations:
+        if not isinstance(raw_item, Mapping):
+            raise CnHkFlowProviderUnavailable("malformed_payload")
+        symbol = _text(raw_item.get("symbol")).upper()
+        contract = _CONTRACTS_BY_SYMBOL.get(symbol)
+        if contract is None:
+            continue
+        value = _parse_number(raw_item.get("value"))
+        if value is None:
+            raise CnHkFlowProviderUnavailable("malformed_payload")
+        unit = _text(raw_item.get("unit"))
+        if unit != contract.expected_unit:
+            raise CnHkFlowProviderUnavailable("malformed_payload")
+        parsed[symbol] = ParsedCnHkFlowObservation(
+            symbol=symbol,
+            value=value,
+            as_of=_extract_as_of(raw_item) or as_of_text,
+            is_evidence=True,
+        )
+    if not parsed:
+        raise CnHkFlowProviderUnavailable("empty_payload")
+    return parsed
+
+
+def _authorized_metric_item(
+    observation: ParsedCnHkFlowObservation,
+    *,
+    freshness: str,
+    trading_date: str,
+    session: str,
+    source_freshness_evidence: Mapping[str, Any],
+) -> dict[str, Any]:
+    contract = _CONTRACTS_BY_SYMBOL[observation.symbol]
+    currency = _currency_for_unit(contract.expected_unit)
+    return {
+        "name": contract.display_name,
+        "label": contract.display_name,
+        "symbol": observation.symbol,
+        "value": observation.value,
+        "price": observation.value,
+        "change": None,
+        "changePercent": None,
+        "change_text": None,
+        "sparkline": [],
+        "trend": [],
+        "unit": contract.expected_unit,
+        "currency": currency,
+        "source": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
+        "sourceLabel": f"{AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_NAME} diagnostic cache",
+        "sourceType": AUTHORIZED_CN_HK_CONNECT_FLOW_SOURCE_TYPE,
+        "sourceTier": AUTHORIZED_CN_HK_CONNECT_FLOW_SOURCE_TIER,
+        "providerId": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
+        "providerClass": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
+        "activationHint": "authorized_cn_hk_connect_flow_cache_diagnostic",
+        "asOf": observation.as_of,
+        "updatedAt": observation.as_of,
+        "tradingDate": trading_date or None,
+        "session": session or None,
+        "freshness": freshness,
+        "isFallback": False,
+        "fallbackUsed": False,
+        "isUnavailable": False,
+        "observationOnly": True,
+        "sourceAuthorityAllowed": True,
+        "scoreContributionAllowed": False,
+        "reasonCodes": [_AUTHORIZED_SUCCESS_REASON_CODE],
+        "sourceFreshnessEvidence": dict(source_freshness_evidence),
+        "risk_direction": "neutral",
+        "hover_details": ["Authorized diagnostic cache; score contribution disabled."],
+    }
+
+
+def _authorized_freshness(payload: Mapping[str, Any]) -> str:
+    freshness = _text(payload.get("freshness") or payload.get("sourceFreshness")).lower()
+    if freshness in {"live", "fresh", "realtime"}:
+        raise CnHkFlowProviderUnavailable("malformed_payload")
+    if freshness in {"delayed", "cached", "stale"}:
+        return freshness
+    return "delayed"
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    text = _text(value)
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return _normalize_datetime(parsed)
+
+
+def _normalize_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=_CN_TZ)
+    return value.astimezone(_CN_TZ)
+
+
+def _delay_minutes(as_of: datetime, now: datetime) -> int:
+    delay = int((now - as_of).total_seconds() // 60)
+    return max(0, delay)
+
+
+def _currency_for_unit(unit: str) -> str | None:
+    normalized = unit.upper()
+    if "CNY" in normalized:
+        return "CNY"
+    if "HKD" in normalized:
+        return "HKD"
+    return None
 
 
 def _safe_reason_bucket(value: Any) -> str:

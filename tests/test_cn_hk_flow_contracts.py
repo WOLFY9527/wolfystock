@@ -8,12 +8,17 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from src.services.cn_hk_flow_contracts import (
+    AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
     CN_HK_FLOW_SYMBOLS,
+    CnHkFlowProviderUnavailable,
     SAFE_UNAVAILABLE_REASON_BUCKETS,
+    build_authorized_cn_hk_connect_flow_snapshot,
     get_cn_hk_flow_contract,
     list_cn_hk_flow_contracts,
     parse_mocked_cn_hk_flow_payload,
@@ -24,6 +29,7 @@ from src.services.market_data_source_registry import CANONICAL_SOURCE_TYPES
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "cn_hk_flows"
 MODULE_PATH = REPO_ROOT / "src" / "services" / "cn_hk_flow_contracts.py"
+CN_TZ = ZoneInfo("Asia/Shanghai")
 FORBIDDEN_IMPORT_PREFIXES = (
     "data_provider",
     "requests",
@@ -35,6 +41,30 @@ FORBIDDEN_IMPORT_PREFIXES = (
     "src.services.liquidity_monitor_service",
     "src.services.market_rotation_radar_service",
 )
+
+
+def _authorized_provider_payload(
+    *,
+    as_of: str,
+    observations: list[dict[str, object]] | None = None,
+    trading_date: str = "2026-05-23",
+) -> dict[str, object]:
+    return {
+        "providerId": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
+        "source": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
+        "sourceType": "authorized_licensed_feed",
+        "sourceTier": "authorized_licensed_feed",
+        "asOf": as_of,
+        "tradingDate": trading_date,
+        "session": "morning",
+        "freshness": "delayed",
+        "observations": observations
+        if observations is not None
+        else [
+            {"symbol": "NORTHBOUND", "value": 42.6, "unit": "亿 CNY", "currency": "CNY"},
+            {"symbol": "SOUTHBOUND", "value": 28.4, "unit": "亿 HKD", "currency": "HKD"},
+        ],
+    }
 
 
 def _load_json_fixture(name: str) -> dict[str, object]:
@@ -122,6 +152,91 @@ def test_parse_mocked_cn_hk_flow_fixture_returns_complete_contract_set() -> None
             "unavailableReason": None,
         },
     ]
+
+
+def test_authorized_cn_hk_connect_flow_snapshot_projects_diagnostic_contract() -> None:
+    now = datetime(2026, 5, 23, 10, 5, tzinfo=CN_TZ)
+    as_of = (now - timedelta(minutes=5)).isoformat(timespec="seconds")
+
+    snapshot = build_authorized_cn_hk_connect_flow_snapshot(
+        _authorized_provider_payload(as_of=as_of),
+        now=now,
+    )
+
+    assert snapshot["providerId"] == AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID
+    assert snapshot["source"] == AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID
+    assert snapshot["sourceType"] == "authorized_licensed_feed"
+    assert snapshot["sourceTier"] == "authorized_licensed_feed"
+    assert snapshot["cacheOnly"] is True
+    assert snapshot["externalProviderCalls"] is False
+    assert snapshot["observationOnly"] is True
+    assert snapshot["sourceAuthorityAllowed"] is True
+    assert snapshot["scoreContributionAllowed"] is False
+    assert snapshot["fulfilledMetrics"] == ["NORTHBOUND", "SOUTHBOUND"]
+    assert snapshot["missingMetrics"] == ["MAINLAND_MAIN", "CN_ETF", "MARGIN_BALANCE"]
+    assert snapshot["coverageRatio"] == 0.4
+    assert snapshot["tradingDate"] == "2026-05-23"
+    assert snapshot["session"] == "morning"
+    assert snapshot["freshness"] == "delayed"
+    assert snapshot["sourceFreshnessEvidence"]["delayMinutes"] == 5
+    assert snapshot["reasonCodes"] == ["authorized_cn_hk_connect_flow_diagnostic_only"]
+
+    northbound = next(item for item in snapshot["items"] if item["symbol"] == "NORTHBOUND")
+    assert northbound["value"] == 42.6
+    assert northbound["unit"] == "亿 CNY"
+    assert northbound["currency"] == "CNY"
+    assert northbound["sourceAuthorityAllowed"] is True
+    assert northbound["scoreContributionAllowed"] is False
+    assert northbound["observationOnly"] is True
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_reason"),
+    [
+        ({"enabled": False}, "disabled_provider"),
+        ({"credentialState": "missing", "message": "missing token SECRET"}, "missing_credentials"),
+        (_load_json_fixture("permission_denied.json"), "permission_denied"),
+        ({"observations": []}, "empty_payload"),
+        (
+            {
+                "observations": [
+                    {"symbol": "NORTHBOUND", "value": "N/A", "unit": "亿 CNY"},
+                    {"symbol": "SOUTHBOUND", "value": 28.4, "unit": "亿 HKD"},
+                ]
+            },
+            "malformed_payload",
+        ),
+        (
+            _authorized_provider_payload(
+                as_of=datetime(2026, 5, 20, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds"),
+            ),
+            "stale_data",
+        ),
+        (
+            _authorized_provider_payload(
+                as_of=datetime(2026, 5, 23, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds"),
+                observations=[
+                    {"symbol": "NORTHBOUND", "value": 42.6, "unit": "亿 CNY", "currency": "CNY"},
+                ],
+            ),
+            "low_coverage",
+        ),
+    ],
+)
+def test_authorized_cn_hk_connect_flow_snapshot_fails_closed_with_sanitized_reason(
+    payload: dict[str, object],
+    expected_reason: str,
+) -> None:
+    now = datetime(2026, 5, 23, 10, 5, tzinfo=CN_TZ)
+
+    with pytest.raises(CnHkFlowProviderUnavailable) as exc:
+        build_authorized_cn_hk_connect_flow_snapshot(payload, now=now)
+
+    assert expected_reason in exc.value.reason_codes
+    serialized = json.dumps(exc.value.to_dict(), ensure_ascii=False, sort_keys=True)
+    assert "SECRET" not in serialized
+    assert "https://api.tickflow.test/raw" not in serialized
+    assert "providerPayload" not in serialized
 
 
 def test_tickflow_breadth_fixture_cannot_be_parsed_as_flow_evidence() -> None:

@@ -28,6 +28,21 @@ boundaries.
 - User-facing pages must disclose fallback, stale, partial, or unavailable data
   honestly without making degraded data look fully live.
 
+## Disabled Cache-Only Diagnostics
+
+- `authorized.cn_hk_connect_flow` is disabled by default. When
+  `CN_HK_CONNECT_FLOW_PROVIDER_ENABLED=true` and
+  `CN_HK_CONNECT_FLOW_CACHE_PATH` points to a local JSON cache, Market Overview
+  may surface CN/HK connect-flow diagnostics from that cache only.
+- The adapter does not make live provider calls. `CN_HK_CONNECT_FLOW_API_KEY` is
+  optional metadata for operator environments and is never returned by Provider
+  Operations.
+- CN/HK connect-flow diagnostics remain `observationOnly=true` and
+  `scoreContributionAllowed=false`; Liquidity Monitor must not score them.
+- If the cache is missing, malformed, stale, permission-denied, or below the
+  required northbound/southbound coverage, `/api/v1/market/cn-flows` falls back
+  to the existing static fallback response.
+
 ## Related Domains
 
 - [Scanner](../scanner/README.md)

@@ -356,6 +356,51 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
     }.issubset(set(rotation_flow["routerReasonCodes"]))
 
 
+def test_cn_hk_connect_flow_provider_ops_reports_cache_only_config_without_secret_values() -> None:
+    payload = ProviderOperationsMatrixService(
+        env={
+            "CN_HK_CONNECT_FLOW_PROVIDER_ENABLED": "true",
+            "CN_HK_CONNECT_FLOW_CACHE_PATH": "/tmp/private-cn-hk-flow-cache.json",
+            "CN_HK_CONNECT_FLOW_API_KEY": "super-secret-token-value",
+        },
+        spec_finder=lambda _: None,
+    ).build_matrix()
+
+    cn_hk_flow = _row_by_id(payload, "authorized.cn_hk_connect_flow")
+
+    assert payload["diagnosticOnly"] is True
+    assert payload["metadata"]["secretValuesIncluded"] is False
+    assert cn_hk_flow["runtimeState"] == "configured_cache_only_diagnostic"
+    assert cn_hk_flow["credentialState"] == "present"
+    assert cn_hk_flow["dependencyState"] == "not_required"
+    assert cn_hk_flow["observationOnly"] is True
+    assert cn_hk_flow["scoreContributionAllowed"] is False
+    assert cn_hk_flow["scoreEligible"] is False
+    assert cn_hk_flow["noDefaultLiveHttpCalls"] is True
+    assert cn_hk_flow["diagnosticOnly"] is True
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    assert "super-secret-token-value" not in serialized
+    assert "/tmp/private-cn-hk-flow-cache.json" not in serialized
+
+
+def test_cn_hk_connect_flow_provider_ops_reports_explicit_disabled_cache_config() -> None:
+    payload = ProviderOperationsMatrixService(
+        env={
+            "CN_HK_CONNECT_FLOW_PROVIDER_ENABLED": "false",
+            "CN_HK_CONNECT_FLOW_CACHE_PATH": "/tmp/private-cn-hk-flow-cache.json",
+        },
+        spec_finder=lambda _: None,
+    ).build_matrix()
+
+    cn_hk_flow = _row_by_id(payload, "authorized.cn_hk_connect_flow")
+
+    assert cn_hk_flow["runtimeState"] == "disabled"
+    assert cn_hk_flow["credentialState"] == "present"
+    assert cn_hk_flow["scoreContributionAllowed"] is False
+    assert cn_hk_flow["scoreEligible"] is False
+    assert "provider_disabled" in cn_hk_flow["reasonCodes"]
+
+
 def test_polygon_us_grouped_daily_projection_is_visible_without_secret_or_official_overclaim(
     monkeypatch,
 ) -> None:
