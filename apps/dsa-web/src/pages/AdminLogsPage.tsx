@@ -5,6 +5,7 @@ import {
   type AdminDataMissingDrilldownItem,
   type AdminLogCleanupResponse,
   type AdminLogHealthSummary,
+  type AdminOperatorIssueRollupItem,
   type AdminLogStorageSummary,
   type AdminIncidentTimelineHook,
   type AdminIncidentTimelineItem,
@@ -855,6 +856,8 @@ function summarySectionClass(severity: EventSeverity): string {
   return 'border-emerald-300/12 bg-emerald-400/[0.035]';
 }
 
+const LOCAL_PATH_DISPLAY_RE = /(?:file:\/\/)?\/(?:Users|home|private|tmp|var|Volumes)\/[^\s,;]+|[A-Za-z]:\\[^\s,;]+/gi;
+
 function safeDebugSummaryPayload(payload: Record<string, unknown>): string {
   return JSON.stringify(sanitizeDisplayValue(payload), null, 2);
 }
@@ -912,9 +915,48 @@ function sanitizeDisplayValue(value: unknown): unknown {
     return value
       .replace(/([?&](?:api[-_]?key|token|access_token|secret|password|authorization)=)[^&#\s]+/gi, '$1***')
       .replace(/\b(api[-_]?key|apikey|access[-_]?token|token|authorization|secret|password)\b\s*[:=]\s*([^\s,;&]+)/gi, '$1=***')
-      .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer ***');
+      .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer ***')
+      .replace(LOCAL_PATH_DISPLAY_RE, '[redacted_path]');
   }
   return value;
+}
+
+function safeOperatorText(value: unknown, fallback = '--'): string {
+  const sanitized = sanitizeDisplayValue(value);
+  if (typeof sanitized === 'string' || typeof sanitized === 'number' || typeof sanitized === 'boolean') {
+    return text(sanitized, fallback);
+  }
+  return fallback;
+}
+
+function operatorIssueVariant(severity: string | null | undefined): TerminalChipVariant {
+  const normalized = String(severity || '').toLowerCase();
+  if (normalized === 'critical' || normalized === 'error') return 'danger';
+  if (normalized === 'warning') return 'caution';
+  return 'neutral';
+}
+
+function operatorIssueSeverityLabel(severity: string | null | undefined, locale: AdminLogsLanguage): string {
+  const normalized = String(severity || 'warning').toLowerCase();
+  if (normalized === 'critical') return locale === 'zh' ? '严重' : 'Critical';
+  if (normalized === 'error') return locale === 'zh' ? '错误' : 'Error';
+  if (normalized === 'warning') return locale === 'zh' ? '警告' : 'Warning';
+  return locale === 'zh' ? '提示' : 'Info';
+}
+
+function operatorIssueFilterQuery(item: AdminOperatorIssueRollupItem): string {
+  return [
+    item.provider,
+    item.source,
+    item.reasonCode,
+    item.eventType,
+    item.affectedSurfaces?.[0],
+    item.affectedDomains?.[0],
+  ]
+    .map((value) => safeOperatorText(value, ''))
+    .filter(Boolean)
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .join(' ');
 }
 
 function JsonBlock({ value }: { value: unknown }) {
@@ -1064,6 +1106,8 @@ const AdminLogsPage: React.FC = () => {
   const [isCleanupBusy, setIsCleanupBusy] = useState(false);
   const [dataMissingItems, setDataMissingItems] = useState<AdminDataMissingDrilldownItem[]>([]);
   const [isLoadingDataMissing, setIsLoadingDataMissing] = useState(false);
+  const [operatorIssueItems, setOperatorIssueItems] = useState<AdminOperatorIssueRollupItem[]>([]);
+  const [isLoadingOperatorIssues, setIsLoadingOperatorIssues] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState<ExecutionLogSessionDetail | null>(null);
   const [selectedBusinessDetail, setSelectedBusinessDetail] = useState<BusinessEventDetail | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -1103,6 +1147,25 @@ const AdminLogsPage: React.FC = () => {
       setDataMissingItems([]);
     } finally {
       setIsLoadingDataMissing(false);
+    }
+  }, [activeTab, sinceFilter]);
+
+  const loadOperatorIssues = useCallback(async () => {
+    if (activeTab === 'raw') {
+      setOperatorIssueItems([]);
+      return;
+    }
+    setIsLoadingOperatorIssues(true);
+    try {
+      const response = await adminLogsApi.listOperatorIssueRollup({
+        since: sinceFilter,
+        limit: 6,
+      });
+      setOperatorIssueItems(response.items || []);
+    } catch {
+      setOperatorIssueItems([]);
+    } finally {
+      setIsLoadingOperatorIssues(false);
     }
   }, [activeTab, sinceFilter]);
 
@@ -1261,6 +1324,10 @@ const AdminLogsPage: React.FC = () => {
     void loadDataMissing();
   }, [loadDataMissing]);
 
+  useEffect(() => {
+    void loadOperatorIssues();
+  }, [loadOperatorIssues]);
+
   const filteredSessions = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return sessions.filter((item) => {
@@ -1376,6 +1443,14 @@ const AdminLogsPage: React.FC = () => {
     if (!lookup) return;
     await openIncidentTimeline(lookup, text(item.symbol || item.affectedSurface || item.missingDomain));
   }, [openIncidentTimeline]);
+
+  const applyOperatorIssueFilter = useCallback((item: AdminOperatorIssueRollupItem) => {
+    const query = operatorIssueFilterQuery(item);
+    setActiveTab('data_source');
+    setStatusFilter('all');
+    setPageOffset(0);
+    setSearchQuery(query);
+  }, []);
 
   const openIncidentNavigation = useCallback(async (item: AdminIncidentTimelineItem) => {
     const nav = item.navigation || {};
@@ -1892,6 +1967,87 @@ const AdminLogsPage: React.FC = () => {
             />
           </div>
         </TerminalPanel>
+
+        {activeTab !== 'raw' ? (
+          <TerminalPanel as="section" data-testid="admin-logs-operator-issue-rollup" dense>
+            <TerminalSectionHeader
+              eyebrow={locale === 'zh' ? '运维问题' : 'OPERATOR ISSUES'}
+              title="Operator Issue Rollup"
+              action={<TerminalChip variant="neutral">{countLabel(operatorIssueItems.length, 'issue', 'issues', '组问题', locale)}</TerminalChip>}
+            />
+            <TerminalNotice variant="neutral" className="mt-3">
+              {locale === 'zh'
+                ? '只读聚合：仅使用现有 Admin Logs 行，按安全维度合并 provider unavailable、timeout、fallback、stale、partial 等重复问题。'
+                : 'Read-only aggregate from existing Admin Logs rows, grouped by safe provider/source/status/reason dimensions.'}
+            </TerminalNotice>
+            {isLoadingOperatorIssues ? (
+              <p className="mt-3 text-sm text-muted-text">{t('adminLogs.loading')}</p>
+            ) : operatorIssueItems.length === 0 ? (
+              <TerminalEmptyState className="mt-3 min-h-[72px]" title={locale === 'zh' ? '当前窗口暂无运维问题聚合' : 'No operator issue rollup in this window'}>
+                {locale === 'zh' ? '没有观察到重复的 provider unavailable、timeout、fallback、stale 或 partial 降级问题。' : 'No repeated provider unavailable, timeout, fallback, stale, or partial degraded issue was observed.'}
+              </TerminalEmptyState>
+            ) : (
+              <TerminalDenseList className="mt-3 gap-0 overflow-hidden rounded-xl border border-white/6 bg-black/15">
+                {operatorIssueItems.map((item) => {
+                  const title = safeOperatorText(item.issueTitle);
+                  const guidance = safeOperatorText(item.operatorGuidance, locale === 'zh' ? '检查相关配置与最近失败原因。' : 'Check related configuration and recent failure reasons.');
+                  const providerLine = [
+                    item.provider,
+                    item.source,
+                    item.model,
+                    item.channel,
+                  ].map((value) => safeOperatorText(value, '')).filter(Boolean).join(' · ');
+                  const contextLine = [
+                    ...(item.affectedSurfaces || []),
+                    ...(item.affectedDomains || []),
+                  ].map((value) => safeOperatorText(value, '')).filter(Boolean).join(' · ');
+                  const reasonLine = [
+                    item.reasonCode,
+                    item.eventType,
+                    item.freshnessStatus,
+                    item.status,
+                  ].map((value) => safeOperatorText(value, '')).filter(Boolean).join(' · ');
+                  const sampleEventIds = (item.sampleEventIds || []).map((value) => safeOperatorText(value, '')).filter(Boolean).slice(0, 3);
+                  return (
+                    <div
+                      key={item.issueId}
+                      data-testid="operator-issue-row"
+                      className="grid gap-3 border-b border-white/6 px-3 py-2.5 last:border-b-0 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1.1fr)_minmax(10rem,0.9fr)_auto]"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-semibold text-foreground" title={title}>{title}</p>
+                          <TerminalChip variant={operatorIssueVariant(item.severity)} className="w-fit font-semibold">
+                            {operatorIssueSeverityLabel(item.severity, locale)}
+                          </TerminalChip>
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-secondary-text" title={guidance}>{guidance}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium text-foreground" title={providerLine || contextLine}>{providerLine || contextLine || '--'}</p>
+                        <p className="mt-1 truncate text-[11px] text-muted-text" title={reasonLine}>{reasonLine || '--'}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-xs text-secondary-text">{countLabel(item.count, 'event', 'events', '条事件', locale)} · {formatDateTime(item.latestTimestamp, locale)}</p>
+                        <p className="mt-1 truncate text-[11px] text-muted-text" title={sampleEventIds.join(' · ')}>
+                          {sampleEventIds.length
+                            ? `${locale === 'zh' ? '样例事件' : 'Sample events'}: ${sampleEventIds.join(' · ')}`
+                            : (locale === 'zh' ? '无样例事件 ID' : 'No sample event IDs')}
+                        </p>
+                        <p className="mt-1 truncate text-[11px] text-muted-text" title={contextLine}>{contextLine || '--'}</p>
+                      </div>
+                      <div className="flex items-center justify-start lg:justify-end">
+                        <TerminalButton type="button" variant="compact" className="px-2.5 py-1 text-xs" onClick={() => applyOperatorIssueFilter(item)}>
+                          {locale === 'zh' ? '筛选日志' : 'Filter logs'}
+                        </TerminalButton>
+                      </div>
+                    </div>
+                  );
+                })}
+              </TerminalDenseList>
+            )}
+          </TerminalPanel>
+        ) : null}
 
         {activeTab !== 'raw' ? (
           <TerminalPanel as="section" data-testid="admin-logs-data-missing-section" dense>

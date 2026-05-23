@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../i18n/core';
 import AdminLogsPage from '../AdminLogsPage';
 
-const { listBusinessEvents, getBusinessEventDetail, listSessions, getSessionDetail, getStorageSummary, cleanupLogs, listDataMissingDrilldown, getIncidentTimeline } = vi.hoisted(() => ({
+const { listBusinessEvents, getBusinessEventDetail, listSessions, getSessionDetail, getStorageSummary, cleanupLogs, listDataMissingDrilldown, listOperatorIssueRollup, getIncidentTimeline } = vi.hoisted(() => ({
   listBusinessEvents: vi.fn(),
   getBusinessEventDetail: vi.fn(),
   listSessions: vi.fn(),
@@ -11,6 +11,7 @@ const { listBusinessEvents, getBusinessEventDetail, listSessions, getSessionDeta
   getStorageSummary: vi.fn(),
   cleanupLogs: vi.fn(),
   listDataMissingDrilldown: vi.fn(),
+  listOperatorIssueRollup: vi.fn(),
   getIncidentTimeline: vi.fn(),
 }));
 
@@ -23,6 +24,7 @@ vi.mock('../../api/adminLogs', () => ({
     getStorageSummary,
     cleanupLogs,
     listDataMissingDrilldown,
+    listOperatorIssueRollup,
     getIncidentTimeline,
   },
 }));
@@ -351,6 +353,51 @@ const dataMissingDrilldown = [
   },
 ];
 
+const operatorIssueRollup = [
+  {
+    issueId: 'provider-timeout:finnhub:market-overview',
+    issueClass: 'provider_timeout',
+    issueTitle: 'Provider timeout · finnhub',
+    severity: 'warning',
+    count: 3,
+    latestTimestamp: '2026-04-30T13:20:04Z',
+    firstTimestamp: '2026-04-30T13:10:04Z',
+    sampleEventIds: ['evt-timeout-1', 'evt-timeout-2'],
+    affectedSurfaces: ['market_overview'],
+    affectedDomains: ['quote'],
+    provider: 'finnhub',
+    source: 'market_overview',
+    model: null,
+    channel: null,
+    reasonCode: 'provider_timeout',
+    eventType: 'ExternalSourceTimeout',
+    freshnessStatus: 'missing',
+    status: 'timed_out',
+    operatorGuidance: 'provider timeout: check provider credentials and upstream status.',
+  },
+  {
+    issueId: 'fallback-served:unsafe-provider',
+    issueClass: 'fallback_served',
+    issueTitle: 'Fallback served from /Users/alice/.env token=FRONTENDTOKEN',
+    severity: 'warning',
+    count: 1,
+    latestTimestamp: '2026-04-30T12:00:00Z',
+    firstTimestamp: '2026-04-30T12:00:00Z',
+    sampleEventIds: ['evt-fallback-1'],
+    affectedSurfaces: ['market_overview'],
+    affectedDomains: ['news'],
+    provider: '/Users/alice/.env token=FRONTENDTOKEN',
+    source: 'cache',
+    model: null,
+    channel: null,
+    reasonCode: 'fallback_used',
+    eventType: 'DataSourceFallbackServed',
+    freshnessStatus: 'fallback',
+    status: 'success',
+    operatorGuidance: 'fallback served: inspect configured primary provider without exposing /private/tmp/key token=FRONTENDTOKEN.',
+  },
+];
+
 const incidentTimelinePayload = {
   lookup: {
     sessionId: 'session-tsla',
@@ -572,6 +619,10 @@ describe('AdminLogsPage', () => {
       total: dataMissingDrilldown.length,
       items: dataMissingDrilldown,
     });
+    listOperatorIssueRollup.mockResolvedValue({
+      total: operatorIssueRollup.length,
+      items: operatorIssueRollup,
+    });
     getIncidentTimeline.mockResolvedValue(incidentTimelinePayload);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
@@ -599,6 +650,13 @@ describe('AdminLogsPage', () => {
     expect(screen.getByText('先处理失败和数据源降级')).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-filter-bar')).toBeInTheDocument();
     expect(await screen.findByTestId('admin-logs-health-summary')).toBeInTheDocument();
+    expect(await screen.findByTestId('admin-logs-operator-issue-rollup')).toHaveTextContent('Operator Issue Rollup');
+    expect(screen.getByTestId('admin-logs-operator-issue-rollup')).toHaveTextContent('Provider timeout');
+    expect(screen.getByTestId('admin-logs-operator-issue-rollup')).toHaveTextContent('check provider credentials');
+    expect(screen.getByTestId('admin-logs-operator-issue-rollup')).toHaveTextContent('evt-timeout-1');
+    expect(screen.getByTestId('admin-logs-operator-issue-rollup')).not.toHaveTextContent('FRONTENDTOKEN');
+    expect(screen.getByTestId('admin-logs-operator-issue-rollup')).not.toHaveTextContent('/Users/alice');
+    expect(screen.getByTestId('admin-logs-operator-issue-rollup')).not.toHaveTextContent('/private/tmp');
     expect(await screen.findByTestId('admin-logs-data-missing-section')).toHaveTextContent('缺失 / 降级数据样本');
     expect(screen.getByTestId('admin-logs-data-missing-section')).toHaveTextContent('NVDA');
     expect(screen.getByTestId('admin-logs-data-missing-section')).toHaveTextContent('newsapi');
@@ -649,6 +707,21 @@ describe('AdminLogsPage', () => {
     expect(screen.queryByText('fetch_news')).not.toBeInTheDocument();
     await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ since: '24h', limit: 20, offset: 0 })));
     await waitFor(() => expect(listDataMissingDrilldown).toHaveBeenCalledWith({ since: '24h', limit: 4 }));
+    await waitFor(() => expect(listOperatorIssueRollup).toHaveBeenCalledWith({ since: '24h', limit: 6 }));
+  });
+
+  it('filters the existing logs table from an operator rollup issue', async () => {
+    render(<AdminLogsPage />);
+
+    const section = await screen.findByTestId('admin-logs-operator-issue-rollup');
+    const firstIssue = within(section).getByText('Provider timeout · finnhub').closest('[data-testid="operator-issue-row"]');
+    expect(firstIssue).not.toBeNull();
+    fireEvent.click(within(firstIssue as HTMLElement).getByRole('button', { name: '筛选日志' }));
+
+    await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({
+      category: 'data_source',
+      query: expect.stringContaining('finnhub'),
+    })));
   });
 
   it('opens the incident timeline drawer from data-missing drilldown samples', async () => {

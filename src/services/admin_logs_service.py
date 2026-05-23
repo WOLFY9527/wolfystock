@@ -60,6 +60,361 @@ _SURFACE_ALIASES = {
     "notifications": "notification",
     "admin_logs": "admin_logs",
 }
+_LOCAL_PATH_RE = re.compile(
+    r"(?i)(?:file://)?/(?:users|home|private|tmp|var|volumes)/[^\s,;]+|[a-z]:\\[^\s,;]+"
+)
+_OPERATOR_ISSUE_GUIDANCE = {
+    "provider_unavailable": (
+        "Provider unavailable",
+        "check provider credentials and provider status; keep fallback/stale data marked as degraded until the provider recovers.",
+    ),
+    "provider_timeout": (
+        "Provider timeout",
+        "provider timeout: check provider credentials, upstream latency, and retry window before treating the source as healthy.",
+    ),
+    "fallback_served": (
+        "Fallback served",
+        "fallback served: confirm the primary provider failure is understood and verify fallback freshness before relying on it.",
+    ),
+    "stale_cache_served": (
+        "Stale cache served",
+        "stale cache served: check cache refresh jobs and upstream availability before considering the data current.",
+    ),
+    "partial_degraded_evidence": (
+        "Partial/degraded evidence",
+        "partial/degraded evidence: inspect the affected domain and keep downstream confidence capped until evidence is complete.",
+    ),
+    "websocket_degraded": (
+        "Websocket degraded",
+        "websocket degraded: check channel health, reconnect behavior, and whether clients are receiving delayed updates.",
+    ),
+}
+_OPERATOR_SEVERITY_ORDER = {"critical": 0, "error": 1, "warning": 2, "info": 3}
+
+
+class AdminOperatorIssueRollupService:
+    """Read-only operator issue projection over existing Admin Logs rows."""
+
+    def __init__(self) -> None:
+        self.db = get_db()
+
+    @staticmethod
+    def _text(value: Any) -> str:
+        return str(value or "").strip()
+
+    @classmethod
+    def _safe_display(cls, value: Any, *, max_length: int = 180) -> Optional[str]:
+        text_value = sanitize_message(cls._text(value))
+        if not text_value:
+            return None
+        text_value = _LOCAL_PATH_RE.sub("[redacted_path]", text_value)
+        text_value = re.sub(r"\s+", " ", text_value).strip()
+        if not text_value:
+            return None
+        return text_value[:max_length].rstrip() or None
+
+    @classmethod
+    def _safe_token(cls, value: Any, *, fallback: str = "unknown") -> str:
+        token = AdminDataMissingDrilldownService._normalize_token(value)
+        if token and re.fullmatch(r"[a-z0-9_:/]{1,80}", token):
+            return token
+        return fallback
+
+    @classmethod
+    def _parse_iso(cls, value: Any) -> Optional[datetime]:
+        return AdminDataMissingDrilldownService._parse_iso(value)
+
+    @classmethod
+    def _provider_source_model_channel(
+        cls,
+        *,
+        summary: Dict[str, Any],
+        detail: Dict[str, Any],
+    ) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+        business = summary.get("business_event") if isinstance(summary.get("business_event"), dict) else {}
+        provider = (
+            detail.get("provider")
+            or detail.get("data_provider")
+            or detail.get("gateway")
+            or business.get("provider")
+        )
+        source = (
+            detail.get("source")
+            or detail.get("source_label")
+            or detail.get("resolved_source")
+            or business.get("source")
+        )
+        model = detail.get("model") or detail.get("model_name") or business.get("model")
+        channel = (
+            detail.get("channel")
+            or detail.get("notification_channel")
+            or detail.get("websocket_channel")
+            or business.get("channel")
+        )
+        return (
+            cls._safe_display(provider),
+            cls._safe_display(source),
+            cls._safe_display(model),
+            cls._safe_display(channel),
+        )
+
+    @classmethod
+    def _event_type(cls, event: Dict[str, Any], detail: Dict[str, Any]) -> Optional[str]:
+        return cls._safe_display(
+            detail.get("event_name")
+            or detail.get("event_type")
+            or event.get("event_name")
+            or event.get("step"),
+            max_length=120,
+        )
+
+    @classmethod
+    def _classify_issue(
+        cls,
+        *,
+        event: Dict[str, Any],
+        detail: Dict[str, Any],
+        reason_code: str,
+        freshness_status: str,
+        event_type: Optional[str],
+    ) -> Optional[str]:
+        status = cls._safe_token(event.get("status"))
+        category = cls._safe_token(detail.get("category") or event.get("phase"), fallback="")
+        text_blob = " ".join(
+            part
+            for part in (
+                reason_code,
+                freshness_status,
+                status,
+                category,
+                cls._safe_token(event_type, fallback=""),
+                cls._safe_token(detail.get("reason"), fallback=""),
+                cls._safe_token(detail.get("error_code"), fallback=""),
+                cls._safe_token(detail.get("error_type"), fallback=""),
+                cls._safe_token(event.get("error_code"), fallback=""),
+                cls._safe_token(event.get("message"), fallback=""),
+            )
+            if part
+        )
+        fallback = AdminDataMissingDrilldownService._flag_value(
+            detail,
+            "fallback_used",
+            "fallbackUsed",
+            "isFallback",
+            "is_fallback",
+        ) or status == "switched_to_fallback"
+        stale = freshness_status == "stale" or AdminDataMissingDrilldownService._flag_value(detail, "stale", "is_stale")
+        partial = AdminDataMissingDrilldownService._flag_value(
+            detail,
+            "partial",
+            "isPartial",
+            "is_partial",
+        ) or status in {"partial", "partial_success", "degraded"}
+
+        if "websocket" in text_blob and any(marker in text_blob for marker in ("degraded", "unavailable", "disconnect", "timeout")):
+            return "websocket_degraded"
+        if stale or "stale_cache" in text_blob or freshness_status == "stale":
+            return "stale_cache_served"
+        if fallback or "fallback" in text_blob or freshness_status == "fallback":
+            return "fallback_served"
+        if "timeout" in text_blob or status in {"timeout", "timed_out", "timeout_unknown"}:
+            return "provider_timeout"
+        if any(marker in text_blob for marker in ("provider_unavailable", "unavailable", "provider_down", "unhealthy", "circuit_open", "missing_api_key", "not_configured")):
+            return "provider_unavailable"
+        if partial or any(marker in text_blob for marker in ("partial", "degraded", "insufficient_evidence", "evidence_gap")):
+            return "partial_degraded_evidence"
+        if category in {"data_source", "market", "cache"} and status in {"failed", "error"}:
+            return "provider_unavailable"
+        return None
+
+    @classmethod
+    def _severity(cls, *, issue_class: str, event: Dict[str, Any], detail: Dict[str, Any]) -> str:
+        level = cls._text(detail.get("level") or event.get("level")).upper()
+        status = cls._safe_token(event.get("status"))
+        if level == "CRITICAL":
+            return "critical"
+        if issue_class == "provider_unavailable" or level == "ERROR":
+            return "error"
+        if status in {"failed", "error"} and issue_class not in {"fallback_served", "stale_cache_served"}:
+            return "error"
+        return "warning"
+
+    @classmethod
+    def _issue_title(
+        cls,
+        *,
+        issue_class: str,
+        provider: Optional[str],
+        source: Optional[str],
+        domain: str,
+        surface: str,
+    ) -> str:
+        base = _OPERATOR_ISSUE_GUIDANCE.get(issue_class, ("Operator issue", ""))[0]
+        label = provider or source or domain or surface
+        return cls._safe_display(f"{base} · {label}", max_length=220) or base
+
+    @classmethod
+    def _issue_id(cls, key: Tuple[Any, ...]) -> str:
+        raw = "|".join(cls._text(part) for part in key)
+        token = re.sub(r"[^a-zA-Z0-9_.:/|-]+", "_", raw).strip("_")
+        return token[:220] or "operator_issue"
+
+    def list_items(
+        self,
+        *,
+        since: Optional[str] = "24h",
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        limit: int = 50,
+    ) -> Dict[str, Any]:
+        effective_date_from = date_from or AdminDataMissingDrilldownService._parse_since(since)
+        effective_limit = max(1, min(int(limit), 100))
+        session_limit = max(200, min(effective_limit * 20, 1000))
+        rows, _ = self.db.list_execution_log_sessions(
+            task_id=None,
+            stock_code=None,
+            status=None,
+            category=None,
+            provider=None,
+            model=None,
+            channel=None,
+            date_from=effective_date_from,
+            date_to=date_to,
+            limit=session_limit,
+            offset=0,
+        )
+        session_ids = [self._text(row.get("session_id")) for row in rows if isinstance(row, dict) and self._text(row.get("session_id"))]
+        if not session_ids:
+            return {"total": 0, "items": []}
+        detail_map = self.db.list_execution_log_session_details(session_ids)
+        buckets: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
+
+        for session_id in session_ids:
+            session_detail = sanitize_metadata(detail_map.get(session_id) or {})
+            summary = session_detail.get("summary") if isinstance(session_detail.get("summary"), dict) else {}
+            events = session_detail.get("events") if isinstance(session_detail.get("events"), list) else []
+            for event in events:
+                if not isinstance(event, dict):
+                    continue
+                safe_event = sanitize_metadata(event)
+                detail = safe_event.get("detail") if isinstance(safe_event.get("detail"), dict) else {}
+                reason_code = AdminDataMissingDrilldownService._normalize_reason_code(safe_event, detail)
+                freshness_status = AdminDataMissingDrilldownService._freshness_status(safe_event, detail, reason_code)
+                event_type = self._event_type(safe_event, detail)
+                issue_class = self._classify_issue(
+                    event=safe_event,
+                    detail=detail,
+                    reason_code=reason_code,
+                    freshness_status=freshness_status,
+                    event_type=event_type,
+                )
+                if not issue_class:
+                    continue
+
+                surface = AdminDataMissingDrilldownService._affected_surface(
+                    summary=summary,
+                    detail=session_detail,
+                    event_detail=detail,
+                )
+                domain = AdminDataMissingDrilldownService._infer_missing_domain(safe_event, detail) or self._safe_token(detail.get("domain"))
+                provider, source, model, channel = self._provider_source_model_channel(summary=summary, detail=detail)
+                status = self._safe_token(safe_event.get("status"))
+                severity = self._severity(issue_class=issue_class, event=safe_event, detail=detail)
+                key = (
+                    issue_class,
+                    surface,
+                    domain,
+                    provider,
+                    source,
+                    model,
+                    channel,
+                    reason_code,
+                    event_type,
+                    freshness_status,
+                    status,
+                )
+                event_time = self._parse_iso(safe_event.get("event_at"))
+                event_time_text = event_time.isoformat() if event_time else self._safe_display(safe_event.get("event_at"))
+                bucket = buckets.setdefault(
+                    key,
+                    {
+                        "issue_id": self._issue_id(key),
+                        "issue_class": issue_class,
+                        "issue_title": self._issue_title(
+                            issue_class=issue_class,
+                            provider=provider,
+                            source=source,
+                            domain=domain,
+                            surface=surface,
+                        ),
+                        "severity": severity,
+                        "count": 0,
+                        "latest_timestamp": event_time_text,
+                        "first_timestamp": event_time_text,
+                        "sample_events": [],
+                        "affected_surfaces": set(),
+                        "affected_domains": set(),
+                        "provider": provider,
+                        "source": source,
+                        "model": model,
+                        "channel": channel,
+                        "reason_code": reason_code,
+                        "event_type": event_type,
+                        "freshness_status": freshness_status,
+                        "status": status,
+                        "operator_guidance": _OPERATOR_ISSUE_GUIDANCE[issue_class][1],
+                    },
+                )
+                bucket["count"] += 1
+                bucket["affected_surfaces"].add(surface)
+                bucket["affected_domains"].add(domain)
+                if _OPERATOR_SEVERITY_ORDER.get(severity, 9) < _OPERATOR_SEVERITY_ORDER.get(bucket["severity"], 9):
+                    bucket["severity"] = severity
+                if event_time_text and (not bucket["latest_timestamp"] or event_time_text > bucket["latest_timestamp"]):
+                    bucket["latest_timestamp"] = event_time_text
+                if event_time_text and (not bucket["first_timestamp"] or event_time_text < bucket["first_timestamp"]):
+                    bucket["first_timestamp"] = event_time_text
+                event_id = self._safe_display(safe_event.get("id"), max_length=80)
+                if event_id:
+                    bucket["sample_events"].append((event_time or datetime.min, event_id))
+
+        items: List[Dict[str, Any]] = []
+        for bucket in buckets.values():
+            sample_event_ids = [
+                event_id
+                for _, event_id in sorted(bucket["sample_events"], key=lambda entry: (entry[0], entry[1]), reverse=True)[:5]
+            ]
+            items.append(
+                {
+                    "issue_id": bucket["issue_id"],
+                    "issue_class": bucket["issue_class"],
+                    "issue_title": bucket["issue_title"],
+                    "severity": bucket["severity"],
+                    "count": int(bucket["count"]),
+                    "latest_timestamp": bucket["latest_timestamp"],
+                    "first_timestamp": bucket["first_timestamp"],
+                    "sample_event_ids": sample_event_ids,
+                    "affected_surfaces": sorted(bucket["affected_surfaces"]),
+                    "affected_domains": sorted(bucket["affected_domains"]),
+                    "provider": bucket["provider"],
+                    "source": bucket["source"],
+                    "model": bucket["model"],
+                    "channel": bucket["channel"],
+                    "reason_code": bucket["reason_code"],
+                    "event_type": bucket["event_type"],
+                    "freshness_status": bucket["freshness_status"],
+                    "status": bucket["status"],
+                    "operator_guidance": bucket["operator_guidance"],
+                }
+            )
+        items.sort(
+            key=lambda item: (
+                _OPERATOR_SEVERITY_ORDER.get(str(item.get("severity") or ""), 9),
+                -int(item.get("count") or 0),
+                str(item.get("latest_timestamp") or ""),
+            ),
+        )
+        return {"total": len(items), "items": items[:effective_limit]}
 
 
 class AdminDataMissingDrilldownService:

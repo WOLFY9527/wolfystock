@@ -14,6 +14,7 @@ from api.v1.schemas.admin_logs import (
     AdminLogCleanupResponse,
     AdminDataMissingDrilldownResponse,
     AdminIncidentTimelineResponse,
+    AdminOperatorIssueRollupResponse,
     AdminLogStorageSummaryModel,
     BusinessEventDetailModel,
     BusinessEventListResponse,
@@ -21,7 +22,7 @@ from api.v1.schemas.admin_logs import (
     ExecutionLogSessionListResponse,
 )
 from src.services.admin_incident_timeline_service import AdminIncidentTimelineService
-from src.services.admin_logs_service import AdminDataMissingDrilldownService, AdminLogsRetentionService
+from src.services.admin_logs_service import AdminDataMissingDrilldownService, AdminLogsRetentionService, AdminOperatorIssueRollupService
 from src.services.execution_log_service import ExecutionLogService
 
 router = APIRouter()
@@ -318,6 +319,29 @@ def list_data_missing_drilldown(
 ):
     service = AdminDataMissingDrilldownService()
     return AdminDataMissingDrilldownResponse(
+        **service.list_items(
+            since=since,
+            date_from=_parse_optional_datetime(date_from) or _since_to_date_from(since),
+            date_to=_parse_optional_datetime(date_to),
+            limit=limit,
+        )
+    )
+
+
+@router.get(
+    "/operator-issue-rollup",
+    response_model=AdminOperatorIssueRollupResponse,
+    summary="Aggregate read-only operator issues from existing admin logs",
+)
+def list_operator_issue_rollup(
+    since: str = Query(default="24h", description="Relative window, for example 15m, 1h, 24h, 7d"),
+    date_from: Optional[str] = Query(default=None, description="ISO datetime start"),
+    date_to: Optional[str] = Query(default=None, description="ISO datetime end"),
+    limit: int = Query(default=50, ge=1, le=100),
+    _: CurrentUser = Depends(require_admin_capability("ops:logs:read")),
+):
+    service = AdminOperatorIssueRollupService()
+    return AdminOperatorIssueRollupResponse(
         **service.list_items(
             since=since,
             date_from=_parse_optional_datetime(date_from) or _since_to_date_from(since),

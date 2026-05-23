@@ -253,6 +253,33 @@ export interface AdminDataMissingDrilldownResponse {
   items: AdminDataMissingDrilldownItem[];
 }
 
+export interface AdminOperatorIssueRollupItem {
+  issueId: string;
+  issueClass: string;
+  issueTitle: string;
+  severity: string;
+  count: number;
+  latestTimestamp?: string | null;
+  firstTimestamp?: string | null;
+  sampleEventIds: string[];
+  affectedSurfaces: string[];
+  affectedDomains: string[];
+  provider?: string | null;
+  source?: string | null;
+  model?: string | null;
+  channel?: string | null;
+  reasonCode: string;
+  eventType?: string | null;
+  freshnessStatus?: string | null;
+  status?: string | null;
+  operatorGuidance: string;
+}
+
+export interface AdminOperatorIssueRollupResponse {
+  total: number;
+  items: AdminOperatorIssueRollupItem[];
+}
+
 export interface AdminIncidentTimelineLookup {
   sessionId?: string | null;
   requestId?: string | null;
@@ -423,6 +450,31 @@ function normalizeDataMissingDrilldownItem(payload: Record<string, unknown>): Ad
     sampleEventIds: Array.isArray(normalized.sampleEventIds) ? normalized.sampleEventIds : [],
     sampleSessionIds: Array.isArray(normalized.sampleSessionIds) ? normalized.sampleSessionIds : [],
     sampleBusinessEventIds: Array.isArray(normalized.sampleBusinessEventIds) ? normalized.sampleBusinessEventIds : [],
+  };
+}
+
+function normalizeOperatorIssueRollupItem(payload: Record<string, unknown>): AdminOperatorIssueRollupItem {
+  const normalized = toCamelCase<AdminOperatorIssueRollupItem>(payload);
+  return {
+    issueId: normalized.issueId || 'operator-issue',
+    issueClass: normalized.issueClass || 'operator_issue',
+    issueTitle: normalized.issueTitle || 'Operator issue',
+    severity: normalized.severity || 'warning',
+    count: Number(normalized.count || 0),
+    latestTimestamp: normalized.latestTimestamp || null,
+    firstTimestamp: normalized.firstTimestamp || null,
+    sampleEventIds: Array.isArray(normalized.sampleEventIds) ? normalized.sampleEventIds : [],
+    affectedSurfaces: Array.isArray(normalized.affectedSurfaces) ? normalized.affectedSurfaces : [],
+    affectedDomains: Array.isArray(normalized.affectedDomains) ? normalized.affectedDomains : [],
+    provider: normalized.provider || null,
+    source: normalized.source || null,
+    model: normalized.model || null,
+    channel: normalized.channel || null,
+    reasonCode: normalized.reasonCode || 'unknown',
+    eventType: normalized.eventType || null,
+    freshnessStatus: normalized.freshnessStatus || null,
+    status: normalized.status || null,
+    operatorGuidance: normalized.operatorGuidance || '',
   };
 }
 
@@ -603,6 +655,34 @@ export const adminLogsApi = {
       total: Number(normalized.total || 0),
       items: Array.isArray(normalized.items)
         ? normalized.items.map((item) => normalizeDataMissingDrilldownItem(item as unknown as Record<string, unknown>))
+        : [],
+    };
+  },
+
+  listOperatorIssueRollup: async (
+    params: {
+      since?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      limit?: number;
+    } = {},
+  ): Promise<AdminOperatorIssueRollupResponse> => {
+    const response = await apiClient.get<Record<string, unknown>>(
+      '/api/v1/admin/logs/operator-issue-rollup',
+      {
+        params: {
+          since: params.since,
+          date_from: params.dateFrom,
+          date_to: params.dateTo,
+          limit: params.limit,
+        },
+      },
+    );
+    const normalized = toCamelCase<AdminOperatorIssueRollupResponse>(response.data);
+    return {
+      total: Number(normalized.total || 0),
+      items: Array.isArray(normalized.items)
+        ? normalized.items.map((item) => normalizeOperatorIssueRollupItem(item as unknown as Record<string, unknown>))
         : [],
     };
   },

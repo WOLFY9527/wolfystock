@@ -592,6 +592,135 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(metadata["nested"]["connection_string"], "***")
         self.assertEqual(metadata["nested"]["safeLabel"], "visible")
 
+    def test_operator_issue_rollup_groups_degraded_provider_events_without_raw_payloads(self) -> None:
+        now = datetime.now()
+        self._record_event(
+            session_id="provider-timeout-1",
+            event_name="ExternalSourceTimeout",
+            level="WARNING",
+            category="data_source",
+            message="provider timeout token=RAW_TOKEN path=/Users/alice/.env",
+            status="timed_out",
+            target="finnhub",
+            detail={
+                "surface": "market_overview",
+                "domain": "quote",
+                "provider": "finnhub",
+                "source": "market_overview",
+                "reason_code": "provider_timeout",
+                "freshness_status": "missing",
+                "metadata": {"apiKey": "RAW_TOKEN", "localPath": "/Users/alice/.env"},
+            },
+            event_at=now - timedelta(minutes=4),
+        )
+        self._record_event(
+            session_id="provider-timeout-2",
+            event_name="ExternalSourceTimeout",
+            level="WARNING",
+            category="data_source",
+            message="provider timeout token=RAW_TOKEN path=/Users/alice/.env",
+            status="timed_out",
+            target="finnhub",
+            detail={
+                "surface": "market_overview",
+                "domain": "quote",
+                "provider": "finnhub",
+                "source": "market_overview",
+                "reason_code": "provider_timeout",
+                "freshness_status": "missing",
+                "metadata": {"authorization": "Bearer RAW_TOKEN", "localPath": "/Users/alice/.env"},
+            },
+            event_at=now - timedelta(minutes=2),
+        )
+        self._record_event(
+            session_id="fallback-served",
+            event_name="DataSourceFallbackServed",
+            level="NOTICE",
+            category="data_source",
+            message="fallback served from cache",
+            status="success",
+            target="fmp",
+            detail={
+                "surface": "market_overview",
+                "domain": "news",
+                "provider": "fmp",
+                "source": "cache",
+                "fallback_used": True,
+                "reason": "fallback_used",
+                "freshness_status": "fallback",
+            },
+            event_at=now - timedelta(minutes=3),
+        )
+        self._record_event(
+            session_id="stale-cache-served",
+            event_name="MarketCacheStaleServed",
+            level="NOTICE",
+            category="cache",
+            message="stale cache served",
+            status="success",
+            target="market_cache",
+            detail={
+                "surface": "market_overview",
+                "domain": "breadth",
+                "source": "market_cache",
+                "stale": True,
+                "reason_code": "stale_cache_served",
+                "freshness_status": "stale",
+            },
+            event_at=now - timedelta(minutes=1),
+        )
+        self._record_event(
+            session_id="partial-evidence",
+            event_name="EvidencePartial",
+            level="WARNING",
+            category="analysis",
+            message="partial degraded evidence",
+            status="partial",
+            target="evidence",
+            detail={
+                "surface": "analysis",
+                "domain": "evidence",
+                "provider": "newsapi",
+                "source": "news",
+                "partial": True,
+                "reason_code": "partial_evidence",
+                "freshness_status": "partial",
+            },
+            event_at=now,
+        )
+        self._record_event(
+            session_id="routine-cache",
+            event_name="MarketCacheHit",
+            level="INFO",
+            category="cache",
+            message="routine cache hit",
+            status="success",
+            target="market_cache",
+            event_at=now,
+        )
+
+        with patch("src.services.admin_logs_service.get_db", return_value=self.db):
+            payload = admin_logs.list_operator_issue_rollup(since="", limit=10, _=_admin_user())
+
+        classes = {item.issue_class: item for item in payload.items}
+        self.assertEqual(payload.total, 4)
+        self.assertEqual(classes["provider_timeout"].count, 2)
+        self.assertEqual(classes["provider_timeout"].provider, "finnhub")
+        self.assertEqual(classes["provider_timeout"].source, "market_overview")
+        self.assertEqual(classes["provider_timeout"].affected_surfaces, ["market_overview"])
+        self.assertEqual(classes["provider_timeout"].affected_domains, ["quote"])
+        self.assertEqual(classes["provider_timeout"].severity, "warning")
+        self.assertEqual(len(classes["provider_timeout"].sample_event_ids), 2)
+        self.assertEqual(classes["fallback_served"].severity, "warning")
+        self.assertEqual(classes["stale_cache_served"].freshness_status, "stale")
+        self.assertEqual(classes["partial_degraded_evidence"].affected_domains, ["evidence"])
+        dumped = str(payload.model_dump())
+        self.assertIn("check provider credentials", dumped)
+        self.assertIn("fallback served", dumped)
+        self.assertNotIn("RAW_TOKEN", dumped)
+        self.assertNotIn("/Users/alice", dumped)
+        self.assertNotIn("raw_response", dumped.lower())
+
     def test_session_detail_keeps_actor_session_attribution_and_readable_summary_fields_explicit(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()

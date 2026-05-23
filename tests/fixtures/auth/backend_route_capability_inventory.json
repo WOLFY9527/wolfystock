@@ -146,7 +146,7 @@
     },
     {
       "route_id": "admin.logs.read",
-      "path_pattern": "^/api/v1/admin/logs(?:/storage/summary|/incident-timeline|/data-missing-drilldown|/sessions(?:/\\{session_id\\})?|/\\{event_id\\})?$",
+      "path_pattern": "^/api/v1/admin/logs(?:/storage/summary|/incident-timeline|/data-missing-drilldown|/operator-issue-rollup|/sessions(?:/\\{session_id\\})?|/\\{event_id\\})?$",
       "methods": ["GET"],
       "surface": "admin_logs",
       "auth_dependency_label": "admin_capability",

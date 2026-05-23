@@ -197,6 +197,33 @@ class AdminDataMissingDrilldownResponse(BaseModel):
     items: List[AdminDataMissingDrilldownItemModel] = Field(default_factory=list)
 
 
+class AdminOperatorIssueRollupItemModel(BaseModel):
+    issue_id: str
+    issue_class: str
+    issue_title: str
+    severity: str
+    count: int = 0
+    latest_timestamp: Optional[str] = None
+    first_timestamp: Optional[str] = None
+    sample_event_ids: List[str] = Field(default_factory=list)
+    affected_surfaces: List[str] = Field(default_factory=list)
+    affected_domains: List[str] = Field(default_factory=list)
+    provider: Optional[str] = None
+    source: Optional[str] = None
+    model: Optional[str] = None
+    channel: Optional[str] = None
+    reason_code: str = "unknown"
+    event_type: Optional[str] = None
+    freshness_status: Optional[str] = None
+    status: Optional[str] = None
+    operator_guidance: str
+
+
+class AdminOperatorIssueRollupResponse(BaseModel):
+    total: int = 0
+    items: List[AdminOperatorIssueRollupItemModel] = Field(default_factory=list)
+
+
 class AdminIncidentTimelineLookupModel(BaseModel):
     session_id: Optional[str] = None
     request_id: Optional[str] = None
