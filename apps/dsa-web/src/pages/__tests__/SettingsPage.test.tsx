@@ -37,7 +37,35 @@ const {
   useSystemConfigMock,
   llmEditorModuleLoad,
   dataSourceDrawerModuleLoad,
-} = vi.hoisted(() => ({
+  aiProviderConfigModuleLoad,
+  dataSourceConfigModuleLoad,
+  notificationChannelsConfigModuleLoad,
+  systemLogsConfigModuleLoad,
+} = vi.hoisted(() => {
+  const createDeferredModuleState = () => {
+    let resolve: (() => void) | null = null;
+    const state = {
+      loadCount: 0,
+      promise: Promise.resolve(),
+      reset() {
+        state.loadCount = 0;
+        state.promise = Promise.resolve();
+        resolve = null;
+      },
+      defer() {
+        state.loadCount = 0;
+        state.promise = new Promise<void>((nextResolve) => {
+          resolve = nextResolve;
+        });
+      },
+      resolve() {
+        resolve?.();
+      },
+    };
+    return state;
+  };
+
+  return {
   load: vi.fn(),
   clearToast: vi.fn(),
   setActiveCategory: vi.fn(),
@@ -66,46 +94,20 @@ const {
   useAuthMock: vi.fn(),
   useSystemConfigMock: vi.fn(),
   dataSourceDrawerModuleLoad: (() => {
-    let resolve: (() => void) | null = null;
-    const state = {
-      loadCount: 0,
-      promise: Promise.resolve(),
-      reset() {
-        state.loadCount = 0;
-        state.promise = Promise.resolve();
-        resolve = null;
-      },
-      defer() {
-        state.loadCount = 0;
-        state.promise = new Promise<void>((nextResolve) => {
-          resolve = nextResolve;
-        });
-      },
-      resolve() {
-        resolve?.();
-      },
-    };
+    const state = createDeferredModuleState();
     return state;
   })(),
   llmEditorModuleLoad: (() => {
-    let resolve: (() => void) | null = null;
-    const state = {
-      loadCount: 0,
-      promise: Promise.resolve(),
-      reset() {
-        state.loadCount = 0;
-        state.promise = new Promise<void>((nextResolve) => {
-          resolve = nextResolve;
-        });
-      },
-      resolve() {
-        resolve?.();
-      },
-    };
+    const state = createDeferredModuleState();
     state.reset();
     return state;
   })(),
-}));
+  aiProviderConfigModuleLoad: (() => createDeferredModuleState())(),
+  dataSourceConfigModuleLoad: (() => createDeferredModuleState())(),
+  notificationChannelsConfigModuleLoad: (() => createDeferredModuleState())(),
+  systemLogsConfigModuleLoad: (() => createDeferredModuleState())(),
+  };
+});
 
 vi.mock('../../api/systemConfig', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/systemConfig')>();
@@ -855,6 +857,61 @@ async function openQuickProviderDrawer(providerName: string) {
   return providerCard as HTMLElement;
 }
 
+async function importSettingsPageWithLazyDomainMocks() {
+  vi.resetModules();
+
+  vi.doMock('../../components/settings/AIProviderConfig', async () => {
+    aiProviderConfigModuleLoad.loadCount += 1;
+    await aiProviderConfigModuleLoad.promise;
+    return {
+      default: () => (
+        <section>
+          <h2>AI Provider Config Mock</h2>
+        </section>
+      ),
+    };
+  });
+
+  vi.doMock('../../components/settings/DataSourceConfig', async () => {
+    dataSourceConfigModuleLoad.loadCount += 1;
+    await dataSourceConfigModuleLoad.promise;
+    return {
+      default: () => (
+        <section>
+          <h2>数据源配置</h2>
+          <button type="button">mock data source action</button>
+        </section>
+      ),
+    };
+  });
+
+  vi.doMock('../../components/settings/NotificationChannelsConfig', async () => {
+    notificationChannelsConfigModuleLoad.loadCount += 1;
+    await notificationChannelsConfigModuleLoad.promise;
+    return {
+      NotificationChannelsConfig: () => (
+        <section>
+          <h2>Notification Channels Config Mock</h2>
+        </section>
+      ),
+    };
+  });
+
+  vi.doMock('../../components/settings/SystemLogsConfig', async () => {
+    systemLogsConfigModuleLoad.loadCount += 1;
+    await systemLogsConfigModuleLoad.promise;
+    return {
+      default: () => (
+        <section>
+          <h2>System Logs Config Mock</h2>
+        </section>
+      ),
+    };
+  });
+
+  return import('../SettingsPage');
+}
+
 function buildAiConfigItem(key: string, value: string) {
   return {
     key,
@@ -902,6 +959,10 @@ describe('SettingsPage', () => {
     vi.clearAllMocks();
     llmEditorModuleLoad.reset();
     dataSourceDrawerModuleLoad.reset();
+    aiProviderConfigModuleLoad.reset();
+    dataSourceConfigModuleLoad.reset();
+    notificationChannelsConfigModuleLoad.reset();
+    systemLogsConfigModuleLoad.reset();
     window.history.replaceState({}, '', '/');
     window.innerWidth = 1280;
     window.dispatchEvent(new Event('resize'));
@@ -3801,6 +3862,63 @@ describe('SettingsPage', () => {
     expect(saveExternalItems).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(screen.getByText('备用路由配置缺失：需同时设置网关与模型，或全部清空。')).toBeInTheDocument();
+    });
+  });
+
+  it('does not import non-overview domain panels on the default system overview render', async () => {
+    const { default: LazySettingsPage } = await importSettingsPageWithLazyDomainMocks();
+
+    await withSystemSettingsPath(async () => {
+      render(<LazySettingsPage />);
+
+      expect(await screen.findByRole('heading', { name: zh('settings.controlPlaneTitle') })).toBeInTheDocument();
+      expect(aiProviderConfigModuleLoad.loadCount).toBe(0);
+      expect(dataSourceConfigModuleLoad.loadCount).toBe(0);
+      expect(notificationChannelsConfigModuleLoad.loadCount).toBe(0);
+      expect(systemLogsConfigModuleLoad.loadCount).toBe(0);
+    });
+  });
+
+  it('imports a settings domain panel only after switching away from overview', async () => {
+    const { default: LazySettingsPage } = await importSettingsPageWithLazyDomainMocks();
+
+    await withSystemSettingsPath(async () => {
+      render(<LazySettingsPage />);
+
+      expect(await screen.findByRole('heading', { name: zh('settings.controlPlaneTitle') })).toBeInTheDocument();
+      expect(dataSourceConfigModuleLoad.loadCount).toBe(0);
+
+      fireEvent.click(screen.getByRole('button', { name: /数据源/ }));
+
+      await waitFor(() => {
+        expect(dataSourceConfigModuleLoad.loadCount).toBe(1);
+      });
+      expect(await screen.findByRole('button', { name: 'mock data source action' })).toBeInTheDocument();
+      expect(aiProviderConfigModuleLoad.loadCount).toBe(0);
+      expect(notificationChannelsConfigModuleLoad.loadCount).toBe(0);
+      expect(systemLogsConfigModuleLoad.loadCount).toBe(0);
+    });
+  });
+
+  it('shows an accessible compact fallback while a lazy settings domain panel is loading', async () => {
+    dataSourceConfigModuleLoad.defer();
+    const { default: LazySettingsPage } = await importSettingsPageWithLazyDomainMocks();
+
+    await withSystemSettingsPath(async () => {
+      render(<LazySettingsPage />);
+
+      expect(await screen.findByRole('heading', { name: zh('settings.controlPlaneTitle') })).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /数据源/ }));
+
+      const loadingPanel = await screen.findByTestId('settings-domain-panel-loading');
+      expect(loadingPanel).toHaveAttribute('role', 'status');
+      expect(loadingPanel).toHaveAttribute('aria-live', 'polite');
+      expect(screen.getByText('正在按需加载设置面板…')).toBeInTheDocument();
+
+      dataSourceConfigModuleLoad.resolve();
+
+      expect(await screen.findByRole('button', { name: 'mock data source action' })).toBeInTheDocument();
     });
   });
 });

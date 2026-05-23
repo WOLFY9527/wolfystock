@@ -6,11 +6,7 @@ import { systemConfigApi, SystemConfigValidationError } from '../api/systemConfi
 import { ApiErrorAlert, Button, ConfirmDialog, Disclosure, Drawer, GlassCard, Input, Select } from '../components/common';
 import { PageBriefDrawer } from '../components/home-bento';
 import { useIsDesktopViewport } from '../components/layout/useIsDesktopViewport';
-import AIProviderConfig from '../components/settings/AIProviderConfig';
-import DataSourceConfig from '../components/settings/DataSourceConfig';
-import { NotificationChannelsConfig } from '../components/settings/NotificationChannelsConfig';
 import SystemControlPlane from '../components/settings/SystemControlPlane';
-import SystemLogsConfig from '../components/settings/SystemLogsConfig';
 import {
   type DataRouteKey,
 } from '../components/settings/dataSourceLibraryShared';
@@ -67,6 +63,13 @@ const LazyLLMChannelEditor = lazy(async () => {
   const module = await import('../components/settings/LLMChannelEditor');
   return { default: module.LLMChannelEditor };
 });
+const LazyAIProviderConfig = lazy(() => import('../components/settings/AIProviderConfig'));
+const LazyDataSourceConfig = lazy(() => import('../components/settings/DataSourceConfig'));
+const LazyNotificationChannelsConfig = lazy(async () => {
+  const module = await import('../components/settings/NotificationChannelsConfig');
+  return { default: module.NotificationChannelsConfig };
+});
+const LazySystemLogsConfig = lazy(() => import('../components/settings/SystemLogsConfig'));
 const LazyDataSourceLibraryDrawer = lazy(() => import('../components/settings/DataSourceLibraryDrawer'));
 
 const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-white/10 bg-white/[0.02] p-1';
@@ -102,6 +105,32 @@ const DataSourceLibraryDrawerFallback: React.FC<{
       <SettingsLoading />
     </div>
   </Drawer>
+);
+
+const SettingsDomainPanelFallback: React.FC<{
+  description: string;
+  loadingLabel: string;
+  title: string;
+}> = ({ description, loadingLabel, title }) => (
+  <section
+    role="status"
+    aria-live="polite"
+    data-testid="settings-domain-panel-loading"
+    className="overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02]"
+  >
+    <div className="border-b border-white/5 px-4 py-4 sm:px-5">
+      <h2 className="text-sm font-semibold text-white">{title}</h2>
+      <p className="mt-1 text-xs text-secondary-text">{description}</p>
+    </div>
+    <div className="space-y-3 px-4 py-4 sm:px-5">
+      <p className="text-xs text-secondary-text">{loadingLabel}</p>
+      <div aria-hidden="true" className="space-y-2">
+        <div className="settings-skeleton-strong h-3 w-28 rounded" />
+        <div className="settings-skeleton-soft h-10 rounded-xl" />
+        <div className="settings-skeleton-soft h-10 rounded-xl" />
+      </div>
+    </div>
+  </section>
 );
 
 type RoutingDraftState = {
@@ -1986,6 +2015,14 @@ const SettingsPage: React.FC = () => {
   const activeDomainTitle = panelNavItems.find((item) => item.domain === activePanel)?.title
     || panelNavItems.find((item) => item.domain === activeDomain)?.title
     || activeDomain;
+  const activeDomainNavItem = panelNavItems.find((item) => item.domain === activeDomain) || null;
+  const settingsDomainPanelFallback = activeDomainNavItem ? (
+    <SettingsDomainPanelFallback
+      title={activeDomainNavItem.title}
+      description={activeDomainNavItem.desc}
+      loadingLabel={language === 'zh' ? '正在按需加载设置面板…' : 'Loading settings panel…'}
+    />
+  ) : null;
   const {
     heroItems,
     systemHealthSummaryCards,
@@ -2217,64 +2254,66 @@ const SettingsPage: React.FC = () => {
                 <SettingsLoading />
               ) : (
                 <div className="space-y-4">
-                  {activeDomain === 'ai_models' ? (
-                    <AIProviderConfig
-                      t={t}
-                      aiRoutingScope={aiRoutingScope}
-                      aiRouteRows={aiRouteRows}
-                      configuredProvidersText={configuredProvidersText}
-                      routeStatus={t(`settings.aiRouteStatus.${aiSummary.routeStatus}`)}
-                      routeMissingButApiConfigured={aiSummary.routeMissingButApiConfigured}
-                      selectorReadinessMismatch={aiSelectorReadinessMismatch}
-                      aiRoutingError={aiRoutingError}
-                      providerCards={quickProviderCards}
-                      aiChannelConfigRef={aiChannelConfigRef}
-                      adminLocked={adminLocked}
-                      isSaving={isSaving}
-                      onOpenAiRoutingDrawer={openAiRoutingDrawer}
-                      onOpenQuickProviderDrawer={openQuickProviderDrawer}
-                      onJumpToProviderAdvancedConfig={jumpToProviderAdvancedConfig}
-                      onSaveDirectProviderKeys={() => void saveDirectProviderKeys()}
-                      onJumpToAiChannelConfig={jumpToAiChannelConfig}
-                    />
-                  ) : null}
+                  <Suspense fallback={settingsDomainPanelFallback}>
+                    {activeDomain === 'ai_models' ? (
+                      <LazyAIProviderConfig
+                        t={t}
+                        aiRoutingScope={aiRoutingScope}
+                        aiRouteRows={aiRouteRows}
+                        configuredProvidersText={configuredProvidersText}
+                        routeStatus={t(`settings.aiRouteStatus.${aiSummary.routeStatus}`)}
+                        routeMissingButApiConfigured={aiSummary.routeMissingButApiConfigured}
+                        selectorReadinessMismatch={aiSelectorReadinessMismatch}
+                        aiRoutingError={aiRoutingError}
+                        providerCards={quickProviderCards}
+                        aiChannelConfigRef={aiChannelConfigRef}
+                        adminLocked={adminLocked}
+                        isSaving={isSaving}
+                        onOpenAiRoutingDrawer={openAiRoutingDrawer}
+                        onOpenQuickProviderDrawer={openQuickProviderDrawer}
+                        onJumpToProviderAdvancedConfig={jumpToProviderAdvancedConfig}
+                        onSaveDirectProviderKeys={() => void saveDirectProviderKeys()}
+                        onJumpToAiChannelConfig={jumpToAiChannelConfig}
+                      />
+                    ) : null}
 
-                  {activeDomain === 'data_sources' ? (
-                    <DataSourceConfig
-                      t={t}
-                      dataRoutingGroups={dataRoutingGroups}
-                      dataSourceLibrary={dataSourceLibrary}
-                      adminLocked={adminLocked}
-                      isSaving={isSaving}
-                      prettySourceLabel={prettySourceLabel}
-                      onOpenDataRoutingDrawer={setDataRoutingDrawerKey}
-                      onOpenCreateDataSourceDrawer={openCreateDataSourceDrawer}
-                      onOpenEditDataSourceDrawer={openEditDataSourceDrawer}
-                      onValidateDataSource={(sourceId) => {
-                        void validateDataSourceEntry(sourceId);
-                      }}
-                    />
-                  ) : null}
+                    {activeDomain === 'data_sources' ? (
+                      <LazyDataSourceConfig
+                        t={t}
+                        dataRoutingGroups={dataRoutingGroups}
+                        dataSourceLibrary={dataSourceLibrary}
+                        adminLocked={adminLocked}
+                        isSaving={isSaving}
+                        prettySourceLabel={prettySourceLabel}
+                        onOpenDataRoutingDrawer={setDataRoutingDrawerKey}
+                        onOpenCreateDataSourceDrawer={openCreateDataSourceDrawer}
+                        onOpenEditDataSourceDrawer={openEditDataSourceDrawer}
+                        onValidateDataSource={(sourceId) => {
+                          void validateDataSourceEntry(sourceId);
+                        }}
+                      />
+                    ) : null}
 
-                  {activeDomain === 'notifications' ? (
-                    <NotificationChannelsConfig
-                      items={itemsByCategory.notification || []}
-                      disabled={adminLocked}
-                      isSaving={isSaving}
-                      language={language}
-                      onSaveItems={saveExternalItems}
-                    />
-                  ) : null}
+                    {activeDomain === 'notifications' ? (
+                      <LazyNotificationChannelsConfig
+                        items={itemsByCategory.notification || []}
+                        disabled={adminLocked}
+                        isSaving={isSaving}
+                        language={language}
+                        onSaveItems={saveExternalItems}
+                      />
+                    ) : null}
 
-                  {activeDomain === 'advanced' ? (
-                    <SystemLogsConfig
-                      t={t}
-                      showRuntimeExecutionSummary={showRuntimeExecutionSummary}
-                      adminLocked={adminLocked}
-                      isSaving={isSaving}
-                      onOpenRuntimeVisibilityDrawer={() => setRuntimeVisibilityDrawerOpen(true)}
-                    />
-                  ) : null}
+                    {activeDomain === 'advanced' ? (
+                      <LazySystemLogsConfig
+                        t={t}
+                        showRuntimeExecutionSummary={showRuntimeExecutionSummary}
+                        adminLocked={adminLocked}
+                        isSaving={isSaving}
+                        onOpenRuntimeVisibilityDrawer={() => setRuntimeVisibilityDrawerOpen(true)}
+                      />
+                    ) : null}
+                  </Suspense>
 
                   {!isDesktopViewport ? (
                     <Disclosure
