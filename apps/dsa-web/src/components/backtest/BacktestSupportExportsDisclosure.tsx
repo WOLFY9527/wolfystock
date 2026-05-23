@@ -3,7 +3,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { backtestApi } from '../../api/backtest';
 import { getApiErrorMessage } from '../../api/error';
 import { useI18n } from '../../contexts/UiLanguageContext';
-import type { RuleBacktestSupportExportIndexItem } from '../../types/backtest';
+import type {
+  RuleBacktestRobustnessEvidenceExportResponse,
+  RuleBacktestSupportExportIndexItem,
+} from '../../types/backtest';
 import {
   TerminalButton,
   TerminalChip,
@@ -22,6 +25,11 @@ type LocalizedCopy = {
   zh: string;
   en: string;
 };
+
+type RobustnessEvidencePreviewState =
+  | { status: 'idle' | 'loading' }
+  | { status: 'ready'; payload: RuleBacktestRobustnessEvidenceExportResponse }
+  | { status: 'error'; message: string };
 
 type SupportExportDefinition = {
   id: 'supportBundleManifest' | 'supportBundleReproducibilityManifest' | 'robustnessEvidenceJson' | 'executionTraceJson' | 'executionTraceCsv';
@@ -136,6 +144,228 @@ function getSupportExportItem(
   return items.find((item) => definition.keys.includes(item.key)) || null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getRecord(value: unknown, keys: string[]): Record<string, unknown> | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  for (const key of keys) {
+    const candidate = value[key];
+    if (isRecord(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function getList(value: unknown, keys: string[]): Record<string, unknown>[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+  for (const key of keys) {
+    const candidate = value[key];
+    if (Array.isArray(candidate)) {
+      return candidate.filter(isRecord);
+    }
+  }
+  return [];
+}
+
+function getString(value: unknown, keys: string[]): string | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  for (const key of keys) {
+    const candidate = value[key];
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function getBoolean(value: unknown, keys: string[]): boolean | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  for (const key of keys) {
+    const candidate = value[key];
+    if (typeof candidate === 'boolean') {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function getNumber(value: unknown, keys: string[]): number | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  for (const key of keys) {
+    const candidate = value[key];
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function formatWindowRange(start: string | null, end: string | null): string {
+  if (start && end) {
+    return `${start} -> ${end}`;
+  }
+  return start || end || '--';
+}
+
+function getDiagnosticWindowLabel(language: 'zh' | 'en', foldIndex: number | null): string {
+  if (language === 'en') {
+    return foldIndex != null ? `Stored diagnostic window ${foldIndex}` : 'Stored diagnostic window';
+  }
+  return foldIndex != null ? `已存储诊断窗口 ${foldIndex}` : '已存储诊断窗口';
+}
+
+function renderRobustnessEvidencePreview(
+  payload: RuleBacktestRobustnessEvidenceExportResponse,
+  language: 'zh' | 'en',
+): React.ReactNode {
+  const oosEvidence = getRecord(payload, ['walkForwardOosEvidence', 'walk_forward_oos_evidence']);
+  if (!oosEvidence) {
+    return (
+      <TerminalNotice variant="neutral">
+        {language === 'en'
+          ? 'This export does not include stored OOS diagnostic evidence.'
+          : '当前导出未包含已存储的 OOS 诊断证据。'}
+      </TerminalNotice>
+    );
+  }
+
+  const diagnosticOnly = getBoolean(oosEvidence, ['diagnosticOnly', 'diagnostic_only']);
+  const decisionGrade = getBoolean(oosEvidence, ['decisionGrade', 'decision_grade']);
+  const coverage = getRecord(oosEvidence, ['coverage']);
+  const authority = getRecord(oosEvidence, ['authority']);
+  const configuration = getRecord(oosEvidence, ['configuration']);
+  const folds = getList(oosEvidence, ['folds', 'fold_results']);
+  const periodStart = getString(oosEvidence, ['periodStart', 'period_start']);
+  const periodEnd = getString(oosEvidence, ['periodEnd', 'period_end']);
+  const availableFoldCount = getNumber(coverage, ['availableFoldCount', 'available_fold_count']);
+  const missingFoldCount = getNumber(coverage, ['missingFoldCount', 'missing_fold_count']);
+  const skippedFoldCount = getNumber(coverage, ['skippedFoldCount', 'skipped_fold_count']);
+  const configuredMaxFolds = getNumber(configuration, ['maxFolds', 'max_folds']);
+  const configuredTrainWindow = getNumber(configuration, ['trainWindow', 'train_window']);
+  const configuredTestWindow = getNumber(configuration, ['testWindow', 'test_window']);
+  const configuredStep = getNumber(configuration, ['step']);
+  const configuredWindowUnit = getString(configuration, ['windowUnit', 'window_unit']);
+  const authorityFlags = [
+    { label: 'provider_calls_executed', value: getBoolean(authority, ['providerCallsExecuted', 'provider_calls_executed']) },
+    { label: 'engine_math_changed', value: getBoolean(authority, ['engineMathChanged', 'engine_math_changed']) },
+    { label: 'optimizer_executed', value: getBoolean(authority, ['optimizerExecuted', 'optimizer_executed']) },
+    { label: 'parameter_sweep_executed', value: getBoolean(authority, ['parameterSweepExecuted', 'parameter_sweep_executed']) },
+    { label: 'strategy_parameters_mutated', value: getBoolean(authority, ['strategyParametersMutated', 'strategy_parameters_mutated']) },
+  ].filter((item) => item.value !== null);
+
+  return (
+    <div className="flex flex-col gap-3" data-testid="backtest-oos-diagnostic-preview">
+      <TerminalNotice variant="neutral">
+        {language === 'en'
+          ? 'Stored diagnostic windows below are replay evidence only. They do not indicate pass/fail validation.'
+          : '下列窗口仅为已存储的诊断回放证据，不表示通过/未通过验证。'}
+      </TerminalNotice>
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        <TerminalNestedBlock>
+          <p className="text-[11px] text-white/35">diagnosticOnly</p>
+          <p className="mt-1 font-mono text-sm text-white/82">{String(diagnosticOnly ?? '--')}</p>
+        </TerminalNestedBlock>
+        <TerminalNestedBlock>
+          <p className="text-[11px] text-white/35">decisionGrade</p>
+          <p className="mt-1 font-mono text-sm text-white/82">{String(decisionGrade ?? '--')}</p>
+        </TerminalNestedBlock>
+        <TerminalNestedBlock>
+          <p className="text-[11px] text-white/35">{language === 'en' ? 'Coverage' : '覆盖计数'}</p>
+          <p className="mt-1 font-mono text-sm text-white/82">
+            {language === 'en'
+              ? `available ${availableFoldCount ?? '--'} · missing ${missingFoldCount ?? '--'} · skipped ${skippedFoldCount ?? '--'}`
+              : `可用 ${availableFoldCount ?? '--'} · 缺失 ${missingFoldCount ?? '--'} · 跳过 ${skippedFoldCount ?? '--'}`}
+          </p>
+        </TerminalNestedBlock>
+        <TerminalNestedBlock>
+          <p className="text-[11px] text-white/35">{language === 'en' ? 'Stored window span' : '存储窗口范围'}</p>
+          <p className="mt-1 font-mono text-sm text-white/82">{formatWindowRange(periodStart, periodEnd)}</p>
+          <p className="mt-1 text-[11px] leading-5 text-white/35">
+            {language === 'en'
+              ? `folds ${folds.length}${configuredMaxFolds != null ? ` / ${configuredMaxFolds}` : ''}`
+              : `fold ${folds.length}${configuredMaxFolds != null ? ` / ${configuredMaxFolds}` : ''}`}
+            {configuredTrainWindow != null && configuredTestWindow != null
+              ? ` · train ${configuredTrainWindow} · test ${configuredTestWindow}${configuredStep != null ? ` · step ${configuredStep}` : ''}${configuredWindowUnit ? ` · ${configuredWindowUnit}` : ''}`
+              : ''}
+          </p>
+        </TerminalNestedBlock>
+      </div>
+      <TerminalNestedBlock>
+        <p className="text-[11px] text-white/35">{language === 'en' ? 'Authority no-execution flags' : 'authority 未执行标记'}</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {authorityFlags.length > 0 ? authorityFlags.map((flag) => (
+            <TerminalChip
+              key={flag.label}
+              variant={flag.value === false ? 'info' : 'neutral'}
+              className="font-mono"
+            >
+              {flag.label}={String(flag.value)}
+            </TerminalChip>
+          )) : (
+            <span className="font-mono text-xs text-white/55">--</span>
+          )}
+        </div>
+      </TerminalNestedBlock>
+      <div className="flex flex-col gap-2">
+        {folds.length > 0 ? folds.map((fold, index) => {
+          const foldIndex = getNumber(fold, ['foldIndex', 'fold_index']) ?? index + 1;
+          const trainWindow = getRecord(fold, ['trainWindow', 'train_window']);
+          const testWindow = getRecord(fold, ['testWindow', 'test_window']);
+          return (
+            <TerminalNestedBlock key={getString(fold, ['foldId', 'fold_id']) || `stored-oos-fold-${index}`}>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-medium text-white/88">{getDiagnosticWindowLabel(language, foldIndex)}</p>
+                <TerminalChip variant="neutral" className="font-mono">
+                  {getString(fold, ['state']) || '--'}
+                </TerminalChip>
+              </div>
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                <div>
+                  <p className="text-[11px] text-white/35">{language === 'en' ? 'Train window' : '训练窗口'}</p>
+                  <p className="mt-1 font-mono text-xs leading-5 text-white/68">
+                    {formatWindowRange(
+                      getString(trainWindow, ['startDate', 'start_date']),
+                      getString(trainWindow, ['endDate', 'end_date']),
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-white/35">{language === 'en' ? 'Test window' : '测试窗口'}</p>
+                  <p className="mt-1 font-mono text-xs leading-5 text-white/68">
+                    {formatWindowRange(
+                      getString(testWindow, ['startDate', 'start_date']),
+                      getString(testWindow, ['endDate', 'end_date']),
+                    )}
+                  </p>
+                </div>
+              </div>
+            </TerminalNestedBlock>
+          );
+        }) : (
+          <TerminalNotice variant="neutral">
+            {language === 'en'
+              ? 'Stored OOS diagnostic windows are not present in this export.'
+              : '当前导出未包含已存储的 OOS 诊断窗口。'}
+          </TerminalNotice>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosureProps> = ({ runId, code }) => {
   const { language, t } = useI18n();
   const [items, setItems] = useState<RuleBacktestSupportExportIndexItem[]>([]);
@@ -143,6 +373,7 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
   const [loadError, setLoadError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<SupportExportDefinition['id'] | null>(null);
+  const [robustnessPreview, setRobustnessPreview] = useState<RobustnessEvidencePreviewState>({ status: 'idle' });
 
   const loadIndex = useCallback(async () => {
     setIsLoading(true);
@@ -160,6 +391,42 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
   useEffect(() => {
     void loadIndex();
   }, [loadIndex]);
+
+  useEffect(() => {
+    setRobustnessPreview({ status: 'idle' });
+  }, [runId]);
+
+  const robustnessEvidenceItem = getSupportExportItem(
+    SUPPORT_EXPORT_DEFINITIONS.find((definition) => definition.id === 'robustnessEvidenceJson')!,
+    items,
+  );
+
+  useEffect(() => {
+    if (robustnessEvidenceItem?.available !== true || robustnessPreview.status !== 'idle') {
+      return;
+    }
+    let active = true;
+    setRobustnessPreview({ status: 'loading' });
+    void backtestApi.getRuleBacktestRobustnessEvidenceJson(runId)
+      .then((payload) => {
+        if (!active) {
+          return;
+        }
+        setRobustnessPreview({ status: 'ready', payload });
+      })
+      .catch((error) => {
+        if (!active) {
+          return;
+        }
+        setRobustnessPreview({
+          status: 'error',
+          message: getApiErrorMessage(error, t('backtest.resultPage.supportExports.downloadFailed')),
+        });
+      });
+    return () => {
+      active = false;
+    };
+  }, [robustnessEvidenceItem?.available, robustnessPreview.status, runId, t]);
 
   const handleDownload = async (definition: SupportExportDefinition) => {
     setDownloadError(null);
@@ -268,6 +535,26 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
               </div>
               <p className="mt-2 text-xs leading-5 text-white/48">{getDefinitionCopy(definition, 'description')}</p>
               <p className="mt-2 text-[11px] leading-5 text-white/35">{getAvailabilityText(item)}</p>
+              {definition.id === 'robustnessEvidenceJson' && isAvailable ? (
+                <TerminalDisclosure
+                  title="OOS diagnostic evidence"
+                  summary={language === 'en' ? 'Stored diagnostic windows preview' : '已存储诊断窗口预览'}
+                  className="mt-3"
+                  data-testid="backtest-oos-diagnostic-evidence-disclosure"
+                >
+                  {robustnessPreview.status === 'loading' ? (
+                    <p className="text-xs leading-5 text-white/45">
+                      {language === 'en' ? 'Loading stored OOS diagnostic evidence…' : '正在加载已存储的 OOS 诊断证据…'}
+                    </p>
+                  ) : null}
+                  {robustnessPreview.status === 'error' ? (
+                    <TerminalNotice variant="danger">{robustnessPreview.message}</TerminalNotice>
+                  ) : null}
+                  {robustnessPreview.status === 'ready'
+                    ? renderRobustnessEvidencePreview(robustnessPreview.payload, language)
+                    : null}
+                </TerminalDisclosure>
+              ) : null}
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
               <TerminalButton

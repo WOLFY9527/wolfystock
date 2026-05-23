@@ -38,6 +38,59 @@ function renderDisclosure() {
   );
 }
 
+function makeRobustnessEvidencePayload(overrides: Record<string, unknown> = {}) {
+  return {
+    version: 'rule_backtest_robustness_evidence_export_v1',
+    source: 'stored_robustness_analysis',
+    walkForwardOosEvidence: {
+      contractKind: 'backtest_walk_forward_oos_diagnostic_evidence',
+      state: 'available',
+      source: 'stored_robustness_analysis.walk_forward',
+      diagnosticOnly: true,
+      decisionGrade: false,
+      periodStart: '2024-01-01',
+      periodEnd: '2024-02-23',
+      configuration: {
+        trainWindow: 36,
+        testWindow: 18,
+        step: 9,
+        maxFolds: 3,
+        windowUnit: 'bars',
+      },
+      coverage: {
+        availableFoldCount: 1,
+        missingFoldCount: 0,
+        skippedFoldCount: 0,
+      },
+      authority: {
+        providerCallsExecuted: false,
+        engineMathChanged: false,
+        optimizerExecuted: false,
+        parameterSweepExecuted: false,
+        strategyParametersMutated: false,
+      },
+      folds: [
+        {
+          foldId: 'wf_oos_fold_0001',
+          foldIndex: 1,
+          state: 'completed',
+          trainWindow: {
+            startDate: '2024-01-01',
+            endDate: '2024-02-05',
+            size: 36,
+          },
+          testWindow: {
+            startDate: '2024-02-06',
+            endDate: '2024-02-23',
+            size: 18,
+          },
+        },
+      ],
+    },
+    ...overrides,
+  };
+}
+
 describe('BacktestSupportExportsDisclosure', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -104,6 +157,7 @@ describe('BacktestSupportExportsDisclosure', () => {
         },
       ],
     });
+    getRuleBacktestRobustnessEvidenceJson.mockResolvedValue(makeRobustnessEvidencePayload());
 
     renderDisclosure();
 
@@ -122,6 +176,9 @@ describe('BacktestSupportExportsDisclosure', () => {
     expect(screen.getByText('执行轨迹 JSON')).toBeInTheDocument();
     expect(screen.getByText('执行轨迹 CSV')).toBeInTheDocument();
     expect(screen.getByText('这些导出只用于技术支持与复现实证，不替代结果摘要、图表或指标的主要结论口径。')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(getRuleBacktestRobustnessEvidenceJson).toHaveBeenCalledWith(99);
+    });
     expect(screen.queryByText('/api/v1/backtest/rule/runs/99/support-bundle-manifest')).not.toBeInTheDocument();
     expect(screen.queryByText('RuleBacktestSupportBundleManifestResponse')).not.toBeInTheDocument();
     expect(screen.queryByText('stored_backtest_result')).not.toBeInTheDocument();
@@ -165,6 +222,94 @@ describe('BacktestSupportExportsDisclosure', () => {
     expect(screen.getByText('支持包清单 JSON')).toBeInTheDocument();
     expect(screen.queryByText('稳健性证据')).not.toBeInTheDocument();
     expect(screen.queryByText('下载稳健性证据 JSON')).not.toBeInTheDocument();
+  });
+
+  it('fetches and renders the OOS diagnostic preview from the existing robustness evidence export', async () => {
+    getRuleBacktestSupportExportIndex.mockResolvedValue({
+      runId: 99,
+      status: 'completed',
+      exports: [
+        {
+          key: 'robustness_evidence_json',
+          available: true,
+          availabilityReason: 'ready',
+          format: 'json',
+          mediaType: 'application/json',
+          deliveryMode: 'api',
+          endpointPath: '/api/v1/backtest/rule/runs/99/robustness-evidence.json',
+          payloadClass: 'RuleBacktestRobustnessEvidenceExportResponse',
+        },
+      ],
+    });
+    getRuleBacktestRobustnessEvidenceJson.mockResolvedValue(makeRobustnessEvidencePayload());
+
+    renderDisclosure();
+
+    fireEvent.click(screen.getByRole('button', { name: '展开 技术支持导出' }));
+
+    await waitFor(() => {
+      expect(getRuleBacktestRobustnessEvidenceJson).toHaveBeenCalledWith(99);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '展开 OOS diagnostic evidence' }));
+
+    const preview = await screen.findByTestId('backtest-oos-diagnostic-preview');
+    expect(preview).toHaveTextContent('diagnosticOnly');
+    expect(preview).toHaveTextContent('true');
+    expect(preview).toHaveTextContent('decisionGrade');
+    expect(preview).toHaveTextContent('false');
+    expect(preview).toHaveTextContent('可用 1 · 缺失 0 · 跳过 0');
+    expect(preview).toHaveTextContent('provider_calls_executed=false');
+    expect(preview).toHaveTextContent('engine_math_changed=false');
+    expect(preview).toHaveTextContent('optimizer_executed=false');
+    expect(preview).toHaveTextContent('已存储诊断窗口 1');
+    expect(preview).toHaveTextContent('2024-01-01 -> 2024-02-05');
+    expect(preview).toHaveTextContent('2024-02-06 -> 2024-02-23');
+
+    const previewText = preview.textContent?.toLowerCase() || '';
+    expect(previewText).not.toContain('winner');
+    expect(previewText).not.toContain('best');
+    expect(previewText).not.toContain('proof');
+    expect(previewText).not.toContain('validated');
+    expect(previewText).not.toContain('recommended');
+  });
+
+  it('degrades gracefully when the robustness export lacks stored OOS diagnostic evidence', async () => {
+    getRuleBacktestSupportExportIndex.mockResolvedValue({
+      runId: 99,
+      status: 'completed',
+      exports: [
+        {
+          key: 'robustness_evidence_json',
+          available: true,
+          availabilityReason: 'ready',
+          format: 'json',
+          mediaType: 'application/json',
+          deliveryMode: 'api',
+          endpointPath: '/api/v1/backtest/rule/runs/99/robustness-evidence.json',
+          payloadClass: 'RuleBacktestRobustnessEvidenceExportResponse',
+        },
+      ],
+    });
+    getRuleBacktestRobustnessEvidenceJson.mockResolvedValue({
+      version: 'rule_backtest_robustness_evidence_export_v1',
+      source: 'stored_robustness_analysis',
+      robustnessAnalysis: {
+        state: 'available',
+      },
+    });
+
+    renderDisclosure();
+
+    fireEvent.click(screen.getByRole('button', { name: '展开 技术支持导出' }));
+
+    await waitFor(() => {
+      expect(getRuleBacktestRobustnessEvidenceJson).toHaveBeenCalledWith(99);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '展开 OOS diagnostic evidence' }));
+
+    expect(await screen.findByText('当前导出未包含已存储的 OOS 诊断证据。')).toBeInTheDocument();
   });
 
   it('downloads support artifacts through the existing read-only client methods', async () => {
@@ -241,14 +386,12 @@ describe('BacktestSupportExportsDisclosure', () => {
       executionAssumptionsFingerprint: { sha256: 'abc123' },
       resultAuthority: { source: 'stored_backtest_result' },
     });
-    getRuleBacktestRobustnessEvidenceJson.mockResolvedValue({
-      version: 'rule_backtest_robustness_evidence_export_v1',
-      source: 'stored_robustness_analysis',
+    getRuleBacktestRobustnessEvidenceJson.mockResolvedValue(makeRobustnessEvidencePayload({
       robustnessAnalysis: {
         state: 'available',
         walkForward: { windows: 4 },
       },
-    });
+    }));
     getRuleBacktestExecutionTraceJson.mockResolvedValue({
       version: 'rule_backtest_execution_trace_export_v1',
       source: 'stored_execution_trace',
@@ -284,10 +427,11 @@ describe('BacktestSupportExportsDisclosure', () => {
     await waitFor(() => {
       expect(getRuleBacktestSupportBundleManifest).toHaveBeenCalledWith(99);
       expect(getRuleBacktestSupportBundleReproducibilityManifest).toHaveBeenCalledWith(99);
-      expect(getRuleBacktestRobustnessEvidenceJson).toHaveBeenCalledWith(99);
       expect(getRuleBacktestExecutionTraceJson).toHaveBeenCalledWith(99);
       expect(getRuleBacktestExecutionTraceCsv).toHaveBeenCalledWith(99);
     });
+    expect(getRuleBacktestRobustnessEvidenceJson).toHaveBeenCalledWith(99);
+    expect(getRuleBacktestRobustnessEvidenceJson).toHaveBeenCalledTimes(2);
 
     expect(createObjectUrlMock).toHaveBeenCalledTimes(5);
     expect(clickMock).toHaveBeenCalledTimes(5);
