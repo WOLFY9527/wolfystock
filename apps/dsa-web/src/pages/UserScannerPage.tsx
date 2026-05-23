@@ -17,9 +17,6 @@ import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { scannerApi } from '../api/scanner';
 import { watchlistApi } from '../api/watchlist';
-import {
-  ScannerBacktestLab,
-} from '../components/scanner/ScannerBacktestLab';
 import { ScannerActionButton as ActionButton } from '../components/scanner/ScannerActionButton';
 import {
   ScannerCandidateDetailPanel,
@@ -41,8 +38,8 @@ import {
 import { TrustDisclosureChips } from '../components/evidence/TrustDisclosureChips';
 import {
   useScannerBacktestLab,
-  type ScannerBacktestItem,
 } from '../components/scanner/useScannerBacktestLab';
+import type { ScannerBacktestItem } from '../components/scanner/scannerBacktestShared';
 import {
   TerminalButton,
   TerminalChip,
@@ -94,6 +91,11 @@ import {
 const LazyScannerStrategySimulationPanel = lazy(async () => {
   const module = await import('../components/scanner/ScannerStrategySimulationPanel');
   return { default: module.ScannerStrategySimulationPanel };
+});
+
+const LazyScannerBacktestLab = lazy(async () => {
+  const module = await import('../components/scanner/ScannerBacktestLab');
+  return { default: module.ScannerBacktestLab };
 });
 
 const {
@@ -3254,14 +3256,16 @@ const UserScannerPage: React.FC = () => {
                                   disabled={strategySimulationDisabled}
                                 />
                               </Suspense>
-                              <ScannerBacktestLab
-                                language={language}
-                                items={backtestItems}
-                                isRunning={isBacktestBatchRunning}
-                                onRunBatch={handleBacktestBatch}
-                                onCopySymbol={(symbol) => void handleCopyText(symbol, `backtest:${symbol}`)}
-                                counts={backtestCounts}
-                              />
+                              <Suspense fallback={null}>
+                                <LazyScannerBacktestLab
+                                  language={language}
+                                  items={backtestItems}
+                                  isRunning={isBacktestBatchRunning}
+                                  onRunBatch={handleBacktestBatch}
+                                  onCopySymbol={(symbol) => void handleCopyText(symbol, `backtest:${symbol}`)}
+                                  counts={backtestCounts}
+                                />
+                              </Suspense>
                             </div>
                           </AdvancedDisclosure>
                         </div>

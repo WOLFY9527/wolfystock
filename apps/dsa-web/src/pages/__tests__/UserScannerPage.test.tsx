@@ -26,6 +26,7 @@ const {
   addWatchlistItem,
   removeWatchlistItem,
   runRuleBacktest,
+  loadScannerBacktestLabMock,
 } = vi.hoisted(() => ({
   getRuns: vi.fn(),
   getRun: vi.fn(),
@@ -38,6 +39,7 @@ const {
   addWatchlistItem: vi.fn(),
   removeWatchlistItem: vi.fn(),
   runRuleBacktest: vi.fn(),
+  loadScannerBacktestLabMock: vi.fn(),
 }));
 
 const writeTextMock = vi.fn();
@@ -76,6 +78,13 @@ vi.mock('../../api/backtest', () => ({
     runRuleBacktest,
   },
 }));
+
+vi.mock('../../components/scanner/ScannerBacktestLab', async () => {
+  loadScannerBacktestLabMock();
+  return vi.importActual<typeof import('../../components/scanner/ScannerBacktestLab')>(
+    '../../components/scanner/ScannerBacktestLab',
+  );
+});
 
 function makeCandidate(overrides: Partial<ScannerCandidate>): ScannerCandidate {
   return {
@@ -1133,6 +1142,29 @@ describe('UserScannerPage', () => {
       page: 1,
       limit: 8,
     });
+  });
+
+  it('keeps trust chips eager and does not load the backtest lab on default scanner load', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+
+    expect(await screen.findByTestId('scanner-result-row-WULF')).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-score-trust-WULF')).toBeInTheDocument();
+    expect(screen.queryByTestId('scanner-backtest-lab')).not.toBeInTheDocument();
+    expect(loadScannerBacktestLabMock).not.toHaveBeenCalled();
+  });
+
+  it('loads the backtest lab only after opening the strategy experiment disclosure', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+
+    const experiment = await screen.findByTestId('scanner-strategy-experiment');
+    expect(loadScannerBacktestLabMock).not.toHaveBeenCalled();
+
+    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*(?:回测准备|Backtest setup)|Expand.*(?:回测准备|Backtest setup)/i }));
+
+    expect(await screen.findByTestId('scanner-backtest-lab')).toBeInTheDocument();
+    expect(loadScannerBacktestLabMock).toHaveBeenCalledTimes(1);
   });
 
   it('keeps scanner page wrappers document-scrollable while bounding candidates internally', async () => {

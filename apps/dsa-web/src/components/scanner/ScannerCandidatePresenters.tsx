@@ -16,11 +16,9 @@ import type {
   ScannerCandidateDiagnostic,
   ScannerLabeledValue,
 } from '../../types/scanner';
-import type { ScannerBacktestItem } from './useScannerBacktestLab';
+import type { ScannerBacktestItem } from './scannerBacktestShared';
 import { ScannerActionButton as ActionButton } from './ScannerActionButton';
-import {
-  ScannerBacktestResultStrip,
-} from './ScannerBacktestLab';
+import { ScannerBacktestResultStrip } from './ScannerBacktestResultStrip';
 import {
   AdvancedDisclosure,
   DetailSection,

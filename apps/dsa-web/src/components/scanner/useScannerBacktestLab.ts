@@ -1,64 +1,34 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { backtestApi } from '../../api/backtest';
 import { getParsedApiError } from '../../api/error';
-import { getDefaultRuleDateRange } from '../backtest/shared';
-import { buildPointAndShootStrategyText } from '../backtest/strategyCatalog';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 import type { ScannerCandidate } from '../../types/scanner';
+import {
+  dedupeBacktestCandidates,
+  getScannerBacktestConfig,
+  getScannerBacktestKey,
+  normalizeCandidateSymbol,
+  type ScannerBacktestBatchSource,
+  type ScannerBacktestItem,
+  type ScannerBacktestSource,
+  type ScannerBacktestStatus,
+} from './scannerBacktestShared';
 
 const SCANNER_BACKTEST_CONCURRENCY = 2;
-const SCANNER_BACKTEST_INITIAL_CAPITAL = 100000;
-const SCANNER_BACKTEST_FEE_BPS = 0;
-const SCANNER_BACKTEST_SLIPPAGE_BPS = 0;
-const SCANNER_BACKTEST_BENCHMARK_MODE = 'auto';
-
-export type ScannerBacktestStatus = 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'skipped_existing';
-export type ScannerBacktestSource = 'official_selected' | 'preview_selected' | 'top_5' | 'current_filter' | 'manual';
-export type ScannerBacktestBatchSource = Exclude<ScannerBacktestSource, 'manual'>;
-export type ScannerBacktestItem = {
-  symbol: string;
-  status: ScannerBacktestStatus;
-  resultId?: number | string;
-  totalReturnPct?: number | null;
-  maxDrawdownPct?: number | null;
-  sharpe?: number | null;
-  tradeCount?: number | null;
-  error?: string | null;
-};
 
 type Language = 'zh' | 'en';
 type ScannerBacktestBatchCandidates = Record<ScannerBacktestBatchSource, ScannerCandidate[]>;
+type ScannerBacktestRuntime = Awaited<ReturnType<typeof loadScannerBacktestRuntime>>;
 
-function normalizeCandidateSymbol(symbol?: string | null): string | null {
-  const normalized = String(symbol || '').trim().toUpperCase();
-  return normalized || null;
-}
+async function loadScannerBacktestRuntime() {
+  const [{ backtestApi }, { buildPointAndShootStrategyText }] = await Promise.all([
+    import('../../api/backtest'),
+    import('../backtest/strategyCatalog'),
+  ]);
 
-export function getScannerBacktestConfig() {
-  const { startDate, endDate } = getDefaultRuleDateRange();
   return {
-    startDate,
-    endDate,
-    initialCapital: SCANNER_BACKTEST_INITIAL_CAPITAL,
-    feeBps: SCANNER_BACKTEST_FEE_BPS,
-    slippageBps: SCANNER_BACKTEST_SLIPPAGE_BPS,
-    benchmarkMode: SCANNER_BACKTEST_BENCHMARK_MODE,
-    strategyTemplate: 'moving_average_crossover' as const,
+    backtestApi,
+    buildPointAndShootStrategyText,
   };
-}
-
-function getScannerBacktestKey(symbol: string): string {
-  const config = getScannerBacktestConfig();
-  return [
-    symbol,
-    config.startDate,
-    config.endDate,
-    config.initialCapital,
-    config.feeBps,
-    config.slippageBps,
-    config.benchmarkMode,
-    config.strategyTemplate,
-  ].join('|');
 }
 
 function getBacktestErrorMessage(error: unknown, language: Language): string {
@@ -69,7 +39,7 @@ function getBacktestErrorMessage(error: unknown, language: Language): string {
 
 function getSharpeFromRun(run: RuleBacktestRunResponse): number | null {
   const summary = run.summary || {};
-  const value = summary.sharpe ?? summary.sharpeRatio ?? summary['sharpe_ratio'];
+  const value = summary.sharpe ?? summary.sharpeRatio ?? summary.sharpe_ratio;
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
@@ -86,18 +56,6 @@ function mapRuleRunToScannerBacktestItem(run: RuleBacktestRunResponse, status: S
   };
 }
 
-function dedupeBacktestCandidates(candidates: ScannerCandidate[]): ScannerCandidate[] {
-  const seen = new Set<string>();
-  const items: ScannerCandidate[] = [];
-  candidates.forEach((candidate) => {
-    const symbol = normalizeCandidateSymbol(candidate.symbol);
-    if (!symbol || seen.has(symbol)) return;
-    seen.add(symbol);
-    items.push({ ...candidate, symbol });
-  });
-  return items;
-}
-
 export function useScannerBacktestLab({
   language,
   batchCandidatesBySource,
@@ -109,6 +67,7 @@ export function useScannerBacktestLab({
   const [isBacktestBatchRunning, setIsBacktestBatchRunning] = useState(false);
   const inFlightBacktestKeysRef = useRef<Set<string>>(new Set());
   const completedBacktestKeysRef = useRef<Map<string, ScannerBacktestItem>>(new Map());
+  const runtimeRef = useRef<Promise<ScannerBacktestRuntime> | null>(null);
 
   const backtestItems = useMemo(
     () => Object.values(backtestItemsBySymbol).sort((left, right) => left.symbol.localeCompare(right.symbol)),
@@ -126,6 +85,13 @@ export function useScannerBacktestLab({
     batchCandidatesBySource.preview_selected,
     batchCandidatesBySource.top_5,
   ]);
+
+  const getRuntime = useCallback(() => {
+    if (!runtimeRef.current) {
+      runtimeRef.current = loadScannerBacktestRuntime();
+    }
+    return runtimeRef.current;
+  }, []);
 
   const runScannerBacktests = useCallback(async (source: ScannerBacktestSource, candidates: ScannerCandidate[]) => {
     const targetCandidates = dedupeBacktestCandidates(candidates);
@@ -156,6 +122,7 @@ export function useScannerBacktestLab({
     if (!queue.length) return;
 
     const config = getScannerBacktestConfig();
+    const runtime = await getRuntime();
     const runOne = async (candidate: ScannerCandidate) => {
       const symbol = normalizeCandidateSymbol(candidate.symbol);
       if (!symbol) return;
@@ -165,13 +132,13 @@ export function useScannerBacktestLab({
         [symbol]: { ...(current[symbol] || { symbol }), status: 'running' },
       }));
       try {
-        const strategyText = buildPointAndShootStrategyText(language, config.strategyTemplate, {
+        const strategyText = runtime.buildPointAndShootStrategyText(language, config.strategyTemplate, {
           code: symbol,
           startDate: config.startDate,
           endDate: config.endDate,
           initialCapital: String(config.initialCapital),
         });
-        const response = await backtestApi.runRuleBacktest({
+        const response = await runtime.backtestApi.runRuleBacktest({
           code: symbol,
           strategyText,
           startDate: config.startDate,
@@ -212,7 +179,7 @@ export function useScannerBacktestLab({
     } finally {
       if (source !== 'manual') setIsBacktestBatchRunning(false);
     }
-  }, [isBacktestBatchRunning, language]);
+  }, [getRuntime, isBacktestBatchRunning, language]);
 
   const handleBacktestCandidate = useCallback((candidate: ScannerCandidate) => {
     void runScannerBacktests('manual', [candidate]);
@@ -240,3 +207,10 @@ export function useScannerBacktestLab({
     isBacktestBatchRunning,
   };
 }
+
+export type {
+  ScannerBacktestBatchSource,
+  ScannerBacktestItem,
+  ScannerBacktestSource,
+  ScannerBacktestStatus,
+} from './scannerBacktestShared';
