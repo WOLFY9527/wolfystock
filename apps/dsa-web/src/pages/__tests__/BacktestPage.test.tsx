@@ -904,10 +904,13 @@ describe('BacktestPage', () => {
 
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
 
+    const pageShell = screen.getByTestId('backtest-page-shell');
+
     expect(screen.getByTestId('backtest-bento-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'min-h-0', 'bg-transparent');
     expect(screen.getByTestId('backtest-bento-page')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'max-w-[1600px]');
     expect(screen.getByTestId('backtest-bento-page')).not.toHaveClass('container', 'mx-auto', 'max-w-[1600px]');
-    expect(screen.getByTestId('backtest-page-shell')).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6');
+    expect(pageShell).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-5');
+    expect(pageShell).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(screen.getByTestId('backtest-subnav')).toHaveClass('w-full', 'rounded-[24px]', 'border', 'border-white/5', 'bg-white/[0.02]');
     expect(screen.getByTestId('backtest-v1-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-6', 'bg-transparent');
     expect(screen.getByTestId('backtest-v1-page')).not.toHaveClass('pt-6');
@@ -916,7 +919,7 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('tab', { name: bt('zh', 'page.normalMode') })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') })).toHaveAttribute('aria-selected', 'false');
 
-    expect(screen.getByTestId('normal-backtest-workspace')).toBeInTheDocument();
+    expect(await screen.findByTestId('normal-backtest-workspace')).toBeInTheDocument();
     expect(screen.queryByTestId('pro-backtest-workspace')).not.toBeInTheDocument();
     expect(screen.getByTestId('normal-backtest-consolidated-card')).toBeInTheDocument();
     expect(screen.getByTestId('normal-backtest-form-grid')).toHaveClass('grid', 'md:grid-cols-4');
@@ -1388,7 +1391,9 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-report-key-metrics')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-report-trade-table')).toBeInTheDocument();
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');
-    expect(screen.getByText('已完成')).toHaveAttribute('data-status', 'success');
+    expect(
+      within(screen.getByTestId('deterministic-result-page-hero')).getByText('已完成', { selector: '[data-status="success"]' }),
+    ).toHaveAttribute('data-status', 'success');
     expect(await screen.findByTestId('deterministic-backtest-chart-workspace')).toBeInTheDocument();
     expect(await screen.findByLabelText(bt('zh', 'resultPage.chartWorkspace.cumulativeReturnChartAria'))).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.overview') })).toHaveAttribute('aria-selected', 'true');
@@ -1663,7 +1668,13 @@ describe('BacktestPage', () => {
 
     expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /ORCL/i })).toBeInTheDocument();
-    expect(within(screen.getByTestId('deterministic-result-page-hero')).getByText(/2026\/04\/08/)).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('deterministic-result-page-hero')).getByText((content, element) => (
+        element?.tagName === 'P'
+        && content.includes('2025-01-01')
+        && content.includes('2026/04/08')
+      )),
+    ).toBeInTheDocument();
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '123');
     expect(await screen.findByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
   }, 10000);
@@ -1674,7 +1685,11 @@ describe('BacktestPage', () => {
 
     expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /ORCL/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: bt('en', 'resultPage.hero.backToConfig') })).toBeInTheDocument();
+    const heroCommandBar = screen.getByTestId('deterministic-result-page-hero').querySelector('[data-linear-primitive="command-bar"]');
+    expect(heroCommandBar).not.toBeNull();
+    expect(
+      within(heroCommandBar as HTMLElement).getByRole('button', { name: bt('en', 'resultPage.hero.backToConfig') }),
+    ).toBeInTheDocument();
     expect(await screen.findByRole('tab', { name: bt('en', 'resultPage.tabs.overview') })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.audit') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.trades') })).toBeInTheDocument();
