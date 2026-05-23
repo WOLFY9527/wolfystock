@@ -615,6 +615,18 @@ function checklistBadgesForReadinessCheck(check: MarketDataReadinessCheck): Setu
   return badges;
 }
 
+function checklistBadgeDisplayLabel(label: string): string {
+  return {
+    'observation-only': '仅观察',
+    'score-blocked': '评分阻断',
+    'disabled by default': '默认关闭',
+    'cache required': '需要缓存',
+    'credential required': '需要凭据',
+    'paid likely': '可能需付费',
+    'aggregate-supported': '聚合证据',
+  }[label] || label;
+}
+
 function defaultChecklistWhyItMatters(title: string): string {
   return `${title} already appears in Provider Ops because a visible readiness or source-truth dependency can affect that surface. It does not promise investment accuracy.`;
 }
@@ -1031,7 +1043,9 @@ const ProviderSetupChecklistPanel: React.FC<{
                     {entry.badges.length ? (
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {entry.badges.map((badge) => (
-                          <TerminalChip key={`${entry.key}-${badge.label}`} variant={badge.variant}>{badge.label}</TerminalChip>
+                          <TerminalChip key={`${entry.key}-${badge.label}`} variant={badge.variant}>
+                            {checklistBadgeDisplayLabel(badge.label)}
+                          </TerminalChip>
                         ))}
                       </div>
                     ) : null}

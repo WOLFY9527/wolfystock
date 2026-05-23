@@ -664,14 +664,14 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklist).toHaveTextContent('Portfolio');
     expect(checklist).toHaveTextContent('Options Lab');
     expect(checklist).toHaveTextContent('Provider Ops / system diagnostics');
-    expect(checklist).toHaveTextContent('credential required');
-    expect(checklist).toHaveTextContent('paid likely');
-    expect(checklist).toHaveTextContent('cache required');
+    expect(checklist).toHaveTextContent('需要凭据');
+    expect(checklist).toHaveTextContent('可能需付费');
+    expect(checklist).toHaveTextContent('需要缓存');
     expect(checklist).toHaveTextContent('official-public cache-only');
-    expect(checklist).toHaveTextContent('disabled by default');
-    expect(checklist).toHaveTextContent('aggregate-supported');
-    expect(checklist).toHaveTextContent('observation-only');
-    expect(checklist).toHaveTextContent('score-blocked');
+    expect(checklist).toHaveTextContent('默认关闭');
+    expect(checklist).toHaveTextContent('聚合证据');
+    expect(checklist).toHaveTextContent('仅观察');
+    expect(checklist).toHaveTextContent('评分阻断');
     expect(checklist).toHaveTextContent('missing provider');
     expect(checklist).toHaveTextContent('Use the existing Tushare credential setup and keep secret values out of this page.');
     expect(checklist).toHaveTextContent('Keep Polygon grouped-daily breadth on the approved credential-plus-cache path before using it for primary US posture context.');
@@ -691,7 +691,21 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklist).not.toHaveTextContent('/opt/feeds/index-futures');
     expect(checklist).not.toHaveTextContent('super-secret-token');
     expect(checklist).not.toHaveTextContent('mystery_surface');
-    expect(screen.getByRole('button', { name: '展开 完整 provider matrix' })).toBeInTheDocument();
+    expect(checklist).not.toHaveTextContent('credential required');
+    expect(checklist).not.toHaveTextContent('paid likely');
+    expect(checklist).not.toHaveTextContent('cache required');
+    expect(checklist).not.toHaveTextContent('disabled by default');
+    expect(checklist).not.toHaveTextContent('aggregate-supported');
+    expect(checklist).not.toHaveTextContent('observation-only');
+    expect(checklist).not.toHaveTextContent('score-blocked');
+
+    const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
+    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 完整 provider matrix' }));
+    expect(matrixDisclosure).toHaveTextContent('cache-required');
+    expect(matrixDisclosure).toHaveTextContent('present');
+    expect(matrixDisclosure).toHaveTextContent('polygon_high_low_history_unavailable');
+    expect(matrixDisclosure).toHaveTextContent('missing_provider_configuration');
+    expect(within(matrixDisclosure).getByRole('button', { name: '收起 完整 provider matrix' })).toBeInTheDocument();
   });
 
   it('supports a compact representative symbol override for readiness checks', async () => {
