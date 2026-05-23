@@ -167,6 +167,157 @@ function warningLabel(value: string): string {
   return limitationLabel(value);
 }
 
+function gateRecord(value?: OptionsDecisionResponse['dataQualityGates'] | OptionsDecisionResponse['liquidityGates']): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null;
+}
+
+function gateStatus(value?: OptionsDecisionResponse['dataQualityGates'] | OptionsDecisionResponse['liquidityGates']): string | null {
+  const status = gateRecord(value)?.status;
+  return typeof status === 'string' ? status : null;
+}
+
+function gateBoolean(record: Record<string, unknown> | null, key: string): boolean | null {
+  const value = record?.[key];
+  return typeof value === 'boolean' ? value : null;
+}
+
+function gateReasonSummary(value: string): string | null {
+  if (!value) return null;
+  if (
+    value === 'synthetic_or_fixture_data_not_decision_grade'
+    || value.includes('synthetic delayed')
+    || value.includes('演示数据')
+  ) return '演示/延迟数据';
+  if (
+    value === 'wide_bid_ask_spread'
+    || value === 'wide_bid_ask_spread_in_one_or_more_legs'
+    || value === 'wide_spread_watch'
+  ) return '价差偏宽';
+  if (
+    value === 'thin_liquidity_in_one_or_more_legs'
+    || value === 'low_or_missing_open_interest'
+    || value === 'low_or_missing_volume'
+    || value === 'liquidity_below_threshold'
+    || value === 'low_oi_watch'
+  ) return '成交深度不足';
+  if (
+    value === 'missing_greeks'
+    || value === 'missing_greeks_degrade_confidence'
+    || value === 'iv_rank_unavailable'
+    || value === 'iv_rank_unavailable_degrade_confidence'
+    || value === 'expected_move_unavailable'
+    || value === 'expected_move_unavailable_degrade_confidence'
+  ) return '关键信号不完整';
+  if (value === 'provider_validation_required') return '数据待验证';
+  if (value === '需人工复核') return '仍需人工复核';
+  if (value === '不可作为交易信号' || value === '不可用于真实交易判断') return '仅观察';
+  if (value === 'data_quality_not_decision_grade') return '数据质量受限';
+
+  const label = warningLabel(value);
+  return label === '部分外部数据暂不可用' ? '部分外部数据暂不可用' : label;
+}
+
+type ReadinessChip = {
+  label: string;
+  tone: 'neutral' | 'info' | 'warn' | 'risk' | 'good';
+};
+
+function readinessDecisionChip(decision?: OptionsDecisionResponse | null): ReadinessChip {
+  if (decision?.decisionGrade === true && decision?.gateDecision !== 'blocked') {
+    return { label: '通过基础门控', tone: 'good' };
+  }
+  if (isNonDecisionGrade(decision)) {
+    return { label: '未达判断等级', tone: 'risk' };
+  }
+  return { label: '仅观察', tone: 'warn' };
+}
+
+function readinessObservationChip(decision?: OptionsDecisionResponse | null): ReadinessChip {
+  return decision?.decisionGrade === true && decision?.gateDecision !== 'blocked'
+    ? { label: '仍需人工复核', tone: 'warn' }
+    : { label: '仅观察', tone: 'warn' };
+}
+
+function readinessDataChip(decision?: OptionsDecisionResponse | null): ReadinessChip {
+  const gates = gateRecord(decision?.dataQualityGates);
+  const status = gateStatus(decision?.dataQualityGates);
+  const gateDecisionGrade = gateBoolean(gates, 'decisionGrade');
+  const tier = typeof gates?.tier === 'string' ? gates.tier : decision?.dataQuality?.dataQualityTier;
+  const restricted = status === 'blocked'
+    || status === 'restricted'
+    || gateDecisionGrade === false
+    || tier === 'synthetic_demo_only'
+    || tier === 'insufficient'
+    || decision?.decisionGrade === false;
+  return restricted
+    ? { label: '数据质量受限', tone: 'risk' }
+    : { label: '数据质量通过', tone: 'good' };
+}
+
+function readinessLiquidityChip(decision?: OptionsDecisionResponse | null): ReadinessChip {
+  const gates = gateRecord(decision?.liquidityGates);
+  const status = gateStatus(decision?.liquidityGates);
+  const passed = gateBoolean(gates, 'passed');
+  const scoreValue = typeof gates?.liquidityScore === 'number'
+    ? gates.liquidityScore
+    : decision?.liquidity?.liquidityScore;
+  const restricted = status === 'blocked'
+    || status === 'restricted'
+    || passed === false
+    || asArray(decision?.liquidity?.liquidityWarnings).length > 0
+    || (typeof scoreValue === 'number' && scoreValue < 60);
+  return restricted
+    ? { label: '流动性受限', tone: 'warn' }
+    : { label: '流动性通过', tone: 'good' };
+}
+
+function readinessReasonSummaries(decision?: OptionsDecisionResponse | null): string[] {
+  const summaries = [
+    ...asArray(decision?.failClosedReasonCodes),
+    ...asArray(decision?.gateIssues),
+  ]
+    .map(gateReasonSummary)
+    .filter((value): value is string => Boolean(value));
+  return [...new Set(summaries)].slice(0, 2);
+}
+
+const ReadinessGateStrip: React.FC<{
+  decision?: OptionsDecisionResponse | null;
+  testId?: string;
+  className?: string;
+}> = ({ decision, testId, className }) => {
+  if (!decision) return null;
+
+  const chips = [
+    readinessDecisionChip(decision),
+    readinessObservationChip(decision),
+    readinessDataChip(decision),
+    readinessLiquidityChip(decision),
+  ];
+  const reasonSummaries = readinessReasonSummaries(decision);
+
+  return (
+    <div
+      data-testid={testId}
+      className={cn(
+        'rounded-md border border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_88%,transparent)] px-3 py-2',
+        className,
+      )}
+    >
+      <div className="flex flex-wrap gap-2">
+        {chips.map((chip) => (
+          <Pill key={chip.label} tone={chip.tone}>{chip.label}</Pill>
+        ))}
+      </div>
+      {reasonSummaries.length ? (
+        <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+          {reasonSummaries.join(' · ')}
+        </p>
+      ) : null}
+    </div>
+  );
+};
+
 function dataTierLabel(value?: string | null): string {
   if (value === 'live_usable') return '实时可分析';
   if (value === 'delayed_usable') return '行情延迟，可观察';
@@ -558,8 +709,9 @@ const StrategyRow: React.FC<{
   rank: number;
   highlighted: boolean;
   gateBlocked: boolean;
+  decision?: OptionsDecisionResponse | null;
   alternative?: RankedAlternative;
-}> = ({ strategy, rank, highlighted, gateBlocked, alternative }) => (
+}> = ({ strategy, rank, highlighted, gateBlocked, decision, alternative }) => (
   <article
     data-testid={highlighted ? 'options-lab-primary-strategy-row' : undefined}
     className={cn(
@@ -601,6 +753,13 @@ const StrategyRow: React.FC<{
       <p className={labelClass}>核心原因</p>
       <p className="mt-1 truncate text-xs text-[color:var(--wolfy-text-secondary)]">{strategyPrimaryReason(strategy, alternative)}</p>
     </div>
+    {highlighted ? (
+      <ReadinessGateStrip
+        decision={decision}
+        testId="options-lab-primary-strategy-readiness-strip"
+        className="xl:col-[1/-1]"
+      />
+    ) : null}
   </article>
 );
 
@@ -662,6 +821,7 @@ const StrategyComparisonPanel: React.FC<{
               rank={index + 1}
               highlighted={index === 0}
               gateBlocked={gateBlocked}
+              decision={index === 0 ? decision : null}
               alternative={rankMap.get(strategy.strategyType)?.alternative}
             />
           ))}
@@ -766,6 +926,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
                 ))}
               </div>
             </div>
+            <ReadinessGateStrip decision={decision} testId="options-lab-decision-readiness-strip" className="mt-4" />
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <DecisionMetric label="情景质量" value={number(decision?.tradeQualityScore)} tone="text-[color:var(--wolfy-text-primary)]" />
               <DecisionMetric label="最大亏损" value={money(decision?.riskReward?.maxLoss)} tone="text-[color:var(--wolfy-market-down)]" />

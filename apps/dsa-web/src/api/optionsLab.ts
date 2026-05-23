@@ -209,6 +209,7 @@ export type OptionsDecisionResponse = {
   decisionGrade?: boolean | null;
   gateDecision?: string | null;
   failClosedReasonCodes?: string[] | null;
+  gateIssues?: string[] | null;
   dataQualityGates?: OptionsGateDetails;
   liquidityGates?: OptionsGateDetails;
   expectedMove?: {

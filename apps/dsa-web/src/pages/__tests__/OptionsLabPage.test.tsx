@@ -486,6 +486,241 @@ describe('OptionsLabPage', () => {
     expect(document.body.textContent || '').not.toContain('可观察结构');
   });
 
+  it('renders compact readiness gate strips with observation-only framing and hidden raw codes', async () => {
+    vi.mocked(optionsLabApi.evaluateDecision).mockResolvedValueOnce({
+      symbol: 'TEM',
+      strategy: 'bull_call_spread',
+      dataQuality: {
+        dataQualityScore: 25,
+        dataQualityTier: 'synthetic_demo_only',
+        blockingReasons: ['synthetic_or_fixture_data_not_decision_grade'],
+        sourceType: 'synthetic',
+      },
+      liquidity: {
+        liquidityScore: 42,
+        spreadPct: 28,
+        liquidityWarnings: ['wide_bid_ask_spread'],
+      },
+      ivGreeks: {
+        ivReadiness: 44,
+        ivRankStatus: 'unavailable',
+        warnings: ['iv_rank_unavailable'],
+      },
+      decisionGrade: false,
+      gateDecision: 'blocked',
+      failClosedReasonCodes: ['synthetic_or_fixture_data_not_decision_grade'],
+      gateIssues: ['synthetic_or_fixture_data_not_decision_grade', 'wide_bid_ask_spread'],
+      dataQualityGates: {
+        status: 'blocked',
+        decisionGrade: false,
+        tier: 'synthetic_demo_only',
+      },
+      liquidityGates: {
+        status: 'restricted',
+        passed: false,
+        liquidityScore: 42,
+      },
+      expectedMove: {
+        expectedMoveAbs: 7.5,
+        expectedMovePct: 14.31,
+        expectedMoveSource: 'straddle_mid',
+      },
+      optimizer: {
+        preferredStrategyKey: null,
+        optimizerLabel: '数据不足，禁止判断',
+        noTradeReason: 'data_quality_not_decision_grade',
+        alternatives: [],
+      },
+      rankedAlternatives: [
+        {
+          strategyKey: 'bull_call_spread',
+          dataQualityTier: 'synthetic_demo_only',
+          liquidityScore: 42,
+          breakevenPressure: 0.19,
+          maxLoss: 230,
+          maxGain: 270,
+          riskRewardRatio: 1.17,
+          expectedMoveAlignment: 92,
+          ivReadiness: 44,
+          tradeQualityScore: 35,
+          decisionLabel: '数据不足，禁止判断',
+          primaryReasons: ['当前为 synthetic delayed / 演示数据'],
+          riskWarnings: ['不可用于真实交易判断'],
+        },
+      ],
+      breakeven: {
+        breakeven: 52.3,
+        requiredMovePct: -0.19,
+        targetPriceStatus: 'target_above_breakeven',
+        score: 86,
+      },
+      riskReward: {
+        maxLoss: 230,
+        maxGain: 270,
+        riskRewardRatio: 1.17,
+        score: 72,
+      },
+      tradeQualityScore: 35,
+      decisionLabel: '数据不足，禁止判断',
+      primaryReasons: ['当前为 synthetic delayed / 演示数据'],
+      riskWarnings: ['不可用于真实交易判断'],
+      freshness: {
+        source: 'synthetic_options_lab_fixture',
+        freshness: 'synthetic_delayed',
+      },
+      metadata: {
+        readOnly: true,
+        fixtureBacked: true,
+        syntheticData: true,
+        noExternalCalls: true,
+        noOrderPlacement: true,
+        noBrokerConnection: true,
+        noPortfolioMutation: true,
+        noTradingRecommendation: true,
+      },
+    } as never);
+
+    renderPage();
+
+    const decisionStrip = await screen.findByTestId('options-lab-decision-readiness-strip');
+    const primaryStrip = await screen.findByTestId('options-lab-primary-strategy-readiness-strip');
+
+    [decisionStrip, primaryStrip].forEach((strip) => {
+      expect(strip).toHaveTextContent('未达判断等级');
+      expect(strip).toHaveTextContent('仅观察');
+      expect(strip).toHaveTextContent('数据质量受限');
+      expect(strip).toHaveTextContent('流动性受限');
+      expect(strip).toHaveTextContent('演示/延迟数据');
+      expect(strip).toHaveTextContent('价差偏宽');
+      expect(strip.textContent || '').not.toContain('synthetic_or_fixture_data_not_decision_grade');
+      expect(strip.textContent || '').not.toContain('wide_bid_ask_spread');
+      expect(strip.textContent || '').not.toMatch(/买入|卖出|推荐/);
+    });
+  });
+
+  it('renders pass-but-review readiness gate strips for decision-grade payloads', async () => {
+    vi.mocked(optionsLabApi.evaluateDecision).mockResolvedValueOnce({
+      symbol: 'TEM',
+      strategy: 'bull_call_spread',
+      dataQuality: {
+        dataQualityScore: 88,
+        dataQualityTier: 'live_usable',
+        warnings: [],
+        sourceType: 'licensed',
+      },
+      liquidity: {
+        liquidityScore: 84,
+        spreadPct: 8,
+        liquidityWarnings: [],
+      },
+      ivGreeks: {
+        ivReadiness: 79,
+        ivRankStatus: 'available',
+        ivRank: 62,
+        ivPercentile: 58,
+        warnings: [],
+      },
+      ivRank: 62,
+      ivPercentile: 58,
+      ivRankStatus: 'available',
+      decisionGrade: true,
+      gateDecision: 'passed',
+      failClosedReasonCodes: [],
+      gateIssues: [],
+      dataQualityGates: {
+        status: 'passed',
+        decisionGrade: true,
+        tier: 'live_usable',
+      },
+      liquidityGates: {
+        status: 'passed',
+        passed: true,
+        liquidityScore: 84,
+      },
+      expectedMove: {
+        expectedMoveAbs: 6.2,
+        expectedMovePct: 11.84,
+        expectedMoveSource: 'straddle_mid',
+      },
+      optimizer: {
+        preferredStrategyKey: 'bull_call_spread',
+        optimizerLabel: '仅观察',
+        noTradeReason: null,
+        alternatives: [
+          {
+            strategyKey: 'bull_call_spread',
+            dataQualityTier: 'live_usable',
+            liquidityScore: 84,
+            breakevenPressure: 0.12,
+            maxLoss: 210,
+            maxGain: 290,
+            riskRewardRatio: 1.38,
+            expectedMoveAlignment: 88,
+            ivReadiness: 79,
+            tradeQualityScore: 74,
+            decisionLabel: '仅观察',
+            primaryReasons: ['需人工复核'],
+            riskWarnings: [],
+          },
+        ],
+      },
+      rankedAlternatives: [
+        {
+          strategyKey: 'bull_call_spread',
+          dataQualityTier: 'live_usable',
+          liquidityScore: 84,
+          breakevenPressure: 0.12,
+          maxLoss: 210,
+          maxGain: 290,
+          riskRewardRatio: 1.38,
+          expectedMoveAlignment: 88,
+          ivReadiness: 79,
+          tradeQualityScore: 74,
+          decisionLabel: '仅观察',
+          primaryReasons: ['需人工复核'],
+          riskWarnings: [],
+        },
+      ],
+      breakeven: {
+        breakeven: 56.1,
+        requiredMovePct: 2.5,
+        targetPriceStatus: 'target_above_breakeven',
+        score: 78,
+      },
+      riskReward: {
+        maxLoss: 210,
+        maxGain: 290,
+        riskRewardRatio: 1.38,
+        score: 75,
+      },
+      tradeQualityScore: 74,
+      decisionLabel: '仅观察',
+      primaryReasons: ['需人工复核'],
+      riskWarnings: [],
+      noAdviceDisclosure: 'Analytical output only; not personalized financial advice.',
+      freshness: {
+        source: 'licensed_options',
+        freshness: 'live',
+      },
+      metadata: {
+        readOnly: true,
+        noExternalCalls: true,
+        noTradingRecommendation: true,
+      },
+    } as never);
+
+    renderPage();
+
+    const decisionStrip = await screen.findByTestId('options-lab-decision-readiness-strip');
+    const primaryStrip = await screen.findByTestId('options-lab-primary-strategy-readiness-strip');
+
+    [decisionStrip, primaryStrip].forEach((strip) => {
+      expect(strip).toHaveTextContent('通过基础门控');
+      expect(strip).toHaveTextContent('仍需人工复核');
+      expect(strip.textContent || '').not.toMatch(/买入|卖出|推荐/);
+    });
+  });
+
   it('keeps delayed and demo fixture states explicitly observation-only', async () => {
     renderPage();
 
