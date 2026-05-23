@@ -162,8 +162,12 @@ def _cache_entry(
     return payload
 
 
-def _make_service() -> LiquidityMonitorService:
-    return LiquidityMonitorService(cache=MarketCache(max_workers=1), db=DatabaseManager.get_instance())
+def _make_service(*, allow_external_provider_calls: bool = False) -> LiquidityMonitorService:
+    return LiquidityMonitorService(
+        cache=MarketCache(max_workers=1),
+        db=DatabaseManager.get_instance(),
+        allow_external_provider_calls=allow_external_provider_calls,
+    )
 
 
 def _activation(payload: Dict[str, Any], key: str) -> Dict[str, Any]:
@@ -874,6 +878,146 @@ def test_liquidity_monitor_runtime_source_stays_cache_only() -> None:
         )
 
 
+def test_default_liquidity_monitor_read_does_not_fetch_binance_funding(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "crypto",
+        _cache_entry(
+            source="binance",
+            freshness="live",
+            items=[
+                {"symbol": "BTC", "label": "Bitcoin", "changePercent": 2.0, "value": 65000, "asOf": now},
+                {"symbol": "ETH", "label": "Ethereum", "changePercent": 1.0, "value": 3200, "asOf": now},
+                {"symbol": "BNB", "label": "BNB", "changePercent": 0.5, "value": 600, "asOf": now},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    with (
+        patch.object(LiquidityMonitorService, "_now", return_value=datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ)),
+        patch("src.services.liquidity_monitor_service.fetch_binance_funding_row") as mock_funding,
+        patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", return_value=_FakeHistoryFrame([]), create=True),
+    ):
+        payload = service.get_liquidity_monitor()
+
+    funding = _indicators_by_key(payload)["crypto_funding"]
+
+    mock_funding.assert_not_called()
+    assert payload["sourceMetadata"]["externalProviderCalls"] is False
+    assert funding["status"] == "unavailable"
+    assert funding["includedInScore"] is False
+    assert funding["scoreContribution"] == 0
+    assert funding["evidence"]["isUnavailable"] is True
+    assert "未触发实时 funding 查询" in funding["summary"]
+
+
+def test_default_liquidity_monitor_read_does_not_fetch_yfinance_proxy_when_cache_missing(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+
+    with (
+        patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", return_value=_FakeHistoryFrame([18.0, 15.0]), create=True) as mock_proxy,
+        patch("src.services.liquidity_monitor_service.fetch_binance_funding_row") as mock_funding,
+    ):
+        payload = service.get_liquidity_monitor()
+
+    indicators = _indicators_by_key(payload)
+
+    mock_proxy.assert_not_called()
+    mock_funding.assert_not_called()
+    assert payload["sourceMetadata"]["externalProviderCalls"] is False
+    assert payload["score"]["regime"] == "unavailable"
+    for key in ("vix_pressure", "us_rates_pressure", "crypto_funding"):
+        indicator = indicators[key]
+        assert indicator["status"] == "unavailable"
+        assert indicator["includedInScore"] is False
+        assert indicator["scoreContribution"] == 0
+        assert indicator["evidence"]["isUnavailable"] is True
+        assert indicator["coverageDiagnostics"]["contributesToScore"] is False
+
+
+def test_default_liquidity_monitor_read_scores_authorized_fresh_cached_evidence_without_provider_calls(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "crypto",
+        _cache_entry(
+            source="binance",
+            freshness="live",
+            items=[
+                {"symbol": "BTC", "label": "Bitcoin", "changePercent": 2.0, "value": 65000, "source": "binance", "sourceType": "exchange_public"},
+                {"symbol": "ETH", "label": "Ethereum", "changePercent": 1.0, "value": 3200, "source": "binance", "sourceType": "exchange_public"},
+                {"symbol": "BNB", "label": "BNB", "changePercent": 0.5, "value": 600, "source": "binance", "sourceType": "exchange_public"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "volatility",
+        _cache_entry(
+            source="fred",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 15.2,
+                    "changePercent": -2.5,
+                    "source": "fred",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                }
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {"symbol": "US2Y", "label": "US 2Y", "value": 4.62, "changePercent": -0.22, "source": "treasury", "sourceType": "official_public", "sourceLabel": "US Treasury", "unit": "%"},
+                {"symbol": "US10Y", "label": "US 10Y", "value": 4.31, "changePercent": -0.31, "source": "treasury", "sourceType": "official_public", "sourceLabel": "US Treasury", "unit": "%"},
+                {"symbol": "US30Y", "label": "US 30Y", "value": 4.58, "changePercent": -0.18, "source": "treasury", "sourceType": "official_public", "sourceLabel": "US Treasury", "unit": "%"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    with (
+        patch("src.services.liquidity_monitor_service.fetch_binance_funding_row") as mock_funding,
+        patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", return_value=_FakeHistoryFrame([]), create=True) as mock_proxy,
+    ):
+        payload = service.get_liquidity_monitor()
+
+    indicators = _indicators_by_key(payload)
+
+    mock_funding.assert_not_called()
+    mock_proxy.assert_not_called()
+    assert payload["sourceMetadata"]["externalProviderCalls"] is False
+    assert indicators["crypto_spot_momentum"]["includedInScore"] is True
+    assert indicators["vix_pressure"]["includedInScore"] is True
+    assert indicators["us_rates_pressure"]["includedInScore"] is True
+    assert payload["score"]["includedIndicatorCount"] == 3
+    assert payload["score"]["regime"] != "unavailable"
+
+
 def test_persistent_raw_macro_snapshot_prefers_official_vix_without_proxy_fetch(isolated_db: DatabaseManager) -> None:
     service = _make_service()
     _save_market_overview_snapshot(
@@ -1275,7 +1419,7 @@ def test_expired_proxy_rates_cache_yields_to_newer_official_snapshot_without_pro
 
 
 def test_raw_rates_snapshot_with_sofr_only_official_data_keeps_proxy_yields_observation_only(isolated_db: DatabaseManager) -> None:
-    service = _make_service()
+    service = _make_service(allow_external_provider_calls=True)
     _save_market_overview_snapshot(
         isolated_db,
         key="rates",
@@ -1409,7 +1553,7 @@ def test_raw_official_snapshot_without_item_freshness_normalizes_to_delayed_with
 
 
 def test_malformed_raw_official_observation_is_skipped_and_proxy_fallback_remains_available(isolated_db: DatabaseManager) -> None:
-    service = _make_service()
+    service = _make_service(allow_external_provider_calls=True)
     _save_market_overview_snapshot(
         isolated_db,
         key="volatility",
@@ -1618,7 +1762,7 @@ def test_liquidity_monitor_metadata_declares_read_only_runtime_boundary(isolated
 
     assert payload["endpoint"] == "/api/v1/market/liquidity-monitor"
     assert payload["sourceMetadata"] == {
-        "externalProviderCalls": True,
+        "externalProviderCalls": False,
         "providerRuntimeChanged": False,
         "marketCacheMutation": False,
     }
@@ -2063,7 +2207,7 @@ def test_fresh_binance_crypto_input_remains_live_exchange_public_when_fresh(
 def test_delayed_yfinance_macro_proxy_is_observation_only_without_real_source(
     isolated_db: DatabaseManager,
 ) -> None:
-    service = _make_service()
+    service = _make_service(allow_external_provider_calls=True)
     quote_index = [
         datetime(2026, 5, 12, 16, 0, tzinfo=timezone.utc),
         datetime(2026, 5, 13, 16, 0, tzinfo=timezone.utc),
@@ -2441,7 +2585,7 @@ def test_liquidity_evidence_snapshot_preserves_fallback_input_state_when_indicat
 
 
 def test_crypto_funding_uses_explicit_bounded_binance_backfill_when_cache_snapshot_lacks_funding(isolated_db: DatabaseManager) -> None:
-    service = _make_service()
+    service = _make_service(allow_external_provider_calls=True)
     now_dt = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ)
     now = now_dt.isoformat(timespec="seconds")
     service.cache.set(
@@ -2497,7 +2641,7 @@ def test_crypto_funding_uses_explicit_bounded_binance_backfill_when_cache_snapsh
 
 
 def test_crypto_funding_backfill_drops_stale_provider_rows_without_claiming_live(isolated_db: DatabaseManager) -> None:
-    service = _make_service()
+    service = _make_service(allow_external_provider_calls=True)
     now_dt = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ)
     now = now_dt.isoformat(timespec="seconds")
     service.cache.set(
@@ -2542,7 +2686,7 @@ def test_crypto_funding_backfill_drops_stale_provider_rows_without_claiming_live
 
 
 def test_crypto_funding_stays_unavailable_when_binance_public_endpoint_fails(isolated_db: DatabaseManager) -> None:
-    service = _make_service()
+    service = _make_service(allow_external_provider_calls=True)
     now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
     service.cache.set(
         "crypto",
@@ -2576,7 +2720,7 @@ def test_response_source_metadata_reports_runtime_and_cache_boundaries(isolated_
     payload = service.get_liquidity_monitor()
 
     assert payload["sourceMetadata"] == {
-        "externalProviderCalls": True,
+        "externalProviderCalls": False,
         "providerRuntimeChanged": False,
         "marketCacheMutation": False,
     }
@@ -3408,7 +3552,7 @@ def test_coinbase_crypto_inputs_cannot_claim_liquidity_score_authority(
     assert "scoring_not_allowed" in spot_diagnostics["routeRejectedReasonCodes"]
 
 def test_vix_indicator_uses_yfinance_proxy_when_volatility_panel_is_unavailable(isolated_db: DatabaseManager) -> None:
-    service = _make_service()
+    service = _make_service(allow_external_provider_calls=True)
     quote_index = [
         datetime(2026, 5, 12, 16, 0, tzinfo=timezone.utc),
         datetime(2026, 5, 13, 16, 0, tzinfo=timezone.utc),
@@ -3549,7 +3693,7 @@ def test_vix_indicator_ignores_malformed_official_macro_cache_and_keeps_cached_p
 
 
 def test_yfinance_proxy_panels_remain_delayed_and_not_live_provider_labels(isolated_db: DatabaseManager) -> None:
-    service = _make_service()
+    service = _make_service(allow_external_provider_calls=True)
     quote_index = [
         datetime(2026, 5, 12, 16, 0, tzinfo=timezone.utc),
         datetime(2026, 5, 13, 16, 0, tzinfo=timezone.utc),
@@ -3664,7 +3808,7 @@ def test_usd_pressure_does_not_use_yfinance_dxy_proxy_when_official_series_is_mi
 
 
 def test_us_rates_indicator_uses_yfinance_treasury_proxies_when_rates_panel_is_unavailable(isolated_db: DatabaseManager) -> None:
-    service = _make_service()
+    service = _make_service(allow_external_provider_calls=True)
     quote_index = [
         datetime(2026, 5, 12, 16, 0, tzinfo=timezone.utc),
         datetime(2026, 5, 13, 16, 0, tzinfo=timezone.utc),
@@ -3857,7 +4001,7 @@ def test_us_rates_indicator_uses_official_macro_cache_when_rates_panel_is_unavai
 def test_us_rates_indicator_falls_back_to_proxy_yields_when_official_yields_are_malformed(
     isolated_db: DatabaseManager,
 ) -> None:
-    service = _make_service()
+    service = _make_service(allow_external_provider_calls=True)
     official_as_of = "2026-05-12T16:15:00+08:00"
     quote_index = [
         datetime(2026, 5, 12, 16, 0, tzinfo=timezone.utc),

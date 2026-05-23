@@ -277,9 +277,11 @@ class LiquidityMonitorService:
         *,
         cache: MarketCache = market_cache,
         db: Optional[DatabaseManager] = None,
+        allow_external_provider_calls: bool = False,
     ) -> None:
         self.cache = cache
         self.db = db or DatabaseManager.get_instance()
+        self.allow_external_provider_calls = allow_external_provider_calls
         self._external_provider_calls_used = False
 
     def get_liquidity_monitor(self) -> Dict[str, Any]:
@@ -602,7 +604,9 @@ class LiquidityMonitorService:
             ]
         if not items:
             message = "Binance Futures funding 暂不可用"
-            if not self._has_live_crypto_context(panel):
+            if not self.allow_external_provider_calls:
+                message = "Binance Futures funding 缓存暂不可用，默认读取未触发实时 funding 查询"
+            elif not self._has_live_crypto_context(panel):
                 message = "缺少 BTC/ETH 现货上下文，未触发实时 funding 查询"
             elif funding_panel is not panel and funding_panel.freshness == "stale":
                 message = "Binance Futures funding 数据过期"
@@ -1696,6 +1700,8 @@ class LiquidityMonitorService:
         )
 
     def _fetch_live_crypto_funding_panel(self, panel: PanelState) -> Optional[PanelState]:
+        if not self.allow_external_provider_calls:
+            return None
         if not self._has_live_crypto_context(panel):
             return None
         self._external_provider_calls_used = True
@@ -1762,6 +1768,8 @@ class LiquidityMonitorService:
 
     def _fetch_macro_proxy_panel(self, key: str, specs: List[Dict[str, Any]]) -> Optional[PanelState]:
         if not specs:
+            return None
+        if not self.allow_external_provider_calls:
             return None
         self._external_provider_calls_used = True
         provenance = project_source_provenance(source="yfinance_proxy", source_type="proxy_public", freshness="delayed")

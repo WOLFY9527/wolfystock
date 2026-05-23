@@ -100,7 +100,7 @@
       "includedInScore": false,
       "scoreContribution": 0,
       "scoreWeight": 0,
-      "summary": "缺少 BTC/ETH 现货上下文，未触发实时 funding 查询",
+      "summary": "Binance Futures funding 缓存暂不可用，默认读取未触发实时 funding 查询",
       "evidence": {
         "contractVersion": "source_confidence_contract_v1",
         "source": "unavailable",
@@ -1270,7 +1270,7 @@
   },
   "advisoryDisclosure": "仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。",
   "sourceMetadata": {
-    "externalProviderCalls": true,
+    "externalProviderCalls": false,
     "providerRuntimeChanged": false,
     "marketCacheMutation": false
   }
