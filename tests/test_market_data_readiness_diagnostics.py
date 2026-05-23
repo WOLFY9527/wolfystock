@@ -136,6 +136,7 @@ def test_tushare_token_missing_reports_boolean_only(tmp_path: Path) -> None:
 
     assert token_check["status"] == "missing"
     assert token_check["secretConfigured"] is False
+    assert token_check["productAffectedSurfaces"] == ["market_overview", "liquidity_monitor"]
     assert "envKey" not in token_check.get("details", {})
 
 
@@ -178,6 +179,7 @@ def test_representative_file_missing_reports_partial(tmp_path: Path) -> None:
 
     assert payload["readinessStatus"] == "partial"
     assert file_check["status"] == "partial"
+    assert file_check["productAffectedSurfaces"] == ["provider_ops"]
     assert file_check["details"]["missingSymbols"] == ["MSFT"]
     assert file_check["details"]["existingCount"] == 1
 

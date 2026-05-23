@@ -33,6 +33,9 @@ from src.services.market_data_readiness_diagnostics import (
     MarketDataReadinessDiagnostics,
     build_market_data_readiness_diagnostics,
 )
+from src.services.provider_affected_surface_mapping import (
+    canonical_product_affected_surfaces,
+)
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
 from src.services.official_macro_source_registry import get_official_macro_source
 from src.services.polygon_us_breadth_provider import (
@@ -645,6 +648,9 @@ class ProviderOperationsMatrixService:
             "scoreEligibilityGates": sorted(row.score_eligibility_gates),
             "supportedCapabilities": sorted(row.supported_capabilities),
             "affectedSurfaces": sorted(row.affected_surfaces),
+            "productAffectedSurfaces": self._canonical_product_affected_surfaces(
+                sorted(row.affected_surfaces)
+            ),
             "routerReasonCodes": sorted(row.router_reason_codes),
             "reasonCodes": list(row.reason_codes),
             "fulfilledMetrics": list(row.fulfilled_metrics),
@@ -681,6 +687,12 @@ class ProviderOperationsMatrixService:
         if incoming and (not current or current in {"unknown", "runtime_metadata"}):
             return incoming
         return current or incoming
+
+    @staticmethod
+    def _canonical_product_affected_surfaces(
+        surfaces: Sequence[str] | None,
+    ) -> list[str]:
+        return list(canonical_product_affected_surfaces(surfaces))
 
     @staticmethod
     def _router_diagnostic_requests() -> tuple[tuple[str, str, str, str], ...]:

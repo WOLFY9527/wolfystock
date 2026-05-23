@@ -134,6 +134,7 @@ export interface ProviderOperationsMatrixRow {
   scoreEligibilityGates?: string[];
   supportedCapabilities?: string[];
   affectedSurfaces?: string[];
+  productAffectedSurfaces?: string[];
   routerReasonCodes?: string[];
   reasonCodes?: string[];
   fulfilledMetrics?: string[];

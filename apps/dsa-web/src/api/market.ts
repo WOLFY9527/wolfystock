@@ -221,6 +221,7 @@ export type MarketDataReadinessCheck = {
   userFacingMessage: string;
   remediationHint?: string | null;
   affectsSurfaces: string[];
+  productAffectedSurfaces?: string[];
   secretConfigured?: boolean;
   details?: Record<string, unknown>;
 };
@@ -265,6 +266,7 @@ function normalizeMarketDataReadinessPayload(rawPayload: Record<string, unknown>
       userFacingMessage: check.userFacingMessage || '',
       remediationHint: check.remediationHint || null,
       affectsSurfaces: Array.isArray(check.affectsSurfaces) ? check.affectsSurfaces : [],
+      ...(Array.isArray(check.productAffectedSurfaces) ? { productAffectedSurfaces: check.productAffectedSurfaces } : {}),
       ...(typeof check.secretConfigured === 'boolean' ? { secretConfigured: check.secretConfigured } : {}),
       ...(check.details && typeof check.details === 'object' ? { details: check.details } : {}),
     })) : [],

@@ -552,6 +552,18 @@ function resolveChecklistSurfaces(surfaces: string[] | undefined): string[] {
   return labels.length ? labels : ['Provider Ops / system diagnostics'];
 }
 
+function resolveChecklistMatrixSurfaces(row: ProviderOperationsMatrixRow): string[] {
+  return resolveChecklistSurfaces(
+    row.productAffectedSurfaces?.length ? row.productAffectedSurfaces : row.affectedSurfaces,
+  );
+}
+
+function resolveChecklistReadinessSurfaces(check: MarketDataReadinessCheck): string[] {
+  return resolveChecklistSurfaces(
+    check.productAffectedSurfaces?.length ? check.productAffectedSurfaces : check.affectsSurfaces,
+  );
+}
+
 function pushChecklistBadge(
   badges: SetupChecklistBadge[],
   condition: boolean,
@@ -715,7 +727,7 @@ function buildSetupChecklistEntries(
     .forEach((row) => {
       const copy = checklistCopyForMatrixRow(row);
       const badges = checklistBadgesForMatrixRow(row);
-      resolveChecklistSurfaces(row.affectedSurfaces).forEach((surface) => {
+      resolveChecklistMatrixSurfaces(row).forEach((surface) => {
         entries.push({
           key: `matrix:${row.providerId}:${surface}`,
           surface,
@@ -732,7 +744,7 @@ function buildSetupChecklistEntries(
     .forEach((check) => {
       const copy = checklistCopyForReadinessCheck(check);
       const badges = checklistBadgesForReadinessCheck(check);
-      resolveChecklistSurfaces(check.affectsSurfaces).forEach((surface) => {
+      resolveChecklistReadinessSurfaces(check).forEach((surface) => {
         entries.push({
           key: `readiness:${check.id}:${surface}`,
           surface,

@@ -14,6 +14,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
+from src.services.provider_affected_surface_mapping import (
+    canonical_product_affected_surfaces,
+)
+
 
 _LOCAL_US_PARQUET_ENV_KEYS = ("LOCAL_US_PARQUET_DIR", "US_STOCK_PARQUET_DIR")
 _TUSHARE_TOKEN_ENV_KEYS = ("TUSHARE_TOKEN",)
@@ -34,6 +38,7 @@ class MarketDataReadinessCheck:
     user_facing_message: str
     remediation_hint: Optional[str]
     affects_surfaces: tuple[str, ...]
+    product_affected_surfaces: tuple[str, ...] = ()
     secret_configured: Optional[bool] = None
     details: Optional[dict[str, Any]] = None
 
@@ -45,6 +50,10 @@ class MarketDataReadinessCheck:
             "userFacingMessage": self.user_facing_message,
             "remediationHint": self.remediation_hint,
             "affectsSurfaces": list(self.affects_surfaces),
+            "productAffectedSurfaces": list(
+                self.product_affected_surfaces
+                or canonical_product_affected_surfaces(self.affects_surfaces)
+            ),
         }
         if self.secret_configured is not None:
             payload["secretConfigured"] = self.secret_configured

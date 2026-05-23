@@ -264,6 +264,7 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
     ]
     assert fed["contractCoverageUniverses"] == ["rrp_tga_reserve_balances_release_bundle"]
     assert {"market_overview", "liquidity_impulse"}.issubset(set(fed["affectedSurfaces"]))
+    assert fed["productAffectedSurfaces"] == ["market_overview", "liquidity_monitor"]
     assert fed["fulfilledMetrics"] == []
     assert fed["missingMetrics"] == ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
     assert fed["coverageCount"] == 0
@@ -323,6 +324,7 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
     ]
     assert cn_money["contractCoverageUniverses"] == ["dr007_shibor_repo_liquidity_rate_bundle"]
     assert {"market_overview", "liquidity_impulse"}.issubset(set(cn_money["affectedSurfaces"]))
+    assert cn_money["productAffectedSurfaces"] == ["market_overview", "liquidity_monitor"]
     assert {
         "missing_provider_configuration",
         "cache_required",
@@ -353,6 +355,7 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
     ]
     assert dxy["contractCoverageUniverses"] == ["dxy_reference_pair_bundle"]
     assert {"market_overview", "liquidity_impulse"}.issubset(set(dxy["affectedSurfaces"]))
+    assert dxy["productAffectedSurfaces"] == ["market_overview", "liquidity_monitor"]
     assert {
         "missing_provider_configuration",
         "cache_required",
@@ -385,6 +388,7 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
         "northbound_southbound_mainland_flow_bundle"
     ]
     assert {"market_overview", "liquidity_impulse"}.issubset(set(cn_hk_flow["affectedSurfaces"]))
+    assert cn_hk_flow["productAffectedSurfaces"] == ["market_overview", "liquidity_monitor"]
     assert {
         "missing_provider_configuration",
         "cache_required",
@@ -416,6 +420,7 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
     ]
     assert futures["contractCoverageUniverses"] == ["nq_es_ym_rty_extended_hours_bundle"]
     assert {"market_overview", "liquidity_impulse"}.issubset(set(futures["affectedSurfaces"]))
+    assert futures["productAffectedSurfaces"] == ["market_overview", "liquidity_monitor"]
     assert {
         "missing_provider_configuration",
         "cache_required",
@@ -446,6 +451,7 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
     ]
     assert rotation_flow["contractCoverageUniverses"] == ["licensed_sector_theme_flow_universe"]
     assert "rotation_radar" in rotation_flow["affectedSurfaces"]
+    assert rotation_flow["productAffectedSurfaces"] == ["rotation_radar"]
     assert {
         "missing_provider_configuration",
         "cache_required",
@@ -454,6 +460,15 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
         "freshness_floor_required",
         "coverage_floor_required",
     }.issubset(set(rotation_flow["routerReasonCodes"]))
+
+
+def test_unknown_surface_aliases_fall_back_to_provider_ops_product_surface() -> None:
+    assert ProviderOperationsMatrixService._canonical_product_affected_surfaces(
+        ["mystery_surface"]
+    ) == ["provider_ops"]
+    assert ProviderOperationsMatrixService._canonical_product_affected_surfaces(
+        ["stock_history", "system_diagnostics", "unknown_surface"]
+    ) == ["provider_ops"]
 
 
 def test_cn_hk_connect_flow_provider_ops_reports_cache_only_config_without_secret_values() -> None:

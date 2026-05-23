@@ -210,6 +210,7 @@ const readinessPayload = {
       userFacingMessage: 'Tushare token is not configured.',
       remediationHint: 'Set TUSHARE_TOKEN when local operators need Tushare-backed CN/HK market intelligence inputs.',
       affectsSurfaces: ['market_overview', 'liquidity_monitor'],
+      productAffectedSurfaces: ['market_overview', 'liquidity_monitor'],
       secretConfigured: false,
     },
     {
@@ -219,6 +220,7 @@ const readinessPayload = {
       userFacingMessage: 'Representative US parquet files are missing for part of the requested symbol set.',
       remediationHint: 'Sync the missing parquet files or reduce the representative symbol list to locally available coverage.',
       affectsSurfaces: ['stock_history'],
+      productAffectedSurfaces: ['provider_ops'],
       details: {
         representativeSymbols: ['AAPL', 'SPY', 'BTC-USD'],
         missingSymbols: ['BTC-USD'],
@@ -255,6 +257,7 @@ const operationsMatrixPayload = {
       cacheRequired: true,
       supportedCapabilities: ['fed_liquidity'],
       affectedSurfaces: ['market_overview', 'liquidity_impulse'],
+      productAffectedSurfaces: ['market_overview', 'liquidity_monitor'],
       routerReasonCodes: ['cache_required', 'freshness_floor_required', 'missing_provider_configuration'],
       missingProviderReason: 'official_fed_liquidity_contract_not_configured',
       degradationReason: 'missing_provider_configuration',
@@ -284,6 +287,7 @@ const operationsMatrixPayload = {
       cacheRequired: false,
       supportedCapabilities: ['cn_history_daily'],
       affectedSurfaces: ['scanner'],
+      productAffectedSurfaces: ['scanner'],
       routerReasonCodes: ['credential_missing'],
       missingProviderReason: null,
       degradationReason: 'credential_missing',
@@ -314,6 +318,7 @@ const operationsMatrixPayload = {
       cacheRequired: true,
       supportedCapabilities: ['us_advancers_decliners'],
       affectedSurfaces: ['market_overview', 'liquidity_impulse'],
+      productAffectedSurfaces: ['market_overview', 'liquidity_monitor'],
       routerReasonCodes: [],
       reasonCodes: ['polygon_high_low_history_unavailable'],
       fulfilledMetrics: ['ADVANCERS', 'DECLINERS', 'UNCHANGED', 'ADVANCE_DECLINE_RATIO'],
@@ -359,6 +364,7 @@ const operationsMatrixPayload = {
       cacheRequired: true,
       supportedCapabilities: ['cn_money_market'],
       affectedSurfaces: ['market_overview'],
+      productAffectedSurfaces: ['market_overview'],
       routerReasonCodes: ['cache_required'],
       reasonCodes: [],
       fulfilledMetrics: ['money_market_levels'],
@@ -402,6 +408,7 @@ const operationsMatrixPayload = {
       cacheRequired: true,
       supportedCapabilities: ['northbound_southbound_connect_flow'],
       affectedSurfaces: ['rotation_radar'],
+      productAffectedSurfaces: ['rotation_radar'],
       routerReasonCodes: ['cache_required'],
       reasonCodes: [],
       fulfilledMetrics: ['northbound_flow'],
@@ -445,6 +452,7 @@ const operationsMatrixPayload = {
       cacheRequired: false,
       supportedCapabilities: ['cn_index_futures'],
       affectedSurfaces: ['liquidity_monitor', 'options_lab'],
+      productAffectedSurfaces: ['liquidity_monitor', 'options_lab'],
       routerReasonCodes: ['credential_missing'],
       reasonCodes: [],
       fulfilledMetrics: [],
@@ -464,11 +472,46 @@ const operationsMatrixPayload = {
       remediationHint: 'Load token from /opt/feeds/index-futures before runtime.',
       diagnosticOnly: true,
     },
+    {
+      providerId: 'legacy_surface_projection',
+      providerName: 'Legacy surface projection',
+      sourceLabel: 'Legacy surface projection',
+      providerCategory: 'runtime_capability',
+      sourceType: 'cache_snapshot',
+      sourceTier: 'local_cache',
+      trustLevel: 'reproducible_local_or_stored',
+      freshnessExpectation: 'daily',
+      runtimeState: 'observation_only',
+      credentialState: 'not_required',
+      dependencyState: 'not_required',
+      enabledByDefault: false,
+      observationOnly: true,
+      scoreContributionAllowed: false,
+      sourceAuthorityAllowed: true,
+      scoreEligible: false,
+      inertMetadataOnly: true,
+      paidDataLikelyRequired: false,
+      keyRequired: false,
+      noDefaultLiveHttpCalls: true,
+      cacheRequired: true,
+      supportedCapabilities: ['diagnostic_surface_projection'],
+      affectedSurfaces: ['mystery_surface'],
+      productAffectedSurfaces: ['portfolio'],
+      routerReasonCodes: ['cache_required'],
+      reasonCodes: [],
+      fulfilledMetrics: [],
+      missingMetrics: [],
+      coverageCount: null,
+      missingProviderReason: null,
+      degradationReason: 'cache_only_contract',
+      remediationHint: 'Refresh local diagnostic cache only.',
+      diagnosticOnly: true,
+    },
   ],
   summary: {
-    totalRows: 6,
-    observationOnlyRows: 2,
-    inertMetadataOnlyRows: 4,
+    totalRows: 7,
+    observationOnlyRows: 3,
+    inertMetadataOnlyRows: 5,
     missingProviderRows: 2,
     scoreEligibleRows: 1,
     paidDataLikelyRequiredRows: 2,
@@ -618,6 +661,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklist).toHaveTextContent('Liquidity Monitor');
     expect(checklist).toHaveTextContent('Rotation Radar');
     expect(checklist).toHaveTextContent('Scanner');
+    expect(checklist).toHaveTextContent('Portfolio');
     expect(checklist).toHaveTextContent('Options Lab');
     expect(checklist).toHaveTextContent('Provider Ops / system diagnostics');
     expect(checklist).toHaveTextContent('credential required');
@@ -646,6 +690,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklist).not.toHaveTextContent('/tmp/connect-cache');
     expect(checklist).not.toHaveTextContent('/opt/feeds/index-futures');
     expect(checklist).not.toHaveTextContent('super-secret-token');
+    expect(checklist).not.toHaveTextContent('mystery_surface');
     expect(screen.getByRole('button', { name: '展开 完整 provider matrix' })).toBeInTheDocument();
   });
 
