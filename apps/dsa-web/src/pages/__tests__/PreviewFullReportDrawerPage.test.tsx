@@ -1,29 +1,17 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { translate } from '../../i18n/core';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import PreviewFullReportDrawerPage from '../PreviewFullReportDrawerPage';
 
-vi.mock('../../components/report/ReportMarkdown', async () => {
-  await new Promise((resolve) => {
-    setTimeout(resolve, 25);
-  });
-
-  return {
-  ReportMarkdown: ({ onClose, stockName, initialContent }: { onClose: () => void; stockName: string; initialContent: string }) => (
-    <div>
-      <div data-testid="report-markdown">drawer content</div>
-      <div>{stockName}</div>
-      <div data-testid="report-markdown-content">{initialContent}</div>
-      <button type="button" onClick={onClose}>close</button>
-    </div>
-  ),
-  };
-});
+vi.mock('../../components/common/Drawer', () => ({
+  Drawer: ({ children }: { children: ReactNode }) => <div data-testid="drawer-shell">{children}</div>,
+}));
 
 describe('PreviewFullReportDrawerPage', () => {
-  it('opens the drawer in Chinese and English', async () => {
+  it('shows the route shell buttons on first paint', () => {
     render(
       <MemoryRouter initialEntries={['/__preview/full-report']}>
         <UiLanguageProvider>
@@ -36,20 +24,41 @@ describe('PreviewFullReportDrawerPage', () => {
     expect(page).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(page).not.toHaveClass('workspace-page');
     expect(page).not.toHaveClass('workspace-page--preview');
+    expect(screen.getByRole('button', { name: translate('zh', 'previewFullReport.openChinese') })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('zh', 'previewFullReport.openEnglish') })).toBeInTheDocument();
+  });
+
+  it('renders localized markdown content after opening technical details in Chinese and English drawers', async () => {
+    render(
+      <MemoryRouter initialEntries={['/__preview/full-report']}>
+        <UiLanguageProvider>
+          <PreviewFullReportDrawerPage />
+        </UiLanguageProvider>
+      </MemoryRouter>,
+    );
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'previewFullReport.openChinese') }));
-    expect(await screen.findByTestId('preview-full-report-loading')).toBeInTheDocument();
-    expect(await screen.findByTestId('report-markdown')).toBeInTheDocument();
-    expect(screen.queryByTestId('preview-full-report-loading')).not.toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'previewFullReport.stockName'))).toBeInTheDocument();
-    expect(screen.getByTestId('report-markdown-content').textContent).toContain(translate('zh', 'previewFullReport.markdown').slice(0, 24));
 
-    fireEvent.click(screen.getByRole('button', { name: 'close' }));
+    let technicalDetails = await screen.findByTestId('report-technical-evidence-details');
+    fireEvent.click(within(technicalDetails).getByText('技术细节'));
+
+    await waitFor(() => {
+      expect(screen.getByText('一、结论摘要')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('columnheader', { name: '字段' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'previewFullReport.openEnglish') }));
-    expect(screen.getByTestId('report-markdown')).toBeInTheDocument();
-    expect(screen.getByText(translate('en', 'previewFullReport.stockName'))).toBeInTheDocument();
-    expect(screen.getByTestId('report-markdown-content').textContent).toContain(translate('en', 'previewFullReport.markdown').slice(0, 24));
+
+    technicalDetails = await screen.findByTestId('report-technical-evidence-details');
+    fireEvent.click(within(technicalDetails).getByText('Technical details'));
+
+    await waitFor(() => {
+      expect(screen.getByText('1. Executive Summary')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('columnheader', { name: 'Field' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'Intraday snapshot' })).toBeInTheDocument();
   });
 
   it('renders localized English shell copy on /en preview routes', () => {

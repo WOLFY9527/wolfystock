@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ReportMarkdown } from '../ReportMarkdown';
@@ -53,6 +53,11 @@ describe('ReportMarkdown', () => {
     expect(screen.getAllByText(/已接入但本次记录未返回/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/当前数据源未提供/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/当前市场\/会话不适用/).length).toBeGreaterThan(0);
+    const technicalDetails = screen.getByTestId('report-technical-evidence-details');
+    fireEvent.click(within(technicalDetails).getByText('技术细节'));
+    await waitFor(() => {
+      expect(screen.getByText('决策摘要')).toBeInTheDocument();
+    });
     expect(screen.getByText('决策摘要')).toBeInTheDocument();
     expect(screen.getByText('执行计划')).toBeInTheDocument();
     expect(screen.getByText('当前动作')).toBeInTheDocument();
@@ -124,5 +129,49 @@ describe('ReportMarkdown', () => {
     expect(executiveSummary).toHaveTextContent('关键风险');
     expect(evidenceDetails).not.toHaveAttribute('open');
     expect(readingSurface.firstElementChild).toBe(executiveSummary);
+  });
+
+  it('keeps executive summary and coverage audit synchronous without mounting technical details before disclosure opens', async () => {
+    render(
+      <ReportMarkdown
+        recordId={4}
+        stockName="Oracle"
+        stockCode="ORCL"
+        onClose={() => undefined}
+        standardReport={{
+          coverageNotes: {
+            missingFieldNotes: ['VWAP：字段待接入'],
+          },
+        }}
+        initialContent={'## Decision Summary\n| Field | Value |\n| --- | --- |\n| VWAP | NA（字段待接入） |'}
+      />,
+    );
+
+    expect(await screen.findByTestId('report-executive-summary')).toHaveTextContent('执行摘要');
+    expect(screen.getByText('缺失字段')).toBeInTheDocument();
+    expect(screen.queryByText('决策摘要')).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: '字段' })).not.toBeInTheDocument();
+  });
+
+  it('renders technical markdown headings and tables after opening the disclosure', async () => {
+    render(
+      <ReportMarkdown
+        recordId={5}
+        stockName="Oracle"
+        stockCode="ORCL"
+        onClose={() => undefined}
+        initialContent={'## Decision Summary\n### Execution Plan\n| Field | Value |\n| --- | --- |\n| VWAP | Ready |'}
+      />,
+    );
+
+    const technicalDetails = await screen.findByTestId('report-technical-evidence-details');
+    fireEvent.click(within(technicalDetails).getByText('技术细节'));
+
+    await waitFor(() => {
+      expect(screen.getByText('决策摘要')).toBeInTheDocument();
+    });
+    expect(screen.getByText('执行计划')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: '字段' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'Ready' })).toBeInTheDocument();
   });
 });

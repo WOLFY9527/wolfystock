@@ -1,7 +1,5 @@
 import type React from 'react';
-import { useEffect, useState, useCallback, useMemo } from 'react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { historyApi } from '../../api/history';
 import { Drawer } from '../common/Drawer';
 import { SupportPanel } from '../common';
@@ -24,6 +22,11 @@ interface ReportMarkdownProps {
   standardReport?: StandardReport;
   initialContent?: string;
 }
+
+const LazyReportMarkdownTechnicalDetailsRenderer = lazy(async () => {
+  const module = await import('./ReportMarkdownTechnicalDetailsRenderer');
+  return { default: module.ReportMarkdownTechnicalDetailsRenderer };
+});
 
 /**
  * Markdown 报告抽屉组件
@@ -52,6 +55,7 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
   const [isLoading, setIsLoading] = useState(initialContent === undefined);
   const [error, setError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(true);
+  const [hasOpenedTechnicalDetails, setHasOpenedTechnicalDetails] = useState(false);
 
   const coverageAudit = useMemo(() => {
     const mergedEntries = [
@@ -311,36 +315,33 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
             <details
               data-testid="report-technical-evidence-details"
               className="theme-panel-subtle rounded-[var(--cohere-radius-medium)] px-5 py-4 md:px-6"
+              onToggle={(event) => {
+                if (event.currentTarget.open) {
+                  setHasOpenedTechnicalDetails(true);
+                }
+              }}
             >
               <summary className="cursor-pointer list-none text-sm font-semibold tracking-[0.06em] text-foreground">
                 {normalizedLanguage === 'en' ? 'Technical details' : '技术细节'}
               </summary>
               <div className="mt-4 mx-auto w-full max-w-[86ch]">
-                <div
-                  className="home-markdown-prose prose prose-invert max-w-none
-                    prose-headings:text-foreground prose-headings:font-semibold prose-headings:tracking-tight
-                    prose-h1:mt-0 prose-h1:mb-4 prose-h1:text-[1.75rem] prose-h1:leading-tight
-                    prose-h2:mt-8 prose-h2:mb-3 prose-h2:text-[1.35rem] prose-h2:leading-snug
-                    prose-h3:mt-6 prose-h3:mb-2 prose-h3:text-[1.1rem] prose-h3:leading-snug
-                    prose-h4:mt-5 prose-h4:mb-2 prose-h4:text-base prose-h4:leading-snug
-                    prose-p:my-3 prose-p:leading-7 prose-p:last:mb-0
-                    prose-strong:text-foreground prose-strong:font-semibold
-                    prose-ul:my-3 prose-ol:my-3 prose-li:my-1 prose-li:leading-7
-                    prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
-                    prose-pre:my-4 prose-pre:border prose-pre:rounded-xl prose-pre:bg-[hsl(var(--elevated)/0.92)] prose-pre:p-4 prose-pre:text-xs prose-pre:leading-6
-                    prose-table:my-4 prose-table:block prose-table:overflow-x-auto prose-table:no-scrollbar prose-table:rounded-xl prose-table:border prose-table:border-[var(--home-prose-border)]
-                    prose-th:border prose-th:border-[var(--home-prose-border-strong)] prose-th:px-3 prose-th:py-2 prose-th:uppercase prose-th:tracking-[0.12em]
-                    prose-td:border prose-td:border-[var(--home-prose-border-strong)] prose-td:px-3 prose-td:py-2 prose-td:align-top
-                    prose-hr:my-6
-                    prose-a:no-underline hover:prose-a:underline
-                    prose-blockquote:my-4 prose-blockquote:border-l-2 prose-blockquote:border-[var(--home-prose-blockquote-border)] prose-blockquote:bg-[var(--home-prose-blockquote-bg)] prose-blockquote:px-4 prose-blockquote:py-3 prose-blockquote:text-secondary-text
-                    break-words
-                  "
-                >
-                  <Markdown remarkPlugins={[remarkGfm]}>
-                    {localizedMarkdownContent}
-                  </Markdown>
-                </div>
+                {hasOpenedTechnicalDetails ? (
+                  <Suspense
+                    fallback={(
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        aria-busy="true"
+                        data-testid="report-technical-details-loading"
+                        className="rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/35 px-3 py-3 text-sm text-secondary-text"
+                      >
+                        {normalizedLanguage === 'en' ? 'Loading technical details…' : '正在加载技术细节…'}
+                      </div>
+                    )}
+                  >
+                    <LazyReportMarkdownTechnicalDetailsRenderer markdown={localizedMarkdownContent} />
+                  </Suspense>
+                ) : null}
               </div>
             </details>
           </div>
