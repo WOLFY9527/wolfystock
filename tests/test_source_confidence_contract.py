@@ -241,6 +241,54 @@ def test_provider_fit_metadata_contract_projects_required_camel_case_fields() ->
     }
 
 
+def test_official_cn_money_market_normalized_rows_carry_non_scoring_source_confidence_fields() -> None:
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    from src.services.cn_money_market_rates_contracts import (
+        OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+        build_official_cn_money_market_rates_snapshot,
+    )
+
+    now = datetime(2026, 5, 23, 10, 5, tzinfo=ZoneInfo("Asia/Shanghai"))
+    as_of = (now - timedelta(minutes=5)).isoformat(timespec="seconds")
+    snapshot = build_official_cn_money_market_rates_snapshot(
+        {
+            "providerId": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+            "source": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+            "sourceType": "official_public",
+            "sourceTier": "official_public",
+            "asOf": as_of,
+            "publicationDate": "2026-05-23",
+            "tradingDate": "2026-05-23",
+            "holidayCalendarQualified": True,
+            "observations": [
+                {"symbol": "DR007", "value": 1.86, "unit": "%"},
+                {"symbol": "SHIBOR", "officialSeriesId": "SHIBOR_ON", "value": 1.72, "unit": "%"},
+            ],
+        },
+        now=now,
+    )
+    dr007 = next(item for item in snapshot["items"] if item["officialSeriesId"] == "DR007")
+    contract = coerce_source_confidence_contract(
+        {
+            "source": dr007["source"],
+            "sourceLabel": dr007["sourceLabel"],
+            "asOf": dr007["asOf"],
+            "freshness": dr007["freshness"],
+            "confidenceWeight": 1.0,
+            "coverage": snapshot["coverageRatio"],
+        }
+    )
+
+    assert contract.to_dict()["source"] == OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID
+    assert dr007["sourceType"] == "official_public"
+    assert dr007["sourceTier"] == "official_public"
+    assert dr007["sourceAuthorityAllowed"] is True
+    assert dr007["scoreContributionAllowed"] is False
+    assert dr007["observationOnly"] is True
+
+
 def test_provider_capability_support_contract_projects_license_gated_missing_provider_fields() -> None:
     contract = coerce_provider_capability_support_contract(
         {

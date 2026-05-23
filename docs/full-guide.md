@@ -162,6 +162,7 @@ python3 scripts/smoke_backtest_rule.py
 | `CN_HK_CONNECT_FLOW_PROVIDER_ENABLED` | 授权 CN/HK Connect Flow 缓存诊断开关；默认关闭，不发起实时 provider 请求 | 可选 |
 | `CN_HK_CONNECT_FLOW_CACHE_PATH` | 授权 CN/HK Connect Flow 本地 JSON 缓存路径 | 可选 |
 | `CN_HK_CONNECT_FLOW_API_KEY` | 授权 CN/HK Connect Flow 凭据占位；当前诊断路径不读取、不回显 | 可选 |
+| `CN_MONEY_MARKET_RATES_CACHE_PATH` | CN 货币市场官方公开本地 JSON 缓存路径；不需要 Key，仅用于诊断，不发起实时 provider 请求 | 可选 |
 | `TWELVE_DATA_API_KEY` | Twelve Data 单 Key；用于港股 Scanner quote/history 补强 | 可选 |
 | `TWELVE_DATA_API_KEYS` | Twelve Data 多 Key（逗号分隔）；优先级高于 `TWELVE_DATA_API_KEY` | 可选 |
 | `ALPACA_API_KEY_ID` | Alpaca Key ID；用于美股 Scanner market-data 补强 | 可选 |
@@ -296,6 +297,7 @@ python3 scripts/smoke_backtest_rule.py
 | `CN_HK_CONNECT_FLOW_PROVIDER_ENABLED` | 授权 CN/HK Connect Flow 缓存诊断开关；默认关闭，不发起实时 provider 请求 | `false` | 可选 |
 | `CN_HK_CONNECT_FLOW_CACHE_PATH` | 授权 CN/HK Connect Flow 本地 JSON 缓存路径；仅在上方开关为 `true` 时读取 | - | 可选 |
 | `CN_HK_CONNECT_FLOW_API_KEY` | 授权 CN/HK Connect Flow 凭据占位；当前诊断路径不读取、不回显，仅供运营环境记录 | - | 可选 |
+| `CN_MONEY_MARKET_RATES_CACHE_PATH` | CN 货币市场官方公开本地 JSON 缓存路径；不需要 Key，仅用于 Provider Ops 诊断，不参与 Liquidity Monitor 评分 | - | 可选 |
 | `TWELVE_DATA_API_KEY` | Twelve Data 单 Key；用于港股 Scanner quote / daily history 补强 | - | 可选 |
 | `TWELVE_DATA_API_KEYS` | Twelve Data 多 Key（逗号分隔）；优先级高于 `TWELVE_DATA_API_KEY` | - | 可选 |
 | `ALPACA_API_KEY_ID` | Alpaca Key ID；用于美股 Scanner quote / daily history 补强 | - | 可选 |

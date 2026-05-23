@@ -2735,6 +2735,13 @@ class LiquidityMonitorService:
                 allowed_source_types={"authorized_licensed_feed"},
                 allowed_source_tiers={"authorized_licensed_feed"},
             )
+        if key == "cn_money_market_rates":
+            return self._indicator_required_inputs_have_diagnostic_authority(
+                evidence,
+                required_inputs={"DR007", "SHIBOR"},
+                allowed_source_types={"official_public"},
+                allowed_source_tiers={"official_public"},
+            )
         if key in {"vix_pressure", "us_rates_pressure", "cn_hk_index_context"}:
             return (
                 str(trust.get("sourceTier") or "") == "official_public"

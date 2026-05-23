@@ -15,6 +15,9 @@ import pytest
 
 from api.v1.schemas.liquidity_monitor import LiquidityMonitorResponse
 from src.services.cn_hk_flow_contracts import AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID
+from src.services.cn_money_market_rates_contracts import (
+    OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+)
 from src.services.liquidity_monitor_service import LiquidityMonitorService, PanelState
 from src.services.market_cache import MarketCache
 from src.storage import DatabaseManager
@@ -3509,6 +3512,76 @@ def test_liquidity_provider_activation_keeps_cn_money_and_futures_observation_on
     assert futures_diagnostics["observationOnly"] is True
     assert futures_diagnostics["scoreContributionAllowed"] is False
     assert futures_diagnostics["paidDataLikelyRequired"] is True
+
+
+def test_liquidity_cn_money_official_cache_rows_remain_observation_only_non_scoring(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source=OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+            freshness="delayed",
+            items=[
+                {
+                    "symbol": "DR007",
+                    "label": "DR007",
+                    "value": 1.86,
+                    "changePercent": -3.13,
+                    "unit": "%",
+                    "source": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+                    "sourceLabel": "Official CN Money Market Rates diagnostic cache",
+                    "sourceType": "official_public",
+                    "sourceTier": "official_public",
+                    "trustLevel": "score_grade_when_configured",
+                    "officialSeriesId": "DR007",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": False,
+                    "observationOnly": True,
+                    "isFallback": False,
+                    "freshness": "delayed",
+                },
+                {
+                    "symbol": "SHIBOR",
+                    "label": "SHIBOR overnight",
+                    "value": 1.72,
+                    "changePercent": -1.71,
+                    "unit": "%",
+                    "source": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+                    "sourceLabel": "Official CN Money Market Rates diagnostic cache",
+                    "sourceType": "official_public",
+                    "sourceTier": "official_public",
+                    "trustLevel": "score_grade_when_configured",
+                    "officialSeriesId": "SHIBOR_ON",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": False,
+                    "observationOnly": True,
+                    "isFallback": False,
+                    "freshness": "delayed",
+                },
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["cn_money_market_rates"]
+    diagnostics = indicator["coverageDiagnostics"]
+
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostics["requiredProviderClass"] == OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID
+    assert diagnostics["configuredProviderAvailable"] is True
+    assert diagnostics["realSourceAvailable"] is True
+    assert diagnostics["observationOnly"] is True
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["scoreExclusionReason"] == "observation_only"
+    assert diagnostics["missingProviderReason"] is None
+    assert all(item["scoreContributionAllowed"] is False for item in indicator["evidence"]["inputs"])
 
 
 def test_binance_crypto_activation_keeps_exchange_public_spot_scoring(

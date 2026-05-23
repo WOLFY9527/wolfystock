@@ -42,6 +42,17 @@ boundaries.
 - If the cache is missing, malformed, stale, permission-denied, or below the
   required northbound/southbound coverage, `/api/v1/market/cn-flows` falls back
   to the existing static fallback response.
+- `official_public.cn_money_market_rates` is a cache-only official-public
+  contract. When `CN_MONEY_MARKET_RATES_CACHE_PATH` points to a local JSON
+  cache, Provider Operations can validate DR007 + overnight SHIBOR coverage and
+  show diagnostic freshness/coverage metadata without making provider calls.
+- CN money-market diagnostics do not require a key, remain
+  `observationOnly=true` and `scoreContributionAllowed=false`, and must not
+  promote static Market Overview fallback rows or Liquidity Monitor scoring.
+- If the CN money-market cache path is absent, empty, malformed, stale,
+  partially covered, date-ambiguous, or uses unsupported units/value formats,
+  the contract fails closed and existing Market Overview `/rates` fallback
+  behavior remains unchanged.
 
 ## Related Domains
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import builtins
 import json
 import os
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -13,9 +14,15 @@ from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import admin_provider_operations_matrix
+from src.services.cn_money_market_rates_contracts import (
+    OFFICIAL_CN_MONEY_MARKET_RATES_CACHE_PATH_ENV,
+    OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+)
 from src.services.provider_operations_matrix_service import (
     ProviderOperationsMatrixService,
 )
+
+CN_TZ = timezone(timedelta(hours=8))
 
 
 def _provider_read_admin() -> CurrentUser:
@@ -68,6 +75,26 @@ def _client_for(user_factory) -> TestClient:
 
 def _row_by_id(payload: dict, provider_id: str) -> dict:
     return next(row for row in payload["rows"] if row["providerId"] == provider_id)
+
+
+def _cn_money_market_cache_payload() -> dict:
+    now = datetime.now(CN_TZ).replace(microsecond=0)
+    date_text = now.date().isoformat()
+    return {
+        "providerId": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+        "source": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+        "sourceType": "official_public",
+        "sourceTier": "official_public",
+        "asOf": now.isoformat(timespec="seconds"),
+        "publicationDate": date_text,
+        "tradingDate": date_text,
+        "holidayCalendarQualified": True,
+        "freshness": "delayed",
+        "observations": [
+            {"symbol": "DR007", "value": 1.86, "unit": "%"},
+            {"symbol": "SHIBOR", "officialSeriesId": "SHIBOR_ON", "value": 1.72, "unit": "%"},
+        ],
+    }
 
 
 def test_endpoint_requires_admin_provider_read_capability() -> None:
@@ -399,6 +426,70 @@ def test_cn_hk_connect_flow_provider_ops_reports_explicit_disabled_cache_config(
     assert cn_hk_flow["scoreContributionAllowed"] is False
     assert cn_hk_flow["scoreEligible"] is False
     assert "provider_disabled" in cn_hk_flow["reasonCodes"]
+
+
+def test_cn_money_market_provider_ops_surfaces_valid_cache_diagnostic_without_paths_or_scoring(tmp_path) -> None:
+    cache_path = tmp_path / "private-cn-money-market-cache.json"
+    cache_path.write_text(
+        json.dumps(_cn_money_market_cache_payload(), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    payload = ProviderOperationsMatrixService(
+        env={
+            OFFICIAL_CN_MONEY_MARKET_RATES_CACHE_PATH_ENV: str(cache_path),
+            "CN_MONEY_MARKET_RATES_API_KEY": "super-secret-token-value",
+        },
+        spec_finder=lambda _: None,
+    ).build_matrix()
+
+    cn_money = _row_by_id(payload, OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID)
+
+    assert payload["diagnosticOnly"] is True
+    assert payload["metadata"]["externalProviderCalls"] is False
+    assert payload["metadata"]["secretValuesIncluded"] is False
+    assert cn_money["sourceType"] == "official_public"
+    assert cn_money["sourceTier"] == "official_public"
+    assert cn_money["runtimeState"] == "configured_cache_only_diagnostic"
+    assert cn_money["credentialState"] == "not_required"
+    assert cn_money["dependencyState"] == "not_required"
+    assert cn_money["keyRequired"] is False
+    assert cn_money["paidDataLikelyRequired"] is False
+    assert cn_money["observationOnly"] is True
+    assert cn_money["sourceAuthorityAllowed"] is True
+    assert cn_money["scoreContributionAllowed"] is False
+    assert cn_money["scoreEligible"] is False
+    assert cn_money["fulfilledMetrics"] == ["DR007", "SHIBOR_ON"]
+    assert cn_money["missingMetrics"] == []
+    assert cn_money["coverageCount"] == 2
+    assert cn_money["sourceFreshnessEvidence"]["externalProviderCalls"] is False
+    assert cn_money["sourceFreshnessEvidence"]["coverageRatio"] == 1.0
+    assert cn_money["reasonCodes"] == ["official_cn_money_market_rates_cache_valid_diagnostic_only"]
+    assert cn_money["missingProviderReason"] is None
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    assert "super-secret-token-value" not in serialized
+    assert str(cache_path) not in serialized
+    assert cache_path.name not in serialized
+
+
+def test_cn_money_market_provider_ops_reports_invalid_cache_diagnostic_without_raw_path(tmp_path) -> None:
+    cache_path = tmp_path / "private-cn-money-market-cache.json"
+    cache_path.write_text("{not-json", encoding="utf-8")
+    payload = ProviderOperationsMatrixService(
+        env={OFFICIAL_CN_MONEY_MARKET_RATES_CACHE_PATH_ENV: str(cache_path)},
+        spec_finder=lambda _: None,
+    ).build_matrix()
+
+    cn_money = _row_by_id(payload, OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID)
+
+    assert cn_money["runtimeState"] == "configured_cache_diagnostic_unavailable"
+    assert cn_money["sourceType"] == "missing"
+    assert cn_money["sourceAuthorityAllowed"] is False
+    assert cn_money["scoreContributionAllowed"] is False
+    assert cn_money["scoreEligible"] is False
+    assert "malformed_payload" in cn_money["reasonCodes"]
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    assert str(cache_path) not in serialized
+    assert cache_path.name not in serialized
 
 
 def test_polygon_us_grouped_daily_projection_is_visible_without_secret_or_official_overclaim(

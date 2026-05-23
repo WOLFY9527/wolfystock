@@ -225,6 +225,27 @@ def test_future_authorized_us_flow_and_breadth_provider_classes_do_not_project_a
         assert provenance["freshnessLabel"] == "不可用"
 
 
+def test_valid_cn_money_market_cache_diagnostic_projects_as_official_public_without_live_promotion() -> None:
+    valid_cache = project_source_provenance(
+        source="official_public.cn_money_market_rates",
+        source_type="official_public",
+        source_label="Official CN Money Market Rates diagnostic cache",
+        freshness="delayed",
+        no_external_calls=True,
+    )
+    unqualified_live = project_source_provenance(
+        source="official_public.cn_money_market_rates",
+        source_type="official_public",
+        freshness="live",
+    )
+
+    assert valid_cache["sourceType"] == "official_public"
+    assert valid_cache["sourceLabel"] == "Official CN Money Market Rates diagnostic cache"
+    assert valid_cache["freshnessLabel"] == "延迟"
+    assert unqualified_live["sourceType"] == "missing"
+    assert unqualified_live["sourceLabel"] == "未接入"
+
+
 def test_polygon_grouped_daily_is_authorized_vendor_feed_not_official_exchange_breadth() -> None:
     provenance = project_source_provenance(
         source="polygon_us_grouped_daily",

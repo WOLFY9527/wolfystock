@@ -243,6 +243,9 @@ FRESHNESS_LABELS = {
     "unavailable": "不可用",
 }
 
+_OFFICIAL_CN_MONEY_MARKET_RATES_SOURCE = "official_public.cn_money_market_rates"
+_OFFICIAL_CN_MONEY_MARKET_RATES_LABEL = "Official CN Money Market Rates"
+
 
 def _text(value: Any) -> str:
     return str(value or "").strip()
@@ -266,6 +269,13 @@ def resolve_source_type(
         return "cache_snapshot"
     if is_fallback or normalized_freshness in {"fallback", "mock"} or normalized_source == "fallback":
         return "fallback_static"
+    if _is_official_cn_money_market_cache_diagnostic(
+        normalized_source,
+        normalized_type,
+        normalized_freshness,
+        no_external_calls=no_external_calls,
+    ):
+        return "official_public"
     if normalized_source in SOURCE_TYPE_BY_SOURCE:
         return SOURCE_TYPE_BY_SOURCE[normalized_source]
     if normalized_type in SOURCE_TYPE_ALIASES:
@@ -315,9 +325,26 @@ def resolve_source_label(
         and SOURCE_TYPE_BY_SOURCE.get(normalized_source) == resolved_type
     ):
         return SOURCE_LABEL_BY_SOURCE[normalized_source]
+    if normalized_source == _OFFICIAL_CN_MONEY_MARKET_RATES_SOURCE and resolved_type == "official_public":
+        return _OFFICIAL_CN_MONEY_MARKET_RATES_LABEL
     if resolved_type in {"cache_snapshot", "fallback_static", "missing"}:
         return SOURCE_LABEL_BY_TYPE.get(resolved_type, "公开数据")
     return SOURCE_LABEL_BY_TYPE.get(resolved_type, "公开数据")
+
+
+def _is_official_cn_money_market_cache_diagnostic(
+    normalized_source: str,
+    normalized_type: str,
+    normalized_freshness: str,
+    *,
+    no_external_calls: bool,
+) -> bool:
+    return bool(
+        normalized_source == _OFFICIAL_CN_MONEY_MARKET_RATES_SOURCE
+        and normalized_type == "official_public"
+        and no_external_calls
+        and normalized_freshness in {"cached", "delayed", "fresh"}
+    )
 
 
 def resolve_freshness_label(

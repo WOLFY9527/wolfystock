@@ -9,7 +9,9 @@ from unittest.mock import Mock, patch
 
 from api.v1.endpoints import market
 from src.services.market_cache import market_cache
+from src.services.market_data_source_registry import project_source_provenance
 from src.services.market_overview_service import MarketOverviewService
+from src.services.official_macro_transport import MacroObservation
 
 EXPECTED_PROVIDER_HEALTH_FIELDS = {
     "provider",
@@ -116,6 +118,48 @@ def test_us_breadth_sector_proxy_returns_stable_shape_with_metadata() -> None:
     assert payload["providerHealth"]["card"] == "us_breadth"
     assert payload["items"][0]["sourceLabel"] == "Yahoo Finance"
     assert payload["items"][0]["sourceType"] == "unofficial_proxy"
+
+
+def test_rates_panel_keeps_static_cn_fallback_rows_non_authoritative_when_us_official_rows_are_mixed() -> None:
+    service = MarketOverviewService()
+    latest = "2026-05-20"
+    previous = "2026-05-19"
+    official_points = {
+        "DGS2": [
+            MacroObservation("DGS2", 4.82, latest, latest, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+            MacroObservation("DGS2", 4.79, previous, previous, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+        ],
+        "DGS10": [
+            MacroObservation("DGS10", 4.41, latest, latest, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+            MacroObservation("DGS10", 4.36, previous, previous, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
+        ],
+    }
+
+    with (
+        patch.object(service, "_cached_payload", side_effect=lambda _key, fetcher, _fallback: fetcher()),
+        patch.object(service, "_official_macro_points", return_value=official_points),
+        patch("src.services.market_overview_service.ExecutionLogService") as log_service,
+    ):
+        log_service.return_value.record_market_overview_fetch.return_value = "log-rates"
+        payload = service.get_rates()
+
+    assert payload["source"] == "mixed"
+    assert payload["fallbackUsed"] is True
+    items = {item["symbol"]: item for item in payload["items"]}
+    assert items["US10Y"]["sourceType"] == "official_public"
+    for symbol in ("CN10Y", "DR007", "SHIBOR", "LPR"):
+        item = items[symbol]
+        assert item["source"] == "fallback"
+        assert item["isFallback"] is True
+        assert item.get("sourceAuthorityAllowed") is not True
+        assert item.get("scoreContributionAllowed") is not True
+        provenance = project_source_provenance(
+            source=item.get("source"),
+            source_type=item.get("sourceType"),
+            freshness=item.get("freshness"),
+            is_fallback=bool(item.get("isFallback") or item.get("fallbackUsed")),
+        )
+        assert provenance["sourceType"] == "fallback_static"
 
 
 def test_us_breadth_unavailable_returns_compact_unavailable_shape() -> None:

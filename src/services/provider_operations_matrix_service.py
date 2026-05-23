@@ -23,6 +23,12 @@ from src.services.cn_hk_connect_flow_provider import (
     CN_HK_CONNECT_FLOW_PROVIDER_ENABLED_ENV,
 )
 from src.services.cn_hk_flow_contracts import AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID
+from src.services.cn_money_market_rates_contracts import (
+    OFFICIAL_CN_MONEY_MARKET_RATES_CACHE_PATH_ENV,
+    OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+    CnMoneyMarketRatesProviderUnavailable,
+    read_official_cn_money_market_rates_cache,
+)
 from src.services.market_data_readiness_diagnostics import (
     MarketDataReadinessDiagnostics,
     build_market_data_readiness_diagnostics,
@@ -224,6 +230,7 @@ class ProviderOperationsMatrixService:
 
         self._merge_router_reason_codes(rows)
         self._merge_authorized_cn_hk_connect_flow_projection(rows)
+        self._merge_official_cn_money_market_rates_projection(rows)
         self._merge_polygon_us_breadth_projection(rows)
         self._merge_readiness(readiness, rows)
         return rows
@@ -448,6 +455,59 @@ class ProviderOperationsMatrixService:
         elif enabled_raw and _env_bool(enabled_raw, default=False) and cache_path_present:
             row.reason_codes = ["cache_only_diagnostic", "score_contribution_disabled"]
 
+    def _merge_official_cn_money_market_rates_projection(
+        self,
+        rows: dict[str, _ProviderAccumulator],
+    ) -> None:
+        row = self._row(rows, OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID)
+        row.no_default_live_http_calls = True
+        row.cache_required = True
+        row.observation_only = True
+        row.score_contribution_allowed = False
+        row.key_required = False
+        row.paid_data_likely_required = False
+
+        if not _text(self.env.get(OFFICIAL_CN_MONEY_MARKET_RATES_CACHE_PATH_ENV)):
+            return
+
+        try:
+            snapshot = read_official_cn_money_market_rates_cache(env=self.env)
+        except CnMoneyMarketRatesProviderUnavailable as exc:
+            row.runtime_state = "configured_cache_diagnostic_unavailable"
+            row.source_type = "missing"
+            row.source_authority_allowed = False
+            row.reason_codes = list(exc.reason_codes)
+            row.degradation_reason = exc.reason_codes[0] if exc.reason_codes else "malformed_payload"
+            row.source_freshness_evidence = {
+                "providerId": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+                "cacheOnly": True,
+                "externalProviderCalls": False,
+                "isUnavailable": True,
+                "reasonCodes": list(exc.reason_codes),
+            }
+            return
+
+        row.provider_name = str(snapshot.get("providerName") or row.provider_name or "")
+        row.source_label = str(snapshot.get("sourceLabel") or row.provider_name or "")
+        row.provider_category = row.provider_category or "official_macro_liquidity_contract"
+        row.source_type = str(snapshot.get("sourceType") or "official_public")
+        row.source_tier = str(snapshot.get("sourceTier") or "official_public")
+        row.trust_level = str(snapshot.get("trustLevel") or "score_grade_when_configured")
+        row.freshness_expectation = (
+            row.freshness_expectation or "session_delayed_or_daily_official_fixing"
+        )
+        row.runtime_state = "configured_cache_only_diagnostic"
+        row.source_authority_allowed = True
+        row.reason_codes = [str(code) for code in snapshot.get("reasonCodes") or []]
+        row.fulfilled_metrics = [str(item) for item in snapshot.get("fulfilledMetrics") or []]
+        row.missing_metrics = [str(item) for item in snapshot.get("missingMetrics") or []]
+        row.coverage_count = len(row.fulfilled_metrics)
+        evidence = snapshot.get("sourceFreshnessEvidence")
+        row.source_freshness_evidence = dict(evidence) if isinstance(evidence, Mapping) else None
+        row.missing_provider_reason = None
+        row.degradation_reason = None
+        row.inert_metadata_only = True
+
     def _merge_readiness(
         self,
         readiness: MarketDataReadinessDiagnostics,
@@ -630,6 +690,10 @@ class ProviderOperationsMatrixService:
             configured_state = self._cn_hk_connect_flow_runtime_state(credential_state)
             if configured_state is not None:
                 return configured_state
+        if row.provider_id == OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID:
+            configured_state = self._cn_money_market_rates_runtime_state(row)
+            if configured_state is not None:
+                return configured_state
         if row.provider_id in _MISSING_FEED_PROVIDER_IDS:
             return "missing_provider_configuration"
         if credential_state == "missing":
@@ -652,6 +716,17 @@ class ProviderOperationsMatrixService:
         if enabled and cache_path_present:
             return "configured_cache_only_diagnostic"
         return None
+
+    def _cn_money_market_rates_runtime_state(self, row: _ProviderAccumulator) -> str | None:
+        cache_path_present = bool(_text(self.env.get(OFFICIAL_CN_MONEY_MARKET_RATES_CACHE_PATH_ENV)))
+        if not cache_path_present:
+            return None
+        if row.runtime_state in {
+            "configured_cache_only_diagnostic",
+            "configured_cache_diagnostic_unavailable",
+        }:
+            return row.runtime_state
+        return "configured_cache_diagnostic_unavailable"
 
     @staticmethod
     def _score_eligible(row: _ProviderAccumulator, source_type: str) -> bool:
