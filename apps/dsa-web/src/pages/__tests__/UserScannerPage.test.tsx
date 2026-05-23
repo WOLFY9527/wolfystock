@@ -952,10 +952,114 @@ describe('UserScannerPage', () => {
     expect(trustStrip).toHaveTextContent('备用数据');
     expect(trustStrip).toHaveTextContent('数据过期');
     expect(trustStrip).toHaveTextContent('覆盖不完整');
-    expect(trustStrip).toHaveTextContent('不构成买卖建议');
+    expect(trustStrip).not.toHaveTextContent(/不构成买卖建议|Not trading advice/i);
     expect(trustStrip).not.toHaveTextContent(/\b(Fallback|Proxy|Stale|Partial|Observe only|Score capped|Data thin)\b/i);
     expect(container).not.toHaveTextContent(/买入|卖出|加仓|减仓|recommend(?:ation)?/i);
     expectNoRawI18nKeys(container);
+  });
+
+  it('renders a scanner conclusion band for the top candidate state', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+
+    const band = await screen.findByTestId('scanner-conclusion-band');
+    expect(band).toHaveTextContent('当前候选 WULF');
+    expect(band).toHaveTextContent('候选 1');
+    expect(band).toHaveTextContent('受限 1');
+    expect(band).toHaveTextContent('观察 WULF 的下一次更新');
+    expect(band).toHaveTextContent('备用数据');
+    expect(band).toHaveTextContent('数据过期');
+  });
+
+  it('renders a scanner conclusion band when no candidate is usable', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun({
+      shortlist: [],
+      selected: [],
+      summary: {
+        universeCount: 11,
+        submittedCount: 11,
+        evaluatedCount: 3,
+        selectedCount: 0,
+        rejectedCount: 3,
+        dataFailedCount: 0,
+        skippedCount: 0,
+        errorCount: 0,
+        limitedByResultCap: false,
+      },
+      candidates: [
+        {
+          symbol: 'MARA',
+          name: 'MARA Holdings',
+          rank: 1,
+          status: 'rejected',
+          score: 55,
+          provider: 'alpaca',
+          reason: 'below liquidity threshold',
+          failedRules: ['below_liquidity_threshold'],
+          missingFields: [],
+          metrics: {},
+        },
+      ],
+    }));
+
+    renderUserScannerPage();
+
+    const band = await screen.findByTestId('scanner-conclusion-band');
+    expect(band).toHaveTextContent('本次无可用候选');
+    expect(band).toHaveTextContent('候选 0');
+    expect(band).toHaveTextContent('继续观察淘汰分布');
+  });
+
+  it('renders a scanner conclusion band when evidence is insufficient', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun({
+      status: 'failed',
+      failureReason: 'not_enough_history',
+      shortlist: [],
+      selected: [],
+      summary: {
+        universeCount: 11,
+        submittedCount: 11,
+        evaluatedCount: 2,
+        selectedCount: 0,
+        rejectedCount: 0,
+        dataFailedCount: 2,
+        skippedCount: 0,
+        errorCount: 0,
+        limitedByResultCap: false,
+      },
+      candidates: [
+        {
+          symbol: 'CIFR',
+          name: 'Cipher Mining',
+          rank: 1,
+          status: 'data_failed',
+          score: null,
+          provider: null,
+          reason: 'missing price history',
+          failedRules: ['not_enough_history'],
+          missingFields: ['history'],
+          metrics: {},
+        },
+      ],
+    }));
+
+    renderUserScannerPage();
+
+    const band = await screen.findByTestId('scanner-conclusion-band');
+    expect(band).toHaveTextContent('证据不足');
+    expect(band).toHaveTextContent('候选 0');
+    expect(band).toHaveTextContent('补齐行情或历史证据');
+  });
+
+  it('replaces actiony scanner labels with observation and risk-boundary copy', async () => {
+    const { container } = renderUserScannerPage();
+
+    await screen.findByTestId('scanner-result-row-NVDA');
+    expect(container).toHaveTextContent('观察区');
+    expect(container).toHaveTextContent('参考区间');
+    expect(container).toHaveTextContent('风险边界');
+    expect(container).not.toHaveTextContent(/建仓|止损|before acting|执行操作|Entry|Target|Stop/i);
+    expect(container).not.toHaveTextContent(/买入|卖出|加仓|减仓|buy|sell|recommend(?:ation)?/i);
   });
 
   it('renders compact scanner workspace without the old decorative hero', async () => {

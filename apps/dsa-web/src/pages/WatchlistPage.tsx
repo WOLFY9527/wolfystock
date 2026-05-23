@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
 import {
   BarChart3,
   CheckSquare,
@@ -52,6 +52,17 @@ type Notice = { tone: 'success' | 'warning' | 'danger'; message: string } | null
 type FailureReason = '数据不足' | '行情缺失' | '服务暂不可用' | '回测失败' | '扫描失败' | '超时' | '未知错误';
 type BatchFailure = { label: FailureReason; detail?: string };
 type WatchlistTrustState = 'fresh' | 'stale' | 'unknown';
+type WatchlistConclusionModel = {
+  title: string;
+  detail: string;
+  freshCount: number;
+  staleCount: number;
+  unknownCount: number;
+  fallbackProxyCount: number;
+  buckets: TrustDisclosureBucket[];
+  terms: string[];
+  tone: 'success' | 'caution' | 'neutral';
+};
 type BatchProgress = {
   kind: 'scan' | 'backtest';
   total: number;
@@ -318,6 +329,105 @@ function watchlistTrustDisclosureBuckets(item: WatchlistItem): TrustDisclosureBu
   ];
   resolveTrustDisclosureBuckets({ terms }).forEach((bucket) => buckets.push(bucket));
   return Array.from(new Set(buckets.filter((bucket): bucket is TrustDisclosureBucket => Boolean(bucket))));
+}
+
+function addWatchlistBucket(buckets: TrustDisclosureBucket[], bucket: TrustDisclosureBucket) {
+  if (!buckets.includes(bucket)) buckets.push(bucket);
+}
+
+function hasFallbackOrProxyDisclosure(item: WatchlistItem): boolean {
+  const buckets = watchlistTrustDisclosureBuckets(item);
+  return buckets.includes('fallback')
+    || buckets.includes('proxy')
+    || isFallbackTrustSource(item.scoreSource)
+    || isFallbackTrustSource(item.source)
+    || isFallbackTrustSource(item.intelligence?.scanner?.reason)
+    || isFallbackTrustSource(item.intelligence?.scanner?.status);
+}
+
+function buildWatchlistConclusion(items: WatchlistItem[], language: 'zh' | 'en'): WatchlistConclusionModel {
+  const buckets: TrustDisclosureBucket[] = [];
+  const terms: string[] = [];
+  let freshCount = 0;
+  let staleCount = 0;
+  let unknownCount = 0;
+  let fallbackProxyCount = 0;
+
+  items.forEach((item) => {
+    const state = getTrustState(item);
+    if (state === 'fresh') freshCount += 1;
+    else if (state === 'stale') staleCount += 1;
+    else unknownCount += 1;
+
+    const itemBuckets = watchlistTrustDisclosureBuckets(item);
+    itemBuckets.forEach((bucket) => addWatchlistBucket(buckets, bucket));
+    [
+      item.source,
+      item.scoreSource,
+      item.scoreStatus,
+      item.intelligence?.scanner?.status,
+      item.intelligence?.scanner?.reason,
+      item.intelligence?.strategySimulation?.status,
+    ].forEach((term) => {
+      if (term && !terms.includes(term)) terms.push(term);
+    });
+    if (hasFallbackOrProxyDisclosure(item)) {
+      fallbackProxyCount += 1;
+      addWatchlistBucket(buckets, 'fallback');
+      addWatchlistBucket(buckets, 'proxy');
+    }
+  });
+  if (staleCount > 0) addWatchlistBucket(buckets, 'stale');
+  if (unknownCount > 0) addWatchlistBucket(buckets, 'blocked');
+
+  const topItem = [...items]
+    .filter((item) => getTrustState(item) === 'fresh' && getScannerScore(item) !== null)
+    .sort((left, right) => (getScannerScore(right) ?? Number.NEGATIVE_INFINITY) - (getScannerScore(left) ?? Number.NEGATIVE_INFINITY))[0] || null;
+  if (!items.length) {
+    return {
+      title: language === 'en' ? 'Needs watch items' : '需要观察标的',
+      detail: language === 'en'
+        ? 'Add scanner candidates before treating this page as evidence.'
+        : '先从扫描器加入候选，再将观察列表作为证据。',
+      freshCount,
+      staleCount,
+      unknownCount,
+      fallbackProxyCount,
+      buckets,
+      terms,
+      tone: 'neutral',
+    };
+  }
+  if (!topItem) {
+    return {
+      title: language === 'en' ? 'Needs refresh' : '需要刷新',
+      detail: language === 'en'
+        ? 'Refresh stale or unknown rows before treating this watchlist as evidence.'
+        : '先刷新过期或未知条目，再将观察列表作为证据。',
+      freshCount,
+      staleCount,
+      unknownCount,
+      fallbackProxyCount,
+      buckets,
+      terms,
+      tone: 'caution',
+    };
+  }
+
+  const symbol = normalizeText(topItem.symbol).toUpperCase() || topItem.symbol || '--';
+  return {
+    title: language === 'en' ? `Current focus ${symbol}` : `当前焦点 ${symbol}`,
+    detail: language === 'en'
+      ? `Observe ${symbol}'s next score update and row-level evidence chips before treating it as evidence.`
+      : `观察 ${symbol} 的下一次评分更新，并对照行内证据芯片后再作为证据。`,
+    freshCount,
+    staleCount,
+    unknownCount,
+    fallbackProxyCount,
+    buckets,
+    terms,
+    tone: staleCount || unknownCount || fallbackProxyCount ? 'caution' : 'success',
+  };
 }
 
 function formatBacktestStatus(item: WatchlistItem, failure?: BatchFailure): string {
@@ -591,6 +701,56 @@ function getCopy(language: 'zh' | 'en') {
   };
 }
 
+function WatchlistConclusionBand({
+  model,
+  language,
+}: {
+  model: WatchlistConclusionModel;
+  language: 'zh' | 'en';
+}) {
+  const toneVariant: ComponentProps<typeof TerminalChip>['variant'] = model.tone === 'success'
+    ? 'success'
+    : model.tone === 'caution'
+      ? 'caution'
+      : 'neutral';
+  return (
+    <TerminalPanel
+      as="section"
+      dense
+      data-testid="watchlist-conclusion-band"
+      className="grid gap-2 px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_auto]"
+    >
+      <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <TerminalChip variant={toneVariant} className="shrink-0">{model.title}</TerminalChip>
+          <TerminalChip variant="success" className="font-mono">
+            {language === 'en' ? 'Fresh' : '最新'} {model.freshCount}
+          </TerminalChip>
+          <TerminalChip variant={model.staleCount > 0 ? 'caution' : 'neutral'} className="font-mono">
+            {language === 'en' ? 'Stale' : '过期'} {model.staleCount}
+          </TerminalChip>
+          <TerminalChip variant={model.unknownCount > 0 ? 'caution' : 'neutral'} className="font-mono">
+            {language === 'en' ? 'Unknown' : '未知'} {model.unknownCount}
+          </TerminalChip>
+          <TerminalChip variant={model.fallbackProxyCount > 0 ? 'caution' : 'neutral'} className="font-mono">
+            {language === 'en' ? 'Fallback/proxy' : '备用/代理'} {model.fallbackProxyCount}
+          </TerminalChip>
+        </div>
+        <p className="mt-1 text-pretty text-xs leading-relaxed text-white/64">
+          {model.detail}
+        </p>
+      </div>
+      <TrustDisclosureChips
+        buckets={model.buckets}
+        terms={model.terms}
+        maxBuckets={4}
+        className="md:justify-end"
+        chipClassName="text-[11px]"
+      />
+    </TerminalPanel>
+  );
+}
+
 const WatchlistPage: React.FC = () => {
   const navigate = useNavigate();
   const { language } = useI18n();
@@ -785,6 +945,10 @@ const WatchlistPage: React.FC = () => {
     ? copy.emptyFilteredSet
     : `${useSelectedScope && selectedItems.length > 0 ? copy.scopeSelected : copy.scopeFiltered} ${actionItems.length} ${language === 'zh' ? '个标的' : 'symbols'}`;
   const isActionDisabled = actionItems.length === 0 || isBatchBacktesting || isBatchScanning;
+  const watchlistConclusion = useMemo(
+    () => buildWatchlistConclusion(filteredItems, language),
+    [filteredItems, language],
+  );
 
   const toggleSelected = useCallback((item: WatchlistItem) => {
     setSelectedIds((current) => {
@@ -1111,6 +1275,7 @@ const WatchlistPage: React.FC = () => {
           ariaLabel="watchlist summary"
           items={statusItems}
         />
+        <WatchlistConclusionBand model={watchlistConclusion} language={language} />
 
         {notice ? (
           <TerminalNotice className={noticeClassName} role="status">

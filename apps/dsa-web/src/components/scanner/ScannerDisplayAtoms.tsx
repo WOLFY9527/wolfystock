@@ -22,13 +22,13 @@ function normalizeLabel(label?: string | null): string {
 
 function safeScannerFieldLabel(label: string): string {
   const normalized = normalizeLabel(label);
-  if (normalized === 'entry range' || normalized === '建仓' || normalized === '入场' || normalized === 'buy') {
-    return '观察区间';
+  if (normalized === 'entry range' || normalized === 'entry' || normalized === '建仓' || normalized === '入场' || normalized === 'buy') {
+    return '观察区';
   }
-  if (normalized === 'target price' || normalized === '目标价') {
-    return '上方观察';
+  if (normalized === 'target price' || normalized === 'target' || normalized === '目标' || normalized === '目标价') {
+    return '参考区间';
   }
-  if (normalized === 'stop loss' || normalized === '止损位' || normalized === 'stop') {
+  if (normalized === 'stop loss' || normalized === '止损' || normalized === '止损位' || normalized === 'stop') {
     return '风险边界';
   }
   return label;

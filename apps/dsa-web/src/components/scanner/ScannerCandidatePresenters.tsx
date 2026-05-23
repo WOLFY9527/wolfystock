@@ -134,11 +134,11 @@ export function ScannerCandidateDetailPanel({
       </BoardDetailSection>
       <BoardDetailSection title={language === 'en' ? 'Next step' : '下一步'}>
         <div className="flex flex-wrap gap-1.5">
-          {entryRange ? <FieldChip label={language === 'en' ? 'Entry' : '建仓'} value={entryRange} /> : null}
-          {targetPrice ? <FieldChip label={language === 'en' ? 'Target' : '目标'} value={targetPrice} /> : null}
-          {stopLoss ? <FieldChip label={language === 'en' ? 'Stop' : '止损'} value={stopLoss} /> : null}
+          {entryRange ? <FieldChip label={language === 'en' ? 'Observation zone' : '观察区'} value={entryRange} /> : null}
+          {targetPrice ? <FieldChip label={language === 'en' ? 'Reference range' : '参考区间'} value={targetPrice} /> : null}
+          {stopLoss ? <FieldChip label={language === 'en' ? 'Risk boundary' : '风险边界'} value={stopLoss} /> : null}
           {!entryRange && !targetPrice && !stopLoss ? (
-            <p className="text-xs text-white/36">{language === 'en' ? 'Analyze or backtest before acting.' : '先分析或回测，再执行操作。'}</p>
+            <p className="text-xs text-white/36">{language === 'en' ? 'Review source evidence before treating this as evidence.' : '先复核来源证据，再作为证据。'}</p>
           ) : null}
         </div>
       </BoardDetailSection>
@@ -733,11 +733,11 @@ export function ScannerCandidateCard({
 
         <section className="grid grid-cols-3 gap-2 rounded-lg border border-white/5 bg-black/20 p-2">
           <div>
-            <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Watch range' : '观察区间'}</div>
+            <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Observation zone' : '观察区'}</div>
             <div className="truncate text-xs text-white font-medium">{entryRange || '--'}</div>
           </div>
           <div>
-            <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Upper watch' : '上方观察'}</div>
+            <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Reference range' : '参考区间'}</div>
             <div className="truncate text-xs font-medium text-white">{targetPrice || '--'}</div>
           </div>
           <div>

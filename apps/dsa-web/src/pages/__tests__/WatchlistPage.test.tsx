@@ -340,6 +340,98 @@ describe('WatchlistPage', () => {
     expect(within(statusStrip).getByText('最近更新时间').nextElementSibling).toHaveTextContent('05/01');
   });
 
+  it('renders the watchlist conclusion band with fresh, stale, unknown, and fallback summary', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          id: 1,
+          symbol: 'NVDA',
+          scannerScore: 94,
+          scoreStatus: 'fresh',
+          scoreSource: 'scanner_run',
+        }),
+        makeItem({
+          id: 2,
+          symbol: 'BABA',
+          scannerScore: 81,
+          scoreStatus: 'stale',
+          scoreSource: 'proxy_fallback',
+          intelligence: {
+            scanner: { lastScore: 81, status: 'selected', reason: 'Fallback score snapshot.', lastScannedAt: '2026-04-20T12:30:00Z' },
+            strategySimulation: { status: 'unknown' },
+            backtest: {},
+          },
+        }),
+        makeItem({
+          id: 3,
+          symbol: 'SHOP',
+          source: '',
+          scannerRunId: null,
+          scannerRank: null,
+          scannerScore: null,
+          lastScoredAt: null,
+          scoreSource: null,
+          scoreStatus: null,
+          intelligence: undefined,
+        }),
+      ],
+    });
+
+    renderWatchlist();
+
+    const band = await screen.findByTestId('watchlist-conclusion-band');
+    expect(band).toHaveTextContent('当前焦点 NVDA');
+    expect(band).toHaveTextContent('最新 1');
+    expect(band).toHaveTextContent('过期 1');
+    expect(band).toHaveTextContent('未知 1');
+    expect(band).toHaveTextContent('备用/代理 1');
+    expect(band).toHaveTextContent('观察 NVDA 的下一次评分更新');
+    expect(band).toHaveTextContent('备用数据');
+    expect(band).toHaveTextContent('代理证据');
+    expect(band).toHaveTextContent('数据过期');
+    expect(band).not.toHaveTextContent(/买入|卖出|加仓|减仓|buy|sell|recommend(?:ation)?/i);
+  });
+
+  it('renders a watchlist conclusion band needs-refresh state when no fresh item is available', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          id: 12,
+          symbol: 'BABA',
+          scannerScore: 81,
+          scoreStatus: 'stale',
+          scoreSource: 'proxy_fallback',
+          intelligence: {
+            scanner: { lastScore: 81, status: 'selected', reason: 'Fallback score snapshot.', lastScannedAt: '2026-04-20T12:30:00Z' },
+            strategySimulation: { status: 'unknown' },
+            backtest: {},
+          },
+        }),
+        makeItem({
+          id: 13,
+          symbol: 'SHOP',
+          source: '',
+          scannerRunId: null,
+          scannerRank: null,
+          scannerScore: null,
+          lastScoredAt: null,
+          scoreSource: null,
+          scoreStatus: null,
+          intelligence: undefined,
+        }),
+      ],
+    });
+
+    renderWatchlist();
+
+    const band = await screen.findByTestId('watchlist-conclusion-band');
+    expect(band).toHaveTextContent('需要刷新');
+    expect(band).toHaveTextContent('最新 0');
+    expect(band).toHaveTextContent('过期 1');
+    expect(band).toHaveTextContent('未知 1');
+    expect(band).toHaveTextContent('先刷新过期或未知条目');
+  });
+
   it('renders the intelligence command bar, coverage summary, and selected scope controls', async () => {
     renderWatchlist();
     const row = await screen.findByTestId('watchlist-row-NVDA');

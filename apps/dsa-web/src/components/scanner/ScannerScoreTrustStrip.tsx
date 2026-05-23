@@ -238,7 +238,6 @@ export function ScannerScoreTrustStrip({
     proxyFlag ? 'proxy' : null,
     staleFlag ? 'stale' : null,
     partialFlag ? 'partial' : null,
-    observationOnly || capReason ? 'non-advice' : null,
   ];
   const trustTerms = [
     capReason,
@@ -255,7 +254,7 @@ export function ScannerScoreTrustStrip({
     displaySource ? `${language === 'en' ? 'Source' : '来源'} ${displaySource}` : null,
     freshnessLabel ? `${language === 'en' ? 'Freshness' : '时效'} ${freshnessLabel}` : null,
     scoreConfidence != null ? `${language === 'en' ? 'Confidence' : '可信'} ${scoreConfidence.toFixed(2)}` : null,
-    observationOnly || capReason ? (language === 'en' ? 'Not trading advice' : '不构成买卖建议') : null,
+    observationOnly || capReason ? (language === 'en' ? 'Observation only' : '仅供观察') : null,
   ].filter((item): item is string => Boolean(item)));
   const resolvedClassName = ['flex min-w-0 flex-col gap-1', className || ''].filter(Boolean).join(' ');
 

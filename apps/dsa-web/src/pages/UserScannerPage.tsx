@@ -38,6 +38,7 @@ import {
 import {
   ScannerDiagnosticsPanel,
 } from '../components/scanner/ScannerDiagnosticsPanel';
+import { TrustDisclosureChips } from '../components/evidence/TrustDisclosureChips';
 import {
   useScannerBacktestLab,
   type ScannerBacktestItem,
@@ -81,6 +82,7 @@ import type {
 import type { WatchlistItem } from '../types/watchlist';
 import { buildLocalizedPath } from '../utils/localeRouting';
 import { normalizeScannerEvidence } from '../utils/evidenceDisplay';
+import type { TrustDisclosureBucket } from '../utils/trustDisclosure';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import {
   getScannerDetailOptions,
@@ -132,6 +134,24 @@ type ScannerRunSummary = {
   durationLabel: string;
   runTimeLabel: string;
   errorSummary: string | null;
+};
+type ScannerTrustSummary = {
+  cappedCount: number;
+  fallbackCount: number;
+  proxyCount: number;
+  staleCount: number;
+  partialCount: number;
+  limitedCount: number;
+  buckets: TrustDisclosureBucket[];
+  terms: string[];
+};
+type ScannerConclusionModel = {
+  state: 'waiting' | 'top-candidate' | 'no-candidate' | 'insufficient';
+  title: string;
+  detail: string;
+  candidateCount: number;
+  trustSummary: ScannerTrustSummary;
+  tone: 'neutral' | 'success' | 'caution' | 'danger';
 };
 type ScannerValidationErrors = {
   run?: string;
@@ -209,6 +229,54 @@ function normalizeLabel(label?: string | null): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getNestedRecord(parent: Record<string, unknown> | null, ...keys: string[]): Record<string, unknown> | null {
+  for (const key of keys) {
+    const value = parent?.[key];
+    if (isRecord(value)) return value;
+  }
+  return null;
+}
+
+function getNestedString(parent: Record<string, unknown> | null, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const value = parent?.[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function getNestedNumber(parent: Record<string, unknown> | null, ...keys: string[]): number | null {
+  for (const key of keys) {
+    const value = parent?.[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function getNestedBoolean(parent: Record<string, unknown> | null, ...keys: string[]): boolean | null {
+  for (const key of keys) {
+    const value = parent?.[key];
+    if (typeof value === 'boolean') return value;
+  }
+  return null;
+}
+
+function getNestedStringArray(parent: Record<string, unknown> | null, ...keys: string[]): string[] {
+  for (const key of keys) {
+    const value = parent?.[key];
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean);
+    }
+  }
+  return [];
+}
+
+function addUniqueBucket(buckets: TrustDisclosureBucket[], bucket: TrustDisclosureBucket) {
+  if (!buckets.includes(bucket)) buckets.push(bucket);
 }
 
 function getScannerEvidencePayload(candidate: ScannerCandidate | ScannerCandidateDiagnostic): Record<string, unknown> | null {
@@ -369,12 +437,29 @@ function sanitizeScannerNotes(notes: Array<string | null | undefined>, language:
     .filter((item, index, array) => Boolean(item) && array.indexOf(item) === index);
 }
 
+function sanitizeScannerFieldLabel(label: string, language: 'zh' | 'en'): string {
+  const normalized = normalizeLabel(label);
+  if (['entry', 'entry range', '建仓', '入场', 'buy'].includes(normalized)) {
+    return language === 'en' ? 'Observation zone' : '观察区';
+  }
+  if (['target', 'target price', '目标', '目标价'].includes(normalized)) {
+    return language === 'en' ? 'Reference range' : '参考区间';
+  }
+  if (['stop', 'stop loss', '止损', '止损位'].includes(normalized)) {
+    return language === 'en' ? 'Risk boundary' : '风险边界';
+  }
+  return label;
+}
+
 function sanitizeScannerLabeledValues(items: ScannerLabeledValue[] | undefined, language: 'zh' | 'en'): ScannerLabeledValue[] {
   return (items || []).map((item) => {
     const labelHasInternalDetail = isInternalScannerIssue(item.label);
     const valueHasInternalDetail = isInternalScannerIssue(item.value);
     if (!labelHasInternalDetail && !valueHasInternalDetail) {
-      return item;
+      return {
+        ...item,
+        label: sanitizeScannerFieldLabel(item.label, language),
+      };
     }
     return {
       label: language === 'en' ? 'Data note' : '数据说明',
@@ -574,6 +659,196 @@ function isDataUnavailable(candidate: ScannerCandidateDiagnostic): boolean {
   return status === 'data_failed' || status === 'error' || status === 'skipped';
 }
 
+function scannerTrustBucketsForSource(source: ScannerCandidate | ScannerCandidateDiagnostic): { buckets: TrustDisclosureBucket[]; terms: string[] } {
+  const root = isRecord(source) ? source : null;
+  const containers = [
+    getNestedRecord(root, 'diagnostics'),
+    getNestedRecord(root, 'metadata'),
+  ].filter((value): value is Record<string, unknown> => Boolean(value));
+  const buckets: TrustDisclosureBucket[] = [];
+  const terms: string[] = [];
+
+  containers.forEach((container) => {
+    const explainability = getNestedRecord(container, 'scoreExplainability', 'score_explainability');
+    const evidencePacket = getNestedRecord(container, 'evidencePacket', 'evidence_packet');
+    const sourceConfidence = getNestedRecord(explainability, 'sourceConfidence', 'source_confidence')
+      || getNestedRecord(evidencePacket, 'sourceConfidence', 'source_confidence');
+    const providerObservation = getNestedRecord(evidencePacket, 'providerObservation', 'provider_observation');
+    const freshnessDetail = getNestedRecord(evidencePacket, 'freshnessDetail', 'freshness_detail');
+    const capReason = getNestedString(explainability, 'capReason', 'cap_reason')
+      || getNestedString(evidencePacket, 'capReason', 'cap_reason')
+      || getNestedString(sourceConfidence, 'capReason', 'cap_reason');
+    const degradationReason = getNestedString(explainability, 'degradationReason', 'degradation_reason')
+      || getNestedString(evidencePacket, 'degradationReason', 'degradation_reason')
+      || getNestedString(sourceConfidence, 'degradationReason', 'degradation_reason');
+    const scoreConfidence = getNestedNumber(explainability, 'scoreConfidence', 'score_confidence')
+      ?? getNestedNumber(evidencePacket, 'scoreConfidence', 'score_confidence')
+      ?? getNestedNumber(sourceConfidence, 'confidenceWeight', 'confidence_weight');
+    const scoreGradeAllowed = getNestedBoolean(explainability, 'scoreGradeAllowed', 'score_grade_allowed');
+    const scoreContributionAllowed = getNestedBoolean(sourceConfidence, 'scoreContributionAllowed', 'score_contribution_allowed')
+      ?? getNestedBoolean(providerObservation, 'scoreContributionAllowed', 'score_contribution_allowed');
+    const observationOnly = getNestedBoolean(sourceConfidence, 'observationOnly', 'observation_only')
+      ?? getNestedBoolean(providerObservation, 'observationOnly', 'observation_only')
+      ?? (scoreGradeAllowed === false || scoreContributionAllowed === false ? true : null);
+    const fallbackFlag = getNestedBoolean(sourceConfidence, 'isFallback', 'is_fallback')
+      ?? (normalizeRunState(getNestedString(sourceConfidence, 'freshness')) === 'fallback'
+        || normalizeRunState(getNestedString(evidencePacket, 'freshnessState', 'freshness_state')) === 'fallback');
+    const staleFlag = getNestedBoolean(sourceConfidence, 'isStale', 'is_stale')
+      ?? (normalizeRunState(getNestedString(evidencePacket, 'freshnessState', 'freshness_state')) === 'stale');
+    const partialFlag = getNestedBoolean(sourceConfidence, 'isPartial', 'is_partial')
+      ?? (normalizeRunState(getNestedString(evidencePacket, 'dataQualityState', 'data_quality_state')) === 'partial');
+    const sourceLabel = getNestedString(sourceConfidence, 'sourceLabel', 'source_label', 'source');
+    const proxyFlag = getNestedBoolean(sourceConfidence, 'proxyOnly', 'proxy_only')
+      ?? /proxy/.test(normalizeRunState([capReason, degradationReason, sourceLabel].filter(Boolean).join(' ')));
+    const quoteFreshness = getNestedString(freshnessDetail, 'quoteState', 'quote_state');
+    const historyFreshness = getNestedString(freshnessDetail, 'historyState', 'history_state');
+
+    [
+      capReason,
+      degradationReason,
+      sourceLabel,
+      getNestedString(sourceConfidence, 'freshness'),
+      getNestedString(evidencePacket, 'freshnessState', 'freshness_state'),
+      getNestedString(evidencePacket, 'dataQualityState', 'data_quality_state'),
+      quoteFreshness,
+      historyFreshness,
+      ...getNestedStringArray(evidencePacket, 'userFacingLabels', 'warningFlags'),
+    ].forEach((term) => {
+      if (term) terms.push(term);
+    });
+
+    if (capReason || scoreGradeAllowed === false || (scoreConfidence != null && scoreConfidence < 0.7)) addUniqueBucket(buckets, 'confidence');
+    if (fallbackFlag) addUniqueBucket(buckets, 'fallback');
+    if (proxyFlag) addUniqueBucket(buckets, 'proxy');
+    if (staleFlag || normalizeRunState(quoteFreshness) === 'stale' || normalizeRunState(historyFreshness) === 'stale') addUniqueBucket(buckets, 'stale');
+    if (partialFlag) addUniqueBucket(buckets, 'partial');
+    if (observationOnly) addUniqueBucket(buckets, 'observe-only');
+    if (scoreGradeAllowed === false || scoreContributionAllowed === false) addUniqueBucket(buckets, 'observe-only');
+  });
+
+  return { buckets, terms };
+}
+
+function buildScannerTrustSummary(runDetail: ScannerRunDetail | null): ScannerTrustSummary {
+  const empty: ScannerTrustSummary = {
+    cappedCount: 0,
+    fallbackCount: 0,
+    proxyCount: 0,
+    staleCount: 0,
+    partialCount: 0,
+    limitedCount: 0,
+    buckets: [],
+    terms: [],
+  };
+  if (!runDetail) return empty;
+
+  const sources = getCandidateDiagnostics(runDetail).length
+    ? getCandidateDiagnostics(runDetail)
+    : runDetail.shortlist || [];
+
+  const summary = sources.reduce<ScannerTrustSummary>((current, source) => {
+    const { buckets, terms } = scannerTrustBucketsForSource(source);
+    const hasCapped = buckets.includes('confidence');
+    const hasFallback = buckets.includes('fallback');
+    const hasProxy = buckets.includes('proxy');
+    const hasStale = buckets.includes('stale');
+    const hasPartial = buckets.includes('partial');
+    const hasLimited = hasCapped || hasFallback || hasProxy || hasStale;
+    buckets.forEach((bucket) => addUniqueBucket(current.buckets, bucket));
+    terms.forEach((term) => {
+      if (!current.terms.includes(term)) current.terms.push(term);
+    });
+    return {
+      cappedCount: current.cappedCount + Number(hasCapped),
+      fallbackCount: current.fallbackCount + Number(hasFallback),
+      proxyCount: current.proxyCount + Number(hasProxy),
+      staleCount: current.staleCount + Number(hasStale),
+      partialCount: current.partialCount + Number(hasPartial),
+      limitedCount: current.limitedCount + Number(hasLimited),
+      buckets: current.buckets,
+      terms: current.terms,
+    };
+  }, { ...empty, buckets: [], terms: [] });
+
+  if (runDetail.summary?.limitedByResultCap) {
+    addUniqueBucket(summary.buckets, 'confidence');
+    summary.cappedCount += 1;
+    summary.limitedCount = Math.max(summary.limitedCount, 1);
+    summary.terms.push('result capped');
+  }
+
+  return summary;
+}
+
+function buildScannerConclusion(runDetail: ScannerRunDetail | null, language: 'zh' | 'en'): ScannerConclusionModel {
+  const trustSummary = buildScannerTrustSummary(runDetail);
+  if (!runDetail) {
+    return {
+      state: 'waiting',
+      title: language === 'en' ? 'Waiting for a scan' : '等待扫描',
+      detail: language === 'en'
+        ? 'Run or open a scan to see the candidate evidence summary.'
+        : '运行或打开一次扫描后，可查看候选证据摘要。',
+      candidateCount: 0,
+      trustSummary,
+      tone: 'neutral',
+    };
+  }
+
+  const selectedCount = getRunSummaryCount(runDetail, 'selectedCount', runDetail.shortlist?.length || 0);
+  const rejectedCount = getRunSummaryCount(runDetail, 'rejectedCount', 0);
+  const failedCount = getRunSummaryCount(runDetail, 'dataFailedCount', 0) + getRunSummaryCount(runDetail, 'errorCount', 0);
+  const diagnostics = getCandidateDiagnostics(runDetail);
+  const allDiagnosticsUnavailable = diagnostics.length > 0 && diagnostics.every(isDataUnavailable);
+  const runState = normalizeRunState(runDetail.status);
+  const evidenceInsufficient = selectedCount === 0
+    && (runState === 'failed'
+      || runState === 'error'
+      || allDiagnosticsUnavailable
+      || (failedCount > 0 && rejectedCount === 0));
+
+  if (evidenceInsufficient) {
+    return {
+      state: 'insufficient',
+      title: language === 'en' ? 'Evidence insufficient' : '证据不足',
+      detail: language === 'en'
+        ? 'Refresh quotes or history evidence before treating this scan as evidence.'
+        : '补齐行情或历史证据后，再将本次扫描视为证据。',
+      candidateCount: selectedCount,
+      trustSummary,
+      tone: 'danger',
+    };
+  }
+
+  const topCandidate = runDetail.shortlist?.[0]
+    || diagnostics.find(isOfficialSelected)
+    || null;
+  if (selectedCount <= 0 || !topCandidate) {
+    return {
+      state: 'no-candidate',
+      title: language === 'en' ? 'No usable candidate' : '本次无可用候选',
+      detail: language === 'en'
+        ? 'Continue observing the rejection mix and the next scan before treating this pool as evidence.'
+        : '继续观察淘汰分布与下一次扫描变化，再将候选池视为证据。',
+      candidateCount: selectedCount,
+      trustSummary,
+      tone: 'caution',
+    };
+  }
+
+  const symbol = normalizeCandidateSymbol(topCandidate.symbol) || topCandidate.symbol || '--';
+  return {
+    state: 'top-candidate',
+    title: language === 'en' ? `Current candidate ${symbol}` : `当前候选 ${symbol}`,
+    detail: language === 'en'
+      ? `Observe ${symbol}'s next update against the observation zone, reference range, and risk boundary before treating it as evidence.`
+      : `观察 ${symbol} 的下一次更新，并对照观察区、参考区间与风险边界后再作为证据。`,
+    candidateCount: selectedCount,
+    trustSummary,
+    tone: trustSummary.limitedCount > 0 ? 'caution' : 'success',
+  };
+}
+
 function isPreviewSelected(candidate: ScannerCandidateDiagnostic, threshold: number): boolean {
   return candidate.score != null && Number.isFinite(candidate.score) && candidate.score >= threshold && !isDataUnavailable(candidate);
 }
@@ -742,11 +1017,11 @@ function formatWorkbenchWatchSummary(
   const entryRange = getEntryRange(candidate);
   const targetPrice = getTargetPrice(candidate);
   if (!entryRange && !targetPrice) {
-    return language === 'en' ? 'No explicit watch band' : '未提供明确观察区间';
+    return language === 'en' ? 'No explicit observation band' : '未提供明确观察区';
   }
   return [
-    entryRange ? `${language === 'en' ? 'Watch' : '观察'} ${entryRange}` : null,
-    targetPrice ? `${language === 'en' ? 'Target' : '目标'} ${targetPrice}` : null,
+    entryRange ? `${language === 'en' ? 'Observation zone' : '观察区'} ${entryRange}` : null,
+    targetPrice ? `${language === 'en' ? 'Reference range' : '参考区间'} ${targetPrice}` : null,
   ].filter(Boolean).join(' · ');
 }
 
@@ -760,7 +1035,7 @@ function formatWorkbenchRangeSummary(
     return language === 'en' ? 'No explicit risk boundary' : '未提供明确风险边界';
   }
   return [
-    stopLoss ? `${language === 'en' ? 'Stop' : '止损'} ${stopLoss}` : null,
+    stopLoss ? `${language === 'en' ? 'Risk boundary' : '风险边界'} ${stopLoss}` : null,
     riskSummary || null,
   ].filter(Boolean).join(' · ');
 }
@@ -1203,6 +1478,68 @@ function ScannerResultHistorySummary({
         ) : null}
       </TerminalPanel>
     </section>
+  );
+}
+
+function ScannerConclusionBand({
+  model,
+  language,
+}: {
+  model: ScannerConclusionModel;
+  language: 'zh' | 'en';
+}) {
+  const toneVariant: React.ComponentProps<typeof TerminalChip>['variant'] = model.tone === 'success'
+    ? 'success'
+    : model.tone === 'danger'
+      ? 'danger'
+      : model.tone === 'caution'
+        ? 'caution'
+        : 'neutral';
+  const trust = model.trustSummary;
+  const trustCounters = [
+    trust.cappedCount > 0 ? { label: language === 'en' ? 'Capped' : '封顶', value: trust.cappedCount } : null,
+    trust.fallbackCount > 0 ? { label: language === 'en' ? 'Fallback' : '备用', value: trust.fallbackCount } : null,
+    trust.proxyCount > 0 ? { label: language === 'en' ? 'Proxy' : '代理', value: trust.proxyCount } : null,
+    trust.staleCount > 0 ? { label: language === 'en' ? 'Stale' : '过期', value: trust.staleCount } : null,
+  ].filter((item): item is { label: string; value: number } => Boolean(item));
+
+  return (
+    <TerminalPanel
+      as="section"
+      dense
+      data-testid="scanner-conclusion-band"
+      className="grid gap-2 px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_auto]"
+    >
+      <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <TerminalChip variant={toneVariant} className="shrink-0">{model.title}</TerminalChip>
+          <TerminalChip variant="neutral" className="font-mono">
+            {language === 'en' ? 'Candidates' : '候选'} {model.candidateCount}
+          </TerminalChip>
+          {trust.limitedCount > 0 ? (
+            <TerminalChip variant="caution" className="font-mono">
+              {language === 'en' ? 'Limited' : '受限'} {trust.limitedCount}
+            </TerminalChip>
+          ) : null}
+        </div>
+        <p className="mt-1 text-pretty text-xs leading-relaxed text-white/64">
+          {model.detail}
+        </p>
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5 md:justify-end">
+        {trustCounters.map((item) => (
+          <TerminalChip key={item.label} variant="neutral" className="font-mono">
+            {item.label} {item.value}
+          </TerminalChip>
+        ))}
+        <TrustDisclosureChips
+          buckets={trust.buckets}
+          terms={trust.terms}
+          maxBuckets={4}
+          chipClassName="text-[11px]"
+        />
+      </div>
+    </TerminalPanel>
   );
 }
 
@@ -2037,9 +2374,9 @@ const UserScannerPage: React.FC = () => {
           <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-2">
             <span className="text-[10px] uppercase tracking-[0.14em] text-white/36">{language === 'en' ? 'Next' : '下一步'}</span>
             <div className="flex min-w-0 flex-wrap gap-1.5">
-              {getEntryRange(candidate) ? <FieldChip label={language === 'en' ? 'Entry' : '观察区间'} value={getEntryRange(candidate) || '--'} /> : null}
-              {getTargetPrice(candidate) ? <FieldChip label={language === 'en' ? 'Target' : '上方观察'} value={getTargetPrice(candidate) || '--'} /> : null}
-              {getStopLoss(candidate) ? <FieldChip label={language === 'en' ? 'Stop' : '风险边界'} value={getStopLoss(candidate) || '--'} /> : null}
+              {getEntryRange(candidate) ? <FieldChip label={language === 'en' ? 'Observation zone' : '观察区'} value={getEntryRange(candidate) || '--'} /> : null}
+              {getTargetPrice(candidate) ? <FieldChip label={language === 'en' ? 'Reference range' : '参考区间'} value={getTargetPrice(candidate) || '--'} /> : null}
+              {getStopLoss(candidate) ? <FieldChip label={language === 'en' ? 'Risk boundary' : '风险边界'} value={getStopLoss(candidate) || '--'} /> : null}
             </div>
           </div>
         </div>
@@ -2189,6 +2526,10 @@ const UserScannerPage: React.FC = () => {
     { label: language === 'en' ? 'Latest' : '最近', value: generatedAt ? formatTimestamp(generatedAt, language) : '--' },
     { label: language === 'en' ? 'Data' : '数据', value: scannerDataStateLabel },
   ];
+  const scannerConclusion = useMemo(
+    () => buildScannerConclusion(runDetail, language),
+    [language, runDetail],
+  );
 
   return (
     <>
@@ -2260,6 +2601,7 @@ const UserScannerPage: React.FC = () => {
                 items={scannerStatusItems}
                 className="ui-scroll-x-quiet flex-nowrap overflow-x-auto border-y border-white/10 bg-transparent px-2 py-1"
               />
+              <ScannerConclusionBand model={scannerConclusion} language={language} />
             </div>
 
 		          <div data-testid="scanner-workspace-grid" className="w-full flex-1 min-w-0">
@@ -2516,7 +2858,7 @@ const UserScannerPage: React.FC = () => {
                           {([
                             ['score', language === 'en' ? 'scanner score' : '扫描评分'],
                             ['symbol', language === 'en' ? 'symbol' : '代码'],
-                            ['target', language === 'en' ? 'target' : '目标'],
+                            ['target', language === 'en' ? 'reference range' : '参考区间'],
                             ['risk', language === 'en' ? 'risk' : '风险'],
                           ] as const).map(([key, label]) => (
                             <button
