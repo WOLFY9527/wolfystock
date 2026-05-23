@@ -104,9 +104,11 @@ class ProviderScoringContract:
     coverage_ratio_floor: float
     required_source_tier: str
     score_eligibility_gate: str
+    required_symbols: tuple[str, ...] = ()
+    session: str | None = None
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "providerId": self.provider_id,
             "capability": self.capability,
             "coverageUniverse": self.coverage_universe,
@@ -116,6 +118,11 @@ class ProviderScoringContract:
             "requiredSourceTier": self.required_source_tier,
             "scoreEligibilityGate": self.score_eligibility_gate,
         }
+        if self.required_symbols:
+            payload["requiredSymbols"] = list(self.required_symbols)
+        if self.session:
+            payload["session"] = self.session
+        return payload
 
 
 def _ttl(**values: int) -> Mapping[str, int]:
@@ -935,6 +942,8 @@ _PROVIDER_SCORING_CONTRACTS = (
         coverage_ratio_floor=1.0,
         required_source_tier="exchange_or_broker_authorized_feed",
         score_eligibility_gate="configured_authorized_index_futures_bundle_and_extended_hours_freshness",
+        required_symbols=("NQ", "ES", "YM", "RTY"),
+        session="extended_hours",
     ),
     ProviderScoringContract(
         provider_id="authorized.real_sector_theme_flow",

@@ -267,6 +267,31 @@ def test_valid_fed_liquidity_bundle_diagnostic_projects_as_official_public_witho
     assert unqualified_live["sourceLabel"] == "未接入"
 
 
+def test_index_futures_proxy_and_fallback_placeholders_stay_conservative_in_registry() -> None:
+    proxy = project_source_provenance(
+        source="yfinance_proxy",
+        source_type="proxy_public",
+        freshness="delayed",
+    )
+    fallback = project_source_provenance(
+        source="fallback",
+        freshness="fallback",
+        is_fallback=True,
+    )
+    inert_authorized = project_source_provenance(
+        source="exchange_or_broker_authorized.index_futures",
+        source_type="official_public",
+        freshness="delayed",
+    )
+
+    assert proxy["sourceType"] == "unofficial_proxy"
+    assert proxy["sourceLabel"] == "Yahoo Finance"
+    assert fallback["sourceType"] == "fallback_static"
+    assert fallback["sourceLabel"] == "备用数据"
+    assert inert_authorized["sourceType"] == "missing"
+    assert inert_authorized["sourceLabel"] == "未接入"
+
+
 def test_polygon_grouped_daily_is_authorized_vendor_feed_not_official_exchange_breadth() -> None:
     provenance = project_source_provenance(
         source="polygon_us_grouped_daily",

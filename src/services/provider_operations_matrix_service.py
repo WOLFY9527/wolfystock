@@ -156,6 +156,8 @@ class _ProviderAccumulator:
     contract_coverage_universes: set[str] = field(default_factory=set)
     contract_cadences: set[str] = field(default_factory=set)
     contract_freshness_floors: set[str] = field(default_factory=set)
+    contract_required_symbols: list[str] = field(default_factory=list)
+    contract_sessions: list[str] = field(default_factory=list)
     required_source_tiers: set[str] = field(default_factory=set)
     score_eligibility_gates: set[str] = field(default_factory=set)
     contract_coverage_ratio_floor: float | None = None
@@ -356,6 +358,11 @@ class ProviderOperationsMatrixService:
         row.contract_coverage_universes.add(scoring_contract.coverage_universe)
         row.contract_cadences.add(scoring_contract.cadence)
         row.contract_freshness_floors.add(scoring_contract.freshness_floor)
+        for symbol in scoring_contract.required_symbols:
+            if symbol not in row.contract_required_symbols:
+                row.contract_required_symbols.append(symbol)
+        if scoring_contract.session and scoring_contract.session not in row.contract_sessions:
+            row.contract_sessions.append(scoring_contract.session)
         row.required_source_tiers.add(scoring_contract.required_source_tier)
         row.score_eligibility_gates.add(scoring_contract.score_eligibility_gate)
         floor = float(scoring_contract.coverage_ratio_floor)
@@ -605,7 +612,7 @@ class ProviderOperationsMatrixService:
             dependency_state,
             runtime_state,
         )
-        return {
+        payload = {
             "providerId": row.provider_id,
             "providerName": row.provider_name
             or resolve_source_label(source=row.provider_id, source_type=source_type),
@@ -653,6 +660,11 @@ class ProviderOperationsMatrixService:
             "remediationHint": remediation_hint,
             "diagnosticOnly": True,
         }
+        if row.contract_required_symbols:
+            payload["contractRequiredSymbols"] = list(row.contract_required_symbols)
+        if row.contract_sessions:
+            payload["contractSessions"] = list(row.contract_sessions)
+        return payload
 
     @staticmethod
     def _row(

@@ -330,6 +330,38 @@ def test_provider_capability_support_contract_projects_license_gated_missing_pro
     }
 
 
+def test_authorized_index_futures_metadata_contracts_remain_observation_only_and_non_scoring() -> None:
+    from src.services.provider_capability_matrix import (
+        get_provider_capability_support_contract,
+        get_provider_fit_metadata,
+    )
+
+    fit = get_provider_fit_metadata("exchange_or_broker_authorized.index_futures")
+    support = get_provider_capability_support_contract(
+        "exchange_or_broker_authorized.index_futures",
+        "index_futures",
+    )
+
+    assert fit is not None
+    fit_contract = coerce_provider_fit_metadata_contract(fit.to_dict())
+    assert fit_contract.provider_id == "exchange_or_broker_authorized.index_futures"
+    assert fit_contract.source_tier == "exchange_or_broker_authorized_feed"
+    assert fit_contract.observation_only is True
+    assert fit_contract.score_contribution_allowed is False
+    assert fit_contract.plan_dependent is True
+    assert fit_contract.missing_provider_reason == "authorized_index_futures_feed_not_configured"
+
+    assert support is not None
+    support_contract = coerce_provider_capability_support_contract(support.to_dict())
+    assert support_contract.provider_id == "exchange_or_broker_authorized.index_futures"
+    assert support_contract.capability == "index_futures"
+    assert support_contract.source_type == "missing"
+    assert support_contract.source_tier == "exchange_or_broker_authorized_feed"
+    assert support_contract.observation_only is True
+    assert support_contract.score_contribution_allowed is False
+    assert support_contract.missing_provider_reason == "authorized_index_futures_feed_not_configured"
+
+
 def test_provider_dry_run_probe_contract_stays_metadata_only_and_secret_safe() -> None:
     contract = coerce_provider_dry_run_probe_contract(
         {

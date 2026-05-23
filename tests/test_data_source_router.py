@@ -864,6 +864,9 @@ def test_missing_market_intelligence_authority_contracts_route_as_explicit_non_s
     assert candidate.observation_only is True
     assert candidate.score_contribution_allowed is False
     assert candidate.missing_provider_reason == expected_missing_reason
+    if capability == "index_futures":
+        assert plan.required_symbols == ("NQ", "ES", "YM", "RTY")
+        assert plan.session == "extended_hours"
 
 
 def test_route_diagnostic_snapshot_serializes_missing_provider_fields_for_authorized_flow_contracts() -> None:
@@ -939,6 +942,36 @@ def test_route_diagnostic_snapshot_serializes_official_liquidity_contract_fields
         "missing_provider_configuration",
         "release_schedule_required",
         "release_lag_expected",
+        "freshness_floor_required",
+        "coverage_floor_required",
+    }.issubset(set(snapshot["reasonCodes"]["plan"]))
+
+
+def test_route_diagnostic_snapshot_serializes_index_futures_bundle_requirements() -> None:
+    request = DataSourceRouteRequest(
+        market="US",
+        asset_type="futures",
+        use_case="liquidity_impulse",
+        capability="index_futures",
+        freshness_need="delayed",
+        scoring_allowed=False,
+        symbol="NQ",
+        allow_network=False,
+        reproducibility_required=False,
+    )
+
+    snapshot = build_data_source_route_diagnostic_snapshot(request).to_dict()
+
+    assert snapshot["requiredSourceTypes"] == ["cache_snapshot"]
+    assert snapshot["freshnessFloor"] == "delayed"
+    assert snapshot["trustFloor"] == "authorized_index_futures_or_missing"
+    assert snapshot["requiredSymbols"] == ["NQ", "ES", "YM", "RTY"]
+    assert snapshot["session"] == "extended_hours"
+    assert {
+        "cache_required",
+        "missing_provider_configuration",
+        "authorization_required",
+        "extended_hours_session_required",
         "freshness_floor_required",
         "coverage_floor_required",
     }.issubset(set(snapshot["reasonCodes"]["plan"]))

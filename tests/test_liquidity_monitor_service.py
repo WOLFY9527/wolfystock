@@ -3512,6 +3512,9 @@ def test_liquidity_provider_activation_keeps_cn_money_and_futures_observation_on
     assert futures_diagnostics["observationOnly"] is True
     assert futures_diagnostics["scoreContributionAllowed"] is False
     assert futures_diagnostics["paidDataLikelyRequired"] is True
+    assert futures_diagnostics["requiredInputs"] == ["NQ", "ES", "YM", "RTY"]
+    assert futures_diagnostics["missingInputs"] == ["YM", "RTY"]
+    assert futures_diagnostics["scoreExclusionReason"] == "observation_only"
 
 
 def test_liquidity_cn_money_official_cache_rows_remain_observation_only_non_scoring(

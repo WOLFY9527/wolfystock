@@ -408,6 +408,8 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
     assert futures["contractCadences"] == ["extended_hours"]
     assert futures["contractFreshnessFloors"] == ["delayed"]
     assert futures["contractCoverageRatioFloor"] == 1.0
+    assert futures["contractRequiredSymbols"] == ["NQ", "ES", "YM", "RTY"]
+    assert futures["contractSessions"] == ["extended_hours"]
     assert futures["requiredSourceTiers"] == ["exchange_or_broker_authorized_feed"]
     assert futures["scoreEligibilityGates"] == [
         "configured_authorized_index_futures_bundle_and_extended_hours_freshness"

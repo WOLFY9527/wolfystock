@@ -255,6 +255,8 @@ class DataSourceRoutePlan:
     freshness_floor: str
     trust_floor: str
     reason_codes: Mapping[str, tuple[str, ...]]
+    required_symbols: tuple[str, ...] = ()
+    session: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,6 +271,8 @@ class _RoutePolicy:
     required_source_types: tuple[str, ...] = ("cache_snapshot",)
     freshness_floor: str = "delayed"
     trust_floor: str = "observation_only"
+    required_symbols: tuple[str, ...] = ()
+    session: str | None = None
     plan_reason_codes: tuple[str, ...] = ()
 
 
@@ -546,6 +550,8 @@ _ROUTE_POLICIES = MappingProxyType(
             required_source_types=("cache_snapshot",),
             freshness_floor="delayed",
             trust_floor="authorized_index_futures_or_missing",
+            required_symbols=("NQ", "ES", "YM", "RTY"),
+            session="extended_hours",
             plan_reason_codes=_INDEX_FUTURES_PLAN_REASON_CODES,
         ),
         ("market_regime", "us_etf_flow_daily"): _RoutePolicy(
@@ -726,6 +732,8 @@ _ROUTE_POLICIES = MappingProxyType(
             required_source_types=("cache_snapshot",),
             freshness_floor="delayed",
             trust_floor="authorized_index_futures_or_missing",
+            required_symbols=("NQ", "ES", "YM", "RTY"),
+            session="extended_hours",
             plan_reason_codes=_INDEX_FUTURES_PLAN_REASON_CODES,
         ),
         ("rotation_radar", "quote"): _RoutePolicy(
@@ -977,6 +985,8 @@ class DataSourceRouter:
             required_source_types=policy.required_source_types,
             freshness_floor=policy.freshness_floor,
             trust_floor=policy.trust_floor,
+            required_symbols=policy.required_symbols,
+            session=policy.session,
             reason_codes=reason_codes,
         )
 

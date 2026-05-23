@@ -56,7 +56,7 @@ def _request_to_dict(request: DataSourceRouteRequest) -> dict[str, Any]:
 
 
 def _plan_to_dict(plan: DataSourceRoutePlan) -> dict[str, Any]:
-    return {
+    payload = {
         "primaryCandidates": [_candidate_to_dict(candidate) for candidate in plan.primary_candidates],
         "observationCandidates": [_candidate_to_dict(candidate) for candidate in plan.observation_candidates],
         "forbiddenProviders": [_candidate_to_dict(candidate) for candidate in plan.forbidden_providers],
@@ -69,6 +69,11 @@ def _plan_to_dict(plan: DataSourceRoutePlan) -> dict[str, Any]:
         "trustFloor": plan.trust_floor,
         "reasonCodes": {provider_id: list(codes) for provider_id, codes in plan.reason_codes.items()},
     }
+    if plan.required_symbols:
+        payload["requiredSymbols"] = list(plan.required_symbols)
+    if plan.session:
+        payload["session"] = plan.session
+    return payload
 
 
 @dataclass(frozen=True, slots=True)

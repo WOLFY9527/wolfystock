@@ -308,6 +308,7 @@ def test_official_liquidity_contract_metadata_carries_release_and_session_gates(
     fed_entry = get_provider_fit_metadata("official_public.fed_liquidity")
     cn_entry = get_provider_fit_metadata("official_public.cn_money_market_rates")
     dxy_entry = get_provider_fit_metadata("official_or_authorized.fx_dxy")
+    futures_entry = get_provider_fit_metadata("exchange_or_broker_authorized.index_futures")
 
     assert fed_entry is not None
     assert {
@@ -349,6 +350,22 @@ def test_official_liquidity_contract_metadata_carries_release_and_session_gates(
         "coverage_unqualified",
     }.issubset(set(dxy_entry.rejected_for))
     assert "proxy_replacements" in dxy_entry.not_recommended_for
+
+    assert futures_entry is not None
+    assert {
+        "index_futures_authority",
+        "premarket_risk_context",
+        "extended_hours_index_confirmation",
+        "us_futures_bundle_coverage",
+    }.issubset(set(futures_entry.best_use_cases))
+    assert {
+        "runtime_unconfigured",
+        "score_inputs_until_authorized",
+        "session_unqualified",
+        "freshness_unqualified",
+        "coverage_unqualified",
+    }.issubset(set(futures_entry.rejected_for))
+    assert "partial_coverage_scoring" in futures_entry.not_recommended_for
 
 
 def test_official_liquidity_contract_supports_and_scoring_gates_stay_missing_and_fail_closed() -> None:
@@ -413,6 +430,40 @@ def test_official_liquidity_contract_supports_and_scoring_gates_stay_missing_and
     assert dxy_scoring.freshness_floor == "delayed"
     assert dxy_scoring.coverage_ratio_floor == 1.0
     assert dxy_scoring.required_source_tier == "official_or_authorized_fx_feed"
+
+
+def test_index_futures_contract_support_and_scoring_require_full_extended_hours_bundle() -> None:
+    support = get_provider_capability_support_contract(
+        "exchange_or_broker_authorized.index_futures",
+        "index_futures",
+    )
+    scoring = get_provider_scoring_contract(
+        "exchange_or_broker_authorized.index_futures",
+        "index_futures",
+    )
+
+    assert support is not None
+    assert support.source_type == "missing"
+    assert support.source_tier == "exchange_or_broker_authorized_feed"
+    assert support.observation_only is True
+    assert support.score_contribution_allowed is False
+    assert support.paid_data_likely_required is True
+    assert support.key_required is True
+    assert support.cache_required is True
+    assert support.background_refresh_recommended is True
+    assert support.missing_provider_reason == "authorized_index_futures_feed_not_configured"
+
+    assert scoring is not None
+    assert scoring.coverage_universe == "nq_es_ym_rty_extended_hours_bundle"
+    assert scoring.cadence == "extended_hours"
+    assert scoring.freshness_floor == "delayed"
+    assert scoring.coverage_ratio_floor == 1.0
+    assert scoring.required_source_tier == "exchange_or_broker_authorized_feed"
+    assert scoring.required_symbols == ("NQ", "ES", "YM", "RTY")
+    assert scoring.session == "extended_hours"
+    assert scoring.score_eligibility_gate == (
+        "configured_authorized_index_futures_bundle_and_extended_hours_freshness"
+    )
 
 
 def test_authorized_us_flow_and_breadth_support_contracts_cover_required_capabilities() -> None:
