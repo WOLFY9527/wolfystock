@@ -463,3 +463,375 @@ export const sourceToneClass = (index: number): string => {
   if (index === 2) return 'text-[var(--accent-warning)]';
   return 'text-muted-text';
 };
+
+export type DataSourceImpactSurface =
+  | 'market_overview'
+  | 'liquidity_monitor'
+  | 'rotation_radar'
+  | 'scanner'
+  | 'portfolio'
+  | 'watchlist'
+  | 'options_lab'
+  | 'backtest'
+  | 'provider_ops';
+
+export type DataSourceImpactCapability =
+  | 'quotes'
+  | 'fundamentals'
+  | 'news'
+  | 'macro'
+  | 'crypto'
+  | 'futures'
+  | 'breadth'
+  | 'fund_flow'
+  | 'cn_hk_flow'
+  | 'money_market_rates'
+  | 'fed_liquidity'
+  | 'diagnostics';
+
+type DataSourceImpactState =
+  | 'configured'
+  | 'auth_needed'
+  | 'disabled_by_default'
+  | 'cache_required'
+  | 'paid_likely'
+  | 'observation_only'
+  | 'score_gates';
+
+type DataSourceImpactEvidence = 'score_when_gates_pass' | 'observation_only' | 'diagnostics_only';
+
+export type DataSourceImpactView = {
+  known: boolean;
+  surfaces: string[];
+  capabilities: string[];
+  states: string[];
+  evidence: string;
+  summary: string;
+  unlock: string;
+};
+
+export type DataCoverageGapView = {
+  key: string;
+  surfaces: string[];
+  missing: string;
+  impact: string;
+};
+
+type DataSourceImpactProfile = {
+  aliases: string[];
+  surfaces: DataSourceImpactSurface[];
+  capabilities: DataSourceImpactCapability[];
+  states: DataSourceImpactState[];
+  evidence: DataSourceImpactEvidence;
+  summaryKey: string;
+  unlockKey: string;
+};
+
+type DataSourceImpactInput = {
+  key?: string;
+  label?: string;
+  name?: string;
+  configured?: boolean;
+  credentialRequired?: boolean;
+  capabilityKeys?: DataSourceCapability[];
+  capabilities?: DataSourceCapability[];
+};
+
+const DATA_SOURCE_IMPACT_SURFACE_LABEL_KEYS: Record<DataSourceImpactSurface, string> = {
+  market_overview: 'settings.dataSourceImpactSurface.marketOverview',
+  liquidity_monitor: 'settings.dataSourceImpactSurface.liquidityMonitor',
+  rotation_radar: 'settings.dataSourceImpactSurface.rotationRadar',
+  scanner: 'settings.dataSourceImpactSurface.scanner',
+  portfolio: 'settings.dataSourceImpactSurface.portfolio',
+  watchlist: 'settings.dataSourceImpactSurface.watchlist',
+  options_lab: 'settings.dataSourceImpactSurface.optionsLab',
+  backtest: 'settings.dataSourceImpactSurface.backtest',
+  provider_ops: 'settings.dataSourceImpactSurface.providerOps',
+};
+
+const DATA_SOURCE_IMPACT_CAPABILITY_LABEL_KEYS: Record<DataSourceImpactCapability, string> = {
+  quotes: 'settings.dataSourceImpactCapability.quotes',
+  fundamentals: 'settings.dataSourceImpactCapability.fundamentals',
+  news: 'settings.dataSourceImpactCapability.news',
+  macro: 'settings.dataSourceImpactCapability.macro',
+  crypto: 'settings.dataSourceImpactCapability.crypto',
+  futures: 'settings.dataSourceImpactCapability.futures',
+  breadth: 'settings.dataSourceImpactCapability.breadth',
+  fund_flow: 'settings.dataSourceImpactCapability.fundFlow',
+  cn_hk_flow: 'settings.dataSourceImpactCapability.cnHkFlow',
+  money_market_rates: 'settings.dataSourceImpactCapability.moneyMarketRates',
+  fed_liquidity: 'settings.dataSourceImpactCapability.fedLiquidity',
+  diagnostics: 'settings.dataSourceImpactCapability.diagnostics',
+};
+
+const DATA_SOURCE_IMPACT_STATE_LABEL_KEYS: Record<DataSourceImpactState, string> = {
+  configured: 'settings.dataSourceImpactState.configured',
+  auth_needed: 'settings.dataSourceImpactState.missingCredential',
+  disabled_by_default: 'settings.dataSourceImpactState.disabledByDefault',
+  cache_required: 'settings.dataSourceImpactState.cacheRequired',
+  paid_likely: 'settings.dataSourceImpactState.paidLikely',
+  observation_only: 'settings.dataSourceImpactState.observationOnly',
+  score_gates: 'settings.dataSourceImpactState.scoreGates',
+};
+
+const DATA_SOURCE_IMPACT_EVIDENCE_LABEL_KEYS: Record<DataSourceImpactEvidence, string> = {
+  score_when_gates_pass: 'settings.dataSourceImpactEvidence.scoreWhenGatesPass',
+  observation_only: 'settings.dataSourceImpactEvidence.observationOnly',
+  diagnostics_only: 'settings.dataSourceImpactEvidence.diagnosticsOnly',
+};
+
+const DATA_SOURCE_IMPACT_PROFILES: Record<string, DataSourceImpactProfile> = {
+  polygon: {
+    aliases: ['polygon', 'polygon_io', 'polygon_us_grouped_daily'],
+    surfaces: ['market_overview', 'liquidity_monitor', 'rotation_radar', 'scanner', 'provider_ops'],
+    capabilities: ['quotes', 'breadth'],
+    states: ['paid_likely', 'cache_required', 'score_gates'],
+    evidence: 'score_when_gates_pass',
+    summaryKey: 'settings.dataSourceImpactSummary.polygon',
+    unlockKey: 'settings.dataSourceImpactUnlock.polygon',
+  },
+  fred: {
+    aliases: ['fred', 'fed_liquidity', 'official_public_fed_liquidity'],
+    surfaces: ['liquidity_monitor', 'market_overview', 'provider_ops'],
+    capabilities: ['macro', 'fed_liquidity', 'money_market_rates'],
+    states: ['cache_required', 'score_gates'],
+    evidence: 'score_when_gates_pass',
+    summaryKey: 'settings.dataSourceImpactSummary.fred',
+    unlockKey: 'settings.dataSourceImpactUnlock.fred',
+  },
+  cn_cache: {
+    aliases: [
+      'tushare',
+      'akshare',
+      'baostock',
+      'cn_cache',
+      'a_share',
+      'cn_hk_connect',
+      'cache_cn_hk_connect_daily',
+      'official_public_cn_money_market_cache',
+      'cn_money_market_cache',
+    ],
+    surfaces: ['market_overview', 'liquidity_monitor', 'rotation_radar', 'scanner', 'portfolio', 'watchlist', 'backtest', 'provider_ops'],
+    capabilities: ['quotes', 'fundamentals', 'fund_flow', 'cn_hk_flow', 'money_market_rates'],
+    states: ['cache_required', 'paid_likely', 'observation_only', 'score_gates'],
+    evidence: 'observation_only',
+    summaryKey: 'settings.dataSourceImpactSummary.cnCache',
+    unlockKey: 'settings.dataSourceImpactUnlock.cnCache',
+  },
+  binance: {
+    aliases: ['binance'],
+    surfaces: ['market_overview', 'watchlist', 'scanner', 'provider_ops'],
+    capabilities: ['crypto', 'futures'],
+    states: ['paid_likely', 'observation_only', 'score_gates'],
+    evidence: 'observation_only',
+    summaryKey: 'settings.dataSourceImpactSummary.binance',
+    unlockKey: 'settings.dataSourceImpactUnlock.binance',
+  },
+  coinbase: {
+    aliases: ['coinbase'],
+    surfaces: ['market_overview', 'watchlist', 'scanner', 'provider_ops'],
+    capabilities: ['crypto'],
+    states: ['paid_likely', 'observation_only', 'score_gates'],
+    evidence: 'observation_only',
+    summaryKey: 'settings.dataSourceImpactSummary.coinbase',
+    unlockKey: 'settings.dataSourceImpactUnlock.coinbase',
+  },
+  finnhub: {
+    aliases: ['finnhub'],
+    surfaces: ['market_overview', 'scanner', 'portfolio', 'watchlist', 'backtest', 'provider_ops'],
+    capabilities: ['quotes', 'fundamentals', 'news'],
+    states: ['paid_likely', 'score_gates'],
+    evidence: 'score_when_gates_pass',
+    summaryKey: 'settings.dataSourceImpactSummary.multiCapability',
+    unlockKey: 'settings.dataSourceImpactUnlock.multiCapability',
+  },
+  alpha_vantage: {
+    aliases: ['alpha_vantage', 'alphavantage'],
+    surfaces: ['market_overview', 'scanner', 'watchlist', 'backtest', 'provider_ops'],
+    capabilities: ['quotes', 'fundamentals', 'macro'],
+    states: ['paid_likely', 'score_gates'],
+    evidence: 'score_when_gates_pass',
+    summaryKey: 'settings.dataSourceImpactSummary.multiCapability',
+    unlockKey: 'settings.dataSourceImpactUnlock.multiCapability',
+  },
+  twelve_data: {
+    aliases: ['twelve_data', 'twelvedata'],
+    surfaces: ['market_overview', 'scanner', 'watchlist', 'backtest', 'provider_ops'],
+    capabilities: ['quotes', 'futures'],
+    states: ['paid_likely', 'score_gates'],
+    evidence: 'score_when_gates_pass',
+    summaryKey: 'settings.dataSourceImpactSummary.multiCapability',
+    unlockKey: 'settings.dataSourceImpactUnlock.multiCapability',
+  },
+  yahoo: {
+    aliases: ['yahoo', 'yfinance', 'yahoo_finance'],
+    surfaces: ['market_overview', 'scanner', 'portfolio', 'watchlist', 'backtest', 'provider_ops'],
+    capabilities: ['quotes', 'fundamentals'],
+    states: ['observation_only', 'score_gates'],
+    evidence: 'observation_only',
+    summaryKey: 'settings.dataSourceImpactSummary.yahoo',
+    unlockKey: 'settings.dataSourceImpactUnlock.yahoo',
+  },
+  fmp: {
+    aliases: ['fmp', 'financial_modeling_prep'],
+    surfaces: ['market_overview', 'scanner', 'portfolio', 'watchlist', 'backtest', 'provider_ops'],
+    capabilities: ['quotes', 'fundamentals', 'news'],
+    states: ['paid_likely', 'score_gates'],
+    evidence: 'score_when_gates_pass',
+    summaryKey: 'settings.dataSourceImpactSummary.multiCapability',
+    unlockKey: 'settings.dataSourceImpactUnlock.multiCapability',
+  },
+  alpaca: {
+    aliases: ['alpaca'],
+    surfaces: ['market_overview', 'scanner', 'watchlist', 'backtest', 'provider_ops'],
+    capabilities: ['quotes'],
+    states: ['paid_likely', 'score_gates'],
+    evidence: 'score_when_gates_pass',
+    summaryKey: 'settings.dataSourceImpactSummary.multiCapability',
+    unlockKey: 'settings.dataSourceImpactUnlock.multiCapability',
+  },
+  news: {
+    aliases: ['gnews', 'tavily'],
+    surfaces: ['market_overview', 'rotation_radar', 'scanner', 'watchlist', 'provider_ops'],
+    capabilities: ['news'],
+    states: ['paid_likely', 'score_gates'],
+    evidence: 'score_when_gates_pass',
+    summaryKey: 'settings.dataSourceImpactSummary.multiCapability',
+    unlockKey: 'settings.dataSourceImpactUnlock.multiCapability',
+  },
+};
+
+const CUSTOM_ROUTE_CAPABILITY_TO_IMPACT: Record<DataSourceCapability, DataSourceImpactCapability> = {
+  market: 'quotes',
+  fundamentals: 'fundamentals',
+  news: 'news',
+  sentiment: 'news',
+  local: 'diagnostics',
+};
+
+const normalizeProviderLookupValue = (value: unknown): string => String(value || '')
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '_')
+  .replace(/^_+|_+$/g, '');
+
+const uniqueOrdered = <T extends string>(items: T[]): T[] => {
+  const seen = new Set<T>();
+  const result: T[] = [];
+  items.forEach((item) => {
+    if (!item || seen.has(item)) {
+      return;
+    }
+    seen.add(item);
+    result.push(item);
+  });
+  return result;
+};
+
+function findDataSourceImpactProfile(source: DataSourceImpactInput): DataSourceImpactProfile | null {
+  const candidates = [
+    source.key,
+    source.label,
+    source.name,
+  ]
+    .map((value) => normalizeProviderLookupValue(value))
+    .filter(Boolean);
+  for (const profile of Object.values(DATA_SOURCE_IMPACT_PROFILES)) {
+    const aliases = profile.aliases.map((alias) => normalizeProviderLookupValue(alias));
+    if (candidates.some((candidate) => aliases.some((alias) => candidate === alias || candidate.includes(alias)))) {
+      return profile;
+    }
+  }
+  return null;
+}
+
+const translateList = <T extends string>(items: T[], keys: Record<T, string>, t: TranslateFn): string[] => (
+  uniqueOrdered(items).map((item) => t(keys[item]))
+);
+
+export function buildDataSourceImpactView(source: DataSourceImpactInput, t: TranslateFn): DataSourceImpactView {
+  const profile = findDataSourceImpactProfile(source);
+  const capabilityKeys = profile
+    ? profile.capabilities
+    : uniqueOrdered((source.capabilityKeys || source.capabilities || [])
+      .map((capability) => CUSTOM_ROUTE_CAPABILITY_TO_IMPACT[capability])
+      .filter((capability): capability is DataSourceImpactCapability => Boolean(capability)));
+  const baseState: DataSourceImpactState = source.configured === true
+    ? 'configured'
+    : source.credentialRequired === false
+      ? 'configured'
+      : 'auth_needed';
+  const states = uniqueOrdered([
+    baseState,
+    ...(profile?.states || ['score_gates']),
+  ]);
+
+  return {
+    known: Boolean(profile),
+    surfaces: translateList(profile?.surfaces || ['provider_ops'], DATA_SOURCE_IMPACT_SURFACE_LABEL_KEYS, t),
+    capabilities: translateList(
+      capabilityKeys.length ? capabilityKeys : ['diagnostics'],
+      DATA_SOURCE_IMPACT_CAPABILITY_LABEL_KEYS,
+      t,
+    ),
+    states: translateList(states, DATA_SOURCE_IMPACT_STATE_LABEL_KEYS, t),
+    evidence: t(DATA_SOURCE_IMPACT_EVIDENCE_LABEL_KEYS[profile?.evidence || 'diagnostics_only']),
+    summary: t(profile?.summaryKey || 'settings.dataSourceImpactSummary.unknown'),
+    unlock: t(profile?.unlockKey || 'settings.dataSourceImpactUnlock.unknown'),
+  };
+}
+
+const dataSourceMatchesProfile = (source: DataSourceLibraryEntry, profileKey: string): boolean => {
+  const profile = DATA_SOURCE_IMPACT_PROFILES[profileKey];
+  if (!profile) return false;
+  return findDataSourceImpactProfile({
+    key: source.key,
+    label: source.label,
+    name: source.customRecord?.name,
+  }) === profile;
+};
+
+const hasConfiguredProfile = (sources: DataSourceLibraryEntry[], profileKey: string): boolean => (
+  sources.some((source) => source.configured && dataSourceMatchesProfile(source, profileKey))
+);
+
+export function buildDataCoverageGaps(sources: DataSourceLibraryEntry[], t: TranslateFn): DataCoverageGapView[] {
+  return [
+    {
+      key: 'market_breadth',
+      profiles: ['polygon'],
+      surfaces: ['market_overview', 'rotation_radar', 'scanner'] as DataSourceImpactSurface[],
+      missingKey: 'settings.dataCoverageGapMissing.marketBreadth',
+      impactKey: 'settings.dataCoverageGapImpact.marketBreadth',
+    },
+    {
+      key: 'liquidity_macro',
+      profiles: ['fred', 'cn_cache'],
+      surfaces: ['liquidity_monitor', 'market_overview'] as DataSourceImpactSurface[],
+      missingKey: 'settings.dataCoverageGapMissing.liquidityMacro',
+      impactKey: 'settings.dataCoverageGapImpact.liquidityMacro',
+    },
+    {
+      key: 'portfolio_history',
+      profiles: ['finnhub', 'fmp', 'twelve_data'],
+      surfaces: ['portfolio', 'watchlist', 'backtest'] as DataSourceImpactSurface[],
+      missingKey: 'settings.dataCoverageGapMissing.portfolioHistory',
+      impactKey: 'settings.dataCoverageGapImpact.portfolioHistory',
+    },
+    {
+      key: 'options_lab',
+      profiles: ['polygon'],
+      surfaces: ['options_lab', 'provider_ops'] as DataSourceImpactSurface[],
+      missingKey: 'settings.dataCoverageGapMissing.optionsLab',
+      impactKey: 'settings.dataCoverageGapImpact.optionsLab',
+    },
+  ]
+    .filter((gap) => !gap.profiles.some((profileKey) => hasConfiguredProfile(sources, profileKey)))
+    .map((gap) => ({
+      key: gap.key,
+      surfaces: translateList(gap.surfaces, DATA_SOURCE_IMPACT_SURFACE_LABEL_KEYS, t),
+      missing: t(gap.missingKey),
+      impact: t(gap.impactKey),
+    }))
+    .slice(0, 4);
+}

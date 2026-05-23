@@ -8,6 +8,11 @@ type ApiSourceCardProps = {
   validationBadge: React.ReactNode;
   isConfigured: boolean;
   capabilities: string[];
+  impactLabel: string;
+  impactSurfaces: string[];
+  impactCapabilities: string[];
+  impactStates: string[];
+  impactEvidenceText: string;
   statusText: string;
   validationMessage: string;
   usedByText: string;
@@ -30,6 +35,11 @@ export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
   validationBadge,
   isConfigured,
   capabilities,
+  impactLabel,
+  impactSurfaces,
+  impactCapabilities,
+  impactStates,
+  impactEvidenceText,
   statusText,
   validationMessage,
   usedByText,
@@ -77,6 +87,33 @@ export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
         <span className="truncate">{usedByText}</span>
         <span className="truncate">{endpointText}</span>
         <span className="truncate">{internalFlagText}</span>
+      </div>
+      <div className="mt-2 grid gap-2 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+        <div className="min-w-0">
+          <p className="mb-1 text-[10px] font-bold uppercase text-white/35">{impactLabel}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {impactSurfaces.map((surface) => (
+              <span key={`${testId}-surface-${surface}`} className={GHOST_TAG_CLASS}>
+                {surface}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div className="flex flex-wrap gap-1.5">
+            {impactCapabilities.map((capability) => (
+              <span key={`${testId}-capability-${capability}`} className={GHOST_TAG_CLASS}>
+                {capability}
+              </span>
+            ))}
+            {impactStates.map((state) => (
+              <span key={`${testId}-state-${state}`} className={GHOST_TAG_CLASS}>
+                {state}
+              </span>
+            ))}
+          </div>
+          <p className="mt-1 text-[11px] text-white/45">{impactEvidenceText}</p>
+        </div>
       </div>
     </div>
 

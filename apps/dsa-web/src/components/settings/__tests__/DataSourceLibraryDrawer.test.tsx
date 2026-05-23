@@ -38,6 +38,91 @@ function buildBuiltinEntry(): DataSourceLibraryEntry {
 }
 
 describe('DataSourceLibraryDrawer', () => {
+  it('explains known provider impact before a custom source is saved', () => {
+    render(
+      <DataSourceLibraryDrawer
+        adminLocked={false}
+        isOpen
+        isSaving={false}
+        language="zh"
+        deleteTarget={null}
+        draft={{
+          id: '',
+          name: 'Polygon',
+          credentialSchema: 'single_key',
+          credential: '',
+          secret: '',
+          baseUrl: '',
+          description: '',
+          capabilities: [],
+          validation: { status: 'pending' },
+        }}
+        entry={null}
+        mode="create"
+        managedBuiltinDraft={{ credential: '', secret: '', extraValue: '' }}
+        onClose={vi.fn()}
+        onDeleteTargetChange={vi.fn()}
+        onDraftChange={vi.fn()}
+        onManagedBuiltinDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onValidate={vi.fn()}
+        onConfirmDelete={vi.fn()}
+        t={zh}
+      />,
+    );
+
+    const panel = screen.getByTestId('data-source-impact-panel');
+    expect(within(panel).getByText('配置后可能影响')).toBeInTheDocument();
+    expect(within(panel).getByText('Market Overview')).toBeInTheDocument();
+    expect(within(panel).getByText('Liquidity Monitor')).toBeInTheDocument();
+    expect(within(panel).getByText('可解锁能力')).toBeInTheDocument();
+    expect(within(panel).getByText('US breadth')).toBeInTheDocument();
+    expect(within(panel).getByText(/grouped daily/)).toBeInTheDocument();
+    expect(within(panel).getByText(/不是官方 NYSE\/Nasdaq/)).toBeInTheDocument();
+    expect(within(panel).getByText(/不会自动变成可评分证据/)).toBeInTheDocument();
+  });
+
+  it('keeps unknown provider impact limited to Provider Ops without rendering secret or path text', () => {
+    render(
+      <DataSourceLibraryDrawer
+        adminLocked={false}
+        isOpen
+        isSaving={false}
+        language="zh"
+        deleteTarget={null}
+        draft={{
+          id: '',
+          name: 'Mystery Local Feed',
+          credentialSchema: 'single_key',
+          credential: 'opaque-value',
+          secret: '',
+          baseUrl: '',
+          description: 'local cache LOCAL_PRIVATE_FEED_PATH opaque=value',
+          capabilities: ['news'],
+          validation: { status: 'pending' },
+        }}
+        entry={null}
+        mode="create"
+        managedBuiltinDraft={{ credential: '', secret: '', extraValue: '' }}
+        onClose={vi.fn()}
+        onDeleteTargetChange={vi.fn()}
+        onDraftChange={vi.fn()}
+        onManagedBuiltinDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onValidate={vi.fn()}
+        onConfirmDelete={vi.fn()}
+        t={zh}
+      />,
+    );
+
+    const panel = screen.getByTestId('data-source-impact-panel');
+    expect(within(panel).getByText('Provider Ops / system diagnostics')).toBeInTheDocument();
+    expect(within(panel).queryByText('Market Overview')).not.toBeInTheDocument();
+    expect(within(panel).queryByText('Liquidity Monitor')).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/opaque-value/i)).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/LOCAL_PRIVATE_FEED_PATH/i)).not.toBeInTheDocument();
+  });
+
   it('renders the Twelve Data HK entitlement check as compact badges without exposing raw provider details', () => {
     const validationResult: BuiltinDataSourceValidationResult = {
       provider: 'twelve_data',

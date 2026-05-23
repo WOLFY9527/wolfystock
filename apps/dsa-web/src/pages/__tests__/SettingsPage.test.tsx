@@ -2817,6 +2817,7 @@ describe('SettingsPage', () => {
     expect(dataSection).not.toBeNull();
     expectNoRawI18nKeys(dataSection as HTMLElement);
     expect(within(dataSection as HTMLElement).getByText('1. 数据路由')).toBeInTheDocument();
+    expect(within(dataSection as HTMLElement).getByText('Data coverage gaps')).toBeInTheDocument();
     expect(within(dataSection as HTMLElement).getByText('2. 数据源库')).toBeInTheDocument();
     expect(within(dataSection as HTMLElement).getByText('MARKET DATA')).toBeInTheDocument();
     expect(within(dataSection as HTMLElement).getByText('FUNDAMENTALS')).toBeInTheDocument();
@@ -2829,6 +2830,11 @@ describe('SettingsPage', () => {
     expect(within(finnhubCard).getByText('行情')).toBeInTheDocument();
     expect(within(finnhubCard).getByText('基本面')).toBeInTheDocument();
     expect(within(finnhubCard).getByText('新闻')).toBeInTheDocument();
+    expect(within(finnhubCard).getByText('Impact / Used by')).toBeInTheDocument();
+    expect(within(finnhubCard).getByText('Market Overview')).toBeInTheDocument();
+    expect(within(finnhubCard).getByText('Scanner')).toBeInTheDocument();
+    expect(within(finnhubCard).getByText('Watchlist')).toBeInTheDocument();
+    expect(within(finnhubCard).getByText('可能提升为可评分证据')).toBeInTheDocument();
     expect(within(finnhubCard).getByText('已配置待验证')).toBeInTheDocument();
     expect(within(finnhubCard).getByText('状态检查：已配置，未做连通性验证')).toBeInTheDocument();
     const yahooCard = within(dataSection as HTMLElement).getByTestId('data-source-card-yahoo');
@@ -2856,10 +2862,10 @@ describe('SettingsPage', () => {
               id: 'demo_news_api',
               name: 'Demo News API',
               credentialSchema: 'single_key',
-              credential: 'demo-key',
+              credential: 'opaque-value',
               secret: '',
               baseUrl: 'https://demo.example.com/v1',
-              description: 'Custom news endpoint',
+              description: 'Custom news endpoint at LOCAL_PRIVATE_CACHE_PATH opaque=value',
               capabilities: ['news'],
               validation: { status: 'validated' },
             },
@@ -2884,6 +2890,10 @@ describe('SettingsPage', () => {
     const customCard = within(dataSection as HTMLElement).getByTestId('data-source-card-demo_news_api');
     expect(within(customCard).getByText(`${translate('zh', 'settings.dataSourceEndpointNameLabel')}: demo_news_api`)).toBeInTheDocument();
     expect(within(customCard).getByText(`${translate('zh', 'settings.dataSourceInternalFlagLabel')}: ${translate('zh', 'settings.dataSourceInternalFlagExternal')}`)).toBeInTheDocument();
+    expect(within(customCard).getByText('Provider Ops / system diagnostics')).toBeInTheDocument();
+    expect(within(customCard).queryByText('Market Overview')).not.toBeInTheDocument();
+    expect(within(customCard).queryByText(/opaque-value/i)).not.toBeInTheDocument();
+    expect(within(customCard).queryByText(/LOCAL_PRIVATE_CACHE_PATH/i)).not.toBeInTheDocument();
   });
 
   it('shows the runtime summary visibility title only once in the advanced domain section', async () => {

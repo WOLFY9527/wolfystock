@@ -6,6 +6,7 @@ import {
   DATA_SOURCE_CAPABILITY_LABEL_KEYS,
   DATA_SOURCE_CAPABILITY_OPTIONS,
   DATA_SOURCE_CUSTOM_SCHEMA_OPTIONS,
+  buildDataSourceImpactView,
   formatDataSourceCheckLine,
   type BuiltinDataSourceValidationResult,
   type CustomDataSourceRecord,
@@ -36,6 +37,63 @@ function sanitizeValidationMessage(value: string): string {
   }
   return redacted.slice(0, 160);
 }
+
+function buildDraftImpactInput(draft: CustomDataSourceRecord) {
+  const configured = Boolean(
+    draft.name.trim()
+    && draft.credential.trim()
+    && (draft.credentialSchema !== 'key_secret' || draft.secret.trim())
+    && draft.capabilities.length,
+  );
+  return {
+    key: draft.id,
+    label: draft.name,
+    name: draft.name,
+    configured,
+    credentialRequired: true,
+    capabilityKeys: draft.capabilities,
+  };
+}
+
+const ImpactPanel: React.FC<{
+  draft?: CustomDataSourceRecord;
+  entry?: DataSourceLibraryEntry | null;
+  t: TranslateFn;
+}> = ({ draft, entry, t }) => {
+  const impact = buildDataSourceImpactView(entry || (draft ? buildDraftImpactInput(draft) : {}), t);
+  return (
+    <div className={DRAWER_PANEL_CLASS} data-testid="data-source-impact-panel">
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+            {t('settings.dataSourceImpactPreSubmitTitle')}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {impact.surfaces.map((surface) => (
+              <span key={`impact-surface-${surface}`} className={GHOST_TAG_CLASS}>{surface}</span>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-secondary-text">{impact.summary}</p>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+            {t('settings.dataSourceImpactUnlockTitle')}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {impact.capabilities.map((capability) => (
+              <span key={`impact-capability-${capability}`} className={GHOST_TAG_CLASS}>{capability}</span>
+            ))}
+            {impact.states.map((state) => (
+              <span key={`impact-state-${state}`} className={GHOST_TAG_CLASS}>{state}</span>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-secondary-text">{impact.unlock}</p>
+          <p className="mt-2 text-[11px] text-white/45">{t('settings.dataSourceImpactGateNote')}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 function hkEntitlementTone(value: string): string {
   if (value === 'ok_hk_quote_history') return 'border-emerald-400/20 bg-emerald-400/8 text-emerald-200';
@@ -342,6 +400,7 @@ const DataSourceLibraryDrawer: React.FC<DataSourceLibraryDrawerProps> = ({
               })}
             </div>
           </div>
+          <ImpactPanel draft={draft} entry={entry} t={t} />
 
           <div className="space-y-3">
             <Input

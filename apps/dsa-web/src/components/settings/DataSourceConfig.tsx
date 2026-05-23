@@ -3,7 +3,15 @@ import { Button, GlassCard } from '../common';
 import { StatusBadge } from '../ui/StatusBadge';
 import { ApiSourceCard } from './ApiSourceCard';
 import { SettingsSectionCard } from './SettingsSectionCard';
-import { sourceToneClass, type DataRouteKey, type DataSourceLibraryEntry, type DataSourceValidationState } from './dataSourceLibraryShared';
+import {
+  buildDataCoverageGaps,
+  buildDataSourceImpactView,
+  sourceToneClass,
+  type DataCoverageGapView,
+  type DataRouteKey,
+  type DataSourceLibraryEntry,
+  type DataSourceValidationState,
+} from './dataSourceLibraryShared';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
 
@@ -97,6 +105,37 @@ const StatusDot: React.FC<{ active: boolean }> = ({ active }) => (
   />
 );
 
+const CoverageGapsPanel: React.FC<{ gaps: DataCoverageGapView[]; t: TranslateFn }> = ({ gaps, t }) => (
+  <GlassCard className="px-4 py-4">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">
+          {t('settings.dataCoverageGapsTitle')}
+        </p>
+        <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.dataCoverageGapsDesc')}</p>
+      </div>
+      <span className={GHOST_TAG_CLASS}>{t('settings.dataCoverageGapProxyLabel')}</span>
+    </div>
+    <div className="mt-3 grid gap-2 md:grid-cols-2" data-testid="data-coverage-gaps">
+      {gaps.map((gap) => (
+        <div key={gap.key} className="min-w-0 border-t border-white/5 pt-2">
+          <div className="flex flex-wrap gap-1.5">
+            {gap.surfaces.map((surface) => (
+              <span key={`${gap.key}-${surface}`} className={GHOST_TAG_CLASS}>{surface}</span>
+            ))}
+          </div>
+          <p className="mt-1 text-xs font-semibold text-white/70">
+            {t('settings.dataCoverageGapMissingProviderLabel')}: {gap.missing}
+          </p>
+          <p className="mt-1 text-[11px] text-white/40">
+            {t('settings.dataCoverageGapImproveLabel')}: {gap.impact}
+          </p>
+        </div>
+      ))}
+    </div>
+  </GlassCard>
+);
+
 const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
   t,
   dataRoutingGroups,
@@ -108,12 +147,16 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
   onOpenCreateDataSourceDrawer,
   onOpenEditDataSourceDrawer,
   onValidateDataSource,
-}) => (
-  <SettingsSectionCard
-    title={t('settings.dataEffectiveTitle')}
-    description={t('settings.dataEffectiveDesc')}
-  >
-    <div className="space-y-3">
+}) => {
+  const coverageGaps = buildDataCoverageGaps(dataSourceLibrary, t);
+
+  return (
+    <SettingsSectionCard
+      title={t('settings.dataEffectiveTitle')}
+      description={t('settings.dataEffectiveDesc')}
+    >
+      <div className="space-y-3">
+        <CoverageGapsPanel gaps={coverageGaps} t={t} />
       <GlassCard className="px-4 py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -201,63 +244,72 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
             <section key={group.key} aria-label={group.title}>
               <h3 className={SECTION_HEADER_CLASS}>{group.title}</h3>
               <div className="flex flex-col">
-                {group.items.map((source) => (
-                  <ApiSourceCard
-                    key={source.key}
-                    testId={`data-source-card-${source.key}`}
-                    label={source.label}
-                    kindLabel={source.builtin ? t('settings.dataSourceBuiltinKind') : t('settings.dataSourceCustomKind')}
-                    validationBadge={(
-                      <StatusBadge
-                        status={getValidationBadgeStatus(source.validationState)}
-                        label={source.validationState === 'builtin'
-                          ? t('settings.dataSourceValidationBuiltin')
-                          : source.validationState === 'loading'
-                            ? t('settings.dataSourceValidationChecking')
-                          : source.validationState === 'validated'
-                            ? t('settings.dataSourceValidated')
-                            : source.validationState === 'partial'
-                              ? t('settings.dataSourceValidationPartial')
-                            : source.validationState === 'missing_key'
-                              ? t('settings.dataSourceValidationMissingKey')
-                            : source.validationState === 'unsupported'
-                              ? t('settings.dataSourceValidationUnsupported')
-                            : source.validationState === 'failed'
-                              ? t('settings.dataSourceValidationFailed')
-                              : source.configured
-                                ? t('settings.dataSourceConfiguredPending')
-                                : t('settings.notConfigured')}
-                        variant="soft"
-                        size="sm"
-                      />
-                    )}
-                    isConfigured={source.usable || source.configured}
-                    capabilities={source.capabilityLabels}
-                    statusText={source.configured
-                      ? t('settings.dataSourceStatusConfigured')
-                      : t('settings.dataSourceStatusMissing')}
-                    validationMessage={source.validationMessage}
-                    usedByText={`${t('settings.dataSourceUsedByLabel')}: ${source.routeUsage.length
-                      ? source.routeUsage.map((routeKey) => t(`settings.dataRouteName.${routeKey}`)).join(' · ')
-                      : t('settings.dataSourceNotRouted')}`}
-                    endpointText={`${t('settings.dataSourceEndpointNameLabel')}: ${source.key}`}
-                    internalFlagText={`${t('settings.dataSourceInternalFlagLabel')}: ${source.builtin
-                      ? t('settings.dataSourceInternalFlagBuiltin')
-                      : t('settings.dataSourceInternalFlagExternal')}`}
-                    manageLabel={source.builtin ? t('settings.dataSourceManageAction') : t('settings.dataSourceEditAction')}
-                    validateLabel={t('settings.dataSourceValidateAction')}
-                    validateDisabled={source.validationState === 'loading'}
-                    onManage={() => onOpenEditDataSourceDrawer(source.key)}
-                    onValidate={() => onValidateDataSource(source.key)}
-                  />
-                ))}
+                {group.items.map((source) => {
+                  const impact = buildDataSourceImpactView(source, t);
+                  return (
+                    <ApiSourceCard
+                      key={source.key}
+                      testId={`data-source-card-${source.key}`}
+                      label={source.label}
+                      kindLabel={source.builtin ? t('settings.dataSourceBuiltinKind') : t('settings.dataSourceCustomKind')}
+                      validationBadge={(
+                        <StatusBadge
+                          status={getValidationBadgeStatus(source.validationState)}
+                          label={source.validationState === 'builtin'
+                            ? t('settings.dataSourceValidationBuiltin')
+                            : source.validationState === 'loading'
+                              ? t('settings.dataSourceValidationChecking')
+                            : source.validationState === 'validated'
+                              ? t('settings.dataSourceValidated')
+                              : source.validationState === 'partial'
+                                ? t('settings.dataSourceValidationPartial')
+                              : source.validationState === 'missing_key'
+                                ? t('settings.dataSourceValidationMissingKey')
+                              : source.validationState === 'unsupported'
+                                ? t('settings.dataSourceValidationUnsupported')
+                              : source.validationState === 'failed'
+                                ? t('settings.dataSourceValidationFailed')
+                                : source.configured
+                                  ? t('settings.dataSourceConfiguredPending')
+                                  : t('settings.notConfigured')}
+                          variant="soft"
+                          size="sm"
+                        />
+                      )}
+                      isConfigured={source.usable || source.configured}
+                      capabilities={source.capabilityLabels}
+                      impactLabel={t('settings.dataSourceImpactLabel')}
+                      impactSurfaces={impact.surfaces}
+                      impactCapabilities={impact.capabilities}
+                      impactStates={impact.states}
+                      impactEvidenceText={impact.evidence}
+                      statusText={source.configured
+                        ? t('settings.dataSourceStatusConfigured')
+                        : t('settings.dataSourceStatusMissing')}
+                      validationMessage={source.validationMessage}
+                      usedByText={`${t('settings.dataSourceUsedByLabel')}: ${source.routeUsage.length
+                        ? source.routeUsage.map((routeKey) => t(`settings.dataRouteName.${routeKey}`)).join(' · ')
+                        : t('settings.dataSourceNotRouted')}`}
+                      endpointText={`${t('settings.dataSourceEndpointNameLabel')}: ${source.key}`}
+                      internalFlagText={`${t('settings.dataSourceInternalFlagLabel')}: ${source.builtin
+                        ? t('settings.dataSourceInternalFlagBuiltin')
+                        : t('settings.dataSourceInternalFlagExternal')}`}
+                      manageLabel={source.builtin ? t('settings.dataSourceManageAction') : t('settings.dataSourceEditAction')}
+                      validateLabel={t('settings.dataSourceValidateAction')}
+                      validateDisabled={source.validationState === 'loading'}
+                      onManage={() => onOpenEditDataSourceDrawer(source.key)}
+                      onValidate={() => onValidateDataSource(source.key)}
+                    />
+                  );
+                })}
               </div>
             </section>
           ))}
         </div>
       </GlassCard>
-    </div>
-  </SettingsSectionCard>
-);
+      </div>
+    </SettingsSectionCard>
+  );
+};
 
 export default DataSourceConfig;
