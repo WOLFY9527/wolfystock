@@ -28,6 +28,7 @@ import {
   LabeledValueGrid,
   NotesList,
 } from './ScannerDisplayAtoms';
+import { ScannerScoreTrustStrip } from './ScannerScoreTrustStrip';
 import { TerminalButton } from '../terminal';
 
 type CandidateDetailOutcomeItem = {
@@ -386,6 +387,7 @@ export function ScannerCandidateInspector({
 
 export function ScannerCandidateDiagnosticRow({
   candidate,
+  trustSources,
   language,
   isSelectedCandidate,
   isExpanded,
@@ -423,6 +425,7 @@ export function ScannerCandidateDiagnosticRow({
   onToggleMore,
 }: {
   candidate: ScannerCandidateDiagnostic;
+  trustSources?: Array<ScannerCandidate | ScannerCandidateDiagnostic | null | undefined>;
   language: 'zh' | 'en';
   isSelectedCandidate: boolean;
   isExpanded: boolean;
@@ -459,6 +462,7 @@ export function ScannerCandidateDiagnosticRow({
   onExport: () => void;
   onToggleMore: () => void;
 }) {
+  const resolvedTrustSources = trustSources?.length ? trustSources : [candidate];
   return (
     <article
       data-testid={`scanner-ranked-row-${candidate.symbol}`}
@@ -491,6 +495,7 @@ export function ScannerCandidateDiagnosticRow({
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Score' : '评分'}</p>
               <p className={`mt-1 font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-100' : 'text-white/78'}`}>{scoreLabel}</p>
               {scoreDelta ? <p className="text-[10px] text-white/36">{scoreDelta}</p> : null}
+              <ScannerScoreTrustStrip sources={resolvedTrustSources} language={language} className="mt-1.5" testId={`scanner-score-trust-${candidate.symbol}`} />
             </div>
             <div className="min-w-0" onClick={onSelect}>
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Status' : '状态'}</p>
@@ -554,6 +559,7 @@ export function ScannerCandidateDiagnosticRow({
               <p title={dataQualityLabel}>{dataQualityLabel}</p>
               <p title={watchSummary}>{watchSummary}</p>
               <p className="text-[11px] text-white/38" title={rangeSummary}>{rangeSummary}</p>
+              <ScannerScoreTrustStrip sources={resolvedTrustSources} language={language} className="pt-0.5" testId={`scanner-score-trust-mobile-${candidate.symbol}`} />
               {evidenceSummary ? <EvidenceChips summary={evidenceSummary} maxLabels={2} /> : null}
             </div>
             <div className="flex flex-wrap gap-1.5">

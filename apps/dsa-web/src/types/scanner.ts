@@ -191,9 +191,63 @@ export interface ScannerProviderDiagnostics {
   providerWarnings: string[];
 }
 
+export interface ScannerSourceConfidence {
+  source?: string | null;
+  sourceLabel?: string | null;
+  asOf?: string | null;
+  freshness?: string | null;
+  isFallback?: boolean | null;
+  isStale?: boolean | null;
+  isPartial?: boolean | null;
+  isSynthetic?: boolean | null;
+  isUnavailable?: boolean | null;
+  confidenceWeight?: number | null;
+  coverage?: number | null;
+  degradationReason?: string | null;
+  capReason?: string | null;
+  scoreContributionAllowed?: boolean | null;
+  observationOnly?: boolean | null;
+  proxyOnly?: boolean | null;
+}
+
+export interface ScannerScoreExplainability {
+  rawScore?: number | null;
+  finalScore?: number | null;
+  capReason?: string | null;
+  degradationReason?: string | null;
+  scoreConfidence?: number | null;
+  evidenceCoverage?: number | null;
+  capApplied?: boolean | null;
+  scoreGradeAllowed?: boolean | null;
+  reasonCodes?: string[];
+  sourceConfidence?: ScannerSourceConfidence | null;
+}
+
+export interface ScannerEvidencePacket {
+  scoreConfidence?: number | null;
+  capReason?: string | null;
+  degradationReason?: string | null;
+  freshnessState?: string | null;
+  dataQualityState?: string | null;
+  freshnessDetail?: {
+    quoteState?: string | null;
+    historyState?: string | null;
+  } | null;
+  userFacingLabels?: string[];
+  warningFlags?: string[];
+  sourceConfidence?: ScannerSourceConfidence | null;
+  providerObservation?: {
+    observationOnly?: boolean | null;
+    scoreContributionAllowed?: boolean | null;
+    entries?: Array<Record<string, unknown>>;
+  } | null;
+}
+
 export interface ScannerRunDiagnostics {
   coverageSummary?: ScannerCoverageSummary;
   providerDiagnostics?: ScannerProviderDiagnostics;
+  scoreExplainability?: ScannerScoreExplainability;
+  evidencePacket?: ScannerEvidencePacket;
   universeSelection?: {
     universeType: string;
     themeId?: string | null;

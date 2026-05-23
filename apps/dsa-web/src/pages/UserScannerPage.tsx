@@ -29,6 +29,7 @@ import {
   AdvancedDisclosure,
   FieldChip,
 } from '../components/scanner/ScannerDisplayAtoms';
+import { ScannerScoreTrustStrip } from '../components/scanner/ScannerScoreTrustStrip';
 import { ScannerStrategySimulationPanelFallback } from '../components/scanner/ScannerStrategySimulationPanelFallback';
 import {
   ScannerHistoryDrawer,
@@ -2009,8 +2010,11 @@ const UserScannerPage: React.FC = () => {
                 </span>
               </div>
               <p className="mt-1 truncate text-xs text-white/42">{candidate.companyName || candidate.name || candidate.symbol || '--'}</p>
+              <ScannerScoreTrustStrip sources={[candidate]} language={language} className="mt-2 max-w-[32rem]" testId={`scanner-detail-score-trust-${getCandidateIdentity(candidate)}`} />
             </div>
             <div className="shrink-0 text-right">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-white/36">{language === 'en' ? 'Score' : '评分'}</p>
+              <p className="font-mono text-sm font-semibold text-white">{candidate.score != null ? `${candidate.score}/100` : '--'}</p>
               <p className="text-[10px] uppercase tracking-[0.14em] text-white/36">{language === 'en' ? 'Rank' : '排名'}</p>
               <p className="font-mono text-sm font-semibold text-white">{candidate.rank ? `#${candidate.rank}` : '--'}</p>
             </div>
@@ -2656,6 +2660,7 @@ const UserScannerPage: React.FC = () => {
                                       rangeSummary={formatWorkbenchRangeSummary(sourceCandidate, language)}
                                       evidenceSummary={getScannerEvidenceSummary(candidate)}
                                       scoreLabel={candidate.score == null ? '--' : `${candidate.score}/100`}
+                                      trustSources={[sourceCandidate, candidate]}
                                       scoreDelta={formatScoreDelta(comparison?.scoreDelta ?? null)}
                                       comparisonLabel={comparison?.label || null}
                                       statusLabel={diagnosticStatusLabel(candidate.status, language)}

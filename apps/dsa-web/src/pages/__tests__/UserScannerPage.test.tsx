@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApiError, createParsedApiError } from '../../api/error';
 import UserScannerPage from '../UserScannerPage';
 import { UiLanguageProvider, useI18n } from '../../contexts/UiLanguageContext';
+import { expectNoRawI18nKeys } from '../../test-utils/i18nRawKeySentinel';
 import type {
   ScannerCandidate,
   ScannerRunDetail,
@@ -140,6 +141,48 @@ function makeCandidate(overrides: Partial<ScannerCandidate>): ScannerCandidate {
       outperformedBenchmark: null,
     },
     diagnostics: {},
+    ...overrides,
+  };
+}
+
+function makeTrustDiagnostics(overrides: Record<string, unknown> = {}) {
+  return {
+    scoreExplainability: {
+      rawScore: 81.6,
+      finalScore: 40,
+      capReason: 'fallback_source',
+      degradationReason: 'fallback_source',
+      scoreConfidence: 0.4,
+      evidenceCoverage: 0.76,
+      scoreGradeAllowed: false,
+      sourceConfidence: {
+        source: 'fallback_snapshot',
+        sourceLabel: 'Fallback snapshot',
+        freshness: 'fallback',
+        isFallback: true,
+        isPartial: true,
+        confidenceWeight: 0.4,
+        coverage: 0.76,
+        capReason: 'fallback_source',
+        degradationReason: 'fallback_source',
+        scoreContributionAllowed: false,
+        observationOnly: true,
+      },
+      reasonCodes: ['fallback_source'],
+    },
+    evidencePacket: {
+      scoreConfidence: 0.4,
+      capReason: 'fallback_source',
+      degradationReason: 'fallback_source',
+      freshnessState: 'fallback',
+      dataQualityState: 'partial',
+      freshnessDetail: {
+        quoteState: 'fallback',
+        historyState: 'stale',
+      },
+      userFacingLabels: ['仅观察', '数据源不足', 'Fallback'],
+      warningFlags: ['仅观察', '需人工复核'],
+    },
     ...overrides,
   };
 }
@@ -375,13 +418,7 @@ function makeCryptoDiagnosticsRun(overrides: Partial<ScannerRunDetail> = {}): Sc
         companyName: 'TeraWulf',
         rank: 1,
         score: 60,
-        diagnostics: {
-          evidence_packet: {
-            userFacingLabels: ['仅观察', 'provider_timeout'],
-            freshnessState: 'stale',
-            adminReasonCodes: ['provider_timeout'],
-          },
-        },
+        diagnostics: makeTrustDiagnostics(),
       }),
     ],
     selected: [
@@ -391,13 +428,7 @@ function makeCryptoDiagnosticsRun(overrides: Partial<ScannerRunDetail> = {}): Sc
         companyName: 'TeraWulf',
         rank: 1,
         score: 60,
-        diagnostics: {
-          evidence_packet: {
-            userFacingLabels: ['仅观察', 'provider_timeout'],
-            freshnessState: 'stale',
-            adminReasonCodes: ['provider_timeout'],
-          },
-        },
+        diagnostics: makeTrustDiagnostics(),
       }),
     ],
     candidates: [
@@ -412,13 +443,7 @@ function makeCryptoDiagnosticsRun(overrides: Partial<ScannerRunDetail> = {}): Sc
         failedRules: [],
         missingFields: [],
         metrics: { return20d: 44.1, trend: 20 },
-        metadata: {
-          evidence_packet: {
-            userFacingLabels: ['仅观察', 'provider_timeout'],
-            freshnessState: 'stale',
-            adminReasonCodes: ['provider_timeout'],
-          },
-        },
+        metadata: makeTrustDiagnostics(),
       },
       {
         symbol: 'MARA',
@@ -906,12 +931,27 @@ describe('UserScannerPage', () => {
   });
 
   it('renders scanner score without misleading AI score copy for normal scanner scores', async () => {
-    renderUserScannerPage();
+    const { container } = renderUserScannerPage();
 
     expect(within(await screen.findByTestId('scanner-result-row-NVDA')).getAllByText('94/100').length).toBeGreaterThan(0);
     expect(within(screen.getByTestId('scanner-result-row-AVGO')).getAllByText('88/100').length).toBeGreaterThan(0);
     expect(screen.queryByText(/AI score|AI 评分/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Annualized return forecast|年化收益预测/)).not.toBeInTheDocument();
+    expectNoRawI18nKeys(container);
+  });
+
+  it('shows visible trust disclosure next to capped fallback scanner scores without trading-action wording', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    const { container } = renderUserScannerPage();
+
+    const row = await screen.findByTestId('scanner-result-row-WULF');
+    expect(within(row).getAllByText('60/100').length).toBeGreaterThan(0);
+    expect(within(row).getAllByText(/分数已封顶|Score capped/i).length).toBeGreaterThan(0);
+    expect(within(row).getAllByText(/仅观察|Observe only/i).length).toBeGreaterThan(0);
+    expect(within(row).getAllByText(/Fallback|备用/i).length).toBeGreaterThan(0);
+    expect(within(row).getAllByText(/数据源不足|Data thin/i).length).toBeGreaterThan(0);
+    expect(container).not.toHaveTextContent(/买入|卖出|加仓|减仓|recommend(?:ation)?/i);
+    expectNoRawI18nKeys(container);
   });
 
   it('renders compact scanner workspace without the old decorative hero', async () => {
