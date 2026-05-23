@@ -82,13 +82,50 @@ const DEFAULT_HOME_TICKER = 'ORCL';
 const HOME_CHART_FALLBACK_TIMEFRAMES = ['1D', '1W', '1M'];
 const HOME_CHART_FALLBACK_INDICATORS = ['MA5', 'MA10', 'MA20', 'MA60', 'VWAP'];
 const HOME_CHART_FALLBACK_GRID_ROWS = ['price-top', 'price-upper', 'price-mid', 'volume'];
+const HOME_CHART_IDLE_TIMEOUT_MS = 240;
+
+function useDeferredHomeChartMount() {
+  const [shouldRenderChart, setShouldRenderChart] = useState(false);
+
+  useEffect(() => {
+    let isCancelled = false;
+    let idleHandle: number | null = null;
+    let timeoutHandle: number | null = null;
+
+    const revealChart = () => {
+      if (!isCancelled) {
+        setShouldRenderChart(true);
+      }
+    };
+
+    if (typeof window.requestIdleCallback === 'function') {
+      idleHandle = window.requestIdleCallback(revealChart, { timeout: HOME_CHART_IDLE_TIMEOUT_MS });
+    } else {
+      timeoutHandle = window.setTimeout(revealChart, 0);
+    }
+
+    return () => {
+      isCancelled = true;
+      if (idleHandle !== null && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleHandle);
+      }
+      if (timeoutHandle !== null) {
+        window.clearTimeout(timeoutHandle);
+      }
+    };
+  }, []);
+
+  return shouldRenderChart;
+}
 
 function HomeCandlestickChartFallback({
   className,
   style,
+  statusLabel,
 }: {
   className?: string;
   style?: React.CSSProperties;
+  statusLabel: string;
 }) {
   return (
     <div
@@ -98,43 +135,50 @@ function HomeCandlestickChartFallback({
       )}
       style={style}
       data-testid="home-candlestick-chart-fallback"
-      aria-hidden="true"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      aria-busy="true"
+      aria-label={statusLabel}
     >
-      <div className="mb-2.5 flex min-w-0 flex-col gap-2.5">
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <div className="flex items-center gap-0.5 rounded-full border border-[color:var(--wolfy-border-faint)] bg-white/[0.025] p-0.5">
-              {HOME_CHART_FALLBACK_TIMEFRAMES.map((label, index) => (
-                <span
-                  key={label}
-                  className={cn(
-                    'h-[22px] rounded-full px-2.5 py-1 text-[10px] font-medium',
-                    index === 0 ? 'bg-[var(--wolfy-accent-soft)] text-transparent' : 'text-transparent',
-                  )}
-                >
-                  {label}
-                </span>
-              ))}
+      <span className="sr-only">{statusLabel}</span>
+      <div aria-hidden="true">
+        <div className="mb-2.5 flex min-w-0 flex-col gap-2.5">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <div className="flex items-center gap-0.5 rounded-full border border-[color:var(--wolfy-border-faint)] bg-white/[0.025] p-0.5">
+                {HOME_CHART_FALLBACK_TIMEFRAMES.map((label, index) => (
+                  <span
+                    key={label}
+                    className={cn(
+                      'h-[22px] rounded-full px-2.5 py-1 text-[10px] font-medium',
+                      index === 0 ? 'bg-[var(--wolfy-accent-soft)] text-transparent' : 'text-transparent',
+                    )}
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+              <span className="hidden h-3 w-10 rounded-full bg-white/[0.04] sm:inline" />
             </div>
-            <span className="hidden h-3 w-10 rounded-full bg-white/[0.04] sm:inline" />
+            <span className="h-3 w-24 rounded-full bg-white/[0.04]" />
           </div>
-          <span className="h-3 w-24 rounded-full bg-white/[0.04]" />
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {HOME_CHART_FALLBACK_INDICATORS.map((label) => (
+              <span
+                key={label}
+                className="h-[24px] w-14 rounded-full border border-white/[0.05] bg-white/[0.012]"
+              />
+            ))}
+          </div>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          {HOME_CHART_FALLBACK_INDICATORS.map((label) => (
-            <span
-              key={label}
-              className="h-[24px] w-14 rounded-full border border-white/[0.05] bg-white/[0.012]"
-            />
-          ))}
-        </div>
-      </div>
-      <div className="relative h-[216px] min-w-[280px] overflow-hidden rounded-[12px] border border-[color:var(--wolfy-border-faint)] bg-[linear-gradient(180deg,rgba(17,22,38,0.92),rgba(13,18,32,0.98))] sm:h-[228px] xl:h-[242px]">
-        <div className="pointer-events-none absolute inset-x-4 top-6 h-px bg-gradient-to-r from-transparent via-white/14 to-transparent" />
-        <div className="absolute inset-x-4 bottom-5 top-10 grid grid-rows-4 gap-4">
-          {HOME_CHART_FALLBACK_GRID_ROWS.map((row) => (
-            <span key={row} className="border-t border-white/[0.045]" />
-          ))}
+        <div className="relative h-[216px] min-w-[280px] overflow-hidden rounded-[12px] border border-[color:var(--wolfy-border-faint)] bg-[linear-gradient(180deg,rgba(17,22,38,0.92),rgba(13,18,32,0.98))] sm:h-[228px] xl:h-[242px]">
+          <div className="pointer-events-none absolute inset-x-4 top-6 h-px bg-gradient-to-r from-transparent via-white/14 to-transparent" />
+          <div className="absolute inset-x-4 bottom-5 top-10 grid grid-rows-4 gap-4">
+            {HOME_CHART_FALLBACK_GRID_ROWS.map((row) => (
+              <span key={row} className="border-t border-white/[0.045]" />
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -1157,6 +1201,8 @@ function LinearTechnicalStructure({
   currentPrice,
   signals,
   isGuest,
+  shouldRenderHomeChart,
+  homeChartLoadingLabel,
   guestPaywall,
   onOpenDetails,
   detailLabel,
@@ -1167,6 +1213,8 @@ function LinearTechnicalStructure({
   currentPrice?: number | null;
   signals: DashboardSignal[];
   isGuest: boolean;
+  shouldRenderHomeChart: boolean;
+  homeChartLoadingLabel: string;
   guestPaywall?: React.ReactNode;
   onOpenDetails: () => void;
   detailLabel: string;
@@ -1221,23 +1269,32 @@ function LinearTechnicalStructure({
         )}
         data-testid="home-research-chart-workspace"
       >
-        <Suspense
-          fallback={(
-            <HomeCandlestickChartFallback
+        {shouldRenderHomeChart ? (
+          <Suspense
+            fallback={(
+              <HomeCandlestickChartFallback
+                className="rounded-none border-0 bg-transparent shadow-none"
+                style={{ background: 'transparent', borderColor: 'transparent', boxShadow: 'none' }}
+                statusLabel={homeChartLoadingLabel}
+              />
+            )}
+          >
+            <LazyHomeCandlestickChart
+              ticker={ticker}
+              currentPrice={currentPrice}
+              isLocked={isGuest}
+              onContextChange={onChartContextChange}
               className="rounded-none border-0 bg-transparent shadow-none"
               style={{ background: 'transparent', borderColor: 'transparent', boxShadow: 'none' }}
             />
-          )}
-        >
-          <LazyHomeCandlestickChart
-            ticker={ticker}
-            currentPrice={currentPrice}
-            isLocked={isGuest}
-            onContextChange={onChartContextChange}
+          </Suspense>
+        ) : (
+          <HomeCandlestickChartFallback
             className="rounded-none border-0 bg-transparent shadow-none"
             style={{ background: 'transparent', borderColor: 'transparent', boxShadow: 'none' }}
+            statusLabel={homeChartLoadingLabel}
           />
-        </Suspense>
+        )}
         <div
           className="home-research-signal-rail hidden min-w-0 content-start overflow-hidden border-t border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] xl:border-l"
           data-testid="home-bento-decision-support-grid"
@@ -3820,6 +3877,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [searchParams] = useSearchParams();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
+  const shouldRenderHomeChart = useDeferredHomeChartMount();
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
   const [activeDrawer, setActiveDrawer] = useState<DetailDrawerKey | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -3867,6 +3925,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const refreshTaskProgress = useStockPoolStore((state) => state.refreshTaskProgress);
   const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setHistoryDrawerOpen(true));
   const registrationPath = '/login?mode=create&redirect=%2F';
+  const homeChartLoadingLabel = language === 'en' ? 'Loading home price chart' : '正在加载首页价格图表';
   const recentHistoryItems = useMemo(
     () => historyItems.filter((item) => !item.isTest).slice(0, 8),
     [historyItems],
@@ -4715,6 +4774,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                                 currentPrice={parseHomeChartPrice(activeTraceReport?.meta.currentPrice ?? activeTraceReport?.details?.standardReport?.summaryPanel?.currentPrice)}
                                 signals={technicalSignals}
                                 isGuest={Boolean(isGuest)}
+                                shouldRenderHomeChart={shouldRenderHomeChart}
+                                homeChartLoadingLabel={homeChartLoadingLabel}
                                 guestPaywall={guestPaywall}
                                 onOpenDetails={() => setActiveDrawer('tech')}
                                 detailLabel={readyCopy.tech.detailLabel}

@@ -280,6 +280,44 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByRole('heading', { name: 'WolfyStock 分析面板' })).toBeInTheDocument();
   });
 
+  it('keeps an accessible chart placeholder visible before the deferred chart mount starts', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    const originalRequestIdleCallback = window.requestIdleCallback;
+    const originalCancelIdleCallback = window.cancelIdleCallback;
+    let scheduledIdle: IdleRequestCallback | null = null;
+
+    window.requestIdleCallback = vi.fn((callback: IdleRequestCallback) => {
+      scheduledIdle = callback;
+      return 1;
+    });
+    window.cancelIdleCallback = vi.fn();
+
+    try {
+      renderSurface();
+
+      const chartWorkspace = screen.getByTestId('home-research-chart-workspace');
+      expect(chartWorkspace).toContainElement(screen.getByRole('status', { name: '正在加载首页价格图表' }));
+      expect(chartWorkspace).toContainElement(screen.getByTestId('home-candlestick-chart-fallback'));
+      await waitFor(() => expect(window.requestIdleCallback).toHaveBeenCalledTimes(1));
+      expect(stocksApi.getHistory).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('home-candlestick-chart-frame')).not.toBeInTheDocument();
+      expect(scheduledIdle).not.toBeNull();
+
+      await act(async () => {
+        scheduledIdle?.({
+          didTimeout: false,
+          timeRemaining: () => 16,
+        } as IdleDeadline);
+      });
+
+      expect(await screen.findByTestId('home-candlestick-chart-frame')).toBeInTheDocument();
+      expect(stocksApi.getHistory).toHaveBeenCalled();
+    } finally {
+      window.requestIdleCallback = originalRequestIdleCallback;
+      window.cancelIdleCallback = originalCancelIdleCallback;
+    }
+  });
+
   it('renders the signed-in ResearchConsole route for authenticated users', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
@@ -2746,7 +2784,11 @@ describe('HomeSurfacePage', () => {
     renderSurface();
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('该周期行情暂不可用');
+      const unavailable = screen.getByTestId('home-candlestick-unavailable');
+      expect(unavailable).toHaveTextContent('该周期行情暂不可用');
+      expect(unavailable).toHaveTextContent('主数据源失败');
+      expect(unavailable).toHaveTextContent('本地回补不可用');
+      expect(unavailable).toHaveTextContent('可信度 不可用');
     });
     expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('主数据源失败');
     expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('本地回补不可用');
