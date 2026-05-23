@@ -1,17 +1,18 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AppContent } from '../App';
+import App, { AppContent } from '../App';
 import { translate } from '../i18n/core';
 import { expectNoRawI18nKeys } from '../test-utils/i18nRawKeySentinel';
 import { isPreviewRoutePath } from '../utils/appRouteGuards';
 import type { AdminCapabilityFlags } from '../utils/adminCapabilities';
 
-const { useAuthMock, useProductSurfaceMock, setLanguageMock, languageState } = vi.hoisted(() => ({
+const { useAuthMock, useProductSurfaceMock, setLanguageMock, languageState, previewReportPanelImportSpy } = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
   useProductSurfaceMock: vi.fn(),
   setLanguageMock: vi.fn(),
   languageState: { value: 'zh' as 'zh' | 'en' },
+  previewReportPanelImportSpy: vi.fn(),
 }));
 
 const noCapabilities: AdminCapabilityFlags = {
@@ -72,6 +73,19 @@ vi.mock('../components/common', async () => {
     Shell: () => React.createElement('div', { 'data-testid': 'shell-frame' }, React.createElement(router.Outlet)),
     BrandedLoadingScreen: () => null,
     ApiErrorAlert: () => React.createElement('div', {}, 'api-error'),
+  };
+});
+
+vi.mock('../components/report/StandardReportPanel', async () => {
+  previewReportPanelImportSpy();
+  await new Promise((resolve) => {
+    setTimeout(resolve, 100);
+  });
+
+  return {
+    StandardReportPanel: ({ report }: { report: { summary?: { analysisSummary?: string } } }) => (
+      <div data-testid="route-preview-standard-report">{report.summary?.analysisSummary}</div>
+    ),
   };
 });
 
@@ -183,6 +197,11 @@ function renderAt(path: string) {
   );
 }
 
+function renderBrowserAppAt(path: string) {
+  window.history.replaceState(window.history.state, '', path);
+  return render(<App />);
+}
+
 function LocationProbe() {
   const location = useLocation();
   return <div data-testid="location-path">{location.pathname}</div>;
@@ -278,6 +297,23 @@ describe('AppContent route flows', () => {
     languageState.value = 'en';
     renderAt('/en/guest');
     expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
+  });
+
+  it('renders the preview report route and resolves the deferred report panel', async () => {
+    languageState.value = 'zh';
+    renderBrowserAppAt('/__preview/report');
+
+    expect(await screen.findByTestId('preview-report-page')).toBeInTheDocument();
+    expect(await screen.findByTestId('route-preview-standard-report')).toHaveTextContent('等待回踩确认');
+    expect(previewReportPanelImportSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not eagerly import the preview report panel on unrelated home routes', async () => {
+    languageState.value = 'en';
+    renderAt('/en');
+
+    expect(await screen.findByText('Home Workspace')).toBeInTheDocument();
+    expect(previewReportPanelImportSpy).not.toHaveBeenCalled();
   });
 
   it.each(['/settings', '/settings/system'])(
