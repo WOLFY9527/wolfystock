@@ -914,12 +914,24 @@ describe('PortfolioPage FX refresh', () => {
   });
 
   it('renders compact portfolio evidence chips without exposing raw sync or authority internals', async () => {
-    const snapshot = makeSnapshot({ includePosition: true, fxStale: true }) as ReturnType<typeof makeSnapshot> & Record<string, unknown>;
+    const snapshot = makeSnapshot({
+      includePosition: true,
+      fxStale: true,
+      positionOverrides: {
+        priceSource: 'daily_close_quote',
+        priceSourceLabel: 'Daily close quote',
+        priceAsOf: '2026-03-18',
+        isPriceFallback: true,
+        priceFallbackReason: 'current_quote_unavailable',
+        valuationConfidence: 0.62,
+      },
+    }) as ReturnType<typeof makeSnapshot> & Record<string, unknown>;
     snapshot.fxFreshnessState = 'stale';
     snapshot.holdingsLineageState = 'missing';
     snapshot.cashLedgerCompletenessState = 'missing';
     snapshot.benchmarkMappingState = 'missing';
     snapshot.factorMappingState = 'missing';
+    snapshot.sourceAuthorityState = 'observation_only';
     snapshot.confidenceCap = {
       value: 60,
       reason_codes: ['stale_fx', 'manual_replay_complete'],
@@ -940,17 +952,31 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const snapshotStrip = screen.getByTestId('portfolio-account-status-strip');
+    const valuationTrust = within(snapshotStrip).getByTestId('portfolio-valuation-trust-strip');
+    expect(valuationTrust).toHaveTextContent('仅供观察');
+    expect(valuationTrust).toHaveTextContent('估值回退');
+    expect(valuationTrust).toHaveTextContent('收盘报价');
+    expect(valuationTrust).toHaveTextContent('FX 汇率已过期');
+    expect(valuationTrust).toHaveTextContent('现金流水不完整');
+    expect(valuationTrust).toHaveTextContent('持仓来源待核验');
     expect(within(snapshotStrip).getByTestId('portfolio-snapshot-evidence-chips')).toHaveTextContent('仅供观察');
 
     const risk = screen.getByTestId('portfolio-risk-card');
-    const chips = within(risk).getByTestId('portfolio-risk-evidence-chips');
-    expect(chips).toHaveTextContent('仅供风险观察');
-    expect(chips).toHaveTextContent('FX 汇率已过期');
-    expect(chips).toHaveTextContent('持仓来源待核验');
-    expect(chips).toHaveTextContent('现金流水不完整');
-    expect(chips).toHaveTextContent('基准映射暂缺');
-    expect(chips).toHaveTextContent('因子映射暂缺');
-    expect(chips).not.toHaveTextContent(/manual_replay_complete|manual_replay_authoritative|sourceAuthority|syncImportStatus|confidenceCap|stale_fx/i);
+    const riskTrust = within(risk).getByTestId('portfolio-risk-trust-strip');
+    expect(riskTrust).toHaveTextContent('仅供风险观察');
+    expect(riskTrust).toHaveTextContent('FX 汇率已过期');
+    expect(riskTrust).toHaveTextContent('持仓来源待核验');
+    expect(riskTrust).toHaveTextContent('现金流水不完整');
+    expect(riskTrust).toHaveTextContent('基准映射暂缺');
+    expect(riskTrust).toHaveTextContent('因子映射暂缺');
+    expect(riskTrust).toHaveTextContent('置信上限 60');
+    expect(riskTrust).not.toHaveTextContent(/manual_replay_complete|manual_replay_authoritative|sourceAuthority|syncImportStatus|confidenceCap|stale_fx/i);
+
+    const holdingTrust = screen.getByTestId('portfolio-holding-trust-AAPL');
+    expect(holdingTrust).toHaveTextContent('估值回退');
+    expect(holdingTrust).toHaveTextContent('现价缺失');
+    expect(holdingTrust).toHaveTextContent('收盘报价');
+    expect(holdingTrust).toHaveTextContent('截至 2026-03-18');
   });
 
   it('keeps native exposure visible when FX conversion is unavailable', async () => {

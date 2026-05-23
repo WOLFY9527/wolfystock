@@ -6,6 +6,7 @@ import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Drawer, Input, PillBadge, SectionShell, SegmentedControl, Select } from '../components/common';
 import { EvidenceChips } from '../components/evidence/EvidenceChips';
+import { PortfolioTrustStrip, type PortfolioTrustChipItem } from '../components/portfolio/PortfolioTrustStrip';
 import {
   TerminalButton,
   TerminalDenseList,
@@ -193,6 +194,142 @@ function positionPriceDisclosure(position: PortfolioPositionItem, language: Port
     position.priceAsOf || null,
     confidence,
   ].filter(Boolean).join(' · ');
+}
+
+function normalizeTrustToken(value?: string | null): string {
+  return String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+function isReadyTrustToken(token: string): boolean {
+  return Boolean(token) && (
+    token.includes('ready')
+    || token.includes('authoritative')
+    || token.includes('complete')
+    || token.includes('fresh')
+    || token.includes('current')
+    || token.includes('verified')
+    || token.includes('confirmed')
+    || token.includes('ok')
+    || token.includes('mapped')
+    || token.includes('available')
+  );
+}
+
+function uniqueTrustItems(items: Array<PortfolioTrustChipItem | null | undefined | false>): PortfolioTrustChipItem[] {
+  const seen = new Set<string>();
+  const result: PortfolioTrustChipItem[] = [];
+  for (const item of items) {
+    if (!item) continue;
+    const signature = `${item.label}::${item.variant ?? 'neutral'}`;
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    result.push(item);
+  }
+  return result;
+}
+
+function buildTrustStateItem(
+  kind: 'fxFreshness' | 'holdingsLineage' | 'cashLedgerCompleteness' | 'benchmarkMapping' | 'factorMapping',
+  rawValue: string | null | undefined,
+  language: PortfolioLanguage,
+): PortfolioTrustChipItem | null {
+  const token = normalizeTrustToken(rawValue);
+  if (!token) return null;
+
+  if (kind === 'fxFreshness') {
+    if (token.includes('stale') || token.includes('expired')) {
+      return { key: `fx-${token}`, label: language === 'zh' ? 'FX 汇率已过期' : 'FX stale', variant: 'caution' };
+    }
+    if (token.includes('missing') || token.includes('unavailable')) {
+      return { key: `fx-${token}`, label: language === 'zh' ? 'FX 汇率缺失' : 'FX unavailable', variant: 'danger' };
+    }
+    if (isReadyTrustToken(token)) {
+      return { key: `fx-${token}`, label: language === 'zh' ? 'FX 已更新' : 'FX current', variant: 'success' };
+    }
+    return { key: `fx-${token}`, label: language === 'zh' ? 'FX 待确认' : 'FX pending', variant: 'neutral' };
+  }
+
+  if (kind === 'holdingsLineage') {
+    if (token.includes('missing') || token.includes('partial') || token.includes('incomplete')) {
+      return { key: `holdings-${token}`, label: language === 'zh' ? '持仓来源待核验' : 'Holdings lineage pending', variant: 'caution' };
+    }
+    if (isReadyTrustToken(token)) {
+      return { key: `holdings-${token}`, label: language === 'zh' ? '持仓来源已核验' : 'Holdings lineage verified', variant: 'success' };
+    }
+    return { key: `holdings-${token}`, label: language === 'zh' ? '持仓来源待确认' : 'Holdings source pending', variant: 'neutral' };
+  }
+
+  if (kind === 'cashLedgerCompleteness') {
+    if (token.includes('missing') || token.includes('partial') || token.includes('incomplete')) {
+      return { key: `cash-${token}`, label: language === 'zh' ? '现金流水不完整' : 'Cash ledger incomplete', variant: 'caution' };
+    }
+    if (isReadyTrustToken(token)) {
+      return { key: `cash-${token}`, label: language === 'zh' ? '现金流水完整' : 'Cash ledger complete', variant: 'success' };
+    }
+    return { key: `cash-${token}`, label: language === 'zh' ? '现金流水待确认' : 'Cash ledger pending', variant: 'neutral' };
+  }
+
+  if (kind === 'benchmarkMapping') {
+    if (token.includes('missing') || token.includes('partial') || token.includes('limited') || token.includes('unmapped')) {
+      return { key: `benchmark-${token}`, label: language === 'zh' ? '基准映射暂缺' : 'Benchmark limited', variant: 'caution' };
+    }
+    if (isReadyTrustToken(token)) {
+      return { key: `benchmark-${token}`, label: language === 'zh' ? '基准映射完整' : 'Benchmark mapped', variant: 'success' };
+    }
+    return { key: `benchmark-${token}`, label: language === 'zh' ? '基准映射待确认' : 'Benchmark pending', variant: 'neutral' };
+  }
+
+  if (token.includes('missing') || token.includes('partial') || token.includes('limited') || token.includes('unmapped')) {
+    return { key: `factor-${token}`, label: language === 'zh' ? '因子映射暂缺' : 'Factor mapping limited', variant: 'caution' };
+  }
+  if (isReadyTrustToken(token)) {
+    return { key: `factor-${token}`, label: language === 'zh' ? '因子映射完整' : 'Factor mapping available', variant: 'success' };
+  }
+  return { key: `factor-${token}`, label: language === 'zh' ? '因子映射待确认' : 'Factor mapping pending', variant: 'neutral' };
+}
+
+function summarizePortfolioPriceSource(
+  positions: PortfolioPositionItem[],
+  language: PortfolioLanguage,
+): PortfolioTrustChipItem | null {
+  const labels = Array.from(new Set(
+    positions
+      .map((position) => positionPriceSourceHint(position, language))
+      .filter(Boolean),
+  ));
+  if (!labels.length) return null;
+  if (labels.length === 1) {
+    return { key: `price-source-${labels[0]}`, label: labels[0], variant: 'neutral' };
+  }
+  return {
+    key: 'price-source-mixed',
+    label: language === 'zh' ? '多来源报价' : 'Mixed quote sources',
+    variant: 'neutral',
+  };
+}
+
+function summarizePortfolioPriceAsOf(
+  positions: PortfolioPositionItem[],
+  language: PortfolioLanguage,
+): PortfolioTrustChipItem | null {
+  const values = Array.from(new Set(
+    positions
+      .map((position) => position.priceAsOf)
+      .filter((value): value is string => Boolean(value)),
+  ));
+  if (!values.length) return null;
+  if (values.length === 1) {
+    return {
+      key: `price-asof-${values[0]}`,
+      label: language === 'zh' ? `截至 ${values[0]}` : `As of ${values[0]}`,
+      variant: 'neutral',
+    };
+  }
+  return {
+    key: 'price-asof-mixed',
+    label: language === 'zh' ? '多时点快照' : 'Mixed snapshot times',
+    variant: 'neutral',
+  };
 }
 
 function PortfolioSegmentedControl({
@@ -1642,6 +1779,70 @@ const PortfolioPage: React.FC = () => {
       || portfolioEvidenceSummary.freshnessLabel != null
     ),
   );
+  const valuationTrustItems = useMemo(() => uniqueTrustItems([
+    positionRows.some((row) => row.isPriceFallback)
+      ? { key: 'valuation-fallback', label: language === 'zh' ? '估值回退' : 'Valuation fallback', variant: 'caution' }
+      : hasHoldings
+        ? { key: 'valuation-reliable', label: language === 'zh' ? '估值可信' : 'Valuation supported', variant: 'success' }
+        : null,
+    summarizePortfolioPriceSource(positionRows, language),
+    summarizePortfolioPriceAsOf(positionRows, language),
+    buildTrustStateItem('fxFreshness', snapshot?.fxFreshnessState, language),
+    buildTrustStateItem('holdingsLineage', snapshot?.holdingsLineageState, language),
+    buildTrustStateItem('cashLedgerCompleteness', snapshot?.cashLedgerCompletenessState, language),
+  ]), [
+    hasHoldings,
+    language,
+    positionRows,
+    snapshot?.cashLedgerCompletenessState,
+    snapshot?.fxFreshnessState,
+    snapshot?.holdingsLineageState,
+  ]);
+  const riskTrustItems = useMemo(() => uniqueTrustItems([
+    portfolioEvidenceSummary
+      ? {
+        key: `risk-posture-${portfolioEvidenceSummary.posture}`,
+        label: portfolioEvidenceSummary.displayLabel,
+        variant: portfolioEvidenceSummary.tone === 'danger'
+          ? 'danger'
+          : portfolioEvidenceSummary.tone === 'warning'
+            ? 'caution'
+            : portfolioEvidenceSummary.tone === 'info'
+              ? 'info'
+              : portfolioEvidenceSummary.tone === 'success'
+                ? 'success'
+                : 'neutral',
+      }
+      : null,
+    portfolioEvidenceSummary?.confidenceCap != null
+      ? {
+        key: `risk-cap-${portfolioEvidenceSummary.confidenceCap}`,
+        label: language === 'zh' ? `置信上限 ${portfolioEvidenceSummary.confidenceCap}` : `Confidence cap ${portfolioEvidenceSummary.confidenceCap}`,
+        variant: 'neutral',
+      }
+      : null,
+    portfolioEvidenceSummary?.freshnessLabel
+      ? {
+        key: `risk-freshness-${portfolioEvidenceSummary.freshnessLabel}`,
+        label: portfolioEvidenceSummary.freshnessLabel,
+        variant: portfolioEvidenceSummary.tone === 'danger' ? 'caution' : 'neutral',
+      }
+      : null,
+    ...(portfolioEvidenceSummary?.limitationLabels || []).map((label) => ({ key: `risk-limitation-${label}`, label, variant: 'neutral' as const })),
+    buildTrustStateItem('benchmarkMapping', snapshot?.benchmarkMappingState, language),
+    buildTrustStateItem('factorMapping', snapshot?.factorMappingState, language),
+    buildTrustStateItem('fxFreshness', snapshot?.fxFreshnessState, language),
+    buildTrustStateItem('holdingsLineage', snapshot?.holdingsLineageState, language),
+    buildTrustStateItem('cashLedgerCompleteness', snapshot?.cashLedgerCompletenessState, language),
+  ]), [
+    language,
+    portfolioEvidenceSummary,
+    snapshot?.benchmarkMappingState,
+    snapshot?.cashLedgerCompletenessState,
+    snapshot?.factorMappingState,
+    snapshot?.fxFreshnessState,
+    snapshot?.holdingsLineageState,
+  ]);
   const holdingsPrimaryValue = hasHoldings
     ? (language === 'zh' ? `${positionRows.length} 项持仓` : `${positionRows.length} holdings`)
     : (language === 'zh' ? '无持仓' : 'No holdings');
@@ -1999,13 +2200,21 @@ const PortfolioPage: React.FC = () => {
                   <p className="mt-2 text-xs leading-5 text-white/35">
                     {hasHoldings ? `${holdingsPrimaryValue} · ${accountStateSummary}` : compactNoHoldingText}
                   </p>
-                  {showPortfolioEvidenceChips ? (
-                    <EvidenceChips
-                      summary={portfolioEvidenceSummary}
-                      maxLabels={0}
+                  {showPortfolioEvidenceChips || valuationTrustItems.length ? (
+                    <PortfolioTrustStrip
+                      title={language === 'zh' ? '估值信任' : 'Valuation trust'}
+                      items={valuationTrustItems}
                       className="mt-3"
-                      data-testid="portfolio-snapshot-evidence-chips"
-                    />
+                      data-testid="portfolio-valuation-trust-strip"
+                    >
+                      {showPortfolioEvidenceChips ? (
+                        <EvidenceChips
+                          summary={portfolioEvidenceSummary}
+                          maxLabels={0}
+                          data-testid="portfolio-snapshot-evidence-chips"
+                        />
+                      ) : null}
+                    </PortfolioTrustStrip>
                   ) : null}
                 </div>
 
@@ -2099,40 +2308,89 @@ const PortfolioPage: React.FC = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {positionRows.map((row) => (
-                              <tr key={`${row.accountId}-${row.symbol}-${row.market}`} className="border-b border-white/5 text-white/62 transition-colors hover:bg-white/[0.03]">
-                                <td className="px-3 py-2">
-                                  <div className="truncate font-mono text-sm text-white">{row.symbol}</div>
-                                  <div className="truncate text-[11px] text-white/35">
-                                    {row.accountName}
-                                    {' · '}
-                                    {translate(language, 'portfolio.positionContext', {
-                                      market: formatAccountMarketLabel(row.market, language),
-                                      currency: row.currency || '--',
-                                    })}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2 font-mono">{Number(row.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
-                                <td className="px-3 py-2 font-mono">{formatMoney(row.totalCost, row.currency)}</td>
-                                <td className="px-3 py-2 font-mono">
-                                  {formatMoney(row.marketValueBase, row.valuationCurrency)}
-                                  {row.valuationCurrency !== displayCurrency ? <div className="mt-1 text-[11px] text-white/35">{renderConvertedDisplay(row.marketValueBase, row.valuationCurrency)}</div> : null}
-                                  <div className={`mt-1 text-[11px] ${row.isPriceFallback ? 'text-amber-300' : 'text-white/35'}`}>
-                                    {`${formatMoney(row.lastPrice, row.currency)} · ${positionPriceDisclosure(row, language)}`}
-                                  </div>
-                                </td>
-                                <td className={`px-3 py-2 font-mono ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                  {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
-                                  <div className="mt-1 text-[11px] text-white/40">{formatPercent(row.unrealizedPnlPct)}</div>
-                                </td>
-                                <td className="px-3 py-2 text-white/45">{topPosition?.key === row.symbol && topPositionPercent >= 35 ? (language === 'zh' ? '集中' : 'Concentrated') : (language === 'zh' ? '观察' : 'Observe')}</td>
-                                <td className="px-3 py-2">
-                                  <Button type="button" variant="ghost" className={PORTFOLIO_TEXT_BUTTON_CLASS} onClick={() => openManualLedger('trade', 'stock')}>
-                                    {manualLedgerActionLabel}
-                                  </Button>
-                                </td>
-                              </tr>
-                            ))}
+                            {positionRows.map((row) => {
+                              const rowTrustItems = uniqueTrustItems([
+                                topPosition?.key === row.symbol && topPositionPercent >= 35
+                                  ? {
+                                    key: `${row.symbol}-concentration`,
+                                    label: language === 'zh' ? '集中' : 'Concentrated',
+                                    variant: topPositionPercent >= 50 ? 'danger' : 'caution',
+                                  }
+                                  : {
+                                    key: `${row.symbol}-observe`,
+                                    label: language === 'zh' ? '观察' : 'Observe',
+                                    variant: 'neutral',
+                                  },
+                                row.isPriceFallback
+                                  ? {
+                                    key: `${row.symbol}-fallback`,
+                                    label: language === 'zh' ? '估值回退' : 'Fallback price',
+                                    variant: 'caution',
+                                  }
+                                  : null,
+                                {
+                                  key: `${row.symbol}-source`,
+                                  label: positionPriceSourceHint(row, language),
+                                  variant: row.isPriceFallback ? 'caution' : 'neutral',
+                                },
+                                row.priceFallbackReason
+                                  ? {
+                                    key: `${row.symbol}-reason`,
+                                    label: positionPriceFallbackReasonLabel(row, language) || row.priceFallbackReason,
+                                    variant: 'neutral',
+                                  }
+                                  : null,
+                                row.priceAsOf
+                                  ? {
+                                    key: `${row.symbol}-asof`,
+                                    label: language === 'zh' ? `截至 ${row.priceAsOf}` : `As of ${row.priceAsOf}`,
+                                    variant: 'neutral',
+                                  }
+                                  : null,
+                              ]);
+
+                              return (
+                                <tr key={`${row.accountId}-${row.symbol}-${row.market}`} className="border-b border-white/5 text-white/62 transition-colors hover:bg-white/[0.03]">
+                                  <td className="px-3 py-2">
+                                    <div className="truncate font-mono text-sm text-white">{row.symbol}</div>
+                                    <div className="truncate text-[11px] text-white/35">
+                                      {row.accountName}
+                                      {' · '}
+                                      {translate(language, 'portfolio.positionContext', {
+                                        market: formatAccountMarketLabel(row.market, language),
+                                        currency: row.currency || '--',
+                                      })}
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2 font-mono">{Number(row.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
+                                  <td className="px-3 py-2 font-mono">{formatMoney(row.totalCost, row.currency)}</td>
+                                  <td className="px-3 py-2 font-mono">
+                                    {formatMoney(row.marketValueBase, row.valuationCurrency)}
+                                    {row.valuationCurrency !== displayCurrency ? <div className="mt-1 text-[11px] text-white/35">{renderConvertedDisplay(row.marketValueBase, row.valuationCurrency)}</div> : null}
+                                    <div className={`mt-1 text-[11px] ${row.isPriceFallback ? 'text-amber-300' : 'text-white/35'}`}>
+                                      {`${formatMoney(row.lastPrice, row.currency)} · ${positionPriceDisclosure(row, language)}`}
+                                    </div>
+                                  </td>
+                                  <td className={`px-3 py-2 font-mono ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
+                                    <div className="mt-1 text-[11px] text-white/40">{formatPercent(row.unrealizedPnlPct)}</div>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <PortfolioTrustStrip
+                                      items={rowTrustItems}
+                                      className="border-0 bg-transparent p-0"
+                                      chipsClassName="gap-1"
+                                      data-testid={`portfolio-holding-trust-${row.symbol}`}
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <Button type="button" variant="ghost" className={PORTFOLIO_TEXT_BUTTON_CLASS} onClick={() => openManualLedger('trade', 'stock')}>
+                                      {manualLedgerActionLabel}
+                                    </Button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </TerminalDenseTable>
@@ -2247,11 +2505,11 @@ const PortfolioPage: React.FC = () => {
                         </PillBadge>
                       </span>
                     </div>
-                    {showPortfolioEvidenceChips ? (
-                      <EvidenceChips
-                        summary={portfolioEvidenceSummary}
-                        maxLabels={6}
-                        data-testid="portfolio-risk-evidence-chips"
+                    {riskTrustItems.length ? (
+                      <PortfolioTrustStrip
+                        title={language === 'zh' ? '风险信任' : 'Risk trust'}
+                        items={riskTrustItems}
+                        data-testid="portfolio-risk-trust-strip"
                       />
                     ) : null}
 
