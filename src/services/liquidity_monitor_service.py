@@ -14,11 +14,19 @@ from src.contracts.source_confidence import (
     evaluate_market_intelligence_trust_from_sources,
 )
 from src.services.liquidity_impulse_synthesis_adapter import build_liquidity_impulse_synthesis_payload
+from src.services.cn_money_market_rates_contracts import (
+    OFFICIAL_CN_MONEY_MARKET_RATES_CONTEXT_METRICS,
+    OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+    OFFICIAL_CN_MONEY_MARKET_RATES_REQUIRED_METRICS,
+)
 from src.services.data_source_router import DataSourceRouteRequest, DataSourceRouter
 from src.services.market_cache import MarketCache, market_cache
 from src.services.market_data_source_registry import project_source_provenance, resolve_source_type
 from src.services.market_overview_binance_transport import fetch_binance_funding_row
 from src.services.market_overview_yfinance_transport import fetch_yfinance_quote_history_frame
+from src.services.official_macro_liquidity_cache_contracts import (
+    build_official_fed_liquidity_cache_bundle,
+)
 from src.services.us_breadth_contracts import representative_sample_breadth_metadata
 from src.services.vix_metadata import normalize_vix_quote_metadata
 from src.storage import DatabaseManager
@@ -923,12 +931,13 @@ class LiquidityMonitorService:
 
     def _fed_liquidity_indicator(self, panel: PanelState) -> Dict[str, Any]:
         components = self._extract_fed_liquidity_components(panel)
+        cache_bundle = build_official_fed_liquidity_cache_bundle(components)
         score_grade_components = [
             component
             for component in components
             if self._fed_liquidity_component_score_grade(component)
         ]
-        all_required_ready = len(score_grade_components) == len(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["fed_liquidity"])
+        all_required_ready = bool(cache_bundle.get("scoreContributionAllowed")) and len(score_grade_components) == len(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["fed_liquidity"])
         if not components:
             return self._indicator(
                 "fed_liquidity",
@@ -967,10 +976,10 @@ class LiquidityMonitorService:
 
         direction = self._direction_from_counts(positive, negative)
         contribution = 6 if direction > 0 else -6 if direction < 0 else 0
-        freshness = self._weakest_freshness([str(component.get("freshness") or "unavailable") for component in components])
+        freshness = str(cache_bundle.get("freshness") or self._weakest_freshness([str(component.get("freshness") or "unavailable") for component in components]))
         status = "live" if all_required_ready else "partial"
         included = all_required_ready
-        degradation_reason = None if all_required_ready else "fed_liquidity_required_series_missing_or_stale"
+        degradation_reason = None if all_required_ready else str(cache_bundle.get("degradationReason") or "fed_liquidity_required_series_missing_or_stale")
         evidence_inputs = [
             self._source_confidence_input_from_component(component)
             for component in components
@@ -981,6 +990,7 @@ class LiquidityMonitorService:
             inputs=evidence_inputs,
             expected_input_count=len(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["fed_liquidity"]),
         )
+        evidence["cacheBundleDiagnostics"] = cache_bundle
         if degradation_reason:
             evidence["degradationReason"] = degradation_reason
 
@@ -1124,6 +1134,22 @@ class LiquidityMonitorService:
         available = [item for item in (dr007, shibor) if item is not None]
         avg_change = sum(float(self._change_value(item) or 0.0) for item in available) / len(available)
         freshness = self._weakest_freshness([self._item_freshness(item, panel) for item in available])
+        cache_bundle = self._cn_money_market_cache_bundle_diagnostics(panel)
+        evidence = self._indicator_evidence(
+            status="partial",
+            freshness=freshness,
+            inputs=[
+                self._source_confidence_input_from_item(
+                    item,
+                    panel,
+                    key=str(item.get("symbol") or ""),
+                    label=str(item.get("label") or item.get("symbol") or ""),
+                )
+                for item in available
+            ],
+            expected_input_count=2,
+        )
+        evidence["cacheBundleDiagnostics"] = cache_bundle
         return self._indicator(
             "cn_money_market_rates",
             "CN 货币市场利率",
@@ -1134,21 +1160,122 @@ class LiquidityMonitorService:
             False,
             f"均值 {avg_change:+.2f}%",
             freshness=freshness,
-            evidence=self._indicator_evidence(
-                status="partial",
-                freshness=freshness,
-                inputs=[
-                    self._source_confidence_input_from_item(
-                        item,
-                        panel,
-                        key=str(item.get("symbol") or ""),
-                        label=str(item.get("label") or item.get("symbol") or ""),
-                    )
-                    for item in available
-                ],
-                expected_input_count=2,
-            ),
+            evidence=evidence,
         )
+
+    def _cn_money_market_cache_bundle_diagnostics(self, panel: PanelState) -> Dict[str, Any]:
+        snapshot_bundle = panel.payload.get("cacheBundleDiagnostics")
+        if isinstance(snapshot_bundle, dict):
+            bundle = copy.deepcopy(snapshot_bundle)
+            bundle.setdefault("externalProviderCalls", False)
+            bundle.setdefault("scoreContributionAllowed", False)
+            bundle.setdefault("observationOnly", True)
+            return bundle
+
+        raw_items = panel.payload.get("items")
+        items = [item for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
+        required = list(OFFICIAL_CN_MONEY_MARKET_RATES_REQUIRED_METRICS)
+        context_metrics = list(OFFICIAL_CN_MONEY_MARKET_RATES_CONTEXT_METRICS)
+        fulfilled: list[str] = []
+        malformed: list[str] = []
+        context_series: list[str] = []
+        context_only_series: list[str] = []
+        freshness_values: list[str] = []
+
+        for item in items:
+            series_id = self._cn_money_market_series_id(item)
+            if not series_id:
+                continue
+            official_public = (
+                str(item.get("sourceType") or panel.payload.get("sourceType") or "").lower() == "official_public"
+                or str(item.get("sourceTier") or panel.payload.get("sourceTier") or "").lower() == "official_public"
+            )
+            provider_id = str(item.get("source") or panel.source or "").lower()
+            if not official_public or provider_id not in {OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID, ""}:
+                continue
+            value = self._numeric(item.get("value") if item.get("value") is not None else item.get("price"))
+            if value is None:
+                if series_id in required:
+                    malformed.append(series_id)
+                continue
+            if series_id in required:
+                fulfilled.append(series_id)
+            elif series_id in context_metrics:
+                context_series.append(series_id)
+                context_only_series.append(series_id)
+            freshness_values.append(self._item_freshness(item, panel))
+
+        fulfilled = [series for series in required if series in set(fulfilled)]
+        malformed = [series for series in required if series in set(malformed)]
+        missing = [series for series in required if series not in set(fulfilled)]
+        coverage_ratio = round(len(fulfilled) / len(required), 2)
+        freshness = self._weakest_freshness(freshness_values or [panel.freshness or "unavailable"])
+        reason_codes = ["official_cn_money_market_rates_cache_valid_diagnostic_only"]
+        if missing:
+            reason_codes.append("missing_required_metric")
+        if malformed:
+            reason_codes.append("unsupported_value_format")
+        if "CN10Y" in context_only_series:
+            reason_codes.append("cn10y_context_only_not_yield_curve_authority")
+
+        return {
+            "providerId": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+            "providerName": "Official CN Money Market Rates",
+            "source": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+            "sourceLabel": "Official CN Money Market Rates diagnostic cache",
+            "sourceType": "official_public",
+            "sourceTier": "official_public",
+            "trustLevel": "score_grade_when_configured",
+            "retrievalMode": "cache_only",
+            "cacheOnly": True,
+            "externalProviderCalls": False,
+            "freshness": freshness,
+            "requiredSeries": required,
+            "fulfilledSeries": fulfilled,
+            "missingSeries": missing,
+            "malformedSeries": malformed,
+            "requiredMetrics": required,
+            "fulfilledMetrics": fulfilled,
+            "missingMetrics": missing,
+            "contextSeries": list(dict.fromkeys(context_series)),
+            "contextOnlySeries": list(dict.fromkeys(context_only_series)),
+            "coverageRatio": coverage_ratio,
+            "coverage": coverage_ratio,
+            "isPartial": bool(missing or malformed),
+            "isStale": freshness == "stale",
+            "isUnavailable": not fulfilled,
+            "isFallback": False,
+            "fallbackUsed": False,
+            "observationOnly": True,
+            "sourceAuthorityAllowed": not bool(missing or malformed),
+            "scoreContributionAllowed": False,
+            "reasonCodes": reason_codes,
+            "sourceFreshnessEvidence": {
+                "providerId": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+                "source": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+                "freshness": freshness,
+                "requiredSeries": required,
+                "fulfilledSeries": fulfilled,
+                "missingSeries": missing,
+                "contextSeries": list(dict.fromkeys(context_series)),
+                "coverageRatio": coverage_ratio,
+                "externalProviderCalls": False,
+                "cacheOnly": True,
+            },
+        }
+
+    @staticmethod
+    def _cn_money_market_series_id(item: Dict[str, Any]) -> str | None:
+        raw = str(item.get("officialSeriesId") or item.get("seriesId") or item.get("sourceId") or item.get("symbol") or "").upper()
+        aliases = {
+            "SHIBOR": "SHIBOR_ON",
+            "SHIBOR_O/N": "SHIBOR_ON",
+            "LPR1Y": "LPR_1Y",
+            "LPR5Y": "LPR_5Y",
+        }
+        normalized = aliases.get(raw, raw)
+        valid = set(OFFICIAL_CN_MONEY_MARKET_RATES_REQUIRED_METRICS) | set(OFFICIAL_CN_MONEY_MARKET_RATES_CONTEXT_METRICS)
+        return normalized if normalized in valid else None
 
     def _futures_indicator(self, panel: PanelState) -> Dict[str, Any]:
         if panel.is_fallback or panel.freshness in {"fallback", "mock", "error", "unavailable"}:
@@ -2329,7 +2456,7 @@ class LiquidityMonitorService:
             degradation_reason = activation_cap_reason or (
                 trust["degradationReasons"][0] if trust["degradationReasons"] else evidence.get("capReason")
             )
-        return {
+        diagnostics = {
             "indicatorId": key,
             "indicatorName": label,
             "requiredInputs": list(required_inputs),
@@ -2358,6 +2485,10 @@ class LiquidityMonitorService:
             "routeRejectedReasonCodes": activation["routeRejectedReasonCodes"],
             "activationHint": activation_hint,
         }
+        cache_bundle = evidence.get("cacheBundleDiagnostics")
+        if isinstance(cache_bundle, dict):
+            diagnostics["cacheBundleDiagnostics"] = copy.deepcopy(cache_bundle)
+        return diagnostics
 
     def _indicator_provider_activation(
         self,
@@ -2680,6 +2811,9 @@ class LiquidityMonitorService:
                 and self._indicator_source_seen(evidence, panel, {"binance", "binance_ws"})
             )
         if key == "fed_liquidity":
+            cache_bundle = evidence.get("cacheBundleDiagnostics")
+            if isinstance(cache_bundle, dict):
+                return bool(cache_bundle.get("scoreContributionAllowed"))
             inputs = [item for item in evidence.get("inputs", []) if isinstance(item, dict)]
             required = set(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["fed_liquidity"])
             return (

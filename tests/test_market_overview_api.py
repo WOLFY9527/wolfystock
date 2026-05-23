@@ -100,6 +100,66 @@ class MarketOverviewApiTestCase(unittest.TestCase):
         self.assertEqual(indices["items"][0]["freshness"], "delayed")
         self.assertFalse(indices["items"][0]["isFallback"])
 
+    def test_macro_fed_liquidity_cache_bundle_diagnostics_are_cache_only_without_source_calls(self) -> None:
+        from src.services.market_overview_service import MarketOverviewService
+        from src.services.official_macro_transport import MacroObservation
+
+        service = MarketOverviewService(cn_hk_connect_flow_provider=lambda: None)
+
+        def points(series_id: str, latest: float, previous: float) -> list[MacroObservation]:
+            return [
+                MacroObservation(
+                    symbol=series_id,
+                    value=latest,
+                    date="2026-05-22",
+                    as_of="2026-05-22T16:15:00+00:00",
+                    source_id=f"fred:{series_id}",
+                    source_type="official_public",
+                    freshness_hint="delayed",
+                ),
+                MacroObservation(
+                    symbol=series_id,
+                    value=previous,
+                    date="2026-05-15",
+                    as_of="2026-05-15T16:15:00+00:00",
+                    source_id=f"fred:{series_id}",
+                    source_type="official_public",
+                    freshness_hint="delayed",
+                ),
+            ]
+
+        official_points = {
+            "WALCL": points("WALCL", 7485000.0, 7475000.0),
+            "RRPONTSYD": points("RRPONTSYD", 432.2, 455.0),
+            "WTREGEN": points("WTREGEN", 812000.0, 826000.0),
+            "WRESBAL": points("WRESBAL", 3260000.0, 3240000.0),
+        }
+
+        with (
+            patch(
+                "src.services.market_overview_service.fetch_fred_observation_points",
+                side_effect=AssertionError("cache bundle projection must not fetch FRED"),
+            ) as fred_fetch,
+            patch(
+                "src.services.market_overview_service.fetch_treasury_daily_rate_observation_points",
+                side_effect=AssertionError("cache bundle projection must not fetch Treasury"),
+            ) as treasury_fetch,
+        ):
+            items = service._official_fed_liquidity_items(official_points)
+
+        fed_assets = items["FED_ASSETS"]
+        bundle = fed_assets["cacheBundleDiagnostics"]
+        self.assertEqual(bundle["requiredSeries"], ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"])
+        self.assertEqual(bundle["fulfilledSeries"], ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"])
+        self.assertEqual(bundle["missingSeries"], [])
+        self.assertEqual(bundle["coverageRatio"], 1.0)
+        self.assertEqual(bundle["sourceType"], "official_public")
+        self.assertFalse(bundle["externalProviderCalls"])
+        self.assertTrue(bundle["scoreContributionAllowed"])
+        self.assertFalse(bundle["observationOnly"])
+        fred_fetch.assert_not_called()
+        treasury_fetch.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -166,6 +166,67 @@ def _cache_entry(
     return payload
 
 
+FED_LIQUIDITY_SERIES_BY_SYMBOL = {
+    "FED_ASSETS": "WALCL",
+    "FED_RRP": "RRPONTSYD",
+    "TGA": "WTREGEN",
+    "RESERVES": "WRESBAL",
+}
+
+
+def _fed_liquidity_macro_item(
+    symbol: str,
+    *,
+    value: Any = 1.0,
+    change_percent: float | None = 0.1,
+    freshness: str = "cached",
+    source_authority_allowed: bool = True,
+    score_contribution_allowed: bool = True,
+    is_stale: bool = False,
+    is_unavailable: bool = False,
+) -> Dict[str, Any]:
+    series_id = FED_LIQUIDITY_SERIES_BY_SYMBOL[symbol]
+    policy = (
+        "official_daily_us_weekday_t_plus_1"
+        if series_id == "RRPONTSYD"
+        else "official_weekly_fed_liquidity_t_plus_7"
+    )
+    base_as_of = "2026-05-20T16:15:00+08:00"
+    return {
+        "symbol": symbol,
+        "label": symbol,
+        "value": value,
+        "changePercent": change_percent,
+        "source": "fred",
+        "sourceId": f"fred:{series_id}",
+        "sourceType": "official_public",
+        "sourceLabel": f"FRED {series_id}",
+        "sourceTier": "official_public",
+        "trustLevel": "reliable",
+        "officialSeriesId": series_id,
+        "officialObservationDate": "2026-05-20",
+        "officialAsOf": "2026-05-20",
+        "sourceAuthorityAllowed": source_authority_allowed,
+        "scoreContributionAllowed": score_contribution_allowed,
+        "routeRejectedReasonCodes": [],
+        "unit": "USD mn",
+        "freshness": freshness,
+        "asOf": base_as_of,
+        "updatedAt": base_as_of,
+        "isStale": is_stale,
+        "isUnavailable": is_unavailable,
+        "isFallback": False,
+        "sourceFreshnessEvidence": {
+            "freshness": freshness,
+            "freshnessPolicy": policy,
+            "externalProviderCalls": False,
+            "isFallback": False,
+            "isStale": is_stale,
+            "isUnavailable": is_unavailable,
+        },
+    }
+
+
 def _make_service(*, allow_external_provider_calls: bool = False) -> LiquidityMonitorService:
     return LiquidityMonitorService(
         cache=MarketCache(max_workers=1),
@@ -3564,6 +3625,25 @@ def test_liquidity_cn_money_official_cache_rows_remain_observation_only_non_scor
                     "isFallback": False,
                     "freshness": "delayed",
                 },
+                {
+                    "symbol": "CN10Y",
+                    "label": "China 10Y government bond yield context",
+                    "value": 2.35,
+                    "changePercent": 0.0,
+                    "unit": "%",
+                    "source": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+                    "sourceLabel": "Official CN Money Market Rates diagnostic cache",
+                    "sourceType": "official_public",
+                    "sourceTier": "official_public",
+                    "trustLevel": "score_grade_when_configured",
+                    "officialSeriesId": "CN10Y",
+                    "sourceAuthorityAllowed": False,
+                    "sourceAuthorityReason": "cn10y_context_only_not_yield_curve_authority",
+                    "scoreContributionAllowed": False,
+                    "observationOnly": True,
+                    "isFallback": False,
+                    "freshness": "delayed",
+                },
             ],
             updated_at=now,
             as_of=now,
@@ -3584,6 +3664,18 @@ def test_liquidity_cn_money_official_cache_rows_remain_observation_only_non_scor
     assert diagnostics["scoreContributionAllowed"] is False
     assert diagnostics["scoreExclusionReason"] == "observation_only"
     assert diagnostics["missingProviderReason"] is None
+    bundle = diagnostics["cacheBundleDiagnostics"]
+    assert bundle["providerId"] == OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID
+    assert bundle["requiredSeries"] == ["DR007", "SHIBOR_ON"]
+    assert bundle["fulfilledSeries"] == ["DR007", "SHIBOR_ON"]
+    assert bundle["missingSeries"] == []
+    assert bundle["coverageRatio"] == 1.0
+    assert bundle["contextSeries"] == ["CN10Y"]
+    assert bundle["contextOnlySeries"] == ["CN10Y"]
+    assert bundle["externalProviderCalls"] is False
+    assert bundle["observationOnly"] is True
+    assert bundle["scoreContributionAllowed"] is False
+    assert "cn10y_context_only_not_yield_curve_authority" in str(bundle)
     assert all(item["scoreContributionAllowed"] is False for item in indicator["evidence"]["inputs"])
 
 
@@ -4841,6 +4933,19 @@ def test_fed_liquidity_indicator_scores_only_when_full_official_group_is_fresh(
     assert diagnostics["realSourceAvailable"] is True
     assert diagnostics["scoreContributionAllowed"] is True
     assert diagnostics["sourceAuthorityRouteRejected"] is False
+    bundle = diagnostics["cacheBundleDiagnostics"]
+    assert bundle["providerId"] == "official_public.fed_liquidity"
+    assert bundle["sourceType"] == "official_public"
+    assert bundle["requiredSeries"] == ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    assert bundle["fulfilledSeries"] == ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    assert bundle["missingSeries"] == []
+    assert bundle["coverageRatio"] == 1.0
+    assert bundle["freshness"] in {"cached", "delayed"}
+    assert bundle["externalProviderCalls"] is False
+    assert bundle["observationOnly"] is False
+    assert bundle["scoreContributionAllowed"] is True
+    assert bundle["sourceFreshnessEvidence"]["freshnessPolicies"]["RRPONTSYD"] == "official_daily_us_weekday_t_plus_1"
+    assert indicator["evidence"]["cacheBundleDiagnostics"]["scoreContributionAllowed"] is True
     assert {item["officialSeriesId"] for item in indicator["evidence"]["inputs"]} == {
         "WALCL",
         "RRPONTSYD",
@@ -4941,8 +5046,56 @@ def test_fed_liquidity_indicator_remains_observation_only_when_series_is_missing
     assert diagnostics["missingInputs"] == ["RESERVES"]
     assert diagnostics["realSourceAvailable"] is False
     assert diagnostics["missingProviderReason"] == "requires_official_public.fed_liquidity"
+    bundle = diagnostics["cacheBundleDiagnostics"]
+    assert bundle["requiredSeries"] == ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    assert bundle["fulfilledSeries"] == ["WALCL", "RRPONTSYD", "WTREGEN"]
+    assert bundle["missingSeries"] == ["WRESBAL"]
+    assert bundle["coverageRatio"] == 0.75
+    assert bundle["observationOnly"] is True
+    assert bundle["scoreContributionAllowed"] is False
+    assert bundle["externalProviderCalls"] is False
     assert "RESERVES" in diagnostics["activationHint"]
     assert "fed_liquidity_partial_coverage" in str(indicator["evidence"]["inputs"])
+
+
+def test_fed_liquidity_indicator_fails_closed_for_malformed_cache_value(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    base_as_of = "2026-05-20T16:15:00+08:00"
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                _fed_liquidity_macro_item("FED_ASSETS", value=7485000.0, change_percent=0.13),
+                _fed_liquidity_macro_item("FED_RRP", value=432.2, change_percent=-5.01),
+                _fed_liquidity_macro_item("TGA", value=812000.0, change_percent=-1.69),
+                _fed_liquidity_macro_item("RESERVES", value="N/A", change_percent=0.62),
+            ],
+            updated_at=base_as_of,
+            as_of=base_as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["fed_liquidity"]
+    diagnostics = indicator["coverageDiagnostics"]
+    bundle = diagnostics["cacheBundleDiagnostics"]
+
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert indicator["status"] == "partial"
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["scoreExclusionReason"] == "fed_liquidity_required_series_missing_or_stale"
+    assert bundle["malformedSeries"] == ["WRESBAL"]
+    assert bundle["missingSeries"] == ["WRESBAL"]
+    assert bundle["coverageRatio"] == 0.75
+    assert bundle["scoreContributionAllowed"] is False
+    assert bundle["observationOnly"] is True
+    assert bundle["externalProviderCalls"] is False
 
 
 def test_usd_pressure_scores_when_official_trade_weighted_usd_is_fresh(

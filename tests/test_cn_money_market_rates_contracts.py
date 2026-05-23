@@ -117,12 +117,28 @@ def test_valid_official_cn_money_market_cache_normalizes_required_metrics_withou
     assert snapshot["scoreContributionAllowed"] is False
     assert snapshot["fulfilledMetrics"] == ["DR007", "SHIBOR_ON"]
     assert snapshot["missingMetrics"] == []
+    assert snapshot["requiredSeries"] == ["DR007", "SHIBOR_ON"]
+    assert snapshot["fulfilledSeries"] == ["DR007", "SHIBOR_ON"]
+    assert snapshot["missingSeries"] == []
+    assert snapshot["contextSeries"] == ["SHIBOR_3M", "LPR_1Y", "LPR_5Y", "CN10Y"]
     assert snapshot["coverageRatio"] == 1.0
     assert snapshot["publicationDate"] == "2026-05-23"
     assert snapshot["tradingDate"] == "2026-05-23"
     assert snapshot["sourceFreshnessEvidence"]["externalProviderCalls"] is False
     assert snapshot["sourceFreshnessEvidence"]["coverageRatio"] == 1.0
     assert snapshot["reasonCodes"] == ["official_cn_money_market_rates_cache_valid_diagnostic_only"]
+    bundle = snapshot["cacheBundleDiagnostics"]
+    assert bundle["providerId"] == OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID
+    assert bundle["sourceType"] == "official_public"
+    assert bundle["externalProviderCalls"] is False
+    assert bundle["scoreContributionAllowed"] is False
+    assert bundle["observationOnly"] is True
+    assert bundle["requiredSeries"] == ["DR007", "SHIBOR_ON"]
+    assert bundle["fulfilledSeries"] == ["DR007", "SHIBOR_ON"]
+    assert bundle["missingSeries"] == []
+    assert bundle["coverageRatio"] == 1.0
+    assert bundle["contextSeries"] == ["SHIBOR_3M", "LPR_1Y", "LPR_5Y", "CN10Y"]
+    assert "CN10Y" in bundle["contextOnlySeries"]
 
     by_series = {item["officialSeriesId"]: item for item in snapshot["items"]}
     assert by_series["DR007"]["symbol"] == "DR007"

@@ -289,6 +289,84 @@ def test_official_cn_money_market_normalized_rows_carry_non_scoring_source_confi
     assert dr007["observationOnly"] is True
 
 
+def test_official_fed_liquidity_cache_bundle_source_confidence_is_fail_closed() -> None:
+    from src.services.official_macro_liquidity_cache_contracts import (
+        OFFICIAL_FED_LIQUIDITY_PROVIDER_ID,
+        build_official_fed_liquidity_cache_bundle,
+    )
+
+    complete_bundle = build_official_fed_liquidity_cache_bundle(
+        [
+            {
+                "symbol": "FED_ASSETS",
+                "officialSeriesId": "WALCL",
+                "value": 7485000.0,
+                "source": "fred",
+                "sourceType": "official_public",
+                "sourceTier": "official_public",
+                "freshness": "cached",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+            },
+            {
+                "symbol": "FED_RRP",
+                "officialSeriesId": "RRPONTSYD",
+                "value": 432.2,
+                "source": "fred",
+                "sourceType": "official_public",
+                "sourceTier": "official_public",
+                "freshness": "cached",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+            },
+            {
+                "symbol": "TGA",
+                "officialSeriesId": "WTREGEN",
+                "value": 812000.0,
+                "source": "fred",
+                "sourceType": "official_public",
+                "sourceTier": "official_public",
+                "freshness": "cached",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+            },
+            {
+                "symbol": "RESERVES",
+                "officialSeriesId": "WRESBAL",
+                "value": 3260000.0,
+                "source": "fred",
+                "sourceType": "official_public",
+                "sourceTier": "official_public",
+                "freshness": "cached",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+            },
+        ]
+    )
+    malformed_bundle = build_official_fed_liquidity_cache_bundle(
+        [
+            {
+                "symbol": "FED_ASSETS",
+                "officialSeriesId": "WALCL",
+                "value": "N/A",
+                "source": "fred",
+                "sourceType": "official_public",
+                "sourceTier": "official_public",
+                "freshness": "cached",
+            }
+        ]
+    )
+
+    assert complete_bundle["providerId"] == OFFICIAL_FED_LIQUIDITY_PROVIDER_ID
+    assert complete_bundle["scoreContributionAllowed"] is True
+    assert complete_bundle["sourceAuthorityAllowed"] is True
+    assert complete_bundle["externalProviderCalls"] is False
+    assert malformed_bundle["scoreContributionAllowed"] is False
+    assert malformed_bundle["sourceAuthorityAllowed"] is False
+    assert malformed_bundle["malformedSeries"] == ["WALCL"]
+    assert malformed_bundle["observationOnly"] is True
+
+
 def test_provider_capability_support_contract_projects_license_gated_missing_provider_fields() -> None:
     contract = coerce_provider_capability_support_contract(
         {

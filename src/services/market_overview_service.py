@@ -44,6 +44,9 @@ from src.services.official_macro_transport import (
     fetch_treasury_daily_rate_observation_points,
     fred_runtime_config_probe,
 )
+from src.services.official_macro_liquidity_cache_contracts import (
+    build_official_fed_liquidity_cache_bundle,
+)
 from src.services.market_overview_binance_transport import (
     fetch_binance_funding_row,
     fetch_binance_kline_history_rows,
@@ -2229,9 +2232,15 @@ class MarketOverviewService:
         if not items:
             return {}
 
-        group_ready = len(items) == len(self.FED_LIQUIDITY_SERIES) and not failures
-        reason_codes = sorted(set(failures.values())) if failures else []
+        cache_bundle = build_official_fed_liquidity_cache_bundle(list(items.values()))
+        group_ready = bool(cache_bundle.get("scoreContributionAllowed"))
+        reason_codes = [str(code) for code in cache_bundle.get("reasonCodes") or []]
+        if not reason_codes and failures:
+            reason_codes = sorted(set(failures.values()))
         for symbol, item in items.items():
+            item["cacheBundleDiagnostics"] = copy.deepcopy(cache_bundle)
+            item["externalProviderCalls"] = False
+            item["cacheOnly"] = True
             if group_ready:
                 item.update(
                     {
@@ -2243,11 +2252,14 @@ class MarketOverviewService:
                 )
                 continue
             if not item.get("isUnavailable"):
+                authority_reason = str(cache_bundle.get("degradationReason") or "fed_liquidity_partial_coverage")
+                if authority_reason == "fed_liquidity_required_series_missing_or_stale":
+                    authority_reason = "fed_liquidity_partial_coverage"
                 item.update(
                     {
-                        "sourceAuthorityAllowed": True,
+                        "sourceAuthorityAllowed": False,
                         "scoreContributionAllowed": False,
-                        "sourceAuthorityReason": "fed_liquidity_partial_coverage",
+                        "sourceAuthorityReason": authority_reason,
                         "routeRejectedReasonCodes": reason_codes or ["fed_liquidity_partial_coverage"],
                     }
                 )

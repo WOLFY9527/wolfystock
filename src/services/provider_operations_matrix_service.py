@@ -29,6 +29,10 @@ from src.services.cn_money_market_rates_contracts import (
     CnMoneyMarketRatesProviderUnavailable,
     read_official_cn_money_market_rates_cache,
 )
+from src.services.official_macro_liquidity_cache_contracts import (
+    OFFICIAL_FED_LIQUIDITY_PROVIDER_ID,
+    build_official_fed_liquidity_cache_bundle,
+)
 from src.services.market_data_readiness_diagnostics import (
     MarketDataReadinessDiagnostics,
     build_market_data_readiness_diagnostics,
@@ -37,7 +41,6 @@ from src.services.provider_affected_surface_mapping import (
     canonical_product_affected_surfaces,
 )
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
-from src.services.official_macro_source_registry import get_official_macro_source
 from src.services.polygon_us_breadth_provider import (
     POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
     POLYGON_US_BREADTH_AUTHORITY_BASIS,
@@ -110,21 +113,7 @@ _NO_OPTIONAL_DEPENDENCY_PROVIDER_IDS = _MISSING_FEED_PROVIDER_IDS | {
     "official_public.fed_liquidity",
     "polygon_us_grouped_daily",
 }
-_OFFICIAL_FED_LIQUIDITY_PROVIDER_ID = "official_public.fed_liquidity"
-_OFFICIAL_FED_LIQUIDITY_SERIES_IDS = ("WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL")
-_OFFICIAL_FED_LIQUIDITY_FRESHNESS_POLICIES = {
-    "RRPONTSYD": "official_daily_us_weekday_t_plus_1",
-    "WALCL": "official_weekly_fed_liquidity_t_plus_7",
-    "WRESBAL": "official_weekly_fed_liquidity_t_plus_7",
-    "WTREGEN": "official_weekly_fed_liquidity_t_plus_7",
-}
-_OFFICIAL_FED_LIQUIDITY_SYMBOL_TO_SERIES_ID = {
-    "FED_ASSETS": "WALCL",
-    "FED_RRP": "RRPONTSYD",
-    "TGA": "WTREGEN",
-    "RESERVES": "WRESBAL",
-}
-_RELIABLE_FRESHNESS = frozenset({"live", "cached", "delayed"})
+_OFFICIAL_FED_LIQUIDITY_PROVIDER_ID = OFFICIAL_FED_LIQUIDITY_PROVIDER_ID
 _POLYGON_US_BREADTH_AD_METRICS = (
     "ADVANCERS",
     "DECLINERS",
@@ -846,161 +835,7 @@ class ProviderOperationsMatrixService:
     def _project_official_fed_liquidity_runtime_bundle(
         runtime_rows: Sequence[Mapping[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        rows_by_series: dict[str, Mapping[str, Any]] = {}
-        for row in runtime_rows or ():
-            series_id = ProviderOperationsMatrixService._fed_liquidity_series_id(row)
-            if series_id:
-                rows_by_series[series_id] = row
-
-        fulfilled: list[str] = []
-        missing: list[str] = []
-        stale: list[str] = []
-        for series_id in _OFFICIAL_FED_LIQUIDITY_SERIES_IDS:
-            row = rows_by_series.get(series_id)
-            if row is None:
-                missing.append(series_id)
-                continue
-            if ProviderOperationsMatrixService._fed_liquidity_row_is_ready(row, series_id):
-                fulfilled.append(series_id)
-                continue
-            missing.append(series_id)
-            if ProviderOperationsMatrixService._fed_liquidity_row_is_stale(row):
-                stale.append(series_id)
-
-        coverage_count = len(fulfilled)
-        coverage_ratio = round(coverage_count / len(_OFFICIAL_FED_LIQUIDITY_SERIES_IDS), 3)
-        supported_source_ids = [
-            contract.source_id
-            for contract in (
-                get_official_macro_source(f"FRED_{series_id}")
-                for series_id in _OFFICIAL_FED_LIQUIDITY_SERIES_IDS
-            )
-            if contract is not None
-        ]
-        base_evidence = {
-            "aggregateSupported": True,
-            "externalProviderCalls": False,
-            "isFallback": False,
-            "freshnessPolicies": dict(_OFFICIAL_FED_LIQUIDITY_FRESHNESS_POLICIES),
-            "requiredSeries": list(_OFFICIAL_FED_LIQUIDITY_SERIES_IDS),
-            "supportedSourceIds": supported_source_ids,
-        }
-        if coverage_count == len(_OFFICIAL_FED_LIQUIDITY_SERIES_IDS):
-            return {
-                "runtimeState": "aggregate_supported_runtime_evidence_ready",
-                "trustLevel": "score_grade",
-                "observationOnly": False,
-                "sourceAuthorityAllowed": True,
-                "scoreContributionAllowed": True,
-                "reasonCodes": ["official_macro_transport_supported"],
-                "fulfilledMetrics": list(_OFFICIAL_FED_LIQUIDITY_SERIES_IDS),
-                "missingMetrics": [],
-                "coverageCount": coverage_count,
-                "degradationReason": None,
-                "sourceFreshnessEvidence": {
-                    **base_evidence,
-                    "coverageRatio": coverage_ratio,
-                    "freshness": "delayed",
-                    "isPartial": False,
-                    "isUnavailable": False,
-                    "runtimeEvidence": "full",
-                },
-            }
-
-        if runtime_rows:
-            reason_codes = ["official_macro_transport_supported"]
-            if stale:
-                reason_codes.append("stale_official_macro_evidence")
-            if missing:
-                reason_codes.append("missing_official_macro_row")
-            return {
-                "runtimeState": "aggregate_supported_runtime_evidence_partial",
-                "trustLevel": "score_grade_when_configured",
-                "observationOnly": True,
-                "sourceAuthorityAllowed": False,
-                "scoreContributionAllowed": False,
-                "reasonCodes": reason_codes,
-                "fulfilledMetrics": fulfilled,
-                "missingMetrics": missing,
-                "coverageCount": coverage_count,
-                "degradationReason": "fed_liquidity_required_series_missing_or_stale",
-                "sourceFreshnessEvidence": {
-                    **base_evidence,
-                    "coverageRatio": coverage_ratio,
-                    "freshness": "stale" if stale else "partial",
-                    "isPartial": True,
-                    "isUnavailable": False,
-                    "missingSeries": missing,
-                    "runtimeEvidence": "partial",
-                    "staleSeries": stale,
-                },
-            }
-
-        return {
-            "runtimeState": "aggregate_supported_runtime_evidence_missing",
-            "trustLevel": "score_grade_when_configured",
-            "observationOnly": True,
-            "sourceAuthorityAllowed": False,
-            "scoreContributionAllowed": False,
-            "reasonCodes": [
-                "official_macro_transport_supported",
-                "missing_official_macro_row",
-            ],
-            "fulfilledMetrics": [],
-            "missingMetrics": list(_OFFICIAL_FED_LIQUIDITY_SERIES_IDS),
-            "coverageCount": 0,
-            "degradationReason": "fed_liquidity_required_series_missing_or_stale",
-            "sourceFreshnessEvidence": {
-                **base_evidence,
-                "freshness": "unavailable",
-                "isPartial": False,
-                "isUnavailable": True,
-                "runtimeEvidence": "missing",
-            },
-        }
-
-    @staticmethod
-    def _fed_liquidity_series_id(row: Mapping[str, Any]) -> str | None:
-        explicit_series_id = _text(row.get("officialSeriesId") or row.get("seriesId")).upper()
-        if explicit_series_id in _OFFICIAL_FED_LIQUIDITY_SERIES_IDS:
-            return explicit_series_id
-        symbol = _text(row.get("symbol")).upper()
-        return _OFFICIAL_FED_LIQUIDITY_SYMBOL_TO_SERIES_ID.get(symbol)
-
-    @staticmethod
-    def _fed_liquidity_row_is_ready(row: Mapping[str, Any], series_id: str) -> bool:
-        freshness = _text(row.get("freshness")).lower()
-        evidence = row.get("sourceFreshnessEvidence")
-        source_freshness_evidence = dict(evidence) if isinstance(evidence, Mapping) else {}
-        freshness_policy = _text(source_freshness_evidence.get("freshnessPolicy"))
-        expected_policy = _OFFICIAL_FED_LIQUIDITY_FRESHNESS_POLICIES[series_id]
-        try:
-            numeric_value = float(row.get("value"))
-        except (TypeError, ValueError):
-            numeric_value = None
-        return bool(
-            _text(row.get("sourceType")).lower() == "official_public"
-            and _text(row.get("sourceTier")).lower() == "official_public"
-            and row.get("sourceAuthorityAllowed") is not False
-            and row.get("scoreContributionAllowed") is not False
-            and not bool(row.get("isFallback"))
-            and not bool(row.get("isUnavailable"))
-            and not bool(row.get("isStale"))
-            and freshness in _RELIABLE_FRESHNESS
-            and numeric_value is not None
-            and freshness_policy == expected_policy
-        )
-
-    @staticmethod
-    def _fed_liquidity_row_is_stale(row: Mapping[str, Any]) -> bool:
-        freshness = _text(row.get("freshness")).lower()
-        evidence = row.get("sourceFreshnessEvidence")
-        source_freshness_evidence = dict(evidence) if isinstance(evidence, Mapping) else {}
-        return bool(
-            row.get("isStale")
-            or source_freshness_evidence.get("isStale")
-            or freshness == "stale"
-        )
+        return build_official_fed_liquidity_cache_bundle(runtime_rows)
 
     @staticmethod
     def _summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
