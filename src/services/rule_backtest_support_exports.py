@@ -9,6 +9,8 @@ import io
 import json
 from typing import Any, Callable, Mapping, Sequence
 
+from src.services.backtest_walkforward_oos import build_walk_forward_oos_evidence_from_stored_robustness
+
 
 def stringify_execution_trace_value(value: Any) -> str:
     if value is None:
@@ -153,13 +155,25 @@ def resolve_stored_robustness_evidence_payload(run: Mapping[str, Any]) -> dict[s
     summary = dict(run.get("summary") or {}) if isinstance(run.get("summary"), dict) else {}
     summary_payload = summary.get("robustness_analysis")
     if isinstance(summary_payload, dict) and summary_payload:
-        return dict(summary_payload)
+        return _with_walk_forward_oos_evidence(summary_payload, run)
 
     run_payload = run.get("robustness_analysis")
     if isinstance(run_payload, dict) and run_payload:
-        return dict(run_payload)
+        return _with_walk_forward_oos_evidence(run_payload, run)
 
     return {}
+
+
+def _with_walk_forward_oos_evidence(
+    robustness_payload: Mapping[str, Any],
+    run: Mapping[str, Any],
+) -> dict[str, Any]:
+    payload = dict(robustness_payload)
+    payload["walk_forward_oos_evidence"] = build_walk_forward_oos_evidence_from_stored_robustness(
+        payload,
+        run_metadata=run,
+    )
+    return payload
 
 
 def build_support_export_index(run: Mapping[str, Any]) -> dict[str, Any]:

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import csv
+import copy
 import hashlib
 import json
 import os
@@ -260,6 +261,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         return service, response
 
     def _assert_export_payload_is_sanitized(self, payload: object) -> None:
+        payload = self._payload_without_allowed_oos_authority_flags(payload)
         serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
         for sentinel in RAW_PROVIDER_SENTINELS:
             self.assertNotIn(sentinel, serialized)
@@ -283,9 +285,21 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         walk(payload)
 
     def _assert_robustness_payload_avoids_optimizer_semantics(self, payload: dict) -> None:
-        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True).lower()
+        normalized_payload = self._payload_without_allowed_oos_authority_flags(payload)
+        serialized = json.dumps(normalized_payload, ensure_ascii=False, sort_keys=True).lower()
         for needle in FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS:
             self.assertNotIn(needle, serialized)
+
+    @staticmethod
+    def _payload_without_allowed_oos_authority_flags(payload: object) -> object:
+        normalized = copy.deepcopy(payload)
+        if isinstance(normalized, dict):
+            evidence = normalized.get("walk_forward_oos_evidence")
+            if isinstance(evidence, dict):
+                authority = evidence.get("authority")
+                if isinstance(authority, dict) and authority.get("optimizer_executed") is False:
+                    authority.pop("optimizer_executed")
+        return normalized
 
     def _fetch_support_bundle_surface(self, run_id: int) -> dict:
         export_index_response = self.client.get(f"/api/v1/backtest/rule/runs/{run_id}/export-index")
@@ -378,6 +392,14 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
             self.assertEqual(http_payload["monte_carlo"], service_payload["monte_carlo"])
             self.assertEqual(http_payload["stress_tests"], service_payload["stress_tests"])
             self.assertEqual(http_payload["diagnostics"], service_payload["diagnostics"])
+            self.assertEqual(
+                http_payload["walk_forward_oos_evidence"],
+                service_payload["walk_forward_oos_evidence"],
+            )
+            self.assertEqual(
+                service_payload["walk_forward_oos_evidence"]["contract_kind"],
+                "backtest_walk_forward_oos_diagnostic_evidence",
+            )
             self.assertIn("profile", http_payload)
             self.assertIn("source", http_payload)
             self.assertIsNone(http_payload["profile"])

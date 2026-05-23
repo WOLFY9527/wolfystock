@@ -13,6 +13,7 @@ from typing import Any, Mapping, Sequence
 
 WALK_FORWARD_OOS_CONTRACT_VERSION = "v1"
 WALK_FORWARD_OOS_CONTRACT_KIND = "backtest_walk_forward_oos_validation_scaffold"
+WALK_FORWARD_OOS_EVIDENCE_CONTRACT_KIND = "backtest_walk_forward_oos_diagnostic_evidence"
 DEFAULT_WALK_FORWARD_OOS_METRIC_KEYS = (
     "total_return_pct",
     "max_drawdown_pct",
@@ -248,6 +249,149 @@ def aggregate_walk_forward_oos_results(
     }
 
 
+def build_walk_forward_oos_evidence_from_stored_robustness(
+    stored_robustness: Mapping[str, Any],
+    *,
+    run_metadata: Mapping[str, Any] | None = None,
+    metric_keys: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Adapt stored robustness walk-forward payloads into diagnostic OOS evidence."""
+
+    payload = copy.deepcopy(dict(stored_robustness or {}))
+    metadata = copy.deepcopy(dict(run_metadata or {}))
+    walk_forward = dict(payload.get("walk_forward") or {})
+    configuration = _normalize_stored_evidence_configuration(
+        payload.get("configuration"),
+        metric_keys=metric_keys,
+    )
+    resolved_metric_keys = list(configuration["metric_keys"])
+    raw_windows = [
+        copy.deepcopy(dict(item))
+        for item in list(walk_forward.get("windows") or [])
+        if isinstance(item, Mapping)
+    ]
+    ordered_windows = sorted(
+        enumerate(raw_windows, start=1),
+        key=lambda item: _stored_window_sort_key(item[0], item[1]),
+    )
+
+    fold_results: list[dict[str, Any]] = []
+    completed_metric_snapshots: list[dict[str, float]] = []
+    skipped_fold_count = 0
+    completed_without_metrics_count = 0
+    diagnostics = _normalize_diagnostics(walk_forward.get("diagnostics"))
+
+    for fallback_index, window in ordered_windows:
+        fold_index = _safe_positive_int(window.get("window_index")) or fallback_index
+        state = str(window.get("state") or "completed").strip() or "completed"
+        metrics = _extract_metric_snapshot(window.get("metrics"), resolved_metric_keys)
+        train_start = _date_label(window.get("train_start")) or "unknown"
+        train_end = _date_label(window.get("train_end")) or "unknown"
+        test_start = _date_label(window.get("test_start")) or "unknown"
+        test_end = _date_label(window.get("test_end")) or "unknown"
+        fold_id = _build_fold_id(
+            fold_index=fold_index,
+            train_start=train_start,
+            train_end=train_end,
+            test_start=test_start,
+            test_end=test_end,
+        )
+        train_window = {
+            "start_date": None if train_start == "unknown" else train_start,
+            "end_date": None if train_end == "unknown" else train_end,
+        }
+        test_window = {
+            "start_date": None if test_start == "unknown" else test_start,
+            "end_date": None if test_end == "unknown" else test_end,
+        }
+        if configuration.get("train_window") is not None:
+            train_window["size"] = configuration["train_window"]
+        if configuration.get("test_window") is not None:
+            test_window["size"] = configuration["test_window"]
+
+        if state in {"completed", "available"} and metrics:
+            completed_metric_snapshots.append(metrics)
+        elif state in {"completed", "available"}:
+            completed_without_metrics_count += 1
+            diagnostics.append(f"fold_{fold_index}_metrics_missing")
+        else:
+            skipped_fold_count += 1
+            diagnostics.append(f"fold_{fold_index}_state_{state}")
+
+        fold_results.append(
+            {
+                "fold_id": fold_id,
+                "fold_index": fold_index,
+                "state": state,
+                "train_window": train_window,
+                "test_window": test_window,
+                "metrics": metrics,
+            }
+        )
+
+    expected_fold_count = _configured_evidence_fold_count(configuration, walk_forward)
+    missing_fold_count = max(0, expected_fold_count - len(fold_results)) if expected_fold_count is not None else 0
+    if missing_fold_count > 0:
+        diagnostics.append("stored_fold_count_below_configured_max_windows")
+    if not fold_results:
+        diagnostics.append("stored_walk_forward_windows_missing")
+
+    completed_fold_count = len(completed_metric_snapshots)
+    missing_result_fold_count = missing_fold_count + skipped_fold_count + completed_without_metrics_count
+    if completed_fold_count and missing_result_fold_count == 0:
+        state = "available"
+    elif completed_fold_count:
+        state = "partial"
+    else:
+        state = "diagnostic_unavailable"
+
+    oos_result_summary = {
+        "state": state,
+        "completed_fold_count": completed_fold_count,
+        "missing_result_fold_count": missing_result_fold_count,
+        "metric_keys": resolved_metric_keys,
+        "metric_aggregates": _aggregate_metric_snapshots(completed_metric_snapshots, resolved_metric_keys),
+    }
+    evidence = {
+        "contract_kind": WALK_FORWARD_OOS_EVIDENCE_CONTRACT_KIND,
+        "contract_version": WALK_FORWARD_OOS_CONTRACT_VERSION,
+        "state": state,
+        "source": "stored_robustness_analysis.walk_forward",
+        "read_mode": "stored_first",
+        "diagnostic_only": True,
+        "decision_grade": False,
+        "source_run_id": _safe_int(metadata.get("id") or metadata.get("run_id")),
+        "source_run_ids": _source_run_ids(metadata),
+        "configuration": configuration,
+        "fold_order": [str(item["fold_id"]) for item in fold_results],
+        "folds": copy.deepcopy(fold_results),
+        "fold_results": copy.deepcopy(fold_results),
+        "oos_result_summary": oos_result_summary,
+        "coverage": {
+            "available_fold_count": completed_fold_count,
+            "missing_fold_count": missing_fold_count,
+            "skipped_fold_count": skipped_fold_count,
+            "diagnostics": _dedupe_strings(diagnostics),
+        },
+        "reproducibility": _build_stored_evidence_reproducibility(configuration),
+        "authority": {
+            "input_mode": "stored_robustness_analysis_walk_forward",
+            "adapter_execution_count": 0,
+            "new_strategy_execution_count": 0,
+            "provider_calls_executed": False,
+            "engine_math_changed": False,
+            "strategy_parameters_mutated": False,
+            "optimizer_executed": False,
+            "parameter_sweep_executed": False,
+        },
+    }
+    for key in ("code", "timeframe", "period_start", "period_end"):
+        value = metadata.get(key) if metadata.get(key) is not None else payload.get(key)
+        if value is not None:
+            evidence[key] = value
+    return evidence
+
+
 def _normalize_config(config: Mapping[str, Any] | WalkForwardOOSConfig) -> dict[str, Any]:
     if isinstance(config, WalkForwardOOSConfig):
         raw_config = config.to_dict()
@@ -271,6 +415,31 @@ def _normalize_config(config: Mapping[str, Any] | WalkForwardOOSConfig) -> dict[
     return resolved
 
 
+def _normalize_stored_evidence_configuration(
+    configuration: Any,
+    *,
+    metric_keys: Sequence[str] | None,
+) -> dict[str, Any]:
+    config_parent = dict(configuration or {}) if isinstance(configuration, Mapping) else {}
+    raw_config = dict(config_parent.get("walk_forward") or {})
+    raw_metric_keys = metric_keys or raw_config.get("metric_keys") or DEFAULT_WALK_FORWARD_OOS_METRIC_KEYS
+    resolved_metric_keys = [raw_metric_keys] if isinstance(raw_metric_keys, str) else list(raw_metric_keys)
+    resolved: dict[str, Any] = {
+        "train_window": _safe_positive_int(raw_config.get("train_window")),
+        "test_window": _safe_positive_int(raw_config.get("test_window")),
+        "step": _safe_positive_int(raw_config.get("step")) or 1,
+        "metric_keys": [str(item) for item in resolved_metric_keys],
+        "window_unit": "bars",
+    }
+    max_windows = _safe_positive_int(raw_config.get("max_windows"))
+    max_folds = _safe_positive_int(raw_config.get("max_folds")) or max_windows
+    if max_windows is not None:
+        resolved["max_windows"] = max_windows
+    if max_folds is not None:
+        resolved["max_folds"] = max_folds
+    return resolved
+
+
 def _positive_int(value: Any, name: str) -> int:
     try:
         resolved = int(value)
@@ -279,6 +448,16 @@ def _positive_int(value: Any, name: str) -> int:
     if resolved < 1:
         raise ValueError(f"{name} must be a positive integer.")
     return resolved
+
+
+def _safe_positive_int(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        resolved = int(value)
+    except (TypeError, ValueError):
+        return None
+    return resolved if resolved > 0 else None
 
 
 def _normalize_observations(observations: Sequence[Any]) -> list[_ObservationMarker]:
@@ -328,6 +507,10 @@ def _date_label(value: Any) -> str | None:
             except ValueError:
                 return normalized
     return str(value)
+
+
+def _stored_window_sort_key(source_index: int, window: Mapping[str, Any]) -> tuple[int, int]:
+    return (_safe_positive_int(window.get("window_index")) or source_index, source_index)
 
 
 def _build_validation_fold(
@@ -450,6 +633,17 @@ def _augment_result_reproducibility(reproducibility: Any) -> dict[str, Any]:
     return payload
 
 
+def _build_stored_evidence_reproducibility(configuration: Mapping[str, Any]) -> dict[str, Any]:
+    config_payload = copy.deepcopy(dict(configuration))
+    serialized_config = json.dumps(config_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return {
+        "config_hash_sha256": hashlib.sha256(serialized_config.encode("utf-8")).hexdigest(),
+        "input_ordering": "stored_walk_forward_window_index_ascending",
+        "fold_id_policy": "stable_from_window_bounds",
+        "result_ordering": "fold_index_ascending",
+    }
+
+
 def _normalize_fold_results(
     fold_results: Sequence[Mapping[str, Any]] | Mapping[str, Any],
 ) -> dict[str, dict[str, Any]]:
@@ -472,6 +666,57 @@ def _normalize_fold_results(
         if fold_id:
             results_by_fold_id[str(fold_id)] = item
     return results_by_fold_id
+
+
+def _configured_evidence_fold_count(
+    configuration: Mapping[str, Any],
+    walk_forward: Mapping[str, Any],
+) -> int | None:
+    for value in (
+        configuration.get("max_folds"),
+        configuration.get("max_windows"),
+        walk_forward.get("window_count"),
+    ):
+        resolved = _safe_positive_int(value)
+        if resolved is not None:
+            return resolved
+    return None
+
+
+def _safe_int(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _source_run_ids(metadata: Mapping[str, Any]) -> list[int]:
+    run_id = _safe_int(metadata.get("id") or metadata.get("run_id"))
+    return [run_id] if run_id is not None else []
+
+
+def _normalize_diagnostics(value: Any) -> list[str]:
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        values = list(value)
+    else:
+        values = []
+    return _dedupe_strings(str(item) for item in values if str(item or "").strip())
+
+
+def _dedupe_strings(values: Sequence[Any]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        item = str(value or "").strip()
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        deduped.append(item)
+    return deduped
 
 
 def _extract_metric_snapshot(metrics: Any, metric_keys: Sequence[str]) -> dict[str, float]:

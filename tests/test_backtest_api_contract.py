@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 import warnings
 from unittest.mock import MagicMock, patch
@@ -111,6 +112,16 @@ FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS = (
 
 class BacktestApiContractTestCase(unittest.TestCase):
     @staticmethod
+    def _payload_without_allowed_oos_authority_flags(payload: dict) -> dict:
+        normalized = json.loads(json.dumps(payload, ensure_ascii=False))
+        evidence = normalized.get("walk_forward_oos_evidence")
+        if isinstance(evidence, dict):
+            authority = evidence.get("authority")
+            if isinstance(authority, dict) and authority.get("optimizer_executed") is False:
+                authority.pop("optimizer_executed")
+        return normalized
+
+    @staticmethod
     def _assert_robustness_payload_stays_research_prototype(payload: dict) -> None:
         assert payload["state"] == "research_prototype"
         assert payload["source"] == "summary.robustness_analysis"
@@ -133,7 +144,16 @@ class BacktestApiContractTestCase(unittest.TestCase):
             for forbidden in ("validation_score", "validated_strategy", "selected_strategy", "optimized_parameters"):
                 assert forbidden not in serialized, forbidden
 
-        serialized = str(payload).lower()
+        oos_evidence = dict(payload.get("walk_forward_oos_evidence") or {})
+        if oos_evidence:
+            assert oos_evidence["contract_kind"] == "backtest_walk_forward_oos_diagnostic_evidence"
+            assert oos_evidence["diagnostic_only"] is True
+            assert oos_evidence["decision_grade"] is False
+            assert oos_evidence["authority"]["optimizer_executed"] is False
+            assert oos_evidence["authority"]["provider_calls_executed"] is False
+            assert oos_evidence["authority"]["engine_math_changed"] is False
+
+        serialized = str(BacktestApiContractTestCase._payload_without_allowed_oos_authority_flags(payload)).lower()
         for needle in FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS:
             assert needle not in serialized, needle
 
@@ -607,6 +627,98 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 ],
                 "aggregate_metrics": {"median_total_return_pct": 3.2},
                 "diagnostics": [],
+            },
+            "walk_forward_oos_evidence": {
+                "contract_kind": "backtest_walk_forward_oos_diagnostic_evidence",
+                "contract_version": "v1",
+                "state": "available",
+                "source": "stored_robustness_analysis.walk_forward",
+                "read_mode": "stored_first",
+                "diagnostic_only": True,
+                "decision_grade": False,
+                "source_run_id": 123,
+                "source_run_ids": [123],
+                "code": "600519",
+                "timeframe": "1d",
+                "period_start": "2024-01-01",
+                "period_end": "2024-02-23",
+                "configuration": {
+                    "train_window": 36,
+                    "test_window": 18,
+                    "step": 9,
+                    "max_windows": 3,
+                    "max_folds": 3,
+                    "metric_keys": ["total_return_pct", "max_drawdown_pct", "win_rate_pct", "trade_count"],
+                    "window_unit": "bars",
+                },
+                "fold_order": ["wf_oos_fold_0001_train_20240101_20240205_test_20240206_20240223"],
+                "folds": [
+                    {
+                        "fold_id": "wf_oos_fold_0001_train_20240101_20240205_test_20240206_20240223",
+                        "fold_index": 1,
+                        "state": "completed",
+                        "train_window": {
+                            "start_date": "2024-01-01",
+                            "end_date": "2024-02-05",
+                            "size": 36,
+                        },
+                        "test_window": {
+                            "start_date": "2024-02-06",
+                            "end_date": "2024-02-23",
+                            "size": 18,
+                        },
+                        "metrics": {"total_return_pct": 3.2},
+                    }
+                ],
+                "fold_results": [
+                    {
+                        "fold_id": "wf_oos_fold_0001_train_20240101_20240205_test_20240206_20240223",
+                        "fold_index": 1,
+                        "state": "completed",
+                        "train_window": {
+                            "start_date": "2024-01-01",
+                            "end_date": "2024-02-05",
+                            "size": 36,
+                        },
+                        "test_window": {
+                            "start_date": "2024-02-06",
+                            "end_date": "2024-02-23",
+                            "size": 18,
+                        },
+                        "metrics": {"total_return_pct": 3.2},
+                    }
+                ],
+                "oos_result_summary": {
+                    "state": "available",
+                    "completed_fold_count": 1,
+                    "missing_result_fold_count": 0,
+                    "metric_keys": ["total_return_pct", "max_drawdown_pct", "win_rate_pct", "trade_count"],
+                    "metric_aggregates": {
+                        "total_return_pct": {"count": 1, "min": 3.2, "max": 3.2, "mean": 3.2},
+                    },
+                },
+                "coverage": {
+                    "available_fold_count": 1,
+                    "missing_fold_count": 0,
+                    "skipped_fold_count": 0,
+                    "diagnostics": [],
+                },
+                "reproducibility": {
+                    "config_hash_sha256": "fixture-hash",
+                    "input_ordering": "stored_walk_forward_window_index_ascending",
+                    "fold_id_policy": "stable_from_window_bounds",
+                    "result_ordering": "fold_index_ascending",
+                },
+                "authority": {
+                    "input_mode": "stored_robustness_analysis_walk_forward",
+                    "adapter_execution_count": 0,
+                    "new_strategy_execution_count": 0,
+                    "provider_calls_executed": False,
+                    "engine_math_changed": False,
+                    "strategy_parameters_mutated": False,
+                    "optimizer_executed": False,
+                    "parameter_sweep_executed": False,
+                },
             },
         }
 

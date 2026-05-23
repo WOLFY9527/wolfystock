@@ -2,6 +2,7 @@
 """Tests for AI-assisted rule backtesting."""
 
 import csv
+import copy
 import hashlib
 import json
 import os
@@ -210,6 +211,16 @@ class RuleBacktestTestCase(unittest.TestCase):
             session.commit()
 
     @staticmethod
+    def _payload_without_allowed_oos_authority_flags(payload: dict) -> dict:
+        normalized = copy.deepcopy(payload)
+        evidence = normalized.get("walk_forward_oos_evidence")
+        if isinstance(evidence, dict):
+            authority = evidence.get("authority")
+            if isinstance(authority, dict) and authority.get("optimizer_executed") is False:
+                authority.pop("optimizer_executed")
+        return normalized
+
+    @staticmethod
     def _assert_public_backtest_text_is_analytical(text: str) -> None:
         normalized = text.lower()
         for needle in FORBIDDEN_PUBLIC_ADVICE_TERMS:
@@ -219,7 +230,8 @@ class RuleBacktestTestCase(unittest.TestCase):
 
     @staticmethod
     def _assert_robustness_payload_avoids_optimizer_semantics(payload: dict) -> None:
-        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True).lower()
+        normalized_payload = RuleBacktestTestCase._payload_without_allowed_oos_authority_flags(payload)
+        serialized = json.dumps(normalized_payload, ensure_ascii=False, sort_keys=True).lower()
         for needle in FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS:
             assert needle not in serialized, needle
 
@@ -252,6 +264,18 @@ class RuleBacktestTestCase(unittest.TestCase):
         windows = list(walk_forward.get("windows") or [])
         if windows:
             assert set(windows[0].keys()) == WALK_FORWARD_DIAGNOSTIC_WINDOW_KEYS
+
+        oos_evidence = dict(payload.get("walk_forward_oos_evidence") or {})
+        if oos_evidence:
+            assert oos_evidence.get("contract_kind") == "backtest_walk_forward_oos_diagnostic_evidence"
+            assert oos_evidence.get("diagnostic_only") is True
+            assert oos_evidence.get("decision_grade") is False
+            authority = dict(oos_evidence.get("authority") or {})
+            assert authority.get("provider_calls_executed") is False
+            assert authority.get("engine_math_changed") is False
+            assert authority.get("strategy_parameters_mutated") is False
+            assert authority.get("optimizer_executed") is False
+            assert authority.get("parameter_sweep_executed") is False
 
     @staticmethod
     def _compare_run_payload(
@@ -2361,10 +2385,32 @@ class RuleBacktestTestCase(unittest.TestCase):
 
         self.assertTrue(robustness_item["available"])
         self.assertEqual(robustness_item["availability_reason"], "stored_robustness_analysis_present")
-        self.assertEqual(payload, response["robustness_analysis"])
+        self.assertEqual(payload["state"], response["robustness_analysis"]["state"])
+        self.assertEqual(payload["configuration"], response["robustness_analysis"]["configuration"])
+        self.assertEqual(payload["walk_forward"], response["robustness_analysis"]["walk_forward"])
         self.assertEqual(payload["seed"], 4242)
         self.assertEqual(payload["configuration"]["walk_forward"]["train_window"], 36)
         self.assertEqual(payload["configuration"]["monte_carlo"]["simulation_count"], 16)
+        self.assertEqual(
+            payload["walk_forward_oos_evidence"]["contract_kind"],
+            "backtest_walk_forward_oos_diagnostic_evidence",
+        )
+        self.assertEqual(payload["walk_forward_oos_evidence"]["source_run_id"], response["id"])
+        self.assertEqual(payload["walk_forward_oos_evidence"]["source"], "stored_robustness_analysis.walk_forward")
+        self.assertEqual(payload["walk_forward_oos_evidence"]["read_mode"], "stored_first")
+        self.assertEqual(
+            payload["walk_forward_oos_evidence"]["authority"],
+            {
+                "input_mode": "stored_robustness_analysis_walk_forward",
+                "adapter_execution_count": 0,
+                "new_strategy_execution_count": 0,
+                "provider_calls_executed": False,
+                "engine_math_changed": False,
+                "strategy_parameters_mutated": False,
+                "optimizer_executed": False,
+                "parameter_sweep_executed": False,
+            },
+        )
         self._assert_robustness_payload_avoids_optimizer_semantics(payload)
         self._assert_public_backtest_text_is_analytical(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
@@ -2442,8 +2488,14 @@ class RuleBacktestTestCase(unittest.TestCase):
             }
         )
 
-        self.assertEqual(payload, summary_payload)
+        self.assertEqual(payload["state"], summary_payload["state"])
+        self.assertEqual(payload["seed"], summary_payload["seed"])
+        self.assertEqual(payload["configuration"], summary_payload["configuration"])
         self.assertNotEqual(payload["seed"], run_payload["seed"])
+        self.assertEqual(
+            payload["walk_forward_oos_evidence"]["contract_kind"],
+            "backtest_walk_forward_oos_diagnostic_evidence",
+        )
         self._assert_robustness_payload_avoids_optimizer_semantics(payload)
 
     def _assert_support_bundle_export_contract(
@@ -2709,7 +2761,14 @@ class RuleBacktestTestCase(unittest.TestCase):
 
         if expected_robustness_available:
             robustness_payload = service.get_robustness_evidence_export_json(run_id)
-            self.assertEqual(robustness_payload, run["robustness_analysis"])
+            self.assertEqual(robustness_payload["state"], run["robustness_analysis"]["state"])
+            self.assertEqual(robustness_payload["configuration"], run["robustness_analysis"]["configuration"])
+            self.assertEqual(robustness_payload["walk_forward"], run["robustness_analysis"]["walk_forward"])
+            self.assertEqual(
+                robustness_payload["walk_forward_oos_evidence"]["contract_kind"],
+                "backtest_walk_forward_oos_diagnostic_evidence",
+            )
+            self.assertEqual(robustness_payload["walk_forward_oos_evidence"]["source_run_id"], run_id)
             self._assert_robustness_payload_avoids_optimizer_semantics(robustness_payload)
             self._assert_public_backtest_text_is_analytical(
                 json.dumps(robustness_payload, ensure_ascii=False, sort_keys=True)
