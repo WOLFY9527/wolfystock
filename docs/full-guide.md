@@ -316,7 +316,7 @@ python3 scripts/smoke_backtest_rule.py
 > - TickFlow 能力按套餐权限分层：有限权限套餐仍可使用主指数查询；支持 `CN_Equity_A` 标的池查询的套餐才会启用 TickFlow 市场统计。
 > - 官方 quickstart 已文档化 `quotes.get(universes=["CN_Equity_A"])`，但线上 smoke test 进一步确认：`TICKFLOW_API_KEY` 不等于一定具备该权限，且 `quotes.get(symbols=[...])` 单次存在标的数量限制。
 > - TickFlow 实际返回的 `change_pct` / `amplitude` 为比例值；系统已在接入层统一转换为百分比值，确保与现有数据源字段语义一致。
-> - 配置 `POLYGON_API_KEY` 后，Market Overview 美股 breadth 仅使用 Polygon grouped daily EOD 数据计算 advance/decline/unchanged；52 周新高/新低在未接入有界历史回看前保持缺失且不参与评分。
+> - 配置 `POLYGON_API_KEY` 后，Market Overview 美股 breadth 仅使用 Polygon grouped daily EOD 数据计算 advance/decline/unchanged；52 周新高/新低只在同源 Polygon grouped daily 历史满足 252 个已完成交易日、覆盖率和前收盘匹配门槛时计算，否则保持缺失且不伪造为官方 NYSE/Nasdaq breadth。
 > - 字段契约：
 >   - `fundamental_context.boards.data` = `sector_rankings`（板块涨跌榜，结构 `{top, bottom}`）；
 >   - `fundamental_context.earnings.data.financial_report` = 财报摘要（报告期、营收、归母净利润、经营现金流、ROE）；

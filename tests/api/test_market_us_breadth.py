@@ -111,8 +111,10 @@ def test_market_us_breadth_uses_polygon_computed_ad_when_authority_gate_passes()
         "sourceType": "authorized_licensed_feed",
         "sourceTier": "official_or_authorized_licensed_feed",
         "trustLevel": "score_grade_for_computed_ad_metrics_when_fresh",
-        "authorityBasis": "computed_from_authorized_polygon_grouped_daily",
+        "authorityBasis": "computed_from_authorized_polygon_history",
         "universe": "polygon_us_grouped_daily_ex_otc",
+        "officialExchangePublishedBreadth": False,
+        "fullBreadthAuthority": False,
     }
 
     with patch(
@@ -128,6 +130,7 @@ def test_market_us_breadth_uses_polygon_computed_ad_when_authority_gate_passes()
     assert payload["breadthClaimScope"] == "advance_decline_only"
     assert payload["breadthCompleteness"] == "partial_ad_only"
     assert payload["officialExchangePublishedBreadth"] is False
+    assert payload["fullBreadthAuthority"] is False
     assert payload["representativeSample"] is False
     assert payload["sourceAuthorityAllowed"] is True
     assert payload["scoreContributionAllowed"] is True
@@ -147,6 +150,82 @@ def test_market_us_breadth_uses_polygon_computed_ad_when_authority_gate_passes()
     assert by_symbol["NEW_HIGHS"]["value"] is None
     assert by_symbol["NEW_HIGHS"]["scoreContributionAllowed"] is False
     assert by_symbol["NEW_HIGHS"]["sourceAuthorityReason"] == "polygon_high_low_history_unavailable"
+
+
+def test_market_us_breadth_projects_polygon_high_low_when_history_gates_pass() -> None:
+    service = MarketOverviewService()
+    activation = {
+        "credentialsPresent": True,
+        "providerConstructed": True,
+        "probePassed": True,
+        "observationDate": "2026-05-21",
+        "previousObservationDate": "2026-05-20",
+        "comparisonBasis": "previous_close",
+        "asOf": "2026-05-21",
+        "freshnessValid": True,
+        "coverageCount": 12000,
+        "previousCoverageCount": 11950,
+        "comparisonCoverageCount": 11950,
+        "highLowLookbackSessions": 252,
+        "highLowEligibleCount": 11250,
+        "highLowEligibleThreshold": 9600,
+        "sourceMetadataValid": True,
+        "sourceAuthorityAllowed": True,
+        "scoreContributionAllowed": True,
+        "broadMarketClaimAllowed": False,
+        "officialExchangePublishedBreadth": False,
+        "fullBreadthAuthority": False,
+        "fulfilledMetrics": [
+            "ADVANCERS",
+            "DECLINERS",
+            "UNCHANGED",
+            "ADVANCE_DECLINE_RATIO",
+            "NEW_HIGHS",
+            "NEW_LOWS",
+            "HIGH_LOW_RATIO",
+        ],
+        "missingMetrics": [],
+        "reasonCodes": [],
+        "metrics": {
+            "advancers": 7000,
+            "decliners": 4000,
+            "unchanged": 1000,
+            "advanceDeclineRatio": 1.75,
+            "newHighs": 318,
+            "newLows": 42,
+            "highLowRatio": 7.571,
+        },
+        "source": "polygon_us_grouped_daily",
+        "sourceLabel": "Polygon grouped daily US equities (computed breadth)",
+        "sourceType": "authorized_licensed_feed",
+        "sourceTier": "official_or_authorized_licensed_feed",
+        "trustLevel": "score_grade_for_computed_ad_metrics_when_fresh",
+        "authorityBasis": "computed_from_authorized_polygon_history",
+        "universe": "polygon_us_grouped_daily_ex_otc",
+    }
+
+    payload = service._polygon_us_breadth_snapshot(
+        activation,
+        service._polygon_us_breadth_authority_diagnostic(activation),
+    )
+
+    by_symbol = {item["symbol"]: item for item in payload["items"]}
+    assert payload["breadthClaimScope"] == "computed_polygon_ad_high_low"
+    assert payload["breadthCompleteness"] == "computed_high_low_available"
+    assert payload["officialExchangePublishedBreadth"] is False
+    assert payload["fullBreadthAuthority"] is False
+    assert payload["broadMarketClaimAllowed"] is False
+    assert payload["isPartial"] is False
+    assert payload["fulfilledMetrics"] == activation["fulfilledMetrics"]
+    assert payload["missingMetrics"] == []
+    assert payload["highLowEligibleCount"] == 11250
+    assert payload["highLowEligibleThreshold"] == 9600
+    assert "unavailable" not in payload["warning"].lower()
+    assert by_symbol["NEW_HIGHS"]["value"] == 318
+    assert by_symbol["NEW_HIGHS"]["scoreContributionAllowed"] is True
+    assert by_symbol["NEW_HIGHS"]["sourceAuthorityReason"] is None
+    assert by_symbol["NEW_LOWS"]["value"] == 42
+    assert by_symbol["HIGH_LOW_RATIO"]["value"] == 7.571
 
 
 def test_market_us_breadth_proxy_snapshot_projects_to_unofficial_proxy_not_exchange_public() -> None:

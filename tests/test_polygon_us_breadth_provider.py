@@ -3,10 +3,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from src.services.polygon_us_breadth_provider import (
+    POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON,
+    POLYGON_HIGH_LOW_HISTORY_DATE_GAP_REASON,
+    POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON,
+    POLYGON_HIGH_LOW_HISTORY_MALFORMED_REASON,
+    POLYGON_HIGH_LOW_HISTORY_MIXED_SOURCE_REASON,
     POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
     POLYGON_US_BREADTH_REASON_COVERAGE_BELOW_THRESHOLD,
     POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE,
@@ -29,6 +34,39 @@ def _grouped_payload(rows: list[dict[str, object]]) -> dict[str, object]:
         "resultsCount": len(rows),
         "results": rows,
     }
+
+
+def _prior_weekdays(observation_date: str, count: int) -> list[str]:
+    cursor = date.fromisoformat(observation_date) - timedelta(days=1)
+    dates: list[str] = []
+    while len(dates) < count:
+        if cursor.weekday() < 5:
+            dates.append(cursor.isoformat())
+        cursor -= timedelta(days=1)
+    return dates
+
+
+def _high_low_rows(
+    *,
+    aaa_high: float = 14.0,
+    aaa_low: float = 8.0,
+    bbb_high: float = 22.0,
+    bbb_low: float = 18.0,
+    ccc_high: float = 33.0,
+    ccc_low: float = 28.0,
+) -> list[dict[str, object]]:
+    return [
+        {"T": "AAA", "o": 9.0, "c": 10.0, "h": aaa_high, "l": aaa_low},
+        {"T": "BBB", "o": 22.0, "c": 20.0, "h": bbb_high, "l": bbb_low},
+        {"T": "CCC", "o": 28.0, "c": 30.0, "h": ccc_high, "l": ccc_low},
+    ]
+
+
+def _complete_high_low_history(observation_date: str, sessions: int = 3) -> tuple[tuple[str, dict[str, object]], ...]:
+    return tuple(
+        (history_date, _grouped_payload(_high_low_rows()))
+        for history_date in _prior_weekdays(observation_date, sessions)
+    )
 
 
 def test_missing_polygon_key_keeps_us_breadth_fail_closed_with_existing_reason() -> None:
@@ -212,11 +250,214 @@ def test_fresh_valid_polygon_grouped_daily_computes_ad_breadth_from_previous_clo
     assert result["metrics"]["newLows"] is None
     assert result["metrics"]["highLowRatio"] is None
     assert result["universe"] == "polygon_us_grouped_daily_ex_otc"
-    assert result["authorityBasis"] == "computed_from_authorized_polygon_grouped_daily"
+    assert result["authorityBasis"] == "computed_from_authorized_polygon_history"
+    assert result["officialExchangePublishedBreadth"] is False
+    assert result["fullBreadthAuthority"] is False
     assert POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON in result["reasonCodes"]
     assert {"NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"}.issubset(result["missingMetrics"])
     assert diagnostic_summary(result)["comparisonBasis"] == "previous_close"
     assert diagnostic_summary(result)["previousObservationDate"] == "2026-05-20"
+
+
+def test_valid_polygon_history_computes_high_low_breadth_without_official_overclaim() -> None:
+    latest = _grouped_payload([
+        {"T": "AAA", "o": 10.0, "c": 11.0, "h": 15.0, "l": 9.0},
+        {"T": "BBB", "o": 20.0, "c": 18.0, "h": 21.0, "l": 17.0},
+        {"T": "CCC", "o": 30.0, "c": 30.0, "h": 32.0, "l": 29.0},
+    ])
+    previous = _grouped_payload(_high_low_rows())
+
+    result = compute_polygon_us_breadth(
+        latest,
+        previous_payload=previous,
+        historical_payloads=_complete_high_low_history("2026-05-21"),
+        observation_date="2026-05-21",
+        previous_observation_date="2026-05-20",
+        now=datetime(2026, 5, 22, 12, tzinfo=ZoneInfo("America/New_York")),
+        min_coverage_count=3,
+        high_low_lookback_sessions=3,
+        min_high_low_eligible_count=3,
+    )
+
+    assert result["source"] == "polygon_us_grouped_daily"
+    assert result["authorityBasis"] == "computed_from_authorized_polygon_history"
+    assert result["universe"] == "polygon_us_grouped_daily_ex_otc"
+    assert result["officialExchangePublishedBreadth"] is False
+    assert result["fullBreadthAuthority"] is False
+    assert result["sourceAuthorityAllowed"] is True
+    assert result["scoreContributionAllowed"] is True
+    assert result["broadMarketClaimAllowed"] is False
+    assert result["fulfilledMetrics"] == list(US_BREADTH_SYMBOLS)
+    assert result["missingMetrics"] == []
+    assert result["reasonCodes"] == []
+    assert result["metrics"]["newHighs"] == 1
+    assert result["metrics"]["newLows"] == 1
+    assert result["metrics"]["highLowRatio"] == 1.0
+    assert result["highLowLookbackSessions"] == 3
+    assert result["highLowEligibleCount"] == 3
+    assert result["highLowEligibleThreshold"] == 3
+    assert diagnostic_summary(result)["fulfilledMetrics"] == list(US_BREADTH_SYMBOLS)
+
+
+def test_insufficient_polygon_history_keeps_ad_fulfilled_and_high_low_fail_closed() -> None:
+    latest = _grouped_payload([
+        {"T": "AAA", "o": 10.0, "c": 11.0, "h": 15.0, "l": 9.0},
+        {"T": "BBB", "o": 20.0, "c": 18.0, "h": 21.0, "l": 17.0},
+        {"T": "CCC", "o": 30.0, "c": 30.0, "h": 32.0, "l": 29.0},
+    ])
+    previous = _grouped_payload(_high_low_rows())
+
+    result = compute_polygon_us_breadth(
+        latest,
+        previous_payload=previous,
+        historical_payloads=_complete_high_low_history("2026-05-21", sessions=2),
+        observation_date="2026-05-21",
+        previous_observation_date="2026-05-20",
+        now=datetime(2026, 5, 22, 12, tzinfo=ZoneInfo("America/New_York")),
+        min_coverage_count=3,
+        high_low_lookback_sessions=3,
+        min_high_low_eligible_count=3,
+    )
+
+    assert result["comparisonBasis"] == "previous_close"
+    assert result["sourceAuthorityAllowed"] is True
+    assert result["scoreContributionAllowed"] is True
+    assert result["fulfilledMetrics"] == [
+        "ADVANCERS",
+        "DECLINERS",
+        "UNCHANGED",
+        "ADVANCE_DECLINE_RATIO",
+    ]
+    assert {"NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"}.issubset(result["missingMetrics"])
+    assert result["metrics"]["newHighs"] is None
+    assert result["metrics"]["newLows"] is None
+    assert result["metrics"]["highLowRatio"] is None
+    assert result["reasonCodes"] == [POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON]
+
+
+def test_polygon_history_date_gap_keeps_high_low_fail_closed() -> None:
+    latest = _grouped_payload([
+        {"T": "AAA", "o": 10.0, "c": 11.0, "h": 15.0, "l": 9.0},
+        {"T": "BBB", "o": 20.0, "c": 18.0, "h": 21.0, "l": 17.0},
+        {"T": "CCC", "o": 30.0, "c": 30.0, "h": 32.0, "l": 29.0},
+    ])
+    previous = _grouped_payload(_high_low_rows())
+    gap_history = tuple(
+        (history_date, _grouped_payload(_high_low_rows()))
+        for history_date in ("2026-05-20", "2026-05-18", "2026-05-15")
+    )
+
+    result = compute_polygon_us_breadth(
+        latest,
+        previous_payload=previous,
+        historical_payloads=gap_history,
+        observation_date="2026-05-21",
+        previous_observation_date="2026-05-20",
+        now=datetime(2026, 5, 22, 12, tzinfo=ZoneInfo("America/New_York")),
+        min_coverage_count=3,
+        high_low_lookback_sessions=3,
+        min_high_low_eligible_count=3,
+    )
+
+    assert result["fulfilledMetrics"] == [
+        "ADVANCERS",
+        "DECLINERS",
+        "UNCHANGED",
+        "ADVANCE_DECLINE_RATIO",
+    ]
+    assert result["reasonCodes"] == [POLYGON_HIGH_LOW_HISTORY_DATE_GAP_REASON]
+
+
+def test_polygon_history_below_eligible_threshold_keeps_high_low_fail_closed() -> None:
+    latest = _grouped_payload([
+        {"T": "AAA", "o": 10.0, "c": 11.0, "h": 15.0, "l": 9.0},
+        {"T": "BBB", "o": 20.0, "c": 18.0, "h": 21.0, "l": 17.0},
+        {"T": "CCC", "o": 30.0, "c": 30.0, "h": 32.0, "l": 29.0},
+    ])
+    previous = _grouped_payload(_high_low_rows())
+    history = list(_complete_high_low_history("2026-05-21"))
+    history[-1] = (
+        history[-1][0],
+        _grouped_payload(_high_low_rows(aaa_high=float("nan"))),
+    )
+
+    result = compute_polygon_us_breadth(
+        latest,
+        previous_payload=previous,
+        historical_payloads=tuple(history),
+        observation_date="2026-05-21",
+        previous_observation_date="2026-05-20",
+        now=datetime(2026, 5, 22, 12, tzinfo=ZoneInfo("America/New_York")),
+        min_coverage_count=3,
+        high_low_lookback_sessions=3,
+        min_high_low_eligible_count=3,
+    )
+
+    assert result["highLowEligibleCount"] == 2
+    assert result["highLowEligibleThreshold"] == 3
+    assert result["reasonCodes"] == [POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON]
+
+
+def test_mixed_source_polygon_history_keeps_high_low_fail_closed() -> None:
+    latest = _grouped_payload([
+        {"T": "AAA", "o": 10.0, "c": 11.0, "h": 15.0, "l": 9.0},
+        {"T": "BBB", "o": 20.0, "c": 18.0, "h": 21.0, "l": 17.0},
+        {"T": "CCC", "o": 30.0, "c": 30.0, "h": 32.0, "l": 29.0},
+    ])
+    previous = _grouped_payload(_high_low_rows())
+    history = list(_complete_high_low_history("2026-05-21"))
+    history[1] = (history[1][0], {**history[1][1], "source": "yfinance_proxy"})
+
+    result = compute_polygon_us_breadth(
+        latest,
+        previous_payload=previous,
+        historical_payloads=tuple(history),
+        observation_date="2026-05-21",
+        previous_observation_date="2026-05-20",
+        now=datetime(2026, 5, 22, 12, tzinfo=ZoneInfo("America/New_York")),
+        min_coverage_count=3,
+        high_low_lookback_sessions=3,
+        min_high_low_eligible_count=3,
+    )
+
+    assert result["fulfilledMetrics"] == [
+        "ADVANCERS",
+        "DECLINERS",
+        "UNCHANGED",
+        "ADVANCE_DECLINE_RATIO",
+    ]
+    assert result["reasonCodes"] == [POLYGON_HIGH_LOW_HISTORY_MIXED_SOURCE_REASON]
+
+
+def test_malformed_polygon_history_keeps_high_low_fail_closed() -> None:
+    latest = _grouped_payload([
+        {"T": "AAA", "o": 10.0, "c": 11.0, "h": 15.0, "l": 9.0},
+        {"T": "BBB", "o": 20.0, "c": 18.0, "h": 21.0, "l": 17.0},
+        {"T": "CCC", "o": 30.0, "c": 30.0, "h": 32.0, "l": 29.0},
+    ])
+    previous = _grouped_payload(_high_low_rows())
+    history = list(_complete_high_low_history("2026-05-21"))
+    history[1] = (history[1][0], {"status": "OK", "resultsCount": "bad", "results": []})
+
+    result = compute_polygon_us_breadth(
+        latest,
+        previous_payload=previous,
+        historical_payloads=tuple(history),
+        observation_date="2026-05-21",
+        previous_observation_date="2026-05-20",
+        now=datetime(2026, 5, 22, 12, tzinfo=ZoneInfo("America/New_York")),
+        min_coverage_count=3,
+        high_low_lookback_sessions=3,
+        min_high_low_eligible_count=3,
+    )
+
+    assert result["fulfilledMetrics"] == [
+        "ADVANCERS",
+        "DECLINERS",
+        "UNCHANGED",
+        "ADVANCE_DECLINE_RATIO",
+    ]
+    assert result["reasonCodes"] == [POLYGON_HIGH_LOW_HISTORY_MALFORMED_REASON]
 
 
 def test_polygon_activation_fetches_recent_completed_date_and_previous_comparison() -> None:
@@ -243,6 +484,7 @@ def test_polygon_activation_fetches_recent_completed_date_and_previous_compariso
         transport=transport,
         now=datetime(2026, 5, 22, 12, tzinfo=POLYGON_US_EASTERN_TZ),
         min_coverage_count=3,
+        high_low_lookback_sessions=1,
     )
 
     assert calls == ["2026-05-21", "2026-05-20"]

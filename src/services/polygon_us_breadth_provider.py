@@ -14,7 +14,7 @@ import math
 import os
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -32,7 +32,7 @@ POLYGON_US_BREADTH_SOURCE_LABEL = "Polygon grouped daily US equities (computed b
 POLYGON_US_BREADTH_SOURCE_TYPE = "authorized_licensed_feed"
 POLYGON_US_BREADTH_SOURCE_TIER = "official_or_authorized_licensed_feed"
 POLYGON_US_BREADTH_TRUST_LEVEL = "score_grade_for_computed_ad_metrics_when_fresh"
-POLYGON_US_BREADTH_AUTHORITY_BASIS = "computed_from_authorized_polygon_grouped_daily"
+POLYGON_US_BREADTH_AUTHORITY_BASIS = "computed_from_authorized_polygon_history"
 POLYGON_US_BREADTH_UNIVERSE = "polygon_us_grouped_daily_ex_otc"
 POLYGON_US_BREADTH_ENDPOINT_TEMPLATE = (
     "https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/{date}"
@@ -43,6 +43,8 @@ POLYGON_US_BREADTH_RECENT_DATE_LIMIT = 4
 POLYGON_US_BREADTH_MIN_COVERAGE_COUNT = 8000
 POLYGON_US_BREADTH_MAX_CALENDAR_LAG_DAYS = 4
 POLYGON_US_BREADTH_MAX_BUSINESS_LAG_DAYS = 2
+POLYGON_HIGH_LOW_LOOKBACK_SESSIONS = 252
+POLYGON_HIGH_LOW_MIN_ELIGIBLE_COUNT = 8000
 
 POLYGON_US_BREADTH_REASON_UNAUTHORIZED = "polygon_unauthorized"
 POLYGON_US_BREADTH_REASON_RESPONSE_INVALID = "polygon_response_invalid"
@@ -50,6 +52,12 @@ POLYGON_US_BREADTH_REASON_COVERAGE_BELOW_THRESHOLD = "polygon_coverage_below_thr
 POLYGON_US_BREADTH_REASON_EOD_STALE = "polygon_eod_stale"
 POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE = "polygon_previous_close_unavailable"
 POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON = "polygon_high_low_history_unavailable"
+POLYGON_HIGH_LOW_HISTORY_MALFORMED_REASON = "polygon_high_low_history_malformed"
+POLYGON_HIGH_LOW_HISTORY_MIXED_SOURCE_REASON = "polygon_high_low_history_mixed_source"
+POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON = "polygon_high_low_history_insufficient_lookback"
+POLYGON_HIGH_LOW_HISTORY_DATE_GAP_REASON = "polygon_high_low_history_date_gap"
+POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON = "polygon_high_low_history_below_threshold"
+POLYGON_HIGH_LOW_RATIO_UNAVAILABLE_REASON = "polygon_high_low_ratio_unavailable"
 
 _AD_FULFILLED_METRICS = (
     "ADVANCERS",
@@ -68,6 +76,8 @@ class _GroupedDailyRow:
     ticker: str
     open_price: float
     close_price: float
+    high_price: float | None = None
+    low_price: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,12 +88,26 @@ class _ParsedGroupedDaily:
     reason: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _HighLowComputation:
+    ok: bool
+    new_highs: int | None = None
+    new_lows: int | None = None
+    high_low_ratio: float | None = None
+    eligible_count: int = 0
+    eligible_threshold: int = 0
+    lookback_sessions: int = POLYGON_HIGH_LOW_LOOKBACK_SESSIONS
+    reason: str | None = None
+
+
 def run_polygon_us_breadth_activation(
     *,
     api_key: str | None = None,
     transport: PolygonTransport | None = None,
     now: datetime | None = None,
     min_coverage_count: int = POLYGON_US_BREADTH_MIN_COVERAGE_COUNT,
+    high_low_lookback_sessions: int = POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+    min_high_low_eligible_count: int = POLYGON_HIGH_LOW_MIN_ELIGIBLE_COUNT,
     timeout_seconds: float = POLYGON_US_BREADTH_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
     """Fetch recent grouped daily rows and return a sanitized activation summary."""
@@ -97,6 +121,13 @@ def run_polygon_us_breadth_activation(
         )
 
     fetch = transport or _default_polygon_transport
+    fetched_payloads: dict[str, tuple[int, Mapping[str, Any] | None]] = {}
+
+    def fetch_grouped_daily(candidate_date: str) -> tuple[int, Mapping[str, Any] | None]:
+        if candidate_date not in fetched_payloads:
+            fetched_payloads[candidate_date] = fetch(candidate_date, credential, timeout_seconds)
+        return fetched_payloads[candidate_date]
+
     candidates = recent_completed_us_trading_dates(now=now)
     latest_payload: Mapping[str, Any] | None = None
     latest_date: str | None = None
@@ -104,7 +135,7 @@ def run_polygon_us_breadth_activation(
     latest_index = -1
 
     for index, candidate in enumerate(candidates):
-        status_code, payload = fetch(candidate, credential, timeout_seconds)
+        status_code, payload = fetch_grouped_daily(candidate)
         if status_code in {401, 403}:
             return _fail_closed_summary(
                 reason_codes=(POLYGON_US_BREADTH_REASON_UNAUTHORIZED,),
@@ -130,7 +161,7 @@ def run_polygon_us_breadth_activation(
     previous_payload: Mapping[str, Any] | None = None
     previous_date: str | None = None
     for candidate in candidates[latest_index + 1 :]:
-        status_code, payload = fetch(candidate, credential, timeout_seconds)
+        status_code, payload = fetch_grouped_daily(candidate)
         if status_code != 200:
             continue
         parsed = parse_polygon_grouped_daily_payload(payload)
@@ -139,13 +170,27 @@ def run_polygon_us_breadth_activation(
             previous_date = candidate
             break
 
+    historical_payloads: tuple[tuple[str, Mapping[str, Any] | None], ...] | None = None
+    if previous_payload is not None and previous_date:
+        history_items: list[tuple[str, Mapping[str, Any] | None]] = []
+        for history_date in prior_completed_us_trading_dates(
+            latest_date,
+            limit=high_low_lookback_sessions,
+        ):
+            status_code, payload = fetch_grouped_daily(history_date)
+            history_items.append((history_date, payload if status_code == 200 else None))
+        historical_payloads = tuple(history_items)
+
     return compute_polygon_us_breadth(
         latest_payload,
         previous_payload=previous_payload,
+        historical_payloads=historical_payloads,
         observation_date=latest_date,
         previous_observation_date=previous_date,
         now=now,
         min_coverage_count=min_coverage_count,
+        high_low_lookback_sessions=high_low_lookback_sessions,
+        min_high_low_eligible_count=min_high_low_eligible_count,
         credentials_present=True,
         provider_constructed=True,
     )
@@ -155,10 +200,17 @@ def compute_polygon_us_breadth(
     payload: Mapping[str, Any] | None,
     *,
     previous_payload: Mapping[str, Any] | None = None,
+    historical_payloads: (
+        Mapping[str, Mapping[str, Any] | None]
+        | Sequence[tuple[str, Mapping[str, Any] | None]]
+        | None
+    ) = None,
     observation_date: str,
     previous_observation_date: str | None = None,
     now: datetime | None = None,
     min_coverage_count: int = POLYGON_US_BREADTH_MIN_COVERAGE_COUNT,
+    high_low_lookback_sessions: int = POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+    min_high_low_eligible_count: int = POLYGON_HIGH_LOW_MIN_ELIGIBLE_COUNT,
     credentials_present: bool = True,
     provider_constructed: bool = True,
 ) -> dict[str, Any]:
@@ -225,21 +277,44 @@ def compute_polygon_us_breadth(
             unchanged += 1
 
     ad_ratio = round(advancers / decliners, 3) if decliners > 0 else None
+    high_low = (
+        _compute_polygon_high_low_breadth(
+            parsed.rows,
+            historical_payloads=historical_payloads,
+            observation_date=observation_date,
+            coverage_threshold=coverage_threshold,
+            lookback_sessions=high_low_lookback_sessions,
+            min_eligible_count=min_high_low_eligible_count,
+        )
+        if previous_close_available
+        else _HighLowComputation(
+            ok=False,
+            reason=POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
+            lookback_sessions=max(1, int(high_low_lookback_sessions)),
+            eligible_threshold=max(1, int(min_high_low_eligible_count)),
+        )
+    )
     fulfilled_metrics = (
         list(_AD_FULFILLED_METRICS if ad_ratio is not None else _AD_FULFILLED_METRICS[:-1])
         if previous_close_available
         else []
     )
+    if high_low.ok:
+        fulfilled_metrics.extend(["NEW_HIGHS", "NEW_LOWS"])
+        if high_low.high_low_ratio is not None:
+            fulfilled_metrics.append("HIGH_LOW_RATIO")
     missing_metrics = [
         symbol
         for symbol in US_BREADTH_SYMBOLS
         if symbol not in fulfilled_metrics
     ]
-    reason_codes = [POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON]
+    reason_codes: list[str] = []
     if not previous_close_available:
-        reason_codes.insert(0, POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE)
+        reason_codes.append(POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE)
     if ad_ratio is None:
         reason_codes.append(POLYGON_US_BREADTH_REASON_RESPONSE_INVALID)
+    if high_low.reason:
+        reason_codes.append(high_low.reason)
 
     source_metadata_valid = _source_metadata_valid()
     authority_allowed = bool(
@@ -254,15 +329,15 @@ def compute_polygon_us_breadth(
         and ad_ratio is not None
     )
     score_allowed = bool(authority_allowed and fulfilled_metrics)
-    broad_market_claim_allowed = bool(score_allowed and set(US_BREADTH_SYMBOLS).issubset(set(fulfilled_metrics)))
+    broad_market_claim_allowed = False
     metrics = {
         "advancers": advancers,
         "decliners": decliners,
         "unchanged": unchanged,
         "advanceDeclineRatio": ad_ratio,
-        "newHighs": None,
-        "newLows": None,
-        "highLowRatio": None,
+        "newHighs": high_low.new_highs if high_low.ok else None,
+        "newLows": high_low.new_lows if high_low.ok else None,
+        "highLowRatio": high_low.high_low_ratio if high_low.ok else None,
     }
     return {
         "credentialsPresent": credentials_present,
@@ -279,10 +354,15 @@ def compute_polygon_us_breadth(
         "comparisonCoverageCount": comparison_coverage_count,
         "rawResultsCount": parsed.results_count,
         "coverageThreshold": coverage_threshold,
+        "highLowLookbackSessions": high_low.lookback_sessions,
+        "highLowEligibleCount": high_low.eligible_count,
+        "highLowEligibleThreshold": high_low.eligible_threshold,
         "sourceMetadataValid": source_metadata_valid,
         "sourceAuthorityAllowed": authority_allowed,
         "scoreContributionAllowed": score_allowed,
         "broadMarketClaimAllowed": broad_market_claim_allowed,
+        "officialExchangePublishedBreadth": False,
+        "fullBreadthAuthority": False,
         "observationOnly": not score_allowed,
         "fulfilledMetrics": fulfilled_metrics,
         "missingMetrics": missing_metrics,
@@ -318,11 +398,21 @@ def parse_polygon_grouped_daily_payload(payload: Mapping[str, Any] | None) -> _P
         if not isinstance(item, Mapping):
             continue
         ticker = _text(item.get("T") or item.get("ticker")).upper()
-        open_price = _parse_finite_float(item.get("o") or item.get("open"))
-        close_price = _parse_finite_float(item.get("c") or item.get("close"))
+        open_price = _parse_finite_float(_first_present(item, "o", "open"))
+        close_price = _parse_finite_float(_first_present(item, "c", "close"))
+        high_price = _parse_finite_float(_first_present(item, "h", "high"))
+        low_price = _parse_finite_float(_first_present(item, "l", "low"))
         if not ticker or open_price is None or close_price is None:
             continue
-        rows.append(_GroupedDailyRow(ticker=ticker, open_price=open_price, close_price=close_price))
+        rows.append(
+            _GroupedDailyRow(
+                ticker=ticker,
+                open_price=open_price,
+                close_price=close_price,
+                high_price=high_price,
+                low_price=low_price,
+            )
+        )
 
     return _ParsedGroupedDaily(True, int(results_count), tuple(rows))
 
@@ -339,6 +429,25 @@ def recent_completed_us_trading_dates(
     if current.hour < 18:
         cursor -= timedelta(days=1)
 
+    dates: list[str] = []
+    while len(dates) < max(1, int(limit)):
+        if cursor.weekday() < 5:
+            dates.append(cursor.isoformat())
+        cursor -= timedelta(days=1)
+    return tuple(dates)
+
+
+def prior_completed_us_trading_dates(
+    observation_date: str,
+    *,
+    limit: int = POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+) -> tuple[str, ...]:
+    """Return completed US weekdays before an observation date."""
+
+    parsed = _parse_date(observation_date)
+    if parsed is None:
+        return ()
+    cursor = parsed - timedelta(days=1)
     dates: list[str] = []
     while len(dates) < max(1, int(limit)):
         if cursor.weekday() < 5:
@@ -374,6 +483,151 @@ def polygon_eod_freshness(observation_date: str, *, now: datetime | None = None)
     }
 
 
+def _compute_polygon_high_low_breadth(
+    latest_rows: Sequence[_GroupedDailyRow],
+    *,
+    historical_payloads: (
+        Mapping[str, Mapping[str, Any] | None]
+        | Sequence[tuple[str, Mapping[str, Any] | None]]
+        | None
+    ),
+    observation_date: str,
+    coverage_threshold: int,
+    lookback_sessions: int,
+    min_eligible_count: int,
+) -> _HighLowComputation:
+    lookback = max(1, int(lookback_sessions))
+    absolute_floor = max(1, int(min_eligible_count))
+    eligible_threshold = max(absolute_floor, math.ceil(0.8 * len(latest_rows)))
+    base = {
+        "eligible_threshold": eligible_threshold,
+        "lookback_sessions": lookback,
+    }
+    history_items = _normalize_historical_payloads(historical_payloads)
+    if not history_items:
+        return _HighLowComputation(
+            ok=False,
+            reason=POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
+            **base,
+        )
+    if len(history_items) < lookback:
+        return _HighLowComputation(
+            ok=False,
+            reason=POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON,
+            **base,
+        )
+
+    lookback_items = history_items[:lookback]
+    expected_dates = prior_completed_us_trading_dates(observation_date, limit=lookback)
+    actual_dates = tuple(history_date for history_date, _ in lookback_items)
+    if not expected_dates or actual_dates != expected_dates:
+        return _HighLowComputation(
+            ok=False,
+            reason=POLYGON_HIGH_LOW_HISTORY_DATE_GAP_REASON,
+            **base,
+        )
+
+    history_by_date: list[dict[str, _GroupedDailyRow]] = []
+    for _, history_payload in lookback_items:
+        if history_payload is None:
+            return _HighLowComputation(
+                ok=False,
+                reason=POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
+                **base,
+            )
+        if not _history_source_valid(history_payload):
+            return _HighLowComputation(
+                ok=False,
+                reason=POLYGON_HIGH_LOW_HISTORY_MIXED_SOURCE_REASON,
+                **base,
+            )
+        parsed_history = parse_polygon_grouped_daily_payload(history_payload)
+        if not parsed_history.ok:
+            return _HighLowComputation(
+                ok=False,
+                reason=POLYGON_HIGH_LOW_HISTORY_MALFORMED_REASON,
+                **base,
+            )
+        if len(parsed_history.rows) < coverage_threshold:
+            return _HighLowComputation(
+                ok=False,
+                reason=POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON,
+                **base,
+            )
+        history_by_date.append(
+            {
+                row.ticker: row
+                for row in parsed_history.rows
+                if row.high_price is not None and row.low_price is not None
+            }
+        )
+
+    latest_by_ticker = {
+        row.ticker: row
+        for row in latest_rows
+        if row.high_price is not None and row.low_price is not None
+    }
+    eligible_count = 0
+    new_highs = 0
+    new_lows = 0
+    for ticker, latest in latest_by_ticker.items():
+        prior_rows = [history_rows.get(ticker) for history_rows in history_by_date]
+        if any(row is None for row in prior_rows):
+            continue
+        prior_highs = [row.high_price for row in prior_rows if row and row.high_price is not None]
+        prior_lows = [row.low_price for row in prior_rows if row and row.low_price is not None]
+        if len(prior_highs) < lookback or len(prior_lows) < lookback:
+            continue
+        eligible_count += 1
+        if latest.high_price is not None and latest.high_price >= max(prior_highs) - _EPSILON:
+            new_highs += 1
+        if latest.low_price is not None and latest.low_price <= min(prior_lows) + _EPSILON:
+            new_lows += 1
+
+    if eligible_count < eligible_threshold:
+        return _HighLowComputation(
+            ok=False,
+            eligible_count=eligible_count,
+            reason=POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON,
+            **base,
+        )
+
+    high_low_ratio = round(new_highs / new_lows, 3) if new_lows > 0 else None
+    return _HighLowComputation(
+        ok=True,
+        new_highs=new_highs,
+        new_lows=new_lows,
+        high_low_ratio=high_low_ratio,
+        eligible_count=eligible_count,
+        reason=None if high_low_ratio is not None else POLYGON_HIGH_LOW_RATIO_UNAVAILABLE_REASON,
+        **base,
+    )
+
+
+def _normalize_historical_payloads(
+    historical_payloads: (
+        Mapping[str, Mapping[str, Any] | None]
+        | Sequence[tuple[str, Mapping[str, Any] | None]]
+        | None
+    ),
+) -> tuple[tuple[str, Mapping[str, Any] | None], ...]:
+    if historical_payloads is None:
+        return ()
+    if isinstance(historical_payloads, Mapping):
+        return tuple(
+            (str(history_date), payload)
+            for history_date, payload in sorted(historical_payloads.items(), reverse=True)
+        )
+    return tuple((str(history_date), payload) for history_date, payload in historical_payloads)
+
+
+def _history_source_valid(payload: Mapping[str, Any] | None) -> bool:
+    if not isinstance(payload, Mapping):
+        return True
+    source = _text(payload.get("source") or payload.get("sourceId") or payload.get("provider"))
+    return not source or source == POLYGON_US_BREADTH_SOURCE
+
+
 def diagnostic_summary(result: Mapping[str, Any]) -> dict[str, Any]:
     """Return the bounded JSON shape used by the operator diagnostic script."""
 
@@ -389,10 +643,15 @@ def diagnostic_summary(result: Mapping[str, Any]) -> dict[str, Any]:
         "previousCoverageCount": int(result.get("previousCoverageCount") or 0),
         "comparisonCoverageCount": int(result.get("comparisonCoverageCount") or 0),
         "coverageThreshold": int(result.get("coverageThreshold") or 0),
+        "highLowLookbackSessions": int(result.get("highLowLookbackSessions") or 0),
+        "highLowEligibleCount": int(result.get("highLowEligibleCount") or 0),
+        "highLowEligibleThreshold": int(result.get("highLowEligibleThreshold") or 0),
         "sourceMetadataValid": bool(result.get("sourceMetadataValid")),
         "sourceAuthorityAllowed": bool(result.get("sourceAuthorityAllowed")),
         "scoreContributionAllowed": bool(result.get("scoreContributionAllowed")),
         "broadMarketClaimAllowed": bool(result.get("broadMarketClaimAllowed")),
+        "officialExchangePublishedBreadth": bool(result.get("officialExchangePublishedBreadth")),
+        "fullBreadthAuthority": bool(result.get("fullBreadthAuthority")),
         "fulfilledMetrics": list(result.get("fulfilledMetrics") or []),
         "missingMetrics": list(result.get("missingMetrics") or []),
         "reasonCodes": list(result.get("reasonCodes") or []),
@@ -448,10 +707,15 @@ def _fail_closed_summary(
         "previousCoverageCount": 0,
         "comparisonCoverageCount": 0,
         "coverageThreshold": coverage_threshold,
+        "highLowLookbackSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+        "highLowEligibleCount": 0,
+        "highLowEligibleThreshold": POLYGON_HIGH_LOW_MIN_ELIGIBLE_COUNT,
         "sourceMetadataValid": _source_metadata_valid(),
         "sourceAuthorityAllowed": False,
         "scoreContributionAllowed": False,
         "broadMarketClaimAllowed": False,
+        "officialExchangePublishedBreadth": False,
+        "fullBreadthAuthority": False,
         "observationOnly": True,
         "fulfilledMetrics": [],
         "missingMetrics": list(US_BREADTH_SYMBOLS),
@@ -479,7 +743,7 @@ def _source_metadata_valid() -> bool:
     return bool(
         POLYGON_US_BREADTH_SOURCE_LABEL.startswith("Polygon")
         and "computed" in POLYGON_US_BREADTH_SOURCE_LABEL
-        and POLYGON_US_BREADTH_AUTHORITY_BASIS == "computed_from_authorized_polygon_grouped_daily"
+        and POLYGON_US_BREADTH_AUTHORITY_BASIS == "computed_from_authorized_polygon_history"
         and POLYGON_US_BREADTH_UNIVERSE == "polygon_us_grouped_daily_ex_otc"
     )
 
@@ -527,12 +791,27 @@ def _parse_finite_float(value: Any) -> float | None:
     return parsed if math.isfinite(parsed) else None
 
 
+def _first_present(mapping: Mapping[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in mapping and mapping[key] is not None:
+            return mapping[key]
+    return None
+
+
 def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
 __all__ = [
     "POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON",
+    "POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON",
+    "POLYGON_HIGH_LOW_HISTORY_DATE_GAP_REASON",
+    "POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON",
+    "POLYGON_HIGH_LOW_HISTORY_MALFORMED_REASON",
+    "POLYGON_HIGH_LOW_HISTORY_MIXED_SOURCE_REASON",
+    "POLYGON_HIGH_LOW_LOOKBACK_SESSIONS",
+    "POLYGON_HIGH_LOW_MIN_ELIGIBLE_COUNT",
+    "POLYGON_HIGH_LOW_RATIO_UNAVAILABLE_REASON",
     "POLYGON_US_BREADTH_AUTHORITY_BASIS",
     "POLYGON_US_BREADTH_REASON_COVERAGE_BELOW_THRESHOLD",
     "POLYGON_US_BREADTH_REASON_EOD_STALE",
@@ -550,6 +829,7 @@ __all__ = [
     "diagnostic_summary",
     "parse_polygon_grouped_daily_payload",
     "polygon_eod_freshness",
+    "prior_completed_us_trading_dates",
     "recent_completed_us_trading_dates",
     "run_polygon_us_breadth_activation",
 ]

@@ -4206,6 +4206,16 @@ class MarketOverviewService:
         missing_metrics = list(activation.get("missingMetrics") or [])
         reason_codes = list(activation.get("reasonCodes") or [])
         metric_coverage_ratio = round(len(fulfilled_metrics) / max(1, len(fulfilled_metrics) + len(missing_metrics)), 3)
+        high_low_symbols = {"NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"}
+        high_low_fulfilled = high_low_symbols.issubset(set(fulfilled_metrics))
+        high_low_unavailable_reason = next(
+            (
+                str(reason)
+                for reason in reason_codes
+                if str(reason).startswith("polygon_high_low")
+            ),
+            POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
+        )
         score_contribution_allowed = bool(
             activation.get("scoreContributionAllowed")
             and activation.get("comparisonBasis") == "previous_close"
@@ -4217,10 +4227,11 @@ class MarketOverviewService:
         )
         source_meta = {
             "breadthClaimType": "computed_authorized_polygon_grouped_daily_breadth",
-            "breadthClaimScope": "advance_decline_only",
-            "breadthCompleteness": "partial_ad_only",
+            "breadthClaimScope": "computed_polygon_ad_high_low" if high_low_fulfilled else "advance_decline_only",
+            "breadthCompleteness": "computed_high_low_available" if high_low_fulfilled else "partial_ad_only",
             "representativeSample": False,
             "officialExchangePublishedBreadth": False,
+            "fullBreadthAuthority": False,
             "broadMarketClaimAllowed": broad_market_claim_allowed,
             "observationOnly": False,
             "sourceAuthorityAllowed": source_authority_allowed,
@@ -4241,7 +4252,11 @@ class MarketOverviewService:
             "comparisonBasis": activation.get("comparisonBasis"),
             "previousCoverageCount": activation.get("previousCoverageCount"),
             "comparisonCoverageCount": activation.get("comparisonCoverageCount"),
+            "highLowLookbackSessions": activation.get("highLowLookbackSessions"),
+            "highLowEligibleCount": activation.get("highLowEligibleCount"),
+            "highLowEligibleThreshold": activation.get("highLowEligibleThreshold"),
             "metricCoverageRatio": metric_coverage_ratio,
+            "highLowUnavailableReason": None if high_low_fulfilled else high_low_unavailable_reason,
             "sourceFreshnessEvidence": {
                 "freshness": "delayed",
                 "isFallback": False,
@@ -4252,6 +4267,9 @@ class MarketOverviewService:
                 "previousObservationDate": activation.get("previousObservationDate"),
                 "comparisonBasis": activation.get("comparisonBasis"),
                 "freshnessPolicy": "polygon_grouped_daily_eod_recent_completed_us_weekday",
+                "highLowLookbackSessions": activation.get("highLowLookbackSessions"),
+                "highLowEligibleCount": activation.get("highLowEligibleCount"),
+                "highLowEligibleThreshold": activation.get("highLowEligibleThreshold"),
             },
         }
         metrics = activation.get("metrics") if isinstance(activation.get("metrics"), Mapping) else {}
@@ -4298,14 +4316,23 @@ class MarketOverviewService:
                 detail=detail,
             ),
         ]
-        items.extend(
-            self._polygon_unavailable_breadth_metric_item(label, symbol, as_of, updated_at, source_meta)
-            for label, symbol in (
-                ("New Highs", "NEW_HIGHS"),
-                ("New Lows", "NEW_LOWS"),
-                ("High/Low Ratio", "HIGH_LOW_RATIO"),
+        for label, symbol, unit, value_key in (
+            ("New Highs", "NEW_HIGHS", "stocks", "newHighs"),
+            ("New Lows", "NEW_LOWS", "stocks", "newLows"),
+            ("High/Low Ratio", "HIGH_LOW_RATIO", "ratio", "highLowRatio"),
+        ):
+            items.append(
+                self._polygon_us_breadth_metric_item(
+                    label,
+                    symbol,
+                    metrics.get(value_key),
+                    unit,
+                    as_of,
+                    updated_at,
+                    source_meta,
+                    detail=detail,
+                )
             )
-        )
         return {
             **source_meta,
             "updatedAt": updated_at,
@@ -4315,15 +4342,20 @@ class MarketOverviewService:
             "comparisonBasis": activation.get("comparisonBasis"),
             "previousCoverageCount": activation.get("previousCoverageCount"),
             "comparisonCoverageCount": activation.get("comparisonCoverageCount"),
+            "highLowLookbackSessions": activation.get("highLowLookbackSessions"),
+            "highLowEligibleCount": activation.get("highLowEligibleCount"),
+            "highLowEligibleThreshold": activation.get("highLowEligibleThreshold"),
             "freshness": "delayed",
             "coverage": metric_coverage_ratio,
             "isPartial": bool(missing_metrics),
             "isFallback": False,
             "fallbackUsed": False,
             "warning": (
-                "US breadth uses computed Polygon grouped-daily AD metrics; "
-                "broad-market breadth claims remain disabled because 52-week high/low "
-                "breadth is unavailable without historical lookback."
+                "US breadth uses computed Polygon grouped-daily AD and 52-week high/low metrics; "
+                "broad-market authority remains disabled because this is not official NYSE/Nasdaq published breadth."
+                if high_low_fulfilled
+                else "US breadth uses computed Polygon grouped-daily AD metrics; "
+                "52-week high/low breadth is unavailable because strict historical coverage gates did not pass."
             ),
             "explanation": (
                 "This is computed from Polygon's authorized grouped daily US equity feed "
@@ -4334,7 +4366,7 @@ class MarketOverviewService:
             "fulfilledMetrics": fulfilled_metrics,
             "missingMetrics": missing_metrics,
             "missingMetricReasons": {
-                symbol: POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON
+                symbol: high_low_unavailable_reason
                 for symbol in ("NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO")
                 if symbol in missing_metrics
             },
@@ -4388,6 +4420,7 @@ class MarketOverviewService:
         updated_at: str,
         source_meta: Mapping[str, Any],
     ) -> Dict[str, Any]:
+        reason = str(source_meta.get("highLowUnavailableReason") or POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON)
         item = self._unavailable_item(
             label,
             symbol,
@@ -4413,9 +4446,9 @@ class MarketOverviewService:
             "broadMarketClaimAllowed": False,
             "sourceAuthorityAllowed": False,
             "scoreContributionAllowed": False,
-            "sourceAuthorityReason": POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
-            "routeRejectedReasonCodes": [POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON],
-            "degradationReason": POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
+            "sourceAuthorityReason": reason,
+            "routeRejectedReasonCodes": [reason],
+            "degradationReason": reason,
             "sourceFreshnessEvidence": {
                 "freshness": "unavailable",
                 "isFallback": False,

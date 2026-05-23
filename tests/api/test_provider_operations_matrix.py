@@ -372,7 +372,7 @@ def test_polygon_us_grouped_daily_projection_is_visible_without_secret_or_offici
 
     polygon = _row_by_id(payload, "polygon_us_grouped_daily")
     assert polygon["sourceLabel"] == "Polygon grouped daily US equities (computed breadth)"
-    assert polygon["authorityBasis"] == "computed_from_authorized_polygon_grouped_daily"
+    assert polygon["authorityBasis"] == "computed_from_authorized_polygon_history"
     assert polygon["universe"] == "polygon_us_grouped_daily_ex_otc"
     assert polygon["sourceType"] == "authorized_licensed_feed"
     assert polygon["sourceTier"] == "official_or_authorized_licensed_feed"

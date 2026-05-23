@@ -339,7 +339,7 @@ export SSL_CERT_FILE="$(python -c 'import certifi; print(certifi.where())')"
 > - TickFlow behavior is capability-based rather than just key-based: limited plans can still enhance main CN indices, while plans with `CN_Equity_A` universe query support also enhance market breadth.
 > - The official quickstart documents `quotes.get(universes=["CN_Equity_A"])`, but online smoke tests confirmed two additional real-world constraints: universe access depends on plan permissions, and `quotes.get(symbols=[...])` has a per-request symbol limit.
 > - TickFlow currently returns `change_pct` / `amplitude` as ratio values; this integration normalizes them to the project's percent convention so they match AkShare / Tushare / efinance semantics.
-> - When `POLYGON_API_KEY` is configured, Market Overview US breadth only computes advance/decline/unchanged from Polygon grouped daily EOD data; 52-week highs/lows remain unavailable and non-scoring until a bounded historical lookback exists.
+> - When `POLYGON_API_KEY` is configured, Market Overview US breadth only uses Polygon grouped daily EOD data for advance/decline/unchanged. 52-week highs/lows are computed only when same-source Polygon grouped daily history passes the 252 completed-session, coverage, and previous-close gates; otherwise they remain unavailable and are not relabeled as official NYSE/Nasdaq breadth.
 > - Per-stock analysis, realtime quote priority, and sector rankings fallback remain unchanged.
 
 ---
