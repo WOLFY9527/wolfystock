@@ -323,8 +323,11 @@
         "capReason": "unavailable_source",
         "degradationReason": "usd_pressure_missing_series",
         "sourceAuthorityRouteRejected": false,
-        "routeRejectedReasonCodes": [],
-        "activationHint": "官方 FRED trade-weighted USD 证据新鲜且授权时可计分；缺少 DTWEXBGS 时仅保留观察态。；requiredProviderClass=official_public.usd_pressure；missingProviderReason=requires_official_public.usd_pressure；requiredRealSourceForScore=True；scoreExclusionReason=usd_pressure_missing_series；trust gate=unavailable / unavailable；缺少: USD_TWI；scoreContributionAllowed=False；cap=unavailable_source；score capped"
+        "sourceAuthorityReason": "usd_pressure_missing_series",
+        "routeRejectedReasonCodes": [
+          "usd_pressure_missing_series"
+        ],
+        "activationHint": "官方 FRED trade-weighted USD 证据新鲜且授权时可计分；缺少 DTWEXBGS 时仅保留观察态。；requiredProviderClass=official_public.usd_pressure；missingProviderReason=requires_official_public.usd_pressure；requiredRealSourceForScore=True；scoreExclusionReason=usd_pressure_missing_series；routeRejectedReasonCodes=usd_pressure_missing_series；trust gate=unavailable / unavailable；缺少: USD_TWI；scoreContributionAllowed=False；cap=unavailable_source；score capped"
       }
     },
     {
@@ -550,7 +553,7 @@
         "proxyOnly": false,
         "observationOnly": false,
         "scoreContributionAllowed": false,
-        "scoreExclusionReason": "trust_gate_blocked",
+        "scoreExclusionReason": "proxy_only_missing_real_source",
         "requiredRealSourceForScore": true,
         "missingProviderReason": "requires_authorized.us_etf_flow",
         "paidDataLikelyRequired": true,
@@ -563,7 +566,7 @@
         "degradationReason": "fallback_source",
         "sourceAuthorityRouteRejected": false,
         "routeRejectedReasonCodes": [],
-        "activationHint": "激活现有 `funds_flow` snapshot 或 Market Overview 的 SPY / QQQ / IWM quote-derived ETF flow proxy；缺少 ETF 条目时保持不可用。；requiredProviderClass=authorized.us_etf_flow；missingProviderReason=requires_authorized.us_etf_flow；paidDataLikelyRequired=True；requiredRealSourceForScore=True；scoreExclusionReason=trust_gate_blocked；trust gate=unavailable / unavailable；缺少: ETF；scoreContributionAllowed=False；cap=unavailable_source；score capped"
+        "activationHint": "激活现有 `funds_flow` snapshot 或 Market Overview 的 SPY / QQQ / IWM quote-derived ETF flow proxy；缺少 ETF 条目时保持不可用。；requiredProviderClass=authorized.us_etf_flow；missingProviderReason=requires_authorized.us_etf_flow；paidDataLikelyRequired=True；requiredRealSourceForScore=True；scoreExclusionReason=proxy_only_missing_real_source；trust gate=unavailable / unavailable；缺少: ETF；scoreContributionAllowed=False；cap=unavailable_source；score capped"
       }
     },
     {
@@ -631,7 +634,7 @@
         "proxyOnly": false,
         "observationOnly": false,
         "scoreContributionAllowed": false,
-        "scoreExclusionReason": "trust_gate_blocked",
+        "scoreExclusionReason": "proxy_only_missing_real_source",
         "requiredRealSourceForScore": true,
         "missingProviderReason": "requires_official_or_authorized.us_market_breadth",
         "paidDataLikelyRequired": true,
@@ -644,7 +647,7 @@
         "degradationReason": "fallback_source",
         "sourceAuthorityRouteRejected": false,
         "routeRejectedReasonCodes": [],
-        "activationHint": "激活现有 sector ETF breadth proxy；需要 SECTORS_UP、SECTORS_DOWN 和相对强弱代理。；requiredProviderClass=official_or_authorized.us_market_breadth；missingProviderReason=requires_official_or_authorized.us_market_breadth；paidDataLikelyRequired=True；requiredRealSourceForScore=True；scoreExclusionReason=trust_gate_blocked；trust gate=unavailable / unavailable；缺少: SECTORS_UP, SECTORS_DOWN, RSP_SPY, IWM_SPY, QQQ_SPY；scoreContributionAllowed=False；cap=unavailable_source；score capped"
+        "activationHint": "激活现有 sector ETF breadth proxy；需要 SECTORS_UP、SECTORS_DOWN 和相对强弱代理。；requiredProviderClass=official_or_authorized.us_market_breadth；missingProviderReason=requires_official_or_authorized.us_market_breadth；paidDataLikelyRequired=True；requiredRealSourceForScore=True；scoreExclusionReason=proxy_only_missing_real_source；trust gate=unavailable / unavailable；缺少: SECTORS_UP, SECTORS_DOWN, RSP_SPY, IWM_SPY, QQQ_SPY；scoreContributionAllowed=False；cap=unavailable_source；score capped"
       }
     },
     {

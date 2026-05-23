@@ -321,8 +321,11 @@
         "capReason": "unavailable_source",
         "degradationReason": "usd_pressure_missing_series",
         "sourceAuthorityRouteRejected": false,
-        "routeRejectedReasonCodes": [],
-        "activationHint": "官方 FRED trade-weighted USD 证据新鲜且授权时可计分；缺少 DTWEXBGS 时仅保留观察态。；requiredProviderClass=official_public.usd_pressure；missingProviderReason=requires_official_public.usd_pressure；requiredRealSourceForScore=True；scoreExclusionReason=usd_pressure_missing_series；trust gate=unavailable / unavailable；缺少: USD_TWI；scoreContributionAllowed=False；cap=unavailable_source；score capped；source=mixed"
+        "sourceAuthorityReason": "usd_pressure_missing_series",
+        "routeRejectedReasonCodes": [
+          "usd_pressure_missing_series"
+        ],
+        "activationHint": "官方 FRED trade-weighted USD 证据新鲜且授权时可计分；缺少 DTWEXBGS 时仅保留观察态。；requiredProviderClass=official_public.usd_pressure；missingProviderReason=requires_official_public.usd_pressure；requiredRealSourceForScore=True；scoreExclusionReason=usd_pressure_missing_series；routeRejectedReasonCodes=usd_pressure_missing_series；trust gate=unavailable / unavailable；缺少: USD_TWI；scoreContributionAllowed=False；cap=unavailable_source；score capped；source=mixed"
       }
     },
     {

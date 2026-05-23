@@ -2728,6 +2728,291 @@ def test_us_breadth_indicator_uses_relative_proxy_votes(isolated_db: DatabaseMan
     assert "representative_sample_not_full_market_breadth" in evidence_inputs["RSP_SPY"]["routeRejectedReasonCodes"]
 
 
+def test_cache_snapshot_etf_flow_cannot_score_when_real_source_unavailable(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "funds_flow",
+        _cache_entry(
+            source="cache",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "ETF",
+                    "label": "ETF flow cache snapshot",
+                    "value": 1.2,
+                    "source": "cache",
+                    "sourceType": "cache_snapshot",
+                    "sourceLabel": "Cache Snapshot",
+                }
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["us_etf_flow_proxy"]
+    diagnostics = indicator["coverageDiagnostics"]
+
+    assert indicator["status"] == "partial"
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostics["realSourceAvailable"] is False
+    assert diagnostics["missingProviderReason"] == "requires_authorized.us_etf_flow"
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["scoreExclusionReason"] == "proxy_only_missing_real_source"
+    assert diagnostics["requiredRealSourceForScore"] is True
+    assert diagnostics["sourceTier"] == "snapshot"
+    assert "missingProviderReason=requires_authorized.us_etf_flow" in diagnostics["activationHint"]
+
+
+def test_cache_snapshot_representative_breadth_cannot_score_when_input_gates_are_false(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "us_breadth",
+        _cache_entry(
+            source="cache",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "SECTORS_UP",
+                    "label": "Sectors Up",
+                    "value": 2,
+                    "source": "cache",
+                    "sourceType": "cache_snapshot",
+                },
+                {
+                    "symbol": "SECTORS_DOWN",
+                    "label": "Sectors Down",
+                    "value": 9,
+                    "source": "cache",
+                    "sourceType": "cache_snapshot",
+                },
+                {
+                    "symbol": "RSP_SPY",
+                    "label": "RSP vs SPY",
+                    "value": -0.7,
+                    "changePercent": -0.7,
+                    "source": "cache",
+                    "sourceType": "cache_snapshot",
+                },
+                {
+                    "symbol": "IWM_SPY",
+                    "label": "IWM vs SPY",
+                    "value": -0.8,
+                    "changePercent": -0.8,
+                    "source": "cache",
+                    "sourceType": "cache_snapshot",
+                },
+                {
+                    "symbol": "QQQ_SPY",
+                    "label": "QQQ vs SPY",
+                    "value": -0.6,
+                    "changePercent": -0.6,
+                    "source": "cache",
+                    "sourceType": "cache_snapshot",
+                },
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["us_breadth_proxy"]
+    diagnostics = indicator["coverageDiagnostics"]
+    evidence_inputs = {item["key"]: item for item in indicator["evidence"]["inputs"]}
+
+    assert indicator["status"] == "live"
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostics["realSourceAvailable"] is False
+    assert diagnostics["missingProviderReason"] == "requires_official_or_authorized.us_market_breadth"
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["scoreExclusionReason"] == "proxy_only_missing_real_source"
+    assert diagnostics["sourceAuthorityReason"] == "representative_sample_not_full_market_breadth"
+    assert "representative_sample_not_full_market_breadth" in diagnostics["routeRejectedReasonCodes"]
+    assert evidence_inputs["SECTORS_UP"]["sourceAuthorityAllowed"] is False
+    assert evidence_inputs["SECTORS_UP"]["scoreContributionAllowed"] is False
+    assert evidence_inputs["RSP_SPY"]["sourceAuthorityAllowed"] is False
+    assert evidence_inputs["RSP_SPY"]["scoreContributionAllowed"] is False
+
+
+def test_score_assembly_ignores_blocked_cache_snapshot_etf_flow(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "crypto",
+        _cache_entry(
+            source="binance",
+            freshness="live",
+            items=[
+                {
+                    "symbol": "BTC",
+                    "label": "BTC",
+                    "changePercent": 1.4,
+                    "value": 64000.0,
+                    "source": "binance",
+                    "sourceType": "exchange_public",
+                },
+                {
+                    "symbol": "ETH",
+                    "label": "ETH",
+                    "changePercent": 1.1,
+                    "value": 3300.0,
+                    "source": "binance",
+                    "sourceType": "exchange_public",
+                },
+                {
+                    "symbol": "BNB",
+                    "label": "BNB",
+                    "changePercent": 0.7,
+                    "value": 610.0,
+                    "source": "binance",
+                    "sourceType": "exchange_public",
+                },
+                {
+                    "symbol": "BTC_FUNDING",
+                    "label": "BTC Funding",
+                    "value": 0.011,
+                    "changePercent": 0.011,
+                    "source": "binance",
+                    "sourceType": "exchange_public",
+                },
+                {
+                    "symbol": "ETH_FUNDING",
+                    "label": "ETH Funding",
+                    "value": 0.009,
+                    "changePercent": 0.009,
+                    "source": "binance",
+                    "sourceType": "exchange_public",
+                },
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "volatility",
+        _cache_entry(
+            source="fred",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 15.2,
+                    "changePercent": -2.5,
+                    "source": "fred",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                }
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "US2Y",
+                    "label": "US 2Y",
+                    "value": 4.62,
+                    "changePercent": -0.22,
+                    "source": "treasury",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                },
+                {
+                    "symbol": "US10Y",
+                    "label": "US 10Y",
+                    "value": 4.31,
+                    "changePercent": -0.31,
+                    "source": "treasury",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "US 30Y",
+                    "value": 4.58,
+                    "changePercent": -0.18,
+                    "source": "treasury",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "unit": "%",
+                },
+                {
+                    "symbol": "SOFR",
+                    "label": "SOFR",
+                    "value": 5.31,
+                    "source": "fred",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED SOFR",
+                    "unit": "%",
+                },
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "funds_flow",
+        _cache_entry(
+            source="cache",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "ETF",
+                    "label": "ETF flow cache snapshot",
+                    "value": 1.2,
+                    "source": "cache",
+                    "sourceType": "cache_snapshot",
+                }
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    with patch(
+        "src.services.liquidity_monitor_service.fetch_binance_funding_row",
+        side_effect=RuntimeError("network disabled"),
+    ):
+        payload = service.get_liquidity_monitor()
+
+    indicators = _indicators_by_key(payload)
+
+    assert indicators["crypto_spot_momentum"]["includedInScore"] is True
+    assert indicators["vix_pressure"]["includedInScore"] is True
+    assert indicators["us_rates_pressure"]["includedInScore"] is True
+    assert indicators["us_etf_flow_proxy"]["includedInScore"] is False
+    assert indicators["us_etf_flow_proxy"]["scoreContribution"] == 0
+    assert payload["score"]["includedIndicatorCount"] == 3
+    assert payload["score"]["includedIndicatorWeight"] == 20
+    assert payload["score"]["value"] == 66
+
+
 def test_liquidity_provider_activation_diagnostics_classify_proxy_indicators_and_cap_score(
     isolated_db: DatabaseManager,
 ) -> None:

@@ -2367,16 +2367,37 @@ class LiquidityMonitorService:
         observation_only = bool(policy.get("observationOnly"))
         required_real_source_for_score = bool(policy.get("requiresRealSourceForScore"))
         proxy_score_allowlisted = bool(policy.get("allowProxyScoreContribution"))
-        proxy_observation_only_reason = "proxy_only_missing_real_source" if proxy_only and not real_source_available else None
+        blocked_input_authority = (
+            required_real_source_for_score
+            and self._indicator_has_score_blocked_evidence_input(evidence)
+        )
+        blocked_input_reason = (
+            self._first_blocked_input_authority_reason(evidence)
+            if blocked_input_authority
+            else None
+        )
+        blocked_input_route_codes = (
+            self._first_blocked_input_route_rejected_reason_codes(evidence)
+            if blocked_input_authority
+            else []
+        )
+        proxy_observation_only_reason = (
+            "proxy_only_missing_real_source" if proxy_only and not real_source_available else None
+        )
+        missing_provider_reason = None
+        if required_provider_class and not real_source_available:
+            missing_provider_reason = f"requires_{required_provider_class}"
         score_exclusion_reason = None
         if observation_only:
             score_exclusion_reason = "observation_only"
-        elif required_real_source_for_score and proxy_only and not proxy_score_allowlisted:
-            score_exclusion_reason = "proxy_only_missing_real_source"
         elif key == "usd_pressure" and not real_source_available:
             score_exclusion_reason = self._usd_pressure_unavailable_reason(evidence)
         elif key == "fed_liquidity" and not real_source_available:
             score_exclusion_reason = "fed_liquidity_required_series_missing_or_stale"
+        elif required_real_source_for_score and missing_provider_reason and not proxy_score_allowlisted:
+            score_exclusion_reason = "proxy_only_missing_real_source"
+        elif required_real_source_for_score and blocked_input_authority:
+            score_exclusion_reason = blocked_input_reason or LIQUIDITY_SCORE_ROUTE_REJECTED_REASON
         elif not bool(trust.get("conclusionAllowed")):
             score_exclusion_reason = "trust_gate_blocked"
         score_contribution_allowed = bool(
@@ -2384,6 +2405,8 @@ class LiquidityMonitorService:
             and not observation_only
             and bool(trust.get("conclusionAllowed"))
             and score_exclusion_reason is None
+            and not (required_real_source_for_score and missing_provider_reason)
+            and not blocked_input_authority
         )
         source_authority_route_rejected = False
         source_authority_reason = None
@@ -2400,12 +2423,12 @@ class LiquidityMonitorService:
             if source_authority_route_rejected:
                 score_contribution_allowed = False
                 score_exclusion_reason = score_exclusion_reason or LIQUIDITY_SCORE_ROUTE_REJECTED_REASON
-        if key == "us_breadth_proxy" and source_authority_reason is None:
-            source_authority_reason = self._first_input_source_authority_reason(evidence)
-            route_rejected_reason_codes = self._first_input_route_rejected_reason_codes(evidence)
-        missing_provider_reason = None
-        if required_provider_class and not real_source_available:
-            missing_provider_reason = f"requires_{required_provider_class}"
+        if required_real_source_for_score and source_authority_reason is None:
+            source_authority_reason = blocked_input_reason or self._first_input_source_authority_reason(evidence)
+        if required_real_source_for_score and not route_rejected_reason_codes:
+            route_rejected_reason_codes = (
+                blocked_input_route_codes or self._first_input_route_rejected_reason_codes(evidence)
+            )
         return {
             "requiredProviderClass": required_provider_class,
             "configuredProviderAvailable": configured_provider_available,
@@ -2422,6 +2445,55 @@ class LiquidityMonitorService:
             "sourceAuthorityReason": source_authority_reason,
             "routeRejectedReasonCodes": route_rejected_reason_codes,
         }
+
+    @staticmethod
+    def _indicator_has_score_blocked_evidence_input(evidence: Dict[str, Any]) -> bool:
+        inputs = evidence.get("inputs")
+        if not isinstance(inputs, list):
+            return False
+        return any(
+            isinstance(item, dict)
+            and (
+                item.get("sourceAuthorityAllowed") is False
+                or item.get("scoreContributionAllowed") is False
+            )
+            for item in inputs
+        )
+
+    @staticmethod
+    def _first_blocked_input_authority_reason(evidence: Dict[str, Any]) -> str | None:
+        inputs = evidence.get("inputs")
+        if not isinstance(inputs, list):
+            return None
+        for item in inputs:
+            if not isinstance(item, dict):
+                continue
+            if item.get("sourceAuthorityAllowed") is not False and item.get("scoreContributionAllowed") is not False:
+                continue
+            reason = str(
+                item.get("sourceAuthorityReason")
+                or item.get("degradationReason")
+                or item.get("capReason")
+                or ""
+            ).strip()
+            if reason:
+                return reason
+        return None
+
+    @staticmethod
+    def _first_blocked_input_route_rejected_reason_codes(evidence: Dict[str, Any]) -> list[str]:
+        inputs = evidence.get("inputs")
+        if not isinstance(inputs, list):
+            return []
+        for item in inputs:
+            if not isinstance(item, dict):
+                continue
+            if item.get("sourceAuthorityAllowed") is not False and item.get("scoreContributionAllowed") is not False:
+                continue
+            codes = item.get("routeRejectedReasonCodes")
+            if isinstance(codes, list):
+                return [str(code) for code in codes if str(code or "").strip()]
+        return []
 
     @staticmethod
     def _first_input_source_authority_reason(evidence: Dict[str, Any]) -> str | None:
@@ -2630,12 +2702,75 @@ class LiquidityMonitorService:
                     for item in inputs
                 )
             )
+        if key == "us_etf_flow_proxy":
+            return self._indicator_required_inputs_have_real_source_authority(
+                evidence,
+                required_inputs=set(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["us_etf_flow_proxy"]),
+                allowed_source_types={"authorized_licensed_feed"},
+                allowed_source_tiers={"authorized_licensed_feed"},
+            )
+        if key == "us_breadth_proxy":
+            return self._indicator_required_inputs_have_real_source_authority(
+                evidence,
+                required_inputs=set(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["us_breadth_proxy"]),
+                allowed_source_types={"authorized_licensed_feed", "official_public"},
+                allowed_source_tiers={
+                    "authorized_licensed_feed",
+                    "official_or_authorized_licensed_feed",
+                    "official_public",
+                },
+            )
         if key in {"vix_pressure", "us_rates_pressure", "cn_hk_index_context"}:
             return (
                 str(trust.get("sourceTier") or "") == "official_public"
                 and not self._indicator_has_proxy_input(panel, evidence)
             )
         return False
+
+    def _indicator_required_inputs_have_real_source_authority(
+        self,
+        evidence: Dict[str, Any],
+        *,
+        required_inputs: set[str],
+        allowed_source_types: set[str],
+        allowed_source_tiers: set[str],
+    ) -> bool:
+        inputs = [item for item in evidence.get("inputs", []) if isinstance(item, dict)]
+        keyed_inputs = {
+            self._indicator_input_key(item): item
+            for item in inputs
+            if self._indicator_input_key(item) in required_inputs
+        }
+        if set(keyed_inputs) != required_inputs:
+            return False
+        return all(
+            self._indicator_input_has_real_source_authority(
+                item,
+                allowed_source_types=allowed_source_types,
+                allowed_source_tiers=allowed_source_tiers,
+            )
+            for item in keyed_inputs.values()
+        )
+
+    @staticmethod
+    def _indicator_input_has_real_source_authority(
+        item: Dict[str, Any],
+        *,
+        allowed_source_types: set[str],
+        allowed_source_tiers: set[str],
+    ) -> bool:
+        source_type = str(item.get("sourceType") or "").lower()
+        source_tier = str(item.get("sourceTier") or "").lower()
+        has_allowed_authority = source_type in allowed_source_types or source_tier in allowed_source_tiers
+        return bool(
+            has_allowed_authority
+            and item.get("sourceAuthorityAllowed") is not False
+            and item.get("scoreContributionAllowed") is not False
+            and not item.get("isFallback")
+            and not item.get("isUnavailable")
+            and not item.get("isStale")
+            and str(item.get("freshness") or "") in RELIABLE_FRESHNESS
+        )
 
     @staticmethod
     def _indicator_has_proxy_input(panel: PanelState, evidence: Dict[str, Any]) -> bool:
