@@ -1290,7 +1290,7 @@ describe('BacktestPage', () => {
     await parseDeterministicStrategy();
 
     const executableSpecSection = screen.getByTestId('pro-parsed-summary');
-    expect(within(executableSpecSection).getByText('规格来源 · 兼容 setup')).toBeInTheDocument();
+    expect(await within(executableSpecSection).findByText('规格来源 · 兼容 setup')).toBeInTheDocument();
   });
 
   it('keeps historical evaluation functional across Normal and Professional modes', async () => {
