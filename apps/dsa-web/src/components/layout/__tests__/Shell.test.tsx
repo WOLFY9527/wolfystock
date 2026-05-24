@@ -266,13 +266,46 @@ describe('Shell', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: '账户中心' }));
-    fireEvent.click(await screen.findByRole('button', { name: '退出登录' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '退出登录' }));
 
     expect(await screen.findByRole('heading', { name: translate('zh', 'nav.logoutTitle') })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'nav.logoutConfirm') }));
 
     await waitFor(() => expect(mockLogout).toHaveBeenCalled());
     expect(mockHardRedirect).not.toHaveBeenCalled();
+  });
+
+  it('supports keyboard menu navigation and restores focus to the account trigger', async () => {
+    render(
+      <MemoryRouter initialEntries={['/market-overview']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const trigger = screen.getByRole('button', { name: '账户中心' });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+
+    const menu = await screen.findByRole('menu', { name: '账户中心菜单' });
+    const accountItem = within(menu).getByRole('menuitem', { name: '账户中心' });
+    await waitFor(() => expect(accountItem).toHaveFocus());
+
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    await waitFor(() => expect(within(menu).getByRole('menuitem', { name: '账户与安全' })).toHaveFocus());
+
+    fireEvent.keyDown(menu, { key: 'End' });
+    await waitFor(() => expect(within(menu).getByRole('menuitem', { name: '退出登录' })).toHaveFocus());
+
+    fireEvent.keyDown(menu, { key: 'Home' });
+    await waitFor(() => expect(accountItem).toHaveFocus());
+
+    fireEvent.keyDown(menu, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('menu', { name: '账户中心菜单' })).not.toBeInTheDocument());
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it('keeps language/logout controls inside the mobile drawer instead of duplicating them in the top bar', async () => {
@@ -295,6 +328,32 @@ describe('Shell', () => {
 
     expect(await screen.findByRole('button', { name: '切换语言' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
+  });
+
+  it('keeps guest mobile drawer free of account center entries', async () => {
+    window.innerWidth = 390;
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: false,
+      currentUser: null,
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '打开导航菜单' }));
+
+    expect(await screen.findByRole('heading', { name: translate('zh', 'shell.drawerTitle') })).toBeInTheDocument();
+    expect(screen.queryByTestId('shell-mobile-account-center')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '登录' })).toBeInTheDocument();
   });
 
   it('renders a compact mobile header with the active route label', () => {
@@ -369,6 +428,29 @@ describe('Shell', () => {
     await act(async () => {
       await settleDrawerMotion();
     });
+  });
+
+  it('shows the mobile account drawer section for signed-in non-admin users without admin controls', async () => {
+    window.innerWidth = 390;
+
+    render(
+      <MemoryRouter initialEntries={['/watchlist']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '打开导航菜单' }));
+
+    expect(await screen.findByRole('heading', { name: translate('zh', 'shell.drawerTitle') })).toBeInTheDocument();
+    const accountPanel = screen.getByTestId('shell-mobile-account-center');
+    expect(accountPanel).toBeInTheDocument();
+    expect(within(accountPanel).getByRole('link', { name: '账户中心' })).toBeInTheDocument();
+    expect(within(accountPanel).getByRole('button', { name: '退出登录' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
   });
 
   it('keeps the mobile navigation drawer open until the user closes it or navigates away', async () => {
@@ -755,6 +837,7 @@ describe('Shell', () => {
     );
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
+    expect(screen.getByRole('button', { name: '账户中心' })).toBeInTheDocument();
     expect(within(actionIsland).queryByRole('button', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.userGovernance') })).not.toBeInTheDocument();

@@ -165,10 +165,13 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const isDesktop = useIsDesktopViewport();
   const previousPathnameRef = useRef(location.pathname);
   const didInitializeViewportRef = useRef(false);
+  const accountTriggerRef = useRef<HTMLButtonElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const accountMenuItemRefs = useRef<Array<HTMLAnchorElement | HTMLButtonElement | null>>([]);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [railOpen, setRailOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [accountMenuFocusIndex, setAccountMenuFocusIndex] = useState<number | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [railContent, setRailContent] = useState<React.ReactNode | null>(null);
   const hasRailContent = Boolean(railContent);
@@ -220,9 +223,20 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     setRailOpen(false);
   }, [setRailOpen]);
 
-  const closeAccountMenu = useCallback(() => {
+  const closeAccountMenu = useCallback((options?: { returnFocus?: boolean }) => {
     setAccountMenuOpen(false);
-  }, [setAccountMenuOpen]);
+    setAccountMenuFocusIndex(null);
+    if (options?.returnFocus) {
+      window.setTimeout(() => {
+        accountTriggerRef.current?.focus();
+      }, 0);
+    }
+  }, [setAccountMenuFocusIndex, setAccountMenuOpen]);
+
+  const openAccountMenu = useCallback((focusIndex = 0) => {
+    setAccountMenuOpen(true);
+    setAccountMenuFocusIndex(focusIndex);
+  }, [setAccountMenuFocusIndex, setAccountMenuOpen]);
 
   const openRail = useCallback(() => {
     setMobileNavOpen(false);
@@ -249,6 +263,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
       setMobileNavOpen(false);
       setRailOpen(false);
       setAccountMenuOpen(false);
+      setAccountMenuFocusIndex(null);
     }, 0);
 
     return () => window.clearTimeout(timer);
@@ -264,6 +279,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
       setMobileNavOpen(false);
       setRailOpen(false);
       setAccountMenuOpen(false);
+      setAccountMenuFocusIndex(null);
     }, 0);
 
     return () => window.clearTimeout(timer);
@@ -278,12 +294,12 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
       if (accountMenuRef.current?.contains(event.target as Node)) {
         return;
       }
-      setAccountMenuOpen(false);
+      closeAccountMenu({ returnFocus: true });
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setAccountMenuOpen(false);
+        closeAccountMenu({ returnFocus: true });
       }
     };
 
@@ -293,7 +309,61 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [accountMenuOpen]);
+  }, [accountMenuOpen, closeAccountMenu]);
+
+  useEffect(() => {
+    if (!accountMenuOpen || accountMenuFocusIndex === null) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      accountMenuItemRefs.current[accountMenuFocusIndex]?.focus();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [accountMenuFocusIndex, accountMenuOpen]);
+
+  const handleAccountTriggerKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown') {
+      event.preventDefault();
+      openAccountMenu(0);
+    }
+  }, [openAccountMenu]);
+
+  const handleAccountMenuKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    const items = accountMenuItemRefs.current.filter(Boolean) as Array<HTMLAnchorElement | HTMLButtonElement>;
+    if (!items.length) {
+      return;
+    }
+
+    const activeIndex = items.findIndex((item) => item === document.activeElement);
+    const resolvedIndex = activeIndex >= 0 ? activeIndex : 0;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      items[(resolvedIndex + 1) % items.length]?.focus();
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      items[(resolvedIndex - 1 + items.length) % items.length]?.focus();
+      return;
+    }
+    if (event.key === 'Home') {
+      event.preventDefault();
+      items[0]?.focus();
+      return;
+    }
+    if (event.key === 'End') {
+      event.preventDefault();
+      items[items.length - 1]?.focus();
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeAccountMenu({ returnFocus: true });
+    }
+  }, [closeAccountMenu]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -397,15 +467,24 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                 className="pointer-events-auto relative"
               >
                 <button
+                  ref={accountTriggerRef}
                   type="button"
                   className={cn(
                     'flex min-w-[12.5rem] items-center justify-between gap-3 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]/92 px-3 py-2 text-left shadow-[0_16px_40px_rgba(0,0,0,0.28)] backdrop-blur',
                     accountMenuOpen ? 'border-[color:var(--wolfy-accent)]' : '',
                   )}
                   aria-label={accountCopy.accountCenter}
+                  aria-haspopup="menu"
                   aria-expanded={accountMenuOpen}
                   aria-controls="shell-account-center-menu"
-                  onClick={() => setAccountMenuOpen((open) => !open)}
+                  onClick={() => {
+                    if (accountMenuOpen) {
+                      closeAccountMenu({ returnFocus: true });
+                      return;
+                    }
+                    openAccountMenu(0);
+                  }}
+                  onKeyDown={handleAccountTriggerKeyDown}
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-[10px] uppercase tracking-[0.1em] text-[color:var(--wolfy-text-muted)]">
@@ -422,18 +501,26 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                   <div
                     id="shell-account-center-menu"
                     role="menu"
+                    aria-label={accountCopy.menuLabel}
+                    aria-orientation="vertical"
                     data-testid="shell-account-center-menu"
                     className="absolute right-0 top-full mt-2 flex min-w-[15rem] max-w-[min(22rem,calc(100vw-2rem))] flex-col gap-1 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-2 shadow-[0_20px_48px_rgba(0,0,0,0.28)]"
+                    onKeyDown={handleAccountMenuKeyDown}
                   >
-                    {accountMenuItems.map(({ label, to, icon: Icon }) => (
+                    {accountMenuItems.map(({ label, to, icon: Icon }, index) => (
                       <NavLink
                         key={label}
                         to={to}
+                        ref={(node) => {
+                          accountMenuItemRefs.current[index] = node;
+                        }}
+                        role="menuitem"
+                        tabIndex={-1}
                         className={({ isActive }) => cn(
                           'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-white/72 transition-colors hover:bg-white/[0.04] hover:text-white',
                           isActive ? 'bg-white/[0.05] text-white' : '',
                         )}
-                        onClick={closeAccountMenu}
+                        onClick={() => closeAccountMenu()}
                       >
                         <Icon className="h-4 w-4 shrink-0 text-white/56" />
                         <span className="truncate">{label}</span>
@@ -442,6 +529,11 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                     <div className="my-1 h-px bg-[var(--wolfy-divider)]" />
                     <button
                       type="button"
+                      ref={(node) => {
+                        accountMenuItemRefs.current[accountMenuItems.length] = node;
+                      }}
+                      role="menuitem"
+                      tabIndex={-1}
                       className="flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-red-200/80 transition-colors hover:bg-red-500/10 hover:text-red-100"
                       onClick={() => {
                         closeAccountMenu();
