@@ -28,7 +28,6 @@ from src.admin_rbac import (
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, ROLE_ADMIN, ROLE_USER
 from src.storage import AdminRole, AdminRoleCapability, AdminUserRole, DatabaseManager
 from tests.security_launch_preflight_helper import (
-    EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS,
     inventory_public_launch_admin_route_capabilities,
 )
 
@@ -618,11 +617,14 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
         self.assertEqual(
             {
                 "admin_cost.py": 4,
-                "admin_logs.py": 6,
+                "admin_logs.py": 9,
                 "admin_notifications.py": 7,
                 "admin_portfolio.py": 4,
                 "admin_provider_circuits.py": 5,
+                "admin_provider_operations_matrix.py": 1,
                 "admin_security.py": 1,
+                "admin_users.py": 4,
+                "market_provider_operations.py": 1,
                 "provider_usage_ledger.py": 1,
                 "system_config.py": 9,
             },
@@ -631,8 +633,21 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
 
     def test_public_launch_admin_route_capability_inventory_is_explicit(self) -> None:
         inventory = inventory_public_launch_admin_route_capabilities()
+        expected_capability_counts = {
+            "admin_cost.py": {"cost:observability:read": 4},
+            "admin_logs.py": {"ops:logs:read": 8, "ops:logs:write": 1},
+            "admin_notifications.py": {"ops:notifications:read": 2, "ops:notifications:write": 5},
+            "admin_portfolio.py": {"users:portfolio:read": 4},
+            "admin_provider_circuits.py": {"ops:providers:read": 5},
+            "admin_security.py": {"users:security:write": 1},
+            "system_config.py": {
+                "ops:system_config:read": 3,
+                "ops:system_config:write": 3,
+                "ops:providers:write": 3,
+            },
+        }
 
-        self.assertEqual(EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS, inventory.capability_counts)
+        self.assertEqual(expected_capability_counts, inventory.capability_counts)
         self.assertEqual({}, inventory.legacy_admin_dependencies)
         for capability_counts in inventory.capability_counts.values():
             self.assertTrue(set(capability_counts).issubset(set(ADMIN_RBAC_CAPABILITIES)))
@@ -648,9 +663,7 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
 
         self.assertEqual(
             {
-                "admin_users.py": 4,
                 "agent.py": 1,
-                "market_provider_operations.py": 1,
                 "quant.py": 9,
                 "scanner.py": 3,
                 "usage.py": 1,
