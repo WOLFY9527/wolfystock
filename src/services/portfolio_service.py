@@ -3350,7 +3350,7 @@ class PortfolioService:
             keys = list(fifo_lots.keys())
         else:
             keys = list(avg_state.keys())
-        latest_closes = self.repo.get_latest_closes(
+        latest_closes = self.repo.get_latest_closes_with_dates(
             symbols=[key[0] for key in keys],
             as_of=as_of_date,
         )
@@ -3385,7 +3385,9 @@ class PortfolioService:
                     }
                 )
 
-            raw_last_price = latest_closes.get(symbol)
+            latest_close = latest_closes.get(symbol)
+            raw_last_price = latest_close[0] if latest_close is not None else None
+            latest_close_date = latest_close[1] if latest_close is not None else None
             is_price_fallback = raw_last_price is None or raw_last_price <= 0
             last_price = avg_cost if is_price_fallback else float(raw_last_price)
             price_metadata = self._build_position_price_metadata(
@@ -3394,7 +3396,11 @@ class PortfolioService:
                     if is_price_fallback
                     else PORTFOLIO_PRICE_SOURCE_DAILY_CLOSE
                 ),
-                price_as_of=None if is_price_fallback else as_of_date.isoformat(),
+                price_as_of=(
+                    None
+                    if is_price_fallback
+                    else (latest_close_date or as_of_date).isoformat()
+                ),
                 is_price_fallback=is_price_fallback,
                 price_fallback_reason=(
                     PORTFOLIO_PRICE_FALLBACK_REASON_CURRENT_QUOTE_UNAVAILABLE

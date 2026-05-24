@@ -1322,6 +1322,20 @@ class PortfolioRepository:
             return float(row.close)
 
     def get_latest_closes(self, *, symbols: Iterable[str], as_of: date) -> Dict[str, float]:
+        return {
+            symbol: close
+            for symbol, (close, _latest_date) in self.get_latest_closes_with_dates(
+                symbols=symbols,
+                as_of=as_of,
+            ).items()
+        }
+
+    def get_latest_closes_with_dates(
+        self,
+        *,
+        symbols: Iterable[str],
+        as_of: date,
+    ) -> Dict[str, Tuple[float, Optional[date]]]:
         normalized = sorted({str(symbol or "").strip().upper() for symbol in symbols if str(symbol or "").strip()})
         if not normalized:
             return {}
@@ -1342,7 +1356,7 @@ class PortfolioRepository:
         )
         with self.db.get_session() as session:
             rows = session.execute(
-                select(StockDaily.code, StockDaily.close)
+                select(StockDaily.code, StockDaily.close, StockDaily.date)
                 .join(
                     latest_dates,
                     and_(
@@ -1351,11 +1365,24 @@ class PortfolioRepository:
                     ),
                 )
             ).all()
-        return {
-            str(code).upper(): float(close)
-            for code, close in rows
-            if code is not None and close is not None
-        }
+        latest_closes: Dict[str, Tuple[float, Optional[date]]] = {}
+        for code, close, latest_date in rows:
+            if code is None or close is None:
+                continue
+            close_date: Optional[date]
+            if isinstance(latest_date, datetime):
+                close_date = latest_date.date()
+            elif isinstance(latest_date, date):
+                close_date = latest_date
+            elif latest_date:
+                try:
+                    close_date = date.fromisoformat(str(latest_date))
+                except ValueError:
+                    close_date = None
+            else:
+                close_date = None
+            latest_closes[str(code).upper()] = (float(close), close_date)
+        return latest_closes
 
     def get_latest_market_data_update(
         self,

@@ -1861,9 +1861,12 @@ class PortfolioServiceTestCase(unittest.TestCase):
             side_effect=AssertionError("snapshot read should batch latest-close lookups"),
         ), patch.object(
             self.service.repo,
-            "get_latest_closes",
+            "get_latest_closes_with_dates",
             create=True,
-            return_value={"600519": 100.0, "000001": 20.0},
+            return_value={
+                "600519": (100.0, date(2026, 1, 1)),
+                "000001": (20.0, date(2026, 1, 1)),
+            },
         ) as batch_lookup:
             snapshot = self.service.get_portfolio_snapshot(
                 account_id=aid,
@@ -1878,6 +1881,44 @@ class PortfolioServiceTestCase(unittest.TestCase):
         batch_lookup.assert_called_once()
         self.assertEqual(set(batch_lookup.call_args.kwargs["symbols"]), {"600519", "000001"})
         self.assertEqual(batch_lookup.call_args.kwargs["as_of"], date(2026, 1, 1))
+
+    def test_snapshot_uses_actual_latest_close_date_for_price_as_of(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=10000,
+            currency="CNY",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="600519",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="cn",
+            currency="CNY",
+        )
+        self._save_close("600519", date(2026, 1, 3), 125.0)
+
+        snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 5), cost_method="fifo")
+
+        account_snapshot = snapshot["accounts"][0]
+        position = account_snapshot["positions"][0]
+        self.assertAlmostEqual(position["avg_cost"], 100.0, places=6)
+        self.assertAlmostEqual(position["last_price"], 125.0, places=6)
+        self.assertAlmostEqual(position["market_value_base"], 1250.0, places=6)
+        self.assertAlmostEqual(position["unrealized_pnl_base"], 250.0, places=6)
+        self.assertAlmostEqual(position["cost_basis_native"], 1000.0, places=6)
+        self.assertAlmostEqual(account_snapshot["total_cash"], 9000.0, places=6)
+        self.assertAlmostEqual(account_snapshot["total_market_value"], 1250.0, places=6)
+        self.assertAlmostEqual(account_snapshot["unrealized_pnl"], 250.0, places=6)
+        self.assertEqual(position["price_source"], "daily_close_quote")
+        self.assertEqual(position["price_as_of"], "2026-01-03")
+        self.assertFalse(position["is_price_fallback"])
 
     def test_snapshot_discloses_avg_cost_price_fallback_without_mutating_ledger(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
@@ -1910,6 +1951,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertAlmostEqual(position["last_price"], 100.0, places=6)
         self.assertAlmostEqual(position["market_value_base"], 1000.0, places=6)
         self.assertAlmostEqual(position["unrealized_pnl_base"], 0.0, places=6)
+        self.assertAlmostEqual(position["cost_basis_native"], 1000.0, places=6)
         self.assertEqual(position["price_source"], "avg_cost_fallback")
         self.assertEqual(position["price_source_label"], "Average cost fallback")
         self.assertIsNone(position["price_as_of"])
