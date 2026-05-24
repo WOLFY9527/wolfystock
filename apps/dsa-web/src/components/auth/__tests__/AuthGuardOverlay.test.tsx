@@ -30,34 +30,58 @@ describe('AuthGuardOverlay', () => {
     navigate.mockReset();
   });
 
-  it('renders the centered auth guard shell in Chinese', () => {
+  it('renders the centered auth guard as a fixed frosted modal overlay in Chinese', () => {
     const { container } = render(
       <MemoryRouter initialEntries={['/zh/market-overview']}>
         <AuthGuardOverlay moduleName="市场总览" />
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId('auth-guard-shell')).toHaveAttribute('data-workspace-width', 'near-full');
-    expect(screen.getByTestId('auth-guard-shell')).toHaveClass(
-      'flex',
-      'w-full',
-      'flex-1',
-      'items-center',
-      'justify-center',
-      'py-10',
+    expect(screen.getByRole('dialog', { name: '登录解锁 市场总览' })).toHaveAttribute('aria-modal', 'true');
+    expect(screen.getByTestId('auth-guard-overlay')).toHaveClass(
+      'fixed',
+      'inset-0',
+      'z-[80]',
+      'grid',
+      'place-items-center',
     );
-    expect(screen.getByTestId('auth-guard-shell').className).not.toContain('bg-[#030303]/80');
+    expect(screen.queryByTestId('auth-guard-shell')).not.toBeInTheDocument();
+    expect(screen.getByTestId('auth-guard-scrim')).toHaveClass(
+      'absolute',
+      'inset-0',
+      'backdrop-blur-md',
+    );
+    expect(screen.getByTestId('auth-guard-scrim').className).not.toContain('bg-black');
     expect(screen.getByTestId('auth-guard-card')).toHaveClass(
-      'w-full',
-      'max-w-[28rem]',
+      'relative',
+      'z-10',
+      'w-[min(92vw,28rem)]',
       'border',
-      'bg-[var(--wolfy-surface-console)]',
+      'backdrop-blur-2xl',
     );
     expect(screen.getByRole('heading', { name: '登录解锁 市场总览' })).toBeInTheDocument();
     expect(screen.getByText('游客模式仅支持首页基础查询。保存个人工作区、深度历史回溯及进阶指标测算，均需绑定正式账户。')).toBeInTheDocument();
     expectNoRawI18nKeys(container);
     fireEvent.click(screen.getByRole('button', { name: '登录 / 创建账户' }));
     expect(navigate).toHaveBeenCalledWith('/zh/login');
+  });
+
+  it('keeps optional protected children as a non-interactive blurred backdrop', () => {
+    render(
+      <MemoryRouter initialEntries={['/zh/portfolio']}>
+        <AuthGuardOverlay moduleName="持仓管理">
+          <section data-testid="protected-page">locked portfolio surface</section>
+        </AuthGuardOverlay>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('auth-guard-backdrop-content')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('auth-guard-backdrop-content')).toHaveClass(
+      'pointer-events-none',
+      'select-none',
+      'blur-[2px]',
+    );
+    expect(screen.getByTestId('protected-page')).toHaveTextContent('locked portfolio surface');
   });
 
   it('renders the English CTA copy and opens the localized login route', () => {

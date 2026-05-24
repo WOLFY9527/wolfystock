@@ -199,8 +199,7 @@ const LoginPage: React.FC = () => {
               <Input
                 id="username"
                 type="text"
-                iconType="key"
-                className="h-auto w-full bg-white/[0.03] border border-white/10 rounded-xl pl-12 pr-4 py-3 text-white text-sm focus:border-white/20 outline-none transition-colors"
+                className="h-auto w-full bg-white/[0.03] border border-white/10 rounded-xl !px-4 py-3 text-white text-sm focus:border-white/20 outline-none transition-colors"
                 label={copy.usernameLabel}
                 placeholder={isCreateUserMode ? copy.usernamePlaceholderCreate : copy.usernamePlaceholderLogin}
                 value={username}
@@ -215,7 +214,7 @@ const LoginPage: React.FC = () => {
               <Input
                 id="displayName"
                 type="text"
-                className="h-auto w-full bg-white/[0.03] border border-white/10 rounded-xl pr-4 py-3 text-white text-sm focus:border-white/20 outline-none transition-colors"
+                className="h-auto w-full bg-white/[0.03] border border-white/10 rounded-xl !px-4 py-3 text-white text-sm focus:border-white/20 outline-none transition-colors"
                 label={copy.displayNameLabel}
                 placeholder={copy.displayNamePlaceholder}
                 value={displayName}
@@ -229,8 +228,7 @@ const LoginPage: React.FC = () => {
               id="password"
               type="password"
               allowTogglePassword
-              iconType="password"
-              className="h-auto w-full bg-white/[0.03] border border-white/10 rounded-xl pl-12 py-3 text-white text-sm focus:border-white/20 outline-none transition-colors"
+              className="h-auto w-full bg-white/[0.03] border border-white/10 rounded-xl !pl-4 !pr-12 py-3 text-white text-sm focus:border-white/20 outline-none transition-colors"
               label={isAdminBootstrap ? copy.passwordLabelSetup : copy.passwordLabelLogin}
               placeholder={isAdminBootstrap ? copy.passwordPlaceholderSetup : copy.passwordPlaceholderLogin}
               value={password}
@@ -244,8 +242,7 @@ const LoginPage: React.FC = () => {
                 id="passwordConfirm"
                 type="password"
                 allowTogglePassword
-                iconType="password"
-                className="h-auto w-full bg-white/[0.03] border border-white/10 rounded-xl pl-12 py-3 text-white text-sm focus:border-white/20 outline-none transition-colors"
+                className="h-auto w-full bg-white/[0.03] border border-white/10 rounded-xl !pl-4 !pr-12 py-3 text-white text-sm focus:border-white/20 outline-none transition-colors"
                 label={copy.passwordConfirmLabel}
                 placeholder={isAdminBootstrap ? copy.passwordConfirmPlaceholderSetup : copy.passwordConfirmPlaceholderLogin}
                 value={passwordConfirm}

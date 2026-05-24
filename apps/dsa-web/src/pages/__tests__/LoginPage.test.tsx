@@ -154,13 +154,14 @@ describe('LoginPage', () => {
     expect(screen.getByLabelText(translate('en', 'auth.login.passwordLabelLogin'))).toBeInTheDocument();
     expect(screen.getByPlaceholderText(translate('en', 'auth.login.usernamePlaceholderLogin'))).toHaveAttribute('placeholder', 'Enter email or username');
     expect(screen.getByLabelText(translate('en', 'auth.login.usernameLabel'))).toHaveClass(
-      'pl-12',
+      '!px-4',
       'py-3',
       'bg-white/[0.03]',
       'border-white/10',
     );
     expect(screen.getByLabelText(translate('en', 'auth.login.passwordLabelLogin'))).toHaveClass(
-      'pl-12',
+      '!pl-4',
+      '!pr-12',
       'py-3',
       'bg-white/[0.03]',
       'border-white/10',
@@ -179,6 +180,28 @@ describe('LoginPage', () => {
     );
     expect(screen.getByRole('button', { name: translate('en', 'auth.login.submitLogin') })).toBeInTheDocument();
     expectNoRawI18nKeys(container);
+  });
+
+  it('keeps login input adornments from sharing text space', () => {
+    window.history.replaceState(window.history.state, '', '/login?redirect=%2Fscanner');
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fscanner')]);
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login: vi.fn(),
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    const { container } = renderPage();
+    const usernameInput = screen.getByLabelText(translate('zh', 'auth.login.usernameLabel'));
+    const passwordInput = screen.getByLabelText(translate('zh', 'auth.login.passwordLabelLogin'));
+
+    expect(container.querySelectorAll('.input-field__icon')).toHaveLength(0);
+    expect(usernameInput).toHaveClass('!px-4');
+    expect(usernameInput).not.toHaveClass('pl-12');
+    expect(passwordInput).toHaveClass('!pl-4', '!pr-12');
+    expect(passwordInput).not.toHaveClass('pl-12');
+    expect(container.querySelectorAll('.input-field__trailing')).toHaveLength(1);
   });
 
   it('links the login page to the reset-password route', () => {
