@@ -22,11 +22,14 @@ The caller selects model and reasoning in the Codex UI or surrounding task title
 Default policy:
 
 ```text
-Execution tasks: 5.4 + high
-Decision / architecture / high-risk audit tasks: 5.5 + xhigh
+Low-risk docs/tests/small fixes: 5.4 + medium
+Normal bounded execution: 5.4 + high
+Architecture / high-risk / protected-domain audits / multi-report integration: 5.5 + xhigh
 ```
 
-## 3. Required Prompt Fields
+Use the lowest route that fits the task risk. Do not repeat model/reasoning lines in every prompt unless overriding the default route.
+
+## 3. Required Prompt Fields And Efficiency
 
 Each task prompt should include these task-specific fields:
 
@@ -36,18 +39,29 @@ Task title:
 Branch:
 Workspace:
 Mode:
-Read:
+Read and obey:
+Current context:
 Goal:
-Allowed files:
-Forbidden files:
+Allowed final diff:
+Forbidden final diff:
 Implementation:
 Protected semantics:
 Validation:
 Browser:
+Commit:
 Final report:
 ```
 
 Task ID should be stable and must match the final report.
+
+Prompt efficiency rules:
+
+- Keep the `Read and obey:` prefix stable so shared docs stay cache-friendly.
+- Include only necessary shared docs; do not paste rules already covered here or in the standard guard.
+- Keep `Current context` to 3-5 lines of task-specific state and recent decisions.
+- Use exact `Allowed final diff` paths or path globs; avoid broad `docs/**` unless truly scoped.
+- Merge validation commands into the smallest faithful command group when order does not matter.
+- Use standard `Mode` names only: `CODEX-ISOLATED`, `SERIAL-MAIN`, `WORKTREE-WORKER`, `READ-ONLY-AUDIT`.
 
 ## 4. Task Ledger Statuses
 
@@ -63,6 +77,8 @@ PLANNED       scoped only; implementation has not started
 ```
 
 ## 5. Execution Modes
+
+The only standard `Mode` values are `CODEX-ISOLATED`, `SERIAL-MAIN`, `WORKTREE-WORKER`, and `READ-ONLY-AUDIT`. Do not invent aliases or mixed names.
 
 ### CODEX-ISOLATED
 
@@ -118,6 +134,12 @@ Rules:
 - Do not push
 - Do not run destructive commands
 ```
+
+Audit discipline:
+
+- Avoid mechanical `READ-ONLY-AUDIT -> execution -> post-merge audit` chains for low-risk docs, tests, copy, and small fixes.
+- Use audits mainly for high-risk, protected-domain, unclear, or cross-surface work where separate evidence changes the decision.
+- For low-risk bounded tasks, prefer one execution prompt with focused preflight, implementation, validation, and concise final report.
 
 ## 6. Parallelization Rules
 
@@ -223,6 +245,12 @@ Run TypeScript separately only when shared interfaces/routes/types changed or bu
 git diff --check -- <changed-doc-files>
 git status --short --branch
 bash scripts/release_secret_scan.sh
+```
+
+Merged form for compact prompts:
+
+```bash
+git diff --check -- <changed-doc-files> && ./scripts/release_secret_scan.sh && git status --short --branch
 ```
 
 ### Backend endpoint mapping

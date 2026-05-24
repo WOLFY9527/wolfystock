@@ -18,6 +18,13 @@ Workspace: <cwd>
 
 Success-class closeout should also state commit, push status, files changed, validation, main risks, and rollback. Keep this concise and reuse the sections below instead of adding a second SOP.
 
+## Concise report rules
+
+- Include task-specific proof only; omit sections that do not apply when the user asks for a narrower final report.
+- Do not paste full logs, diffs, build output, screenshots, or generated reports unless a failure requires key excerpts.
+- Keep validation evidence to command plus result, with the shortest useful failure excerpt if blocked.
+- For docs-only and low-risk tasks, prefer files changed, rules/behavior added, validation summary, final git status, and rollback.
+
 ## Progress header
 
 For execution-class final reports and blocker reports, start with a short progress update. For tiny docs-only or no-op tasks, keep this compact:
