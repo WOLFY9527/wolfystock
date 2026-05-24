@@ -309,6 +309,10 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const row = await screen.findByTestId('watchlist-row-NVDA');
+    const wideScope = screen.getByTestId('watchlist-wide-workspace-scope');
+    expect(wideScope).toHaveAttribute('data-workspace-width', 'near-full');
+    expect(wideScope).toHaveClass('workspace-width-near-full', 'overflow-x-hidden');
+    expect(wideScope).toContainElement(screen.getByTestId('watchlist-page'));
     expect(screen.getByTestId('watchlist-page')).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(screen.getByTestId('watchlist-header-strip')).toHaveAttribute('data-layout-zone', 'HeaderStrip');
     expect(document.querySelector('[data-terminal-primitive="dense-page-header"]')).toBeInTheDocument();

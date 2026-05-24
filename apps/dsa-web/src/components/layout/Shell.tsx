@@ -124,6 +124,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const isWideRoute = surfacePathname === '/'
     || surfacePathname.startsWith('/scanner')
     || surfacePathname.startsWith('/portfolio')
+    || surfacePathname.startsWith('/watchlist')
     || isMarketOverviewRoute
     || isLiquidityMonitorRoute
     || isRotationRadarRoute

@@ -445,6 +445,27 @@ describe('Shell', () => {
     expect(document.body.dataset.marketOverviewShell).toBe('true');
   });
 
+  it('uses the full-width workspace lane for the localized watchlist route', () => {
+    render(
+      <MemoryRouter initialEntries={['/zh/watchlist']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const primaryNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
+    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
+    expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
+    expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'flex-1', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12');
+    expect(document.querySelector('.shell-content-frame--scanner')).toBeNull();
+    expect(document.querySelector('.theme-shell--market-overview')).toBeNull();
+    expect(document.querySelector('.shell-content-frame--backtest')).toBeNull();
+  });
+
   it('treats the system settings route as a wide workspace surface', () => {
     render(
       <MemoryRouter initialEntries={['/settings/system']}>

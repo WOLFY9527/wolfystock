@@ -18,6 +18,7 @@ import { watchlistApi } from '../api/watchlist';
 import { AuthGuardOverlay } from '../components/auth/AuthGuardOverlay';
 import { ApiErrorAlert, Input, Select } from '../components/common';
 import { TrustDisclosureChips } from '../components/evidence/TrustDisclosureChips';
+import { WideWorkspaceShellScope } from '../components/layout/WideWorkspaceShell';
 import { ProductSetupPath } from '../components/market-intelligence/ProductSetupPath';
 import {
   ConsoleBoard,
@@ -1334,7 +1335,8 @@ const WatchlistPage: React.FC = () => {
       : 'neutral';
 
   return (
-    <TerminalPageShell data-testid="watchlist-page" className="flex-1 min-w-0 py-5 md:py-6">
+    <WideWorkspaceShellScope data-testid="watchlist-wide-workspace-scope" className="min-h-0 flex-1">
+      <TerminalPageShell data-testid="watchlist-page" className="flex-1 min-w-0 py-5 md:py-6">
       <div data-layout-zone="HeaderStrip" data-testid="watchlist-header-strip" className="flex min-w-0 flex-col gap-3">
         <DensePageHeader
           eyebrow={language === 'zh' ? '扫描候选' : 'Scanner candidates'}
@@ -2025,6 +2027,7 @@ const WatchlistPage: React.FC = () => {
         </div>
       </DenseTableShell>
       </TerminalPageShell>
+    </WideWorkspaceShellScope>
     );
 };
 
