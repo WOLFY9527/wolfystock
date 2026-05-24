@@ -472,6 +472,34 @@ function traceDataSourceLabel(name?: string | null, locale: DashboardLocale = 'z
   return labels[value.toLowerCase()] || value || '数据源';
 }
 
+function userFacingDataSourceLabel(name?: string | null, locale: DashboardLocale = 'zh'): string {
+  const value = String(name || '').trim();
+  const normalized = value.toLowerCase();
+  const isEnglish = locale === 'en';
+  if (!normalized) {
+    return isEnglish ? 'Unconfirmed data' : '待确认数据';
+  }
+  if (normalized.includes('quote') || normalized.includes('market') || normalized.includes('price') || normalized.includes('行情')) {
+    return isEnglish ? 'Quote data' : '行情数据';
+  }
+  if (normalized.includes('candle') || normalized.includes('technical') || normalized.includes('indicator') || normalized.includes('技术')) {
+    return isEnglish ? 'Technical data' : '技术数据';
+  }
+  if (normalized.includes('fundamental') || normalized.includes('financial') || normalized.includes('eps') || normalized.includes('fmp') || normalized.includes('基本面')) {
+    return isEnglish ? 'Fundamental data' : '基本面数据';
+  }
+  if (normalized.includes('earnings') || normalized.includes('财报')) {
+    return isEnglish ? 'Earnings data' : '财报数据';
+  }
+  if (normalized.includes('news') || normalized.includes('gnews') || normalized.includes('headline') || normalized.includes('新闻')) {
+    return isEnglish ? 'News data' : '新闻数据';
+  }
+  if (normalized.includes('sentiment') || normalized.includes('情绪')) {
+    return isEnglish ? 'Sentiment data' : '情绪数据';
+  }
+  return traceDataSourceLabel(value, locale);
+}
+
 function localizeTraceMessage(value: string | undefined, type: string | undefined, locale: DashboardLocale): string {
   const text = String(value || '').trim();
   if (locale === 'en') {
@@ -868,6 +896,133 @@ function buildDataQualityPreview(report: DataQualityReport, locale: DashboardLoc
   return isEnglish ? 'Coverage stable' : '覆盖稳定';
 }
 
+function uniqueCompactLabels(values: Array<string | undefined | null>, limit = 4): string[] {
+  return Array.from(new Set(values.map((item) => String(item || '').trim()).filter(Boolean))).slice(0, limit);
+}
+
+function buildAvailableDataCopy(report: DataQualityReport | undefined, trace: DecisionTrace | undefined, locale: DashboardLocale): string {
+  const isEnglish = locale === 'en';
+  const traceSources = (trace?.dataSources || [])
+    .filter((item) => ['used', 'fallback'].includes(String(item.status || '').trim().toLowerCase()))
+    .map((item) => {
+      const label = userFacingDataSourceLabel(item.name, locale);
+      return String(item.status || '').trim().toLowerCase() === 'fallback'
+        ? (isEnglish ? `${label} fallback` : `${label}（备用数据）`)
+        : label;
+    });
+  const completedSources = (report?.completedSources || []).map((item) => userFacingDataSourceLabel(item, locale));
+  const available = uniqueCompactLabels([...traceSources, ...completedSources], 4);
+  return available.length ? available.join(isEnglish ? ' / ' : '、') : (isEnglish ? 'No confirmed source yet' : '暂无已确认可用数据');
+}
+
+function buildMissingDataCopy(report: DataQualityReport | undefined, locale: DashboardLocale): string {
+  const isEnglish = locale === 'en';
+  if (!report) {
+    return isEnglish ? 'Quality report unavailable' : '暂无结构化质量报告';
+  }
+  const rawGaps = [
+    ...(report.importantMissing || []),
+    ...(report.optionalMissing || []),
+    ...(report.pendingSources || []),
+    ...(report.failedSources || []),
+    ...(report.skippedSources || []),
+    ...(report.providerTimeouts || []),
+    ...(report.providerCooldowns || []),
+  ];
+  const gaps = uniqueCompactLabels(rawGaps.map((item) => dataQualityFieldLabel(item, locale)), 4);
+  return gaps.length ? gaps.join(isEnglish ? ' / ' : '、') : (isEnglish ? 'No prominent gap' : '暂无突出缺口');
+}
+
+function hasPositiveTechnicalEvidence(dashboard: DashboardPayload): boolean {
+  return dashboard.decision.signalTone === 'bullish'
+    || dashboard.tech.signals.some((signal) => {
+      const text = `${signal.label} ${signal.value} ${signal.details || ''}`;
+      return signal.tone === 'bullish' || /偏强|多头|上方|突破|扩张|金叉|bull|above|constructive|strong|expand/i.test(text);
+    });
+}
+
+function buildDataQualityImpactCopy(
+  report: DataQualityReport | undefined,
+  dashboard: DashboardPayload,
+  locale: DashboardLocale,
+): string {
+  const isEnglish = locale === 'en';
+  const positiveTechnical = hasPositiveTechnicalEvidence(dashboard);
+  if (!report) {
+    return isEnglish
+      ? 'Quality evidence is not structured, so the view stays observation-only.'
+      : '缺少结构化质量报告，当前结论保持仅观察。';
+  }
+  if (report.requiredAvailable === false) {
+    return isEnglish
+      ? 'Key quote or candle evidence is missing; keep the conclusion observation-only.'
+      : '关键行情或 K 线缺失，当前结论只能保持仅观察。';
+  }
+  if (hasDataQualityGaps(report)) {
+    return positiveTechnical
+      ? (isEnglish
+        ? 'Technical evidence is constructive, but incomplete coverage prevents an action conclusion.'
+        : '技术证据偏强，但覆盖不完整，不能升格为行动结论。')
+      : (isEnglish
+        ? 'Coverage is incomplete, so the conclusion remains bounded.'
+        : '覆盖仍不完整，结论需要保持受限。');
+  }
+  return isEnglish
+    ? 'Coverage is usable; still verify with follow-up evidence.'
+    : '覆盖可用，仍需用后续证据复核。';
+}
+
+function buildResearchFrameworkRows(
+  locale: DashboardLocale,
+  dashboard: DashboardPayload,
+  dataQualityReport: DataQualityReport | undefined,
+): Array<{ label: string; value: string; tone?: SignalTone }> {
+  const isEnglish = locale === 'en';
+  const positiveTechnical = hasPositiveTechnicalEvidence(dashboard);
+  const hasGaps = dataQualityReport ? hasDataQualityGaps(dataQualityReport) : true;
+  const stanceLabel = resolveLinearStanceLabel(locale, dashboard.decision.signalLabel, dashboard.decision.signalTone);
+  const supportSignals = uniqueCompactLabels(
+    dashboard.tech.signals
+      .filter((signal) => signal.tone === 'bullish' || /偏强|多头|上方|突破|扩张|bull|above|constructive|strong|expand/i.test(`${signal.label} ${signal.value} ${signal.details || ''}`))
+      .map((signal) => signal.label),
+    2,
+  );
+  const missingCopy = buildMissingDataCopy(dataQualityReport, locale);
+  const hasMissingCopy = !/(暂无突出缺口|No prominent gap)/i.test(missingCopy);
+
+  return [
+    {
+      label: isEnglish ? 'Current conclusion' : '当前结论',
+      value: isEnglish
+        ? positiveTechnical && hasGaps
+          ? `${stanceLabel}: technical evidence is constructive, but incomplete evidence keeps this observation-only.`
+          : `${stanceLabel}: keep the conclusion bounded by the available evidence.`
+        : positiveTechnical && hasGaps
+          ? `${stanceLabel}：技术证据偏强，但新闻/基本面覆盖不完整，不能升格为行动结论。`
+          : `${stanceLabel}：当前只表达研究观察，仍需后续证据复核。`,
+    },
+    {
+      label: isEnglish ? 'Support' : '支持因素',
+      value: supportSignals.length
+        ? (isEnglish ? `${supportSignals.join(' / ')} support the technical view.` : `${supportSignals.join('、')}提供正向技术证据。`)
+        : (isEnglish ? 'No strong support factor is confirmed yet.' : '暂未形成稳定支撑因素。'),
+      tone: positiveTechnical ? 'bullish' : 'neutral',
+    },
+    {
+      label: isEnglish ? 'Limits' : '限制因素',
+      value: hasMissingCopy
+        ? (isEnglish ? `${missingCopy}; conclusion remains constrained.` : `${missingCopy}，结论仍受证据覆盖限制。`)
+        : (isEnglish ? 'No prominent missing field, but follow-up evidence is still needed.' : '暂无突出缺口，但仍需后续证据复核。'),
+    },
+    {
+      label: isEnglish ? 'Next confirmation' : '下一步确认',
+      value: hasMissingCopy
+        ? (isEnglish ? 'Confirm the missing data before upgrading the thesis.' : '先补齐缺失数据，再复核技术偏强是否延续。')
+        : (isEnglish ? 'Track the next candle and event evidence.' : '跟踪下一根 K 线与事件证据。'),
+    },
+  ];
+}
+
 function DecisionSourceDetailsPanel({
   report,
   locale,
@@ -1154,6 +1309,26 @@ function buildLinearLevelMetrics(metrics: DashboardField[], locale: DashboardLoc
   return slots.map((slot) => findByAliases(slot.aliases) || slot.fallback);
 }
 
+function buildChartConclusionCopy(locale: DashboardLocale, signals: DashboardSignal[]): string {
+  const hasBullishSignal = signals.some((signal) => signal.tone === 'bullish'
+    || /偏强|多头|上方|突破|扩张|金叉|bull|above|constructive|strong|expand/i.test(`${signal.label} ${signal.value} ${signal.details || ''}`));
+  const hasMissingSignal = signals.some((signal) => isEmptyDashboardValue(signal.value));
+  if (locale === 'en') {
+    if (hasBullishSignal) {
+      return hasMissingSignal
+        ? 'Chart conclusion: technical evidence is constructive, but missing metrics keep the view observational.'
+        : 'Chart conclusion: technical structure is constructive; confirm it with follow-up evidence.';
+    }
+    return 'Chart conclusion: price structure still needs more evidence.';
+  }
+  if (hasBullishSignal) {
+    return hasMissingSignal
+      ? '图表结论：技术证据偏强，但缺失指标未补齐，仍保持仅观察。'
+      : '图表结论：技术结构偏强，仍需后续证据确认。';
+  }
+  return '图表结论：价格结构仍需更多证据确认。';
+}
+
 function LinearKeyLevelsStrip({
   metrics,
   locale,
@@ -1222,6 +1397,7 @@ function LinearTechnicalStructure({
 }) {
   const { marketColorConvention } = useUiPreferences();
   const isEnglish = locale === 'en';
+  const chartConclusion = buildChartConclusionCopy(locale, signals);
   const signalRows: Array<DashboardSignal & { placeholderKey?: string }> = signals.slice(0, 6);
   while (signalRows.length < 6) {
     signalRows.push({
@@ -1250,6 +1426,7 @@ function LinearTechnicalStructure({
       <div className="mb-1.5 flex min-w-0 flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold tracking-[0] text-white/90">{locale === 'en' ? 'Technical Structure' : '技术结构'}</p>
+          <p className="mt-1 text-xs leading-5 text-white/46" data-testid="home-linear-chart-conclusion">{chartConclusion}</p>
         </div>
         <button
           ref={openDetailsButtonRef}
@@ -1342,6 +1519,7 @@ function LinearObservationPanel({
   locale,
   dashboard,
   dataQualityReport,
+  decisionTrace,
   sourceSummary,
   isGuest,
   guestPaywall,
@@ -1351,6 +1529,7 @@ function LinearObservationPanel({
   locale: DashboardLocale;
   dashboard: DashboardPayload;
   dataQualityReport?: DataQualityReport;
+  decisionTrace?: DecisionTrace;
   sourceSummary?: string;
   isGuest: boolean;
   guestPaywall?: React.ReactNode;
@@ -1372,46 +1551,19 @@ function LinearObservationPanel({
   const qualityPreview = dataQualityReport
     ? buildDataQualityPreview(dataQualityReport, locale)
     : sourceSummary || (isEnglish ? 'Data quality not yet confirmed.' : '数据质量仍待确认。');
-  const observationRows: Array<{ label: string; value: string; tone?: SignalTone }> = [
-    {
-      label: isEnglish ? 'Current structure' : '当前结构',
-      value: dashboard.decision.scoreValue,
-      tone: undefined,
-    },
-    ...dashboard.strategy.metrics.slice(0, 3).map((metric) => ({
-      label: getMetricLabelForStrip(locale, metric.label),
-      value: metric.value,
-      tone: metric.tone,
-    })),
-  ];
+  const observationRows = buildResearchFrameworkRows(locale, dashboard, dataQualityReport);
   const qualityRows = [
     {
-      label: isEnglish ? 'Coverage' : '覆盖状态',
-      value: !dataQualityReport
-        ? EMPTY_FIELD_VALUE
-        : dataQualityReport.requiredAvailable === false
-        ? (isEnglish ? 'Constrained' : '受限')
-        : (isEnglish ? 'Available' : '可用'),
+      label: isEnglish ? 'Available data' : '已可用数据',
+      value: buildAvailableDataCopy(dataQualityReport, decisionTrace, locale),
     },
     {
-      label: isEnglish ? 'Key gaps' : '关键缺口',
-      value: !dataQualityReport
-        ? EMPTY_FIELD_VALUE
-        : dataQualityReport.importantMissing?.length
-        ? dataQualityReport.importantMissing
-          .slice(0, 2)
-          .map((item) => sanitizeUserFacingDataIssue(item, locale))
-          .filter(Boolean)
-          .join(' / ')
-        : (isEnglish ? 'None highlighted' : '暂无突出缺口'),
+      label: isEnglish ? 'Still missing' : '仍缺失数据',
+      value: buildMissingDataCopy(dataQualityReport, locale),
     },
     {
-      label: isEnglish ? 'Pending follow-up' : '待补信息',
-      value: !dataQualityReport
-        ? EMPTY_FIELD_VALUE
-        : dataQualityReport.pendingSources?.length
-        ? dataQualityReport.pendingSources.join(' / ')
-        : (isEnglish ? 'No pending source' : '暂无待补来源'),
+      label: isEnglish ? 'Impact' : '对结论的影响',
+      value: buildDataQualityImpactCopy(dataQualityReport, dashboard, locale),
     },
   ] as const;
   const quantRows = buildQuantSnapshotRows(locale, dashboard.tech.signals);
@@ -1439,11 +1591,11 @@ function LinearObservationPanel({
         </div>
         <div className="divide-y divide-white/[0.055]">
           {observationRows.map((row) => (
-            <div key={row.label} className="flex min-w-0 items-start justify-between gap-5 py-2.5">
-              <span className="truncate text-[11px] text-white/38">{row.label}</span>
+            <div key={row.label} className="grid min-w-0 gap-1 py-2.5">
+              <span className="text-[11px] text-white/38">{row.label}</span>
               <span
                 className={cn(
-                  'min-w-0 text-right text-xs font-semibold',
+                  'min-w-0 break-words text-xs font-semibold leading-[1.55]',
                   row.tone ? metricValueClass({ label: row.label, value: row.value, tone: row.tone }, marketColorConvention) : 'text-white/74',
                 )}
                 style={row.tone ? toneTextStyle(row.tone, marketColorConvention) : undefined}
@@ -1667,7 +1819,12 @@ function LinearEventsStrip({
       data-visual-role="attached-event-deck"
     >
       <div className="flex min-w-0 items-center justify-between gap-3 pb-1.5">
-        <h2 className="text-sm font-semibold text-white/88">{isEnglish ? 'Recent catalysts / events' : '近期催化剂 / 事件'}</h2>
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-white/88">{isEnglish ? 'Recent catalysts / events' : '近期催化剂 / 事件'}</h2>
+          <p className="mt-0.5 text-xs text-white/42" data-testid="home-linear-events-evidence-note">
+            {isEnglish ? 'Evidence only: dated or explicit company/market events.' : '事件证据：仅展示带日期或明确公司/市场线索的事项。'}
+          </p>
+        </div>
         <span className="text-[11px] text-white/34">{events.length ? `${events.length}${isEnglish ? ' rows' : ' 条'}` : pendingText}</span>
       </div>
       <div
@@ -1733,6 +1890,19 @@ type DashboardField = {
 
 type DashboardSignal = DashboardField & {
   tone: SignalTone;
+};
+
+type HomePriceCurrency = 'usd' | 'cny' | 'hkd' | 'crypto' | 'unknown';
+
+type HomePriceDisplayContext = {
+  currency: HomePriceCurrency;
+  cryptoUnit?: string;
+};
+
+type HomePriceContextReport = {
+  meta?: unknown;
+  details?: { standardReport?: unknown } | null;
+  decisionTrace?: { market?: unknown } | null;
 };
 
 type QuantSnapshotSlot = {
@@ -2622,6 +2792,139 @@ function parseHomeChartPrice(value: unknown): number | null {
   return null;
 }
 
+function readHomePriceContextHint(report: HomePriceContextReport, stockCode: string): string {
+  const standardReport = report.details?.standardReport;
+  const values = [
+    stockCode,
+    report.decisionTrace?.market,
+    readObjectField(report, ['meta', 'market']),
+    readObjectField(report, ['meta', 'currency']),
+    readObjectField(standardReport, ['summaryPanel', 'market']),
+    readObjectField(standardReport, ['summaryPanel', 'currency']),
+    readObjectField(standardReport, ['summaryPanel', 'priceLabel']),
+    readObjectField(standardReport, ['summaryPanel', 'priceContextNote']),
+    readObjectField(standardReport, ['market', 'currency']),
+  ];
+  return values.map((value) => String(value || '').trim()).filter(Boolean).join(' ');
+}
+
+function resolveHomePriceDisplayContext(report: HomePriceContextReport, stockCode: string): HomePriceDisplayContext {
+  const hint = readHomePriceContextHint(report, stockCode).toLowerCase();
+  const code = stockCode.trim().toUpperCase();
+  const cryptoUnit = hint.match(/\b(USDT|USDC|BTC|ETH|USD)\b/i)?.[1]?.toUpperCase();
+
+  if (/crypto|bitcoin|ethereum|数字货币|加密|usdt|usdc|btc|eth/.test(hint)) {
+    return { currency: 'crypto', cryptoUnit };
+  }
+  if (/\b(hk|hkd|hong kong)\b|港股|港元|^hk\d+/i.test(hint) || /^HK\d{4,5}$/i.test(code) || /^\d{4,5}\.HK$/i.test(code)) {
+    return { currency: 'hkd' };
+  }
+  if (/\b(cn|cny|rmb|sh|sz)\b|人民币|a股|沪|深/i.test(hint) || /^\d{6}(?:\.(?:SH|SZ))?$/.test(code)) {
+    return { currency: 'cny' };
+  }
+  if (/\b(us|usa|usd|nyse|nasdaq|amex)\b|美元|美股/.test(hint) || /^[A-Z]{1,5}(?:[.-][A-Z])?$/.test(code)) {
+    return { currency: 'usd' };
+  }
+  return { currency: 'unknown' };
+}
+
+function formatHomePriceNumber(
+  value: number,
+  locale: DashboardLocale,
+  context: HomePriceDisplayContext,
+  includeNeutralPrefix: boolean,
+): string {
+  const formatted = value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  if (context.currency === 'usd') {
+    return `$${formatted}`;
+  }
+  if (context.currency === 'cny') {
+    return `${formatted} 元`;
+  }
+  if (context.currency === 'hkd') {
+    return `${formatted} 港元`;
+  }
+  if (context.currency === 'crypto') {
+    return context.cryptoUnit ? `${formatted} ${context.cryptoUnit}` : formatted;
+  }
+  return includeNeutralPrefix ? `${locale === 'en' ? 'Price' : '价格'} ${formatted}` : formatted;
+}
+
+function formatHomePriceLevelValue(
+  locale: DashboardLocale,
+  raw: string | undefined,
+  context: HomePriceDisplayContext,
+  fallback: string,
+): string {
+  const value = sanitizeMetricValue(raw);
+  if (!value || value === EMPTY_FIELD_VALUE) {
+    return fallback;
+  }
+
+  const noteMatch = value.match(/[（(].*$/);
+  const note = noteMatch?.[0] || '';
+  const priceSegment = noteMatch?.index !== undefined ? value.slice(0, noteMatch.index).trim() : value;
+  const matches = priceSegment.match(/(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?/g) || [];
+  if (!matches.length) {
+    return value;
+  }
+
+  const isRange = matches.length > 1 || /[-~至到–—]/.test(priceSegment);
+  const numbers = matches
+    .slice(0, isRange ? 2 : 1)
+    .map((item) => Number.parseFloat(item.replace(/,/g, '')))
+    .filter((item) => Number.isFinite(item));
+  if (!numbers.length) {
+    return value;
+  }
+
+  const formatted = numbers
+    .map((item, index) => formatHomePriceNumber(item, locale, context, index === 0))
+    .join(' - ');
+  return `${formatted}${note ? note : ''}`;
+}
+
+function polishHomeNarrativeCopy(locale: DashboardLocale, raw: string, context: HomePriceDisplayContext): string {
+  const value = String(raw || '').trim();
+  if (!value || value === EMPTY_FIELD_VALUE) {
+    return value;
+  }
+
+  const pricePattern = /((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*元/g;
+  const relabeledCurrency = context.currency === 'cny'
+    ? value
+    : value
+      .replace(new RegExp(`(股价|价格|价位)\\s*${pricePattern.source}`, 'g'), (_match, label: string, numeric: string) => {
+        const parsed = Number.parseFloat(numeric.replace(/,/g, ''));
+        return Number.isFinite(parsed)
+          ? `${label}${formatHomePriceNumber(parsed, locale, context, false)}`
+          : _match;
+      })
+      .replace(pricePattern, (_match, numeric: string) => {
+        const parsed = Number.parseFloat(numeric.replace(/,/g, ''));
+        return Number.isFinite(parsed)
+          ? formatHomePriceNumber(parsed, locale, context, true)
+          : _match;
+      });
+
+  if (locale === 'en') {
+    return relabeledCurrency
+      .replace(/\brecommend(?:s|ed|ation)?\b/gi, 'research note')
+      .replace(/\bguaranteed\b/gi, 'unconfirmed');
+  }
+
+  return relabeledCurrency
+    .replace(/建议观望等待/g, '当前仍以观察为主，等待')
+    .replace(/建议继续观望/g, '当前结论仍是继续观察')
+    .replace(/建议观望/g, '当前结论仍是观察')
+    .replace(/建议等待/g, '当前仍需等待')
+    .replace(/建议/g, '研究提示');
+}
+
 function formatHistoryTimestamp(value?: string, locale: DashboardLocale = 'zh'): string {
   const text = String(value || '').trim();
   if (!text) {
@@ -3434,9 +3737,42 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
   const targetValue = normalized.target || EMPTY_FIELD_VALUE;
   const stopValue = normalized.stop || EMPTY_FIELD_VALUE;
   const positionBody = normalized.positionBody || EMPTY_FIELD_VALUE;
-  const localizedEntryValue = localizeMetricValue(locale, entryValue, EMPTY_FIELD_VALUE);
-  const localizedTargetValue = localizeMetricValue(locale, targetValue, EMPTY_FIELD_VALUE);
-  const localizedStopValue = localizeMetricValue(locale, stopValue, EMPTY_FIELD_VALUE);
+  const priceDisplayContext = resolveHomePriceDisplayContext(report, stockCode);
+  const localizedEntryValue = localizeMetricValue(
+    locale,
+    formatHomePriceLevelValue(locale, entryValue, priceDisplayContext, EMPTY_FIELD_VALUE),
+    EMPTY_FIELD_VALUE,
+  );
+  const localizedTargetValue = localizeMetricValue(
+    locale,
+    formatHomePriceLevelValue(locale, targetValue, priceDisplayContext, EMPTY_FIELD_VALUE),
+    EMPTY_FIELD_VALUE,
+  );
+  const localizedStopValue = localizeMetricValue(
+    locale,
+    formatHomePriceLevelValue(locale, stopValue, priceDisplayContext, EMPTY_FIELD_VALUE),
+    EMPTY_FIELD_VALUE,
+  );
+  const localizedScoreContext = polishHomeNarrativeCopy(
+    locale,
+    localizeNarrativeText(locale, rawScoreValue, EMPTY_FIELD_VALUE),
+    priceDisplayContext,
+  );
+  const localizedSummary = polishHomeNarrativeCopy(
+    locale,
+    localizeNarrativeText(locale, rawSummary, EMPTY_FIELD_VALUE),
+    priceDisplayContext,
+  );
+  const localizedReasonBody = polishHomeNarrativeCopy(
+    locale,
+    localizeNarrativeText(locale, reasonBody, EMPTY_FIELD_VALUE),
+    priceDisplayContext,
+  );
+  const localizedPositionBody = polishHomeNarrativeCopy(
+    locale,
+    localizeNarrativeText(locale, positionBody, EMPTY_FIELD_VALUE),
+    priceDisplayContext,
+  );
 
   return enrichDashboardPayload(locale, {
     ...seed,
@@ -3450,11 +3786,11 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
       heroLabel: locale === 'en' ? 'Score' : '评分',
       signalLabel: localizeSentimentLabel(locale, rawSignalLabel, EMPTY_FIELD_VALUE),
       signalTone: sentimentTone,
-      scoreValue: localizeNarrativeText(locale, rawScoreValue, EMPTY_FIELD_VALUE),
+      scoreValue: localizedScoreContext,
       badge: localizeNarrativeText(locale, normalized.badge, EMPTY_FIELD_VALUE),
-      summary: localizeNarrativeText(locale, rawSummary, EMPTY_FIELD_VALUE),
+      summary: localizedSummary,
       reasonTitle: locale === 'en' ? 'Latest Report Context' : '最近报告归因',
-      reasonBody: localizeNarrativeText(locale, reasonBody, EMPTY_FIELD_VALUE),
+      reasonBody: localizedReasonBody,
       confidenceValue: normalized.confidence,
     },
     strategy: {
@@ -3476,7 +3812,7 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
           tone: isPendingMetricValue(localizedStopValue) ? 'neutral' : 'bearish',
         },
       ],
-      positionBody: localizeNarrativeText(locale, positionBody, EMPTY_FIELD_VALUE),
+      positionBody: localizedPositionBody,
     },
     tech: {
       ...seed.tech,
@@ -3504,9 +3840,22 @@ function buildGuestDashboardFromPreview(
   const scoreText = (score / 10).toFixed(1);
   const rawCompany = getCompanyDisplayName(preview.report) || preview.stockName || stockCode;
   const companyProfile = resolveCompanyProfile(stockCode, rawCompany);
-  const actionText = localizeNarrativeText(locale, summary.operationAdvice, seed.decision.scoreValue);
-  const trendText = localizeNarrativeText(locale, summary.trendPrediction, actionText);
-  const summaryText = localizeNarrativeText(locale, summary.analysisSummary, seed.decision.summary);
+  const priceDisplayContext = resolveHomePriceDisplayContext(preview.report, stockCode);
+  const actionText = polishHomeNarrativeCopy(
+    locale,
+    localizeNarrativeText(locale, summary.operationAdvice, seed.decision.scoreValue),
+    priceDisplayContext,
+  );
+  const trendText = polishHomeNarrativeCopy(
+    locale,
+    localizeNarrativeText(locale, summary.trendPrediction, actionText),
+    priceDisplayContext,
+  );
+  const summaryText = polishHomeNarrativeCopy(
+    locale,
+    localizeNarrativeText(locale, summary.analysisSummary, seed.decision.summary),
+    priceDisplayContext,
+  );
 
   return enrichDashboardPayload(locale, {
     ...seed,
@@ -4564,6 +4913,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               locale={locale}
               dashboard={readyCopy}
               dataQualityReport={activeDataQualityReport}
+              decisionTrace={activeDecisionTrace}
               sourceSummary={sourceSummary}
               isGuest={Boolean(isGuest)}
               guestPaywall={guestPaywall}

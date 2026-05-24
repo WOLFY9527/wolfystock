@@ -433,9 +433,9 @@ describe('HomeSurfacePage', () => {
     expect(stopLossMetric).toHaveAttribute('data-key-level-order', '2');
     expect(targetMetric).toHaveAttribute('data-key-level-order', '3');
     expect(entryMetric).not.toHaveClass('bg-white/[0.02]', 'border-white/[0.08]', 'p-6', 'col-span-2');
-    expect(within(entryMetric).getByText('121.80 - 124.60')).toHaveClass('text-sm', 'font-semibold');
-    expect(within(targetMetric).getByText('133.50')).toHaveClass('text-sm', 'font-semibold', 'text-emerald-400');
-    expect(within(stopLossMetric).getByText('117.40')).toHaveClass('text-sm', 'font-semibold', 'text-rose-400');
+    expect(within(entryMetric).getByText('$121.80 - $124.60')).toHaveClass('text-sm', 'font-semibold');
+    expect(within(targetMetric).getByText('$133.50')).toHaveClass('text-sm', 'font-semibold', 'text-emerald-400');
+    expect(within(stopLossMetric).getByText('$117.40')).toHaveClass('text-sm', 'font-semibold', 'text-rose-400');
 
     expect(chartWorkspace).toContainElement(await screen.findByTestId('home-candlestick-chart-frame'));
     expect(primaryWorkspace.closest('[data-layout-zone="PrimaryWorkRegion"]')).toContainElement(chartWorkspace);
@@ -449,6 +449,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-linear-technical-chart').getAttribute('style') || '').toContain('background: transparent');
     expect(screen.getByTestId('home-linear-technical-chart').getAttribute('style') || '').toContain('border-color: transparent');
     expect(screen.getByTestId('home-linear-technical-chart').getAttribute('style') || '').toContain('box-shadow: none');
+    expect(screen.getByTestId('home-linear-chart-conclusion')).toHaveTextContent('图表结论');
     expect(screen.getByTestId('home-bento-decision-support-grid')).toHaveAttribute('data-visual-role', 'chart-adjacent-metrics');
     expect(screen.getByTestId('home-bento-decision-support-grid')).toHaveClass('home-research-signal-rail', 'xl:border-l');
     const macdSignal = screen.getByTestId('home-bento-tech-signal-MACD');
@@ -462,9 +463,13 @@ describe('HomeSurfacePage', () => {
     expect(within(rail).getByText('数据质量与说明')).toBeInTheDocument();
     expect(within(rail).getByText('量化信号快照')).toBeInTheDocument();
     expect(screen.getByTestId('home-linear-quant-snapshot')).toHaveAttribute('data-research-card', 'quant-signal');
-    expect(within(rail).getByText('覆盖状态')).toBeInTheDocument();
-    expect(within(rail).getByText('关键缺口')).toBeInTheDocument();
-    expect(within(rail).getByText('待补信息')).toBeInTheDocument();
+    expect(within(rail).getByText('当前结论')).toBeInTheDocument();
+    expect(within(rail).getByText('支持因素')).toBeInTheDocument();
+    expect(within(rail).getByText('限制因素')).toBeInTheDocument();
+    expect(within(rail).getByText('下一步确认')).toBeInTheDocument();
+    expect(within(rail).getByText('已可用数据')).toBeInTheDocument();
+    expect(within(rail).getByText('仍缺失数据')).toBeInTheDocument();
+    expect(within(rail).getByText('对结论的影响')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-strategy')).toHaveAttribute('data-research-card', 'opportunity');
     expect(screen.getByTestId('home-bento-card-fundamentals')).toHaveAttribute('data-research-card', 'data-context');
     const railSections = Array.from(rail.querySelectorAll('[data-rail-section]'))
@@ -476,6 +481,7 @@ describe('HomeSurfacePage', () => {
     expect(secondaryDeck).toContainElement(catalysts);
     expect(catalysts).toHaveAttribute('data-visual-role', 'attached-event-deck');
     expect(within(catalysts).getByText('近期催化剂 / 事件')).toBeInTheDocument();
+    expect(screen.getByTestId('home-linear-events-evidence-note')).toHaveTextContent('事件证据');
     expect(eventTable).toHaveTextContent('事件');
     expect(eventTable).toHaveTextContent('类型');
     expect(eventTable).toHaveTextContent('影响方向');
@@ -525,6 +531,117 @@ describe('HomeSurfacePage', () => {
     expect(cardZones.every((zone) => zone === 'PrimaryWorkRegion' || zone === 'ContextRail')).toBe(true);
     expect(cardZones.filter((zone) => zone === 'PrimaryWorkRegion')).toHaveLength(2);
     expect(cardZones.filter((zone) => zone === 'ContextRail')).toHaveLength(3);
+  });
+
+  it('keeps US equity key levels non-CNY and makes the right rail conclusion-first', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValue({
+      ...defaultHistoryReport,
+      summary: {
+        ...defaultHistoryReport.summary,
+        trendPrediction: '短线技术偏强，均线结构偏强、价格位于 MA20 上方、价格位于 MA60 上方。',
+        sentimentLabel: 'Bullish',
+      },
+      strategy: {
+        idealBuy: '192.34元 - 196.80元',
+        stopLoss: '184.20元',
+        takeProfit: '205.50元',
+      },
+      details: {
+        ...defaultHistoryReport.details,
+        dataQualityReport: {
+          ...defaultHistoryReport.details.dataQualityReport,
+          importantMissing: ['fundamentals.eps'],
+          optionalMissing: ['news'],
+          pendingSources: ['news'],
+          completedSources: ['sentiment'],
+          providerTimeouts: ['gnews:news'],
+          enrichmentReasons: { news: ['optional_news_timeout'] },
+        },
+        standardReport: {
+          ...defaultHistoryReport.details.standardReport,
+          summaryPanel: {
+            ...defaultHistoryReport.details.standardReport.summaryPanel,
+            oneSentence: 'ORCL 当前股价192.09元，建议观望等待更多证据。',
+          },
+          decisionContext: {
+            shortTermView: '短线技术偏强，均线结构偏强、价格位于 MA20 上方、价格位于 MA60 上方。',
+          },
+          decisionPanel: {
+            ...defaultHistoryReport.details.standardReport.decisionPanel,
+            idealEntry: '192.34元 - 196.80元',
+            target: '205.50元',
+            stopLoss: '184.20元',
+            buildStrategy: '仅观察技术证据，等待新闻与基本面补齐后复核。',
+          },
+          reasonLayer: {
+            coreReasons: ['均线结构偏强，MACD 仍在零轴上方。'],
+          },
+          technicalFields: [
+            { label: 'MACD', value: '零轴上方二次扩张' },
+            { label: '均线结构', value: '价格位于 MA20 与 MA60 上方' },
+          ],
+        },
+      },
+      dataQualityReport: {
+        ...defaultHistoryReport.dataQualityReport,
+        importantMissing: ['fundamentals.eps'],
+        optionalMissing: ['news'],
+        pendingSources: ['news'],
+        completedSources: ['sentiment'],
+        providerTimeouts: ['gnews:news'],
+        enrichmentReasons: { news: ['optional_news_timeout'] },
+      },
+      decisionTrace: {
+        ...defaultHistoryReport.decisionTrace,
+        market: 'US',
+        decisionFields: {
+          ...defaultHistoryReport.decisionTrace.decisionFields,
+          action: { value: 'hold', source: 'rule', confidence: 0.78 },
+          entry: { value: '192.34元 - 196.80元', source: 'llm' },
+          target: { value: '205.50元', source: 'llm' },
+          stop: { value: '184.20元', source: 'llm' },
+        },
+      },
+    });
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+
+    const entryMetric = screen.getByTestId('home-bento-strategy-metric-观察区间');
+    const targetMetric = screen.getByTestId('home-bento-strategy-metric-上方观察区');
+    const stopLossMetric = screen.getByTestId('home-bento-strategy-metric-风险失效线');
+
+    expect(entryMetric).toHaveTextContent('$192.34 - $196.80');
+    expect(targetMetric).toHaveTextContent('$205.50');
+    expect(stopLossMetric).toHaveTextContent('$184.20');
+    expect(entryMetric).not.toHaveTextContent('元');
+    expect(targetMetric).not.toHaveTextContent('元');
+    expect(stopLossMetric).not.toHaveTextContent('元');
+
+    const thesis = screen.getByTestId('home-bento-decision-insight-copy');
+    expect(thesis).toHaveTextContent('$192.09');
+    expect(thesis).not.toHaveTextContent('192.09元');
+    expect(thesis).not.toHaveTextContent('建议');
+
+    const rail = screen.getByTestId('home-research-context-rail');
+    expect(within(rail).getByText('当前结论')).toBeInTheDocument();
+    expect(within(rail).getByText('支持因素')).toBeInTheDocument();
+    expect(within(rail).getByText('限制因素')).toBeInTheDocument();
+    expect(within(rail).getByText('下一步确认')).toBeInTheDocument();
+    expect(within(rail).getByText(/仅观察：技术证据偏强/)).toBeInTheDocument();
+    expect(within(rail).getAllByText(/不能升格为行动结论/).length).toBeGreaterThan(0);
+
+    const qualityPanel = screen.getByTestId('home-bento-card-fundamentals');
+    expect(within(qualityPanel).getByText('已可用数据')).toBeInTheDocument();
+    expect(within(qualityPanel).getByText('仍缺失数据')).toBeInTheDocument();
+    expect(within(qualityPanel).getByText('对结论的影响')).toBeInTheDocument();
+    expect(qualityPanel).toHaveTextContent('新闻数据暂缺');
+    expect(qualityPanel).toHaveTextContent('基本面数据缺失');
+    expect(qualityPanel).not.toHaveTextContent(/\bnews\b/i);
+
+    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('仅观察');
+    expect(screen.getByTestId('home-bento-dashboard')).not.toHaveTextContent(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|guaranteed|AI recommends you buy/i);
   });
 
   it('shows only verified catalyst-like events when report event data exists', async () => {
@@ -605,8 +722,8 @@ describe('HomeSurfacePage', () => {
 
     await screen.findByText('Oracle Corporation');
     expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-white');
-    expect(within(screen.getByTestId('home-bento-strategy-metric-上方观察区')).getByText('133.50')).toHaveClass('text-rose-400');
-    expect(within(screen.getByTestId('home-bento-strategy-metric-风险失效线')).getByText('117.40')).toHaveClass('text-emerald-400');
+    expect(within(screen.getByTestId('home-bento-strategy-metric-上方观察区')).getByText('$133.50')).toHaveClass('text-rose-400');
+    expect(within(screen.getByTestId('home-bento-strategy-metric-风险失效线')).getByText('$117.40')).toHaveClass('text-emerald-400');
   });
 
   it('lazy-loads the full decision report drawer only after the trigger is opened', async () => {
@@ -960,9 +1077,9 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-decision-score-value')).toHaveTextContent('68');
     expect(screen.getByTestId('home-bento-decision-conviction-value')).toHaveTextContent('中');
     expect(screen.getByTestId('home-bento-decision-conviction-value')).not.toHaveTextContent('0%');
-    expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('152.00 - 155.00');
-    expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('168.40');
-    expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('147.80');
+    expect(screen.getByTestId('home-research-key-levels')).toHaveTextContent('$152.00 - $155.00');
+    expect(screen.getByTestId('home-research-key-levels')).toHaveTextContent('$168.40');
+    expect(screen.getByTestId('home-research-key-levels')).toHaveTextContent('$147.80');
     expect(screen.getByTestId('home-bento-card-tech')).toHaveTextContent('56.8');
     expect(screen.getByTestId('home-bento-card-fundamentals')).not.toHaveTextContent('4.8%');
     expect(screen.getByTestId('home-bento-card-fundamentals')).not.toHaveTextContent('$25.8B');
@@ -1090,9 +1207,9 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('仅观察');
     expect(screen.getByTestId('home-bento-decision-conviction-value')).toHaveTextContent('低');
     expect(screen.getByTestId('home-bento-decision-conviction-value')).not.toHaveTextContent('0%');
-    expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('74.23-75.18');
-    expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('75.27');
-    expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('73.10');
+    expect(screen.getByTestId('home-research-key-levels')).toHaveTextContent('$74.23 - $75.18');
+    expect(screen.getByTestId('home-research-key-levels')).toHaveTextContent('$75.27');
+    expect(screen.getByTestId('home-research-key-levels')).toHaveTextContent('$73.10');
     expect(screen.getByTestId('home-bento-card-tech')).toHaveTextContent('43.5');
     expect(screen.getByTestId('home-bento-card-fundamentals')).not.toHaveTextContent('4.17%');
 
@@ -1141,8 +1258,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-research-header-strip')).toHaveTextContent('复制报告');
     expect(screen.getByTestId('home-research-header-strip')).toHaveTextContent('重新分析');
     expect(screen.queryByText('查看完整判断')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('128.5');
-    expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('136.00-138.00');
+    expect(screen.getByTestId('home-research-key-levels')).toHaveTextContent('$128.50');
+    expect(screen.getByTestId('home-research-key-levels')).toHaveTextContent('$136.00 - $138.00');
 
     fireEvent.click(screen.getByRole('button', { name: '决策来源' }));
 
@@ -2623,7 +2740,7 @@ describe('HomeSurfacePage', () => {
       expect(screen.getByTestId('home-bento-decision-insight-copy').textContent).toBe('Netflix completion replaced neutral cards.');
       expect(screen.getByTestId('home-bento-decision-support-grid')).toBeInTheDocument();
     });
-    expect(screen.getAllByText('104.80').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('$104.80').length).toBeGreaterThan(0);
     expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
     expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
   });
@@ -2948,8 +3065,8 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('home-bento-analysis-result-card')).toHaveTextContent('AMD task payload normalized from snake_case report blocks.');
     });
-    expect(screen.getAllByText('168.40').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('147.80').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('$168.40').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('$147.80').length).toBeGreaterThan(0);
   });
 
   it('does not expose task progress internals on the home surface', async () => {
