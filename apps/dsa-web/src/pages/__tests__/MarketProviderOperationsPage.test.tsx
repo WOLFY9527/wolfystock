@@ -580,20 +580,36 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getAllByText('失败率').length).toBeGreaterThan(0);
     expect(screen.getAllByText('缓存状态').length).toBeGreaterThan(0);
     expect(screen.getAllByText('最近异常').length).toBeGreaterThan(0);
-    expect(screen.getByText('新浪财经')).toBeInTheDocument();
+    expect(screen.getAllByText('新浪财经').length).toBeGreaterThan(0);
     expect(screen.getByText('只读')).toBeInTheDocument();
     expect(screen.getByText('外部调用关闭')).toBeInTheDocument();
     expect(screen.getByText('缓存不变更')).toBeInTheDocument();
+    const topSummary = screen.getByTestId('market-provider-readability-summary');
+    expect(topSummary).toHaveTextContent('首屏摘要');
+    expect(topSummary).toHaveTextContent('数据源可用');
+    expect(topSummary).toHaveTextContent('需补齐');
+    expect(topSummary).toHaveTextContent('仅诊断/观察');
+    expect(topSummary).toHaveTextContent('影响产品页');
+    expect(topSummary).toHaveTextContent('新浪财经');
+    expect(topSummary).toHaveTextContent('Tushare Pro');
+    expect(topSummary).toHaveTextContent('Market Overview');
+    expect(topSummary).not.toHaveTextContent('official_public.fed_liquidity');
+    expect(topSummary).not.toHaveTextContent('missing_provider_configuration');
+    expect(topSummary).not.toHaveTextContent('TUSHARE_TOKEN');
     expect(screen.getByText('本地行情就绪诊断')).toBeInTheDocument();
-    expect(screen.getByText('diagnosticOnly')).toBeInTheDocument();
-    expect(screen.getByText('providerRuntimeCalled')).toBeInTheDocument();
-    expect(screen.getByText('networkCallsEnabled')).toBeInTheDocument();
+    expect(screen.getByText('只读诊断')).toBeInTheDocument();
+    expect(screen.getByText('运行时调用')).toBeInTheDocument();
+    expect(screen.getByText('网络调用')).toBeInTheDocument();
     expect(screen.getByText('未配置')).toBeInTheDocument();
     expect(screen.getByText('AAPL')).toBeInTheDocument();
     expect(screen.getByText('BTC-USD')).toBeInTheDocument();
-    expect(screen.getByText('Tushare token is not configured.')).toBeInTheDocument();
-    expect(screen.getByText('Set TUSHARE_TOKEN when local operators need Tushare-backed CN/HK market intelligence inputs.')).toBeInTheDocument();
-    expect(screen.getByText('Representative US parquet files are missing for part of the requested symbol set.')).toBeInTheDocument();
+    expect(screen.getByText('凭据配置')).toBeInTheDocument();
+    expect(screen.getByText('本地缓存/历史文件')).toBeInTheDocument();
+    expect(screen.getAllByText('Tushare 覆盖凭据').length).toBeGreaterThan(0);
+    expect(screen.getByText('Tushare 覆盖凭据未配置，相关 CN/HK 市场上下文只能保持缺口提示。')).toBeInTheDocument();
+    expect(screen.getByText('部分代表样本缺少本地历史缓存，离线覆盖检查只能显示部分就绪。')).toBeInTheDocument();
+    expect(screen.queryByText('Tushare token is not configured.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Set TUSHARE_TOKEN when local operators need Tushare-backed CN/HK market intelligence inputs.')).not.toBeInTheDocument();
     expect(screen.getByText('限制与快照摘要')).toBeInTheDocument();
     const gapBoard = screen.getByTestId('market-provider-source-gap-board');
     expect(gapBoard).toHaveTextContent('优先级路线图');
@@ -602,8 +618,8 @@ describe('MarketProviderOperationsPage', () => {
     expect(gapBoard).toHaveTextContent('P3 区域 / 期货确认');
     expect(gapBoard).toHaveTextContent('Fed Liquidity');
     expect(gapBoard).toHaveTextContent('Polygon grouped daily US equities');
-    expect(gapBoard).toHaveTextContent('AD-only');
-    expect(gapBoard).toHaveTextContent('High/low missing');
+    expect(gapBoard).toHaveTextContent('仅涨跌家数');
+    expect(gapBoard).toHaveTextContent('高低点缺失');
     expect(gapBoard).not.toHaveTextContent('NYSE');
     expect(gapBoard).not.toHaveTextContent('Nasdaq');
     expect(gapBoard).toHaveTextContent('当前为什么不可用');
@@ -656,8 +672,9 @@ describe('MarketProviderOperationsPage', () => {
 
     render(<MarketProviderOperationsPage />);
 
-    expect(await screen.findByText('Provider Setup Checklist')).toBeInTheDocument();
+    expect(await screen.findByText('数据源配置清单')).toBeInTheDocument();
     const checklist = screen.getByTestId('market-provider-setup-checklist');
+    expect(checklist).toHaveTextContent('只读展示现有 provider 缺口会影响哪些产品面');
     expect(checklist).toHaveTextContent('Market Overview');
     expect(checklist).toHaveTextContent('Liquidity Monitor');
     expect(checklist).toHaveTextContent('Rotation Radar');
@@ -669,19 +686,19 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklist).toHaveTextContent('需要凭据');
     expect(checklist).toHaveTextContent('可能需付费');
     expect(checklist).toHaveTextContent('需要缓存');
-    expect(checklist).toHaveTextContent('official-public cache-only');
+    expect(checklist).toHaveTextContent('官方公开缓存');
     expect(checklist).toHaveTextContent('默认关闭');
     expect(checklist).toHaveTextContent('聚合证据');
     expect(checklist).toHaveTextContent('仅观察');
     expect(checklist).toHaveTextContent('评分阻断');
-    expect(checklist).toHaveTextContent('missing provider');
-    expect(checklist).toHaveTextContent('Use the existing Tushare credential setup and keep secret values out of this page.');
-    expect(checklist).toHaveTextContent('Keep Polygon grouped-daily breadth on the approved credential-plus-cache path before using it for primary US posture context.');
-    expect(checklist).toHaveTextContent('Sync the approved local US parquet/cache coverage before expecting representative history checks to clear.');
-    expect(checklist).toHaveTextContent('Refresh the approved official-public money-market cache snapshot; this page stays read-only.');
-    expect(checklist).toHaveTextContent('Refresh the CN/HK connect cache snapshot so rotation context is available without live provider calls.');
-    expect(checklist).toHaveTextContent('Add the existing Fed liquidity aggregate evidence cache so broad liquidity context is visible without implying a trade signal.');
-    expect(checklist).toHaveTextContent('Complete the existing authorized feed setup for index futures before relying on it for futures confirmation.');
+    expect(checklist).toHaveTextContent('缺少 provider');
+    expect(checklist).toHaveTextContent('沿现有 Tushare 凭据配置路径处理，并继续避免在本页显示密钥值。');
+    expect(checklist).toHaveTextContent('保持 Polygon grouped-daily 宽度走已批准的凭据与缓存路径');
+    expect(checklist).toHaveTextContent('同步已批准的本地美股 parquet/cache 覆盖');
+    expect(checklist).toHaveTextContent('刷新已批准的官方公开 money-market 缓存快照');
+    expect(checklist).toHaveTextContent('刷新 CN/HK connect 缓存快照，让 Rotation Radar 背景可用且不新增 live provider 调用。');
+    expect(checklist).toHaveTextContent('补齐既有 Fed liquidity 聚合证据缓存');
+    expect(checklist).toHaveTextContent('完成现有授权 feed 配置后，再返回本页确认期货确认链路是否通过。');
     expect(checklist).not.toHaveTextContent('polygon_high_low_history_unavailable');
     expect(checklist).not.toHaveTextContent('missing_provider_configuration');
     expect(checklist).not.toHaveTextContent('cache_only_contract');
@@ -698,6 +715,8 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklist).not.toHaveTextContent('cache required');
     expect(checklist).not.toHaveTextContent('disabled by default');
     expect(checklist).not.toHaveTextContent('aggregate-supported');
+    expect(checklist).not.toHaveTextContent('official-public cache-only');
+    expect(checklist).not.toHaveTextContent('missing provider');
     expect(checklist).not.toHaveTextContent('observation-only');
     expect(checklist).not.toHaveTextContent('score-blocked');
 
@@ -714,6 +733,20 @@ describe('MarketProviderOperationsPage', () => {
     expect(within(matrixDisclosure).getByRole('button', { name: '收起 完整 provider matrix' })).toBeInTheDocument();
   });
 
+  it('keeps product labels available without introducing trading-action wording', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+
+    render(<MarketProviderOperationsPage />);
+
+    const checklist = await screen.findByTestId('market-provider-setup-checklist');
+    expect(checklist).toHaveTextContent('Portfolio');
+    expect(checklist).toHaveTextContent('Watchlist');
+    expect(checklist).toHaveTextContent('Options Lab');
+
+    const bodyText = document.body.textContent || '';
+    expect(bodyText).not.toMatch(/买入按钮|下单|立即交易|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy/i);
+  });
+
   it('honors a safe surface query for setup focus without hiding full diagnostics', async () => {
     const previousPath = window.location.pathname;
     const previousSearch = window.location.search;
@@ -723,10 +756,10 @@ describe('MarketProviderOperationsPage', () => {
     try {
       render(<MarketProviderOperationsPage />);
 
-      expect(await screen.findByText('Provider Setup Checklist')).toBeInTheDocument();
+      expect(await screen.findByText('数据源配置清单')).toBeInTheDocument();
       const focus = screen.getByTestId('market-provider-setup-surface-focus');
       expect(focus).toHaveTextContent('已按 Market Overview 聚焦');
-      expect(focus).toHaveTextContent('改善证据覆盖');
+      expect(focus).toHaveTextContent('确认覆盖缺口');
       const checklist = screen.getByTestId('market-provider-setup-checklist');
       expect(checklist).toHaveTextContent('Market Overview');
       expect(checklist).toHaveTextContent('Fed Liquidity');
@@ -752,7 +785,7 @@ describe('MarketProviderOperationsPage', () => {
     try {
       render(<MarketProviderOperationsPage />);
 
-      expect(await screen.findByText('Provider Setup Checklist')).toBeInTheDocument();
+      expect(await screen.findByText('数据源配置清单')).toBeInTheDocument();
       expect(screen.queryByTestId('market-provider-setup-surface-focus')).not.toBeInTheDocument();
       const checklist = screen.getByTestId('market-provider-setup-checklist');
       expect(checklist).toHaveTextContent('Market Overview');

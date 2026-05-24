@@ -40,6 +40,13 @@ import { marketIntelligenceReasonLabel } from '../utils/marketIntelligenceGuidan
 import { productSetupSurfaceFromCurrentQuery, type ProductSetupSurface } from '../utils/productSetupSurface';
 
 type StatusTone = 'live' | 'cache' | 'stale' | 'fallback' | 'partial' | 'unavailable' | 'error' | 'refreshing';
+type ProviderOpsTopSummaryData = {
+  availableSources: string[];
+  missingSources: string[];
+  diagnosticSources: string[];
+  affectedSurfaces: string[];
+};
+type ReadinessDiagnosticGroupId = 'credentials' | 'localCache' | 'coverage' | 'runtime' | 'other';
 type TickflowProjection = {
   provider?: unknown;
   market?: unknown;
@@ -179,10 +186,10 @@ function providerKey(item: Pick<MarketProviderOperationItem, 'provider' | 'cache
 
 function readinessStatusLabel(status: string): string {
   return {
-    ready: 'ready',
-    partial: 'partial',
-    missing: 'missing',
-    misconfigured: 'misconfigured',
+    ready: '已就绪',
+    partial: '部分就绪',
+    missing: '缺失',
+    misconfigured: '配置异常',
   }[status] || status;
 }
 
@@ -196,9 +203,9 @@ function readinessStatusVariant(status: string): 'neutral' | 'success' | 'cautio
 
 function readinessSeverityLabel(severity: string): string {
   return {
-    error: 'error',
-    warning: 'warning',
-    info: 'info',
+    error: '阻断',
+    warning: '注意',
+    info: '信息',
   }[severity] || severity;
 }
 
@@ -219,6 +226,113 @@ function surfaceLabel(surface: string): string {
     options_lab: 'Options Lab',
     stock_history: 'US parquet history',
   }[surface] || surface.replace(/_/g, ' ');
+}
+
+function uniqueLabels(values: Array<string | null | undefined>): string[] {
+  return values
+    .map((value) => String(value || '').trim())
+    .filter((value, index, list) => Boolean(value) && list.indexOf(value) === index);
+}
+
+function formatReadableList(values: string[], empty = '暂无可展示项'): string {
+  if (!values.length) return empty;
+  const visible = values.slice(0, 3);
+  const suffix = values.length > visible.length ? ` 等 ${formatNumber(values.length, 0)} 项` : '';
+  return `${visible.join('、')}${suffix}`;
+}
+
+function matrixRowHasMissingSetup(row: ProviderOperationsMatrixRow): boolean {
+  const runtimeState = String(row.runtimeState || '').toLowerCase();
+  const credentialState = String(row.credentialState || '').toLowerCase();
+  const dependencyState = String(row.dependencyState || '').toLowerCase();
+  const sourceType = String(row.sourceType || '').toLowerCase();
+  return sourceType === 'missing'
+    || runtimeState === 'missing'
+    || runtimeState === 'credential_missing'
+    || runtimeState === 'missing_provider_configuration'
+    || credentialState === 'missing'
+    || dependencyState === 'dependency_missing'
+    || Boolean(row.missingProviderReason);
+}
+
+function matrixRowIsPrimaryAvailable(row: ProviderOperationsMatrixRow): boolean {
+  return !matrixRowHasMissingSetup(row)
+    && row.sourceAuthorityAllowed === true
+    && row.scoreContributionAllowed === true
+    && row.scoreEligible === true
+    && row.observationOnly !== true
+    && row.inertMetadataOnly !== true;
+}
+
+function matrixRowIsDiagnosticOnly(row: ProviderOperationsMatrixRow): boolean {
+  return row.observationOnly === true
+    || row.inertMetadataOnly === true
+    || row.diagnosticOnly === true
+    || row.scoreContributionAllowed === false
+    || row.scoreEligible === false;
+}
+
+function operationItemIsAvailable(item: MarketProviderOperationItem): boolean {
+  const status = normalizeStatus(item.status);
+  return (status === 'live' || status === 'cache') && !item.errorSummary && !item.isFallback && !item.fallbackUsed && !item.isStale;
+}
+
+function readinessCheckName(check: MarketDataReadinessCheck): string {
+  if (check.id === 'tushare_token') return 'Tushare 覆盖凭据';
+  if (check.id === 'local_us_parquet_representative_files') return '本地美股历史缓存';
+  return sanitizeCodeLabel(check.id).replace(/_/g, ' ');
+}
+
+function readinessCheckMessage(check: MarketDataReadinessCheck): string {
+  if (check.id === 'tushare_token') return 'Tushare 覆盖凭据未配置，相关 CN/HK 市场上下文只能保持缺口提示。';
+  if (check.id === 'local_us_parquet_representative_files') return '部分代表样本缺少本地历史缓存，离线覆盖检查只能显示部分就绪。';
+  return sanitizeOperatorText(check.userFacingMessage);
+}
+
+function readinessCheckGuidance(check: MarketDataReadinessCheck): string {
+  if (check.id === 'tushare_token') return '沿现有凭据配置路径处理，返回本页确认 readiness；本页不读取或显示密钥值。';
+  if (check.id === 'local_us_parquet_representative_files') return '同步已批准的本地历史缓存，或缩小代表样本范围后重新检查。';
+  return check.remediationHint ? sanitizeOperatorText(check.remediationHint) : '按现有配置路径处理后，再返回本页确认状态。';
+}
+
+function readinessDiagnosticGroupId(check: MarketDataReadinessCheck): ReadinessDiagnosticGroupId {
+  const id = check.id.toLowerCase();
+  if (check.secretConfigured === false || id.includes('token') || id.includes('credential') || id.includes('key')) return 'credentials';
+  if (id.includes('parquet') || id.includes('cache') || id.includes('file') || id.includes('history')) return 'localCache';
+  if (check.status === 'ready') return 'coverage';
+  if (id.includes('runtime') || id.includes('network') || id.includes('provider')) return 'runtime';
+  return 'other';
+}
+
+function buildProviderOpsTopSummary(
+  items: MarketProviderOperationItem[],
+  rows: ProviderOperationsMatrixRow[],
+  checks: MarketDataReadinessCheck[],
+): ProviderOpsTopSummaryData {
+  const availableSources = uniqueLabels([
+    ...items.filter(operationItemIsAvailable).map(providerLabel),
+    ...rows.filter(matrixRowIsPrimaryAvailable).map(sourceGapName),
+  ]);
+  const missingSources = uniqueLabels([
+    ...rows.filter(matrixRowHasMissingSetup).map(sourceGapName),
+    ...checks.filter(shouldIncludeChecklistReadinessCheck).map(readinessCheckName),
+  ]);
+  const diagnosticSources = uniqueLabels(
+    rows
+      .filter(matrixRowIsDiagnosticOnly)
+      .map(sourceGapName),
+  );
+  const affectedSurfaces = uniqueLabels([
+    ...rows.flatMap(resolveChecklistMatrixSurfaces),
+    ...checks.flatMap(resolveChecklistReadinessSurfaces),
+  ]).filter((surface) => surface !== 'Provider Ops / system diagnostics');
+
+  return {
+    availableSources,
+    missingSources,
+    diagnosticSources,
+    affectedSurfaces: affectedSurfaces.length ? affectedSurfaces : ['Provider Ops / system diagnostics'],
+  };
 }
 
 function summarizeReadinessFacts(check: MarketDataReadinessCheck): string[] {
@@ -433,6 +547,18 @@ const CHECKLIST_SURFACE_ORDER = [
   'Provider Ops / system diagnostics',
 ] as const;
 
+const READINESS_DIAGNOSTIC_GROUPS: Array<{
+  id: ReadinessDiagnosticGroupId;
+  title: string;
+  description: string;
+}> = [
+  { id: 'credentials', title: '凭据配置', description: '只判断是否缺少已声明凭据，不展示密钥值。' },
+  { id: 'localCache', title: '本地缓存/历史文件', description: '确认离线快照、parquet 或本地覆盖是否满足代表样本。' },
+  { id: 'coverage', title: '覆盖已就绪', description: '当前检查没有阻断项，继续保持只读观察。' },
+  { id: 'runtime', title: '运行边界', description: '确认 provider runtime 与网络调用边界没有被前端改变。' },
+  { id: 'other', title: '其他诊断', description: '保留未归类检查，但降低原始 ID 的视觉优先级。' },
+];
+
 function capabilityHaystack(row: ProviderOperationsMatrixRow): string[] {
   return [
     row.providerId,
@@ -509,10 +635,10 @@ function sourceGapBadges(row: ProviderOperationsMatrixRow): Array<{ label: strin
   const missing = new Set(row.missingMetrics || []);
   const badges: Array<{ label: string; variant: 'neutral' | 'success' | 'caution' | 'danger' | 'info' }> = [];
   if (fulfilled.has('ADVANCERS') && fulfilled.has('DECLINERS')) {
-    badges.push({ label: 'AD-only', variant: 'info' });
+    badges.push({ label: '仅涨跌家数', variant: 'info' });
   }
   if (missing.has('NEW_HIGHS') || missing.has('NEW_LOWS') || missing.has('HIGH_LOW_RATIO')) {
-    badges.push({ label: 'High/low missing', variant: 'caution' });
+    badges.push({ label: '高低点缺失', variant: 'caution' });
   }
   if (row.sourceFreshnessEvidence?.freshness) {
     badges.push({ label: `EOD ${sanitizeCodeLabel(row.sourceFreshnessEvidence.freshness)}`, variant: 'neutral' });
@@ -630,58 +756,60 @@ function checklistBadgeDisplayLabel(label: string): string {
     'credential required': '需要凭据',
     'paid likely': '可能需付费',
     'aggregate-supported': '聚合证据',
+    'official-public cache-only': '官方公开缓存',
+    'missing provider': '缺少 provider',
   }[label] || label;
 }
 
 function defaultChecklistWhyItMatters(title: string): string {
-  return `${title} already appears in Provider Ops because a visible readiness or source-truth dependency can affect that surface. It does not promise investment accuracy.`;
+  return `${title} 已在 Provider Ops 中出现，说明现有 readiness 或 source-truth 依赖会影响对应产品面；它不承诺提高投资准确性。`;
 }
 
 function defaultChecklistNextStep(title: string): string {
-  return `Follow the existing ${title} setup path outside this read-only page, then return to confirm the current readiness state.`;
+  return `沿现有 ${title} 配置路径处理，再返回本页确认 readiness；本页保持只读。`;
 }
 
 function checklistCopyForMatrixRow(row: ProviderOperationsMatrixRow): Pick<SetupChecklistEntry, 'title' | 'whyItMatters' | 'safeNextStep'> {
   if (row.providerId === 'polygon_us_grouped_daily') {
     return {
       title: sourceGapName(row),
-      whyItMatters: 'Grouped-daily breadth helps frame broad US posture context, but incomplete breadth metrics must stay out of primary score-grade claims. It does not promise market accuracy.',
-      safeNextStep: 'Keep Polygon grouped-daily breadth on the approved credential-plus-cache path before using it for primary US posture context.',
+      whyItMatters: '美股 grouped-daily 宽度可以辅助解释美股大盘背景，但高低点指标缺失时不能进入主结论级表述。',
+      safeNextStep: '保持 Polygon grouped-daily 宽度走已批准的凭据与缓存路径，先补齐覆盖再用于主背景判断。',
     };
   }
   if (row.providerId === 'official_public.fed_liquidity') {
     return {
       title: sourceGapName(row),
-      whyItMatters: 'Fed aggregate evidence helps frame broad liquidity posture, but it should remain contextual evidence rather than a direct trade signal.',
-      safeNextStep: 'Add the existing Fed liquidity aggregate evidence cache so broad liquidity context is visible without implying a trade signal.',
+      whyItMatters: 'Fed 聚合证据可以补充广义流动性背景，但未配置前只能作为可见缺口，不能改写前台判断。',
+      safeNextStep: '补齐既有 Fed liquidity 聚合证据缓存，让流动性背景可见，同时保持只读边界。',
     };
   }
   if (row.providerId === 'official_public.cn_money_market_cache') {
     return {
       title: sourceGapName(row),
-      whyItMatters: 'Official-public money-market context can help operators interpret short-term liquidity conditions, but cache snapshots remain observational and do not guarantee precision.',
-      safeNextStep: 'Refresh the approved official-public money-market cache snapshot; this page stays read-only.',
+      whyItMatters: '官方公开 money-market 缓存有助于观察短端流动性背景，但仍是观察级快照。',
+      safeNextStep: '刷新已批准的官方公开 money-market 缓存快照；本页只确认状态。',
     };
   }
   if (row.providerId === 'cache.cn_hk_connect_daily') {
     return {
       title: sourceGapName(row),
-      whyItMatters: 'CN/HK connect cache snapshots help compare regional rotation context without opening new live routes or claiming full flow coverage.',
-      safeNextStep: 'Refresh the CN/HK connect cache snapshot so rotation context is available without live provider calls.',
+      whyItMatters: 'CN/HK connect 缓存可以解释区域轮动背景，但缺少 southbound 时只能显示覆盖不完整。',
+      safeNextStep: '刷新 CN/HK connect 缓存快照，让 Rotation Radar 背景可用且不新增 live provider 调用。',
     };
   }
   if (row.providerId === 'authorized.cn_index_futures_feed') {
     return {
       title: sourceGapName(row),
-      whyItMatters: 'Index futures confirmation can support regional risk context, but it belongs behind the existing licensed setup and current score gates.',
-      safeNextStep: 'Complete the existing authorized feed setup for index futures before relying on it for futures confirmation.',
+      whyItMatters: '指数期货授权源可以补充区域风险确认，但必须先满足既有授权与评分门槛。',
+      safeNextStep: '完成现有授权 feed 配置后，再返回本页确认期货确认链路是否通过。',
     };
   }
   if (row.providerId === 'tushare_pro') {
     return {
       title: sourceGapName(row),
-      whyItMatters: 'Tushare-backed coverage helps fill CN/HK daily context where the current product surface expects it, but it still does not guarantee better signals.',
-      safeNextStep: 'Use the existing Tushare credential setup and keep secret values out of this page.',
+      whyItMatters: 'Tushare 覆盖可以补齐 CN/HK 日频背景，但不承诺更高信号质量或投资准确性。',
+      safeNextStep: '沿现有 Tushare 凭据配置路径处理，并继续避免在本页显示密钥值。',
     };
   }
   const title = sourceGapName(row);
@@ -696,15 +824,15 @@ function checklistCopyForReadinessCheck(check: MarketDataReadinessCheck): Pick<S
   if (check.id === 'tushare_token') {
     return {
       title: 'Tushare',
-      whyItMatters: 'Tushare-backed coverage helps fill CN/HK market context where existing surfaces expect it, but it does not guarantee better signal quality or investment accuracy.',
-      safeNextStep: 'Use the existing Tushare credential setup and keep secret values out of this page.',
+      whyItMatters: 'Tushare 覆盖可以补齐 CN/HK 市场背景，但不承诺更高信号质量或投资准确性。',
+      safeNextStep: '沿现有 Tushare 凭据配置路径处理，并继续避免在本页显示密钥值。',
     };
   }
   if (check.id === 'local_us_parquet_representative_files') {
     return {
       title: 'Local US parquet/cache',
-      whyItMatters: 'Representative local US history coverage affects whether offline history checks can confirm what the system already has on disk. Missing files reduce what operators can verify.',
-      safeNextStep: 'Sync the approved local US parquet/cache coverage before expecting representative history checks to clear.',
+      whyItMatters: '本地美股历史覆盖决定离线检查能确认哪些磁盘数据；缺文件会降低可验证范围。',
+      safeNextStep: '同步已批准的本地美股 parquet/cache 覆盖，再期待代表样本检查清空。',
     };
   }
   const title = sanitizeCodeLabel(check.id);
@@ -937,6 +1065,61 @@ const ReadOnlyBadges: React.FC<{ response?: MarketProviderOperationsResponse | n
   );
 };
 
+const ProviderOpsTopSummary: React.FC<{
+  data: ProviderOpsTopSummaryData;
+  isLoading: boolean;
+}> = ({ data, isLoading }) => {
+  const summaryItems = [
+    {
+      label: '数据源可用',
+      value: isLoading ? '读取中' : `${formatNumber(data.availableSources.length, 0)} 项`,
+      detail: formatReadableList(data.availableSources, '暂无实时或可计分来源'),
+      variant: data.availableSources.length ? 'success' : 'neutral',
+    },
+    {
+      label: '需补齐',
+      value: isLoading ? '读取中' : `${formatNumber(data.missingSources.length, 0)} 项`,
+      detail: formatReadableList(data.missingSources, '当前未见配置缺口'),
+      variant: data.missingSources.length ? 'caution' : 'success',
+    },
+    {
+      label: '仅诊断/观察',
+      value: isLoading ? '读取中' : `${formatNumber(data.diagnosticSources.length, 0)} 项`,
+      detail: formatReadableList(data.diagnosticSources, '暂无仅观察项'),
+      variant: data.diagnosticSources.length ? 'info' : 'neutral',
+    },
+    {
+      label: '影响产品页',
+      value: isLoading ? '读取中' : `${formatNumber(data.affectedSurfaces.length, 0)} 个`,
+      detail: formatReadableList(data.affectedSurfaces, '仅 Provider Ops 诊断'),
+      variant: 'neutral',
+    },
+  ] as const;
+
+  return (
+    <div data-testid="market-provider-readability-summary" className="mt-5 rounded-lg border border-white/[0.07] bg-white/[0.025] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">首屏摘要</p>
+          <p className="mt-1 text-sm font-semibold text-white/84">先确认状态、缺口、观察边界和影响页面</p>
+        </div>
+        <TerminalChip variant="info">不改变 provider 语义</TerminalChip>
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-4">
+        {summaryItems.map((item) => (
+          <div key={item.label} className="min-w-0 rounded-md border border-white/[0.06] bg-black/10 px-3 py-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-medium text-white/50">{item.label}</p>
+              <TerminalChip variant={item.variant}>{item.value}</TerminalChip>
+            </div>
+            <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/72">{item.detail}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const SourceGapBoard: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ rows }) => (
   <div data-testid="market-provider-source-gap-board" className="mt-4 grid min-w-0 gap-3 xl:grid-cols-2">
     {SOURCE_GAP_CAPABILITIES.map((capability) => {
@@ -1019,16 +1202,16 @@ const ProviderSetupChecklistPanel: React.FC<{
     <TerminalNestedBlock data-testid="market-provider-setup-checklist" className="mt-4 bg-black/10 px-3 py-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">Setup</p>
-          <p className="mt-1 text-sm font-semibold text-white/82">Provider Setup Checklist</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">配置动作</p>
+          <p className="mt-1 text-sm font-semibold text-white/82">数据源配置清单</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
-          <TerminalChip variant="neutral">{formatNumber(groups.length, 0)} surfaces</TerminalChip>
-          <TerminalChip variant="info">{formatNumber(visibleEntries.length, 0)} setup items</TerminalChip>
+          <TerminalChip variant="neutral">{formatNumber(groups.length, 0)} 个产品面</TerminalChip>
+          <TerminalChip variant="info">{formatNumber(visibleEntries.length, 0)} 个配置项</TerminalChip>
         </div>
       </div>
       <p className="mt-2 text-[11px] leading-5 text-white/48">
-        Read-only setup view for which existing provider gaps affect which product surface, what kind of dependency is missing, and the next safe setup step. It does not promise investment accuracy.
+        只读展示现有 provider 缺口会影响哪些产品面、缺少哪类依赖，以及下一步应沿哪个既有配置路径处理；不承诺投资准确性。
       </p>
       {surfaceFocus ? (
         <div
@@ -1037,16 +1220,16 @@ const ProviderSetupChecklistPanel: React.FC<{
         >
           <span className="font-semibold text-cyan-100/82">已按 {surfaceFocus.label} 聚焦：</span>
           {' '}
-          以下 checklist 行来自现有 productAffectedSurfaces，用于改善证据覆盖、减少 fallback/proxy，可能提升为可评分证据。
+          以下清单来自现有 productAffectedSurfaces，用于确认覆盖缺口；不会改变评分规则或承诺信号质量。
         </div>
       ) : null}
 
       {isLoading && !visibleEntries.length ? (
-        <p className="mt-3 text-[11px] leading-5 text-white/38">正在汇总 checklist；仍然只读，不触发 provider runtime。</p>
+        <p className="mt-3 text-[11px] leading-5 text-white/38">正在汇总配置清单；仍然只读，不触发 provider runtime。</p>
       ) : null}
 
       {!isLoading && !groups.length ? (
-        <p className="mt-3 text-[11px] leading-5 text-white/38">当前没有额外的 setup 阻断项；完整 matrix 与 diagnostics 仍保留在下方。</p>
+        <p className="mt-3 text-[11px] leading-5 text-white/38">当前没有额外配置阻断项；完整 matrix 与 diagnostics 仍保留在下方。</p>
       ) : null}
 
       {groups.length ? (
@@ -1055,7 +1238,7 @@ const ProviderSetupChecklistPanel: React.FC<{
             <div key={group.surface} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs font-semibold text-white/82">{group.surface}</p>
-                <TerminalChip variant="neutral">{formatNumber(group.items.length, 0)} items</TerminalChip>
+                <TerminalChip variant="neutral">{formatNumber(group.items.length, 0)} 项</TerminalChip>
               </div>
               <div className="mt-3 space-y-2">
                 {group.items.map((entry) => (
@@ -1071,10 +1254,10 @@ const ProviderSetupChecklistPanel: React.FC<{
                       </div>
                     ) : null}
                     <p className="mt-2 text-[11px] leading-5 text-white/54">
-                      Why it matters: {entry.whyItMatters}
+                      影响说明：{entry.whyItMatters}
                     </p>
                     <p className="mt-1 text-[11px] leading-5 text-white/62">
-                      Safe next step: {entry.safeNextStep}
+                      安全下一步：{entry.safeNextStep}
                     </p>
                   </div>
                 ))}
@@ -1469,13 +1652,12 @@ const MarketDataReadinessPanel: React.FC<{
 }> = ({ data, isLoading, error, symbolInput, onSymbolInputChange, onSymbolSubmit }) => {
   const checks = data?.checks ?? EMPTY_READINESS_CHECKS;
   const groupedChecks = useMemo(() => {
-    const order = ['error', 'warning', 'info'];
-    return order
-      .map((severity) => ({
-        severity,
+    return READINESS_DIAGNOSTIC_GROUPS
+      .map((group) => ({
+        ...group,
         items: checks
-          .filter((check) => check.severity === severity)
-          .sort((left, right) => left.status.localeCompare(right.status) || left.id.localeCompare(right.id)),
+          .filter((check) => readinessDiagnosticGroupId(check) === group.id)
+          .sort((left, right) => left.severity.localeCompare(right.severity) || left.status.localeCompare(right.status) || readinessCheckName(left).localeCompare(readinessCheckName(right))),
       }))
       .filter((group) => group.items.length > 0);
   }, [checks]);
@@ -1520,9 +1702,9 @@ const MarketDataReadinessPanel: React.FC<{
           <p className="mt-2 text-[11px] leading-5 text-white/42">只发送可选 symbol query 到 `/api/v1/market/data-readiness`，不触发 provider runtime，也不读取 secret 值。</p>
         </TerminalNestedBlock>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <TerminalMetric label="diagnosticOnly" value={String(data?.diagnosticOnly ?? true)} valueClassName="text-sm" />
-          <TerminalMetric label="providerRuntimeCalled" value={String(data?.providerRuntimeCalled ?? false)} valueClassName="text-sm" />
-          <TerminalMetric label="networkCallsEnabled" value={String(data?.networkCallsEnabled ?? false)} valueClassName="text-sm" />
+          <TerminalMetric label="只读诊断" value={data?.diagnosticOnly === false ? '否' : '是'} valueClassName="text-sm" />
+          <TerminalMetric label="运行时调用" value={data?.providerRuntimeCalled ? '已触发' : '未触发'} valueClassName="text-sm" />
+          <TerminalMetric label="网络调用" value={data?.networkCallsEnabled ? '已开启' : '关闭'} valueClassName="text-sm" />
         </div>
       </div>
 
@@ -1543,10 +1725,10 @@ const MarketDataReadinessPanel: React.FC<{
           {!groupedChecks.length ? (
             <TerminalEmptyState title="暂无 readiness 检查项">接口未返回检查项时，不前端推断环境健康度。</TerminalEmptyState>
           ) : groupedChecks.map((group) => (
-            <div key={group.severity}>
+            <div key={group.id}>
               <div className="mb-2 flex flex-wrap items-center gap-2">
-                <TerminalChip variant={readinessSeverityVariant(group.severity)}>{readinessSeverityLabel(group.severity)}</TerminalChip>
-                <span className="text-[11px] text-white/42">{formatNumber(group.items.length, 0)} checks</span>
+                <TerminalChip variant="info">{group.title}</TerminalChip>
+                <span className="text-[11px] text-white/42">{formatNumber(group.items.length, 0)} 项 · {group.description}</span>
               </div>
               <TerminalDenseList>
                 {group.items.map((check) => {
@@ -1555,11 +1737,12 @@ const MarketDataReadinessPanel: React.FC<{
                     <TerminalNestedBlock key={check.id} className="px-3 py-2.5">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="font-mono text-[11px] text-white/48">{check.id}</p>
-                          <p className="mt-1 text-sm font-semibold text-white">{check.userFacingMessage}</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">就绪检查</p>
+                          <p className="mt-1 text-sm font-semibold text-white">{readinessCheckName(check)}</p>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           <TerminalChip variant={readinessStatusVariant(check.status)}>{readinessStatusLabel(check.status)}</TerminalChip>
+                          <TerminalChip variant={readinessSeverityVariant(check.severity)}>{readinessSeverityLabel(check.severity)}</TerminalChip>
                           {typeof check.secretConfigured === 'boolean' ? (
                             <TerminalChip variant={check.secretConfigured ? 'success' : 'caution'}>
                               {check.secretConfigured ? '已配置' : '未配置'}
@@ -1567,13 +1750,28 @@ const MarketDataReadinessPanel: React.FC<{
                           ) : null}
                         </div>
                       </div>
-                      {check.remediationHint ? <p className="mt-2 text-[11px] leading-5 text-white/62">{check.remediationHint}</p> : null}
+                      <p className="mt-2 text-[11px] leading-5 text-white/62">{readinessCheckMessage(check)}</p>
+                      <p className="mt-1 text-[11px] leading-5 text-white/54">下一步：{readinessCheckGuidance(check)}</p>
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        {check.affectsSurfaces.map((surface) => (
-                          <TerminalChip key={`${check.id}-${surface}`} variant="neutral">{surfaceLabel(surface)}</TerminalChip>
+                        {resolveChecklistReadinessSurfaces(check).map((surface) => (
+                          <TerminalChip key={`${check.id}-${surface}`} variant="neutral">{surface}</TerminalChip>
                         ))}
                       </div>
-                      {facts.length ? <p className="mt-2 font-mono text-[11px] leading-5 text-white/42">{facts.join(' · ')}</p> : null}
+                      <TerminalDisclosure
+                        title="技术细节"
+                        summary="诊断 ID、原始影响面与样本差异"
+                        className="mt-2 bg-black/10"
+                      >
+                        <div className="space-y-2 text-[11px] leading-5 text-white/50">
+                          <p><span className="text-white/34">诊断 ID：</span><span className="font-mono">{sanitizeCodeLabel(check.id)}</span></p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {check.affectsSurfaces.map((surface) => (
+                              <TerminalChip key={`${check.id}-${surface}`} variant="neutral">{surfaceLabel(surface)}</TerminalChip>
+                            ))}
+                          </div>
+                          {facts.length ? <p className="font-mono text-white/42">{facts.join(' · ')}</p> : null}
+                        </div>
+                      </TerminalDisclosure>
                     </TerminalNestedBlock>
                   );
                 })}
@@ -1695,6 +1893,8 @@ const MarketProviderOperationsPage: React.FC = () => {
   };
 
   const items = response?.items ?? EMPTY_PROVIDER_ITEMS;
+  const matrixRows = matrixResponse?.rows ?? EMPTY_PROVIDER_MATRIX_ROWS;
+  const readinessChecks = readiness?.checks ?? EMPTY_READINESS_CHECKS;
   const cacheStates = response?.cacheStates ?? EMPTY_PROVIDER_CACHE_STATES;
   const eventRollups = response?.eventRollups ?? EMPTY_PROVIDER_EVENT_ROLLUPS;
   const summary = useMemo(() => normalizeSummary(response?.summary ?? SUMMARY_DEFAULTS), [response?.summary]);
@@ -1744,6 +1944,11 @@ const MarketProviderOperationsPage: React.FC = () => {
     ];
   }, [cacheStates, degradedCount, eventRollups.length, items.length, summary, topException]);
 
+  const topSummary = useMemo(
+    () => buildProviderOpsTopSummary(items, matrixRows, readinessChecks),
+    [items, matrixRows, readinessChecks],
+  );
+
   return (
     <div data-testid="market-provider-operations-page" className="market-provider-operations-page flex min-h-0 w-full flex-1 flex-col overflow-y-auto no-scrollbar text-white">
       <TerminalPageShell className="py-5 md:py-6">
@@ -1758,6 +1963,7 @@ const MarketProviderOperationsPage: React.FC = () => {
               ? '正在读取数据源维护快照'
               : `先看路线图与阻断项，再按需下钻健康、熔断、失败率与缓存。生成 ${formatDisplayDate(response?.generatedAt, '待统计')} · 窗口 ${response?.window?.key || '24h'} · 只读快照`}
           </p>
+          <ProviderOpsTopSummary data={topSummary} isLoading={isLoading || isMatrixLoading || isReadinessLoading} />
           {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}
         </TerminalPanel>
 
