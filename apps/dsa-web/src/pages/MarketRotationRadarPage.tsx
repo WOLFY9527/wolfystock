@@ -22,7 +22,6 @@ import {
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal/TerminalPrimitives';
-import { ProductSetupPath } from '../components/market-intelligence/ProductSetupPath';
 import { WideWorkspacePageShell } from '../components/layout/WideWorkspaceShell';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import {
@@ -42,7 +41,6 @@ import { cn } from '../utils/cn';
 import { normalizeRotationEvidence } from '../utils/evidenceDisplay';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import {
-  MARKET_DECISION_NOT_READY_NOTICE,
   decisionReadinessStateLabel,
   decisionReadinessVariant,
   marketIntelligenceReasonLabel,
@@ -50,13 +48,14 @@ import {
   type DecisionReadinessState,
   type DecisionReadinessSummary,
 } from '../utils/marketIntelligenceGuidance';
+import { buildDataSourcesSetupHref, buildProviderOpsSetupHref } from '../utils/productSetupSurface';
 
 const TOP_THEME_LIMIT = 10;
 const MARKET_OPTIONS = [
-  { id: 'US', label: 'US' },
+  { id: 'US', label: '美股' },
   { id: 'CN', label: 'A股' },
-  { id: 'HK', label: 'HK' },
-  { id: 'CRYPTO', label: 'Crypto' },
+  { id: 'HK', label: '港股' },
+  { id: 'CRYPTO', label: '加密' },
 ] as const;
 
 const STAGE_LABELS: Record<MarketRotationStage, string> = {
@@ -141,6 +140,8 @@ const DATA_GAP_LABELS: Record<string, string> = {
   benchmark_proxy_missing: '基准代理缺失',
   proxy_coverage_incomplete: '代理覆盖不完整',
   taxonomy_only: '仅有分类主题',
+  missing_required_windows: '必要时窗缺失',
+  no_headline_theme: '缺少可比较头部主题',
 };
 
 type Bucket = {
@@ -163,6 +164,16 @@ type CapitalRotationSummaryView = {
   modeLabel: string;
   modeDetail: string;
   cards: CapitalRotationSummaryCard[];
+};
+
+type RotationConclusionView = {
+  state: DecisionReadinessState;
+  title: string;
+  detail: string;
+  whyNotConclusion: string;
+  missingEvidence: string[];
+  nextStep: string;
+  variant: 'neutral' | 'info' | 'caution' | 'danger' | 'success';
 };
 
 type DataStateFields = {
@@ -594,6 +605,36 @@ const ThemeMetric: React.FC<{ label: string; value: string; tone?: string }> = (
   </div>
 );
 
+const RotationSetupPath: React.FC<{ testId: string }> = ({ testId }) => (
+  <div
+    data-testid={testId}
+    className="mt-4 rounded-lg border border-cyan-200/12 bg-cyan-300/[0.035] px-3 py-3"
+  >
+    <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold text-cyan-100/82">查看需配置的数据源</p>
+        <p className="mt-1 max-w-3xl text-[11px] leading-5 text-white/52">
+          补齐行情覆盖、减少备用或代理证据、提升为可评分证据的可能性；是否进入判断仍由现有来源门槛决定。
+        </p>
+      </div>
+      <div className="flex shrink-0 flex-wrap gap-2">
+        <a
+          className="inline-flex min-h-8 items-center rounded-md border border-white/[0.08] bg-white/[0.035] px-2.5 py-1 text-[11px] font-semibold text-white/72 transition-colors hover:border-cyan-200/25 hover:bg-white/[0.06] hover:text-white"
+          href={buildProviderOpsSetupHref('rotation_radar')}
+        >
+          查看提供方运维
+        </a>
+        <a
+          className="inline-flex min-h-8 items-center rounded-md border border-white/[0.08] bg-white/[0.035] px-2.5 py-1 text-[11px] font-semibold text-white/72 transition-colors hover:border-cyan-200/25 hover:bg-white/[0.06] hover:text-white"
+          href={buildDataSourcesSetupHref('rotation_radar')}
+        >
+          前往数据源设置
+        </a>
+      </div>
+    </div>
+  </div>
+);
+
 const EtfLeadershipDiagnosticsPanel: React.FC<{
   diagnostics: MarketRotationEtfLeadershipDiagnostics;
 }> = ({ diagnostics }) => {
@@ -605,40 +646,40 @@ const EtfLeadershipDiagnosticsPanel: React.FC<{
   return (
     <div data-testid="rotation-radar-etf-leadership-panel" className="min-w-0 px-1 py-3">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-        <TerminalSectionHeader eyebrow="Bounded ETF Authority" title="ETF Leadership diagnostics" />
-        <TerminalChip variant={enabled ? 'success' : 'caution'}>{enabled ? 'Enabled' : 'Disabled'}</TerminalChip>
+        <TerminalSectionHeader eyebrow="ETF 权威范围" title="ETF 代理权威检查" />
+        <TerminalChip variant={enabled ? 'success' : 'caution'}>{enabled ? '已启用' : '未启用'}</TerminalChip>
       </div>
 
       <p className="mt-2 text-[11px] leading-5 text-white/48">
-        仅覆盖 {BOUNDED_ETF_SYMBOLS.join(' / ')}。这是 display-only 的 bounded ETF authority diagnostics，
-        不扩展主题排名、headline eligibility 或任何交易含义。
+        仅覆盖 {BOUNDED_ETF_SYMBOLS.join(' / ')}。这是只读的 ETF 权威来源检查，
+        不扩展主题排名、头部资格或任何交易含义。
       </p>
 
       <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
-        <TerminalChip>{`Confidence ${diagnostics.confidenceLabel || '未返回'}`}</TerminalChip>
-        <TerminalChip>{`As Of ${formatDateTime(diagnostics.asOf) || '待确认'}`}</TerminalChip>
-        <TerminalChip>{`Source ${diagnostics.source || evidence.sourceLabel}`}</TerminalChip>
+        <TerminalChip>{`置信度 ${diagnostics.confidenceLabel || '未返回'}`}</TerminalChip>
+        <TerminalChip>{`截至 ${formatDateTime(diagnostics.asOf) || '待确认'}`}</TerminalChip>
+        <TerminalChip>{`来源 ${diagnostics.source || evidence.sourceLabel}`}</TerminalChip>
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <ThemeMetric label="Eligible ETFs" value={`${diagnostics.eligibleSymbols.length}/6`} />
-        <ThemeMetric label="Leadership Spread" value={leadershipSpreadLabel(diagnostics.leadershipSpread)} tone={enabled ? 'text-cyan-100' : 'text-white/52'} />
-        <ThemeMetric label="Authority Evidence" value={`${evidence.authorityAllowed}/${evidence.total || diagnostics.eligibleSymbols.length || 0}`} tone={enabled ? 'text-emerald-200' : 'text-amber-200'} />
-        <ThemeMetric label="Score-Eligible" value={`${evidence.scoreEligible}/${evidence.total || diagnostics.eligibleSymbols.length || 0}`} tone={enabled ? 'text-emerald-200' : 'text-amber-200'} />
+        <ThemeMetric label="可用 ETF" value={`${diagnostics.eligibleSymbols.length}/6`} />
+        <ThemeMetric label="强弱差" value={leadershipSpreadLabel(diagnostics.leadershipSpread)} tone={enabled ? 'text-cyan-100' : 'text-white/52'} />
+        <ThemeMetric label="权威证据" value={`${evidence.authorityAllowed}/${evidence.total || diagnostics.eligibleSymbols.length || 0}`} tone={enabled ? 'text-emerald-200' : 'text-amber-200'} />
+        <ThemeMetric label="可计分证据" value={`${evidence.scoreEligible}/${evidence.total || diagnostics.eligibleSymbols.length || 0}`} tone={enabled ? 'text-emerald-200' : 'text-amber-200'} />
       </div>
 
       <div className="mt-3 grid gap-2">
         <TerminalNestedBlock className="min-w-0 px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase text-white/35">Eligible</p>
+          <p className="text-[10px] font-semibold uppercase text-white/35">纳入范围</p>
           <p className="mt-1 text-xs text-white/72">{compactSymbols(diagnostics.eligibleSymbols)}</p>
         </TerminalNestedBlock>
         <TerminalNestedBlock className="min-w-0 px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase text-white/35">Leading</p>
-          <p className="mt-1 text-xs text-white/72">{enabled ? compactSymbols(diagnostics.leadingSymbols, '待补齐') : 'Disabled / fail-closed'}</p>
+          <p className="text-[10px] font-semibold uppercase text-white/35">领先代理</p>
+          <p className="mt-1 text-xs text-white/72">{enabled ? compactSymbols(diagnostics.leadingSymbols, '待补齐') : '未启用 / 未满足条件'}</p>
         </TerminalNestedBlock>
         <TerminalNestedBlock className="min-w-0 px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase text-white/35">Lagging</p>
-          <p className="mt-1 text-xs text-white/72">{enabled ? compactSymbols(diagnostics.laggingSymbols, '待补齐') : 'Disabled / fail-closed'}</p>
+          <p className="text-[10px] font-semibold uppercase text-white/35">落后代理</p>
+          <p className="mt-1 text-xs text-white/72">{enabled ? compactSymbols(diagnostics.laggingSymbols, '待补齐') : '未启用 / 未满足条件'}</p>
         </TerminalNestedBlock>
       </div>
 
@@ -650,12 +691,12 @@ const EtfLeadershipDiagnosticsPanel: React.FC<{
 
       <TerminalNotice variant={enabled ? 'info' : 'caution'} className="mt-3 text-[11px] leading-5 text-white/56">
         {enabled
-          ? `Evidence summary: Authority ${evidence.authorityAllowed}/${evidence.total}, Score-Eligible ${evidence.scoreEligible}/${evidence.total}, Source ${evidence.sourceLabel}.`
-          : `Fail-closed until ETF windows and authority checks pass. Authority ${evidence.authorityAllowed}/${evidence.total || 0}，Score-Eligible ${evidence.scoreEligible}/${evidence.total || 0}。`}
+          ? `证据摘要：权威 ${evidence.authorityAllowed}/${evidence.total}，可计分 ${evidence.scoreEligible}/${evidence.total}，来源 ${evidence.sourceLabel}。`
+          : `未满足必要时窗与权威检查前保持关闭。权威 ${evidence.authorityAllowed}/${evidence.total || 0}，可计分 ${evidence.scoreEligible}/${evidence.total || 0}。`}
       </TerminalNotice>
       <TerminalDisclosure
         data-testid="rotation-etf-raw-reason-codes"
-        title="原始 reason codes"
+        title="原始原因代码"
         summary="默认折叠"
         className="mt-3 bg-black/10"
       >
@@ -673,6 +714,7 @@ function marketIntelligenceReasonLabelsForRotation(values: string[]): string[] {
   const seen = new Set<string>();
   return values
     .map((value) => marketIntelligenceReasonLabel(value, 'zh'))
+    .map((label) => label.replaceAll('ETF authority', 'ETF 权威来源'))
     .filter((label) => {
       if (seen.has(label)) return false;
       seen.add(label);
@@ -735,41 +777,144 @@ function derivePrimaryDisplayThemes(
   return resolveSummaryThemes(payload.themes || [], payload.summary.strongestThemes || []);
 }
 
+function deriveRotationDecisionState(
+  payload: MarketRotationRadarResponse,
+  tiers = deriveRotationTiers(payload),
+): DecisionReadinessState {
+  const confirmedCount = tiers.confirmedLeaders.length;
+  const candidateCount = tiers.candidateThemes.length;
+  const scoreEligibleCount = rotationScoreEligibleCount(payload);
+
+  if (confirmedCount > 0 && scoreEligibleCount > 0 && !payload.isFallback && !payload.isStale) {
+    return 'ready';
+  }
+  if (tiers.libraryMode || payload.isFallback || payload.isStale || payload.themes.length === 0) {
+    return 'unavailable';
+  }
+  if (candidateCount > 0 || scoreEligibleCount > 0) {
+    return 'observe';
+  }
+  return 'unavailable';
+}
+
+function deriveConclusionScopeThemes(
+  payload: MarketRotationRadarResponse,
+  tiers = deriveRotationTiers(payload),
+): MarketRotationTheme[] {
+  const scopeThemes = resolveSummaryThemes(payload.themes || [], payload.summary.strongestThemes || []);
+  const primaryThemes = derivePrimaryDisplayThemes(payload, tiers);
+  return primaryThemes.length ? primaryThemes : scopeThemes.length ? scopeThemes : payload.themes || [];
+}
+
+function hasBreadthEvidence(themes: MarketRotationTheme[]): boolean {
+  return themes.some((theme) => Number.isFinite(Number(theme.breadth?.percentUp)) && Number(theme.breadth?.percentUp) > 0);
+}
+
+function deriveMissingEvidence(
+  payload: MarketRotationRadarResponse,
+  tiers = deriveRotationTiers(payload),
+  summaryThemes = deriveConclusionScopeThemes(payload, tiers),
+): string[] {
+  const missing = [
+    payload.themes.length === 0 ? '可比较主题/行业/概念样本' : '',
+    tiers.libraryMode ? '多时窗行情快照' : '',
+    tiers.libraryMode ? '成员广度快照' : '',
+    tiers.confirmedLeaders.length === 0 ? '真实流向确认' : '',
+    rotationScoreEligibleCount(payload) === 0 ? '权威来源检查' : '',
+    !hasBreadthEvidence(summaryThemes) || tiers.confirmedLeaders.length === 0 ? '广度确认' : '',
+    payload.isFallback ? '非备用数据' : '',
+    payload.isStale ? '新鲜行情窗口' : '',
+    ...summaryThemes.flatMap((theme) => themeDataGaps(theme).slice(0, 2)).map(formatGapLabel),
+  ];
+  return uniqueReadinessItems(
+    missing,
+    5,
+    tiers.confirmedLeaders.length ? '暂无关键证据缺口，继续复核反证与新鲜度' : '真实流向、广度与多时窗行情待补齐',
+  );
+}
+
+function deriveRotationConclusion(
+  payload: MarketRotationRadarResponse,
+  tiers = deriveRotationTiers(payload),
+): RotationConclusionView {
+  const state = deriveRotationDecisionState(payload, tiers);
+  const summaryThemes = deriveConclusionScopeThemes(payload, tiers);
+  const missingEvidence = deriveMissingEvidence(payload, tiers, summaryThemes);
+  const themeScope = tiers.libraryMode ? '当前主题/行业/概念只有分类映射' : '当前主题/行业/概念';
+
+  if (state === 'ready') {
+    return {
+      state,
+      title: '可判断',
+      detail: '已有真实流向级证据和可计分来源，可形成主题轮动方向的研究判断；仍需持续复核反证、风险与新鲜度。',
+      whyNotConclusion: '当前已具备研究判断所需的核心证据，但页面仍只输出观察结论，不扩展为交易动作。',
+      missingEvidence,
+      nextStep: '继续观察退潮主题、风险标签与数据新鲜度；若反证增加，应降级为仅观察。',
+      variant: 'success',
+    };
+  }
+
+  if (state === 'observe') {
+    return {
+      state,
+      title: '仅观察',
+      detail: '已有候选线索，但缺少真实流向确认或完整广度证据，暂不能判断轮动方向。',
+      whyNotConclusion: `${themeScope}主要依赖相对强弱、动量代理或局部样本，尚不能证明扩散和流向同时成立。`,
+      missingEvidence,
+      nextStep: '在提供方运维页或数据源设置补齐行情、代理覆盖与权威来源检查，或等待新的多时窗与成员广度快照。',
+      variant: 'info',
+    };
+  }
+
+  return {
+    state,
+    title: '当前无法判断轮动方向',
+    detail: '当前证据不足，不能把主题、行业或概念列表解释为轮动方向。',
+    whyNotConclusion: tiers.libraryMode || payload.themes.length === 0
+      ? `${themeScope}，没有可比较的行情时窗、成员广度、真实流向或权威来源确认。`
+      : `${themeScope}缺少足够的新鲜行情、广度扩散和真实流向确认，不能形成方向结论。`,
+    missingEvidence,
+    nextStep: '先补齐对应市场的行情、代理覆盖与权威来源检查；如果数据源暂不可用，就等待新的多时窗快照再复核。',
+    variant: 'danger',
+  };
+}
+
 function rotationGuidance(payload: MarketRotationRadarResponse): {
   title: string;
   detail: string;
-  variant: 'neutral' | 'info' | 'caution' | 'danger';
+  variant: 'neutral' | 'info' | 'caution' | 'danger' | 'success';
 } {
   const tiers = deriveRotationTiers(payload);
+  const conclusion = deriveRotationConclusion(payload, tiers);
 
   if (tiers.libraryMode) {
     return {
-      title: '主题库模式：当前不是实时轮动信号',
-      detail: '当前仅展示主题分类与观察线索，缺少 ETF authority / flow / breadth confirmation。',
+      title: conclusion.title,
+      detail: conclusion.detail,
       variant: 'caution',
     };
   }
 
   if (tiers.confirmedLeaders.length) {
     return {
-      title: '主题轮动可继续观察',
-      detail: '已出现可用证据，但页面仍只提供研究观察，不放大为交易含义。',
-      variant: 'info',
+      title: conclusion.title,
+      detail: conclusion.detail,
+      variant: 'success',
     };
   }
 
   if (tiers.candidateThemes.length) {
     return {
-      title: '暂无真实流向确认，保留候选观察',
-      detail: 'ETF authority 或 score-grade flow 未确认时，代理/动量证据只进入候选观察。',
+      title: conclusion.title,
+      detail: conclusion.detail,
       variant: 'info',
     };
   }
 
   return {
-    title: '当前不能判断主题轮动',
-    detail: '当前仅展示主题分类与观察线索，缺少 ETF authority / flow / breadth confirmation。',
-    variant: 'info',
+    title: conclusion.title,
+    detail: conclusion.detail,
+    variant: 'danger',
   };
 }
 
@@ -787,6 +932,7 @@ function uniqueReadinessItems(items: Array<string | null | undefined>, limit: nu
 
 function buildRotationDecisionReadiness(payload: MarketRotationRadarResponse): DecisionReadinessSummary {
   const tiers = deriveRotationTiers(payload);
+  const conclusion = deriveRotationConclusion(payload, tiers);
   const confirmedCount = tiers.confirmedLeaders.length;
   const candidateCount = tiers.candidateThemes.length;
   const scoreEligibleCount = rotationScoreEligibleCount(payload);
@@ -796,47 +942,52 @@ function buildRotationDecisionReadiness(payload: MarketRotationRadarResponse): D
   const scopeThemes = resolveSummaryThemes(payload.themes || [], payload.summary.strongestThemes || []);
   const primaryThemes = derivePrimaryDisplayThemes(payload, tiers);
   const summaryThemes = primaryThemes.length ? primaryThemes : scopeThemes.length ? scopeThemes : payload.themes || [];
-  const state: DecisionReadinessState = confirmedCount > 0
-    && scoreEligibleCount > 0
-    && !payload.isFallback
-    && !payload.isStale
-    ? 'ready'
-    : tiers.libraryMode || payload.isFallback || payload.isStale || payload.themes.length === 0
-      ? 'unavailable'
-      : candidateCount > 0 || scoreEligibleCount > 0
-        ? 'observe'
-        : 'unavailable';
+  const state = conclusion.state;
   const blockers = [
     confirmedCount === 0 ? '真实流向确认缺失' : '',
-    scoreEligibleCount === 0 ? 'ETF authority 未满足可用条件' : '',
+    scoreEligibleCount === 0 ? '权威来源检查未满足可用条件' : '',
     tiers.libraryMode ? '仅有主题分类' : '',
-    payload.isFallback ? '存在 fallback 载荷' : '',
+    payload.themes.length === 0 ? '缺少可比较主题/行业/概念样本' : '',
+    payload.isFallback ? '存在备用数据载荷' : '',
     payload.isStale ? '存在过期载荷' : '',
-    summarizeGap(summaryThemes),
+    ...conclusion.missingEvidence,
   ];
   const nextEvidence = [
-    scoreEligibleCount === 0 ? 'ETF authority' : '',
-    confirmedCount === 0 ? '真实资金流证据' : '',
-    confirmedCount === 0 ? 'breadth confirmation' : '',
+    scoreEligibleCount === 0 ? '权威来源检查' : '',
+    confirmedCount === 0 ? '真实流向证据' : '',
+    confirmedCount === 0 ? '广度确认' : '',
     ...summaryThemes.flatMap((theme) => themeDataGaps(theme).slice(0, 1)).map(formatGapLabel),
     state === 'ready' ? '继续确认反证与扩散质量' : '',
   ];
 
   return {
     state,
-    stateLabel: decisionReadinessStateLabel(state),
+    stateLabel: state === 'unavailable' ? '当前无法判断轮动方向' : decisionReadinessStateLabel(state),
     stateVariant: decisionReadinessVariant(state),
-    qualityLabel: `证据质量：确认 ${confirmedCount} · 候选 ${candidateCount} · ETF可计分 ${scoreEligibleCount}/${totalEtfEvidence}`,
+    qualityLabel: `证据质量：确认 ${confirmedCount} · 候选 ${candidateCount} · 权威可计分 ${scoreEligibleCount}/${totalEtfEvidence}`,
     blockers: uniqueReadinessItems(blockers, 4, state === 'ready' ? '暂无关键阻塞' : '关键证据仍待补齐'),
-    nextEvidence: uniqueReadinessItems(nextEvidence, 3, '等待新的 score-grade 轮动证据'),
-    conclusion: state === 'ready'
-      ? '当前证据可支持主题轮动方向的研究判断。'
-      : MARKET_DECISION_NOT_READY_NOTICE,
+    nextEvidence: uniqueReadinessItems(nextEvidence, 3, '等待新的评分级轮动证据'),
+    conclusion: conclusion.detail,
   };
 }
 
 function themeNamesSummary(themes: MarketRotationTheme[], fallback: string): string {
   return themes.length ? themes.map((theme) => theme.name).join(' / ') : fallback;
+}
+
+function capitalSummaryCardTag(key: string): string {
+  switch (key) {
+    case 'confirmed':
+      return '主线';
+    case 'candidate':
+      return '候选';
+    case 'cooling':
+      return '反证';
+    case 'taxonomy':
+      return '分类';
+    default:
+      return '观察';
+  }
 }
 
 function deriveCapitalRotationSummary(payload: MarketRotationRadarResponse): CapitalRotationSummaryView {
@@ -847,16 +998,15 @@ function deriveCapitalRotationSummary(payload: MarketRotationRadarResponse): Cap
     coolingThemes,
     taxonomyThemes,
   } = deriveRotationTiers(payload);
-  const modeLabel = libraryMode
-    ? '当前不是实时轮动信号'
-    : confirmedLeaders.length
-      ? '真实流向确认'
-      : '仅候选观察';
-  const modeDetail = libraryMode
-    ? '当前仅展示 taxonomy-only library，不能视为确认资本流向。'
-    : confirmedLeaders.length
-      ? '已出现真实流向级证据，仍保持观察边界。'
-      : '当前主题仅进入候选观察，未确认真实资本流向。';
+  const conclusion = deriveRotationConclusion(payload, {
+    libraryMode,
+    confirmedLeaders,
+    candidateThemes,
+    coolingThemes,
+    taxonomyThemes,
+  });
+  const modeLabel = conclusion.title;
+  const modeDetail = conclusion.whyNotConclusion;
 
   return {
     modeLabel,
@@ -866,28 +1016,28 @@ function deriveCapitalRotationSummary(payload: MarketRotationRadarResponse): Cap
         key: 'confirmed',
         label: '确认主线',
         value: themeNamesSummary(confirmedLeaders, '暂无真实流向确认'),
-        detail: confirmedLeaders.length ? 'Confirmed mainline' : '没有把候选或代理证据升级为确认主线。',
+        detail: confirmedLeaders.length ? '已满足真实流向级确认，仍仅作研究观察。' : '没有把候选或代理证据升级为确认主线。',
         variant: confirmedLeaders.length ? 'success' : 'caution',
       },
       {
         key: 'candidate',
         label: '候选观察',
         value: themeNamesSummary(candidateThemes, '暂无候选主题'),
-        detail: candidateThemes.length ? 'Candidate watchlist，等待 real-flow / breadth confirmation。' : '当前没有可排序候选。',
+        detail: candidateThemes.length ? '候选主题仍在等待真实流向与广度确认。' : '当前没有可排序候选。',
         variant: candidateThemes.length ? 'info' : 'neutral',
       },
       {
         key: 'cooling',
         label: '降温 / 走弱',
         value: themeNamesSummary(coolingThemes, '暂无降温主题'),
-        detail: coolingThemes.length ? 'Cooling or weak themes，继续作为反证观察。' : '未见明显退潮列表。',
+        detail: coolingThemes.length ? '走弱或分歧主题继续作为反证观察。' : '未见明显退潮列表。',
         variant: coolingThemes.length ? 'caution' : 'neutral',
       },
       {
         key: 'taxonomy',
         label: '分类库',
-        value: themeNamesSummary(taxonomyThemes, '暂无 taxonomy-only 条目'),
-        detail: taxonomyThemes.length ? 'Taxonomy-only library，不是确认方向。' : '当前不是主题库模式。',
+        value: themeNamesSummary(taxonomyThemes, '暂无分类库条目'),
+        detail: taxonomyThemes.length ? '仅为主题分类库，不是确认方向。' : '当前不是主题库模式。',
         variant: taxonomyThemes.length ? 'caution' : 'neutral',
       },
     ],
@@ -899,7 +1049,7 @@ const CapitalRotationSummaryPanel: React.FC<{ view: CapitalRotationSummaryView }
     <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-cyan-400/0 via-cyan-200/40 to-sky-400/0" aria-hidden="true" />
     <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0">
-        <p className="text-[10px] font-medium tracking-[0.24em] text-white/38">Capital Rotation Summary</p>
+        <p className="text-[10px] font-medium tracking-[0.24em] text-white/38">轮动结论</p>
         <h2 className="mt-2 text-base font-semibold leading-6 text-white/90 md:text-lg">{view.modeLabel}</h2>
         <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">{view.modeDetail}</p>
       </div>
@@ -910,7 +1060,7 @@ const CapitalRotationSummaryPanel: React.FC<{ view: CapitalRotationSummaryView }
           <div className="flex min-w-0 items-start justify-between gap-2">
             <p className="text-[11px] font-medium text-white/48">{card.label}</p>
             <TerminalChip variant={card.variant} className="px-1.5 py-0.5 text-[10px]">
-              {card.key === 'taxonomy' ? 'library' : card.key}
+              {capitalSummaryCardTag(card.key)}
             </TerminalChip>
           </div>
           <p className="mt-2 break-words text-sm font-semibold leading-5 text-white/84">{card.value}</p>
@@ -953,7 +1103,7 @@ const RotationDecisionReadinessPanel: React.FC<{ summary: DecisionReadinessSumma
       </div>
     </div>
     {summary.state !== 'ready' ? (
-      <ProductSetupPath surface="rotation_radar" testId="rotation-setup-path" />
+      <RotationSetupPath testId="rotation-setup-path" />
     ) : null}
   </TerminalPanel>
 );
@@ -961,6 +1111,7 @@ const RotationDecisionReadinessPanel: React.FC<{ summary: DecisionReadinessSumma
 const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> = ({ payload }) => {
   const guidance = rotationGuidance(payload);
   const tiers = deriveRotationTiers(payload);
+  const conclusion = deriveRotationConclusion(payload, tiers);
   const libraryMode = tiers.libraryMode;
   const scopeThemes = resolveSummaryThemes(payload.themes || [], payload.summary.strongestThemes || []);
   const primaryThemes = derivePrimaryDisplayThemes(payload, tiers);
@@ -969,14 +1120,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
   const topThemeTitle = libraryMode
     ? summaryTitle(payload.summary.strongestThemes, '按主题分类浏览')
     : themeNamesSummary(primaryThemes, '等待真实行情');
-  const upgradeLine = '需要 ETF authority / flow / breadth confirmation 才能升级为实时轮动信号。';
-  const nextWatch = libraryMode
-    ? `优先补齐 ${summarizeGap(summaryThemes)}，再确认 ETF authority、流向与广度是否同时过关。`
-    : payload.summary.watchlistSignals?.length
-      ? `${payload.summary.watchlistSignals[0].themeName} · ${payload.summary.watchlistSignals[0].signalLabel || payload.summary.watchlistSignals[0].label || '观察线索'}`
-      : tiers.candidateThemes.length
-        ? `${tiers.candidateThemes[0].name} · 候选观察，等待真实流向确认`
-        : '继续核对是否有新的实时轮动确认。';
+  const upgradeLine = '需要真实流向确认、权威来源检查、广度确认与多时窗行情同时补齐后，才能升级为轮动方向判断。';
 
   return (
     <TerminalPanel
@@ -1003,13 +1147,9 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
         <div data-testid="rotation-radar-summary-band" data-terminal-primitive="panel" className="contents">
         <div className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
           <p className="text-[11px] font-medium text-white/48">当前状态</p>
-          <p className="mt-2 text-sm font-semibold text-white/82">{libraryMode ? '当前不是实时轮动信号' : tiers.confirmedLeaders.length ? '当前可继续观察主题轮动' : '当前仅候选观察'}</p>
+          <p className="mt-2 text-sm font-semibold text-white/82">{conclusion.title}</p>
           <p className="mt-2 text-[11px] leading-5 text-white/58">
-            {libraryMode
-              ? '主题库不是机会榜，不是实时排名，只保留分类浏览与观察线索。'
-              : tiers.confirmedLeaders.length
-                ? '页面只解释研究证据，不放大为交易含义。'
-                : '代理/动量证据只进入候选观察，不放大为确认主线。'}
+            {conclusion.whyNotConclusion}
           </p>
         </div>
         <div className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
@@ -1020,20 +1160,25 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
           </p>
         </div>
         <div className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
-          <p className="text-[11px] font-medium text-white/48">主要缺口 / 升级条件</p>
-          <p className="mt-2 text-sm font-semibold text-white/82">{summarizeGap(summaryThemes)}</p>
+          <p className="text-[11px] font-medium text-white/48">缺哪些证据 / 升级条件</p>
+          <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+            {conclusion.missingEvidence.map((item) => (
+              <TerminalChip key={item} variant={conclusion.state === 'ready' ? 'neutral' : 'caution'}>{item}</TerminalChip>
+            ))}
+          </div>
           <p className="mt-2 text-[11px] leading-5 text-white/58">{upgradeLine}</p>
         </div>
         </div>
       </div>
 
       <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
-        <p className="text-[11px] font-medium text-white/48">下一步观察</p>
-        <p className="mt-2 text-[11px] leading-5 text-white/60">{nextWatch}</p>
+        <p className="text-[11px] font-medium text-white/48">下一步应配置或等待什么数据</p>
+        <p className="mt-2 text-[11px] leading-5 text-white/60">{conclusion.nextStep}</p>
       </div>
 
       <TerminalDisclosure
-        title="技术细节 / Details"
+        data-testid="rotation-guidance-technical-details"
+        title="技术细节"
         summary="证据分层、主题摘要与升级边界默认折叠"
         className="mt-4 bg-black/10"
       >
@@ -1445,7 +1590,7 @@ const ThemeDetailPanel: React.FC<{
       <div className="px-1 py-3">
         <TerminalDisclosure
           data-testid="rotation-etf-diagnostics-disclosure"
-          title="ETF authority 技术细节"
+          title="ETF 权威来源技术细节"
           summary="默认折叠"
         >
           <EtfLeadershipDiagnosticsPanel diagnostics={diagnostics} />
@@ -1487,9 +1632,9 @@ const ThemeDetailPanel: React.FC<{
       <div className="min-w-0 px-1 py-3">
         {taxonomyOnly || libraryMode ? (
           <TerminalNotice variant="info" className="grid gap-2 px-3 py-3 text-[11px] leading-5">
-            <p>当前不能判断主题轮动，当前不是实时轮动信号。</p>
+            <p>当前无法判断轮动方向，当前不是实时轮动信号。</p>
             <p>当前仅展示主题分类与观察线索，主题库不是机会榜，也不是实时排名。</p>
-            <p>需要 ETF authority / flow / breadth confirmation 才能升级为实时轮动信号。</p>
+            <p>需要真实流向确认、权威来源检查、广度确认与多时窗行情同时补齐后，才能升级为轮动方向判断。</p>
           </TerminalNotice>
         ) : dataWarning ? (
           <TerminalNotice variant="caution" className="text-[11px] leading-5">
@@ -1558,7 +1703,7 @@ const ThemeDetailPanel: React.FC<{
             <TerminalNotice variant="info" className="mt-2 text-[11px] leading-5 text-cyan-50/62">
               {nextWatch?.symbol
                 ? `${nextWatch.symbol} · ${nextWatch.signalLabel || nextWatch.label || '观察信号'} · ${nextWatch.readOnly ? '只读证据' : '待确认'}`
-                : '等待可靠候选补齐，保持只读观察'}
+                : '等待可靠候选补齐，保持研究观察'}
             </TerminalNotice>
             <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
               {theme.riskLabels.length ? theme.riskLabels.map((risk) => <RiskChip key={risk} risk={risk} />) : (
@@ -1736,6 +1881,10 @@ const MarketRotationRadarPage: React.FC = () => {
     () => (payload ? deriveCapitalRotationSummary(payload) : null),
     [payload],
   );
+  const rotationConclusion = useMemo(
+    () => (payload && rotationTiers ? deriveRotationConclusion(payload, rotationTiers) : null),
+    [payload, rotationTiers],
+  );
   const decisionReadinessSummary = useMemo(
     () => (payload ? buildRotationDecisionReadiness(payload) : null),
     [payload],
@@ -1803,9 +1952,9 @@ const MarketRotationRadarPage: React.FC = () => {
                             ? (libraryMode
                               ? `${headlineThemes.length} 个主题分类条目`
                               : rotationTiers?.confirmedLeaders.length
-                                ? `Top ${headlineThemes.length} 真实流向确认`
-                                : `Top ${headlineThemes.length} 候选观察`)
-                            : (libraryMode ? '暂无可展示主题' : '暂无头部排名')}
+                                ? `前 ${headlineThemes.length} 个真实流向确认`
+                                : `前 ${headlineThemes.length} 个候选观察`)
+                            : (rotationConclusion?.title || (libraryMode ? '暂无可展示主题' : '暂无头部排名'))}
                         />
                         <div className="hidden min-w-0 grid-cols-[4.75rem_4.75rem_4.5rem] gap-2 text-right text-[10px] font-semibold uppercase text-white/32 md:grid">
                           <span>相对</span>
@@ -1830,8 +1979,24 @@ const MarketRotationRadarPage: React.FC = () => {
                         </DenseRows>
                       ) : (
                         <div className="p-3">
-                          <TerminalEmptyState className="min-h-[104px] justify-start text-sm text-white/42">
-                            {payload.summary.noHeadlineReason || '没有可用于头部排名'}
+                          <TerminalEmptyState
+                            data-testid="rotation-radar-insufficient-empty"
+                            className="min-h-[104px] items-start justify-start px-3 py-3 text-left text-sm text-white/52"
+                          >
+                            <span className="block font-semibold text-white/82">
+                              {rotationConclusion?.title || '当前无法判断轮动方向'}
+                            </span>
+                            <span className="mt-2 block leading-5">
+                              {rotationConclusion?.whyNotConclusion || payload.summary.noHeadlineReason || '没有可用于头部排名'}
+                            </span>
+                            <span className="mt-3 flex min-w-0 flex-wrap gap-1.5">
+                              {(rotationConclusion?.missingEvidence || ['真实流向、广度与多时窗行情待补齐']).map((item) => (
+                                <TerminalChip key={item} variant="caution">{item}</TerminalChip>
+                              ))}
+                            </span>
+                            <span className="mt-3 block leading-5 text-white/60">
+                              {rotationConclusion?.nextStep || '等待新的多时窗行情和成员广度快照后再复核。'}
+                            </span>
                           </TerminalEmptyState>
                         </div>
                       )}
@@ -1857,7 +2022,9 @@ const MarketRotationRadarPage: React.FC = () => {
                         </DenseRows>
                       ) : (
                         <div className="p-3">
-                          <TerminalEmptyState className="min-h-[72px] justify-start text-sm text-white/42">暂无降温主题。</TerminalEmptyState>
+                          <TerminalEmptyState className="min-h-[72px] justify-start px-3 py-2 text-sm text-white/48">
+                            未形成可比较的退潮或分歧列表；等待更多主题完成同窗对比。
+                          </TerminalEmptyState>
                         </div>
                       )}
                     </aside>
@@ -1918,12 +2085,12 @@ const MarketRotationRadarPage: React.FC = () => {
                   <TerminalChip>{marketLabel(payload.market || selectedMarket)}</TerminalChip>
                   <TerminalChip>{payload.sourceLabel || '待确认'}</TerminalChip>
                   <DataFreshnessBadge freshness={payload.freshness || 'fallback'} className="px-1.5 text-[9px]" />
-                  <TerminalChip>Top-N {headlineThemes.length}/{payload.themes.length}</TerminalChip>
+                  <TerminalChip>头部展示 {headlineThemes.length}/{payload.themes.length}</TerminalChip>
                 </div>
                 <Gauge className="h-4 w-4 text-cyan-200/70" aria-hidden="true" />
                 <span>当前页面优先解释主题轮动、相对强弱与代理证据边界，不自动放大为真实资金流结论。</span>
                 <Signal className="ml-2 h-4 w-4 text-emerald-200/70" aria-hidden="true" />
-                <span>不代表实时方向建议，不触发交易、通知、组合或新的外部数据请求。</span>
+                <span>不代表实时方向结论，不触发交易、通知、组合或新的外部数据请求。</span>
                 <Waves className="ml-2 h-4 w-4 text-white/40" aria-hidden="true" />
                 <span>{conservativeFlowCopy(payload.noAdviceDisclosure, shouldAllowMoneyFlowLanguage(selectedTheme))}</span>
               </div>
