@@ -306,6 +306,7 @@ def test_polygon_grouped_daily_is_authorized_vendor_feed_not_official_exchange_b
 def test_scanner_local_sources_keep_specific_cache_labels() -> None:
     expected = {
         "local_universe_cache": ("cache_snapshot", "本地候选缓存"),
+        "local_us_parquet": ("cache_snapshot", "本地 Parquet 历史"),
         "local_us_parquet_dir": ("cache_snapshot", "本地 Parquet 历史"),
         "local_db": ("cache_snapshot", "本地数据库历史"),
         "local_db_us_history": ("cache_snapshot", "本地数据库历史"),
@@ -315,6 +316,33 @@ def test_scanner_local_sources_keep_specific_cache_labels() -> None:
     for source, (source_type, source_label) in expected.items():
         assert resolve_source_type(source=source) == source_type
         assert resolve_source_label(source=source, source_type=source_type) == source_label
+
+
+def test_local_us_parquet_alias_projects_as_cache_snapshot_not_live_or_provider_evidence() -> None:
+    provenance = project_source_provenance(
+        source="local_us_parquet",
+        freshness="live",
+    )
+    directory_provenance = project_source_provenance(
+        source="local_us_parquet_dir",
+        freshness="cached",
+    )
+
+    assert provenance["sourceType"] == "cache_snapshot"
+    assert provenance["sourceLabel"] == "本地 Parquet 历史"
+    assert provenance["freshnessLabel"] == "缓存快照"
+    assert provenance["sourceType"] not in {
+        "exchange_public",
+        "official_public",
+        "public_proxy",
+        "unofficial_proxy",
+        "fallback_static",
+        "synthetic_fixture",
+        "authorized_licensed_feed",
+    }
+    assert directory_provenance["sourceType"] == "cache_snapshot"
+    assert directory_provenance["sourceLabel"] == "本地 Parquet 历史"
+    assert directory_provenance["freshnessLabel"] == "缓存快照"
 
 
 def test_scanner_seed_and_degraded_sources_keep_fallback_labels() -> None:
