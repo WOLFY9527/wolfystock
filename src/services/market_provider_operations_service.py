@@ -15,7 +15,7 @@ from typing import Any, ClassVar, Dict, Iterable, List, Optional, Tuple
 from src.config import get_config
 from src.services.execution_log_service import ExecutionLogService
 from src.services.market_cache import MARKET_CACHE_TTLS, MarketCache, market_cache
-from src.services.market_overview_service import SOURCE_LABELS
+from src.services.market_data_source_registry import resolve_source_label
 from src.services.system_config_provider_projection import project_tickflow_entitlement_health
 from src.storage import DatabaseManager
 from src.utils.security import sanitize_message
@@ -38,6 +38,33 @@ SECRET_ASSIGNMENT_RE = re.compile(rf"\b({SENSITIVE_FIELD_PATTERN})\b\s*[:=]\s*[^
 SECRET_WORD_RE = re.compile(rf"({SENSITIVE_FIELD_PATTERN})", re.IGNORECASE)
 SUMMARY_CACHE_TTL_SECONDS = 10.0
 SUMMARY_CACHE_VERSION = "GET:/api/v1/admin/market-providers/operations:v1"
+PROVIDER_OPS_REGISTRY_LABEL_SOURCES = frozenset(
+    {
+        "eastmoney",
+        "sina",
+        "tickflow",
+        "yahoo",
+        "yfinance",
+        "yfinance_proxy",
+        "binance",
+        "binance_ws",
+        "alternative",
+        "alternative_me",
+        "cnn",
+        "cached",
+        "fallback",
+        "mock",
+        "polygon_us_grouped_daily",
+        "unavailable",
+    }
+)
+PROVIDER_OPS_LEGACY_LABEL_OVERRIDES = {
+    "fred": "FRED",
+    "treasury": "US Treasury",
+    "computed": "系统计算",
+    "mixed": "多来源",
+    "public": "公开数据",
+}
 
 
 @dataclass(frozen=True)
@@ -294,7 +321,7 @@ class MarketProviderOperationsService:
         last_successful_time = self._parse_time(last_successful or as_of or updated_at)
         return {
             "provider": source,
-            "sourceLabel": self._safe_public_text(payload.get("sourceLabel") or SOURCE_LABELS.get(source.lower())),
+            "sourceLabel": self._provider_source_label(source, payload.get("sourceLabel")),
             "sourceType": self._safe_public_text(payload.get("sourceType")),
             "domain": panel.domain,
             "endpoint": panel.endpoint,
@@ -511,6 +538,27 @@ class MarketProviderOperationsService:
         if SECRET_WORD_RE.search(text):
             text = SECRET_WORD_RE.sub("***", text)
         return text[:500]
+
+    @staticmethod
+    def _provider_source_label(source: Any, source_label: Any = None) -> Optional[str]:
+        explicit_label = MarketProviderOperationsService._safe_public_text(source_label)
+        if explicit_label:
+            return explicit_label
+
+        normalized_source = str(source or "").strip().lower()
+        if not normalized_source:
+            return None
+        if (
+            normalized_source not in PROVIDER_OPS_REGISTRY_LABEL_SOURCES
+            and normalized_source not in PROVIDER_OPS_LEGACY_LABEL_OVERRIDES
+        ):
+            return None
+        return MarketProviderOperationsService._safe_public_text(
+            resolve_source_label(
+                normalized_source,
+                source_label=PROVIDER_OPS_LEGACY_LABEL_OVERRIDES.get(normalized_source),
+            )
+        )
 
     @staticmethod
     def _safe_error(value: Any) -> Optional[str]:
