@@ -106,7 +106,7 @@ export const MarketRegimeSynthesisHeader: React.FC<{ view: MarketRegimeSynthesis
             data-testid="market-regime-synthesis-disclaimer"
             className="mt-3 text-[11px] leading-5 text-white/34"
           >
-            非投资建议
+            不构成交易指令
           </p>
         ) : null}
       </div>

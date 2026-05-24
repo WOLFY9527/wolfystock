@@ -227,7 +227,7 @@ const MarketDirectionReadinessStrip: React.FC<{
         </div>
       ) : null}
       {view.notInvestmentAdvice ? (
-        <p className="mt-2 text-[10px] font-semibold text-white/34">非投资建议</p>
+        <p className="mt-2 text-[10px] font-semibold text-white/34">不构成交易指令</p>
       ) : null}
     </div>
   );
