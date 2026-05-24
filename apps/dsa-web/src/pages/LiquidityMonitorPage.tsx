@@ -17,7 +17,6 @@ import {
   type LiquidityImpulseHeaderEvidenceView,
   type LiquidityImpulseSynthesisHeaderView,
 } from '../components/liquidity-monitor/LiquidityImpulseSynthesisHeader';
-import { ProductSetupPath } from '../components/market-intelligence/ProductSetupPath';
 import {
   TerminalChip,
   TerminalDenseTable,
@@ -34,6 +33,7 @@ import { OfficialMacroAuthorityDiagnostics } from '../components/common/Official
 import { buildOfficialMacroAuthorityDiagnosticsView } from '../components/common/officialMacroAuthorityDiagnosticsData';
 import { formatDateTime, formatPercent, formatSignedNumber } from '../utils/format';
 import { cn } from '../utils/cn';
+import { buildDataSourcesSetupHref, buildProviderOpsSetupHref } from '../utils/productSetupSurface';
 import {
   MARKET_DECISION_NOT_READY_NOTICE,
   buildLiquidityRegimeGaugeSummary,
@@ -75,7 +75,26 @@ const FRESHNESS_LABELS: Record<LiquidityMonitorFreshness, string> = {
 };
 
 const INDICATOR_LABEL_OVERRIDES: Record<string, string> = {
+  credit_spread: '信用利差',
   crypto_funding: 'Crypto 资金费率',
+  us_breadth_proxy: '美国市场广度',
+  us_rates_pressure: '美国利率压力',
+  usd_pressure: '美元压力',
+  vix_pressure: '波动率压力',
+};
+
+const EVIDENCE_ITEM_LABEL_OVERRIDES: Record<string, string> = {
+  'liquidity_monitor:btc': 'BTC 流动性代理',
+  'liquidity_monitor:btc_momentum': 'BTC 动量',
+  'liquidity_monitor:cn_hk_flows': '中港资金流',
+  'liquidity_monitor:funding': '资金费率',
+  'liquidity_monitor:usd_pressure': '美元压力',
+  'liquidity_monitor:us_rates_pressure': '美国利率压力',
+  'BTC': 'BTC 动量',
+  'CN/HK Flows': '中港资金流',
+  'Funding': '资金费率',
+  'US Rates / 利率压力': '美国利率压力',
+  'USD / 美元压力': '美元压力',
 };
 
 function statusLabel(status: LiquidityMonitorIndicator['status']): string {
@@ -124,6 +143,15 @@ function detailReason(indicator: LiquidityMonitorIndicator): string {
 
 function displayLabel(indicator: LiquidityMonitorIndicator): string {
   return INDICATOR_LABEL_OVERRIDES[indicator.key] || indicator.label;
+}
+
+function evidenceProductLabel(item: LiquidityImpulseSynthesisEvidenceItem): string {
+  const rawLabel = item.label || '';
+  return EVIDENCE_ITEM_LABEL_OVERRIDES[item.key]
+    || EVIDENCE_ITEM_LABEL_OVERRIDES[rawLabel]
+    || rawLabel
+    || pillarLabel(item.pillar)
+    || titleCaseFromSnake(item.key);
 }
 
 const IMPULSE_LABELS: Record<string, string> = {
@@ -301,7 +329,7 @@ function evidenceReasonLabel(value?: string | null): string | null {
 }
 
 function evidenceItemDisplayLabel(item: LiquidityImpulseSynthesisEvidenceItem): string {
-  return item.label || pillarLabel(item.pillar) || titleCaseFromSnake(item.key);
+  return evidenceProductLabel(item);
 }
 
 function buildEvidenceMeta(
@@ -353,7 +381,7 @@ function buildLiquidityImpulseSynthesisView(
     return {
       state: 'missing',
       title: '流动性方向待返回',
-      summary: '当前流动性监测载荷未返回 liquidityImpulseSynthesis，不推断扩张或收缩。',
+      summary: '当前流动性脉冲摘要未返回，不推断扩张或收缩。',
       stateChipLabel: '载荷缺失',
       stateChipVariant: 'neutral',
       confidenceLabel: '未返回',
@@ -401,10 +429,11 @@ function buildLiquidityImpulseSynthesisView(
     scoringPillarCount != null ? `支柱 ${scoringPillarCount}` : '',
     discountedEvidenceCount != null ? `折价 ${discountedEvidenceCount}` : '',
     `缺口 ${dataGapCount}`,
-    proxyOnlyDecision ? 'proxy-only' : '',
+    proxyOnlyDecision ? '仅代理' : '',
   ].filter(Boolean).join(' · ');
   const contradictionCount = Math.min(synthesis.counterEvidence.length, 3);
   const gapCount = Math.min(dataGapCount, 3);
+  const impulseLabel = impulseCodeLabel(synthesis.liquidityImpulse);
 
   return {
     state: promotable ? 'ready' : 'insufficient',
@@ -414,22 +443,21 @@ function buildLiquidityImpulseSynthesisView(
         ? '流动性方向数据不足'
         : '流动性方向待确认',
     summary: promotable
-      ? (synthesis.narrativeBullets[0]
-        || `主驱动 ${Math.min(synthesis.dominantDrivers.length, 3)} 项 · 反证 ${contradictionCount} 项 · 缺口 ${gapCount} 项`)
+      ? `${impulseLabel}：主驱动 ${Math.min(synthesis.dominantDrivers.length, 3)} 项，反证 ${contradictionCount} 项，缺口 ${gapCount} 项。`
       : proxyOnlyDecision
-        ? `后端返回“${synthesis.impulseLabel}”，但当前可计分证据为 proxy-only，前端不升级为真实扩张或收缩结论。`
+        ? `返回方向为“${impulseLabel}”，但当前可计分证据仅来自代理或观察项，不升级为真实扩张或收缩结论。`
         : synthesis.liquidityImpulse === 'data_insufficient'
-          ? (synthesis.narrativeBullets[0] || '当前可用证据不足，只展示缺口与残余信号。')
-          : `后端返回“${synthesis.impulseLabel}”，但当前置信度不足，只展示支持证据、反证与数据缺口。`,
+          ? '当前可用证据不足，只展示缺口与残余信号。'
+          : `返回方向为“${impulseLabel}”，但当前置信度不足，只展示支持证据、反证与数据缺口。`,
     stateChipLabel: promotable
       ? '主结论'
       : synthesis.liquidityImpulse === 'data_insufficient'
         ? '数据不足'
         : proxyOnlyDecision
-          ? 'Proxy-only'
+          ? '代理证据'
           : '低置信度',
     stateChipVariant: promotable ? 'success' : 'caution',
-    impulseLabel: synthesis.impulseLabel,
+    impulseLabel,
     subtypeLabel: subtypeLabel(synthesis.subtype),
     confidenceLabel: synthesisConfidenceLabel(synthesis.confidenceLabel, synthesis.confidence),
     confidenceValueText: formatPercent(synthesis.confidence, { mode: 'ratio' }),
@@ -817,14 +845,14 @@ function buildLiquidityDecisionReadiness(
       : 'unavailable';
   const missingIndicators = topIndicatorNames(indicators, isMissingOrUnavailableIndicator, 3);
   const synthesisGaps = data.liquidityImpulseSynthesis?.dataGaps.map((item) => evidenceItemDisplayLabel(item)) || [];
-  const proxyOnly = synthesisView.state !== 'ready' && /proxy/i.test(synthesisView.stateChipLabel);
+  const proxyOnly = synthesisView.state !== 'ready' && synthesisView.stateChipLabel === '代理证据';
   const blockers = [
     ...coverageSummary.blockingReasons,
-    proxyOnly ? 'Proxy-only 证据不能升级方向' : '',
+    proxyOnly ? '代理证据不能升级方向' : '',
     synthesisView.state === 'missing' ? '流动性脉冲载荷缺失' : '',
     data.score.regime === 'unavailable' ? '流动性分数不可用' : '',
     data.freshness.weakestIndicatorFreshness === 'fallback' || data.freshness.weakestIndicatorFreshness === 'stale'
-      ? '存在 fallback/stale 负担'
+      ? '存在备用或过期负担'
       : '',
   ];
   const nextEvidence = [
@@ -846,25 +874,230 @@ function buildLiquidityDecisionReadiness(
   };
 }
 
+type LiquidityBiasSummary = {
+  label: '偏宽松' | '偏收紧' | '中性观察' | '仅观察' | '不可判断';
+  variant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+  toneClassName: string;
+  detail: string;
+};
+
+function buildLiquidityBiasSummary(
+  data: LiquidityMonitorResponse,
+  readinessSummary: DecisionReadinessSummary,
+  synthesisView: LiquidityImpulseSynthesisHeaderView,
+): LiquidityBiasSummary {
+  if (readinessSummary.state === 'unavailable' || data.score.regime === 'unavailable') {
+    return {
+      label: '不可判断',
+      variant: 'danger',
+      toneClassName: 'text-rose-200',
+      detail: '没有足够评分级证据支撑方向，不能判断偏宽松或偏收紧。',
+    };
+  }
+
+  if (readinessSummary.state === 'observe' || synthesisView.state !== 'ready') {
+    return {
+      label: '仅观察',
+      variant: 'info',
+      toneClassName: 'text-cyan-100',
+      detail: '已有部分线索，但仍受来源、时效或覆盖缺口限制。',
+    };
+  }
+
+  const impulse = data.liquidityImpulseSynthesis?.liquidityImpulse;
+  if (impulse === 'expanding_liquidity') {
+    return {
+      label: '偏宽松',
+      variant: 'success',
+      toneClassName: 'text-emerald-200',
+      detail: '评分级证据支持流动性背景偏宽松，仍只作为研究背景。',
+    };
+  }
+  if (impulse === 'contracting_liquidity') {
+    return {
+      label: '偏收紧',
+      variant: 'caution',
+      toneClassName: 'text-amber-200',
+      detail: '评分级证据显示流动性压力更强，继续观察反证是否改善。',
+    };
+  }
+  if (impulse !== 'balanced_liquidity' && (data.score.regime === 'abundant' || data.score.regime === 'supportive')) {
+    return {
+      label: '偏宽松',
+      variant: 'success',
+      toneClassName: 'text-emerald-200',
+      detail: '评分级证据支持流动性背景偏宽松，仍只作为研究背景。',
+    };
+  }
+  if (impulse !== 'balanced_liquidity' && (data.score.regime === 'tight' || data.score.regime === 'stress')) {
+    return {
+      label: '偏收紧',
+      variant: 'caution',
+      toneClassName: 'text-amber-200',
+      detail: '评分级证据显示流动性压力更强，继续观察反证是否改善。',
+    };
+  }
+
+  return {
+    label: '中性观察',
+    variant: 'neutral',
+    toneClassName: 'text-white/78',
+    detail: '扩张与收缩证据未形成单边方向，仅作为观察背景。',
+  };
+}
+
+function buildLiquidityMainGapLine(
+  readinessSummary: DecisionReadinessSummary,
+  coverageSummary: LiquidityCoverageReadinessSummary,
+  missing: LiquidityIndicatorBucketSummary,
+): string {
+  const blockers = readinessSummary.blockers.filter((item) => item !== '暂无关键阻塞');
+  if (blockers.length > 0) {
+    return blockers.slice(0, 3).join('；');
+  }
+  if (coverageSummary.blockingReasons.length > 0) {
+    return coverageSummary.blockingReasons.slice(0, 3).join('；');
+  }
+  if (missing.count > 0) {
+    return missing.namesLine;
+  }
+  return readinessSummary.state === 'ready'
+    ? '暂无关键阻塞，继续确认新增反证是否进入评分级。'
+    : '关键来源仍待补齐。';
+}
+
+const LiquiditySetupPath: React.FC<{ testId: string }> = ({ testId }) => (
+  <div
+    data-testid={testId}
+    className="mt-4 rounded-lg border border-cyan-200/12 bg-cyan-300/[0.035] px-3 py-3"
+  >
+    <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold text-cyan-100/82">补齐阻塞判断的数据源</p>
+        <p className="mt-1 max-w-3xl text-[11px] leading-5 text-white/52">
+          优先核对提供方覆盖、授权来源、缓存时效和缺失输入；是否进入计分仍由现有来源门槛决定。
+        </p>
+      </div>
+      <div className="flex shrink-0 flex-wrap gap-2">
+        <a
+          className="inline-flex min-h-8 items-center rounded-md border border-white/[0.08] bg-white/[0.035] px-2.5 py-1 text-[11px] font-semibold text-white/72 transition-colors hover:border-cyan-200/25 hover:bg-white/[0.06] hover:text-white"
+          href={buildProviderOpsSetupHref('liquidity_monitor')}
+        >
+          查看提供方覆盖
+        </a>
+        <a
+          className="inline-flex min-h-8 items-center rounded-md border border-white/[0.08] bg-white/[0.035] px-2.5 py-1 text-[11px] font-semibold text-white/72 transition-colors hover:border-cyan-200/25 hover:bg-white/[0.06] hover:text-white"
+          href={buildDataSourcesSetupHref('liquidity_monitor')}
+        >
+          前往数据源设置
+        </a>
+      </div>
+    </div>
+  </div>
+);
+
 const DecisionReadinessBand: React.FC<{
   summary: DecisionReadinessSummary;
-}> = ({ summary }) => (
+  coverageSummary: LiquidityCoverageReadinessSummary;
+  regimeGauge: LiquidityRegimeGaugeSummary;
+  scoring: LiquidityIndicatorBucketSummary;
+  observation: LiquidityIndicatorBucketSummary;
+  missing: LiquidityIndicatorBucketSummary;
+  nextWatch: string;
+  data: LiquidityMonitorResponse;
+  synthesisView: LiquidityImpulseSynthesisHeaderView;
+}> = ({ summary, coverageSummary, regimeGauge, scoring, observation, missing, nextWatch, data, synthesisView }) => {
+  const bias = buildLiquidityBiasSummary(data, summary, synthesisView);
+  const mainGapLine = buildLiquidityMainGapLine(summary, coverageSummary, missing);
+  const evidenceColumns = [
+    { key: 'scoring', label: '哪些证据在计分', count: scoring.count, detail: scoring.namesLine, tone: 'text-emerald-200' },
+    { key: 'observation', label: '哪些只观察', count: observation.count, detail: observation.namesLine, tone: 'text-cyan-100' },
+    { key: 'missing', label: '阻塞/缺失证据', count: missing.count, detail: missing.namesLine, tone: 'text-amber-200' },
+  ];
+
+  return (
   <section
     data-testid="liquidity-decision-readiness"
     className="min-w-0 border-b border-white/[0.06] pb-4"
   >
-    <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-      <div className="min-w-0">
-        <p className="text-[11px] font-semibold text-white/45">判断可用性</p>
-        <h2 className="mt-1 text-base font-semibold leading-6 text-white/92 md:text-lg">{summary.stateLabel}</h2>
-        <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">{summary.conclusion}</p>
+    <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1.15fr)]">
+      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-4 py-4">
+        <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold text-white/45">流动性判断摘要</p>
+            <h2 className="mt-1 text-lg font-semibold leading-7 text-white/92 md:text-xl">
+              能否判断：{summary.stateLabel}
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">{summary.conclusion}</p>
+            <p
+              className="mt-2 text-xs leading-5 text-white/52"
+              data-testid="liquidity-monitor-coverage-summary"
+            >
+              {coverageSummary.summaryLine}
+            </p>
+          </div>
+          <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
+            <TerminalChip variant={summary.stateVariant}>{summary.stateLabel}</TerminalChip>
+            <TerminalChip variant={bias.variant}>{bias.label}</TerminalChip>
+            <TerminalChip variant="neutral">{FRESHNESS_LABELS[data.freshness.status]}</TerminalChip>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+            <p className="text-[11px] font-medium text-white/48">当前方向</p>
+            <p className={cn('mt-2 text-sm font-semibold', bias.toneClassName)}>{bias.label}</p>
+            <p className="mt-1 text-[11px] leading-5 text-white/56">{bias.detail}</p>
+          </div>
+          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+            <p className="text-[11px] font-medium text-white/48">主要缺口</p>
+            <p className="mt-2 text-[11px] leading-5 text-white/60">{mainGapLine}</p>
+          </div>
+          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+            <p className="text-[11px] font-medium text-white/48">下一步观察</p>
+            <p className="mt-2 text-[11px] leading-5 text-white/60">{nextWatch}</p>
+          </div>
+        </div>
       </div>
-      <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
-        <TerminalChip variant={summary.stateVariant}>{summary.stateLabel}</TerminalChip>
-        <TerminalChip variant="neutral">{summary.qualityLabel}</TerminalChip>
+
+      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-4 py-4">
+        <div className="mb-3 min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
+          <p className="text-[11px] font-medium text-white/48">证据质量</p>
+          <p className="mt-1 text-[11px] leading-5 text-white/62">{summary.qualityLabel}</p>
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          {evidenceColumns.map((column) => (
+            <div key={column.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+              <p className="text-[11px] font-medium text-white/48">{column.label}</p>
+              <p className={cn('mt-2 font-mono text-2xl font-semibold', column.tone)}>{column.count}</p>
+              <p className="mt-2 text-[11px] leading-5 text-white/58">{column.detail}</p>
+            </div>
+          ))}
+        </div>
+
+        <section data-testid="liquidity-regime-gauge" className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+          <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium text-white/48">流动性刻度</p>
+              <p className="mt-1 text-sm font-semibold text-white/84">{regimeGauge.stateLabel}</p>
+            </div>
+            <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
+              <TerminalChip variant={regimeGauge.stateVariant}>{regimeGauge.degreeLabel}</TerminalChip>
+              <TerminalChip variant="neutral">{regimeGauge.trendLabel}</TerminalChip>
+              <TerminalChip variant="info">{regimeGauge.usableEvidenceLabel}</TerminalChip>
+              <TerminalChip variant="caution">{regimeGauge.blockedEvidenceLabel}</TerminalChip>
+            </div>
+          </div>
+          <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
+            {regimeGauge.implicationLines.map((line) => (
+              <TerminalChip key={line} variant={regimeGauge.stateVariant}>{line}</TerminalChip>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
-    <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
+
+    <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
       <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
         <p className="text-[11px] font-medium text-white/48">阻塞项</p>
         <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
@@ -883,10 +1116,11 @@ const DecisionReadinessBand: React.FC<{
       </div>
     </div>
     {summary.state !== 'ready' ? (
-      <ProductSetupPath surface="liquidity_monitor" testId="liquidity-setup-path" />
+      <LiquiditySetupPath testId="liquidity-setup-path" />
     ) : null}
   </section>
-);
+  );
+};
 
 const LiquidityGuidancePanel: React.FC<{
   coverageSummary: LiquidityCoverageReadinessSummary;
@@ -919,88 +1153,21 @@ const LiquidityGuidancePanel: React.FC<{
   return (
     <TerminalPanel data-testid="liquidity-monitor-guidance-panel" className="relative overflow-hidden">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-cyan-300/0 via-cyan-200/40 to-sky-300/0" aria-hidden="true" />
-      <DecisionReadinessBand summary={readinessSummary} />
-      <section data-testid="liquidity-regime-gauge" className="min-w-0 border-b border-white/[0.06] py-4">
-        <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <p className="text-[10px] font-medium tracking-[0.24em] text-white/38">{regimeGauge.title}</p>
-            <h2 className="mt-2 text-base font-semibold leading-6 text-white/90 md:text-lg">{regimeGauge.stateLabel}</h2>
-          </div>
-          <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
-            <TerminalChip variant={regimeGauge.stateVariant}>{regimeGauge.degreeLabel}</TerminalChip>
-            <TerminalChip variant="neutral">{regimeGauge.trendLabel}</TerminalChip>
-          </div>
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1.15fr_1fr_1fr]">
-          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
-            <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
-              <div
-                className={cn(
-                  'h-full rounded-full',
-                  regimeGauge.stateVariant === 'success'
-                    ? 'bg-emerald-300/70'
-                    : regimeGauge.stateVariant === 'danger'
-                      ? 'bg-rose-300/70'
-                      : regimeGauge.stateVariant === 'caution'
-                        ? 'bg-amber-300/70'
-                        : 'bg-cyan-200/70',
-                )}
-                style={{ width: `${Math.max(0, Math.min(100, Number(regimeGauge.degreeLabel.match(/\d+/)?.[0] || 0)))}%` }}
-                aria-hidden="true"
-              />
-            </div>
-            <p className="mt-2 text-[11px] leading-5 text-white/58">{regimeGauge.degreeLabel}</p>
-          </div>
-          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
-            <p className="text-[11px] font-medium text-white/48">证据覆盖</p>
-            <p className="mt-2 text-sm font-semibold text-white/84">{regimeGauge.usableEvidenceLabel}</p>
-            <p className="mt-1 text-sm font-semibold text-amber-200">{regimeGauge.blockedEvidenceLabel}</p>
-          </div>
-          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
-            <p className="text-[11px] font-medium text-white/48">使用边界</p>
-            <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
-              {regimeGauge.implicationLines.map((line) => (
-                <TerminalChip key={line} variant={regimeGauge.stateVariant}>{line}</TerminalChip>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-      <TerminalSectionHeader
-        eyebrow="流动性判断摘要"
-        title={`流动性方向：${coverageSummary.directionLabel}`}
-        action={<TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.stateLabel}</TerminalChip>}
+      <DecisionReadinessBand
+        summary={readinessSummary}
+        coverageSummary={coverageSummary}
+        regimeGauge={regimeGauge}
+        scoring={scoring}
+        observation={observation}
+        missing={missing}
+        nextWatch={nextWatch}
+        data={data}
+        synthesisView={synthesisView}
       />
-      <p className="mt-3 text-sm font-medium text-white/84">{coverageSummary.directionExplanation}</p>
-      <p
-        className="mt-1 text-xs leading-5 text-white/52"
-        data-testid="liquidity-monitor-coverage-summary"
-      >
-        {coverageSummary.summaryLine}
-      </p>
-
-      <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-3">
-        {[
-          { key: 'scoring', label: '可计分证据', summary: scoring, tone: 'text-emerald-200' },
-          { key: 'observation', label: '观察证据', summary: observation, tone: 'text-cyan-100' },
-          { key: 'missing', label: '缺失证据', summary: missing, tone: 'text-amber-200' },
-        ].map((column) => (
-          <div key={column.key} className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
-            <p className="text-[11px] font-medium text-white/48">{column.label}</p>
-            <p className={cn('mt-2 font-mono text-2xl font-semibold', column.tone)}>{column.summary.count}</p>
-            <p className="mt-2 text-[11px] leading-5 text-white/58">{column.summary.namesLine}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
-        <p className="text-[11px] font-medium text-white/48">下一步观察</p>
-        <p className="mt-2 text-[11px] leading-5 text-white/60">{nextWatch}</p>
-      </div>
 
       <TerminalDisclosure
         data-testid="liquidity-monitor-indicator-disclosure"
-        title="技术细节 / Details"
+        title="技术证据与来源边界"
         summary="流动性脉冲、完整指标矩阵、来源覆盖与运行边界默认折叠"
         className="mt-4 bg-black/10"
       >

@@ -90,7 +90,7 @@ export const LiquidityImpulseSynthesisHeader: React.FC<{
               variant="neutral"
               className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest"
             >
-              <span className="text-white/36">Subtype</span>
+              <span className="text-white/36">子类型</span>
               <span className="max-w-[220px] truncate font-mono normal-case tracking-normal">
                 {view.subtypeLabel}
               </span>
@@ -113,7 +113,7 @@ export const LiquidityImpulseSynthesisHeader: React.FC<{
               variant="neutral"
               className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest"
             >
-              <span className="text-white/36">Direction</span>
+              <span className="text-white/36">方向分</span>
               <span className="font-mono normal-case tracking-normal">
                 {view.directionScoreText}
               </span>
