@@ -596,6 +596,13 @@ describe('MarketProviderOperationsPage', () => {
     expect(topSummary).not.toHaveTextContent('official_public.fed_liquidity');
     expect(topSummary).not.toHaveTextContent('missing_provider_configuration');
     expect(topSummary).not.toHaveTextContent('TUSHARE_TOKEN');
+    const pageRoot = screen.getByTestId('market-provider-operations-page');
+    expect(pageRoot).not.toHaveTextContent('Provider Setup Checklist');
+    expect(pageRoot).not.toHaveTextContent('Why it matters');
+    expect(pageRoot).not.toHaveTextContent('Safe next step');
+    expect(pageRoot).not.toHaveTextContent('setup items');
+    expect(pageRoot).not.toHaveTextContent('Provider Ops / system diagnostics');
+    expect(pageRoot).not.toHaveTextContent('provider runtime');
     expect(screen.getByText('本地行情就绪诊断')).toBeInTheDocument();
     expect(screen.getByText('只读诊断')).toBeInTheDocument();
     expect(screen.getByText('运行时调用')).toBeInTheDocument();
@@ -655,7 +662,12 @@ describe('MarketProviderOperationsPage', () => {
 
     const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
     expect(matrixDisclosure).not.toHaveAttribute('open');
-    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 完整 provider matrix' }));
+    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 完整数据源矩阵' }));
+    expect(matrixDisclosure).toHaveTextContent('数据源');
+    expect(matrixDisclosure).toHaveTextContent('来源');
+    expect(matrixDisclosure).toHaveTextContent('就绪状态');
+    expect(matrixDisclosure).toHaveTextContent('门槛');
+    expect(matrixDisclosure).toHaveTextContent('原因代码');
     expect(matrixDisclosure).toHaveTextContent('official_public.fed_liquidity');
     expect(matrixDisclosure).toHaveTextContent('missing_provider_configuration');
     expect(matrixDisclosure).toHaveTextContent('cache_required');
@@ -674,7 +686,7 @@ describe('MarketProviderOperationsPage', () => {
 
     expect(await screen.findByText('数据源配置清单')).toBeInTheDocument();
     const checklist = screen.getByTestId('market-provider-setup-checklist');
-    expect(checklist).toHaveTextContent('只读展示现有 provider 缺口会影响哪些产品面');
+    expect(checklist).toHaveTextContent('只读展示现有数据源缺口会影响哪些产品面');
     expect(checklist).toHaveTextContent('Market Overview');
     expect(checklist).toHaveTextContent('Liquidity Monitor');
     expect(checklist).toHaveTextContent('Rotation Radar');
@@ -682,7 +694,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklist).toHaveTextContent('Portfolio');
     expect(checklist).toHaveTextContent('Watchlist');
     expect(checklist).toHaveTextContent('Options Lab');
-    expect(checklist).toHaveTextContent('Provider Ops / system diagnostics');
+    expect(checklist).toHaveTextContent('数据源运维 / 系统诊断');
     expect(checklist).toHaveTextContent('需要凭据');
     expect(checklist).toHaveTextContent('可能需付费');
     expect(checklist).toHaveTextContent('需要缓存');
@@ -691,12 +703,12 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklist).toHaveTextContent('聚合证据');
     expect(checklist).toHaveTextContent('仅观察');
     expect(checklist).toHaveTextContent('评分阻断');
-    expect(checklist).toHaveTextContent('缺少 provider');
+    expect(checklist).toHaveTextContent('缺少数据源配置');
     expect(checklist).toHaveTextContent('沿现有 Tushare 凭据配置路径处理，并继续避免在本页显示密钥值。');
     expect(checklist).toHaveTextContent('保持 Polygon grouped-daily 宽度走已批准的凭据与缓存路径');
     expect(checklist).toHaveTextContent('同步已批准的本地美股 parquet/cache 覆盖');
     expect(checklist).toHaveTextContent('刷新已批准的官方公开 money-market 缓存快照');
-    expect(checklist).toHaveTextContent('刷新 CN/HK connect 缓存快照，让 Rotation Radar 背景可用且不新增 live provider 调用。');
+    expect(checklist).toHaveTextContent('刷新 CN/HK connect 缓存快照，让 Rotation Radar 背景可用且不新增实时数据源调用。');
     expect(checklist).toHaveTextContent('补齐既有 Fed liquidity 聚合证据缓存');
     expect(checklist).toHaveTextContent('完成现有授权 feed 配置后，再返回本页确认期货确认链路是否通过。');
     expect(checklist).not.toHaveTextContent('polygon_high_low_history_unavailable');
@@ -717,6 +729,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklist).not.toHaveTextContent('aggregate-supported');
     expect(checklist).not.toHaveTextContent('official-public cache-only');
     expect(checklist).not.toHaveTextContent('missing provider');
+    expect(checklist).not.toHaveTextContent('Provider Ops / system diagnostics');
     expect(checklist).not.toHaveTextContent('observation-only');
     expect(checklist).not.toHaveTextContent('score-blocked');
 
@@ -725,12 +738,16 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklistText.indexOf('Watchlist')).toBeLessThan(checklistText.indexOf('Options Lab'));
 
     const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
-    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 完整 provider matrix' }));
+    expect(matrixDisclosure).toHaveTextContent('完整数据源矩阵');
+    expect(matrixDisclosure).not.toHaveTextContent('Provider');
+    expect(matrixDisclosure).not.toHaveTextContent('Readiness');
+    expect(matrixDisclosure).not.toHaveTextContent('Reason codes');
+    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 完整数据源矩阵' }));
     expect(matrixDisclosure).toHaveTextContent('cache-required');
     expect(matrixDisclosure).toHaveTextContent('present');
     expect(matrixDisclosure).toHaveTextContent('polygon_high_low_history_unavailable');
     expect(matrixDisclosure).toHaveTextContent('missing_provider_configuration');
-    expect(within(matrixDisclosure).getByRole('button', { name: '收起 完整 provider matrix' })).toBeInTheDocument();
+    expect(within(matrixDisclosure).getByRole('button', { name: '收起 完整数据源矩阵' })).toBeInTheDocument();
   });
 
   it('keeps product labels available without introducing trading-action wording', async () => {
@@ -768,7 +785,7 @@ describe('MarketProviderOperationsPage', () => {
       expect(checklist).not.toHaveTextContent('Portfolio');
 
       const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
-      fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 完整 provider matrix' }));
+      fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 完整数据源矩阵' }));
       expect(matrixDisclosure).toHaveTextContent('cache.cn_hk_connect_daily');
       expect(matrixDisclosure).toHaveTextContent('authorized.cn_index_futures_feed');
     } finally {
@@ -866,7 +883,7 @@ describe('MarketProviderOperationsPage', () => {
     render(<MarketProviderOperationsPage />);
 
     expect(await screen.findByText('数据源优先级路线图')).toBeInTheDocument();
-    expect(screen.getByText('暂无 provider matrix 行')).toBeInTheDocument();
+    expect(screen.getByText('暂无数据源矩阵行')).toBeInTheDocument();
   });
 
   it('renders a section-scoped API error when the operations matrix request fails', async () => {

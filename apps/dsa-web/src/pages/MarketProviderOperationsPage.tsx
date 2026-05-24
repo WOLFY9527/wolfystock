@@ -72,6 +72,7 @@ const EMPTY_PROVIDER_CACHE_STATES: MarketProviderCacheState[] = [];
 const EMPTY_PROVIDER_EVENT_ROLLUPS: MarketProviderEventRollup[] = [];
 const EMPTY_PROVIDER_MATRIX_ROWS: ProviderOperationsMatrixRow[] = [];
 const EMPTY_READINESS_CHECKS: MarketDataReadinessCheck[] = [];
+const PROVIDER_OPS_DIAGNOSTIC_SURFACE = '数据源运维 / 系统诊断';
 const SUMMARY_DEFAULTS: MarketProviderOperationsSummary = {
   totalItems: 0,
   liveCount: 0,
@@ -290,7 +291,7 @@ function readinessCheckMessage(check: MarketDataReadinessCheck): string {
 }
 
 function readinessCheckGuidance(check: MarketDataReadinessCheck): string {
-  if (check.id === 'tushare_token') return '沿现有凭据配置路径处理，返回本页确认 readiness；本页不读取或显示密钥值。';
+  if (check.id === 'tushare_token') return '沿现有凭据配置路径处理，返回本页确认就绪状态；本页不读取或显示密钥值。';
   if (check.id === 'local_us_parquet_representative_files') return '同步已批准的本地历史缓存，或缩小代表样本范围后重新检查。';
   return check.remediationHint ? sanitizeOperatorText(check.remediationHint) : '按现有配置路径处理后，再返回本页确认状态。';
 }
@@ -325,13 +326,13 @@ function buildProviderOpsTopSummary(
   const affectedSurfaces = uniqueLabels([
     ...rows.flatMap(resolveChecklistMatrixSurfaces),
     ...checks.flatMap(resolveChecklistReadinessSurfaces),
-  ]).filter((surface) => surface !== 'Provider Ops / system diagnostics');
+  ]).filter((surface) => surface !== PROVIDER_OPS_DIAGNOSTIC_SURFACE);
 
   return {
     availableSources,
     missingSources,
     diagnosticSources,
-    affectedSurfaces: affectedSurfaces.length ? affectedSurfaces : ['Provider Ops / system diagnostics'],
+    affectedSurfaces: affectedSurfaces.length ? affectedSurfaces : [PROVIDER_OPS_DIAGNOSTIC_SURFACE],
   };
 }
 
@@ -544,7 +545,7 @@ const CHECKLIST_SURFACE_ORDER = [
   'Watchlist',
   'Options Lab',
   'Backtest',
-  'Provider Ops / system diagnostics',
+  PROVIDER_OPS_DIAGNOSTIC_SURFACE,
 ] as const;
 
 const READINESS_DIAGNOSTIC_GROUPS: Array<{
@@ -555,7 +556,7 @@ const READINESS_DIAGNOSTIC_GROUPS: Array<{
   { id: 'credentials', title: '凭据配置', description: '只判断是否缺少已声明凭据，不展示密钥值。' },
   { id: 'localCache', title: '本地缓存/历史文件', description: '确认离线快照、parquet 或本地覆盖是否满足代表样本。' },
   { id: 'coverage', title: '覆盖已就绪', description: '当前检查没有阻断项，继续保持只读观察。' },
-  { id: 'runtime', title: '运行边界', description: '确认 provider runtime 与网络调用边界没有被前端改变。' },
+  { id: 'runtime', title: '运行边界', description: '确认数据源运行时与网络调用边界没有被前端改变。' },
   { id: 'other', title: '其他诊断', description: '保留未归类检查，但降低原始 ID 的视觉优先级。' },
 ];
 
@@ -618,7 +619,7 @@ function sourceGapRequiredWork(row: ProviderOperationsMatrixRow): string {
   if (matrixCacheRequired(row)) {
     return '填充已批准的缓存路径，并保持 freshness 达标。';
   }
-  return '继续保持 provider runtime、缓存与 authority 门槛通过。';
+  return '继续保持数据源运行时、缓存与来源权限门槛通过。';
 }
 
 function sourceGapBlocksScoreGrade(row: ProviderOperationsMatrixRow): boolean {
@@ -672,7 +673,7 @@ function checklistSurfaceLabel(surface: string): string | null {
   if (normalized === 'options_lab') return 'Options Lab';
   if (normalized === 'backtest') return 'Backtest';
   if (normalized === 'provider_ops' || normalized === 'system_diagnostics' || normalized === 'stock_history') {
-    return 'Provider Ops / system diagnostics';
+    return PROVIDER_OPS_DIAGNOSTIC_SURFACE;
   }
   return null;
 }
@@ -681,7 +682,7 @@ function resolveChecklistSurfaces(surfaces: string[] | undefined): string[] {
   const labels = (surfaces || [])
     .map((surface) => checklistSurfaceLabel(surface))
     .filter((surface, index, list): surface is string => Boolean(surface) && list.indexOf(surface) === index);
-  return labels.length ? labels : ['Provider Ops / system diagnostics'];
+  return labels.length ? labels : [PROVIDER_OPS_DIAGNOSTIC_SURFACE];
 }
 
 function resolveChecklistMatrixSurfaces(row: ProviderOperationsMatrixRow): string[] {
@@ -757,16 +758,16 @@ function checklistBadgeDisplayLabel(label: string): string {
     'paid likely': '可能需付费',
     'aggregate-supported': '聚合证据',
     'official-public cache-only': '官方公开缓存',
-    'missing provider': '缺少 provider',
+    'missing provider': '缺少数据源配置',
   }[label] || label;
 }
 
 function defaultChecklistWhyItMatters(title: string): string {
-  return `${title} 已在 Provider Ops 中出现，说明现有 readiness 或 source-truth 依赖会影响对应产品面；它不承诺提高投资准确性。`;
+  return `${title} 已在本页出现，说明现有就绪诊断或来源可信度依赖会影响对应产品面；它不承诺提高投资准确性。`;
 }
 
 function defaultChecklistNextStep(title: string): string {
-  return `沿现有 ${title} 配置路径处理，再返回本页确认 readiness；本页保持只读。`;
+  return `沿现有 ${title} 配置路径处理，再返回本页确认就绪状态；本页保持只读。`;
 }
 
 function checklistCopyForMatrixRow(row: ProviderOperationsMatrixRow): Pick<SetupChecklistEntry, 'title' | 'whyItMatters' | 'safeNextStep'> {
@@ -795,7 +796,7 @@ function checklistCopyForMatrixRow(row: ProviderOperationsMatrixRow): Pick<Setup
     return {
       title: sourceGapName(row),
       whyItMatters: 'CN/HK connect 缓存可以解释区域轮动背景，但缺少 southbound 时只能显示覆盖不完整。',
-      safeNextStep: '刷新 CN/HK connect 缓存快照，让 Rotation Radar 背景可用且不新增 live provider 调用。',
+      safeNextStep: '刷新 CN/HK connect 缓存快照，让 Rotation Radar 背景可用且不新增实时数据源调用。',
     };
   }
   if (row.providerId === 'authorized.cn_index_futures_feed') {
@@ -830,7 +831,7 @@ function checklistCopyForReadinessCheck(check: MarketDataReadinessCheck): Pick<S
   }
   if (check.id === 'local_us_parquet_representative_files') {
     return {
-      title: 'Local US parquet/cache',
+      title: '本地美股历史缓存',
       whyItMatters: '本地美股历史覆盖决定离线检查能确认哪些磁盘数据；缺文件会降低可验证范围。',
       safeNextStep: '同步已批准的本地美股 parquet/cache 覆盖，再期待代表样本检查清空。',
     };
@@ -1091,7 +1092,7 @@ const ProviderOpsTopSummary: React.FC<{
     {
       label: '影响产品页',
       value: isLoading ? '读取中' : `${formatNumber(data.affectedSurfaces.length, 0)} 个`,
-      detail: formatReadableList(data.affectedSurfaces, '仅 Provider Ops 诊断'),
+      detail: formatReadableList(data.affectedSurfaces, '仅数据源运维诊断'),
       variant: 'neutral',
     },
   ] as const;
@@ -1103,7 +1104,7 @@ const ProviderOpsTopSummary: React.FC<{
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">首屏摘要</p>
           <p className="mt-1 text-sm font-semibold text-white/84">先确认状态、缺口、观察边界和影响页面</p>
         </div>
-        <TerminalChip variant="info">不改变 provider 语义</TerminalChip>
+        <TerminalChip variant="info">不改变数据源语义</TerminalChip>
       </div>
       <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-4">
         {summaryItems.map((item) => (
@@ -1211,7 +1212,7 @@ const ProviderSetupChecklistPanel: React.FC<{
         </div>
       </div>
       <p className="mt-2 text-[11px] leading-5 text-white/48">
-        只读展示现有 provider 缺口会影响哪些产品面、缺少哪类依赖，以及下一步应沿哪个既有配置路径处理；不承诺投资准确性。
+        只读展示现有数据源缺口会影响哪些产品面、缺少哪类依赖，以及下一步应沿哪个既有配置路径处理；不承诺投资准确性。
       </p>
       {surfaceFocus ? (
         <div
@@ -1225,11 +1226,11 @@ const ProviderSetupChecklistPanel: React.FC<{
       ) : null}
 
       {isLoading && !visibleEntries.length ? (
-        <p className="mt-3 text-[11px] leading-5 text-white/38">正在汇总配置清单；仍然只读，不触发 provider runtime。</p>
+        <p className="mt-3 text-[11px] leading-5 text-white/38">正在汇总配置清单；仍然只读，不触发数据源运行时。</p>
       ) : null}
 
       {!isLoading && !groups.length ? (
-        <p className="mt-3 text-[11px] leading-5 text-white/38">当前没有额外配置阻断项；完整 matrix 与 diagnostics 仍保留在下方。</p>
+        <p className="mt-3 text-[11px] leading-5 text-white/38">当前没有额外配置阻断项；完整矩阵与技术诊断仍保留在下方。</p>
       ) : null}
 
       {groups.length ? (
@@ -1296,20 +1297,20 @@ const ProviderOperationsMatrixPanel: React.FC<{
         )}
       />
       <p className="mt-2 text-[11px] leading-5 text-white/42">
-        先看哪些缺口真正阻断了产品首屏结论，再按需展开完整 provider matrix。这里仍保持只读，不触发 provider runtime，不展示 secret、原始 URL、原始 payload 或本地路径。
+        先看哪些缺口真正阻断了产品首屏结论，再按需展开完整数据源矩阵。这里仍保持只读，不触发数据源运行时，不展示密钥、原始 URL、原始载荷或本地路径。
       </p>
 
       {error ? <ApiErrorAlert error={error} className="mt-4" /> : null}
 
       {isLoading && !response ? (
         <div className="mt-4">
-          <TerminalEmptyState title="正在读取 provider matrix">保持只读，只请求 `/api/v1/admin/providers/operations-matrix`。</TerminalEmptyState>
+          <TerminalEmptyState title="正在读取数据源矩阵">保持只读，只请求 `/api/v1/admin/providers/operations-matrix`。</TerminalEmptyState>
         </div>
       ) : null}
 
       {!isLoading && !error && !rows.length ? (
         <div className="mt-4">
-          <TerminalEmptyState title="暂无 provider matrix 行">接口未返回 row 时，不前端推断 provider readiness 或 source 权限。</TerminalEmptyState>
+          <TerminalEmptyState title="暂无数据源矩阵行">接口未返回行时，不在前端推断数据源就绪状态或来源权限。</TerminalEmptyState>
         </div>
       ) : null}
 
@@ -1324,19 +1325,19 @@ const ProviderOperationsMatrixPanel: React.FC<{
           <SourceGapBoard rows={rows} />
           <TerminalDisclosure
             data-testid="market-provider-matrix-disclosure"
-            title="完整 provider matrix"
-            summary="默认折叠，保留 source/type/runtime/gate/reason code 原始诊断"
+            title="完整数据源矩阵"
+            summary="默认折叠，保留来源类型、运行状态、门槛与原因代码原始诊断"
             className="mt-2 bg-black/10"
           >
             <TerminalDenseTable>
               <table className="min-w-full table-fixed">
                 <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
                   <tr className="border-b border-white/5 text-left">
-                    <th className="px-3 py-3 font-medium">Provider</th>
-                    <th className="px-3 py-3 font-medium">Source</th>
-                    <th className="px-3 py-3 font-medium">Readiness</th>
-                    <th className="px-3 py-3 font-medium">Gates</th>
-                    <th className="px-3 py-3 font-medium">Reason codes</th>
+                    <th className="px-3 py-3 font-medium">数据源</th>
+                    <th className="px-3 py-3 font-medium">来源</th>
+                    <th className="px-3 py-3 font-medium">就绪状态</th>
+                    <th className="px-3 py-3 font-medium">门槛</th>
+                    <th className="px-3 py-3 font-medium">原因代码</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1500,7 +1501,7 @@ const ProviderDetailsPanel: React.FC<{ item: MarketProviderOperationItem | null 
         </div>
         <TerminalDenseList className="mt-4">
           <TerminalNestedBlock className="px-3 py-2">
-            <p className="text-[10px] uppercase tracking-widest text-white/35">provider ID</p>
+            <p className="text-[10px] uppercase tracking-widest text-white/35">数据源 ID</p>
             <p className="mt-1 font-mono text-[11px] text-white/65">{item.provider}</p>
           </TerminalNestedBlock>
           <TerminalNestedBlock className="px-3 py-2">
@@ -1537,7 +1538,7 @@ const CacheStatesPanel: React.FC<{ cacheStates: MarketProviderCacheState[] }> = 
                       TTL {formatCountLabel(state.ttlSeconds, '待统计')}s · 读取 {formatDisplayDate(state.fetchedAt, '待统计')}
                     </p>
                   </div>
-                  <TerminalChip variant={statusChipVariant(status)}>{status}</TerminalChip>
+                  <TerminalChip variant={statusChipVariant(status)}>{statusLabel(status)}</TerminalChip>
                 </div>
                 {state.lastError ? (
                   <p className="mt-2 text-[11px] leading-5 text-white/58">{sanitizeOperatorText(state.lastError)}</p>
@@ -1567,7 +1568,7 @@ const EventRollupsPanel: React.FC<{ eventRollups: MarketProviderEventRollup[] }>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-white">{rollup.provider}</p>
-                    <p className="mt-1 text-[11px] text-white/42">{rollup.card || rollup.category || 'market provider'}</p>
+                    <p className="mt-1 text-[11px] text-white/42">{rollup.card || rollup.category || '市场数据源'}</p>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     <TerminalChip variant={rollup.failureCount > 0 ? 'danger' : 'neutral'}>失败 {formatCountLabel(rollup.failureCount, '0')}</TerminalChip>
@@ -1699,7 +1700,7 @@ const MarketDataReadinessPanel: React.FC<{
               更新样本
             </TerminalButton>
           </div>
-          <p className="mt-2 text-[11px] leading-5 text-white/42">只发送可选 symbol query 到 `/api/v1/market/data-readiness`，不触发 provider runtime，也不读取 secret 值。</p>
+          <p className="mt-2 text-[11px] leading-5 text-white/42">只发送可选代表符号参数到 `/api/v1/market/data-readiness`，不触发数据源运行时，也不读取密钥值。</p>
         </TerminalNestedBlock>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <TerminalMetric label="只读诊断" value={data?.diagnosticOnly === false ? '否' : '是'} valueClassName="text-sm" />
@@ -1709,21 +1710,21 @@ const MarketDataReadinessPanel: React.FC<{
       </div>
 
       <TerminalNotice variant="info" className="mt-4">
-        这个面板只解释本地 readiness 与缺口来源，不改写 Market Overview、Liquidity Monitor 或 Rotation Radar 的既有结论。
+        这个面板只解释本地就绪诊断与缺口来源，不改写 Market Overview、Liquidity Monitor 或 Rotation Radar 的既有结论。
       </TerminalNotice>
 
       {error ? <ApiErrorAlert error={error} className="mt-4" /> : null}
 
       {isLoading && !data ? (
         <div className="mt-4">
-          <TerminalEmptyState title="正在读取 readiness">保持只读；不会触发外部数据源调用。</TerminalEmptyState>
+          <TerminalEmptyState title="正在读取就绪诊断">保持只读；不会触发外部数据源调用。</TerminalEmptyState>
         </div>
       ) : null}
 
       {!isLoading && !error ? (
         <div className="mt-4 space-y-4">
           {!groupedChecks.length ? (
-            <TerminalEmptyState title="暂无 readiness 检查项">接口未返回检查项时，不前端推断环境健康度。</TerminalEmptyState>
+            <TerminalEmptyState title="暂无就绪检查项">接口未返回检查项时，不在前端推断环境健康度。</TerminalEmptyState>
           ) : groupedChecks.map((group) => (
             <div key={group.id}>
               <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -1875,7 +1876,7 @@ const MarketProviderOperationsPage: React.FC = () => {
       .catch((apiError) => {
         if (!cancelled) {
           const parsed = getParsedApiError(apiError);
-          setReadinessError({ ...parsed, title: '读取本地行情 readiness 失败' });
+          setReadinessError({ ...parsed, title: '读取本地行情就绪诊断失败' });
         }
       })
       .finally(() => {
@@ -1980,7 +1981,7 @@ const MarketProviderOperationsPage: React.FC = () => {
         </div>
 
         <TerminalNotice variant="info">
-          前端只读取现有运维快照，不触发数据源请求、不改变缓存、不改变 provider 排序，也不隐藏真实失败。
+          前端只读取现有运维快照，不触发数据源请求、不改变缓存、不改变数据源排序，也不隐藏真实失败。
         </TerminalNotice>
 
         {isLoading && !response && !error ? <LoadingOperationsState /> : null}
