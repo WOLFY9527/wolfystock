@@ -51,6 +51,52 @@ npx --prefix apps/dsa-web playwright test e2e/market-research-surfaces.spec.ts -
 Those forms can bypass the app-local Playwright config and cause relative
 `page.goto('/...')` navigations to fail with invalid URL errors.
 
+## Authenticated Route Smoke Standard
+
+For auth-gated frontend route smoke checks, prefer app-local Playwright
+harnesses over ad-hoc manual browser login:
+
+- Use `apps/dsa-web/e2e/fixtures/authenticatedRouteSmoke.ts` when the route
+  only needs a normal authenticated session plus route-specific API mocks from
+  the spec or an existing fixture. The helper installs mocked
+  `/api/v1/auth/status` and `/api/v1/auth/me`, opens the route, captures API
+  request paths, records console/page errors, exposes a no-horizontal-overflow
+  assertion, and provides cleanup through
+  `page.unrouteAll({ behavior: 'ignoreErrors' })`.
+- Use `apps/dsa-web/e2e/fixtures/productAuth.ts` for product routes such as
+  Options Lab that need the existing product data mocks and product request
+  assertions.
+- Use `apps/dsa-web/e2e/fixtures/adminAuth.ts` for Admin/Ops routes that need
+  admin API payload mocks, RBAC capability rehearsal, or admin-only request
+  assertions. The generic authenticated route smoke helper may mock an admin
+  auth status, but it does not replace the admin harness for admin data routes.
+- Keep route paths exact and canonical. For example, use
+  `/zh/market/rotation-radar` instead of the legacy mismatch
+  `/zh/rotation-radar`.
+
+Manual browser, Safari, or in-app browser evidence is acceptable only as
+supplemental evidence or when Playwright/local preview is blocked by a concrete
+environment issue. It should not replace a focused Playwright auth harness for
+auth-gated route acceptance when the app-local harness can run.
+
+Temporary screenshots for manual or fallback browser evidence must stay outside
+the repo:
+
+```text
+/tmp/<task-id>-fresh-before/
+/tmp/<task-id>-fresh-after/
+```
+
+When browser evidence is blocked, report it directly in the final report with:
+
+- command or browser target attempted;
+- exact blocker, such as localhost access denied, `ERR_CONNECTION_CLOSED`, or
+  auth-gated route redirect;
+- whether Playwright E2E, request logs, console/page errors, and
+  no-horizontal-overflow checks still ran;
+- confirmation that no stale screenshots or old `/tmp` images were used as
+  current proof.
+
 ## Fresh Evidence Rule
 
 Current UI evidence must come only from:

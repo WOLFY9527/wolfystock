@@ -8,6 +8,10 @@ import {
   openProductRouteWithHarness,
   test,
 } from './fixtures/productAuth';
+import {
+  expectNoHorizontalOverflow as expectNoAuthenticatedRouteHorizontalOverflow,
+  openAuthenticatedRouteSmoke,
+} from './fixtures/authenticatedRouteSmoke';
 import type { Page } from '@playwright/test';
 
 const viewports = [
@@ -27,6 +31,41 @@ async function clickOptionsLabNav(page: Page) {
 }
 
 test.describe('mocked product route auth browser harness', () => {
+  test('opens a normal authenticated settings route with the shared smoke helper', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.route('**/api/v1/auth/preferences/notifications**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          channel: 'multi',
+          enabled: false,
+          email: null,
+          emailEnabled: false,
+          discordEnabled: false,
+          discordWebhook: null,
+          deliveryAvailable: false,
+          emailDeliveryAvailable: false,
+          discordDeliveryAvailable: false,
+          updatedAt: '2026-05-24T00:00:00+08:00',
+        }),
+      });
+    });
+
+    const smoke = await openAuthenticatedRouteSmoke(page, '/zh/settings');
+
+    try {
+      await expect(page.getByTestId('personal-settings-workspace')).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('personal-settings-account-row')).toContainText(/已登录|Signed in/);
+      expect(smoke.requests.count('GET', '/api/v1/auth/status')).toBeGreaterThan(0);
+      expect(smoke.requests.wasFetched('GET', '/api/v1/auth/preferences/notifications')).toBe(true);
+      await expectNoAuthenticatedRouteHorizontalOverflow(page);
+      smoke.expectNoConsolePageErrors();
+    } finally {
+      await smoke.cleanup();
+    }
+  });
+
   test('renders localized Options Lab on direct authenticated reload', async ({ page }) => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
