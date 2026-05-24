@@ -2943,7 +2943,13 @@ describe('HomeSurfacePage', () => {
 
     renderSurface();
 
-    const unavailable = await screen.findByTestId('home-candlestick-unavailable');
+    await waitFor(() => {
+      const unavailable = screen.getByTestId('home-candlestick-unavailable');
+      expect(unavailable).toHaveTextContent('主数据源失败');
+      expect(unavailable).toHaveTextContent('本地回补');
+      expect(unavailable).toHaveTextContent('可信度 备用');
+    });
+    const unavailable = screen.getByTestId('home-candlestick-unavailable');
     expect(unavailable).toHaveTextContent('主数据源失败');
     expect(unavailable).toHaveTextContent('本地回补');
     expect(unavailable).toHaveTextContent('可信度 备用');
