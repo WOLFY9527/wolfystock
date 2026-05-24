@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useId } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { Lock } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { TerminalButton } from '../terminal';
@@ -11,12 +11,34 @@ type AuthGuardOverlayProps = {
   children?: React.ReactNode;
 };
 
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
+  if (!container) {
+    return [];
+  }
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((element) => (
+    element.tabIndex >= 0 && !element.closest('[aria-hidden="true"]')
+  ));
+}
+
 export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName, children }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { language } = useI18n();
   const titleId = useId();
   const bodyId = useId();
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const cardRef = useRef<HTMLElement | null>(null);
+  const loginButtonRef = useRef<HTMLButtonElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const routeLocale = parseLocaleFromPathname(location.pathname);
   const loginPath = routeLocale ? buildLocalizedPath('/login', routeLocale) : '/login';
   const title = language === 'en' ? `Sign in to unlock ${moduleName}` : `登录解锁 ${moduleName}`;
@@ -25,12 +47,64 @@ export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName, 
     : '游客模式仅支持首页基础查询。保存个人工作区、深度历史回溯及进阶指标测算，均需绑定正式账户。';
   const buttonLabel = language === 'en' ? 'Sign in / Create account' : '登录 / 创建账户';
 
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const initialFocusTarget = loginButtonRef.current ?? getFocusableElements(cardRef.current)[0] ?? dialogRef.current;
+    initialFocusTarget?.focus({ preventScroll: true });
+
+    return () => {
+      const previousFocus = previousFocusRef.current;
+      if (previousFocus && document.contains(previousFocus)) {
+        previousFocus.focus({ preventScroll: true });
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!cardRef.current?.contains(document.activeElement)) {
+          loginButtonRef.current?.focus({ preventScroll: true });
+        }
+        return;
+      }
+
+      if (event.key !== 'Tab') {
+        return;
+      }
+
+      const focusableElements = getFocusableElements(cardRef.current);
+      const fallbackFocusTarget = loginButtonRef.current ?? dialogRef.current;
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        fallbackFocusTarget?.focus({ preventScroll: true });
+        return;
+      }
+
+      event.preventDefault();
+      const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const activeIndex = activeElement ? focusableElements.findIndex((element) => element === activeElement) : -1;
+      const nextIndex = event.shiftKey
+        ? activeIndex <= 0 ? focusableElements.length - 1 : activeIndex - 1
+        : activeIndex === -1 || activeIndex >= focusableElements.length - 1 ? 0 : activeIndex + 1;
+
+      focusableElements[nextIndex]?.focus({ preventScroll: true });
+    };
+
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, []);
+
   return (
     <section
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={bodyId}
+      tabIndex={-1}
       data-testid="auth-guard-overlay"
       className="fixed inset-0 z-[80] grid place-items-center overflow-hidden px-4 py-6 sm:px-6"
     >
@@ -81,6 +155,7 @@ export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName, 
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(128,136,255,0.13),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.04),transparent_42%)]" aria-hidden="true" />
 
       <section
+        ref={cardRef}
         className="relative z-10 flex w-[min(92vw,28rem)] flex-col items-center overflow-hidden rounded-[14px] border border-white/12 bg-[color:rgba(18,23,35,0.74)] px-5 py-6 text-center shadow-[0_24px_80px_rgba(3,7,18,0.38)] backdrop-blur-2xl sm:px-6 sm:py-7"
         data-testid="auth-guard-card"
       >
@@ -90,6 +165,7 @@ export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName, 
         <h2 id={titleId} className="text-base font-semibold text-[color:var(--wolfy-text-primary)]">{title}</h2>
         <p id={bodyId} className="mx-auto mt-3 max-w-[22rem] text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{body}</p>
         <TerminalButton
+          ref={loginButtonRef}
           variant="primary"
           className="mt-7 h-11 w-full rounded-[10px] text-sm"
           onClick={() => navigate(loginPath)}

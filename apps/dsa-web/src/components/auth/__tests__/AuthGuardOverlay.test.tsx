@@ -28,6 +28,7 @@ describe('AuthGuardOverlay', () => {
   beforeEach(() => {
     languageState.value = 'zh';
     navigate.mockReset();
+    document.body.innerHTML = '';
   });
 
   it('renders the centered auth guard as a fixed frosted modal overlay in Chinese', () => {
@@ -98,5 +99,77 @@ describe('AuthGuardOverlay', () => {
     expectNoRawI18nKeys(container);
     fireEvent.click(screen.getByRole('button', { name: 'Sign in / Create account' }));
     expect(navigate).toHaveBeenCalledWith('/en/login');
+  });
+
+  it('moves focus to the primary login CTA when the blocking dialog opens', () => {
+    const trigger = document.createElement('button');
+    trigger.textContent = 'Protected route trigger';
+    document.body.appendChild(trigger);
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+
+    render(
+      <MemoryRouter initialEntries={['/zh/market-overview']}>
+        <AuthGuardOverlay moduleName="市场总览" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('button', { name: '登录 / 创建账户' })).toHaveFocus();
+  });
+
+  it('wraps Tab and Shift+Tab inside the auth dialog instead of exposing protected backdrop controls', () => {
+    render(
+      <MemoryRouter initialEntries={['/zh/portfolio']}>
+        <AuthGuardOverlay moduleName="持仓管理">
+          <button type="button">背景操作</button>
+        </AuthGuardOverlay>
+      </MemoryRouter>,
+    );
+
+    const loginCta = screen.getByRole('button', { name: '登录 / 创建账户' });
+    expect(loginCta).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(loginCta).toHaveFocus();
+    expect(screen.getByRole('button', { name: '背景操作', hidden: true })).not.toHaveFocus();
+
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(loginCta).toHaveFocus();
+    expect(screen.getByRole('button', { name: '背景操作', hidden: true })).not.toHaveFocus();
+  });
+
+  it('restores focus to the previously focused element when the overlay unmounts', () => {
+    const trigger = document.createElement('button');
+    trigger.textContent = 'Open protected route';
+    document.body.appendChild(trigger);
+    trigger.focus();
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/zh/portfolio']}>
+        <AuthGuardOverlay moduleName="持仓管理" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('button', { name: '登录 / 创建账户' })).toHaveFocus();
+
+    unmount();
+
+    expect(trigger).toHaveFocus();
+  });
+
+  it('keeps Escape non-dismissible for required auth and preserves login navigation', () => {
+    render(
+      <MemoryRouter initialEntries={['/zh/portfolio']}>
+        <AuthGuardOverlay moduleName="持仓管理" />
+      </MemoryRouter>,
+    );
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(screen.getByRole('dialog', { name: '登录解锁 持仓管理' })).toBeInTheDocument();
+    expect(navigate).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '登录 / 创建账户' }));
+    expect(navigate).toHaveBeenCalledWith('/zh/login');
   });
 });
