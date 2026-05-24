@@ -215,6 +215,45 @@ type LiquidityIndicatorBucketSummary = {
   namesLine: string;
 };
 
+type LiquidityBreadthTruthStripView = {
+  stateLabel: string;
+  stateVariant: 'neutral' | 'success' | 'caution' | 'info';
+  sourceLabel: string;
+  sourceVariant: 'neutral' | 'success' | 'caution' | 'info';
+  freshnessLabel: string;
+  freshnessVariant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+  coverageLabel: string;
+  coverageVariant: 'neutral' | 'success' | 'caution' | 'info';
+  summary: string;
+  sourceDetail: string | null;
+  missingSummary: string | null;
+  limitationSummary: string | null;
+};
+
+const BREADTH_INPUT_LABELS: Record<string, string> = {
+  ADVANCERS: '上涨家数',
+  DECLINERS: '下跌家数',
+  UNCHANGED: '平盘家数',
+  ADVANCE_DECLINE_RATIO: '上涨/下跌比',
+  NEW_HIGHS: '新高家数',
+  NEW_LOWS: '新低家数',
+  HIGH_LOW_RATIO: '新高/新低比',
+  SECTORS_UP: '行业上涨',
+  SECTORS_DOWN: '行业下跌',
+  RSP_SPY: 'RSP/SPY',
+  IWM_SPY: 'IWM/SPY',
+  QQQ_SPY: 'QQQ/SPY',
+};
+
+const BREADTH_LIMITATION_LABELS: Record<string, string> = {
+  representative_sample_not_full_market_breadth: '代表性样本，不等于全市场宽度',
+  proxy_only_missing_real_source: '缺少官方/授权宽度主源',
+  partial_coverage: '覆盖不完整',
+  proxy_or_placeholder_not_authorized_breadth: '来源层级未达到官方/授权宽度',
+  source_authority_router_rejected: '来源权限未通过',
+  'requires_official_or_authorized.us_market_breadth': '缺少官方/授权宽度提供方',
+};
+
 function titleCaseFromSnake(value?: string | null): string {
   if (!value) return '待确认';
   return value
@@ -570,6 +609,159 @@ function summarizeIndicatorBucket(
   };
 }
 
+function isUsBreadthIndicator(indicator: LiquidityMonitorIndicator | null | undefined): indicator is LiquidityMonitorIndicator {
+  return indicator?.key === 'us_breadth_proxy';
+}
+
+function formatBreadthInputLabel(value?: string | null): string {
+  if (!value) return '待确认';
+  return BREADTH_INPUT_LABELS[value] || value;
+}
+
+function breadthLimitationLabel(value?: string | null): string | null {
+  if (!value) return null;
+  return BREADTH_LIMITATION_LABELS[value] || humanizeBlockingReason(value);
+}
+
+function uniqueCompactValues(values: Array<string | null | undefined>, limit: number): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  values.forEach((value) => {
+    const normalized = String(value || '').trim();
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  });
+  return result.slice(0, limit);
+}
+
+function buildBreadthTruthStripView(indicator: LiquidityMonitorIndicator): LiquidityBreadthTruthStripView | null {
+  if (!isUsBreadthIndicator(indicator)) {
+    return null;
+  }
+
+  const diagnostics = indicator.coverageDiagnostics;
+  const evidence = indicator.evidence;
+  const inputs = evidence?.inputs || [];
+  const scoreGrade = diagnostics?.scoreContributionAllowed === true || indicator.includedInScore;
+  const staleOrFallback = indicator.freshness === 'stale' || indicator.freshness === 'fallback' || indicator.freshness === 'mock';
+  const degraded = !scoreGrade || staleOrFallback || evidence?.isPartial || diagnostics?.missingInputs.length;
+  const proxyOnly = diagnostics?.proxyOnly === true
+    || inputs.some((input) => input.observationOnly || input.scoreContributionAllowed === false || input.sourceAuthorityAllowed === false);
+  const sourceTier = diagnostics?.sourceTier
+    || inputs.find((input) => input.sourceTier)?.sourceTier
+    || evidence?.inputs.find((input) => input.sourceType)?.sourceType
+    || null;
+  const sourceDetail = evidence?.sourceLabel
+    || inputs.find((input) => input.sourceLabel)?.sourceLabel
+    || null;
+  const requiredCount = diagnostics?.requiredInputs.length || 0;
+  const fulfilledCount = diagnostics?.fulfilledInputs.length || 0;
+  const missingInputs = diagnostics?.missingInputs || [];
+  const coverageRatio = requiredCount > 0 ? `${fulfilledCount}/${requiredCount}` : null;
+  const limitationSummary = uniqueCompactValues([
+    breadthLimitationLabel(diagnostics?.scoreExclusionReason),
+    breadthLimitationLabel(diagnostics?.sourceAuthorityReason),
+    ...((diagnostics?.routeRejectedReasonCodes || []).map((reason) => breadthLimitationLabel(reason))),
+    breadthLimitationLabel(diagnostics?.degradationReason),
+    breadthLimitationLabel(diagnostics?.capReason),
+  ], 2).join('；') || null;
+  const sourceLabel = sourceTier === 'official_public'
+    ? '官方宽度'
+    : sourceTier === 'authorized_licensed_feed'
+      ? '授权宽度'
+      : sourceTier === 'official_or_authorized_licensed_feed'
+        ? '官方/授权占位'
+        : proxyOnly || /proxy|unofficial/i.test(String(sourceTier || ''))
+          ? '代理宽度'
+          : staleOrFallback || evidence?.isFallback || inputs.some((input) => input.isFallback)
+            ? '备用宽度'
+            : sourceTier
+              ? '宽度来源待核实'
+              : '来源待确认';
+  const stateLabel = scoreGrade
+    ? '评分级证据'
+    : indicator.status === 'unavailable'
+      ? '证据不足'
+      : proxyOnly || degraded
+        ? '仅观察'
+        : '降级证据';
+  const stateVariant = scoreGrade
+    ? 'success'
+    : indicator.status === 'unavailable'
+      ? 'neutral'
+      : proxyOnly
+        ? 'info'
+        : 'caution';
+  const coverageLabel = coverageRatio ? `覆盖 ${coverageRatio}` : '覆盖待确认';
+  const coverageVariant = coverageRatio
+    ? missingInputs.length === 0 && scoreGrade
+      ? 'success'
+      : missingInputs.length > 0
+        ? 'caution'
+        : 'info'
+    : 'neutral';
+  const missingSummary = missingInputs.length > 0
+    ? `缺口：${missingInputs.map((value) => formatBreadthInputLabel(value)).join('、')}`
+    : null;
+  const summary = scoreGrade
+    ? `当前以${sourceLabel}作为评分级宽度证据。`
+    : indicator.status === 'unavailable'
+      ? `当前宽度证据不足，仅展示来源状态与覆盖缺口。`
+      : `当前仅展示${sourceLabel}观察，不进入计分。`;
+
+  return {
+    stateLabel,
+    stateVariant,
+    sourceLabel,
+    sourceVariant: scoreGrade ? 'success' : proxyOnly || staleOrFallback ? 'caution' : 'info',
+    freshnessLabel: FRESHNESS_LABELS[indicator.freshness],
+    freshnessVariant: chipVariantForFreshness(indicator.freshness),
+    coverageLabel,
+    coverageVariant,
+    summary,
+    sourceDetail,
+    missingSummary,
+    limitationSummary,
+  };
+}
+
+const LiquidityBreadthTruthStrip: React.FC<{
+  indicator: LiquidityMonitorIndicator;
+  testId: string;
+}> = ({ indicator, testId }) => {
+  const view = buildBreadthTruthStripView(indicator);
+  if (!view) {
+    return null;
+  }
+
+  return (
+    <div
+      data-testid={testId}
+      className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5"
+    >
+      <div className="flex min-w-0 flex-wrap gap-1.5">
+        <TerminalChip variant={view.stateVariant}>{view.stateLabel}</TerminalChip>
+        <TerminalChip variant={view.sourceVariant}>{view.sourceLabel}</TerminalChip>
+        <TerminalChip variant={view.freshnessVariant}>{view.freshnessLabel}</TerminalChip>
+        <TerminalChip variant={view.coverageVariant}>{view.coverageLabel}</TerminalChip>
+      </div>
+      <p className="mt-2 text-[11px] leading-5 text-white/68">{view.summary}</p>
+      {view.sourceDetail ? (
+        <p className="mt-1 text-[11px] leading-5 text-white/52">来源：{view.sourceDetail}</p>
+      ) : null}
+      {view.missingSummary ? (
+        <p className="mt-1 text-[11px] leading-5 text-white/52">{view.missingSummary}</p>
+      ) : null}
+      {view.limitationSummary ? (
+        <p className="mt-1 text-[11px] leading-5 text-white/52">限制：{view.limitationSummary}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function buildLiquidityNextWatch(
   coverageSummary: LiquidityCoverageReadinessSummary,
   indicators: LiquidityMonitorIndicator[],
@@ -876,7 +1068,17 @@ const LiquidityGuidancePanel: React.FC<{
                         </TerminalChip>
                       </td>
                       <td className="px-3 py-2.5 font-mono text-white/72">{contributionLabel(indicator)}</td>
-                      <td className="px-3 py-2.5 text-xs leading-5 text-white/48">{indicator.summary || '—'}</td>
+                      <td className="px-3 py-2.5 text-xs leading-5 text-white/48">
+                        <div className="space-y-2">
+                          <p>{indicator.summary || '—'}</p>
+                          {isUsBreadthIndicator(indicator) ? (
+                            <LiquidityBreadthTruthStrip
+                              indicator={indicator}
+                              testId="liquidity-breadth-truth-strip-row"
+                            />
+                          ) : null}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -900,6 +1102,12 @@ const LiquidityGuidancePanel: React.FC<{
                   <TerminalMetric label="评分贡献" value={contributionLabel(selectedIndicator)} valueClassName="text-lg font-sans" />
                   <TerminalMetric label="更新时间" value={formatDateTime(selectedIndicator.updatedAt) || '待确认'} valueClassName="text-sm font-sans" />
                   <TerminalMetric label="备注" value={detailReason(selectedIndicator)} valueClassName="text-sm font-sans leading-6" />
+                  {isUsBreadthIndicator(selectedIndicator) ? (
+                    <LiquidityBreadthTruthStrip
+                      indicator={selectedIndicator}
+                      testId="liquidity-breadth-truth-strip-detail"
+                    />
+                  ) : null}
                 </div>
               ) : (
                 <p className="mt-4 text-sm text-white/45">当前没有可展示的指标。</p>

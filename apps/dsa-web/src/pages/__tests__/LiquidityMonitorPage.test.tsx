@@ -459,6 +459,137 @@ const payload = {
   },
 };
 
+const officialBreadthIndicator = {
+  key: 'us_breadth_proxy',
+  label: 'US 广度代理',
+  status: 'live',
+  freshness: 'delayed',
+  includedInScore: true,
+  scoreContribution: 6,
+  scoreWeight: 6,
+  summary: '7000/4000 | NH/NL 318/42',
+  updatedAt: '2026-05-21T16:00:00+08:00',
+  evidence: {
+    contractVersion: 'source_confidence_contract_v1',
+    source: 'nyse_official_breadth',
+    sourceLabel: 'NYSE Official Breadth Cache',
+    asOf: '2026-05-21T16:00:00+08:00',
+    freshness: 'delayed',
+    isFallback: false,
+    isStale: false,
+    isPartial: false,
+    isUnavailable: false,
+    coverage: 1,
+    confidenceWeight: 1,
+    inputs: [
+      { key: 'ADVANCERS', label: 'Advancers', source: 'nyse_official_breadth', sourceLabel: 'NYSE breadth', sourceType: 'official_public', sourceTier: 'official_public', freshness: 'delayed', observationOnly: false, sourceAuthorityAllowed: true, scoreContributionAllowed: true },
+      { key: 'DECLINERS', label: 'Decliners', source: 'nyse_official_breadth', sourceLabel: 'NYSE breadth', sourceType: 'official_public', sourceTier: 'official_public', freshness: 'delayed', observationOnly: false, sourceAuthorityAllowed: true, scoreContributionAllowed: true },
+      { key: 'UNCHANGED', label: 'Unchanged', source: 'nyse_official_breadth', sourceLabel: 'NYSE breadth', sourceType: 'official_public', sourceTier: 'official_public', freshness: 'delayed', observationOnly: false, sourceAuthorityAllowed: true, scoreContributionAllowed: true },
+      { key: 'ADVANCE_DECLINE_RATIO', label: 'Advance/Decline ratio', source: 'nyse_official_breadth', sourceLabel: 'NYSE breadth', sourceType: 'official_public', sourceTier: 'official_public', freshness: 'delayed', observationOnly: false, sourceAuthorityAllowed: true, scoreContributionAllowed: true },
+      { key: 'NEW_HIGHS', label: 'New highs', source: 'nyse_official_breadth', sourceLabel: 'NYSE breadth', sourceType: 'official_public', sourceTier: 'official_public', freshness: 'delayed', observationOnly: false, sourceAuthorityAllowed: true, scoreContributionAllowed: true },
+      { key: 'NEW_LOWS', label: 'New lows', source: 'nyse_official_breadth', sourceLabel: 'NYSE breadth', sourceType: 'official_public', sourceTier: 'official_public', freshness: 'delayed', observationOnly: false, sourceAuthorityAllowed: true, scoreContributionAllowed: true },
+      { key: 'HIGH_LOW_RATIO', label: 'High/Low ratio', source: 'nyse_official_breadth', sourceLabel: 'NYSE breadth', sourceType: 'official_public', sourceTier: 'official_public', freshness: 'delayed', observationOnly: false, sourceAuthorityAllowed: true, scoreContributionAllowed: true },
+    ],
+  },
+  coverageDiagnostics: {
+    indicatorId: 'us_breadth_proxy',
+    indicatorName: 'US 广度代理',
+    requiredInputs: ['ADVANCERS', 'DECLINERS', 'UNCHANGED', 'ADVANCE_DECLINE_RATIO', 'NEW_HIGHS', 'NEW_LOWS', 'HIGH_LOW_RATIO'],
+    fulfilledInputs: ['ADVANCERS', 'DECLINERS', 'UNCHANGED', 'ADVANCE_DECLINE_RATIO', 'NEW_HIGHS', 'NEW_LOWS', 'HIGH_LOW_RATIO'],
+    missingInputs: [],
+    requiredProviderClass: 'official_or_authorized.us_market_breadth',
+    configuredProviderAvailable: true,
+    realSourceAvailable: true,
+    proxyOnly: false,
+    observationOnly: false,
+    scoreContributionAllowed: true,
+    scoreExclusionReason: null,
+    requiredRealSourceForScore: true,
+    proxyObservationOnlyReason: null,
+    missingProviderReason: null,
+    paidDataLikelyRequired: false,
+    sourceTier: 'official_public',
+    freshness: 'delayed',
+    trustLevel: 'reliable',
+    contributesToScore: true,
+    scoreContribution: 6,
+    capReason: null,
+    degradationReason: null,
+    sourceAuthorityRouteRejected: false,
+    sourceAuthorityReason: null,
+    routeRejectedReasonCodes: [],
+  },
+};
+
+const degradedBreadthIndicator = {
+  key: 'us_breadth_proxy',
+  label: 'US 广度代理',
+  status: 'partial',
+  freshness: 'stale',
+  includedInScore: false,
+  scoreContribution: 0,
+  scoreWeight: 6,
+  summary: '8/3 | RSP/SPY +1.20%',
+  updatedAt: '2026-05-21T16:00:00+08:00',
+  evidence: {
+    contractVersion: 'source_confidence_contract_v1',
+    source: 'yfinance_proxy',
+    sourceLabel: 'Yahoo Finance',
+    asOf: '2026-05-21T16:00:00+08:00',
+    freshness: 'partial',
+    isFallback: false,
+    isStale: true,
+    isPartial: true,
+    isUnavailable: false,
+    coverage: 0.4,
+    confidenceWeight: 0.7,
+    degradationReason: 'partial_coverage',
+    capReason: 'partial_coverage',
+    inputs: [
+      { key: 'SECTORS_UP', label: 'Sectors Up', source: 'yfinance_proxy', sourceLabel: 'Yahoo Finance', sourceType: 'unofficial_proxy', sourceTier: 'unofficial_proxy', freshness: 'stale', observationOnly: true, sourceAuthorityAllowed: false, scoreContributionAllowed: false },
+      { key: 'SECTORS_DOWN', label: 'Sectors Down', source: 'yfinance_proxy', sourceLabel: 'Yahoo Finance', sourceType: 'unofficial_proxy', sourceTier: 'unofficial_proxy', freshness: 'stale', observationOnly: true, sourceAuthorityAllowed: false, scoreContributionAllowed: false },
+    ],
+  },
+  coverageDiagnostics: {
+    indicatorId: 'us_breadth_proxy',
+    indicatorName: 'US 广度代理',
+    requiredInputs: ['SECTORS_UP', 'SECTORS_DOWN', 'RSP_SPY', 'IWM_SPY', 'QQQ_SPY'],
+    fulfilledInputs: ['SECTORS_UP', 'SECTORS_DOWN'],
+    missingInputs: ['RSP_SPY', 'IWM_SPY', 'QQQ_SPY'],
+    requiredProviderClass: 'official_or_authorized.us_market_breadth',
+    configuredProviderAvailable: true,
+    realSourceAvailable: false,
+    proxyOnly: true,
+    observationOnly: false,
+    scoreContributionAllowed: false,
+    scoreExclusionReason: 'proxy_only_missing_real_source',
+    requiredRealSourceForScore: true,
+    proxyObservationOnlyReason: 'proxy_only_missing_real_source',
+    missingProviderReason: 'requires_official_or_authorized.us_market_breadth',
+    paidDataLikelyRequired: true,
+    sourceTier: 'unofficial_public_api',
+    freshness: 'stale',
+    trustLevel: 'usable_with_caution',
+    contributesToScore: false,
+    scoreContribution: 0,
+    capReason: 'partial_coverage',
+    degradationReason: 'partial_coverage',
+    sourceAuthorityRouteRejected: false,
+    sourceAuthorityReason: 'representative_sample_not_full_market_breadth',
+    routeRejectedReasonCodes: ['representative_sample_not_full_market_breadth'],
+  },
+};
+
+function withBreadthIndicator(indicator: Record<string, unknown>) {
+  return {
+    ...payload,
+    indicators: [
+      indicator,
+      ...payload.indicators.filter((item) => item.key !== 'us_breadth_proxy'),
+    ],
+  };
+}
+
 describe('LiquidityMonitorPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -752,6 +883,62 @@ describe('LiquidityMonitorPage', () => {
     expect(diagnostics).toHaveTextContent('provider_forbidden_for_use_case');
     expect(diagnostics).toHaveTextContent('As-of 2026-05-06');
     expect(within(diagnostics).getByText(/provider_forbidden_for_use_case/, { selector: 'p' })).toBeVisible();
+  });
+
+  it('renders score-grade official breadth truth strips in the row and detail panel', async () => {
+    getLiquidityMonitor.mockResolvedValueOnce(withBreadthIndicator(officialBreadthIndicator));
+
+    render(<LiquidityMonitorPage />);
+
+    await screen.findByRole('heading', { name: '流动性监测' });
+    const details = expandLiquidityDetails();
+    const rowStrip = within(details).getByTestId('liquidity-breadth-truth-strip-row');
+    expect(rowStrip).toHaveTextContent('评分级证据');
+    expect(rowStrip).toHaveTextContent('官方宽度');
+    expect(rowStrip).toHaveTextContent('延迟');
+    expect(rowStrip).toHaveTextContent('覆盖 7/7');
+    expect(rowStrip).toHaveTextContent('当前以官方宽度作为评分级宽度证据。');
+    expect(rowStrip).toHaveTextContent('来源：NYSE Official Breadth Cache');
+    expect(rowStrip).not.toHaveTextContent('仅观察');
+
+    const breadthRow = within(details).getAllByText('US 广度代理')[0]?.closest('tr');
+    expect(breadthRow).toBeTruthy();
+    fireEvent.click(breadthRow!);
+
+    const detailStrip = within(details).getByTestId('liquidity-breadth-truth-strip-detail');
+    expect(detailStrip).toHaveTextContent('评分级证据');
+    expect(detailStrip).toHaveTextContent('官方宽度');
+    expect(detailStrip).toHaveTextContent('覆盖 7/7');
+    expect(detailStrip.textContent || '').not.toMatch(/买入|卖出|加仓|减仓|buy|sell|recommend/i);
+  });
+
+  it('renders proxy breadth as observation-only with stale partial coverage gaps', async () => {
+    getLiquidityMonitor.mockResolvedValueOnce(withBreadthIndicator(degradedBreadthIndicator));
+
+    render(<LiquidityMonitorPage />);
+
+    await screen.findByRole('heading', { name: '流动性监测' });
+    const details = expandLiquidityDetails();
+    const rowStrip = within(details).getByTestId('liquidity-breadth-truth-strip-row');
+    expect(rowStrip).toHaveTextContent('仅观察');
+    expect(rowStrip).toHaveTextContent('代理宽度');
+    expect(rowStrip).toHaveTextContent('过期');
+    expect(rowStrip).toHaveTextContent('覆盖 2/5');
+    expect(rowStrip).toHaveTextContent('当前仅展示代理宽度观察，不进入计分。');
+    expect(rowStrip).toHaveTextContent('来源：Yahoo Finance');
+    expect(rowStrip).toHaveTextContent('缺口：RSP/SPY、IWM/SPY、QQQ/SPY');
+    expect(rowStrip).toHaveTextContent('限制：缺少官方/授权宽度主源；代表性样本，不等于全市场宽度');
+
+    const breadthRow = within(details).getAllByText('US 广度代理')[0]?.closest('tr');
+    expect(breadthRow).toBeTruthy();
+    fireEvent.click(breadthRow!);
+
+    const detailStrip = within(details).getByTestId('liquidity-breadth-truth-strip-detail');
+    expect(detailStrip).toHaveTextContent('仅观察');
+    expect(detailStrip).toHaveTextContent('代理宽度');
+    expect(detailStrip).toHaveTextContent('过期');
+    expect(detailStrip).toHaveTextContent('覆盖 2/5');
+    expect(detailStrip.textContent || '').not.toMatch(/买入|卖出|加仓|减仓|buy|sell|recommend/i);
   });
 
   it('shows the selected indicator inspector and collapsed source details', async () => {
