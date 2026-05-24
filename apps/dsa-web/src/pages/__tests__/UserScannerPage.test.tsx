@@ -1595,16 +1595,158 @@ describe('UserScannerPage', () => {
   it('keeps empty states clear when history and results are empty', async () => {
     getRuns.mockResolvedValue(makeHistoryResponse([]));
 
-    renderUserScannerPage();
+    const { container } = renderUserScannerPage({ viewportWidth: 1800 });
 
     expect(await screen.findByTestId('scanner-status-strip')).toHaveTextContent(/等待|Waiting/);
-    expect((await screen.findAllByText('当前无匹配的扫描结果')).length).toBeGreaterThan(0);
+    expect(await screen.findByTestId('scanner-workbench-empty-state')).toHaveTextContent('尚未运行扫描');
+    expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent(/顶部命令栏.*市场.*范围.*评估深度.*候选上限/);
+    expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent(/打开历史/);
     expect(screen.queryByTestId('scanner-candidate-scroll-region')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('scanner-context-rail')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('scanner-detail-rail')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('scanner-inline-detail-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('scanner-workbench-detail-layout')).toHaveClass('grid-cols-1');
+    expect(container).not.toHaveTextContent(/买入|卖出|加仓|减仓|buy|sell|recommend(?:ation)?/i);
 
     fireEvent.click(screen.getByTestId('scanner-history-trigger'));
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
-    expect(screen.getAllByText('当前无匹配的扫描结果').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('尚未运行扫描').length).toBeGreaterThan(0);
+  });
+
+  it('renders scanner-specific empty guidance when no candidate is selected', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun({
+      shortlist: [],
+      selected: [],
+      summary: {
+        universeCount: 11,
+        submittedCount: 11,
+        evaluatedCount: 4,
+        selectedCount: 0,
+        rejectedCount: 3,
+        dataFailedCount: 1,
+        skippedCount: 0,
+        errorCount: 0,
+        limitedByResultCap: false,
+      },
+      candidates: [
+        {
+          symbol: 'MARA',
+          name: 'MARA Holdings',
+          rank: 1,
+          status: 'rejected',
+          score: 55,
+          provider: 'alpaca',
+          reason: 'below liquidity threshold',
+          failedRules: ['below_liquidity_threshold'],
+          missingFields: [],
+          metrics: {},
+        },
+        {
+          symbol: 'CIFR',
+          name: 'Cipher Mining',
+          rank: 2,
+          status: 'data_failed',
+          score: null,
+          provider: null,
+          reason: 'missing price history',
+          failedRules: ['not_enough_history'],
+          missingFields: ['history'],
+          metrics: {},
+        },
+      ],
+    }));
+
+    renderUserScannerPage();
+
+    const emptyState = await screen.findByTestId('scanner-workbench-empty-state');
+    expect(emptyState).toHaveTextContent('本次无入选候选');
+    expect(emptyState).toHaveTextContent(/切换候选过滤到候选池或全部/);
+    expect(emptyState).toHaveTextContent(/查看淘汰与数据失败行/);
+    expect(emptyState).toHaveTextContent(/顶部命令栏.*候选上限.*范围.*评估深度/);
+    expect(screen.getByTestId('scanner-candidate-filters')).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-ranked-sortbar')).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-more-actions')).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-run-button')).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-history-trigger')).toBeInTheDocument();
+  });
+
+  it('renders data-failed guidance when all rows lack usable evidence', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun({
+      status: 'failed',
+      failureReason: 'not_enough_history',
+      shortlist: [],
+      selected: [],
+      summary: {
+        universeCount: 11,
+        submittedCount: 11,
+        evaluatedCount: 2,
+        selectedCount: 0,
+        rejectedCount: 0,
+        dataFailedCount: 2,
+        skippedCount: 0,
+        errorCount: 0,
+        limitedByResultCap: false,
+      },
+      candidates: [
+        {
+          symbol: 'CIFR',
+          name: 'Cipher Mining',
+          rank: 1,
+          status: 'data_failed',
+          score: null,
+          provider: null,
+          reason: 'missing price history',
+          failedRules: ['not_enough_history'],
+          missingFields: ['history'],
+          metrics: {},
+        },
+        {
+          symbol: 'HIVE',
+          name: 'HIVE Digital',
+          rank: 2,
+          status: 'error',
+          score: null,
+          provider: 'alpaca',
+          reason: null,
+          failedRules: [],
+          missingFields: ['quote'],
+          metrics: {},
+        },
+      ],
+    }));
+
+    renderUserScannerPage();
+
+    const emptyState = await screen.findByTestId('scanner-workbench-empty-state');
+    expect(emptyState).toHaveTextContent('数据失败或证据不足');
+    expect(emptyState).toHaveTextContent(/切换候选过滤到数据失败/);
+    expect(emptyState).toHaveTextContent(/查看行级原因/);
+    expect(emptyState).toHaveTextContent(/稍后重试或打开历史/);
+  });
+
+  it('renders fetch-failure guidance without exposing raw scanner details', async () => {
+    getRun.mockRejectedValueOnce(
+      createApiError(
+        createParsedApiError({
+          title: '请求超时',
+          message: '请求超时，请稍后重试。',
+          rawMessage: 'provider_timeout raw scanner detail',
+          status: 504,
+          code: 'upstream_timeout',
+          category: 'upstream_timeout',
+          isTimeoutError: true,
+        }),
+      ),
+    );
+
+    renderUserScannerPage();
+
+    expect(await screen.findByTestId('scanner-page-error-summary')).toHaveTextContent('超时');
+    const emptyState = await screen.findByTestId('scanner-workbench-empty-state');
+    expect(emptyState).toHaveTextContent('扫描读取失败');
+    expect(emptyState).toHaveTextContent(/稍后重试或打开历史/);
+    expect(emptyState).not.toHaveTextContent(/provider_timeout|raw scanner/i);
   });
 
   it('keeps existing run button behavior and market defaults', async () => {

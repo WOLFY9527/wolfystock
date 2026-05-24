@@ -155,6 +155,10 @@ type ScannerConclusionModel = {
   trustSummary: ScannerTrustSummary;
   tone: 'neutral' | 'success' | 'caution' | 'danger';
 };
+type ScannerWorkbenchEmptyState = {
+  title: string;
+  body: string;
+};
 type ScannerValidationErrors = {
   run?: string;
   customSymbols?: string;
@@ -848,6 +852,83 @@ function buildScannerConclusion(runDetail: ScannerRunDetail | null, language: 'z
     candidateCount: selectedCount,
     trustSummary,
     tone: trustSummary.limitedCount > 0 ? 'caution' : 'success',
+  };
+}
+
+function buildScannerWorkbenchEmptyState({
+  candidateFilter,
+  diagnosticCandidates,
+  language,
+  pageErrorSummary,
+  runDetail,
+}: {
+  candidateFilter: CandidateFilter;
+  diagnosticCandidates: ScannerCandidateDiagnostic[];
+  language: 'zh' | 'en';
+  pageErrorSummary: string | null;
+  runDetail: ScannerRunDetail | null;
+}): ScannerWorkbenchEmptyState {
+  if (pageErrorSummary) {
+    return {
+      title: language === 'en' ? 'Scanner fetch failed' : '扫描读取失败',
+      body: language === 'en'
+        ? `${pageErrorSummary}. Retry later or open history.`
+        : `${pageErrorSummary}。可稍后重试或打开历史记录。`,
+    };
+  }
+
+  if (!runDetail) {
+    return {
+      title: language === 'en' ? 'No scan has run yet' : '尚未运行扫描',
+      body: language === 'en'
+        ? 'Use the top command bar to check market, universe, detailed review, and shortlist controls; open history for previous runs.'
+        : '先在顶部命令栏确认市场、范围、评估深度与候选上限；如需已有结果可打开历史记录。',
+    };
+  }
+
+  const selectedCount = getRunSummaryCount(runDetail, 'selectedCount', runDetail.shortlist?.length || 0);
+  const rejectedCount = getRunSummaryCount(runDetail, 'rejectedCount', 0);
+  const failedCount = getRunSummaryCount(runDetail, 'dataFailedCount', 0) + getRunSummaryCount(runDetail, 'errorCount', 0);
+  const runState = normalizeRunState(runDetail.status);
+  const allDiagnosticsUnavailable = diagnosticCandidates.length > 0 && diagnosticCandidates.every(isDataUnavailable);
+  const evidenceInsufficient = selectedCount === 0
+    && (runState === 'failed'
+      || runState === 'error'
+      || allDiagnosticsUnavailable
+      || (failedCount > 0 && rejectedCount === 0));
+
+  if (evidenceInsufficient) {
+    return {
+      title: language === 'en' ? 'Data failed or evidence insufficient' : '数据失败或证据不足',
+      body: language === 'en'
+        ? 'Switch the candidate filter to Data failed to inspect row-level reasons; retry later or open history.'
+        : '切换候选过滤到数据失败，查看行级原因；可稍后重试或打开历史记录。',
+    };
+  }
+
+  if (selectedCount === 0 && diagnosticCandidates.length > 0) {
+    return {
+      title: language === 'en' ? 'No selected candidates' : '本次无入选候选',
+      body: language === 'en'
+        ? 'Switch the candidate filter to Candidate pool or All to inspect rejected and data-failed rows, or adjust shortlist, universe, and detailed review controls in the top command bar.'
+        : '切换候选过滤到候选池或全部，查看淘汰与数据失败行；也可在顶部命令栏调整候选上限、范围或评估深度。',
+    };
+  }
+
+  if (candidateFilter === 'data_failed') {
+    return {
+      title: language === 'en' ? 'No data-failed rows in this view' : '当前无数据失败行',
+      body: language === 'en'
+        ? 'Switch the candidate filter to Candidate pool or All, or retry later if data availability changed.'
+        : '切换候选过滤到候选池或全部；如数据可用性变化，可稍后重试。',
+    };
+  }
+
+  return {
+    title: language === 'en' ? 'No rows in the current filter' : '当前过滤无候选行',
+    body: language === 'en'
+      ? 'Switch the candidate filter, inspect data-failed rows, or adjust market, universe, detailed review, and shortlist controls in the top command bar.'
+      : '切换候选过滤、查看数据失败行，或在顶部命令栏调整市场、范围、评估深度与候选上限。',
   };
 }
 
@@ -2020,7 +2101,7 @@ const UserScannerPage: React.FC = () => {
   const activeDetailTrackPending = pendingWatchlistIdentity === activeDetailWatchlistIdentity;
   const activeSimulationTheme = runDetail?.themeId || (scanScope === 'theme' ? themeId : null);
   const strategySimulationDisabled = !runDetail || (runDetail.universeType === 'theme' && !runDetail.themeId);
-  const showDetailRail = viewportWidth >= 1600;
+  const showDetailRail = viewportWidth >= 1600 && Boolean(activeDetailCandidate);
 
   const handleStrategySimulation = useCallback(async () => {
     if (!runDetail) return;
@@ -2120,9 +2201,21 @@ const UserScannerPage: React.FC = () => {
       overflowSymbolCount: Math.max(0, matchedSymbols.length - 10),
     } satisfies ScannerHistoryDrawerItem;
   }), [historyItems, language, t]);
-  const emptyStateTitle = language === 'en' ? 'No matching scanner results' : '当前无匹配的扫描结果';
-  const emptyStateBody = language === 'en' ? 'Adjust the filters on the left or try again later' : '请调整左侧参数或稍后再试';
+  const emptyStateTitle = language === 'en' ? 'No scan has run yet' : '尚未运行扫描';
+  const emptyStateBody = language === 'en'
+    ? 'Use the top command bar to check market, universe, detailed review, and shortlist controls.'
+    : '先在顶部命令栏确认市场、范围、评估深度与候选上限。';
   const pageErrorSummary = pageError ? sanitizeScannerErrorSummary(pageError.message, language) || compactScannerStateLabel('failed', language) : null;
+  const workbenchEmptyState = useMemo(
+    () => buildScannerWorkbenchEmptyState({
+      candidateFilter,
+      diagnosticCandidates,
+      language,
+      pageErrorSummary,
+      runDetail,
+    }),
+    [candidateFilter, diagnosticCandidates, language, pageErrorSummary, runDetail],
+  );
   const handleAnalyzeCandidate = useCallback(async (candidate: ScannerCandidate) => {
     setPendingAnalyzeSymbol(candidate.symbol);
     setActionNotice(null);
@@ -2956,7 +3049,10 @@ const UserScannerPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className={`grid min-h-0 flex-1 min-w-0 gap-3 px-2 py-2 ${showDetailRail ? 'xl:grid-cols-[minmax(820px,1fr)_minmax(320px,340px)]' : 'grid-cols-1'}`}>
+                    <div
+                      data-testid="scanner-workbench-detail-layout"
+                      className={`grid min-h-0 flex-1 min-w-0 gap-3 px-2 py-2 ${showDetailRail ? 'xl:grid-cols-[minmax(820px,1fr)_minmax(320px,340px)]' : 'grid-cols-1'}`}
+                    >
                       <div data-testid="scanner-primary-work-region" className="min-w-0">
                         {workbenchDiagnostics.length ? (
                           <div
@@ -3037,19 +3133,19 @@ const UserScannerPage: React.FC = () => {
                           </div>
                         ) : (
                           <CompactEmptyRow
-                            title={runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length ? (language === 'en' ? 'No selected candidates' : '本次无入选候选') : emptyStateTitle}
+                            data-testid="scanner-workbench-empty-state"
+                            title={workbenchEmptyState.title}
                             className="m-0 min-h-[120px]"
                           >
-                            {runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length
-                              ? (language === 'en' ? 'Open Candidate pool or All to inspect rejected and data-failed candidates.' : '切换到候选池或全部查看淘汰与数据失败原因。')
-                              : pageErrorSummary || emptyStateBody}
+                            {workbenchEmptyState.body}
                           </CompactEmptyRow>
                         )}
 
                       </div>
 
-                      <div data-testid="scanner-context-rail" className="min-w-0">
-                        {!showDetailRail && activeDetailCandidate ? (
+                      {activeDetailCandidate ? (
+                        <div data-testid="scanner-context-rail" className="min-w-0">
+                          {!showDetailRail ? (
                           <div data-testid="scanner-inline-detail-panel" className="max-h-[min(72vh,42rem)] overflow-y-auto rounded-xl border border-white/5 bg-black/20 p-3 no-scrollbar ui-scroll-y-quiet">
                             <div data-testid={`scanner-candidate-detail-${activeDetailCandidate.symbol || 'unknown'}`} className="contents">
                               <div data-testid="scanner-candidate-inspector" className="contents">
@@ -3073,9 +3169,9 @@ const UserScannerPage: React.FC = () => {
                               </div>
                             </div>
                           </div>
-                        ) : null}
+                          ) : null}
 
-                        {showDetailRail && activeDetailCandidate ? (
+                          {showDetailRail ? (
                           <aside data-testid="scanner-detail-rail" className="sticky top-4 self-start max-h-[min(72vh,42rem)] overflow-y-auto rounded-xl border border-white/5 bg-black/20 p-3 no-scrollbar ui-scroll-y-quiet">
                             <div data-testid={`scanner-candidate-detail-${activeDetailCandidate.symbol || 'unknown'}`} className="contents">
                               <div data-testid="scanner-candidate-inspector" className="contents">
@@ -3099,8 +3195,9 @@ const UserScannerPage: React.FC = () => {
                               </div>
                             </div>
                           </aside>
-                        ) : null}
-                      </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
 
                     {runDetail && hasCandidateDiagnostics ? (
