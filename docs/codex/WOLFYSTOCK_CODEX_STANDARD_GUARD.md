@@ -12,6 +12,7 @@ Default workflow:
 - Do not use or checkout long-lived manual worktree branches.
 - Do not checkout `codex/frontend-lane` or `codex/backend-lane`.
 - Do not create or use manual worktrees under `/Users/yehengli/worktrees` unless the user explicitly requests that mode.
+- Use execution mode `CODEX-ISOLATED` unless the prompt explicitly selects `SERIAL-MAIN`, `WORKTREE-WORKER`, or `READ-ONLY-AUDIT`.
 - Report actual `cwd`, branch, and base commit in final reports.
 
 Default dependency policy:
@@ -21,6 +22,8 @@ Default dependency policy:
 - Never run `npm audit fix` as a setup step.
 
 Use same-main shared worktree rules only when the user explicitly asks to work directly in `/Users/yehengli/daily_stock_analysis`. See `WOLFYSTOCK_SHARED_MAIN_WORKTREE_PROTOCOL.md`.
+
+For execution modes and prompt metadata, read `WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`.
 
 ## 1. Preflight
 
@@ -66,7 +69,7 @@ Rules:
 - Do not broad-format unrelated files.
 - Do not restore, clean, reset, revert, stash, move, or overwrite unrelated work.
 - If a changelog has unrelated hunks, stage only the task hunk or skip changelog and report why.
-- Execution-class tasks should commit and push after validation unless blocked by tests, branch permissions, or explicit prompt scope.
+- Execution-class tasks should commit and push only when the prompt's `Commit` section authorizes it. If not authorized, report local changes and exact next commands instead.
 - Read-only tasks must not stage, commit, or push.
 
 ## 3. Secrets And Sensitive Data

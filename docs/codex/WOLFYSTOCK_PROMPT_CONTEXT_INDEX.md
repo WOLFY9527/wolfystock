@@ -9,6 +9,7 @@ Task prompts should reference these stable docs instead of repeating long boiler
 ```text
 Read and obey:
 - docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md
+- docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md
 - docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md
 ```
 
@@ -37,6 +38,7 @@ or:
 Read:
 
 - `WOLFYSTOCK_CODEX_STANDARD_GUARD.md`
+- `WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`
 - `WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`
 - task-specific docs/files
 
@@ -52,6 +54,7 @@ Rules:
 Read:
 
 - `WOLFYSTOCK_CODEX_STANDARD_GUARD.md`
+- `WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`
 - `docs/frontend/README.md`
 - `docs/frontend/visual-system.md`
 - `docs/frontend/validation-playbook.md`
@@ -68,6 +71,7 @@ Read frontend UI docs above plus:
 Read:
 
 - `WOLFYSTOCK_CODEX_STANDARD_GUARD.md`
+- `WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`
 - `WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md`
 - `WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`
 - relevant tests and service files.

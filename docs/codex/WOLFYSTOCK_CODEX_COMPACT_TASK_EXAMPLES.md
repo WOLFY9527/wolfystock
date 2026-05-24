@@ -9,8 +9,8 @@ Model and reasoning recommendations belong outside the black-box prompt. See `WO
 ```text
 Task ID: T-###
 Task title: Audit <area> architecture risks
-Branch: main
-Workspace: /Users/yehengli/daily_stock_analysis
+Branch: <Codex isolated task branch>
+Workspace: <Codex App isolated task workspace>
 Mode: READ-ONLY-AUDIT
 
 Read and obey:
@@ -45,9 +45,9 @@ Include:
 ```text
 Task ID: T-###
 Task title: <route> Linear OS migration
-Branch: main
-Workspace: /Users/yehengli/daily_stock_analysis
-Mode: SERIAL-MAIN
+Branch: <Codex isolated task branch>
+Workspace: <Codex App isolated task workspace>
+Mode: CODEX-ISOLATED
 
 Read and obey:
 - docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md
@@ -103,9 +103,9 @@ Include fresh screenshot source and route-specific visual observations.
 ```text
 Task ID: T-###
 Task title: Update <docs topic>
-Branch: main
-Workspace: /Users/yehengli/daily_stock_analysis
-Mode: SERIAL-MAIN
+Branch: <Codex isolated task branch>
+Workspace: <Codex App isolated task workspace>
+Mode: CODEX-ISOLATED
 
 Read and obey:
 - docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md
@@ -140,9 +140,9 @@ Use WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md, docs-only closeout.
 ```text
 Task ID: T-###
 Task title: <backend task>
-Branch: main
-Workspace: /Users/yehengli/daily_stock_analysis
-Mode: SERIAL-MAIN
+Branch: <Codex isolated task branch>
+Workspace: <Codex App isolated task workspace>
+Mode: CODEX-ISOLATED
 
 Read and obey:
 - docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md

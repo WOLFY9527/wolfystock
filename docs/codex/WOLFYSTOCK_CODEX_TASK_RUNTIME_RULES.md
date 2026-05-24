@@ -9,7 +9,7 @@ Purpose: keep Codex prompts compact without losing operational constraints. Ever
 3. Prefer small, reviewable changes over broad refactors.
 4. Stage only task-related files.
 5. Never use `git add .`.
-6. Push only the task branch named in the prompt.
+6. Push only when the prompt's `Commit` section authorizes it, and only to the prompt-named target branch.
 7. Do not commit unrelated formatting, lockfile, config, generated, or cache changes.
 8. If the workspace, branch, or git root does not match the prompt, stop and report the mismatch.
 9. If a protected domain appears necessary, stop and report the risk instead of modifying it.
@@ -64,9 +64,25 @@ PLANNED       scoped only; implementation has not started
 
 ## 5. Execution Modes
 
+### CODEX-ISOLATED
+
+Use as the default execution mode for normal Codex App tasks.
+
+Rules:
+
+```text
+- Use the Codex App isolated task workspace.
+- Use local environment: WolfyStock Fast.
+- Base from latest origin/main.
+- Do not create or use manual worktrees.
+- Do not work directly in /Users/yehengli/daily_stock_analysis unless the prompt explicitly switches to SERIAL-MAIN.
+- Report actual cwd, branch, and base commit.
+- Push only if the prompt's Commit section authorizes it.
+```
+
 ### SERIAL-MAIN
 
-Use when the task is a single safe task on `main` and there is no true parallelism need.
+Use only when the user explicitly asks to work directly in the shared `/Users/yehengli/daily_stock_analysis` main worktree.
 
 Rules:
 
@@ -86,7 +102,7 @@ Rules:
 - Work only in the workspace path given by the prompt
 - Branch must match the branch given by the prompt
 - Stop if branch/path mismatch
-- Push only this branch
+- Push only this branch, and only if the prompt's Commit section authorizes it
 ```
 
 ### READ-ONLY-AUDIT

@@ -16,6 +16,8 @@ Workspace:
 Mode:
 ```
 
+Default mode for normal Codex App tasks is `CODEX-ISOLATED`. Use `SERIAL-MAIN` only when the prompt explicitly requests the shared main worktree.
+
 Use the same Task ID in the final report.
 
 ## Universal Header
@@ -35,6 +37,7 @@ Report actual cwd, branch, and base commit in the final response.
 
 Read and obey:
 - docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md
+- docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md
 - docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md
 ```
 
@@ -132,7 +135,7 @@ Validation:
 Commit:
 - Stage only task-related files.
 - Commit message: <message>
-- Push if safe.
+- Push only if the prompt authorizes push and validation passes.
 
 Final report:
 - use WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md
@@ -175,7 +178,7 @@ Validation:
 Commit:
 - Stage only task-related files.
 - Commit message: <message>
-- Push if safe.
+- Push only if the prompt authorizes push and validation passes.
 
 Final report:
 - use WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md

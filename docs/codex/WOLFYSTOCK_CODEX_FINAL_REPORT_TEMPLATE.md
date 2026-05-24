@@ -20,7 +20,7 @@ Success-class closeout should also state commit, push status, files changed, val
 
 ## Progress header
 
-Start every response to the user with a short progress update:
+For execution-class final reports and blocker reports, start with a short progress update. For tiny docs-only or no-op tasks, keep this compact:
 
 ```text
 Progress update:
