@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketProviderOperationsPage from '../MarketProviderOperationsPage';
+import { resolveProductSetupSurface } from '../../utils/productSetupSurface';
 
 const { getOperations } = vi.hoisted(() => ({
   getOperations: vi.fn(),
@@ -496,7 +497,7 @@ const operationsMatrixPayload = {
       cacheRequired: true,
       supportedCapabilities: ['diagnostic_surface_projection'],
       affectedSurfaces: ['mystery_surface'],
-      productAffectedSurfaces: ['portfolio'],
+      productAffectedSurfaces: ['portfolio', 'watchlist'],
       routerReasonCodes: ['cache_required'],
       reasonCodes: [],
       fulfilledMetrics: [],
@@ -662,6 +663,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklist).toHaveTextContent('Rotation Radar');
     expect(checklist).toHaveTextContent('Scanner');
     expect(checklist).toHaveTextContent('Portfolio');
+    expect(checklist).toHaveTextContent('Watchlist');
     expect(checklist).toHaveTextContent('Options Lab');
     expect(checklist).toHaveTextContent('Provider Ops / system diagnostics');
     expect(checklist).toHaveTextContent('需要凭据');
@@ -698,6 +700,10 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklist).not.toHaveTextContent('aggregate-supported');
     expect(checklist).not.toHaveTextContent('observation-only');
     expect(checklist).not.toHaveTextContent('score-blocked');
+
+    const checklistText = checklist.textContent || '';
+    expect(checklistText.indexOf('Portfolio')).toBeLessThan(checklistText.indexOf('Watchlist'));
+    expect(checklistText.indexOf('Watchlist')).toBeLessThan(checklistText.indexOf('Options Lab'));
 
     const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
     fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 完整 provider matrix' }));
@@ -756,6 +762,18 @@ describe('MarketProviderOperationsPage', () => {
     } finally {
       window.history.replaceState({}, '', `${previousPath}${previousSearch}`);
     }
+  });
+
+  it('accepts existing and new safe setup surfaces while rejecting unknown or unsafe values', () => {
+    expect(resolveProductSetupSurface('market_overview')?.key).toBe('market_overview');
+    expect(resolveProductSetupSurface('liquidity_monitor')?.key).toBe('liquidity_monitor');
+    expect(resolveProductSetupSurface('rotation_radar')?.key).toBe('rotation_radar');
+    expect(resolveProductSetupSurface('portfolio')?.key).toBe('portfolio');
+    expect(resolveProductSetupSurface('watchlist')?.key).toBe('watchlist');
+    expect(resolveProductSetupSurface('options_lab')?.key).toBe('options_lab');
+    expect(resolveProductSetupSurface('/Users/example/provider')).toBeNull();
+    expect(resolveProductSetupSurface('javascript:alert(1)')).toBeNull();
+    expect(resolveProductSetupSurface('watchlist&token=secret')).toBeNull();
   });
 
   it('supports a compact representative symbol override for readiness checks', async () => {

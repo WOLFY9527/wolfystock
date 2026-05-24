@@ -214,6 +214,9 @@ function surfaceLabel(surface: string): string {
     market_overview: 'Market Overview',
     liquidity_monitor: 'Liquidity Monitor',
     rotation_radar: 'Rotation Radar',
+    portfolio: 'Portfolio',
+    watchlist: 'Watchlist',
+    options_lab: 'Options Lab',
     stock_history: 'US parquet history',
   }[surface] || surface.replace(/_/g, ' ');
 }
@@ -424,6 +427,7 @@ const CHECKLIST_SURFACE_ORDER = [
   'Rotation Radar',
   'Scanner',
   'Portfolio',
+  'Watchlist',
   'Options Lab',
   'Backtest',
   'Provider Ops / system diagnostics',
@@ -538,6 +542,7 @@ function checklistSurfaceLabel(surface: string): string | null {
   if (normalized === 'rotation_radar') return 'Rotation Radar';
   if (normalized === 'scanner') return 'Scanner';
   if (normalized === 'portfolio') return 'Portfolio';
+  if (normalized === 'watchlist') return 'Watchlist';
   if (normalized === 'options_lab') return 'Options Lab';
   if (normalized === 'backtest') return 'Backtest';
   if (normalized === 'provider_ops' || normalized === 'system_diagnostics' || normalized === 'stock_history') {

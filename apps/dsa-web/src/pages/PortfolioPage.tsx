@@ -40,6 +40,7 @@ import {
   savePortfolioDisplayCurrency,
   type PortfolioDisplayCurrency,
 } from '../utils/portfolioPreferences';
+import { ProductSetupPath } from '../components/market-intelligence/ProductSetupPath';
 import type {
   PortfolioAccountItem,
   PortfolioBrokerConnectionItem,
@@ -1798,6 +1799,7 @@ const PortfolioPage: React.FC = () => {
     snapshot?.fxFreshnessState,
     snapshot?.holdingsLineageState,
   ]);
+  const shouldShowPortfolioSetupPath = showPortfolioEvidenceChips || valuationTrustItems.some((item) => item.variant && item.variant !== 'success');
   const riskTrustItems = useMemo(() => uniqueTrustItems([
     portfolioEvidenceSummary
       ? {
@@ -2215,6 +2217,13 @@ const PortfolioPage: React.FC = () => {
                         />
                       ) : null}
                     </PortfolioTrustStrip>
+                  ) : null}
+                  {shouldShowPortfolioSetupPath ? (
+                    <ProductSetupPath
+                      surface="portfolio"
+                      testId="portfolio-setup-path"
+                      className="mt-3"
+                    />
                   ) : null}
                 </div>
 

@@ -1,4 +1,10 @@
-export type ProductSetupSurfaceKey = 'market_overview' | 'liquidity_monitor' | 'rotation_radar';
+export type ProductSetupSurfaceKey =
+  | 'market_overview'
+  | 'liquidity_monitor'
+  | 'rotation_radar'
+  | 'portfolio'
+  | 'watchlist'
+  | 'options_lab';
 
 export type ProductSetupSurface = {
   key: ProductSetupSurfaceKey;
@@ -19,6 +25,18 @@ export const PRODUCT_SETUP_SURFACES: Record<ProductSetupSurfaceKey, ProductSetup
   rotation_radar: {
     key: 'rotation_radar',
     label: 'Rotation Radar',
+  },
+  portfolio: {
+    key: 'portfolio',
+    label: 'Portfolio',
+  },
+  watchlist: {
+    key: 'watchlist',
+    label: 'Watchlist',
+  },
+  options_lab: {
+    key: 'options_lab',
+    label: 'Options Lab',
   },
 };
 

@@ -598,6 +598,16 @@ describe('OptionsLabPage', () => {
     });
   });
 
+  it('renders setup-path actions while keeping synthetic options output observation-only', async () => {
+    renderPage();
+
+    const setupPath = await screen.findByTestId('options-lab-setup-path');
+    expect(within(setupPath).getByRole('link', { name: '查看 Provider Ops' })).toHaveAttribute('href', '/admin/market-providers?surface=options_lab');
+    expect(within(setupPath).getByRole('link', { name: '前往数据源设置' })).toHaveAttribute('href', '/settings/system?panel=data_sources&surface=options_lab');
+    expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('不可作为交易信号');
+    expect(setupPath.textContent || '').not.toMatch(/买入|卖出|推荐|live options/i);
+  });
+
   it('renders pass-but-review readiness gate strips for decision-grade payloads', async () => {
     vi.mocked(optionsLabApi.evaluateDecision).mockResolvedValueOnce({
       symbol: 'TEM',

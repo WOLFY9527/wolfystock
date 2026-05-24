@@ -23,6 +23,7 @@ import {
   WolfyShellSurface,
 } from '../components/linear';
 import { EvidenceChips } from '../components/evidence/EvidenceChips';
+import { ProductSetupPath } from '../components/market-intelligence/ProductSetupPath';
 import {
   TerminalButton,
   TerminalChip,
@@ -1397,6 +1398,14 @@ const OptionsLabPageContent: React.FC = () => {
     if (!Number.isFinite(targetPriceValue) || targetPriceValue <= 0 || !targetDate.trim()) return '先补齐目标价格与目标日期。';
     return null;
   }, [hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
+  const shouldShowOptionsSetupPath = useMemo(() => {
+    if (decisionState.decision) {
+      return isNonDecisionGrade(decisionState.decision);
+    }
+    return asArray(state.summary?.optionsAvailability?.limitations).length > 0
+      || asArray(state.summary?.metadata?.limitations).length > 0
+      || asArray(state.chain?.limitations).length > 0;
+  }, [decisionState.decision, state.chain, state.summary]);
 
   return (
     <main className="w-full overflow-x-hidden text-white">
@@ -1427,6 +1436,12 @@ const OptionsLabPageContent: React.FC = () => {
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,0.85fr)]">
             <div className="grid min-w-0 gap-6">
+              {shouldShowOptionsSetupPath ? (
+                <ProductSetupPath
+                  surface="options_lab"
+                  testId="options-lab-setup-path"
+                />
+              ) : null}
               <SnapshotPanel summary={state.summary} chain={state.chain} decision={decisionState.decision} />
               <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} />
               <StrategyComparisonPanel

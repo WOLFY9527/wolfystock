@@ -979,6 +979,40 @@ describe('PortfolioPage FX refresh', () => {
     expect(holdingTrust).toHaveTextContent('截至 2026-03-18');
   });
 
+  it('renders setup-path actions beside valuation trust without changing portfolio trust calculations', async () => {
+    const snapshot = makeSnapshot({
+      includePosition: true,
+      fxStale: true,
+      positionOverrides: {
+        isPriceFallback: true,
+        valuationConfidence: 0.62,
+      },
+    }) as ReturnType<typeof makeSnapshot> & Record<string, unknown>;
+    snapshot.fxFreshnessState = 'stale';
+    snapshot.holdingsLineageState = 'missing';
+    snapshot.cashLedgerCompletenessState = 'missing';
+    snapshot.sourceAuthorityState = 'observation_only';
+    snapshot.confidenceCap = {
+      value: 60,
+      limitation_labels: ['仅供风险观察'],
+    };
+    getSnapshot.mockResolvedValue(snapshot);
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const statusStrip = screen.getByTestId('portfolio-account-status-strip');
+    expect(within(statusStrip).getByTestId('portfolio-valuation-trust-strip')).toHaveTextContent('估值回退');
+
+    const setupPath = within(statusStrip).getByTestId('portfolio-setup-path');
+    expect(setupPath).toHaveTextContent('Provider Ops');
+    expect(setupPath).toHaveTextContent('数据源设置');
+    expect(within(setupPath).getByRole('link', { name: '查看 Provider Ops' })).toHaveAttribute('href', '/admin/market-providers?surface=portfolio');
+    expect(within(setupPath).getByRole('link', { name: '前往数据源设置' })).toHaveAttribute('href', '/settings/system?panel=data_sources&surface=portfolio');
+    expect(setupPath.textContent || '').not.toMatch(/买入|卖出|推荐|guaranteed/i);
+  });
+
   it('keeps native exposure visible when FX conversion is unavailable', async () => {
     getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: true }));
 

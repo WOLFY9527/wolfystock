@@ -678,6 +678,42 @@ describe('WatchlistPage', () => {
     expect(trustStrip).not.toHaveTextContent(/proxy_fallback|proxy fallback|fallback|proxy|信号过期/i);
   });
 
+  it('renders watchlist setup-path actions for stale diagnostic evidence without conflating the page with scanner setup', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [makeItem({
+        id: 12,
+        symbol: 'BILI',
+        source: 'portfolio',
+        scannerRunId: 91,
+        scannerRank: null,
+        scannerScore: 70,
+        lastScoredAt: '2026-04-20T12:30:00Z',
+        scoreSource: 'proxy_fallback',
+        scoreStatus: 'stale',
+        intelligence: {
+          scanner: {
+            lastScore: 70,
+            lastRank: null,
+            status: 'selected',
+            reason: 'Fallback score snapshot.',
+            lastScannedAt: '2026-04-20T12:30:00Z',
+          },
+          strategySimulation: { status: 'partial' },
+          backtest: {},
+        },
+      })],
+    });
+
+    renderWatchlist();
+
+    const setupPath = await screen.findByTestId('watchlist-setup-path');
+    expect(within(setupPath).getByRole('link', { name: '查看 Provider Ops' })).toHaveAttribute('href', '/admin/market-providers?surface=watchlist');
+    expect(within(setupPath).getByRole('link', { name: '前往数据源设置' })).toHaveAttribute('href', '/settings/system?panel=data_sources&surface=watchlist');
+    expect(setupPath.textContent || '').not.toContain('surface=scanner');
+    expect(setupPath.textContent || '').not.toMatch(/买入|卖出|推荐/i);
+    expect(screen.getByTestId('watchlist-status-strip')).toBeInTheDocument();
+  });
+
   it('shows unknown trust disclosure when source and freshness fields are absent', async () => {
     listWatchlistItems.mockResolvedValue({
       items: [makeItem({

@@ -18,6 +18,7 @@ import { watchlistApi } from '../api/watchlist';
 import { AuthGuardOverlay } from '../components/auth/AuthGuardOverlay';
 import { ApiErrorAlert, Input, Select } from '../components/common';
 import { TrustDisclosureChips } from '../components/evidence/TrustDisclosureChips';
+import { ProductSetupPath } from '../components/market-intelligence/ProductSetupPath';
 import {
   ConsoleBoard,
   ConsoleContextRail,
@@ -949,6 +950,11 @@ const WatchlistPage: React.FC = () => {
     () => buildWatchlistConclusion(filteredItems, language),
     [filteredItems, language],
   );
+  const shouldShowWatchlistSetupPath = filteredItems.length > 0 && (
+    watchlistConclusion.staleCount > 0
+    || watchlistConclusion.unknownCount > 0
+    || watchlistConclusion.fallbackProxyCount > 0
+  );
 
   const toggleSelected = useCallback((item: WatchlistItem) => {
     setSelectedIds((current) => {
@@ -1276,6 +1282,12 @@ const WatchlistPage: React.FC = () => {
           items={statusItems}
         />
         <WatchlistConclusionBand model={watchlistConclusion} language={language} />
+        {shouldShowWatchlistSetupPath ? (
+          <ProductSetupPath
+            surface="watchlist"
+            testId="watchlist-setup-path"
+          />
+        ) : null}
 
         {notice ? (
           <TerminalNotice className={noticeClassName} role="status">
