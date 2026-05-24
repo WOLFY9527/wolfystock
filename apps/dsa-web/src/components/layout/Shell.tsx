@@ -122,6 +122,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const shellViewportClass = isScannerRoute || isHomeRoute ? 'min-h-screen' : 'h-full min-h-0';
   const shellFrameOverflowClass = '';
   const isWideRoute = surfacePathname === '/'
+    || isBacktestRoute
     || surfacePathname.startsWith('/scanner')
     || surfacePathname.startsWith('/portfolio')
     || surfacePathname.startsWith('/watchlist')

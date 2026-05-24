@@ -1288,7 +1288,7 @@ const BacktestPage: React.FC = () => {
       aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
       className={getSafariReadySurfaceClassName(isSafariReady, 'w-full flex-1 min-w-0 min-h-0 bg-transparent')}
     >
-      <TerminalPageShell data-testid="backtest-page-shell" className="flex-1 min-w-0 min-h-0 py-5 md:py-6">
+      <TerminalPageShell data-testid="backtest-page-shell" className="flex-1 min-w-0 min-h-0 max-w-none mx-0 px-0 py-5 md:py-6 xl:px-0">
         <TerminalPageHeading
           data-testid="backtest-page-heading"
           title={language === 'en' ? 'Backtest' : '回测'}

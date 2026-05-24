@@ -502,7 +502,7 @@ describe('Shell', () => {
     expect(document.querySelector('.theme-page-transition')).toHaveClass('theme-page-transition--system-control');
   });
 
-  it('adds a dedicated content-frame modifier for the backtest route', () => {
+  it('uses the wide workspace lane for the backtest route', () => {
     render(
       <MemoryRouter initialEntries={['/backtest']}>
         <ThemeProvider>
@@ -513,8 +513,12 @@ describe('Shell', () => {
       </MemoryRouter>
     );
 
+    expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--backtest')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame')).toHaveClass('flex', 'w-full', 'min-w-0');
+    expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'flex-1', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12');
+    expect(document.querySelector('.shell-main-column')).not.toHaveClass('mx-auto', 'max-w-[1600px]');
   });
 
   it('keeps the masthead and route frame on full-width shell tokens', () => {
