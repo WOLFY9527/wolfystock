@@ -1400,6 +1400,13 @@ const allMarketPanelRequests = [
   ...secondStagedMarketPanelRequests,
 ] as const;
 
+const FIRST_STAGE_PANEL_DELAY_MS = 250;
+const SECOND_STAGE_PANEL_DELAY_MS = 650;
+const SECOND_STAGE_PANEL_DELTA_MS = SECOND_STAGE_PANEL_DELAY_MS - FIRST_STAGE_PANEL_DELAY_MS;
+const CRYPTO_PENDING_FALLBACK_DELAY_MS = 3_100;
+const FAST_MARKET_POLL_INTERVAL_MS = 45_000;
+const MEDIUM_MARKET_POLL_INTERVAL_MS = 120_000;
+const SLOW_MARKET_POLL_INTERVAL_MS = 300_000;
 const AUTO_REVALIDATE_OBSERVATION_WINDOW_MS = 5_000;
 
 type MarketPanelRequestMock = (typeof allMarketPanelRequests)[number];
@@ -1430,6 +1437,52 @@ function expectMarketPanelRequestsNotCalled(requests: readonly MarketPanelReques
   requests.forEach((request) => {
     expect(request).not.toHaveBeenCalled();
   });
+}
+
+async function advanceMarketOverviewTimersByTime(ms: number): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+}
+
+async function advanceFirstStagedMarketPanelRequests(): Promise<void> {
+  await advanceMarketOverviewTimersByTime(FIRST_STAGE_PANEL_DELAY_MS);
+}
+
+async function advanceSecondStagedMarketPanelRequests(): Promise<void> {
+  await advanceMarketOverviewTimersByTime(SECOND_STAGE_PANEL_DELTA_MS);
+}
+
+async function drainStagedMarketPanelRequests(): Promise<void> {
+  await advanceMarketOverviewTimersByTime(SECOND_STAGE_PANEL_DELAY_MS);
+}
+
+async function advanceAutoRevalidateObservationWindow(): Promise<void> {
+  await advanceMarketOverviewTimersByTime(AUTO_REVALIDATE_OBSERVATION_WINDOW_MS);
+}
+
+async function flushMarketOverviewMicrotasks(turns = 1): Promise<void> {
+  await act(async () => {
+    for (let index = 0; index < turns; index += 1) {
+      await Promise.resolve();
+    }
+  });
+}
+
+async function runMarketOverviewAsyncStep(callback: () => void): Promise<void> {
+  await act(async () => {
+    callback();
+    await Promise.resolve();
+  });
+}
+
+function getMarketOverviewIntervalCallback(
+  setIntervalSpy: { mock: { calls: Array<[TimerHandler, number | undefined, ...unknown[]]> } },
+  delayMs: number,
+): () => void {
+  const callback = setIntervalSpy.mock.calls.find(([, delay]) => delay === delayMs)?.[0];
+  expect(typeof callback).toBe('function');
+  return callback as () => void;
 }
 
 describe('MarketOverviewPage', () => {
@@ -1959,10 +2012,7 @@ describe('MarketOverviewPage', () => {
     ]);
     expect(MockEventSource.instances).toHaveLength(1);
 
-    await act(async () => {
-      vi.advanceTimersByTime(250);
-      await Promise.resolve();
-    });
+    await advanceFirstStagedMarketPanelRequests();
 
     expect(countMarketPanelRequests()).toBe(13);
     expectMarketPanelRequestsCalledOnce([
@@ -1971,10 +2021,7 @@ describe('MarketOverviewPage', () => {
     ]);
     expectMarketPanelRequestsNotCalled(secondStagedMarketPanelRequests);
 
-    await act(async () => {
-      vi.advanceTimersByTime(400);
-      await Promise.resolve();
-    });
+    await advanceSecondStagedMarketPanelRequests();
 
     expect(countMarketPanelRequests()).toBe(17);
     expectMarketPanelRequestsCalledOnce(allMarketPanelRequests);
@@ -1997,10 +2044,7 @@ describe('MarketOverviewPage', () => {
       ...secondStagedMarketPanelRequests,
     ]);
 
-    await act(async () => {
-      vi.advanceTimersByTime(250);
-      await Promise.resolve();
-    });
+    await advanceFirstStagedMarketPanelRequests();
 
     expect(countMarketPanelRequests()).toBe(13);
     expectMarketPanelRequestsCalledOnce([
@@ -2009,10 +2053,7 @@ describe('MarketOverviewPage', () => {
     ]);
     expectMarketPanelRequestsNotCalled(secondStagedMarketPanelRequests);
 
-    await act(async () => {
-      vi.advanceTimersByTime(400);
-      await Promise.resolve();
-    });
+    await advanceSecondStagedMarketPanelRequests();
 
     expect(countMarketPanelRequests()).toBe(17);
     expectMarketPanelRequestsCalledOnce(allMarketPanelRequests);
@@ -3209,9 +3250,7 @@ describe('MarketOverviewPage', () => {
     expect(await screen.findByTestId('market-overview-card-crypto')).toBeInTheDocument();
     const source = MockEventSource.instances[0];
     view.unmount();
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await flushMarketOverviewMicrotasks();
 
     expect(source.closed).toBe(true);
   });
@@ -3391,9 +3430,7 @@ describe('MarketOverviewPage', () => {
 
     render(<MarketOverviewPage />);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(3100);
-    });
+    await advanceMarketOverviewTimersByTime(CRYPTO_PENDING_FALLBACK_DELAY_MS);
 
     expandPendingDataSourceSection();
     expect(screen.getByTestId('market-overview-card-crypto')).toBeInTheDocument();
@@ -3429,24 +3466,17 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await flushMarketOverviewMicrotasks(2);
     expect(screen.getByRole('heading', { name: /加密核心/i })).toBeInTheDocument();
     expect(screen.getAllByTestId('data-freshness-badge-refreshing').length).toBeGreaterThan(0);
     expect(marketApi.getCrypto).toHaveBeenCalledTimes(1);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(AUTO_REVALIDATE_OBSERVATION_WINDOW_MS);
-    });
+    await advanceAutoRevalidateObservationWindow();
 
     expect(marketApi.getCrypto).toHaveBeenCalledTimes(2);
     expect(screen.getAllByText('76,837.04').length).toBeGreaterThan(0);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(AUTO_REVALIDATE_OBSERVATION_WINDOW_MS);
-    });
+    await advanceAutoRevalidateObservationWindow();
 
     expect(marketApi.getCrypto).toHaveBeenCalledTimes(2);
   });
@@ -3458,32 +3488,21 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await flushMarketOverviewMicrotasks(2);
     expect(screen.getByRole('heading', { name: /加密核心/i })).toBeInTheDocument();
     expect(screen.getAllByTestId('data-freshness-badge-refreshing').length).toBeGreaterThan(0);
     expect(marketApi.getCrypto).toHaveBeenCalledTimes(1);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(AUTO_REVALIDATE_OBSERVATION_WINDOW_MS);
-    });
+    await advanceAutoRevalidateObservationWindow();
     expect(marketApi.getCrypto).toHaveBeenCalledTimes(2);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(AUTO_REVALIDATE_OBSERVATION_WINDOW_MS);
-    });
+    await advanceAutoRevalidateObservationWindow();
     expect(marketApi.getCrypto).toHaveBeenCalledTimes(3);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(AUTO_REVALIDATE_OBSERVATION_WINDOW_MS);
-    });
+    await advanceAutoRevalidateObservationWindow();
     expect(marketApi.getCrypto).toHaveBeenCalledTimes(4);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(AUTO_REVALIDATE_OBSERVATION_WINDOW_MS);
-    });
+    await advanceAutoRevalidateObservationWindow();
 
     expect(marketApi.getCrypto).toHaveBeenCalledTimes(4);
   });
@@ -3563,16 +3582,10 @@ describe('MarketOverviewPage', () => {
 
     render(<MarketOverviewPage />);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(650);
-    });
+    await drainStagedMarketPanelRequests();
     expectMarketPanelRequestsCalledOnce(allMarketPanelRequests);
 
-    const intervalByDelay = new Map(
-      setIntervalSpy.mock.calls.map(([callback, delay]) => [delay, callback as () => void]),
-    );
-    const fastCallback = intervalByDelay.get(45_000);
-    expect(typeof fastCallback).toBe('function');
+    const fastCallback = getMarketOverviewIntervalCallback(setIntervalSpy, FAST_MARKET_POLL_INTERVAL_MS);
 
     const indicesRefresh = createDeferredPromise<ReturnType<typeof panel>>();
     const volatilityRefresh = createDeferredPromise<ReturnType<typeof panel>>();
@@ -3581,21 +3594,19 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketOverviewApi.getVolatility).mockReturnValueOnce(volatilityRefresh.promise);
     vi.mocked(marketApi.getCrypto).mockReturnValueOnce(cryptoRefresh.promise);
 
-    await act(async () => {
-      fastCallback?.();
-      fastCallback?.();
-      await Promise.resolve();
+    await runMarketOverviewAsyncStep(() => {
+      fastCallback();
+      fastCallback();
     });
 
     expect(marketOverviewApi.getIndices).toHaveBeenCalledTimes(2);
     expect(marketOverviewApi.getVolatility).toHaveBeenCalledTimes(2);
     expect(marketApi.getCrypto).toHaveBeenCalledTimes(2);
 
-    await act(async () => {
+    await runMarketOverviewAsyncStep(() => {
       indicesRefresh.resolve(panel('IndexTrendsCard', 'SPX'));
       volatilityRefresh.resolve(panel('VolatilityCard', 'VIX'));
       cryptoRefresh.resolve(cryptoPanel());
-      await Promise.resolve();
     });
   });
 
@@ -3618,10 +3629,9 @@ describe('MarketOverviewPage', () => {
     expect(marketOverviewApi.getVolatility).toHaveBeenCalledTimes(2);
     expect(marketApi.getSentiment).toHaveBeenCalledTimes(2);
 
-    await act(async () => {
+    await runMarketOverviewAsyncStep(() => {
       volatilityRefresh.resolve(panel('VolatilityCard', 'VIX'));
       sentimentRefresh.resolve(sentimentPanel());
-      await Promise.resolve();
     });
   });
 
@@ -3669,23 +3679,15 @@ describe('MarketOverviewPage', () => {
     const setIntervalSpy = vi.spyOn(window, 'setInterval');
     render(<MarketOverviewPage />);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(650);
-    });
+    await drainStagedMarketPanelRequests();
     expectMarketPanelRequestsCalledOnce(allMarketPanelRequests);
 
     expect(setIntervalSpy).toHaveBeenCalledTimes(3);
-    const intervalByDelay = new Map(
-      setIntervalSpy.mock.calls.map(([callback, delay]) => [delay, callback as TimerHandler]),
-    );
-    const fastCallback = intervalByDelay.get(45_000);
-    const mediumCallback = intervalByDelay.get(120_000);
-    const slowCallback = intervalByDelay.get(300_000);
-    expect(typeof fastCallback).toBe('function');
-    expect(typeof mediumCallback).toBe('function');
-    expect(typeof slowCallback).toBe('function');
+    const fastCallback = getMarketOverviewIntervalCallback(setIntervalSpy, FAST_MARKET_POLL_INTERVAL_MS);
+    const mediumCallback = getMarketOverviewIntervalCallback(setIntervalSpy, MEDIUM_MARKET_POLL_INTERVAL_MS);
+    const slowCallback = getMarketOverviewIntervalCallback(setIntervalSpy, SLOW_MARKET_POLL_INTERVAL_MS);
 
-    (fastCallback as () => void)();
+    fastCallback();
     expect(marketApi.getCrypto).toHaveBeenCalledTimes(2);
     expect(marketOverviewApi.getIndices).toHaveBeenCalledTimes(2);
     expect(marketOverviewApi.getVolatility).toHaveBeenCalledTimes(2);
@@ -3693,14 +3695,14 @@ describe('MarketOverviewPage', () => {
     expect(marketApi.getCnIndices).toHaveBeenCalledTimes(1);
     expect(marketApi.getFutures).toHaveBeenCalledTimes(1);
 
-    (mediumCallback as () => void)();
+    mediumCallback();
     expect(marketApi.getCnIndices).toHaveBeenCalledTimes(2);
     expect(marketApi.getCnBreadth).toHaveBeenCalledTimes(2);
     expect(marketApi.getFutures).toHaveBeenCalledTimes(2);
     expect(marketApi.getSentiment).toHaveBeenCalledTimes(1);
     expect(marketApi.getCnFlows).toHaveBeenCalledTimes(1);
 
-    (slowCallback as () => void)();
+    slowCallback();
     expect(marketApi.getSentiment).toHaveBeenCalledTimes(2);
     expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(2);
     expect(marketApi.getCnFlows).toHaveBeenCalledTimes(2);
