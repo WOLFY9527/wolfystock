@@ -813,7 +813,7 @@ async function openAdvancedConfigDrawer() {
   expect(screen.getByTestId('llm-provider-scope')).toHaveTextContent('');
 }
 
-function openMaintenancePanel(summaryLabel = '展开维护操作与日志入口') {
+function openMaintenancePanel(summaryLabel = '展开缓存维护与初始化动作') {
   const summary = screen.getByText(summaryLabel);
   const details = summary.closest('details');
   expect(details).not.toBeNull();
@@ -822,7 +822,7 @@ function openMaintenancePanel(summaryLabel = '展开维护操作与日志入口'
   expect(details).toHaveAttribute('open');
 }
 
-function getMaintenancePanel(summaryLabel = '展开维护操作与日志入口') {
+function getMaintenancePanel(summaryLabel = '展开缓存维护与初始化动作') {
   const summary = screen.getByText(summaryLabel);
   return summary.closest('details');
 }
@@ -1223,7 +1223,7 @@ describe('SettingsPage', () => {
       expect(screen.getAllByText(zh('settings.controlPlaneStatProviders'))).toHaveLength(1);
       expect(screen.getAllByText(zh('settings.controlPlaneStatDataSources'))).toHaveLength(1);
       expect(screen.getAllByText('当前已进入全局系统控制面').length).toBeGreaterThan(0);
-      expect(screen.getByText('展开维护操作与日志入口')).toBeInTheDocument();
+      expect(screen.getByText('展开缓存维护与初始化动作')).toBeInTheDocument();
       expect(getMaintenancePanel()).not.toHaveAttribute('open');
       expect(screen.queryByText('认证与登录保护')).not.toBeInTheDocument();
       expect(screen.queryByText('修改密码')).not.toBeInTheDocument();
@@ -1235,7 +1235,8 @@ describe('SettingsPage', () => {
     await withSystemSettingsPath(async () => {
       render(<SettingsPage />);
 
-      expect(await screen.findByTestId('system-health-summary')).toHaveTextContent('系统健康');
+      expect(await screen.findByTestId('system-health-summary')).toHaveTextContent('当前状态');
+      expect(screen.getByTestId('system-health-summary')).toHaveTextContent('系统健康');
       expect(screen.getByTestId('system-health-summary')).toHaveTextContent('可用');
       expect(screen.getByTestId('system-health-summary')).toHaveTextContent('需关注');
       expect(screen.getByTestId('system-health-summary')).toHaveTextContent('未配置');
@@ -1244,22 +1245,56 @@ describe('SettingsPage', () => {
       expect(screen.getByTestId('system-health-summary')).toHaveTextContent('环境状态');
 
       const subsystemCards = screen.getByTestId('system-subsystem-cards');
+      expect(subsystemCards).toHaveTextContent('安全与凭证');
+      expect(subsystemCards).toHaveTextContent('数据接入与探测');
+      expect(subsystemCards).toHaveTextContent('管理入口');
       expect(subsystemCards).toHaveTextContent('数据源');
       expect(subsystemCards).toHaveTextContent('市场总览');
       expect(subsystemCards).toHaveTextContent('扫描器');
-      expect(subsystemCards).toHaveTextContent('回测');
-      expect(subsystemCards).toHaveTextContent('投资组合');
       expect(subsystemCards).toHaveTextContent('AI 决策');
       expect(subsystemCards).toHaveTextContent('通知');
-      expect(subsystemCards).toHaveTextContent('DuckDB 量化引擎');
       expect(subsystemCards).toHaveTextContent('日志中心');
-      expect(subsystemCards).toHaveTextContent('量化加速未启用；默认 Python 路径继续可用');
-      expect(subsystemCards).toHaveTextContent('可选代码检查');
-      expect(subsystemCards).toHaveTextContent('flake8 未安装；不影响运行时分析');
-      expect(subsystemCards).toHaveTextContent('A股扩展数据源');
-      expect(subsystemCards).toHaveTextContent('akshare 未安装；外部数据源与回退路径继续可用');
+      expect(screen.getByTestId('system-risk-boundary-strip')).toHaveTextContent('回测');
+      expect(screen.getByTestId('system-risk-boundary-strip')).toHaveTextContent('投资组合');
+      expect(screen.getByTestId('system-duckdb-disclosure')).toHaveTextContent('DuckDB 量化引擎');
+      expect(screen.getByTestId('system-duckdb-disclosure')).toHaveTextContent('开发者 / 兼容层');
+      expect(screen.getByTestId('system-duckdb-disclosure')).toHaveTextContent('量化加速未启用；默认 Python 路径继续可用');
+      expect(screen.getByTestId('system-duckdb-disclosure')).toHaveTextContent('可选代码检查');
+      expect(screen.getByTestId('system-duckdb-disclosure')).toHaveTextContent('flake8 未安装；不影响运行时分析');
+      expect(screen.getByTestId('system-duckdb-disclosure')).toHaveTextContent('A股扩展数据源');
+      expect(screen.getByTestId('system-duckdb-disclosure')).toHaveTextContent('akshare 未安装；外部数据源与回退路径继续可用');
       expect(subsystemCards).not.toHaveTextContent('failed');
       expect(subsystemCards).not.toHaveTextContent('false');
+    });
+  });
+
+  it('presents the first system screen as Chinese-first risk grouping with raw and probe controls secondary', async () => {
+    await withSystemSettingsPath(async () => {
+      render(<SettingsPage />);
+
+      const dashboard = await screen.findByTestId('system-operator-dashboard');
+      expect(dashboard).toHaveTextContent('当前状态');
+      expect(dashboard).toHaveTextContent('优先处理');
+      expect(dashboard).toHaveTextContent('安全与凭证');
+      expect(dashboard).toHaveTextContent('数据接入与探测');
+      expect(dashboard).toHaveTextContent('管理入口');
+      expect(screen.getByTestId('system-secondary-zones')).toHaveTextContent('缓存 / 重载 / 危险动作');
+      expect(screen.getByTestId('system-secondary-zones')).toHaveTextContent('开发者 / 兼容层');
+
+      const visibleText = defaultVisibleText(document.body);
+      expect(visibleText).toContain('只展示凭证就绪状态');
+      expect(visibleText).toContain('远端校验仍需进入数据源详情显式触发');
+      expect(visibleText).not.toContain('重置运行时缓存');
+      expect(visibleText).not.toContain('执行工厂重置');
+      expect(visibleText).not.toContain('测试连接');
+      expect(visibleText).not.toContain('展开原始字段与兼容键');
+      expect(testLLMChannel).not.toHaveBeenCalled();
+      expect(testCustomDataSource).not.toHaveBeenCalled();
+      expect(testBuiltinDataSource).not.toHaveBeenCalled();
+      expect(resetRuntimeCaches).not.toHaveBeenCalled();
+      expect(factoryResetSystem).not.toHaveBeenCalled();
+      expect(save).not.toHaveBeenCalled();
+      expect(saveExternalItems).not.toHaveBeenCalled();
     });
   });
 
@@ -1272,13 +1307,13 @@ describe('SettingsPage', () => {
       );
       expect(screen.getByTestId('settings-main-content')).toHaveClass('max-w-none');
       expect(screen.getByTestId('system-operator-dashboard')).toHaveTextContent('系统当前能否安全运行');
-      expect(screen.getByTestId('system-priority-settings')).toHaveTextContent('重要设置组');
+      expect(screen.getByTestId('system-priority-settings')).toHaveTextContent('风险与操作意图');
 
       const duckdbDisclosure = screen.getByTestId('system-duckdb-disclosure');
       const dangerZone = screen.getByTestId('system-danger-zone');
       expect(duckdbDisclosure).not.toHaveAttribute('open');
       expect(dangerZone).not.toHaveAttribute('open');
-      expect(dangerZone).toHaveTextContent('危险系统动作');
+      expect(dangerZone).toHaveTextContent('缓存 / 重载 / 危险动作');
       expect(dangerZone).toHaveTextContent('确认后才执行');
     });
   });
@@ -1619,9 +1654,7 @@ describe('SettingsPage', () => {
       render(<SettingsPage />);
 
       expect(await screen.findByText('原始诊断')).toBeInTheDocument();
-      const developerDetails = screen.getAllByText('开发者细节')
-        .map((item) => item.closest('details'))
-        .find((details) => details?.textContent?.includes('原始诊断'));
+      const developerDetails = screen.getByText('原始配置与兼容层').closest('details');
       expect(developerDetails).not.toBeNull();
       expect(developerDetails).not.toHaveAttribute('open');
       expect(screen.queryByText('masked-vendor-key')).not.toBeInTheDocument();
@@ -1715,13 +1748,13 @@ describe('SettingsPage', () => {
       render(<SettingsPage />);
 
       expect(await screen.findByRole('heading', { name: '全局控制面概览' })).toBeInTheDocument();
-      expect(screen.getByText('展开维护操作与日志入口')).toBeInTheDocument();
+      expect(screen.getByText('展开缓存维护与初始化动作')).toBeInTheDocument();
+      expect(screen.getByTestId('system-admin-entry-boundary')).toHaveTextContent('查看系统执行日志');
       expect(getMaintenancePanel()).not.toHaveAttribute('open');
 
       openMaintenancePanel();
 
       expect(getMaintenancePanel()).toHaveAttribute('open');
-      expect(screen.getByRole('button', { name: '查看系统执行日志' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: '重置运行时缓存' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: '执行工厂重置' })).toBeInTheDocument();
     });
