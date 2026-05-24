@@ -104,6 +104,10 @@ _MISSING_FEED_PROVIDER_IDS = frozenset(
         "authorized.real_sector_theme_flow",
         "authorized.us_etf_flow",
         "exchange_or_broker_authorized.index_futures",
+        "options_lab.bid_ask_liquidity_gate",
+        "options_lab.iv_greeks_gate",
+        "options_lab.iv_rank_history",
+        "options_lab.oi_volume_gate",
         "official_public.cn_money_market_rates",
         "official_or_authorized.fx_dxy",
         "official_or_authorized.us_market_breadth",
@@ -329,10 +333,16 @@ class ProviderOperationsMatrixService:
             row.paid_data_likely_required or metadata.paid_data_likely_required
         )
         row.key_required = row.key_required or metadata.key_required
+        row.cache_required = metadata.cache_required if row.cache_required is None else row.cache_required
+        if metadata.provider_id.startswith(("portfolio.", "watchlist.", "options_lab.")):
+            row.supported_capabilities.add(metadata.provider_id)
         row.affected_surfaces.update(metadata.best_use_cases)
         row.router_reason_codes.update(metadata.rejected_for)
         row.missing_provider_reason = row.missing_provider_reason or metadata.missing_provider_reason
         row.degradation_reason = row.degradation_reason or metadata.degradation_reason
+        row.remediation_hint = row.remediation_hint or self._metadata_gap_remediation_hint(
+            metadata.provider_id
+        )
         row.runtime_state = row.runtime_state or "metadata_only"
         probe = get_provider_dry_run_probe_contract(metadata.provider_id)
         if probe is not None:
@@ -765,6 +775,8 @@ class ProviderOperationsMatrixService:
             configured_state = self._cn_money_market_rates_runtime_state(row)
             if configured_state is not None:
                 return configured_state
+        if metadata_gap_state := self._metadata_gap_runtime_state(row):
+            return metadata_gap_state
         if row.provider_id in _MISSING_FEED_PROVIDER_IDS:
             return "missing_provider_configuration"
         if credential_state == "missing":
@@ -828,6 +840,50 @@ class ProviderOperationsMatrixService:
             return (
                 "Keep this provider diagnostic or observation-only unless explicit "
                 "source-confidence gates approve promotion."
+            )
+        return None
+
+    @staticmethod
+    def _metadata_gap_runtime_state(row: _ProviderAccumulator) -> str | None:
+        if not row.provider_id.startswith(("portfolio.", "watchlist.", "options_lab.")):
+            return None
+        source_type = row.source_type or ""
+        if source_type == "cache_snapshot":
+            return "configured_cache_only_diagnostic"
+        if source_type == "synthetic_fixture":
+            return "synthetic_fixture_only_diagnostic"
+        if source_type == "disabled_live_stub":
+            return "disabled_live_stub_diagnostic"
+        if source_type == "missing":
+            return "missing_provider_configuration"
+        return "observation_only"
+
+    @staticmethod
+    def _metadata_gap_remediation_hint(provider_id: str) -> str | None:
+        if provider_id.startswith("portfolio."):
+            return (
+                "Keep this diagnostic-only until explicit stored snapshots preserve "
+                "freshness, lineage, and non-fallback provenance; only stored evidence "
+                "may graduate to score-grade."
+            )
+        if provider_id.startswith("watchlist."):
+            return (
+                "Keep watchlist score gaps diagnostic-only; stale or missing watchlist "
+                "scores must never be promoted to score-grade."
+            )
+        if provider_id in {
+            "options_lab.synthetic_fixture_chain",
+            "options_lab.disabled_live_provider_stubs",
+        }:
+            return (
+                "Keep fixture and stub rows diagnostic-only; synthetic or disabled "
+                "options metadata must never be promoted to score-grade."
+            )
+        if provider_id.startswith("options_lab."):
+            return (
+                "Future decision-grade options metadata requires authorized or "
+                "cache-backed bid/ask, OI/volume, IV/Greeks, IV rank/history, "
+                "freshness, and source authority evidence."
             )
         return None
 

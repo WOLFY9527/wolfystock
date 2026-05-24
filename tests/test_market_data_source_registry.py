@@ -475,3 +475,41 @@ def test_portfolio_risk_provenance_aliases_remain_inert_and_non_live() -> None:
         )
 
         assert provenance == case["expected"]
+
+
+def test_provider_ops_gap_metadata_ids_project_safe_inert_provenance() -> None:
+    cases = {
+        "portfolio.price_provenance": ("cached", "cache_snapshot", "缓存快照"),
+        "portfolio.fx_provenance": ("cached", "cache_snapshot", "缓存快照"),
+        "portfolio.sector_industry_exposure": ("cached", "cache_snapshot", "缓存快照"),
+        "portfolio.factor_risk_metrics": ("cached", "cache_snapshot", "缓存快照"),
+        "portfolio.benchmark_return_history": ("cached", "cache_snapshot", "缓存快照"),
+        "watchlist.scanner_score_snapshot": ("cached", "cache_snapshot", "缓存快照"),
+        "watchlist.score_refresh_freshness": ("cached", "cache_snapshot", "缓存快照"),
+        "watchlist.no_score_stale_state": ("unavailable", "missing", "未接入"),
+        "watchlist.source_confidence_preservation": ("cached", "cache_snapshot", "缓存快照"),
+        "options_lab.synthetic_fixture_chain": (
+            "synthetic_delayed",
+            "synthetic_fixture",
+            "Synthetic Fixture",
+        ),
+        "options_lab.disabled_live_provider_stubs": (
+            "unavailable",
+            "disabled_live_stub",
+            "Disabled Live Stub",
+        ),
+        "options_lab.bid_ask_liquidity_gate": ("unavailable", "missing", "未接入"),
+        "options_lab.oi_volume_gate": ("unavailable", "missing", "未接入"),
+        "options_lab.iv_greeks_gate": ("unavailable", "missing", "未接入"),
+        "options_lab.iv_rank_history": ("unavailable", "missing", "未接入"),
+    }
+
+    for source, (freshness, expected_type, expected_label) in cases.items():
+        provenance = project_source_provenance(
+            source=source,
+            freshness=freshness,
+        )
+
+        assert provenance["sourceType"] == expected_type
+        assert provenance["sourceLabel"] == expected_label
+        assert provenance["freshnessLabel"] != "实时"

@@ -24,6 +24,7 @@ _CANONICAL_SURFACE_BY_ALIAS = {
     "scanner_diagnostics": "scanner",
     "stock_history": "provider_ops",
     "system_diagnostics": "provider_ops",
+    "watchlist": "watchlist",
 }
 _EXPLICIT_PROVIDER_OPS_ALIASES = {"provider_ops", "stock_history", "system_diagnostics"}
 _CANONICAL_SURFACE_ORDER = (
@@ -31,6 +32,7 @@ _CANONICAL_SURFACE_ORDER = (
     "liquidity_monitor",
     "rotation_radar",
     "scanner",
+    "watchlist",
     "portfolio",
     "options_lab",
     "backtest",

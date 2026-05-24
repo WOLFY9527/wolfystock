@@ -398,3 +398,132 @@ def test_provider_fit_metadata_helpers_are_deterministic_and_do_not_modify_runti
     assert len(list_provider_dry_run_probe_contracts()) == len(first)
     assert get_provider_capability("sec_edgar") is None
     assert get_provider_capability("coinbase_public") is None
+
+
+def test_provider_fit_metadata_includes_portfolio_watchlist_and_options_gap_rows() -> None:
+    expected = {
+        "portfolio.price_provenance": {
+            "provider_category": "portfolio_diagnostic_gap",
+            "surface": "portfolio",
+            "paid_data_likely_required": False,
+            "key_required": False,
+            "cache_required": True,
+        },
+        "portfolio.fx_provenance": {
+            "provider_category": "portfolio_diagnostic_gap",
+            "surface": "portfolio",
+            "paid_data_likely_required": False,
+            "key_required": False,
+            "cache_required": True,
+        },
+        "portfolio.sector_industry_exposure": {
+            "provider_category": "portfolio_diagnostic_gap",
+            "surface": "portfolio",
+            "paid_data_likely_required": False,
+            "key_required": False,
+            "cache_required": True,
+        },
+        "portfolio.factor_risk_metrics": {
+            "provider_category": "portfolio_diagnostic_gap",
+            "surface": "portfolio",
+            "paid_data_likely_required": False,
+            "key_required": False,
+            "cache_required": True,
+        },
+        "portfolio.benchmark_return_history": {
+            "provider_category": "portfolio_diagnostic_gap",
+            "surface": "portfolio",
+            "paid_data_likely_required": False,
+            "key_required": False,
+            "cache_required": True,
+        },
+        "watchlist.scanner_score_snapshot": {
+            "provider_category": "watchlist_diagnostic_gap",
+            "surface": "watchlist",
+            "paid_data_likely_required": False,
+            "key_required": False,
+            "cache_required": True,
+        },
+        "watchlist.score_refresh_freshness": {
+            "provider_category": "watchlist_diagnostic_gap",
+            "surface": "watchlist",
+            "paid_data_likely_required": False,
+            "key_required": False,
+            "cache_required": True,
+        },
+        "watchlist.no_score_stale_state": {
+            "provider_category": "watchlist_diagnostic_gap",
+            "surface": "watchlist",
+            "paid_data_likely_required": False,
+            "key_required": False,
+            "cache_required": True,
+        },
+        "watchlist.source_confidence_preservation": {
+            "provider_category": "watchlist_diagnostic_gap",
+            "surface": "watchlist",
+            "paid_data_likely_required": False,
+            "key_required": False,
+            "cache_required": True,
+        },
+        "options_lab.synthetic_fixture_chain": {
+            "provider_category": "options_lab_diagnostic_gap",
+            "surface": "options_lab",
+            "paid_data_likely_required": False,
+            "key_required": False,
+            "cache_required": True,
+        },
+        "options_lab.disabled_live_provider_stubs": {
+            "provider_category": "options_lab_diagnostic_gap",
+            "surface": "options_lab",
+            "paid_data_likely_required": False,
+            "key_required": False,
+            "cache_required": False,
+        },
+        "options_lab.bid_ask_liquidity_gate": {
+            "provider_category": "options_lab_diagnostic_gap",
+            "surface": "options_lab",
+            "paid_data_likely_required": True,
+            "key_required": True,
+            "cache_required": True,
+        },
+        "options_lab.oi_volume_gate": {
+            "provider_category": "options_lab_diagnostic_gap",
+            "surface": "options_lab",
+            "paid_data_likely_required": True,
+            "key_required": True,
+            "cache_required": True,
+        },
+        "options_lab.iv_greeks_gate": {
+            "provider_category": "options_lab_diagnostic_gap",
+            "surface": "options_lab",
+            "paid_data_likely_required": True,
+            "key_required": True,
+            "cache_required": True,
+        },
+        "options_lab.iv_rank_history": {
+            "provider_category": "options_lab_diagnostic_gap",
+            "surface": "options_lab",
+            "paid_data_likely_required": True,
+            "key_required": True,
+            "cache_required": True,
+        },
+    }
+
+    for provider_id, entry in expected.items():
+        metadata = get_provider_fit_metadata(provider_id)
+        probe = get_provider_dry_run_probe_contract(provider_id)
+
+        assert metadata is not None
+        assert probe is not None
+        assert get_provider_capability(provider_id) is None
+        assert metadata.provider_category == entry["provider_category"]
+        assert metadata.observation_only is True
+        assert metadata.score_contribution_allowed is False
+        assert metadata.best_use_cases[0] == entry["surface"]
+        assert metadata.paid_data_likely_required is entry["paid_data_likely_required"]
+        assert metadata.key_required is entry["key_required"]
+        assert metadata.cache_required is entry["cache_required"]
+        assert probe.no_default_live_http_calls is True
+        assert probe.network_call_executed is False
+        assert probe.observation_only is True
+        assert probe.score_contribution_allowed is False

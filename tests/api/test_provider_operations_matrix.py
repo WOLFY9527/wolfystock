@@ -471,6 +471,193 @@ def test_unknown_surface_aliases_fall_back_to_provider_ops_product_surface() -> 
     ) == ["provider_ops"]
 
 
+def test_watchlist_surface_alias_is_canonicalized_independently_from_scanner() -> None:
+    assert ProviderOperationsMatrixService._canonical_product_affected_surfaces(
+        ["scanner_diagnostics", "watchlist", "watchlist.score_refresh_freshness"]
+    ) == ["scanner", "watchlist"]
+
+
+def test_portfolio_watchlist_and_options_gap_rows_are_inert_and_surface_scoped() -> None:
+    payload = ProviderOperationsMatrixService(
+        env={},
+        spec_finder=lambda _: None,
+    ).build_matrix()
+
+    expected = {
+        "portfolio.price_provenance": {
+            "sourceType": "cache_snapshot",
+            "runtimeState": "configured_cache_only_diagnostic",
+            "providerCategory": "portfolio_diagnostic_gap",
+            "surface": "portfolio",
+            "cacheRequired": True,
+            "keyRequired": False,
+            "paidDataLikelyRequired": False,
+            "hint": ("stored", "freshness", "lineage", "non-fallback"),
+        },
+        "portfolio.fx_provenance": {
+            "sourceType": "cache_snapshot",
+            "runtimeState": "configured_cache_only_diagnostic",
+            "providerCategory": "portfolio_diagnostic_gap",
+            "surface": "portfolio",
+            "cacheRequired": True,
+            "keyRequired": False,
+            "paidDataLikelyRequired": False,
+            "hint": ("stored", "freshness", "lineage", "non-fallback"),
+        },
+        "portfolio.sector_industry_exposure": {
+            "sourceType": "cache_snapshot",
+            "runtimeState": "configured_cache_only_diagnostic",
+            "providerCategory": "portfolio_diagnostic_gap",
+            "surface": "portfolio",
+            "cacheRequired": True,
+            "keyRequired": False,
+            "paidDataLikelyRequired": False,
+            "hint": ("stored", "freshness", "lineage", "non-fallback"),
+        },
+        "portfolio.factor_risk_metrics": {
+            "sourceType": "cache_snapshot",
+            "runtimeState": "configured_cache_only_diagnostic",
+            "providerCategory": "portfolio_diagnostic_gap",
+            "surface": "portfolio",
+            "cacheRequired": True,
+            "keyRequired": False,
+            "paidDataLikelyRequired": False,
+            "hint": ("stored", "freshness", "lineage", "non-fallback"),
+        },
+        "portfolio.benchmark_return_history": {
+            "sourceType": "cache_snapshot",
+            "runtimeState": "configured_cache_only_diagnostic",
+            "providerCategory": "portfolio_diagnostic_gap",
+            "surface": "portfolio",
+            "cacheRequired": True,
+            "keyRequired": False,
+            "paidDataLikelyRequired": False,
+            "hint": ("stored", "freshness", "lineage", "non-fallback"),
+        },
+        "watchlist.scanner_score_snapshot": {
+            "sourceType": "cache_snapshot",
+            "runtimeState": "configured_cache_only_diagnostic",
+            "providerCategory": "watchlist_diagnostic_gap",
+            "surface": "watchlist",
+            "cacheRequired": True,
+            "keyRequired": False,
+            "paidDataLikelyRequired": False,
+            "hint": ("watchlist", "score-grade", "never"),
+        },
+        "watchlist.score_refresh_freshness": {
+            "sourceType": "cache_snapshot",
+            "runtimeState": "configured_cache_only_diagnostic",
+            "providerCategory": "watchlist_diagnostic_gap",
+            "surface": "watchlist",
+            "cacheRequired": True,
+            "keyRequired": False,
+            "paidDataLikelyRequired": False,
+            "hint": ("watchlist", "score-grade", "never"),
+        },
+        "watchlist.no_score_stale_state": {
+            "sourceType": "missing",
+            "runtimeState": "missing_provider_configuration",
+            "providerCategory": "watchlist_diagnostic_gap",
+            "surface": "watchlist",
+            "cacheRequired": True,
+            "keyRequired": False,
+            "paidDataLikelyRequired": False,
+            "hint": ("watchlist", "score-grade", "never"),
+        },
+        "watchlist.source_confidence_preservation": {
+            "sourceType": "cache_snapshot",
+            "runtimeState": "configured_cache_only_diagnostic",
+            "providerCategory": "watchlist_diagnostic_gap",
+            "surface": "watchlist",
+            "cacheRequired": True,
+            "keyRequired": False,
+            "paidDataLikelyRequired": False,
+            "hint": ("watchlist", "score-grade", "never"),
+        },
+        "options_lab.synthetic_fixture_chain": {
+            "sourceType": "synthetic_fixture",
+            "runtimeState": "synthetic_fixture_only_diagnostic",
+            "providerCategory": "options_lab_diagnostic_gap",
+            "surface": "options_lab",
+            "cacheRequired": True,
+            "keyRequired": False,
+            "paidDataLikelyRequired": False,
+            "hint": ("diagnostic-only", "never", "score-grade"),
+        },
+        "options_lab.disabled_live_provider_stubs": {
+            "sourceType": "disabled_live_stub",
+            "runtimeState": "disabled_live_stub_diagnostic",
+            "providerCategory": "options_lab_diagnostic_gap",
+            "surface": "options_lab",
+            "cacheRequired": False,
+            "keyRequired": False,
+            "paidDataLikelyRequired": False,
+            "hint": ("diagnostic-only", "never", "score-grade"),
+        },
+        "options_lab.bid_ask_liquidity_gate": {
+            "sourceType": "missing",
+            "runtimeState": "missing_provider_configuration",
+            "providerCategory": "options_lab_diagnostic_gap",
+            "surface": "options_lab",
+            "cacheRequired": True,
+            "keyRequired": True,
+            "paidDataLikelyRequired": True,
+            "hint": ("bid/ask", "OI/volume", "IV/Greeks", "IV rank/history"),
+        },
+        "options_lab.oi_volume_gate": {
+            "sourceType": "missing",
+            "runtimeState": "missing_provider_configuration",
+            "providerCategory": "options_lab_diagnostic_gap",
+            "surface": "options_lab",
+            "cacheRequired": True,
+            "keyRequired": True,
+            "paidDataLikelyRequired": True,
+            "hint": ("bid/ask", "OI/volume", "IV/Greeks", "IV rank/history"),
+        },
+        "options_lab.iv_greeks_gate": {
+            "sourceType": "missing",
+            "runtimeState": "missing_provider_configuration",
+            "providerCategory": "options_lab_diagnostic_gap",
+            "surface": "options_lab",
+            "cacheRequired": True,
+            "keyRequired": True,
+            "paidDataLikelyRequired": True,
+            "hint": ("bid/ask", "OI/volume", "IV/Greeks", "IV rank/history"),
+        },
+        "options_lab.iv_rank_history": {
+            "sourceType": "missing",
+            "runtimeState": "missing_provider_configuration",
+            "providerCategory": "options_lab_diagnostic_gap",
+            "surface": "options_lab",
+            "cacheRequired": True,
+            "keyRequired": True,
+            "paidDataLikelyRequired": True,
+            "hint": ("bid/ask", "OI/volume", "IV/Greeks", "IV rank/history"),
+        },
+    }
+
+    for provider_id, entry in expected.items():
+        row = _row_by_id(payload, provider_id)
+        hint = row["remediationHint"] or ""
+
+        assert row["providerCategory"] == entry["providerCategory"]
+        assert row["sourceType"] == entry["sourceType"]
+        assert row["runtimeState"] == entry["runtimeState"]
+        assert row["productAffectedSurfaces"] == [entry["surface"]]
+        assert row["supportedCapabilities"] == [provider_id]
+        assert row["diagnosticOnly"] is True
+        assert row["inertMetadataOnly"] is True
+        assert row["observationOnly"] is True
+        assert row["scoreContributionAllowed"] is False
+        assert row["scoreEligible"] is False
+        assert row["noDefaultLiveHttpCalls"] is True
+        assert row["cacheRequired"] is entry["cacheRequired"]
+        assert row["keyRequired"] is entry["keyRequired"]
+        assert row["paidDataLikelyRequired"] is entry["paidDataLikelyRequired"]
+        assert hint
+        assert all(token in hint for token in entry["hint"])
+
+
 def test_cn_hk_connect_flow_provider_ops_reports_cache_only_config_without_secret_values() -> None:
     payload = ProviderOperationsMatrixService(
         env={
