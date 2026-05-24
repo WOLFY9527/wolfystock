@@ -132,9 +132,9 @@ function buildAccountPath(routeLocale: UiLanguage | null, target: string): strin
 export const Shell: React.FC<ShellProps> = ({ children }) => {
   const { t, language } = useI18n();
   const { loggedIn, currentUser, logout } = useAuth();
-  const location = useLocation();
-  const routeLocale = parseLocaleFromPathname(location.pathname);
-  const surfacePathname = stripLocalePrefix(location.pathname);
+  const { pathname } = useLocation();
+  const routeLocale = parseLocaleFromPathname(pathname);
+  const surfacePathname = stripLocalePrefix(pathname);
   const isHomeRoute = surfacePathname === '/' || surfacePathname === '';
   const isBacktestRoute = surfacePathname.startsWith('/backtest');
   const isMarketOverviewRoute = surfacePathname.startsWith('/market-overview');
@@ -163,7 +163,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     || surfacePathname.startsWith('/options-lab')
     || isSystemControlRoute;
   const isDesktop = useIsDesktopViewport();
-  const previousPathnameRef = useRef(location.pathname);
+  const previousPathnameRef = useRef(pathname);
   const didInitializeViewportRef = useRef(false);
   const accountTriggerRef = useRef<HTMLButtonElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
@@ -254,11 +254,11 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   );
 
   useEffect(() => {
-    if (location.pathname === previousPathnameRef.current) {
+    if (pathname === previousPathnameRef.current) {
       return;
     }
 
-    previousPathnameRef.current = location.pathname;
+    previousPathnameRef.current = pathname;
     const timer = window.setTimeout(() => {
       setMobileNavOpen(false);
       setRailOpen(false);
@@ -267,7 +267,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [location.pathname]);
+  }, [pathname]);
 
   useEffect(() => {
     if (!didInitializeViewportRef.current) {
@@ -549,7 +549,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
             </div>
           ) : null}
           <main className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full${isSystemControlRoute ? ' p-0 shell-main-column--system-control' : isHomeRoute ? ' px-4 pt-3 pb-8 md:px-6 lg:pt-4 xl:px-8 shell-main-column--home' : ' px-6 pt-6 pb-12 md:px-8 xl:px-12'}${shellFrameOverflowClass}${isPageScrollRoute ? ' shell-main-column--page-scroll' : ''}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
-            <div key={location.pathname} className={`theme-page-transition flex min-h-0 min-w-0 w-full flex-col${isScannerRoute || isHomeRoute ? '' : ' h-full'}${isPageScrollRoute ? ' theme-page-transition--page-scroll' : ''}${isSystemControlRoute ? ' theme-page-transition--system-control' : ''}`}>
+            <div key={pathname} className={`theme-page-transition flex min-h-0 min-w-0 w-full flex-col${isScannerRoute || isHomeRoute ? '' : ' h-full'}${isPageScrollRoute ? ' theme-page-transition--page-scroll' : ''}${isSystemControlRoute ? ' theme-page-transition--system-control' : ''}`}>
               {children ?? <Outlet />}
             </div>
           </main>

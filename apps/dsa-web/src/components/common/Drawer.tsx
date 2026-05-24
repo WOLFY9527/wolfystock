@@ -14,6 +14,7 @@ const BACKDROP_INTERACTION_GUARD_MS = 420;
 const DRAWER_READY_DELAY_MS = 80;
 const DRAWER_WARMUP_INTERVAL_MS = 100;
 const DRAWER_WARMUP_WINDOW_MS = 500;
+const DRAWER_CLOSE_DELAY_MS = 190;
 
 interface DrawerProps {
   isOpen: boolean;
@@ -46,6 +47,10 @@ export const Drawer: React.FC<DrawerProps> = ({
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const backdropGuardRef = useRef(isOpen);
   const backdropGuardTimerRef = useRef<number | null>(null);
+  const openMountFrameRef = useRef<number | null>(null);
+  const openReadyFrameRef = useRef<number | null>(null);
+  const interactionReadyTimerRef = useRef<number | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -63,56 +68,99 @@ export const Drawer: React.FC<DrawerProps> = ({
         onClose();
       }
     },
-    [onClose]
+    [onClose],
   );
 
-  useEffect(() => {
-    if (isOpen) {
-      backdropGuardRef.current = true;
-      setIsInteractionReady(false);
-      if (backdropGuardTimerRef.current != null) {
-        window.clearTimeout(backdropGuardTimerRef.current);
-      }
-      backdropGuardTimerRef.current = window.setTimeout(() => {
-        backdropGuardRef.current = false;
-        backdropGuardTimerRef.current = null;
-      }, BACKDROP_INTERACTION_GUARD_MS);
-      window.requestAnimationFrame(() => {
-        setIsMounted(true);
-        window.requestAnimationFrame(() => {
-          repaintTargets();
-          setUiState('open');
-          window.setTimeout(() => {
-            repaintTargets();
-            setIsInteractionReady(true);
-          }, DRAWER_READY_DELAY_MS);
-        });
-      });
-      return;
-    }
-
-    backdropGuardRef.current = false;
-    setIsInteractionReady(false);
+  const clearBackdropGuardTimer = useCallback(() => {
     if (backdropGuardTimerRef.current != null) {
       window.clearTimeout(backdropGuardTimerRef.current);
       backdropGuardTimerRef.current = null;
     }
+  }, []);
 
-    if (!isMounted) {
-      return;
+  const clearOpenWork = useCallback(() => {
+    if (openMountFrameRef.current != null) {
+      window.cancelAnimationFrame(openMountFrameRef.current);
+      openMountFrameRef.current = null;
     }
-    queueMicrotask(() => setUiState('closed'));
-    const timer = window.setTimeout(() => {
-      setIsMounted(false);
-    }, 190);
-    return () => window.clearTimeout(timer);
-  }, [isOpen, isMounted, repaintTargets]);
-
-  useEffect(() => () => {
-    if (backdropGuardTimerRef.current != null) {
-      window.clearTimeout(backdropGuardTimerRef.current);
+    if (openReadyFrameRef.current != null) {
+      window.cancelAnimationFrame(openReadyFrameRef.current);
+      openReadyFrameRef.current = null;
+    }
+    if (interactionReadyTimerRef.current != null) {
+      window.clearTimeout(interactionReadyTimerRef.current);
+      interactionReadyTimerRef.current = null;
     }
   }, []);
+
+  const clearCloseTimer = useCallback(() => {
+    if (closeTimerRef.current != null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    clearCloseTimer();
+
+    if (!isOpen) {
+      backdropGuardRef.current = false;
+      setIsInteractionReady(false);
+      clearBackdropGuardTimer();
+      clearOpenWork();
+      return;
+    }
+
+    backdropGuardRef.current = true;
+    setIsInteractionReady(false);
+    clearBackdropGuardTimer();
+    clearOpenWork();
+
+    backdropGuardTimerRef.current = window.setTimeout(() => {
+      backdropGuardRef.current = false;
+      backdropGuardTimerRef.current = null;
+    }, BACKDROP_INTERACTION_GUARD_MS);
+
+    openMountFrameRef.current = window.requestAnimationFrame(() => {
+      openMountFrameRef.current = null;
+      setIsMounted(true);
+      openReadyFrameRef.current = window.requestAnimationFrame(() => {
+        openReadyFrameRef.current = null;
+        repaintTargets();
+        setUiState('open');
+        interactionReadyTimerRef.current = window.setTimeout(() => {
+          interactionReadyTimerRef.current = null;
+          repaintTargets();
+          setIsInteractionReady(true);
+        }, DRAWER_READY_DELAY_MS);
+      });
+    });
+
+    return () => {
+      clearBackdropGuardTimer();
+      clearOpenWork();
+    };
+  }, [clearBackdropGuardTimer, clearCloseTimer, clearOpenWork, isOpen, repaintTargets]);
+
+  useEffect(() => {
+    if (isOpen || !isMounted) {
+      return;
+    }
+
+    queueMicrotask(() => setUiState('closed'));
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      setIsMounted(false);
+    }, DRAWER_CLOSE_DELAY_MS);
+
+    return clearCloseTimer;
+  }, [clearCloseTimer, isMounted, isOpen]);
+
+  useEffect(() => () => {
+    clearBackdropGuardTimer();
+    clearOpenWork();
+    clearCloseTimer();
+  }, [clearBackdropGuardTimer, clearCloseTimer, clearOpenWork]);
 
   useEffect(() => {
     if (!isMounted) {
@@ -140,15 +188,6 @@ export const Drawer: React.FC<DrawerProps> = ({
 
     let elapsedMs = 0;
     const warmTargets = () => {
-      const noop = () => undefined;
-      if (panelRef.current) {
-        panelRef.current.addEventListener('pointerdown', noop, { passive: true });
-        panelRef.current.removeEventListener('pointerdown', noop);
-      }
-      if (closeButtonRef.current) {
-        closeButtonRef.current.addEventListener('pointerdown', noop, { passive: true });
-        closeButtonRef.current.removeEventListener('pointerdown', noop);
-      }
       repaintTargets();
     };
 
