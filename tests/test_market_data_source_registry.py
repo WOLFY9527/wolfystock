@@ -526,9 +526,21 @@ def test_provider_ops_gap_metadata_ids_project_safe_inert_provenance() -> None:
             "disabled_live_stub",
             "Disabled Live Stub",
         ),
-        "options_lab.bid_ask_liquidity_gate": ("unavailable", "missing", "未接入"),
-        "options_lab.oi_volume_gate": ("unavailable", "missing", "未接入"),
-        "options_lab.iv_greeks_gate": ("unavailable", "missing", "未接入"),
+        "options_lab.bid_ask_liquidity_gate": (
+            "unavailable",
+            "missing",
+            "Offline Bid/Ask Liquidity Gate (no authorized live decision-grade evidence)",
+        ),
+        "options_lab.oi_volume_gate": (
+            "unavailable",
+            "missing",
+            "Offline OI/Volume Gate (no authorized live decision-grade evidence)",
+        ),
+        "options_lab.iv_greeks_gate": (
+            "unavailable",
+            "missing",
+            "Offline IV/Greeks Gate (no authorized live decision-grade evidence)",
+        ),
         "options_lab.iv_rank_history": ("unavailable", "missing", "未接入"),
     }
 
@@ -541,3 +553,41 @@ def test_provider_ops_gap_metadata_ids_project_safe_inert_provenance() -> None:
         assert provenance["sourceType"] == expected_type
         assert provenance["sourceLabel"] == expected_label
         assert provenance["freshnessLabel"] != "实时"
+
+
+def test_options_lab_offline_gate_rows_stay_non_live_observation_only_metadata() -> None:
+    expected_labels = {
+        "options_lab.bid_ask_liquidity_gate": (
+            "Offline Bid/Ask Liquidity Gate (no authorized live decision-grade evidence)"
+        ),
+        "options_lab.oi_volume_gate": (
+            "Offline OI/Volume Gate (no authorized live decision-grade evidence)"
+        ),
+        "options_lab.iv_greeks_gate": (
+            "Offline IV/Greeks Gate (no authorized live decision-grade evidence)"
+        ),
+    }
+
+    for source, expected_label in expected_labels.items():
+        unavailable = project_source_provenance(source=source, freshness="unavailable")
+        live_hint = project_source_provenance(
+            source=source,
+            source_type="official_public",
+            freshness="live",
+            no_external_calls=True,
+        )
+
+        assert unavailable["sourceType"] == "missing"
+        assert unavailable["sourceLabel"] == expected_label
+        assert unavailable["sourceLabel"] != "未接入"
+        assert unavailable["freshnessLabel"] == "不可用"
+        assert "Offline" in unavailable["sourceLabel"]
+        assert "no authorized live decision-grade evidence" in unavailable["sourceLabel"]
+        assert live_hint == unavailable
+        assert live_hint["sourceType"] not in {
+            "authorized_licensed_feed",
+            "exchange_public",
+            "official_public",
+            "public_proxy",
+            "unofficial_proxy",
+        }
