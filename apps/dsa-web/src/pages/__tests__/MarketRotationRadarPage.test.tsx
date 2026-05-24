@@ -894,8 +894,9 @@ describe('MarketRotationRadarPage', () => {
     render(<MarketRotationRadarPage />);
 
     const page = await screen.findByTestId('market-rotation-radar-page');
-    expect(screen.getByTestId('rotation-decision-readiness')).toHaveTextContent('当前无法判断轮动方向');
-    expect(screen.getByTestId('rotation-decision-readiness')).toHaveTextContent('当前证据不足');
+    const decisionReadiness = await screen.findByTestId('rotation-decision-readiness');
+    expect(decisionReadiness).toHaveTextContent('当前无法判断轮动方向');
+    expect(decisionReadiness).toHaveTextContent('当前证据不足');
     expect(screen.getByTestId('rotation-capital-summary')).toHaveTextContent('轮动结论');
     expect(screen.getByTestId('rotation-capital-summary')).toHaveTextContent('当前无法判断轮动方向');
     expect(screen.getByTestId('rotation-radar-guidance')).toHaveTextContent('缺哪些证据 / 升级条件');
