@@ -517,6 +517,23 @@ export type DataCoverageGapView = {
   impact: string;
 };
 
+type DataCoverageGapDefinitionBase = {
+  key: string;
+  profiles?: string[];
+  surfaces: DataSourceImpactSurface[];
+};
+
+type DataCoverageGapDefinition = DataCoverageGapDefinitionBase & (
+  | {
+    missingKey: string;
+    impactKey: string;
+  }
+  | {
+    missingText: string;
+    impactText: string;
+  }
+);
+
 type DataSourceImpactProfile = {
   aliases: string[];
   surfaces: DataSourceImpactSurface[];
@@ -796,7 +813,7 @@ const hasConfiguredProfile = (sources: DataSourceLibraryEntry[], profileKey: str
 );
 
 export function buildDataCoverageGaps(sources: DataSourceLibraryEntry[], t: TranslateFn): DataCoverageGapView[] {
-  return [
+  const gaps: DataCoverageGapDefinition[] = [
     {
       key: 'market_breadth',
       profiles: ['polygon'],
@@ -812,11 +829,15 @@ export function buildDataCoverageGaps(sources: DataSourceLibraryEntry[], t: Tran
       impactKey: 'settings.dataCoverageGapImpact.liquidityMacro',
     },
     {
-      key: 'portfolio_history',
-      profiles: ['finnhub', 'fmp', 'twelve_data'],
+      key: 'portfolio_watchlist_backtest_lineage',
       surfaces: ['portfolio', 'watchlist', 'backtest'] as DataSourceImpactSurface[],
-      missingKey: 'settings.dataCoverageGapMissing.portfolioHistory',
-      impactKey: 'settings.dataCoverageGapImpact.portfolioHistory',
+      missingText: '优先核对 cache_snapshot、本地 OHLCV provenance 与 dataset lineage',
+      impactText: [
+        'Portfolio 先核对 stored portfolio snapshots、price provenance、FX/cache evidence、configured local/cache evidence 与 actual close-date metadata。',
+        'Watchlist 先核对 persisted Scanner evidence、score freshness 与 local OHLCV provenance。',
+        'Backtest 先核对 local/cache dataset lineage、repro manifests 与 local OHLCV coverage。',
+        '外部付费 provider 仅作为上述本地证据仍缺口时的可选补充。',
+      ].join(' '),
     },
     {
       key: 'options_lab',
@@ -825,13 +846,15 @@ export function buildDataCoverageGaps(sources: DataSourceLibraryEntry[], t: Tran
       missingKey: 'settings.dataCoverageGapMissing.optionsLab',
       impactKey: 'settings.dataCoverageGapImpact.optionsLab',
     },
-  ]
-    .filter((gap) => !gap.profiles.some((profileKey) => hasConfiguredProfile(sources, profileKey)))
+  ];
+
+  return gaps
+    .filter((gap) => !gap.profiles?.some((profileKey) => hasConfiguredProfile(sources, profileKey)))
     .map((gap) => ({
       key: gap.key,
       surfaces: translateList(gap.surfaces, DATA_SOURCE_IMPACT_SURFACE_LABEL_KEYS, t),
-      missing: t(gap.missingKey),
-      impact: t(gap.impactKey),
+      missing: 'missingText' in gap ? gap.missingText : t(gap.missingKey),
+      impact: 'impactText' in gap ? gap.impactText : t(gap.impactKey),
     }))
     .slice(0, 4);
 }
