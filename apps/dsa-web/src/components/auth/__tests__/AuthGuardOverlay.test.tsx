@@ -37,25 +37,24 @@ describe('AuthGuardOverlay', () => {
       </MemoryRouter>,
     );
 
+    expect(screen.getByTestId('auth-guard-shell')).toHaveAttribute('data-workspace-width', 'near-full');
     expect(screen.getByTestId('auth-guard-shell')).toHaveClass(
-      'z-40',
       'flex',
       'w-full',
       'flex-1',
       'items-center',
       'justify-center',
-      'bg-[#030303]/80',
-      'backdrop-blur-sm',
+      'py-10',
     );
+    expect(screen.getByTestId('auth-guard-shell').className).not.toContain('bg-[#030303]/80');
     expect(screen.getByTestId('auth-guard-card')).toHaveClass(
-      'w-[360px]',
-      'bg-white/[0.02]',
+      'w-full',
+      'max-w-[28rem]',
       'border',
-      'border-white/5',
-      'rounded-[24px]',
-      'shadow-2xl',
+      'bg-[var(--wolfy-surface-console)]',
     );
     expect(screen.getByRole('heading', { name: '登录解锁 市场总览' })).toBeInTheDocument();
+    expect(screen.getByText('游客模式仅支持首页基础查询。保存个人工作区、深度历史回溯及进阶指标测算，均需绑定正式账户。')).toBeInTheDocument();
     expectNoRawI18nKeys(container);
     fireEvent.click(screen.getByRole('button', { name: '登录 / 创建账户' }));
     expect(navigate).toHaveBeenCalledWith('/zh/login');
@@ -71,7 +70,7 @@ describe('AuthGuardOverlay', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'Sign in to unlock Portfolio' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sign in / Create account' })).toHaveClass('bg-white', 'text-black', 'active:scale-95');
+    expect(screen.getByRole('button', { name: 'Sign in / Create account' })).toHaveClass('bg-[var(--wolfy-accent)]', 'text-[#f7f8ff]');
     expectNoRawI18nKeys(container);
     fireEvent.click(screen.getByRole('button', { name: 'Sign in / Create account' }));
     expect(navigate).toHaveBeenCalledWith('/en/login');

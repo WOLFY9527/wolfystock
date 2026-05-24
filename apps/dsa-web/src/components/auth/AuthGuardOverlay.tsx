@@ -1,5 +1,9 @@
 import type React from 'react';
+import { Lock } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { WideWorkspacePageShell } from '../layout/WideWorkspaceShell';
+import { WolfyShellSurface } from '../linear';
+import { TerminalButton } from '../terminal';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../../utils/localeRouting';
 
@@ -20,29 +24,31 @@ export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName }
   const buttonLabel = language === 'en' ? 'Sign in / Create account' : '登录 / 创建账户';
 
   return (
-    <div
-      className="z-40 flex w-full flex-1 items-center justify-center bg-[#030303]/80 backdrop-blur-sm"
+    <WideWorkspacePageShell
+      data-layout-zone="PrimaryWorkRegion"
       data-testid="auth-guard-shell"
+      className="flex-1 items-center justify-center py-10"
     >
-      <div
-        className="w-[360px] max-w-[calc(100%-2rem)] bg-white/[0.02] border border-white/5 rounded-[24px] p-8 flex flex-col items-center text-center shadow-2xl"
+      <WolfyShellSurface
+        as="section"
+        variant="console"
+        padding="lg"
+        className="flex w-full max-w-[28rem] flex-col items-center text-center"
         data-testid="auth-guard-card"
       >
-        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-5">
-          <svg className="w-5 h-5 text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2Zm10-10V7a4 4 0 0 0-8 0v4h8Z" />
-          </svg>
+        <div className="mx-auto mb-5 flex h-11 w-11 items-center justify-center rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]">
+          <Lock className="h-4 w-4" aria-hidden="true" />
         </div>
-        <h3 className="text-base font-bold text-white mb-2 tracking-wide">{title}</h3>
-        <p className="text-xs text-white/40 mb-8 leading-relaxed">{body}</p>
-        <button
-          type="button"
-          className="w-full py-3 bg-white text-black font-bold text-sm rounded-xl hover:bg-white/90 active:scale-95 transition-all"
+        <h3 className="text-base font-semibold text-[color:var(--wolfy-text-primary)]">{title}</h3>
+        <p className="mx-auto mt-3 max-w-[22rem] text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{body}</p>
+        <TerminalButton
+          variant="primary"
+          className="mt-7 h-11 w-full text-sm"
           onClick={() => navigate(loginPath)}
         >
           {buttonLabel}
-        </button>
-      </div>
-    </div>
+        </TerminalButton>
+      </WolfyShellSurface>
+    </WideWorkspacePageShell>
   );
 };
