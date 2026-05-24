@@ -172,6 +172,33 @@ FED_LIQUIDITY_SERIES_BY_SYMBOL = {
     "TGA": "WTREGEN",
     "RESERVES": "WRESBAL",
 }
+AUTHORIZED_US_BREADTH_SYMBOLS = (
+    "ADVANCERS",
+    "DECLINERS",
+    "UNCHANGED",
+    "ADVANCE_DECLINE_RATIO",
+    "NEW_HIGHS",
+    "NEW_LOWS",
+    "HIGH_LOW_RATIO",
+)
+AUTHORIZED_US_BREADTH_LABELS = {
+    "ADVANCERS": "Advancers",
+    "DECLINERS": "Decliners",
+    "UNCHANGED": "Unchanged",
+    "ADVANCE_DECLINE_RATIO": "Advance / Decline Ratio",
+    "NEW_HIGHS": "New Highs",
+    "NEW_LOWS": "New Lows",
+    "HIGH_LOW_RATIO": "High / Low Ratio",
+}
+AUTHORIZED_US_BREADTH_UNITS = {
+    "ADVANCERS": "stocks",
+    "DECLINERS": "stocks",
+    "UNCHANGED": "stocks",
+    "ADVANCE_DECLINE_RATIO": "ratio",
+    "NEW_HIGHS": "stocks",
+    "NEW_LOWS": "stocks",
+    "HIGH_LOW_RATIO": "ratio",
+}
 
 
 def _fed_liquidity_macro_item(
@@ -224,6 +251,111 @@ def _fed_liquidity_macro_item(
             "isStale": is_stale,
             "isUnavailable": is_unavailable,
         },
+    }
+
+
+def _authorized_us_breadth_item(
+    symbol: str,
+    value: Any,
+    *,
+    as_of: str,
+    freshness: str = "delayed",
+    source: str = "polygon_us_grouped_daily",
+    source_type: str = "authorized_licensed_feed",
+    source_tier: str = "official_or_authorized_licensed_feed",
+    trust_level: str = "score_grade_when_configured",
+    source_authority_allowed: bool = True,
+    score_contribution_allowed: bool = True,
+    source_authority_reason: str | None = None,
+    route_rejected_reason_codes: list[str] | None = None,
+    is_stale: bool = False,
+    is_fallback: bool = False,
+) -> Dict[str, Any]:
+    return {
+        "symbol": symbol,
+        "label": AUTHORIZED_US_BREADTH_LABELS[symbol],
+        "value": value,
+        "source": source,
+        "sourceLabel": "Polygon grouped daily US equities (computed breadth)",
+        "sourceType": source_type,
+        "sourceTier": source_tier,
+        "trustLevel": trust_level,
+        "sourceAuthorityAllowed": source_authority_allowed,
+        "scoreContributionAllowed": score_contribution_allowed,
+        "sourceAuthorityReason": source_authority_reason,
+        "routeRejectedReasonCodes": list(route_rejected_reason_codes or []),
+        "unit": AUTHORIZED_US_BREADTH_UNITS[symbol],
+        "freshness": freshness,
+        "asOf": as_of,
+        "updatedAt": as_of,
+        "isFallback": is_fallback,
+        "isStale": is_stale,
+        "isUnavailable": value is None,
+    }
+
+
+def _authorized_us_breadth_cache_payload(
+    *,
+    as_of: str,
+    items: list[Dict[str, Any]],
+    freshness: str = "delayed",
+    source: str = "polygon_us_grouped_daily",
+    source_type: str = "authorized_licensed_feed",
+    source_tier: str = "official_or_authorized_licensed_feed",
+    trust_level: str = "score_grade_when_configured",
+    source_authority_allowed: bool = True,
+    score_contribution_allowed: bool = True,
+    source_authority_reason: str | None = None,
+    route_rejected_reason_codes: list[str] | None = None,
+    observation_only: bool = False,
+    is_partial: bool = False,
+    is_fallback: bool = False,
+    fulfilled_metrics: list[str] | None = None,
+    missing_metrics: list[str] | None = None,
+) -> Dict[str, Any]:
+    fulfilled = list(fulfilled_metrics or [])
+    missing = list(missing_metrics or [])
+    if not fulfilled and not missing:
+        seen_symbols = {str(item.get("symbol") or "") for item in items if isinstance(item, dict)}
+        fulfilled = [symbol for symbol in AUTHORIZED_US_BREADTH_SYMBOLS if symbol in seen_symbols]
+        missing = [symbol for symbol in AUTHORIZED_US_BREADTH_SYMBOLS if symbol not in seen_symbols]
+    codes = list(route_rejected_reason_codes or [])
+    return {
+        "source": source,
+        "sourceLabel": "Polygon grouped daily US equities (computed breadth)",
+        "sourceType": source_type,
+        "sourceTier": source_tier,
+        "trustLevel": trust_level,
+        "freshness": freshness,
+        "updatedAt": as_of,
+        "asOf": as_of,
+        "isFallback": is_fallback,
+        "fallbackUsed": is_fallback,
+        "representativeSample": False,
+        "officialExchangePublishedBreadth": False,
+        "fullBreadthAuthority": False,
+        "breadthClaimType": "computed_authorized_polygon_grouped_daily_breadth",
+        "comparisonBasis": "previous_close",
+        "coverageCount": 12000,
+        "coverageThreshold": 9600,
+        "sourceAuthorityAllowed": source_authority_allowed,
+        "scoreContributionAllowed": score_contribution_allowed,
+        "sourceAuthorityReason": source_authority_reason,
+        "routeRejectedReasonCodes": codes,
+        "observationOnly": observation_only,
+        "isPartial": is_partial,
+        "fulfilledMetrics": fulfilled,
+        "missingMetrics": missing,
+        "authorityDiagnostics": {"reasonCodes": codes, "comparisonBasis": "previous_close"},
+        "sourceFreshnessEvidence": {
+            "freshness": freshness,
+            "comparisonBasis": "previous_close",
+            "isFallback": is_fallback,
+            "isStale": freshness == "stale",
+            "isPartial": is_partial,
+            "isUnavailable": False,
+        },
+        "items": items,
     }
 
 
@@ -2935,6 +3067,265 @@ def test_us_breadth_indicator_uses_relative_proxy_votes(isolated_db: DatabaseMan
     assert evidence_inputs["SECTORS_UP"]["scoreContributionAllowed"] is False
     assert evidence_inputs["SECTORS_UP"]["sourceAuthorityReason"] == "representative_sample_not_full_market_breadth"
     assert "representative_sample_not_full_market_breadth" in evidence_inputs["RSP_SPY"]["routeRejectedReasonCodes"]
+
+
+def test_authorized_us_breadth_cache_scores_when_full_gates_pass(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    as_of = "2026-05-21T16:00:00+08:00"
+    items = [
+        _authorized_us_breadth_item("ADVANCERS", 7000, as_of=as_of),
+        _authorized_us_breadth_item("DECLINERS", 4000, as_of=as_of),
+        _authorized_us_breadth_item("UNCHANGED", 1000, as_of=as_of),
+        _authorized_us_breadth_item("ADVANCE_DECLINE_RATIO", 1.75, as_of=as_of),
+        _authorized_us_breadth_item("NEW_HIGHS", 318, as_of=as_of),
+        _authorized_us_breadth_item("NEW_LOWS", 42, as_of=as_of),
+        _authorized_us_breadth_item("HIGH_LOW_RATIO", 7.571, as_of=as_of),
+    ]
+    service.cache.set(
+        "us_breadth",
+        _authorized_us_breadth_cache_payload(as_of=as_of, items=items),
+        ttl_seconds=30,
+    )
+
+    with (
+        patch("src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame", return_value=_FakeHistoryFrame([]), create=True) as mock_proxy,
+        patch("src.services.liquidity_monitor_service.fetch_binance_funding_row", side_effect=RuntimeError("network disabled")) as mock_funding,
+    ):
+        payload = service.get_liquidity_monitor()
+
+    indicator = _indicators_by_key(payload)["us_breadth_proxy"]
+    diagnostics = indicator["coverageDiagnostics"]
+    bundle = diagnostics["cacheBundleDiagnostics"]
+
+    assert indicator["status"] == "live"
+    assert indicator["includedInScore"] is True
+    assert indicator["scoreContribution"] == 6
+    assert indicator["freshness"] == "delayed"
+    assert "7000/4000" in indicator["summary"]
+    assert "NH/NL 318/42" in indicator["summary"]
+    assert diagnostics["realSourceAvailable"] is True
+    assert diagnostics["proxyOnly"] is False
+    assert diagnostics["scoreContributionAllowed"] is True
+    assert diagnostics["scoreExclusionReason"] is None
+    assert diagnostics["missingProviderReason"] is None
+    assert diagnostics["requiredInputs"] == list(AUTHORIZED_US_BREADTH_SYMBOLS)
+    assert diagnostics["fulfilledInputs"] == list(AUTHORIZED_US_BREADTH_SYMBOLS)
+    assert diagnostics["missingInputs"] == []
+    assert bundle["providerId"] == "official_or_authorized.us_market_breadth"
+    assert bundle["coverageRatio"] == 1.0
+    assert bundle["observationOnly"] is False
+    assert bundle["scoreContributionAllowed"] is True
+    assert bundle["externalProviderCalls"] is False
+    assert payload["sourceMetadata"]["externalProviderCalls"] is False
+    assert payload["sourceMetadata"]["providerRuntimeChanged"] is False
+    assert payload["sourceMetadata"]["marketCacheMutation"] is False
+    mock_proxy.assert_not_called()
+    mock_funding.assert_not_called()
+
+
+def test_authorized_us_breadth_missing_cache_remains_observation_only(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["us_breadth_proxy"]
+    diagnostics = indicator["coverageDiagnostics"]
+
+    assert indicator["status"] == "unavailable"
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostics["realSourceAvailable"] is False
+    assert diagnostics["scoreContributionAllowed"] is False
+
+
+def test_authorized_us_breadth_stale_cache_remains_observation_only(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    as_of = "2026-05-21T16:00:00+08:00"
+    items = [
+        _authorized_us_breadth_item("ADVANCERS", 7000, as_of=as_of, freshness="stale", is_stale=True),
+        _authorized_us_breadth_item("DECLINERS", 4000, as_of=as_of, freshness="stale", is_stale=True),
+        _authorized_us_breadth_item("UNCHANGED", 1000, as_of=as_of, freshness="stale", is_stale=True),
+        _authorized_us_breadth_item("ADVANCE_DECLINE_RATIO", 1.75, as_of=as_of, freshness="stale", is_stale=True),
+        _authorized_us_breadth_item("NEW_HIGHS", 318, as_of=as_of, freshness="stale", is_stale=True),
+        _authorized_us_breadth_item("NEW_LOWS", 42, as_of=as_of, freshness="stale", is_stale=True),
+        _authorized_us_breadth_item("HIGH_LOW_RATIO", 7.571, as_of=as_of, freshness="stale", is_stale=True),
+    ]
+    service.cache.set(
+        "us_breadth",
+        _authorized_us_breadth_cache_payload(as_of=as_of, items=items, freshness="stale"),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["us_breadth_proxy"]
+    diagnostics = indicator["coverageDiagnostics"]
+    bundle = diagnostics["cacheBundleDiagnostics"]
+
+    assert indicator["status"] == "partial"
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostics["realSourceAvailable"] is True
+    assert diagnostics["missingProviderReason"] is None
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["scoreExclusionReason"] == "stale_source"
+    assert bundle["observationOnly"] is True
+    assert bundle["scoreContributionAllowed"] is False
+
+
+def test_authorized_us_breadth_partial_coverage_remains_observation_only(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    as_of = "2026-05-21T16:00:00+08:00"
+    items = [
+        _authorized_us_breadth_item("ADVANCERS", 7000, as_of=as_of),
+        _authorized_us_breadth_item("DECLINERS", 4000, as_of=as_of),
+        _authorized_us_breadth_item("UNCHANGED", 1000, as_of=as_of),
+        _authorized_us_breadth_item("ADVANCE_DECLINE_RATIO", 1.75, as_of=as_of),
+    ]
+    service.cache.set(
+        "us_breadth",
+        _authorized_us_breadth_cache_payload(
+            as_of=as_of,
+            items=items,
+            is_partial=True,
+            fulfilled_metrics=["ADVANCERS", "DECLINERS", "UNCHANGED", "ADVANCE_DECLINE_RATIO"],
+            missing_metrics=["NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"],
+            route_rejected_reason_codes=["polygon_high_low_history_unavailable"],
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["us_breadth_proxy"]
+    diagnostics = indicator["coverageDiagnostics"]
+    bundle = diagnostics["cacheBundleDiagnostics"]
+
+    assert indicator["status"] == "partial"
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostics["realSourceAvailable"] is True
+    assert diagnostics["missingProviderReason"] is None
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["scoreExclusionReason"] == "polygon_high_low_history_unavailable"
+    assert diagnostics["missingInputs"] == ["NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"]
+    assert bundle["coverageRatio"] == 0.571
+    assert bundle["observationOnly"] is True
+    assert bundle["scoreContributionAllowed"] is False
+
+
+@pytest.mark.parametrize(
+    (
+        "payload_kwargs",
+        "item_kwargs",
+        "expected_real_source",
+        "expected_score_exclusion_reason",
+        "expected_authority_reason",
+    ),
+    [
+        (
+            {
+                "freshness": "fallback",
+                "is_fallback": True,
+                "source_authority_allowed": False,
+                "score_contribution_allowed": False,
+                "source_authority_reason": "fallback_source",
+                "route_rejected_reason_codes": ["fallback_source"],
+            },
+            {"freshness": "fallback", "source_authority_allowed": False, "score_contribution_allowed": False, "source_authority_reason": "fallback_source", "route_rejected_reason_codes": ["fallback_source"], "is_fallback": True},
+            False,
+            "proxy_only_missing_real_source",
+            "fallback_source",
+        ),
+        (
+            {
+                "source": "yfinance_proxy",
+                "source_type": "public_proxy",
+                "source_tier": "unofficial_proxy",
+                "trust_level": "usable_with_caution",
+                "source_authority_allowed": False,
+                "score_contribution_allowed": False,
+                "source_authority_reason": "proxy_or_placeholder_not_authorized_breadth",
+                "route_rejected_reason_codes": ["proxy_or_placeholder_not_authorized_breadth"],
+            },
+            {"source": "yfinance_proxy", "source_type": "public_proxy", "source_tier": "unofficial_proxy", "trust_level": "usable_with_caution", "source_authority_allowed": False, "score_contribution_allowed": False, "source_authority_reason": "proxy_or_placeholder_not_authorized_breadth", "route_rejected_reason_codes": ["proxy_or_placeholder_not_authorized_breadth"]},
+            False,
+            "proxy_only_missing_real_source",
+            "proxy_or_placeholder_not_authorized_breadth",
+        ),
+        (
+            {
+                "source": "mock",
+                "source_type": "synthetic_fixture",
+                "source_tier": "synthetic_fixture",
+                "trust_level": "weak",
+                "freshness": "mock",
+                "source_authority_allowed": False,
+                "score_contribution_allowed": False,
+                "source_authority_reason": "synthetic_fixture",
+                "route_rejected_reason_codes": ["synthetic_fixture"],
+            },
+            {"source": "mock", "source_type": "synthetic_fixture", "source_tier": "synthetic_fixture", "trust_level": "weak", "freshness": "mock", "source_authority_allowed": False, "score_contribution_allowed": False, "source_authority_reason": "synthetic_fixture", "route_rejected_reason_codes": ["synthetic_fixture"]},
+            False,
+            "proxy_only_missing_real_source",
+            "synthetic_fixture",
+        ),
+        (
+            {
+                "source_authority_allowed": False,
+                "score_contribution_allowed": False,
+                "source_authority_reason": "trust_gate_blocked",
+                "route_rejected_reason_codes": ["trust_gate_blocked"],
+                "trust_level": "weak",
+            },
+            {"source_authority_allowed": False, "score_contribution_allowed": False, "source_authority_reason": "trust_gate_blocked", "route_rejected_reason_codes": ["trust_gate_blocked"], "trust_level": "weak"},
+            True,
+            "trust_gate_blocked",
+            "trust_gate_blocked",
+        ),
+    ],
+)
+def test_authorized_us_breadth_degraded_flags_remain_observation_only(
+    isolated_db: DatabaseManager,
+    payload_kwargs: Dict[str, Any],
+    item_kwargs: Dict[str, Any],
+    expected_real_source: bool,
+    expected_score_exclusion_reason: str,
+    expected_authority_reason: str,
+) -> None:
+    service = _make_service()
+    as_of = "2026-05-21T16:00:00+08:00"
+    items = [
+        _authorized_us_breadth_item("ADVANCERS", 7000, as_of=as_of, **item_kwargs),
+        _authorized_us_breadth_item("DECLINERS", 4000, as_of=as_of, **item_kwargs),
+        _authorized_us_breadth_item("UNCHANGED", 1000, as_of=as_of, **item_kwargs),
+        _authorized_us_breadth_item("ADVANCE_DECLINE_RATIO", 1.75, as_of=as_of, **item_kwargs),
+        _authorized_us_breadth_item("NEW_HIGHS", 318, as_of=as_of, **item_kwargs),
+        _authorized_us_breadth_item("NEW_LOWS", 42, as_of=as_of, **item_kwargs),
+        _authorized_us_breadth_item("HIGH_LOW_RATIO", 7.571, as_of=as_of, **item_kwargs),
+    ]
+    service.cache.set(
+        "us_breadth",
+        _authorized_us_breadth_cache_payload(as_of=as_of, items=items, **payload_kwargs),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["us_breadth_proxy"]
+    diagnostics = indicator["coverageDiagnostics"]
+
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostics["realSourceAvailable"] is expected_real_source
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["scoreExclusionReason"] == expected_score_exclusion_reason
+    assert diagnostics["sourceAuthorityReason"] == expected_authority_reason
+    assert expected_authority_reason in diagnostics["routeRejectedReasonCodes"]
 
 
 def test_cache_snapshot_etf_flow_cannot_score_when_real_source_unavailable(

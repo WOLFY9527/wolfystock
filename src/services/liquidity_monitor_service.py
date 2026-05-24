@@ -27,7 +27,11 @@ from src.services.market_overview_yfinance_transport import fetch_yfinance_quote
 from src.services.official_macro_liquidity_cache_contracts import (
     build_official_fed_liquidity_cache_bundle,
 )
-from src.services.us_breadth_contracts import representative_sample_breadth_metadata
+from src.services.us_breadth_contracts import (
+    US_BREADTH_AUTHORITY_PROVIDER_ID,
+    US_BREADTH_SYMBOLS,
+    representative_sample_breadth_metadata,
+)
 from src.services.vix_metadata import normalize_vix_quote_metadata
 from src.storage import DatabaseManager
 
@@ -170,6 +174,7 @@ LIQUIDITY_INDICATOR_ACTIVATION_HINTS = {
     "cn_money_market_rates": "仅在 `rates` 或 `macro` 快照里有 DR007 / SHIBOR 时激活，缺失则保持观测态。",
     "futures_premarket": "现有 futures snapshot 或延迟 proxy 可用时才激活；没有真实期货快照时保持不可用。",
 }
+AUTHORIZED_US_BREADTH_REQUIRED_METRICS = tuple(str(symbol) for symbol in US_BREADTH_SYMBOLS)
 
 LIQUIDITY_INDICATOR_PROVIDER_ACTIVATION = {
     "crypto_spot_momentum": {
@@ -1040,6 +1045,42 @@ class LiquidityMonitorService:
         )
 
     def _us_breadth_indicator(self, panel: PanelState) -> Dict[str, Any]:
+        authorized_breadth = self._extract_authorized_us_breadth_components(panel)
+        if authorized_breadth is not None:
+            direction = self._direction_from_counts(
+                int(authorized_breadth["positive_votes"]),
+                int(authorized_breadth["negative_votes"]),
+            )
+            summary_parts = [
+                f"{int(authorized_breadth['advancers'])}/{int(authorized_breadth['decliners'])}",
+                f"A/D {float(authorized_breadth['advance_decline_ratio']):.2f}",
+                f"NH/NL {int(authorized_breadth['new_highs'])}/{int(authorized_breadth['new_lows'])}",
+                f"HL {float(authorized_breadth['high_low_ratio']):.2f}",
+            ]
+            status = "live" if bool(authorized_breadth["score_ready"]) else "partial"
+            evidence = self._indicator_evidence(
+                status=status,
+                freshness=str(authorized_breadth["freshness"]),
+                inputs=[
+                    self._source_confidence_input_from_component(component)
+                    for component in authorized_breadth["components"]
+                ],
+                expected_input_count=len(AUTHORIZED_US_BREADTH_REQUIRED_METRICS),
+            )
+            evidence["cacheBundleDiagnostics"] = copy.deepcopy(authorized_breadth["cache_bundle"])
+            return self._indicator(
+                "us_breadth_proxy",
+                "US 广度",
+                panel,
+                status,
+                6 if direction > 0 else -6 if direction < 0 else 0,
+                6,
+                True,
+                " | ".join(summary_parts),
+                freshness=str(authorized_breadth["freshness"]),
+                evidence=evidence,
+            )
+
         breadth = self._extract_us_breadth_components(panel)
         if breadth is None:
             return self._indicator("us_breadth_proxy", "US Broadth / 广度代理", panel, "unavailable", 0, 6, False, "仅在可靠 breadth 缓存存在时启用")
@@ -1735,6 +1776,244 @@ class LiquidityMonitorService:
             "negative_votes": negative_votes,
             "freshness": self._weakest_freshness(freshness_values),
         }
+
+    def _extract_authorized_us_breadth_components(self, panel: PanelState) -> Optional[Dict[str, Any]]:
+        raw_items = panel.payload.get("items")
+        if not isinstance(raw_items, list):
+            return None
+
+        metric_rows = {
+            str(item.get("symbol") or ""): item
+            for item in raw_items
+            if isinstance(item, dict) and str(item.get("symbol") or "") in AUTHORIZED_US_BREADTH_REQUIRED_METRICS
+        }
+        if not metric_rows:
+            return None
+
+        cache_bundle = self._authorized_us_breadth_cache_bundle_diagnostics(panel, metric_rows)
+        if cache_bundle is None:
+            return None
+
+        degradation_reason = self._text(cache_bundle.get("degradationReason"))
+        route_rejected_reason_codes = list(cache_bundle.get("reasonCodes") or [])
+        score_ready = bool(cache_bundle.get("scoreContributionAllowed"))
+        components: list[Dict[str, Any]] = []
+
+        for symbol in AUTHORIZED_US_BREADTH_REQUIRED_METRICS:
+            raw = metric_rows.get(symbol)
+            if not isinstance(raw, dict):
+                continue
+            component = {
+                "symbol": symbol,
+                "key": symbol,
+                "label": str(raw.get("label") or raw.get("name") or symbol),
+                "value": self._numeric(raw.get("value") if raw.get("value") is not None else raw.get("price")),
+                "unit": str(raw.get("unit") or ""),
+                **self._component_projection_meta(raw, panel),
+            }
+            if raw.get("sourceAuthorityAllowed") is False:
+                component["sourceAuthorityAllowed"] = False
+            if raw.get("scoreContributionAllowed") is False:
+                component["scoreContributionAllowed"] = False
+            if raw.get("sourceAuthorityReason"):
+                component["sourceAuthorityReason"] = raw.get("sourceAuthorityReason")
+                component["degradationReason"] = raw.get("sourceAuthorityReason")
+            if raw.get("routeRejectedReasonCodes"):
+                component["routeRejectedReasonCodes"] = list(raw.get("routeRejectedReasonCodes") or [])
+            if not score_ready:
+                component["sourceAuthorityAllowed"] = False
+                component["scoreContributionAllowed"] = False
+                if degradation_reason:
+                    component["sourceAuthorityReason"] = degradation_reason
+                    component["degradationReason"] = degradation_reason
+                if route_rejected_reason_codes:
+                    component["routeRejectedReasonCodes"] = list(route_rejected_reason_codes)
+            components.append(component)
+
+        advancers = self._numeric(metric_rows.get("ADVANCERS", {}).get("value"))
+        decliners = self._numeric(metric_rows.get("DECLINERS", {}).get("value"))
+        advance_decline_ratio = self._numeric(metric_rows.get("ADVANCE_DECLINE_RATIO", {}).get("value"))
+        new_highs = self._numeric(metric_rows.get("NEW_HIGHS", {}).get("value"))
+        new_lows = self._numeric(metric_rows.get("NEW_LOWS", {}).get("value"))
+        high_low_ratio = self._numeric(metric_rows.get("HIGH_LOW_RATIO", {}).get("value"))
+        if None in {advancers, decliners, advance_decline_ratio, new_highs, new_lows, high_low_ratio}:
+            return {
+                "components": components,
+                "positive_votes": 0,
+                "negative_votes": 0,
+                "advancers": 0.0,
+                "decliners": 0.0,
+                "advance_decline_ratio": 0.0,
+                "new_highs": 0.0,
+                "new_lows": 0.0,
+                "high_low_ratio": 0.0,
+                "freshness": str(cache_bundle.get("freshness") or panel.freshness or "unavailable"),
+                "cache_bundle": cache_bundle,
+                "score_ready": False,
+            }
+
+        positive_votes = 0
+        negative_votes = 0
+        if advancers > decliners:
+            positive_votes += 1
+        elif advancers < decliners:
+            negative_votes += 1
+        if advance_decline_ratio > 1.0:
+            positive_votes += 1
+        elif advance_decline_ratio < 1.0:
+            negative_votes += 1
+        if new_highs > new_lows:
+            positive_votes += 1
+        elif new_highs < new_lows:
+            negative_votes += 1
+        if high_low_ratio > 1.0:
+            positive_votes += 1
+        elif high_low_ratio < 1.0:
+            negative_votes += 1
+
+        return {
+            "components": components,
+            "positive_votes": positive_votes,
+            "negative_votes": negative_votes,
+            "advancers": advancers,
+            "decliners": decliners,
+            "advance_decline_ratio": advance_decline_ratio,
+            "new_highs": new_highs,
+            "new_lows": new_lows,
+            "high_low_ratio": high_low_ratio,
+            "freshness": str(cache_bundle.get("freshness") or panel.freshness or "unavailable"),
+            "cache_bundle": cache_bundle,
+            "score_ready": score_ready,
+        }
+
+    def _authorized_us_breadth_cache_bundle_diagnostics(
+        self,
+        panel: PanelState,
+        metric_rows: Dict[str, Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if not metric_rows:
+            return None
+
+        route_reason_codes = [
+            str(code)
+            for code in (
+                panel.payload.get("routeRejectedReasonCodes")
+                or (panel.payload.get("authorityDiagnostics") or {}).get("reasonCodes")
+                or []
+            )
+            if str(code or "").strip()
+        ]
+        source_type = str(panel.payload.get("sourceType") or "").lower()
+        source_tier = str(panel.payload.get("sourceTier") or "").lower()
+        freshness_values = [self._item_freshness(item, panel) for item in metric_rows.values()]
+        freshness = self._weakest_freshness(freshness_values or [panel.freshness or "unavailable"])
+        required_metrics = list(AUTHORIZED_US_BREADTH_REQUIRED_METRICS)
+        fulfilled_metrics = [
+            symbol
+            for symbol in required_metrics
+            if self._authorized_us_breadth_metric_ready(metric_rows.get(symbol), panel)
+        ]
+        missing_metrics = [symbol for symbol in required_metrics if symbol not in set(fulfilled_metrics)]
+        coverage_ratio = round(len(fulfilled_metrics) / len(required_metrics), 3)
+        authorized_source_present = bool(
+            not panel.is_fallback
+            and source_type in {"authorized_licensed_feed", "official_public"}
+            and source_tier in {
+                "authorized_licensed_feed",
+                "official_or_authorized_licensed_feed",
+                "official_public",
+            }
+            and not bool(panel.payload.get("representativeSample"))
+            and source_type not in {"public_proxy", "proxy_public", "unofficial_proxy", "synthetic_fixture", "fallback_static"}
+        )
+        payload_score_gate = bool(
+            panel.payload.get("sourceAuthorityAllowed")
+            and panel.payload.get("scoreContributionAllowed")
+        )
+        score_contribution_allowed = bool(
+            authorized_source_present
+            and payload_score_gate
+            and freshness in RELIABLE_FRESHNESS
+            and not panel.is_stale
+            and not bool(panel.payload.get("observationOnly"))
+            and not bool(panel.payload.get("isPartial"))
+            and not missing_metrics
+        )
+        degradation_reason = self._text(panel.payload.get("sourceAuthorityReason"))
+        if not authorized_source_present:
+            degradation_reason = degradation_reason or "proxy_or_placeholder_not_authorized_breadth"
+        elif freshness not in RELIABLE_FRESHNESS or panel.is_stale:
+            degradation_reason = degradation_reason or "stale_source"
+        elif missing_metrics or bool(panel.payload.get("isPartial")):
+            degradation_reason = degradation_reason or (route_reason_codes[0] if route_reason_codes else "partial_coverage")
+        elif not payload_score_gate:
+            degradation_reason = degradation_reason or (route_reason_codes[0] if route_reason_codes else "trust_gate_blocked")
+        if degradation_reason and not route_reason_codes:
+            route_reason_codes = [degradation_reason]
+
+        return {
+            "providerId": US_BREADTH_AUTHORITY_PROVIDER_ID,
+            "providerName": "Official or Authorized US Market Breadth",
+            "source": panel.payload.get("source") or panel.source,
+            "sourceLabel": panel.payload.get("sourceLabel") or "Official or Authorized US Market Breadth cache",
+            "sourceType": panel.payload.get("sourceType") or panel.source,
+            "sourceTier": panel.payload.get("sourceTier") or panel.payload.get("sourceType"),
+            "trustLevel": panel.payload.get("trustLevel") or "score_grade_when_configured",
+            "retrievalMode": "cache_only",
+            "cacheOnly": True,
+            "externalProviderCalls": False,
+            "freshness": freshness,
+            "requiredMetrics": required_metrics,
+            "fulfilledMetrics": fulfilled_metrics,
+            "missingMetrics": missing_metrics,
+            "coverageRatio": coverage_ratio,
+            "coverage": coverage_ratio,
+            "coverageCount": panel.payload.get("coverageCount"),
+            "coverageThreshold": panel.payload.get("coverageThreshold"),
+            "comparisonBasis": panel.payload.get("comparisonBasis"),
+            "isPartial": bool(missing_metrics or panel.payload.get("isPartial")),
+            "isStale": freshness == "stale" or panel.is_stale,
+            "isUnavailable": not metric_rows,
+            "isFallback": panel.is_fallback,
+            "fallbackUsed": panel.is_fallback,
+            "observationOnly": not score_contribution_allowed,
+            "realSourceAvailable": authorized_source_present,
+            "sourceAuthorityAllowed": score_contribution_allowed,
+            "scoreContributionAllowed": score_contribution_allowed,
+            "degradationReason": degradation_reason,
+            "reasonCodes": route_reason_codes,
+            "sourceFreshnessEvidence": {
+                **copy.deepcopy(panel.payload.get("sourceFreshnessEvidence") or {}),
+                "freshness": freshness,
+                "cacheOnly": True,
+                "coverageRatio": coverage_ratio,
+                "requiredMetrics": required_metrics,
+                "fulfilledMetrics": fulfilled_metrics,
+                "missingMetrics": missing_metrics,
+                "externalProviderCalls": False,
+            },
+        }
+
+    def _authorized_us_breadth_metric_ready(self, item: Optional[Dict[str, Any]], panel: PanelState) -> bool:
+        if not isinstance(item, dict):
+            return False
+        source_type = str(item.get("sourceType") or panel.payload.get("sourceType") or "").lower()
+        source_tier = str(item.get("sourceTier") or panel.payload.get("sourceTier") or "").lower()
+        return bool(
+            source_type in {"authorized_licensed_feed", "official_public"}
+            and source_tier in {
+                "authorized_licensed_feed",
+                "official_or_authorized_licensed_feed",
+                "official_public",
+            }
+            and item.get("sourceAuthorityAllowed") is not False
+            and item.get("scoreContributionAllowed") is not False
+            and not item.get("isFallback")
+            and not item.get("isUnavailable")
+            and not item.get("isStale")
+            and str(self._item_freshness(item, panel) or "") in RELIABLE_FRESHNESS
+            and self._numeric(item.get("value") if item.get("value") is not None else item.get("price")) is not None
+        )
 
     def _extract_cn_flow_components(self, panel: PanelState, breadth_panel: PanelState) -> Optional[Dict[str, Any]]:
         flow_labels = {
@@ -2499,6 +2778,7 @@ class LiquidityMonitorService:
         trust: Dict[str, Any],
     ) -> Dict[str, Any]:
         policy = LIQUIDITY_INDICATOR_PROVIDER_ACTIVATION.get(key, {})
+        cache_bundle = evidence.get("cacheBundleDiagnostics")
         required_provider_class = self._text(policy.get("requiredProviderClass"))
         configured_provider_available = self._indicator_configured_provider_available(panel, evidence)
         real_source_available = self._indicator_real_source_available(key, panel, evidence, trust)
@@ -2526,6 +2806,12 @@ class LiquidityMonitorService:
         missing_provider_reason = None
         if required_provider_class and not real_source_available:
             missing_provider_reason = f"requires_{required_provider_class}"
+        if (
+            key == "us_breadth_proxy"
+            and isinstance(cache_bundle, dict)
+            and bool(cache_bundle.get("realSourceAvailable"))
+        ):
+            missing_provider_reason = None
         score_exclusion_reason = None
         if observation_only:
             score_exclusion_reason = "observation_only"
@@ -2684,6 +2970,15 @@ class LiquidityMonitorService:
         panel: PanelState,
         evidence: Dict[str, Any],
     ) -> Dict[str, Any]:
+        cache_bundle = evidence.get("cacheBundleDiagnostics")
+        if (
+            key == "us_breadth_proxy"
+            and isinstance(cache_bundle, dict)
+            and bool(cache_bundle.get("scoreContributionAllowed"))
+            and bool(cache_bundle.get("realSourceAvailable"))
+        ):
+            return {"rejected": False, "reason": None, "reasonCodes": []}
+
         route_request = self._build_liquidity_score_route_request(key)
         if route_request is None:
             return {"rejected": False, "reason": None, "reasonCodes": []}
@@ -2852,6 +3147,9 @@ class LiquidityMonitorService:
                 allowed_source_tiers={"authorized_licensed_feed"},
             )
         if key == "us_breadth_proxy":
+            cache_bundle = evidence.get("cacheBundleDiagnostics")
+            if isinstance(cache_bundle, dict):
+                return bool(cache_bundle.get("realSourceAvailable"))
             return self._indicator_required_inputs_have_real_source_authority(
                 evidence,
                 required_inputs=set(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["us_breadth_proxy"]),
@@ -3004,6 +3302,14 @@ class LiquidityMonitorService:
         return None
 
     def _indicator_required_inputs(self, key: str, inputs: List[Dict[str, Any]], panel: PanelState) -> tuple[str, ...]:
+        if key == "us_breadth_proxy":
+            input_keys = {
+                self._indicator_input_key(item)
+                for item in inputs
+                if self._indicator_input_key(item)
+            }
+            if input_keys & set(AUTHORIZED_US_BREADTH_REQUIRED_METRICS):
+                return AUTHORIZED_US_BREADTH_REQUIRED_METRICS
         required = LIQUIDITY_INDICATOR_REQUIRED_INPUTS.get(key)
         if required:
             return required
@@ -3078,6 +3384,13 @@ class LiquidityMonitorService:
         evidence: Dict[str, Any],
     ) -> str:
         hint = LIQUIDITY_INDICATOR_ACTIVATION_HINTS.get(key)
+        cache_bundle = evidence.get("cacheBundleDiagnostics")
+        if (
+            key == "us_breadth_proxy"
+            and isinstance(cache_bundle, dict)
+            and cache_bundle.get("providerId") == US_BREADTH_AUTHORITY_PROVIDER_ID
+        ):
+            hint = "激活现有授权 US breadth cache；仅当授权来源、freshness、coverage 与 score gate 同时通过时计分。"
         parts: list[str] = []
         if hint:
             parts.append(hint)
