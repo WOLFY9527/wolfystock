@@ -1355,6 +1355,51 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByText('manual')).toBeInTheDocument();
   });
 
+  it('renders account and sync forms with Chinese-first drawer labels', async () => {
+    listImportBrokers.mockResolvedValueOnce({
+      brokers: [
+        { broker: 'huatai', aliases: [], displayName: '华泰', fileExtensions: ['csv'] },
+        { broker: 'ibkr', aliases: ['interactivebrokers'], displayName: 'Interactive Brokers', fileExtensions: ['xml'] },
+      ],
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(screen.getByLabelText('记账账户')).toBeInTheDocument();
+    expect(screen.getByLabelText('成本方法')).toBeInTheDocument();
+    expect(screen.queryByText('LEDGER ACCOUNT')).not.toBeInTheDocument();
+    expect(screen.queryByText('COST METHOD')).not.toBeInTheDocument();
+
+    fireEvent.click(getLeftTabButton('账户'));
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.createAccount') }));
+
+    expect(screen.getByLabelText('账户名称')).toBeInTheDocument();
+    expect(screen.getByLabelText('券商')).toHaveValue('Demo');
+    expect(screen.getByLabelText('基准币种')).toHaveValue('CNY');
+    expect(screen.getByLabelText('市场范围')).toHaveValue('cn');
+    expect(screen.queryByText('ACCOUNT NAME')).not.toBeInTheDocument();
+    expect(screen.queryByText('BROKER')).not.toBeInTheDocument();
+    expect(screen.queryByText('BASE CCY')).not.toBeInTheDocument();
+    expect(screen.queryByText('MARKET')).not.toBeInTheDocument();
+
+    fireEvent.click(getLeftTabButton('同步'));
+
+    const brokerSelect = screen.getByLabelText('导入来源') as HTMLSelectElement;
+    expect(brokerSelect).toHaveValue('huatai');
+    fireEvent.change(brokerSelect, { target: { value: 'ibkr' } });
+
+    expect(brokerSelect).toHaveValue('ibkr');
+    expect(Array.from(brokerSelect.options).map((option) => option.textContent).join(' ')).toContain('Interactive Brokers');
+    expect(screen.getByLabelText('IBKR API 地址')).toHaveValue('https://localhost:5000/v1/api');
+    expect(screen.getByLabelText('IBKR 账户引用')).toBeInTheDocument();
+    expect(screen.getByLabelText('IBKR 会话令牌')).toBeInTheDocument();
+    expect(screen.queryByText('API BASE')).not.toBeInTheDocument();
+    expect(screen.queryByText('ACCOUNT REF')).not.toBeInTheDocument();
+    expect(screen.queryByText('SESSION TOKEN')).not.toBeInTheDocument();
+  });
+
   it('confirms account deletion and falls back to the next active account', async () => {
     getAccounts
       .mockResolvedValueOnce(makeAccounts([{ id: 1, name: 'Main' }, { id: 2, name: 'Alt' }]))
