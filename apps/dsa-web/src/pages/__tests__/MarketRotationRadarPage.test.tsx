@@ -652,6 +652,8 @@ describe('MarketRotationRadarPage', () => {
     expect(screen.getByTestId('rotation-radar-guidance')).toHaveTextContent('下一步应配置或等待什么数据');
     expect(screen.getByTestId('rotation-radar-mode-controls')).toHaveTextContent('美股');
     expect(screen.getByTestId('rotation-radar-mode-controls')).toHaveAttribute('data-linear-primitive', 'command-bar');
+    expect(screen.getByTestId('rotation-taxonomy-mode-note')).toHaveTextContent('主题优先');
+    expect(screen.getByTestId('rotation-radar-mode-controls')).not.toHaveTextContent('ETF代理');
     expect(screen.getByTestId('rotation-market-tab-US')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '刷新主题轮动雷达' })).toHaveAttribute('data-terminal-primitive', 'button');
     expect(screen.getByTestId('rotation-radar-freshness')).toHaveAttribute('data-terminal-primitive', 'nested-block');
@@ -693,7 +695,8 @@ describe('MarketRotationRadarPage', () => {
     expect(panel).toHaveTextContent('ETF 代理权威检查');
     expect(panel).toHaveTextContent('SPY / QQQ / IWM / SMH / SOXX / IGV');
     expect(panel).toHaveTextContent('已启用');
-    expect(panel).toHaveTextContent('high');
+    expect(panel).toHaveTextContent('置信度 高');
+    expect(panel).toHaveTextContent('来源 权威行情源');
     expect(panel).toHaveTextContent('SMH');
     expect(panel).toHaveTextContent('SOXX');
     expect(panel).toHaveTextContent('QQQ');
@@ -705,11 +708,14 @@ describe('MarketRotationRadarPage', () => {
     expect(panel).toHaveTextContent('权威 6/6');
     expect(panel).toHaveTextContent('可计分 6/6');
     expect(panel.textContent || '').not.toMatch(/headline eligible|top theme|bullish|risk-on/i);
+    expect(panel.textContent || '').not.toMatch(/alpaca_etf_authority_spine|Alpaca SIP|Score-Eligible|Source|Confidence/i);
     expect(panel.textContent || '').not.toMatch(forbiddenTradingActionPattern);
 
     const debug = within(panel).getByTestId('rotation-etf-raw-reason-codes');
     expect(debug).not.toHaveAttribute('open');
-    fireEvent.click(within(debug).getByRole('button', { name: '展开 原始原因代码' }));
+    fireEvent.click(within(debug).getByRole('button', { name: '展开 原始来源 / 原因代码' }));
+    expect(debug).toHaveTextContent('alpaca_etf_authority_spine');
+    expect(debug).toHaveTextContent('Alpaca SIP');
     expect(debug).toHaveTextContent('bounded_etf_authority_active');
   });
 
@@ -868,10 +874,12 @@ describe('MarketRotationRadarPage', () => {
     fireEvent.click(within(disclosure).getByRole('button', { name: '展开 ETF 权威来源技术细节' }));
     const panel = await screen.findByTestId('rotation-radar-etf-leadership-panel');
     expect(panel).toHaveTextContent('未启用');
+    expect(panel).toHaveTextContent('置信度 未启用');
     expect(panel).toHaveTextContent('ETF 必要时窗缺失');
     expect(panel).toHaveTextContent(/ETF 权威来源\s*未满足可用条件/);
     expect(panel).not.toHaveTextContent('missing_required_windows');
     expect(panel).not.toHaveTextContent('ineligible_bounded_etf');
+    expect(panel).not.toHaveTextContent('disabled');
     expect(panel).toHaveTextContent('权威 0/1');
     expect(panel).toHaveTextContent('可计分 0/1');
     expect(panel).not.toHaveTextContent('leadingSymbols');
@@ -879,7 +887,7 @@ describe('MarketRotationRadarPage', () => {
     expect(panel.textContent || '').not.toMatch(forbiddenTradingActionPattern);
 
     const debug = within(panel).getByTestId('rotation-etf-raw-reason-codes');
-    fireEvent.click(within(debug).getByRole('button', { name: '展开 原始原因代码' }));
+    fireEvent.click(within(debug).getByRole('button', { name: '展开 原始来源 / 原因代码' }));
     expect(debug).toHaveTextContent('missing_required_windows');
     expect(debug).toHaveTextContent('ineligible_bounded_etf');
 
@@ -929,7 +937,7 @@ describe('MarketRotationRadarPage', () => {
     const bodyText = page.textContent || '';
     expect(bodyText).not.toMatch(forbiddenTradingActionPattern);
     expect(bodyText).not.toMatch(rawI18nKeyPattern);
-    expect(bodyText).not.toMatch(/Capital Rotation Summary|Candidate watchlist|taxonomy-only|ETF authority|score-grade|real-flow|breadth confirmation|Details/i);
+    expect(bodyText).not.toMatch(/Capital Rotation Summary|Candidate watchlist|taxonomy-only|ETF authority|score-grade|real-flow|breadth confirmation|Details|Enabled|Disabled|Confidence|Source|Score-Eligible/i);
   });
 
   it('keeps full taxonomy-only markets in library framing only', async () => {

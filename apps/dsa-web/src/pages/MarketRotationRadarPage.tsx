@@ -73,7 +73,6 @@ const RISK_LABELS: Record<MarketRotationRiskLabel, string> = {
   stale_or_incomplete_windows: '时窗缺失/过期',
 };
 
-const TAXONOMY_PLACEHOLDERS = ['主题', '行业', '概念', 'ETF代理'];
 const REAL_FLOW_EVIDENCE_TYPES = new Set(['real_flow', 'mixed_real_and_proxy']);
 const BOUNDED_ETF_SYMBOLS = ['SPY', 'QQQ', 'IWM', 'SMH', 'SOXX', 'IGV'] as const;
 
@@ -411,6 +410,46 @@ function compactConfidence(value?: number | null): string {
   return `${Math.round(value * 100)}%`;
 }
 
+function etfConfidenceLabel(value?: string | null): string {
+  const normalized = String(value || '').trim().toLowerCase();
+  const labels: Record<string, string> = {
+    high: '高',
+    medium: '中',
+    low: '低',
+    disabled: '未启用',
+    insufficient: '证据不足',
+    unknown: '待确认',
+  };
+  if (!normalized) {
+    return '未返回';
+  }
+  return labels[normalized] || sanitizeRotationText(value, '待确认');
+}
+
+function etfSourceSummaryLabel(source?: string | null, fallback?: string | null): string {
+  const value = String(fallback || source || '').trim();
+  const normalized = value.toLowerCase().replace(/[\s-]+/g, '_');
+  if (!value) {
+    return '待确认';
+  }
+  if (normalized.includes('alpaca') || normalized.includes('sip')) {
+    return '权威行情源';
+  }
+  if (normalized.includes('fixture') || normalized.includes('mock') || normalized.includes('test')) {
+    return '测试数据源';
+  }
+  if (normalized.includes('taxonomy')) {
+    return '静态主题库';
+  }
+  if (normalized.includes('fallback')) {
+    return '备用数据';
+  }
+  if (normalized.includes('_') || /^[a-z0-9.]+$/.test(normalized)) {
+    return '来源已记录';
+  }
+  return sanitizeRotationText(value, '来源已记录');
+}
+
 function formatThemeStage(stage?: MarketRotationStage): string {
   return stage ? STAGE_LABELS[stage] || stage : '待识别';
 }
@@ -588,12 +627,14 @@ function summarizeEtfEvidence(diagnostics: MarketRotationEtfLeadershipDiagnostic
   const sourceLabel = String(evidence.find((row) => row.sourceLabel)?.sourceLabel || diagnostics.source || '待确认');
   const reasonCodes = evidence.flatMap((row) => row.reasonCodes || []);
   const uniqueReasons = Array.from(new Set(reasonCodes.filter(Boolean)));
+  const rawSourceLabels = Array.from(new Set([diagnostics.source, ...evidence.map((row) => row.sourceLabel)].filter(Boolean)));
   return {
     authorityAllowed,
     scoreEligible,
     total: evidence.length,
     freshness,
     sourceLabel,
+    rawSourceLabels,
     uniqueReasons,
   };
 }
@@ -656,9 +697,9 @@ const EtfLeadershipDiagnosticsPanel: React.FC<{
       </p>
 
       <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
-        <TerminalChip>{`置信度 ${diagnostics.confidenceLabel || '未返回'}`}</TerminalChip>
+        <TerminalChip>{`置信度 ${etfConfidenceLabel(diagnostics.confidenceLabel)}`}</TerminalChip>
         <TerminalChip>{`截至 ${formatDateTime(diagnostics.asOf) || '待确认'}`}</TerminalChip>
-        <TerminalChip>{`来源 ${diagnostics.source || evidence.sourceLabel}`}</TerminalChip>
+        <TerminalChip>{`来源 ${etfSourceSummaryLabel(diagnostics.source, evidence.sourceLabel)}`}</TerminalChip>
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
@@ -691,16 +732,19 @@ const EtfLeadershipDiagnosticsPanel: React.FC<{
 
       <TerminalNotice variant={enabled ? 'info' : 'caution'} className="mt-3 text-[11px] leading-5 text-white/56">
         {enabled
-          ? `证据摘要：权威 ${evidence.authorityAllowed}/${evidence.total}，可计分 ${evidence.scoreEligible}/${evidence.total}，来源 ${evidence.sourceLabel}。`
+          ? `证据摘要：权威 ${evidence.authorityAllowed}/${evidence.total}，可计分 ${evidence.scoreEligible}/${evidence.total}，来源 ${etfSourceSummaryLabel(diagnostics.source, evidence.sourceLabel)}。`
           : `未满足必要时窗与权威检查前保持关闭。权威 ${evidence.authorityAllowed}/${evidence.total || 0}，可计分 ${evidence.scoreEligible}/${evidence.total || 0}。`}
       </TerminalNotice>
       <TerminalDisclosure
         data-testid="rotation-etf-raw-reason-codes"
-        title="原始原因代码"
+        title="原始来源 / 原因代码"
         summary="默认折叠"
         className="mt-3 bg-black/10"
       >
         <div className="flex min-w-0 flex-wrap gap-1.5">
+          {evidence.rawSourceLabels.map((source) => (
+            <TerminalChip key={`source-${source}`} variant="neutral">{source}</TerminalChip>
+          ))}
           {rawReasonCodes.map((code) => (
             <TerminalChip key={code} variant="neutral">{code}</TerminalChip>
           ))}
@@ -1230,7 +1274,7 @@ const CommandBar: React.FC<{
 }> = ({ selectedMarket, supportedMarkets, searchQuery, onMarketChange, onSearchChange, loading, freshness, onRefresh }) => (
   <WolfyCommandBar
     data-testid="rotation-radar-mode-controls"
-    className="min-h-[132px] gap-y-3 sm:min-h-[118px] lg:min-h-11"
+    className="min-h-[104px] gap-y-2 sm:min-h-[88px] lg:min-h-11"
     leading={(
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase text-white/35">
@@ -1277,7 +1321,7 @@ const CommandBar: React.FC<{
       </div>
     )}
   >
-    <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
+    <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:gap-2">
       <label className="relative min-w-0 flex-1">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" aria-hidden="true" />
         <input
@@ -1287,27 +1331,15 @@ const CommandBar: React.FC<{
           placeholder="搜索主题、英文名或成员"
         />
       </label>
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <div
+        data-testid="rotation-taxonomy-mode-note"
+        className="inline-flex min-h-8 shrink-0 items-center gap-2 rounded-md border border-white/[0.06] bg-white/[0.025] px-2.5 text-[11px] text-white/46"
+      >
         <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase text-white/35">
           <Gauge className="h-3.5 w-3.5 text-cyan-200/70" aria-hidden="true" />
-          分类层级
+          分类
         </div>
-        {TAXONOMY_PLACEHOLDERS.map((mode, index) => (
-          <TerminalButton
-            key={mode}
-            type="button"
-            variant="compact"
-            className={cn(
-              'shrink-0',
-              index === 0
-                ? 'border-white/10 bg-white/[0.055] text-white/75 hover:bg-white/[0.055] hover:text-white/75'
-                : 'cursor-default text-white/35 hover:border-white/10 hover:bg-white/[0.03] hover:text-white/35',
-            )}
-            disabled
-          >
-            {mode}
-          </TerminalButton>
-        ))}
+        <span>主题优先，行业/概念随结果展开</span>
       </div>
     </div>
   </WolfyCommandBar>
