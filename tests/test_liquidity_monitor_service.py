@@ -262,7 +262,7 @@ def _authorized_us_breadth_item(
     freshness: str = "delayed",
     source: str = "polygon_us_grouped_daily",
     source_type: str = "authorized_licensed_feed",
-    source_tier: str = "official_or_authorized_licensed_feed",
+    source_tier: str = "authorized_licensed_feed",
     trust_level: str = "score_grade_when_configured",
     source_authority_allowed: bool = True,
     score_contribution_allowed: bool = True,
@@ -301,7 +301,7 @@ def _authorized_us_breadth_cache_payload(
     freshness: str = "delayed",
     source: str = "polygon_us_grouped_daily",
     source_type: str = "authorized_licensed_feed",
-    source_tier: str = "official_or_authorized_licensed_feed",
+    source_tier: str = "authorized_licensed_feed",
     trust_level: str = "score_grade_when_configured",
     source_authority_allowed: bool = True,
     score_contribution_allowed: bool = True,
@@ -3075,17 +3075,21 @@ def test_authorized_us_breadth_cache_scores_when_full_gates_pass(
     service = _make_service()
     as_of = "2026-05-21T16:00:00+08:00"
     items = [
-        _authorized_us_breadth_item("ADVANCERS", 7000, as_of=as_of),
-        _authorized_us_breadth_item("DECLINERS", 4000, as_of=as_of),
-        _authorized_us_breadth_item("UNCHANGED", 1000, as_of=as_of),
-        _authorized_us_breadth_item("ADVANCE_DECLINE_RATIO", 1.75, as_of=as_of),
-        _authorized_us_breadth_item("NEW_HIGHS", 318, as_of=as_of),
-        _authorized_us_breadth_item("NEW_LOWS", 42, as_of=as_of),
-        _authorized_us_breadth_item("HIGH_LOW_RATIO", 7.571, as_of=as_of),
+        _authorized_us_breadth_item("ADVANCERS", 7000, as_of=as_of, source_tier="authorized_licensed_feed"),
+        _authorized_us_breadth_item("DECLINERS", 4000, as_of=as_of, source_tier="authorized_licensed_feed"),
+        _authorized_us_breadth_item("UNCHANGED", 1000, as_of=as_of, source_tier="authorized_licensed_feed"),
+        _authorized_us_breadth_item("ADVANCE_DECLINE_RATIO", 1.75, as_of=as_of, source_tier="authorized_licensed_feed"),
+        _authorized_us_breadth_item("NEW_HIGHS", 318, as_of=as_of, source_tier="authorized_licensed_feed"),
+        _authorized_us_breadth_item("NEW_LOWS", 42, as_of=as_of, source_tier="authorized_licensed_feed"),
+        _authorized_us_breadth_item("HIGH_LOW_RATIO", 7.571, as_of=as_of, source_tier="authorized_licensed_feed"),
     ]
     service.cache.set(
         "us_breadth",
-        _authorized_us_breadth_cache_payload(as_of=as_of, items=items),
+        _authorized_us_breadth_cache_payload(
+            as_of=as_of,
+            items=items,
+            source_tier="authorized_licensed_feed",
+        ),
         ttl_seconds=30,
     )
 
@@ -3123,6 +3127,88 @@ def test_authorized_us_breadth_cache_scores_when_full_gates_pass(
     assert payload["sourceMetadata"]["marketCacheMutation"] is False
     mock_proxy.assert_not_called()
     mock_funding.assert_not_called()
+
+
+def test_official_public_us_breadth_cache_scores_when_full_gates_pass(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    as_of = "2026-05-21T16:00:00+08:00"
+    items = [
+        _authorized_us_breadth_item("ADVANCERS", 7000, as_of=as_of, source="nyse_official_breadth", source_type="official_public", source_tier="official_public"),
+        _authorized_us_breadth_item("DECLINERS", 4000, as_of=as_of, source="nyse_official_breadth", source_type="official_public", source_tier="official_public"),
+        _authorized_us_breadth_item("UNCHANGED", 1000, as_of=as_of, source="nyse_official_breadth", source_type="official_public", source_tier="official_public"),
+        _authorized_us_breadth_item("ADVANCE_DECLINE_RATIO", 1.75, as_of=as_of, source="nyse_official_breadth", source_type="official_public", source_tier="official_public"),
+        _authorized_us_breadth_item("NEW_HIGHS", 318, as_of=as_of, source="nyse_official_breadth", source_type="official_public", source_tier="official_public"),
+        _authorized_us_breadth_item("NEW_LOWS", 42, as_of=as_of, source="nyse_official_breadth", source_type="official_public", source_tier="official_public"),
+        _authorized_us_breadth_item("HIGH_LOW_RATIO", 7.571, as_of=as_of, source="nyse_official_breadth", source_type="official_public", source_tier="official_public"),
+    ]
+    service.cache.set(
+        "us_breadth",
+        _authorized_us_breadth_cache_payload(
+            as_of=as_of,
+            items=items,
+            source="nyse_official_breadth",
+            source_type="official_public",
+            source_tier="official_public",
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["us_breadth_proxy"]
+    diagnostics = indicator["coverageDiagnostics"]
+    bundle = diagnostics["cacheBundleDiagnostics"]
+
+    assert indicator["status"] == "live"
+    assert indicator["includedInScore"] is True
+    assert indicator["scoreContribution"] == 6
+    assert diagnostics["realSourceAvailable"] is True
+    assert diagnostics["scoreContributionAllowed"] is True
+    assert diagnostics["scoreExclusionReason"] is None
+    assert bundle["sourceType"] == "official_public"
+    assert bundle["sourceTier"] == "official_public"
+    assert bundle["scoreContributionAllowed"] is True
+
+
+def test_authorized_us_breadth_combined_source_tier_remains_observation_only(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    as_of = "2026-05-21T16:00:00+08:00"
+    items = [
+        _authorized_us_breadth_item("ADVANCERS", 7000, as_of=as_of, source_tier="official_or_authorized_licensed_feed"),
+        _authorized_us_breadth_item("DECLINERS", 4000, as_of=as_of, source_tier="official_or_authorized_licensed_feed"),
+        _authorized_us_breadth_item("UNCHANGED", 1000, as_of=as_of, source_tier="official_or_authorized_licensed_feed"),
+        _authorized_us_breadth_item("ADVANCE_DECLINE_RATIO", 1.75, as_of=as_of, source_tier="official_or_authorized_licensed_feed"),
+        _authorized_us_breadth_item("NEW_HIGHS", 318, as_of=as_of, source_tier="official_or_authorized_licensed_feed"),
+        _authorized_us_breadth_item("NEW_LOWS", 42, as_of=as_of, source_tier="official_or_authorized_licensed_feed"),
+        _authorized_us_breadth_item("HIGH_LOW_RATIO", 7.571, as_of=as_of, source_tier="official_or_authorized_licensed_feed"),
+    ]
+    service.cache.set(
+        "us_breadth",
+        _authorized_us_breadth_cache_payload(
+            as_of=as_of,
+            items=items,
+            source_tier="official_or_authorized_licensed_feed",
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["us_breadth_proxy"]
+    diagnostics = indicator["coverageDiagnostics"]
+    bundle = diagnostics["cacheBundleDiagnostics"]
+
+    assert indicator["status"] == "partial"
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostics["realSourceAvailable"] is False
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["scoreExclusionReason"] == "proxy_only_missing_real_source"
+    assert diagnostics["sourceAuthorityReason"] == "proxy_or_placeholder_not_authorized_breadth"
+    assert bundle["observationOnly"] is True
+    assert bundle["scoreContributionAllowed"] is False
 
 
 def test_authorized_us_breadth_missing_cache_remains_observation_only(

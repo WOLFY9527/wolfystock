@@ -1920,7 +1920,6 @@ class LiquidityMonitorService:
             and source_type in {"authorized_licensed_feed", "official_public"}
             and source_tier in {
                 "authorized_licensed_feed",
-                "official_or_authorized_licensed_feed",
                 "official_public",
             }
             and not bool(panel.payload.get("representativeSample"))
@@ -2003,7 +2002,6 @@ class LiquidityMonitorService:
             source_type in {"authorized_licensed_feed", "official_public"}
             and source_tier in {
                 "authorized_licensed_feed",
-                "official_or_authorized_licensed_feed",
                 "official_public",
             }
             and item.get("sourceAuthorityAllowed") is not False
@@ -3156,7 +3154,6 @@ class LiquidityMonitorService:
                 allowed_source_types={"authorized_licensed_feed", "official_public"},
                 allowed_source_tiers={
                     "authorized_licensed_feed",
-                    "official_or_authorized_licensed_feed",
                     "official_public",
                 },
             )
