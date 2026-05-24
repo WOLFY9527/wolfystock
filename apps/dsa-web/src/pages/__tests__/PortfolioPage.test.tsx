@@ -766,20 +766,120 @@ describe('PortfolioPage FX refresh', () => {
     expect(holdings).toHaveTextContent('估算价格');
     expect(holdings).toHaveTextContent('均价回退');
     expect(holdings).toHaveTextContent('Average cost fallback');
-    expect(holdings).not.toHaveTextContent('现价快照');
+    expect(holdings).toHaveTextContent('现价缺失');
+    expect(holdings).toHaveTextContent('置信度 25%');
+    expect(holdings).not.toHaveTextContent(/现价快照|Live quote/);
   });
 
-  it('does not mark live quote prices as fallback estimates', async () => {
-    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: false }));
+  it('labels generic non-fallback position prices as neutral snapshots', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({
+      includePosition: true,
+      fxStale: false,
+      positionOverrides: {
+        priceSource: null,
+        priceSourceLabel: null,
+        isPriceFallback: false,
+      },
+    }));
 
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
 
     const holdings = screen.getByTestId('portfolio-current-holdings-panel');
-    expect(holdings).toHaveTextContent('现价快照');
+    expect(holdings).toHaveTextContent('价格快照');
+    expect(holdings).toHaveTextContent('价格来源待确认');
+    expect(holdings).not.toHaveTextContent(/现价快照|Live quote/);
     expect(holdings).not.toHaveTextContent('估算价格');
     expect(holdings).not.toHaveTextContent('均价回退');
+    expect(holdings.textContent || '').not.toMatch(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy/i);
+  });
+
+  it('uses neutral English price snapshot wording on English routes', async () => {
+    window.history.replaceState(window.history.state, '', '/en/portfolio');
+    getSnapshot.mockResolvedValue(makeSnapshot({
+      includePosition: true,
+      fxStale: false,
+      positionOverrides: {
+        priceSource: null,
+        priceSourceLabel: null,
+        isPriceFallback: false,
+      },
+    }));
+
+    render(
+      <UiLanguageProvider>
+        <PortfolioPage />
+      </UiLanguageProvider>,
+    );
+
+    await waitForInitialLoad();
+
+    const holdings = screen.getByTestId('portfolio-current-holdings-panel');
+    expect(holdings).toHaveTextContent('Price snapshot');
+    expect(holdings).toHaveTextContent('Price source pending');
+    expect(holdings).not.toHaveTextContent(/Live quote|现价快照/);
+  });
+
+  it('keeps portfolio price source hints distinguishable across quote, sync, and fallback states', async () => {
+    const snapshot = makeSnapshot({ includePosition: true, fxStale: false });
+    const basePosition = snapshot.accounts[0].positions[0];
+    snapshot.accounts[0].positions = [
+      {
+        ...basePosition,
+        symbol: 'AAPL',
+        priceSource: 'daily_close_quote',
+        priceSourceLabel: 'Daily close quote',
+        priceAsOf: '2026-03-19',
+        isPriceFallback: false,
+        priceFallbackReason: null,
+        valuationConfidence: 1,
+      },
+      {
+        ...basePosition,
+        symbol: 'MSFT',
+        priceSource: 'broker_sync_snapshot',
+        priceSourceLabel: 'Synced snapshot',
+        priceAsOf: '2026-03-19',
+        isPriceFallback: false,
+        priceFallbackReason: null,
+        valuationConfidence: 1,
+      },
+      {
+        ...basePosition,
+        symbol: 'COST',
+        lastPrice: 150,
+        marketValueBase: 1500,
+        unrealizedPnlBase: 0,
+        unrealizedPnlPct: 0,
+        priceSource: 'avg_cost_fallback',
+        priceSourceLabel: 'Avg-cost fallback',
+        priceAsOf: null,
+        isPriceFallback: true,
+        priceFallbackReason: 'current_quote_unavailable',
+        valuationConfidence: 0.25,
+      },
+    ];
+    getSnapshot.mockResolvedValue(snapshot);
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const holdings = screen.getByTestId('portfolio-current-holdings-panel');
+    expect(holdings).toHaveTextContent('价格快照');
+    expect(holdings).toHaveTextContent('Daily close quote');
+    expect(holdings).toHaveTextContent('Synced snapshot');
+    expect(holdings).toHaveTextContent('Avg-cost fallback');
+    expect(holdings).not.toHaveTextContent(/现价快照|Live quote/);
+
+    expect(screen.getByTestId('portfolio-holding-trust-AAPL')).toHaveTextContent('收盘报价');
+    expect(screen.getByTestId('portfolio-holding-trust-MSFT')).toHaveTextContent('同步快照');
+
+    const fallbackTrust = screen.getByTestId('portfolio-holding-trust-COST');
+    expect(fallbackTrust).toHaveTextContent('估值回退');
+    expect(fallbackTrust).toHaveTextContent('均价回退');
+    expect(fallbackTrust).toHaveTextContent('现价缺失');
   });
 
   it('renders portfolio risk drilldown explainability without raw debug labels', async () => {

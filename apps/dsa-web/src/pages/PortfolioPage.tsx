@@ -152,7 +152,7 @@ function positionPriceStateLabel(position: Pick<PortfolioPositionItem, 'isPriceF
   if (position.isPriceFallback) {
     return language === 'zh' ? '估算价格' : 'Estimated price';
   }
-  return language === 'zh' ? '现价快照' : 'Live quote';
+  return language === 'zh' ? '价格快照' : 'Price snapshot';
 }
 
 function positionPriceSourceHint(
