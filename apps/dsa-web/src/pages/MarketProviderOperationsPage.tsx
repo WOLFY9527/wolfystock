@@ -14,7 +14,7 @@ import {
   type MarketProviderOperationsSummary,
 } from '../api/marketProviderOperations';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert } from '../components/common';
+import { ApiErrorAlert, Input } from '../components/common';
 import { DataFreshnessBadge } from '../components/market-overview/marketOverviewPrimitives';
 import {
   TerminalButton,
@@ -1501,17 +1501,18 @@ const MarketDataReadinessPanel: React.FC<{
             </div>
           </div>
           <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-end">
-            <label className="min-w-0 flex-1">
-              <span className="mb-1.5 block text-[11px] text-white/42">代表符号</span>
-              <input
+            <div className="min-w-0 flex-1">
+              <Input
                 aria-label="代表符号"
+                label="代表符号"
+                labelClassName="mb-1.5 block text-[11px] font-normal text-white/42"
                 type="text"
                 value={symbolInput}
                 onChange={(event) => onSymbolInputChange(event.target.value)}
                 placeholder="AAPL, SPY, BTC-USD"
-                className="h-10 w-full rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-[color:var(--wolfy-divider)]"
+                className="h-10 px-3 text-white placeholder:text-white/28"
               />
-            </label>
+            </div>
             <TerminalButton variant="secondary" className="min-h-10 md:min-w-28" onClick={onSymbolSubmit} disabled={isLoading}>
               更新样本
             </TerminalButton>

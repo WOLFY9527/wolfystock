@@ -229,7 +229,7 @@ const MarketDecisionSemanticsList: React.FC<{
     <p className="text-[11px] font-medium text-white/48">{label}</p>
     <div
       data-testid={testId}
-      className="mt-2 flex max-h-32 min-w-0 flex-col gap-1.5 overflow-y-auto pr-1 text-[11px] leading-5 text-white/58 ui-scroll-y-quiet"
+      className="mt-2 flex max-h-32 min-w-0 flex-col gap-1.5 overflow-y-auto no-scrollbar pr-1 text-[11px] leading-5 text-white/58 ui-scroll-y-quiet"
     >
       {items.length ? items.map((item) => (
         <p key={item.key} className="min-w-0">
