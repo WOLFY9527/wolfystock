@@ -69,13 +69,22 @@ export function useSafariWarmActivation<T extends HTMLElement>(onActivate: () =>
 
   useEffect(() => {
     let elapsedMs = 0;
+    let releaseWarmListener: (() => void) | null = null;
+
+    const clearWarmListener = () => {
+      releaseWarmListener?.();
+      releaseWarmListener = null;
+    };
 
     const warmTarget = () => {
+      clearWarmListener();
       const element = ref.current;
       if (!element) return;
       const noop = () => undefined;
       element.addEventListener('pointerdown', noop, { passive: true });
-      element.removeEventListener('pointerdown', noop);
+      releaseWarmListener = () => {
+        element.removeEventListener('pointerdown', noop);
+      };
       repaintElement(element);
     };
 
@@ -85,11 +94,13 @@ export function useSafariWarmActivation<T extends HTMLElement>(onActivate: () =>
       elapsedMs += WARMUP_INTERVAL_MS;
       if (elapsedMs >= WARMUP_WINDOW_MS) {
         window.clearInterval(intervalId);
+        clearWarmListener();
       }
     }, WARMUP_INTERVAL_MS);
 
     return () => {
       window.clearInterval(intervalId);
+      clearWarmListener();
     };
   }, []);
 

@@ -145,9 +145,9 @@ const BacktestPage: React.FC = () => {
   const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const navigate = useNavigate();
-  const location = useLocation();
+  const { search: routeSearch, state: routeState } = useLocation();
   const { language } = useI18n();
-  const scannerHandoff = useMemo(() => parseScannerBacktestHandoff(location.search), [location.search]);
+  const scannerHandoff = useMemo(() => parseScannerBacktestHandoff(routeSearch), [routeSearch]);
 
   useEffect(() => {
     document.title = bt(language, 'page.documentTitle');
@@ -552,7 +552,7 @@ const BacktestPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const state = location.state as BacktestPageLocationState | null;
+    const state = routeState as BacktestPageLocationState | null;
     const draftRun = state?.draftRun;
     if (draftRun) {
       applyRuleRunDraft(draftRun);
@@ -571,7 +571,7 @@ const BacktestPage: React.FC = () => {
 
     setActiveModule('rule');
     setCodeFilter(prefillCode);
-  }, [applyRuleRunDraft, location.state, scannerHandoff]);
+  }, [applyRuleRunDraft, routeState, scannerHandoff]);
 
   const fetchPerformance = useCallback(async (code?: string, windowBars?: number, options: { showNotice?: boolean } = {}) => {
     const { showNotice = true } = options;
