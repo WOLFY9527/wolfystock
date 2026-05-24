@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import json
 import tempfile
 import unittest
 from datetime import datetime, timedelta
@@ -38,7 +39,15 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         os.environ.pop("DATABASE_PATH", None)
         self.temp_dir.cleanup()
 
-    def _save_scanner_candidate(self, *, symbol: str, market: str, score: float, rank: int) -> None:
+    def _save_scanner_candidate(
+        self,
+        *,
+        symbol: str,
+        market: str,
+        score: float,
+        rank: int,
+        diagnostics_source: str | None = None,
+    ) -> None:
         now = datetime.now()
         run = MarketScannerRun(
             market=market,
@@ -58,6 +67,19 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
             rank=rank,
             score=score,
             reason_summary="Latest scanner score.",
+            diagnostics_json=(
+                json.dumps(
+                    {
+                        "history": {
+                            "source": diagnostics_source,
+                            "latest_trade_date": "2026-05-22",
+                        }
+                    },
+                    ensure_ascii=False,
+                )
+                if diagnostics_source
+                else None
+            ),
             created_at=now,
         )
         with self.db.get_session() as session:
@@ -96,6 +118,61 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         self.assertEqual(item["theme_id"], "crypto_miners")
         self.assertEqual(item["universe_type"], "theme")
         self.assertTrue(item["last_scored_at"])
+
+    def test_refresh_projects_local_us_parquet_dir_provenance_without_runtime_fetches(self) -> None:
+        self.service.add_item(
+            owner_id="user-1",
+            symbol="WULF",
+            market="us",
+            scanner_score=60,
+            scanner_rank=8,
+        )
+        self._save_scanner_candidate(
+            symbol="WULF",
+            market="us",
+            score=72.5,
+            rank=3,
+            diagnostics_source="local_us_parquet_dir",
+        )
+
+        with (
+            patch("data_provider.base.DataFetcherManager.get_daily_data", side_effect=AssertionError("watchlist provenance should not fetch provider history")) as get_daily_data,
+            patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=AssertionError("watchlist provenance should not fetch provider quotes")) as get_realtime_quote,
+            patch("src.services.us_history_helper.fetch_daily_history_with_local_us_fallback", side_effect=AssertionError("watchlist provenance should not fetch local/cache history")) as fetch_local_history,
+            patch("src.services.backtest_service.BacktestService.run_backtest", side_effect=AssertionError("watchlist provenance should not run backtests")) as run_backtest,
+        ):
+            result = self.service.refresh_scores(owner_id="user-1", market="us")
+            item = self.service.list_items(owner_id="user-1")[0]
+
+        self.assertEqual(result["updated_count"], 1)
+        self.assertEqual(item["score_source"], "scanner_run")
+        provenance = item["intelligence"]["scanner"]["ohlcv_provenance"]
+        self.assertEqual(provenance["source"], "local_us_parquet_dir")
+        self.assertEqual(provenance["source_type"], "cache_snapshot")
+        self.assertEqual(provenance["source_label"], "本地 Parquet 历史")
+        get_daily_data.assert_not_called()
+        get_realtime_quote.assert_not_called()
+        fetch_local_history.assert_not_called()
+        run_backtest.assert_not_called()
+
+    def test_refresh_missing_diagnostics_preserves_scanner_run_without_provenance(self) -> None:
+        self.service.add_item(
+            owner_id="user-1",
+            symbol="WULF",
+            market="us",
+            scanner_score=60,
+            scanner_rank=8,
+        )
+        self._save_scanner_candidate(symbol="WULF", market="us", score=72.5, rank=3)
+
+        result = self.service.refresh_scores(owner_id="user-1", market="us")
+
+        self.assertEqual(result["updated_count"], 1)
+        item = self.service.list_items(owner_id="user-1")[0]
+        self.assertEqual(item["score_source"], "scanner_run")
+        self.assertEqual(item["scanner_score"], 72.5)
+        self.assertEqual(item["scanner_rank"], 3)
+        self.assertNotIn("ohlcv_provenance", item["intelligence"]["scanner"])
 
     def test_refresh_preserves_candidate_when_scanner_data_is_missing(self) -> None:
         self.service.add_item(

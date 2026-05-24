@@ -11,8 +11,13 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, desc, select
 
+from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
 from src.storage import AppUser, DatabaseManager, MarketScannerCandidate, MarketScannerRun, RuleBacktestRun, UserWatchlistItem
 from src.utils.symbol_normalization import canonical_stock_code
+
+
+_LOCAL_OHLCV_HISTORY_SOURCES = {"local_us_parquet", "local_us_parquet_dir"}
+
 
 class WatchlistService:
     """Business logic for user-owned candidate tracking."""
@@ -94,10 +99,72 @@ class WatchlistService:
         return number if number == number else None
 
     @staticmethod
+    def _scanner_candidate_key(item: Dict[str, Any]) -> Optional[tuple[int, str]]:
+        scanner_run_id = item.get("scanner_run_id")
+        if scanner_run_id is None:
+            return None
+        try:
+            run_id = int(scanner_run_id)
+        except (TypeError, ValueError):
+            return None
+        symbol = str(item.get("symbol") or "").strip().upper()
+        if not symbol:
+            return None
+        return (run_id, symbol)
+
+    @staticmethod
+    def _project_local_ohlcv_provenance(diagnostics: Dict[str, Any]) -> Optional[Dict[str, str]]:
+        history = diagnostics.get("history") if isinstance(diagnostics.get("history"), dict) else {}
+        source = str(
+            history.get("source")
+            or diagnostics.get("history_source")
+            or diagnostics.get("historySource")
+            or ""
+        ).strip().lower()
+        if source not in _LOCAL_OHLCV_HISTORY_SOURCES:
+            return None
+        source_type = resolve_source_type(source)
+        return {
+            "source": source,
+            "source_type": source_type,
+            "source_label": resolve_source_label(source, source_type=source_type),
+        }
+
+    def _scanner_ohlcv_provenance_by_item(self, items: List[Dict[str, Any]]) -> Dict[tuple[int, str], Dict[str, str]]:
+        keys = {key for item in items if (key := self._scanner_candidate_key(item)) is not None}
+        if not keys:
+            return {}
+        run_ids = sorted({run_id for run_id, _symbol in keys})
+        symbols = sorted({symbol for _run_id, symbol in keys})
+        with self.db.get_session() as session:
+            candidates = session.execute(
+                select(MarketScannerCandidate)
+                .where(
+                    and_(
+                        MarketScannerCandidate.run_id.in_(run_ids),
+                        MarketScannerCandidate.symbol.in_(symbols),
+                    )
+                )
+            ).scalars().all()
+
+        provenance_by_key: Dict[tuple[int, str], Dict[str, str]] = {}
+        for candidate in candidates:
+            key = (int(candidate.run_id), str(candidate.symbol or "").upper())
+            if key not in keys or key in provenance_by_key:
+                continue
+            provenance = self._project_local_ohlcv_provenance(
+                self._load_json_object(getattr(candidate, "diagnostics_json", None))
+            )
+            if provenance is not None:
+                provenance_by_key[key] = provenance
+        return provenance_by_key
+
+    @staticmethod
     def _build_intelligence_payload(
         item: Dict[str, Any],
         *,
         backtest: Optional[RuleBacktestRun] = None,
+        scanner_ohlcv_provenance: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         scanner_score = WatchlistService._safe_float(item.get("scanner_score"))
         scanner_status = "selected" if scanner_score is not None or item.get("scanner_run_id") else "unknown"
@@ -145,17 +212,21 @@ class WatchlistService:
                 ),
             }
 
+        scanner_payload = {
+            "last_score": scanner_score,
+            "last_rank": int(item["scanner_rank"]) if item.get("scanner_rank") is not None else None,
+            "status": scanner_status,
+            "theme": item.get("theme_id"),
+            "theme_label": None,
+            "profile": item.get("score_profile"),
+            "reason": item.get("score_reason") or item.get("notes"),
+            "last_scanned_at": item.get("last_scored_at"),
+        }
+        if scanner_ohlcv_provenance is not None:
+            scanner_payload["ohlcv_provenance"] = scanner_ohlcv_provenance
+
         return {
-            "scanner": {
-                "last_score": scanner_score,
-                "last_rank": int(item["scanner_rank"]) if item.get("scanner_rank") is not None else None,
-                "status": scanner_status,
-                "theme": item.get("theme_id"),
-                "theme_label": None,
-                "profile": item.get("score_profile"),
-                "reason": item.get("score_reason") or item.get("notes"),
-                "last_scanned_at": item.get("last_scored_at"),
-            },
+            "scanner": scanner_payload,
             "strategy_simulation": strategy_simulation,
             "backtest": backtest_payload,
         }
@@ -203,10 +274,12 @@ class WatchlistService:
             owner_id=owner_id,
             symbols=[str(item.get("symbol") or "") for item in items],
         )
+        scanner_provenance = self._scanner_ohlcv_provenance_by_item(items)
         for item in items:
             item["intelligence"] = self._build_intelligence_payload(
                 item,
                 backtest=backtests.get(str(item.get("symbol") or "").upper()),
+                scanner_ohlcv_provenance=scanner_provenance.get(self._scanner_candidate_key(item)),
             )
         return items
 

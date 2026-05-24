@@ -72,6 +72,12 @@ class WatchlistItemResponse(BaseModel):
     intelligence: Optional["WatchlistIntelligenceResponse"] = None
 
 
+class WatchlistOhlcvProvenanceResponse(BaseModel):
+    source: str
+    source_type: str
+    source_label: str
+
+
 class WatchlistScannerIntelligenceResponse(BaseModel):
     last_score: Optional[float] = None
     last_rank: Optional[int] = None
@@ -81,6 +87,7 @@ class WatchlistScannerIntelligenceResponse(BaseModel):
     profile: Optional[str] = None
     reason: Optional[str] = None
     last_scanned_at: Optional[str] = None
+    ohlcv_provenance: Optional[WatchlistOhlcvProvenanceResponse] = None
 
 
 class WatchlistStrategySimulationIntelligenceResponse(BaseModel):
