@@ -15,11 +15,11 @@ import {
   type OptionsUnderlyingSummaryResponse,
 } from '../api/optionsLab';
 import {
+  CompactFilterBar,
   ConsoleDisclosure,
   ConsoleStatusStrip,
   DataWorkbenchFrame,
   DenseRows,
-  WolfyCommandBar,
   WolfyShellSurface,
 } from '../components/linear';
 import { EvidenceChips } from '../components/evidence/EvidenceChips';
@@ -76,7 +76,8 @@ const COMPARISON_LOADING_TIMEOUT_MS = 12000;
 const COMPARISON_EMPTY_MESSAGE = '先选择可用到期日并加载合约后，再进入策略对比。';
 const OPTIONS_LAB_CRASH_FALLBACK = '期权实验室暂时无法加载，请刷新或稍后重试。';
 
-const fieldClass = 'h-10 w-full rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-3 font-mono text-sm text-[color:var(--wolfy-text-primary)] outline-none transition-colors placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)]';
+const fieldShellClass = 'group flex min-h-[4rem] min-w-0 flex-col justify-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_92%,transparent)] px-3 py-2 transition-colors focus-within:border-[color:var(--wolfy-accent)]';
+const fieldClass = 'h-6 w-full border-0 bg-transparent p-0 font-mono text-sm text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)]';
 const labelClass = 'text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]';
 const panelClass = 'min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-4 md:p-5';
 const innerBlockClass = 'rounded-md border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)]';
@@ -336,7 +337,7 @@ const ReadinessGateStrip: React.FC<{
 };
 
 function dataTierLabel(value?: string | null): string {
-  if (value === 'live_usable') return '实时可分析';
+  if (value === 'live_usable') return '数据门控通过';
   if (value === 'delayed_usable') return '行情延迟，可观察';
   if (value === 'synthetic_demo_only') return '演示/延迟数据';
   if (value === 'insufficient') return '数据不足';
@@ -344,7 +345,7 @@ function dataTierLabel(value?: string | null): string {
 }
 
 function freshnessLabel(value?: string | null): string {
-  if (value === 'live') return '实时';
+  if (value === 'live') return '数据标记：实时';
   if (value === 'mock') return '演示/延迟数据';
   if (value === 'synthetic_delayed') return '演示/延迟数据';
   if (value === 'fixture') return '浏览器验证数据';
@@ -498,28 +499,28 @@ const AssumptionPanel: React.FC<{
   <section className="xl:col-span-12" data-testid="options-lab-assumptions-panel">
     <WolfyShellSurface variant="console" padding="sm" className="overflow-hidden">
       <div className="border-b border-[color:var(--wolfy-divider)] px-1 pb-3">
-        <SectionHeader eyebrow="实验命令区" title="期权假设" icon={Search}>
+        <SectionHeader eyebrow="情景控制台" title="期权情景输入" icon={Search}>
           <div className="flex flex-wrap gap-2">
-            <Pill tone="info">ExperimentConsole</Pill>
-            <Pill tone="neutral">只读情景分析</Pill>
+            <Pill tone="info">只读观察</Pill>
+            <Pill tone="neutral">门控优先</Pill>
           </div>
         </SectionHeader>
         <p className="mt-2 text-sm text-[color:var(--wolfy-text-secondary)]">
-          在同一假设下同步观察策略矩阵、风险边界与期权链，不新增交易动作。
+          控制区只记录假设；数据是否可判断以后续准备度和风险边界为准，不构成买卖建议。
         </p>
       </div>
 
       <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
-        <WolfyCommandBar
+        <CompactFilterBar
           className="min-h-0 items-stretch gap-3 p-3"
           trailing={(
             <TerminalButton type="button" variant="primary" className="min-h-10 px-5" onClick={onSubmit}>
-              执行
+              刷新情景
             </TerminalButton>
           )}
         >
           <div className="grid gap-3 lg:grid-cols-[minmax(0,0.95fr)_repeat(2,minmax(0,0.7fr))]">
-            <label className="flex min-w-0 flex-col gap-1.5">
+            <label className={fieldShellClass}>
               <span className={labelClass}>标的代码</span>
               <input
                 aria-label="标的代码"
@@ -529,24 +530,24 @@ const AssumptionPanel: React.FC<{
                 placeholder="TEM"
               />
             </label>
-            <label className="flex min-w-0 flex-col gap-1.5">
+            <label className={fieldShellClass}>
               <span className={labelClass}>目标价格</span>
               <input aria-label="目标价格" value={targetPrice} onChange={(event) => onTargetPriceChange(event.target.value)} className={fieldClass} inputMode="decimal" />
             </label>
-            <label className="flex min-w-0 flex-col gap-1.5">
+            <label className={fieldShellClass}>
               <span className={labelClass}>目标日期</span>
               <input aria-label="目标日期" value={targetDate} onChange={(event) => onTargetDateChange(event.target.value)} className={fieldClass} placeholder="2026-08-21" />
             </label>
           </div>
-        </WolfyCommandBar>
+        </CompactFilterBar>
 
         <div className="grid gap-3 md:grid-cols-2">
-          <label className="flex min-w-0 flex-col gap-1.5">
+          <label className={fieldShellClass}>
             <span className={labelClass}>到期日</span>
             <div className="relative">
               <select
                 aria-label="到期日"
-                className={cn(fieldClass, 'appearance-none pr-10')}
+                className={cn(fieldClass, 'appearance-none pr-8')}
                 value={selectedExpiration}
                 onChange={(event) => onExpirationSelect(event.target.value)}
               >
@@ -558,10 +559,10 @@ const AssumptionPanel: React.FC<{
                   </option>
                 ))}
               </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--wolfy-text-muted)]" aria-hidden="true" />
+              <ChevronDown className="pointer-events-none absolute right-0 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--wolfy-text-muted)]" aria-hidden="true" />
             </div>
           </label>
-          <label className="flex min-w-0 flex-col gap-1.5">
+          <label className={fieldShellClass}>
             <span className={labelClass}>风险预算</span>
             <input aria-label="风险预算" value={riskBudget} onChange={(event) => onRiskBudgetChange(event.target.value)} className={fieldClass} inputMode="decimal" />
           </label>
@@ -915,7 +916,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
       ) : null}
       {!emptyMessage && !decisionState.loading && !decisionState.error && !decision ? (
         <TerminalEmptyState title="等待情景准备度" className="mt-5">
-          先完成合约链加载，再进入 payoff / risk workspace。
+          先完成合约链加载，再进入收益/风险工作区。
         </TerminalEmptyState>
       ) : null}
       {!emptyMessage && !decisionState.loading && !decisionState.error && decision ? (
@@ -1093,7 +1094,7 @@ const MethodologyDisclosure: React.FC<{
   <ConsoleDisclosure
     data-testid="options-lab-analysis-details"
     title="数据限制"
-    summary="保持折叠，避免把 provider/runtime 限制抬到主工作台。"
+    summary="保持折叠，避免把链路与数据限制抬到主工作台。"
     className="border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]"
   >
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -1428,7 +1429,14 @@ const OptionsLabPageContent: React.FC = () => {
       <TerminalPageShell data-testid="options-lab-page-root">
         <TerminalPageHeading
           data-testid="options-lab-page-heading"
+          eyebrow="只读情景分析"
           title="期权实验室"
+          action={(
+            <div className="flex flex-wrap justify-end gap-2">
+              <Pill tone="info">门控优先</Pill>
+              <Pill tone="warn">不构成买卖建议</Pill>
+            </div>
+          )}
         />
         <div className="mt-5 grid gap-6" data-testid="options-lab-bento-grid">
           <AssumptionPanel

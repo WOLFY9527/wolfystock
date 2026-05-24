@@ -367,7 +367,7 @@ describe('OptionsLabPage', () => {
     mockHappyPath();
   });
 
-  it('renders the Chinese-first ExperimentConsole with command area, main workspace, and dense chain matrices', async () => {
+  it('renders the Chinese-first scenario console with command area, main workspace, and dense chain matrices', async () => {
     renderPage();
 
     const heading = screen.getByRole('heading', { level: 1, name: '期权实验室' });
@@ -384,11 +384,14 @@ describe('OptionsLabPage', () => {
     expect(pageRoot.className).not.toMatch(/\bbg-(black|\[#000\]|\[#050505\]|gray-|zinc-|slate-|neutral-)/);
 
     const commandArea = screen.getByTestId('options-lab-assumptions-panel');
-    expect(commandArea).toHaveTextContent('实验命令区');
-    expect(commandArea).toHaveTextContent('ExperimentConsole');
-    expect(commandArea).toHaveTextContent('只读情景分析');
+    expect(commandArea).toHaveTextContent('情景控制台');
+    expect(commandArea).toHaveTextContent('期权情景输入');
+    expect(commandArea).toHaveTextContent('只读观察');
+    expect(commandArea).toHaveTextContent('门控优先');
+    expect(commandArea).toHaveTextContent('不构成买卖建议');
+    expect(commandArea).not.toHaveTextContent('ExperimentConsole');
     expect(within(commandArea).getByLabelText('标的代码')).toHaveValue('TEM');
-    expect(within(commandArea).getByRole('button', { name: '执行' })).toHaveAttribute('data-terminal-primitive', 'button');
+    expect(within(commandArea).getByRole('button', { name: '刷新情景' })).toHaveAttribute('data-terminal-primitive', 'button');
     expect(within(commandArea).getByLabelText('到期日')).toBeInTheDocument();
     expect(within(commandArea).getByText('上涨情景')).toBeInTheDocument();
     expect(within(commandArea).getByText('下跌情景')).toBeInTheDocument();
@@ -403,7 +406,7 @@ describe('OptionsLabPage', () => {
     expect(within(snapshotPanel).getAllByText('标的').length).toBeGreaterThan(0);
     expect(within(snapshotPanel).getAllByText('IV 分位').length).toBeGreaterThan(0);
     expect(screen.getByTestId('options-lab-bento-grid')).toHaveClass('mt-5', 'grid', 'gap-6');
-    ['标的快照', '期权假设', '情景准备度', '风险边界', '策略候选', '数据限制', 'Call / Put 工作区'].forEach((label) => {
+    ['标的快照', '期权情景输入', '情景准备度', '风险边界', '策略候选', '数据限制', 'Call / Put 工作区'].forEach((label) => {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     });
     expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('保持折叠');
@@ -1346,7 +1349,7 @@ describe('OptionsLabPage', () => {
       expect(panel.className).not.toMatch(/\bbg-(black|\[#000\]|\[#050505\]|gray-|zinc-|slate-|neutral-)/);
     });
     expect(screen.getByTestId('options-lab-analysis-details').className).toMatch(/bg-\[var\(--wolfy-surface-console\)\]/);
-    expect(screen.getByTestId('options-lab-assumptions-panel')).toHaveTextContent('ExperimentConsole');
+    expect(screen.getByTestId('options-lab-assumptions-panel')).not.toHaveTextContent('ExperimentConsole');
   });
 
   it('keeps the page visible when decision payload is malformed', async () => {
