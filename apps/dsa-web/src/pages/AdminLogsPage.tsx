@@ -34,7 +34,7 @@ import {
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal';
-import { getStatusLabel, normalizeStatus, type UnifiedStatus } from '../components/ui/StatusBadge';
+import { getStatusLabel, normalizeStatus, type UnifiedStatus } from '../components/ui/StatusBadge.helpers';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { describeAdminLogLevel } from '../utils/displayStatus';
 import { formatDateTime as formatDateTimeValue, formatDurationMs } from '../utils/format';

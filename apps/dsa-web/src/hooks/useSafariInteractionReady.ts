@@ -68,39 +68,29 @@ export function useSafariWarmActivation<T extends HTMLElement>(onActivate: () =>
   const lastActivationAtRef = useRef(0);
 
   useEffect(() => {
-    let elapsedMs = 0;
-    let releaseWarmListener: (() => void) | null = null;
+    const element = ref.current;
+    if (!element) {
+      return;
+    }
 
-    const clearWarmListener = () => {
-      releaseWarmListener?.();
-      releaseWarmListener = null;
-    };
-
-    const warmTarget = () => {
-      clearWarmListener();
-      const element = ref.current;
-      if (!element) return;
-      const noop = () => undefined;
-      element.addEventListener('pointerdown', noop, { passive: true });
-      releaseWarmListener = () => {
-        element.removeEventListener('pointerdown', noop);
-      };
+    const noop = () => undefined;
+    const repaint = () => {
       repaintElement(element);
     };
 
-    warmTarget();
-    const intervalId = window.setInterval(() => {
-      warmTarget();
-      elapsedMs += WARMUP_INTERVAL_MS;
-      if (elapsedMs >= WARMUP_WINDOW_MS) {
-        window.clearInterval(intervalId);
-        clearWarmListener();
-      }
-    }, WARMUP_INTERVAL_MS);
+    element.addEventListener('pointerdown', noop, { passive: true });
+    repaint();
+
+    const intervalId = window.setInterval(repaint, WARMUP_INTERVAL_MS);
+    const releaseTimer = window.setTimeout(() => {
+      window.clearInterval(intervalId);
+      element.removeEventListener('pointerdown', noop);
+    }, WARMUP_WINDOW_MS);
 
     return () => {
       window.clearInterval(intervalId);
-      clearWarmListener();
+      window.clearTimeout(releaseTimer);
+      element.removeEventListener('pointerdown', noop);
     };
   }, []);
 

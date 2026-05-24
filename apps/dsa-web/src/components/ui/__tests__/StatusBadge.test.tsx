@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { StatusBadge, getStatusLabel, normalizeStatus } from '../StatusBadge';
+import { StatusBadge } from '../StatusBadge';
+import { getStatusLabel, normalizeStatus } from '../StatusBadge.helpers';
 
 describe('StatusBadge', () => {
   it('maps success aliases to 成功', () => {
