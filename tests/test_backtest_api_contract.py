@@ -2377,7 +2377,18 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
     def test_get_rule_backtest_support_bundle_manifest_returns_compact_contract(self) -> None:
         service = MagicMock()
-        service.get_support_bundle_manifest.return_value = self._support_bundle_manifest_payload(status="completed")
+        payload = self._support_bundle_manifest_payload(status="completed")
+        payload["dataset_lineage"] = {
+            "source": "local_us_parquet",
+            "provider": "Local US Parquet",
+            "authority_status": "allowed",
+            "authority_source_type": "cache_snapshot",
+            "requested_range": {"start": "2024-01-01", "end": "2024-01-31"},
+            "actual_range": {"start": "2024-01-02", "end": "2024-01-31"},
+            "bar_count": 21,
+            "dataset_version": "unknown",
+        }
+        service.get_support_bundle_manifest.return_value = payload
 
         with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
             response = get_rule_backtest_support_bundle_manifest(123, db_manager=MagicMock())
@@ -2393,6 +2404,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.result_authority["read_mode"], "stored_first")
         self.assertIn("trade_rows", response.result_authority["domains"])
         self.assertEqual(response.artifact_counts["trade_rows_count"], 0)
+        self.assertEqual(response.dataset_lineage, payload["dataset_lineage"])
         service.get_support_bundle_manifest.assert_called_once_with(123)
 
     def test_get_rule_backtest_support_bundle_manifest_preserves_drift_signals(self) -> None:
@@ -2453,7 +2465,18 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
     def test_get_rule_backtest_support_bundle_reproducibility_manifest_returns_compact_contract(self) -> None:
         service = MagicMock()
-        service.get_support_bundle_reproducibility_manifest.return_value = self._support_bundle_reproducibility_manifest_payload(status="completed")
+        payload = self._support_bundle_reproducibility_manifest_payload(status="completed")
+        payload["dataset_lineage"] = {
+            "source": "local_us_parquet",
+            "provider": "Local US Parquet",
+            "authority_status": "allowed",
+            "authority_source_type": "cache_snapshot",
+            "requested_range": {"start": "2024-01-01", "end": "2024-01-31"},
+            "actual_range": {"start": "2024-01-02", "end": "2024-01-31"},
+            "bar_count": 21,
+            "dataset_version": "unknown",
+        }
+        service.get_support_bundle_reproducibility_manifest.return_value = payload
 
         with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
             response = get_rule_backtest_support_bundle_reproducibility_manifest(123, db_manager=MagicMock())
@@ -2465,6 +2488,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.run_diagnostics["current_status"], "completed")
         self.assertEqual(response.execution_assumptions_fingerprint["source"], "summary.execution_assumptions_snapshot")
         self.assertEqual(response.result_authority["read_mode"], "stored_first")
+        self.assertEqual(response.dataset_lineage, payload["dataset_lineage"])
         service.get_support_bundle_reproducibility_manifest.assert_called_once_with(123)
 
     def test_get_rule_backtest_support_bundle_reproducibility_manifest_preserves_drift_signals(self) -> None:

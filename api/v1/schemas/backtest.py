@@ -1250,6 +1250,7 @@ class RuleBacktestSupportBundleManifestResponse(BaseModel):
     manifest_version: str
     manifest_kind: str
     run: Dict[str, Any] = Field(default_factory=dict)
+    dataset_lineage: Dict[str, Any] = Field(default_factory=dict)
     run_timing: Dict[str, Any] = Field(default_factory=dict)
     run_diagnostics: Dict[str, Any] = Field(default_factory=dict)
     artifact_availability: Dict[str, Any] = Field(default_factory=dict)
@@ -1262,6 +1263,7 @@ class RuleBacktestSupportBundleReproducibilityManifestResponse(BaseModel):
     manifest_version: str
     manifest_kind: str
     run: Dict[str, Any] = Field(default_factory=dict)
+    dataset_lineage: Dict[str, Any] = Field(default_factory=dict)
     run_timing: Dict[str, Any] = Field(default_factory=dict)
     run_diagnostics: Dict[str, Any] = Field(default_factory=dict)
     artifact_availability: Dict[str, Any] = Field(default_factory=dict)

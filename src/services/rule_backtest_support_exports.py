@@ -68,10 +68,56 @@ def build_execution_assumptions_fingerprint(
     }
 
 
+def _mapping_payload(value: Any) -> dict[str, Any]:
+    return dict(value or {}) if isinstance(value, Mapping) else {}
+
+
+def _text_or_unknown(value: Any) -> str:
+    text = str(value or "").strip()
+    return text or "unknown"
+
+
+def _readiness_dataset_version(readiness: Mapping[str, Any]) -> Any:
+    for key in ("dataset_version", "datasetVersion"):
+        if readiness.get(key):
+            return readiness.get(key)
+    categories = _mapping_payload(readiness.get("categories"))
+    reproducibility = _mapping_payload(categories.get("reproducibility"))
+    details = _mapping_payload(reproducibility.get("details"))
+    return details.get("dataset_version") or details.get("datasetVersion")
+
+
+def _date_range_payload(data_quality: Mapping[str, Any], prefix: str) -> dict[str, Any]:
+    start = data_quality.get(f"{prefix}_start") or data_quality.get(f"{prefix}_start_date")
+    end = data_quality.get(f"{prefix}_end") or data_quality.get(f"{prefix}_end_date")
+    return {"start": start, "end": end}
+
+
+def build_dataset_lineage_manifest(run: Mapping[str, Any]) -> dict[str, Any] | None:
+    data_quality = _mapping_payload(run.get("data_quality"))
+    if not data_quality:
+        return None
+
+    readiness = _mapping_payload(
+        run.get("professionalReadiness") or run.get("professional_readiness")
+    )
+    dataset_version = data_quality.get("dataset_version") or _readiness_dataset_version(readiness)
+    return {
+        "source": _text_or_unknown(data_quality.get("source")),
+        "provider": _text_or_unknown(data_quality.get("provider")),
+        "authority_status": _text_or_unknown(data_quality.get("authority_status")),
+        "authority_source_type": _text_or_unknown(data_quality.get("authority_source_type")),
+        "requested_range": _date_range_payload(data_quality, "requested"),
+        "actual_range": _date_range_payload(data_quality, "actual"),
+        "bar_count": data_quality.get("bar_count"),
+        "dataset_version": _text_or_unknown(dataset_version),
+    }
+
+
 def build_support_bundle_manifest(run: Mapping[str, Any]) -> dict[str, Any]:
     execution_trace = dict(run.get("execution_trace") or {})
     result_authority = dict(run.get("result_authority") or {})
-    return {
+    manifest = {
         "manifest_version": "v1",
         "manifest_kind": "rule_backtest_support_bundle",
         "run": {
@@ -116,13 +162,17 @@ def build_support_bundle_manifest(run: Mapping[str, Any]) -> dict[str, Any]:
             "execution_trace_rows_count": len(list(execution_trace.get("rows") or [])),
         },
     }
+    dataset_lineage = build_dataset_lineage_manifest(run)
+    if dataset_lineage is not None:
+        manifest["dataset_lineage"] = dataset_lineage
+    return manifest
 
 
 def build_support_bundle_reproducibility_manifest(run: Mapping[str, Any]) -> dict[str, Any]:
     result_authority = dict(run.get("result_authority") or {})
     execution_assumptions_snapshot = dict(run.get("execution_assumptions_snapshot") or {})
     execution_assumptions = dict(run.get("execution_assumptions") or {})
-    return {
+    manifest = {
         "manifest_version": "v1",
         "manifest_kind": "rule_backtest_reproducibility_manifest",
         "run": {
@@ -149,6 +199,10 @@ def build_support_bundle_reproducibility_manifest(run: Mapping[str, Any]) -> dic
         ),
         "result_authority": build_reproducibility_authority_summary(result_authority),
     }
+    dataset_lineage = build_dataset_lineage_manifest(run)
+    if dataset_lineage is not None:
+        manifest["dataset_lineage"] = dataset_lineage
+    return manifest
 
 
 def resolve_stored_robustness_evidence_payload(run: Mapping[str, Any]) -> dict[str, Any]:

@@ -23,6 +23,7 @@ from src.services.rule_backtest_support_exports import (
     build_execution_trace_export_csv_text,
     build_execution_trace_export_json_payload,
     build_reproducibility_authority_summary,
+    build_support_bundle_reproducibility_manifest,
     build_support_bundle_manifest,
     build_support_export_index,
     resolve_stored_robustness_evidence_payload,
@@ -2349,6 +2350,70 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(trace_json["trace_rows"][0]["动作"], "买")
         self.assertEqual(trace_json["benchmark_summary"]["requested_mode"], "auto")
         self.assertEqual(trace_csv.splitlines()[0].split(","), EXPECTED_TRACE_EXPORT_FIELD_LABELS)
+
+    def test_support_manifests_project_dataset_lineage_from_stored_quality(self) -> None:
+        run = {
+            "id": 654,
+            "code": "AAPL",
+            "status": "completed",
+            "strategy_hash": "fixture",
+            "timeframe": "daily",
+            "lookback_bars": 20,
+            "period_start": "2024-01-03",
+            "period_end": "2024-01-19",
+            "benchmark_mode": "same_symbol_buy_and_hold",
+            "benchmark_code": "AAPL",
+            "trade_count": 0,
+            "run_timing": {},
+            "run_diagnostics": {},
+            "artifact_availability": {},
+            "readback_integrity": {},
+            "result_authority": {"contract_version": "v1", "read_mode": "stored_first", "domains": {}},
+            "execution_assumptions_snapshot": {},
+            "execution_assumptions": {},
+            "status_history": [],
+            "warnings": [],
+            "trades": [],
+            "equity_curve": [],
+            "audit_rows": [],
+            "daily_return_series": [],
+            "exposure_curve": [],
+            "execution_trace": {"rows": []},
+            "data_quality": {
+                "source": "local_us_parquet_dir",
+                "provider": "Local US Parquet Directory",
+                "authority_status": "allowed",
+                "authority_source_type": "cache_snapshot",
+                "requested_start": "2024-01-02",
+                "requested_end": "2024-01-31",
+                "actual_start": "2024-01-03",
+                "actual_end": "2024-01-19",
+                "bar_count": 12,
+            },
+            "professionalReadiness": {
+                "reproducibility_state": "partial_without_dataset_lineage",
+            },
+        }
+
+        manifest = build_support_bundle_manifest(run)
+        reproducibility = build_support_bundle_reproducibility_manifest(run)
+
+        expected_lineage = {
+            "source": "local_us_parquet_dir",
+            "provider": "Local US Parquet Directory",
+            "authority_status": "allowed",
+            "authority_source_type": "cache_snapshot",
+            "requested_range": {"start": "2024-01-02", "end": "2024-01-31"},
+            "actual_range": {"start": "2024-01-03", "end": "2024-01-19"},
+            "bar_count": 12,
+            "dataset_version": "unknown",
+        }
+        self.assertEqual(manifest["dataset_lineage"], expected_lineage)
+        self.assertEqual(reproducibility["dataset_lineage"], expected_lineage)
+        self.assertNotIn("manifest_id", manifest["dataset_lineage"])
+        self.assertNotIn("hash_sha256", manifest["dataset_lineage"])
+        self.assertEqual(manifest["run"]["id"], 654)
+        self.assertEqual(reproducibility["result_authority"]["read_mode"], "stored_first")
 
     def test_service_exports_stored_robustness_evidence_json(self) -> None:
         service = RuleBacktestService(self.db)

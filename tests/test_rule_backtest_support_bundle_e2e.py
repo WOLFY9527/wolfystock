@@ -210,6 +210,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                         high=close + 0.2,
                         low=close - 0.3,
                         close=float(close),
+                        data_source="local_us_parquet",
                     )
                 )
             session.commit()
@@ -271,16 +272,17 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         for marker in FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS:
             self.assertNotIn(marker.lower(), normalized)
 
-        def walk(value: object) -> None:
+        def walk(value: object, path: tuple[str, ...] = ()) -> None:
             if isinstance(value, dict):
                 for key, nested in value.items():
                     normalized_key = str(key).lower()
-                    for forbidden in SENSITIVE_EXPORT_KEY_TERMS:
-                        self.assertNotIn(forbidden, normalized_key)
-                    walk(nested)
+                    if not (normalized_key == "provider" and path == ("dataset_lineage",)):
+                        for forbidden in SENSITIVE_EXPORT_KEY_TERMS:
+                            self.assertNotIn(forbidden, normalized_key)
+                    walk(nested, (*path, str(key)))
             elif isinstance(value, list):
                 for nested in value:
-                    walk(nested)
+                    walk(nested, path)
 
         walk(payload)
 
@@ -648,6 +650,13 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 ).encode("utf-8")
             ).hexdigest(),
         )
+        self.assertEqual(payloads["manifest"]["dataset_lineage"], payloads["reproducibility"]["dataset_lineage"])
+        self.assertEqual(payloads["manifest"]["dataset_lineage"]["source"], "local_us_parquet")
+        self.assertEqual(payloads["manifest"]["dataset_lineage"]["provider"], "Local US Parquet")
+        self.assertEqual(payloads["manifest"]["dataset_lineage"]["authority_status"], "allowed")
+        self.assertEqual(payloads["manifest"]["dataset_lineage"]["authority_source_type"], "cache_snapshot")
+        self.assertEqual(payloads["manifest"]["dataset_lineage"]["dataset_version"], "unknown")
+        self.assertGreater(payloads["manifest"]["dataset_lineage"]["bar_count"], 0)
         self.assertTrue(payloads["manifest"]["artifact_availability"]["has_trade_rows"])
         self.assertTrue(payloads["manifest"]["artifact_availability"]["has_execution_trace"])
         self.assertFalse(payloads["manifest"]["readback_integrity"]["used_live_storage_repair"])
