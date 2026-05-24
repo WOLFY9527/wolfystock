@@ -53,6 +53,7 @@ type Notice = { tone: 'success' | 'warning' | 'danger'; message: string } | null
 type FailureReason = '数据不足' | '行情缺失' | '服务暂不可用' | '回测失败' | '扫描失败' | '超时' | '未知错误';
 type BatchFailure = { label: FailureReason; detail?: string };
 type WatchlistTrustState = 'fresh' | 'stale' | 'unknown';
+type WatchlistScoreDisclosureState = 'fresh' | 'stale' | 'fallbackProxy' | 'unknown' | 'failed';
 type WatchlistConclusionModel = {
   title: string;
   detail: string;
@@ -219,13 +220,94 @@ function formatFreshness(value?: string | null): string {
   return '已过期';
 }
 
+function isFallbackTrustSource(value?: string | null): boolean {
+  const token = normalizeToken(value);
+  return token.includes('fallback') || token.includes('proxy');
+}
+
+function hasFallbackOrProxyScoreContext(item: WatchlistItem): boolean {
+  return [
+    item.scoreSource,
+    item.scoreStatus,
+    item.intelligence?.scanner?.status,
+    item.intelligence?.scanner?.reason,
+  ].some(isFallbackTrustSource);
+}
+
+function getScoreDisclosureState(item: WatchlistItem): WatchlistScoreDisclosureState {
+  const status = normalizeToken(item.scoreStatus);
+  if (['data_failed', 'provider_down', 'provider_error', 'failed', 'error', 'critical'].includes(status)) {
+    return 'failed';
+  }
+  if (['stale', 'partial'].includes(status)) return 'stale';
+  if (hasFallbackOrProxyScoreContext(item)) return 'fallbackProxy';
+  if (status === 'fresh') return 'fresh';
+  return 'unknown';
+}
+
+function formatScoreDisclosureFreshness(item: WatchlistItem, value: string | null | undefined, language: 'zh' | 'en'): string {
+  const state = getScoreDisclosureState(item);
+  if (state === 'stale') return language === 'en' ? 'Historical score' : '历史评分';
+  if (state === 'fallbackProxy') return language === 'en' ? 'Fallback/proxy score' : '备用/代理评分';
+  if (state === 'unknown') return language === 'en' ? 'Needs score refresh' : '评分待刷新';
+  return formatFreshness(value);
+}
+
+function formatScoreDisclosureStatus(state: WatchlistScoreDisclosureState, language: 'zh' | 'en'): string {
+  if (language === 'en') {
+    if (state === 'fresh') return 'Signal fresh';
+    if (state === 'stale') return 'Historical evidence';
+    if (state === 'fallbackProxy') return 'Fallback/proxy evidence';
+    if (state === 'failed') return 'Scan failed';
+    return 'Signal unknown';
+  }
+  if (state === 'fresh') return '信号最新';
+  if (state === 'stale') return '历史证据';
+  if (state === 'fallbackProxy') return '备用/代理证据';
+  if (state === 'failed') return '扫描失败';
+  return '信号未知';
+}
+
+function scoreDisclosureChipVariant(state: WatchlistScoreDisclosureState): React.ComponentProps<typeof TerminalChip>['variant'] {
+  if (state === 'fresh') return 'success';
+  if (state === 'failed') return 'danger';
+  if (state === 'stale' || state === 'fallbackProxy' || state === 'unknown') return 'caution';
+  return 'neutral';
+}
+
+function scannerStatusChipVariant(label: string): React.ComponentProps<typeof TerminalChip>['variant'] {
+  if (label === '扫描失败') return 'danger';
+  if (label === '已验证' || label === '通过筛选') return 'info';
+  if (['历史证据', '备用/代理证据', '证据待补齐'].includes(label)) return 'caution';
+  return 'neutral';
+}
+
+function formatScoreDisclosureNotice(state: WatchlistScoreDisclosureState, language: 'zh' | 'en'): string | null {
+  if (state === 'stale') {
+    return language === 'en'
+      ? 'Preserved historical evidence. Refresh or rescan before use.'
+      : '保留历史证据，刷新或重新扫描后再使用。';
+  }
+  if (state === 'fallbackProxy') {
+    return language === 'en'
+      ? 'Fallback/proxy evidence is degraded. Refresh or rescan before use.'
+      : '备用/代理证据已降级，刷新或重新扫描后再使用。';
+  }
+  return null;
+}
+
 function formatScannerStatus(item: WatchlistItem): string {
   const status = normalizeText(item.intelligence?.scanner?.status || item.scoreStatus).toLowerCase();
   const simulationStatus = normalizeText(item.intelligence?.strategySimulation?.status).toLowerCase();
+  const scoreDisclosureState = getScoreDisclosureState(item);
+  if (scoreDisclosureState === 'failed') return '扫描失败';
+  if (['data_failed', 'provider_down', 'provider_error', 'error', 'failed', 'critical'].includes(status)) return '扫描失败';
+  if (scoreDisclosureState === 'stale') return '历史证据';
+  if (scoreDisclosureState === 'fallbackProxy') return '备用/代理证据';
+  if (scoreDisclosureState === 'unknown') return hasScannerEvidence(item) ? '证据待补齐' : '未扫描';
   if (['selected', 'verified', 'ready', 'fresh'].includes(status)) return '已验证';
   if (['preview', 'candidate', 'passed'].includes(status)) return '通过筛选';
   if (['rejected', 'not_selected', 'failed_filter'].includes(status)) return '未通过';
-  if (['data_failed', 'provider_down', 'provider_error', 'error', 'failed', 'critical'].includes(status)) return '扫描失败';
   if (simulationStatus === 'insufficient_history' || status === 'insufficient_history') return '数据不足';
   if (!hasScannerEvidence(item)) return '未扫描';
   return '通过筛选';
@@ -264,17 +346,10 @@ function formatTrustToken(value?: string | null): string | null {
 }
 
 function getTrustState(item: WatchlistItem): WatchlistTrustState {
-  const status = normalizeToken(item.scoreStatus);
-  if (status === 'fresh') return 'fresh';
-  if (['stale', 'data_failed', 'provider_down', 'provider_error', 'failed', 'error', 'fallback', 'partial'].includes(status)) {
-    return 'stale';
-  }
-  return 'unknown';
-}
-
-function isFallbackTrustSource(value?: string | null): boolean {
-  const token = normalizeToken(value);
-  return token.includes('fallback') || token.includes('proxy');
+  const state = getScoreDisclosureState(item);
+  if (state === 'fresh') return 'fresh';
+  if (state === 'unknown') return 'unknown';
+  return 'stale';
 }
 
 function hasMissingTrustContext(item: WatchlistItem): boolean {
@@ -283,17 +358,6 @@ function hasMissingTrustContext(item: WatchlistItem): boolean {
     && !normalizeText(item.scoreSource)
     && item.scannerRunId == null
     && !getTrustUpdatedTime(item);
-}
-
-function formatTrustStateLabel(state: WatchlistTrustState, language: 'zh' | 'en'): string {
-  if (language === 'en') {
-    if (state === 'fresh') return 'Signal fresh';
-    if (state === 'stale') return 'Stale data';
-    return 'Signal unknown';
-  }
-  if (state === 'fresh') return '信号最新';
-  if (state === 'stale') return '数据过期';
-  return '信号未知';
 }
 
 function formatTrustSourceLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
@@ -1235,6 +1299,7 @@ const WatchlistPage: React.FC = () => {
   const activeBacktest = activeItem?.intelligence?.backtest;
   const activeScore = activeItem ? getScannerScore(activeItem) : null;
   const activeLatestTime = activeItem ? getLatestIntelligenceTime(activeItem) : null;
+  const activeScoreDisclosureState = activeItem ? getScoreDisclosureState(activeItem) : 'unknown';
   const activeScannerStatusLabel = activeItem ? formatScannerStatus(activeItem) : '--';
   const activeBacktestStatusLabel = activeItem ? formatBacktestStatus(activeItem) : '--';
   const activeScannerReason = activeItem ? formatScannerReason(activeScanner?.reason, language) : null;
@@ -1449,29 +1514,18 @@ const WatchlistPage: React.FC = () => {
                     const scannerStatusLabel = formatScannerStatus(item);
                     const backtestStatusLabel = formatBacktestStatus(item, batchFailure);
                     const isActive = activeItem?.id === item.id;
-                    const trustState = getTrustState(item);
-                    const trustStateLabel = formatTrustStateLabel(trustState, language);
+                    const scoreDisclosureState = getScoreDisclosureState(item);
+                    const scoreDisclosureStatusLabel = formatScoreDisclosureStatus(scoreDisclosureState, language);
+                    const scoreDisclosureNotice = formatScoreDisclosureNotice(scoreDisclosureState, language);
                     const trustSourceLabel = formatTrustSourceLabel(item.source, language);
                     const trustScoreSourceLabel = formatTrustScoreSourceLabel(item.scoreSource, language);
                     const trustScannerRunLabel = formatTrustScannerRunLabel(item.scannerRunId, language);
                     const trustUpdatedLabel = formatTrustUpdatedLabel(getTrustUpdatedTime(item), language);
                     const trustDisclosureBuckets = watchlistTrustDisclosureBuckets(item);
                     const showUnknownTrustNotice = hasMissingTrustContext(item);
-                    const scoreFreshnessVariant = item.scoreStatus === 'fresh'
-                      ? 'success'
-                      : item.scoreStatus === 'stale'
-                        ? 'caution'
-                        : 'neutral';
-                    const trustStateVariant = trustState === 'fresh'
-                      ? 'success'
-                      : trustState === 'stale'
-                        ? 'caution'
-                        : 'neutral';
-                    const scannerStatusVariant = scannerStatusLabel === '扫描失败'
-                      ? 'danger'
-                      : scannerStatusLabel === '已验证' || scannerStatusLabel === '通过筛选'
-                        ? 'info'
-                        : 'neutral';
+                    const scoreFreshnessVariant = scoreDisclosureChipVariant(scoreDisclosureState);
+                    const trustStateVariant = scoreDisclosureChipVariant(scoreDisclosureState);
+                    const scannerStatusVariant = scannerStatusChipVariant(scannerStatusLabel);
                     const backtestStatusVariant = backtestStatusLabel === '已回测'
                       ? 'success'
                       : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(backtestStatusLabel)
@@ -1561,7 +1615,7 @@ const WatchlistPage: React.FC = () => {
                                 {formatScore(score)}
                               </TerminalChip>
                               <TerminalChip variant={scoreFreshnessVariant} className="font-mono uppercase tracking-widest">
-                                {formatFreshness(item.lastScoredAt || scanner?.lastScannedAt)}
+                                {formatScoreDisclosureFreshness(item, item.lastScoredAt || scanner?.lastScannedAt, language)}
                               </TerminalChip>
                               {(scanner?.lastRank ?? item.scannerRank) ? (
                                 <TerminalChip variant="neutral">
@@ -1576,7 +1630,7 @@ const WatchlistPage: React.FC = () => {
 
                           <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px]">
                             <div data-testid={`watchlist-trust-strip-${item.symbol}`} className="flex min-w-0 flex-wrap items-center gap-1.5">
-                              {trustState !== 'stale' ? <TerminalChip variant={trustStateVariant}>{trustStateLabel}</TerminalChip> : null}
+                              {scoreDisclosureState !== 'failed' ? <TerminalChip variant={trustStateVariant}>{scoreDisclosureStatusLabel}</TerminalChip> : null}
                               <TrustDisclosureChips
                                 buckets={trustDisclosureBuckets}
                                 chipClassName="text-[11px]"
@@ -1592,6 +1646,11 @@ const WatchlistPage: React.FC = () => {
                               {showUnknownTrustNotice ? (
                                 <TerminalNotice variant="caution" className="px-2.5 py-1 text-[11px] leading-5">
                                   {copy.sourceUnknownNeedsRefresh}
+                                </TerminalNotice>
+                              ) : null}
+                              {scoreDisclosureNotice ? (
+                                <TerminalNotice variant="caution" className="px-2.5 py-1 text-[11px] leading-5">
+                                  {scoreDisclosureNotice}
                                 </TerminalNotice>
                               ) : null}
                             </div>
@@ -1617,7 +1676,7 @@ const WatchlistPage: React.FC = () => {
                                 {scannerReasonLabel}
                               </TerminalChip>
                             ) : null}
-                            <TerminalChip variant="neutral">{formatFreshness(latestTime)}</TerminalChip>
+                            <TerminalChip variant={scoreFreshnessVariant}>{formatScoreDisclosureFreshness(item, latestTime, language)}</TerminalChip>
                             {typeof avgForward === 'number' || typeof hitRate === 'number' ? (
                               <TerminalChip
                                 variant={(avgForward ?? 0) >= 0 ? 'success' : 'danger'}
@@ -1749,13 +1808,15 @@ const WatchlistPage: React.FC = () => {
                           <TerminalChip variant="info" className="font-mono text-cyan-100">
                             {language === 'zh' ? '分数' : 'SCORE'} {formatScore(activeScore)}
                           </TerminalChip>
-                          <TerminalChip variant={activeScannerStatusLabel === '扫描失败' ? 'danger' : activeScannerStatusLabel === '已验证' || activeScannerStatusLabel === '通过筛选' ? 'info' : 'neutral'}>
+                          <TerminalChip variant={scannerStatusChipVariant(activeScannerStatusLabel)}>
                             {activeScannerStatusLabel}
                           </TerminalChip>
                           <TerminalChip variant={activeBacktestStatusLabel === '已回测' ? 'success' : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(activeBacktestStatusLabel) ? 'danger' : ['样本不足', '数据缺失'].includes(activeBacktestStatusLabel) ? 'caution' : 'neutral'}>
                             {activeBacktestStatusLabel}
                           </TerminalChip>
-                          <TerminalChip variant="neutral">{formatFreshness(activeLatestTime)}</TerminalChip>
+                          <TerminalChip variant={scoreDisclosureChipVariant(activeScoreDisclosureState)}>
+                            {activeItem ? formatScoreDisclosureFreshness(activeItem, activeLatestTime, language) : '--'}
+                          </TerminalChip>
                         </div>
                         {activeContextTags.length ? (
                           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -1773,7 +1834,7 @@ const WatchlistPage: React.FC = () => {
                         <div className="divide-y divide-[color:var(--wolfy-divider)]">
                           {[
                             { label: copy.source, value: activeItem.source || '--' },
-                            { label: copy.signalTrust, value: formatTrustStateLabel(getTrustState(activeItem), language) },
+                            { label: copy.signalTrust, value: formatScoreDisclosureStatus(activeScoreDisclosureState, language) },
                             { label: language === 'en' ? 'Score source' : '评分源', value: formatTrustToken(activeItem.scoreSource) || '--' },
                             { label: language === 'en' ? 'Scanner run' : '扫描批次', value: activeItem.scannerRunId != null ? `#${activeItem.scannerRunId}` : '--' },
                             { label: copy.lastScored, value: formatDateTime(activeItem.lastScoredAt, language) },

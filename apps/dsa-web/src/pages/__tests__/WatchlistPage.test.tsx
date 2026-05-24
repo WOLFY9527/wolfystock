@@ -678,6 +678,112 @@ describe('WatchlistPage', () => {
     expect(trustStrip).not.toHaveTextContent(/proxy_fallback|proxy fallback|fallback|proxy|信号过期/i);
   });
 
+  it('keeps stale inherited scanner scores from rendering as verified latest evidence', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [makeItem({
+        id: 15,
+        symbol: 'BABA',
+        source: 'scanner',
+        scannerRunId: 77,
+        scannerRank: 2,
+        scannerScore: 81,
+        lastScoredAt: '2026-05-01T11:45:00',
+        scoreSource: 'scanner_run',
+        scoreStatus: 'stale',
+        intelligence: {
+          scanner: {
+            lastScore: 81,
+            lastRank: 2,
+            status: 'selected',
+            reason: 'Latest scanner score.',
+            lastScannedAt: '2026-05-01T11:50:00',
+          },
+          strategySimulation: { status: 'ready' },
+          backtest: {},
+        },
+      })],
+    });
+
+    renderWatchlist();
+
+    const row = await screen.findByTestId('watchlist-row-BABA');
+    expect(row).toHaveTextContent('历史评分');
+    expect(row).toHaveTextContent('保留历史证据');
+    expect(row).toHaveTextContent('刷新或重新扫描后再使用');
+    expect(within(row).queryByText('已验证')).not.toBeInTheDocument();
+    expect(within(row).queryByText('最新')).not.toBeInTheDocument();
+    expect(within(row).queryByText('今日')).not.toBeInTheDocument();
+  });
+
+  it('gives unknown no-score rows an explicit refresh or scanner next action', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [makeItem({
+        id: 16,
+        symbol: 'SHOP',
+        source: '',
+        scannerRunId: null,
+        scannerRank: null,
+        scannerScore: null,
+        lastScoredAt: null,
+        scoreSource: null,
+        scoreStatus: 'unknown',
+        themeId: null,
+        universeType: null,
+        intelligence: undefined,
+      })],
+    });
+
+    renderWatchlist();
+
+    const row = await screen.findByTestId('watchlist-row-SHOP');
+    expect(row).toHaveTextContent('评分待刷新');
+    expect(row).toHaveTextContent('来源未知 / 需要刷新');
+    expect(row).toHaveTextContent('可刷新情报或返回扫描器补齐证据');
+    expect(within(row).queryByText('已验证')).not.toBeInTheDocument();
+    expect(within(row).queryByText('最新')).not.toBeInTheDocument();
+    expect(within(row).queryByText('今日')).not.toBeInTheDocument();
+  });
+
+  it('keeps fallback proxy score evidence degraded instead of verified', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [makeItem({
+        id: 17,
+        symbol: 'BILI',
+        source: 'scanner',
+        scannerRunId: 91,
+        scannerRank: 4,
+        scannerScore: 70,
+        lastScoredAt: '2026-05-01T11:45:00',
+        scoreSource: 'proxy_fallback',
+        scoreStatus: 'fresh',
+        intelligence: {
+          scanner: {
+            lastScore: 70,
+            lastRank: 4,
+            status: 'selected',
+            reason: 'Fallback score snapshot.',
+            lastScannedAt: '2026-05-01T11:50:00',
+          },
+          strategySimulation: { status: 'ready' },
+          backtest: {},
+        },
+      })],
+    });
+
+    renderWatchlist();
+
+    const row = await screen.findByTestId('watchlist-row-BILI');
+    expect(row).toHaveTextContent('备用/代理评分');
+    expect(row).toHaveTextContent('备用数据');
+    expect(row).toHaveTextContent('代理证据');
+    expect(row).toHaveTextContent('刷新或重新扫描后再使用');
+    expect(within(row).queryByText('已验证')).not.toBeInTheDocument();
+    expect(within(row).queryByText('信号最新')).not.toBeInTheDocument();
+    expect(within(row).queryByText('今日')).not.toBeInTheDocument();
+    const forbiddenActionCopy = /买入|卖出|加仓|减仓|下单|立即交易|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy|recommend(?:ation)?|buy|sell/i;
+    expect(row).not.toHaveTextContent(forbiddenActionCopy);
+  });
+
   it('renders watchlist setup-path actions for stale diagnostic evidence without conflating the page with scanner setup', async () => {
     listWatchlistItems.mockResolvedValue({
       items: [makeItem({
