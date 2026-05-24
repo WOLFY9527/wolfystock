@@ -708,7 +708,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklist).toHaveTextContent('保持 Polygon grouped-daily 宽度走已批准的凭据与缓存路径');
     expect(checklist).toHaveTextContent('同步已批准的本地美股 parquet/cache 覆盖');
     expect(checklist).toHaveTextContent('刷新已批准的官方公开 money-market 缓存快照');
-    expect(checklist).toHaveTextContent('刷新 CN/HK connect 缓存快照，让 Rotation Radar 背景可用且不新增实时数据源调用。');
+    expect(checklist).toHaveTextContent('刷新 CN/HK connect 缓存快照，减少覆盖缺口并保持不新增实时数据源调用。');
     expect(checklist).toHaveTextContent('补齐既有 Fed liquidity 聚合证据缓存');
     expect(checklist).toHaveTextContent('完成现有授权 feed 配置后，再返回本页确认期货确认链路是否通过。');
     expect(checklist).not.toHaveTextContent('polygon_high_low_history_unavailable');
@@ -748,6 +748,87 @@ describe('MarketProviderOperationsPage', () => {
     expect(matrixDisclosure).toHaveTextContent('polygon_high_low_history_unavailable');
     expect(matrixDisclosure).toHaveTextContent('missing_provider_configuration');
     expect(within(matrixDisclosure).getByRole('button', { name: '收起 完整数据源矩阵' })).toBeInTheDocument();
+  });
+
+  it('keeps non-scoring setup copy conservative and leaves score eligibility to existing source gates', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+
+    render(<MarketProviderOperationsPage />);
+
+    const checklist = await screen.findByTestId('market-provider-setup-checklist');
+    const gapBoard = screen.getByTestId('market-provider-source-gap-board');
+
+    expect(gapBoard).toHaveTextContent('补足可用性说明');
+    expect(gapBoard).toHaveTextContent('减少备用/代理/缺失状态');
+    expect(gapBoard).toHaveTextContent('改善数据覆盖披露');
+    expect(gapBoard).toHaveTextContent('是否进入评分仍由既有 source-confidence gates 决定');
+    expect(gapBoard).not.toHaveTextContent('提升到可支撑评分级结论');
+    expect(gapBoard).not.toHaveTextContent('让当前仅观察的证据进入可用结论面');
+    expect(checklist).toHaveTextContent('仅用于诊断/观察/配置指引');
+    expect(checklist).toHaveTextContent('是否进入评分仍由既有 source-confidence gates 决定');
+    expect(checklist).not.toHaveTextContent('提升为可评分证据');
+    expect(checklist).not.toHaveTextContent('decision-grade');
+    expect(checklist).not.toHaveTextContent('conclusion-ready');
+  });
+
+  it('describes synthetic fixture rows as diagnostic-only guidance instead of score-grade promotion', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+    getOperationsMatrix.mockResolvedValue({
+      ...operationsMatrixPayload,
+      rows: [
+        ...operationsMatrixPayload.rows,
+        {
+          providerId: 'synthetic.fixture.market_context',
+          providerName: 'Synthetic fixture context',
+          sourceLabel: 'Synthetic fixture context',
+          providerCategory: 'diagnostic_fixture',
+          sourceType: 'synthetic_fixture',
+          sourceTier: 'fixture',
+          trustLevel: 'synthetic_fixture',
+          freshnessExpectation: 'fixture',
+          runtimeState: 'observation_only',
+          credentialState: 'not_required',
+          dependencyState: 'not_required',
+          enabledByDefault: false,
+          observationOnly: true,
+          scoreContributionAllowed: false,
+          sourceAuthorityAllowed: false,
+          scoreEligible: false,
+          inertMetadataOnly: true,
+          paidDataLikelyRequired: false,
+          keyRequired: false,
+          noDefaultLiveHttpCalls: true,
+          cacheRequired: false,
+          supportedCapabilities: ['diagnostic_surface_projection'],
+          affectedSurfaces: ['provider_ops'],
+          productAffectedSurfaces: ['watchlist'],
+          routerReasonCodes: ['fixture_only'],
+          reasonCodes: ['synthetic_fixture_only'],
+          fulfilledMetrics: [],
+          missingMetrics: [],
+          coverageCount: 0,
+          missingProviderReason: null,
+          degradationReason: 'synthetic_fixture_only',
+          remediationHint: 'Keep local synthetic fixture disabled outside diagnostics.',
+          diagnosticOnly: true,
+        },
+      ],
+      summary: {
+        ...operationsMatrixPayload.summary,
+        totalRows: 8,
+        observationOnlyRows: 4,
+        inertMetadataOnlyRows: 6,
+      },
+    });
+
+    render(<MarketProviderOperationsPage />);
+
+    const checklist = await screen.findByTestId('market-provider-setup-checklist');
+    expect(checklist).toHaveTextContent('Synthetic fixture context');
+    expect(checklist).toHaveTextContent('仅用于诊断/观察/配置指引');
+    expect(checklist).toHaveTextContent('改善数据覆盖披露');
+    expect(checklist).not.toHaveTextContent('提升为可评分证据');
+    expect(checklist).not.toHaveTextContent('score-grade');
   });
 
   it('keeps product labels available without introducing trading-action wording', async () => {

@@ -594,16 +594,23 @@ function sourceGapCurrentState(row: ProviderOperationsMatrixRow): string {
 }
 
 function sourceGapImpact(row: ProviderOperationsMatrixRow): string {
+  const sourceType = String(row.sourceType || '').toLowerCase();
+  const conservativeOnly = row.observationOnly === true
+    || row.inertMetadataOnly === true
+    || row.diagnosticOnly === true
+    || sourceType.includes('snapshot')
+    || sourceType.includes('fixture')
+    || matrixCacheRequired(row);
   if (row.sourceAuthorityAllowed === false) {
-    return '解锁真实 authority 通过后的前台结论能力。';
+    return '补足可用性说明，并减少备用/代理/缺失状态；是否进入评分仍由既有 source-confidence gates 决定。';
+  }
+  if (conservativeOnly) {
+    return '改善数据覆盖披露；仅用于诊断/观察/配置指引，是否进入评分仍由既有 source-confidence gates 决定。';
   }
   if (row.scoreContributionAllowed === false || row.scoreEligible === false) {
-    return '让证据从可见但不计分，提升到可支撑评分级结论。';
+    return '补足可用性说明，并减少备用/代理/缺失状态；是否进入评分仍由既有 source-confidence gates 决定。';
   }
-  if (row.observationOnly) {
-    return '让当前仅观察的证据进入可用结论面。';
-  }
-  return '维持运行稳定后，可继续支撑对应产品能力。';
+  return '补足可用性说明，并继续沿既有 source-confidence gates 判断是否可用于对应产品面。';
 }
 
 function sourceGapRequiredWork(row: ProviderOperationsMatrixRow): string {
@@ -762,11 +769,17 @@ function checklistBadgeDisplayLabel(label: string): string {
   }[label] || label;
 }
 
-function defaultChecklistWhyItMatters(title: string): string {
-  return `${title} 已在本页出现，说明现有就绪诊断或来源可信度依赖会影响对应产品面；它不承诺提高投资准确性。`;
+function defaultChecklistWhyItMatters(title: string, conservativeOnly = false): string {
+  if (conservativeOnly) {
+    return `${title} 仅用于诊断/观察/配置指引，用来补足可用性说明并改善数据覆盖披露；是否进入评分仍由既有 source-confidence gates 决定。`;
+  }
+  return `${title} 已在本页出现，说明现有就绪诊断或来源可信度依赖会影响对应产品面；是否进入评分仍由既有 source-confidence gates 决定。`;
 }
 
-function defaultChecklistNextStep(title: string): string {
+function defaultChecklistNextStep(title: string, conservativeOnly = false): string {
+  if (conservativeOnly) {
+    return `沿现有 ${title} 配置路径处理，优先减少备用/代理/缺失状态，再回到本页确认覆盖披露是否补齐；本页保持只读。`;
+  }
   return `沿现有 ${title} 配置路径处理，再返回本页确认就绪状态；本页保持只读。`;
 }
 
@@ -774,50 +787,56 @@ function checklistCopyForMatrixRow(row: ProviderOperationsMatrixRow): Pick<Setup
   if (row.providerId === 'polygon_us_grouped_daily') {
     return {
       title: sourceGapName(row),
-      whyItMatters: '美股 grouped-daily 宽度可以辅助解释美股大盘背景，但高低点指标缺失时不能进入主结论级表述。',
-      safeNextStep: '保持 Polygon grouped-daily 宽度走已批准的凭据与缓存路径，先补齐覆盖再用于主背景判断。',
+      whyItMatters: '美股 grouped-daily 宽度可以辅助解释美股大盘背景，但高低点指标缺失时只能改善数据覆盖披露；是否进入评分仍由既有 source-confidence gates 决定。',
+      safeNextStep: '保持 Polygon grouped-daily 宽度走已批准的凭据与缓存路径，先补齐覆盖并减少缺失状态，再观察主背景披露是否完整。',
     };
   }
   if (row.providerId === 'official_public.fed_liquidity') {
     return {
       title: sourceGapName(row),
-      whyItMatters: 'Fed 聚合证据可以补充广义流动性背景，但未配置前只能作为可见缺口，不能改写前台判断。',
-      safeNextStep: '补齐既有 Fed liquidity 聚合证据缓存，让流动性背景可见，同时保持只读边界。',
+      whyItMatters: 'Fed 聚合证据可以补充广义流动性背景，但未配置前仅用于补足可用性说明与覆盖披露；是否进入评分仍由既有 source-confidence gates 决定。',
+      safeNextStep: '补齐既有 Fed liquidity 聚合证据缓存，先减少缺失状态并让背景披露完整，同时保持只读边界。',
     };
   }
   if (row.providerId === 'official_public.cn_money_market_cache') {
     return {
       title: sourceGapName(row),
-      whyItMatters: '官方公开 money-market 缓存有助于观察短端流动性背景，但仍是观察级快照。',
-      safeNextStep: '刷新已批准的官方公开 money-market 缓存快照；本页只确认状态。',
+      whyItMatters: '官方公开 money-market 缓存有助于观察短端流动性背景，但仍仅用于诊断/观察/配置指引；是否进入评分仍由既有 source-confidence gates 决定。',
+      safeNextStep: '刷新已批准的官方公开 money-market 缓存快照，改善数据覆盖披露；本页只确认状态。',
     };
   }
   if (row.providerId === 'cache.cn_hk_connect_daily') {
     return {
       title: sourceGapName(row),
-      whyItMatters: 'CN/HK connect 缓存可以解释区域轮动背景，但缺少 southbound 时只能显示覆盖不完整。',
-      safeNextStep: '刷新 CN/HK connect 缓存快照，让 Rotation Radar 背景可用且不新增实时数据源调用。',
+      whyItMatters: 'CN/HK connect 缓存可以解释区域轮动背景，但缺少 southbound 时只用于改善数据覆盖披露；是否进入评分仍由既有 source-confidence gates 决定。',
+      safeNextStep: '刷新 CN/HK connect 缓存快照，减少覆盖缺口并保持不新增实时数据源调用。',
     };
   }
   if (row.providerId === 'authorized.cn_index_futures_feed') {
     return {
       title: sourceGapName(row),
-      whyItMatters: '指数期货授权源可以补充区域风险确认，但必须先满足既有授权与评分门槛。',
+      whyItMatters: '指数期货授权源可以补充区域风险确认，但是否进入评分仍由既有授权与 source-confidence gates 决定。',
       safeNextStep: '完成现有授权 feed 配置后，再返回本页确认期货确认链路是否通过。',
     };
   }
   if (row.providerId === 'tushare_pro') {
     return {
       title: sourceGapName(row),
-      whyItMatters: 'Tushare 覆盖可以补齐 CN/HK 日频背景，但不承诺更高信号质量或投资准确性。',
+      whyItMatters: 'Tushare 覆盖可以补齐 CN/HK 日频背景，但是否进入评分仍由既有 source-confidence gates 决定，不承诺更高信号质量或投资准确性。',
       safeNextStep: '沿现有 Tushare 凭据配置路径处理，并继续避免在本页显示密钥值。',
     };
   }
   const title = sourceGapName(row);
+  const conservativeOnly = row.observationOnly === true
+    || row.inertMetadataOnly === true
+    || row.diagnosticOnly === true
+    || matrixCacheRequired(row)
+    || String(row.sourceType || '').toLowerCase().includes('snapshot')
+    || String(row.sourceType || '').toLowerCase().includes('fixture');
   return {
     title,
-    whyItMatters: defaultChecklistWhyItMatters(title),
-    safeNextStep: defaultChecklistNextStep(title),
+    whyItMatters: defaultChecklistWhyItMatters(title, conservativeOnly),
+    safeNextStep: defaultChecklistNextStep(title, conservativeOnly),
   };
 }
 
@@ -825,22 +844,22 @@ function checklistCopyForReadinessCheck(check: MarketDataReadinessCheck): Pick<S
   if (check.id === 'tushare_token') {
     return {
       title: 'Tushare',
-      whyItMatters: 'Tushare 覆盖可以补齐 CN/HK 市场背景，但不承诺更高信号质量或投资准确性。',
+      whyItMatters: 'Tushare 覆盖可以补齐 CN/HK 市场背景，但是否进入评分仍由既有 source-confidence gates 决定，不承诺更高信号质量或投资准确性。',
       safeNextStep: '沿现有 Tushare 凭据配置路径处理，并继续避免在本页显示密钥值。',
     };
   }
   if (check.id === 'local_us_parquet_representative_files') {
     return {
       title: '本地美股历史缓存',
-      whyItMatters: '本地美股历史覆盖决定离线检查能确认哪些磁盘数据；缺文件会降低可验证范围。',
-      safeNextStep: '同步已批准的本地美股 parquet/cache 覆盖，再期待代表样本检查清空。',
+      whyItMatters: '本地美股历史覆盖决定离线检查能确认哪些磁盘数据；缺文件时仅用于诊断/观察/配置指引，并改善数据覆盖披露。',
+      safeNextStep: '同步已批准的本地美股 parquet/cache 覆盖，先减少缺失状态，再期待代表样本检查清空。',
     };
   }
   const title = sanitizeCodeLabel(check.id);
   return {
     title,
-    whyItMatters: defaultChecklistWhyItMatters(title),
-    safeNextStep: defaultChecklistNextStep(title),
+    whyItMatters: defaultChecklistWhyItMatters(title, true),
+    safeNextStep: defaultChecklistNextStep(title, true),
   };
 }
 
@@ -1212,7 +1231,7 @@ const ProviderSetupChecklistPanel: React.FC<{
         </div>
       </div>
       <p className="mt-2 text-[11px] leading-5 text-white/48">
-        只读展示现有数据源缺口会影响哪些产品面、缺少哪类依赖，以及下一步应沿哪个既有配置路径处理；不承诺投资准确性。
+        只读展示现有数据源缺口会影响哪些产品面、缺少哪类依赖，以及下一步应沿哪个既有配置路径处理；仅用于诊断/观察/配置指引，是否进入评分仍由既有 source-confidence gates 决定。
       </p>
       {surfaceFocus ? (
         <div
@@ -1221,7 +1240,7 @@ const ProviderSetupChecklistPanel: React.FC<{
         >
           <span className="font-semibold text-cyan-100/82">已按 {surfaceFocus.label} 聚焦：</span>
           {' '}
-          以下清单来自现有 productAffectedSurfaces，用于确认覆盖缺口；不会改变评分规则或承诺信号质量。
+          以下清单来自现有 productAffectedSurfaces，用于确认覆盖缺口；仅改善数据覆盖披露，不会改变评分规则，是否进入评分仍由既有 source-confidence gates 决定。
         </div>
       ) : null}
 
