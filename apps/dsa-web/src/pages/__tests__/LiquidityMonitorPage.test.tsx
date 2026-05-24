@@ -541,6 +541,7 @@ describe('LiquidityMonitorPage', () => {
     expect(resolvedReadyBand).toHaveTextContent('证据质量');
     expect(resolvedReadyBand).toHaveTextContent('阻塞项');
     expect(resolvedReadyBand).toHaveTextContent('提升证据');
+    expect(within(resolvedReadyBand).queryByText('查看需配置的数据源')).not.toBeInTheDocument();
     expect(resolvedReadyBand.textContent || '').not.toMatch(/买入|卖出|buy now|sell now|recommend/i);
     readyView.unmount();
 
@@ -587,6 +588,14 @@ describe('LiquidityMonitorPage', () => {
     const observationBand = screen.getByTestId('liquidity-decision-readiness');
     expect(observationBand).toHaveTextContent('当前只适合作为观察，不应用作方向判断');
     expect(observationBand).toHaveTextContent(/Proxy-only|代理/);
+    const observationSetupPath = within(observationBand).getByTestId('liquidity-setup-path');
+    expect(observationSetupPath).toHaveTextContent('查看需配置的数据源');
+    expect(observationSetupPath).toHaveTextContent('改善证据覆盖');
+    expect(observationSetupPath).toHaveTextContent('减少 fallback/proxy');
+    expect(observationSetupPath).toHaveTextContent('可能提升为可评分证据');
+    expect(within(observationSetupPath).getByRole('link', { name: '查看 Provider Ops' })).toHaveAttribute('href', '/admin/market-providers?surface=liquidity_monitor');
+    expect(within(observationSetupPath).getByRole('link', { name: '前往数据源设置' })).toHaveAttribute('href', '/settings/system?panel=data_sources&surface=liquidity_monitor');
+    expect(observationSetupPath.textContent || '').not.toMatch(/买入|卖出|建议|recommend|investment|profit|guarantee/i);
     observationView.unmount();
 
     getLiquidityMonitor.mockResolvedValueOnce({
@@ -650,6 +659,7 @@ describe('LiquidityMonitorPage', () => {
     const unavailableBand = screen.getByTestId('liquidity-decision-readiness');
     expect(unavailableBand).toHaveTextContent('当前只适合作为观察，不应用作方向判断');
     expect(unavailableBand).toHaveTextContent(/数据源不可用|来源不可用|Provider unavailable/);
+    expect(within(unavailableBand).getByTestId('liquidity-setup-path')).toHaveTextContent('前往数据源设置');
   });
 
   it('renders a liquidity regime gauge and keeps proxy-only evidence insufficient', async () => {

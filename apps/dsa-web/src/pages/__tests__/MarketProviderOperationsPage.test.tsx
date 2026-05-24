@@ -708,6 +708,56 @@ describe('MarketProviderOperationsPage', () => {
     expect(within(matrixDisclosure).getByRole('button', { name: '收起 完整 provider matrix' })).toBeInTheDocument();
   });
 
+  it('honors a safe surface query for setup focus without hiding full diagnostics', async () => {
+    const previousPath = window.location.pathname;
+    const previousSearch = window.location.search;
+    window.history.replaceState({}, '', '/admin/market-providers?surface=market_overview');
+    getOperations.mockResolvedValue(populatedPayload);
+
+    try {
+      render(<MarketProviderOperationsPage />);
+
+      expect(await screen.findByText('Provider Setup Checklist')).toBeInTheDocument();
+      const focus = screen.getByTestId('market-provider-setup-surface-focus');
+      expect(focus).toHaveTextContent('已按 Market Overview 聚焦');
+      expect(focus).toHaveTextContent('改善证据覆盖');
+      const checklist = screen.getByTestId('market-provider-setup-checklist');
+      expect(checklist).toHaveTextContent('Market Overview');
+      expect(checklist).toHaveTextContent('Fed Liquidity');
+      expect(checklist).toHaveTextContent('Polygon grouped daily US equities');
+      expect(checklist).not.toHaveTextContent('Rotation Radar');
+      expect(checklist).not.toHaveTextContent('Portfolio');
+
+      const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
+      fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 完整 provider matrix' }));
+      expect(matrixDisclosure).toHaveTextContent('cache.cn_hk_connect_daily');
+      expect(matrixDisclosure).toHaveTextContent('authorized.cn_index_futures_feed');
+    } finally {
+      window.history.replaceState({}, '', `${previousPath}${previousSearch}`);
+    }
+  });
+
+  it('ignores unknown unsafe surface query text without rendering it', async () => {
+    const previousPath = window.location.pathname;
+    const previousSearch = window.location.search;
+    window.history.replaceState({}, '', '/admin/market-providers?surface=%2FUsers%2Fexample%2Fprovider&token=super-secret-token');
+    getOperations.mockResolvedValue(populatedPayload);
+
+    try {
+      render(<MarketProviderOperationsPage />);
+
+      expect(await screen.findByText('Provider Setup Checklist')).toBeInTheDocument();
+      expect(screen.queryByTestId('market-provider-setup-surface-focus')).not.toBeInTheDocument();
+      const checklist = screen.getByTestId('market-provider-setup-checklist');
+      expect(checklist).toHaveTextContent('Market Overview');
+      expect(checklist).toHaveTextContent('Rotation Radar');
+      expect(document.body.textContent || '').not.toContain('/Users/example/provider');
+      expect(document.body.textContent || '').not.toContain('super-secret-token');
+    } finally {
+      window.history.replaceState({}, '', `${previousPath}${previousSearch}`);
+    }
+  });
+
   it('supports a compact representative symbol override for readiness checks', async () => {
     getOperations.mockResolvedValue(populatedPayload);
     getDataReadiness.mockResolvedValue(readinessPayload);

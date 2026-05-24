@@ -15,6 +15,7 @@ import { useI18n } from '../contexts/UiLanguageContext';
 import { useAuth, useSystemConfig } from '../hooks';
 import type { SystemConfigCategory } from '../types/systemConfig';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
+import { productSetupSurfaceFromCurrentQuery } from '../utils/productSetupSurface';
 import {
   GATEWAY_READINESS_NOTES,
   getGatewayModelOptions,
@@ -373,6 +374,13 @@ const SettingsPage: React.FC = () => {
   const { language, t } = useI18n();
   const { passwordChangeable } = useAuth();
   const isSystemSettingsSurface = typeof window !== 'undefined' && window.location.pathname.includes('/settings/system');
+  const surfaceFocus = productSetupSurfaceFromCurrentQuery();
+  const shouldFocusDataSourcesFromQuery = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('panel') === 'data_sources';
+  const shouldFocusDataSources = Boolean(surfaceFocus) || shouldFocusDataSourcesFromQuery;
+  const initialActivePanel: SettingsWorkspacePanel = shouldFocusDataSources
+    ? 'data_sources'
+    : (isSystemSettingsSurface ? 'overview' : 'advanced');
 
   const {
     categories,
@@ -397,8 +405,8 @@ const SettingsPage: React.FC = () => {
     setDraftValue,
     adminUnlockToken,
   } = useSystemConfig();
-  const [activeDomain, setActiveDomain] = useState<SettingsDomain>('advanced');
-  const [activePanel, setActivePanel] = useState<SettingsWorkspacePanel>(isSystemSettingsSurface ? 'overview' : 'advanced');
+  const [activeDomain, setActiveDomain] = useState<SettingsDomain>(shouldFocusDataSources ? 'data_sources' : 'advanced');
+  const [activePanel, setActivePanel] = useState<SettingsWorkspacePanel>(initialActivePanel);
   const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
 
   useEffect(() => {
@@ -497,6 +505,17 @@ const SettingsPage: React.FC = () => {
       setActiveCategory(firstCategory);
     }
   }, [activeCategory, domainCategories, domainCategorySet, setActiveCategory]);
+
+  useEffect(() => {
+    if (!shouldFocusDataSources) {
+      return;
+    }
+    setActiveDomain('data_sources');
+    setActivePanel('data_sources');
+    if (activeCategory !== 'data_source') {
+      setActiveCategory('data_source');
+    }
+  }, [activeCategory, setActiveCategory, shouldFocusDataSources]);
 
   const panelNavItems = useMemo(() => ([
     {
@@ -2291,6 +2310,7 @@ const SettingsPage: React.FC = () => {
                         onValidateDataSource={(sourceId) => {
                           void validateDataSourceEntry(sourceId);
                         }}
+                        surfaceFocus={surfaceFocus}
                       />
                     ) : null}
 

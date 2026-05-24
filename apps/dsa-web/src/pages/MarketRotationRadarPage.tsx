@@ -22,6 +22,7 @@ import {
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal/TerminalPrimitives';
+import { ProductSetupPath } from '../components/market-intelligence/ProductSetupPath';
 import { WideWorkspacePageShell } from '../components/layout/WideWorkspaceShell';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import {
@@ -951,6 +952,9 @@ const RotationDecisionReadinessPanel: React.FC<{ summary: DecisionReadinessSumma
         </div>
       </div>
     </div>
+    {summary.state !== 'ready' ? (
+      <ProductSetupPath surface="rotation_radar" testId="rotation-setup-path" />
+    ) : null}
   </TerminalPanel>
 );
 

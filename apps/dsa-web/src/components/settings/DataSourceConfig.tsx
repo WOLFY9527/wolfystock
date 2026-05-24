@@ -12,6 +12,7 @@ import {
   type DataSourceLibraryEntry,
   type DataSourceValidationState,
 } from './dataSourceLibraryShared';
+import type { ProductSetupSurface } from '../../utils/productSetupSurface';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
 
@@ -33,6 +34,7 @@ type DataSourceConfigProps = {
   onOpenCreateDataSourceDrawer: () => void;
   onOpenEditDataSourceDrawer: (sourceId: string) => void;
   onValidateDataSource: (sourceId: string) => void;
+  surfaceFocus?: ProductSetupSurface | null;
 };
 
 const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
@@ -147,8 +149,12 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
   onOpenCreateDataSourceDrawer,
   onOpenEditDataSourceDrawer,
   onValidateDataSource,
+  surfaceFocus = null,
 }) => {
   const coverageGaps = buildDataCoverageGaps(dataSourceLibrary, t);
+  const focusedCoverageGaps = surfaceFocus
+    ? coverageGaps.filter((gap) => gap.surfaces.includes(surfaceFocus.label))
+    : [];
 
   return (
     <SettingsSectionCard
@@ -156,6 +162,21 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
       description={t('settings.dataEffectiveDesc')}
     >
       <div className="space-y-3">
+        {surfaceFocus ? (
+          <GlassCard className="px-4 py-3" data-testid="data-source-surface-context">
+            <p className="text-sm font-semibold text-foreground">
+              从 {surfaceFocus.label} 跳转：以下数据源可能改善证据覆盖
+            </p>
+            <p className="mt-1 text-xs leading-5 text-secondary-text">
+              改善证据覆盖 / 减少 fallback/proxy / 可能提升为可评分证据。这里只引用现有 impact metadata 与 coverage gap map。
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {(focusedCoverageGaps.length ? focusedCoverageGaps : coverageGaps.slice(0, 2)).map((gap) => (
+                <span key={gap.key} className={GHOST_TAG_CLASS}>{gap.missing}</span>
+              ))}
+            </div>
+          </GlassCard>
+        ) : null}
         <CoverageGapsPanel gaps={coverageGaps} t={t} />
       <GlassCard className="px-4 py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">

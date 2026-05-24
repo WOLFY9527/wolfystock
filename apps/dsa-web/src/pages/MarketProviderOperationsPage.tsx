@@ -37,6 +37,7 @@ import { useI18n } from '../contexts/UiLanguageContext';
 import { cn } from '../utils/cn';
 import { formatDateTime, formatNumber, formatPercent } from '../utils/format';
 import { marketIntelligenceReasonLabel } from '../utils/marketIntelligenceGuidance';
+import { productSetupSurfaceFromCurrentQuery, type ProductSetupSurface } from '../utils/productSetupSurface';
 
 type StatusTone = 'live' | 'cache' | 'stale' | 'fallback' | 'partial' | 'unavailable' | 'error' | 'refreshing';
 type TickflowProjection = {
@@ -990,18 +991,23 @@ const ProviderSetupChecklistPanel: React.FC<{
   rows: ProviderOperationsMatrixRow[];
   checks: MarketDataReadinessCheck[];
   isLoading: boolean;
-}> = ({ rows, checks, isLoading }) => {
+  surfaceFocus: ProductSetupSurface | null;
+}> = ({ rows, checks, isLoading, surfaceFocus }) => {
   const entries = useMemo(() => buildSetupChecklistEntries(rows, checks), [rows, checks]);
+  const visibleEntries = useMemo(
+    () => surfaceFocus ? entries.filter((entry) => entry.surface === surfaceFocus.label) : entries,
+    [entries, surfaceFocus],
+  );
   const groups = useMemo(
     () => CHECKLIST_SURFACE_ORDER
       .map((surface) => ({
         surface,
-        items: entries
+        items: visibleEntries
           .filter((entry) => entry.surface === surface)
           .sort((left, right) => left.title.localeCompare(right.title)),
       }))
       .filter((group) => group.items.length > 0),
-    [entries],
+    [visibleEntries],
   );
 
   return (
@@ -1013,14 +1019,24 @@ const ProviderSetupChecklistPanel: React.FC<{
         </div>
         <div className="flex flex-wrap gap-1.5">
           <TerminalChip variant="neutral">{formatNumber(groups.length, 0)} surfaces</TerminalChip>
-          <TerminalChip variant="info">{formatNumber(entries.length, 0)} setup items</TerminalChip>
+          <TerminalChip variant="info">{formatNumber(visibleEntries.length, 0)} setup items</TerminalChip>
         </div>
       </div>
       <p className="mt-2 text-[11px] leading-5 text-white/48">
         Read-only setup view for which existing provider gaps affect which product surface, what kind of dependency is missing, and the next safe setup step. It does not promise investment accuracy.
       </p>
+      {surfaceFocus ? (
+        <div
+          data-testid="market-provider-setup-surface-focus"
+          className="mt-3 rounded-md border border-cyan-200/12 bg-cyan-300/[0.035] px-3 py-2 text-[11px] leading-5 text-white/56"
+        >
+          <span className="font-semibold text-cyan-100/82">已按 {surfaceFocus.label} 聚焦：</span>
+          {' '}
+          以下 checklist 行来自现有 productAffectedSurfaces，用于改善证据覆盖、减少 fallback/proxy，可能提升为可评分证据。
+        </div>
+      ) : null}
 
-      {isLoading && !entries.length ? (
+      {isLoading && !visibleEntries.length ? (
         <p className="mt-3 text-[11px] leading-5 text-white/38">正在汇总 checklist；仍然只读，不触发 provider runtime。</p>
       ) : null}
 
@@ -1072,7 +1088,8 @@ const ProviderOperationsMatrixPanel: React.FC<{
   isLoading: boolean;
   isReadinessLoading: boolean;
   error: ParsedApiError | null;
-}> = ({ response, readiness, isLoading, isReadinessLoading, error }) => {
+  surfaceFocus: ProductSetupSurface | null;
+}> = ({ response, readiness, isLoading, isReadinessLoading, error, surfaceFocus }) => {
   const rows = response?.rows ?? EMPTY_PROVIDER_MATRIX_ROWS;
   const summary = response?.summary ?? MATRIX_SUMMARY_DEFAULTS;
   const checks = readiness?.checks ?? EMPTY_READINESS_CHECKS;
@@ -1110,7 +1127,7 @@ const ProviderOperationsMatrixPanel: React.FC<{
 
       {!isLoading && (rows.length || checks.length) ? (
         <>
-          <ProviderSetupChecklistPanel rows={rows} checks={checks} isLoading={isLoading || isReadinessLoading} />
+          <ProviderSetupChecklistPanel rows={rows} checks={checks} isLoading={isLoading || isReadinessLoading} surfaceFocus={surfaceFocus} />
         </>
       ) : null}
 
@@ -1591,6 +1608,7 @@ const EmptyErrorState: React.FC = () => (
 
 const MarketProviderOperationsPage: React.FC = () => {
   const { language } = useI18n();
+  const surfaceFocus = productSetupSurfaceFromCurrentQuery();
   const [response, setResponse] = useState<MarketProviderOperationsResponse | null>(null);
   const [matrixResponse, setMatrixResponse] = useState<ProviderOperationsMatrixResponse | null>(null);
   const [readiness, setReadiness] = useState<MarketDataReadinessResponse | null>(null);
@@ -1763,6 +1781,7 @@ const MarketProviderOperationsPage: React.FC = () => {
               isLoading={isMatrixLoading}
               isReadinessLoading={isReadinessLoading}
               error={matrixError}
+              surfaceFocus={surfaceFocus}
             />
             {response ? (
               <>

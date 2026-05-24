@@ -10,6 +10,7 @@ import { cn } from '../../utils/cn';
 import type { MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
 import type { OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';
 import { TrustDisclosureChips } from '../evidence/TrustDisclosureChips';
+import { ProductSetupPath } from '../market-intelligence/ProductSetupPath';
 import type { TrustDisclosureBucket } from '../../utils/trustDisclosure';
 import {
   MARKET_DECISION_NOT_READY_NOTICE,
@@ -412,6 +413,9 @@ const DecisionReadinessBand: React.FC<{
         </div>
       </div>
     </div>
+    {summary.state !== 'ready' ? (
+      <ProductSetupPath surface="market_overview" testId="market-overview-setup-path" />
+    ) : null}
   </section>
 );
 

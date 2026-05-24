@@ -917,6 +917,7 @@ describe('MarketRotationRadarPage', () => {
     expect(readyBand).toHaveTextContent('可判断');
     expect(readyBand).toHaveTextContent('确认 1');
     expect(readyBand).toHaveTextContent('ETF可计分');
+    expect(within(readyBand).queryByText('查看需配置的数据源')).not.toBeInTheDocument();
     expect(readyBand.textContent || '').not.toMatch(forbiddenTradingActionPattern);
     readyView.unmount();
 
@@ -927,6 +928,14 @@ describe('MarketRotationRadarPage', () => {
     expect(observationBand).toHaveTextContent('仅观察');
     expect(observationBand).toHaveTextContent('当前只适合作为观察，不应用作方向判断');
     expect(observationBand).toHaveTextContent('真实流向确认缺失');
+    const observationSetupPath = within(observationBand).getByTestId('rotation-setup-path');
+    expect(observationSetupPath).toHaveTextContent('查看需配置的数据源');
+    expect(observationSetupPath).toHaveTextContent('改善证据覆盖');
+    expect(observationSetupPath).toHaveTextContent('减少 fallback/proxy');
+    expect(observationSetupPath).toHaveTextContent('可能提升为可评分证据');
+    expect(within(observationSetupPath).getByRole('link', { name: '查看 Provider Ops' })).toHaveAttribute('href', '/admin/market-providers?surface=rotation_radar');
+    expect(within(observationSetupPath).getByRole('link', { name: '前往数据源设置' })).toHaveAttribute('href', '/settings/system?panel=data_sources&surface=rotation_radar');
+    expect(observationSetupPath.textContent || '').not.toMatch(forbiddenTradingActionPattern);
     observationView.unmount();
 
     vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(taxonomyMarketFixture('CN'));
@@ -936,6 +945,7 @@ describe('MarketRotationRadarPage', () => {
     expect(unavailableBand).toHaveTextContent('不可判断');
     expect(unavailableBand).toHaveTextContent('仅有主题分类');
     expect(unavailableBand).toHaveTextContent('当前只适合作为观察，不应用作方向判断');
+    expect(within(unavailableBand).getByTestId('rotation-setup-path')).toHaveTextContent('前往数据源设置');
     expect(unavailableBand.textContent || '').not.toMatch(forbiddenTradingActionPattern);
   });
 

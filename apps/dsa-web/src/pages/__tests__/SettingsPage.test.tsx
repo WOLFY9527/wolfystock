@@ -2849,6 +2849,38 @@ describe('SettingsPage', () => {
     expect(within(routingDrawer).getByRole('button', { name: '保存优先顺序' })).toBeInTheDocument();
   });
 
+  it('focuses Data Sources from a safe product surface query and keeps unsafe query text hidden', async () => {
+    const previousPath = window.location.pathname;
+    const previousSearch = window.location.search;
+    window.history.replaceState({}, '', '/settings/system?panel=data_sources&surface=market_overview&path=%2FUsers%2Fexample%2Fprovider&token=super-secret-token');
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'system',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        data_source: [
+          buildDataSourceConfigItem('REALTIME_SOURCE_PRIORITY', 'finnhub,yahoo'),
+          buildDataSourceConfigItem('FINNHUB_API_KEY', 'masked-finnhub-token'),
+        ],
+      },
+    }));
+
+    try {
+      render(<SettingsPage />);
+
+      expect(await screen.findByRole('heading', { name: '数据源配置' })).toBeInTheDocument();
+      const dataSection = screen.getByRole('heading', { name: '数据源配置' }).closest('section') as HTMLElement;
+      const banner = within(dataSection).getByTestId('data-source-surface-context');
+      expect(banner).toHaveTextContent('从 Market Overview 跳转：以下数据源可能改善证据覆盖');
+      expect(banner).toHaveTextContent('减少 fallback/proxy');
+      expect(banner).toHaveTextContent('可能提升为可评分证据');
+      expect(banner.textContent || '').not.toMatch(/买入|卖出|建议|recommend|investment|profit|guarantee/i);
+      expect(document.body.textContent || '').not.toContain('/Users/example/provider');
+      expect(document.body.textContent || '').not.toContain('super-secret-token');
+    } finally {
+      window.history.replaceState({}, '', `${previousPath}${previousSearch}`);
+    }
+  });
+
   it('shows read-only endpoint and internal metadata on api source cards', async () => {
     useSystemConfigMock.mockReturnValue(buildSystemConfigState({
       activeCategory: 'data_source',

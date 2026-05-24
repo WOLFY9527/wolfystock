@@ -17,6 +17,7 @@ import {
   type LiquidityImpulseHeaderEvidenceView,
   type LiquidityImpulseSynthesisHeaderView,
 } from '../components/liquidity-monitor/LiquidityImpulseSynthesisHeader';
+import { ProductSetupPath } from '../components/market-intelligence/ProductSetupPath';
 import {
   TerminalChip,
   TerminalDenseTable,
@@ -689,6 +690,9 @@ const DecisionReadinessBand: React.FC<{
         </div>
       </div>
     </div>
+    {summary.state !== 'ready' ? (
+      <ProductSetupPath surface="liquidity_monitor" testId="liquidity-setup-path" />
+    ) : null}
   </section>
 );
 
