@@ -6478,14 +6478,7 @@ class MarketOverviewService:
             lambda: self._fallback_overview_panel("macro", "MacroIndicatorsCard", "数据源刷新超时，当前显示备用快照"),
             deadline=deadline,
         )
-        fed_liquidity_items = [
-            item
-            for item in macro.get("items", [])
-            if isinstance(item, dict)
-            and str(item.get("symbol") or "") in self.FED_LIQUIDITY_SERIES
-            and item.get("sourceAuthorityAllowed") is True
-            and item.get("scoreContributionAllowed") is True
-        ]
+        fed_liquidity_items = self._official_fed_liquidity_score_grade_temperature_items(macro)
         if fed_liquidity_items:
             rates["items"] = [*rates.get("items", []), *fed_liquidity_items]
         fx = self._temperature_panel(
@@ -6560,6 +6553,42 @@ class MarketOverviewService:
             "crypto": crypto,
             "fallback_notice": True,
         }
+
+    def _official_fed_liquidity_score_grade_temperature_items(self, macro: Mapping[str, Any]) -> List[Dict[str, Any]]:
+        raw_items = macro.get("items") if isinstance(macro.get("items"), list) else []
+        fed_items = [
+            dict(item)
+            for item in raw_items
+            if isinstance(item, dict) and str(item.get("symbol") or "") in self.FED_LIQUIDITY_SERIES
+        ]
+        if not fed_items:
+            return []
+
+        cache_bundle = build_official_fed_liquidity_cache_bundle(fed_items)
+        if not bool(cache_bundle.get("scoreContributionAllowed")):
+            return []
+
+        items_by_symbol = {str(item.get("symbol") or ""): item for item in fed_items}
+        ordered: List[Dict[str, Any]] = []
+        for symbol in self.FED_LIQUIDITY_SERIES:
+            item = items_by_symbol.get(symbol)
+            if item is None:
+                return []
+            normalized = {
+                **item,
+                "cacheBundleDiagnostics": copy.deepcopy(cache_bundle),
+                "requiredProviderClass": "official_public.fed_liquidity",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "sourceAuthorityReason": None,
+                "routeRejectedReasonCodes": [],
+                "externalProviderCalls": False,
+                "cacheOnly": True,
+            }
+            normalized.setdefault("sourceTier", "official_public")
+            normalized.setdefault("trustLevel", "score_grade")
+            ordered.append(normalized)
+        return ordered
 
     def _fallback_market_temperature_inputs(self) -> Dict[str, Any]:
         indices = self._fallback_cn_indices_snapshot()

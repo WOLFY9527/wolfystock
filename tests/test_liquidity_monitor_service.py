@@ -5575,6 +5575,127 @@ def test_fed_liquidity_indicator_fails_closed_for_malformed_cache_value(
     assert bundle["externalProviderCalls"] is False
 
 
+def test_fed_liquidity_indicator_fails_closed_for_stale_official_bundle(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    base_as_of = "2026-05-20T16:15:00+08:00"
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="stale",
+            items=[
+                _fed_liquidity_macro_item(
+                    "FED_ASSETS",
+                    value=7485000.0,
+                    change_percent=0.13,
+                    freshness="stale",
+                    is_stale=True,
+                ),
+                _fed_liquidity_macro_item(
+                    "FED_RRP",
+                    value=432.2,
+                    change_percent=-5.01,
+                    freshness="stale",
+                    is_stale=True,
+                ),
+                _fed_liquidity_macro_item(
+                    "TGA",
+                    value=812000.0,
+                    change_percent=-1.69,
+                    freshness="stale",
+                    is_stale=True,
+                ),
+                _fed_liquidity_macro_item(
+                    "RESERVES",
+                    value=3260000.0,
+                    change_percent=0.62,
+                    freshness="stale",
+                    is_stale=True,
+                ),
+            ],
+            updated_at=base_as_of,
+            as_of=base_as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["fed_liquidity"]
+    diagnostics = indicator["coverageDiagnostics"]
+    bundle = diagnostics["cacheBundleDiagnostics"]
+
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["scoreExclusionReason"] == "fed_liquidity_required_series_missing_or_stale"
+    assert bundle["staleSeries"] == ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    assert bundle["observationOnly"] is True
+    assert bundle["scoreContributionAllowed"] is False
+    assert bundle["externalProviderCalls"] is False
+
+
+def test_fed_liquidity_indicator_fails_closed_for_fallback_proxy_bundle(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    base_as_of = "2026-05-20T16:15:00+08:00"
+    items = []
+    for symbol in FED_LIQUIDITY_SERIES_BY_SYMBOL:
+        item = _fed_liquidity_macro_item(
+            symbol,
+            value=1.0,
+            change_percent=0.1,
+            freshness="fallback",
+        )
+        item.update(
+            {
+                "source": "yfinance_proxy",
+                "sourceId": f"yfinance_proxy:{item['officialSeriesId']}",
+                "sourceType": "public_proxy",
+                "sourceTier": "public_proxy",
+                "trustLevel": "weak",
+                "isFallback": True,
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "sourceFreshnessEvidence": {
+                    "freshness": "fallback",
+                    "isFallback": True,
+                    "isStale": False,
+                    "isUnavailable": False,
+                },
+            }
+        )
+        items.append(item)
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="fallback",
+            is_fallback=True,
+            items=items,
+            updated_at=base_as_of,
+            as_of=base_as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["fed_liquidity"]
+    diagnostics = indicator["coverageDiagnostics"]
+    bundle = diagnostics["cacheBundleDiagnostics"]
+
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["realSourceAvailable"] is False
+    assert bundle["fallbackOrProxySeries"] == ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    assert bundle["observationOnly"] is True
+    assert bundle["scoreContributionAllowed"] is False
+    assert bundle["externalProviderCalls"] is False
+
+
 def test_usd_pressure_scores_when_official_trade_weighted_usd_is_fresh(
     isolated_db: DatabaseManager,
 ) -> None:

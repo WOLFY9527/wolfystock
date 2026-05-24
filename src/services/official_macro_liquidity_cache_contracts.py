@@ -230,15 +230,15 @@ def official_fed_liquidity_series_id(row: Mapping[str, Any]) -> str | None:
 
 def _classify_fed_liquidity_row(row: Mapping[str, Any], series_id: str) -> dict[str, Any]:
     freshness = _row_freshness(row)
-    numeric_value = _numeric(row.get("value") if row.get("value") is not None else row.get("price"))
-    if numeric_value is None:
-        return {"present": False, "reason": "malformed", "blocked": False, "freshness": freshness}
     if _row_is_fallback_or_proxy(row, freshness=freshness):
         return {"present": False, "reason": "fallback_or_proxy", "blocked": False, "freshness": freshness}
     if _row_is_stale(row, freshness=freshness):
         return {"present": False, "reason": "stale", "blocked": False, "freshness": freshness}
     if _row_is_unavailable(row, freshness=freshness):
         return {"present": False, "reason": "unavailable", "blocked": False, "freshness": freshness}
+    numeric_value = _numeric(row.get("value") if row.get("value") is not None else row.get("price"))
+    if numeric_value is None:
+        return {"present": False, "reason": "malformed", "blocked": False, "freshness": freshness}
     if not _row_has_official_fred_provenance(row, series_id):
         return {"present": False, "reason": "fallback_or_proxy", "blocked": False, "freshness": freshness}
     if freshness not in _RELIABLE_FRESHNESS:
