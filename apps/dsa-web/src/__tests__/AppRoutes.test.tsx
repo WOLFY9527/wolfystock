@@ -377,6 +377,17 @@ describe('AppContent route flows', () => {
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/en/market-overview'));
   });
 
+  it.each(['/prototype/scanner-board', '/zh/prototype/scanner-board'])(
+    'falls through to NotFound for the removed scanner board prototype route at %s',
+    async (path) => {
+      renderAtWithLocationProbe(path);
+
+      expect(await screen.findByText('not-found-page')).toBeInTheDocument();
+      expect(screen.getByTestId('location-path')).toHaveTextContent(path);
+      expect(screen.queryByText('scanner-surface-page')).not.toBeInTheDocument();
+    },
+  );
+
   it('redirects locale-prefixed guest settings access to the locale guest page', async () => {
     languageState.value = 'en';
     renderAtWithLocationProbe('/en/settings/system');
