@@ -8,7 +8,7 @@ vi.mock('../SettingsPage', () => ({
 }));
 
 describe('SystemSettingsPage', () => {
-  it('renders the system settings surface on the shared shell without duplicating route-local shell width or background slabs', () => {
+  it('renders the system settings surface through the lazy console boundary without duplicating route-local shell width or background slabs', async () => {
     render(
       <MemoryRouter initialEntries={['/settings/system']}>
         <SystemSettingsPage />
@@ -19,7 +19,8 @@ describe('SystemSettingsPage', () => {
     const shellHeader = screen.getByTestId('system-settings-shell-header');
 
     expect(screen.getByRole('heading', { name: '系统设置' })).toBeInTheDocument();
-    expect(screen.getByText('settings-page-core')).toBeInTheDocument();
+    expect(screen.getByTestId('system-settings-loading')).toHaveAttribute('aria-busy', 'true');
+    expect(await screen.findByText('settings-page-core')).toBeInTheDocument();
     expect(pageRoot).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(pageRoot).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-5', 'min-h-0', 'flex-1', 'overflow-x-hidden', 'py-5', 'text-white', 'md:py-6');
     expect(pageRoot.className).not.toContain('bg-[#050505]');

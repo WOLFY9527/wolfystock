@@ -1,11 +1,12 @@
-import type React from 'react';
+import { Suspense, lazy, type FC } from 'react';
 import {
   TerminalChip,
   TerminalMetric,
   TerminalPageHeading,
   TerminalPageShell,
 } from '../components/terminal/TerminalPrimitives';
-import SettingsPage from './SettingsPage';
+
+const SettingsPage = lazy(() => import('./SettingsPage'));
 
 const SYSTEM_SETTINGS_OVERVIEW = [
   {
@@ -25,7 +26,29 @@ const SYSTEM_SETTINGS_OVERVIEW = [
   },
 ] as const;
 
-const SystemSettingsPage: React.FC = () => {
+const settingsConsoleFallback = (
+  <section
+    role="status"
+    aria-busy="true"
+    aria-live="polite"
+    data-testid="system-settings-loading"
+    className="min-h-[220px] rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-4 py-4 text-sm text-[color:var(--wolfy-text-secondary)]"
+  >
+    <div className="flex min-w-0 flex-col gap-2">
+      <span className="text-xs font-medium text-[color:var(--wolfy-text-primary)]">正在加载系统设置控制台</span>
+      <span className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+        外层风险总览已就绪，配置快照与操作面板正在进入控制台。
+      </span>
+    </div>
+    <div className="mt-4 grid gap-2" aria-hidden="true">
+      <span className="h-3 w-1/2 rounded-full bg-[color:color-mix(in_srgb,var(--wolfy-text-primary)_12%,transparent)]" />
+      <span className="h-3 w-2/3 rounded-full bg-[color:color-mix(in_srgb,var(--wolfy-text-primary)_9%,transparent)]" />
+      <span className="h-3 w-1/3 rounded-full bg-[color:color-mix(in_srgb,var(--wolfy-text-primary)_7%,transparent)]" />
+    </div>
+  </section>
+);
+
+const SystemSettingsPage: FC = () => {
   return (
     <TerminalPageShell
       data-testid="system-settings-page"
@@ -60,7 +83,9 @@ const SystemSettingsPage: React.FC = () => {
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
-        <SettingsPage />
+        <Suspense fallback={settingsConsoleFallback}>
+          <SettingsPage />
+        </Suspense>
       </div>
     </TerminalPageShell>
   );
