@@ -598,6 +598,152 @@ describe('OptionsLabPage', () => {
     });
   });
 
+  it('renders safe guarded UI when gateIssues arrive as API issue objects', async () => {
+    vi.mocked(optionsLabApi.evaluateDecision).mockResolvedValueOnce({
+      symbol: 'TEM',
+      strategy: 'bull_call_spread',
+      dataQuality: {
+        dataQualityScore: 25,
+        dataQualityTier: 'synthetic_demo_only',
+        blockingReasons: ['synthetic_or_fixture_data_not_decision_grade'],
+        sourceType: 'synthetic',
+      },
+      liquidity: {
+        liquidityScore: 42,
+        spreadPct: 28,
+        liquidityWarnings: ['wide_bid_ask_spread'],
+      },
+      ivGreeks: {
+        ivReadiness: 44,
+        ivRankStatus: 'unavailable',
+        warnings: ['iv_rank_unavailable'],
+      },
+      decisionGrade: false,
+      gateDecision: 'blocked',
+      failClosedReasonCodes: ['synthetic_or_fixture_data_not_decision_grade'],
+      gateIssues: [
+        {
+          code: 'synthetic_or_fixture_data_not_decision_grade',
+          category: 'freshness',
+          status: 'blocked',
+          label: '演示数据不可用于判断',
+          decisionGrade: false,
+          legIndex: 0,
+          contractSymbol: 'TEM260619C00055000',
+        },
+        {
+          code: 'wide_bid_ask_spread',
+          category: 'liquidity',
+          status: 'blocked',
+          label: '买卖价差过宽',
+          decisionGrade: false,
+          legIndex: 1,
+          contractSymbol: 'TEM260619C00060000',
+        },
+      ],
+      dataQualityGates: {
+        status: 'blocked',
+        decisionGrade: false,
+        tier: 'synthetic_demo_only',
+      },
+      liquidityGates: {
+        status: 'blocked',
+        passed: false,
+        liquidityScore: 42,
+      },
+      expectedMove: {
+        expectedMoveAbs: 7.5,
+        expectedMovePct: 14.31,
+        expectedMoveSource: 'straddle_mid',
+      },
+      optimizer: {
+        preferredStrategyKey: null,
+        optimizerLabel: '数据不足，禁止判断',
+        noTradeReason: 'data_quality_not_decision_grade',
+        alternatives: [
+          {
+            strategyKey: 'bull_call_spread',
+            dataQualityTier: 'synthetic_demo_only',
+            liquidityScore: 42,
+            breakevenPressure: 0.19,
+            maxLoss: 230,
+            maxGain: 270,
+            riskRewardRatio: 1.17,
+            expectedMoveAlignment: 92,
+            ivReadiness: 44,
+            tradeQualityScore: 35,
+            decisionLabel: '数据不足，禁止判断',
+            primaryReasons: ['当前为 synthetic delayed / 演示数据'],
+            riskWarnings: ['不可用于真实交易判断'],
+          },
+        ],
+      },
+      rankedAlternatives: [
+        {
+          strategyKey: 'bull_call_spread',
+          dataQualityTier: 'synthetic_demo_only',
+          liquidityScore: 42,
+          breakevenPressure: 0.19,
+          maxLoss: 230,
+          maxGain: 270,
+          riskRewardRatio: 1.17,
+          expectedMoveAlignment: 92,
+          ivReadiness: 44,
+          tradeQualityScore: 35,
+          decisionLabel: '数据不足，禁止判断',
+          primaryReasons: ['当前为 synthetic delayed / 演示数据'],
+          riskWarnings: ['不可用于真实交易判断'],
+        },
+      ],
+      breakeven: {
+        breakeven: 52.3,
+        requiredMovePct: -0.19,
+        targetPriceStatus: 'target_above_breakeven',
+        score: 86,
+      },
+      riskReward: {
+        maxLoss: 230,
+        maxGain: 270,
+        riskRewardRatio: 1.17,
+        score: 72,
+      },
+      tradeQualityScore: 35,
+      decisionLabel: '数据不足，禁止判断',
+      primaryReasons: ['当前为 synthetic delayed / 演示数据'],
+      riskWarnings: ['不可用于真实交易判断'],
+      freshness: {
+        source: 'synthetic_options_lab_fixture',
+        freshness: 'synthetic_delayed',
+      },
+      metadata: {
+        readOnly: true,
+        fixtureBacked: true,
+        syntheticData: true,
+        noExternalCalls: true,
+        noOrderPlacement: true,
+        noBrokerConnection: true,
+        noPortfolioMutation: true,
+        noTradingRecommendation: true,
+      },
+    } as never);
+
+    renderPage();
+
+    expect(await screen.findByRole('heading', { level: 1, name: '期权实验室' })).toBeInTheDocument();
+    const decisionStrip = await screen.findByTestId('options-lab-decision-readiness-strip');
+    const primaryStrip = await screen.findByTestId('options-lab-primary-strategy-readiness-strip');
+
+    [decisionStrip, primaryStrip].forEach((strip) => {
+      expect(strip).toHaveTextContent('未达判断等级');
+      expect(strip).toHaveTextContent('演示/延迟数据');
+      expect(strip).toHaveTextContent('价差偏宽');
+      expect(strip.textContent || '').not.toContain('synthetic_or_fixture_data_not_decision_grade');
+      expect(strip.textContent || '').not.toContain('wide_bid_ask_spread');
+      expect(strip.textContent || '').not.toMatch(/买入|卖出|推荐/);
+    });
+    expect(screen.queryByText('期权实验室暂时无法加载，请刷新或稍后重试。')).not.toBeInTheDocument();
+  });
+
   it('renders setup-path actions while keeping synthetic options output observation-only', async () => {
     renderPage();
 

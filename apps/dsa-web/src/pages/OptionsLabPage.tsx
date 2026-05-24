@@ -100,6 +100,21 @@ function asArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
 }
 
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function gateIssueReasonValues(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(gateIssueReasonValues);
+
+  const issue = recordValue(value);
+  if (!issue) return [];
+
+  return [issue.code, issue.label]
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+}
+
 function limitationLabel(value: string): string {
   if (value === 'provider_validation_required') return '数据待验证';
   if (value === 'mocked_frontend_shell') return '浏览器验证数据';
@@ -193,6 +208,7 @@ function gateReasonSummary(value: string): string | null {
     value === 'wide_bid_ask_spread'
     || value === 'wide_bid_ask_spread_in_one_or_more_legs'
     || value === 'wide_spread_watch'
+    || value.includes('价差')
   ) return '价差偏宽';
   if (
     value === 'thin_liquidity_in_one_or_more_legs'
@@ -275,7 +291,7 @@ function readinessLiquidityChip(decision?: OptionsDecisionResponse | null): Read
 function readinessReasonSummaries(decision?: OptionsDecisionResponse | null): string[] {
   const summaries = [
     ...asArray(decision?.failClosedReasonCodes),
-    ...asArray(decision?.gateIssues),
+    ...gateIssueReasonValues(decision?.gateIssues),
   ]
     .map(gateReasonSummary)
     .filter((value): value is string => Boolean(value));
