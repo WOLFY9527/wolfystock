@@ -118,6 +118,8 @@ describe('Shell', () => {
     expect(scannerLink).toHaveClass('text-sm', 'font-medium', 'text-white/50');
     expect(screen.getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toHaveClass('text-sm', 'font-bold', 'text-white');
     expect(screen.queryByTestId('chat-completion-badge')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '账户中心' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '决策台' })).not.toBeInTheDocument();
     expect(document.querySelector('.shell-content-frame')).toHaveClass('shell-content-frame--wide');
@@ -223,6 +225,7 @@ describe('Shell', () => {
     expect(screen.getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.backtest') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.signIn') })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '账户中心' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: translate('zh', 'nav.settings') })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: translate('zh', 'nav.logout') })).not.toBeInTheDocument();
   });
@@ -262,7 +265,8 @@ describe('Shell', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'nav.logout') }));
+    fireEvent.click(screen.getByRole('button', { name: '账户中心' }));
+    fireEvent.click(await screen.findByRole('button', { name: '退出登录' }));
 
     expect(await screen.findByRole('heading', { name: translate('zh', 'nav.logoutTitle') })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'nav.logoutConfirm') }));
@@ -310,6 +314,7 @@ describe('Shell', () => {
     expect(screen.getByRole('link', { name: 'WolfyStock' })).toBeInTheDocument();
     expect(screen.getByTestId('shell-mobile-active-route')).toHaveTextContent(translate('zh', 'nav.watchlist'));
     expect(screen.queryByRole('navigation', { name: translate('zh', 'shell.drawerTitle') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '账户中心' })).not.toBeInTheDocument();
   });
 
   it('opens a mobile admin menu with all primary routes and account actions', async () => {
@@ -342,6 +347,14 @@ describe('Shell', () => {
     expect(within(drawerNav).getByRole('link', { name: '轮动雷达' })).toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.backtest') })).toBeInTheDocument();
+    const accountPanel = screen.getByTestId('shell-mobile-account-center');
+    expect(accountPanel).toBeInTheDocument();
+    expect(within(accountPanel).getByRole('link', { name: '账户中心' })).toBeInTheDocument();
+    expect(within(accountPanel).getByRole('link', { name: '账户与安全' })).toBeInTheDocument();
+    expect(within(accountPanel).getByRole('link', { name: '修改密码' })).toBeInTheDocument();
+    expect(within(accountPanel).getByRole('link', { name: '隐私设置' })).toBeInTheDocument();
+    expect(within(accountPanel).getByRole('link', { name: '显示偏好' })).toBeInTheDocument();
+    expect(within(accountPanel).getByRole('button', { name: '退出登录' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('zh', 'language.toggle') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.settings') })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'nav.independentConsole') }));
@@ -561,6 +574,7 @@ describe('Shell', () => {
     );
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
+    expect(screen.getByRole('button', { name: '账户中心' })).toBeInTheDocument();
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /管理员模式/ })).not.toBeInTheDocument();
   });
@@ -584,6 +598,7 @@ describe('Shell', () => {
     );
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
+    expect(screen.getByRole('button', { name: '账户中心' })).toBeInTheDocument();
     expect(actionIsland).toHaveClass(
       'flex',
       'items-center',

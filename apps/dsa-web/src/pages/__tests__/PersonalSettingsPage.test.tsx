@@ -71,7 +71,7 @@ vi.mock('../../components/settings/FontSizeSettingsCard', () => ({
 }));
 
 vi.mock('../../components/settings/ChangePasswordCard', () => ({
-  ChangePasswordCard: () => <div data-testid="change-password-card" />,
+  ChangePasswordCard: () => <div data-testid="change-password-card">修改密码</div>,
 }));
 
 describe('PersonalSettingsPage', () => {
@@ -122,7 +122,7 @@ describe('PersonalSettingsPage', () => {
       </MemoryRouter>,
     );
 
-    const heading = screen.getByRole('heading', { level: 1, name: '设置' });
+    const heading = screen.getByRole('heading', { level: 1, name: '账户中心' });
     const workspace = screen.getByTestId('personal-settings-workspace');
     const settingsConsole = screen.getByTestId('personal-settings-console');
     const primaryBoard = screen.getByTestId('personal-settings-primary-board');
@@ -139,7 +139,11 @@ describe('PersonalSettingsPage', () => {
     expect(helpRail).toHaveAttribute('data-linear-primitive', 'context-rail');
     expect(screen.getByTestId('personal-settings-profile-header')).toBeInTheDocument();
     expect(screen.getByTestId('personal-settings-security-section')).toBeInTheDocument();
+    expect(screen.getByTestId('personal-settings-privacy-section')).toBeInTheDocument();
     expect(screen.getByTestId('personal-settings-preferences-section')).toBeInTheDocument();
+    expect(screen.getByText('账户与安全')).toBeInTheDocument();
+    expect(screen.getByText('隐私设置')).toBeInTheDocument();
+    expect(screen.getByText('显示与偏好')).toBeInTheDocument();
     expect(screen.getByText(zh('settings.personalGuestPreferencesTitle'))).toBeInTheDocument();
     expect(screen.queryByText(zh('settings.personalGuestPreferencesBody'))).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: zh('language.zh') })).not.toBeInTheDocument();
@@ -232,9 +236,14 @@ describe('PersonalSettingsPage', () => {
     expect(screen.getByTestId('personal-settings-console')).toBeInTheDocument();
     expect(screen.getByTestId('personal-settings-primary-board')).toHaveAttribute('data-linear-primitive', 'console-board');
     expect(screen.getByTestId('personal-settings-help-rail')).toHaveAttribute('data-linear-primitive', 'context-rail');
+    expect(screen.getByRole('heading', { level: 1, name: '账户中心' })).toBeInTheDocument();
     expect(screen.getByTestId('personal-settings-account-row')).toBeInTheDocument();
     expect(screen.getByTestId('personal-settings-notification-row')).toBeInTheDocument();
+    expect(screen.getByTestId('personal-settings-privacy-section')).toBeInTheDocument();
     expect(profileHeader).toHaveTextContent('Admin');
+    expect(screen.getByText('账户与安全')).toBeInTheDocument();
+    expect(screen.getByText('隐私设置')).toBeInTheDocument();
+    expect(screen.getByText('显示与偏好')).toBeInTheDocument();
     expect(screen.queryByText(zh('settings.personalAdminConsoleTitle'))).not.toBeInTheDocument();
     expect(screen.queryByText(zh('settings.personalAdminConsoleDesc'))).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: zh('nav.independentConsole') })).not.toBeInTheDocument();
@@ -246,6 +255,7 @@ describe('PersonalSettingsPage', () => {
     expect(saveButton).toHaveAttribute('data-terminal-primitive', 'button');
     expect(within(screen.getByTestId('personal-settings-boundary-disclosure')).getByRole('button')).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByTestId('change-password-card')).toBeInTheDocument();
+    expect(screen.getByText('修改密码')).toBeInTheDocument();
     expect(screen.getByTestId('font-size-card')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '紧凑' }));
     fireEvent.click(screen.getByRole('button', { name: /完整数字/ }));

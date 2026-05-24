@@ -68,18 +68,20 @@ const NUMBER_FORMAT_OPTIONS = [
 ] as const;
 
 function SettingsConsoleSection({
+  id,
   title,
   description,
   children,
   'data-testid': dataTestId,
 }: {
+  id?: string;
   title: string;
   description: string;
   children: React.ReactNode;
   'data-testid'?: string;
 }) {
   return (
-    <section data-testid={dataTestId} className="min-w-0">
+    <section id={id} data-testid={dataTestId} className="min-w-0 scroll-mt-28">
       <div className="px-4 py-4 md:px-5">
         <h2 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{title}</h2>
         <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{description}</p>
@@ -164,11 +166,18 @@ const PersonalSettingsPage: React.FC = () => {
 
   const copy = language === 'en'
     ? {
-      consoleEyebrow: 'Personal settings',
+      consoleEyebrow: 'Account center',
+      pageTitle: 'Account Center',
       guestTitle: 'Guest session',
       guestSubtitle: 'Sign in to sync notification targets and manage password changes.',
       securityTitle: 'Account & security',
       securityDescription: 'Access state, password rotation, and delivery targets stay scoped to this personal console.',
+      privacyTitle: 'Privacy settings',
+      privacyDescription: 'Personal notifications, saved preferences, and sign-out behavior stay scoped to your own account surface.',
+      privacyBoundaryTitle: 'Personal privacy boundary',
+      privacyBoundaryBody: 'This account center does not expose admin diagnostics, tokens, or system-level security controls. Personal data stays on the user route, while shared runtime controls remain in the admin console.',
+      privacySessionTitle: 'Session and local defaults',
+      privacySessionBody: 'Signing out closes the current authenticated session. Display density, number formatting, and font size remain local browser preferences until you change them again.',
       preferencesTitle: 'Display & preferences',
       preferencesDescription: 'Compact, local display defaults for density, number formatting, fonts, and portfolio currency.',
       accountLabel: 'Account',
@@ -198,11 +207,18 @@ const PersonalSettingsPage: React.FC = () => {
       guestAccessTitle: 'Sign in for account controls',
     }
     : {
-      consoleEyebrow: '个人设置',
+      consoleEyebrow: '账户中心',
+      pageTitle: '账户中心',
       guestTitle: '访客会话',
       guestSubtitle: '登录后可同步通知目标并管理密码修改。',
       securityTitle: '账户与安全',
       securityDescription: '访问状态、密码变更和通知目标都只保留在个人设置控制台内。',
+      privacyTitle: '隐私设置',
+      privacyDescription: '个人通知、本地偏好和退出登录行为都只保留在你自己的账户界面内。',
+      privacyBoundaryTitle: '个人隐私边界',
+      privacyBoundaryBody: '账户中心不会暴露管理员诊断、原始令牌或系统级安全控制。个人数据只停留在用户路由，全局运行时控制继续留在管理员控制台。',
+      privacySessionTitle: '会话与本地默认项',
+      privacySessionBody: '退出登录只会结束当前认证会话。显示密度、数字格式和字体大小仍然保存在当前浏览器，直到你再次修改。',
       preferencesTitle: '显示与偏好',
       preferencesDescription: '用紧凑的本地偏好统一控制密度、数字格式、字体和组合显示货币。',
       accountLabel: '账户',
@@ -233,7 +249,7 @@ const PersonalSettingsPage: React.FC = () => {
     };
 
   useEffect(() => {
-    document.title = language === 'en' ? 'Settings - WolfyStock' : '设置 - WolfyStock';
+    document.title = language === 'en' ? 'Account Center - WolfyStock' : '账户中心 - WolfyStock';
   }, [language]);
 
   useEffect(() => {
@@ -343,10 +359,11 @@ const PersonalSettingsPage: React.FC = () => {
       <section className="flex min-h-0 min-w-0 flex-col gap-4">
         <TerminalPageHeading
           data-testid="settings-page-heading"
-          title={language === 'en' ? 'Settings' : '设置'}
+          title={copy.pageTitle}
         />
 
         <WolfyShellSurface
+          id="account-center"
           as="section"
           variant="console"
           padding="md"
@@ -383,6 +400,7 @@ const PersonalSettingsPage: React.FC = () => {
         >
           <ConsoleBoard data-testid="personal-settings-primary-board">
             <SettingsConsoleSection
+              id="security"
               data-testid="personal-settings-security-section"
               title={copy.securityTitle}
               description={copy.securityDescription}
@@ -556,10 +574,42 @@ const PersonalSettingsPage: React.FC = () => {
                 )}
               </div>
 
-              {loggedIn && passwordChangeable ? <ChangePasswordCard /> : null}
+              <div id="password" className="scroll-mt-28">
+                {loggedIn && passwordChangeable ? <ChangePasswordCard /> : null}
+              </div>
             </SettingsConsoleSection>
 
             <SettingsConsoleSection
+              id="privacy"
+              data-testid="personal-settings-privacy-section"
+              title={copy.privacyTitle}
+              description={copy.privacyDescription}
+            >
+              <div className={SETTINGS_ROW_CLASS}>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+                    {copy.privacyBoundaryTitle}
+                  </p>
+                </div>
+                <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+                  {copy.privacyBoundaryBody}
+                </div>
+              </div>
+
+              <div className={SETTINGS_ROW_CLASS}>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+                    {copy.privacySessionTitle}
+                  </p>
+                </div>
+                <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+                  {copy.privacySessionBody}
+                </div>
+              </div>
+            </SettingsConsoleSection>
+
+            <SettingsConsoleSection
+              id="preferences"
               data-testid="personal-settings-preferences-section"
               title={copy.preferencesTitle}
               description={copy.preferencesDescription}
