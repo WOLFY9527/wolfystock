@@ -228,11 +228,59 @@ const DENSE_QUOTE_MODULES = new Set<MarketOverviewModuleId>([
 
 const US_BREADTH_AD_SYMBOLS = ['ADVANCERS', 'DECLINERS', 'UNCHANGED', 'ADVANCE_DECLINE_RATIO'];
 const US_BREADTH_HIGH_LOW_SYMBOLS = ['NEW_HIGHS', 'NEW_LOWS', 'HIGH_LOW_RATIO'];
+const US_BREADTH_ALL_SYMBOLS = [...US_BREADTH_AD_SYMBOLS, ...US_BREADTH_HIGH_LOW_SYMBOLS];
 const US_BREADTH_PROXY_SYMBOLS = ['SECTORS_UP', 'SECTORS_DOWN', 'STRONGEST_SECTOR', 'WEAKEST_SECTOR', 'RSP_SPY', 'IWM_SPY', 'QQQ_SPY', 'SECTOR_PROXY_UNAVAILABLE'];
 const US_BREADTH_HIGH_LOW_LABELS: Record<string, string> = {
   NEW_HIGHS: 'NEW_HIGHS',
   NEW_LOWS: 'NEW_LOWS',
   HIGH_LOW_RATIO: 'HIGH_LOW_RATIO',
+};
+const US_BREADTH_INPUT_LABELS: Record<string, string> = {
+  ADVANCERS: '上涨家数',
+  DECLINERS: '下跌家数',
+  UNCHANGED: '平盘家数',
+  ADVANCE_DECLINE_RATIO: '上涨/下跌比',
+  NEW_HIGHS: '新高家数',
+  NEW_LOWS: '新低家数',
+  HIGH_LOW_RATIO: '新高/新低比',
+};
+const US_BREADTH_LIMITATION_LABELS: Record<string, string> = {
+  representative_sample_not_full_market_breadth: '代表性样本，不等于全市场宽度',
+  proxy_only_missing_real_source: '缺少官方/授权宽度主源',
+  partial_coverage: '覆盖不完整',
+  proxy_or_placeholder_not_authorized_breadth: '来源层级未达到官方/授权宽度',
+  source_authority_router_rejected: '来源权限未通过',
+  provider_forbidden_for_use_case: '当前用例禁止该来源',
+  provider_unavailable: '数据源不可用',
+  unavailable_source: '来源不可用',
+  polygon_high_low_history_unavailable: '高低点宽度缺失',
+  official_exchange_published_breadth_unavailable: '缺少官方发布宽度',
+  'requires_official_or_authorized.us_market_breadth': '缺少官方/授权宽度提供方',
+};
+const US_BREADTH_FRESHNESS_LABELS: Record<string, string> = {
+  live: '实时',
+  delayed: '延迟',
+  cached: '缓存',
+  stale: '数据过期',
+  fallback: '备用数据',
+  mock: '备用数据',
+  error: '数据异常',
+  unavailable: '暂不可用',
+};
+
+type UsBreadthTruthStripView = {
+  stateLabel: string;
+  stateVariant: 'neutral' | 'success' | 'caution' | 'info' | 'danger';
+  sourceLabel: string;
+  sourceVariant: 'neutral' | 'success' | 'caution' | 'info';
+  freshnessLabel: string;
+  freshnessVariant: 'neutral' | 'success' | 'caution' | 'info' | 'danger';
+  coverageLabel: string;
+  coverageVariant: 'neutral' | 'success' | 'caution' | 'info';
+  summary: string;
+  sourceDetail: string | null;
+  missingSummary: string | null;
+  limitationSummary: string | null;
 };
 
 function buildCategoryLayout(tab: MarketOverviewTab): MarketOverviewLayoutRow[] {
@@ -427,10 +475,54 @@ function isPolygonComputedUsBreadth(panel?: MarketOverviewPanel): boolean {
   return hasAdMetrics && sourceText.includes('polygon');
 }
 
+function hasStructuredUsBreadthMetrics(panel?: MarketOverviewPanel): boolean {
+  const itemSymbols = new Set((panel?.items || []).map((item) => item.symbol));
+  const fulfilledMetrics = new Set(panel?.fulfilledMetrics || []);
+  return US_BREADTH_ALL_SYMBOLS.some((symbol) => itemSymbols.has(symbol) || fulfilledMetrics.has(symbol));
+}
+
+function isOfficialUsBreadth(panel?: MarketOverviewPanel): boolean {
+  const sourceText = [
+    panel?.source,
+    panel?.sourceLabel,
+    panel?.sourceType,
+    panel?.sourceTier,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return panel?.officialExchangePublishedBreadth === true
+    || sourceText.includes('official_public')
+    || sourceText.includes('official breadth')
+    || sourceText.includes('nyse_official_breadth')
+    || sourceText.includes('nasdaq_official_breadth');
+}
+
+function formatUsBreadthInputLabel(symbol: string): string {
+  return US_BREADTH_INPUT_LABELS[symbol] || US_BREADTH_HIGH_LOW_LABELS[symbol] || symbol;
+}
+
+function formatUsBreadthLimitation(value?: string | null): string | null {
+  if (!value) return null;
+  return US_BREADTH_LIMITATION_LABELS[value] || marketIntelligenceReasonLabel(value);
+}
+
+function uniqueCompactValues(values: Array<string | null | undefined>, limit: number): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  values.forEach((value) => {
+    const normalized = String(value || '').trim();
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  });
+  return result.slice(0, limit);
+}
+
 function missingUsBreadthMetricItem(symbol: string, panel?: MarketOverviewPanel): MarketOverviewItem {
-  const message = '高低点宽度缺失';
+  const highLowMissing = US_BREADTH_HIGH_LOW_SYMBOLS.includes(symbol);
+  const message = highLowMissing ? '高低点宽度缺失' : '宽度指标缺失';
   return {
-    ...unavailableMarketItem(symbol, US_BREADTH_HIGH_LOW_LABELS[symbol] || symbol, message),
+    ...unavailableMarketItem(symbol, formatUsBreadthInputLabel(symbol), message),
     source: panel?.source || 'computed_from_authorized_polygon_grouped_daily',
     sourceLabel: panel?.sourceLabel || 'Polygon grouped daily',
     sourceType: panel?.sourceType,
@@ -452,6 +544,24 @@ function missingUsBreadthMetricItem(symbol: string, panel?: MarketOverviewPanel)
 }
 
 function buildUsBreadthPanel(sourcePanel: MarketOverviewPanel | undefined): MarketOverviewPanel {
+  if (hasStructuredUsBreadthMetrics(sourcePanel) && !isPolygonComputedUsBreadth(sourcePanel)) {
+    const panel = buildFilteredPanel(
+      sourcePanel,
+      'UsBreadthStructuredModule',
+      US_BREADTH_ALL_SYMBOLS,
+    );
+    const existingSymbols = new Set(panel.items.map((item) => item.symbol));
+    const missingMetricSymbols = Array.from(new Set(sourcePanel?.missingMetrics || []))
+      .filter((symbol) => US_BREADTH_ALL_SYMBOLS.includes(symbol) && !existingSymbols.has(symbol));
+    return {
+      ...panel,
+      items: [
+        ...panel.items,
+        ...missingMetricSymbols.map((symbol) => missingUsBreadthMetricItem(symbol, sourcePanel)),
+      ],
+    };
+  }
+
   if (!isPolygonComputedUsBreadth(sourcePanel)) {
     return buildFilteredPanel(
       sourcePanel,
@@ -486,6 +596,16 @@ function buildUsBreadthDisclosure(panel?: MarketOverviewPanel): {
   sourceLabel: string;
   notice: string;
 } {
+  if (hasStructuredUsBreadthMetrics(panel) && !isPolygonComputedUsBreadth(panel)) {
+    const fullCoverage = !panel?.isPartial && (panel?.missingMetrics || []).length === 0;
+    const official = isOfficialUsBreadth(panel);
+    return {
+      eyebrow: official ? '官方宽度' : '授权宽度',
+      description: fullCoverage ? 'AD 与新高/新低宽度齐备' : 'AD 与高低点宽度待补齐',
+      sourceLabel: panel?.sourceLabel || (official ? '官方宽度快照' : '授权宽度快照'),
+      notice: official ? '官方/授权宽度快照，用于研究判断' : '授权宽度快照，用于研究判断',
+    };
+  }
   if (isPolygonComputedUsBreadth(panel)) {
     const highLowMissing = (panel?.missingMetrics || []).some((symbol) => US_BREADTH_HIGH_LOW_SYMBOLS.includes(symbol));
     return {
@@ -501,6 +621,182 @@ function buildUsBreadthDisclosure(panel?: MarketOverviewPanel): {
     sourceLabel: '行业 ETF 代理（非评分）',
     notice: '代表性行业 ETF 代理，非完整市场宽度，非评分',
   };
+}
+
+function buildUsBreadthCoverage(panel?: MarketOverviewPanel): {
+  fulfilledCount: number;
+  requiredCount: number;
+  missingSymbols: string[];
+} {
+  const fulfilled = new Set(
+    (panel?.fulfilledMetrics || []).filter((symbol) => US_BREADTH_ALL_SYMBOLS.includes(symbol)),
+  );
+  if (fulfilled.size === 0) {
+    (panel?.items || []).forEach((item) => {
+      if (US_BREADTH_ALL_SYMBOLS.includes(item.symbol) && item.isUnavailable !== true) {
+        fulfilled.add(item.symbol);
+      }
+    });
+  }
+
+  const missing = new Set(
+    (panel?.missingMetrics || []).filter((symbol) => US_BREADTH_ALL_SYMBOLS.includes(symbol)),
+  );
+  if (fulfilled.size > 0 && missing.size === 0) {
+    US_BREADTH_ALL_SYMBOLS.forEach((symbol) => {
+      if (!fulfilled.has(symbol)) {
+        missing.add(symbol);
+      }
+    });
+  }
+  if (fulfilled.size === 0 && missing.size === 0) {
+    US_BREADTH_ALL_SYMBOLS.forEach((symbol) => missing.add(symbol));
+  }
+
+  return {
+    fulfilledCount: fulfilled.size,
+    requiredCount: US_BREADTH_ALL_SYMBOLS.length,
+    missingSymbols: US_BREADTH_ALL_SYMBOLS.filter((symbol) => missing.has(symbol)),
+  };
+}
+
+function buildUsBreadthTruthStripView(panel?: MarketOverviewPanel): UsBreadthTruthStripView {
+  const coverage = buildUsBreadthCoverage(panel);
+  const structuredMetrics = hasStructuredUsBreadthMetrics(panel);
+  const official = isOfficialUsBreadth(panel);
+  const sourceText = [
+    panel?.source,
+    panel?.sourceLabel,
+    panel?.sourceType,
+    panel?.sourceTier,
+  ].filter(Boolean).join(' ').toLowerCase();
+  const unavailable = panel?.isUnavailable === true
+    || panel?.source === 'unavailable'
+    || panel?.freshness === 'unavailable';
+  const staleOrFallback = panel?.isFallback === true
+    || panel?.isStale === true
+    || ['stale', 'fallback', 'mock', 'error'].includes(String(panel?.freshness || ''));
+  const coverageGap = coverage.missingSymbols.length > 0;
+  const proxyOnly = !structuredMetrics
+    || sourceText.includes('proxy')
+    || sourceText.includes('unofficial')
+    || panel?.sourceAuthorityReason === 'representative_sample_not_full_market_breadth'
+    || (panel?.routeRejectedReasonCodes || []).includes('representative_sample_not_full_market_breadth');
+  const scoreGradeReady = structuredMetrics
+    && panel?.sourceAuthorityAllowed === true
+    && panel?.scoreContributionAllowed === true
+    && panel?.observationOnly !== true
+    && !staleOrFallback
+    && !unavailable
+    && !coverageGap;
+
+  const sourceLabel = unavailable
+    ? '宽度不可用'
+    : official
+      ? '官方宽度'
+      : structuredMetrics && panel?.sourceAuthorityAllowed === true
+        ? '授权宽度'
+        : proxyOnly
+          ? '代理宽度'
+          : staleOrFallback
+            ? '备用宽度'
+            : '宽度待复核';
+  const stateLabel = scoreGradeReady
+    ? '评分级证据'
+    : unavailable
+      ? '证据不足'
+      : '仅观察';
+  const stateVariant = scoreGradeReady
+    ? 'success'
+    : unavailable
+      ? 'neutral'
+      : proxyOnly
+        ? 'info'
+        : 'caution';
+  const freshnessLabel = US_BREADTH_FRESHNESS_LABELS[String(panel?.freshness || 'cached')] || '待确认';
+  const freshnessVariant = panel?.freshness === 'live'
+    ? 'success'
+    : panel?.freshness === 'delayed' || panel?.freshness === 'cached'
+      ? 'neutral'
+      : panel?.freshness === 'stale'
+        ? 'caution'
+        : panel?.freshness === 'fallback' || panel?.freshness === 'mock'
+          ? 'info'
+          : panel?.freshness === 'unavailable'
+            ? 'danger'
+            : 'caution';
+  const coverageLabel = `覆盖 ${coverage.fulfilledCount}/${coverage.requiredCount}`;
+  const coverageVariant = scoreGradeReady
+    ? 'success'
+    : coverageGap
+      ? 'caution'
+      : structuredMetrics
+        ? 'info'
+        : 'neutral';
+  const limitationSummary = uniqueCompactValues([
+    coverageGap ? '覆盖不完整' : null,
+    formatUsBreadthLimitation(panel?.sourceAuthorityReason),
+    ...((panel?.routeRejectedReasonCodes || []).map((reason) => formatUsBreadthLimitation(reason))),
+    ...((panel?.reasonCodes || []).map((reason) => formatUsBreadthLimitation(reason))),
+    panel?.warning || null,
+  ], 3).join('；') || null;
+  const limitedMissing = coverage.missingSymbols.slice(0, 4).map((symbol) => formatUsBreadthInputLabel(symbol));
+  const missingSummary = coverageGap && (structuredMetrics || unavailable)
+    ? `缺口：${limitedMissing.join('、')}${coverage.missingSymbols.length > 4 ? ` 等${coverage.missingSymbols.length}项` : ''}`
+    : null;
+  const summary = scoreGradeReady
+    ? `当前以${sourceLabel}作为可计分宽度证据。`
+    : unavailable
+      ? '当前宽度证据不足，仅展示可用性与覆盖缺口。'
+      : coverageGap
+        ? `当前仅展示${sourceLabel}观察，宽度覆盖不完整，不按完整评分级宽度展示。`
+        : staleOrFallback
+          ? `当前仅展示${sourceLabel}观察，时效未满足计分展示。`
+          : `当前仅展示${sourceLabel}观察，不进入计分。`;
+
+  return {
+    stateLabel,
+    stateVariant,
+    sourceLabel,
+    sourceVariant: scoreGradeReady ? 'success' : proxyOnly || staleOrFallback ? 'info' : 'caution',
+    freshnessLabel,
+    freshnessVariant,
+    coverageLabel,
+    coverageVariant,
+    summary,
+    sourceDetail: panel?.sourceLabel || null,
+    missingSummary,
+    limitationSummary,
+  };
+}
+
+const UsBreadthTruthStrip: React.FC<{
+  panel?: MarketOverviewPanel;
+}> = ({ panel }) => {
+  const view = buildUsBreadthTruthStripView(panel);
+  return (
+    <div
+      data-testid="market-overview-us-breadth-truth-strip"
+      className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5"
+    >
+      <div className="flex min-w-0 flex-wrap gap-1.5">
+        <TerminalChip variant={view.stateVariant}>{view.stateLabel}</TerminalChip>
+        <TerminalChip variant={view.sourceVariant}>{view.sourceLabel}</TerminalChip>
+        <TerminalChip variant={view.freshnessVariant}>{view.freshnessLabel}</TerminalChip>
+        <TerminalChip variant={view.coverageVariant}>{view.coverageLabel}</TerminalChip>
+      </div>
+      <p className="mt-2 text-[11px] leading-5 text-white/68">{view.summary}</p>
+      {view.sourceDetail ? (
+        <p className="mt-1 text-[11px] leading-5 text-white/52">来源：{view.sourceDetail}</p>
+      ) : null}
+      {view.missingSummary ? (
+        <p className="mt-1 text-[11px] leading-5 text-white/52">{view.missingSummary}</p>
+      ) : null}
+      {view.limitationSummary ? (
+        <p className="mt-1 text-[11px] leading-5 text-white/52">限制：{view.limitationSummary}</p>
+      ) : null}
+    </div>
+  );
 }
 
 function unavailableMarketItem(symbol: string, label: string, message: string): MarketOverviewItem {
@@ -1675,6 +1971,7 @@ const ContextMetricModuleCard: React.FC<{
   panel: MarketOverviewPanel;
   sourceLabel: string;
   notice?: string;
+  insightStrip?: React.ReactNode;
   refreshing?: boolean;
   onRefresh?: () => void;
 }> = ({
@@ -1685,6 +1982,7 @@ const ContextMetricModuleCard: React.FC<{
   panel,
   sourceLabel,
   notice,
+  insightStrip,
   refreshing = false,
   onRefresh,
 }) => {
@@ -1714,6 +2012,7 @@ const ContextMetricModuleCard: React.FC<{
             />
           ) : null}
         </div>
+        {insightStrip}
         <div className="flex min-h-0 flex-col overflow-y-auto no-scrollbar border-y border-white/[0.045] ui-scroll-y-quiet">
           {visibleItems.map((item) => (
             <MarketOverviewDenseQuoteItem
@@ -1986,6 +2285,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
         notice={usBreadthDisclosure.notice}
         panel={usBreadthModulePanel}
         sourceLabel={usBreadthDisclosure.sourceLabel}
+        insightStrip={<UsBreadthTruthStrip panel={panels.usBreadth} />}
         refreshing={refreshingPanel === 'usBreadth'}
         onRefresh={() => {
           onRefreshPanel('usBreadth');

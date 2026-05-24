@@ -431,6 +431,105 @@ const polygonUsBreadthPanel = () => ({
   warning: 'High/low breadth unavailable.',
 });
 
+const officialUsBreadthPanel = () => ({
+  ...denseQuotePanel('UsBreadthCard', [
+    {
+      ...quoteItem('ADVANCERS', '上涨家数', 4123, 0, 'nyse_official_breadth'),
+      unit: '家',
+      sourceLabel: 'NYSE Official Breadth Cache',
+      sourceType: 'official_public',
+      sourceTier: 'official_public',
+      trustLevel: 'reliable',
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+      observationOnly: false,
+    },
+    {
+      ...quoteItem('DECLINERS', '下跌家数', 1834, 0, 'nyse_official_breadth'),
+      unit: '家',
+      sourceLabel: 'NYSE Official Breadth Cache',
+      sourceType: 'official_public',
+      sourceTier: 'official_public',
+      trustLevel: 'reliable',
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+      observationOnly: false,
+    },
+    {
+      ...quoteItem('UNCHANGED', '平盘家数', 201, 0, 'nyse_official_breadth'),
+      unit: '家',
+      sourceLabel: 'NYSE Official Breadth Cache',
+      sourceType: 'official_public',
+      sourceTier: 'official_public',
+      trustLevel: 'reliable',
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+      observationOnly: false,
+    },
+    {
+      ...quoteItem('ADVANCE_DECLINE_RATIO', '上涨/下跌比', 2.25, 0, 'nyse_official_breadth'),
+      unit: '',
+      sourceLabel: 'NYSE Official Breadth Cache',
+      sourceType: 'official_public',
+      sourceTier: 'official_public',
+      trustLevel: 'reliable',
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+      observationOnly: false,
+    },
+    {
+      ...quoteItem('NEW_HIGHS', '新高家数', 318, 0, 'nyse_official_breadth'),
+      unit: '家',
+      sourceLabel: 'NYSE Official Breadth Cache',
+      sourceType: 'official_public',
+      sourceTier: 'official_public',
+      trustLevel: 'reliable',
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+      observationOnly: false,
+    },
+    {
+      ...quoteItem('NEW_LOWS', '新低家数', 42, 0, 'nyse_official_breadth'),
+      unit: '家',
+      sourceLabel: 'NYSE Official Breadth Cache',
+      sourceType: 'official_public',
+      sourceTier: 'official_public',
+      trustLevel: 'reliable',
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+      observationOnly: false,
+    },
+    {
+      ...quoteItem('HIGH_LOW_RATIO', '新高/新低比', 7.57, 0, 'nyse_official_breadth'),
+      unit: '',
+      sourceLabel: 'NYSE Official Breadth Cache',
+      sourceType: 'official_public',
+      sourceTier: 'official_public',
+      trustLevel: 'reliable',
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+      observationOnly: false,
+    },
+  ], 'nyse_official_breadth'),
+  source: 'nyse_official_breadth',
+  sourceLabel: 'NYSE Official Breadth Cache',
+  sourceType: 'official_public',
+  sourceTier: 'official_public',
+  trustLevel: 'reliable',
+  freshness: 'delayed' as const,
+  isFallback: false,
+  isPartial: false,
+  officialExchangePublishedBreadth: true,
+  fulfilledMetrics: ['ADVANCERS', 'DECLINERS', 'UNCHANGED', 'ADVANCE_DECLINE_RATIO', 'NEW_HIGHS', 'NEW_LOWS', 'HIGH_LOW_RATIO'],
+  missingMetrics: [],
+  metricCoverageRatio: 1,
+  sourceAuthorityAllowed: true,
+  scoreContributionAllowed: true,
+  broadMarketClaimAllowed: true,
+  observationOnly: false,
+  routeRejectedReasonCodes: [],
+});
+
 const usBreadthUnavailablePanel = () => ({
   ...snapshotPanel('UsBreadthCard', 'SECTOR_PROXY_UNAVAILABLE', '数据暂不可用'),
   source: 'unavailable',
@@ -2916,9 +3015,35 @@ describe('MarketOverviewPage', () => {
     expect(breadthCard).toHaveTextContent(/行业 ETF 代理/);
     await waitFor(() => expect(breadthCard).toHaveTextContent(/Sectors Up|Strongest XLK|RSP vs SPY/));
     expect(breadthCard).not.toHaveTextContent(/未接入/);
+    const truthStrip = within(breadthCard).getByTestId('market-overview-us-breadth-truth-strip');
+    expect(truthStrip).toHaveTextContent('仅观察');
+    expect(truthStrip).toHaveTextContent('代理宽度');
+    expect(truthStrip).not.toHaveTextContent('评分级证据');
+    expect(truthStrip.textContent || '').not.toMatch(/买入|卖出|加仓|减仓|buy|sell|recommend/i);
 
     const sectorCard = screen.getByTestId('market-overview-card-usSectorRotation');
     await waitFor(() => expect(sectorCard).toHaveTextContent(/Sector Health|Strongest XLK|Weakest XLE/));
+  });
+
+  it('renders official full-coverage US breadth as score-grade evidence', async () => {
+    renderMarketOverviewWorkbenchWithProps({
+      panels: {
+        ...localSnapshotPayload().payload,
+        usBreadth: officialUsBreadthPanel(),
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '美股' }));
+
+    const breadthCard = await screen.findByTestId('market-overview-card-usBreadth');
+    const truthStrip = within(breadthCard).getByTestId('market-overview-us-breadth-truth-strip');
+    expect(truthStrip).toHaveTextContent('评分级证据');
+    expect(truthStrip).toHaveTextContent('官方宽度');
+    expect(truthStrip).toHaveTextContent('覆盖 7/7');
+    expect(truthStrip).toHaveTextContent('当前以官方宽度作为可计分宽度证据。');
+    expect(truthStrip).toHaveTextContent('来源：NYSE Official Breadth Cache');
+    expect(truthStrip).not.toHaveTextContent('仅观察');
+    expect(truthStrip.textContent || '').not.toMatch(/买入|卖出|加仓|减仓|buy|sell|recommend/i);
   });
 
   it('renders Polygon EOD computed US breadth with visible partial high-low gaps', async () => {
@@ -2930,6 +3055,7 @@ describe('MarketOverviewPage', () => {
 
     const breadthCard = await screen.findByTestId('market-overview-card-usBreadth');
     await waitFor(() => expect(breadthCard).toHaveTextContent(/Polygon EOD 计算宽度/));
+    const truthStrip = within(breadthCard).getByTestId('market-overview-us-breadth-truth-strip');
 
     expect(breadthCard).toHaveTextContent(/AD 指标可用/);
     expect(breadthCard).toHaveTextContent(/高低点宽度缺失/);
@@ -2942,6 +3068,12 @@ describe('MarketOverviewPage', () => {
     expect(breadthCard).toHaveTextContent(/NEW_LOWS/);
     expect(breadthCard).toHaveTextContent(/HIGH_LOW_RATIO/);
     expect(breadthCard).not.toHaveTextContent(/行业 ETF 代理|RSP vs SPY|IWM vs SPY/);
+    expect(truthStrip).toHaveTextContent('仅观察');
+    expect(truthStrip).toHaveTextContent('授权宽度');
+    expect(truthStrip).toHaveTextContent('覆盖 4/7');
+    expect(truthStrip).toHaveTextContent('宽度覆盖不完整');
+    expect(truthStrip).toHaveTextContent('高低点宽度缺失');
+    expect(truthStrip).not.toHaveTextContent('评分级证据');
     expect(breadthCard.textContent || '').not.toMatch(/买入|卖出|加仓|减仓|buy|sell|add|reduce/i);
   });
 
@@ -2955,9 +3087,13 @@ describe('MarketOverviewPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '美股' }));
     const breadthCard = await screen.findByTestId('market-overview-card-usBreadth');
+    const truthStrip = within(breadthCard).getByTestId('market-overview-us-breadth-truth-strip');
 
     await waitFor(() => expect(breadthCard).toHaveTextContent(/数据暂不可用|未接入/));
     expect(breadthCard).toHaveTextContent(/暂不可用|未接入/);
+    expect(truthStrip).toHaveTextContent('证据不足');
+    expect(truthStrip).toHaveTextContent('宽度不可用');
+    expect(truthStrip).not.toHaveTextContent('评分级证据');
     expect(within(breadthCard).queryByText(/Advance \/ decline：未接入/)).not.toBeInTheDocument();
   });
 
