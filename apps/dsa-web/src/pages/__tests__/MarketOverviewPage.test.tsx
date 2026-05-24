@@ -1884,7 +1884,9 @@ describe('MarketOverviewPage', () => {
     expect(screen.getAllByText(/标普500/i).length).toBeGreaterThan(0);
     expect(screen.queryByText('pts')).not.toBeInTheDocument();
 
-    expect(screen.getAllByTestId('market-overview-sparkline').length).toBeGreaterThanOrEqual(2);
+    await waitFor(() => {
+      expect(screen.getAllByTestId('market-overview-sparkline').length).toBeGreaterThanOrEqual(2);
+    });
     expect(screen.queryByText(/Log:/i)).not.toBeInTheDocument();
     expect(screen.queryAllByTestId('market-overview-fallback-only-notice')).toHaveLength(0);
     expect(screen.getByTestId('market-data-quality')).toBeInTheDocument();
