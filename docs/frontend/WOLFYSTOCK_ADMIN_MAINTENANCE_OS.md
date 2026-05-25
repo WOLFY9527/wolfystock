@@ -6,6 +6,18 @@ This document defines how WolfyStock admin surfaces translate backend
 diagnostics into operator-readable maintenance workflows. It is a frontend
 information architecture contract, not a backend semantics change.
 
+## Scope Boundary
+
+This document applies to admin, backstage, and maintenance routes only.
+
+It must not be used as permission to expose diagnostic details in
+consumer-facing product pages. Consumer-facing pages must follow
+`docs/frontend/WOLFYSTOCK_CONSUMER_DATA_QUALITY_UX.md`.
+
+Admin routes may expose provider names, reason codes, source-confidence
+internals, raw diagnostics, and repair actions, but only through the L0-L4
+progressive disclosure model defined in this document.
+
 ## Purpose
 
 Admin and ops pages currently expose too much developer-facing diagnostic detail
@@ -15,9 +27,9 @@ the operational question first and defer raw evidence until the operator asks
 for it.
 
 The frontend must present a maintainable, low-noise operating surface for
-routes such as Market Overview, Liquidity Monitor, Rotation Radar, Provider
-Ops, and System Settings. Raw backend fields remain available, but only through
-progressive disclosure.
+admin and maintenance views of routes such as Market Overview, Liquidity
+Monitor, Rotation Radar, Provider Ops, and System Settings. Raw backend fields
+remain available, but only through progressive disclosure.
 
 ## Core Principle
 

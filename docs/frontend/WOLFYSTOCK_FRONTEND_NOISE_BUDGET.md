@@ -1,15 +1,58 @@
 # WolfyStock Frontend Noise Budget
 
-Status: current noise-budget contract for admin and maintenance-facing
-frontend surfaces.
+Status: current noise-budget contract for consumer-facing and
+admin/maintenance frontend surfaces.
 
 This document defines the maximum default diagnostic density allowed in the
-first viewport for WolfyStock admin/ops pages. It exists to prevent frontend
-rewrites from regressing into developer-console layouts.
+first viewport for WolfyStock consumer and admin/ops pages. It exists to
+prevent frontend rewrites from regressing into either developer-console
+layouts or noisy user-facing product surfaces.
 
-## Default Viewport Budget
+## Route Split
 
-Unless a task explicitly says otherwise, the default first viewport budget is:
+Every frontend route must be classified before UI work starts:
+
+- consumer-facing product route
+- admin, backstage, or maintenance route
+
+If the route is consumer-facing, follow
+`docs/frontend/WOLFYSTOCK_CONSUMER_DATA_QUALITY_UX.md`.
+
+If the route is admin-facing, follow
+`docs/frontend/WOLFYSTOCK_ADMIN_MAINTENANCE_OS.md`.
+
+Do not mix the two disclosure models in the same default viewport.
+
+## Consumer Default Viewport Budget
+
+Unless a task explicitly says otherwise, the default first viewport budget for
+consumer-facing pages is:
+
+- max 1 soft status banner
+- max 5 compact product status chips
+- max 3 summary cards
+- max 1 line of user-safe reason per unavailable module
+- no raw reason code
+- no JSON
+- no provider trace
+- no backend field names
+- no internal provider names unless the page is explicitly admin-only
+- no maintainer remediation instructions
+- details collapsed or routed to admin-only diagnostics
+
+Consumer interpretation rules:
+
+- Consumer status should look like product behavior, not maintainer evidence.
+- One unavailable module gets at most one short user-safe explanation line.
+- If technical detail is necessary for support, route it to an admin-only path
+  rather than expanding the consumer surface.
+- Consumer cards should show outcome, confidence, and last updated state before
+  any explanation text.
+
+## Admin Default Viewport Budget
+
+Unless a task explicitly says otherwise, the default first viewport budget for
+admin and maintenance pages is:
 
 - max 1 alert banner
 - max 5 status chips
@@ -30,6 +73,8 @@ Interpretation rules:
   degradation message three times.
 - Long diagnostic prose belongs in the inspector drawer, not inline in every
   card.
+- Raw diagnostics may exist for admin pages, but they remain collapsed by
+  default.
 
 ## Component Contract
 
@@ -48,7 +93,8 @@ Purpose: expose the shortest useful explanation without opening a full panel.
 
 - Triggered from hover or focus.
 - Shows one-line reason only.
-- Must translate backend diagnostic meaning into operator language.
+- Must translate backend diagnostic meaning into either product language or
+  operator language depending on the route type.
 - Must not dump raw field names, JSON, or stacked reason-code lists.
 
 ### InspectorDrawer
@@ -98,16 +144,18 @@ Purpose: rank the operator's next steps.
 
 Default interaction contract:
 
-- chip shows status
-- hover/focus shows one-line reason
-- click opens inspector drawer
+- consumer chip -> one-line product explanation only
+- admin chip -> one-line technical reason
+- admin click -> inspector drawer
 - raw diagnostics stay collapsed
 
 Behavior rules:
 
 - Hover and focus should reveal the same short explanation for pointer and
   keyboard users.
-- Click should deepen context, not replace the chip label with inline noise.
+- Consumer hover/focus copy should stay product-safe and user-readable.
+- Admin click should deepen context without replacing the chip label with
+  inline noise.
 - Raw diagnostics require an additional deliberate disclosure inside the
   inspector drawer or detail section.
 - Users should never lose the L0/L1 operational summary when opening details.
@@ -131,6 +179,21 @@ unless each layer adds a different level of detail.
 
 ## Before / After Examples
 
+### Example 0: same issue, different surface
+
+Technical source state:
+
+`configuredProviderAvailable=false, realSourceAvailable=false,
+requiredProviderClass=authorized.us_etf_flow, proxyOnly=true`
+
+Consumer-facing after:
+
+`部分数据暂不可用，当前评分已暂停。`
+
+Admin-facing after:
+
+`Authorized ETF flow provider is unavailable. Proxy evidence only.`
+
 ### Example 1: scoring exclusion
 
 Before:
@@ -145,6 +208,10 @@ After:
 `US breadth proxy is visible for observation, but is not authorized for
 scoring.`
 
+Consumer-facing after:
+
+`当前信号置信度较低，仅供观察。`
+
 ### Example 2: provider readiness
 
 Before:
@@ -156,6 +223,11 @@ credential or entitlement, proxyOnly=true`
 After:
 
 `Authorized ETF flow provider is unavailable. Proxy evidence only.`
+
+Admin action row:
+
+`US ETF flow provider unavailable. Scoring blocked. Check authorization or
+entitlement state.`
 
 ### Example 3: stale official data
 
@@ -169,6 +241,10 @@ After:
 
 `Inflation lane is readable, but the latest official reading is stale.`
 
+Consumer-facing after:
+
+`已使用最近一次可用数据。`
+
 ### Example 4: backtest support artifact
 
 Before:
@@ -181,10 +257,32 @@ After:
 `Reproducibility bundle is incomplete. Review support artifacts before relying
 on this run.`
 
+### Example 5: reason-code and confidence compression
+
+Before:
+
+`reasonFamilies=[source_confidence, score_blocked], sourceAuthorityAllowed=false,
+scoreContributionAllowed=false, observationOnly=true`
+
+Consumer-facing after:
+
+`部分数据暂不可用，当前评分已暂停。`
+
+Admin-facing after:
+
+`Source is not authorized for scoring. Observation only.`
+
 ## Acceptance Checklist For Future Frontend Tasks
 
-Use this checklist before landing any admin/maintenance frontend rewrite:
+Use this checklist before landing a frontend rewrite:
 
+- Does this route face consumers or admins?
+- If consumer-facing, are provider names, reason codes, backend fields, and
+  raw diagnostics absent by default?
+- If admin-facing, are technical details progressively disclosed rather than
+  dumped into the first viewport?
+- Does every data-quality issue become either a graceful product state or an
+  admin action item?
 - Does the first viewport answer whether the system is usable?
 - Does the page identify what is degraded or unavailable without raw payload
   text?
