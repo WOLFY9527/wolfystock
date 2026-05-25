@@ -1195,6 +1195,35 @@ const SourceGapBoard: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ row
   </div>
 );
 
+const SourceGapDisclosure: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ rows }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <TerminalNestedBlock
+      data-testid="market-provider-source-gap-disclosure"
+      data-open={open ? 'true' : 'false'}
+      className="mt-4 bg-black/10 px-2.5 py-2"
+    >
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="truncate text-xs font-medium text-[color:var(--wolfy-text-secondary)]">数据源缺口诊断</h3>
+          <p className="mt-0.5 truncate text-[11px] text-[color:var(--wolfy-text-muted)]">
+            默认折叠，展开查看分组缺口与工作说明
+          </p>
+        </div>
+        <TerminalButton
+          variant="compact"
+          aria-expanded={open}
+          aria-label={`${open ? '收起' : '展开'} 数据源缺口诊断`}
+          onClick={() => setOpen((current) => !current)}
+        >
+          {open ? '收起' : '展开'}
+        </TerminalButton>
+      </div>
+      {open ? <SourceGapBoard rows={rows} /> : null}
+    </TerminalNestedBlock>
+  );
+};
+
 const ProviderSetupChecklistPanel: React.FC<{
   rows: ProviderOperationsMatrixRow[];
   checks: MarketDataReadinessCheck[];
@@ -1341,7 +1370,7 @@ const ProviderOperationsMatrixPanel: React.FC<{
 
       {!isLoading && rows.length ? (
         <>
-          <SourceGapBoard rows={rows} />
+          <SourceGapDisclosure rows={rows} />
           <TerminalDisclosure
             data-testid="market-provider-matrix-disclosure"
             title="完整数据源矩阵"

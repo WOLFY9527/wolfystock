@@ -618,6 +618,14 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.queryByText('Tushare token is not configured.')).not.toBeInTheDocument();
     expect(screen.queryByText('Set TUSHARE_TOKEN when local operators need Tushare-backed CN/HK market intelligence inputs.')).not.toBeInTheDocument();
     expect(screen.getByText('限制与快照摘要')).toBeInTheDocument();
+    const sourceGapDisclosure = screen.getByTestId('market-provider-source-gap-disclosure');
+    expect(sourceGapDisclosure).toHaveAttribute('data-open', 'false');
+    expect(within(sourceGapDisclosure).getByRole('button', { name: '展开 数据源缺口诊断' })).toBeInTheDocument();
+    expect(screen.queryByTestId('market-provider-source-gap-board')).not.toBeInTheDocument();
+    expect(sourceGapDisclosure).not.toHaveTextContent('P0 市场方向判断');
+    expect(sourceGapDisclosure).not.toHaveTextContent('当前为什么不可用');
+    fireEvent.click(within(sourceGapDisclosure).getByRole('button', { name: '展开 数据源缺口诊断' }));
+    expect(sourceGapDisclosure).toHaveAttribute('data-open', 'true');
     const gapBoard = screen.getByTestId('market-provider-source-gap-board');
     expect(gapBoard).toHaveTextContent('优先级路线图');
     expect(gapBoard).toHaveTextContent('P0 市场方向判断');
@@ -634,6 +642,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(gapBoard).toHaveTextContent('所需工作');
     expect(gapBoard).toHaveTextContent('阻断评分级结论：是');
     expect(gapBoard).not.toHaveTextContent('missing_provider_configuration');
+    expect(within(sourceGapDisclosure).getByRole('button', { name: '收起 数据源缺口诊断' })).toBeInTheDocument();
     expect(screen.queryByText('official_public.fed_liquidity')).not.toBeInTheDocument();
     expect(screen.getAllByText('缓存状态').length).toBeGreaterThan(0);
     expect(screen.getAllByText('最近异常').length).toBeGreaterThan(0);
@@ -756,6 +765,9 @@ describe('MarketProviderOperationsPage', () => {
     render(<MarketProviderOperationsPage />);
 
     const checklist = await screen.findByTestId('market-provider-setup-checklist');
+    const sourceGapDisclosure = screen.getByTestId('market-provider-source-gap-disclosure');
+    expect(sourceGapDisclosure).toHaveAttribute('data-open', 'false');
+    fireEvent.click(within(sourceGapDisclosure).getByRole('button', { name: '展开 数据源缺口诊断' }));
     const gapBoard = screen.getByTestId('market-provider-source-gap-board');
 
     expect(gapBoard).toHaveTextContent('补足可用性说明');
