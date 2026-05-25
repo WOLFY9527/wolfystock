@@ -107,6 +107,17 @@ FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS = (
     "auto-tune",
     "grid_search",
     "grid search",
+    "winner",
+    "winner_selection",
+    "winner selection",
+    "selected_parameters",
+    "selected parameters",
+    "trained_parameters",
+    "trained parameters",
+    "parameter_training",
+    "parameter training",
+    "training_score",
+    "training score",
 )
 
 
@@ -152,6 +163,26 @@ class BacktestApiContractTestCase(unittest.TestCase):
             assert oos_evidence["authority"]["optimizer_executed"] is False
             assert oos_evidence["authority"]["provider_calls_executed"] is False
             assert oos_evidence["authority"]["engine_math_changed"] is False
+
+        monte_carlo = dict(payload.get("monte_carlo") or {})
+        assert monte_carlo["state"] == "available"
+        assert monte_carlo["simulation_count"] == 2
+        assert len(monte_carlo["paths"]) == monte_carlo["simulation_count"]
+        assert [path["simulation_index"] for path in monte_carlo["paths"]] == [1, 2]
+        assert all(path["state"] == "completed" for path in monte_carlo["paths"])
+        assert all("total_return_pct" in path["metrics"] for path in monte_carlo["paths"])
+        assert monte_carlo["aggregate_metrics"]["total_return_pct"]["count"] == 2
+        assert monte_carlo["diagnostics"] == []
+
+        stress_tests = dict(payload.get("stress_tests") or {})
+        assert stress_tests["state"] == "available"
+        assert stress_tests["scenario_count"] == 2
+        assert [scenario["scenario_key"] for scenario in stress_tests["scenarios"]] == [
+            "single_day_shock_down_15",
+            "volatility_whipsaw",
+        ]
+        assert stress_tests["worst_scenario"]["scenario_key"] == "single_day_shock_down_15"
+        assert stress_tests["diagnostics"] == []
 
         serialized = str(BacktestApiContractTestCase._payload_without_allowed_oos_authority_flags(payload)).lower()
         for needle in FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS:
@@ -609,6 +640,9 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "seed": 4242,
                     "noise_scale": 0.5,
                 },
+                "stress_tests": {
+                    "scenario_keys": ["single_day_shock_down_15", "volatility_whipsaw"],
+                },
             },
             "walk_forward": {
                 "analysis_mode": "diagnostic_replay",
@@ -628,6 +662,53 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "aggregate_metrics": {"median_total_return_pct": 3.2},
                 "diagnostics": [],
             },
+            "monte_carlo": {
+                "state": "available",
+                "simulation_count": 2,
+                "paths": [
+                    {
+                        "simulation_index": 1,
+                        "state": "completed",
+                        "metrics": {"total_return_pct": 2.8, "max_drawdown_pct": 4.2},
+                    },
+                    {
+                        "simulation_index": 2,
+                        "state": "completed",
+                        "metrics": {"total_return_pct": 3.5, "max_drawdown_pct": 3.8},
+                    },
+                ],
+                "aggregate_metrics": {
+                    "total_return_pct": {"count": 2, "min": 2.8, "max": 3.5, "mean": 3.15},
+                    "max_drawdown_pct": {"count": 2, "min": 3.8, "max": 4.2, "mean": 4.0},
+                },
+                "diagnostics": [],
+            },
+            "stress_tests": {
+                "state": "available",
+                "scenario_count": 2,
+                "scenarios": [
+                    {
+                        "scenario_key": "single_day_shock_down_15",
+                        "label": "Single-day shock down 15%",
+                        "state": "completed",
+                        "metrics": {"total_return_pct": -1.4, "max_drawdown_pct": 6.1},
+                    },
+                    {
+                        "scenario_key": "volatility_whipsaw",
+                        "label": "Volatility whipsaw regime",
+                        "state": "completed",
+                        "metrics": {"total_return_pct": 1.1, "max_drawdown_pct": 5.2},
+                    },
+                ],
+                "worst_scenario": {
+                    "scenario_key": "single_day_shock_down_15",
+                    "label": "Single-day shock down 15%",
+                    "state": "completed",
+                    "metrics": {"total_return_pct": -1.4, "max_drawdown_pct": 6.1},
+                },
+                "diagnostics": [],
+            },
+            "diagnostics": [],
             "walk_forward_oos_evidence": {
                 "contract_kind": "backtest_walk_forward_oos_diagnostic_evidence",
                 "contract_version": "v1",

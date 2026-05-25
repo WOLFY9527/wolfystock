@@ -119,6 +119,17 @@ FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS = (
     "auto-tune",
     "grid_search",
     "grid search",
+    "winner",
+    "winner_selection",
+    "winner selection",
+    "selected_parameters",
+    "selected parameters",
+    "trained_parameters",
+    "trained parameters",
+    "parameter_training",
+    "parameter training",
+    "training_score",
+    "training score",
 )
 
 
@@ -292,6 +303,66 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         for needle in FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS:
             self.assertNotIn(needle, serialized)
 
+    def _assert_robustness_payload_is_stored_evidence_contract(self, payload: dict) -> None:
+        self.assertEqual(payload["source"], "summary.robustness_analysis")
+        metadata = dict(payload.get("contract_metadata") or {})
+        self.assertTrue(metadata.get("diagnostic_only"))
+        self.assertFalse(metadata.get("parameter_selection_executed"))
+        self.assertFalse(metadata.get("parameter_sweep_executed"))
+        self.assertFalse(metadata.get("provider_calls_executed"))
+        self.assertFalse(metadata.get("portfolio_allocation_backtest_executed"))
+        self.assertFalse(metadata.get("professional_quant_readiness_claimed"))
+        self.assertFalse(metadata.get("walk_forward_validation_claimed"))
+        self.assertEqual(
+            metadata.get("input_strategy_policy"),
+            "reuse_input_strategy_without_parameter_search",
+        )
+
+        monte_carlo = dict(payload["monte_carlo"])
+        monte_carlo_paths = list(monte_carlo["paths"])
+        self.assertEqual(monte_carlo["state"], "available")
+        self.assertEqual(monte_carlo["simulation_count"], len(monte_carlo_paths))
+        self.assertGreater(monte_carlo["simulation_count"], 0)
+        self.assertEqual(
+            [path["simulation_index"] for path in monte_carlo_paths],
+            list(range(1, monte_carlo["simulation_count"] + 1)),
+        )
+        self.assertTrue(all(path["state"] in {"completed", "no_result"} for path in monte_carlo_paths))
+        self.assertTrue(all(isinstance(path.get("metrics"), dict) for path in monte_carlo_paths))
+        self.assertIsInstance(monte_carlo["aggregate_metrics"], dict)
+        self.assertIsInstance(monte_carlo["diagnostics"], list)
+
+        stress_tests = dict(payload["stress_tests"])
+        stress_scenarios = list(stress_tests["scenarios"])
+        self.assertEqual(stress_tests["state"], "available")
+        self.assertEqual(stress_tests["scenario_count"], len(stress_scenarios))
+        self.assertEqual(
+            [scenario["scenario_key"] for scenario in stress_scenarios],
+            payload["configuration"]["stress_tests"]["scenario_keys"],
+        )
+        self.assertIn(
+            stress_tests["worst_scenario"]["scenario_key"],
+            {scenario["scenario_key"] for scenario in stress_scenarios},
+        )
+        self.assertIsInstance(stress_tests["diagnostics"], list)
+
+        oos_evidence = dict(payload["walk_forward_oos_evidence"])
+        self.assertEqual(oos_evidence["read_mode"], "stored_first")
+        self.assertTrue(oos_evidence["diagnostic_only"])
+        self.assertFalse(oos_evidence["decision_grade"])
+        self.assertEqual(
+            oos_evidence["authority"]["input_mode"],
+            "stored_robustness_analysis_walk_forward",
+        )
+        self.assertEqual(oos_evidence["authority"]["adapter_execution_count"], 0)
+        self.assertEqual(oos_evidence["authority"]["new_strategy_execution_count"], 0)
+        self.assertFalse(oos_evidence["authority"]["provider_calls_executed"])
+        self.assertFalse(oos_evidence["authority"]["engine_math_changed"])
+        self.assertFalse(oos_evidence["authority"]["strategy_parameters_mutated"])
+        self.assertFalse(oos_evidence["authority"]["optimizer_executed"])
+        self.assertFalse(oos_evidence["authority"]["parameter_sweep_executed"])
+        self._assert_robustness_payload_avoids_optimizer_semantics(payload)
+
     @staticmethod
     def _payload_without_allowed_oos_authority_flags(payload: object) -> object:
         normalized = copy.deepcopy(payload)
@@ -406,6 +477,8 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
             self.assertIn("source", http_payload)
             self.assertIsNone(http_payload["profile"])
             self.assertEqual(http_payload["source"], "summary.robustness_analysis")
+            self._assert_robustness_payload_is_stored_evidence_contract(service_payload)
+            self._assert_robustness_payload_is_stored_evidence_contract(http_payload)
             self._assert_robustness_payload_avoids_optimizer_semantics(service_payload)
             self._assert_robustness_payload_avoids_optimizer_semantics(http_payload)
         else:
@@ -599,6 +672,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 )
             )
             payloads["robustness"] = robustness_response.json()
+            self._assert_robustness_payload_is_stored_evidence_contract(payloads["robustness"])
             self._assert_robustness_payload_avoids_optimizer_semantics(payloads["robustness"])
         else:
             self.assertEqual(
@@ -664,6 +738,45 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         self.assertTrue(payloads["manifest"]["artifact_availability"]["has_execution_trace"])
         self.assertFalse(payloads["manifest"]["readback_integrity"]["used_live_storage_repair"])
         self.assertGreater(payloads["manifest"]["artifact_counts"]["execution_trace_rows_count"], 0)
+
+    def test_support_bundle_e2e_robustness_evidence_readback_uses_stored_payload_without_recompute(self) -> None:
+        service, response = self._run_completed_backtest()
+        stored_robustness = dict(response["robustness_analysis"])
+
+        with patch.object(
+            RuleBacktestService,
+            "_build_robustness_analysis",
+            side_effect=AssertionError("robustness export must not recompute robustness_analysis"),
+        ), patch.object(
+            RuleBacktestService,
+            "_build_monte_carlo_analysis",
+            side_effect=AssertionError("robustness export must not recompute monte_carlo"),
+        ), patch.object(
+            RuleBacktestService,
+            "_build_stress_test_analysis",
+            side_effect=AssertionError("robustness export must not recompute stress_tests"),
+        ), patch.object(
+            RuleBacktestService,
+            "_run_robustness_backtest",
+            side_effect=AssertionError("robustness export must not run robustness backtests"),
+        ):
+            payloads = self._assert_support_bundle_surface(
+                run_id=int(response["id"]),
+                trace_available=True,
+            )
+            self._assert_service_http_support_bundle_parity(
+                service=service,
+                run_id=int(response["id"]),
+                payloads=payloads,
+                trace_available=True,
+            )
+
+        robustness_payload = payloads["robustness"]
+        self.assertEqual(robustness_payload["configuration"], stored_robustness["configuration"])
+        self.assertEqual(robustness_payload["monte_carlo"], stored_robustness["monte_carlo"])
+        self.assertEqual(robustness_payload["stress_tests"], stored_robustness["stress_tests"])
+        self.assertEqual(robustness_payload["diagnostics"], stored_robustness["diagnostics"])
+        self._assert_robustness_payload_is_stored_evidence_contract(robustness_payload)
 
     def test_support_bundle_e2e_projects_authority_reason_families_for_local_cache_lineage(self) -> None:
         service, response = self._run_completed_backtest()
