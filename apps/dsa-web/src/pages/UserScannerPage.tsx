@@ -26,7 +26,6 @@ import {
   AdvancedDisclosure,
   FieldChip,
 } from '../components/scanner/ScannerDisplayAtoms';
-import { ScannerScoreTrustStrip } from '../components/scanner/ScannerScoreTrustStrip';
 import { ScannerStrategySimulationPanelFallback } from '../components/scanner/ScannerStrategySimulationPanelFallback';
 import {
   ScannerHistoryDrawer,
@@ -35,7 +34,6 @@ import {
 import {
   ScannerDiagnosticsPanel,
 } from '../components/scanner/ScannerDiagnosticsPanel';
-import { TrustDisclosureChips } from '../components/evidence/TrustDisclosureChips';
 import {
   useScannerBacktestLab,
 } from '../components/scanner/useScannerBacktestLab';
@@ -99,8 +97,6 @@ const LazyScannerBacktestLab = lazy(async () => {
 });
 
 const {
-  formatProviderDiagnostics,
-  getProviderDiagnostics,
   getRunProviderDiagnostics,
   hasRunDiagnosticsContent,
 } = ScannerDiagnosticsPanel;
@@ -305,6 +301,42 @@ function getScannerEvidenceSummary(candidate: ScannerCandidate | ScannerCandidat
   return payload ? normalizeScannerEvidence(payload) : null;
 }
 
+function stripScannerConsumerTrustSource(source: ScannerCandidate | ScannerCandidateDiagnostic): ScannerCandidate | ScannerCandidateDiagnostic {
+  if ('metadata' in source) {
+    return {
+      ...source,
+      metadata: {},
+    };
+  }
+  return {
+    ...source,
+    diagnostics: {},
+  };
+}
+
+function consumerTrustNoticeFromBuckets(buckets: TrustDisclosureBucket[], language: 'zh' | 'en'): string | null {
+  if (buckets.includes('stale') || buckets.includes('fallback')) {
+    return language === 'en'
+      ? 'Some results use the latest available data.'
+      : '部分结果使用最近一次可用数据。';
+  }
+  if (buckets.includes('partial') || buckets.includes('proxy')) {
+    return language === 'en'
+      ? 'Some scan data is temporarily unavailable; current results are for observation.'
+      : '部分扫描数据暂不可用，当前结果仅供观察。';
+  }
+  if (buckets.includes('confidence') || buckets.includes('observe-only')) {
+    return language === 'en'
+      ? 'Current candidate confidence is low.'
+      : '当前候选信号置信度较低。';
+  }
+  return null;
+}
+
+function getScannerConsumerQualityNotice(source: ScannerCandidate | ScannerCandidateDiagnostic, language: 'zh' | 'en'): string | null {
+  return consumerTrustNoticeFromBuckets(scannerTrustBucketsForSource(source).buckets, language);
+}
+
 function parseFirstNumericValue(value?: string | null): number | null {
   if (!value) return null;
   const match = value.match(/-?\d+(?:\.\d+)?/);
@@ -355,9 +387,9 @@ function compactScannerStateLabel(value?: string | null, language: 'zh' | 'en' =
   if (normalized === 'timeout' || normalized === 'timed_out' || normalized.includes('timeout')) return language === 'en' ? 'Timeout' : '超时';
   if (['empty', 'no_candidates', 'no_candidate', 'no_shortlist'].includes(normalized)) return language === 'en' ? 'No candidates' : '无候选';
   if (['insufficient_data', 'data_insufficient', 'not_enough_history', 'missing_history'].includes(normalized)) return language === 'en' ? 'Insufficient data' : '数据不足';
-  if (['provider_down', 'provider_error', 'provider_failed', 'data_source_error'].includes(normalized)) return language === 'en' ? 'External data unavailable' : '部分外部数据暂不可用';
-  if (['local_data', 'local', 'local_cache', 'local_snapshot'].includes(normalized)) return language === 'en' ? 'Local data' : '本地数据';
-  if (['fallback', 'fallback_data', 'degraded'].includes(normalized)) return language === 'en' ? 'Fallback data' : '备用数据';
+  if (['provider_down', 'provider_error', 'provider_failed', 'data_source_error'].includes(normalized)) return language === 'en' ? 'Data unavailable' : '数据暂不可用';
+  if (['local_data', 'local', 'local_cache', 'local_snapshot'].includes(normalized)) return language === 'en' ? 'Recent available data' : '最近可用数据';
+  if (['fallback', 'fallback_data', 'degraded'].includes(normalized)) return language === 'en' ? 'Recent available data' : '最近可用数据';
   if (['partial', 'partial_data', 'partial_success'].includes(normalized)) return language === 'en' ? 'Partial data' : '部分数据';
   if (!normalized || normalized === 'unknown') return language === 'en' ? 'Unconfirmed' : '未确认';
   return language === 'en' ? 'Unconfirmed' : '未确认';
@@ -368,7 +400,7 @@ function sanitizeScannerErrorSummary(value?: string | null, language: 'zh' | 'en
   if (!normalized) return null;
   if (normalized.includes('timeout')) return language === 'en' ? 'Timeout' : '超时';
   if (String(value || '').includes('超时')) return language === 'en' ? 'Timeout' : '超时';
-  if (normalized.includes('provider')) return language === 'en' ? 'External data unavailable' : '部分外部数据暂不可用';
+  if (normalized.includes('provider')) return language === 'en' ? 'Data unavailable' : '数据暂不可用';
   if (normalized.includes('history') || normalized.includes('missing') || normalized.includes('insufficient') || normalized.includes('not_enough')) {
     return language === 'en' ? 'Insufficient data' : '数据不足';
   }
@@ -376,8 +408,8 @@ function sanitizeScannerErrorSummary(value?: string | null, language: 'zh' | 'en
     return language === 'en' ? 'Insufficient data' : '数据不足';
   }
   if (normalized.includes('candidate') || normalized.includes('shortlist') || normalized === 'empty') return language === 'en' ? 'No candidates' : '无候选';
-  if (normalized.includes('fallback')) return language === 'en' ? 'Fallback data' : '备用数据';
-  if (normalized.includes('local')) return language === 'en' ? 'Local data' : '本地数据';
+  if (normalized.includes('fallback')) return language === 'en' ? 'Recent available data' : '最近可用数据';
+  if (normalized.includes('local')) return language === 'en' ? 'Recent available data' : '最近可用数据';
   if (normalized.includes('partial')) return language === 'en' ? 'Partial data' : '部分数据';
   if (normalized.includes('failed') || normalized.includes('error')) return language === 'en' ? 'Failed' : '失败';
   return compactScannerStateLabel(value, language);
@@ -584,7 +616,7 @@ function getDiagnosticReason(candidate: ScannerCandidateDiagnostic, language: 'z
   return candidate.reason
     || candidate.failedRules?.[0]?.replace(/_/g, ' ')
     || candidate.missingFields?.[0]
-    || (language === 'en' ? 'No diagnostic reason' : '未提供诊断原因');
+    || (language === 'en' ? 'No data note' : '未提供数据说明');
 }
 
 function normalizeDiagnosticText(value?: string | null): string {
@@ -597,8 +629,8 @@ function formatFriendlyProvider(value?: string | null, language: 'zh' | 'en' = '
   if (normalized.includes('provider down') || normalized.includes('provider error') || normalized.includes('provider failed')) return compactScannerStateLabel('provider_error', language);
   if (normalized === 'unknown') return compactScannerStateLabel('unknown', language);
   if (normalized.includes('fallback')) return compactScannerStateLabel('fallback', language);
-  if (normalized.includes('local db') || normalized.includes('local')) return language === 'en' ? 'Local data' : '本地数据';
-  return language === 'en' ? 'External data available' : '外部数据可用';
+  if (normalized.includes('local db') || normalized.includes('local')) return language === 'en' ? 'Recent available data' : '最近可用数据';
+  return language === 'en' ? 'Available' : '可用';
 }
 
 function formatFriendlyDiagnosticReason(candidate: ScannerCandidateDiagnostic, language: 'zh' | 'en'): string {
@@ -624,6 +656,8 @@ function formatFriendlyDiagnosticReason(candidate: ScannerCandidateDiagnostic, l
 }
 
 function formatCandidateDataQuality(candidate: ScannerCandidateDiagnostic, language: 'zh' | 'en'): string {
+  const trustNotice = getScannerConsumerQualityNotice(candidate, language);
+  if (trustNotice) return trustNotice;
   const status = normalizeDiagnosticStatus(candidate.status);
   const text = [
     candidate.reason,
@@ -635,7 +669,7 @@ function formatCandidateDataQuality(candidate: ScannerCandidateDiagnostic, langu
     return sanitizeUserFacingDataIssue(text || candidate.reason, language);
   }
   const provider = formatFriendlyProvider(candidate.provider, language);
-  if (provider === (language === 'en' ? 'Local data' : '本地数据')) return provider;
+  if (provider === (language === 'en' ? 'Recent available data' : '最近可用数据')) return provider;
   return language === 'en' ? 'Verified' : '已验证';
 }
 
@@ -647,9 +681,9 @@ function diagnosticStatusLabel(status: ScannerCandidateDiagnostic['status'], lan
   const labels: Record<ScannerCandidateDiagnosticStatus, { zh: string; en: string }> = {
     selected: { zh: '入选', en: 'Selected' },
     rejected: { zh: '淘汰', en: 'Rejected' },
-    data_failed: { zh: '数据失败', en: 'Data failed' },
+    data_failed: { zh: '数据受限', en: 'Limited data' },
     skipped: { zh: '跳过', en: 'Skipped' },
-    error: { zh: '错误', en: 'Error' },
+    error: { zh: '数据暂不可用', en: 'Data unavailable' },
     evaluated: { zh: '已评估', en: 'Evaluated' },
   };
   const normalizedStatus = normalizeDiagnosticStatus(status);
@@ -899,10 +933,10 @@ function buildScannerWorkbenchEmptyState({
 
   if (evidenceInsufficient) {
     return {
-      title: language === 'en' ? 'Data failed or evidence insufficient' : '数据失败或证据不足',
+      title: language === 'en' ? 'Limited data or evidence insufficient' : '数据受限或证据不足',
       body: language === 'en'
-        ? 'Switch the candidate filter to Data failed to inspect row-level reasons; retry later or open history.'
-        : '切换候选过滤到数据失败，查看行级原因；可稍后重试或打开历史记录。',
+        ? 'Switch the candidate view to Limited data to inspect row-level notes; retry later or open history.'
+        : '切换候选视图到数据受限，查看行级说明；可稍后重试或打开历史记录。',
     };
   }
 
@@ -910,25 +944,25 @@ function buildScannerWorkbenchEmptyState({
     return {
       title: language === 'en' ? 'No selected candidates' : '本次无入选候选',
       body: language === 'en'
-        ? 'Switch the candidate filter to Candidate pool or All to inspect rejected and data-failed rows, or adjust shortlist, universe, and detailed review controls in the top command bar.'
-        : '切换候选过滤到候选池或全部，查看淘汰与数据失败行；也可在顶部命令栏调整候选上限、范围或评估深度。',
+        ? 'Switch the candidate view to Candidate pool or All to inspect rejected and limited-data rows, or adjust shortlist, universe, and detailed review controls in the top command bar.'
+        : '切换候选视图到候选池或全部，查看淘汰与数据受限行；也可在顶部命令栏调整候选上限、范围或评估深度。',
     };
   }
 
   if (candidateFilter === 'data_failed') {
     return {
-      title: language === 'en' ? 'No data-failed rows in this view' : '当前无数据失败行',
+      title: language === 'en' ? 'No limited-data rows in this view' : '当前无数据受限行',
       body: language === 'en'
-        ? 'Switch the candidate filter to Candidate pool or All, or retry later if data availability changed.'
-        : '切换候选过滤到候选池或全部；如数据可用性变化，可稍后重试。',
+        ? 'Switch the candidate view to Candidate pool or All, or retry later if data availability changed.'
+        : '切换候选视图到候选池或全部；如数据可用性变化，可稍后重试。',
     };
   }
 
   return {
     title: language === 'en' ? 'No rows in the current filter' : '当前过滤无候选行',
     body: language === 'en'
-      ? 'Switch the candidate filter, inspect data-failed rows, or adjust market, universe, detailed review, and shortlist controls in the top command bar.'
-      : '切换候选过滤、查看数据失败行，或在顶部命令栏调整市场、范围、评估深度与候选上限。',
+      ? 'Switch the candidate view, inspect limited-data rows, or adjust market, universe, detailed review, and shortlist controls in the top command bar.'
+      : '切换候选视图、查看数据受限行，或在顶部命令栏调整市场、范围、评估深度与候选上限。',
   };
 }
 
@@ -955,7 +989,7 @@ function previewDecisionLabel(
   language: 'zh' | 'en',
 ): string {
   if (isOfficialSelected(candidate)) return language === 'en' ? 'Official' : '官方';
-  if (isDataUnavailable(candidate)) return language === 'en' ? 'Data failed' : '数据失败';
+  if (isDataUnavailable(candidate)) return language === 'en' ? 'Limited data' : '数据受限';
   if (isPreviewSelected(candidate, threshold)) return language === 'en' ? 'Preview' : '预览';
   return language === 'en' ? 'Rejected' : '淘汰';
 }
@@ -1579,12 +1613,7 @@ function ScannerConclusionBand({
         ? 'caution'
         : 'neutral';
   const trust = model.trustSummary;
-  const trustCounters = [
-    trust.cappedCount > 0 ? { label: language === 'en' ? 'Capped' : '封顶', value: trust.cappedCount } : null,
-    trust.fallbackCount > 0 ? { label: language === 'en' ? 'Fallback' : '备用', value: trust.fallbackCount } : null,
-    trust.proxyCount > 0 ? { label: language === 'en' ? 'Proxy' : '代理', value: trust.proxyCount } : null,
-    trust.staleCount > 0 ? { label: language === 'en' ? 'Stale' : '过期', value: trust.staleCount } : null,
-  ].filter((item): item is { label: string; value: number } => Boolean(item));
+  const trustNotice = consumerTrustNoticeFromBuckets(trust.buckets, language);
 
   return (
     <TerminalPanel
@@ -1599,29 +1628,16 @@ function ScannerConclusionBand({
           <TerminalChip variant="neutral" className="font-mono">
             {language === 'en' ? 'Candidates' : '候选'} {model.candidateCount}
           </TerminalChip>
-          {trust.limitedCount > 0 ? (
-            <TerminalChip variant="caution" className="font-mono">
-              {language === 'en' ? 'Limited' : '受限'} {trust.limitedCount}
-            </TerminalChip>
-          ) : null}
         </div>
         <p className="mt-1 text-pretty text-xs leading-relaxed text-white/64">
           {model.detail}
         </p>
       </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5 md:justify-end">
-        {trustCounters.map((item) => (
-          <TerminalChip key={item.label} variant="neutral" className="font-mono">
-            {item.label} {item.value}
-          </TerminalChip>
-        ))}
-        <TrustDisclosureChips
-          buckets={trust.buckets}
-          terms={trust.terms}
-          maxBuckets={4}
-          chipClassName="text-[11px]"
-        />
-      </div>
+      {trustNotice ? (
+        <p className="min-w-0 text-xs leading-relaxed text-white/58 md:max-w-[18rem] md:text-right">
+          {trustNotice}
+        </p>
+      ) : null}
     </TerminalPanel>
   );
 }
@@ -2407,8 +2423,8 @@ const UserScannerPage: React.FC = () => {
     backtestItem?: ScannerBacktestItem,
   ) => {
     if (!runDetail) return null;
-    const candidateProvider = getProviderDiagnostics(candidate.diagnostics);
     const ai = candidate.aiInterpretation;
+    const detailQualityNotice = getScannerConsumerQualityNotice(candidate, language);
     const outcomeItems = hasOutcome(candidate.realizedOutcome)
       ? [
         { label: language === 'en' ? 'Outcome' : '结果', value: candidate.realizedOutcome.outcomeLabel },
@@ -2442,7 +2458,11 @@ const UserScannerPage: React.FC = () => {
                 </span>
               </div>
               <p className="mt-1 truncate text-xs text-white/42">{candidate.companyName || candidate.name || candidate.symbol || '--'}</p>
-              <ScannerScoreTrustStrip sources={[candidate]} language={language} className="mt-2 max-w-[32rem]" testId={`scanner-detail-score-trust-${getCandidateIdentity(candidate)}`} />
+              {detailQualityNotice ? (
+                <p className="mt-2 max-w-[32rem] text-[11px] leading-relaxed text-white/52">
+                  {detailQualityNotice}
+                </p>
+              ) : null}
             </div>
             <div className="shrink-0 text-right">
               <p className="text-[10px] uppercase tracking-[0.14em] text-white/36">{language === 'en' ? 'Score' : '评分'}</p>
@@ -2480,7 +2500,6 @@ const UserScannerPage: React.FC = () => {
           <div className="grid gap-1.5 rounded-xl border border-white/8 bg-black/15 p-3">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[10px] uppercase tracking-[0.14em] text-white/36">{language === 'en' ? 'Key metrics' : '关键指标'}</span>
-              {candidateProvider ? <span className="truncate text-[10px] text-white/42">{formatProviderDiagnostics(candidateProvider, language)}</span> : null}
             </div>
             <div className="grid gap-1.5">
               {compactMetricItems.map((item) => (
@@ -2545,7 +2564,7 @@ const UserScannerPage: React.FC = () => {
         <AdvancedDisclosure
           testId={`scanner-result-detail-more-${getCandidateIdentity(candidate)}`}
           title={language === 'en' ? 'More detail' : '更多细节'}
-          summary={language === 'en' ? 'Evidence, signals, source notes' : '证据、信号、来源说明'}
+          summary={language === 'en' ? 'Data notes, signals, supporting context' : '数据说明、信号、补充信息'}
           icon="more"
         >
           <div className="max-h-[min(34vh,20rem)] overflow-y-auto no-scrollbar ui-scroll-y-quiet">
@@ -2568,7 +2587,7 @@ const UserScannerPage: React.FC = () => {
               aiLines={compactAiLines}
               aiUnavailableText={sanitizeScannerUserText(ai?.status, language, language === 'en' ? 'AI interpretation not available' : 'AI 解读不可用')}
               outcomeItems={outcomeItems}
-              providerNotes={candidateProvider ? formatProviderDiagnostics(candidateProvider, language) : null}
+              providerNotes={null}
               onAnalyze={() => void handleAnalyzeCandidate(candidate)}
               onCopy={() => void handleCopyText(candidate.symbol, `candidate:${candidate.symbol}`)}
               onExport={() => handleExportRows(
@@ -2617,7 +2636,7 @@ const UserScannerPage: React.FC = () => {
   const scannerStatusItems = [
     { label: language === 'en' ? 'Universe' : '范围', value: scannerScopeLabel },
     { label: language === 'en' ? 'Theme' : '主题', value: scannerThemeLabel },
-    { label: language === 'en' ? 'Selected / rejected / data failed' : '入选 / 淘汰 / 数据失败', value: `${shortlistCount} / ${runDetail?.summary?.rejectedCount ?? 0} / ${runDetail?.summary?.dataFailedCount ?? 0}` },
+    { label: language === 'en' ? 'Selected / rejected / limited data' : '入选 / 淘汰 / 数据受限', value: `${shortlistCount} / ${runDetail?.summary?.rejectedCount ?? 0} / ${runDetail?.summary?.dataFailedCount ?? 0}` },
     { label: language === 'en' ? 'Latest' : '最近', value: generatedAt ? formatTimestamp(generatedAt, language) : '--' },
     { label: language === 'en' ? 'Data' : '数据', value: scannerDataStateLabel },
   ];
@@ -2924,12 +2943,12 @@ const UserScannerPage: React.FC = () => {
                       <div className="flex min-w-0 flex-row flex-wrap items-center gap-2">
                         {runDetail && hasCandidateDiagnostics ? (
                           <div data-testid="scanner-compact-filter-bar" className="min-w-0">
-                            <div data-testid="scanner-candidate-filters" className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1 border-r border-white/10 pr-2" role="group" aria-label={language === 'en' ? 'Candidate diagnostics filter' : '候选诊断过滤'}>
+                            <div data-testid="scanner-candidate-filters" className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1 border-r border-white/10 pr-2" role="group" aria-label={language === 'en' ? 'Candidate view' : '候选视图'}>
                               {([
                                 ['selected', language === 'en' ? 'Selected' : '入选'],
                                 ['pool', language === 'en' ? 'Candidate pool' : '候选池'],
                                 ['rejected', language === 'en' ? 'Rejected' : '淘汰'],
-                                ['data_failed', language === 'en' ? 'Data failed' : '数据失败'],
+                                ['data_failed', language === 'en' ? 'Limited data' : '数据受限'],
                                 ['all', language === 'en' ? 'All' : '全部'],
                               ] as const).map(([key, label]) => (
                                 <button
@@ -2975,7 +2994,7 @@ const UserScannerPage: React.FC = () => {
                               [language === 'en' ? 'Evaluated' : '已评估', runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize],
                               [language === 'en' ? 'Selected' : '入选', runDetail.summary?.selectedCount ?? shortlistCount],
                               [language === 'en' ? 'Rejected' : '淘汰', runDetail.summary?.rejectedCount ?? 0],
-                              [language === 'en' ? 'Data failed' : '数据失败', runDetail.summary?.dataFailedCount ?? 0],
+                              [language === 'en' ? 'Limited data' : '数据受限', runDetail.summary?.dataFailedCount ?? 0],
                             ].map(([label, value]) => (
                               <span key={String(label)} className="inline-flex items-baseline gap-1 rounded-md border border-white/8 bg-white/[0.03] px-2 py-0.5">
                                 <span className="text-white/36">{label}</span>
@@ -3098,9 +3117,9 @@ const UserScannerPage: React.FC = () => {
                                       dataQualityLabel={formatCandidateDataQuality(candidate, language)}
                                       watchSummary={formatWorkbenchWatchSummary(sourceCandidate, language)}
                                       rangeSummary={formatWorkbenchRangeSummary(sourceCandidate, language)}
-                                      evidenceSummary={getScannerEvidenceSummary(candidate)}
+                                      evidenceSummary={null}
                                       scoreLabel={candidate.score == null ? '--' : `${candidate.score}/100`}
-                                      trustSources={[sourceCandidate, candidate]}
+                                      trustSources={[stripScannerConsumerTrustSource(sourceCandidate), stripScannerConsumerTrustSource(candidate)]}
                                       scoreDelta={formatScoreDelta(comparison?.scoreDelta ?? null)}
                                       comparisonLabel={comparison?.label || null}
                                       statusLabel={diagnosticStatusLabel(candidate.status, language)}
@@ -3232,7 +3251,7 @@ const UserScannerPage: React.FC = () => {
                           {rejectionBuckets.length || hasRunDiagnosticsContent(runDetail) ? (
                             <AdvancedDisclosure
                               testId="scanner-diagnostics-disclosure"
-                              title={language === 'en' ? 'Diagnostics' : '诊断'}
+                              title={language === 'en' ? 'Data notes' : '数据说明'}
                               summary={language === 'en'
                                 ? `Evaluated ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · main rejection ${rejectionBuckets[0]?.label || 'n/a'}`
                                 : `评估 ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · 主要淘汰 ${rejectionBuckets[0]?.label || '暂无'}`}
