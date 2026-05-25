@@ -23,7 +23,6 @@ import {
   TerminalDisclosure,
   TerminalGrid,
   TerminalMetric,
-  TerminalNotice,
   TerminalPageHeading,
   TerminalPanel,
   TerminalSectionHeader,
@@ -39,7 +38,6 @@ import {
   buildLiquidityRegimeGaugeSummary,
   decisionReadinessStateLabel,
   decisionReadinessVariant,
-  sanitizeMarketGuidanceCopy,
   type DecisionReadinessState,
   type DecisionReadinessSummary,
   type LiquidityRegimeGaugeSummary,
@@ -975,7 +973,7 @@ function buildLiquidityMainGapLine(
 }
 
 type ConsumerLiquidityStatusView = {
-  availabilityLabel: '可用' | '部分可用' | '暂不可用';
+  availabilityLabel: '正常' | '观察中' | '暂不可用';
   availabilityVariant: 'success' | 'info' | 'neutral';
   scoringLabel: '评分可用' | '评分已暂停';
   scoringVariant: 'success' | 'caution';
@@ -984,8 +982,6 @@ type ConsumerLiquidityStatusView = {
   freshnessChipLabel: string;
   freshnessVariant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
   headline: string;
-  notice: string | null;
-  noticeVariant: 'info' | 'caution' | 'danger';
   availabilityDetail: string;
   scoringDetail: string;
   freshnessSummary: string;
@@ -1011,8 +1007,8 @@ function buildConsumerLiquidityStatusView(
     || coverageSummary.missingOrUnavailableCount >= Math.max(2, Math.ceil(indicators.length * 0.75))
     ? '暂不可用'
     : coverageSummary.missingOrUnavailableCount > 0 || limitedConfidence || coverageSummary.observationOnlyCount > 0
-      ? '部分可用'
-      : '可用';
+      ? '观察中'
+      : '正常';
   const freshnessSummary = data.freshness.status === 'live'
     ? '已更新'
     : data.freshness.status === 'delayed'
@@ -1022,39 +1018,28 @@ function buildConsumerLiquidityStatusView(
         : data.freshness.status === 'stale' || data.freshness.status === 'fallback' || data.freshness.status === 'mock'
           ? '已使用最近一次可用数据'
           : '暂不可用';
-  const notice = availabilityLabel === '暂不可用'
-    ? '本模块暂不可用，请稍后重试。'
-    : scoringPaused && coverageSummary.missingOrUnavailableCount > 0
-      ? '部分流动性数据暂不可用，当前评分已暂停。'
-      : data.freshness.status === 'delayed'
-        ? '数据更新中，稍后将自动刷新。'
-        : limitedConfidence
-          ? '当前流动性信号置信度较低，仅供观察。'
-          : freshnessSummary === '已使用最近一次可用数据'
-            ? '已使用最近一次可用数据。'
-            : null;
 
   return {
     availabilityLabel,
-    availabilityVariant: availabilityLabel === '可用' ? 'success' : availabilityLabel === '部分可用' ? 'info' : 'neutral',
+    availabilityVariant: availabilityLabel === '正常' ? 'success' : availabilityLabel === '观察中' ? 'info' : 'neutral',
     scoringLabel: scoringPaused ? '评分已暂停' : '评分可用',
     scoringVariant: scoringPaused ? 'caution' : 'success',
     confidenceLabel: limitedConfidence ? '置信度受限' : '置信度稳定',
     confidenceVariant: limitedConfidence ? 'info' : 'success',
     freshnessChipLabel: FRESHNESS_LABELS[data.freshness.status],
     freshnessVariant: chipVariantForFreshness(data.freshness.status),
-    headline: availabilityLabel === '可用'
-      ? '当前流动性读数可继续观察。'
-      : availabilityLabel === '部分可用'
-        ? '当前流动性读数部分可用。'
-        : '当前流动性模块暂不可用。',
-    notice,
-    noticeVariant: availabilityLabel === '暂不可用' ? 'danger' : scoringPaused ? 'caution' : 'info',
-    availabilityDetail: unavailableModules.length > 0
-      ? `当前受限模块：${unavailableModules.join('、')}。`
-      : availabilityLabel === '可用'
-        ? '当前主要流动性读数已返回。'
-        : '当前部分流动性读数仍在恢复中。',
+    headline: availabilityLabel === '暂不可用'
+      ? '当前流动性数据暂不可用，稍后自动重试。'
+      : availabilityLabel === '观察中'
+        ? '当前流动性信号仍在观察中，先关注状态变化。'
+        : '当前流动性状态正常，可继续观察。',
+    availabilityDetail: availabilityLabel === '暂不可用'
+      ? '当前流动性数据暂不可用，稍后自动重试。'
+      : availabilityLabel === '观察中'
+        ? unavailableModules.length > 0
+          ? `当前以观察状态为主，受影响项：${unavailableModules.join('、')}。`
+          : '当前仍有部分信号待恢复，先保持观察。'
+        : '当前主要流动性读数已返回，可继续观察。',
     scoringDetail: availabilityLabel === '暂不可用'
       ? '本模块暂不可用，请稍后重试。'
       : limitedConfidence
@@ -1097,6 +1082,44 @@ const LiquiditySetupPath: React.FC<{ testId: string }> = ({ testId }) => (
   </div>
 );
 
+const ConsumerDisclosure: React.FC<{
+  testId: string;
+  title: string;
+  summary: string;
+  className?: string;
+  children: React.ReactNode;
+}> = ({ testId, title, summary, className, children }) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div
+      data-testid={testId}
+      data-terminal-primitive="disclosure"
+      className={cn(
+        'rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-2 text-xs transition-colors hover:border-[color:var(--wolfy-divider)]',
+        className,
+      )}
+    >
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="truncate text-xs font-medium text-[color:var(--wolfy-text-secondary)]">{title}</h3>
+          <p className="mt-0.5 truncate text-[11px] text-[color:var(--wolfy-text-muted)]">{summary}</p>
+        </div>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={`${open ? '收起' : '展开'} ${title}`}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-transparent px-2 py-1 text-[11px] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)]"
+          onClick={() => setOpen((current) => !current)}
+        >
+          <span>{open ? '收起' : '展开'}</span>
+        </button>
+      </div>
+      {open ? <div className="mt-2">{children}</div> : null}
+    </div>
+  );
+};
+
 const DecisionReadinessBand: React.FC<{
   summary: DecisionReadinessSummary;
   coverageSummary: LiquidityCoverageReadinessSummary;
@@ -1137,16 +1160,9 @@ const DecisionReadinessBand: React.FC<{
             <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
               <TerminalChip variant={consumerView.availabilityVariant}>{consumerView.availabilityLabel}</TerminalChip>
               <TerminalChip variant={consumerView.scoringVariant}>{consumerView.scoringLabel}</TerminalChip>
-              <TerminalChip variant={consumerView.confidenceVariant}>{consumerView.confidenceLabel}</TerminalChip>
               <TerminalChip variant={consumerView.freshnessVariant}>{consumerView.freshnessChipLabel}</TerminalChip>
             </div>
           </div>
-
-          {consumerView.notice ? (
-            <TerminalNotice variant={consumerView.noticeVariant} className="mt-4">
-              {consumerView.notice}
-            </TerminalNotice>
-          ) : null}
 
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3">
@@ -1165,6 +1181,19 @@ const DecisionReadinessBand: React.FC<{
               <p className="mt-1 text-[11px] leading-5 text-white/56">{consumerView.freshnessDetail}</p>
             </div>
           </div>
+
+          <ConsumerDisclosure
+            testId="liquidity-monitor-consumer-details"
+            title="查看数据说明"
+            summary="默认折叠"
+            className="mt-4 bg-black/10"
+          >
+            <div className="grid gap-2 text-[11px] leading-5 text-white/56">
+              <p>当前页面默认只展示流动性状态、评分状态与最近更新，避免把内部诊断信息直接放到主视图。</p>
+              <p>当状态为观察中时，表示部分信号仍在恢复或置信度受限，页面会继续自动刷新。</p>
+              <p>当状态为暂不可用时，表示当前不适合给出完整流动性读数，稍后会再次尝试更新。</p>
+            </div>
+          </ConsumerDisclosure>
         </div>
       </section>
     );
@@ -1540,16 +1569,7 @@ const LiquidityMonitorPage: React.FC = () => {
       <TerminalPageHeading
         eyebrow="流动性"
         title="流动性监测"
-        action={
-          <TerminalChip variant={data ? chipVariantForFreshness(data.freshness.status) : 'neutral'}>
-            {data ? FRESHNESS_LABELS[data.freshness.status] : '加载中'}
-          </TerminalChip>
-        }
       />
-
-      <TerminalNotice variant="info">
-        {sanitizeMarketGuidanceCopy(data?.advisoryDisclosure, '仅用于观察市场流动性环境，非投资建议，不触发扫描、回测或组合动作。')}
-      </TerminalNotice>
 
       {error ? <ApiErrorAlert error={error} /> : null}
 

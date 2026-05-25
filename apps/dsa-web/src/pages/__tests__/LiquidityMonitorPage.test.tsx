@@ -621,13 +621,16 @@ describe('LiquidityMonitorPage', () => {
     expect(pageShell).toHaveClass('max-w-[1840px]');
     const guidancePanel = screen.getByTestId('liquidity-monitor-guidance-panel');
     expect(guidancePanel).toHaveTextContent('流动性状态');
-    expect(guidancePanel).toHaveTextContent('部分可用');
+    expect(guidancePanel).toHaveTextContent('观察中');
     expect(guidancePanel).toHaveTextContent('评分状态');
     expect(guidancePanel).toHaveTextContent('评分已暂停');
-    expect(guidancePanel).toHaveTextContent('数据更新');
+    expect(guidancePanel).toHaveTextContent('最近更新');
     expect(guidancePanel).toHaveTextContent('当前流动性信号置信度较低，仅供观察。');
     expect(screen.getAllByText('延迟').length).toBeGreaterThan(0);
-    expect(screen.getByText('仅用于观察市场流动性环境，非投资建议，不触发扫描、回测或组合动作。')).toBeInTheDocument();
+    const disclosure = screen.getByTestId('liquidity-monitor-consumer-details');
+    expect(disclosure).toHaveAttribute('data-terminal-primitive', 'disclosure');
+    expect(disclosure).not.toHaveAttribute('open');
+    expect(within(disclosure).getByRole('button', { name: '展开 查看数据说明' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByTestId('liquidity-monitor-admin-details')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '展开 技术细节' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('liquidity-impulse-synthesis-header')).not.toBeInTheDocument();
@@ -664,13 +667,15 @@ describe('LiquidityMonitorPage', () => {
     render(<LiquidityMonitorPage />);
 
     const guidancePanel = await screen.findByTestId('liquidity-monitor-guidance-panel');
-    expect(guidancePanel).toHaveTextContent('部分流动性数据暂不可用，当前评分已暂停。');
-    expect(guidancePanel).toHaveTextContent('当前受限模块');
+    expect(guidancePanel).toHaveTextContent('当前流动性信号仍在观察中，先关注状态变化。');
+    expect(guidancePanel).toHaveTextContent('流动性状态');
+    expect(guidancePanel).toHaveTextContent('评分状态');
     expect(guidancePanel).toHaveTextContent('最近更新');
-    expect(guidancePanel).toHaveTextContent('美国利率压力');
-    expect(guidancePanel).toHaveTextContent('Crypto 资金费率');
+    expect(screen.getByTestId('liquidity-monitor-consumer-details')).toHaveTextContent('查看数据说明');
+    expect(screen.queryByText('美国利率压力')).not.toBeInTheDocument();
+    expect(screen.queryByText('Crypto 资金费率')).not.toBeInTheDocument();
     expect(guidancePanel.textContent || '').not.toMatch(
-      /score_contribution_not_allowed|source_authority_router_rejected|provider_unavailable|fallback_source|sourceAuthorityAllowed|scoreContributionAllowed|Liquidity Regime Gauge|Proxy-only/i,
+      /score_contribution_not_allowed|source_authority_router_rejected|provider_unavailable|fallback_source|sourceAuthorityAllowed|scoreContributionAllowed|Liquidity Regime Gauge|Proxy-only|Details|provider|fallback|reason|runtime|diagnostic/i,
     );
   });
 

@@ -180,8 +180,10 @@ test.describe('Liquidity Monitor degraded proxy-only state', () => {
         await expect(guidancePanel).toContainText('本模块暂不可用，请稍后重试。');
         await expect(guidancePanel).toContainText('评分已暂停');
         await expect(guidancePanel).toContainText('暂不可用');
-        await expect(guidancePanel).toContainText('当前受限模块');
+        await expect(guidancePanel).toContainText('当前流动性数据暂不可用，稍后自动重试。');
         await expect(guidancePanel).toContainText('已使用最近一次可用数据');
+        await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('查看数据说明');
+        await expect(page.getByTestId('liquidity-decision-readiness')).not.toContainText('当前受限模块');
         await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('数据更新');
         await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('最近更新');
         await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('评分状态');
