@@ -23,6 +23,7 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     get_backtest_performance,
     get_backtest_stock_performance,
     get_rule_backtest_robustness_evidence_json,
+    get_rule_backtest_regime_attribution_readiness_json,
     get_rule_backtest_execution_trace_csv,
     get_rule_backtest_execution_trace_json,
     get_rule_backtest_support_bundle_reproducibility_manifest,
@@ -55,6 +56,7 @@ from api.v1.schemas.backtest import (  # noqa: E402
     RuleBacktestUniverseJobResponse,
     RuleBacktestUniverseResultsResponse,
     RuleBacktestExecutionTraceExportResponse,
+    RuleBacktestRegimeAttributionReadinessExportResponse,
     RuleBacktestRobustnessEvidenceExportResponse,
     RuleBacktestSupportExportIndexResponse,
     RuleBacktestSupportBundleManifestResponse,
@@ -803,6 +805,66 @@ class BacktestApiContractTestCase(unittest.TestCase):
             },
         }
 
+    @staticmethod
+    def _regime_attribution_readiness_payload() -> dict:
+        return {
+            "exportKind": "rule_backtest_regime_attribution_readiness",
+            "version": "v1",
+            "runId": 123,
+            "code": "600519",
+            "status": "completed",
+            "timeframe": "daily",
+            "period": {"start": "2025-01-01", "end": "2025-12-31"},
+            "source": "stored_rule_backtest_readback_projection",
+            "readMode": "stored_first",
+            "storedFirst": True,
+            "diagnosticOnly": True,
+            "engineReexecuted": False,
+            "mathChanged": False,
+            "attributionEngineAvailable": False,
+            "pnlCausalityAvailable": False,
+            "runtimeEngineStatement": "not_a_runtime_attribution_engine",
+            "mathSnapshot": {
+                "trade_count": 0,
+                "total_return_pct": 0.0,
+                "max_drawdown_pct": 0.0,
+                "win_rate_pct": 0.0,
+                "final_equity": 100000.0,
+            },
+            "evidenceAvailability": {
+                "trades": {"available": False, "availabilityReason": "stored_trade_rows_missing"},
+                "dailyAudit": {"available": False, "availabilityReason": "stored_audit_rows_missing"},
+            },
+            "gapReasons": [
+                {
+                    "code": "missing_date_level_market_regime_labels",
+                    "message": "Date-level market regime labels are not stored on the run.",
+                },
+                {
+                    "code": "missing_regime_source_version",
+                    "message": "No regime source or version is stored for reproducible attribution.",
+                },
+                {
+                    "code": "missing_trade_to_regime_join_policy",
+                    "message": "No policy exists for joining trades to market regime labels.",
+                },
+                {
+                    "code": "missing_daily_pnl_allocation_policy",
+                    "message": "No policy exists for allocating daily PnL across regimes.",
+                },
+                {
+                    "code": "missing_holding_period_allocation_rules",
+                    "message": "No rules exist for assigning multi-day holding periods to regimes.",
+                },
+            ],
+            "limitations": [
+                "diagnostic_readiness_projection_only",
+                "not_a_runtime_attribution_engine",
+                "no_market_regime_classification",
+                "no_pnl_by_regime_allocation",
+            ],
+        }
+
     @classmethod
     def _support_export_index_payload(cls, *, status: str = "completed", robustness_available: bool = True) -> dict:
         run_payload = cls._rule_run_payload(status=status)
@@ -865,6 +927,16 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "endpoint_path": f"/api/v1/backtest/rule/runs/{run_id}/robustness-evidence.json",
                     "payload_class": "heavy",
                 },
+                {
+                    "key": "regime_attribution_readiness_json",
+                    "available": True,
+                    "availability_reason": "run_exists_readiness_projection_available",
+                    "format": "json",
+                    "media_type": "application/json",
+                    "delivery_mode": "api",
+                    "endpoint_path": f"/api/v1/backtest/rule/runs/{run_id}/regime-attribution-readiness.json",
+                    "payload_class": "compact",
+                },
             ],
         }
 
@@ -896,6 +968,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
             )
         else:
             service.get_robustness_evidence_export_json.return_value = robustness_payload
+        regime_readiness_payload = self._regime_attribution_readiness_payload()
+        service.get_regime_attribution_readiness_export.return_value = regime_readiness_payload
 
         with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
             manifest_response = get_rule_backtest_support_bundle_manifest(123, db_manager=MagicMock())
@@ -904,12 +978,20 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 db_manager=MagicMock(),
             )
             export_index_response = get_rule_backtest_support_export_index(123, db_manager=MagicMock())
+            readiness_response = get_rule_backtest_regime_attribution_readiness_json(
+                123,
+                db_manager=MagicMock(),
+            )
 
             self.assertEqual(manifest_response.run["id"], 123)
             self.assertEqual(reproducibility_response.run["id"], 123)
             self.assertEqual(export_index_response.run_id, 123)
+            self.assertEqual(readiness_response.runId, 123)
             self.assertEqual(manifest_response.run["status"], export_index_response.status)
             self.assertEqual(reproducibility_response.run["status"], export_index_response.status)
+            self.assertTrue(readiness_response.diagnosticOnly)
+            self.assertFalse(readiness_response.engineReexecuted)
+            self.assertFalse(readiness_response.mathChanged)
             self.assertEqual(manifest_response.run_timing, reproducibility_response.run_timing)
             self.assertEqual(manifest_response.run_diagnostics, reproducibility_response.run_diagnostics)
             self.assertEqual(manifest_response.artifact_availability, reproducibility_response.artifact_availability)
@@ -962,6 +1044,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "execution_trace_json",
                     "execution_trace_csv",
                     "robustness_evidence_json",
+                    "regime_attribution_readiness_json",
                 ],
             )
             self.assertEqual(
@@ -972,6 +1055,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "/api/v1/backtest/rule/runs/123/execution-trace.json",
                     "/api/v1/backtest/rule/runs/123/execution-trace.csv",
                     "/api/v1/backtest/rule/runs/123/robustness-evidence.json",
+                    "/api/v1/backtest/rule/runs/123/regime-attribution-readiness.json",
                 ],
             )
             self.assertEqual(
@@ -985,6 +1069,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     ("json", "application/json", "api", "heavy"),
                     ("csv", "text/csv", "api", "heavy"),
                     ("json", "application/json", "api", "heavy"),
+                    ("json", "application/json", "api", "compact"),
                 ],
             )
             self.assertEqual(manifest_response.manifest_kind, "rule_backtest_support_bundle")
@@ -1096,6 +1181,12 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 )
                 self.assertEqual(robustness_response.model_dump(), robustness_payload)
                 self._assert_robustness_payload_stays_research_prototype(robustness_response.model_dump())
+            self.assertEqual(readiness_response.model_dump(), regime_readiness_payload)
+            self.assertTrue(export_index_response.exports[5].available)
+            self.assertEqual(
+                export_index_response.exports[5].availability_reason,
+                "run_exists_readiness_projection_available",
+            )
 
     def test_run_rule_backtest_async_path_enqueues_background_processing(self) -> None:
         request = RuleBacktestRunRequest(
@@ -2704,7 +2795,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertIsInstance(response, RuleBacktestSupportExportIndexResponse)
         self.assertEqual(response.run_id, 123)
         self.assertEqual(response.status, "completed")
-        self.assertEqual(len(response.exports), 5)
+        self.assertEqual(len(response.exports), 6)
         self.assertEqual(
             [item.key for item in response.exports],
             [
@@ -2713,6 +2804,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "execution_trace_json",
                 "execution_trace_csv",
                 "robustness_evidence_json",
+                "regime_attribution_readiness_json",
             ],
         )
         self.assertEqual(response.exports[0].key, "support_bundle_manifest_json")
@@ -2752,6 +2844,14 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(
             response.exports[4].endpoint_path,
             "/api/v1/backtest/rule/runs/123/robustness-evidence.json",
+        )
+        self.assertEqual(response.exports[5].key, "regime_attribution_readiness_json")
+        self.assertTrue(response.exports[5].available)
+        self.assertEqual(response.exports[5].payload_class, "compact")
+        self.assertEqual(response.exports[5].delivery_mode, "api")
+        self.assertEqual(
+            response.exports[5].endpoint_path,
+            "/api/v1/backtest/rule/runs/123/regime-attribution-readiness.json",
         )
         service.get_support_export_index.assert_called_once_with(123)
 
@@ -2819,6 +2919,47 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(ctx.exception.detail["error"], "export_unavailable")
         service.get_robustness_evidence_export_json.assert_called_once_with(123)
 
+    def test_get_rule_backtest_regime_attribution_readiness_json_returns_stored_projection(self) -> None:
+        service = MagicMock()
+        service.get_regime_attribution_readiness_export.return_value = (
+            self._regime_attribution_readiness_payload()
+        )
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_regime_attribution_readiness_json(123, db_manager=MagicMock())
+
+        self.assertIsInstance(response, RuleBacktestRegimeAttributionReadinessExportResponse)
+        self.assertEqual(response.exportKind, "rule_backtest_regime_attribution_readiness")
+        self.assertEqual(response.readMode, "stored_first")
+        self.assertTrue(response.diagnosticOnly)
+        self.assertFalse(response.engineReexecuted)
+        self.assertFalse(response.mathChanged)
+        self.assertFalse(response.attributionEngineAvailable)
+        self.assertFalse(response.pnlCausalityAvailable)
+        self.assertEqual(
+            [item["code"] for item in response.gapReasons],
+            [
+                "missing_date_level_market_regime_labels",
+                "missing_regime_source_version",
+                "missing_trade_to_regime_join_policy",
+                "missing_daily_pnl_allocation_policy",
+                "missing_holding_period_allocation_rules",
+            ],
+        )
+        service.get_regime_attribution_readiness_export.assert_called_once_with(123)
+
+    def test_get_rule_backtest_regime_attribution_readiness_json_returns_not_found(self) -> None:
+        service = MagicMock()
+        service.get_regime_attribution_readiness_export.side_effect = ValueError("Run 123 not found.")
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            with self.assertRaises(HTTPException) as ctx:
+                get_rule_backtest_regime_attribution_readiness_json(123, db_manager=MagicMock())
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(ctx.exception.detail["error"], "not_found")
+        service.get_regime_attribution_readiness_export.assert_called_once_with(123)
+
     def test_get_rule_backtest_execution_trace_csv_returns_csv_response(self) -> None:
         service = MagicMock()
         service.get_execution_trace_export_csv_text.return_value = "日期,动作\r\n2024-01-02,买\r\n"
@@ -2860,6 +3001,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertFalse(response.exports[2].available)
         self.assertFalse(response.exports[3].available)
         self.assertTrue(response.exports[4].available)
+        self.assertTrue(response.exports[5].available)
         self.assertEqual(response.exports[2].availability_reason, "execution_trace_rows_missing")
         self.assertEqual(response.exports[3].availability_reason, "execution_trace_rows_missing")
 

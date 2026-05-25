@@ -251,6 +251,269 @@ def build_support_bundle_reproducibility_manifest(run: Mapping[str, Any]) -> dic
     return manifest
 
 
+REGIME_ATTRIBUTION_READINESS_GAP_REASONS: list[dict[str, str]] = [
+    {
+        "code": "missing_date_level_market_regime_labels",
+        "message": "Date-level market regime labels are not stored on the run.",
+    },
+    {
+        "code": "missing_regime_source_version",
+        "message": "No regime source or version is stored for reproducible attribution.",
+    },
+    {
+        "code": "missing_trade_to_regime_join_policy",
+        "message": "No policy exists for joining trades to market regime labels.",
+    },
+    {
+        "code": "missing_daily_pnl_allocation_policy",
+        "message": "No policy exists for allocating daily PnL across regimes.",
+    },
+    {
+        "code": "missing_holding_period_allocation_rules",
+        "message": "No rules exist for assigning multi-day holding periods to regimes.",
+    },
+]
+
+
+def _list_payload(value: Any) -> list[Any]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return []
+    return list(value)
+
+
+def _summary_payload(run: Mapping[str, Any]) -> dict[str, Any]:
+    return _mapping_payload(run.get("summary"))
+
+
+def _first_mapping_payload(*values: Any) -> dict[str, Any]:
+    for value in values:
+        payload = _mapping_payload(value)
+        if payload:
+            return payload
+    return {}
+
+
+def _availability_payload(
+    *,
+    available: bool,
+    available_reason: str,
+    missing_reason: str,
+    **extra: Any,
+) -> dict[str, Any]:
+    payload = {
+        "available": bool(available),
+        "availabilityReason": available_reason if available else missing_reason,
+    }
+    payload.update(extra)
+    return payload
+
+
+def _domain_summary(result_authority: Mapping[str, Any], domain_name: str) -> dict[str, Any]:
+    domains = _mapping_payload(result_authority.get("domains"))
+    domain = _mapping_payload(domains.get(domain_name))
+    if not domain:
+        return {
+            "available": False,
+            "availabilityReason": f"{domain_name}_authority_missing",
+        }
+
+    state = _text_or_unknown(domain.get("state"))
+    completeness = _text_or_unknown(domain.get("completeness"))
+    source = _text_or_unknown(domain.get("source"))
+    available = state == "available" and completeness != "unavailable" and source != "unavailable"
+    return _availability_payload(
+        available=available,
+        available_reason=f"{domain_name}_authority_available",
+        missing_reason=f"{domain_name}_authority_unavailable",
+        source=source,
+        completeness=completeness,
+        state=state,
+    )
+
+
+def _trades_evidence(run: Mapping[str, Any], result_authority: Mapping[str, Any]) -> dict[str, Any]:
+    trades = _list_payload(run.get("trades"))
+    trade_count = len(trades)
+    if not trade_count:
+        declared_count = run.get("trade_count")
+        try:
+            trade_count = int(declared_count or 0)
+        except (TypeError, ValueError):
+            trade_count = 0
+    domain = _domain_summary(result_authority, "trade_rows")
+    available = bool(_list_payload(run.get("trades")))
+    return _availability_payload(
+        available=available,
+        available_reason="stored_trade_rows_present",
+        missing_reason="stored_trade_rows_missing",
+        count=len(_list_payload(run.get("trades"))),
+        declaredCount=trade_count,
+        authority=domain,
+    )
+
+
+def _daily_audit_evidence(run: Mapping[str, Any], result_authority: Mapping[str, Any]) -> dict[str, Any]:
+    audit_rows = _list_payload(run.get("audit_rows"))
+    daily_return_series = _list_payload(run.get("daily_return_series"))
+    rows_with_daily_pnl = sum(
+        1
+        for row in audit_rows
+        if isinstance(row, Mapping) and row.get("daily_pnl") is not None
+    )
+    return _availability_payload(
+        available=bool(audit_rows),
+        available_reason="stored_audit_rows_present",
+        missing_reason="stored_audit_rows_missing",
+        count=len(audit_rows),
+        rowsWithDailyPnl=rows_with_daily_pnl,
+        dailyReturnSeriesCount=len(daily_return_series),
+        authority=_domain_summary(result_authority, "replay_payload"),
+    )
+
+
+def _drawdown_bucket_evidence(run: Mapping[str, Any]) -> dict[str, Any]:
+    summary = _summary_payload(run)
+    drawdown_payload = _first_mapping_payload(
+        run.get("drawdown_regime_attribution"),
+        summary.get("drawdown_regime_attribution"),
+    )
+    if not drawdown_payload:
+        return _availability_payload(
+            available=False,
+            available_reason="stored_drawdown_bucket_summary_present",
+            missing_reason="stored_drawdown_bucket_summary_missing",
+            state="unavailable",
+        )
+
+    bucket_counts = _mapping_payload(drawdown_payload.get("bucket_counts"))
+    contribution_summaries = _mapping_payload(drawdown_payload.get("contribution_summaries"))
+    classified_rows = _mapping_payload(contribution_summaries.get("classified_rows"))
+    state = _text_or_unknown(drawdown_payload.get("state"))
+    available = state != "unavailable" and bool(bucket_counts)
+    return _availability_payload(
+        available=available,
+        available_reason="stored_drawdown_bucket_summary_present",
+        missing_reason="stored_drawdown_bucket_summary_unavailable",
+        source=_text_or_unknown(drawdown_payload.get("source")),
+        state=state,
+        bucketCount=len(bucket_counts),
+        classifiedRows=dict(classified_rows),
+        causalityNote=contribution_summaries.get("causality_note"),
+    )
+
+
+def _robustness_support_evidence(run: Mapping[str, Any]) -> dict[str, Any]:
+    summary = _summary_payload(run)
+    robustness_payload = _first_mapping_payload(
+        summary.get("robustness_analysis"),
+        run.get("robustness_analysis"),
+    )
+    artifact_availability = _first_mapping_payload(
+        run.get("artifact_availability"),
+        summary.get("artifact_availability"),
+    )
+    readback_integrity = _first_mapping_payload(
+        run.get("readback_integrity"),
+        summary.get("readback_integrity"),
+    )
+    return _availability_payload(
+        available=bool(robustness_payload or artifact_availability or readback_integrity),
+        available_reason="stored_support_artifacts_present",
+        missing_reason="stored_support_artifacts_missing",
+        robustnessAvailable=bool(robustness_payload),
+        robustnessState=robustness_payload.get("state"),
+        robustnessSource=robustness_payload.get("source"),
+        artifactAvailabilityAvailable=bool(artifact_availability),
+        readbackIntegrityAvailable=bool(readback_integrity),
+        readbackIntegrityLevel=readback_integrity.get("integrity_level"),
+    )
+
+
+def _dataset_lineage_evidence(run: Mapping[str, Any]) -> dict[str, Any]:
+    dataset_lineage = build_dataset_lineage_manifest(run)
+    if dataset_lineage is None:
+        return _availability_payload(
+            available=False,
+            available_reason="dataset_lineage_present",
+            missing_reason="dataset_lineage_missing",
+        )
+    return _availability_payload(
+        available=True,
+        available_reason="dataset_lineage_present",
+        missing_reason="dataset_lineage_missing",
+        lineage=dataset_lineage,
+    )
+
+
+def _result_authority_evidence(result_authority: Mapping[str, Any]) -> dict[str, Any]:
+    domains = _mapping_payload(result_authority.get("domains"))
+    domain_states = {
+        str(name): {
+            "source": _mapping_payload(payload).get("source"),
+            "completeness": _mapping_payload(payload).get("completeness"),
+            "state": _mapping_payload(payload).get("state"),
+        }
+        for name, payload in domains.items()
+    }
+    return _availability_payload(
+        available=bool(result_authority),
+        available_reason="result_authority_present",
+        missing_reason="result_authority_missing",
+        contractVersion=result_authority.get("contract_version"),
+        readMode=result_authority.get("read_mode"),
+        domainStates=domain_states,
+    )
+
+
+def build_regime_attribution_readiness_export(run: Mapping[str, Any]) -> dict[str, Any]:
+    """Build a bounded diagnostic readiness projection from stored run readback data."""
+
+    result_authority = _mapping_payload(run.get("result_authority"))
+    return {
+        "exportKind": "rule_backtest_regime_attribution_readiness",
+        "version": "v1",
+        "runId": int(run.get("id") or 0),
+        "code": run.get("code"),
+        "status": run.get("status"),
+        "timeframe": run.get("timeframe"),
+        "period": {
+            "start": run.get("period_start") or run.get("start_date"),
+            "end": run.get("period_end") or run.get("end_date"),
+        },
+        "source": "stored_rule_backtest_readback_projection",
+        "readMode": "stored_first",
+        "storedFirst": True,
+        "diagnosticOnly": True,
+        "engineReexecuted": False,
+        "mathChanged": False,
+        "attributionEngineAvailable": False,
+        "pnlCausalityAvailable": False,
+        "runtimeEngineStatement": "not_a_runtime_attribution_engine",
+        "mathSnapshot": {
+            "trade_count": run.get("trade_count"),
+            "total_return_pct": run.get("total_return_pct"),
+            "max_drawdown_pct": run.get("max_drawdown_pct"),
+            "win_rate_pct": run.get("win_rate_pct"),
+            "final_equity": run.get("final_equity"),
+        },
+        "evidenceAvailability": {
+            "trades": _trades_evidence(run, result_authority),
+            "dailyAudit": _daily_audit_evidence(run, result_authority),
+            "drawdownBucketSummary": _drawdown_bucket_evidence(run),
+            "robustnessSupportArtifacts": _robustness_support_evidence(run),
+            "datasetLineage": _dataset_lineage_evidence(run),
+            "resultAuthority": _result_authority_evidence(result_authority),
+        },
+        "gapReasons": [dict(item) for item in REGIME_ATTRIBUTION_READINESS_GAP_REASONS],
+        "limitations": [
+            "diagnostic_readiness_projection_only",
+            "not_a_runtime_attribution_engine",
+            "no_market_regime_classification",
+            "no_pnl_by_regime_allocation",
+        ],
+    }
+
+
 def resolve_stored_robustness_evidence_payload(run: Mapping[str, Any]) -> dict[str, Any]:
     summary = dict(run.get("summary") or {}) if isinstance(run.get("summary"), dict) else {}
     summary_payload = summary.get("robustness_analysis")
@@ -341,6 +604,16 @@ def build_support_export_index(run: Mapping[str, Any]) -> dict[str, Any]:
                 "delivery_mode": "api",
                 "endpoint_path": f"/api/v1/backtest/rule/runs/{resolved_run_id}/robustness-evidence.json",
                 "payload_class": "heavy",
+            },
+            {
+                "key": "regime_attribution_readiness_json",
+                "available": True,
+                "availability_reason": "run_exists_readiness_projection_available",
+                "format": "json",
+                "media_type": "application/json",
+                "delivery_mode": "api",
+                "endpoint_path": f"/api/v1/backtest/rule/runs/{resolved_run_id}/regime-attribution-readiness.json",
+                "payload_class": "compact",
             },
         ],
     }

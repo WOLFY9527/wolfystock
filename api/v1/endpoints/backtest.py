@@ -29,6 +29,7 @@ from api.v1.schemas.backtest import (
     RuleBacktestStatusResponse,
     RuleBacktestCancelResponse,
     RuleBacktestExecutionTraceExportResponse,
+    RuleBacktestRegimeAttributionReadinessExportResponse,
     RuleBacktestRobustnessEvidenceExportResponse,
     RuleBacktestSupportBundleManifestResponse,
     RuleBacktestSupportBundleReproducibilityManifestResponse,
@@ -1019,6 +1020,35 @@ def get_rule_backtest_robustness_evidence_json(
         return _build_model(RuleBacktestRobustnessEvidenceExportResponse, data)
 
     return _run_endpoint("查询规则回测 robustness evidence JSON export 失败", _operation)
+
+
+@router.get(
+    "/rule/runs/{run_id}/regime-attribution-readiness.json",
+    response_model=RuleBacktestRegimeAttributionReadinessExportResponse,
+    responses={
+        200: {"description": "规则回测 regime attribution readiness JSON export"},
+        404: {"description": "记录不存在", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取规则回测 regime attribution readiness JSON export",
+    description="只读返回单条规则回测已存储证据的 regime attribution readiness 诊断；不会重新执行回测引擎，也不是运行时 attribution engine。",
+)
+def get_rule_backtest_regime_attribution_readiness_json(
+    run_id: int,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> RuleBacktestRegimeAttributionReadinessExportResponse:
+    def _operation() -> RuleBacktestRegimeAttributionReadinessExportResponse:
+        service = _build_rule_backtest_service(db_manager, current_user)
+        try:
+            data = service.get_regime_attribution_readiness_export(run_id)
+        except ValueError as exc:
+            if "not found" in str(exc).lower():
+                raise _not_found_error("规则回测记录不存在") from exc
+            raise
+        return _build_model(RuleBacktestRegimeAttributionReadinessExportResponse, data)
+
+    return _run_endpoint("查询规则回测 regime attribution readiness JSON export 失败", _operation)
 
 
 @router.get(

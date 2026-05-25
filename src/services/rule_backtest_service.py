@@ -26,6 +26,7 @@ from src.services.rule_backtest_support_exports import (
     build_execution_trace_export_csv_text,
     build_execution_trace_export_json_payload,
     build_execution_trace_export_rows,
+    build_regime_attribution_readiness_export,
     build_support_bundle_manifest,
     build_support_bundle_reproducibility_manifest,
     build_support_export_index,
@@ -10715,6 +10716,12 @@ class RuleBacktestService:
             raise ValueError(f"Run {run_id} has no stored robustness evidence to export.")
 
         return payload
+
+    def get_regime_attribution_readiness_export(self, run_id: int) -> Dict[str, Any]:
+        run = self.get_run(run_id)
+        if run is None:
+            raise ValueError(f"Run {run_id} not found.")
+        return build_regime_attribution_readiness_export(run)
 
     def parse_and_run_automated(
         self,

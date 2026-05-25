@@ -388,6 +388,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 "execution_trace_json",
                 "execution_trace_csv",
                 "robustness_evidence_json",
+                "regime_attribution_readiness_json",
             ],
         )
         self.assertEqual(
@@ -401,6 +402,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 ("json", "application/json", "api", "heavy"),
                 ("csv", "text/csv", "api", "heavy"),
                 ("json", "application/json", "api", "heavy"),
+                ("json", "application/json", "api", "compact"),
             ],
         )
 
@@ -438,9 +440,16 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         trace_json_path = payloads["export_index"]["exports"][2]["endpoint_path"]
         trace_csv_path = payloads["export_index"]["exports"][3]["endpoint_path"]
         robustness_path = payloads["export_index"]["exports"][4]["endpoint_path"]
+        readiness_path = payloads["export_index"]["exports"][5]["endpoint_path"]
         trace_json_response = self.client.get(trace_json_path)
         trace_csv_response = self.client.get(trace_csv_path)
         robustness_response = self.client.get(robustness_path)
+        readiness_response = self.client.get(readiness_path)
+        self.assertEqual(readiness_response.status_code, 200)
+        self.assertEqual(
+            service.get_regime_attribution_readiness_export(run_id),
+            readiness_response.json(),
+        )
 
         if trace_available:
             self.assertEqual(service.get_execution_trace_export_json(run_id), trace_json_response.json())
@@ -545,6 +554,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 f"/api/v1/backtest/rule/runs/{run_id}/execution-trace.json",
                 f"/api/v1/backtest/rule/runs/{run_id}/execution-trace.csv",
                 f"/api/v1/backtest/rule/runs/{run_id}/robustness-evidence.json",
+                f"/api/v1/backtest/rule/runs/{run_id}/regime-attribution-readiness.json",
             ],
         )
         self.assertTrue(
@@ -559,9 +569,28 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         trace_json_path = export_index["exports"][2]["endpoint_path"]
         trace_csv_path = export_index["exports"][3]["endpoint_path"]
         robustness_path = export_index["exports"][4]["endpoint_path"]
+        readiness_path = export_index["exports"][5]["endpoint_path"]
         trace_json_response = self.client.get(trace_json_path)
         trace_csv_response = self.client.get(trace_csv_path)
         robustness_response = self.client.get(robustness_path)
+        readiness_response = self.client.get(readiness_path)
+        self.assertTrue(export_index["exports"][5]["available"])
+        self.assertEqual(
+            export_index["exports"][5]["availability_reason"],
+            "run_exists_readiness_projection_available",
+        )
+        self.assertEqual(readiness_response.status_code, 200)
+        self.assertTrue(
+            readiness_response.headers.get("content-type", "").startswith(
+                export_index["exports"][5]["media_type"]
+            )
+        )
+        payloads["regime_attribution_readiness"] = readiness_response.json()
+        self.assertTrue(payloads["regime_attribution_readiness"]["diagnosticOnly"])
+        self.assertFalse(payloads["regime_attribution_readiness"]["engineReexecuted"])
+        self.assertFalse(payloads["regime_attribution_readiness"]["mathChanged"])
+        self.assertFalse(payloads["regime_attribution_readiness"]["attributionEngineAvailable"])
+        self.assertFalse(payloads["regime_attribution_readiness"]["pnlCausalityAvailable"])
 
         if trace_available:
             self.assertTrue(export_index["exports"][2]["available"])
@@ -912,6 +941,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         self._assert_export_payload_is_sanitized(payloads["reproducibility"])
         self._assert_export_payload_is_sanitized(payloads["trace_json"])
         self._assert_export_payload_is_sanitized(payloads["trace_csv_rows"])
+        self._assert_export_payload_is_sanitized(payloads["regime_attribution_readiness"])
 
         trace_execution_model = payloads["trace_json"]["execution_model"]
         self.assertEqual(trace_execution_model["signal_evaluation_timing"], "bar_close")

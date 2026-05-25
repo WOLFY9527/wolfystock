@@ -1318,6 +1318,31 @@ class RuleBacktestRobustnessEvidenceExportResponse(BaseModel):
     configuration: Dict[str, Any] = Field(default_factory=dict)
 
 
+class RuleBacktestRegimeAttributionReadinessExportResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    exportKind: str
+    version: str
+    runId: int
+    code: Optional[str] = None
+    status: Optional[str] = None
+    timeframe: Optional[str] = None
+    period: Dict[str, Any] = Field(default_factory=dict)
+    source: str
+    readMode: str
+    storedFirst: bool
+    diagnosticOnly: bool
+    engineReexecuted: bool
+    mathChanged: bool
+    attributionEngineAvailable: bool
+    pnlCausalityAvailable: bool
+    runtimeEngineStatement: str
+    mathSnapshot: Dict[str, Any] = Field(default_factory=dict)
+    evidenceAvailability: Dict[str, Any] = Field(default_factory=dict)
+    gapReasons: List[Dict[str, Any]] = Field(default_factory=list)
+    limitations: List[str] = Field(default_factory=list)
+
+
 class RuleBacktestSupportExportIndexItem(BaseModel):
     key: str
     available: bool
