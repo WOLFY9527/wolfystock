@@ -44,6 +44,58 @@ _ENDPOINTS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _skipped_official_macro_diagnostic(reason: str = "not_requested") -> dict[str, Any]:
+    return {
+        "status": "skipped",
+        "credentialsPresent": False,
+        "providerConstructed": False,
+        "probePassed": False,
+        "freshnessValid": False,
+        "sourceMetadataValid": False,
+        "sourceAuthorityAllowed": False,
+        "scoreContributionAllowed": False,
+        "fulfilledSeries": [],
+        "missingSeries": [],
+        "staleSeries": [],
+        "reason": reason,
+    }
+
+
+def _skipped_alpaca_rotation_diagnostic(reason: str = "not_requested") -> dict[str, Any]:
+    return {
+        "status": "skipped",
+        "credentialsPresent": False,
+        "providerConstructed": False,
+        "probePassed": False,
+        "freshnessValid": False,
+        "sourceMetadataValid": False,
+        "sourceAuthorityAllowed": False,
+        "scoreContributionAllowed": False,
+        "fulfilledWindows": [],
+        "missingWindows": [],
+        "staleWindows": [],
+        "reason": reason,
+    }
+
+
+def _skipped_polygon_us_breadth_diagnostic(
+    reason_code: str = "not_requested",
+) -> dict[str, Any]:
+    return {
+        "status": "skipped",
+        "credentialsPresent": False,
+        "probePassed": False,
+        "observationDate": None,
+        "freshnessValid": False,
+        "coverageCount": 0,
+        "sourceAuthorityAllowed": False,
+        "scoreContributionAllowed": False,
+        "fulfilledMetrics": [],
+        "missingMetrics": list(US_BREADTH_SYMBOLS),
+        "reasonCodes": [reason_code],
+    }
+
+
 def _sanitize_reason(value: Any) -> str | None:
     text = str(value or "").strip()
     if not text:
@@ -325,10 +377,18 @@ def collect_diagnostic_bundle(
     *,
     base_url: str | None = None,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    include_live_smoke: bool = False,
 ) -> dict[str, Any]:
-    official_macro_diagnostic = _compact_official_macro_diagnostic(run_official_macro_live_smoke())
-    alpaca_rotation_diagnostic = _compact_alpaca_rotation_diagnostic(run_rotation_radar_alpaca_live_smoke())
-    polygon_us_breadth_diagnostic = _collect_polygon_us_breadth_diagnostic()
+    if include_live_smoke:
+        official_macro_diagnostic = _compact_official_macro_diagnostic(run_official_macro_live_smoke())
+        alpaca_rotation_diagnostic = _compact_alpaca_rotation_diagnostic(
+            run_rotation_radar_alpaca_live_smoke()
+        )
+        polygon_us_breadth_diagnostic = _collect_polygon_us_breadth_diagnostic()
+    else:
+        official_macro_diagnostic = _skipped_official_macro_diagnostic()
+        alpaca_rotation_diagnostic = _skipped_alpaca_rotation_diagnostic()
+        polygon_us_breadth_diagnostic = _skipped_polygon_us_breadth_diagnostic()
     result: dict[str, Any] = {
         "officialMacroDiagnostic": official_macro_diagnostic,
         "alpacaRotationDiagnostic": alpaca_rotation_diagnostic,
@@ -403,6 +463,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=f"Optional local backend base URL. Defaults to ${BASE_URL_ENV_VAR} when set.",
     )
     parser.add_argument(
+        "--live-smoke",
+        action="store_true",
+        help="Opt in to live provider smoke diagnostics. Default mode stays offline/safe.",
+    )
+    parser.add_argument(
         "--timeout-seconds",
         type=float,
         default=DEFAULT_TIMEOUT_SECONDS,
@@ -414,12 +479,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
-        payload = collect_diagnostic_bundle(base_url=args.base_url, timeout_seconds=args.timeout_seconds)
+        payload = collect_diagnostic_bundle(
+            base_url=args.base_url,
+            timeout_seconds=args.timeout_seconds,
+            include_live_smoke=args.live_smoke,
+        )
     except Exception:
         fallback = {
-            "officialMacroDiagnostic": _compact_official_macro_diagnostic({}),
-            "alpacaRotationDiagnostic": _compact_alpaca_rotation_diagnostic({}),
-            "polygonUsBreadthDiagnostic": _collect_polygon_us_breadth_diagnostic(),
+            "officialMacroDiagnostic": _skipped_official_macro_diagnostic("unexpected_error"),
+            "alpacaRotationDiagnostic": _skipped_alpaca_rotation_diagnostic("unexpected_error"),
+            "polygonUsBreadthDiagnostic": _skipped_polygon_us_breadth_diagnostic("unexpected_error"),
             "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
             "discrepancies": [],
         }

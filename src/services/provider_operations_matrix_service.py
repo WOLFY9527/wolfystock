@@ -265,7 +265,10 @@ class ProviderOperationsMatrixService:
         row.freshness_expectation = row.freshness_expectation or capability.freshness_class.value
         row.runtime_state = row.runtime_state or "runtime_metadata"
         row.enabled_by_default = True
-        row.score_contribution_allowed = True
+        row.score_contribution_allowed = (
+            row.score_contribution_allowed
+            or self._generic_runtime_score_contribution_allowed(row.source_type)
+        )
         row.supported_capabilities.update(domain.value for domain in capability.domains)
         row.affected_surfaces.update(
             surface
@@ -729,6 +732,10 @@ class ProviderOperationsMatrixService:
         if capability.provider_id.startswith("local_") or capability.provider_id == "local_cache":
             return "local_cache"
         return "runtime_metadata"
+
+    @staticmethod
+    def _generic_runtime_score_contribution_allowed(source_type: str | None) -> bool:
+        return source_type == "cache_snapshot"
 
     @staticmethod
     def _trust_for_runtime(capability: ProviderCapability) -> str:

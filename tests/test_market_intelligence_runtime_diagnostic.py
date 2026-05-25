@@ -24,62 +24,17 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
     monkeypatch.setattr(
         module,
         "run_official_macro_live_smoke",
-        lambda: {
-            "credentialsPresent": True,
-            "providerConstructed": True,
-            "probePassed": True,
-            "freshnessValid": True,
-            "sourceMetadataValid": True,
-            "sourceAuthorityAllowed": True,
-            "scoreContributionAllowed": True,
-            "fulfilledSeries": ["VIXCLS", "SOFR"],
-            "missingSeries": [],
-            "staleSeries": [],
-            "reason": None,
-        },
+        lambda: (_ for _ in ()).throw(AssertionError("official macro live smoke should not run")),
     )
     monkeypatch.setattr(
         module,
         "run_rotation_radar_alpaca_live_smoke",
-        lambda: {
-            "credentialsPresent": False,
-            "providerConstructed": False,
-            "probePassed": False,
-            "freshnessValid": False,
-            "sourceMetadataValid": False,
-            "sourceAuthorityAllowed": False,
-            "scoreContributionAllowed": False,
-            "fulfilledWindows": [],
-            "missingWindows": ["5m", "15m", "60m", "1d"],
-            "staleWindows": [],
-            "reason": "credentials",
-        },
+        lambda: (_ for _ in ()).throw(AssertionError("alpaca live smoke should not run")),
     )
     monkeypatch.setattr(
         module,
         "run_polygon_us_breadth_activation",
-        lambda: {
-            "credentialsPresent": False,
-            "providerConstructed": False,
-            "probePassed": False,
-            "observationDate": None,
-            "freshnessValid": False,
-            "coverageCount": 0,
-            "sourceMetadataValid": True,
-            "sourceAuthorityAllowed": False,
-            "scoreContributionAllowed": False,
-            "fulfilledMetrics": [],
-            "missingMetrics": [
-                "ADVANCERS",
-                "DECLINERS",
-                "UNCHANGED",
-                "ADVANCE_DECLINE_RATIO",
-                "NEW_HIGHS",
-                "NEW_LOWS",
-                "HIGH_LOW_RATIO",
-            ],
-            "reasonCodes": ["authorized_us_market_breadth_feed_not_configured"],
-        },
+        lambda: (_ for _ in ()).throw(AssertionError("polygon live smoke should not run")),
         raising=False,
     )
     monkeypatch.setattr(
@@ -92,19 +47,21 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
 
     assert payload == {
         "officialMacroDiagnostic": {
-            "credentialsPresent": True,
-            "providerConstructed": True,
-            "probePassed": True,
-            "freshnessValid": True,
-            "sourceMetadataValid": True,
-            "sourceAuthorityAllowed": True,
-            "scoreContributionAllowed": True,
-            "fulfilledSeries": ["VIXCLS", "SOFR"],
+            "status": "skipped",
+            "credentialsPresent": False,
+            "providerConstructed": False,
+            "probePassed": False,
+            "freshnessValid": False,
+            "sourceMetadataValid": False,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "fulfilledSeries": [],
             "missingSeries": [],
             "staleSeries": [],
-            "reason": None,
+            "reason": "not_requested",
         },
         "alpacaRotationDiagnostic": {
+            "status": "skipped",
             "credentialsPresent": False,
             "providerConstructed": False,
             "probePassed": False,
@@ -113,11 +70,12 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
             "sourceAuthorityAllowed": False,
             "scoreContributionAllowed": False,
             "fulfilledWindows": [],
-            "missingWindows": ["5m", "15m", "60m", "1d"],
+            "missingWindows": [],
             "staleWindows": [],
-            "reason": "credentials",
+            "reason": "not_requested",
         },
         "polygonUsBreadthDiagnostic": {
+            "status": "skipped",
             "credentialsPresent": False,
             "probePassed": False,
             "observationDate": None,
@@ -135,7 +93,7 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
                 "NEW_LOWS",
                 "HIGH_LOW_RATIO",
             ],
-            "reasonCodes": ["authorized_us_market_breadth_feed_not_configured"],
+            "reasonCodes": ["not_requested"],
         },
         "usBreadthAuthorityDiagnostic": {
             "providerConstructed": False,
@@ -162,6 +120,79 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
         },
         "discrepancies": [],
     }
+
+
+def test_runtime_diagnostic_live_smoke_is_explicit_opt_in(monkeypatch) -> None:
+    module = _load_script_module()
+    calls = {"official": 0, "alpaca": 0, "polygon": 0}
+
+    monkeypatch.setattr(
+        module,
+        "run_official_macro_live_smoke",
+        lambda: calls.__setitem__("official", calls["official"] + 1) or {
+            "credentialsPresent": True,
+            "providerConstructed": True,
+            "probePassed": True,
+            "freshnessValid": True,
+            "sourceMetadataValid": True,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "fulfilledSeries": ["VIXCLS", "SOFR"],
+            "missingSeries": [],
+            "staleSeries": [],
+            "reason": None,
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "run_rotation_radar_alpaca_live_smoke",
+        lambda: calls.__setitem__("alpaca", calls["alpaca"] + 1) or {
+            "credentialsPresent": False,
+            "providerConstructed": False,
+            "probePassed": False,
+            "freshnessValid": False,
+            "sourceMetadataValid": False,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "fulfilledWindows": [],
+            "missingWindows": ["5m", "15m", "60m", "1d"],
+            "staleWindows": [],
+            "reason": "credentials",
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "run_polygon_us_breadth_activation",
+        lambda: calls.__setitem__("polygon", calls["polygon"] + 1) or {
+            "credentialsPresent": False,
+            "providerConstructed": False,
+            "probePassed": False,
+            "observationDate": None,
+            "freshnessValid": False,
+            "coverageCount": 0,
+            "sourceMetadataValid": True,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "fulfilledMetrics": [],
+            "missingMetrics": list(module.US_BREADTH_SYMBOLS),
+            "reasonCodes": ["authorized_us_market_breadth_feed_not_configured"],
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module,
+        "_fetch_json",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("endpoint fetch should not run")),
+    )
+
+    payload = module.collect_diagnostic_bundle(include_live_smoke=True)
+
+    assert calls == {"official": 1, "alpaca": 1, "polygon": 1}
+    assert payload["officialMacroDiagnostic"]["probePassed"] is True
+    assert payload["alpacaRotationDiagnostic"]["reason"] == "credentials"
+    assert payload["polygonUsBreadthDiagnostic"]["reasonCodes"] == [
+        "authorized_us_market_breadth_feed_not_configured"
+    ]
 
 
 def test_runtime_diagnostic_sanitizes_endpoint_and_provider_output(monkeypatch) -> None:
@@ -301,7 +332,10 @@ def test_runtime_diagnostic_sanitizes_endpoint_and_provider_output(monkeypatch) 
 
     monkeypatch.setattr(module, "_fetch_json", fake_fetch_json)
 
-    payload = module.collect_diagnostic_bundle(base_url="http://127.0.0.1:8000?token=top-secret")
+    payload = module.collect_diagnostic_bundle(
+        base_url="http://127.0.0.1:8000?token=top-secret",
+        include_live_smoke=True,
+    )
     serialized = json.dumps(payload, ensure_ascii=False)
 
     assert payload["endpointReachability"]["baseUrl"] == "http://127.0.0.1:8000"
@@ -377,7 +411,7 @@ def test_runtime_diagnostic_keeps_polygon_breadth_probe_failure_fail_closed(monk
         lambda: (_ for _ in ()).throw(RuntimeError("polygon api_key=raw-secret")),
     )
 
-    payload = module.collect_diagnostic_bundle()
+    payload = module.collect_diagnostic_bundle(include_live_smoke=True)
     serialized = json.dumps(payload, ensure_ascii=False)
 
     assert "officialMacroDiagnostic" in payload

@@ -898,6 +898,42 @@ def test_weak_and_proxy_providers_remain_non_score_grade() -> None:
         assert row["trustLevel"] in {"weak", "usable_with_caution"}
 
 
+def test_generic_runtime_capability_score_permission_fails_closed_without_explicit_gate() -> None:
+    assert ProviderOperationsMatrixService._generic_runtime_score_contribution_allowed(
+        "cache_snapshot"
+    ) is True
+    for source_type in (
+        "public_proxy",
+        "unofficial_proxy",
+        "fallback_static",
+        "synthetic_fixture",
+        "missing",
+        "disabled_live_stub",
+        "official_public",
+        "authorized_licensed_feed",
+    ):
+        assert (
+            ProviderOperationsMatrixService._generic_runtime_score_contribution_allowed(source_type)
+            is False
+        )
+
+
+def test_runtime_metadata_rows_do_not_claim_score_contribution_without_explicit_projection() -> None:
+    payload = ProviderOperationsMatrixService(env={}, spec_finder=lambda _: None).build_matrix()
+
+    for provider_id in ("alpaca", "fmp", "gnews", "social_sentiment", "tavily", "yahoo_yfinance"):
+        row = _row_by_id(payload, provider_id)
+        assert row["runtimeState"] == "runtime_metadata"
+        assert row["scoreContributionAllowed"] is False
+        assert row["scoreEligible"] is False
+
+    for provider_id in ("local_cache", "local_inference", "local_news_cache", "local_ohlcv"):
+        row = _row_by_id(payload, provider_id)
+        assert row["sourceType"] == "cache_snapshot"
+        assert row["scoreContributionAllowed"] is True
+        assert row["scoreEligible"] is True
+
+
 def test_secret_values_are_not_emitted_from_readiness_or_credentials(monkeypatch) -> None:
     monkeypatch.setenv("TUSHARE_TOKEN", "super-secret-token-value")
 
