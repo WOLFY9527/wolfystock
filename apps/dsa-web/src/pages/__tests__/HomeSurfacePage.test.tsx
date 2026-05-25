@@ -277,7 +277,11 @@ describe('HomeSurfacePage', () => {
     renderSurface();
     expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
     expect(screen.getByTestId('guest-home-clean-search')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'WolfyStock 分析面板' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'WolfyStock 研究控制台' })).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-command-surface')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-capability-strip')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-trust-strip')).toHaveTextContent('不等于买卖建议');
+    expect(screen.getByTestId('guest-home-clean-search')).not.toHaveTextContent('WolfyStock 分析面板');
   });
 
   it('keeps an accessible chart placeholder visible before the deferred chart mount starts', async () => {

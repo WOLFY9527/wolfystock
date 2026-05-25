@@ -54,7 +54,7 @@ describe('GuestHomePage', () => {
     window.history.replaceState(window.history.state, '', '/zh');
   });
 
-  it('uses the home bento source, hides the dashboard before search, and reveals the paywalled preview after submit', async () => {
+  it('renders a compact guest research console before search and reveals the paywalled preview after submit', async () => {
     previewMock.mockResolvedValue({
       queryId: 'preview-q1',
       stockCode: 'AAPL',
@@ -79,13 +79,39 @@ describe('GuestHomePage', () => {
 
     renderGuest();
 
+    const guestFirstScreen = screen.getByTestId('guest-home-clean-search');
+    const commandSurface = screen.getByTestId('guest-home-command-surface');
+    const capabilityStrip = screen.getByTestId('guest-home-capability-strip');
+    const trustStrip = screen.getByTestId('guest-home-trust-strip');
+    const previewStrip = screen.getByTestId('guest-home-preview-strip');
+
     expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
-    expect(screen.getByTestId('guest-home-clean-search')).toBeInTheDocument();
-    expect(screen.queryByTestId('home-bento-grid')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'WolfyStock 分析面板' })).toBeInTheDocument();
+    expect(guestFirstScreen).toBeInTheDocument();
+    expect(screen.queryByTestId('home-research-console')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'WolfyStock 研究控制台' })).toBeInTheDocument();
+    expect(commandSurface).toHaveAttribute('data-visual-role', 'guest-command-console');
+    expect(screen.getByTestId('guest-home-command-workflow')).toHaveTextContent('搜索');
+    expect(screen.getByTestId('guest-home-command-workflow')).toHaveTextContent('分析');
+    expect(screen.getByTestId('guest-home-command-workflow')).toHaveTextContent('观察');
+    expect(screen.getByTestId('guest-home-command-workflow')).toHaveTextContent('报告');
     expect(screen.getByTestId('home-bento-omnibar')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '分析' })).toBeEnabled();
+    expect(screen.getByText('输入股票代码或标的名称，先启动研究命令。登录后可保存观察、生成报告，并进入组合或扫描工作台。')).toBeInTheDocument();
+    expect(capabilityStrip).toHaveTextContent('登录后解锁');
+    expect(capabilityStrip).toHaveTextContent('保存观察');
+    expect(capabilityStrip).toHaveTextContent('生成报告');
+    expect(capabilityStrip).toHaveTextContent('组合工作台');
+    expect(capabilityStrip).toHaveTextContent('全市场扫描');
+    expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/login?mode=create&redirect=%2F');
+    expect(trustStrip).toHaveTextContent('研究边界');
+    expect(trustStrip).toHaveTextContent('不等于买卖建议');
+    expect(previewStrip).toHaveTextContent('游客预览范围');
+    expect(previewStrip).toHaveTextContent('完整报告');
+    expect(previewStrip).toHaveTextContent('既有登录链路解锁');
     expect(screen.queryByTestId('guest-home-frosted-lock')).not.toBeInTheDocument();
+    expect(guestFirstScreen).not.toHaveTextContent('WolfyStock 分析面板');
+    expect(guestFirstScreen).not.toHaveTextContent('输入股票代码，搜索后生成 AI 分析面板。');
+    expect(guestFirstScreen).not.toHaveTextContent(/买入|卖出|推荐|目标价|止损/);
 
     fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'AAPL' } });
     fireEvent.submit(screen.getByTestId('home-bento-omnibar'));
@@ -98,7 +124,7 @@ describe('GuestHomePage', () => {
       });
     });
 
-    expect(await screen.findByTestId('home-bento-grid')).toBeInTheDocument();
+    expect(await screen.findByTestId('home-research-console')).toBeInTheDocument();
     expect(screen.queryByTestId('guest-home-clean-search')).not.toBeInTheDocument();
     expect(screen.getByText('Apple Inc.')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-score-value')).toHaveTextContent('7.2');
@@ -106,7 +132,7 @@ describe('GuestHomePage', () => {
     expect(screen.getAllByTestId('guest-home-frosted-lock')).toHaveLength(2);
     expect(screen.getAllByText('解锁完整 AI 量化策略与深度技术形态解析')).toHaveLength(2);
     expect(screen.getAllByRole('link', { name: '免费创建账户 (Create Free Account)' })).toHaveLength(2);
-    expect(screen.getByTestId('home-bento-secondary-stack')).toContainElement(screen.getAllByTestId('guest-home-frosted-lock')[1]);
+    expect(screen.getByTestId('home-research-context-rail')).toContainElement(screen.getAllByTestId('guest-home-frosted-lock')[1]);
   });
 
   it('renders the English clean search funnel copy', () => {
@@ -115,10 +141,11 @@ describe('GuestHomePage', () => {
 
     renderGuest(['/en/guest']);
 
-    expect(screen.getByRole('heading', { name: 'WolfyStock Analysis Center' })).toBeInTheDocument();
-    expect(screen.getByText('Enter a ticker to generate an analysis view.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'WolfyStock Research Console' })).toBeInTheDocument();
+    expect(screen.getByText('Enter a ticker or name to start a research pass. Sign in to save watch items, generate reports, and open portfolio or scanner workflows.')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-trust-strip')).toHaveTextContent('not a trading instruction');
     expect(screen.getByRole('button', { name: 'Analyze' })).toBeInTheDocument();
-    expect(screen.queryByTestId('home-bento-grid')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-research-console')).not.toBeInTheDocument();
   });
 
   it('falls back to a local snapshot when the live preview API rate-limits', async () => {
@@ -135,7 +162,7 @@ describe('GuestHomePage', () => {
     expect(await screen.findByText('NVIDIA Corporation')).toBeInTheDocument();
     expect(screen.getAllByText('The local snapshot keeps the leadership trend intact, with momentum still driving the short-term structure.').length).toBeGreaterThan(0);
     expect(screen.getByTestId('home-bento-decision-score-value')).toHaveTextContent('8.4');
-    expect(within(screen.getByTestId('home-bento-secondary-stack')).getByTestId('guest-home-frosted-lock')).toBeInTheDocument();
+    expect(within(screen.getByTestId('home-research-context-rail')).getByTestId('guest-home-frosted-lock')).toBeInTheDocument();
   });
 
   it('redirects signed-in users away from /guest and back to home', async () => {

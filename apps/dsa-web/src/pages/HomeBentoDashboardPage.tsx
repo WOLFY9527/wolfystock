@@ -5030,6 +5030,37 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       </button>
     </>
   ) : null;
+  const guestCommandConsoleCopy = locale === 'en'
+    ? {
+        eyebrow: 'Guest Research Console',
+        title: 'WolfyStock Research Console',
+        subtitle: 'Enter a ticker or name to start a research pass. Sign in to save watch items, generate reports, and open portfolio or scanner workflows.',
+        commandLabel: 'Command entry',
+        commandHint: 'Examples: AAPL / Tencent / 600519',
+        unlockTitle: 'Unlock after sign-in',
+        unlockItems: ['Save watch items', 'Generate reports', 'Portfolio workspace', 'Market scanner'],
+        unlockAction: 'Create free account',
+        previewTitle: 'Guest preview scope',
+        previewBody: 'Guests can open a compact research preview first. Full reports, saved observation history, portfolio, and scanner remain locked behind the existing sign-in flow.',
+        trustTitle: 'Research boundary',
+        trustBody: 'Data confidence and evidence coverage affect the conclusion strength. Current output is for research observation only, not a trading instruction.',
+        workflow: ['Search', 'Analyze', 'Observe', 'Report'],
+      }
+    : {
+        eyebrow: '游客研究控制台',
+        title: 'WolfyStock 研究控制台',
+        subtitle: '输入股票代码或标的名称，先启动研究命令。登录后可保存观察、生成报告，并进入组合或扫描工作台。',
+        commandLabel: '研究命令入口',
+        commandHint: '示例：AAPL / 腾讯控股 / 600519',
+        unlockTitle: '登录后解锁',
+        unlockItems: ['保存观察', '生成报告', '组合工作台', '全市场扫描'],
+        unlockAction: '免费创建账户',
+        previewTitle: '游客预览范围',
+        previewBody: '游客可先查看简版研究预览；完整报告、观察历史、组合与扫描能力仍保持既有登录链路解锁。',
+        trustTitle: '研究边界',
+        trustBody: '数据可信度与证据覆盖会直接影响结论强度；当前输出仅用于研究观察，不等于买卖建议。',
+        workflow: ['搜索', '分析', '观察', '报告'],
+      };
 
   const omnibarModule = (
     <div className="w-full shrink-0" data-testid="home-bento-omnibar-shell">
@@ -5127,26 +5158,95 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       <main className="w-full flex-1 flex flex-col min-h-0 min-w-0" data-testid="home-bento-main">
         {!shouldRenderDashboardPanels ? (
           <section
-            className="flex min-h-[min(62vh,620px)] w-full flex-col items-center justify-center gap-8 px-4 text-center"
+            className="mx-auto flex w-full max-w-[1920px] flex-1 min-w-0 flex-col px-3 py-3 sm:px-4 xl:px-6"
             data-testid="guest-home-clean-search"
           >
-            <div className="flex flex-col items-center gap-5">
-              <img
-                src="/wolfystock-logo-mark.png"
-                alt="WolfyStock"
-                className="h-16 w-16 rounded-full bg-white/[0.03] p-2 shadow-[0_0_38px_rgba(99,102,241,0.28)]"
-              />
-              <div>
-                <h1 className="text-3xl font-black tracking-[0] text-white md:text-5xl">
-                  {locale === 'en' ? 'WolfyStock Analysis Center' : 'WolfyStock 分析面板'}
-                </h1>
-                <p className="mt-3 text-sm text-white/45">
-                  {locale === 'en' ? 'Enter a ticker to generate an analysis view.' : '输入股票代码，搜索后生成 AI 分析面板。'}
-                </p>
+            <div className="flex w-full min-w-0 flex-col gap-3" data-testid="guest-home-first-screen-stack">
+              <section
+                className="min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-4 sm:px-5 sm:py-5"
+                data-testid="guest-home-command-surface"
+                data-layout-zone="RouteConsole"
+                data-visual-role="guest-command-console"
+              >
+                <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="min-w-0 max-w-3xl">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">
+                      {guestCommandConsoleCopy.eyebrow}
+                    </p>
+                    <h1 className="mt-2 text-[28px] font-semibold tracking-[0] text-white sm:text-[32px]">
+                      {guestCommandConsoleCopy.title}
+                    </h1>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-white/62 sm:text-[15px]">
+                      {guestCommandConsoleCopy.subtitle}
+                    </p>
+                  </div>
+                  <div
+                    className="grid min-w-0 grid-cols-2 overflow-hidden rounded-[8px] border border-white/[0.06] text-[11px] sm:grid-cols-4 xl:max-w-[21rem]"
+                    data-testid="guest-home-command-workflow"
+                  >
+                    {guestCommandConsoleCopy.workflow.map((item, index) => (
+                      <div key={item} className="min-w-0 border-b border-r border-white/[0.06] px-3 py-2.5 last:border-r-0 even:border-r-0 sm:border-b-0 sm:even:border-r sm:last:border-r-0">
+                        <span className="block font-mono text-[10px] text-white/26">0{index + 1}</span>
+                        <span className="mt-1 block truncate font-semibold text-white/72">{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-4 grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_17rem]">
+                  <div className="min-w-0">
+                    <div className="mb-2 flex min-w-0 flex-wrap items-center justify-between gap-2">
+                      <p className="text-[11px] font-medium text-white/40">{guestCommandConsoleCopy.commandLabel}</p>
+                      <p className="text-[11px] text-white/30">{guestCommandConsoleCopy.commandHint}</p>
+                    </div>
+                    {omnibarModule}
+                  </div>
+                  <aside
+                    className="min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-4 py-3"
+                    data-testid="guest-home-capability-strip"
+                  >
+                    <p className="text-[11px] font-medium text-white/40">{guestCommandConsoleCopy.unlockTitle}</p>
+                    <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+                      {guestCommandConsoleCopy.unlockItems.map((item) => (
+                        <span
+                          key={item}
+                          className="inline-flex min-h-8 items-center rounded-full border border-white/[0.07] bg-white/[0.03] px-3 text-xs font-medium text-white/72"
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                    <Link
+                      to={registrationPath}
+                      className="mt-3 inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#8178e7]"
+                      data-testid="guest-home-registration-link"
+                    >
+                      {guestCommandConsoleCopy.unlockAction}
+                    </Link>
+                  </aside>
+                </div>
+              </section>
+
+              <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+                <section
+                  className="min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-3.5 sm:px-5"
+                  data-testid="guest-home-trust-strip"
+                >
+                  <p className="text-[11px] font-medium text-white/40">{guestCommandConsoleCopy.trustTitle}</p>
+                  <p className="mt-2 text-sm leading-6 text-white/62">
+                    {guestCommandConsoleCopy.trustBody}
+                  </p>
+                </section>
+                <section
+                  className="min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-3.5 sm:px-5"
+                  data-testid="guest-home-preview-strip"
+                >
+                  <p className="text-[11px] font-medium text-white/40">{guestCommandConsoleCopy.previewTitle}</p>
+                  <p className="mt-2 text-sm leading-6 text-white/62">
+                    {guestCommandConsoleCopy.previewBody}
+                  </p>
+                </section>
               </div>
-            </div>
-            <div className="w-full max-w-3xl">
-              {omnibarModule}
             </div>
           </section>
         ) : (() => {
