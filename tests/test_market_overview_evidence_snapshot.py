@@ -65,6 +65,10 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
             "coverage": 1.0,
             "degradationReason": None,
             "capReason": None,
+            "sourceType": "unofficial_public_api",
+            "sourceAuthorityAllowed": None,
+            "scoreContributionAllowed": None,
+            "observationOnly": None,
         }
 
     def test_fallback_panel_projects_evidence_snapshot(self) -> None:
@@ -200,5 +204,102 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
         assert evidence["isUnavailable"] is True
         assert evidence["coverage"] == 0.0
         assert evidence["confidenceWeight"] == 0.0
-        assert evidence["degradationReason"] == "provider_unavailable"
+        assert evidence["degradationReason"] == "authorized_us_market_breadth_feed_not_configured"
         assert evidence["capReason"] == "unavailable_source"
+        assert evidence["sourceType"] == "missing"
+        assert evidence["sourceAuthorityAllowed"] is False
+        assert evidence["scoreContributionAllowed"] is False
+        assert evidence["observationOnly"] is True
+
+    def test_evidence_snapshot_exposes_score_grade_gate_flags_for_official_fed_bundle(self) -> None:
+        service = MarketOverviewService()
+        as_of = _iso_now()
+        items = [
+            {
+                "symbol": "FED_ASSETS",
+                "label": "Fed total assets",
+                "value": 7485000.0,
+                "changePercent": 0.12,
+                "source": "fred",
+                "sourceLabel": "FRED",
+                "sourceType": "official_public",
+                "updatedAt": as_of,
+                "asOf": as_of,
+                "freshness": "cached",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "observationOnly": False,
+                "cacheBundleDiagnostics": {
+                    "sourceType": "official_public",
+                    "scoreContributionAllowed": True,
+                    "observationOnly": False,
+                },
+            }
+        ]
+
+        payload = service._with_evidence_snapshot(
+            service._with_market_meta(
+                {
+                    "source": "mixed",
+                    "sourceLabel": "多来源",
+                    "updatedAt": as_of,
+                    "asOf": as_of,
+                    "items": items,
+                },
+                "rates",
+            ),
+            "rates",
+        )
+
+        evidence = payload["evidenceSnapshot"]
+        assert evidence["sourceType"] == "official_public"
+        assert evidence["sourceAuthorityAllowed"] is True
+        assert evidence["scoreContributionAllowed"] is True
+        assert evidence["observationOnly"] is False
+        assert evidence["degradationReason"] is None
+        assert evidence["capReason"] is None
+
+    def test_evidence_snapshot_exposes_observation_only_blocked_flags_for_cn_money_market_gate(self) -> None:
+        service = MarketOverviewService()
+        as_of = _iso_now()
+        guarded_rows = service._with_cn_money_market_readiness_items(
+            [
+                {
+                    "symbol": "DR007",
+                    "label": "DR007",
+                    "officialSeriesId": "DR007",
+                    "value": 1.86,
+                    "source": "official_cn_money_market_rates",
+                    "sourceLabel": "全国银行间同业拆借中心",
+                    "sourceType": "official_public",
+                    "updatedAt": as_of,
+                    "asOf": as_of,
+                    "freshness": "delayed",
+                    "confidenceWeight": 1.0,
+                    "isFallback": False,
+                    "isUnavailable": False,
+                }
+            ]
+        )
+
+        payload = service._with_evidence_snapshot(
+            service._with_market_meta(
+                {
+                    "source": "mixed",
+                    "sourceLabel": "多来源",
+                    "updatedAt": as_of,
+                    "asOf": as_of,
+                    "items": guarded_rows,
+                },
+                "rates",
+            ),
+            "rates",
+        )
+
+        evidence = payload["evidenceSnapshot"]
+        assert evidence["sourceType"] == "official_public"
+        assert evidence["sourceAuthorityAllowed"] is False
+        assert evidence["scoreContributionAllowed"] is False
+        assert evidence["observationOnly"] is True
+        assert evidence["degradationReason"] == "cn_money_market_required_series_missing_or_stale"
+        assert evidence["capReason"] is None

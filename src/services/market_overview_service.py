@@ -2983,7 +2983,158 @@ class MarketOverviewService:
         evidence = contract.to_dict()
         evidence["coverage"] = round(float(evidence["coverage"]), 2) if isinstance(evidence.get("coverage"), (int, float)) else evidence.get("coverage")
         evidence["confidenceWeight"] = round(float(evidence["confidenceWeight"]), 2)
+        score_gate_meta = self._evidence_snapshot_score_gate_meta(payload)
+        if score_gate_meta.get("degradationReason") is None:
+            score_gate_meta["degradationReason"] = evidence.get("degradationReason")
+        if score_gate_meta.get("capReason") is None:
+            score_gate_meta["capReason"] = evidence.get("capReason")
+        evidence.update(score_gate_meta)
         return evidence
+
+    def _evidence_snapshot_score_gate_meta(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        candidates = self._evidence_snapshot_gate_candidates(payload)
+        source = str(payload.get("source") or "").strip()
+        payload_source_type = str(payload.get("sourceType") or "").strip()
+        source_type = (
+            payload_source_type
+            or self._evidence_snapshot_candidate_source_type(candidates)
+            or _infer_source_type(source)
+        )
+        score_contribution_allowed = self._evidence_snapshot_gate_flag(
+            payload,
+            candidates,
+            "scoreContributionAllowed",
+        )
+        source_authority_allowed = self._evidence_snapshot_gate_flag(
+            payload,
+            candidates,
+            "sourceAuthorityAllowed",
+        )
+        observation_only = self._evidence_snapshot_observation_only(
+            payload,
+            candidates,
+            score_contribution_allowed,
+        )
+        degradation_reason = self._evidence_snapshot_gate_reason(
+            payload,
+            candidates,
+            score_contribution_allowed=score_contribution_allowed,
+            source_authority_allowed=source_authority_allowed,
+        )
+        cap_reason = self._evidence_snapshot_cap_reason(payload, candidates)
+        return {
+            "sourceType": source_type,
+            "sourceAuthorityAllowed": source_authority_allowed,
+            "scoreContributionAllowed": score_contribution_allowed,
+            "observationOnly": observation_only,
+            "degradationReason": degradation_reason,
+            "capReason": cap_reason,
+        }
+
+    @staticmethod
+    def _evidence_snapshot_gate_candidates(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+        items = payload.get("items") if isinstance(payload.get("items"), list) else []
+        candidates: List[Dict[str, Any]] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            candidates.append(item)
+            cache_bundle = item.get("cacheBundleDiagnostics")
+            if isinstance(cache_bundle, dict):
+                candidates.append(
+                    {
+                        **cache_bundle,
+                        "sourceType": cache_bundle.get("sourceType") or item.get("sourceType"),
+                        "degradationReason": cache_bundle.get("degradationReason") or item.get("degradationReason"),
+                        "sourceAuthorityReason": item.get("sourceAuthorityReason"),
+                    }
+                )
+        return candidates
+
+    @staticmethod
+    def _evidence_snapshot_candidate_source_type(candidates: Sequence[Mapping[str, Any]]) -> str:
+        source_types = [
+            str(candidate.get("sourceType") or "").strip()
+            for candidate in candidates
+            if str(candidate.get("sourceType") or "").strip()
+        ]
+        if not source_types:
+            return ""
+        unique_source_types = list(dict.fromkeys(source_types))
+        if len(unique_source_types) == 1:
+            return unique_source_types[0]
+        return unique_source_types[0]
+
+    @staticmethod
+    def _evidence_snapshot_gate_flag(
+        payload: Mapping[str, Any],
+        candidates: Sequence[Mapping[str, Any]],
+        key: str,
+    ) -> Optional[bool]:
+        if key in payload:
+            return bool(payload.get(key))
+        values = [candidate.get(key) for candidate in candidates if key in candidate]
+        if any(value is True for value in values):
+            return True
+        if any(value is False for value in values):
+            return False
+        return None
+
+    @staticmethod
+    def _evidence_snapshot_observation_only(
+        payload: Mapping[str, Any],
+        candidates: Sequence[Mapping[str, Any]],
+        score_contribution_allowed: Optional[bool],
+    ) -> Optional[bool]:
+        if "observationOnly" in payload:
+            return bool(payload.get("observationOnly"))
+        values = [candidate.get("observationOnly") for candidate in candidates if "observationOnly" in candidate]
+        if any(value is True for value in values):
+            return True
+        if score_contribution_allowed is True:
+            return False
+        if any(value is False for value in values):
+            return False
+        return None
+
+    @staticmethod
+    def _evidence_snapshot_gate_reason(
+        payload: Mapping[str, Any],
+        candidates: Sequence[Mapping[str, Any]],
+        *,
+        score_contribution_allowed: Optional[bool],
+        source_authority_allowed: Optional[bool],
+    ) -> Optional[str]:
+        explicit_payload_reason = (
+            payload.get("degradationReason")
+            or payload.get("fallbackReason")
+        )
+        if explicit_payload_reason:
+            return str(explicit_payload_reason)
+        if score_contribution_allowed is None and source_authority_allowed is None:
+            return None
+        if score_contribution_allowed is True and source_authority_allowed is not False:
+            return None
+        for key in ("degradationReason", "sourceAuthorityReason", "excludeReason"):
+            for candidate in candidates:
+                reason = candidate.get(key)
+                if reason:
+                    return str(reason)
+        return None
+
+    @staticmethod
+    def _evidence_snapshot_cap_reason(
+        payload: Mapping[str, Any],
+        candidates: Sequence[Mapping[str, Any]],
+    ) -> Optional[str]:
+        explicit_payload_cap = payload.get("capReason")
+        if explicit_payload_cap:
+            return str(explicit_payload_cap)
+        for candidate in candidates:
+            cap_reason = candidate.get("capReason")
+            if cap_reason:
+                return str(cap_reason)
+        return None
 
     def _evidence_snapshot_coverage(self, payload: Dict[str, Any], category: str) -> float:
         explicit_coverage = self._clean_number(payload.get("coverage"))
