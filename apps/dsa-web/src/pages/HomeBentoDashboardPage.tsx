@@ -1065,11 +1065,7 @@ function HomeConclusionFirstConsole({
   sourceSummary,
   stanceLabel,
   thesisCopy,
-  scoreDisplayValue,
-  hasScoreValue,
-  scorePercent,
   confidenceVisual,
-  confidenceArcStyle,
 }: {
   locale: DashboardLocale;
   dashboard: DashboardPayload;
@@ -1078,11 +1074,7 @@ function HomeConclusionFirstConsole({
   sourceSummary?: string;
   stanceLabel: string;
   thesisCopy: string;
-  scoreDisplayValue: string;
-  hasScoreValue: boolean;
-  scorePercent: number;
   confidenceVisual: ReturnType<typeof resolveConfidenceVisual>;
-  confidenceArcStyle?: React.CSSProperties;
 }) {
   const isEnglish = locale === 'en';
   const frameworkRows = buildResearchFrameworkRows(locale, dashboard, dataQualityReport);
@@ -1100,9 +1092,9 @@ function HomeConclusionFirstConsole({
   const dataQualityLabel = dataQualityReport
     ? dataQualityTierLabel(dataQualityReport.dataQualityTier, locale)
     : (isEnglish ? 'Unconfirmed' : '未确认');
-  const workflowSteps = isEnglish
-    ? ['Search', 'Analyze', 'Observe', 'Report']
-    : ['搜索', '分析', '观察', '报告'];
+  const confidenceTone: 'neutral' | 'used' | 'warning' | 'missing' = dataQualityReport
+    ? dataQualityChipTone(dataQualityReport)
+    : 'neutral';
 
   return (
     <section
@@ -1111,165 +1103,103 @@ function HomeConclusionFirstConsole({
       data-first-screen-priority="conclusion-first"
       data-visual-role="conclusion-research-console"
     >
-      <div className="grid min-w-0 lg:grid-cols-[minmax(0,1.38fr)_minmax(20rem,0.62fr)]">
-        <div className="min-w-0 px-5 py-5 md:px-6">
-          <div
-            className="mb-5 flex min-w-0 flex-wrap items-center gap-2"
-            data-testid="home-research-judgment-gate"
-          >
-            <span className="text-[11px] font-semibold tracking-[0] text-white/44">
-              {isEnglish ? 'Can we judge now' : '当前能否判断'}
-            </span>
-            <span className="rounded-full border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-1 text-xs font-semibold text-emerald-100/88">
-              {judgmentGateCopy}
-            </span>
-            {dataQualityReport ? (
-              <TraceBadge tone={dataQualityChipTone(dataQualityReport)}>
-                {dataQualityLabel}
-              </TraceBadge>
-            ) : null}
-          </div>
+      <div className="min-w-0 px-5 py-5 md:px-6">
+        <div
+          className="mb-4 flex min-w-0 flex-wrap items-center gap-2"
+          data-testid="home-research-judgment-gate"
+        >
+          <TraceBadge tone={dataQualityReport ? dataQualityChipTone(dataQualityReport) : 'neutral'}>
+            {judgmentGateCopy}
+          </TraceBadge>
+          <TraceBadge tone="neutral">
+            {isEnglish ? 'State' : '状态'}
+            {' · '}
+            {stanceLabel}
+          </TraceBadge>
+          <TraceBadge tone={confidenceTone}>
+            {isEnglish ? 'Confidence' : '可信度'}
+            {' · '}
+            {confidenceVisual.label}
+          </TraceBadge>
+        </div>
 
-          <div className="min-w-0" data-testid="home-research-current-conclusion">
-            <p className="text-[12px] font-semibold tracking-[0] text-white/52">
-              {isEnglish ? 'Current conclusion' : '当前结论'}
+        <div className="min-w-0" data-testid="home-research-current-conclusion">
+          <p className="text-[12px] font-semibold tracking-[0] text-white/52">
+            {isEnglish ? 'Current conclusion' : '当前结论'}
+          </p>
+          <div className="mt-2 flex min-w-0 flex-col gap-2" data-testid="home-bento-decision-action">
+            <p
+              className="text-white text-[34px] font-semibold leading-none tracking-[0] md:text-[42px]"
+              data-testid="home-bento-decision-signal-hero"
+            >
+              {stanceLabel}
             </p>
-            <div className="mt-2 flex min-w-0 flex-wrap items-end gap-x-4 gap-y-2" data-testid="home-bento-decision-action">
-              <p
-                className="text-white text-[34px] font-semibold leading-none tracking-[0] md:text-[42px]"
-                data-testid="home-bento-decision-signal-hero"
-              >
-                {stanceLabel}
-              </p>
-              <span className="pb-1 text-sm leading-6 text-white/62">{currentConclusion}</span>
-            </div>
-            <div className="mt-3" data-testid="home-bento-decision-insight">
-              <span className="sr-only">{isEnglish ? 'Research thesis' : '研究结论依据'}</span>
-              <p className="max-w-[72rem] min-w-0 break-words text-[13px] leading-[1.65] text-white/66 whitespace-normal" data-testid="home-bento-decision-insight-copy">
-                {thesisCopy}
-              </p>
-            </div>
+            <p className="max-w-[64rem] min-w-0 break-words text-sm leading-6 text-white/68">
+              {currentConclusion}
+            </p>
           </div>
-
-          <div className="mt-5 grid min-w-0 gap-0 overflow-hidden rounded-[8px] border border-white/[0.07] md:grid-cols-3">
-            <div className="min-w-0 border-b border-white/[0.07] px-4 py-3 md:border-b-0 md:border-r" data-testid="home-research-support-factors">
-              <p className="text-[11px] font-semibold tracking-[0] text-white/42">{isEnglish ? 'Key support factors' : '关键支撑因素'}</p>
-              <p className="mt-2 break-words text-xs font-semibold leading-[1.55] text-white/76">{supportCopy}</p>
-            </div>
-            <div className="min-w-0 border-b border-white/[0.07] px-4 py-3 md:border-b-0 md:border-r" data-testid="home-research-risk-boundaries">
-              <p className="text-[11px] font-semibold tracking-[0] text-white/42">{isEnglish ? 'Main risks / invalidation' : '主要风险 / 失效条件'}</p>
-              <p className="mt-2 break-words text-xs font-semibold leading-[1.55] text-white/76">{riskCopy}</p>
-            </div>
-            <div className="min-w-0 px-4 py-3" data-testid="home-research-next-actions">
-              <p className="text-[11px] font-semibold tracking-[0] text-white/42">{isEnglish ? 'Next research action' : '下一步研究动作'}</p>
-              <p className="mt-2 break-words text-xs font-semibold leading-[1.55] text-white/76">{nextCopy}</p>
-            </div>
+          <div className="mt-3" data-testid="home-bento-decision-insight">
+            <span className="sr-only">{isEnglish ? 'Research thesis' : '研究结论依据'}</span>
+            <p className="max-w-[72rem] min-w-0 break-words text-[13px] leading-[1.65] text-white/66 whitespace-normal" data-testid="home-bento-decision-insight-copy">
+              {thesisCopy}
+            </p>
           </div>
         </div>
 
-        <aside
-          className="min-w-0 border-t border-[color:var(--wolfy-divider)] bg-[rgba(7,12,19,0.2)] px-5 py-4 lg:border-l lg:border-t-0"
+        <div className="mt-5 grid min-w-0 gap-0 overflow-hidden rounded-[8px] border border-white/[0.07] md:grid-cols-3">
+          <div className="min-w-0 border-b border-white/[0.07] px-4 py-3 md:border-b-0 md:border-r" data-testid="home-research-support-factors">
+            <p className="text-[11px] font-semibold tracking-[0] text-white/42">{isEnglish ? 'Key support factors' : '关键支撑因素'}</p>
+            <p className="mt-2 break-words text-xs font-semibold leading-[1.55] text-white/76">{supportCopy}</p>
+          </div>
+          <div className="min-w-0 border-b border-white/[0.07] px-4 py-3 md:border-b-0 md:border-r" data-testid="home-research-risk-boundaries">
+            <p className="text-[11px] font-semibold tracking-[0] text-white/42">{isEnglish ? 'Main risks / invalidation' : '主要风险 / 失效条件'}</p>
+            <p className="mt-2 break-words text-xs font-semibold leading-[1.55] text-white/76">{riskCopy}</p>
+          </div>
+          <div className="min-w-0 px-4 py-3" data-testid="home-research-next-actions">
+            <p className="text-[11px] font-semibold tracking-[0] text-white/42">{isEnglish ? 'Next watch point' : '下一步关注点'}</p>
+            <p className="mt-2 break-words text-xs font-semibold leading-[1.55] text-white/76">{nextCopy}</p>
+          </div>
+        </div>
+
+        <details
+          className="group mt-4 min-w-0 rounded-[10px] border border-white/[0.06] bg-white/[0.015] px-3 py-2.5"
           data-testid="home-research-trust-strip"
         >
-          <div className="flex min-w-0 flex-col gap-3">
-            <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold tracking-[0] text-white/44">{isEnglish ? 'Research boundary' : '研究边界'}</p>
-                <p
-                  className="mt-1 max-w-[22rem] min-w-0 break-words text-xs leading-[1.55] text-white/56"
-                  data-testid="home-research-boundary-summary"
-                >
-                  {isEnglish ? 'Data quality:' : '数据质量：'}
-                  {' '}
-                  {qualityPreview}
-                </p>
-              </div>
-              <TraceBadge tone={dataQualityReport ? dataQualityChipTone(dataQualityReport) : 'neutral'}>
-                {dataQualityLabel}
-              </TraceBadge>
-            </div>
-
-            <div className="grid min-w-0 gap-2 sm:grid-cols-2">
-              <div
-                className="min-w-0 rounded-[10px] border border-white/[0.06] bg-white/[0.02] px-3 py-2.5"
-                data-testid="home-bento-decision-score"
-              >
-                <p className="text-[10px] uppercase tracking-[0.08em] text-white/32">{isEnglish ? 'Research score' : '研究评分'}</p>
-                <div className="mt-2 flex min-w-0 items-end gap-2" data-testid="home-bento-decision-core-metrics">
-                  <p
-                    className="font-mono text-[20px] font-semibold leading-none text-white/88"
-                    data-testid="home-bento-decision-score-value"
-                    data-prominence="supporting"
-                  >
-                    {scoreDisplayValue}
-                  </p>
-                  {hasScoreValue ? <span className="pb-0.5 text-[11px] text-white/36">/100</span> : null}
-                </div>
-                <span className="mt-2 block h-[2px] w-full overflow-hidden rounded-full bg-white/[0.08]">
-                  <span className="block h-full rounded-full bg-white/[0.24]" style={{ width: hasScoreValue ? `${scorePercent}%` : '0%' }} />
-                </span>
-              </div>
-
-              <div
-                className="min-w-0 rounded-[10px] border border-white/[0.06] bg-white/[0.02] px-3 py-2.5"
-                data-testid="home-bento-decision-conviction"
-              >
-                <p className="text-[10px] uppercase tracking-[0.08em] text-white/32">{isEnglish ? 'Confidence' : '可信度'}</p>
-                <div className="mt-2 flex min-w-0 items-center gap-2.5">
-                  <div
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[color:var(--wolfy-divider)] bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.05),rgba(255,255,255,0.02))]"
-                    data-testid="home-bento-decision-confidence-indicator"
-                    aria-hidden="true"
-                    style={confidenceArcStyle}
-                  >
-                    <span className="font-mono text-[10px] font-semibold text-white/80">{confidenceVisual.label}</span>
-                  </div>
-                  <p className="min-w-0 break-words font-mono text-sm font-semibold text-white/76" data-testid="home-bento-decision-conviction-value">
-                    {confidenceVisual.label}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <details className="group min-w-0 rounded-[10px] border border-white/[0.06] bg-white/[0.015] px-3 py-2.5">
-              <summary
-                className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-white/50 marker:hidden"
-                data-testid="home-research-boundary-disclosure"
-              >
-                <span>{isEnglish ? 'View research boundary' : '查看研究边界'}</span>
-                <span className="text-white/28 transition-transform group-open:rotate-180">{isEnglish ? '▾' : '▾'}</span>
-              </summary>
-              <div className="mt-2.5 divide-y divide-white/[0.06] border-t border-white/[0.06] text-[11px]">
-                {[
-                  { label: isEnglish ? 'Available data' : '已可用数据', value: availableCopy },
-                  { label: isEnglish ? 'Missing data' : '仍缺失数据', value: missingCopy },
-                  { label: isEnglish ? 'Impact' : '对结论的影响', value: qualityImpactCopy },
-                ].map((item) => (
-                  <div key={item.label} className="flex min-w-0 items-start justify-between gap-4 py-2.5">
-                    <span className="shrink-0 text-white/36">{item.label}</span>
-                    <span className="min-w-0 break-words text-right text-white/60 whitespace-normal">{displaySlotValue(item.value, locale)}</span>
-                  </div>
-                ))}
-              </div>
-            </details>
-          </div>
-        </aside>
-      </div>
-      <div
-        className="grid min-w-0 border-t border-[color:var(--wolfy-divider)] bg-[rgba(255,255,255,0.025)] text-xs sm:grid-cols-4"
-        data-testid="home-research-workflow-strip"
-      >
-        {workflowSteps.map((step, index) => (
-          <div
-            key={step}
-            className="flex min-w-0 items-center gap-2 border-b border-[color:var(--wolfy-divider)] px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
+          <summary
+            className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-white/58 marker:hidden"
+            data-testid="home-research-boundary-disclosure"
           >
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/[0.12] font-mono text-[10px] text-white/42">
-              {index + 1}
-            </span>
-            <span className="truncate font-semibold text-white/72">{step}</span>
+            <span>{isEnglish ? 'View research boundary' : '查看研究边界'}</span>
+            <span className="text-white/28 transition-transform group-open:rotate-180">{isEnglish ? '▾' : '▾'}</span>
+          </summary>
+          <div className="mt-2.5 divide-y divide-white/[0.06] border-t border-white/[0.06] text-[11px]">
+            <div className="flex min-w-0 items-start justify-between gap-4 py-2.5">
+              <span className="shrink-0 text-white/36">{isEnglish ? 'Data state' : '数据状态'}</span>
+              <span
+                className="min-w-0 break-words text-right text-white/60 whitespace-normal"
+                data-testid="home-research-boundary-summary"
+              >
+                {qualityPreview}
+              </span>
+            </div>
+            <div className="flex min-w-0 items-start justify-between gap-4 py-2.5">
+              <span className="shrink-0 text-white/36">{isEnglish ? 'Research boundary' : '研究边界'}</span>
+              <span className="min-w-0 break-words text-right text-white/60 whitespace-normal">
+                {dataQualityLabel}
+              </span>
+            </div>
+            {[
+              { label: isEnglish ? 'Available data' : '已可用数据', value: availableCopy },
+              { label: isEnglish ? 'Missing data' : '仍缺失数据', value: missingCopy },
+              { label: isEnglish ? 'Impact' : '对结论的影响', value: qualityImpactCopy },
+            ].map((item) => (
+              <div key={item.label} className="flex min-w-0 items-start justify-between gap-4 py-2.5">
+                <span className="shrink-0 text-white/36">{item.label}</span>
+                <span className="min-w-0 break-words text-right text-white/60 whitespace-normal">{displaySlotValue(item.value, locale)}</span>
+              </div>
+            ))}
           </div>
-        ))}
+        </details>
       </div>
     </section>
   );
@@ -1395,30 +1325,6 @@ function pendingDataText(locale: DashboardLocale): string {
   return locale === 'en' ? 'Pending data' : '待补充数据';
 }
 
-function getQuantSnapshotSlots(locale: DashboardLocale): QuantSnapshotSlot[] {
-  const isEnglish = locale === 'en';
-  return [
-    { label: 'RSI (14)', aliases: ['RSI (14)', 'RSI-14', 'RSI14', 'RSI'] },
-    { label: 'MACD (12,26,9)', aliases: ['MACD (12,26,9)', 'MACD'] },
-    {
-      label: isEnglish ? 'Trend strength' : '趋势强度',
-      aliases: ['Trend strength', '趋势强度', 'Trend', '趋势与反转'],
-    },
-    {
-      label: isEnglish ? 'Volume state' : '成交量状态',
-      aliases: ['Volume state', '成交量状态', 'Volume dynamics', 'Volume profile', '量价动态', '量价配合'],
-    },
-    {
-      label: isEnglish ? 'Relative strength (vs. SPY)' : '相对强度 (vs. SPY)',
-      aliases: ['Relative strength (vs. SPY)', 'Relative strength', '相对强度 (vs. SPY)', '相对强度'],
-    },
-    {
-      label: isEnglish ? 'Volatility (30D)' : '波动率 (30D)',
-      aliases: ['Volatility (30D)', 'Volatility', '波动率 (30D)', '波动率'],
-    },
-  ];
-}
-
 function resolveLinearSectorTrail(locale: DashboardLocale, sector?: string): string {
   const normalized = String(sector || '').trim();
   const lower = normalized.toLowerCase();
@@ -1449,14 +1355,6 @@ function resolveLinearSectorTrail(locale: DashboardLocale, sector?: string): str
     utilities: '公用事业',
   };
   return `单标的分析 / ${zhLabels[lower] || normalized}`;
-}
-
-function normalizeLinearScore(value?: string): number {
-  const numeric = Number.parseFloat(String(value || '').replace(/[^\d.-]/g, ''));
-  if (!Number.isFinite(numeric)) {
-    return 0;
-  }
-  return Math.max(0, Math.min(100, numeric));
 }
 
 function resolveConfidenceVisual(value: string | undefined, locale: DashboardLocale): {
@@ -1771,54 +1669,32 @@ function LinearObservationPanel({
   locale,
   dashboard,
   dataQualityReport,
-  decisionTrace,
-  sourceSummary,
   isGuest,
   guestPaywall,
-  onOpenStrategy,
-  onOpenFundamentals,
 }: {
   locale: DashboardLocale;
   dashboard: DashboardPayload;
   dataQualityReport?: DataQualityReport;
-  decisionTrace?: DecisionTrace;
-  sourceSummary?: string;
   isGuest: boolean;
   guestPaywall?: React.ReactNode;
-  onOpenStrategy: () => void;
-  onOpenFundamentals: () => void;
 }) {
-  const { marketColorConvention } = useUiPreferences();
-  const {
-    ref: openStrategyButtonRef,
-    onClick: handleOpenStrategyClick,
-    onPointerUp: handleOpenStrategyPointerUp,
-  } = useSafariWarmActivation<HTMLButtonElement>(onOpenStrategy);
-  const {
-    ref: openFundamentalsButtonRef,
-    onClick: handleOpenFundamentalsClick,
-    onPointerUp: handleOpenFundamentalsPointerUp,
-  } = useSafariWarmActivation<HTMLButtonElement>(onOpenFundamentals);
   const isEnglish = locale === 'en';
-  const qualityPreview = dataQualityReport
-    ? buildDataQualityPreview(dataQualityReport, locale)
-    : sourceSummary || (isEnglish ? 'Data quality not yet confirmed.' : '数据质量仍待确认。');
   const observationRows = buildResearchFrameworkRows(locale, dashboard, dataQualityReport);
-  const qualityRows = [
-    {
-      label: isEnglish ? 'Available data' : '已可用数据',
-      value: buildAvailableDataCopy(dataQualityReport, decisionTrace, locale),
-    },
-    {
-      label: isEnglish ? 'Still missing' : '仍缺失数据',
-      value: buildMissingDataCopy(dataQualityReport, locale),
-    },
-    {
-      label: isEnglish ? 'Impact' : '对结论的影响',
-      value: buildDataQualityImpactCopy(dataQualityReport, dashboard, locale),
-    },
-  ] as const;
-  const quantRows = buildQuantSnapshotRows(locale, dashboard.tech.signals);
+  const actionCopy = displaySlotValue(
+    dashboard.strategy.positionBody || observationRows[0]?.value,
+    locale,
+    isEnglish ? 'Wait for the next clean setup.' : '等待下一次更干净的确认信号。',
+  );
+  const riskCopy = displaySlotValue(
+    observationRows[2]?.value,
+    locale,
+    isEnglish ? 'Recheck the thesis if support fails.' : '若关键支撑失效，需要重新评估当前判断。',
+  );
+  const nextCopy = displaySlotValue(
+    observationRows[3]?.value,
+    locale,
+    isEnglish ? 'Track the next candle and event evidence.' : '继续跟踪下一根 K 线与事件证据。',
+  );
 
   return (
     <div className="home-research-rail-body relative flex min-w-0 flex-col gap-3 px-0 py-0">
@@ -1826,137 +1702,35 @@ function LinearObservationPanel({
         className="home-research-rail-card min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-5 py-4"
         data-testid="home-bento-card-strategy"
         data-research-card="research-actions"
-        data-rail-section="action-workflow"
+        data-rail-section="current-action"
       >
-        <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Action Rail' : '动作轨道'}</h2>
-          <button
-            ref={openStrategyButtonRef}
-            type="button"
-            className="home-research-action-button rounded-lg border px-2.5 py-1 text-[11px] font-medium text-white/48 transition-colors hover:text-white/72"
-            data-testid="home-bento-drawer-trigger-strategy"
-            onClick={handleOpenStrategyClick}
-            onPointerUp={handleOpenStrategyPointerUp}
-          >
-            {dashboard.strategy.detailLabel}
-          </button>
-        </div>
-        <div className="grid min-w-0 grid-cols-4 overflow-hidden rounded-[8px] border border-white/[0.06] text-[11px]">
-          {(isEnglish ? ['Search', 'Analyze', 'Observe', 'Report'] : ['搜索', '分析', '观察', '报告']).map((item, index) => (
-            <div key={item} className="min-w-0 border-r border-white/[0.06] px-2.5 py-2 last:border-r-0">
-              <span className="block font-mono text-[10px] text-white/26">0{index + 1}</span>
-              <span className="mt-1 block truncate font-semibold text-white/68">{item}</span>
-            </div>
-          ))}
-        </div>
-        <div className="mt-3 border-t border-white/[0.055] pt-3">
-          <p className="text-[11px] text-white/38">{observationRows[0]?.label || (isEnglish ? 'Current conclusion' : '当前结论')}</p>
-          <p className="mt-1 min-w-0 break-words text-xs font-semibold leading-[1.55] text-white/74">
-            {displaySlotValue(observationRows[0]?.value, locale)}
-          </p>
-          <div className="mt-3 py-0">
-            <p className="text-[11px] text-white/38">{observationRows[3]?.label || (isEnglish ? 'Next confirmation' : '下一步确认')}</p>
-            <p className="mt-1 text-xs leading-[1.55] text-white/58">{displaySlotValue(observationRows[3]?.value, locale)}</p>
-          </div>
-        </div>
+        <p className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Current action' : '当前动作'}</p>
+        <p className="mt-2 line-clamp-2 min-w-0 break-words text-xs leading-[1.65] text-white/72">
+          {actionCopy}
+        </p>
       </section>
 
       <section
         className="home-research-rail-card min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-5 py-4"
         data-testid="home-bento-card-fundamentals"
         data-research-card="risk-boundary"
-        data-rail-section="risk-boundaries"
+        data-rail-section="main-risk"
       >
-        <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Risk / Invalidation' : '风险 / 失效'}</h2>
-          <button
-            ref={openFundamentalsButtonRef}
-            type="button"
-            className="home-research-action-button rounded-lg border px-2.5 py-1 text-[11px] font-medium text-white/48 transition-colors hover:text-white/72"
-            data-testid="home-bento-drawer-trigger-fundamentals"
-            onClick={handleOpenFundamentalsClick}
-            onPointerUp={handleOpenFundamentalsPointerUp}
-          >
-            {dashboard.fundamentals.detailLabel}
-          </button>
-        </div>
-        <div className="divide-y divide-white/[0.055] border-t border-white/[0.055] pt-2">
-          <div className="py-2.5">
-            <p className="text-[11px] text-white/38">{observationRows[1]?.label || (isEnglish ? 'Support' : '支持因素')}</p>
-            <p
-              className={cn(
-                'mt-1 min-w-0 break-words text-xs font-semibold leading-[1.55]',
-                observationRows[1]?.tone ? metricValueClass({ label: observationRows[1].label, value: observationRows[1].value, tone: observationRows[1].tone }, marketColorConvention) : 'text-white/74',
-              )}
-              style={observationRows[1]?.tone ? toneTextStyle(observationRows[1].tone, marketColorConvention) : undefined}
-            >
-              {displaySlotValue(observationRows[1]?.value, locale)}
-            </p>
-          </div>
-          <div className="py-2.5">
-            <p className="text-[11px] text-white/38">{isEnglish ? 'Main risks / invalidation' : '主要风险 / 失效条件'}</p>
-            <p className="mt-1 min-w-0 break-words text-xs font-semibold leading-[1.55] text-white/74">
-              {displaySlotValue(observationRows[2]?.value, locale)}
-            </p>
-          </div>
-          <div className="py-2.5">
-            <p className="text-[11px] text-white/38">{dashboard.strategy.positionLabel}</p>
-            <p className="mt-1 text-xs leading-[1.55] text-white/58">{dashboard.strategy.positionBody}</p>
-          </div>
-        </div>
+        <p className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Main risk' : '主要风险'}</p>
+        <p className="mt-2 line-clamp-2 min-w-0 break-words text-xs leading-[1.65] text-white/72">
+          {riskCopy}
+        </p>
       </section>
       <section
         className="home-research-rail-card min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-5 py-4"
         data-testid="home-linear-quant-snapshot"
-        data-research-card="data-quality"
-        data-rail-section="data-quality"
+        data-research-card="next-step"
+        data-rail-section="next-step"
       >
-        <div className="mb-2 flex min-w-0 items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Data Quality' : '数据质量'}</h2>
-          {dataQualityReport ? (
-            <TraceBadge tone={dataQualityChipTone(dataQualityReport)}>
-              {dataQualityTierLabel(dataQualityReport.dataQualityTier, locale)}
-            </TraceBadge>
-          ) : null}
-        </div>
-        <div className="border-t border-white/[0.055] pt-2" data-testid="home-linear-quality-summary">
-          <p className="pb-2 text-xs leading-[1.45] text-white/58">{qualityPreview}</p>
-          <div className="divide-y divide-white/[0.055]">
-            {qualityRows.map((item) => (
-              <div key={item.label} className="flex min-w-0 items-start justify-between gap-5 py-2 text-[11px]">
-                <span className="truncate text-white/38">{item.label}</span>
-                <span className="min-w-0 break-words text-right text-white/58 whitespace-normal">{displaySlotValue(item.value, locale)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="mt-3 divide-y divide-white/[0.055] border-t border-white/[0.055] pt-2">
-          {quantRows.map((signal) => {
-            const muted = isEmptyDashboardValue(signal.value);
-            const rowKey = signal.placeholderKey || signal.label;
-            return (
-              <div key={rowKey} className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(7.2rem,auto)] items-start gap-4 py-2 text-[11px]">
-                <span className="truncate text-white/38">{signal.label}</span>
-                <div className="min-w-0 text-right">
-                  <span
-                    className={cn(
-                      'block min-w-0 break-words font-semibold whitespace-normal',
-                      muted ? 'text-white/28' : toneTextClass(signal.tone, marketColorConvention),
-                    )}
-                    style={muted ? undefined : toneTextStyle(signal.tone, marketColorConvention)}
-                  >
-                    {displaySlotValue(signal.value, locale)}
-                  </span>
-                  {muted ? (
-                    <span className="mt-0.5 block text-[10px] text-white/20">
-                      {isEnglish ? 'Awaiting field' : '字段待接入'}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <p className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Next step' : '下一步'}</p>
+        <p className="mt-2 line-clamp-2 min-w-0 break-words text-xs leading-[1.65] text-white/72">
+          {nextCopy}
+        </p>
       </section>
       {isGuest ? <div className="min-w-0 py-2 last:pb-0">{guestPaywall}</div> : null}
     </div>
@@ -2110,51 +1884,72 @@ function LinearEventsStrip({
         className="home-research-event-table min-w-0 overflow-hidden border-t border-[color:var(--wolfy-divider)] text-xs"
         data-testid="home-linear-events-table"
       >
-        <div className="hidden min-w-0 grid-cols-[minmax(12rem,1.35fr)_6.5rem_6.5rem_6.5rem_6.5rem_5.5rem_minmax(13rem,1fr)] gap-3 border-b border-[color:var(--wolfy-divider)] py-2 text-[11px] text-[color:var(--wolfy-text-muted)] lg:grid">
-          <span>{isEnglish ? 'Event' : '事件'}</span>
-          <span>{isEnglish ? 'Type' : '类型'}</span>
-          <span>{isEnglish ? 'Impact' : '影响方向'}</span>
-          <span>{isEnglish ? 'Priority' : '重要性'}</span>
-          <span>{isEnglish ? 'Time' : '时间'}</span>
-          <span>{isEnglish ? 'Left' : '剩余'}</span>
-          <span>{isEnglish ? 'Notes' : '备注'}</span>
-        </div>
         {events.length ? events.map((event, index) => (
           <div
             key={`${event.label}-${index}`}
-            className="home-research-event-row grid min-w-0 gap-2 border-b border-[color:var(--wolfy-divider)] py-2.5 last:border-b-0 lg:grid-cols-[minmax(12rem,1.35fr)_6.5rem_6.5rem_6.5rem_6.5rem_5.5rem_minmax(13rem,1fr)] lg:gap-3 lg:py-2"
+            className="home-research-event-row flex min-w-0 items-start justify-between gap-3 border-b border-[color:var(--wolfy-divider)] py-3 last:border-b-0"
             data-testid={`home-linear-event-row-${index}`}
           >
-            <span className="min-w-0 truncate text-[color:var(--wolfy-text-primary)]">{displaySlotValue(event.title, locale, isEnglish ? 'No verified event' : '暂无已验证事件')}</span>
-            <span className="min-w-0 truncate text-white/58">{event.label}</span>
-            <span className={cn('min-w-0 truncate', catalystImpactLabel(event, locale) === '利多' || catalystImpactLabel(event, locale) === 'Positive' ? 'text-[color:var(--wolfy-market-up)]' : 'text-white/58')}>
-              {catalystImpactLabel(event, locale)}
-            </span>
-            <span className="min-w-0 truncate text-amber-200/80">{event.importance === 'high' ? (isEnglish ? 'High' : '高') : (isEnglish ? 'Medium' : '中')}</span>
-            <span className="min-w-0 truncate font-mono text-white/60">{displaySlotValue(event.time, locale)}</span>
-            <span className="min-w-0 truncate font-mono text-white/48">{catalystDaysRemaining(event, locale)}</span>
-            <span className="min-w-0 truncate text-white/46">{displaySlotValue(event.detail, locale, pendingText)}</span>
+            <div className="min-w-0 flex-1">
+              <p className="min-w-0 truncate text-[color:var(--wolfy-text-primary)]">
+                {displaySlotValue(event.title, locale, isEnglish ? 'No verified event' : '暂无已验证事件')}
+              </p>
+              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-white/46">
+                <span>{event.label}</span>
+                <span
+                  className={cn(
+                    catalystImpactLabel(event, locale) === '利多' || catalystImpactLabel(event, locale) === 'Positive'
+                      ? 'text-[color:var(--wolfy-market-up)]'
+                      : 'text-white/52',
+                  )}
+                >
+                  {catalystImpactLabel(event, locale)}
+                </span>
+                <span>{event.importance === 'high' ? '高优先' : '中优先'}</span>
+              </div>
+            </div>
+            <div className="shrink-0 text-right text-[11px] text-white/44">
+              <p className="font-mono text-white/58">{displaySlotValue(event.time, locale)}</p>
+              <p className="mt-1 font-mono">{catalystDaysRemaining(event, locale)}</p>
+            </div>
           </div>
         )) : (
           <div data-testid="home-linear-events-empty">
             {placeholderRows.map((index) => (
               <div
                 key={`home-event-placeholder-${index}`}
-                className="home-research-event-row grid min-w-0 gap-2 border-b border-[color:var(--wolfy-divider)] py-2.5 text-[color:var(--wolfy-text-muted)] last:border-b-0 lg:grid-cols-[minmax(12rem,1.35fr)_6.5rem_6.5rem_6.5rem_6.5rem_5.5rem_minmax(13rem,1fr)] lg:gap-3 lg:py-2"
+                className="home-research-event-row flex min-w-0 items-start justify-between gap-3 border-b border-[color:var(--wolfy-divider)] py-3 text-[color:var(--wolfy-text-muted)] last:border-b-0"
                 data-testid={`home-linear-event-placeholder-row-${index}`}
               >
-                <span className="min-w-0 truncate">{pendingText}</span>
-                <span className="min-w-0 truncate">{pendingText}</span>
-                <span className="min-w-0 truncate">{pendingText}</span>
-                <span className="min-w-0 truncate">{pendingText}</span>
-                <span className="min-w-0 truncate font-mono">{pendingText}</span>
-                <span className="min-w-0 truncate font-mono">{pendingText}</span>
-                <span className="min-w-0 truncate">{pendingText}</span>
+                <div className="min-w-0 flex-1">
+                  <span className="block min-w-0 truncate">{pendingText}</span>
+                  <span className="mt-1 block min-w-0 truncate text-[11px]">{pendingText}</span>
+                </div>
+                <div className="shrink-0 text-right text-[11px]">
+                  <span className="block font-mono">{pendingText}</span>
+                  <span className="mt-1 block font-mono">{pendingText}</span>
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
+      {events.length ? (
+        <details className="group mt-3 min-w-0 rounded-[10px] border border-white/[0.06] bg-white/[0.015] px-3 py-2.5" data-testid="home-linear-events-disclosure">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-white/50 marker:hidden">
+            <span>{isEnglish ? 'View event notes' : '查看事件说明'}</span>
+            <span className="text-white/28 transition-transform group-open:rotate-180">{isEnglish ? '▾' : '▾'}</span>
+          </summary>
+          <div className="mt-2.5 divide-y divide-white/[0.06] border-t border-white/[0.06]">
+            {events.map((event, index) => (
+              <div key={`${event.label}-detail-${index}`} className="py-2.5">
+                <p className="text-[11px] font-semibold text-white/66">{event.title}</p>
+                <p className="mt-1 text-xs leading-[1.55] text-white/52">{displaySlotValue(event.detail, locale, pendingText)}</p>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }
@@ -2182,11 +1977,6 @@ type HomePriceContextReport = {
   meta?: unknown;
   details?: { standardReport?: unknown } | null;
   decisionTrace?: { market?: unknown } | null;
-};
-
-type QuantSnapshotSlot = {
-  label: string;
-  aliases: string[];
 };
 
 type DesiredFieldSpec = {
@@ -3490,40 +3280,6 @@ function localizeDashboardFieldLabel(locale: DashboardLocale, label: string): st
   return labels[key] || label;
 }
 
-function buildQuantSnapshotRows(locale: DashboardLocale, signals: DashboardSignal[]): Array<DashboardSignal & { placeholderKey?: string }> {
-  const rows: Array<DashboardSignal & { placeholderKey?: string }> = signals.slice(0, 6);
-  const occupiedKeys = new Set(rows.map((signal) => normalizeDetailKey(signal.label)));
-  const placeholderSlots = getQuantSnapshotSlots(locale)
-    .filter((slot) => !slot.aliases.some((alias) => occupiedKeys.has(normalizeDetailKey(alias))));
-
-  for (const slot of placeholderSlots) {
-    if (rows.length >= 6) {
-      break;
-    }
-    rows.push({
-      label: slot.label,
-      value: EMPTY_FIELD_VALUE,
-      rawValue: EMPTY_FIELD_VALUE,
-      tone: 'neutral',
-      details: EMPTY_FIELD_VALUE,
-      placeholderKey: `quant-${normalizeDetailKey(slot.label)}`,
-    });
-  }
-
-  while (rows.length < 6) {
-    rows.push({
-      label: locale === 'en' ? 'Pending field' : '待补字段',
-      value: EMPTY_FIELD_VALUE,
-      rawValue: EMPTY_FIELD_VALUE,
-      tone: 'neutral',
-      details: EMPTY_FIELD_VALUE,
-      placeholderKey: `quant-pending-${rows.length + 1}`,
-    });
-  }
-
-  return rows;
-}
-
 function formatDesiredMetricValue(label: string, value: string): string {
   const normalizedLabel = normalizeDetailKey(label);
   if (normalizedLabel === 'forwardpe' && /^-?\d+(?:\.\d+)?$/.test(value)) {
@@ -4475,7 +4231,7 @@ function InPlaceListSkeleton({
   );
 }
 
-function GuestPaywallOverlay({ registrationPath }: { registrationPath: string }) {
+function GuestPaywallOverlay({ locale, registrationPath }: { locale: DashboardLocale; registrationPath: string }) {
   return (
     <div
       className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-[rgba(8,12,24,0.58)] px-6 text-center backdrop-blur-[8px]"
@@ -4489,7 +4245,7 @@ function GuestPaywallOverlay({ registrationPath }: { registrationPath: string })
         to={registrationPath}
         className="mt-5 inline-flex items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-3 text-sm font-medium text-white shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all hover:from-blue-400 hover:to-purple-500"
       >
-        免费创建账户 (Create Free Account)
+        {locale === 'en' ? 'Create free account' : '免费创建账户'}
       </Link>
     </div>
   );
@@ -4704,7 +4460,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     return TICKER_FORMAT_RE.test(candidate) ? candidate : '';
   }, [activeTraceReport?.meta.stockCode, dashboardData.ticker, hasActiveTraceReport]);
   const shouldRenderDashboardPanels = !isGuest || Boolean(guestPreview || pendingAnalysisTicker);
-  const guestPaywall = isGuest ? <GuestPaywallOverlay registrationPath={registrationPath} /> : null;
+  const guestPaywall = isGuest ? <GuestPaywallOverlay locale={locale} registrationPath={registrationPath} /> : null;
   const deleteCopy = useMemo(() => ({
     title: t('home.deleteTitle'),
     single: t('home.deleteSingle'),
@@ -5295,15 +5051,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                 ...readyCopy.tech.signals,
               ]
             : readyCopy.tech.signals;
-          const scorePercent = normalizeLinearScore(readyCopy.decision.heroValue);
-          const hasScoreValue = !isEmptyDashboardValue(readyCopy.decision.heroValue);
-          const scoreDisplayValue = displaySlotValue(readyCopy.decision.heroValue, locale);
           const confidenceVisual = resolveConfidenceVisual(readyCopy.decision.confidenceValue, locale);
-          const confidenceArcStyle: React.CSSProperties | undefined = confidenceVisual.numeric !== null
-            ? {
-                background: `conic-gradient(var(--wolfy-accent) ${confidenceVisual.numeric * 3.6}deg, rgba(255,255,255,0.08) 0deg)`,
-              }
-            : undefined;
           const thesisCopy = readyCopy.decision.reasonBody || readyCopy.decision.summary || EMPTY_FIELD_VALUE;
           const stanceLabel = resolveLinearStanceLabel(locale, readyCopy.decision.signalLabel, readyCopy.decision.signalTone);
           const contextRailContent = isHomeAnalyzing ? (
@@ -5319,12 +5067,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               locale={locale}
               dashboard={readyCopy}
               dataQualityReport={activeDataQualityReport}
-              decisionTrace={activeDecisionTrace}
-              sourceSummary={sourceSummary}
               isGuest={Boolean(isGuest)}
               guestPaywall={guestPaywall}
-              onOpenStrategy={() => setActiveDrawer('strategy')}
-              onOpenFundamentals={() => setActiveDrawer('fundamentals')}
             />
           );
           return (
@@ -5451,11 +5195,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                               sourceSummary={sourceSummary}
                               stanceLabel={stanceLabel}
                               thesisCopy={thesisCopy}
-                              scoreDisplayValue={scoreDisplayValue}
-                              hasScoreValue={hasScoreValue}
-                              scorePercent={scorePercent}
                               confidenceVisual={confidenceVisual}
-                              confidenceArcStyle={confidenceArcStyle}
                             />
 
                             <div className="mt-2.5" data-testid="home-bento-research-state-row">
