@@ -18,12 +18,16 @@ from src.contracts.source_confidence import (
     ProviderCapabilitySupportContract,
     ProviderDryRunProbeContract,
     ProviderFitMetadataContract,
+    SCORE_GRADE_BLOCKED_SOURCE_TYPES,
+    SCORE_GRADE_TRUST_LEVELS,
+    ScoreGradeSourceAuthorityResult,
     SourceConfidenceContract,
     SourceFreshness,
     coerce_provider_capability_support_contract,
     coerce_provider_dry_run_probe_contract,
     coerce_provider_fit_metadata_contract,
     coerce_source_confidence_contract,
+    evaluate_score_grade_source_authority,
     validate_source_confidence_contract,
 )
 
@@ -634,6 +638,157 @@ def test_provider_dry_run_probe_contract_stays_metadata_only_and_secret_safe() -
         "missingProviderReason": None,
         "degradationReason": "provider_fit_metadata_only",
     }
+
+
+def test_score_grade_source_authority_result_is_frozen_and_slotted() -> None:
+    result = ScoreGradeSourceAuthorityResult(allowed=False, reason_codes=("blocked_source_type",))
+
+    assert result.allowed is False
+    assert result.reason_codes == ("blocked_source_type",)
+    assert not hasattr(result, "__dict__")
+    with pytest.raises(AttributeError):
+        result.allowed = True  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("source_type", sorted(SCORE_GRADE_BLOCKED_SOURCE_TYPES))
+def test_score_grade_source_authority_blocks_known_non_authority_source_types(
+    source_type: str,
+) -> None:
+    result = evaluate_score_grade_source_authority(
+        source_type=source_type,
+        source_tier="score_grade",
+        trust_level="score_grade_when_configured",
+        score_contribution_allowed=True,
+        source_authority_allowed=True,
+    )
+
+    assert result == ScoreGradeSourceAuthorityResult(
+        allowed=False,
+        reason_codes=("blocked_source_type",),
+    )
+
+
+@pytest.mark.parametrize(
+    ("updates", "expected_reason"),
+    [
+        ({"is_fallback": True}, "fallback_source"),
+        ({"is_stale": True}, "stale_source"),
+        ({"is_synthetic": True}, "synthetic_source"),
+        ({"is_unavailable": True}, "unavailable_source"),
+        ({"observation_only": True}, "observation_only"),
+        ({"score_contribution_allowed": False}, "score_contribution_not_allowed"),
+        ({"source_authority_allowed": False}, "source_authority_not_allowed"),
+    ],
+)
+def test_score_grade_source_authority_blocks_degraded_flags_and_disabled_authority(
+    updates: dict[str, object],
+    expected_reason: str,
+) -> None:
+    payload: dict[str, object] = {
+        "source_type": "score_grade",
+        "source_tier": "score_grade",
+        "trust_level": "score_grade_when_configured",
+        "score_contribution_allowed": True,
+        "source_authority_allowed": True,
+    }
+    payload.update(updates)
+
+    result = evaluate_score_grade_source_authority(**payload)
+
+    assert result.allowed is False
+    assert result.reason_codes == (expected_reason,)
+
+
+@pytest.mark.parametrize(
+    ("updates", "expected_reason"),
+    [
+        ({"source_type": ""}, "missing_source_type"),
+        ({"source_tier": ""}, "missing_source_tier"),
+        ({"trust_level": ""}, "missing_trust_level"),
+        ({"freshness": "fallback"}, "fallback_source"),
+        ({"freshness": "stale"}, "stale_source"),
+        ({"freshness": "synthetic"}, "synthetic_source"),
+        ({"freshness": "unavailable"}, "unavailable_source"),
+    ],
+)
+def test_score_grade_source_authority_fails_closed_for_missing_or_degraded_metadata(
+    updates: dict[str, object],
+    expected_reason: str,
+) -> None:
+    payload: dict[str, object] = {
+        "source_type": "score_grade",
+        "source_tier": "score_grade",
+        "trust_level": "score_grade_when_configured",
+        "score_contribution_allowed": True,
+        "source_authority_allowed": True,
+    }
+    payload.update(updates)
+
+    result = evaluate_score_grade_source_authority(**payload)
+
+    assert result.allowed is False
+    assert result.reason_codes == (expected_reason,)
+
+
+def test_score_grade_source_authority_allows_explicit_score_grade_source_and_trust() -> None:
+    result = evaluate_score_grade_source_authority(
+        source_type="score_grade",
+        source_tier="score_grade",
+        trust_level="score_grade_when_configured",
+        score_contribution_allowed=True,
+        source_authority_allowed=True,
+    )
+
+    assert "score_grade_when_configured" in SCORE_GRADE_TRUST_LEVELS
+    assert result == ScoreGradeSourceAuthorityResult(
+        allowed=True,
+        reason_codes=("score_grade_source_authority_allowed",),
+    )
+
+
+def test_score_grade_source_authority_allows_explicit_reproducible_local_or_stored_contract() -> None:
+    result = evaluate_score_grade_source_authority(
+        source_type="reproducible_local_or_stored",
+        source_tier="reproducible_local_or_stored",
+        trust_level="reproducible_local_or_stored",
+        freshness="cached",
+        score_contribution_allowed=True,
+        source_authority_allowed=True,
+        allowed_source_types=("reproducible_local_or_stored",),
+        allowed_source_tiers=("reproducible_local_or_stored",),
+    )
+
+    assert result == ScoreGradeSourceAuthorityResult(
+        allowed=True,
+        reason_codes=("score_grade_source_authority_allowed",),
+    )
+
+
+def test_score_grade_source_authority_reason_codes_are_stable_and_bounded() -> None:
+    result = evaluate_score_grade_source_authority(
+        source_type="public_proxy",
+        source_tier="unofficial_proxy",
+        trust_level="usable_with_caution",
+        observation_only=True,
+        score_contribution_allowed=False,
+        source_authority_allowed=False,
+        is_stale=True,
+    )
+
+    assert result.allowed is False
+    assert result.reason_codes == (
+        "blocked_source_type",
+        "blocked_source_tier",
+        "trust_level_not_allowed",
+        "stale_source",
+        "observation_only",
+        "score_contribution_not_allowed",
+        "source_authority_not_allowed",
+    )
+    assert len(result.reason_codes) <= 8
+    assert all(code.isidentifier() for code in result.reason_codes)
+    assert "public_proxy" not in result.reason_codes
+    assert "unofficial_proxy" not in result.reason_codes
 
 
 def test_source_confidence_contract_import_is_inert() -> None:

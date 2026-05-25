@@ -15,6 +15,28 @@ from typing import Any, Mapping, Protocol
 
 SOURCE_CONFIDENCE_CONTRACT_VERSION = "source_confidence_contract_v1"
 STRONG_FRESHNESS_VALUES = {"fresh", "live"}
+SCORE_GRADE_BLOCKED_SOURCE_TYPES = frozenset(
+    {
+        "public_proxy",
+        "unofficial_proxy",
+        "missing",
+        "fallback_static",
+        "synthetic_fixture",
+        "delayed_fixture",
+        "malformed_fixture",
+        "disabled_live_stub",
+    }
+)
+SCORE_GRADE_TRUST_LEVELS = frozenset(
+    {
+        "reproducible_local_or_stored",
+        "score_grade",
+        "score_grade_when_configured",
+    }
+)
+_SCORE_GRADE_DEFAULT_SOURCE_TYPES = frozenset({"score_grade"})
+_SCORE_GRADE_DEFAULT_SOURCE_TIERS = frozenset({"score_grade"})
+_SCORE_GRADE_AUTHORITY_ALLOWED_REASON = "score_grade_source_authority_allowed"
 
 
 class SourceFreshness(str, Enum):
@@ -35,6 +57,12 @@ class SupportsSourceConfidence(Protocol):
 
     def to_dict(self) -> dict[str, Any]:
         """Return a serializable source-confidence payload."""
+
+
+@dataclass(frozen=True, slots=True)
+class ScoreGradeSourceAuthorityResult:
+    allowed: bool
+    reason_codes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -473,6 +501,92 @@ def coerce_provider_dry_run_probe_contract(
     )
 
 
+def evaluate_score_grade_source_authority(
+    *,
+    source_type: Any = None,
+    source_tier: Any = None,
+    trust_level: Any = None,
+    observation_only: bool = False,
+    score_contribution_allowed: bool = False,
+    source_authority_allowed: bool = False,
+    freshness: Any = None,
+    is_fallback: bool = False,
+    is_stale: bool = False,
+    is_synthetic: bool = False,
+    is_unavailable: bool = False,
+    allowed_source_types: Any = None,
+    allowed_source_tiers: Any = None,
+    require_trust_level: bool = True,
+) -> ScoreGradeSourceAuthorityResult:
+    """Evaluate whether source metadata can carry score-grade authority.
+
+    The helper is intentionally inert: it only inspects caller-provided metadata
+    and returns bounded reason codes. Runtime consumers must opt in separately.
+    """
+
+    source_type_token = _normalized_token(source_type)
+    source_tier_token = _normalized_token(source_tier)
+    trust_level_token = _normalized_token(trust_level)
+    allowed_type_tokens = _normalized_token_set(
+        allowed_source_types,
+        default=_SCORE_GRADE_DEFAULT_SOURCE_TYPES,
+    )
+    allowed_tier_tokens = _normalized_token_set(
+        allowed_source_tiers,
+        default=_SCORE_GRADE_DEFAULT_SOURCE_TIERS,
+    )
+    freshness_value = _coerce_freshness(freshness)
+    reasons: list[str] = []
+
+    if not source_type_token:
+        reasons.append("missing_source_type")
+    elif source_type_token in SCORE_GRADE_BLOCKED_SOURCE_TYPES:
+        reasons.append("blocked_source_type")
+    elif source_type_token not in allowed_type_tokens:
+        reasons.append("source_type_not_allowed")
+
+    if not source_tier_token:
+        reasons.append("missing_source_tier")
+    elif source_tier_token in SCORE_GRADE_BLOCKED_SOURCE_TYPES:
+        reasons.append("blocked_source_tier")
+    elif source_tier_token not in allowed_tier_tokens:
+        reasons.append("source_tier_not_allowed")
+
+    if require_trust_level:
+        if not trust_level_token:
+            reasons.append("missing_trust_level")
+        elif trust_level_token not in SCORE_GRADE_TRUST_LEVELS:
+            reasons.append("trust_level_not_allowed")
+
+    if _bool(is_fallback) or freshness_value is SourceFreshness.FALLBACK:
+        reasons.append("fallback_source")
+    if _bool(is_stale) or freshness_value is SourceFreshness.STALE:
+        reasons.append("stale_source")
+    if freshness_value is SourceFreshness.PARTIAL:
+        reasons.append("partial_coverage")
+    if _bool(is_synthetic) or freshness_value is SourceFreshness.SYNTHETIC:
+        reasons.append("synthetic_source")
+    if _bool(is_unavailable) or freshness_value is SourceFreshness.UNAVAILABLE:
+        reasons.append("unavailable_source")
+    if _bool(observation_only):
+        reasons.append("observation_only")
+    if not _bool(score_contribution_allowed):
+        reasons.append("score_contribution_not_allowed")
+    if not _bool(source_authority_allowed):
+        reasons.append("source_authority_not_allowed")
+
+    reason_codes = _stable_reason_codes(reasons)
+    if reason_codes:
+        return ScoreGradeSourceAuthorityResult(
+            allowed=False,
+            reason_codes=reason_codes,
+        )
+    return ScoreGradeSourceAuthorityResult(
+        allowed=True,
+        reason_codes=(_SCORE_GRADE_AUTHORITY_ALLOWED_REASON,),
+    )
+
+
 def apply_source_confidence_caps(contract: SourceConfidenceContract) -> SourceConfidenceContract:
     """Cap freshness/weight so degraded sources cannot be projected as fresh."""
 
@@ -584,6 +698,41 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _normalized_token(value: Any) -> str:
+    if isinstance(value, Enum):
+        value = value.value
+    return _text(value).lower()
+
+
+def _normalized_token_set(value: Any, *, default: frozenset[str]) -> frozenset[str]:
+    if value is None:
+        return default
+    if isinstance(value, str):
+        items = (value,)
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        items = value
+    else:
+        items = (value,)
+
+    tokens: list[str] = []
+    for item in items:
+        token = _normalized_token(item)
+        if token:
+            tokens.append(token)
+    return frozenset(tokens)
+
+
+def _stable_reason_codes(reasons: list[str]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    stable: list[str] = []
+    for reason in reasons:
+        if reason in seen:
+            continue
+        seen.add(reason)
+        stable.append(reason)
+    return tuple(stable)
+
+
 def _optional_text(value: Any) -> str | None:
     text = _text(value)
     return text or None
@@ -674,11 +823,14 @@ def _degradation_cap(flags: Mapping[str, bool]) -> tuple[SourceFreshness, float,
 
 __all__ = [
     "SOURCE_CONFIDENCE_CONTRACT_VERSION",
+    "SCORE_GRADE_BLOCKED_SOURCE_TYPES",
+    "SCORE_GRADE_TRUST_LEVELS",
     "STRONG_FRESHNESS_VALUES",
     "ProviderCapabilityContract",
     "ProviderDryRunProbeContract",
     "ProviderFitMetadataContract",
     "ProviderCapabilitySupportContract",
+    "ScoreGradeSourceAuthorityResult",
     "SourceConfidenceContract",
     "SourceConfidenceValidationIssue",
     "SourceConfidenceValidationResult",
@@ -690,5 +842,6 @@ __all__ = [
     "coerce_provider_fit_metadata_contract",
     "coerce_provider_capability_support_contract",
     "coerce_source_confidence_contract",
+    "evaluate_score_grade_source_authority",
     "validate_source_confidence_contract",
 ]

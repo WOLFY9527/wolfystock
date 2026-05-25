@@ -3,11 +3,14 @@
 
 from src.services.source_confidence_contract import (
     SOURCE_CONFIDENCE_CONTRACT_VERSION,
+    SCORE_GRADE_BLOCKED_SOURCE_TYPES,
+    SCORE_GRADE_TRUST_LEVELS,
     STRONG_FRESHNESS_VALUES,
     ProviderCapabilityContract,
     ProviderDryRunProbeContract,
     ProviderFitMetadataContract,
     ProviderCapabilitySupportContract,
+    ScoreGradeSourceAuthorityResult,
     SourceConfidenceContract,
     SourceConfidenceValidationIssue,
     SourceConfidenceValidationResult,
@@ -19,6 +22,7 @@ from src.services.source_confidence_contract import (
     coerce_provider_fit_metadata_contract,
     coerce_provider_capability_support_contract,
     coerce_source_confidence_contract,
+    evaluate_score_grade_source_authority,
     validate_source_confidence_contract,
 )
 from src.services.market_intelligence_trust_gate import (
@@ -34,6 +38,8 @@ from src.services.market_intelligence_trust_gate import (
 __all__ = [
     "MARKET_INTELLIGENCE_TRUST_GATE_VERSION",
     "SOURCE_CONFIDENCE_CONTRACT_VERSION",
+    "SCORE_GRADE_BLOCKED_SOURCE_TYPES",
+    "SCORE_GRADE_TRUST_LEVELS",
     "STRONG_FRESHNESS_VALUES",
     "MarketIntelligenceSourceTier",
     "MarketIntelligenceTrustLevel",
@@ -42,6 +48,7 @@ __all__ = [
     "ProviderDryRunProbeContract",
     "ProviderFitMetadataContract",
     "ProviderCapabilitySupportContract",
+    "ScoreGradeSourceAuthorityResult",
     "SourceConfidenceContract",
     "SourceConfidenceValidationIssue",
     "SourceConfidenceValidationResult",
@@ -53,6 +60,7 @@ __all__ = [
     "coerce_provider_fit_metadata_contract",
     "coerce_provider_capability_support_contract",
     "coerce_source_confidence_contract",
+    "evaluate_score_grade_source_authority",
     "evaluate_market_intelligence_trust",
     "evaluate_market_intelligence_trust_from_sources",
     "resolve_market_intelligence_source_tier",
