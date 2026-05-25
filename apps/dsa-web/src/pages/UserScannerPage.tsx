@@ -42,7 +42,6 @@ import {
   TerminalButton,
   TerminalChip,
   TerminalNestedBlock,
-  TerminalPageShell,
   TerminalPanel,
 } from '../components/terminal';
 import {
@@ -52,7 +51,7 @@ import {
   DenseStatusStrip,
   DenseTableShell,
 } from '../components/terminal/DenseWorkbenchPrimitives';
-import { WideWorkspaceShellScope } from '../components/layout/WideWorkspaceShell';
+import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
   getSafariReadySurfaceClassName,
@@ -2657,10 +2656,10 @@ const UserScannerPage: React.FC = () => {
           'flex w-full flex-1 flex-col min-w-0 bg-transparent text-foreground',
         )}
       >
-          <WideWorkspaceShellScope data-testid="scanner-wide-workspace-scope" className="flex-1">
-	        <TerminalPageShell
+          <ConsumerWorkspaceScope data-testid="scanner-wide-workspace-scope" className="flex-1">
+	        <ConsumerWorkspacePageShell
 	          data-testid="user-scanner-workspace"
-	          className="flex-1 min-w-0 max-w-none gap-3 -mx-4 px-2 sm:-mx-2 sm:px-2 md:mx-0 md:px-3 xl:px-4"
+	          className="flex-1 gap-3"
 	        >
             <div data-testid="scanner-header-strip" className="flex min-w-0 flex-col gap-3">
               {/* <TerminalPageHeading /> marker: DensePageHeader emits the page-level h1. */}
@@ -3390,8 +3389,8 @@ const UserScannerPage: React.FC = () => {
                   </div>
                 </DenseTableShell>
 		          </div>
-	        </TerminalPageShell>
-          </WideWorkspaceShellScope>
+	        </ConsumerWorkspacePageShell>
+          </ConsumerWorkspaceScope>
       </div>
 
       <ScannerHistoryDrawer

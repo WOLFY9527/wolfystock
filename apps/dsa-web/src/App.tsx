@@ -2,8 +2,8 @@ import type React from 'react';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ApiErrorAlert } from './components/common/ApiErrorAlert';
-import { AuthGuardOverlay } from './components/auth/AuthGuardOverlay';
 import { BrandedLoadingScreen } from './components/common/BrandedLoadingScreen';
+import { ConsumerProtectedFrame } from './components/layout/ConsumerWorkspaceShell';
 import { Shell } from './components/layout/Shell';
 import { PreviewShell } from './components/layout/PreviewShell';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -205,11 +205,7 @@ export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = (
     return <>{children}</>;
   }
 
-  return (
-    <div className="w-full h-full flex flex-col items-center justify-center">
-      <AuthGuardOverlay moduleName={moduleName} />
-    </div>
-  );
+  return <ConsumerProtectedFrame moduleName={moduleName} />;
 };
 
 export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {

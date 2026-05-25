@@ -15,9 +15,8 @@ import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import { backtestApi } from '../api/backtest';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { watchlistApi } from '../api/watchlist';
-import { AuthGuardOverlay } from '../components/auth/AuthGuardOverlay';
+import { ConsumerProtectedFrame, ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { ApiErrorAlert, Input, Select } from '../components/common';
-import { WideWorkspaceShellScope } from '../components/layout/WideWorkspaceShell';
 import {
   ConsoleBoard,
   ConsoleContextRail,
@@ -33,7 +32,6 @@ import {
   TerminalButton,
   TerminalChip,
   TerminalNotice,
-  TerminalPageShell,
   TerminalPanel,
 } from '../components/terminal';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -1204,11 +1202,7 @@ const WatchlistPage: React.FC = () => {
   }, [actionItems, backtestSessionKeys, copy.batchBacktestComplete, copy.batchBacktestLabel, isBatchBacktesting]);
 
   if (isGuest) {
-    return (
-      <div className="w-full h-full flex flex-col items-center justify-center">
-        <AuthGuardOverlay moduleName={copy.signInModule} />
-      </div>
-    );
+    return <ConsumerProtectedFrame moduleName={copy.signInModule} />;
   }
 
   const noticeClassName = notice?.tone === 'danger'
@@ -1266,8 +1260,8 @@ const WatchlistPage: React.FC = () => {
       : 'neutral';
 
   return (
-    <WideWorkspaceShellScope data-testid="watchlist-wide-workspace-scope" className="min-h-0 flex-1">
-      <TerminalPageShell data-testid="watchlist-page" className="flex-1 min-w-0 py-5 md:py-6">
+    <ConsumerWorkspaceScope data-testid="watchlist-wide-workspace-scope" className="min-h-0 flex-1">
+      <ConsumerWorkspacePageShell data-testid="watchlist-page" className="flex-1">
       <div data-layout-zone="HeaderStrip" data-testid="watchlist-header-strip" className="flex min-w-0 flex-col gap-3">
         <DensePageHeader
           eyebrow={language === 'zh' ? '扫描候选' : 'Scanner candidates'}
@@ -1928,9 +1922,9 @@ const WatchlistPage: React.FC = () => {
           </div>
         </div>
       </DenseTableShell>
-      </TerminalPageShell>
-    </WideWorkspaceShellScope>
-    );
+      </ConsumerWorkspacePageShell>
+    </ConsumerWorkspaceScope>
+  );
 };
 
 export default WatchlistPage;

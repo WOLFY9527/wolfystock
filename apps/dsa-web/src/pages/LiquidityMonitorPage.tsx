@@ -27,7 +27,7 @@ import {
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal';
-import { WideWorkspacePageShell } from '../components/layout/WideWorkspaceShell';
+import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { OfficialMacroAuthorityDiagnostics } from '../components/common/OfficialMacroAuthorityDiagnostics';
 import { buildOfficialMacroAuthorityDiagnosticsView } from '../components/common/officialMacroAuthorityDiagnosticsData';
 import { formatDateTime, formatPercent, formatSignedNumber } from '../utils/format';
@@ -1565,7 +1565,8 @@ const LiquidityMonitorPage: React.FC = () => {
   );
 
   return (
-    <WideWorkspacePageShell className="flex min-h-0 flex-1 py-5 md:py-6">
+    <ConsumerWorkspaceScope className="min-h-0 flex-1">
+    <ConsumerWorkspacePageShell className="flex min-h-0 flex-1">
       <TerminalPageHeading
         eyebrow="流动性"
         title="流动性监测"
@@ -1600,7 +1601,8 @@ const LiquidityMonitorPage: React.FC = () => {
           </div>
         </TerminalGrid>
       ) : null}
-    </WideWorkspacePageShell>
+    </ConsumerWorkspacePageShell>
+    </ConsumerWorkspaceScope>
   );
 };
 

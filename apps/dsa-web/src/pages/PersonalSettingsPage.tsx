@@ -10,7 +10,8 @@ import {
   ConsoleStatusStrip,
   WolfyShellSurface,
 } from '../components/linear';
-import { TerminalButton, TerminalChip, TerminalPageHeading, TerminalPageShell } from '../components/terminal';
+import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
+import { TerminalButton, TerminalChip, TerminalPageHeading } from '../components/terminal';
 import { authApi } from '../api/auth';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { ChangePasswordCard } from '../components/settings/ChangePasswordCard';
@@ -352,9 +353,10 @@ const PersonalSettingsPage: React.FC = () => {
   ];
 
   return (
-    <TerminalPageShell
+    <ConsumerWorkspaceScope className="flex-1">
+    <ConsumerWorkspacePageShell
       data-testid="personal-settings-workspace"
-      className="flex-1 min-h-0 min-w-0 py-5 md:py-6"
+      className="flex-1 min-h-0 min-w-0"
     >
       <section className="flex min-h-0 min-w-0 flex-col gap-4">
         <TerminalPageHeading
@@ -716,7 +718,8 @@ const PersonalSettingsPage: React.FC = () => {
           </ConsoleContextRail>
         </div>
       </section>
-    </TerminalPageShell>
+    </ConsumerWorkspacePageShell>
+    </ConsumerWorkspaceScope>
   );
 };
 

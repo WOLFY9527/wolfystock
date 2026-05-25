@@ -14,7 +14,7 @@ import {
   type PanelKey,
   type PanelState,
 } from '../components/market-overview/MarketOverviewWorkbench';
-import { WideWorkspaceShellScope } from '../components/layout/WideWorkspaceShell';
+import { ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { TerminalPageHeading } from '../components/terminal';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
@@ -907,7 +907,7 @@ const MarketOverviewPage = () => {
   }, [refreshPanel, resetAutoRevalidatePanel]);
 
   return (
-    <WideWorkspaceShellScope className="min-h-0 flex-1">
+    <ConsumerWorkspaceScope className="min-h-0 flex-1">
       <MarketOverviewWorkbench
         heading={(
           <TerminalPageHeading
@@ -925,7 +925,7 @@ const MarketOverviewPage = () => {
         showAdminDiagnostics={isAdminMode && canReadProviders}
         onRefreshPanel={handleWorkbenchRefresh}
       />
-    </WideWorkspaceShellScope>
+    </ConsumerWorkspaceScope>
   );
 };
 

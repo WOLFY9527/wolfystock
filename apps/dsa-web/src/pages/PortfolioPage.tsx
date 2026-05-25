@@ -5,6 +5,7 @@ import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Drawer, Input, PillBadge, SectionShell, SegmentedControl, Select } from '../components/common';
+import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { PortfolioTrustStrip, type PortfolioTrustChipItem } from '../components/portfolio/PortfolioTrustStrip';
 import {
   TerminalButton,
@@ -16,7 +17,6 @@ import {
   TerminalMetric,
   TerminalNestedBlock,
   TerminalNotice,
-  TerminalPageShell,
   TerminalPanel,
 } from '../components/terminal';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -2373,7 +2373,8 @@ const PortfolioPage: React.FC = () => {
           'w-full flex-1 flex flex-col min-h-0 min-w-0 bg-transparent text-white/72',
         )}
       >
-        <TerminalPageShell className="flex-1 min-w-0 min-h-0">
+        <ConsumerWorkspaceScope className="flex-1">
+        <ConsumerWorkspacePageShell className="flex-1 min-w-0 min-h-0">
           <TerminalGrid data-testid="portfolio-workspace-grid">
             {error || riskWarning || writeWarning ? (
               <div data-testid="portfolio-row-alerts" className="order-0 col-span-12 xl:col-span-12 min-w-0 flex flex-col gap-3">
@@ -3279,7 +3280,8 @@ const PortfolioPage: React.FC = () => {
               </div>
             </div>
 	          </TerminalGrid>
-      </TerminalPageShell>
+      </ConsumerWorkspacePageShell>
+      </ConsumerWorkspaceScope>
     </div>
 
       <Drawer

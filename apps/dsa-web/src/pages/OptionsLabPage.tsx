@@ -32,6 +32,7 @@ import {
   TerminalPageShell,
   TerminalSectionHeader,
 } from '../components/terminal';
+import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { cn } from '../utils/cn';
 import { normalizeOptionsEvidence } from '../utils/evidenceDisplay';
 import { formatNumber, formatPercent } from '../utils/format';
@@ -1562,7 +1563,8 @@ const OptionsLabPageContent: React.FC = () => {
 
   return (
     <main className="w-full overflow-x-hidden text-white">
-      <TerminalPageShell data-testid="options-lab-page-root">
+      <ConsumerWorkspaceScope className="min-h-0 flex-1">
+      <ConsumerWorkspacePageShell data-testid="options-lab-page-root">
         <TerminalPageHeading
           data-testid="options-lab-page-heading"
           eyebrow="只读情景分析"
@@ -1642,7 +1644,8 @@ const OptionsLabPageContent: React.FC = () => {
             </div>
           </div>
         </div>
-      </TerminalPageShell>
+      </ConsumerWorkspacePageShell>
+      </ConsumerWorkspaceScope>
     </main>
   );
 };

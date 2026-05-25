@@ -4946,7 +4946,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       <main className="w-full flex-1 flex flex-col min-h-0 min-w-0" data-testid="home-bento-main">
         {!shouldRenderDashboardPanels ? (
           <section
-            className="mx-auto flex w-full max-w-[1920px] flex-1 min-w-0 flex-col px-3 py-3 sm:px-4 xl:px-6"
+            className="mx-auto flex w-full max-w-[1880px] flex-1 min-w-0 flex-col px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
             data-testid="guest-home-clean-search"
           >
             <div className="flex w-full min-w-0 flex-col gap-3" data-testid="guest-home-first-screen-stack">
@@ -5073,7 +5073,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           );
           return (
             <div
-              className="home-research-stage mx-auto flex w-full max-w-[1920px] min-w-0 flex-col gap-2.5 px-3 py-3 sm:px-4 xl:px-6"
+              className="home-research-stage mx-auto flex w-full max-w-[1880px] min-w-0 flex-col gap-2.5 px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
               data-testid="home-research-stage"
             >
               {omnibarModule}

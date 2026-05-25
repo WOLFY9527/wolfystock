@@ -20,7 +20,7 @@ import {
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal/TerminalPrimitives';
-import { WideWorkspacePageShell } from '../components/layout/WideWorkspaceShell';
+import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   marketRotationApi,
@@ -1113,7 +1113,8 @@ const MarketRotationRadarPage: React.FC = () => {
       data-bento-surface="true"
       className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden no-scrollbar text-white"
     >
-      <WideWorkspacePageShell className="flex min-h-0 flex-1 py-5 md:py-6">
+      <ConsumerWorkspaceScope className="min-h-0 flex-1">
+      <ConsumerWorkspacePageShell className="flex min-h-0 flex-1">
         <TerminalPanel as="section" dense className="relative shrink-0 overflow-hidden">
           <TerminalPageHeading
             eyebrow="主题轮动"
@@ -1230,7 +1231,8 @@ const MarketRotationRadarPage: React.FC = () => {
             </TerminalGrid>
           </>
         ) : null}
-      </WideWorkspacePageShell>
+      </ConsumerWorkspacePageShell>
+      </ConsumerWorkspaceScope>
     </div>
   );
 };

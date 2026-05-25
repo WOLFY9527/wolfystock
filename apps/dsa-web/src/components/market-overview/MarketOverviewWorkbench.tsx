@@ -54,7 +54,8 @@ import {
   MarketOverviewPanelFooter,
   MarketOverviewRefreshButton,
 } from './marketOverviewPrimitives';
-import { TerminalChip, TerminalGrid, TerminalPageShell, TerminalPanel } from '../terminal';
+import { ConsumerWorkspacePageShell } from '../layout/ConsumerWorkspaceShell';
+import { TerminalChip, TerminalGrid, TerminalPanel } from '../terminal';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
 import type { OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';
@@ -2701,7 +2702,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
       data-bento-surface="true"
       className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden no-scrollbar text-white"
     >
-      <TerminalPageShell data-testid="market-overview-workbench" className="flex min-h-0 flex-1 py-5 md:py-6">
+      <ConsumerWorkspacePageShell data-testid="market-overview-workbench" className="flex min-h-0 flex-1">
         <MarketOverviewWorkbenchTopSurface
           heading={heading}
           directionalSummary={directionalSummaryView}
@@ -2742,7 +2743,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
             showExecutiveGroups={activeCategory === 'all'}
           />
         </Suspense>
-      </TerminalPageShell>
+      </ConsumerWorkspacePageShell>
     </div>
   );
 };

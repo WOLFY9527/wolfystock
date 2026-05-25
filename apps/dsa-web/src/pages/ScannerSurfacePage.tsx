@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { AuthGuardOverlay } from '../components/auth/AuthGuardOverlay';
+import { ConsumerProtectedFrame } from '../components/layout/ConsumerWorkspaceShell';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 
@@ -10,11 +10,7 @@ const ScannerSurfacePage: React.FC = () => {
   const { language } = useI18n();
 
   if (isGuest) {
-    return (
-      <div className="w-full h-full flex flex-col items-center justify-center">
-        <AuthGuardOverlay moduleName={language === 'en' ? 'Market Scanner' : '全市场扫描仪'} />
-      </div>
-    );
+    return <ConsumerProtectedFrame moduleName={language === 'en' ? 'Market Scanner' : '全市场扫描仪'} />;
   }
 
   return (
