@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Sequence
 
+from src.contracts.source_confidence import evaluate_score_grade_source_authority
 from src.services.data_source_router import (
     DataSourceRouteRequest,
     DataSourceRouter,
@@ -125,6 +126,12 @@ _POLYGON_US_BREADTH_AD_METRICS = (
     "ADVANCE_DECLINE_RATIO",
 )
 _POLYGON_US_BREADTH_HIGH_LOW_METRICS = ("NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO")
+_PROVIDER_OPS_SCORE_GRADE_TRUST_LEVELS = frozenset(
+    {
+        "reproducible_local_or_stored",
+        "score_grade",
+    }
+)
 
 
 @dataclass
@@ -820,15 +827,36 @@ class ProviderOperationsMatrixService:
 
     @staticmethod
     def _score_eligible(row: _ProviderAccumulator, source_type: str) -> bool:
-        if row.observation_only or not row.score_contribution_allowed:
-            return False
-        if source_type in _PROXY_OR_WEAK_SOURCE_TYPES:
-            return False
-        if row.trust_level in {"weak", "usable_with_caution", "reference_only", "observation_only"}:
-            return False
-        if row.trust_level not in {"reproducible_local_or_stored", "score_grade"}:
-            return False
-        return True
+        trust_level = row.trust_level
+        if trust_level not in _PROVIDER_OPS_SCORE_GRADE_TRUST_LEVELS:
+            trust_level = "provider_ops_trust_level_not_allowed"
+        freshness_evidence = (
+            row.source_freshness_evidence
+            if isinstance(row.source_freshness_evidence, Mapping)
+            else {}
+        )
+        source_tier = row.source_tier or source_type
+        source_authority_allowed = (
+            row.source_authority_allowed
+            if row.source_authority_allowed is not None
+            else source_type == "cache_snapshot"
+        )
+        authority = evaluate_score_grade_source_authority(
+            source_type=source_type,
+            source_tier=source_tier,
+            trust_level=trust_level,
+            observation_only=row.observation_only,
+            score_contribution_allowed=row.score_contribution_allowed,
+            source_authority_allowed=source_authority_allowed,
+            freshness=freshness_evidence.get("freshness"),
+            is_fallback=freshness_evidence.get("isFallback", False),
+            is_stale=freshness_evidence.get("isStale", False),
+            is_synthetic=freshness_evidence.get("isSynthetic", False),
+            is_unavailable=freshness_evidence.get("isUnavailable", False),
+            allowed_source_types=(source_type,),
+            allowed_source_tiers=(source_tier,),
+        )
+        return authority.allowed
 
     @staticmethod
     def _remediation_hint(

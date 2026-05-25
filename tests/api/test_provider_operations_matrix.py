@@ -7,6 +7,7 @@ import builtins
 import json
 import os
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -462,6 +463,39 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
     }.issubset(set(rotation_flow["routerReasonCodes"]))
 
 
+def test_provider_operations_matrix_payload_shape_keeps_score_authority_fields_stable() -> None:
+    payload = ProviderOperationsMatrixService(env={}, spec_finder=lambda _: None).build_matrix()
+
+    assert set(payload) == {"generatedAt", "diagnosticOnly", "rows", "summary", "metadata"}
+    assert {
+        "readOnly",
+        "externalProviderCalls",
+        "providerOrderChanged",
+        "secretValuesIncluded",
+        "rawProviderPayloadsIncluded",
+        "rowCount",
+    }.issubset(payload["metadata"])
+
+    row = _row_by_id(payload, "local_cache")
+    assert {
+        "providerId",
+        "sourceType",
+        "sourceTier",
+        "trustLevel",
+        "runtimeState",
+        "sourceAuthorityAllowed",
+        "scoreContributionAllowed",
+        "scoreEligible",
+        "reasonCodes",
+        "routerReasonCodes",
+        "sourceFreshnessEvidence",
+        "diagnosticOnly",
+    }.issubset(row)
+    assert "scoreAuthorityReasonCodes" not in row
+    assert "sourceAuthorityReasonCodes" not in row
+    assert "scoreEligibilityReasonCodes" not in row
+
+
 def test_unknown_surface_aliases_fall_back_to_provider_ops_product_surface() -> None:
     assert ProviderOperationsMatrixService._canonical_product_affected_surfaces(
         ["mystery_surface"]
@@ -882,20 +916,36 @@ def test_polygon_us_grouped_daily_projection_is_visible_without_secret_or_offici
     assert full_breadth["scoreEligible"] is False
 
 
-def test_weak_and_proxy_providers_remain_non_score_grade() -> None:
+def test_blocked_provider_rows_remain_non_score_grade() -> None:
     payload = ProviderOperationsMatrixService(env={}, spec_finder=lambda _: None).build_matrix()
 
-    for provider_id in (
-        "akshare",
-        "akshare_existing_baseline",
-        "yfinance_current_baseline",
-        "yahooquery",
-    ):
+    expected_source_types = {
+        "akshare": "public_proxy",
+        "akshare_existing_baseline": "public_proxy",
+        "yfinance_current_baseline": "unofficial_proxy",
+        "yahooquery": "unofficial_proxy",
+        "authorized.us_etf_flow": "missing",
+        "options_lab.synthetic_fixture_chain": "synthetic_fixture",
+        "options_lab.disabled_live_provider_stubs": "disabled_live_stub",
+    }
+    for provider_id, source_type in expected_source_types.items():
         row = _row_by_id(payload, provider_id)
         assert row["scoreEligible"] is False
         assert row["scoreContributionAllowed"] is False
-        assert row["sourceType"] in {"public_proxy", "unofficial_proxy"}
-        assert row["trustLevel"] in {"weak", "usable_with_caution"}
+        assert row["sourceType"] == source_type
+
+
+def test_score_authority_helper_keeps_fallback_rows_fail_closed() -> None:
+    row = SimpleNamespace(
+        source_tier="fallback_static",
+        trust_level="score_grade",
+        observation_only=False,
+        source_authority_allowed=True,
+        score_contribution_allowed=True,
+        source_freshness_evidence={"freshness": "fallback", "isFallback": True},
+    )
+
+    assert ProviderOperationsMatrixService._score_eligible(row, "fallback_static") is False
 
 
 def test_generic_runtime_capability_score_permission_fails_closed_without_explicit_gate() -> None:
