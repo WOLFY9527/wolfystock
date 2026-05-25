@@ -54,6 +54,7 @@ function FallbackInput({
         }
       }}
       placeholder={placeholder}
+      aria-label={placeholder}
       disabled={disabled}
       data-autocomplete-mode="fallback"
     />
@@ -260,6 +261,7 @@ function StockAutocompleteInner({
         }}
         onBlur={handleBlur}
         placeholder={placeholder}
+        aria-label={placeholder}
         disabled={disabled}
         aria-autocomplete="none"
         role="combobox"

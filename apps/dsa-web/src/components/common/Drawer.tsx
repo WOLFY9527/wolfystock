@@ -231,11 +231,13 @@ export const Drawer: React.FC<DrawerProps> = ({
   return (
     <div className="fixed inset-0 overflow-hidden overscroll-contain" style={{ zIndex }} role="presentation">
       {/* Backdrop */}
-      <div
+      <button
+        type="button"
+        aria-label={t('common.closeDrawer')}
         data-testid="drawer-backdrop"
         data-state={uiState}
         className={cn(
-          'absolute inset-0 bg-black/60 transition-opacity duration-200 ease-out',
+          'absolute inset-0 border-0 bg-black/60 p-0 transition-opacity duration-200 ease-out',
           uiState === 'open' && isInteractionReady ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
         )}
         onClick={handleBackdropClick}

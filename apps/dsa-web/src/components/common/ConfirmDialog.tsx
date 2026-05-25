@@ -86,20 +86,24 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
   const dialog = (
     <div
-      className={`confirm-dialog theme-overlay-backdrop fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-200 ease-out ${
+      className={`confirm-dialog fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-200 ease-out ${
         uiState === 'open' ? 'opacity-100' : 'opacity-0'
       }`}
       data-state={uiState}
-      onClick={onCancel}
     >
+      <button
+        type="button"
+        aria-label={cancelText ?? t('common.cancel')}
+        className="theme-overlay-backdrop absolute inset-0 border-0 p-0"
+        onClick={onCancel}
+      />
       <div
-        className={`confirm-dialog__surface theme-modal-panel mx-4 w-full max-w-sm rounded-[var(--cohere-radius-medium)] border p-6 transition-all duration-200 ease-out ${
+        className={`confirm-dialog__surface theme-modal-panel relative mx-4 w-full max-w-sm rounded-[var(--cohere-radius-medium)] border p-6 transition-all duration-200 ease-out ${
           uiState === 'open'
             ? 'translate-y-0 scale-100 opacity-100'
             : 'translate-y-1.5 scale-[0.985] opacity-0'
         }`}
         data-state={uiState}
-        onClick={(e) => e.stopPropagation()}
       >
         <p className="confirm-dialog__eyebrow label-uppercase text-secondary-text">
           {isDanger ? t('common.confirmationRequired') : t('common.confirmAction')}

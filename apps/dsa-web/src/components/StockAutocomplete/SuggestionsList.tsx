@@ -43,32 +43,38 @@ export function SuggestionsList({
       {suggestions.map((suggestion, index) => (
         <li
           key={suggestion.canonicalCode}
-          role="option"
-          aria-selected={index === highlightedIndex}
-          data-active={index === highlightedIndex ? 'true' : 'false'}
-          className={cn(
-            "theme-dropdown-item px-4 py-1 cursor-pointer flex items-center justify-between"
-          )}
-          onClick={() => onSelect(suggestion)}
-          onMouseEnter={() => onMouseEnter(index)}
+          className="list-none"
+          role="presentation"
         >
-          <div className="flex items-center gap-3">
-            {/* Market badge */}
-            <MarketBadge market={suggestion.market} />
+          <button
+            type="button"
+            role="option"
+            aria-selected={index === highlightedIndex}
+            data-active={index === highlightedIndex ? 'true' : 'false'}
+            className={cn(
+              "theme-dropdown-item flex w-full appearance-none items-center justify-between border-0 bg-transparent px-4 py-1 text-left"
+            )}
+            onClick={() => onSelect(suggestion)}
+            onMouseEnter={() => onMouseEnter(index)}
+          >
+            <div className="flex items-center gap-3">
+              {/* Market badge */}
+              <MarketBadge market={suggestion.market} />
 
-            {/* Name and code */}
-            <div className="flex flex-col">
-              <span className="text-sm font-medium text-foreground">
-                {suggestion.nameZh}
-              </span>
-              <span className="text-sm text-secondary-text">
-                {suggestion.displayCode}
-              </span>
+              {/* Name and code */}
+              <div className="flex flex-col">
+                <span className="text-sm font-medium text-foreground">
+                  {suggestion.nameZh}
+                </span>
+                <span className="text-sm text-secondary-text">
+                  {suggestion.displayCode}
+                </span>
+              </div>
             </div>
-          </div>
 
-          {/* Match type badge */}
-          <MatchTypeBadge matchType={suggestion.matchType} />
+            {/* Match type badge */}
+            <MatchTypeBadge matchType={suggestion.matchType} />
+          </button>
         </li>
       ))}
     </ul>
