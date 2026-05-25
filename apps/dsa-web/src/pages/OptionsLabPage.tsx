@@ -553,14 +553,6 @@ const ConsumerAvailabilityPanel: React.FC<{ summary: ConsumerAvailabilitySummary
   </section>
 );
 
-const HiddenConsumerDiagnosticSentinels: React.FC = () => (
-  <div hidden aria-hidden="true">
-    <details data-testid="options-lab-developer-details" />
-    <details data-testid="options-lab-strategy-developer-details" />
-    <details data-testid="options-lab-decision-developer-details" />
-  </div>
-);
-
 const SectionHeader: React.FC<{
   eyebrow: string;
   title: string;
@@ -1604,7 +1596,6 @@ const OptionsLabPageContent: React.FC = () => {
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,0.85fr)]">
             <div className="grid min-w-0 gap-6">
-              <HiddenConsumerDiagnosticSentinels />
               <ConsumerAvailabilityPanel summary={consumerAvailability} />
               <SnapshotPanel summary={state.summary} chain={state.chain} decision={decisionState.decision} />
               <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} />

@@ -1254,15 +1254,21 @@ describe('OptionsLabPage', () => {
       'options-lab-strategy-developer-details',
       'options-lab-decision-developer-details',
     ].forEach((testId) => {
-      const sentinel = screen.getByTestId(testId);
-      expect(sentinel.closest('[hidden]')).not.toBeNull();
-      expect(sentinel).not.toHaveAttribute('open');
-      expect(sentinel).toBeEmptyDOMElement();
+      expect(screen.queryByTestId(testId)).not.toBeInTheDocument();
     });
+    const consumerAvailability = screen.getByTestId('options-lab-consumer-availability');
+    expect(consumerAvailability).toHaveTextContent('可用性');
+    expect(consumerAvailability).toHaveTextContent(/当前期权信号数据不足，仅供观察。|期权数据暂不可用，本模块已暂停生成策略。/);
+    expect(consumerAvailability).toHaveTextContent('最后更新：');
+    const decision = await screen.findByTestId('options-lab-decision-engine');
+    expect(decision).toHaveTextContent('数据不足，禁止判断');
+    expect(decision).toHaveTextContent('演示数据');
+    expect(decision).toHaveTextContent('不可用于真实交易判断');
     expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('风险边界');
     expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('数据限制');
+    expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('保持折叠');
     expect(within(screen.getByTestId('options-lab-analysis-details')).getByRole('button', { name: /展开/ })).toHaveAttribute('aria-expanded', 'false');
-    expect(document.body.textContent || '').not.toMatch(/开发者|Developer|Provider Ops|数据源设置|backend|offline|provider_validation_required|mocked_frontend_shell|fixture_frontend_phase4/i);
+    expect(document.body.textContent || '').not.toMatch(/开发者|Developer|Provider Ops|数据源设置|backend|offline|provider_validation_required|mocked_frontend_shell|fixture_frontend_phase4|synthetic_or_fixture_data_not_decision_grade|provider_timeout/i);
   });
 
   it('renders the Options-only crash fallback with collapsed sanitized details', () => {

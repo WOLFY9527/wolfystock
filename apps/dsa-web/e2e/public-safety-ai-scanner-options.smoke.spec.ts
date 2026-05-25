@@ -60,19 +60,22 @@ appTest.describe('AI and scanner public safety surfaces', () => {
 });
 
 productTest.describe('options public safety surface', () => {
-  productTest('Options Lab labels synthetic data as non-decision-grade and keeps developer details collapsed', async ({ page }) => {
+  productTest('Options Lab labels synthetic data as non-decision-grade and keeps consumer details collapsed', async ({ page }) => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       const harness = await openProductRouteWithHarness(page, '/zh/options-lab');
 
       await expect(page.getByRole('heading', { name: '期权实验室' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('options-lab-consumer-availability')).toBeVisible();
+      await expect(page.getByTestId('options-lab-consumer-availability')).toContainText('可用性');
       await expect(page.getByTestId('options-lab-decision-engine')).toBeVisible();
       await expect(page.getByTestId('options-lab-decision-engine')).toContainText('数据不足，禁止判断');
       await expect(page.getByTestId('options-lab-decision-engine')).toContainText('演示数据');
       await expect(page.getByTestId('options-lab-decision-engine')).toContainText('不可用于真实交易判断');
-      await expect(page.getByTestId('options-lab-developer-details')).not.toHaveAttribute('open');
-      await expect(page.getByTestId('options-lab-strategy-developer-details')).not.toHaveAttribute('open');
-      await expect(page.getByTestId('options-lab-decision-developer-details')).not.toHaveAttribute('open');
+      const analysisDetails = page.getByTestId('options-lab-analysis-details');
+      await expect(analysisDetails).toBeVisible();
+      await expect(analysisDetails.getByRole('button', { name: /展开/ })).toHaveAttribute('aria-expanded', 'false');
+      await expect(page.locator('details[open]')).toHaveCount(0);
       await expectSurfaceSafety(page);
 
       expect(harness.requests.count('POST', '/api/v1/options/decision/evaluate')).toBeGreaterThan(0);
