@@ -220,6 +220,8 @@ const homeDailyCandles = Array.from({ length: 24 }, (_, index) => {
   };
 });
 
+const HOME_CHART_UNAVAILABLE_INTERNAL_COPY_PATTERN = /provider|fallback|diagnostic|source|source confidence|confidence|Alpaca|Yahoo Finance|Yfinance|raw diagnostics|reasonCode|providerTrace|sourceConfidence|localFallback|freshness|rawRows|主数据源|回补|诊断|来源|可信度/i;
+
 describe('HomeSurfacePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -2935,7 +2937,7 @@ describe('HomeSurfacePage', () => {
     expect(rightEdge[1] + chartRect.top + size.contentSize[1]).toBeLessThanOrEqual(viewport.height - 10);
   });
 
-  it('shows compact Home history diagnostics when daily OHLC is unavailable', async () => {
+  it('shows consumer-safe Home chart unavailable copy when daily OHLC is unavailable', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(stocksApi.getHistory).mockResolvedValue({
       stockCode: 'ORCL',
@@ -2962,19 +2964,21 @@ describe('HomeSurfacePage', () => {
 
     await waitFor(() => {
       const unavailable = screen.getByTestId('home-candlestick-unavailable');
-      expect(unavailable).toHaveTextContent('该周期行情暂不可用');
-      expect(unavailable).toHaveTextContent('主数据源失败');
-      expect(unavailable).toHaveTextContent('本地回补不可用');
-      expect(unavailable).toHaveTextContent('可信度 不可用');
+      expect(unavailable).toHaveTextContent('行情图表暂不可用，请稍后重试。');
+      expect(unavailable).not.toHaveTextContent(HOME_CHART_UNAVAILABLE_INTERNAL_COPY_PATTERN);
     });
-    expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('主数据源失败');
-    expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('本地回补不可用');
-    expect(screen.getByTestId('home-candlestick-unavailable')).toHaveTextContent('可信度 不可用');
+    const unavailable = screen.getByTestId('home-candlestick-unavailable');
+    expect(unavailable).toHaveTextContent('当前周期 1D');
+    expect(unavailable).not.toHaveTextContent(HOME_CHART_UNAVAILABLE_INTERNAL_COPY_PATTERN);
+    const chartRoot = screen.getByTestId('home-linear-technical-chart');
+    expect(chartRoot).not.toHaveAttribute('data-history-source');
+    expect(chartRoot).not.toHaveAttribute('data-history-status');
+    expect(chartRoot).not.toHaveAttribute('data-history-confidence');
     expect(screen.queryByTestId('home-candlestick-chart-frame')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-candlestick-echarts-node')).not.toBeInTheDocument();
   });
 
-  it('labels local fallback history metadata without fabricating Home candles', async () => {
+  it('does not expose local fallback metadata when Home chart candles are unavailable', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(stocksApi.getHistory).mockResolvedValue({
       stockCode: 'ORCL',
@@ -3005,16 +3009,15 @@ describe('HomeSurfacePage', () => {
 
     await waitFor(() => {
       const unavailable = screen.getByTestId('home-candlestick-unavailable');
-      expect(unavailable).toHaveTextContent('主数据源失败');
-      expect(unavailable).toHaveTextContent('本地回补');
-      expect(unavailable).toHaveTextContent('可信度 备用');
+      expect(unavailable).toHaveTextContent('行情图表暂不可用，请稍后重试。');
+      expect(unavailable).not.toHaveTextContent(HOME_CHART_UNAVAILABLE_INTERNAL_COPY_PATTERN);
     });
     const unavailable = screen.getByTestId('home-candlestick-unavailable');
-    expect(unavailable).toHaveTextContent('主数据源失败');
-    expect(unavailable).toHaveTextContent('本地回补');
-    expect(unavailable).toHaveTextContent('可信度 备用');
-    expect(screen.getByTestId('home-linear-technical-chart')).toHaveAttribute('data-history-source', 'local_db');
-    expect(screen.getByTestId('home-linear-technical-chart')).toHaveAttribute('data-history-confidence', 'cached');
+    expect(unavailable).not.toHaveTextContent(HOME_CHART_UNAVAILABLE_INTERNAL_COPY_PATTERN);
+    const chartRoot = screen.getByTestId('home-linear-technical-chart');
+    expect(chartRoot).not.toHaveAttribute('data-history-source');
+    expect(chartRoot).not.toHaveAttribute('data-history-status');
+    expect(chartRoot).not.toHaveAttribute('data-history-confidence');
     expect(screen.queryByTestId('home-candlestick-chart-frame')).not.toBeInTheDocument();
   });
 
