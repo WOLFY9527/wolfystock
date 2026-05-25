@@ -5,7 +5,6 @@ import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Drawer, Input, PillBadge, SectionShell, SegmentedControl, Select } from '../components/common';
-import { EvidenceChips } from '../components/evidence/EvidenceChips';
 import { PortfolioTrustStrip, type PortfolioTrustChipItem } from '../components/portfolio/PortfolioTrustStrip';
 import {
   TerminalButton,
@@ -40,7 +39,6 @@ import {
   savePortfolioDisplayCurrency,
   type PortfolioDisplayCurrency,
 } from '../utils/portfolioPreferences';
-import { ProductSetupPath } from '../components/market-intelligence/ProductSetupPath';
 import type {
   PortfolioAccountItem,
   PortfolioBrokerConnectionItem,
@@ -148,53 +146,165 @@ type PortfolioLanguage = 'zh' | 'en';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
 
-function positionPriceStateLabel(position: Pick<PortfolioPositionItem, 'isPriceFallback'>, language: PortfolioLanguage): string {
+function hasLimitedValuationConfidence(position: Pick<PortfolioPositionItem, 'valuationConfidence'>): boolean {
+  return typeof position.valuationConfidence === 'number' && position.valuationConfidence < 1;
+}
+
+function positionPriceFreshnessLabel(position: Pick<PortfolioPositionItem, 'isPriceFallback' | 'priceAsOf'>, language: PortfolioLanguage): string {
   if (position.isPriceFallback) {
-    return language === 'zh' ? '估算价格' : 'Estimated price';
+    return language === 'zh' ? '价格延迟' : 'Pricing delayed';
   }
-  return language === 'zh' ? '价格快照' : 'Price snapshot';
+  if (position.priceAsOf) {
+    return language === 'zh' ? '价格快照' : 'Price snapshot';
+  }
+  return language === 'zh' ? '价格更新中' : 'Pricing updating';
 }
 
-function positionPriceSourceHint(
-  position: Pick<PortfolioPositionItem, 'priceSource' | 'priceSourceLabel'>,
-  language: PortfolioLanguage,
-): string {
-  switch (position.priceSource) {
-    case 'avg_cost_fallback':
-      return language === 'zh' ? '均价回退' : 'Avg-cost fallback';
-    case 'broker_sync_snapshot':
-      return language === 'zh' ? '同步快照' : 'Synced snapshot';
-    case 'daily_close_quote':
-      return language === 'zh' ? '收盘报价' : 'Daily close quote';
+function positionPriceFreshnessExplanation(position: Pick<PortfolioPositionItem, 'isPriceFallback' | 'priceAsOf'>, language: PortfolioLanguage): string {
+  if (position.isPriceFallback) {
+    return language === 'zh'
+      ? '部分价格数据暂不可用，已使用最近一次可用数据。'
+      : 'Some price data is temporarily unavailable; the latest available data is shown.';
+  }
+  if (!position.priceAsOf) {
+    return language === 'zh'
+      ? '价格数据更新中，稍后将自动刷新。'
+      : 'Price data is updating and will refresh automatically.';
+  }
+  return positionPriceFreshnessLabel(position, language);
+}
+
+function limitedConfidenceLabel(language: PortfolioLanguage): string {
+  return language === 'zh' ? '置信度有限' : 'Limited confidence';
+}
+
+function positionPriceDisclosure(position: PortfolioPositionItem, language: PortfolioLanguage): string {
+  return [
+    positionPriceFreshnessExplanation(position, language),
+    position.priceAsOf ? (language === 'zh' ? `截至 ${position.priceAsOf}` : `As of ${position.priceAsOf}`) : null,
+    hasLimitedValuationConfidence(position) ? limitedConfidenceLabel(language) : null,
+  ].filter(Boolean).join(' · ');
+}
+
+function consumerFxLabel(state: 'fresh' | 'stale' | 'missing' | 'pending', language: PortfolioLanguage): string {
+  if (language === 'zh') {
+    switch (state) {
+      case 'fresh':
+        return '汇率已更新';
+      case 'stale':
+        return '汇率可能延迟';
+      case 'missing':
+        return '汇率暂不可用';
+      default:
+        return '汇率待确认';
+    }
+  }
+  switch (state) {
+    case 'fresh':
+      return 'Exchange rates current';
+    case 'stale':
+      return 'Exchange rates delayed';
+    case 'missing':
+      return 'Exchange rates unavailable';
     default:
-      return position.priceSourceLabel || (language === 'zh' ? '价格来源待确认' : 'Price source pending');
+      return 'Exchange rates pending';
   }
 }
 
-function positionPriceFallbackReasonLabel(
-  position: Pick<PortfolioPositionItem, 'priceFallbackReason'>,
+function consumerPortfolioDataNotice(
+  options: {
+    hasPriceFallback: boolean;
+    hasUpdatingPrice: boolean;
+    hasLimitedConfidence: boolean;
+    hasFxUnavailable: boolean;
+    hasFxStale?: boolean;
+  },
   language: PortfolioLanguage,
 ): string | null {
-  if (position.priceFallbackReason === 'current_quote_unavailable') {
-    return language === 'zh' ? '现价缺失' : 'Current quote unavailable';
+  if (options.hasFxUnavailable) {
+    return language === 'zh'
+      ? '部分汇率数据暂不可用，估值已暂停更新。'
+      : 'Some exchange-rate data is temporarily unavailable; valuation updates are paused.';
+  }
+  if (options.hasFxStale) {
+    return language === 'zh'
+      ? '当前估值可能存在延迟，仅供参考。'
+      : 'Current valuation may be delayed and is for reference only.';
+  }
+  if (options.hasPriceFallback) {
+    return language === 'zh'
+      ? '部分价格数据暂不可用，已使用最近一次可用数据。'
+      : 'Some price data is temporarily unavailable; the latest available data is shown.';
+  }
+  if (options.hasUpdatingPrice) {
+    return language === 'zh'
+      ? '价格数据更新中，稍后将自动刷新。'
+      : 'Price data is updating and will refresh automatically.';
+  }
+  if (options.hasLimitedConfidence) {
+    return language === 'zh'
+      ? '当前估值可能存在延迟，仅供参考。'
+      : 'Current valuation may be delayed and is for reference only.';
   }
   return null;
 }
 
-function positionPriceDisclosure(position: PortfolioPositionItem, language: PortfolioLanguage): string {
-  const sourceHint = positionPriceSourceHint(position, language);
-  const fallbackReason = positionPriceFallbackReasonLabel(position, language);
-  const confidence = typeof position.valuationConfidence === 'number' && position.valuationConfidence < 1
-    ? `${language === 'zh' ? '置信度' : 'Confidence'} ${Math.round(position.valuationConfidence * 100)}%`
-    : null;
-  return [
-    positionPriceStateLabel(position, language),
-    sourceHint,
-    position.priceSourceLabel && position.priceSourceLabel !== sourceHint ? position.priceSourceLabel : null,
-    fallbackReason,
-    position.priceAsOf || null,
-    confidence,
-  ].filter(Boolean).join(' · ');
+function sanitizePortfolioConsumerLabel(label: string | null | undefined, language: PortfolioLanguage): string | null {
+  const normalized = String(label || '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (
+    normalized.includes('sourceauthority')
+    || normalized.includes('syncimportstatus')
+    || normalized.includes('reasoncode')
+    || normalized.includes('manual_replay')
+    || normalized.includes('provider')
+    || normalized.includes('cache')
+    || normalized.includes('raw')
+    || normalized.includes('debug')
+    || normalized.includes('json')
+  ) {
+    return null;
+  }
+  if (normalized.includes('fx') || normalized.includes('汇率')) {
+    if (normalized.includes('missing') || normalized.includes('缺失') || normalized.includes('unavailable') || normalized.includes('暂不可用')) {
+      return consumerFxLabel('missing', language);
+    }
+    if (normalized.includes('stale') || normalized.includes('过期') || normalized.includes('expired') || normalized.includes('延迟')) {
+      return consumerFxLabel('stale', language);
+    }
+    return consumerFxLabel('pending', language);
+  }
+  if (normalized.includes('benchmark') || normalized.includes('factor') || normalized.includes('mapping') || normalized.includes('基准') || normalized.includes('因子') || normalized.includes('映射')) {
+    return language === 'zh' ? '部分风险参考暂不可用' : 'Some risk references are unavailable';
+  }
+  if (normalized.includes('holdings') || normalized.includes('lineage') || normalized.includes('持仓来源')) {
+    return language === 'zh' ? '持仓数据待核验' : 'Holdings data pending';
+  }
+  if (normalized.includes('fallback') || normalized.includes('备用') || normalized.includes('回退')) {
+    return language === 'zh' ? '当前估值可能存在延迟' : 'Current valuation may be delayed';
+  }
+  if (normalized.includes('confidence') || normalized.includes('置信')) {
+    return limitedConfidenceLabel(language);
+  }
+  if (normalized.includes('stale') || normalized.includes('过期') || normalized.includes('expired')) {
+    return language === 'zh' ? '数据可能延迟' : 'Data may be delayed';
+  }
+  return label || null;
+}
+
+function consumerTrustItemFromLabel(label: string | null | undefined, language: PortfolioLanguage, keyPrefix: string): PortfolioTrustChipItem | null {
+  const safeLabel = sanitizePortfolioConsumerLabel(label, language);
+  if (!safeLabel) return null;
+  return { key: `${keyPrefix}-${safeLabel}`, label: safeLabel, variant: 'neutral' };
+}
+
+function consumerFxRefreshFeedback(stale: boolean, language: PortfolioLanguage): string {
+  if (stale) {
+    return language === 'zh'
+      ? '部分汇率数据暂不可用，估值已暂停更新。'
+      : 'Some exchange-rate data is temporarily unavailable; valuation updates are paused.';
+  }
+  return language === 'zh' ? '汇率数据已更新。' : 'Exchange-rate data updated.';
 }
 
 function normalizeTrustToken(value?: string | null): string {
@@ -239,25 +349,25 @@ function buildTrustStateItem(
 
   if (kind === 'fxFreshness') {
     if (token.includes('stale') || token.includes('expired')) {
-      return { key: `fx-${token}`, label: language === 'zh' ? 'FX 汇率已过期' : 'FX stale', variant: 'caution' };
+      return { key: `fx-${token}`, label: consumerFxLabel('stale', language), variant: 'caution' };
     }
     if (token.includes('missing') || token.includes('unavailable')) {
-      return { key: `fx-${token}`, label: language === 'zh' ? 'FX 汇率缺失' : 'FX unavailable', variant: 'danger' };
+      return { key: `fx-${token}`, label: consumerFxLabel('missing', language), variant: 'danger' };
     }
     if (isReadyTrustToken(token)) {
-      return { key: `fx-${token}`, label: language === 'zh' ? 'FX 已更新' : 'FX current', variant: 'success' };
+      return { key: `fx-${token}`, label: consumerFxLabel('fresh', language), variant: 'success' };
     }
-    return { key: `fx-${token}`, label: language === 'zh' ? 'FX 待确认' : 'FX pending', variant: 'neutral' };
+    return { key: `fx-${token}`, label: consumerFxLabel('pending', language), variant: 'neutral' };
   }
 
   if (kind === 'holdingsLineage') {
     if (token.includes('missing') || token.includes('partial') || token.includes('incomplete')) {
-      return { key: `holdings-${token}`, label: language === 'zh' ? '持仓来源待核验' : 'Holdings lineage pending', variant: 'caution' };
+      return { key: `holdings-${token}`, label: language === 'zh' ? '持仓数据待核验' : 'Holdings data pending', variant: 'caution' };
     }
     if (isReadyTrustToken(token)) {
-      return { key: `holdings-${token}`, label: language === 'zh' ? '持仓来源已核验' : 'Holdings lineage verified', variant: 'success' };
+      return { key: `holdings-${token}`, label: language === 'zh' ? '持仓数据已核验' : 'Holdings data verified', variant: 'success' };
     }
-    return { key: `holdings-${token}`, label: language === 'zh' ? '持仓来源待确认' : 'Holdings source pending', variant: 'neutral' };
+    return { key: `holdings-${token}`, label: language === 'zh' ? '持仓数据待确认' : 'Holdings data pending', variant: 'neutral' };
   }
 
   if (kind === 'cashLedgerCompleteness') {
@@ -272,40 +382,38 @@ function buildTrustStateItem(
 
   if (kind === 'benchmarkMapping') {
     if (token.includes('missing') || token.includes('partial') || token.includes('limited') || token.includes('unmapped')) {
-      return { key: `benchmark-${token}`, label: language === 'zh' ? '基准映射暂缺' : 'Benchmark limited', variant: 'caution' };
+      return { key: `benchmark-${token}`, label: language === 'zh' ? '部分风险参考暂不可用' : 'Some risk references are unavailable', variant: 'caution' };
     }
     if (isReadyTrustToken(token)) {
-      return { key: `benchmark-${token}`, label: language === 'zh' ? '基准映射完整' : 'Benchmark mapped', variant: 'success' };
+      return { key: `benchmark-${token}`, label: language === 'zh' ? '风险参考已更新' : 'Risk references current', variant: 'success' };
     }
-    return { key: `benchmark-${token}`, label: language === 'zh' ? '基准映射待确认' : 'Benchmark pending', variant: 'neutral' };
+    return { key: `benchmark-${token}`, label: language === 'zh' ? '风险参考待确认' : 'Risk references pending', variant: 'neutral' };
   }
 
   if (token.includes('missing') || token.includes('partial') || token.includes('limited') || token.includes('unmapped')) {
-    return { key: `factor-${token}`, label: language === 'zh' ? '因子映射暂缺' : 'Factor mapping limited', variant: 'caution' };
+    return { key: `factor-${token}`, label: language === 'zh' ? '部分风险参考暂不可用' : 'Some risk references are unavailable', variant: 'caution' };
   }
   if (isReadyTrustToken(token)) {
-    return { key: `factor-${token}`, label: language === 'zh' ? '因子映射完整' : 'Factor mapping available', variant: 'success' };
+    return { key: `factor-${token}`, label: language === 'zh' ? '风险参考已更新' : 'Risk references current', variant: 'success' };
   }
-  return { key: `factor-${token}`, label: language === 'zh' ? '因子映射待确认' : 'Factor mapping pending', variant: 'neutral' };
+  return { key: `factor-${token}`, label: language === 'zh' ? '风险参考待确认' : 'Risk references pending', variant: 'neutral' };
 }
 
-function summarizePortfolioPriceSource(
+function summarizePortfolioPriceFreshness(
   positions: PortfolioPositionItem[],
   language: PortfolioLanguage,
 ): PortfolioTrustChipItem | null {
-  const labels = Array.from(new Set(
-    positions
-      .map((position) => positionPriceSourceHint(position, language))
-      .filter(Boolean),
-  ));
-  if (!labels.length) return null;
-  if (labels.length === 1) {
-    return { key: `price-source-${labels[0]}`, label: labels[0], variant: 'neutral' };
+  if (!positions.length) return null;
+  if (positions.some((position) => position.isPriceFallback)) {
+    return { key: 'price-freshness-delayed', label: positionPriceFreshnessLabel({ isPriceFallback: true }, language), variant: 'caution' };
+  }
+  if (positions.some((position) => !position.priceAsOf)) {
+    return { key: 'price-freshness-updating', label: positionPriceFreshnessLabel({ isPriceFallback: false }, language), variant: 'neutral' };
   }
   return {
-    key: 'price-source-mixed',
-    label: language === 'zh' ? '多来源报价' : 'Mixed quote sources',
-    variant: 'neutral',
+    key: 'price-freshness-snapshot',
+    label: positionPriceFreshnessLabel({ isPriceFallback: false, priceAsOf: positions[0].priceAsOf }, language),
+    variant: 'success',
   };
 }
 
@@ -1523,9 +1631,7 @@ const PortfolioPage: React.FC = () => {
       }
       setFxRefreshFeedback({
         tone: result.stale ? 'warning' : 'success',
-        text: result.stale
-          ? translate(language, 'portfolio.fxRefreshFallbackWarning', { updatedCount: 0, staleCount: 1, errorCount: result.error ? 1 : 0 })
-          : translate(language, 'portfolio.fxRefreshUpdated', { count: 1 }),
+        text: consumerFxRefreshFeedback(result.stale, language),
       });
     } catch (err) {
       if (!isActiveRefreshContext(requestedViewKey, requestedRequestId)) {
@@ -1626,10 +1732,20 @@ const PortfolioPage: React.FC = () => {
     || (!totalCashDisplay && totalCash !== 0)
     || (!totalMarketValueDisplay && totalMarketValue !== 0)
     || (!totalUnrealizedDisplay && totalUnrealizedPnl !== 0);
+  const hasPriceFallback = positionRows.some((row) => row.isPriceFallback);
+  const hasUpdatingPrice = hasHoldings && positionRows.some((row) => !row.priceAsOf && !row.isPriceFallback);
+  const hasLimitedConfidence = positionRows.some(hasLimitedValuationConfidence);
+  const consumerDataNotice = consumerPortfolioDataNotice({
+    hasPriceFallback,
+    hasUpdatingPrice,
+    hasLimitedConfidence,
+    hasFxUnavailable,
+    hasFxStale: snapshot?.fxStale,
+  }, language);
   const historyHasNextPage = currentEventCount >= DEFAULT_PAGE_SIZE;
   const totalAssetsTitle = language === 'zh' ? '总资产' : 'Total Assets';
   const historyDrawerTitle = language === 'en' ? 'Ledger History' : '历史记录';
-  const fxUnavailableLabel = language === 'zh' ? '折算不可用' : 'FX unavailable';
+  const fxUnavailableLabel = language === 'zh' ? '折算暂不可用' : 'Conversion unavailable';
   const noHoldingsHistoryNote = language === 'zh' ? '历史记录存在，当前无持仓' : 'History exists while current holdings are empty';
   const recentActivityTitle = language === 'zh' ? '近期活动' : 'Recent Activity';
   const emptyRecentActivityLabel = language === 'zh' ? '暂无历史记录' : 'No history yet';
@@ -1665,7 +1781,7 @@ const PortfolioPage: React.FC = () => {
     single_position_gt_30: language === 'zh' ? '单一标的占比较高' : 'Single position concentration',
     single_currency_gt_80: language === 'zh' ? '单一币种占比较高' : 'Single currency concentration',
     single_market_gt_80: language === 'zh' ? '单一市场占比较高' : 'Single market concentration',
-    fx_conversion_unavailable: language === 'zh' ? '部分折算不可用，已保留原币值' : 'Some FX conversion is unavailable; native values remain visible',
+    fx_conversion_unavailable: language === 'zh' ? '部分折算暂不可用，已保留原币值' : 'Some conversion data is unavailable; native values remain visible',
   };
   const exposureTabs = [
     { value: 'account', label: language === 'zh' ? '账户' : 'Account' },
@@ -1753,7 +1869,7 @@ const PortfolioPage: React.FC = () => {
         ? (language === 'zh' ? '单一市场集中' : 'Single-market concentration')
         : (language === 'zh' ? '跨市场持仓' : 'Cross-market holdings');
   const currencyFxContext = topCurrency?.fxStatus === 'unavailable'
-    ? (language === 'zh' ? '汇率待确认' : 'FX pending')
+    ? consumerFxLabel('pending', language)
     : topCurrency?.nativeCurrency && topCurrency.nativeCurrency !== displayCurrency
       ? (language === 'zh' ? '原币统计可用' : 'Native analytics available')
       : (language === 'zh' ? '主币种' : 'Primary currency');
@@ -1762,7 +1878,7 @@ const PortfolioPage: React.FC = () => {
     Number(topCurrency?.percent || 0) >= 80 ? (language === 'zh' ? '币种集中' : 'Currency concentrated') : null,
     Number(topMarket?.percent || 0) >= 80 ? (language === 'zh' ? '市场集中' : 'Market concentrated') : null,
     hasHoldings && (analytics?.risk.holdingCount ?? positionRows.length) < 3 ? (language === 'zh' ? '持仓数量较少' : 'Few holdings') : null,
-    analytics?.risk.fxUnavailable ? (language === 'zh' ? '汇率数据不可用' : 'FX data unavailable') : null,
+    analytics?.risk.fxUnavailable ? (language === 'zh' ? '汇率数据暂不可用' : 'Exchange-rate data unavailable') : null,
   ].filter(Boolean) as string[];
   const safeRiskWarningLabels = (analytics?.risk.warnings || [])
     .map((warning) => riskWarningLabels[warning])
@@ -1771,7 +1887,7 @@ const PortfolioPage: React.FC = () => {
     () => (snapshot ? normalizePortfolioRiskEvidence(snapshot, { maxLimitationLabels: 6 }) : null),
     [snapshot],
   );
-  const showPortfolioEvidenceChips = Boolean(
+  const hasPortfolioEvidenceSummary = Boolean(
     portfolioEvidenceSummary
     && (
       portfolioEvidenceSummary.posture !== 'unknown'
@@ -1781,30 +1897,40 @@ const PortfolioPage: React.FC = () => {
     ),
   );
   const valuationTrustItems = useMemo(() => uniqueTrustItems([
-    positionRows.some((row) => row.isPriceFallback)
-      ? { key: 'valuation-fallback', label: language === 'zh' ? '估值回退' : 'Valuation fallback', variant: 'caution' }
+    hasPriceFallback
+      ? { key: 'valuation-delayed', label: language === 'zh' ? '价格可能延迟' : 'Pricing may be delayed', variant: 'caution' }
+      : hasLimitedConfidence
+        ? { key: 'valuation-limited', label: limitedConfidenceLabel(language), variant: 'caution' }
       : hasHoldings
-        ? { key: 'valuation-reliable', label: language === 'zh' ? '估值可信' : 'Valuation supported', variant: 'success' }
+        ? { key: 'valuation-reliable', label: language === 'zh' ? '估值已更新' : 'Valuation current', variant: 'success' }
         : null,
-    summarizePortfolioPriceSource(positionRows, language),
+    summarizePortfolioPriceFreshness(positionRows, language),
     summarizePortfolioPriceAsOf(positionRows, language),
+    hasPortfolioEvidenceSummary ? consumerTrustItemFromLabel(portfolioEvidenceSummary?.displayLabel, language, 'snapshot-posture') : null,
+    portfolioEvidenceSummary?.confidenceCap != null ? { key: 'snapshot-limited-confidence', label: limitedConfidenceLabel(language), variant: 'caution' } : null,
+    consumerTrustItemFromLabel(portfolioEvidenceSummary?.freshnessLabel, language, 'snapshot-freshness'),
     buildTrustStateItem('fxFreshness', snapshot?.fxFreshnessState, language),
     buildTrustStateItem('holdingsLineage', snapshot?.holdingsLineageState, language),
     buildTrustStateItem('cashLedgerCompleteness', snapshot?.cashLedgerCompletenessState, language),
   ]), [
+    hasLimitedConfidence,
     hasHoldings,
+    hasPriceFallback,
     language,
+    portfolioEvidenceSummary?.confidenceCap,
+    portfolioEvidenceSummary?.displayLabel,
+    portfolioEvidenceSummary?.freshnessLabel,
     positionRows,
+    hasPortfolioEvidenceSummary,
     snapshot?.cashLedgerCompletenessState,
     snapshot?.fxFreshnessState,
     snapshot?.holdingsLineageState,
   ]);
-  const shouldShowPortfolioSetupPath = showPortfolioEvidenceChips || valuationTrustItems.some((item) => item.variant && item.variant !== 'success');
   const riskTrustItems = useMemo(() => uniqueTrustItems([
     portfolioEvidenceSummary
       ? {
         key: `risk-posture-${portfolioEvidenceSummary.posture}`,
-        label: portfolioEvidenceSummary.displayLabel,
+        label: sanitizePortfolioConsumerLabel(portfolioEvidenceSummary.displayLabel, language) || (language === 'zh' ? '数据状态待确认' : 'Data status pending'),
         variant: portfolioEvidenceSummary.tone === 'danger'
           ? 'danger'
           : portfolioEvidenceSummary.tone === 'warning'
@@ -1819,18 +1945,15 @@ const PortfolioPage: React.FC = () => {
     portfolioEvidenceSummary?.confidenceCap != null
       ? {
         key: `risk-cap-${portfolioEvidenceSummary.confidenceCap}`,
-        label: language === 'zh' ? `置信上限 ${portfolioEvidenceSummary.confidenceCap}` : `Confidence cap ${portfolioEvidenceSummary.confidenceCap}`,
-        variant: 'neutral',
+        label: limitedConfidenceLabel(language),
+        variant: 'caution',
       }
       : null,
     portfolioEvidenceSummary?.freshnessLabel
-      ? {
-        key: `risk-freshness-${portfolioEvidenceSummary.freshnessLabel}`,
-        label: portfolioEvidenceSummary.freshnessLabel,
-        variant: portfolioEvidenceSummary.tone === 'danger' ? 'caution' : 'neutral',
-      }
+      ? consumerTrustItemFromLabel(portfolioEvidenceSummary.freshnessLabel, language, 'risk-freshness')
       : null,
-    ...(portfolioEvidenceSummary?.limitationLabels || []).map((label) => ({ key: `risk-limitation-${label}`, label, variant: 'neutral' as const })),
+    ...(portfolioEvidenceSummary?.limitationLabels || [])
+      .map((label) => consumerTrustItemFromLabel(label, language, 'risk-limitation')),
     buildTrustStateItem('benchmarkMapping', snapshot?.benchmarkMappingState, language),
     buildTrustStateItem('factorMapping', snapshot?.factorMappingState, language),
     buildTrustStateItem('fxFreshness', snapshot?.fxFreshnessState, language),
@@ -2202,27 +2325,17 @@ const PortfolioPage: React.FC = () => {
                   <p className="mt-2 text-xs leading-5 text-white/35">
                     {hasHoldings ? `${holdingsPrimaryValue} · ${accountStateSummary}` : compactNoHoldingText}
                   </p>
-                  {showPortfolioEvidenceChips || valuationTrustItems.length ? (
+                  {consumerDataNotice ? (
+                    <p data-testid="portfolio-consumer-data-notice" className="mt-2 text-xs leading-5 text-amber-200/80">
+                      {consumerDataNotice}
+                    </p>
+                  ) : null}
+                  {hasPortfolioEvidenceSummary || valuationTrustItems.length ? (
                     <PortfolioTrustStrip
                       title={language === 'zh' ? '估值信任' : 'Valuation trust'}
                       items={valuationTrustItems}
                       className="mt-3"
                       data-testid="portfolio-valuation-trust-strip"
-                    >
-                      {showPortfolioEvidenceChips ? (
-                        <EvidenceChips
-                          summary={portfolioEvidenceSummary}
-                          maxLabels={0}
-                          data-testid="portfolio-snapshot-evidence-chips"
-                        />
-                      ) : null}
-                    </PortfolioTrustStrip>
-                  ) : null}
-                  {shouldShowPortfolioSetupPath ? (
-                    <ProductSetupPath
-                      surface="portfolio"
-                      testId="portfolio-setup-path"
-                      className="mt-3"
                     />
                   ) : null}
                 </div>
@@ -2332,21 +2445,28 @@ const PortfolioPage: React.FC = () => {
                                   },
                                 row.isPriceFallback
                                   ? {
-                                    key: `${row.symbol}-fallback`,
-                                    label: language === 'zh' ? '估值回退' : 'Fallback price',
+                                    key: `${row.symbol}-pricing-delayed`,
+                                    label: language === 'zh' ? '价格可能延迟' : 'Pricing may be delayed',
                                     variant: 'caution',
                                   }
                                   : null,
                                 {
-                                  key: `${row.symbol}-source`,
-                                  label: positionPriceSourceHint(row, language),
+                                  key: `${row.symbol}-freshness`,
+                                  label: positionPriceFreshnessLabel(row, language),
                                   variant: row.isPriceFallback ? 'caution' : 'neutral',
                                 },
                                 row.priceFallbackReason
                                   ? {
-                                    key: `${row.symbol}-reason`,
-                                    label: positionPriceFallbackReasonLabel(row, language) || row.priceFallbackReason,
+                                    key: `${row.symbol}-pricing-explanation`,
+                                    label: positionPriceFreshnessExplanation(row, language),
                                     variant: 'neutral',
+                                  }
+                                  : null,
+                                hasLimitedValuationConfidence(row)
+                                  ? {
+                                    key: `${row.symbol}-limited-confidence`,
+                                    label: limitedConfidenceLabel(language),
+                                    variant: 'caution',
                                   }
                                   : null,
                                 row.priceAsOf
@@ -2996,7 +3116,7 @@ const PortfolioPage: React.FC = () => {
               {leftTab === 'fx' ? (
                 <div data-testid="portfolio-fx-panel" className="space-y-4">
                   <div>
-	                    <p className="text-xs uppercase tracking-[0.18em] text-muted-text">实时汇率引擎</p>
+	                    <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{language === 'zh' ? '汇率参考' : 'Exchange-rate reference'}</p>
                     <p className="mt-1 text-[11px] text-white/35">
                       {language === 'en' ? 'Last update' : '最后更新'} {selectedFxRate?.timestamp ? formatFxTimestamp(selectedFxRate.timestamp) : fxLastUpdated}
                       {selectedFxRate?.isStale ? ` · ${copy.fxStale}` : ''}
@@ -3033,9 +3153,7 @@ const PortfolioPage: React.FC = () => {
 		                      <span className="text-sm text-white/60">{fxQuoteCurrency}</span>
 		                    </div>
 		                    <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
-		                      <span className="truncate">{selectedFxRate?.provider || 'frankfurter'}</span>
-			                      <span>{selectedFxRate?.cacheHit ? (language === 'zh' ? '缓存' : 'CACHE') : (language === 'zh' ? '实时' : 'LIVE')}</span>
-		                      {selectedFxRate?.isStale ? <span className="text-amber-300">{copy.fxStale}</span> : null}
+		                      <span>{selectedFxRate ? consumerFxLabel(selectedFxRate.isStale ? 'stale' : 'fresh', language) : consumerFxLabel('pending', language)}</span>
 		                    </div>
 		                  </TerminalNestedBlock>
 	                  <Button

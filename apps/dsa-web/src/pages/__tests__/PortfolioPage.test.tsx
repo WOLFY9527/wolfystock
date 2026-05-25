@@ -740,7 +740,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(risk).toHaveTextContent('单一标的占比较高');
   });
 
-  it('visibly marks avg-cost fallback prices as estimated rather than live', async () => {
+  it('translates delayed fallback prices into consumer-safe valuation language', async () => {
     getSnapshot.mockResolvedValue(makeSnapshot({
       includePosition: true,
       fxStale: false,
@@ -763,12 +763,14 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const holdings = screen.getByTestId('portfolio-current-holdings-panel');
-    expect(holdings).toHaveTextContent('估算价格');
-    expect(holdings).toHaveTextContent('均价回退');
-    expect(holdings).toHaveTextContent('Average cost fallback');
-    expect(holdings).toHaveTextContent('现价缺失');
-    expect(holdings).toHaveTextContent('置信度 25%');
+    expect(holdings).toHaveTextContent('价格可能延迟');
+    expect(holdings).toHaveTextContent('部分价格数据暂不可用，已使用最近一次可用数据。');
+    expect(holdings).toHaveTextContent('置信度有限');
+    expect(holdings).not.toHaveTextContent('Average cost fallback');
+    expect(holdings).not.toHaveTextContent('均价回退');
+    expect(holdings).not.toHaveTextContent('现价缺失');
     expect(holdings).not.toHaveTextContent(/现价快照|Live quote/);
+    expect(holdings.textContent || '').not.toMatch(/avg_cost_fallback|current_quote_unavailable|fallback/i);
   });
 
   it('labels generic non-fallback position prices as neutral snapshots', async () => {
@@ -788,10 +790,10 @@ describe('PortfolioPage FX refresh', () => {
 
     const holdings = screen.getByTestId('portfolio-current-holdings-panel');
     expect(holdings).toHaveTextContent('价格快照');
-    expect(holdings).toHaveTextContent('价格来源待确认');
     expect(holdings).not.toHaveTextContent(/现价快照|Live quote/);
     expect(holdings).not.toHaveTextContent('估算价格');
     expect(holdings).not.toHaveTextContent('均价回退');
+    expect(holdings).not.toHaveTextContent('价格来源待确认');
     expect(holdings.textContent || '').not.toMatch(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy/i);
   });
 
@@ -817,11 +819,11 @@ describe('PortfolioPage FX refresh', () => {
 
     const holdings = screen.getByTestId('portfolio-current-holdings-panel');
     expect(holdings).toHaveTextContent('Price snapshot');
-    expect(holdings).toHaveTextContent('Price source pending');
     expect(holdings).not.toHaveTextContent(/Live quote|现价快照/);
+    expect(holdings).not.toHaveTextContent('Price source pending');
   });
 
-  it('keeps portfolio price source hints distinguishable across quote, sync, and fallback states', async () => {
+  it('compresses quote, sync, and fallback source states into safe freshness states', async () => {
     const snapshot = makeSnapshot({ includePosition: true, fxStale: false });
     const basePosition = snapshot.accounts[0].positions[0];
     snapshot.accounts[0].positions = [
@@ -868,18 +870,21 @@ describe('PortfolioPage FX refresh', () => {
 
     const holdings = screen.getByTestId('portfolio-current-holdings-panel');
     expect(holdings).toHaveTextContent('价格快照');
-    expect(holdings).toHaveTextContent('Daily close quote');
-    expect(holdings).toHaveTextContent('Synced snapshot');
-    expect(holdings).toHaveTextContent('Avg-cost fallback');
+    expect(holdings).toHaveTextContent('价格可能延迟');
+    expect(holdings).toHaveTextContent('部分价格数据暂不可用，已使用最近一次可用数据。');
+    expect(holdings).not.toHaveTextContent('Daily close quote');
+    expect(holdings).not.toHaveTextContent('Synced snapshot');
+    expect(holdings).not.toHaveTextContent('Avg-cost fallback');
     expect(holdings).not.toHaveTextContent(/现价快照|Live quote/);
+    expect(holdings.textContent || '').not.toMatch(/daily_close_quote|broker_sync_snapshot|avg_cost_fallback|current_quote_unavailable|fallback/i);
 
-    expect(screen.getByTestId('portfolio-holding-trust-AAPL')).toHaveTextContent('收盘报价');
-    expect(screen.getByTestId('portfolio-holding-trust-MSFT')).toHaveTextContent('同步快照');
+    expect(screen.getByTestId('portfolio-holding-trust-AAPL')).toHaveTextContent('价格快照');
+    expect(screen.getByTestId('portfolio-holding-trust-MSFT')).toHaveTextContent('价格快照');
 
     const fallbackTrust = screen.getByTestId('portfolio-holding-trust-COST');
-    expect(fallbackTrust).toHaveTextContent('估值回退');
-    expect(fallbackTrust).toHaveTextContent('均价回退');
-    expect(fallbackTrust).toHaveTextContent('现价缺失');
+    expect(fallbackTrust).toHaveTextContent('价格可能延迟');
+    expect(fallbackTrust).toHaveTextContent('价格延迟');
+    expect(fallbackTrust).toHaveTextContent('置信度有限');
   });
 
   it('renders portfolio risk drilldown explainability without raw debug labels', async () => {
@@ -1054,32 +1059,34 @@ describe('PortfolioPage FX refresh', () => {
     const snapshotStrip = screen.getByTestId('portfolio-account-status-strip');
     const valuationTrust = within(snapshotStrip).getByTestId('portfolio-valuation-trust-strip');
     expect(valuationTrust).toHaveTextContent('仅供观察');
-    expect(valuationTrust).toHaveTextContent('估值回退');
-    expect(valuationTrust).toHaveTextContent('收盘报价');
-    expect(valuationTrust).toHaveTextContent('FX 汇率已过期');
+    expect(valuationTrust).toHaveTextContent('价格可能延迟');
+    expect(valuationTrust).toHaveTextContent('价格延迟');
+    expect(valuationTrust).toHaveTextContent('汇率可能延迟');
     expect(valuationTrust).toHaveTextContent('现金流水不完整');
-    expect(valuationTrust).toHaveTextContent('持仓来源待核验');
-    expect(within(snapshotStrip).getByTestId('portfolio-snapshot-evidence-chips')).toHaveTextContent('仅供观察');
+    expect(valuationTrust).toHaveTextContent('持仓数据待核验');
+    expect(screen.getByTestId('portfolio-consumer-data-notice')).toHaveTextContent('当前估值可能存在延迟，仅供参考。');
+    expect(within(snapshotStrip).queryByTestId('portfolio-snapshot-evidence-chips')).not.toBeInTheDocument();
+    expect(valuationTrust.textContent || '').not.toMatch(/Daily close quote|current_quote_unavailable|sourceAuthority|syncImportStatus|confidenceCap|stale_fx|FX 汇率|基准映射|因子映射/i);
 
     const risk = screen.getByTestId('portfolio-risk-card');
     const riskTrust = within(risk).getByTestId('portfolio-risk-trust-strip');
     expect(riskTrust).toHaveTextContent('仅供风险观察');
-    expect(riskTrust).toHaveTextContent('FX 汇率已过期');
-    expect(riskTrust).toHaveTextContent('持仓来源待核验');
+    expect(riskTrust).toHaveTextContent('汇率可能延迟');
+    expect(riskTrust).toHaveTextContent('持仓数据待核验');
     expect(riskTrust).toHaveTextContent('现金流水不完整');
-    expect(riskTrust).toHaveTextContent('基准映射暂缺');
-    expect(riskTrust).toHaveTextContent('因子映射暂缺');
-    expect(riskTrust).toHaveTextContent('置信上限 60');
-    expect(riskTrust).not.toHaveTextContent(/manual_replay_complete|manual_replay_authoritative|sourceAuthority|syncImportStatus|confidenceCap|stale_fx/i);
+    expect(riskTrust).toHaveTextContent('部分风险参考暂不可用');
+    expect(riskTrust).toHaveTextContent('置信度有限');
+    expect(riskTrust).not.toHaveTextContent(/manual_replay_complete|manual_replay_authoritative|sourceAuthority|syncImportStatus|confidenceCap|stale_fx|FX 汇率|基准映射|因子映射/i);
 
     const holdingTrust = screen.getByTestId('portfolio-holding-trust-AAPL');
-    expect(holdingTrust).toHaveTextContent('估值回退');
-    expect(holdingTrust).toHaveTextContent('现价缺失');
-    expect(holdingTrust).toHaveTextContent('收盘报价');
+    expect(holdingTrust).toHaveTextContent('价格可能延迟');
+    expect(holdingTrust).toHaveTextContent('价格延迟');
+    expect(holdingTrust).toHaveTextContent('部分价格数据暂不可用，已使用最近一次可用数据。');
+    expect(holdingTrust).toHaveTextContent('置信度有限');
     expect(holdingTrust).toHaveTextContent('截至 2026-03-18');
   });
 
-  it('renders setup-path actions beside valuation trust without changing portfolio trust calculations', async () => {
+  it('shows consumer-safe data quality copy instead of provider setup remediation by default', async () => {
     const snapshot = makeSnapshot({
       includePosition: true,
       fxStale: true,
@@ -1103,14 +1110,12 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const statusStrip = screen.getByTestId('portfolio-account-status-strip');
-    expect(within(statusStrip).getByTestId('portfolio-valuation-trust-strip')).toHaveTextContent('估值回退');
-
-    const setupPath = within(statusStrip).getByTestId('portfolio-setup-path');
-    expect(setupPath).toHaveTextContent('Provider Ops');
-    expect(setupPath).toHaveTextContent('数据源设置');
-    expect(within(setupPath).getByRole('link', { name: '查看 Provider Ops' })).toHaveAttribute('href', '/admin/market-providers?surface=portfolio');
-    expect(within(setupPath).getByRole('link', { name: '前往数据源设置' })).toHaveAttribute('href', '/settings/system?panel=data_sources&surface=portfolio');
-    expect(setupPath.textContent || '').not.toMatch(/买入|卖出|推荐|guaranteed/i);
+    expect(within(statusStrip).getByTestId('portfolio-valuation-trust-strip')).toHaveTextContent('价格可能延迟');
+    expect(screen.getByTestId('portfolio-consumer-data-notice')).toHaveTextContent('当前估值可能存在延迟，仅供参考。');
+    expect(within(statusStrip).queryByTestId('portfolio-setup-path')).not.toBeInTheDocument();
+    expect(statusStrip).not.toHaveTextContent('Provider Ops');
+    expect(statusStrip).not.toHaveTextContent('数据源设置');
+    expect(statusStrip.textContent || '').not.toMatch(/provider|api key|setup|remediation|sourceAuthority|confidenceCap|reason_codes|fallback/i);
   });
 
   it('keeps native exposure visible when FX conversion is unavailable', async () => {
@@ -1122,12 +1127,12 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.click(within(screen.getByTestId('portfolio-exposure-card')).getByRole('button', { name: '币种' }));
 
     const exposure = screen.getByTestId('portfolio-exposure-card');
-    expect(exposure).toHaveTextContent('折算不可用');
+    expect(exposure).toHaveTextContent('折算暂不可用');
     expect(exposure).toHaveTextContent('USD 1,600.00');
     const risk = screen.getByTestId('portfolio-risk-card');
     expect(within(risk).getByTestId('portfolio-currency-exposure-drilldown')).toHaveTextContent('汇率待确认');
     expect(within(risk).getByTestId('portfolio-currency-exposure-drilldown')).toHaveTextContent('原币统计可用');
-    expect(within(risk).getByTestId('portfolio-risk-hints')).toHaveTextContent('汇率数据不可用');
+    expect(within(risk).getByTestId('portfolio-risk-hints')).toHaveTextContent('汇率数据暂不可用');
   });
 
   it('renders missing market category cleanly without raw unknown text', async () => {
@@ -1202,7 +1207,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveTextContent('HKD 3,257.33');
   });
 
-  it('shows an FX unavailable state instead of fake converted values when a display rate is missing', async () => {
+  it('shows an exchange-rate unavailable state instead of fake converted values when a display rate is missing', async () => {
     getSnapshot.mockResolvedValue(makeSnapshot({
       includePosition: true,
       fxRates: [
@@ -1224,7 +1229,8 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     expect(screen.getAllByText('USD 1,600.00').length).toBeGreaterThan(0);
-    expect(within(screen.getByTestId('portfolio-account-status-strip')).getAllByText('折算不可用').length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId('portfolio-account-status-strip')).getAllByText('折算暂不可用').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('portfolio-consumer-data-notice')).toHaveTextContent('部分汇率数据暂不可用，估值已暂停更新。');
     expect(screen.queryByText(/≈ CNY/)).not.toBeInTheDocument();
   });
 
@@ -1342,7 +1348,7 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.click(getLeftTabButton('汇率'));
     expect(screen.getByTestId('portfolio-fx-panel')).toBeInTheDocument();
-    expect(screen.getByText('实时汇率引擎')).toBeInTheDocument();
+    expect(screen.getByText('汇率参考')).toBeInTheDocument();
     expect(screen.getByLabelText('基准币种')).toHaveValue('USD');
     expect(screen.getByLabelText('报价币种')).toHaveValue('CNY');
     expect(screen.getByText('USD/CNY')).toBeInTheDocument();
@@ -1352,7 +1358,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(refreshFxButton.className).toContain('border-[color:var(--wolfy-accent)]');
     expect(refreshFxButton.className).toContain('bg-[var(--wolfy-accent)]');
     expect(refreshFxButton).toHaveTextContent(translate('zh', 'portfolio.refreshFx'));
-    expect(screen.getByText('manual')).toBeInTheDocument();
+    expect(screen.getByText('汇率已更新')).toBeInTheDocument();
   });
 
   it('renders account and sync forms with Chinese-first drawer labels', async () => {
@@ -1652,7 +1658,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(syncResultCard?.textContent || '').toContain('USD 6,600.00');
   });
 
-  it('refreshes FX from the visible FX surface and only reloads snapshot/risk', async () => {
+  it('refreshes exchange rates from the visible exchange-rate surface and only reloads snapshot/risk', async () => {
     getSnapshot
       .mockResolvedValueOnce(makeSnapshot({ fxStale: true }))
       .mockResolvedValueOnce(makeSnapshot({ fxStale: false }));
@@ -1670,7 +1676,7 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.click(refreshFxButton);
 
     await waitFor(() => expect(refreshFxRate).toHaveBeenCalledWith({ base: 'USD', quote: 'CNY' }));
-    expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshUpdated', { count: 1 }))).toBeInTheDocument();
+    expect(await screen.findByText('汇率数据已更新。')).toBeInTheDocument();
     await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(snapshotCallsBeforeRefresh + 1));
     await waitFor(() => expect(getRisk).toHaveBeenCalledTimes(riskCallsBeforeRefresh + 1));
     expect(listTrades).toHaveBeenCalledTimes(tradeCallsBeforeRefresh);
@@ -1679,7 +1685,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-fx-rate-value')).toHaveTextContent('1 USD = 7.2468 CNY');
   });
 
-  it('shows warning feedback when live FX refresh falls back to stale cache', async () => {
+  it('shows consumer-safe warning feedback when exchange-rate refresh remains stale', async () => {
     refreshFxRate.mockResolvedValueOnce({
       baseCurrency: 'USD',
       quoteCurrency: 'CNY',
@@ -1697,12 +1703,9 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.click(openFxPanel());
 
-    expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshFallbackWarning', {
-      updatedCount: 0,
-      staleCount: 1,
-      errorCount: 1,
-    }))).toBeInTheDocument();
-    expect(screen.getByText('缓存')).toBeInTheDocument();
+    expect(await screen.findByText('部分汇率数据暂不可用，估值已暂停更新。')).toBeInTheDocument();
+    expect(screen.queryByText('缓存')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-fx-panel')).not.toHaveTextContent(/frankfurter|CACHE|fallback|cache/i);
   });
 
   it('restores the button state and shows the existing error alert when FX refresh fails', async () => {
@@ -1819,7 +1822,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByText(translate('en', 'portfolio.dataSyncTitle'))).toBeInTheDocument();
   });
 
-  it('renders localized English FX refresh feedback on /en routes', async () => {
+  it('renders localized English exchange-rate refresh feedback on /en routes', async () => {
     window.history.replaceState(window.history.state, '', '/en/portfolio');
 
     render(
@@ -1832,7 +1835,7 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.click(openFxPanel('en'));
 
-    expect(await screen.findByText(translate('en', 'portfolio.fxRefreshUpdated', { count: 1 }))).toBeInTheDocument();
+    expect(await screen.findByText('Exchange-rate data updated.')).toBeInTheDocument();
   });
 
   it('renders localized English IBKR sync detail and broker connection labels on /en routes', async () => {
