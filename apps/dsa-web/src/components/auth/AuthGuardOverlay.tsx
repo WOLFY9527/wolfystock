@@ -161,8 +161,8 @@ export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName, 
         className="relative z-10 flex w-[min(92vw,28rem)] flex-col items-center overflow-hidden rounded-[14px] border border-white/12 bg-[color:rgba(18,23,35,0.74)] px-5 py-6 text-center shadow-[0_24px_80px_rgba(3,7,18,0.38)] backdrop-blur-2xl sm:px-6 sm:py-7"
         data-testid="auth-guard-card"
       >
-        <div className="mx-auto mb-5 flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/[0.07] text-[color:var(--wolfy-text-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-          <Lock className="h-4 w-4" aria-hidden="true" />
+        <div className="mx-auto mb-5 flex size-11 items-center justify-center rounded-full border border-white/12 bg-white/[0.07] text-[color:var(--wolfy-text-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+          <Lock className="size-4" aria-hidden="true" />
         </div>
         <h2 id={titleId} className="text-base font-semibold text-[color:var(--wolfy-text-primary)]">{title}</h2>
         <p id={bodyId} className="mx-auto mt-3 max-w-[22rem] text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{body}</p>

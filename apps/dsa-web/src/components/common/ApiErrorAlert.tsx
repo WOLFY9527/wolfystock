@@ -109,7 +109,7 @@ export const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({
       role="alert"
     >
       {showDetails ? (
-        <details className="theme-panel-subtle mt-3 rounded-[var(--cohere-radius-medium)] px-3 py-3">
+        <details className="theme-panel-subtle mt-3 rounded-[var(--cohere-radius-medium)] p-3">
           <summary className="label-uppercase cursor-pointer text-danger opacity-90">{t('common.apiError.details')}</summary>
           <pre className="mt-2 whitespace-pre-wrap break-words text-[11px] leading-5 text-danger opacity-85">
             {error.rawMessage}
@@ -117,7 +117,7 @@ export const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({
         </details>
       ) : null}
       {guidance.length > 0 ? (
-        <ul className="theme-panel-subtle mt-3 space-y-1.5 rounded-[var(--cohere-radius-medium)] px-3 py-3 text-[11px] leading-5 text-secondary-text">
+        <ul className="theme-panel-subtle mt-3 space-y-1.5 rounded-[var(--cohere-radius-medium)] p-3 text-[11px] leading-5 text-secondary-text">
           {guidance.map((entry) => (
             <li key={entry}>• {entry}</li>
           ))}
