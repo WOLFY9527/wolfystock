@@ -17,9 +17,7 @@ import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { watchlistApi } from '../api/watchlist';
 import { AuthGuardOverlay } from '../components/auth/AuthGuardOverlay';
 import { ApiErrorAlert, Input, Select } from '../components/common';
-import { TrustDisclosureChips } from '../components/evidence/TrustDisclosureChips';
 import { WideWorkspaceShellScope } from '../components/layout/WideWorkspaceShell';
-import { ProductSetupPath } from '../components/market-intelligence/ProductSetupPath';
 import {
   ConsoleBoard,
   ConsoleContextRail,
@@ -44,7 +42,6 @@ import type { WatchlistItem } from '../types/watchlist';
 import type { RuleBacktestRunResponse } from '../types/backtest';
 import { describeBooleanEnabled, describeDisplayStatus, type DisplayStatusTone } from '../utils/displayStatus';
 import { buildLocalizedPath } from '../utils/localeRouting';
-import { resolveTrustDisclosureBuckets, trustDisclosureLabel, type TrustDisclosureBucket } from '../utils/trustDisclosure';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 
 type SortKey = 'newest' | 'scannerScore' | 'backtestReturn' | 'historicalHitRate' | 'recentlyScored' | 'recentlyBacktested' | 'symbol' | 'market';
@@ -54,16 +51,14 @@ type Notice = { tone: 'success' | 'warning' | 'danger'; message: string } | null
 type FailureReason = '数据不足' | '行情缺失' | '服务暂不可用' | '回测失败' | '扫描失败' | '超时' | '未知错误';
 type BatchFailure = { label: FailureReason; detail?: string };
 type WatchlistTrustState = 'fresh' | 'stale' | 'unknown';
-type WatchlistScoreDisclosureState = 'fresh' | 'stale' | 'fallbackProxy' | 'unknown' | 'failed';
+type WatchlistScoreDisclosureState = 'fresh' | 'stale' | 'limitedConfidence' | 'unknown' | 'failed';
 type WatchlistConclusionModel = {
   title: string;
   detail: string;
   freshCount: number;
   staleCount: number;
   unknownCount: number;
-  fallbackProxyCount: number;
-  buckets: TrustDisclosureBucket[];
-  terms: string[];
+  limitedConfidenceCount: number;
   tone: 'success' | 'caution' | 'neutral';
 };
 type BatchProgress = {
@@ -100,6 +95,15 @@ function formatMarket(value?: string | null): string {
   if (market === 'HK') return '港股';
   if (market === 'US') return 'US';
   return market || '--';
+}
+
+function formatWatchlistOrigin(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  const token = normalizeToken(value);
+  if (token === 'scanner' || token === 'scanner_run') return language === 'en' ? 'Scanner candidate' : '扫描候选';
+  if (token === 'portfolio') return language === 'en' ? 'Portfolio watch' : '组合观察';
+  if (token === 'manual') return language === 'en' ? 'Manual add' : '手动加入';
+  if (token === 'imported' || token === 'import') return language === 'en' ? 'Imported' : '批量导入';
+  return language === 'en' ? 'Watch item' : '观察标的';
 }
 
 function formatDateTime(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
@@ -226,10 +230,11 @@ function isFallbackTrustSource(value?: string | null): boolean {
   return token.includes('fallback') || token.includes('proxy');
 }
 
-function hasFallbackOrProxyScoreContext(item: WatchlistItem): boolean {
+function hasLimitedConfidenceScoreContext(item: WatchlistItem): boolean {
   return [
     item.scoreSource,
     item.scoreStatus,
+    item.scoreReason,
     item.intelligence?.scanner?.status,
     item.intelligence?.scanner?.reason,
   ].some(isFallbackTrustSource);
@@ -240,59 +245,61 @@ function getScoreDisclosureState(item: WatchlistItem): WatchlistScoreDisclosureS
   if (['data_failed', 'provider_down', 'provider_error', 'failed', 'error', 'critical'].includes(status)) {
     return 'failed';
   }
+  if (hasLimitedConfidenceScoreContext(item)) return 'limitedConfidence';
   if (['stale', 'partial'].includes(status)) return 'stale';
-  if (hasFallbackOrProxyScoreContext(item)) return 'fallbackProxy';
   if (status === 'fresh') return 'fresh';
   return 'unknown';
 }
 
 function formatScoreDisclosureFreshness(item: WatchlistItem, value: string | null | undefined, language: 'zh' | 'en'): string {
   const state = getScoreDisclosureState(item);
-  if (state === 'stale') return language === 'en' ? 'Historical score' : '历史评分';
-  if (state === 'fallbackProxy') return language === 'en' ? 'Fallback/proxy score' : '备用/代理评分';
-  if (state === 'unknown') return language === 'en' ? 'Needs score refresh' : '评分待刷新';
+  if (state === 'stale' || state === 'limitedConfidence') return language === 'en' ? 'Recent available' : '最近可用';
+  if (state === 'unknown') return language === 'en' ? 'Updating' : '更新中';
   return formatFreshness(value);
 }
 
 function formatScoreDisclosureStatus(state: WatchlistScoreDisclosureState, language: 'zh' | 'en'): string {
   if (language === 'en') {
     if (state === 'fresh') return 'Signal fresh';
-    if (state === 'stale') return 'Historical evidence';
-    if (state === 'fallbackProxy') return 'Fallback/proxy evidence';
+    if (state === 'stale' || state === 'limitedConfidence') return 'Limited confidence';
     if (state === 'failed') return 'Scan failed';
-    return 'Signal unknown';
+    return 'Updating';
   }
   if (state === 'fresh') return '信号最新';
-  if (state === 'stale') return '历史证据';
-  if (state === 'fallbackProxy') return '备用/代理证据';
+  if (state === 'stale' || state === 'limitedConfidence') return '置信度较低';
   if (state === 'failed') return '扫描失败';
-  return '信号未知';
+  return '数据更新中';
 }
 
 function scoreDisclosureChipVariant(state: WatchlistScoreDisclosureState): React.ComponentProps<typeof TerminalChip>['variant'] {
   if (state === 'fresh') return 'success';
   if (state === 'failed') return 'danger';
-  if (state === 'stale' || state === 'fallbackProxy' || state === 'unknown') return 'caution';
+  if (state === 'stale' || state === 'limitedConfidence' || state === 'unknown') return 'caution';
   return 'neutral';
 }
 
 function scannerStatusChipVariant(label: string): React.ComponentProps<typeof TerminalChip>['variant'] {
   if (label === '扫描失败') return 'danger';
   if (label === '已验证' || label === '通过筛选') return 'info';
-  if (['历史证据', '备用/代理证据', '证据待补齐'].includes(label)) return 'caution';
+  if (['置信度较低', '数据更新中', '最近数据'].includes(label)) return 'caution';
   return 'neutral';
 }
 
 function formatScoreDisclosureNotice(state: WatchlistScoreDisclosureState, language: 'zh' | 'en'): string | null {
   if (state === 'stale') {
     return language === 'en'
-      ? 'Preserved historical evidence. Refresh or rescan before use.'
-      : '保留历史证据，刷新或重新扫描后再使用。';
+      ? 'Using the most recent available data.'
+      : '已使用最近一次可用数据。';
   }
-  if (state === 'fallbackProxy') {
+  if (state === 'limitedConfidence') {
     return language === 'en'
-      ? 'Fallback/proxy evidence is degraded. Refresh or rescan before use.'
-      : '备用/代理证据已降级，刷新或重新扫描后再使用。';
+      ? 'Some watchlist data is temporarily unavailable; using the most recent available data.'
+      : '部分自选股数据暂不可用，已使用最近一次可用数据。';
+  }
+  if (state === 'unknown') {
+    return language === 'en'
+      ? 'Data is updating and will refresh shortly.'
+      : '数据更新中，稍后将自动刷新。';
   }
   return null;
 }
@@ -303,9 +310,8 @@ function formatScannerStatus(item: WatchlistItem): string {
   const scoreDisclosureState = getScoreDisclosureState(item);
   if (scoreDisclosureState === 'failed') return '扫描失败';
   if (['data_failed', 'provider_down', 'provider_error', 'error', 'failed', 'critical'].includes(status)) return '扫描失败';
-  if (scoreDisclosureState === 'stale') return '历史证据';
-  if (scoreDisclosureState === 'fallbackProxy') return '备用/代理证据';
-  if (scoreDisclosureState === 'unknown') return hasScannerEvidence(item) ? '证据待补齐' : '未扫描';
+  if (scoreDisclosureState === 'stale' || scoreDisclosureState === 'limitedConfidence') return '置信度较低';
+  if (scoreDisclosureState === 'unknown') return hasScannerEvidence(item) ? '数据更新中' : '未扫描';
   if (['selected', 'verified', 'ready', 'fresh'].includes(status)) return '已验证';
   if (['preview', 'candidate', 'passed'].includes(status)) return '通过筛选';
   if (['rejected', 'not_selected', 'failed_filter'].includes(status)) return '未通过';
@@ -321,6 +327,11 @@ function formatScannerReason(reason?: string | null, language: 'zh' | 'en' = 'zh
   if (normalized === 'unknown' || normalized.includes('debug') || normalized.includes('critical')) {
     return null;
   }
+  if (
+    /fallback|proxy|reasonfamilies|reasoncode|sourceauthorityallowed|scorecontributionallowed|observationonly|source_confidence|score_blocked|raw diagnostics?|json/.test(normalized)
+  ) {
+    return null;
+  }
   if (/provider|timeout|history|missing|insufficient|not_enough|unavailable|data_failed/.test(normalized)) {
     return sanitizeUserFacingDataIssue(raw, language);
   }
@@ -334,18 +345,6 @@ function normalizeToken(value?: string | null): string {
   return normalizeText(value).toLowerCase();
 }
 
-function formatTrustToken(value?: string | null): string | null {
-  const token = normalizeToken(value);
-  if (!token) return null;
-  const canonicalBuckets = resolveTrustDisclosureBuckets({ terms: [token] });
-  if (canonicalBuckets.length) {
-    return canonicalBuckets.map((bucket) => trustDisclosureLabel(bucket)).join(' / ');
-  }
-  if (token === 'llm') return 'LLM';
-  if (token === 'scanner' || token === 'scanner_run') return '扫描器';
-  return token.replaceAll(/[_-]+/g, ' ');
-}
-
 function getTrustState(item: WatchlistItem): WatchlistTrustState {
   const state = getScoreDisclosureState(item);
   if (state === 'fresh') return 'fresh';
@@ -353,71 +352,24 @@ function getTrustState(item: WatchlistItem): WatchlistTrustState {
   return 'stale';
 }
 
-function hasMissingTrustContext(item: WatchlistItem): boolean {
-  return !normalizeText(item.source)
-    && getTrustState(item) === 'unknown'
-    && !normalizeText(item.scoreSource)
-    && item.scannerRunId == null
-    && !getTrustUpdatedTime(item);
-}
-
-function formatTrustSourceLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
-  const prefix = language === 'en' ? 'Origin' : '来源';
-  return `${prefix} ${formatTrustToken(value) || (language === 'en' ? 'unknown' : '未知')}`;
-}
-
-function formatTrustScoreSourceLabel(value: string | null | undefined, language: 'zh' | 'en'): string | null {
-  const formatted = formatTrustToken(value);
-  if (!formatted) return null;
-  return `${language === 'en' ? 'Score source' : '评分源'} ${formatted}`;
-}
-
-function formatTrustScannerRunLabel(value: number | null | undefined, language: 'zh' | 'en'): string | null {
-  if (value == null) return null;
-  return `${language === 'en' ? 'Scanner run' : '扫描批次'} #${value}`;
-}
-
 function formatTrustUpdatedLabel(value: string | null | undefined, language: 'zh' | 'en'): string | null {
   if (!value) return null;
   return `${language === 'en' ? 'Updated' : '更新'} ${formatDateTime(value, language)}`;
 }
 
-function watchlistTrustDisclosureBuckets(item: WatchlistItem): TrustDisclosureBucket[] {
-  const buckets: Array<TrustDisclosureBucket | null> = [
-    getTrustState(item) === 'stale' ? 'stale' : null,
-  ];
-  const terms = [
-    item.scoreSource,
-    item.scoreStatus,
-    item.intelligence?.scanner?.status,
-    item.intelligence?.scanner?.reason,
-    item.intelligence?.strategySimulation?.status,
-  ];
-  resolveTrustDisclosureBuckets({ terms }).forEach((bucket) => buckets.push(bucket));
-  return Array.from(new Set(buckets.filter((bucket): bucket is TrustDisclosureBucket => Boolean(bucket))));
-}
-
-function addWatchlistBucket(buckets: TrustDisclosureBucket[], bucket: TrustDisclosureBucket) {
-  if (!buckets.includes(bucket)) buckets.push(bucket);
-}
-
-function hasFallbackOrProxyDisclosure(item: WatchlistItem): boolean {
-  const buckets = watchlistTrustDisclosureBuckets(item);
-  return buckets.includes('fallback')
-    || buckets.includes('proxy')
-    || isFallbackTrustSource(item.scoreSource)
+function hasLimitedConfidenceDisclosure(item: WatchlistItem): boolean {
+  return isFallbackTrustSource(item.scoreSource)
     || isFallbackTrustSource(item.source)
+    || isFallbackTrustSource(item.scoreReason)
     || isFallbackTrustSource(item.intelligence?.scanner?.reason)
     || isFallbackTrustSource(item.intelligence?.scanner?.status);
 }
 
 function buildWatchlistConclusion(items: WatchlistItem[], language: 'zh' | 'en'): WatchlistConclusionModel {
-  const buckets: TrustDisclosureBucket[] = [];
-  const terms: string[] = [];
   let freshCount = 0;
   let staleCount = 0;
   let unknownCount = 0;
-  let fallbackProxyCount = 0;
+  let limitedConfidenceCount = 0;
 
   items.forEach((item) => {
     const state = getTrustState(item);
@@ -425,26 +377,10 @@ function buildWatchlistConclusion(items: WatchlistItem[], language: 'zh' | 'en')
     else if (state === 'stale') staleCount += 1;
     else unknownCount += 1;
 
-    const itemBuckets = watchlistTrustDisclosureBuckets(item);
-    itemBuckets.forEach((bucket) => addWatchlistBucket(buckets, bucket));
-    [
-      item.source,
-      item.scoreSource,
-      item.scoreStatus,
-      item.intelligence?.scanner?.status,
-      item.intelligence?.scanner?.reason,
-      item.intelligence?.strategySimulation?.status,
-    ].forEach((term) => {
-      if (term && !terms.includes(term)) terms.push(term);
-    });
-    if (hasFallbackOrProxyDisclosure(item)) {
-      fallbackProxyCount += 1;
-      addWatchlistBucket(buckets, 'fallback');
-      addWatchlistBucket(buckets, 'proxy');
+    if (hasLimitedConfidenceDisclosure(item)) {
+      limitedConfidenceCount += 1;
     }
   });
-  if (staleCount > 0) addWatchlistBucket(buckets, 'stale');
-  if (unknownCount > 0) addWatchlistBucket(buckets, 'blocked');
 
   const topItem = [...items]
     .filter((item) => getTrustState(item) === 'fresh' && getScannerScore(item) !== null)
@@ -458,41 +394,48 @@ function buildWatchlistConclusion(items: WatchlistItem[], language: 'zh' | 'en')
       freshCount,
       staleCount,
       unknownCount,
-      fallbackProxyCount,
-      buckets,
-      terms,
+      limitedConfidenceCount,
       tone: 'neutral',
     };
   }
   if (!topItem) {
     return {
-      title: language === 'en' ? 'Needs refresh' : '需要刷新',
+      title: language === 'en' ? 'Data updating' : '数据更新中',
       detail: language === 'en'
-        ? 'Refresh stale or unknown rows before treating this watchlist as evidence.'
-        : '先刷新过期或未知条目，再将观察列表作为证据。',
+        ? 'Some items need a refresh before reference.'
+        : '部分项目需要刷新后再参考。',
       freshCount,
       staleCount,
       unknownCount,
-      fallbackProxyCount,
-      buckets,
-      terms,
+      limitedConfidenceCount,
       tone: 'caution',
     };
   }
 
   const symbol = normalizeText(topItem.symbol).toUpperCase() || topItem.symbol || '--';
+  const detail = limitedConfidenceCount > 0
+    ? (language === 'en'
+      ? 'Current signal confidence is limited; use for observation only.'
+      : '当前信号置信度较低，仅供观察。')
+    : staleCount > 0
+      ? (language === 'en'
+        ? 'Some watchlist data is temporarily unavailable; using the most recent available data.'
+        : '部分自选股数据暂不可用，已使用最近一次可用数据。')
+      : unknownCount > 0
+        ? (language === 'en'
+          ? 'Data is updating and will refresh shortly.'
+          : '数据更新中，稍后将自动刷新。')
+        : (language === 'en'
+          ? `Review ${symbol}'s score freshness, confidence, and backtest summary.`
+          : `查看 ${symbol} 的评分鲜度、置信度和回测概览。`);
   return {
     title: language === 'en' ? `Current focus ${symbol}` : `当前焦点 ${symbol}`,
-    detail: language === 'en'
-      ? `Observe ${symbol}'s next score update and row-level evidence chips before treating it as evidence.`
-      : `观察 ${symbol} 的下一次评分更新，并对照行内证据芯片后再作为证据。`,
+    detail,
     freshCount,
     staleCount,
     unknownCount,
-    fallbackProxyCount,
-    buckets,
-    terms,
-    tone: staleCount || unknownCount || fallbackProxyCount ? 'caution' : 'success',
+    limitedConfidenceCount,
+    tone: staleCount || unknownCount || limitedConfidenceCount ? 'caution' : 'success',
   };
 }
 
@@ -588,8 +531,8 @@ function getCopy(language: 'zh' | 'en') {
       trackedSymbols: 'Tracked symbols',
       scannerCoverage: 'Scanner results',
       backtestCoverage: 'Backtest results',
-      staleCoverage: 'Stale intelligence',
-      failureCoverage: 'Failed / no data',
+      staleCoverage: 'Recent available',
+      failureCoverage: 'Unavailable',
       latestUpdate: 'Latest update',
       filters: 'Filters',
       advancedFilters: 'Advanced filters',
@@ -600,7 +543,7 @@ function getCopy(language: 'zh' | 'en') {
       search: 'Search',
       searchPlaceholder: 'Symbol or name',
       market: 'Market',
-      source: 'Source',
+      source: 'Added from',
       context: 'Theme / universe',
       sort: 'Sort',
       all: 'All',
@@ -614,9 +557,9 @@ function getCopy(language: 'zh' | 'en') {
       hasScanner: 'Has scanner evidence',
       hasBacktest: 'Has backtest evidence',
       scannerSelected: 'Selected by scanner',
-      staleIntelligence: 'Stale intelligence',
+      staleIntelligence: 'Recent available data',
       intelligence: 'Intelligence',
-      noEvidence: 'No strategy evidence',
+      noEvidence: 'Evidence updating',
       batchBacktestFilter: 'Backtest current filter',
       batchScanFilter: 'Scan current filter',
       selectedOnly: 'Selected only',
@@ -646,7 +589,7 @@ function getCopy(language: 'zh' | 'en') {
       enabled: 'Enabled',
       stale: 'Stale',
       fresh: 'Fresh',
-      sourceUnknownNeedsRefresh: 'Source unknown / needs refresh',
+      sourceUnknownNeedsRefresh: 'Data is updating and will refresh shortly.',
       added: 'Added',
       actions: 'Actions',
       analyze: 'Analyze',
@@ -660,7 +603,7 @@ function getCopy(language: 'zh' | 'en') {
       emptyBody: 'No watched symbols yet. Add candidates from Scanner, or adjust filters to review existing evidence.',
       openScanner: 'Open Scanner',
       tableTitle: 'Tracked candidates',
-    tableDescription: 'Scanner, simulation, and backtest evidence stay explicit.',
+      tableDescription: 'Freshness, confidence, and backtest summary stay visible.',
       loading: 'Loading watchlist...',
       removed: 'Removed from watchlist.',
       copyFailed: 'Copy failed.',
@@ -682,8 +625,8 @@ function getCopy(language: 'zh' | 'en') {
     trackedSymbols: '观察标的数',
     scannerCoverage: '已有扫描结果',
     backtestCoverage: '已有回测结果',
-    staleCoverage: '情报过期',
-    failureCoverage: '失败 / 无数据',
+    staleCoverage: '最近可用',
+    failureCoverage: '暂不可用',
     latestUpdate: '最近更新时间',
     filters: '筛选',
     advancedFilters: '高级筛选',
@@ -694,7 +637,7 @@ function getCopy(language: 'zh' | 'en') {
     search: '搜索',
     searchPlaceholder: '代码或名称',
     market: '市场',
-    source: '来源',
+    source: '加入方式',
     context: '主题 / 候选范围',
     sort: '排序',
     all: '全部',
@@ -708,9 +651,9 @@ function getCopy(language: 'zh' | 'en') {
     hasScanner: '有扫描证据',
     hasBacktest: '有回测证据',
     scannerSelected: '扫描入选',
-    staleIntelligence: '证据过期',
-    intelligence: '策略证据',
-    noEvidence: '暂无策略证据',
+    staleIntelligence: '最近可用数据',
+    intelligence: '观察依据',
+    noEvidence: '依据更新中',
     batchBacktestFilter: '回测当前筛选',
     batchScanFilter: '扫描当前筛选',
     selectedOnly: '仅选中',
@@ -740,7 +683,7 @@ function getCopy(language: 'zh' | 'en') {
     enabled: '已启用',
     stale: '过期',
     fresh: '最新',
-    sourceUnknownNeedsRefresh: '来源未知 / 需要刷新',
+    sourceUnknownNeedsRefresh: '数据更新中，稍后将自动刷新。',
     added: '加入时间',
     actions: '操作',
     analyze: '分析',
@@ -754,7 +697,7 @@ function getCopy(language: 'zh' | 'en') {
     emptyBody: '暂无观察标的，可先从扫描器加入候选。',
     openScanner: '打开扫描器',
     tableTitle: '追踪候选',
-    tableDescription: '扫描、历史模拟和回测证据保持显式标记。',
+    tableDescription: '展示鲜度、置信度和回测概览。',
     loading: '正在加载观察列表...',
     removed: '已从观察列表移除。',
     copyFailed: '复制失败。',
@@ -793,26 +736,19 @@ function WatchlistConclusionBand({
             {language === 'en' ? 'Fresh' : '最新'} {model.freshCount}
           </TerminalChip>
           <TerminalChip variant={model.staleCount > 0 ? 'caution' : 'neutral'} className="font-mono">
-            {language === 'en' ? 'Stale' : '过期'} {model.staleCount}
+            {language === 'en' ? 'Recent available' : '最近可用'} {model.staleCount}
           </TerminalChip>
           <TerminalChip variant={model.unknownCount > 0 ? 'caution' : 'neutral'} className="font-mono">
-            {language === 'en' ? 'Unknown' : '未知'} {model.unknownCount}
+            {language === 'en' ? 'Updating' : '更新中'} {model.unknownCount}
           </TerminalChip>
-          <TerminalChip variant={model.fallbackProxyCount > 0 ? 'caution' : 'neutral'} className="font-mono">
-            {language === 'en' ? 'Fallback/proxy' : '备用/代理'} {model.fallbackProxyCount}
+          <TerminalChip variant={model.limitedConfidenceCount > 0 ? 'caution' : 'neutral'} className="font-mono">
+            {language === 'en' ? 'Limited confidence' : '置信度低'} {model.limitedConfidenceCount}
           </TerminalChip>
         </div>
         <p className="mt-1 text-pretty text-xs leading-relaxed text-white/64">
           {model.detail}
         </p>
       </div>
-      <TrustDisclosureChips
-        buckets={model.buckets}
-        terms={model.terms}
-        maxBuckets={4}
-        className="md:justify-end"
-        chipClassName="text-[11px]"
-      />
     </TerminalPanel>
   );
 }
@@ -903,9 +839,9 @@ const WatchlistPage: React.FC = () => {
     const sources = Array.from(new Set(items.map((item) => normalizeText(item.source).toLowerCase()).filter(Boolean))).sort();
     return [
       { value: 'all', label: copy.all },
-      ...sources.map((source) => ({ value: source, label: source })),
+      ...sources.map((source) => ({ value: source, label: formatWatchlistOrigin(source, language) })),
     ];
-  }, [copy.all, items]);
+  }, [copy.all, items, language]);
 
   const contextOptions = useMemo(() => {
     const options = new Map<string, string>();
@@ -1014,11 +950,6 @@ const WatchlistPage: React.FC = () => {
   const watchlistConclusion = useMemo(
     () => buildWatchlistConclusion(filteredItems, language),
     [filteredItems, language],
-  );
-  const shouldShowWatchlistSetupPath = filteredItems.length > 0 && (
-    watchlistConclusion.staleCount > 0
-    || watchlistConclusion.unknownCount > 0
-    || watchlistConclusion.fallbackProxyCount > 0
   );
 
   const toggleSelected = useCallback((item: WatchlistItem) => {
@@ -1349,12 +1280,6 @@ const WatchlistPage: React.FC = () => {
           items={statusItems}
         />
         <WatchlistConclusionBand model={watchlistConclusion} language={language} />
-        {shouldShowWatchlistSetupPath ? (
-          <ProductSetupPath
-            surface="watchlist"
-            testId="watchlist-setup-path"
-          />
-        ) : null}
 
         {notice ? (
           <TerminalNotice className={noticeClassName} role="status">
@@ -1519,12 +1444,8 @@ const WatchlistPage: React.FC = () => {
                     const scoreDisclosureState = getScoreDisclosureState(item);
                     const scoreDisclosureStatusLabel = formatScoreDisclosureStatus(scoreDisclosureState, language);
                     const scoreDisclosureNotice = formatScoreDisclosureNotice(scoreDisclosureState, language);
-                    const trustSourceLabel = formatTrustSourceLabel(item.source, language);
-                    const trustScoreSourceLabel = formatTrustScoreSourceLabel(item.scoreSource, language);
-                    const trustScannerRunLabel = formatTrustScannerRunLabel(item.scannerRunId, language);
                     const trustUpdatedLabel = formatTrustUpdatedLabel(getTrustUpdatedTime(item), language);
-                    const trustDisclosureBuckets = watchlistTrustDisclosureBuckets(item);
-                    const showUnknownTrustNotice = hasMissingTrustContext(item);
+                    const originLabel = formatWatchlistOrigin(item.source, language);
                     const scoreFreshnessVariant = scoreDisclosureChipVariant(scoreDisclosureState);
                     const trustStateVariant = scoreDisclosureChipVariant(scoreDisclosureState);
                     const scannerStatusVariant = scannerStatusChipVariant(scannerStatusLabel);
@@ -1606,7 +1527,7 @@ const WatchlistPage: React.FC = () => {
                                 </div>
                                 <p className="truncate text-sm text-white/78">{item.name || '--'}</p>
                                 <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/45">
-                                  <span>{item.source || '--'}</span>
+                                  <span>{originLabel}</span>
                                   {item.themeId ? <TerminalChip variant="neutral">{item.themeId}</TerminalChip> : null}
                                   {item.universeType ? <TerminalChip variant="neutral">{item.universeType}</TerminalChip> : null}
                                 </div>
@@ -1633,23 +1554,7 @@ const WatchlistPage: React.FC = () => {
                           <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px]">
                             <div data-testid={`watchlist-trust-strip-${item.symbol}`} className="flex min-w-0 flex-wrap items-center gap-1.5">
                               {scoreDisclosureState !== 'failed' ? <TerminalChip variant={trustStateVariant}>{scoreDisclosureStatusLabel}</TerminalChip> : null}
-                              <TrustDisclosureChips
-                                buckets={trustDisclosureBuckets}
-                                chipClassName="text-[11px]"
-                              />
-                              <TerminalChip variant="neutral">{trustSourceLabel}</TerminalChip>
-                              {trustScoreSourceLabel ? (
-                                <TerminalChip variant={isFallbackTrustSource(item.scoreSource) ? 'caution' : 'neutral'}>
-                                  {trustScoreSourceLabel}
-                                </TerminalChip>
-                              ) : null}
-                              {trustScannerRunLabel ? <TerminalChip variant="neutral">{trustScannerRunLabel}</TerminalChip> : null}
                               {trustUpdatedLabel ? <TerminalChip variant="neutral" className="font-mono">{trustUpdatedLabel}</TerminalChip> : null}
-                              {showUnknownTrustNotice ? (
-                                <TerminalNotice variant="caution" className="px-2.5 py-1 text-[11px] leading-5">
-                                  {copy.sourceUnknownNeedsRefresh}
-                                </TerminalNotice>
-                              ) : null}
                               {scoreDisclosureNotice ? (
                                 <TerminalNotice variant="caution" className="px-2.5 py-1 text-[11px] leading-5">
                                   {scoreDisclosureNotice}
@@ -1660,7 +1565,7 @@ const WatchlistPage: React.FC = () => {
                               <>
                                 <TerminalChip variant="neutral">{copy.noEvidence}</TerminalChip>
                                 <TerminalNotice variant="caution" className="px-2.5 py-1 text-[11px] leading-5" data-testid={`watchlist-no-evidence-note-${item.symbol}`}>
-                                  {language === 'zh' ? '可刷新情报或返回扫描器补齐证据' : 'Refresh intelligence or return to Scanner for evidence'}
+                                  {copy.sourceUnknownNeedsRefresh}
                                 </TerminalNotice>
                               </>
                             ) : null}
@@ -1835,13 +1740,10 @@ const WatchlistPage: React.FC = () => {
                         </div>
                         <div className="divide-y divide-[color:var(--wolfy-divider)]">
                           {[
-                            { label: copy.source, value: activeItem.source || '--' },
                             { label: copy.signalTrust, value: formatScoreDisclosureStatus(activeScoreDisclosureState, language) },
-                            { label: language === 'en' ? 'Score source' : '评分源', value: formatTrustToken(activeItem.scoreSource) || '--' },
-                            { label: language === 'en' ? 'Scanner run' : '扫描批次', value: activeItem.scannerRunId != null ? `#${activeItem.scannerRunId}` : '--' },
+                            { label: copy.scoreFreshness, value: formatScoreDisclosureFreshness(activeItem, activeLatestTime, language) },
                             { label: copy.lastScored, value: formatDateTime(activeItem.lastScoredAt, language) },
                             { label: copy.added, value: formatDateTime(activeItem.createdAt || activeItem.updatedAt, language) },
-                            { label: copy.trustUpdated, value: formatTrustUpdatedLabel(getTrustUpdatedTime(activeItem), language) || '--' },
                             { label: copy.latestUpdate, value: activeLatestTime ? formatDateTime(activeLatestTime, language) : '--' },
                           ].map((row) => (
                             <div key={String(row.label)} className="flex min-w-0 items-start justify-between gap-4 py-2.5 text-[11px]">

@@ -339,12 +339,12 @@ describe('WatchlistPage', () => {
     expect(within(statusStrip).getByText('观察标的数').nextElementSibling).toHaveTextContent('3');
     expect(within(statusStrip).getByText('已有扫描结果').nextElementSibling).toHaveTextContent('3');
     expect(within(statusStrip).getByText('已有回测结果').nextElementSibling).toHaveTextContent('3');
-    expect(within(statusStrip).getByText('情报过期').nextElementSibling).toHaveTextContent('0');
-    expect(within(statusStrip).getByText('失败 / 无数据').nextElementSibling).toHaveTextContent('0');
+    expect(within(statusStrip).getByText('最近可用').nextElementSibling).toHaveTextContent('0');
+    expect(within(statusStrip).getByText('暂不可用').nextElementSibling).toHaveTextContent('0');
     expect(within(statusStrip).getByText('最近更新时间').nextElementSibling).toHaveTextContent('05/01');
   });
 
-  it('renders the watchlist conclusion band with fresh, stale, unknown, and fallback summary', async () => {
+  it('renders the watchlist conclusion band with consumer-safe freshness and confidence summary', async () => {
     listWatchlistItems.mockResolvedValue({
       items: [
         makeItem({
@@ -386,13 +386,11 @@ describe('WatchlistPage', () => {
     const band = await screen.findByTestId('watchlist-conclusion-band');
     expect(band).toHaveTextContent('当前焦点 NVDA');
     expect(band).toHaveTextContent('最新 1');
-    expect(band).toHaveTextContent('过期 1');
-    expect(band).toHaveTextContent('未知 1');
-    expect(band).toHaveTextContent('备用/代理 1');
-    expect(band).toHaveTextContent('观察 NVDA 的下一次评分更新');
-    expect(band).toHaveTextContent('备用数据');
-    expect(band).toHaveTextContent('代理证据');
-    expect(band).toHaveTextContent('数据过期');
+    expect(band).toHaveTextContent('最近可用 1');
+    expect(band).toHaveTextContent('更新中 1');
+    expect(band).toHaveTextContent('置信度低 1');
+    expect(band).toHaveTextContent('当前信号置信度较低，仅供观察。');
+    expect(band).not.toHaveTextContent(/fallback|proxy|备用\/代理|备用数据|代理证据|reasonFamilies|sourceAuthorityAllowed|scoreContributionAllowed/i);
     expect(band).not.toHaveTextContent(/买入|卖出|加仓|减仓|buy|sell|recommend(?:ation)?/i);
   });
 
@@ -429,11 +427,11 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const band = await screen.findByTestId('watchlist-conclusion-band');
-    expect(band).toHaveTextContent('需要刷新');
+    expect(band).toHaveTextContent('数据更新中');
     expect(band).toHaveTextContent('最新 0');
-    expect(band).toHaveTextContent('过期 1');
-    expect(band).toHaveTextContent('未知 1');
-    expect(band).toHaveTextContent('先刷新过期或未知条目');
+    expect(band).toHaveTextContent('最近可用 1');
+    expect(band).toHaveTextContent('更新中 1');
+    expect(band).toHaveTextContent('部分项目需要刷新后再参考。');
   });
 
   it('renders the intelligence command bar, coverage summary, and selected scope controls', async () => {
@@ -450,8 +448,8 @@ describe('WatchlistPage', () => {
     expect(within(statusStrip).getByText('观察标的数').nextElementSibling).toHaveTextContent('3');
     expect(within(statusStrip).getByText('已有扫描结果').nextElementSibling).toHaveTextContent('3');
     expect(within(statusStrip).getByText('已有回测结果').nextElementSibling).toHaveTextContent('3');
-    expect(within(statusStrip).getByText('情报过期').nextElementSibling).toHaveTextContent('0');
-    expect(within(statusStrip).getByText('失败 / 无数据').nextElementSibling).toHaveTextContent('0');
+    expect(within(statusStrip).getByText('最近可用').nextElementSibling).toHaveTextContent('0');
+    expect(within(statusStrip).getByText('暂不可用').nextElementSibling).toHaveTextContent('0');
     expect(within(statusStrip).getByText('最近更新时间').nextElementSibling).toHaveTextContent('05/01');
 
     fireEvent.click(within(row).getByRole('checkbox', { name: '选择 NVDA' }));
@@ -541,7 +539,7 @@ describe('WatchlistPage', () => {
     await screen.findByTestId('watchlist-row-NVDA');
 
     fireEvent.click(screen.getByRole('button', { name: '高级筛选' }));
-    fireEvent.change(screen.getByLabelText('来源'), { target: { value: 'scanner' } });
+    fireEvent.change(screen.getByLabelText('加入方式'), { target: { value: 'scanner' } });
     fireEvent.change(screen.getByLabelText('主题 / 候选范围'), { target: { value: 'theme:semis' } });
 
     expect(screen.queryByTestId('watchlist-row-NVDA')).not.toBeInTheDocument();
@@ -639,11 +637,11 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const row = await screen.findByTestId('watchlist-row-MARA');
-    expect(within(row).getByText('暂无策略证据')).toBeInTheDocument();
-    expect(within(row).getByTestId('watchlist-no-evidence-note-MARA')).toHaveTextContent('补齐证据');
+    expect(within(row).getByText('依据更新中')).toBeInTheDocument();
+    expect(within(row).getByTestId('watchlist-no-evidence-note-MARA')).toHaveTextContent('数据更新中，稍后将自动刷新。');
   });
 
-  it('discloses stale trust state with source, fallback, proxy, and scanner run context', async () => {
+  it('shows stale trust state as consumer-safe freshness and confidence', async () => {
     listWatchlistItems.mockResolvedValue({
       items: [makeItem({
         id: 10,
@@ -673,13 +671,10 @@ describe('WatchlistPage', () => {
 
     const row = await screen.findByTestId('watchlist-row-BABA');
     const trustStrip = within(row).getByTestId('watchlist-trust-strip-BABA');
-    expect(trustStrip).toHaveTextContent('数据过期');
-    expect(trustStrip).toHaveTextContent('备用数据');
-    expect(trustStrip).toHaveTextContent('代理证据');
-    expect(trustStrip).toHaveTextContent('来源 portfolio');
-    expect(trustStrip).toHaveTextContent('扫描批次 #77');
+    expect(trustStrip).toHaveTextContent('置信度较低');
+    expect(row).toHaveTextContent('已使用最近一次可用数据。');
     expect(trustStrip.textContent).toMatch(/更新/);
-    expect(trustStrip).not.toHaveTextContent(/proxy_fallback|proxy fallback|fallback|proxy|信号过期/i);
+    expect(trustStrip).not.toHaveTextContent(/proxy_fallback|proxy fallback|fallback|proxy|备用数据|代理证据|来源|扫描批次|source|scanner run|score source/i);
   });
 
   it('keeps stale inherited scanner scores from rendering as verified latest evidence', async () => {
@@ -711,9 +706,9 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const row = await screen.findByTestId('watchlist-row-BABA');
-    expect(row).toHaveTextContent('历史评分');
-    expect(row).toHaveTextContent('保留历史证据');
-    expect(row).toHaveTextContent('刷新或重新扫描后再使用');
+    expect(row).toHaveTextContent('已使用最近一次可用数据。');
+    expect(row).toHaveTextContent('置信度较低');
+    expect(row).not.toHaveTextContent(/历史评分|历史证据|刷新或重新扫描后再使用/);
     expect(within(row).queryByText('已验证')).not.toBeInTheDocument();
     expect(within(row).queryByText('最新')).not.toBeInTheDocument();
     expect(within(row).queryByText('今日')).not.toBeInTheDocument();
@@ -740,9 +735,8 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const row = await screen.findByTestId('watchlist-row-SHOP');
-    expect(row).toHaveTextContent('评分待刷新');
-    expect(row).toHaveTextContent('来源未知 / 需要刷新');
-    expect(row).toHaveTextContent('可刷新情报或返回扫描器补齐证据');
+    expect(row).toHaveTextContent('数据更新中，稍后将自动刷新。');
+    expect(row).not.toHaveTextContent(/来源未知|评分待刷新|可刷新情报|返回扫描器补齐证据/);
     expect(within(row).queryByText('已验证')).not.toBeInTheDocument();
     expect(within(row).queryByText('最新')).not.toBeInTheDocument();
     expect(within(row).queryByText('今日')).not.toBeInTheDocument();
@@ -777,10 +771,9 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const row = await screen.findByTestId('watchlist-row-BILI');
-    expect(row).toHaveTextContent('备用/代理评分');
-    expect(row).toHaveTextContent('备用数据');
-    expect(row).toHaveTextContent('代理证据');
-    expect(row).toHaveTextContent('刷新或重新扫描后再使用');
+    expect(row).toHaveTextContent('部分自选股数据暂不可用，已使用最近一次可用数据。');
+    expect(row).toHaveTextContent('置信度较低');
+    expect(row).not.toHaveTextContent(/备用\/代理|备用数据|代理证据|fallback|proxy|刷新或重新扫描后再使用/i);
     expect(within(row).queryByText('已验证')).not.toBeInTheDocument();
     expect(within(row).queryByText('信号最新')).not.toBeInTheDocument();
     expect(within(row).queryByText('今日')).not.toBeInTheDocument();
@@ -788,7 +781,7 @@ describe('WatchlistPage', () => {
     expect(row).not.toHaveTextContent(forbiddenActionCopy);
   });
 
-  it('renders watchlist setup-path actions for stale diagnostic evidence without conflating the page with scanner setup', async () => {
+  it('keeps maintainer remediation paths out of the default consumer watchlist', async () => {
     listWatchlistItems.mockResolvedValue({
       items: [makeItem({
         id: 12,
@@ -816,12 +809,12 @@ describe('WatchlistPage', () => {
 
     renderWatchlist();
 
-    const setupPath = await screen.findByTestId('watchlist-setup-path');
-    expect(within(setupPath).getByRole('link', { name: '查看 Provider Ops' })).toHaveAttribute('href', '/admin/market-providers?surface=watchlist');
-    expect(within(setupPath).getByRole('link', { name: '前往数据源设置' })).toHaveAttribute('href', '/settings/system?panel=data_sources&surface=watchlist');
-    expect(setupPath.textContent || '').not.toContain('surface=scanner');
-    expect(setupPath.textContent || '').not.toMatch(/买入|卖出|推荐/i);
+    await screen.findByTestId('watchlist-row-BILI');
+    expect(screen.queryByTestId('watchlist-setup-path')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '查看 Provider Ops' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '前往数据源设置' })).not.toBeInTheDocument();
     expect(screen.getByTestId('watchlist-status-strip')).toBeInTheDocument();
+    expect(screen.getByTestId('watchlist-page')).not.toHaveTextContent(/Provider Ops|surface=scanner|surface=watchlist|provider|proxy|fallback/i);
   });
 
   it('shows unknown trust disclosure when source and freshness fields are absent', async () => {
@@ -846,8 +839,44 @@ describe('WatchlistPage', () => {
 
     const row = await screen.findByTestId('watchlist-row-SHOP');
     const trustStrip = within(row).getByTestId('watchlist-trust-strip-SHOP');
-    expect(trustStrip).toHaveTextContent('信号未知');
-    expect(trustStrip).toHaveTextContent('来源未知 / 需要刷新');
+    expect(trustStrip).toHaveTextContent('数据更新中，稍后将自动刷新。');
+    expect(trustStrip).not.toHaveTextContent(/信号未知|来源未知|需要刷新|score source|source unknown/i);
+  });
+
+  it('does not expose backend diagnostics or repeated refresh-remediation copy by default', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [makeItem({
+        id: 18,
+        symbol: 'SNOW',
+        source: 'scanner',
+        scannerRunId: 101,
+        scannerRank: null,
+        scannerScore: 62,
+        lastScoredAt: '2026-04-20T12:30:00Z',
+        scoreSource: 'proxy_fallback',
+        scoreStatus: 'stale',
+        scoreReason: 'reasonFamilies=[source_confidence,score_blocked] sourceAuthorityAllowed=false scoreContributionAllowed=false observationOnly=true raw diagnostics JSON',
+        scoreError: 'provider_down reasonCode=source_confidence raw diagnostics JSON',
+        intelligence: {
+          scanner: {
+            lastScore: 62,
+            lastRank: null,
+            status: 'provider_error',
+            reason: 'reasonFamilies=[source_confidence,score_blocked] sourceAuthorityAllowed=false scoreContributionAllowed=false observationOnly=true raw diagnostics JSON',
+            lastScannedAt: '2026-04-20T12:30:00Z',
+          },
+          strategySimulation: { status: 'partial' },
+          backtest: {},
+        },
+      })],
+    });
+
+    renderWatchlist();
+
+    const page = await screen.findByTestId('watchlist-page');
+    expect(page).toHaveTextContent('已使用最近一次可用数据。');
+    expect(page).toHaveTextContent('置信度较低');
+    expect(page).not.toHaveTextContent(/reasonFamilies|reasonCode|sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|source_confidence|score_blocked|raw diagnostics|JSON|provider_down|provider_error|proxy_fallback|fallback|proxy|备用\/代理|刷新或重新扫描后再使用|来源未知 \/ 需要刷新/i);
   });
 
   it('sorts by backtest return and historical hit rate', async () => {
