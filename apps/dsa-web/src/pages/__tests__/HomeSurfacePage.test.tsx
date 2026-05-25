@@ -359,7 +359,7 @@ describe('HomeSurfacePage', () => {
     expect(root.getAttribute('style') || '').not.toContain('radial-gradient');
     expect(main).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'min-h-0');
     expect(main.firstElementChild).toBe(stage);
-    expect(stage).toHaveClass('home-research-stage', 'w-full', 'max-w-[1920px]', 'min-w-0', 'px-3');
+    expect(stage).toHaveClass('home-research-stage', 'mx-auto', 'w-full', 'max-w-[1880px]', 'min-w-0', 'px-3', '2xl:px-8');
     expect(stage).not.toHaveClass('lg:w-[96vw]', 'lg:max-w-[1840px]');
     expect(stage.contains(commandBar)).toBe(true);
     expect(stage.contains(researchConsole)).toBe(true);
@@ -424,13 +424,16 @@ describe('HomeSurfacePage', () => {
     expect(within(decisionCard).getByText('下一步关注点')).toBeInTheDocument();
     expect(within(decisionCard).queryByText('投资立场')).not.toBeInTheDocument();
     expect(within(decisionCard).queryByText('综合评分')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-research-score-strip')).toHaveTextContent('研究评分');
+    expect(screen.getByTestId('home-research-confidence-strip')).toHaveTextContent('可信度');
+    expect(screen.getByTestId('home-research-data-state-strip')).toHaveTextContent(/数据状态|Data state/);
     expect(within(decisionCard).getByText('价格触发')).toBeInTheDocument();
     expect(within(decisionCard).getByText('失效位')).toBeInTheDocument();
     expect(within(decisionCard).getByText('下一关注区间')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-header-actions')).toHaveTextContent('完整报告');
     expect(screen.getByTestId('home-bento-drawer-trigger-tech')).toBeInTheDocument();
-    expect(screen.queryByTestId('home-bento-drawer-trigger-strategy')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('home-bento-drawer-trigger-fundamentals')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-drawer-trigger-strategy')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-drawer-trigger-fundamentals')).toBeInTheDocument();
 
     expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('仅观察');
     expect(screen.getByTestId('home-research-judgment-gate')).toHaveTextContent('可信度 · 高');
@@ -574,6 +577,9 @@ describe('HomeSurfacePage', () => {
     expect(oldHeroRow).not.toBeInTheDocument();
     expect(screen.queryByText('投资立场')).not.toBeInTheDocument();
     expect(screen.queryByText('综合评分')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-research-score-strip')).toHaveTextContent('研究评分');
+    expect(screen.getByTestId('home-research-confidence-strip')).toHaveTextContent('可信度');
+    expect(screen.getByTestId('home-research-data-state-strip')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-decision-score-value')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-bento-dashboard')).not.toHaveTextContent(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|目标价|止损|加仓|减仓|建议|recommendation|target|stop|guaranteed|AI recommends you buy/i);
   });
@@ -1926,6 +1932,21 @@ describe('HomeSurfacePage', () => {
     expect(disclosure).toHaveTextContent('已可用数据');
     expect(disclosure).toHaveTextContent('仍缺失数据');
     expect(disclosure).toHaveTextContent('对结论的影响');
+  });
+
+  it('restores observation and fundamentals drill-down drawers from the right rail', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    renderSurface();
+
+    fireEvent.click(await screen.findByTestId('home-bento-drawer-trigger-strategy'));
+    const strategyDialog = await screen.findByRole('dialog');
+    expect(strategyDialog).toHaveTextContent('观察约束');
+    await closeOpenDrawer();
+
+    fireEvent.click(await screen.findByTestId('home-bento-drawer-trigger-fundamentals'));
+    const fundamentalsDialog = await screen.findByRole('dialog');
+    expect(fundamentalsDialog).toHaveTextContent('基本面支撑');
+    await closeOpenDrawer();
   });
 
   it('loads the clicked history record from the database instead of re-analyzing', async () => {

@@ -14,6 +14,7 @@ import type { HomeCandlestickChartContext } from '../components/home-bento/HomeC
 import {
   CompactFilterBar,
   FixedRegionGrid,
+  MetricStrip,
 } from '../components/linear';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -1092,6 +1093,11 @@ function HomeConclusionFirstConsole({
   const dataQualityLabel = dataQualityReport
     ? dataQualityTierLabel(dataQualityReport.dataQualityTier, locale)
     : (isEnglish ? 'Unconfirmed' : '未确认');
+  const scoreDisplayValue = displaySlotValue(
+    dashboard.decision.heroValue,
+    locale,
+    isEnglish ? 'Pending' : '待补充数据',
+  );
   const confidenceTone: 'neutral' | 'used' | 'warning' | 'missing' = dataQualityReport
     ? dataQualityChipTone(dataQualityReport)
     : 'neutral';
@@ -1160,6 +1166,30 @@ function HomeConclusionFirstConsole({
             <p className="mt-2 break-words text-xs font-semibold leading-[1.55] text-white/76">{nextCopy}</p>
           </div>
         </div>
+
+        <MetricStrip
+          className="mt-3 overflow-hidden rounded-[10px] border border-white/[0.07] bg-white/[0.02] sm:grid-cols-3"
+          items={[
+            {
+              key: 'score',
+              label: isEnglish ? 'Research score' : '研究评分',
+              value: scoreDisplayValue,
+              testId: 'home-research-score-strip',
+            },
+            {
+              key: 'confidence',
+              label: isEnglish ? 'Confidence' : '可信度',
+              value: confidenceVisual.label,
+              testId: 'home-research-confidence-strip',
+            },
+            {
+              key: 'data-state',
+              label: isEnglish ? 'Data state' : '数据状态',
+              value: dataQualityLabel,
+              testId: 'home-research-data-state-strip',
+            },
+          ]}
+        />
 
         <details
           className="group mt-4 min-w-0 rounded-[10px] border border-white/[0.06] bg-white/[0.015] px-3 py-2.5"
@@ -1671,13 +1701,27 @@ function LinearObservationPanel({
   dataQualityReport,
   isGuest,
   guestPaywall,
+  onOpenStrategy,
+  onOpenFundamentals,
 }: {
   locale: DashboardLocale;
   dashboard: DashboardPayload;
   dataQualityReport?: DataQualityReport;
   isGuest: boolean;
   guestPaywall?: React.ReactNode;
+  onOpenStrategy: () => void;
+  onOpenFundamentals: () => void;
 }) {
+  const {
+    ref: openStrategyButtonRef,
+    onClick: handleOpenStrategyClick,
+    onPointerUp: handleOpenStrategyPointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(onOpenStrategy);
+  const {
+    ref: openFundamentalsButtonRef,
+    onClick: handleOpenFundamentalsClick,
+    onPointerUp: handleOpenFundamentalsPointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(onOpenFundamentals);
   const isEnglish = locale === 'en';
   const observationRows = buildResearchFrameworkRows(locale, dashboard, dataQualityReport);
   const actionCopy = displaySlotValue(
@@ -1704,7 +1748,19 @@ function LinearObservationPanel({
         data-research-card="research-actions"
         data-rail-section="current-action"
       >
-        <p className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Current action' : '当前动作'}</p>
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <p className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Current action' : '当前动作'}</p>
+          <button
+            ref={openStrategyButtonRef}
+            type="button"
+            className="home-research-action-button rounded-lg border px-2.5 py-1 text-[11px] font-medium text-white/48 transition-colors hover:text-white/72"
+            data-testid="home-bento-drawer-trigger-strategy"
+            onClick={handleOpenStrategyClick}
+            onPointerUp={handleOpenStrategyPointerUp}
+          >
+            {dashboard.strategy.detailLabel}
+          </button>
+        </div>
         <p className="mt-2 line-clamp-2 min-w-0 break-words text-xs leading-[1.65] text-white/72">
           {actionCopy}
         </p>
@@ -1716,7 +1772,19 @@ function LinearObservationPanel({
         data-research-card="risk-boundary"
         data-rail-section="main-risk"
       >
-        <p className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Main risk' : '主要风险'}</p>
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <p className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Main risk' : '主要风险'}</p>
+          <button
+            ref={openFundamentalsButtonRef}
+            type="button"
+            className="home-research-action-button rounded-lg border px-2.5 py-1 text-[11px] font-medium text-white/48 transition-colors hover:text-white/72"
+            data-testid="home-bento-drawer-trigger-fundamentals"
+            onClick={handleOpenFundamentalsClick}
+            onPointerUp={handleOpenFundamentalsPointerUp}
+          >
+            {dashboard.fundamentals.detailLabel}
+          </button>
+        </div>
         <p className="mt-2 line-clamp-2 min-w-0 break-words text-xs leading-[1.65] text-white/72">
           {riskCopy}
         </p>
@@ -5069,6 +5137,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               dataQualityReport={activeDataQualityReport}
               isGuest={Boolean(isGuest)}
               guestPaywall={guestPaywall}
+              onOpenStrategy={() => setActiveDrawer('strategy')}
+              onOpenFundamentals={() => setActiveDrawer('fundamentals')}
             />
           );
           return (
