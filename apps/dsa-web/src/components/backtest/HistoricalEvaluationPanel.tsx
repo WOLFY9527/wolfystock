@@ -295,18 +295,18 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
             </>
           )}
         />
-        <Disclosure summary="查看数据源诊断">
+        <Disclosure summary="查看数据可用性说明">
           <div className="preview-grid">
             <div className="preview-card">
-              <p className="metric-card__label">requested_mode</p>
+              <p className="metric-card__label">请求方式</p>
               <p className="preview-card__text">{getHistoricalRequestedModeLabel(historicalSourceMetadata.requestedMode)}</p>
             </div>
             <div className="preview-card">
-              <p className="metric-card__label">resolved_source</p>
+              <p className="metric-card__label">实际数据来源</p>
               <p className="preview-card__text">{getHistoricalResolvedSourceLabel(historicalSourceMetadata.resolvedSource)}</p>
             </div>
             <div className="preview-card">
-              <p className="metric-card__label">fallback_used</p>
+              <p className="metric-card__label">备用数据状态</p>
               <p className="preview-card__text">{getHistoricalFallbackLabel(historicalSourceMetadata.fallbackUsed)}</p>
             </div>
           </div>
@@ -535,18 +535,18 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
 
           <SummaryStrip items={modeSummaryItems} />
 
-          <Disclosure summary="查看数据源诊断">
+          <Disclosure summary="查看数据可用性说明">
             <div className="preview-grid">
               <div className="preview-card">
-                <p className="metric-card__label">requested_mode</p>
+                <p className="metric-card__label">请求方式</p>
                 <p className="preview-card__text">{getHistoricalRequestedModeLabel(historicalSourceMetadata.requestedMode)}</p>
               </div>
               <div className="preview-card">
-                <p className="metric-card__label">resolved_source</p>
+                <p className="metric-card__label">实际数据来源</p>
                 <p className="preview-card__text">{getHistoricalResolvedSourceLabel(historicalSourceMetadata.resolvedSource)}</p>
               </div>
               <div className="preview-card">
-                <p className="metric-card__label">fallback_used</p>
+                <p className="metric-card__label">备用数据状态</p>
                 <p className="preview-card__text">{getHistoricalFallbackLabel(historicalSourceMetadata.fallbackUsed)}</p>
               </div>
             </div>

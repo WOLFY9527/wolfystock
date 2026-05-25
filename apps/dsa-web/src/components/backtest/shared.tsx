@@ -544,7 +544,7 @@ export const RuleRunStatusBanner: React.FC<{ run: RuleBacktestRunResponse }> = (
   const statusDescription = getRuleRunStatusDescription(run.status, language);
   const localizedNoResultMessage = isCanonicalNoEntrySignalMessage(run.noResultMessage)
     ? bt(language, 'runStatusBanner.noEntrySignal')
-    : run.noResultMessage;
+    : null;
 
   return (
     <Banner
@@ -557,7 +557,7 @@ export const RuleRunStatusBanner: React.FC<{ run: RuleBacktestRunResponse }> = (
       )}
       body={(
         <>
-          {language === 'en' ? statusDescription : (run.statusMessage || statusDescription)}
+          {statusDescription}
           <span className="product-banner__meta">
           {bt(language, 'runStatusBanner.run')} #{run.id} · {run.code} · {latestStatusAt ? formatDateTime(latestStatusAt) : '--'}
           </span>
@@ -781,7 +781,7 @@ export const RuleRunsTable: React.FC<{
               <td>
                 <div className="product-table__stack">
                   <StatusBadge status={row.status} label={getRuleStatusText(row.status, language)} variant="soft" size="sm" />
-                  <span>{language === 'en' ? (getRuleRunStatusDescription(row.status, language) || '--') : (row.statusMessage || getRuleRunStatusDescription(row.status, language) || '--')}</span>
+                  <span>{getRuleRunStatusDescription(row.status, language) || '--'}</span>
                 </div>
               </td>
               <td className="product-table__align-right">{row.lookbackBars}</td>

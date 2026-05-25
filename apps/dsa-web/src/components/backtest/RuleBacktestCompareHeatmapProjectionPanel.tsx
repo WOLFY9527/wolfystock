@@ -37,8 +37,10 @@ function formatCompareStateLabel(value?: string | null): string {
     same_parameter: '参数一致',
     different_parameter: '参数不同',
     missing_parameter: '参数缺失',
-    stored_rule_backtest_runs: '已存储比较运行',
-    stored_first: '存储优先',
+    stored_rule_backtest_runs: '已保存结果',
+    stored_first: '优先使用已完成结果',
+    stored_projection_only: '基于已完成结果',
+    stored_compare_projection: '已完成比较结果',
     first_comparable_run_by_request_order: '按请求顺序首个可比运行',
     market_code_comparison: '市场与代码',
     period_comparison: '区间',
@@ -51,7 +53,11 @@ function formatCompareStateLabel(value?: string | null): string {
     same_normalized_code: '代码一致',
     overlapping_periods: '区间重叠',
   };
-  return labels[normalized] || key.replaceAll('_', ' ');
+  if (labels[normalized]) return labels[normalized];
+  if (/[_.]|provider|authority|trace|payload|contract|diagnostic|stored|execution|source/i.test(key)) {
+    return '比较边界需复核';
+  }
+  return key.replaceAll('_', ' ');
 }
 
 function formatCompareStateWithRaw(value?: string | null): string {
@@ -153,7 +159,7 @@ export default function RuleBacktestCompareHeatmapProjectionPanel({
   if (!projection) {
     return (
       <TerminalEmptyState title="参数热力投影" className="mt-4" data-testid="compare-heatmap-empty">
-        当前比较未提供已存储的参数热力投影。
+        当前比较未提供可查看的参数热力投影。
       </TerminalEmptyState>
     );
   }
@@ -167,7 +173,7 @@ export default function RuleBacktestCompareHeatmapProjectionPanel({
   if (!xValues.length || !yValues.length || !cells.length) {
     return (
       <TerminalEmptyState title="参数热力投影" className="mt-4" data-testid="compare-heatmap-empty">
-        当前比较没有可渲染的已存储投影单元。
+        当前比较没有可渲染的参数组合结果。
       </TerminalEmptyState>
     );
   }
@@ -175,23 +181,24 @@ export default function RuleBacktestCompareHeatmapProjectionPanel({
   const cellMap = new Map(cells.map((cell) => [createHeatmapCellKey(cell.xValue, cell.yValue), cell]));
   const xAxisLabel = formatHeatmapAxisLabel(xAxis.axisKey, xAxis.axisLabel);
   const yAxisLabel = formatHeatmapAxisLabel(yAxis.axisKey, yAxis.axisLabel);
-  const executionCount = projection.authority?.executionCount;
-  const providerCallsExecuted = projection.authority?.providerCallsExecuted;
+  const hasLimitedCells = cells.some((cell) => {
+    const state = String(cell.availabilityState || '').toLowerCase();
+    return state === 'missing' || state === 'ambiguous';
+  });
 
   return (
     <TerminalNestedBlock className="mt-4 space-y-3 min-w-0" data-testid="compare-heatmap-panel">
       <TerminalSectionHeader
-        eyebrow="存储对比投影"
+        eyebrow="参数敏感度"
         title="参数热力投影"
-        action={<TerminalChip variant="info">存储投影</TerminalChip>}
+        action={<TerminalChip variant={hasLimitedCells ? 'caution' : 'info'}>{hasLimitedCells ? '部分可用' : '可复查'}</TerminalChip>}
       />
-      <p className="product-footnote">基于已完成回测的存储对比生成，不重新执行回测。</p>
+      <p className="product-footnote">基于已完成回测结果生成，用于观察参数差异下的历史表现。</p>
 
       <div className="flex flex-wrap gap-2">
-        <TerminalChip variant="neutral">存储投影</TerminalChip>
-        <TerminalChip variant={executionCount === 0 ? 'success' : 'caution'}>{`执行次数 ${executionCount ?? '--'}`}</TerminalChip>
-        <TerminalChip variant={providerCallsExecuted === false ? 'success' : 'caution'}>
-          {providerCallsExecuted === false ? '未触发数据调用' : '涉及数据调用'}
+        <TerminalChip variant="neutral">结果可查看</TerminalChip>
+        <TerminalChip variant={hasLimitedCells ? 'caution' : 'success'}>
+          {hasLimitedCells ? '回测数据质量有限，结果仅供评估。' : '当前结果可用于历史表现评估。'}
         </TerminalChip>
       </div>
 
@@ -254,7 +261,7 @@ export default function RuleBacktestCompareHeatmapProjectionPanel({
                         ) : state === 'ambiguous' ? (
                           <p className="product-footnote">存在多条来源运行，当前单元不直接展示指标。</p>
                         ) : (
-                          <p className="product-footnote">当前参数组合没有可展示的已存储结果。</p>
+                          <p className="product-footnote">当前参数组合没有可展示结果。</p>
                         )}
                       </div>
                     ) : (

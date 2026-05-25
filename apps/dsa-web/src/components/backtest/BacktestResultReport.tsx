@@ -66,6 +66,14 @@ type BacktestResultReportProps = {
   chartNode?: React.ReactNode;
 };
 
+type ConsumerReliabilityItem = {
+  key: string;
+  label: string;
+  value: string;
+  note: string;
+  tone: MetricItem['tone'];
+};
+
 const GHOST_SECTION_CLASS = 'rounded-xl border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md transition-all hover:border-white/10 sm:p-5';
 const LABEL_CLASS = 'text-[10px] font-bold uppercase tracking-widest text-white/40';
 const VALUE_CLASS = 'font-mono text-sm text-white';
@@ -666,6 +674,81 @@ function DiagnosisCard({ item }: { item: DiagnosisItem }) {
   );
 }
 
+function getConsumerReliabilityItems({
+  run,
+  readinessSummary,
+  hasExplicitTraceRows,
+  hasExplicitAssumptions,
+  hasDataQualityEntries,
+  dataQualityWarnings,
+  executionWarnings,
+}: {
+  run: RuleBacktestRunResponse;
+  readinessSummary: ReturnType<typeof normalizeBacktestReadiness>;
+  hasExplicitTraceRows: boolean;
+  hasExplicitAssumptions: boolean;
+  hasDataQualityEntries: boolean;
+  dataQualityWarnings: string[];
+  executionWarnings: string[];
+}): ConsumerReliabilityItem[] {
+  const isCompleted = run.status === 'completed';
+  const isRunning = run.status === 'queued'
+    || run.status === 'parsing'
+    || run.status === 'running'
+    || run.status === 'summarizing';
+  const supportIncomplete = !hasExplicitTraceRows || !hasExplicitAssumptions || !hasDataQualityEntries;
+  const limitedConfidence = readinessSummary.posture !== 'unknown'
+    || readinessSummary.confidenceCap != null
+    || readinessSummary.limitationLabels.length > 0
+    || dataQualityWarnings.length > 0
+    || executionWarnings.length > 0;
+
+  return [
+    {
+      key: 'availability',
+      label: '结果可用性',
+      value: isCompleted ? '可查看' : isRunning ? '生成中' : '暂不可用',
+      tone: isCompleted ? 'positive' : isRunning ? 'neutral' : 'negative',
+      note: isCompleted ? '本次回测结果可查看。' : isRunning ? '结果生成中，请稍后刷新。' : '当前回测结果暂不可查看。',
+    },
+    {
+      key: 'reproducibility',
+      label: '复现状态',
+      value: supportIncomplete ? '部分可用' : '可复查',
+      tone: supportIncomplete ? 'neutral' : 'positive',
+      note: supportIncomplete ? '本次回测结果可查看，但部分复现材料不完整。' : '复现材料已就绪，可按需展开复查。',
+    },
+    {
+      key: 'freshness',
+      label: '辅助证据',
+      value: supportIncomplete ? '部分可用' : '可查看',
+      tone: supportIncomplete ? 'neutral' : 'positive',
+      note: supportIncomplete ? '部分辅助证据暂不可用，不影响历史收益曲线展示。' : '辅助证据可按需展开复查。',
+    },
+    {
+      key: 'confidence',
+      label: '结果置信度',
+      value: limitedConfidence ? '有限置信' : '正常评估',
+      tone: limitedConfidence ? 'neutral' : 'positive',
+      note: limitedConfidence ? '回测数据质量有限，结果仅供评估。' : '当前结果可用于历史表现评估。',
+    },
+  ];
+}
+
+function ConsumerReliabilityCard({ item }: { item: ConsumerReliabilityItem }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3" data-testid={`backtest-consumer-reliability-${item.key}`}>
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <p className={LABEL_CLASS}>{item.label}</p>
+        <span className={`max-w-[58%] truncate rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] ${valueToneClass(item.tone)}`}>
+          {item.value}
+        </span>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-white/58">{item.note}</p>
+    </div>
+  );
+}
+
 const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
   run,
   mode,
@@ -753,6 +836,20 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
     || readinessSummary.confidenceCap != null
     || readinessSummary.limitationLabels.length > 0
     || readinessSummary.freshnessLabel != null;
+  const hasTraceRows = hasExecutionTraceRows(run);
+  const hasExplicitTraceRows = Array.isArray(run.executionTrace?.rows) && run.executionTrace.rows.length > 0;
+  const consumerReliabilityItems = useMemo(
+    () => getConsumerReliabilityItems({
+      run,
+      readinessSummary,
+      hasExplicitTraceRows,
+      hasExplicitAssumptions,
+      hasDataQualityEntries: dataQuality.length > 0,
+      dataQualityWarnings,
+      executionWarnings,
+    }),
+    [dataQuality.length, dataQualityWarnings, executionWarnings, hasExplicitAssumptions, hasExplicitTraceRows, readinessSummary, run],
+  );
 
   const exportTrades = () => {
     downloadCsv(
@@ -800,7 +897,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
     { key: 'trades' as const, label: '交易明细' },
     { key: 'risk' as const, label: '风险分析' },
     { key: 'params' as const, label: '参数' },
-    { key: 'diagnostics' as const, label: '诊断' },
+    { key: 'diagnostics' as const, label: '可靠性' },
   ];
 
   return (
@@ -811,9 +908,16 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
     >
       <div className="flex min-w-0 flex-col gap-4 text-sm text-white/70">
         <nav className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto pb-1 [scrollbar-width:none]" aria-label="Backtest result sections">
-          {['概览', '曲线', '交易', '归因', '风险', '证据'].map((item) => (
-            <a key={item} href={`#backtest-report-${item}`} className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60 hover:bg-white/10 md:min-h-[32px] md:py-1.5">
-              {item}
+          {[
+            { id: '概览', label: '概览' },
+            { id: '曲线', label: '曲线' },
+            { id: '交易', label: '交易' },
+            { id: '归因', label: '归因' },
+            { id: '风险', label: '风险' },
+            { id: '证据', label: '复查' },
+          ].map((item) => (
+            <a key={item.id} href={`#backtest-report-${item.id}`} className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60 hover:bg-white/10 md:min-h-[32px] md:py-1.5">
+              {item.label}
             </a>
           ))}
         </nav>
@@ -823,7 +927,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <div className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <div className="truncate text-base font-semibold text-white">{run.code || '--'} · {statusWord}</div>
-                <StatusBadge status={run.status} label={run.status || statusLabel} size="sm" variant="soft" />
+                <StatusBadge status={run.status} label={statusLabel} size="sm" variant="soft" />
                 <span className="font-mono text-xs text-white/38">{dateRange}</span>
               </div>
               <div className="mt-3 flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-xs text-white/58">
@@ -840,9 +944,12 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             </div>
             <div className="font-mono text-xs text-white/38">{formatDateTime(run.completedAt || run.runAt)}</div>
           </div>
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="backtest-consumer-reliability-strip">
+            {consumerReliabilityItems.map((item) => <ConsumerReliabilityCard key={item.key} item={item} />)}
+          </div>
           {showReadinessChips ? (
             <div className="mt-4 flex flex-col gap-2" data-testid="backtest-readiness-strip">
-              <div className={LABEL_CLASS}>研究边界</div>
+              <div className={LABEL_CLASS}>结果置信度</div>
               <EvidenceChips
                 summary={readinessSummary}
                 maxLabels={5}
@@ -858,13 +965,13 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <MetricCard item={{ key: 'summary-data', label: '可靠性', value: dataQuality.length ? `${dataQuality.length} 项` : '待补充', tone: dataQuality.length ? 'positive' : 'neutral' }} />
             <div className="col-span-2 rounded-xl border border-white/5 bg-black/20 p-3 text-xs leading-5 text-white/50 lg:col-span-4">
               <span className={LABEL_CLASS}>研究结论</span>
-              <span className="ml-2">先读总收益、最大回撤、胜率、交易次数与可靠性；曲线和风险解释跟随结论，导出、执行假设、账本和执行明细默认进入证据区。</span>
+              <span className="ml-2">先读总收益、最大回撤、胜率、交易次数与可靠性；曲线和风险解释跟随结论，复查材料默认折叠。</span>
             </div>
           </div>
           <div className="mt-4" data-testid="backtest-report-diagnosis">
             <div className="mb-2 flex min-w-0 flex-wrap items-center justify-between gap-2">
-              <p className={LABEL_CLASS}>策略诊断</p>
-              <span className="text-xs text-white/42">由已有收益、风险、交易、数据与执行字段生成</span>
+              <p className={LABEL_CLASS}>策略解读</p>
+              <span className="text-xs text-white/42">基于收益、风险、交易和数据完整度生成</span>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
               {diagnosisItems.map((item) => <DiagnosisCard key={item.key} item={item} />)}
@@ -916,7 +1023,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <div className={GHOST_SECTION_CLASS}>
               <p className={LABEL_CLASS}>数据质量</p>
               <p className="mt-2 text-xs leading-5 text-white/48">
-                {dataQualityWarnings.length ? `数据不足或需复核：${dataQualityWarnings[0]}` : '数据质量明细默认折叠，必要时在诊断中展开。'}
+                {dataQualityWarnings.length ? '回测数据质量有限，结果仅供评估。' : '数据质量明细默认折叠，必要时展开复查。'}
               </p>
             </div>
           </aside>
@@ -1024,7 +1131,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         <div id="backtest-report-风险" data-testid="backtest-report-risk-diagnostics" className={GHOST_SECTION_CLASS}>
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
             <div>
-              <p className={LABEL_CLASS}>风险诊断</p>
+              <p className={LABEL_CLASS}>风险解读</p>
               <h3 className="mt-1 text-sm font-semibold text-white">回撤与压力解释</h3>
             </div>
             <span className="text-xs text-white/42">仅使用已返回指标与日账本摘要</span>
@@ -1098,13 +1205,13 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         <details id="backtest-report-证据" data-testid="backtest-report-evidence-details" className={GHOST_SECTION_CLASS}>
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-left">
             <span>
-              <span className={LABEL_CLASS}>证据与明细</span>
-              <span className="ml-2 text-xs text-white/42">数据质量 · 执行假设 · 每日账本 · 执行明细</span>
+              <span className={LABEL_CLASS}>复查材料</span>
+              <span className="ml-2 text-xs text-white/42">数据质量 · 执行假设 · 每日账本</span>
             </span>
             <span className="text-xs text-white/45">展开</span>
           </summary>
           <p className="mt-3 text-xs leading-5 text-white/50">
-            导出、执行假设、每日账本和执行明细默认折叠，只在需要复核研究证据时展开。
+            数据质量、执行假设和每日账本默认折叠，只在需要复查研究材料时展开。
           </p>
         </details>
 
@@ -1113,7 +1220,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <span><span className={LABEL_CLASS}>数据质量</span></span>
             <span className="text-xs text-white/45">{dataQualityOpen ? '收起' : '展开'}</span>
           </button>
-          {dataQualityOpen || mode === 'simple' ? (
+          {dataQualityOpen ? (
             dataQuality.length ? (
               <div data-testid="backtest-data-quality-grid" className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {dataQuality.map(([key, value]) => (
@@ -1127,7 +1234,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
               <p className="mt-3 text-xs text-white/48">数据质量信息不足：当前结果未返回复权/分红/拆股元数据。</p>
             )
           ) : null}
-          {dataQualityOpen || mode === 'simple' ? dataQualityWarnings.length ? (
+          {dataQualityOpen ? dataQualityWarnings.length ? (
             <div className="mt-3 flex min-w-0 flex-wrap gap-2">
               {dataQualityWarnings.map((warning, index) => (
                 <span
@@ -1147,7 +1254,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <span><span className={LABEL_CLASS}>执行假设</span></span>
             <span className="text-xs text-white/45">{assumptionsOpen ? '收起' : '展开'}</span>
           </button>
-          {assumptionsOpen || mode === 'simple' ? (
+          {assumptionsOpen ? (
             <>
               {!hasExplicitAssumptions ? (
                 <p className="mt-3 text-xs text-white/48">执行假设信息不足：当前结果未返回成交时点/撮合规则。</p>
@@ -1183,32 +1290,34 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           <button type="button" className="flex min-h-[36px] w-full items-center justify-between gap-3 text-left" onClick={() => setAdvancedOpen((value) => !value)}>
             <span>
               <span className={LABEL_CLASS}>账本与导出</span>
-              <span className="ml-2 text-xs text-white/42">完整指标 · 每日账本 · 执行明细</span>
+              <span className="ml-2 text-xs text-white/42">完整指标 · 每日账本 · 复查导出</span>
             </span>
             <span className="text-xs text-white/45">{advancedOpen ? '收起' : '展开'}</span>
           </button>
           <div className="mt-4 flex min-w-0 flex-col gap-3">
             <div data-testid="backtest-report-ledger-summary" className="rounded-xl border border-white/5 bg-black/20 p-3 text-xs text-white/58">
-              每日账本 {normalized.rows.length} 行 · {normalized.viewerMeta.firstDate || '--'} {'->'} {normalized.viewerMeta.lastDate || '--'} · 约 11 列
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setLedgerOpen((value) => !value)}>
-                {ledgerOpen ? '收起每日账本' : '展开每日账本'}
-              </button>
-              <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={exportLedger} disabled={!normalized.rows.length}>
-                导出账本CSV
-              </button>
-              <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => downloadExecutionTraceCsv(run)} disabled={!hasExecutionTraceRows(run)}>
-                导出执行明细 CSV
-              </button>
-              <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => downloadExecutionTraceJson(run)} disabled={!hasExecutionTraceRows(run)}>
-                导出执行明细 JSON
-              </button>
+              每日账本 {normalized.rows.length} 行 · {normalized.viewerMeta.firstDate || '--'} {'->'} {normalized.viewerMeta.lastDate || '--'} · 复查材料按需展开
             </div>
             {advancedOpen ? (
-              <div className="rounded-xl border border-white/5 bg-black/20 p-3 text-xs text-white/48">
-                扩展指标在上方折叠区展示；执行明细仅提供导出，不默认渲染全部存储行。
-              </div>
+              <>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setLedgerOpen((value) => !value)}>
+                    {ledgerOpen ? '收起每日账本' : '展开每日账本'}
+                  </button>
+                  <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={exportLedger} disabled={!normalized.rows.length}>
+                    导出账本CSV
+                  </button>
+                  <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => downloadExecutionTraceCsv(run)} disabled={!hasTraceRows}>
+                    导出执行明细 CSV
+                  </button>
+                  <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => downloadExecutionTraceJson(run)} disabled={!hasTraceRows}>
+                    导出执行明细 JSON
+                  </button>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-black/20 p-3 text-xs text-white/48">
+                  扩展指标在上方折叠区展示；执行明细仅提供导出，不默认渲染全部存储行。
+                </div>
+              </>
             ) : null}
               {ledgerOpen ? (
                 <div data-testid="backtest-report-ledger-table" data-visible-rows={visibleLedgerRows.length} data-total-rows={normalized.rows.length} className="no-scrollbar max-h-[420px] overflow-auto rounded-xl border border-white/5 [scrollbar-width:none]">

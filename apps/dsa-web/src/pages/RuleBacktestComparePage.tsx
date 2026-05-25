@@ -110,8 +110,10 @@ function formatCompareStateLabel(value?: string | null): string {
     same_parameter: '参数一致',
     different_parameter: '参数不同',
     missing_parameter: '参数缺失',
-    stored_rule_backtest_runs: '已存储比较运行',
-    stored_first: '存储优先',
+    stored_rule_backtest_runs: '已保存结果',
+    stored_first: '优先使用已完成结果',
+    stored_projection_only: '基于已完成结果',
+    stored_compare_projection: '已完成比较结果',
     first_comparable_run_by_request_order: '按请求顺序首个可比运行',
     market_code_comparison: '市场与代码',
     period_comparison: '区间',
@@ -124,7 +126,11 @@ function formatCompareStateLabel(value?: string | null): string {
     same_normalized_code: '代码一致',
     overlapping_periods: '区间重叠',
   };
-  return labels[normalized] || key.replaceAll('_', ' ');
+  if (labels[normalized]) return labels[normalized];
+  if (/[_.]|provider|authority|trace|payload|contract|diagnostic|stored|execution|source/i.test(key)) {
+    return '比较边界需复核';
+  }
+  return key.replaceAll('_', ' ');
 }
 
 function formatCompareRoleLabel(isBaseline: boolean): string {
@@ -139,7 +145,44 @@ function formatCompareStateWithRaw(value?: string | null): string {
 
 function formatCompareList(values?: Array<string | null | undefined>): string {
   if (!values?.length) return '--';
-  return values.map((value) => formatCompareStateWithRaw(value)).join(', ');
+  const labels = values.map((value) => formatCompareStateWithRaw(value));
+  const uniqueLabels = labels.filter((label, index) => labels.indexOf(label) === index);
+  return uniqueLabels.join(', ');
+}
+
+function formatCompareSourceLabel(value?: string | null): string {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return '--';
+  if (normalized.includes('stored')) return '已保存结果';
+  if (normalized.includes('request')) return '当前请求';
+  return formatCompareStateWithRaw(value);
+}
+
+function formatRunCountLabel(runIds: number[]): string {
+  return runIds.length ? `${runIds.length} 条运行` : '--';
+}
+
+function formatUnavailableRunReason(reason?: string | null): string {
+  const normalized = String(reason || '').trim().toLowerCase();
+  if (!normalized) return '该运行暂不可用于比较。';
+  if (normalized.includes('missing') || normalized.includes('not_found')) return '部分运行结果暂不可用。';
+  if (normalized.includes('status') || normalized.includes('completed')) return '部分运行尚未生成可比较结果。';
+  if (normalized.includes('metric') || normalized.includes('data')) return '部分运行数据质量有限，比较结果仅供评估。';
+  return '部分运行暂不可用于比较。';
+}
+
+function collectCompareDiagnostics(...groups: Array<Array<string | null | undefined> | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const values: string[] = [];
+  groups.forEach((group) => {
+    group?.forEach((value) => {
+      const key = String(value || '').trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      values.push(key);
+    });
+  });
+  return values;
 }
 
 function slugifyCompareKey(value: string): string {
@@ -389,7 +432,7 @@ function buildScenarioMetadataSensitivityRows({
     rows.push({
       key: candidate.key,
       label: candidate.label,
-      sourceLabel: '场景元数据',
+      sourceLabel: '场景设置',
       state: 'different_parameter',
       values,
       signals: buildSensitivitySignals({ metricEntries, valuesByRun }),
@@ -477,7 +520,7 @@ function buildCompareCostSlippagePanelData({
   const distinctScenarioCount = new Set(scenarios.map((scenario) => `${scenario.feeLabel}|${scenario.slippageLabel}`)).size;
   const sourceLabels: string[] = [];
 
-  if (distinctScenarioCount > 1) sourceLabels.push('场景元数据');
+  if (distinctScenarioCount > 1) sourceLabels.push('场景设置');
 
   const differingKeys = parameterComparison?.differingParameterKeys || [];
   const missingKeys = parameterComparison?.missingParameterKeys || [];
@@ -524,13 +567,16 @@ function buildCompareCostSlippagePanelData({
 
 function DiagnosticChipList({ diagnostics }: { diagnostics?: string[] }) {
   if (!diagnostics?.length) {
-    return <p className="product-footnote">无额外诊断。</p>;
+    return <p className="product-footnote">无额外限制。</p>;
   }
+  const labels = diagnostics
+    .map((diagnostic) => formatCompareStateLabel(diagnostic))
+    .filter((label, index, allLabels) => allLabels.indexOf(label) === index);
 
   return (
     <div className="product-chip-list">
-      {diagnostics.map((diagnostic) => (
-        <span key={diagnostic} className="product-chip" title={diagnostic}>{formatCompareStateLabel(diagnostic)}</span>
+      {labels.map((label) => (
+        <span key={label} className="product-chip">{label}</span>
       ))}
     </div>
   );
@@ -546,12 +592,12 @@ function HighlightCards({ highlights }: { highlights: Record<string, RuleBacktes
     <div className="preview-grid">
       {entries.map(([metricKey, item]) => (
         <div key={metricKey} className="preview-card">
-          <p className="metric-card__label">{item.metric || metricKey}</p>
+          <p className="metric-card__label">{formatMetricLabel(metricKey, item.metric)}</p>
           <p className="preview-card__text">{formatCompareStateWithRaw(item.state)}</p>
           <p className="product-footnote">领先运行：{item.winnerRunIds.length ? item.winnerRunIds.join(', ') : '--'}</p>
           <p className="product-footnote">领先值：{item.winnerValue == null ? '--' : formatNumber(item.winnerValue)}</p>
           <p className="product-footnote">候选数：{item.candidateCount}</p>
-          <DiagnosticChipList diagnostics={item.diagnostics} />
+          <p className="product-footnote">结果置信度：{item.diagnostics?.length ? '有限置信' : '正常评估'}</p>
         </div>
       ))}
     </div>
@@ -566,12 +612,10 @@ function RobustnessDimensionCards({ dimensions }: { dimensions: Record<string, R
     <div className="preview-grid">
       {entries.map(([dimensionKey, dimension]) => (
         <div key={dimensionKey} className="preview-card">
-          <p className="metric-card__label">{dimensionKey}</p>
+          <p className="metric-card__label">{formatCompareStateLabel(dimensionKey)}</p>
           <p className="preview-card__text">{formatCompareStateWithRaw(dimension.state)}</p>
           <p className="product-footnote">关系：{formatCompareStateWithRaw(dimension.relationship)}</p>
-          <p className="product-footnote">来源状态：{formatCompareStateWithRaw(dimension.sourceState)}</p>
           <p className="product-footnote">可直接比较：{dimension.directlyComparable == null ? '--' : renderBooleanLabel(dimension.directlyComparable)}</p>
-          <DiagnosticChipList diagnostics={dimension.diagnostics} />
         </div>
       ))}
     </div>
@@ -599,7 +643,7 @@ function MetricDeltaTable({ metricDeltas }: { metricDeltas: Record<string, RuleB
         <tbody>
           {entries.map(([metricKey, metric]) => (
             <tr key={metricKey}>
-              <td>{metricKey}</td>
+              <td>{formatMetricLabel(metricKey, metric.label)}</td>
               <td>{formatCompareStateWithRaw(metric.state)}</td>
               <td className="product-table__align-right">{pct(metric.baselineValue)}</td>
               <td>{metric.availableRunIds.join(', ') || '--'}</td>
@@ -622,8 +666,9 @@ function MetricDeltaTable({ metricDeltas }: { metricDeltas: Record<string, RuleB
 
 function formatMetricLabel(metricKey: string, fallback?: string): string {
   return COMPARE_METRIC_LABELS[metricKey]
-    || fallback
-    || metricKey.replaceAll(/([a-z0-9])([A-Z])/g, '$1 $2');
+    || (fallback || metricKey)
+      .replaceAll('_', ' ')
+      .replaceAll(/([a-z0-9])([A-Z])/g, '$1 $2');
 }
 
 function formatSignedPct(value?: number | null): string {
@@ -1022,8 +1067,8 @@ function CompareSensitivityGrid({
     );
   }
 
-  const parameterRows = rows.filter((row) => row.sourceLabel !== '场景元数据').length;
-  const scenarioRows = rows.filter((row) => row.sourceLabel === '场景元数据').length;
+  const parameterRows = rows.filter((row) => row.sourceLabel !== '场景设置').length;
+  const scenarioRows = rows.filter((row) => row.sourceLabel === '场景设置').length;
 
   return (
     <div data-testid="compare-sensitivity-grid">
@@ -1042,7 +1087,7 @@ function CompareSensitivityGrid({
           {
             label: '亮点覆盖',
             value: String(Object.keys(highlights || {}).length),
-            note: '仅复用已存储比较亮点',
+            note: '仅复用已完成比较亮点',
           },
         ]}
       />
@@ -1137,7 +1182,7 @@ function CompareCostSlippagePanel({
 
       {panelData.signals.length ? (
         <div className="space-y-2">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">已存储指标差异</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">已完成指标差异</p>
           <div className="flex flex-wrap gap-2">
             {panelData.signals.map((signal) => (
               <TerminalChip key={signal.metricKey} variant={getTerminalChipVariantFromState(signal.state)} className="whitespace-normal">
@@ -1147,7 +1192,7 @@ function CompareCostSlippagePanel({
           </div>
         </div>
       ) : (
-        <p className="product-footnote">当前比较没有可映射到费滑场景的已存储指标差异。</p>
+        <p className="product-footnote">当前比较没有可映射到费滑场景的已完成指标差异。</p>
       )}
     </TerminalNestedBlock>
   );
@@ -1233,6 +1278,15 @@ const RuleBacktestComparePage: React.FC = () => {
     robustnessSummary?.overallState,
     runIds,
   ]);
+  const advancedDiagnostics = collectCompareDiagnostics(
+    comparisonHighlights?.diagnostics,
+    robustnessSummary?.diagnostics,
+    comparisonProfile?.diagnostics,
+    marketCodeComparison?.diagnostics,
+    periodComparison?.diagnostics,
+    Object.values(comparisonHighlights?.highlights || {}).flatMap((item) => item.diagnostics || []),
+    Object.values(robustnessSummary?.dimensions || {}).flatMap((dimension) => dimension.diagnostics || []),
+  );
 
   const handleOpenRun = useCallback((runId: number) => {
     navigate(`/backtest/results/${runId}`);
@@ -1285,7 +1339,7 @@ const RuleBacktestComparePage: React.FC = () => {
               <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">WolfyStock</p>
               <h1 className="mt-1 truncate text-lg font-semibold text-[color:var(--wolfy-text-primary)] md:text-xl">规则回测比较工作台</h1>
               <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">
-                按请求顺序对比已完成规则回测运行。当前 runIds: {runIds.length ? runIds.join(', ') : '--'}
+                对比已完成规则回测运行，先看可比性、结果来源和有限置信状态。
               </p>
             </div>
           )}
@@ -1318,7 +1372,7 @@ const RuleBacktestComparePage: React.FC = () => {
             <ConsoleBoard>
               <div className="flex flex-col gap-3 p-4 md:p-5">
                 <div>
-                  <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">正在调用存储优先比较接口</p>
+                  <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">结果生成中，请稍后刷新。</p>
                   <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">加载比较结果</h2>
                 </div>
                 <div className="text-sm text-[color:var(--wolfy-text-secondary)]">正在拉取比较结果…</div>
@@ -1353,18 +1407,18 @@ const RuleBacktestComparePage: React.FC = () => {
                   },
                   {
                     key: 'overall',
-                    label: '整体状态',
+                    label: '可比性',
                     value: formatCompareStateWithRaw(robustnessSummary?.overallState),
                   },
                   {
                     key: 'profile',
-                    label: '主要画像',
+                    label: '结果置信度',
                     value: formatCompareStateWithRaw(comparisonProfile?.primaryProfile),
                   },
                   {
                     key: 'source',
-                    label: '比较来源',
-                    value: formatCompareStateWithRaw(response.comparisonSource),
+                    label: '结果来源',
+                    value: formatCompareSourceLabel(response.comparisonSource),
                   },
                 ]}
               />
@@ -1399,11 +1453,11 @@ const RuleBacktestComparePage: React.FC = () => {
                     <div className="flex items-start justify-between gap-3">
                       <span>缺失运行</span>
                       <span className="max-w-[60%] truncate text-right font-mono text-[color:var(--wolfy-text-primary)]">
-                        {response.missingRunIds.length ? response.missingRunIds.join(', ') : '--'}
+                        {formatRunCountLabel(response.missingRunIds)}
                       </span>
                     </div>
                     <div className="flex items-start justify-between gap-3">
-                      <span>字段分组</span>
+                      <span>比较维度</span>
                       <span className="max-w-[60%] truncate text-right font-mono text-[color:var(--wolfy-text-primary)]">
                         {formatCompareList(response.fieldGroups)}
                       </span>
@@ -1419,17 +1473,17 @@ const RuleBacktestComparePage: React.FC = () => {
                     <Banner
                       tone="warning"
                       title="存在不可用运行"
-                      body={response.unavailableRuns.map((item) => `#${item.runId}: ${item.reason}`).join(' | ')}
+                      body={response.unavailableRuns.map((item) => `#${item.runId}: ${formatUnavailableRunReason(item.reason)}`).join(' | ')}
                     />
                   ) : null}
                 </section>
-                <ConsoleDisclosure id="compare-highlights" title="比较亮点" summary="只展示后端已标记可信的比较亮点" defaultOpen>
+                <ConsoleDisclosure id="compare-highlights" title="比较亮点" summary="展示可读比较亮点，有限置信时保留提醒。" defaultOpen>
                   <SummaryStrip
                     items={[
                       {
                         label: '主要画像',
                         value: formatCompareStateWithRaw(comparisonHighlights?.primaryProfile),
-                        note: formatCompareStateWithRaw(comparisonHighlights?.selectionRule),
+                        note: '基于已完成比较结果',
                       },
                       {
                         label: '整体上下文',
@@ -1441,11 +1495,8 @@ const RuleBacktestComparePage: React.FC = () => {
                   <div className="mt-4">
                     <HighlightCards highlights={comparisonHighlights?.highlights || {}} />
                   </div>
-                  <div className="mt-4">
-                    <DiagnosticChipList diagnostics={comparisonHighlights?.diagnostics} />
-                  </div>
                 </ConsoleDisclosure>
-                <ConsoleDisclosure id="compare-robustness" title="稳健性画像" summary="明确显示部分、有限、不可用状态，而不是静默吞掉" defaultOpen>
+                <ConsoleDisclosure id="compare-robustness" title="稳健性画像" summary="展示可比性和有限置信状态。" defaultOpen>
                   <SummaryStrip
                     items={[
                       {
@@ -1466,7 +1517,7 @@ const RuleBacktestComparePage: React.FC = () => {
                       {
                         label: '主要画像',
                         value: formatCompareStateWithRaw(comparisonProfile?.primaryProfile),
-                        note: formatCompareList(comparisonProfile?.diagnostics),
+                        note: formatCompareList(comparisonProfile?.drivingDimensions),
                       },
                     ]}
                   />
@@ -1492,23 +1543,24 @@ const RuleBacktestComparePage: React.FC = () => {
                     <RobustnessDimensionCards dimensions={robustnessSummary?.dimensions || {}} />
                   </div>
                 </ConsoleDisclosure>
-                <ConsoleDisclosure title="市场与区间上下文" summary="比较边界直接展示后端判定，不二次推断" defaultOpen>
+                <ConsoleDisclosure title="市场与区间上下文" summary="展示标的和区间是否适合放在一起比较。" defaultOpen>
                   <div id="compare-market-period" className="preview-grid">
                     <div className="preview-card">
                       <p className="metric-card__label">市场 / 代码比较</p>
                       <p className="preview-card__text">{formatCompareStateWithRaw(marketCodeComparison?.state)}</p>
                       <p className="product-footnote">关系：{formatCompareStateWithRaw(marketCodeComparison?.relationship)}</p>
                       <p className="product-footnote">可直接比较：{marketCodeComparison?.directlyComparable == null ? '--' : renderBooleanLabel(marketCodeComparison.directlyComparable)}</p>
-                      <DiagnosticChipList diagnostics={marketCodeComparison?.diagnostics} />
                     </div>
                     <div className="preview-card">
                       <p className="metric-card__label">区间比较</p>
                       <p className="preview-card__text">{formatCompareStateWithRaw(periodComparison?.state)}</p>
                       <p className="product-footnote">关系：{formatCompareStateWithRaw(periodComparison?.relationship)}</p>
                       <p className="product-footnote">有意义可比：{periodComparison?.meaningfullyComparable == null ? '--' : renderBooleanLabel(periodComparison.meaningfullyComparable)}</p>
-                      <DiagnosticChipList diagnostics={periodComparison?.diagnostics} />
                     </div>
                   </div>
+                </ConsoleDisclosure>
+                <ConsoleDisclosure title="高级比较依据" summary="默认折叠，保留比较限制与边界说明。">
+                  <DiagnosticChipList diagnostics={advancedDiagnostics} />
                 </ConsoleDisclosure>
                 <ConsoleDisclosure title="参数与指标" summary="参数差异与已校验指标差异放在同一工作台里读" defaultOpen>
                   <div id="compare-parameter-metrics" className="space-y-4">
@@ -1544,7 +1596,7 @@ const RuleBacktestComparePage: React.FC = () => {
                   },
                   {
                     key: 'overall',
-                    label: '整体状态',
+                    label: '可比性',
                     value: formatCompareStateWithRaw(robustnessSummary?.overallState),
                   },
                   {
@@ -1610,7 +1662,7 @@ const RuleBacktestComparePage: React.FC = () => {
                 <section id="compare-parameter-sensitivity" className="space-y-4">
                   <div>
                     <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">参数敏感度网格</p>
-                    <h2 className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">只复用已存储的参数差异、亮点指标与场景元数据，不追加后端计算</h2>
+                    <h2 className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">基于已完成比较结果展示参数差异、亮点指标与场景设置</h2>
                   </div>
                   <CompareCostSlippagePanel
                     items={orderedItems}
@@ -1631,7 +1683,7 @@ const RuleBacktestComparePage: React.FC = () => {
                 <section id="compare-items" className="space-y-3">
                   <div>
                     <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">参与运行</p>
-                    <h2 className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">保留紧凑运行表，方便 AI / 人快速对照基准与候选</h2>
+                    <h2 className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">保留紧凑运行表，方便快速对照基准与候选</h2>
                   </div>
                   <CompareItemsTable
                     items={orderedItems}

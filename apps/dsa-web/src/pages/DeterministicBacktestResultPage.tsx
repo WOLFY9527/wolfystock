@@ -817,14 +817,12 @@ const DeterministicBacktestResultPage: React.FC = () => {
   );
   const localizedNoResultMessage = isCanonicalNoEntrySignalMessage(run?.noResultMessage)
     ? resultPage('noEntrySignal')
-    : (run?.noResultMessage || null);
+    : null;
   const statusSummaryItems = run ? [
     {
       label: resultPage('statusSummary.currentStageLabel'),
       value: getRuleRunStatusLabel(run.status, language),
-      note: language === 'en'
-        ? (localizedNoResultMessage || getRuleRunStatusDescription(run.status, language))
-        : (run.statusMessage || localizedNoResultMessage || getRuleRunStatusDescription(run.status, language)),
+      note: localizedNoResultMessage || getRuleRunStatusDescription(run.status, language),
     },
     {
       label: resultPage('statusSummary.autoRefreshLabel'),

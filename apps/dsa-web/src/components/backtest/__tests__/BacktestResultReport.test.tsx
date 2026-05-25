@@ -234,7 +234,7 @@ describe('BacktestResultReport', () => {
     expect(screen.getByTestId('backtest-report-execution-assumptions')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-report-advanced-details')).toBeInTheDocument();
     expect(simpleReport).toHaveTextContent('核心指标');
-    expect(simpleReport).toHaveTextContent('策略诊断');
+    expect(simpleReport).toHaveTextContent('策略解读');
     expect(simpleReport).toHaveTextContent('基准收益');
     expect(simpleReport).toHaveTextContent('交易摘要');
     expect(simpleReport).toHaveTextContent('数据质量');
@@ -267,6 +267,8 @@ describe('BacktestResultReport', () => {
     expect(screen.getAllByText('暂无基准数据；不影响策略自身回测结果。').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('--');
     expect(screen.getByTestId('backtest-diagnosis-risk')).toHaveTextContent('--');
+    fireEvent.click(screen.getByRole('button', { name: /数据质量/ }));
+    fireEvent.click(screen.getByRole('button', { name: /执行假设/ }));
     expect(screen.getByText('数据质量信息不足：当前结果未返回复权/分红/拆股元数据。')).toBeInTheDocument();
     expect(screen.getByText('执行假设信息不足：当前结果未返回成交时点/撮合规则。')).toBeInTheDocument();
   });
@@ -274,6 +276,7 @@ describe('BacktestResultReport', () => {
   it('renders enriched data quality metadata and compact warnings', () => {
     render(<BacktestResultReport run={makeRun()} mode="simple" />);
 
+    fireEvent.click(screen.getByRole('button', { name: /数据质量/ }));
     const panel = screen.getByTestId('backtest-report-data-quality');
     expect(within(panel).getByText('本地美股 Parquet')).toBeInTheDocument();
     expect(within(panel).getByText('日线')).toBeInTheDocument();
@@ -285,6 +288,7 @@ describe('BacktestResultReport', () => {
   it('renders enriched execution assumptions and compact warnings', () => {
     render(<BacktestResultReport run={makeRun()} mode="simple" />);
 
+    fireEvent.click(screen.getByRole('button', { name: /执行假设/ }));
     const panel = screen.getByTestId('backtest-report-execution-assumptions');
     expect(within(panel).getByText('确定性引擎')).toBeInTheDocument();
     expect(within(panel).getByText('收盘信号 -> 次日开盘')).toBeInTheDocument();
@@ -344,6 +348,42 @@ describe('BacktestResultReport', () => {
     expect(chips).not.toHaveTextContent(/research_prototype|unknown_or_mixed|available_bars_only|baseline_bps_only|partial_without_dataset_lineage|professional_quant_ready/i);
   });
 
+  it('keeps the default consumer reliability view product-safe when support evidence is incomplete', () => {
+    const run = makeRun();
+
+    render(<BacktestResultReport run={{
+      ...run,
+      dataQuality: {
+        ...run.dataQuality!,
+        provider: 'sourceAuthorityAllowed',
+        source: 'fallback_static',
+        warnings: [
+          { code: 'provider_timeout', severity: 'warning', message: 'trace JSON helper metadata missing' },
+        ],
+      },
+      executionAssumptions: {
+        ...run.executionAssumptions,
+        warnings: [
+          { code: 'engine_math_changed', severity: 'warning', message: 'authority internals require remediation' },
+        ],
+      },
+      executionTrace: {
+        source: 'stored_execution_trace',
+        fallback: { note: 'provider_timeout' },
+        rows: [],
+      } as RuleBacktestRunResponse['executionTrace'],
+    }} mode="simple" />);
+
+    const report = screen.getByTestId('backtest-result-report');
+    expect(report).toHaveTextContent('本次回测结果可查看，但部分复现材料不完整。');
+    expect(report).toHaveTextContent('回测数据质量有限，结果仅供评估。');
+    expect(report).toHaveTextContent('部分辅助证据暂不可用，不影响历史收益曲线展示。');
+    expect(screen.queryByTestId('backtest-data-quality-grid')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('backtest-execution-assumptions-grid')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /导出执行明细 JSON/ })).not.toBeInTheDocument();
+    expect(report).not.toHaveTextContent(/sourceAuthorityAllowed|fallback_static|provider_timeout|trace JSON|helper metadata|authority internals|remediation|stored_execution_trace|执行明细 JSON/i);
+  });
+
   it('renders compact drawdown and risk explanation labels without inventing unavailable values', () => {
     render(<BacktestResultReport run={makeRun({
       maxDrawdownPct: null,
@@ -364,6 +404,8 @@ describe('BacktestResultReport', () => {
   it('marks report diagnostic panels as narrow-safe stacked grids', () => {
     render(<BacktestResultReport run={makeRun()} mode="simple" />);
 
+    fireEvent.click(screen.getByRole('button', { name: /数据质量/ }));
+    fireEvent.click(screen.getByRole('button', { name: /执行假设/ }));
     expect(screen.getByTestId('backtest-data-quality-grid')).toHaveClass('grid-cols-1', 'sm:grid-cols-2');
     expect(screen.getByTestId('backtest-execution-assumptions-grid')).toHaveClass('grid-cols-1', 'sm:grid-cols-2');
   });
@@ -374,6 +416,7 @@ describe('BacktestResultReport', () => {
     expect(screen.getByTestId('backtest-report-ledger-summary')).toHaveTextContent('64');
     expect(screen.queryByTestId('backtest-ledger-row-0')).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: /账本与导出/ }));
     fireEvent.click(screen.getByRole('button', { name: /展开每日账本/ }));
     const ledger = screen.getByTestId('backtest-report-ledger-table');
     expect(within(ledger).getByTestId('backtest-ledger-row-0')).toBeInTheDocument();
@@ -499,8 +542,8 @@ describe('BacktestResultReport', () => {
     const report = screen.getByTestId('backtest-result-report');
     const evidence = screen.getByTestId('backtest-report-evidence-details');
     expect(evidence).not.toHaveAttribute('open');
-    expect(evidence).toHaveTextContent('证据与明细');
-    expect(evidence).toHaveTextContent('导出、执行假设、每日账本和执行明细默认折叠');
+    expect(evidence).toHaveTextContent('复查材料');
+    expect(evidence).toHaveTextContent('数据质量、执行假设和每日账本默认折叠');
     expect(report).toHaveTextContent('研究结论');
     expect(report).not.toHaveTextContent('signal_exit');
     expect(report).not.toHaveTextContent('stop_loss');
@@ -564,10 +607,10 @@ describe('BacktestResultReport', () => {
     expect(screen.getByRole('tab', { name: '交易明细' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '风险分析' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '参数' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '诊断' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '可靠性' })).toBeInTheDocument();
     expect(screen.queryByTestId('backtest-data-quality-grid')).not.toBeInTheDocument();
     expect(screen.queryByTestId('backtest-execution-assumptions-grid')).not.toBeInTheDocument();
-    expect(report).toHaveTextContent('数据不足');
+    expect(report).toHaveTextContent('回测数据质量有限，结果仅供评估。');
     expect(report).not.toHaveTextContent(/developer|debug|raw|schema|trace|provider_timeout|not_enough_history|fundamentals_unavailable|optional_news_timeout|fallback|dry run|MarketCache/i);
   });
 });
