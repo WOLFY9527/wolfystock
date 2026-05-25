@@ -69,6 +69,7 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
             "sourceAuthorityAllowed": None,
             "scoreContributionAllowed": None,
             "observationOnly": None,
+            "reasonFamilies": [],
         }
 
     def test_fallback_panel_projects_evidence_snapshot(self) -> None:
@@ -88,6 +89,20 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
         assert evidence["confidenceWeight"] == 0.0
         assert evidence["degradationReason"] == "provider_unavailable"
         assert evidence["capReason"] == "fallback_source"
+        assert evidence["reasonFamilies"] == [
+            {
+                "rawCode": "provider_unavailable",
+                "family": "unclassified",
+                "scope": None,
+                "sourceField": "degradationReason",
+            },
+            {
+                "rawCode": "fallback_source",
+                "family": "fallback",
+                "scope": "source_confidence",
+                "sourceField": "capReason",
+            },
+        ]
 
     def test_stale_panel_projects_evidence_snapshot(self) -> None:
         service = MarketOverviewService()
@@ -210,6 +225,21 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
         assert evidence["sourceAuthorityAllowed"] is False
         assert evidence["scoreContributionAllowed"] is False
         assert evidence["observationOnly"] is True
+        assert evidence["reasonFamilies"] == [
+            {
+                "rawCode": "authorized_us_market_breadth_feed_not_configured",
+                "family": "unclassified",
+                "scope": None,
+                "sourceField": "degradationReason",
+            },
+            {
+                "rawCode": "unavailable_source",
+                "family": "unavailable",
+                "scope": "source_confidence",
+                "sourceField": "capReason",
+            },
+        ]
+        assert all(item["family"] != "malformed" for item in evidence["reasonFamilies"])
 
     def test_evidence_snapshot_exposes_score_grade_gate_flags_for_official_fed_bundle(self) -> None:
         service = MarketOverviewService()
@@ -258,6 +288,7 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
         assert evidence["observationOnly"] is False
         assert evidence["degradationReason"] is None
         assert evidence["capReason"] is None
+        assert evidence["reasonFamilies"] == []
 
     def test_evidence_snapshot_exposes_observation_only_blocked_flags_for_cn_money_market_gate(self) -> None:
         service = MarketOverviewService()
@@ -303,3 +334,54 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
         assert evidence["observationOnly"] is True
         assert evidence["degradationReason"] == "cn_money_market_required_series_missing_or_stale"
         assert evidence["capReason"] is None
+        assert evidence["reasonFamilies"] == [
+            {
+                "rawCode": "cn_money_market_required_series_missing_or_stale",
+                "family": "observation_only",
+                "scope": "official_cache_readiness",
+                "sourceField": "degradationReason",
+            }
+        ]
+
+    def test_evidence_snapshot_unknown_reason_code_maps_to_unclassified_sidecar(self) -> None:
+        service = MarketOverviewService()
+        as_of = _iso_now()
+
+        payload = service._with_evidence_snapshot(
+            service._with_market_meta(
+                {
+                    "source": "yfinance",
+                    "sourceLabel": "Yahoo Finance",
+                    "updatedAt": as_of,
+                    "asOf": as_of,
+                    "degradationReason": "totally_new_reason_code",
+                    "items": [
+                        {
+                            "symbol": "SPX",
+                            "label": "S&P 500",
+                            "value": 5200.12,
+                            "changePercent": 0.42,
+                            "trend": [5180.0, 5200.12],
+                            "source": "yfinance",
+                            "sourceLabel": "Yahoo Finance",
+                            "updatedAt": as_of,
+                            "asOf": as_of,
+                        }
+                    ],
+                },
+                "indices",
+            ),
+            "indices",
+        )
+
+        evidence = payload["evidenceSnapshot"]
+        assert evidence["degradationReason"] == "totally_new_reason_code"
+        assert evidence["capReason"] is None
+        assert evidence["reasonFamilies"] == [
+            {
+                "rawCode": "totally_new_reason_code",
+                "family": "unclassified",
+                "scope": None,
+                "sourceField": "degradationReason",
+            }
+        ]

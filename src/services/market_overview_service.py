@@ -94,6 +94,7 @@ from src.services.market_regime_synthesis_adapter import (
     build_liquidity_impulse_synthesis_payload,
     build_market_regime_synthesis_payload,
 )
+from src.services.reason_code_vocabulary import classify_reason_codes
 from src.services.rotation_state_evidence import build_rotation_state_evidence
 from src.services.rotation_radar_quote_provider import get_rotation_radar_quote_provider
 from src.services.vix_metadata import normalize_vix_panel_metadata, normalize_vix_quote_metadata
@@ -2989,6 +2990,7 @@ class MarketOverviewService:
         if score_gate_meta.get("capReason") is None:
             score_gate_meta["capReason"] = evidence.get("capReason")
         evidence.update(score_gate_meta)
+        evidence["reasonFamilies"] = self._evidence_snapshot_reason_families(evidence)
         return evidence
 
     def _evidence_snapshot_score_gate_meta(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -3135,6 +3137,31 @@ class MarketOverviewService:
             if cap_reason:
                 return str(cap_reason)
         return None
+
+    @staticmethod
+    def _evidence_snapshot_reason_families(evidence: Mapping[str, Any]) -> List[Dict[str, Any]]:
+        source_fields: List[str] = []
+        raw_codes: List[str] = []
+
+        for field in ("degradationReason", "capReason"):
+            raw_code = evidence.get(field)
+            if raw_code is None:
+                continue
+            normalized_code = str(raw_code).strip()
+            if not normalized_code:
+                continue
+            source_fields.append(field)
+            raw_codes.append(normalized_code)
+
+        return [
+            {
+                "rawCode": classification.raw_code,
+                "family": classification.family,
+                "scope": classification.scope,
+                "sourceField": source_field,
+            }
+            for source_field, classification in zip(source_fields, classify_reason_codes(raw_codes))
+        ]
 
     def _evidence_snapshot_coverage(self, payload: Dict[str, Any], category: str) -> float:
         explicit_coverage = self._clean_number(payload.get("coverage"))
