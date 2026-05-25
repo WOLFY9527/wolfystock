@@ -41,7 +41,7 @@ export function MetricNarrativeCard({
         <p className="min-w-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/42">{label}</p>
         {glossaryTerm ? (
           <span className="inline-flex min-h-7 shrink-0 items-center gap-1 rounded-lg border border-cyan-200/15 bg-cyan-300/10 px-2 py-1 text-[11px] font-medium text-cyan-100">
-            <BookOpenText className="h-3.5 w-3.5" aria-hidden="true" />
+            <BookOpenText className="size-3.5" aria-hidden="true" />
             {glossaryTerm}
           </span>
         ) : null}

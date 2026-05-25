@@ -75,7 +75,7 @@ export const GlobalLoader: React.FC<GlobalLoaderProps> = ({ fading = false }) =>
       />
 
       <main className="relative z-10 flex w-full max-w-sm flex-col items-center">
-        <div className="relative flex h-40 w-40 items-center justify-center md:h-48 md:w-48">
+        <div className="relative flex size-40 items-center justify-center md:size-48">
           <span
             className="absolute inset-0 rounded-full bg-emerald-400/10 blur-3xl animate-pulse"
             aria-hidden="true"

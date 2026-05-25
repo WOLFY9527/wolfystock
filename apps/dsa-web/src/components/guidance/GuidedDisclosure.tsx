@@ -35,14 +35,14 @@ export function GuidedDisclosure({
           '[&::-webkit-details-marker]:hidden',
         )}
       >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/8 bg-black/20 text-cyan-100/80">
-          <Layers3 className="h-4 w-4" aria-hidden="true" />
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-white/8 bg-black/20 text-cyan-100/80">
+          <Layers3 className="size-4" aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold text-white">{title}</span>
           <span className="mt-1 block text-xs leading-5 text-white/48">{summary}</span>
         </span>
-        <ChevronDown className="h-4 w-4 shrink-0 text-white/45 transition-transform group-open:rotate-180" aria-hidden="true" />
+        <ChevronDown className="size-4 shrink-0 text-white/45 transition-transform group-open:rotate-180" aria-hidden="true" />
       </summary>
       <div className="grid gap-3 border-t border-white/[0.04] px-4 pb-4 pt-3 md:grid-cols-2">
         <section className="rounded-xl border border-white/[0.04] bg-black/20 p-3">

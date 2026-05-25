@@ -58,10 +58,10 @@ export const Input = ({
 
   const renderLeadingIcon = () => {
     if (iconType === 'password') {
-      return <Lock className="h-4 w-4 text-muted-text/55" />;
+      return <Lock className="size-4 text-muted-text/55" />;
     }
     if (iconType === 'key') {
-      return <Key className="h-4 w-4 text-muted-text/55" />;
+      return <Key className="size-4 text-muted-text/55" />;
     }
     return null;
   };
@@ -79,7 +79,7 @@ export const Input = ({
     <button
       type="button"
       className={cn(
-        'input-surface__toggle inline-flex h-7 w-7 items-center justify-center rounded-full border border-transparent bg-transparent transition-all duration-200 focus:outline-none focus:ring-2',
+        'input-surface__toggle inline-flex size-7 items-center justify-center rounded-full border border-transparent bg-transparent transition-all duration-200 focus:outline-none focus:ring-2',
         visible
           ? 'text-foreground'
           : 'text-muted-text focus:ring-[var(--focus-ring)]'
