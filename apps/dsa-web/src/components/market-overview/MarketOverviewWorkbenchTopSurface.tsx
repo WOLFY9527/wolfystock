@@ -5,7 +5,7 @@ import {
   ConsoleBoard,
   KeyLevelStrip,
 } from '../linear';
-import { TerminalChip, TerminalDisclosure } from '../terminal';
+import { TerminalChip, TerminalDisclosure, TerminalNotice } from '../terminal';
 import { cn } from '../../utils/cn';
 import type { MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
 import type { OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';
@@ -153,6 +153,7 @@ type MarketOverviewWorkbenchTopSurfaceProps = {
   exportLabel: string;
   onExportSummary: () => void;
   heroAnchors: MarketOverviewHeroAnchorView[];
+  showAdminDiagnostics?: boolean;
 };
 
 type DirectionUsabilitySummary = {
@@ -160,6 +161,11 @@ type DirectionUsabilitySummary = {
   variant: 'success' | 'info' | 'caution';
   headline: string;
   detail: string;
+};
+
+type ConsumerDataQualityNoticeView = {
+  message: string;
+  variant: 'neutral' | 'info' | 'caution';
 };
 
 const MARKET_OVERVIEW_SETUP_ACTION_CLASS = 'inline-flex min-h-8 items-center rounded-md border border-white/[0.08] bg-white/[0.035] px-2.5 py-1 text-[11px] font-semibold text-white/72 transition-colors hover:border-cyan-200/25 hover:bg-white/[0.06] hover:text-white';
@@ -348,9 +354,13 @@ function overviewReadinessState(params: {
   if (
     readiness?.status === 'data_insufficient'
     && scoreGradeCount <= 0
-    && (missingCount > 0 || dataState.hasFallback || dataState.hasUnavailable)
   ) {
-    return 'unavailable';
+    if (dataState.availableCount > 0 && !dataState.hasUnavailable) {
+      return 'observe';
+    }
+    if (missingCount > 0 || dataState.hasFallback || dataState.hasUnavailable) {
+      return 'unavailable';
+    }
   }
   if (
     readiness?.status === 'partial_context_only'
@@ -407,14 +417,14 @@ function buildOverviewDecisionReadiness(params: {
 function conclusionCanJudgeDetail(summary: DecisionReadinessSummary): string {
   switch (summary.state) {
     case 'ready':
-      return '评分级证据达到当前方向判断门槛，仍需继续核对反证和数据更新。';
+      return '当前方向判断可参考，仍需继续观察后续更新。';
     case 'observe':
-      return '证据包含观察级、备用或代理来源，只能作为上下文观察。';
+      return '当前信号置信度较低，仅供观察。';
     case 'waiting':
-      return '关键实时源仍在刷新，等待本轮数据完成后再复核。';
+      return '数据更新中，稍后将自动刷新。';
     case 'unavailable':
     default:
-      return '评分级证据不足或来源不可用，不能形成可靠方向。';
+      return '部分数据暂不可用，当前评分已暂停。';
   }
 }
 
@@ -430,21 +440,80 @@ function conclusionDirectionValue(summary: DecisionReadinessSummary, statusSumma
 
 function conclusionWhyItMatters(summary: DecisionReadinessSummary): string {
   if (summary.state === 'ready') {
-    return '继续观察反证是否进入评分级证据。';
+    return '继续跟踪关键信号是否保持一致。';
   }
-  return '这些缺口会阻断方向判断，避免把备用、代理、过期或覆盖不完整的数据升级成评分级结论。';
+  if (summary.state === 'waiting') {
+    return '本轮更新完成后，页面会自动补齐最新状态。';
+  }
+  return '当前信息仍有缺口，建议先保持观察，等待后续更新。';
+}
+
+function buildConsumerDataQualityNotice(summary: DecisionReadinessSummary, dataState: MarketOverviewDataStateStripView): ConsumerDataQualityNoticeView | null {
+  if (summary.state === 'unavailable') {
+    return {
+      message: '部分数据暂不可用，当前评分已暂停。',
+      variant: 'caution',
+    };
+  }
+  if (summary.state === 'waiting' || (dataState.isRefreshing && dataState.availableCount === 0)) {
+    return {
+      message: '数据更新中，稍后将自动刷新。',
+      variant: 'info',
+    };
+  }
+  if (summary.state === 'observe') {
+    return {
+      message: '当前信号置信度较低，仅供观察。',
+      variant: 'info',
+    };
+  }
+  if (dataState.staleCount > 0 || dataState.hasFallback) {
+    return {
+      message: '已使用最近一次可用数据。',
+      variant: 'neutral',
+    };
+  }
+  return null;
+}
+
+function confidenceStatusLabel(summary: DecisionReadinessSummary): string {
+  switch (summary.state) {
+    case 'ready':
+      return '当前信号可参考';
+    case 'waiting':
+      return '更新中';
+    case 'observe':
+      return '仅供观察';
+    case 'unavailable':
+    default:
+      return '评分暂停';
+  }
+}
+
+function dataStatusLabel(summary: DecisionReadinessSummary, dataState: MarketOverviewDataStateStripView): string {
+  if (summary.state === 'waiting' || dataState.isRefreshing) {
+    return '更新中';
+  }
+  if (summary.state === 'unavailable') {
+    return '部分不可用';
+  }
+  if (dataState.hasUnavailable) {
+    return '部分可用';
+  }
+  if (dataState.staleCount > 0 || dataState.hasFallback) {
+    return '最近一次可用数据';
+  }
+  return '数据可用';
 }
 
 const MarketOverviewConclusionLayer: React.FC<{
   testId: string;
   summary: DecisionReadinessSummary;
   statusSummary: DirectionUsabilitySummary;
-}> = ({ testId, summary, statusSummary }) => {
-  const blockers = summary.blockers.slice(0, 5);
-  const nextEvidence = summary.nextEvidence.slice(0, 3);
-  const nextActionText = summary.state === 'ready'
-    ? '继续复核反证、时效与来源覆盖'
-    : `需要补齐：${nextEvidence.join('、')}`;
+  dataState: MarketOverviewDataStateStripView;
+}> = ({ testId, summary, statusSummary, dataState }) => {
+  const notice = buildConsumerDataQualityNotice(summary, dataState);
+  const updatedAtText = dataState.updatedAtLabel || '待刷新';
 
   return (
     <section
@@ -469,39 +538,32 @@ const MarketOverviewConclusionLayer: React.FC<{
           <TerminalChip variant={summary.stateVariant}>{summary.stateLabel}</TerminalChip>
         </div>
       </div>
-      <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 xl:grid-cols-4">
+      {notice ? (
+        <TerminalNotice
+          variant={notice.variant}
+          data-testid="market-overview-consumer-data-quality-notice"
+          className="mt-4"
+        >
+          {notice.message}
+        </TerminalNotice>
+      ) : null}
+      <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 xl:grid-cols-3">
         <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5">
-          <p className="text-[11px] font-medium text-white/48">当前能否判断</p>
+          <p className="text-[11px] font-medium text-white/48">当前结论</p>
           <p className="mt-1 text-sm font-semibold text-white/88">{summary.stateLabel}</p>
           <p className="mt-1 text-[11px] leading-5 text-white/50">{conclusionCanJudgeDetail(summary)}</p>
         </div>
         <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5">
-          <p className="text-[11px] font-medium text-white/48">当前市场方向结论</p>
-          <p className="mt-1 text-sm font-semibold text-white/88">{statusSummary.headline}</p>
-          <p className="mt-1 text-[11px] leading-5 text-white/50">{statusSummary.detail}</p>
-        </div>
-        <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5">
-          <p className="text-[11px] font-medium text-white/48">主要阻断原因</p>
-          <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
-            {blockers.map((item) => (
-              <span
-                key={item}
-                className="max-w-full truncate rounded-md border border-amber-200/12 bg-amber-200/[0.035] px-2 py-1 text-[11px] font-semibold text-amber-100/78"
-              >
-                {item}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5">
-          <p className="text-[11px] font-medium text-white/48">下一步需要的数据/配置</p>
-          <p className="mt-1 text-sm font-semibold text-white/88">{nextActionText}</p>
+          <p className="text-[11px] font-medium text-white/48">置信度状态</p>
+          <p className="mt-1 text-sm font-semibold text-white/88">{confidenceStatusLabel(summary)}</p>
           <p className="mt-1 text-[11px] leading-5 text-white/50">{conclusionWhyItMatters(summary)}</p>
         </div>
+        <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5">
+          <p className="text-[11px] font-medium text-white/48">数据状态</p>
+          <p className="mt-1 text-sm font-semibold text-white/88">{dataStatusLabel(summary, dataState)}</p>
+          <p className="mt-1 text-[11px] leading-5 text-white/50">最近更新：{updatedAtText}</p>
+        </div>
       </div>
-      {summary.state !== 'ready' ? (
-        <MarketOverviewSetupPath testId="market-overview-setup-path" />
-      ) : null}
     </section>
   );
 };
@@ -591,6 +653,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
   temperatureSummary: MarketOverviewTemperatureSummaryView;
   briefingSummary: MarketOverviewBriefingSummaryView;
   officialMacroRecords: OfficialMacroAuthorityRecord[];
+  showAdminDiagnostics: boolean;
 }> = ({
   directionalSummary,
   view,
@@ -602,6 +665,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
   temperatureSummary,
   briefingSummary,
   officialMacroRecords,
+  showAdminDiagnostics,
 }) => {
   const supportingEvidence = view ? [
     ...view.styleTilts.slice(0, 1),
@@ -626,15 +690,15 @@ const MarketDecisionSemanticsStrip: React.FC<{
     ...(view?.directionReadiness?.blockingReasons || []),
     ...((view?.claimBoundaries || []).map((boundary) => boundary.reasonCode || '').filter(Boolean)),
   ];
-  const summarySentence = decisionReliable
-    ? decisionText
-    : `${statusSummary.detail} ${decisionText}`.trim();
   const readinessSummary = buildOverviewDecisionReadiness({
     view,
     decisionReliable,
     dataState,
     decisionText,
   });
+  const summarySentence = readinessSummary.state === 'ready'
+    ? decisionText
+    : conclusionCanJudgeDetail(readinessSummary);
   const trustBuckets: Array<TrustDisclosureBucket | null> = [
     (!decisionReliable || view?.insufficient || statusSummary.variant === 'caution') ? 'confidence' : null,
     dataState.hasFallback ? 'fallback' : null,
@@ -658,6 +722,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
           testId="market-overview-decision-readiness"
           summary={readinessSummary}
           statusSummary={statusSummary}
+          dataState={dataState}
         />
         <div className="flex min-w-0 flex-col gap-3 border-b border-[color:var(--wolfy-divider)] pb-4">
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
@@ -685,7 +750,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
               </TerminalChip>
               <TrustDisclosureChips
                 buckets={trustBuckets}
-                maxBuckets={3}
+                maxBuckets={2}
                 chipClassName="px-2.5 py-1 text-[10px]"
               />
             </div>
@@ -704,25 +769,30 @@ const MarketDecisionSemanticsStrip: React.FC<{
         <p className="mt-3 text-[11px] leading-5 text-white/42">
           仅供研究观察，不构成交易指令。{view?.insufficient ? ' 当前可靠证据不足，暂不形成方向结论。' : ''}
         </p>
-        <TerminalDisclosure
-          data-testid="market-decision-debug-details"
-          title="技术细节"
-          summary="方向可用性、来源覆盖、运行快照与原始原因代码默认折叠"
-          className="mt-3 bg-black/10"
-        >
-          <Suspense fallback={<MarketDecisionDebugLoadingFallback />}>
-            <LazyMarketOverviewDecisionDebugDetails
-              regimeSynthesis={regimeSynthesis}
-              temperatureSummary={temperatureSummary}
-              briefingSummary={briefingSummary}
-              dataState={dataState}
-              officialMacroRecords={officialMacroRecords}
-              directionReadiness={view?.directionReadiness}
-              claimBoundaries={view?.claimBoundaries || []}
-              rawDebugCodes={rawDebugCodes}
-            />
-          </Suspense>
-        </TerminalDisclosure>
+        {showAdminDiagnostics ? (
+          <TerminalDisclosure
+            data-testid="market-decision-debug-details"
+            title="技术细节"
+            summary="管理员模式下可查看方向可用性、来源覆盖与原始原因代码"
+            className="mt-3 bg-black/10"
+          >
+            {readinessSummary.state !== 'ready' ? (
+              <MarketOverviewSetupPath testId="market-overview-setup-path" />
+            ) : null}
+            <Suspense fallback={<MarketDecisionDebugLoadingFallback />}>
+              <LazyMarketOverviewDecisionDebugDetails
+                regimeSynthesis={regimeSynthesis}
+                temperatureSummary={temperatureSummary}
+                briefingSummary={briefingSummary}
+                dataState={dataState}
+                officialMacroRecords={officialMacroRecords}
+                directionReadiness={view?.directionReadiness}
+                claimBoundaries={view?.claimBoundaries || []}
+                rawDebugCodes={rawDebugCodes}
+              />
+            </Suspense>
+          </TerminalDisclosure>
+        ) : null}
       </div>
     </section>
   );
@@ -811,6 +881,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
   exportLabel,
   onExportSummary,
   heroAnchors,
+  showAdminDiagnostics = false,
 }) => {
   return (
     <section data-testid="market-overview-pulse-header" className="flex w-full min-w-0 flex-col gap-4">
@@ -829,6 +900,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
               temperatureSummary={temperatureSummary}
               briefingSummary={briefingSummary}
               officialMacroRecords={officialMacroRecords}
+              showAdminDiagnostics={showAdminDiagnostics}
             />
             <div className="border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4">
               <MarketOverviewCategoryControls

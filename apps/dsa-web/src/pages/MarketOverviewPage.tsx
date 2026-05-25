@@ -17,6 +17,7 @@ import {
 import { WideWorkspaceShellScope } from '../components/layout/WideWorkspaceShell';
 import { TerminalPageHeading } from '../components/terminal';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { useProductSurface } from '../hooks/useProductSurface';
 
 type LocalSnapshotEnvelope = {
   schemaVersion: 1;
@@ -650,6 +651,7 @@ function subscribeToCryptoStream(subscriber: CryptoStreamSubscriber): () => void
 
 const MarketOverviewPage = () => {
   const { language } = useI18n();
+  const { isAdminMode, canReadProviders } = useProductSurface();
   const initialLocalSnapshot = useMemo(() => buildInitialPanelsFromLocalSnapshot(), []);
   const [panels, setPanels] = useState<PanelState>(initialLocalSnapshot.panels);
   const [loading, setLoading] = useState(initialLocalSnapshot.source !== 'local');
@@ -920,6 +922,7 @@ const MarketOverviewPage = () => {
         refreshingPanel={refreshingPanel}
         cryptoRealtimeStatus={cryptoRealtimeStatus}
         isCnShortSentimentBootstrapping={loading && panels.cnShortSentiment === FALLBACK_CN_SHORT_SENTIMENT}
+        showAdminDiagnostics={isAdminMode && canReadProviders}
         onRefreshPanel={handleWorkbenchRefresh}
       />
     </WideWorkspaceShellScope>

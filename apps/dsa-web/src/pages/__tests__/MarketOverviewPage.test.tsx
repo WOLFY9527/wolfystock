@@ -11,6 +11,10 @@ import { TerminalPageHeading } from '../../components/terminal';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { UI_LANGUAGE_STORAGE_KEY } from '../../i18n/core';
 
+const { useProductSurfaceMock } = vi.hoisted(() => ({
+  useProductSurfaceMock: vi.fn(),
+}));
+
 vi.mock('../../api/marketOverview', () => ({
   marketOverviewApi: {
     getIndices: vi.fn(),
@@ -43,6 +47,10 @@ vi.mock('../../api/market', async (importOriginal) => {
     },
   };
 });
+
+vi.mock('../../hooks/useProductSurface', () => ({
+  useProductSurface: useProductSurfaceMock,
+}));
 
 const panel = (panelName: string, symbol: string, label = symbol) => ({
   panelName,
@@ -1517,6 +1525,10 @@ describe('MarketOverviewPage', () => {
   beforeEach(() => {
     window.localStorage.clear();
     MockEventSource.instances = [];
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: true,
+      canReadProviders: true,
+    });
     vi.stubGlobal('EventSource', MockEventSource);
     originalClipboard = navigator.clipboard;
     Object.defineProperty(navigator, 'clipboard', {
@@ -1616,7 +1628,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-grid-loading')).not.toHaveClass('bg-black');
     expect(await screen.findByTestId('market-overview-main-grid')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-side-rail')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '展开 技术细节' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '展开 技术细节' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('market-regime-synthesis-header')).not.toBeInTheDocument();
 
     const usTab = screen.getByRole('button', { name: '美股' });
@@ -1626,8 +1638,8 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-export-summary')).toBeInTheDocument();
   });
 
-  it('lazy loads technical diagnostics only after the disclosure opens', async () => {
-    renderMarketOverviewWorkbench();
+  it('lazy loads technical diagnostics only after the admin disclosure opens', async () => {
+    renderMarketOverviewWorkbenchWithProps({ showAdminDiagnostics: true });
 
     expect(screen.queryByTestId('market-decision-debug-loading')).not.toBeInTheDocument();
     expect(screen.queryByTestId('market-regime-synthesis-header')).not.toBeInTheDocument();
@@ -1850,10 +1862,9 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/市场判断摘要/);
     const conclusion = screen.getByTestId('market-overview-decision-readiness');
     expect(conclusion).toHaveTextContent('市场总览结论');
-    expect(conclusion).toHaveTextContent('当前能否判断');
-    expect(conclusion).toHaveTextContent('当前市场方向结论');
-    expect(conclusion).toHaveTextContent('主要阻断原因');
-    expect(conclusion).toHaveTextContent('下一步需要的数据/配置');
+    expect(conclusion).toHaveTextContent('当前结论');
+    expect(conclusion).toHaveTextContent('置信度状态');
+    expect(conclusion).toHaveTextContent('数据状态');
     expect(screen.getByTestId('market-command-chips').querySelectorAll('[data-terminal-primitive="chip"]').length).toBe(1);
     expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/当前方向判断可参考|暂不形成方向结论|等待数据完成后再判断/);
     const details = expandMarketDecisionDetails();
@@ -2061,6 +2072,10 @@ describe('MarketOverviewPage', () => {
   });
 
   it('renders a stable MarketMonitor skeleton with grouped deep panels and collapsed diagnostics', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: false,
+      canReadProviders: false,
+    });
     render(<MarketOverviewPage />);
 
     expect(await screen.findByTestId('market-overview-pulse-header')).toBeInTheDocument();
@@ -2078,7 +2093,7 @@ describe('MarketOverviewPage', () => {
     expect(sideRail).toContainElement(screen.getByTestId('market-overview-runtime-details'));
     expect(sideRail).toContainElement(screen.getByTestId('market-overview-signal-disclosure'));
     expect(sideRail).toContainElement(screen.getByTestId('market-overview-action-disclosure'));
-    expect(screen.getByRole('button', { name: '展开 技术细节' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '展开 技术细节' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '展开 关键观测' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '展开 观察提示' })).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-deep-panels')).toContainElement(screen.getByTestId('market-overview-executive-secondary-groups'));
@@ -2313,6 +2328,10 @@ describe('MarketOverviewPage', () => {
   });
 
   it('renders a top directional summary for mixed low-confidence evidence', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: false,
+      canReadProviders: false,
+    });
     vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(limitedRealTemperaturePayload());
     vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
 
@@ -2320,10 +2339,9 @@ describe('MarketOverviewPage', () => {
 
     const conclusion = await screen.findByTestId('market-overview-decision-readiness');
     expect(conclusion).toHaveTextContent('市场总览结论');
-    expect(conclusion).toHaveTextContent('当前能否判断');
-    expect(conclusion).toHaveTextContent('当前市场方向结论');
-    expect(conclusion).toHaveTextContent('主要阻断原因');
-    expect(conclusion).toHaveTextContent('下一步需要的数据/配置');
+    expect(conclusion).toHaveTextContent('当前结论');
+    expect(conclusion).toHaveTextContent('置信度状态');
+    expect(conclusion).toHaveTextContent('数据状态');
     expect(conclusion.textContent || '').not.toMatch(/买入|卖出|买卖|target|stop|recommend/i);
     const evidenceDetails = expandMarketEvidenceDetails();
     await waitFor(() => {
@@ -2343,15 +2361,17 @@ describe('MarketOverviewPage', () => {
   });
 
   it('renders decision readiness states for ready, observation-only, and unavailable overview evidence', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: false,
+      canReadProviders: false,
+    });
     const readyView = render(<MarketOverviewPage />);
 
     const readyBand = await screen.findByTestId('market-overview-decision-readiness');
-    expect(readyBand).toHaveTextContent('当前能否判断');
-    expect(readyBand).toHaveTextContent('当前市场方向结论');
-    expect(readyBand).toHaveTextContent('主要阻断原因');
-    expect(readyBand).toHaveTextContent('下一步需要的数据/配置');
+    expect(readyBand).toHaveTextContent('当前结论');
+    expect(readyBand).toHaveTextContent('置信度状态');
+    expect(readyBand).toHaveTextContent('数据状态');
     expect(readyBand).toHaveTextContent('可判断');
-    expect(readyBand).toHaveTextContent('继续复核反证、时效与来源覆盖');
     expect(within(readyBand).queryByText('查看需配置的数据源')).not.toBeInTheDocument();
     expect(readyBand.textContent || '').not.toMatch(/买入|卖出|买卖|buy now|sell now|target|stop|recommend/i);
     readyView.unmount();
@@ -2411,14 +2431,9 @@ describe('MarketOverviewPage', () => {
     const observationBand = screen.getByTestId('market-overview-decision-readiness');
     expect(observationBand).toHaveTextContent('仅观察');
     expect(observationBand).toHaveTextContent('当前只适合作为观察，不应用作方向判断');
-    expect(observationBand).toHaveTextContent('证据包含观察级、备用或代理来源，只能作为上下文观察。');
-    const setupPath = within(observationBand).getByTestId('market-overview-setup-path');
-    expect(setupPath).toHaveTextContent('查看需配置的数据源');
-    expect(setupPath).toHaveTextContent('减少备用或代理证据');
-    expect(setupPath).toHaveTextContent('是否进入评分仍由现有来源门槛决定');
-    expect(within(setupPath).getByRole('link', { name: '查看提供方运维' })).toHaveAttribute('href', '/admin/market-providers?surface=market_overview');
-    expect(within(setupPath).getByRole('link', { name: '前往数据源设置' })).toHaveAttribute('href', '/settings/system?panel=data_sources&surface=market_overview');
-    expect(setupPath.textContent || '').not.toMatch(/买入|卖出|买卖|recommend|investment|profit|guarantee/i);
+    expect(observationBand).toHaveTextContent('当前信号置信度较低，仅供观察。');
+    expect(within(observationBand).queryByTestId('market-overview-setup-path')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '展开 技术细节' })).not.toBeInTheDocument();
     observationView.unmount();
 
     vi.clearAllMocks();
@@ -2427,12 +2442,12 @@ describe('MarketOverviewPage', () => {
 
     const unavailableView = render(<MarketOverviewPage />);
     await screen.findByTestId('market-overview-decision-readiness');
-    await waitFor(() => expect(screen.getByTestId('market-overview-decision-readiness')).toHaveTextContent('不可判断'));
+    await waitFor(() => expect(screen.getByTestId('market-overview-decision-readiness')).toHaveTextContent('仅观察'));
     const unavailableBand = screen.getByTestId('market-overview-decision-readiness');
-    expect(unavailableBand).toHaveTextContent('不可判断');
+    expect(unavailableBand).toHaveTextContent('仅观察');
     expect(unavailableBand).toHaveTextContent('当前只适合作为观察，不应用作方向判断');
-    expect(unavailableBand).toHaveTextContent('评分级证据不足或来源不可用');
-    expect(within(unavailableBand).getByTestId('market-overview-setup-path')).toHaveTextContent('查看提供方运维');
+    expect(unavailableBand).toHaveTextContent('当前信号置信度较低，仅供观察。');
+    expect(within(unavailableBand).queryByTestId('market-overview-setup-path')).not.toBeInTheDocument();
     unavailableView.unmount();
   });
 
@@ -2467,26 +2482,31 @@ describe('MarketOverviewPage', () => {
   });
 
   it('renders a compact observational posture panel from market decision semantics', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: false,
+      canReadProviders: false,
+    });
     render(<MarketOverviewPage />);
 
     const posturePanel = await screen.findByTestId('market-decision-semantics-strip');
 
     expect(posturePanel).toHaveTextContent('市场判断摘要');
     expect(posturePanel).toHaveTextContent('市场总览结论');
-    expect(posturePanel).toHaveTextContent('当前能否判断');
-    expect(posturePanel).toHaveTextContent('当前市场方向结论');
-    expect(posturePanel).toHaveTextContent('主要阻断原因');
-    expect(posturePanel).toHaveTextContent('下一步需要的数据/配置');
+    expect(posturePanel).toHaveTextContent('当前结论');
+    expect(posturePanel).toHaveTextContent('置信度状态');
+    expect(posturePanel).toHaveTextContent('数据状态');
+    expect(posturePanel).not.toHaveTextContent('主要阻断原因');
+    expect(posturePanel).not.toHaveTextContent('下一步需要的数据/配置');
     expect(posturePanel).not.toHaveTextContent('Liquidity beta watch');
     expect(posturePanel).not.toHaveTextContent('Remove the risk-on watch if liquidity turns mixed or contracting.');
     expect(posturePanel).not.toHaveTextContent('liquidity_stops_expanding');
     expect(posturePanel).toHaveTextContent('不构成交易指令');
     expect(posturePanel).not.toHaveTextContent('counter_evidence_present');
     expect(posturePanel).not.toHaveTextContent('not_investment_advice');
+    expect(within(posturePanel).queryByTestId('market-decision-debug-details')).not.toBeInTheDocument();
 
     const readinessBand = screen.getByTestId('market-overview-decision-readiness');
     expect(readinessBand).toHaveTextContent('可判断');
-    expect(readinessBand).toHaveTextContent('继续复核反证、时效与来源覆盖');
 
     const evidence = expandMarketEvidenceDetails();
     expect(evidence).toHaveTextContent('支持证据');
@@ -2498,15 +2518,33 @@ describe('MarketOverviewPage', () => {
     expect(evidence).toHaveTextContent('Remove the risk-on watch if liquidity turns mixed or contracting.');
     expect(evidence).toHaveTextContent('US10Y');
     expect(evidence).toHaveTextContent('Fed liquidity');
+  });
 
+  it('reveals technical diagnostics only in admin mode', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: true,
+      canReadProviders: true,
+    });
+    vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(unreliableTemperaturePayload());
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
+    render(<MarketOverviewPage />);
+
+    const posturePanel = await screen.findByTestId('market-decision-semantics-strip');
     const debug = within(posturePanel).getByTestId('market-decision-debug-details');
     expect(debug).not.toHaveAttribute('open');
+
     fireEvent.click(within(debug).getByRole('button', { name: '展开 技术细节' }));
-    expect(await within(debug).findByText('counter_evidence_present')).toBeInTheDocument();
-    expect((await within(debug).findAllByText('not_investment_advice')).length).toBeGreaterThan(0);
+
+    expect(await within(debug).findByTestId('market-overview-official-macro-diagnostics')).toBeInTheDocument();
+    expect(within(debug).getByText('insufficient_score_grade_evidence')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-setup-path')).toBeInTheDocument();
   });
 
   it('keeps data-insufficient posture conservative without trading advice language', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: false,
+      canReadProviders: false,
+    });
     vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(unreliableTemperaturePayload());
     vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
 
@@ -2518,16 +2556,16 @@ describe('MarketOverviewPage', () => {
     expect(posturePanel).toHaveTextContent(/方向不可用|暂不形成方向结论/);
     expect(posturePanel).toHaveTextContent(/暂不形成方向结论|当前不能形成可靠方向判断/);
     expect(posturePanel).toHaveTextContent('当前可靠证据不足');
-    expect(posturePanel).toHaveTextContent('缺少评分级证据');
+    expect(posturePanel).toHaveTextContent('当前信号置信度较低，仅供观察。');
     expect(posturePanel).toHaveTextContent('置信度受限');
-    expect(posturePanel).toHaveTextContent('仅观察');
+    expect(posturePanel).toHaveTextContent(/仅观察|不可判断/);
     expect(posturePanel).toHaveTextContent('证据不足');
     expect(posturePanel).toHaveTextContent('不构成交易指令');
-    expect(posturePanel).toHaveTextContent(/观察证据|仅作观察|需要权威来源/);
+    expect(posturePanel).toHaveTextContent(/仅供观察|保持观察|等待后续更新/);
     expect(posturePanel).not.toHaveTextContent('missing_scoring_pillars');
     const readinessBand = screen.getByTestId('market-overview-decision-readiness');
-    expect(readinessBand).toHaveTextContent('不可判断');
-    expect(readinessBand).toHaveTextContent('缺少评分级证据');
+    expect(readinessBand).toHaveTextContent('仅观察');
+    expect(readinessBand).toHaveTextContent('当前信号置信度较低，仅供观察。');
     expect(readinessBand).not.toHaveTextContent('fallback_proxy_or_observation_only_evidence_present');
     expect(screen.getByTestId('market-decision-semantics-strip')).not.toHaveTextContent('fallback_proxy_or_observation_only_evidence_present');
     expect(text).not.toMatch(/买入|卖出|买卖|加仓|减仓|仓位|看多|看空|bullish|bearish|buy|sell|target|stop|recommend|add|reduce|position-size/i);
@@ -2674,7 +2712,7 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     expect(await screen.findByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/暂不形成方向结论|等待数据完成后再判断/);
-    expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent('当前可见信号包含延迟、代理或缺失项');
+    expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent('当前信号置信度较低，仅供观察。');
     const railActionHint = screen.queryByTestId('market-overview-rail-action-hint');
     if (railActionHint) {
       expect(railActionHint).not.toHaveTextContent(/等待实时源补齐后再生成强判断/);
@@ -2706,12 +2744,13 @@ describe('MarketOverviewPage', () => {
     });
 
     expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/暂不形成方向结论|等待数据完成后再判断/);
-    expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent('关键面板暂不可用');
+    expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent('部分数据暂不可用，当前评分已暂停。');
   });
 
   it('uses a refresh-state top status only while the overview is truly refreshing', async () => {
     renderMarketOverviewWorkbenchWithProps({
       loading: true,
+      showAdminDiagnostics: true,
       panels: {
         ...localSnapshotPayload({
           indices: snapshotPanel('IndexTrendsCard', 'SPX', 'S&P 500'),
@@ -2735,7 +2774,7 @@ describe('MarketOverviewPage', () => {
     });
 
     expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/暂不形成方向结论|等待数据完成后再判断/);
-    expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent('关键实时源仍在刷新');
+    expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent('数据更新中，稍后将自动刷新。');
     const details = expandMarketDecisionDetails();
     expect(within(details).getByTestId('market-overview-cache-status')).toHaveTextContent(/刷新中/i);
   });
@@ -3745,6 +3784,10 @@ describe('MarketOverviewPage', () => {
   });
 
   it('shows compact official macro authority diagnostics without promoting degraded rows', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: true,
+      canReadProviders: true,
+    });
     vi.mocked(marketOverviewApi.getMacro).mockResolvedValueOnce(officialMacroPanel());
 
     render(<MarketOverviewPage />);

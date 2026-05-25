@@ -243,9 +243,10 @@ export const MarketOverviewRefreshButton: React.FC<{
 export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; sourceLabel?: string; meta?: Partial<MarketDataMeta> }> = ({ panel, sourceLabel, meta }) => {
   const { t } = useI18n();
   const resolvedMeta = meta || panel;
+  const pendingLabel = t('marketOverviewPage.footer.pending');
   const fallbackUpdatedAt = panel?.lastRefreshAt
     ? t('marketOverviewPage.footer.lastRefresh', {
-        timestamp: formatMarketOverviewTimestamp(panel.lastRefreshAt) || t('marketOverviewPage.footer.pending'),
+        timestamp: formatMarketOverviewTimestamp(panel.lastRefreshAt) || pendingLabel,
       })
     : '';
   const details = metaText(resolvedMeta);
@@ -255,7 +256,9 @@ export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; 
   if (resolvedMeta?.isRefreshing) {
     details.push(t('marketOverviewPage.footer.refreshingSnapshot'));
   }
-  const compactDetails = compactMetaText(resolvedMeta) || fallbackUpdatedAt || sourceLabel || '';
+  const compactDetails = compactMetaText(resolvedMeta)
+    || fallbackUpdatedAt
+    || (resolvedMeta?.isRefreshing ? t('marketOverviewPage.footer.refreshingSnapshot') : pendingLabel);
   const freshness = resolveFreshness(resolvedMeta);
 
   return (

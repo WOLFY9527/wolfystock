@@ -1695,7 +1695,7 @@ function summarizeTopLevelDataStatus(params: {
   if (coverageSummary.real > 0 && coverageSummary.mixed > 0) {
     return {
       kind: 'mixedDataAvailable',
-      headline: '数据可用：存在延迟/代理源',
+      headline: '数据可用：部分信号待确认',
       detail: hasMissingPanels ? '部分数据暂不可用' : undefined,
       hasUsableData: true,
       hasMissingPanels,
@@ -1705,7 +1705,7 @@ function summarizeTopLevelDataStatus(params: {
   if (coverageSummary.mixed > 0) {
     return {
       kind: 'proxyPartialAvailable',
-      headline: '数据可用：存在代理源',
+      headline: '数据可用：部分信号待确认',
       detail: hasMissingPanels ? '部分数据暂不可用' : undefined,
       hasUsableData: true,
       hasMissingPanels,
@@ -1714,7 +1714,7 @@ function summarizeTopLevelDataStatus(params: {
 
   return {
     kind: 'delayedAvailable',
-    headline: '数据可用：存在延迟源',
+    headline: '数据可用：已使用最近一次可用数据',
     detail: hasMissingPanels ? '部分数据暂不可用' : undefined,
     hasUsableData: true,
     hasMissingPanels,
@@ -1728,15 +1728,15 @@ function formatTopLevelDataStatus(status: TopLevelDataStatus): string {
 function explainTopLevelDataStatus(status: TopLevelDataStatus): string {
   switch (status.kind) {
     case 'refreshing':
-      return '关键实时源仍在刷新，先保留已验证信号，等待更多确认。';
+      return '数据更新中，稍后将自动刷新。';
     case 'fallbackOnlyUnavailable':
-      return '关键面板暂不可用，缺少足够的可计分证据来支持方向结论。';
+      return '部分数据暂不可用，当前评分已暂停。';
     case 'mixedDataAvailable':
-      return '当前可见信号包含延迟、代理或缺失项，尚不足以支持可靠方向判断。';
+      return '当前信号置信度较低，仅供观察。';
     case 'proxyPartialAvailable':
-      return '当前主要依赖代理信号，缺少实时确认，先保留观察结论。';
+      return '当前信号置信度较低，仅供观察。';
     case 'delayedAvailable':
-      return '当前主要依赖延迟信号，缺少实时确认，先保留观察结论。';
+      return '已使用最近一次可用数据。';
     default:
       return formatTopLevelDataStatus(status);
   }
@@ -2041,6 +2041,7 @@ export type MarketOverviewWorkbenchProps = {
   refreshingPanel: PanelKey | null;
   cryptoRealtimeStatus: CryptoRealtimeStatus;
   isCnShortSentimentBootstrapping: boolean;
+  showAdminDiagnostics?: boolean;
   onRefreshPanel: (panelKey: PanelKey) => void;
 };
 
@@ -2053,6 +2054,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
   refreshingPanel,
   cryptoRealtimeStatus,
   isCnShortSentimentBootstrapping,
+  showAdminDiagnostics = false,
   onRefreshPanel,
 }) => {
   const { language, t } = useI18n();
@@ -2720,6 +2722,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
             void handleExportSummary();
           }}
           heroAnchors={heroAnchorViews}
+          showAdminDiagnostics={showAdminDiagnostics}
         />
         <Suspense fallback={<MarketOverviewWorkbenchGridFallback language={language} />}>
           <LazyMarketOverviewWorkbenchGrid
