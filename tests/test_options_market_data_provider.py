@@ -110,16 +110,46 @@ def test_live_provider_stubs_are_disabled_by_default(provider_name: str) -> None
     provider = create_options_market_data_provider(provider_name)
 
     assert provider.provider_name == provider_name
+    assert provider.capabilities.source_type == "live_stub"
     assert provider.capabilities.live_enabled is False
     assert provider.capabilities.fixture_only is False
     assert provider.capabilities.tradeable_data is False
     assert "live_stub" in provider.capabilities.notes
+    assert "no_external_calls" in provider.capabilities.notes
 
-    with pytest.raises(OptionsProviderUnavailable) as exc_info:
-        provider.get_chain("TEM")
+    with patch("requests.sessions.Session.request") as request_mock:
+        with pytest.raises(OptionsProviderUnavailable) as exc_info:
+            provider.get_chain("TEM")
 
     assert exc_info.value.provider_name == provider_name
     assert exc_info.value.code == "options_provider_disabled"
+    request_mock.assert_not_called()
+
+
+@pytest.mark.parametrize("provider_name", ["tradier", "ibkr", "polygon"])
+def test_live_provider_stubs_expose_no_trade_or_score_grade_surface(provider_name: str) -> None:
+    provider = create_options_market_data_provider(provider_name)
+    exposed_names = {name.lower() for name in dir(provider)}
+
+    assert provider.capabilities.live_enabled is False
+    assert provider.capabilities.tradeable_data is False
+    for forbidden_name in (
+        "decision_grade",
+        "evaluate_decision",
+        "place_order",
+        "score_contract",
+        "submit_order",
+        "trade_quality_score",
+    ):
+        assert forbidden_name not in exposed_names
+
+    with patch("requests.sessions.Session.request") as request_mock:
+        for method_name in ("get_expirations", "get_underlying_quote", "get_chain"):
+            with pytest.raises(OptionsProviderUnavailable) as exc_info:
+                getattr(provider, method_name)("TEM")
+            assert exc_info.value.code == "options_provider_disabled"
+
+    request_mock.assert_not_called()
 
 
 @pytest.mark.parametrize("provider_name", ["tradier", "ibkr", "polygon"])
@@ -208,18 +238,101 @@ def test_tradier_dry_run_maps_provider_shaped_chain_without_live_or_tradeable_fl
     assert provider.capabilities.delayed is True
     assert quote["source"] == "tradier_dry_run_fixture"
     assert quote["freshness"] == "delayed_dry_run"
+    assert set(quote).issuperset(
+        {"price", "changePct", "asOf", "source", "freshness", "providerQuality"}
+    )
     assert chain["providerName"] == "tradier"
     assert chain["source"] == "tradier_dry_run_fixture"
+    assert chain["providerQuality"] == "tradier_dry_run_not_tradeable"
+    assert chain["dataQuality"]["tier"] == "delayed_usable"
     assert chain["providerCapabilities"]["liveEnabled"] is False
     assert chain["providerCapabilities"]["tradeableData"] is False
+    assert chain["providerCapabilities"]["sourceType"] == "delayed_dry_run"
     assert chain["dataQuality"]["tradeable"] is False
+    assert "not_tradeable" in chain["dataQuality"]["hints"]
+    assert set(chain).issuperset(
+        {
+            "symbol",
+            "market",
+            "currency",
+            "underlying",
+            "chainAsOf",
+            "source",
+            "providerName",
+            "providerQuality",
+            "dataQuality",
+            "providerCapabilities",
+            "expirations",
+            "contracts",
+        }
+    )
     assert [item["date"] for item in expirations] == ["2026-06-19", "2026-08-21"]
+    assert set(expirations[0]).issuperset(
+        {"date", "dte", "type", "chainAvailable", "asOf", "source", "freshness", "warnings"}
+    )
     assert {contract["side"] for contract in chain["contracts"]} == {"call", "put"}
     assert all(contract["expiration"] == "2026-06-19" for contract in chain["contracts"])
     assert chain["contracts"][0]["impliedVolatility"] == 0.62
     assert chain["contracts"][0]["greeks"]["delta"] == 0.61
+    assert set(chain["contracts"][0]).issuperset(
+        {
+            "contractSymbol",
+            "side",
+            "expiration",
+            "strike",
+            "bid",
+            "ask",
+            "last",
+            "volume",
+            "openInterest",
+            "impliedVolatility",
+            "greeks",
+            "multiplier",
+            "source",
+            "freshness",
+            "providerQuality",
+            "dataQuality",
+            "warnings",
+        }
+    )
     assert all(contract["dataQuality"]["tradeable"] is False for contract in chain["contracts"])
     assert all(contract["freshness"] == "delayed_dry_run" for contract in chain["contracts"])
+
+
+def test_tradier_dry_run_fixture_remains_non_decision_grade_in_service() -> None:
+    provider = TradierOptionsProviderStub(
+        config=OptionsLiveProviderConfig(
+            live_providers_enabled=True,
+            enabled_provider_keys=frozenset({"tradier"}),
+            credentialed_provider_keys=frozenset({"tradier"}),
+            dry_run_provider_keys=frozenset({"tradier"}),
+        )
+    )
+    service = OptionsLabService(market_data_provider=provider, provider_name="tradier")
+
+    with patch("requests.sessions.Session.request") as request_mock:
+        decision = service.evaluate_decision(
+            {
+                "symbol": "TEM",
+                "marketDataProvider": "tradier",
+                "strategy": "long_call",
+                "expiration": "2026-06-19",
+                "targetPrice": 65,
+                "targetDate": "2026-06-19",
+                "riskBudget": 600,
+            }
+        )
+
+    assert decision.metadata.provider_name == "tradier"
+    assert decision.metadata.live_provider_enabled is False
+    assert decision.metadata.provider_capabilities["liveEnabled"] is False
+    assert decision.metadata.provider_capabilities["tradeableData"] is False
+    assert decision.data_quality.data_quality_tier == "delayed_usable"
+    assert decision.decision_grade is False
+    assert decision.decision_label == "数据不足，禁止判断"
+    assert "dry_run_source_not_decision_grade" in decision.fail_closed_reason_codes
+    assert all(item.decision_label != "有条件可交易" for item in decision.ranked_alternatives)
+    request_mock.assert_not_called()
 
 
 def test_tradier_dry_run_sanitizes_provider_mapping_errors() -> None:
@@ -280,6 +393,14 @@ def _assert_preflight_safety_contract(preflight: dict) -> None:
     assert preflight["providerSlaReadiness"]["errorState"] == "unknown"
     assert preflight["providerSlaReadiness"]["freshnessState"] == "unknown"
     assert preflight["providerSlaReadiness"]["recentErrors"] == []
+    assert preflight["providerSlaReadiness"]["readOnly"] is True
+    assert preflight["providerSlaReadiness"]["noExternalCalls"] is True
+    assert preflight["providerSlaReadiness"]["liveEnforcement"] is False
+    assert preflight["checks"]["noLiveHttpCalls"] is True
+    assert preflight["checks"]["noBrokerOrders"] is True
+    assert preflight["checks"]["noPortfolioMutations"] is True
+    assert preflight["checks"]["tradeableDataBlocked"] is True
+    assert preflight["checks"]["rawPayloadReturned"] is False
     assert set(preflight["stagingCredentialProbeArtifact"]) == ALLOWED_STAGING_PROBE_ARTIFACT_KEYS
     text = _json_lower(preflight["stagingCredentialProbeArtifact"])
     for blocked in ("api_key", "apikey", "token", "secret", "password", "authorization", "dsn"):
@@ -487,6 +608,42 @@ def test_options_provider_preflight_env_live_probe_opt_in_is_presence_only_and_s
     request_mock.assert_not_called()
     text = _json_lower(preflight)
     for blocked in ("valid_synthetic_readiness_value", "tradier_api_token", "api_token", "token"):
+        assert blocked not in text
+    _assert_preflight_safety_contract(preflight)
+
+
+def test_legacy_tradier_env_toggles_remain_fail_closed_without_live_calls_or_secret_leakage() -> None:
+    config = OptionsLiveProviderConfig.from_env(
+        {
+            "OPTIONS_TRADIER_ENABLED": "1",
+            "OPTIONS_TRADIER_DRY_RUN_ENABLED": "1",
+            "OPTIONS_TRADIER_LIVE_PROBE_ENABLED": "1",
+            "TRADIER_API_TOKEN": "valid_synthetic_readiness_value_legacy_1234567890",
+        }
+    )
+
+    with patch("requests.sessions.Session.request") as request_mock:
+        preflight = build_options_provider_live_readiness_preflight("tradier", config=config)
+
+    assert preflight["liveProvidersEnabled"] is False
+    assert preflight["providerEnabled"] is True
+    assert preflight["credentialsPresent"] is True
+    assert preflight["dryRunEnabled"] is True
+    assert preflight["readinessState"] == "disabled"
+    assert preflight["reasonCode"] == "options_provider_disabled"
+    assert preflight["liveProbe"]["enabled"] is False
+    assert preflight["liveProbe"]["explicitOptIn"] is True
+    assert preflight["liveProbe"]["reasonCode"] == "options_provider_disabled"
+    assert preflight["payloadMappable"] is None
+    request_mock.assert_not_called()
+    text = _json_lower(preflight)
+    for blocked in (
+        "valid_synthetic_readiness_value_legacy",
+        "tradier_api_token",
+        "api_token",
+        "token",
+        "secret",
+    ):
         assert blocked not in text
     _assert_preflight_safety_contract(preflight)
 
