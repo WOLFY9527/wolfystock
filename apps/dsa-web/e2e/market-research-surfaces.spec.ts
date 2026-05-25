@@ -5,7 +5,7 @@ const routes = [
   {
     path: '/zh/market-overview',
     root: 'market-overview-shell',
-    first: ['market-decision-strip', 'market-overview-summary-band'],
+    first: ['market-decision-semantics-strip', 'market-overview-decision-readiness'],
     collapsedDisclosures: [],
   },
   {
