@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminProviderCircuitDiagnosticsPage from '../AdminProviderCircuitDiagnosticsPage';
 
@@ -162,7 +162,7 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     useProductSurfaceMock.mockReturnValue({ canReadProviders: true });
   });
 
-  it('renders provider circuit states, events, quota windows, probes, and read-only boundary copy', async () => {
+  it('renders compressed operational verdict and four L1 summary metrics', async () => {
     getDiagnostics.mockResolvedValue(response);
 
     const { container } = render(<AdminProviderCircuitDiagnosticsPage />);
@@ -170,17 +170,67 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(screen.getByText('Provider 熔断诊断')).toBeInTheDocument();
     expect(container.querySelector('[data-terminal-primitive="page-shell"]')).not.toBeNull();
     expect(container.querySelector('[data-terminal-primitive="page-heading"]')).not.toBeNull();
-    expect(container.querySelector('[data-terminal-primitive="notice"]')).not.toBeNull();
     expect(container.querySelector('[data-terminal-primitive="disclosure"]')).not.toBeNull();
-    expect(await screen.findByText('页面用途')).toBeInTheDocument();
-    expect(screen.getByText('当前状态')).toBeInTheDocument();
-    expect(screen.getByText('下一步')).toBeInTheDocument();
-    expect(screen.getByText('定位 provider 熔断风险')).toBeInTheDocument();
-    expect(screen.getByText('部分生产调用应暂缓')).toBeInTheDocument();
-    expect(screen.getByText('1 个熔断打开')).toBeInTheDocument();
-    expect(screen.getByText('先核对凭证与当前熔断')).toBeInTheDocument();
-    expect(screen.getByText('需关注')).toBeInTheDocument();
-    expect(screen.getByText('诊断范围')).toBeInTheDocument();
+    expect(getDiagnostics).toHaveBeenCalledWith({ limit: 50 });
+
+    expect(await screen.findByText('L0 运行判定')).toBeInTheDocument();
+    expect(screen.getByText('Provider 熔断需要管理员处理')).toBeInTheDocument();
+    expect(within(screen.getByTestId('provider-circuit-operational-verdict')).getByText('BLOCKED')).toBeInTheDocument();
+    expect(screen.getByText('按下方动作列表先处理阻断项')).toBeInTheDocument();
+
+    const summaryMetrics = screen.getByTestId('provider-circuit-summary-metrics');
+    expect(summaryMetrics.querySelectorAll('[data-terminal-primitive="nested-block"]')).toHaveLength(4);
+    expect(within(summaryMetrics).getByText('熔断状态')).toBeInTheDocument();
+    expect(within(summaryMetrics).getByText('1 打开')).toBeInTheDocument();
+    expect(within(summaryMetrics).getByText('SLA 阻断')).toBeInTheDocument();
+    expect(within(summaryMetrics).getByText('1 观察')).toBeInTheDocument();
+    expect(within(summaryMetrics).getByText('配额压力')).toBeInTheDocument();
+    expect(within(summaryMetrics).getByText('2 拒绝')).toBeInTheDocument();
+    expect(within(summaryMetrics).getByText('探测结果')).toBeInTheDocument();
+    expect(within(summaryMetrics).getByText('1 正常')).toBeInTheDocument();
+  });
+
+  it('renders a compact ranked action list from degraded state, quota, SLA, and probe signals', async () => {
+    getDiagnostics.mockResolvedValue({
+      ...response,
+      probeEvents: {
+        ...response.probeEvents,
+        items: [
+          {
+            ...response.probeEvents.items[0],
+            resultBucket: 'timeout',
+          },
+        ],
+      },
+    });
+
+    render(<AdminProviderCircuitDiagnosticsPage />);
+
+    const actionList = await screen.findByTestId('provider-circuit-action-list');
+    const rows = within(actionList).getAllByRole('listitem');
+    expect(rows).toHaveLength(4);
+    expect(within(rows[0]).getByText('finnhub 熔断打开')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('finnhub 探测未成功')).toBeInTheDocument();
+    expect(within(rows[2]).getByText('finnhub 配额窗口出现拒绝或限流')).toBeInTheDocument();
+    expect(within(rows[3]).getByText('tradier SLA / 凭证需核对')).toBeInTheDocument();
+    expect(within(actionList).getAllByText('影响')).toHaveLength(4);
+    expect(within(actionList).getAllByText('下一步')).toHaveLength(4);
+  });
+
+  it('keeps provider, event, quota, probe, bucket, and boundary diagnostics behind collapsed L3 disclosure', async () => {
+    getDiagnostics.mockResolvedValue(response);
+
+    render(<AdminProviderCircuitDiagnosticsPage />);
+
+    expect(await screen.findByText('L3 诊断细节：熔断、SLA、事件、配额、探测')).toBeInTheDocument();
+    expect(screen.queryByText('最近熔断事件')).not.toBeInTheDocument();
+    expect(screen.queryByText('配额窗口')).not.toBeInTheDocument();
+    expect(screen.queryByText('探测事件')).not.toBeInTheDocument();
+    expect(screen.queryByText('Provider SLA / 凭证就绪')).not.toBeInTheDocument();
+    expect(screen.queryByText('Provider 429')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('展开 L3 诊断细节：熔断、SLA、事件、配额、探测'));
+
     expect((await screen.findAllByText('finnhub')).length).toBeGreaterThan(0);
     expect(screen.getAllByText('当前为诊断观测，不会改变 provider fallback 或 MarketCache 行为。').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Provider 429').length).toBeGreaterThan(0);
@@ -189,7 +239,6 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(screen.getByText('趋势请求')).toBeInTheDocument();
     expect(screen.getByText('6_20')).toBeInTheDocument();
     expect(screen.getByText('最近错误 buckets')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '展开 二级细节：探测、事件、配额窗口、路由 bucket' }));
     expect(screen.getByText('最近熔断事件')).toBeInTheDocument();
     expect(screen.getAllByText('配额窗口').length).toBeGreaterThan(0);
     expect(screen.getByText('探测事件')).toBeInTheDocument();
@@ -244,7 +293,7 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
 
     render(<AdminProviderCircuitDiagnosticsPage />);
 
-    expect(await screen.findByText('已脱敏')).toBeInTheDocument();
+    expect(await screen.findByText(/已脱敏线索/)).toBeInTheDocument();
     expect(screen.queryByText('https://provider.example/query?token=SECRET')).not.toBeInTheDocument();
   });
 
