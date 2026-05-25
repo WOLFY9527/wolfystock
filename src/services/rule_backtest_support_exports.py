@@ -10,6 +10,7 @@ import json
 from typing import Any, Callable, Mapping, Sequence
 
 from src.services.backtest_walkforward_oos import build_walk_forward_oos_evidence_from_stored_robustness
+from src.services.reason_code_vocabulary import classify_reason_codes
 
 
 def stringify_execution_trace_value(value: Any) -> str:
@@ -119,6 +120,17 @@ def _date_range_payload(data_quality: Mapping[str, Any], prefix: str) -> dict[st
     return {"start": start, "end": end}
 
 
+def _authority_reason_families(reason_codes: Sequence[str]) -> list[dict[str, Any]]:
+    return [
+        {
+            "raw_code": item.raw_code,
+            "family": item.family,
+            "scope": item.scope,
+        }
+        for item in classify_reason_codes(reason_codes)
+    ]
+
+
 def build_dataset_lineage_manifest(run: Mapping[str, Any]) -> dict[str, Any] | None:
     data_quality = _mapping_payload(run.get("data_quality"))
     if not data_quality:
@@ -128,12 +140,14 @@ def build_dataset_lineage_manifest(run: Mapping[str, Any]) -> dict[str, Any] | N
         run.get("professionalReadiness") or run.get("professional_readiness")
     )
     dataset_version = data_quality.get("dataset_version") or _readiness_dataset_version(readiness)
+    authority_reason_codes = _string_list(data_quality.get("authority_reason_codes"))
     return {
         "source": _text_or_unknown(data_quality.get("source")),
         "provider": _text_or_unknown(data_quality.get("provider")),
         "authority_status": _text_or_unknown(data_quality.get("authority_status")),
         "authority_source_type": _text_or_unknown(data_quality.get("authority_source_type")),
-        "authority_reason_codes": _string_list(data_quality.get("authority_reason_codes")),
+        "authority_reason_codes": authority_reason_codes,
+        "authority_reason_families": _authority_reason_families(authority_reason_codes),
         "authority_allowed": _authority_allowed_value(data_quality),
         "degraded_fill_only": _degraded_fill_only_value(data_quality),
         "requested_range": _date_range_payload(data_quality, "requested"),

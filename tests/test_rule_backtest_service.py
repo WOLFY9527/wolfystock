@@ -2405,6 +2405,7 @@ class RuleBacktestTestCase(unittest.TestCase):
             "authority_status": "allowed",
             "authority_source_type": "cache_snapshot",
             "authority_reason_codes": [],
+            "authority_reason_families": [],
             "authority_allowed": True,
             "degraded_fill_only": False,
             "requested_range": {"start": "2024-01-02", "end": "2024-01-31"},
@@ -2418,6 +2419,56 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertNotIn("hash_sha256", manifest["dataset_lineage"])
         self.assertEqual(manifest["run"]["id"], 654)
         self.assertEqual(reproducibility["result_authority"]["read_mode"], "stored_first")
+
+    def test_support_manifests_project_authority_reason_families_sidecar_from_raw_codes(self) -> None:
+        run = {
+            "id": 656,
+            "code": "AAPL",
+            "status": "completed",
+            "data_quality": {
+                "source": "local_us_parquet",
+                "provider": "Local US Parquet",
+                "authority_status": "rejected",
+                "authority_source_type": "cache_snapshot",
+                "authority_reason_codes": [
+                    "provider_forbidden_for_use_case",
+                    "totally_new_reason_code",
+                ],
+                "requested_start": "2024-01-02",
+                "requested_end": "2024-01-31",
+                "actual_start": "2024-01-03",
+                "actual_end": "2024-01-19",
+                "bar_count": 12,
+            },
+        }
+
+        manifest = build_support_bundle_manifest(run)
+        reproducibility = build_support_bundle_reproducibility_manifest(run)
+        lineage = manifest["dataset_lineage"]
+
+        self.assertEqual(
+            lineage["authority_reason_codes"],
+            ["provider_forbidden_for_use_case", "totally_new_reason_code"],
+        )
+        self.assertEqual(
+            lineage["authority_reason_families"],
+            [
+                {
+                    "raw_code": "provider_forbidden_for_use_case",
+                    "family": "authority_rejected",
+                    "scope": "backtest_authority",
+                },
+                {
+                    "raw_code": "totally_new_reason_code",
+                    "family": "unclassified",
+                    "scope": None,
+                },
+            ],
+        )
+        self.assertEqual(reproducibility["dataset_lineage"], lineage)
+        self.assertFalse(lineage["authority_allowed"])
+        self.assertFalse(lineage["degraded_fill_only"])
+        self.assertEqual(lineage["dataset_version"], "unknown")
 
     def test_support_manifests_keep_authority_reason_fields_empty_when_missing(self) -> None:
         run = {
@@ -2441,6 +2492,7 @@ class RuleBacktestTestCase(unittest.TestCase):
 
         self.assertEqual(lineage["authority_status"], "unknown")
         self.assertEqual(lineage["authority_reason_codes"], [])
+        self.assertEqual(lineage["authority_reason_families"], [])
         self.assertIsNone(lineage["authority_allowed"])
         self.assertFalse(lineage["degraded_fill_only"])
         self.assertEqual(lineage["authority_source_type"], "unknown")

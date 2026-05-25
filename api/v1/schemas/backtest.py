@@ -1246,6 +1246,12 @@ class RuleBacktestCancelResponse(RuleBacktestStatusResponse):
     pass
 
 
+class RuleBacktestAuthorityReasonFamilyResponse(BaseModel):
+    raw_code: Optional[str] = None
+    family: Optional[str] = None
+    scope: Optional[str] = None
+
+
 class RuleBacktestDatasetLineageResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -1254,6 +1260,7 @@ class RuleBacktestDatasetLineageResponse(BaseModel):
     authority_status: Optional[str] = None
     authority_source_type: Optional[str] = None
     authority_reason_codes: List[str] = Field(default_factory=list)
+    authority_reason_families: List[RuleBacktestAuthorityReasonFamilyResponse] = Field(default_factory=list)
     authority_allowed: Optional[bool] = None
     degraded_fill_only: Optional[bool] = None
     requested_range: Dict[str, Any] = Field(default_factory=dict)

@@ -2384,6 +2384,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "authority_status": "allowed",
             "authority_source_type": "cache_snapshot",
             "authority_reason_codes": [],
+            "authority_reason_families": [],
             "authority_allowed": True,
             "degraded_fill_only": False,
             "requested_range": {"start": "2024-01-01", "end": "2024-01-31"},
@@ -2409,6 +2410,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.artifact_counts["trade_rows_count"], 0)
         self.assertEqual(response.dataset_lineage.model_dump(), payload["dataset_lineage"])
         self.assertEqual(response.dataset_lineage.authority_reason_codes, [])
+        self.assertEqual(response.dataset_lineage.authority_reason_families, [])
         self.assertTrue(response.dataset_lineage.authority_allowed)
         self.assertFalse(response.dataset_lineage.degraded_fill_only)
         service.get_support_bundle_manifest.assert_called_once_with(123)
@@ -2477,7 +2479,14 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "provider": "Local US Parquet",
             "authority_status": "allowed",
             "authority_source_type": "cache_snapshot",
-            "authority_reason_codes": [],
+            "authority_reason_codes": ["proxy_source_not_reproducible"],
+            "authority_reason_families": [
+                {
+                    "raw_code": "proxy_source_not_reproducible",
+                    "family": "reproducibility_degraded",
+                    "scope": "backtest_authority",
+                }
+            ],
             "authority_allowed": True,
             "degraded_fill_only": False,
             "requested_range": {"start": "2024-01-01", "end": "2024-01-31"},
@@ -2498,7 +2507,17 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.execution_assumptions_fingerprint["source"], "summary.execution_assumptions_snapshot")
         self.assertEqual(response.result_authority["read_mode"], "stored_first")
         self.assertEqual(response.dataset_lineage.model_dump(), payload["dataset_lineage"])
-        self.assertEqual(response.dataset_lineage.authority_reason_codes, [])
+        self.assertEqual(response.dataset_lineage.authority_reason_codes, ["proxy_source_not_reproducible"])
+        self.assertEqual(
+            [item.model_dump() for item in response.dataset_lineage.authority_reason_families],
+            [
+                {
+                    "raw_code": "proxy_source_not_reproducible",
+                    "family": "reproducibility_degraded",
+                    "scope": "backtest_authority",
+                }
+            ],
+        )
         self.assertTrue(response.dataset_lineage.authority_allowed)
         self.assertFalse(response.dataset_lineage.degraded_fill_only)
         service.get_support_bundle_reproducibility_manifest.assert_called_once_with(123)

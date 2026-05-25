@@ -665,6 +665,50 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         self.assertFalse(payloads["manifest"]["readback_integrity"]["used_live_storage_repair"])
         self.assertGreater(payloads["manifest"]["artifact_counts"]["execution_trace_rows_count"], 0)
 
+    def test_support_bundle_e2e_projects_authority_reason_families_for_local_cache_lineage(self) -> None:
+        service, response = self._run_completed_backtest()
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+
+        summary = json.loads(run_row.summary_json)
+        data_quality = dict(summary.get("data_quality") or {})
+        data_quality["authority_reason_codes"] = [
+            "proxy_source_not_reproducible",
+            "totally_new_reason_code",
+        ]
+        summary["data_quality"] = data_quality
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        payloads = self._assert_support_bundle_surface(
+            run_id=int(response["id"]),
+            trace_available=True,
+        )
+
+        lineage = payloads["manifest"]["dataset_lineage"]
+        self.assertEqual(lineage["source"], "local_us_parquet")
+        self.assertEqual(lineage["authority_source_type"], "cache_snapshot")
+        self.assertEqual(
+            lineage["authority_reason_codes"],
+            ["proxy_source_not_reproducible", "totally_new_reason_code"],
+        )
+        self.assertEqual(
+            lineage["authority_reason_families"],
+            [
+                {
+                    "raw_code": "proxy_source_not_reproducible",
+                    "family": "reproducibility_degraded",
+                    "scope": "backtest_authority",
+                },
+                {
+                    "raw_code": "totally_new_reason_code",
+                    "family": "unclassified",
+                    "scope": None,
+                },
+            ],
+        )
+        self.assertEqual(lineage, payloads["reproducibility"]["dataset_lineage"])
+        self.assertGreater(payloads["manifest"]["artifact_counts"]["execution_trace_rows_count"], 0)
+
     def test_support_bundle_e2e_live_storage_repair_preserves_http_contract(self) -> None:
         service, response = self._run_completed_backtest()
         deleted = service.repo.delete_trades_by_run_ids([response["id"]])
