@@ -399,6 +399,7 @@ class PortfolioSnapshotResponse(BaseModel):
     portfolioRiskEvidence: Optional[Dict[str, Any]] = None
     sourceAuthorityState: Optional[str] = None
     fxFreshnessState: Optional[str] = None
+    valuationLineageState: Optional[str] = None
     holdingsLineageState: Optional[str] = None
     cashLedgerCompletenessState: Optional[str] = None
     benchmarkMappingState: Optional[str] = None
@@ -525,6 +526,7 @@ class PortfolioRiskResponse(BaseModel):
     portfolioRiskEvidence: Optional[Dict[str, Any]] = None
     sourceAuthorityState: Optional[str] = None
     fxFreshnessState: Optional[str] = None
+    valuationLineageState: Optional[str] = None
     holdingsLineageState: Optional[str] = None
     cashLedgerCompletenessState: Optional[str] = None
     benchmarkMappingState: Optional[str] = None

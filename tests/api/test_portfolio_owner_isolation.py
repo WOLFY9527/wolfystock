@@ -410,6 +410,16 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
         self.assertEqual(snapshot_payload["riskDiagnostics"]["sourceAuthority"]["state"], "manual")
         self.assertEqual(risk_payload["sourceAuthorityState"], "manual")
         self.assertEqual(risk_payload["riskDiagnostics"]["sourceAuthority"]["state"], "manual")
+        for payload in (snapshot_payload, risk_payload):
+            self.assertIn("valuationLineageState", payload)
+            self.assertIn("valuationLineage", payload["riskDiagnostics"])
+            self.assertEqual(
+                payload["valuationLineageState"],
+                payload["riskDiagnostics"]["valuationLineage"]["state"],
+            )
+            self._assert_public_export_safe_text(
+                json.dumps(payload["riskDiagnostics"]["valuationLineage"], ensure_ascii=False, sort_keys=True)
+            )
         self.assertTrue(snapshot_payload["portfolioRiskEvidence"]["admin_diagnostics"]["sanitized_only"])
         self.assertFalse(snapshot_payload["portfolioRiskEvidence"]["admin_diagnostics"]["raw_payload_stored"])
         self.assertTrue(risk_payload["portfolioRiskEvidence"]["admin_diagnostics"]["sanitized_only"])

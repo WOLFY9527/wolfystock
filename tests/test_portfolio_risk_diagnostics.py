@@ -118,6 +118,13 @@ class PortfolioRiskDiagnosticsTestCase(unittest.TestCase):
         )
 
         self.assertEqual(snapshot["accounts"][0]["positions"][0]["market_value_base"], 910.0)
+        self.assertEqual(snapshot["total_cash"], 300.0)
+        self.assertEqual(snapshot["total_market_value"], 910.0)
+        self.assertEqual(snapshot["total_equity"], 1210.0)
+        self.assertEqual(diagnostics["valuationLineageState"], "fx_stale")
+        self.assertEqual(diagnostics["riskDiagnostics"]["valuationLineage"]["state"], "fx_stale")
+        self.assertEqual(diagnostics["riskDiagnostics"]["valuationLineage"]["details"]["fx"]["state"], "stale")
+        self.assertIn("fx_stale", diagnostics["riskDiagnostics"]["valuationLineage"]["details"]["flags"])
         self.assertEqual(diagnostics["fxFreshnessState"], "stale")
         self.assertLessEqual(diagnostics["confidenceCap"]["value"], 75)
         self.assertIn("FX 汇率已过期", diagnostics["confidenceCap"]["limitation_labels"])
@@ -176,6 +183,113 @@ class PortfolioRiskDiagnosticsTestCase(unittest.TestCase):
             ],
         )
 
+    def test_valuation_lineage_marks_price_fallback_fx_inverse_and_partial_cash_without_changing_values(self) -> None:
+        snapshot = {
+            "as_of": "2026-05-10",
+            "cost_method": "fifo",
+            "currency": "CNY",
+            "account_count": 2,
+            "total_cash": 1000.0,
+            "total_market_value": 2500.0,
+            "total_equity": 3500.0,
+            "fx_stale": False,
+            "fx_rates": [
+                {
+                    "from_currency": "USD",
+                    "to_currency": "CNY",
+                    "rate": 7.2,
+                    "rate_date": "2026-05-10",
+                    "source": "manual",
+                    "is_stale": False,
+                    "updated_at": "2026-05-10T09:25:00",
+                    "source_direction": "inverse",
+                }
+            ],
+            "analytics": {"risk": {"fx_unavailable": False}},
+            "accounts": [
+                {
+                    "account_id": 1,
+                    "account_name": "Fallback",
+                    "market": "us",
+                    "base_currency": "CNY",
+                    "total_cash": 1000.0,
+                    "total_market_value": 1000.0,
+                    "positions": [
+                        {
+                            "symbol": "AAPL",
+                            "market": "us",
+                            "currency": "USD",
+                            "quantity": 1.0,
+                            "market_value_base": 1000.0,
+                            "display_fx_status": "live",
+                            "price_source": "avg_cost_fallback",
+                            "price_as_of": None,
+                            "is_price_fallback": True,
+                            "price_fallback_reason": "current_quote_unavailable",
+                        }
+                    ],
+                },
+                {
+                    "account_id": 2,
+                    "account_name": "Current",
+                    "market": "us",
+                    "base_currency": "CNY",
+                    "total_cash": 0.0,
+                    "total_market_value": 1500.0,
+                    "positions": [
+                        {
+                            "symbol": "MSFT",
+                            "market": "us",
+                            "currency": "USD",
+                            "quantity": 1.0,
+                            "market_value_base": 1500.0,
+                            "display_fx_status": "live",
+                            "price_source": "daily_close_quote",
+                            "price_as_of": "2026-05-10",
+                            "is_price_fallback": False,
+                            "price_fallback_reason": None,
+                        }
+                    ],
+                },
+            ],
+        }
+        repo = _FakeRepo(
+            trades={
+                1: [SimpleNamespace(id=11, trade_uid="TR-001", dedup_hash="DEDUP-001", is_active=True)],
+                2: [SimpleNamespace(id=12, trade_uid="TR-002", dedup_hash="DEDUP-002", is_active=True)],
+            },
+            cash_entries={1: [SimpleNamespace(id=21, currency="CNY")]},
+            corporate_actions={1: [], 2: []},
+        )
+        service = _FakePortfolioService(repo=repo)
+
+        diagnostics = build_portfolio_risk_diagnostics(
+            portfolio_service=service,
+            snapshot=snapshot,
+            account_id=None,
+            as_of=date(2026, 5, 10),
+            cost_method="fifo",
+        )
+
+        self.assertEqual(snapshot["total_cash"], 1000.0)
+        self.assertEqual(snapshot["total_market_value"], 2500.0)
+        self.assertEqual(snapshot["total_equity"], 3500.0)
+        self.assertEqual(diagnostics["valuationLineageState"], "price_fallback")
+
+        lineage = diagnostics["riskDiagnostics"]["valuationLineage"]
+        self.assertEqual(lineage["state"], "price_fallback")
+        self.assertEqual(lineage["details"]["price"]["state"], "fallback")
+        self.assertEqual(lineage["details"]["price"]["fallback_count"], 1)
+        self.assertEqual(lineage["details"]["price"]["fallback_reasons"], ["current_quote_unavailable"])
+        self.assertEqual(lineage["details"]["fx"]["state"], "inverse")
+        self.assertEqual(lineage["details"]["fx"]["inverse_pair_count"], 1)
+        self.assertEqual(lineage["details"]["cash"]["state"], "partial")
+        self.assertEqual(lineage["details"]["cash"]["account_coverage"], {"covered": 1, "total": 2})
+        self.assertEqual(
+            lineage["details"]["flags"],
+            ["price_fallback", "fx_inverse", "cash_partial"],
+        )
+
     def test_missing_holdings_cash_and_unknown_authority_fail_closed(self) -> None:
         snapshot = {
             "as_of": "2026-05-10",
@@ -220,6 +334,9 @@ class PortfolioRiskDiagnosticsTestCase(unittest.TestCase):
         )
 
         self.assertEqual(diagnostics["holdingsLineageState"], "missing")
+        self.assertEqual(diagnostics["valuationLineageState"], "fx_fallback_1_to_1")
+        self.assertEqual(diagnostics["riskDiagnostics"]["valuationLineage"]["details"]["fx"]["state"], "fallback_1_to_1")
+        self.assertIn("fx_fallback_1_to_1", diagnostics["riskDiagnostics"]["valuationLineage"]["details"]["flags"])
         self.assertEqual(diagnostics["cashLedgerCompletenessState"], "missing")
         self.assertEqual(diagnostics["sourceAuthorityState"], "unknown")
         self.assertEqual(diagnostics["riskDiagnostics"]["sourceAuthority"]["state"], "unknown")
@@ -272,6 +389,10 @@ class PortfolioRiskDiagnosticsTestCase(unittest.TestCase):
                             "quantity": 10.0,
                             "market_value_base": 2500.0,
                             "display_fx_status": "live",
+                            "price_source": "daily_close_quote",
+                            "price_as_of": "2026-05-10",
+                            "is_price_fallback": False,
+                            "price_fallback_reason": "raw_provider_payload:SUPERSECRET",
                         }
                     ],
                 }
@@ -315,6 +436,8 @@ class PortfolioRiskDiagnosticsTestCase(unittest.TestCase):
         )
 
         self.assertEqual(diagnostics["benchmarkMappingState"], "unmapped")
+        self.assertEqual(diagnostics["valuationLineageState"], "current")
+        self.assertEqual(diagnostics["riskDiagnostics"]["valuationLineage"]["details"]["price"]["state"], "current")
         self.assertEqual(diagnostics["factorMappingState"], "unmapped")
         self.assertIn("benchmark_relative_claims_disabled", diagnostics["confidenceCap"]["disabled_claims"])
         self.assertIn("factor_risk_claims_disabled", diagnostics["confidenceCap"]["disabled_claims"])
@@ -324,6 +447,8 @@ class PortfolioRiskDiagnosticsTestCase(unittest.TestCase):
         self.assertFalse(diagnostics["portfolioRiskEvidence"]["admin_diagnostics"]["raw_payload_stored"])
 
         payload_text = json.dumps(diagnostics, ensure_ascii=False, sort_keys=True)
+        lineage_text = json.dumps(diagnostics["riskDiagnostics"]["valuationLineage"], ensure_ascii=False, sort_keys=True)
+        self.assertNotIn("raw_provider_payload", lineage_text)
         self.assertNotIn("SUPERSECRET", payload_text)
         self.assertNotIn("VERYSECRET", payload_text)
         self.assertNotIn("RAWSECRET", payload_text)

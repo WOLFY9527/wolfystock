@@ -33,7 +33,26 @@ LABEL_FACTOR_MISSING = "因子映射暂缺"
 LABEL_AUTHORITY_REVIEW = "依据需复核"
 LABEL_OBSERVATION_ONLY = "仅供风险观察"
 LABEL_FORBIDDEN = "数据不足，禁止判断"
+LABEL_PRICE_FALLBACK = "估值价格使用回退"
+LABEL_FX_INVERSE = "FX 使用反向汇率"
+LABEL_VALUATION_LINEAGE_REVIEW = "估值来源需复核"
 CONFIDENCE_POLICY_VERSION = "portfolio_risk_confidence_cap_v1"
+
+KNOWN_PRICE_SOURCES = {
+    "daily_close_quote",
+    "broker_sync_snapshot",
+    "avg_cost_fallback",
+    "missing",
+}
+KNOWN_PRICE_FALLBACK_REASONS = {
+    "current_quote_unavailable",
+    "missing",
+}
+KNOWN_FX_SOURCE_DIRECTIONS = {
+    "direct",
+    "inverse",
+    "missing",
+}
 
 
 def _normalize_currency(value: Any) -> str:
@@ -64,6 +83,24 @@ def _append_unique(target: list[str], value: str | None) -> None:
     text = str(value or "").strip()
     if text and text not in target:
         target.append(text)
+
+
+def _safe_enum(value: Any, *, allowed: set[str], default: str = "other") -> str:
+    normalized = str(value or "").strip().lower().replace(" ", "_")
+    if not normalized:
+        return "missing" if "missing" in allowed else default
+    return normalized if normalized in allowed else default
+
+
+def _iter_snapshot_positions(snapshot: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    positions: list[Mapping[str, Any]] = []
+    for account in list(snapshot.get("accounts") or []):
+        if not isinstance(account, Mapping):
+            continue
+        for position in list(account.get("positions") or []):
+            if isinstance(position, Mapping):
+                positions.append(position)
+    return positions
 
 
 def _coverage_state(*, covered: int, total: int) -> str:
@@ -108,6 +145,250 @@ def _source_class_for_authority(state: str) -> AiEvidenceSourceClass:
     if normalized == "mixed":
         return AiEvidenceSourceClass.FALLBACK
     return AiEvidenceSourceClass.INFERRED
+
+
+def _build_price_lineage_details(snapshot: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
+    positions = _iter_snapshot_positions(snapshot)
+    price_sources = sorted(
+        {
+            _safe_enum(position.get("price_source"), allowed=KNOWN_PRICE_SOURCES)
+            for position in positions
+        }
+    )
+    price_fallback_positions = [
+        position
+        for position in positions
+        if bool(position.get("is_price_fallback"))
+        or _safe_enum(position.get("price_source"), allowed=KNOWN_PRICE_SOURCES) == "avg_cost_fallback"
+    ]
+    price_fallback_reasons = sorted(
+        {
+            _safe_enum(
+                position.get("price_fallback_reason"),
+                allowed=KNOWN_PRICE_FALLBACK_REASONS,
+            )
+            for position in price_fallback_positions
+        }
+    )
+    price_as_of_present = len(
+        [
+            position
+            for position in positions
+            if str(position.get("price_as_of") or "").strip()
+        ]
+    )
+    if not positions:
+        price_state = "unknown"
+    elif price_fallback_positions:
+        price_state = "fallback"
+    elif "missing" in price_sources:
+        price_state = "unknown"
+    else:
+        price_state = "current"
+
+    return price_state, {
+        "state": price_state,
+        "position_count": len(positions),
+        "sources": price_sources or ["missing"],
+        "fallback_count": len(price_fallback_positions),
+        "fallback_reasons": price_fallback_reasons,
+        "as_of_coverage": {
+            "present": price_as_of_present,
+            "missing": max(0, len(positions) - price_as_of_present),
+        },
+    }
+
+
+def _build_fx_lineage_details(
+    *,
+    fx_state: str,
+    fx_rates: list[Mapping[str, Any]],
+    fx_missing_pairs: list[str],
+    fx_stale_pairs: list[str],
+    fx_unavailable: bool,
+    fx_no_usable_as_of: bool,
+) -> tuple[str, dict[str, Any]]:
+    fx_directions = sorted(
+        {
+            _safe_enum(item.get("source_direction"), allowed=KNOWN_FX_SOURCE_DIRECTIONS)
+            for item in fx_rates
+        }
+    )
+    fx_inverse_count = len(
+        [
+            item
+            for item in fx_rates
+            if _safe_enum(item.get("source_direction"), allowed=KNOWN_FX_SOURCE_DIRECTIONS) == "inverse"
+        ]
+    )
+    if fx_unavailable or fx_missing_pairs:
+        fx_lineage_state = "fallback_1_to_1"
+    elif fx_state == "stale" and fx_no_usable_as_of:
+        fx_lineage_state = "severe_stale"
+    elif fx_state == "stale":
+        fx_lineage_state = "stale"
+    elif fx_inverse_count > 0:
+        fx_lineage_state = "inverse"
+    else:
+        fx_lineage_state = "current"
+
+    return fx_lineage_state, {
+        "state": fx_lineage_state,
+        "pair_count": len(fx_rates),
+        "source_directions": fx_directions or ["missing"],
+        "inverse_pair_count": fx_inverse_count,
+        "stale_pair_count": len(fx_stale_pairs),
+        "missing_pair_count": len(fx_missing_pairs),
+        "fallback_1_to_1_active": bool(fx_unavailable or fx_missing_pairs),
+        "severe_stale": bool(fx_no_usable_as_of),
+    }
+
+
+def _valuation_lineage_flags(*, price_state: str, fx_lineage_state: str, cash_state: str) -> list[str]:
+    flags: list[str] = []
+    if price_state == "fallback":
+        _append_unique(flags, "price_fallback")
+    if fx_lineage_state == "fallback_1_to_1":
+        _append_unique(flags, "fx_fallback_1_to_1")
+    if fx_lineage_state == "severe_stale":
+        _append_unique(flags, "fx_severe_stale")
+    if fx_lineage_state in {"stale", "severe_stale"}:
+        _append_unique(flags, "fx_stale")
+    if fx_lineage_state == "inverse":
+        _append_unique(flags, "fx_inverse")
+    if cash_state == "partial":
+        _append_unique(flags, "cash_partial")
+    elif cash_state == "missing":
+        _append_unique(flags, "cash_missing")
+    return flags
+
+
+def _valuation_lineage_state(*, price_state: str, fx_lineage_state: str, cash_state: str) -> str:
+    if fx_lineage_state == "fallback_1_to_1":
+        return "fx_fallback_1_to_1"
+    if fx_lineage_state == "severe_stale":
+        return "fx_severe_stale"
+    if price_state == "fallback":
+        return "price_fallback"
+    if fx_lineage_state == "stale":
+        return "fx_stale"
+    if fx_lineage_state == "inverse":
+        return "fx_inverse"
+    if cash_state == "partial":
+        return "partial_cash"
+    if cash_state == "missing":
+        return "cash_missing"
+    if price_state == "unknown":
+        return "unknown"
+    return "current"
+
+
+def _valuation_lineage_issues(
+    *,
+    valuation_state: str,
+    price_state: str,
+    fx_lineage_state: str,
+    cash_state: str,
+) -> list[PortfolioRiskDiagnosticIssue]:
+    issues: list[PortfolioRiskDiagnosticIssue] = []
+    if price_state == "fallback":
+        issues.append(
+            PortfolioRiskDiagnosticIssue(
+                code="valuation_price_fallback",
+                label=LABEL_PRICE_FALLBACK,
+                detail="At least one holding valuation used the existing average-cost price fallback metadata.",
+            )
+        )
+    if fx_lineage_state == "inverse":
+        issues.append(
+            PortfolioRiskDiagnosticIssue(
+                code="valuation_fx_inverse",
+                label=LABEL_FX_INVERSE,
+                detail="At least one FX pair used an existing inverse-rate metadata path.",
+            )
+        )
+    if fx_lineage_state in {"stale", "severe_stale", "fallback_1_to_1"}:
+        label = LABEL_FX_MISSING if fx_lineage_state == "fallback_1_to_1" else LABEL_FX_STALE
+        issues.append(
+            PortfolioRiskDiagnosticIssue(
+                code=f"valuation_{fx_lineage_state}",
+                label=label,
+                detail="Valuation lineage reflects existing stale or unavailable FX metadata.",
+            )
+        )
+    if cash_state in {"partial", "missing"}:
+        issues.append(
+            PortfolioRiskDiagnosticIssue(
+                code=f"valuation_cash_{cash_state}",
+                label=LABEL_CASH_INCOMPLETE,
+                detail="Cash completeness state is projected from existing ledger/sync coverage metadata.",
+            )
+        )
+    if valuation_state == "unknown":
+        issues.append(
+            PortfolioRiskDiagnosticIssue(
+                code="valuation_lineage_unknown",
+                label=LABEL_VALUATION_LINEAGE_REVIEW,
+                detail="Valuation metadata was insufficient to classify all lineage components.",
+            )
+        )
+    return issues
+
+
+def _build_valuation_lineage_section(
+    *,
+    snapshot: Mapping[str, Any],
+    cash_state: str,
+    cash_present_accounts: int,
+    total_accounts: int,
+    fx_state: str,
+    fx_rates: list[Mapping[str, Any]],
+    fx_missing_pairs: list[str],
+    fx_stale_pairs: list[str],
+    fx_unavailable: bool,
+    fx_no_usable_as_of: bool,
+) -> tuple[str, PortfolioRiskEvidenceSection]:
+    price_state, price_details = _build_price_lineage_details(snapshot)
+    fx_lineage_state, fx_details = _build_fx_lineage_details(
+        fx_state=fx_state,
+        fx_rates=fx_rates,
+        fx_missing_pairs=fx_missing_pairs,
+        fx_stale_pairs=fx_stale_pairs,
+        fx_unavailable=fx_unavailable,
+        fx_no_usable_as_of=fx_no_usable_as_of,
+    )
+    valuation_state = _valuation_lineage_state(
+        price_state=price_state,
+        fx_lineage_state=fx_lineage_state,
+        cash_state=cash_state,
+    )
+    section = PortfolioRiskEvidenceSection(
+        state=valuation_state,
+        summary="Valuation lineage summarizes existing price, FX, and cash completeness metadata without changing accounting values.",
+        issues=_valuation_lineage_issues(
+            valuation_state=valuation_state,
+            price_state=price_state,
+            fx_lineage_state=fx_lineage_state,
+            cash_state=cash_state,
+        ),
+        details={
+            "price": price_details,
+            "fx": fx_details,
+            "cash": {
+                "state": cash_state,
+                "account_coverage": {
+                    "covered": cash_present_accounts,
+                    "total": total_accounts,
+                },
+            },
+            "flags": _valuation_lineage_flags(
+                price_state=price_state,
+                fx_lineage_state=fx_lineage_state,
+                cash_state=cash_state,
+            ),
+        },
+    )
+    return valuation_state, section
 
 
 @dataclass(slots=True)
@@ -168,6 +449,7 @@ class PortfolioRiskDiagnostics:
     cash_ledger_completeness: PortfolioRiskEvidenceSection
     transaction_lineage: PortfolioRiskEvidenceSection
     fx_freshness: PortfolioRiskEvidenceSection
+    valuation_lineage: PortfolioRiskEvidenceSection
     cost_basis_coverage: PortfolioRiskEvidenceSection
     source_authority: PortfolioRiskEvidenceSection
     benchmark_factor_mapping: PortfolioRiskEvidenceSection
@@ -180,6 +462,7 @@ class PortfolioRiskDiagnostics:
             "cashLedgerCompleteness": self.cash_ledger_completeness.to_dict(),
             "transactionLineage": self.transaction_lineage.to_dict(),
             "fxFreshness": self.fx_freshness.to_dict(),
+            "valuationLineage": self.valuation_lineage.to_dict(),
             "costBasisCoverage": self.cost_basis_coverage.to_dict(),
             "sourceAuthority": self.source_authority.to_dict(),
             "benchmarkFactorMapping": self.benchmark_factor_mapping.to_dict(),
@@ -631,6 +914,18 @@ def build_portfolio_risk_diagnostics(
             "no_usable_as_of": fx_no_usable_as_of,
         },
     )
+    valuation_state, valuation_section = _build_valuation_lineage_section(
+        snapshot=snapshot,
+        cash_state=cash_state,
+        cash_present_accounts=cash_present_accounts,
+        total_accounts=len(accounts),
+        fx_state=fx_state,
+        fx_rates=[item for item in fx_rates if isinstance(item, Mapping)],
+        fx_missing_pairs=fx_missing_pairs,
+        fx_stale_pairs=fx_stale_pairs,
+        fx_unavailable=fx_unavailable,
+        fx_no_usable_as_of=fx_no_usable_as_of,
+    )
     cost_section = PortfolioRiskEvidenceSection(
         state="complete",
         summary="Cost-basis coverage reports the active accounting method without changing lot or P&L semantics.",
@@ -720,6 +1015,7 @@ def build_portfolio_risk_diagnostics(
         cash_ledger_completeness=cash_section,
         transaction_lineage=transaction_section,
         fx_freshness=fx_section,
+        valuation_lineage=valuation_section,
         cost_basis_coverage=cost_section,
         source_authority=source_section,
         benchmark_factor_mapping=mapping_section,
@@ -731,6 +1027,7 @@ def build_portfolio_risk_diagnostics(
         "portfolioRiskEvidence": evidence_packet,
         "sourceAuthorityState": authority_state,
         "fxFreshnessState": fx_state,
+        "valuationLineageState": valuation_state,
         "holdingsLineageState": holdings_state,
         "cashLedgerCompletenessState": cash_state,
         "benchmarkMappingState": benchmark_mapping_state,
