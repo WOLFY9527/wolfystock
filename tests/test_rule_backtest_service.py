@@ -1119,6 +1119,51 @@ class RuleBacktestTestCase(unittest.TestCase):
             response["professionalReadiness"]["categories"]["reproducibility"]["blockers"],
         )
 
+    def test_rule_backtest_data_quality_marks_unknown_history_source_as_degraded_fill_only(self) -> None:
+        service = RuleBacktestService(self.db)
+        run_kwargs = {
+            "code": "600519",
+            "strategy_text": "Buy when Close > MA3. Sell when Close < MA3.",
+            "start_date": "2024-01-05",
+            "end_date": "2024-01-20",
+            "lookback_bars": 20,
+            "benchmark_mode": "same_symbol_buy_and_hold",
+            "confirmed": True,
+        }
+
+        with self.db.get_session() as session:
+            rows = session.query(StockDaily).filter(StockDaily.code == "600519").all()
+            for row in rows:
+                row.data_source = "local_us_parquet"
+            session.commit()
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            local_response = service.run_backtest(**run_kwargs)
+
+        with self.db.get_session() as session:
+            rows = session.query(StockDaily).filter(StockDaily.code == "600519").all()
+            for row in rows:
+                row.data_source = "Unknown"
+            session.commit()
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            unknown_response = service.run_backtest(**run_kwargs)
+
+        data_quality = unknown_response["data_quality"]
+        self.assertEqual(data_quality["source"], "Unknown")
+        self.assertEqual(data_quality["authority_status"], "degraded_fill_only")
+        self.assertEqual(data_quality["authority_source_type"], "missing")
+        self.assertEqual(data_quality["authority_reason_codes"], ["source_authority_unknown"])
+        self.assertTrue(any(warning["code"] == "backtest_authority_degraded" for warning in data_quality["warnings"]))
+        self.assertEqual(unknown_response["professionalReadiness"]["reproducibility_state"], "degraded_source_authority")
+        self.assertIn(
+            "source_authority_unknown",
+            unknown_response["professionalReadiness"]["categories"]["reproducibility"]["blockers"],
+        )
+        for key in ("trade_count", "total_return_pct", "max_drawdown_pct", "final_equity"):
+            self.assertEqual(unknown_response[key], local_response[key])
+        self.assertEqual(unknown_response["trades"], local_response["trades"])
+
     def test_rule_backtest_data_quality_reports_missing_bars_and_anomalies(self) -> None:
         service = RuleBacktestService(self.db)
         self._seed_history(
@@ -1749,6 +1794,54 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("tax_model_missing", readiness["categories"]["cost_model"]["blockers"])
         self.assertIn("market_impact_model_missing", readiness["categories"]["cost_model"]["blockers"])
         self.assertIn("dataset_version_unknown", readiness["categories"]["reproducibility"]["blockers"])
+
+    def test_professional_readiness_treats_unknown_authority_as_reproducibility_blocker(self) -> None:
+        readiness = build_backtest_professional_readiness(
+            data_quality={
+                "authority_status": "unknown",
+                "authority_reason_codes": ["source_authority_unknown"],
+                "adjustment_mode": "adjusted_ohlc",
+                "return_basis": "adjusted_total_return",
+                "dividends_handled": "handled",
+                "splits_handled": "handled",
+            },
+            execution_assumptions={
+                "trading_calendar": "XNYS",
+                "holiday_calendar": "modeled",
+                "half_day_policy": "modeled",
+                "volume_participation_limit": 0.1,
+                "partial_fill_supported": True,
+                "no_fill_supported": True,
+                "limit_up_down_handling": "modeled",
+                "halt_handling": "modeled",
+                "fee_model": {"commission_bps": 2.5},
+                "slippage_model": {"slippage_bps": 1.25},
+            },
+            cost_capacity_diagnostics={
+                "assumptions": {
+                    "spread_bps": 0.5,
+                    "minimum_fee": 1.0,
+                    "tax_model": "modeled",
+                    "market_impact_model": "modeled",
+                }
+            },
+            result_authority={
+                "domains": {
+                    "execution_assumptions_snapshot": {
+                        "completeness": "complete",
+                    }
+                },
+                "reproducibility_ready": True,
+            },
+            dataset_version="fixture-v1",
+        ).to_dict()
+
+        self.assertFalse(readiness["professional_reproducibility_ready"])
+        self.assertEqual(readiness["reproducibility_state"], "blocked_source_authority")
+        self.assertIn(
+            "source_authority_unknown",
+            readiness["categories"]["reproducibility"]["blockers"],
+        )
 
     def test_universe_jobs_remain_local_only_and_execute_symbols_in_sequence(self) -> None:
         service = RuleBacktestService(self.db)
@@ -2470,6 +2563,45 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertFalse(lineage["degraded_fill_only"])
         self.assertEqual(lineage["dataset_version"], "unknown")
 
+    def test_support_manifests_project_unknown_authority_reason_family_without_rewriting_status(self) -> None:
+        run = {
+            "id": 657,
+            "code": "AAPL",
+            "status": "completed",
+            "data_quality": {
+                "source": "Unknown",
+                "provider": "Unknown",
+                "authority_status": "unknown",
+                "authority_reason_codes": ["source_authority_unknown"],
+                "requested_start": "2024-01-02",
+                "requested_end": "2024-01-31",
+                "actual_start": "2024-01-03",
+                "actual_end": "2024-01-19",
+                "bar_count": 12,
+            },
+        }
+
+        manifest = build_support_bundle_manifest(run)
+        reproducibility = build_support_bundle_reproducibility_manifest(run)
+        lineage = manifest["dataset_lineage"]
+
+        self.assertEqual(lineage["source"], "Unknown")
+        self.assertEqual(lineage["authority_status"], "unknown")
+        self.assertEqual(lineage["authority_reason_codes"], ["source_authority_unknown"])
+        self.assertEqual(
+            lineage["authority_reason_families"],
+            [
+                {
+                    "raw_code": "source_authority_unknown",
+                    "family": "reproducibility_degraded",
+                    "scope": "backtest_authority",
+                }
+            ],
+        )
+        self.assertFalse(lineage["authority_allowed"])
+        self.assertFalse(lineage["degraded_fill_only"])
+        self.assertEqual(reproducibility["dataset_lineage"], lineage)
+
     def test_support_manifests_keep_authority_reason_fields_empty_when_missing(self) -> None:
         run = {
             "id": 655,
@@ -2493,7 +2625,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(lineage["authority_status"], "unknown")
         self.assertEqual(lineage["authority_reason_codes"], [])
         self.assertEqual(lineage["authority_reason_families"], [])
-        self.assertIsNone(lineage["authority_allowed"])
+        self.assertFalse(lineage["authority_allowed"])
         self.assertFalse(lineage["degraded_fill_only"])
         self.assertEqual(lineage["authority_source_type"], "unknown")
         self.assertEqual(lineage["dataset_version"], "unknown")

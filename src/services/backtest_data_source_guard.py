@@ -23,9 +23,10 @@ _LOCAL_AUTHORITY_SOURCES = frozenset(
         "snapshot",
         "cache",
         "cached",
-        "unknown",
     }
 )
+_UNKNOWN_AUTHORITY_SOURCES = frozenset({"unknown", "missing"})
+_UNKNOWN_AUTHORITY_REASON_CODE = "source_authority_unknown"
 _PROXY_FILL_ONLY_PROVIDERS = frozenset(
     {
         "yahoo_yfinance",
@@ -46,7 +47,6 @@ _SOURCE_PROVIDER_ALIASES = {
     "local_us_parquet": "local_ohlcv",
     "local_us_parquet_dir": "local_ohlcv",
     "snapshot": "local_cache",
-    "unknown": "local_cache",
     "yahoo": "yfinance_current_baseline",
     "yfinance": "yfinance_current_baseline",
     "yfinance_proxy": "yfinance_current_baseline",
@@ -84,18 +84,18 @@ def assess_backtest_data_source_eligibility(
     provider_id = _resolve_provider_id(normalized_source)
     source_type = _resolve_backtest_source_type(normalized_source)
 
-    if not normalized_source:
+    if not normalized_source or normalized_source.lower() in _UNKNOWN_AUTHORITY_SOURCES:
         return BacktestDataSourceEligibility(
             request=request,
             plan=plan,
-            source=None,
-            provider_id=None,
+            source=normalized_source or None,
+            provider_id=provider_id,
             source_type=source_type,
-            authority_status="allowed",
-            authority_allowed=True,
-            degraded_fill_only=False,
+            authority_status="degraded_fill_only",
+            authority_allowed=False,
+            degraded_fill_only=True,
             rejected=False,
-            reason_codes=(),
+            reason_codes=(_UNKNOWN_AUTHORITY_REASON_CODE,),
         )
 
     if normalized_source.lower() in _LOCAL_AUTHORITY_SOURCES or source_type == "cache_snapshot":
@@ -222,6 +222,8 @@ def _resolve_provider_id(source: str) -> str | None:
 
 def _resolve_backtest_source_type(source: str) -> str:
     normalized = str(source or "").strip().lower()
+    if not normalized or normalized in _UNKNOWN_AUTHORITY_SOURCES:
+        return "missing"
     if normalized in _LOCAL_AUTHORITY_SOURCES:
         return "cache_snapshot"
     return resolve_source_type(source=normalized)

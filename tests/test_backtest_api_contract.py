@@ -2415,6 +2415,50 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertFalse(response.dataset_lineage.degraded_fill_only)
         service.get_support_bundle_manifest.assert_called_once_with(123)
 
+    def test_get_rule_backtest_support_bundle_manifest_exposes_unknown_authority_degradation(self) -> None:
+        service = MagicMock()
+        payload = self._support_bundle_manifest_payload(status="completed")
+        payload["dataset_lineage"] = {
+            "source": "Unknown",
+            "provider": "Unknown",
+            "authority_status": "degraded_fill_only",
+            "authority_source_type": "missing",
+            "authority_reason_codes": ["source_authority_unknown"],
+            "authority_reason_families": [
+                {
+                    "raw_code": "source_authority_unknown",
+                    "family": "reproducibility_degraded",
+                    "scope": "backtest_authority",
+                }
+            ],
+            "authority_allowed": False,
+            "degraded_fill_only": True,
+            "requested_range": {"start": "2024-01-01", "end": "2024-01-31"},
+            "actual_range": {"start": "2024-01-02", "end": "2024-01-31"},
+            "bar_count": 21,
+            "dataset_version": "unknown",
+        }
+        service.get_support_bundle_manifest.return_value = payload
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_support_bundle_manifest(123, db_manager=MagicMock())
+
+        self.assertEqual(response.dataset_lineage.model_dump(), payload["dataset_lineage"])
+        self.assertEqual(response.dataset_lineage.authority_reason_codes, ["source_authority_unknown"])
+        self.assertEqual(
+            [item.model_dump() for item in response.dataset_lineage.authority_reason_families],
+            [
+                {
+                    "raw_code": "source_authority_unknown",
+                    "family": "reproducibility_degraded",
+                    "scope": "backtest_authority",
+                }
+            ],
+        )
+        self.assertFalse(response.dataset_lineage.authority_allowed)
+        self.assertTrue(response.dataset_lineage.degraded_fill_only)
+        service.get_support_bundle_manifest.assert_called_once_with(123)
+
     def test_get_rule_backtest_support_bundle_manifest_preserves_drift_signals(self) -> None:
         service = MagicMock()
         payload = self._support_bundle_manifest_payload(status="completed")

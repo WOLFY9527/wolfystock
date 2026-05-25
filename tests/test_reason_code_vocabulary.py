@@ -106,6 +106,7 @@ def test_backtest_authority_codes_remain_distinguishable() -> None:
     rejected = classify_reason_code("provider_forbidden_for_use_case")
     proxy_fill_only = classify_reason_code("proxy_source_not_reproducible")
     generic_degraded = classify_reason_code("source_not_reproducible_for_backtest")
+    unknown_authority = classify_reason_code("source_authority_unknown")
 
     assert rejected == ReasonCodeClassification(
         raw_code="provider_forbidden_for_use_case",
@@ -122,8 +123,14 @@ def test_backtest_authority_codes_remain_distinguishable() -> None:
         family="reproducibility_degraded",
         scope="backtest_authority",
     )
+    assert unknown_authority == ReasonCodeClassification(
+        raw_code="source_authority_unknown",
+        family="reproducibility_degraded",
+        scope="backtest_authority",
+    )
     assert rejected.raw_code != proxy_fill_only.raw_code
     assert proxy_fill_only.raw_code != generic_degraded.raw_code
+    assert generic_degraded.raw_code != unknown_authority.raw_code
 
 
 def test_unknown_codes_return_unclassified() -> None:

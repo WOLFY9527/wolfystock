@@ -184,9 +184,13 @@ def _optional_float(value: Any) -> float | None:
 
 def _authority_blockers(data_quality: dict[str, Any]) -> list[str]:
     status = _lower(data_quality.get("authority_status"))
-    if status in {"allowed", "unknown", ""}:
-        return []
     reasons = [str(item) for item in data_quality.get("authority_reason_codes") or [] if str(item or "").strip()]
+    if "source_authority_unknown" in reasons:
+        return reasons
+    if status == "allowed" or not status:
+        return []
+    if status == "unknown":
+        return reasons or ["source_authority_unknown"]
     if reasons:
         return reasons
     if status == "degraded_fill_only":

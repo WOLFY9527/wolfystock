@@ -3,7 +3,58 @@
 
 from __future__ import annotations
 
+import pytest
+
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
+
+
+@pytest.mark.parametrize("source", ["", "   ", None])
+def test_blank_or_missing_source_is_degraded_fill_only_unknown_authority(source: str | None) -> None:
+    result = assess_backtest_data_source_eligibility(code="AAPL", source=source)
+
+    assert result.authority_status == "degraded_fill_only"
+    assert result.authority_allowed is False
+    assert result.degraded_fill_only is True
+    assert result.rejected is False
+    assert result.source_type == "missing"
+    assert result.reason_codes == ("source_authority_unknown",)
+
+
+def test_unknown_source_is_degraded_fill_only_unknown_authority() -> None:
+    result = assess_backtest_data_source_eligibility(code="AAPL", source="unknown")
+
+    assert result.source == "unknown"
+    assert result.authority_status == "degraded_fill_only"
+    assert result.authority_allowed is False
+    assert result.degraded_fill_only is True
+    assert result.rejected is False
+    assert result.source_type == "missing"
+    assert result.reason_codes == ("source_authority_unknown",)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "local_us_parquet",
+        "local_us_parquet_dir",
+        "local_db",
+        "local_db_hk_history",
+        "local_db_us_history",
+        "cache",
+        "cached",
+        "snapshot",
+        "database_cache",
+    ],
+)
+def test_explicit_local_and_cache_sources_remain_allowed_for_backtest_authority(source: str) -> None:
+    result = assess_backtest_data_source_eligibility(code="AAPL", source=source)
+
+    assert result.authority_status == "allowed"
+    assert result.authority_allowed is True
+    assert result.degraded_fill_only is False
+    assert result.rejected is False
+    assert result.source_type == "cache_snapshot"
+    assert result.reason_codes == ()
 
 
 def test_local_stored_ohlcv_route_is_allowed_for_backtest_authority() -> None:

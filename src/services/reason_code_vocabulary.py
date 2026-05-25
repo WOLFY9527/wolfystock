@@ -67,6 +67,7 @@ _CLASSIFICATION_RULES = MappingProxyType(
         # Backtest authority/reproducibility diagnostics.
         "provider_forbidden_for_use_case": ("authority_rejected", "backtest_authority"),
         "proxy_source_not_reproducible": ("reproducibility_degraded", "backtest_authority"),
+        "source_authority_unknown": ("reproducibility_degraded", "backtest_authority"),
         "source_not_reproducible_for_backtest": ("reproducibility_degraded", "backtest_authority"),
     }
 )

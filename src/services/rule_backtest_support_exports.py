@@ -89,10 +89,13 @@ def _authority_allowed_value(data_quality: Mapping[str, Any]) -> bool | None:
     if isinstance(explicit, bool):
         return explicit
 
+    if "source_authority_unknown" in _string_list(data_quality.get("authority_reason_codes")):
+        return False
+
     status = _text_or_unknown(data_quality.get("authority_status")).lower()
     if status == "allowed":
         return True
-    if status in {"degraded_fill_only", "rejected"}:
+    if status in {"degraded_fill_only", "rejected", "unknown"}:
         return False
     return None
 
