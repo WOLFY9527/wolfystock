@@ -14,7 +14,8 @@ from typing import Any, ClassVar, Dict, Iterable, List, Optional, Tuple
 
 from src.config import get_config
 from src.services.execution_log_service import ExecutionLogService
-from src.services.market_cache import MARKET_CACHE_TTLS, MarketCache, market_cache
+from src.services.llm_instrumentation import snapshot_llm_event_counters
+from src.services.market_cache import MARKET_CACHE_TTLS, SAFE_MARKET_CACHE_PANEL_KEYS, MarketCache, market_cache
 from src.services.market_data_source_registry import resolve_source_label
 from src.services.system_config_provider_projection import project_tickflow_entitlement_health
 from src.storage import DatabaseManager
@@ -65,6 +66,24 @@ PROVIDER_OPS_LEGACY_LABEL_OVERRIDES = {
     "mixed": "多来源",
     "public": "公开数据",
 }
+MARKET_CACHE_EVENT_COUNTER_FIELDS = {
+    "market_cache_hit": "hits",
+    "market_cache_miss": "misses",
+    "market_cache_stale_served": "staleServed",
+    "market_cache_cold_start_fallback_served": "coldFallbacks",
+    "market_cache_refresh_started": "refreshStarted",
+    "market_cache_refresh_completed": "refreshCompleted",
+    "market_cache_refresh_failed": "refreshFailed",
+}
+MARKET_CACHE_EVENT_SUMMARY_FIELDS = (
+    "hits",
+    "misses",
+    "staleServed",
+    "coldFallbacks",
+    "refreshStarted",
+    "refreshCompleted",
+    "refreshFailed",
+)
 
 
 @dataclass(frozen=True)
@@ -138,6 +157,7 @@ class MarketProviderOperationsService:
             "summary": summary,
             "items": items,
             "eventRollups": event_rollups,
+            "marketCacheEventSummary": self._market_cache_event_summary(),
             "cacheStates": cache_states,
             "limitations": sorted(set(limitations)),
             "adminLogDrillThrough": self._drillthrough(since=normalized_window, query="market provider"),
@@ -434,6 +454,69 @@ class MarketProviderOperationsService:
             "staleEventCount": sum(int(item.get("staleServedCount") or 0) for item in event_rollups),
             "slowEventCount": sum(int(item.get("slowCount") or 0) for item in event_rollups),
         }
+
+    @staticmethod
+    def _market_cache_event_summary() -> Dict[str, Any]:
+        totals = MarketProviderOperationsService._empty_market_cache_event_counts()
+        by_panel: Dict[Tuple[str, str], Dict[str, Any]] = {}
+
+        for row in snapshot_llm_event_counters():
+            event_name = str(row.get("event") or "")
+            field = MARKET_CACHE_EVENT_COUNTER_FIELDS.get(event_name)
+            if field is None:
+                continue
+            count = int(row.get("count") or 0)
+            labels = row.get("labels") if isinstance(row.get("labels"), dict) else {}
+            panel_key = MarketProviderOperationsService._safe_market_cache_panel_key(labels.get("panel_key"))
+            endpoint_family = MarketProviderOperationsService._safe_counter_label(labels.get("endpoint_family")) or "unknown"
+            bucket = by_panel.setdefault(
+                (panel_key, endpoint_family),
+                {
+                    "panelKey": panel_key,
+                    "endpointFamily": endpoint_family,
+                    **MarketProviderOperationsService._empty_market_cache_event_counts(),
+                },
+            )
+            totals[field] += count
+            bucket[field] += count
+
+        return {
+            "metadata": {
+                "countersSource": "process_local",
+                "readOnly": True,
+                "externalProviderCalls": False,
+                "cacheMutation": False,
+                "exactness": "observational_not_billing",
+                "durability": "process_local_not_durable",
+            },
+            "totals": totals,
+            "byPanelKey": sorted(
+                by_panel.values(),
+                key=lambda item: (
+                    -sum(int(item.get(field) or 0) for field in MARKET_CACHE_EVENT_SUMMARY_FIELDS),
+                    str(item.get("panelKey") or ""),
+                    str(item.get("endpointFamily") or ""),
+                ),
+            ),
+        }
+
+    @staticmethod
+    def _empty_market_cache_event_counts() -> Dict[str, int]:
+        return {field: 0 for field in MARKET_CACHE_EVENT_SUMMARY_FIELDS}
+
+    @staticmethod
+    def _safe_market_cache_panel_key(value: Any) -> str:
+        text = MarketProviderOperationsService._safe_counter_label(value) or "unknown"
+        return text if text in SAFE_MARKET_CACHE_PANEL_KEYS else "unknown"
+
+    @staticmethod
+    def _safe_counter_label(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        text = str(value or "").strip().lower()
+        if not re.fullmatch(r"[a-z0-9._:/-]{1,64}", text):
+            return None
+        return text
 
     @staticmethod
     def _status(

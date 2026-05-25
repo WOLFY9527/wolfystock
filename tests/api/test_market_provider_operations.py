@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import market_provider_operations
 import src.services.market_provider_operations_service as operations_service
+from src.services.llm_instrumentation import emit_market_cache_event, reset_llm_event_counters
 from src.services.market_cache import market_cache
 from src.services.market_overview_service import MarketOverviewService
 from src.services.market_provider_operations_service import MarketProviderOperationsService
@@ -73,6 +74,7 @@ class _FakeLogService:
 
 @pytest.fixture(autouse=True)
 def isolated_db(tmp_path: Path):
+    reset_llm_event_counters()
     DatabaseManager.reset_instance()
     DatabaseManager(db_url=f"sqlite:///{tmp_path / 'market-provider-operations.sqlite'}")
     MarketProviderOperationsService.clear_summary_cache()
@@ -82,6 +84,7 @@ def isolated_db(tmp_path: Path):
     MarketProviderOperationsService.clear_summary_cache()
     market_cache.clear()
     MarketOverviewService._market_data_cache.clear()
+    reset_llm_event_counters()
     DatabaseManager.reset_instance()
 
 
@@ -178,6 +181,85 @@ def test_operations_summary_cache_expiry_rebuilds_projection(monkeypatch: pytest
     assert second["metadata"]["summaryCache"]["hit"] is True
     assert second["metadata"]["summaryCache"]["cacheAgeMs"] == 5000
     assert third["metadata"]["summaryCache"]["hit"] is False
+
+
+def test_operations_includes_sanitized_market_cache_event_summary_without_side_effects() -> None:
+    common_labels = {
+        "panel_key": "indices",
+        "endpoint_family": "market_overview",
+        "cache_key_hash": "raw-secret-hash",
+        "raw_cache_key": "indices?token=SECRET",
+        "url": "https://provider.example.test/raw?token=SECRET",
+        "headers": {"Authorization": "Bearer SECRET"},
+        "request_body": {"token": "SECRET"},
+        "response_body": {"payload": "SECRET"},
+        "stack_trace": "Traceback should not leak",
+    }
+    for event_name in (
+        "market_cache_hit",
+        "market_cache_miss",
+        "market_cache_stale_served",
+        "market_cache_cold_start_fallback_served",
+        "market_cache_refresh_started",
+        "market_cache_refresh_completed",
+        "market_cache_refresh_failed",
+    ):
+        emit_market_cache_event(event_name, **common_labels)
+
+    with patch.object(market_cache, "get_or_refresh", side_effect=AssertionError("cache refresh called")):
+        payload = _service([]).get_operations(window="24h")
+
+    summary = payload["marketCacheEventSummary"]
+    assert payload["metadata"]["readOnly"] is True
+    assert payload["metadata"]["externalProviderCalls"] is False
+    assert payload["metadata"]["cacheMutation"] is False
+    assert summary["metadata"] == {
+        "countersSource": "process_local",
+        "readOnly": True,
+        "externalProviderCalls": False,
+        "cacheMutation": False,
+        "exactness": "observational_not_billing",
+        "durability": "process_local_not_durable",
+    }
+    assert summary["totals"] == {
+        "hits": 1,
+        "misses": 1,
+        "staleServed": 1,
+        "coldFallbacks": 1,
+        "refreshStarted": 1,
+        "refreshCompleted": 1,
+        "refreshFailed": 1,
+    }
+    assert summary["byPanelKey"] == [
+        {
+            "panelKey": "indices",
+            "endpointFamily": "market_overview",
+            "hits": 1,
+            "misses": 1,
+            "staleServed": 1,
+            "coldFallbacks": 1,
+            "refreshStarted": 1,
+            "refreshCompleted": 1,
+            "refreshFailed": 1,
+        }
+    ]
+
+    dumped = str(summary).lower()
+    for blocked in (
+        "raw_cache_key",
+        "raw-secret-hash",
+        "https://provider.example.test",
+        "secret",
+        "token",
+        "payload",
+        "headers",
+        "request_body",
+        "response_body",
+        "authorization",
+        "traceback",
+        "stack_trace",
+    ):
+        assert blocked not in dumped
 
 
 def test_cached_operations_summary_remains_sanitized_without_raw_payloads_or_secrets() -> None:
