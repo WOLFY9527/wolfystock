@@ -10,6 +10,9 @@ import PersonalSettingsPage from '../PersonalSettingsPage';
 
 const zh = (key: string, vars?: Record<string, string | number | undefined>) => translate('zh', key, vars);
 
+const consumerSettingsForbiddenTextPattern =
+  /管理员诊断|管理员控制台|管理员导航|系统设置|系统控制面|系统日志|运行时控制|运行时内容|全局提供商|数据源设置|运维|admin diagnostics|admin console|admin navigation|system settings|system control plane|operator runtime|runtime controls|global providers|system logs|provider config/i;
+
 const {
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -261,6 +264,56 @@ describe('PersonalSettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /完整数字/ }));
     expect(setDataDensity).toHaveBeenCalledWith('compact');
     expect(setNumberFormat).toHaveBeenCalledWith('full');
+  });
+
+  it('keeps normal personal settings copy and actions inside the consumer account boundary', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      passwordChangeable: true,
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: false,
+      loggedIn: true,
+      currentUser: {
+        username: 'alice',
+        displayName: 'Alice',
+      },
+    });
+    getNotificationPreferences.mockResolvedValue({
+      channel: 'email',
+      enabled: true,
+      email: 'alice@example.com',
+      emailEnabled: true,
+      discordEnabled: false,
+      discordWebhook: null,
+      deliveryAvailable: true,
+      emailDeliveryAvailable: true,
+      discordDeliveryAvailable: true,
+      updatedAt: '2026-04-15T09:00:00Z',
+    });
+
+    const { container } = render(
+      <MemoryRouter>
+        <PersonalSettingsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(getNotificationPreferences).toHaveBeenCalledTimes(1));
+
+    expect(screen.getByRole('heading', { level: 1, name: '账户中心' })).toBeInTheDocument();
+    expect(screen.getByTestId('personal-settings-account-row')).toHaveTextContent('Alice');
+    expect(screen.getByTestId('personal-settings-security-section')).toHaveTextContent('账户与安全');
+    expect(screen.getByTestId('personal-settings-privacy-section')).toHaveTextContent('隐私设置');
+    expect(screen.getByTestId('personal-settings-preferences-section')).toHaveTextContent('显示与偏好');
+    expect(screen.getByTestId('personal-settings-notification-row')).toHaveTextContent(zh('settings.personalNotificationScopeTitle'));
+    expect(screen.getByTestId('change-password-card')).toBeInTheDocument();
+    expect(screen.getByTestId('font-size-card')).toBeInTheDocument();
+
+    expect(document.body).not.toHaveTextContent(consumerSettingsForbiddenTextPattern);
+    expect(container.querySelectorAll('a[href*="/settings/system"], a[href*="/admin"], a[href*="provider"]')).toHaveLength(0);
+    expect(screen.queryByRole('link', { name: consumerSettingsForbiddenTextPattern })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: consumerSettingsForbiddenTextPattern })).not.toBeInTheDocument();
   });
 
   it('saves email and Discord notification targets together for signed-in users', async () => {

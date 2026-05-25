@@ -19,6 +19,15 @@ const viewports = [
   { width: 390, height: 844 },
 ];
 
+const forbiddenSettingsAdminApiPatterns = [
+  /^GET \/api\/v1\/system\/config$/,
+  /\/api\/v1\/quant\/duckdb\//,
+  /\/api\/v1\/system\/diagnostics/i,
+  /\/api\/v1\/admin\/logs(?:\/|$)/,
+  /\/api\/v1\/admin\/providers?(?:\/|$)/,
+  /\/api\/v1\/market\/providers?.*diagnostic/i,
+];
+
 async function clickOptionsLabNav(page: Page) {
   const visibleHeaderLink = page.getByRole('link', { name: '期权实验室' }).first();
   if (await visibleHeaderLink.isVisible().catch(() => false)) {
@@ -59,6 +68,9 @@ test.describe('mocked product route auth browser harness', () => {
       await expect(page.getByTestId('personal-settings-account-row')).toContainText(/已登录|Signed in/);
       expect(smoke.requests.count('GET', '/api/v1/auth/status')).toBeGreaterThan(0);
       expect(smoke.requests.wasFetched('GET', '/api/v1/auth/preferences/notifications')).toBe(true);
+      expect(smoke.requests.calls.filter((entry) => (
+        forbiddenSettingsAdminApiPatterns.some((pattern) => pattern.test(entry))
+      ))).toEqual([]);
       await expectNoAuthenticatedRouteHorizontalOverflow(page);
       smoke.expectNoConsolePageErrors();
     } finally {
