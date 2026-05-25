@@ -77,6 +77,32 @@ def _text_or_unknown(value: Any) -> str:
     return text or "unknown"
 
 
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return []
+    return [str(item).strip() for item in value if str(item or "").strip()]
+
+
+def _authority_allowed_value(data_quality: Mapping[str, Any]) -> bool | None:
+    explicit = data_quality.get("authority_allowed")
+    if isinstance(explicit, bool):
+        return explicit
+
+    status = _text_or_unknown(data_quality.get("authority_status")).lower()
+    if status == "allowed":
+        return True
+    if status in {"degraded_fill_only", "rejected"}:
+        return False
+    return None
+
+
+def _degraded_fill_only_value(data_quality: Mapping[str, Any]) -> bool:
+    explicit = data_quality.get("degraded_fill_only")
+    if isinstance(explicit, bool):
+        return explicit
+    return _text_or_unknown(data_quality.get("authority_status")).lower() == "degraded_fill_only"
+
+
 def _readiness_dataset_version(readiness: Mapping[str, Any]) -> Any:
     for key in ("dataset_version", "datasetVersion"):
         if readiness.get(key):
@@ -107,6 +133,9 @@ def build_dataset_lineage_manifest(run: Mapping[str, Any]) -> dict[str, Any] | N
         "provider": _text_or_unknown(data_quality.get("provider")),
         "authority_status": _text_or_unknown(data_quality.get("authority_status")),
         "authority_source_type": _text_or_unknown(data_quality.get("authority_source_type")),
+        "authority_reason_codes": _string_list(data_quality.get("authority_reason_codes")),
+        "authority_allowed": _authority_allowed_value(data_quality),
+        "degraded_fill_only": _degraded_fill_only_value(data_quality),
         "requested_range": _date_range_payload(data_quality, "requested"),
         "actual_range": _date_range_payload(data_quality, "actual"),
         "bar_count": data_quality.get("bar_count"),

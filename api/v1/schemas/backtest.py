@@ -1246,11 +1246,27 @@ class RuleBacktestCancelResponse(RuleBacktestStatusResponse):
     pass
 
 
+class RuleBacktestDatasetLineageResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    source: Optional[str] = None
+    provider: Optional[str] = None
+    authority_status: Optional[str] = None
+    authority_source_type: Optional[str] = None
+    authority_reason_codes: List[str] = Field(default_factory=list)
+    authority_allowed: Optional[bool] = None
+    degraded_fill_only: Optional[bool] = None
+    requested_range: Dict[str, Any] = Field(default_factory=dict)
+    actual_range: Dict[str, Any] = Field(default_factory=dict)
+    bar_count: Optional[int] = None
+    dataset_version: Optional[str] = None
+
+
 class RuleBacktestSupportBundleManifestResponse(BaseModel):
     manifest_version: str
     manifest_kind: str
     run: Dict[str, Any] = Field(default_factory=dict)
-    dataset_lineage: Dict[str, Any] = Field(default_factory=dict)
+    dataset_lineage: RuleBacktestDatasetLineageResponse = Field(default_factory=RuleBacktestDatasetLineageResponse)
     run_timing: Dict[str, Any] = Field(default_factory=dict)
     run_diagnostics: Dict[str, Any] = Field(default_factory=dict)
     artifact_availability: Dict[str, Any] = Field(default_factory=dict)
@@ -1263,7 +1279,7 @@ class RuleBacktestSupportBundleReproducibilityManifestResponse(BaseModel):
     manifest_version: str
     manifest_kind: str
     run: Dict[str, Any] = Field(default_factory=dict)
-    dataset_lineage: Dict[str, Any] = Field(default_factory=dict)
+    dataset_lineage: RuleBacktestDatasetLineageResponse = Field(default_factory=RuleBacktestDatasetLineageResponse)
     run_timing: Dict[str, Any] = Field(default_factory=dict)
     run_diagnostics: Dict[str, Any] = Field(default_factory=dict)
     artifact_availability: Dict[str, Any] = Field(default_factory=dict)

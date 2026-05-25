@@ -2383,6 +2383,9 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "provider": "Local US Parquet",
             "authority_status": "allowed",
             "authority_source_type": "cache_snapshot",
+            "authority_reason_codes": [],
+            "authority_allowed": True,
+            "degraded_fill_only": False,
             "requested_range": {"start": "2024-01-01", "end": "2024-01-31"},
             "actual_range": {"start": "2024-01-02", "end": "2024-01-31"},
             "bar_count": 21,
@@ -2404,7 +2407,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.result_authority["read_mode"], "stored_first")
         self.assertIn("trade_rows", response.result_authority["domains"])
         self.assertEqual(response.artifact_counts["trade_rows_count"], 0)
-        self.assertEqual(response.dataset_lineage, payload["dataset_lineage"])
+        self.assertEqual(response.dataset_lineage.model_dump(), payload["dataset_lineage"])
+        self.assertEqual(response.dataset_lineage.authority_reason_codes, [])
+        self.assertTrue(response.dataset_lineage.authority_allowed)
+        self.assertFalse(response.dataset_lineage.degraded_fill_only)
         service.get_support_bundle_manifest.assert_called_once_with(123)
 
     def test_get_rule_backtest_support_bundle_manifest_preserves_drift_signals(self) -> None:
@@ -2471,6 +2477,9 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "provider": "Local US Parquet",
             "authority_status": "allowed",
             "authority_source_type": "cache_snapshot",
+            "authority_reason_codes": [],
+            "authority_allowed": True,
+            "degraded_fill_only": False,
             "requested_range": {"start": "2024-01-01", "end": "2024-01-31"},
             "actual_range": {"start": "2024-01-02", "end": "2024-01-31"},
             "bar_count": 21,
@@ -2488,7 +2497,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.run_diagnostics["current_status"], "completed")
         self.assertEqual(response.execution_assumptions_fingerprint["source"], "summary.execution_assumptions_snapshot")
         self.assertEqual(response.result_authority["read_mode"], "stored_first")
-        self.assertEqual(response.dataset_lineage, payload["dataset_lineage"])
+        self.assertEqual(response.dataset_lineage.model_dump(), payload["dataset_lineage"])
+        self.assertEqual(response.dataset_lineage.authority_reason_codes, [])
+        self.assertTrue(response.dataset_lineage.authority_allowed)
+        self.assertFalse(response.dataset_lineage.degraded_fill_only)
         service.get_support_bundle_reproducibility_manifest.assert_called_once_with(123)
 
     def test_get_rule_backtest_support_bundle_reproducibility_manifest_preserves_drift_signals(self) -> None:
