@@ -97,7 +97,7 @@ describe('Shell', () => {
     });
   });
 
-  it('renders the streamlined navigation without the old theme control', () => {
+  it('renders the streamlined navigation without the old theme control', async () => {
     render(
       <MemoryRouter initialEntries={['/market-overview']}>
         <ThemeProvider>
@@ -118,7 +118,9 @@ describe('Shell', () => {
     expect(scannerLink).toHaveClass('text-sm', 'font-medium', 'text-white/50');
     expect(screen.getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toHaveClass('text-sm', 'font-bold', 'text-white');
     expect(screen.queryByTestId('chat-completion-badge')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '账户中心' })).toBeInTheDocument();
+    const actionIsland = await screen.findByTestId('shell-header-utility-island');
+    expect(await within(actionIsland).findByTestId('shell-account-center-entry')).toBeInTheDocument();
+    expect(within(actionIsland).getByRole('button', { name: '账户中心' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '决策台' })).not.toBeInTheDocument();
@@ -265,7 +267,7 @@ describe('Shell', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '账户中心' }));
+    fireEvent.click(await screen.findByRole('button', { name: '账户中心' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: '退出登录' }));
 
     expect(await screen.findByRole('heading', { name: translate('zh', 'nav.logoutTitle') })).toBeInTheDocument();
@@ -286,7 +288,7 @@ describe('Shell', () => {
       </MemoryRouter>
     );
 
-    const trigger = screen.getByRole('button', { name: '账户中心' });
+    const trigger = await screen.findByRole('button', { name: '账户中心' });
     trigger.focus();
     fireEvent.keyDown(trigger, { key: 'ArrowDown' });
 
@@ -656,7 +658,8 @@ describe('Shell', () => {
     );
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
-    expect(screen.getByRole('button', { name: '账户中心' })).toBeInTheDocument();
+    expect(await within(actionIsland).findByTestId('shell-account-center-entry')).toBeInTheDocument();
+    expect(within(actionIsland).getByRole('button', { name: '账户中心' })).toBeInTheDocument();
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /管理员模式/ })).not.toBeInTheDocument();
   });
@@ -680,7 +683,10 @@ describe('Shell', () => {
     );
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
-    expect(screen.getByRole('button', { name: '账户中心' })).toBeInTheDocument();
+    const compactAccountEntry = await within(actionIsland).findByTestId('shell-account-center-entry');
+    expect(compactAccountEntry).toBeInTheDocument();
+    expect(compactAccountEntry).toHaveClass('relative');
+    expect(within(actionIsland).getByRole('button', { name: '账户中心' })).toHaveClass('h-9', 'rounded-lg');
     expect(actionIsland).toHaveClass(
       'flex',
       'items-center',
@@ -837,7 +843,8 @@ describe('Shell', () => {
     );
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
-    expect(screen.getByRole('button', { name: '账户中心' })).toBeInTheDocument();
+    expect(await within(actionIsland).findByTestId('shell-account-center-entry')).toBeInTheDocument();
+    expect(within(actionIsland).getByRole('button', { name: '账户中心' })).toBeInTheDocument();
     expect(within(actionIsland).queryByRole('button', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.userGovernance') })).not.toBeInTheDocument();

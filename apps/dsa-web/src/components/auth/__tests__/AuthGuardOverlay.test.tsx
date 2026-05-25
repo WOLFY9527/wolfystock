@@ -62,6 +62,7 @@ describe('AuthGuardOverlay', () => {
     );
     expect(screen.getByRole('heading', { name: '登录解锁 市场总览' })).toBeInTheDocument();
     expect(screen.getByText('游客模式仅支持首页基础查询。保存个人工作区、深度历史回溯及进阶指标测算，均需绑定正式账户。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '返回首页' })).toBeInTheDocument();
     expectNoRawI18nKeys(container);
     fireEvent.click(screen.getByRole('button', { name: '登录 / 创建账户' }));
     expect(navigate).toHaveBeenCalledWith('/zh/login');
@@ -96,6 +97,7 @@ describe('AuthGuardOverlay', () => {
 
     expect(screen.getByRole('heading', { name: 'Sign in to unlock Portfolio' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign in / Create account' })).toHaveClass('bg-[var(--wolfy-accent)]', 'text-[#f7f8ff]');
+    expect(screen.getByRole('button', { name: 'Return home' })).toBeInTheDocument();
     expectNoRawI18nKeys(container);
     fireEvent.click(screen.getByRole('button', { name: 'Sign in / Create account' }));
     expect(navigate).toHaveBeenCalledWith('/en/login');
@@ -127,14 +129,19 @@ describe('AuthGuardOverlay', () => {
     );
 
     const loginCta = screen.getByRole('button', { name: '登录 / 创建账户' });
+    const safeExitButton = screen.getByRole('button', { name: '返回首页' });
     expect(loginCta).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(safeExitButton).toHaveFocus();
+    expect(screen.getByRole('button', { name: '背景操作', hidden: true })).not.toHaveFocus();
 
     fireEvent.keyDown(document, { key: 'Tab' });
     expect(loginCta).toHaveFocus();
     expect(screen.getByRole('button', { name: '背景操作', hidden: true })).not.toHaveFocus();
 
     fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
-    expect(loginCta).toHaveFocus();
+    expect(safeExitButton).toHaveFocus();
     expect(screen.getByRole('button', { name: '背景操作', hidden: true })).not.toHaveFocus();
   });
 
@@ -157,7 +164,7 @@ describe('AuthGuardOverlay', () => {
     expect(trigger).toHaveFocus();
   });
 
-  it('keeps Escape non-dismissible for required auth and preserves login navigation', () => {
+  it('keeps Escape non-dismissible and exposes an explicit safe exit without bypassing auth', () => {
     render(
       <MemoryRouter initialEntries={['/zh/portfolio']}>
         <AuthGuardOverlay moduleName="持仓管理" />
@@ -169,7 +176,10 @@ describe('AuthGuardOverlay', () => {
     expect(screen.getByRole('dialog', { name: '登录解锁 持仓管理' })).toBeInTheDocument();
     expect(navigate).not.toHaveBeenCalled();
 
+    fireEvent.click(screen.getByRole('button', { name: '返回首页' }));
+    expect(navigate).toHaveBeenCalledWith('/zh');
+
     fireEvent.click(screen.getByRole('button', { name: '登录 / 创建账户' }));
-    expect(navigate).toHaveBeenCalledWith('/zh/login');
+    expect(navigate).toHaveBeenLastCalledWith('/zh/login');
   });
 });

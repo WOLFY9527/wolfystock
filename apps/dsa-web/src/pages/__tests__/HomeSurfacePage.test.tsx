@@ -407,7 +407,10 @@ describe('HomeSurfacePage', () => {
     expect(conclusionConsole).toHaveAttribute('data-visual-role', 'conclusion-research-console');
     expect(within(decisionCard).getByText('当前能否判断')).toBeInTheDocument();
     expect(within(decisionCard).getByText('当前结论')).toBeInTheDocument();
-    expect(within(decisionCard).getByText('可信度 / 数据质量')).toBeInTheDocument();
+    expect(within(decisionCard).queryByText('可信度 / 数据质量')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-research-trust-strip')).toHaveTextContent('研究边界');
+    expect(screen.getByTestId('home-research-boundary-summary')).toHaveTextContent(/数据质量|可信度|研究边界/);
+    expect(screen.getByTestId('home-research-boundary-disclosure')).toHaveTextContent(/展开研究边界|查看研究边界|Expand research boundary|View research boundary/);
     expect(within(decisionCard).getByText('关键支撑因素')).toBeInTheDocument();
     expect(within(decisionCard).getByText('主要风险 / 失效条件')).toBeInTheDocument();
     expect(within(decisionCard).getByText('下一步研究动作')).toBeInTheDocument();
@@ -554,7 +557,7 @@ describe('HomeSurfacePage', () => {
     const conclusionConsole = screen.getByTestId('home-research-conclusion-console');
     const judgmentGate = screen.getByTestId('home-research-judgment-gate');
     const conclusionBlock = screen.getByTestId('home-research-current-conclusion');
-    const qualityBlock = screen.getByTestId('home-research-quality-block');
+    const trustStrip = screen.getByTestId('home-research-trust-strip');
     const supportBlock = screen.getByTestId('home-research-support-factors');
     const riskBlock = screen.getByTestId('home-research-risk-boundaries');
     const nextStepBlock = screen.getByTestId('home-research-next-actions');
@@ -567,7 +570,9 @@ describe('HomeSurfacePage', () => {
     expect(judgmentGate).toHaveTextContent('当前能否判断');
     expect(judgmentGate).toHaveTextContent(/仅观察|证据受限|可以形成研究判断/);
     expect(conclusionBlock).toHaveTextContent('当前结论');
-    expect(qualityBlock).toHaveTextContent('可信度 / 数据质量');
+    expect(trustStrip).toHaveTextContent('研究边界');
+    expect(trustStrip).toHaveTextContent(/数据质量|可信度|可用数据|缺失数据/);
+    expect(conclusionConsole).not.toHaveTextContent(/^可信度 \/ 数据质量$/m);
     expect(supportBlock).toHaveTextContent('关键支撑因素');
     expect(riskBlock).toHaveTextContent('主要风险 / 失效条件');
     expect(nextStepBlock).toHaveTextContent('下一步研究动作');

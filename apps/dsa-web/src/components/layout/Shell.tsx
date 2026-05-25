@@ -4,6 +4,7 @@
  */
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, LockKeyhole, LogOut, Menu, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
@@ -174,6 +175,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const [accountMenuFocusIndex, setAccountMenuFocusIndex] = useState<number | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [railContent, setRailContent] = useState<React.ReactNode | null>(null);
+  const [headerUtilityIsland, setHeaderUtilityIsland] = useState<HTMLDivElement | null>(null);
   const hasRailContent = Boolean(railContent);
   const isMobileNavVisible = mobileNavOpen;
   const isRailVisible = hasRailContent && railOpen;
@@ -242,6 +244,10 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     setMobileNavOpen(false);
     setRailOpen(true);
   }, [setMobileNavOpen, setRailOpen]);
+
+  const shellMastheadInnerRef = useCallback((node: HTMLDivElement | null) => {
+    setHeaderUtilityIsland(node?.querySelector<HTMLDivElement>('[data-testid="shell-header-utility-island"]') ?? null);
+  }, [setHeaderUtilityIsland]);
 
   const railContextValue = useMemo(
     () => ({
@@ -423,7 +429,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         data-layout={isDesktop ? 'desktop' : 'mobile'}
       >
         <header className="shell-masthead shrink-0 w-full">
-          <div className="shell-masthead__inner w-full">
+          <div ref={shellMastheadInnerRef} className="shell-masthead__inner w-full">
             {isDesktop ? (
               <SidebarNav
                 layout="header"
@@ -459,101 +465,99 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         <div
           className={`shell-content-frame relative flex flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isPageScrollRoute ? ' shell-content-frame--page-scroll' : ''}${isHomeRoute ? ' shell-content-frame--home' : ''}${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}${isSystemControlRoute ? ' shell-content-frame--system-control' : ''}`}
         >
-          {isDesktop && loggedIn ? (
-            <div className="pointer-events-none absolute right-6 top-4 z-20 hidden md:flex xl:right-12">
-              <div
-                ref={accountMenuRef}
-                data-testid="shell-account-center-entry"
-                className="pointer-events-auto relative"
-              >
-                <button
-                  ref={accountTriggerRef}
-                  type="button"
-                  className={cn(
-                    'flex min-w-[12.5rem] items-center justify-between gap-3 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]/92 px-3 py-2 text-left shadow-[0_16px_40px_rgba(0,0,0,0.28)] backdrop-blur',
-                    accountMenuOpen ? 'border-[color:var(--wolfy-accent)]' : '',
-                  )}
-                  aria-label={accountCopy.accountCenter}
-                  aria-haspopup="menu"
-                  aria-expanded={accountMenuOpen}
-                  aria-controls="shell-account-center-menu"
-                  onClick={() => {
-                    if (accountMenuOpen) {
-                      closeAccountMenu({ returnFocus: true });
-                      return;
-                    }
-                    openAccountMenu(0);
-                  }}
-                  onKeyDown={handleAccountTriggerKeyDown}
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-[10px] uppercase tracking-[0.1em] text-[color:var(--wolfy-text-muted)]">
-                      {accountDisplayName}
-                    </span>
-                    <span className="mt-1 block text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
-                      {accountCopy.accountCenter}
-                    </span>
-                  </span>
-                  <ChevronDown className={cn('h-4 w-4 shrink-0 text-[color:var(--wolfy-text-secondary)] transition-transform', accountMenuOpen ? 'rotate-180' : '')} />
-                </button>
-
-                {accountMenuOpen ? (
-                  <div
-                    id="shell-account-center-menu"
-                    role="menu"
-                    aria-label={accountCopy.menuLabel}
-                    aria-orientation="vertical"
-                    data-testid="shell-account-center-menu"
-                    className="absolute right-0 top-full mt-2 flex min-w-[15rem] max-w-[min(22rem,calc(100vw-2rem))] flex-col gap-1 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-2 shadow-[0_20px_48px_rgba(0,0,0,0.28)]"
-                    onKeyDown={handleAccountMenuKeyDown}
-                  >
-                    {accountMenuItems.map(({ label, to, icon: Icon }, index) => (
-                      <NavLink
-                        key={label}
-                        to={to}
-                        ref={(node) => {
-                          accountMenuItemRefs.current[index] = node;
-                        }}
-                        role="menuitem"
-                        tabIndex={-1}
-                        className={({ isActive }) => cn(
-                          'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-white/72 transition-colors hover:bg-white/[0.04] hover:text-white',
-                          isActive ? 'bg-white/[0.05] text-white' : '',
-                        )}
-                        onClick={() => closeAccountMenu()}
-                      >
-                        <Icon className="h-4 w-4 shrink-0 text-white/56" />
-                        <span className="truncate">{label}</span>
-                      </NavLink>
-                    ))}
-                    <div className="my-1 h-px bg-[var(--wolfy-divider)]" />
-                    <button
-                      type="button"
-                      ref={(node) => {
-                        accountMenuItemRefs.current[accountMenuItems.length] = node;
-                      }}
-                      role="menuitem"
-                      tabIndex={-1}
-                      className="flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-red-200/80 transition-colors hover:bg-red-500/10 hover:text-red-100"
-                      onClick={() => {
-                        closeAccountMenu();
-                        setShowLogoutConfirm(true);
-                      }}
-                    >
-                      <LogOut className="h-4 w-4 shrink-0 text-red-200/70" />
-                      <span className="truncate">{accountCopy.logout}</span>
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
           <main className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full${isSystemControlRoute ? ' p-0 shell-main-column--system-control' : isHomeRoute ? ' px-4 pt-3 pb-8 md:px-6 lg:pt-4 xl:px-8 shell-main-column--home' : ' px-6 pt-6 pb-12 md:px-8 xl:px-12'}${shellFrameOverflowClass}${isPageScrollRoute ? ' shell-main-column--page-scroll' : ''}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
             <div key={pathname} className={`theme-page-transition flex min-h-0 min-w-0 w-full flex-col${isScannerRoute || isHomeRoute ? '' : ' h-full'}${isPageScrollRoute ? ' theme-page-transition--page-scroll' : ''}${isSystemControlRoute ? ' theme-page-transition--system-control' : ''}`}>
               {children ?? <Outlet />}
             </div>
           </main>
         </div>
+        {isDesktop && loggedIn && headerUtilityIsland ? createPortal(
+          <div
+            ref={accountMenuRef}
+            data-testid="shell-account-center-entry"
+            className="relative"
+          >
+            <button
+              ref={accountTriggerRef}
+              type="button"
+              className={cn(
+                'flex h-9 min-w-0 max-w-[11rem] items-center gap-2 rounded-lg border border-transparent bg-white/[0.03] px-2.5 text-left text-[11px] font-medium text-white/70 transition-colors hover:bg-white/[0.05] hover:text-white',
+                accountMenuOpen ? 'border-[color:var(--wolfy-accent)] bg-white/[0.06] text-white shadow-[0_0_0_1px_rgba(118,109,219,0.14)]' : '',
+              )}
+              aria-label={accountCopy.accountCenter}
+              aria-haspopup="menu"
+              aria-expanded={accountMenuOpen}
+              aria-controls="shell-account-center-menu"
+              onClick={() => {
+                if (accountMenuOpen) {
+                  closeAccountMenu({ returnFocus: true });
+                  return;
+                }
+                openAccountMenu(0);
+              }}
+              onKeyDown={handleAccountTriggerKeyDown}
+            >
+              <span
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.06] text-[10px] font-semibold text-white/82"
+                aria-hidden="true"
+              >
+                {accountDisplayName.slice(0, 1)}
+              </span>
+              <span className="min-w-0 truncate">{accountDisplayName}</span>
+              <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-white/44 transition-transform', accountMenuOpen ? 'rotate-180 text-white/70' : '')} />
+            </button>
+
+            {accountMenuOpen ? (
+              <div
+                id="shell-account-center-menu"
+                role="menu"
+                aria-label={accountCopy.menuLabel}
+                aria-orientation="vertical"
+                data-testid="shell-account-center-menu"
+                className="absolute right-0 top-full z-20 mt-2 flex min-w-[15rem] max-w-[min(22rem,calc(100vw-2rem))] flex-col gap-1 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-2 shadow-[0_20px_48px_rgba(0,0,0,0.28)]"
+                onKeyDown={handleAccountMenuKeyDown}
+              >
+                {accountMenuItems.map(({ label, to, icon: Icon }, index) => (
+                  <NavLink
+                    key={label}
+                    to={to}
+                    ref={(node) => {
+                      accountMenuItemRefs.current[index] = node;
+                    }}
+                    role="menuitem"
+                    tabIndex={-1}
+                    className={({ isActive }) => cn(
+                      'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-white/72 transition-colors hover:bg-white/[0.04] hover:text-white',
+                      isActive ? 'bg-white/[0.05] text-white' : '',
+                    )}
+                    onClick={() => closeAccountMenu()}
+                  >
+                    <Icon className="h-4 w-4 shrink-0 text-white/56" />
+                    <span className="truncate">{label}</span>
+                  </NavLink>
+                ))}
+                <div className="my-1 h-px bg-[var(--wolfy-divider)]" />
+                <button
+                  type="button"
+                  ref={(node) => {
+                    accountMenuItemRefs.current[accountMenuItems.length] = node;
+                  }}
+                  role="menuitem"
+                  tabIndex={-1}
+                  className="flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-red-200/80 transition-colors hover:bg-red-500/10 hover:text-red-100"
+                  onClick={() => {
+                    closeAccountMenu();
+                    setShowLogoutConfirm(true);
+                  }}
+                >
+                  <LogOut className="h-4 w-4 shrink-0 text-red-200/70" />
+                  <span className="truncate">{accountCopy.logout}</span>
+                </button>
+              </div>
+            ) : null}
+          </div>,
+          headerUtilityIsland,
+        ) : null}
 
         {!isDesktop ? (
           <Drawer

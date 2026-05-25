@@ -1168,58 +1168,90 @@ function HomeConclusionFirstConsole({
         </div>
 
         <aside
-          className="min-w-0 border-t border-[color:var(--wolfy-divider)] bg-[rgba(7,12,19,0.28)] px-5 py-5 lg:border-l lg:border-t-0"
-          data-testid="home-research-quality-block"
+          className="min-w-0 border-t border-[color:var(--wolfy-divider)] bg-[rgba(7,12,19,0.2)] px-5 py-4 lg:border-l lg:border-t-0"
+          data-testid="home-research-trust-strip"
         >
-          <div className="flex min-w-0 items-center justify-between gap-3">
-            <p className="text-[12px] font-semibold tracking-[0] text-white/62">{isEnglish ? 'Confidence / Data quality' : '可信度 / 数据质量'}</p>
-            <span className="text-[11px] text-white/38">{qualityPreview}</span>
-          </div>
-          <div className="mt-4 grid min-w-0 grid-cols-2 gap-3">
-            <div className="min-w-0 border-r border-white/[0.07] pr-3" data-testid="home-bento-decision-score">
-              <p className="text-[11px] text-white/38">{isEnglish ? 'Research score' : '研究评分'}</p>
-              <div className="mt-2 flex items-end gap-2" data-testid="home-bento-decision-core-metrics">
+          <div className="flex min-w-0 flex-col gap-3">
+            <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold tracking-[0] text-white/44">{isEnglish ? 'Research boundary' : '研究边界'}</p>
                 <p
-                  className="font-mono text-[28px] font-semibold leading-none text-white md:text-[32px]"
-                  data-testid="home-bento-decision-score-value"
-                  data-prominence="supporting"
+                  className="mt-1 max-w-[22rem] min-w-0 break-words text-xs leading-[1.55] text-white/56"
+                  data-testid="home-research-boundary-summary"
                 >
-                  {scoreDisplayValue}
+                  {isEnglish ? 'Data quality:' : '数据质量：'}
+                  {' '}
+                  {qualityPreview}
                 </p>
-                {hasScoreValue ? <span className="pb-0.5 text-xs text-white/38">/100</span> : null}
               </div>
-              <span className="mt-3 block h-[2px] w-full overflow-hidden rounded-full bg-white/[0.08]">
-                <span className="block h-full rounded-full bg-emerald-300/70" style={{ width: hasScoreValue ? `${scorePercent}%` : '0%' }} />
-              </span>
+              <TraceBadge tone={dataQualityReport ? dataQualityChipTone(dataQualityReport) : 'neutral'}>
+                {dataQualityLabel}
+              </TraceBadge>
             </div>
-            <div className="min-w-0 pl-1" data-testid="home-bento-decision-conviction">
-              <p className="text-[11px] text-white/38">{isEnglish ? 'Confidence' : '可信度'}</p>
-              <div className="mt-2 flex min-w-0 items-center gap-3">
-                <div
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[color:var(--wolfy-divider)] bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]"
-                  data-testid="home-bento-decision-confidence-indicator"
-                  aria-hidden="true"
-                  style={confidenceArcStyle}
-                >
-                  <span className="font-mono text-[11px] font-semibold text-white/84">{confidenceVisual.label}</span>
+
+            <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+              <div
+                className="min-w-0 rounded-[10px] border border-white/[0.06] bg-white/[0.02] px-3 py-2.5"
+                data-testid="home-bento-decision-score"
+              >
+                <p className="text-[10px] uppercase tracking-[0.08em] text-white/32">{isEnglish ? 'Research score' : '研究评分'}</p>
+                <div className="mt-2 flex min-w-0 items-end gap-2" data-testid="home-bento-decision-core-metrics">
+                  <p
+                    className="font-mono text-[20px] font-semibold leading-none text-white/88"
+                    data-testid="home-bento-decision-score-value"
+                    data-prominence="supporting"
+                  >
+                    {scoreDisplayValue}
+                  </p>
+                  {hasScoreValue ? <span className="pb-0.5 text-[11px] text-white/36">/100</span> : null}
                 </div>
-                <p className="min-w-0 break-words font-mono text-base font-semibold text-white/78" data-testid="home-bento-decision-conviction-value">
-                  {confidenceVisual.label}
-                </p>
+                <span className="mt-2 block h-[2px] w-full overflow-hidden rounded-full bg-white/[0.08]">
+                  <span className="block h-full rounded-full bg-white/[0.24]" style={{ width: hasScoreValue ? `${scorePercent}%` : '0%' }} />
+                </span>
+              </div>
+
+              <div
+                className="min-w-0 rounded-[10px] border border-white/[0.06] bg-white/[0.02] px-3 py-2.5"
+                data-testid="home-bento-decision-conviction"
+              >
+                <p className="text-[10px] uppercase tracking-[0.08em] text-white/32">{isEnglish ? 'Confidence' : '可信度'}</p>
+                <div className="mt-2 flex min-w-0 items-center gap-2.5">
+                  <div
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[color:var(--wolfy-divider)] bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.05),rgba(255,255,255,0.02))]"
+                    data-testid="home-bento-decision-confidence-indicator"
+                    aria-hidden="true"
+                    style={confidenceArcStyle}
+                  >
+                    <span className="font-mono text-[10px] font-semibold text-white/80">{confidenceVisual.label}</span>
+                  </div>
+                  <p className="min-w-0 break-words font-mono text-sm font-semibold text-white/76" data-testid="home-bento-decision-conviction-value">
+                    {confidenceVisual.label}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="mt-4 divide-y divide-white/[0.06] border-t border-white/[0.06] text-[11px]">
-            {[
-              { label: isEnglish ? 'Available data' : '已可用数据', value: availableCopy },
-              { label: isEnglish ? 'Missing data' : '仍缺失数据', value: missingCopy },
-              { label: isEnglish ? 'Impact' : '对结论的影响', value: qualityImpactCopy },
-            ].map((item) => (
-              <div key={item.label} className="flex min-w-0 items-start justify-between gap-4 py-2.5">
-                <span className="shrink-0 text-white/36">{item.label}</span>
-                <span className="min-w-0 break-words text-right text-white/60 whitespace-normal">{displaySlotValue(item.value, locale)}</span>
+
+            <details className="group min-w-0 rounded-[10px] border border-white/[0.06] bg-white/[0.015] px-3 py-2.5">
+              <summary
+                className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-white/50 marker:hidden"
+                data-testid="home-research-boundary-disclosure"
+              >
+                <span>{isEnglish ? 'View research boundary' : '查看研究边界'}</span>
+                <span className="text-white/28 transition-transform group-open:rotate-180">{isEnglish ? '▾' : '▾'}</span>
+              </summary>
+              <div className="mt-2.5 divide-y divide-white/[0.06] border-t border-white/[0.06] text-[11px]">
+                {[
+                  { label: isEnglish ? 'Available data' : '已可用数据', value: availableCopy },
+                  { label: isEnglish ? 'Missing data' : '仍缺失数据', value: missingCopy },
+                  { label: isEnglish ? 'Impact' : '对结论的影响', value: qualityImpactCopy },
+                ].map((item) => (
+                  <div key={item.label} className="flex min-w-0 items-start justify-between gap-4 py-2.5">
+                    <span className="shrink-0 text-white/36">{item.label}</span>
+                    <span className="min-w-0 break-words text-right text-white/60 whitespace-normal">{displaySlotValue(item.value, locale)}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            </details>
           </div>
         </aside>
       </div>

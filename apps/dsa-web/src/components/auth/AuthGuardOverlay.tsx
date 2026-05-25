@@ -41,11 +41,13 @@ export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName, 
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const routeLocale = parseLocaleFromPathname(location.pathname);
   const loginPath = routeLocale ? buildLocalizedPath('/login', routeLocale) : '/login';
+  const homePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
   const title = language === 'en' ? `Sign in to unlock ${moduleName}` : `登录解锁 ${moduleName}`;
   const body = language === 'en'
     ? 'Guest mode only supports the home preview. Personal workspaces, historical review, and advanced metrics require a real account.'
     : '游客模式仅支持首页基础查询。保存个人工作区、深度历史回溯及进阶指标测算，均需绑定正式账户。';
   const buttonLabel = language === 'en' ? 'Sign in / Create account' : '登录 / 创建账户';
+  const safeExitLabel = language === 'en' ? 'Return home' : '返回首页';
 
   useEffect(() => {
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -164,14 +166,23 @@ export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName, 
         </div>
         <h2 id={titleId} className="text-base font-semibold text-[color:var(--wolfy-text-primary)]">{title}</h2>
         <p id={bodyId} className="mx-auto mt-3 max-w-[22rem] text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{body}</p>
-        <TerminalButton
-          ref={loginButtonRef}
-          variant="primary"
-          className="mt-7 h-11 w-full rounded-[10px] text-sm"
-          onClick={() => navigate(loginPath)}
-        >
-          {buttonLabel}
-        </TerminalButton>
+        <div className="mt-7 grid w-full gap-2 sm:grid-cols-2">
+          <TerminalButton
+            ref={loginButtonRef}
+            variant="primary"
+            className="h-11 w-full rounded-[10px] text-sm"
+            onClick={() => navigate(loginPath)}
+          >
+            {buttonLabel}
+          </TerminalButton>
+          <TerminalButton
+            variant="secondary"
+            className="h-11 w-full rounded-[10px] text-sm"
+            onClick={() => navigate(homePath)}
+          >
+            {safeExitLabel}
+          </TerminalButton>
+        </div>
       </section>
     </section>
   );
