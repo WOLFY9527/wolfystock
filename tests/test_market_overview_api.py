@@ -312,6 +312,74 @@ class MarketOverviewApiTestCase(unittest.TestCase):
         }
         self.assertEqual(stale_rate_symbols, set())
 
+    def test_market_temperature_cn_money_market_degraded_rows_are_not_score_grade(self) -> None:
+        from src.services.market_overview_service import MarketOverviewService
+        from src.services.official_macro_liquidity_cache_contracts import (
+            OFFICIAL_CN_MONEY_MARKET_PROVIDER_ID,
+        )
+
+        service = MarketOverviewService(cn_hk_connect_flow_provider=lambda: None)
+
+        def official_row(symbol: str, series_id: str, value: object, **overrides: object) -> dict:
+            row = {
+                "symbol": symbol,
+                "label": symbol,
+                "officialSeriesId": series_id,
+                "value": value,
+                "source": OFFICIAL_CN_MONEY_MARKET_PROVIDER_ID,
+                "sourceType": "official_public",
+                "sourceTier": "official_public",
+                "freshness": "delayed",
+                "confidenceWeight": 1.0,
+                "excluded": False,
+                "isFallback": False,
+                "isUnavailable": False,
+            }
+            row.update(overrides)
+            return row
+
+        cases = {
+            "missing_shibor": [official_row("DR007", "DR007", 1.86)],
+            "fallback_shibor": [
+                official_row("DR007", "DR007", 1.86),
+                official_row(
+                    "SHIBOR",
+                    "SHIBOR_ON",
+                    1.72,
+                    source="fallback",
+                    sourceType="fallback_static",
+                    isFallback=True,
+                    freshness="fallback",
+                ),
+            ],
+            "stale_shibor": [
+                official_row("DR007", "DR007", 1.86),
+                official_row("SHIBOR", "SHIBOR_ON", 1.72, freshness="stale", isStale=True),
+            ],
+        }
+
+        for case_name, rows in cases.items():
+            with self.subTest(case_name=case_name):
+                readiness_rows = service._with_cn_money_market_readiness_items(rows)
+                guarded = [
+                    service._guard_market_temperature_score_input(row, panel_key="rates")
+                    for row in readiness_rows
+                ]
+                cn_rows = [
+                    row
+                    for row in guarded
+                    if row.get("symbol") in {"DR007", "SHIBOR"}
+                ]
+                self.assertTrue(cn_rows)
+                for row in cn_rows:
+                    self.assertFalse(row["cacheBundleDiagnostics"]["readinessEligible"])
+                    self.assertFalse(row["sourceAuthorityAllowed"])
+                    self.assertFalse(row["scoreContributionAllowed"])
+                    self.assertEqual(
+                        service._market_temperature_input_confidence(row, "macro_rate"),
+                        0.0,
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

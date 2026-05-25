@@ -287,6 +287,150 @@ def test_official_cn_money_market_normalized_rows_carry_non_scoring_source_confi
     assert dr007["sourceAuthorityAllowed"] is True
     assert dr007["scoreContributionAllowed"] is False
     assert dr007["observationOnly"] is True
+    assert snapshot["readinessEligible"] is True
+    assert snapshot["scoreGradeEvidenceAllowed"] is True
+    assert snapshot["cacheBundleDiagnostics"]["readinessEligible"] is True
+    assert snapshot["cacheBundleDiagnostics"]["scoreContributionAllowed"] is False
+
+
+def test_official_cn_money_market_cache_bundle_readiness_is_fail_closed() -> None:
+    from src.services.official_macro_liquidity_cache_contracts import (
+        OFFICIAL_CN_MONEY_MARKET_PROVIDER_ID,
+        build_official_cn_money_market_cache_bundle,
+    )
+
+    complete_bundle = build_official_cn_money_market_cache_bundle(
+        [
+            {
+                "symbol": "DR007",
+                "officialSeriesId": "DR007",
+                "value": 1.86,
+                "source": OFFICIAL_CN_MONEY_MARKET_PROVIDER_ID,
+                "sourceType": "official_public",
+                "sourceTier": "official_public",
+                "freshness": "delayed",
+                "cacheOnly": True,
+                "externalProviderCalls": False,
+                "sourceAuthorityAllowed": True,
+            },
+            {
+                "symbol": "SHIBOR",
+                "officialSeriesId": "SHIBOR_ON",
+                "value": 1.72,
+                "source": OFFICIAL_CN_MONEY_MARKET_PROVIDER_ID,
+                "sourceType": "official_public",
+                "sourceTier": "official_public",
+                "freshness": "cached",
+                "cacheOnly": True,
+                "externalProviderCalls": False,
+                "sourceAuthorityAllowed": True,
+            },
+        ]
+    )
+    partial_bundle = build_official_cn_money_market_cache_bundle(
+        [
+            {
+                "symbol": "DR007",
+                "officialSeriesId": "DR007",
+                "value": 1.86,
+                "source": OFFICIAL_CN_MONEY_MARKET_PROVIDER_ID,
+                "sourceType": "official_public",
+                "sourceTier": "official_public",
+                "freshness": "delayed",
+            }
+        ]
+    )
+
+    assert complete_bundle["providerId"] == OFFICIAL_CN_MONEY_MARKET_PROVIDER_ID
+    assert complete_bundle["requiredSeries"] == ["DR007", "SHIBOR_ON"]
+    assert complete_bundle["fulfilledSeries"] == ["DR007", "SHIBOR_ON"]
+    assert complete_bundle["missingSeries"] == []
+    assert complete_bundle["coverageRatio"] == 1.0
+    assert complete_bundle["externalProviderCalls"] is False
+    assert complete_bundle["readinessEligible"] is True
+    assert complete_bundle["scoreGradeEvidenceAllowed"] is True
+    assert complete_bundle["cacheSafeOfficialEvidenceAllowed"] is True
+    assert complete_bundle["scoreContributionAllowed"] is True
+    assert complete_bundle["observationOnly"] is False
+    assert partial_bundle["readinessEligible"] is False
+    assert partial_bundle["scoreContributionAllowed"] is False
+    assert partial_bundle["observationOnly"] is True
+    assert partial_bundle["missingSeries"] == ["SHIBOR_ON"]
+
+
+@pytest.mark.parametrize(
+    ("row_updates", "expected_field", "expected_series", "expected_reason"),
+    [
+        ({}, "missingSeries", ["SHIBOR_ON"], "missing_official_cn_money_market_row"),
+        ({"freshness": "stale", "isStale": True}, "staleSeries", ["SHIBOR_ON"], "stale_official_cn_money_market_evidence"),
+        ({"source": "fallback", "sourceType": "fallback_static", "isFallback": True}, "fallbackOrProxySeries", ["SHIBOR_ON"], "fallback_or_proxy_source"),
+        ({"source": "yfinance_proxy", "sourceType": "unofficial_proxy"}, "fallbackOrProxySeries", ["SHIBOR_ON"], "fallback_or_proxy_source"),
+        ({"source": "synthetic", "sourceType": "synthetic_fixture", "freshness": "synthetic"}, "fallbackOrProxySeries", ["SHIBOR_ON"], "fallback_or_proxy_source"),
+        ({"freshness": "unavailable", "isUnavailable": True, "value": None}, "unavailableSeries", ["SHIBOR_ON"], "unavailable_official_cn_money_market_evidence"),
+        ({"value": "N/A"}, "malformedSeries", ["SHIBOR_ON"], "malformed_official_value"),
+    ],
+)
+def test_official_cn_money_market_cache_bundle_blocks_degraded_rows(
+    row_updates: dict[str, object],
+    expected_field: str,
+    expected_series: list[str],
+    expected_reason: str,
+) -> None:
+    from src.services.official_macro_liquidity_cache_contracts import (
+        OFFICIAL_CN_MONEY_MARKET_PROVIDER_ID,
+        build_official_cn_money_market_cache_bundle,
+    )
+
+    shibor_row = {
+        "symbol": "SHIBOR",
+        "officialSeriesId": "SHIBOR_ON",
+        "value": 1.72,
+        "source": OFFICIAL_CN_MONEY_MARKET_PROVIDER_ID,
+        "sourceType": "official_public",
+        "sourceTier": "official_public",
+        "freshness": "delayed",
+        "cacheOnly": True,
+        "externalProviderCalls": False,
+    }
+    if row_updates:
+        shibor_row.update(row_updates)
+        rows = [
+            {
+                "symbol": "DR007",
+                "officialSeriesId": "DR007",
+                "value": 1.86,
+                "source": OFFICIAL_CN_MONEY_MARKET_PROVIDER_ID,
+                "sourceType": "official_public",
+                "sourceTier": "official_public",
+                "freshness": "delayed",
+                "cacheOnly": True,
+                "externalProviderCalls": False,
+            },
+            shibor_row,
+        ]
+    else:
+        rows = [
+            {
+                "symbol": "DR007",
+                "officialSeriesId": "DR007",
+                "value": 1.86,
+                "source": OFFICIAL_CN_MONEY_MARKET_PROVIDER_ID,
+                "sourceType": "official_public",
+                "sourceTier": "official_public",
+                "freshness": "delayed",
+                "cacheOnly": True,
+                "externalProviderCalls": False,
+            }
+        ]
+
+    bundle = build_official_cn_money_market_cache_bundle(rows)
+
+    assert bundle["readinessEligible"] is False
+    assert bundle["scoreContributionAllowed"] is False
+    assert bundle["sourceAuthorityAllowed"] is False
+    assert bundle["observationOnly"] is True
+    assert bundle[expected_field] == expected_series
+    assert expected_reason in bundle["reasonCodes"]
 
 
 def test_official_fed_liquidity_cache_bundle_source_confidence_is_fail_closed() -> None:

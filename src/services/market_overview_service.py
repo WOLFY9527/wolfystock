@@ -45,7 +45,9 @@ from src.services.official_macro_transport import (
     fred_runtime_config_probe,
 )
 from src.services.official_macro_liquidity_cache_contracts import (
+    build_official_cn_money_market_cache_bundle,
     build_official_fed_liquidity_cache_bundle,
+    official_cn_money_market_series_id,
 )
 from src.services.market_overview_binance_transport import (
     fetch_binance_funding_row,
@@ -6635,15 +6637,67 @@ class MarketOverviewService:
             panel = fallback_factory()
         category = self._category_for_cache_key(key)
         panel = self._with_market_meta(dict(panel), category)
-        panel["items"] = [
-            self._guard_market_temperature_score_input(
-                self._with_temperature_input_meta(self._with_item_meta(item, category, panel), category),
-                panel_key=key,
-            )
+        items = [
+            self._with_temperature_input_meta(self._with_item_meta(item, category, panel), category)
             for item in panel.get("items", [])
             if isinstance(item, dict)
         ]
+        if key == "rates":
+            items = self._with_cn_money_market_readiness_items(items)
+        panel["items"] = [
+            self._guard_market_temperature_score_input(item, panel_key=key)
+            for item in items
+        ]
         return self._with_temperature_input_meta(panel, category)
+
+    @staticmethod
+    def _with_cn_money_market_readiness_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        cn_rows = [
+            item
+            for item in items
+            if isinstance(item, dict) and official_cn_money_market_series_id(item) is not None
+        ]
+        if not cn_rows:
+            return items
+
+        cache_bundle = build_official_cn_money_market_cache_bundle(cn_rows)
+        readiness_eligible = bool(cache_bundle.get("readinessEligible"))
+        reason = str(
+            cache_bundle.get("degradationReason")
+            or "cn_money_market_readiness_not_eligible"
+        )
+        route_codes = [str(code) for code in cache_bundle.get("reasonCodes") or []]
+        next_items: List[Dict[str, Any]] = []
+        for item in items:
+            series_id = official_cn_money_market_series_id(item)
+            if series_id is None:
+                next_items.append(item)
+                continue
+            normalized = {
+                **item,
+                "cacheBundleDiagnostics": copy.deepcopy(cache_bundle),
+                "requiredProviderClass": "official_public.cn_money_market_rates",
+                "readinessEligible": readiness_eligible and series_id in {"DR007", "SHIBOR_ON"},
+                "scoreGradeEvidenceAllowed": readiness_eligible and series_id in {"DR007", "SHIBOR_ON"},
+                "cacheSafeOfficialEvidenceAllowed": readiness_eligible and series_id in {"DR007", "SHIBOR_ON"},
+                "externalProviderCalls": False,
+                "cacheOnly": True,
+            }
+            if readiness_eligible and series_id in {"DR007", "SHIBOR_ON"}:
+                normalized["sourceAuthorityAllowed"] = True
+                normalized["scoreContributionAllowed"] = True
+                normalized["sourceAuthorityReason"] = None
+                normalized["routeRejectedReasonCodes"] = []
+            else:
+                normalized["sourceAuthorityAllowed"] = False
+                normalized["scoreContributionAllowed"] = False
+                normalized["sourceAuthorityReason"] = reason
+                normalized["routeRejectedReasonCodes"] = route_codes
+                normalized["excluded"] = True
+                normalized["excludeReason"] = reason
+                normalized["confidenceWeight"] = 0.0
+            next_items.append(normalized)
+        return next_items
 
     def _with_temperature_input_meta(self, meta: Dict[str, Any], category: str) -> Dict[str, Any]:
         reliability = classify_market_payload_reliability(meta, category=category)
@@ -6677,7 +6731,17 @@ class MarketOverviewService:
         route_rejected_reason_codes: List[str] = []
         score_contribution_allowed = bool(not item.get("excluded") and float(item.get("confidenceWeight") or 0.0) > 0)
 
-        if not source_authority_allowed:
+        if item.get("sourceAuthorityAllowed") is False or item.get("scoreContributionAllowed") is False:
+            source_authority_allowed = False
+            score_contribution_allowed = False
+            source_authority_reason = str(
+                item.get("sourceAuthorityReason")
+                or item.get("degradationReason")
+                or item.get("excludeReason")
+                or MARKET_TEMPERATURE_PROVIDER_ABSENT_REASON
+            )
+            route_rejected_reason_codes = [str(code) for code in item.get("routeRejectedReasonCodes") or []]
+        elif not source_authority_allowed:
             score_contribution_allowed = False
             source_authority_reason = MARKET_TEMPERATURE_PROVIDER_ABSENT_REASON
         elif (

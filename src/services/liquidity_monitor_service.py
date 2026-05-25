@@ -25,6 +25,7 @@ from src.services.market_data_source_registry import project_source_provenance, 
 from src.services.market_overview_binance_transport import fetch_binance_funding_row
 from src.services.market_overview_yfinance_transport import fetch_yfinance_quote_history_frame
 from src.services.official_macro_liquidity_cache_contracts import (
+    build_official_cn_money_market_cache_bundle,
     build_official_fed_liquidity_cache_bundle,
 )
 from src.services.us_breadth_contracts import (
@@ -1208,6 +1209,25 @@ class LiquidityMonitorService:
         snapshot_bundle = panel.payload.get("cacheBundleDiagnostics")
         if isinstance(snapshot_bundle, dict):
             bundle = copy.deepcopy(snapshot_bundle)
+            if "readinessEligible" not in bundle:
+                derived_bundle = build_official_cn_money_market_cache_bundle(
+                    [item for item in panel.payload.get("items", []) if isinstance(item, dict)]
+                    if isinstance(panel.payload.get("items"), list)
+                    else []
+                )
+                for field in (
+                    "readinessEligible",
+                    "scoreGradeEvidenceAllowed",
+                    "cacheSafeOfficialEvidenceAllowed",
+                    "staleSeries",
+                    "fallbackOrProxySeries",
+                    "unavailableSeries",
+                    "blockedSeries",
+                    "policyRejectedSeries",
+                    "runtimeState",
+                ):
+                    if field in derived_bundle:
+                        bundle.setdefault(field, copy.deepcopy(derived_bundle[field]))
             bundle.setdefault("externalProviderCalls", False)
             bundle.setdefault("scoreContributionAllowed", False)
             bundle.setdefault("observationOnly", True)
@@ -1215,95 +1235,9 @@ class LiquidityMonitorService:
 
         raw_items = panel.payload.get("items")
         items = [item for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
-        required = list(OFFICIAL_CN_MONEY_MARKET_RATES_REQUIRED_METRICS)
-        context_metrics = list(OFFICIAL_CN_MONEY_MARKET_RATES_CONTEXT_METRICS)
-        fulfilled: list[str] = []
-        malformed: list[str] = []
-        context_series: list[str] = []
-        context_only_series: list[str] = []
-        freshness_values: list[str] = []
-
-        for item in items:
-            series_id = self._cn_money_market_series_id(item)
-            if not series_id:
-                continue
-            official_public = (
-                str(item.get("sourceType") or panel.payload.get("sourceType") or "").lower() == "official_public"
-                or str(item.get("sourceTier") or panel.payload.get("sourceTier") or "").lower() == "official_public"
-            )
-            provider_id = str(item.get("source") or panel.source or "").lower()
-            if not official_public or provider_id not in {OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID, ""}:
-                continue
-            value = self._numeric(item.get("value") if item.get("value") is not None else item.get("price"))
-            if value is None:
-                if series_id in required:
-                    malformed.append(series_id)
-                continue
-            if series_id in required:
-                fulfilled.append(series_id)
-            elif series_id in context_metrics:
-                context_series.append(series_id)
-                context_only_series.append(series_id)
-            freshness_values.append(self._item_freshness(item, panel))
-
-        fulfilled = [series for series in required if series in set(fulfilled)]
-        malformed = [series for series in required if series in set(malformed)]
-        missing = [series for series in required if series not in set(fulfilled)]
-        coverage_ratio = round(len(fulfilled) / len(required), 2)
-        freshness = self._weakest_freshness(freshness_values or [panel.freshness or "unavailable"])
-        reason_codes = ["official_cn_money_market_rates_cache_valid_diagnostic_only"]
-        if missing:
-            reason_codes.append("missing_required_metric")
-        if malformed:
-            reason_codes.append("unsupported_value_format")
-        if "CN10Y" in context_only_series:
-            reason_codes.append("cn10y_context_only_not_yield_curve_authority")
-
-        return {
-            "providerId": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
-            "providerName": "Official CN Money Market Rates",
-            "source": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
-            "sourceLabel": "Official CN Money Market Rates diagnostic cache",
-            "sourceType": "official_public",
-            "sourceTier": "official_public",
-            "trustLevel": "score_grade_when_configured",
-            "retrievalMode": "cache_only",
-            "cacheOnly": True,
-            "externalProviderCalls": False,
-            "freshness": freshness,
-            "requiredSeries": required,
-            "fulfilledSeries": fulfilled,
-            "missingSeries": missing,
-            "malformedSeries": malformed,
-            "requiredMetrics": required,
-            "fulfilledMetrics": fulfilled,
-            "missingMetrics": missing,
-            "contextSeries": list(dict.fromkeys(context_series)),
-            "contextOnlySeries": list(dict.fromkeys(context_only_series)),
-            "coverageRatio": coverage_ratio,
-            "coverage": coverage_ratio,
-            "isPartial": bool(missing or malformed),
-            "isStale": freshness == "stale",
-            "isUnavailable": not fulfilled,
-            "isFallback": False,
-            "fallbackUsed": False,
-            "observationOnly": True,
-            "sourceAuthorityAllowed": not bool(missing or malformed),
-            "scoreContributionAllowed": False,
-            "reasonCodes": reason_codes,
-            "sourceFreshnessEvidence": {
-                "providerId": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
-                "source": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
-                "freshness": freshness,
-                "requiredSeries": required,
-                "fulfilledSeries": fulfilled,
-                "missingSeries": missing,
-                "contextSeries": list(dict.fromkeys(context_series)),
-                "coverageRatio": coverage_ratio,
-                "externalProviderCalls": False,
-                "cacheOnly": True,
-            },
-        }
+        bundle = build_official_cn_money_market_cache_bundle(items)
+        bundle["sourceLabel"] = "Official CN Money Market Rates diagnostic cache"
+        return bundle
 
     @staticmethod
     def _cn_money_market_series_id(item: Dict[str, Any]) -> str | None:
@@ -3165,6 +3099,9 @@ class LiquidityMonitorService:
                 allowed_source_tiers={"authorized_licensed_feed"},
             )
         if key == "cn_money_market_rates":
+            cache_bundle = evidence.get("cacheBundleDiagnostics")
+            if isinstance(cache_bundle, dict) and "readinessEligible" in cache_bundle:
+                return bool(cache_bundle.get("readinessEligible"))
             return self._indicator_required_inputs_have_diagnostic_authority(
                 evidence,
                 required_inputs={"DR007", "SHIBOR"},

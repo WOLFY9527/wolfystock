@@ -4147,13 +4147,74 @@ def test_liquidity_cn_money_official_cache_rows_remain_observation_only_non_scor
     assert bundle["fulfilledSeries"] == ["DR007", "SHIBOR_ON"]
     assert bundle["missingSeries"] == []
     assert bundle["coverageRatio"] == 1.0
+    assert bundle["readinessEligible"] is True
+    assert bundle["scoreGradeEvidenceAllowed"] is True
+    assert bundle["cacheSafeOfficialEvidenceAllowed"] is True
     assert bundle["contextSeries"] == ["CN10Y"]
     assert bundle["contextOnlySeries"] == ["CN10Y"]
     assert bundle["externalProviderCalls"] is False
-    assert bundle["observationOnly"] is True
-    assert bundle["scoreContributionAllowed"] is False
+    assert bundle["observationOnly"] is False
+    assert bundle["scoreContributionAllowed"] is True
     assert "cn10y_context_only_not_yield_curve_authority" in str(bundle)
     assert all(item["scoreContributionAllowed"] is False for item in indicator["evidence"]["inputs"])
+
+
+def test_liquidity_cn_money_degraded_official_cache_rows_stay_observation_only(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source=OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+            freshness="stale",
+            items=[
+                {
+                    "symbol": "DR007",
+                    "label": "DR007",
+                    "value": 1.86,
+                    "unit": "%",
+                    "source": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+                    "sourceType": "official_public",
+                    "sourceTier": "official_public",
+                    "officialSeriesId": "DR007",
+                    "freshness": "stale",
+                    "isStale": True,
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                },
+                {
+                    "symbol": "SHIBOR",
+                    "label": "SHIBOR overnight",
+                    "value": 1.72,
+                    "unit": "%",
+                    "source": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
+                    "sourceType": "official_public",
+                    "sourceTier": "official_public",
+                    "officialSeriesId": "SHIBOR_ON",
+                    "freshness": "stale",
+                    "isStale": True,
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                },
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["cn_money_market_rates"]
+    diagnostics = indicator["coverageDiagnostics"]
+
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostics["observationOnly"] is True
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["realSourceAvailable"] is False
+    assert diagnostics["missingProviderReason"] == f"requires_{OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID}"
 
 
 def test_binance_crypto_activation_keeps_exchange_public_spot_scoring(

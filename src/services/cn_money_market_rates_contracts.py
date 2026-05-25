@@ -17,6 +17,10 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Sequence
 
+from src.services.official_macro_liquidity_cache_contracts import (
+    build_official_cn_money_market_cache_bundle,
+)
+
 
 OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID = "official_public.cn_money_market_rates"
 OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_NAME = "Official CN Money Market Rates"
@@ -304,39 +308,6 @@ def build_official_cn_money_market_rates_snapshot(
         "contextSeries": list(OFFICIAL_CN_MONEY_MARKET_RATES_CONTEXT_METRICS),
         "coverageRatio": coverage_ratio,
     }
-    cache_bundle_diagnostics = {
-        "providerId": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
-        "providerName": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_NAME,
-        "source": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
-        "sourceLabel": f"{OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_NAME} diagnostic cache",
-        "sourceType": OFFICIAL_CN_MONEY_MARKET_RATES_SOURCE_TYPE,
-        "sourceTier": OFFICIAL_CN_MONEY_MARKET_RATES_SOURCE_TIER,
-        "trustLevel": OFFICIAL_CN_MONEY_MARKET_RATES_TRUST_LEVEL,
-        "retrievalMode": OFFICIAL_CN_MONEY_MARKET_RATES_CACHE_ONLY_MODE,
-        "cacheOnly": True,
-        "externalProviderCalls": False,
-        "freshness": freshness,
-        "requiredSeries": list(OFFICIAL_CN_MONEY_MARKET_RATES_REQUIRED_METRICS),
-        "fulfilledSeries": fulfilled_metrics,
-        "missingSeries": missing_metrics,
-        "requiredMetrics": list(OFFICIAL_CN_MONEY_MARKET_RATES_REQUIRED_METRICS),
-        "fulfilledMetrics": fulfilled_metrics,
-        "missingMetrics": missing_metrics,
-        "contextSeries": list(OFFICIAL_CN_MONEY_MARKET_RATES_CONTEXT_METRICS),
-        "contextOnlySeries": list(OFFICIAL_CN_MONEY_MARKET_RATES_CONTEXT_METRICS),
-        "coverageRatio": coverage_ratio,
-        "coverage": coverage_ratio,
-        "isPartial": False,
-        "isStale": False,
-        "isUnavailable": False,
-        "isFallback": False,
-        "fallbackUsed": False,
-        "observationOnly": True,
-        "sourceAuthorityAllowed": True,
-        "scoreContributionAllowed": False,
-        "reasonCodes": [_SUCCESS_REASON_CODE],
-        "sourceFreshnessEvidence": dict(source_freshness_evidence),
-    }
     ordered_series = (
         *OFFICIAL_CN_MONEY_MARKET_RATES_REQUIRED_METRICS,
         *OFFICIAL_CN_MONEY_MARKET_RATES_CONTEXT_METRICS,
@@ -350,6 +321,39 @@ def build_official_cn_money_market_rates_snapshot(
         for series_id in ordered_series
         if series_id in parsed
     ]
+    cache_bundle_diagnostics = build_official_cn_money_market_cache_bundle(items)
+    cache_bundle_diagnostics.update(
+        {
+            "sourceLabel": f"{OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_NAME} diagnostic cache",
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+        }
+    )
+    cache_bundle_diagnostics["reasonCodes"] = list(
+        dict.fromkeys([_SUCCESS_REASON_CODE, *cache_bundle_diagnostics.get("reasonCodes", [])])
+    )
+    readiness_eligible = bool(cache_bundle_diagnostics.get("readinessEligible"))
+    for item in items:
+        if item.get("officialSeriesId") not in OFFICIAL_CN_MONEY_MARKET_RATES_REQUIRED_METRICS:
+            item["readinessEligible"] = False
+            item["scoreGradeEvidenceAllowed"] = False
+            item["cacheSafeOfficialEvidenceAllowed"] = False
+            continue
+        item["readinessEligible"] = readiness_eligible
+        item["scoreGradeEvidenceAllowed"] = readiness_eligible
+        item["cacheSafeOfficialEvidenceAllowed"] = readiness_eligible
+
+    source_freshness_evidence.update(
+        {
+            "readinessEligible": readiness_eligible,
+            "scoreGradeEvidenceAllowed": readiness_eligible,
+            "cacheSafeOfficialEvidenceAllowed": readiness_eligible,
+        }
+    )
+    cache_bundle_diagnostics["sourceFreshnessEvidence"] = {
+        **dict(cache_bundle_diagnostics.get("sourceFreshnessEvidence") or {}),
+        **dict(source_freshness_evidence),
+    }
     return {
         "providerId": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
         "providerName": OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_NAME,
@@ -385,6 +389,9 @@ def build_official_cn_money_market_rates_snapshot(
         "observationOnly": True,
         "sourceAuthorityAllowed": True,
         "scoreContributionAllowed": False,
+        "readinessEligible": readiness_eligible,
+        "scoreGradeEvidenceAllowed": readiness_eligible,
+        "cacheSafeOfficialEvidenceAllowed": readiness_eligible,
         "reasonCodes": [_SUCCESS_REASON_CODE],
         "warning": "Official CN money-market diagnostic cache; scoring remains disabled.",
     }
