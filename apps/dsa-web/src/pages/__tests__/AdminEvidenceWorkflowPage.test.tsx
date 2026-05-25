@@ -62,45 +62,56 @@ describe('AdminEvidenceWorkflowPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('renders the offline evidence workflow sequence and static review states', () => {
+  it('renders one operational verdict, bounded module status, and the offline evidence workflow sequence', () => {
     render(<AdminEvidenceWorkflowPage />);
 
     const page = screen.getByTestId('admin-evidence-workflow-page');
-    expect(within(page).getByTestId('mock-admin-evidence-diagnostics-console')).toBeInTheDocument();
-    expect(within(page).getByTestId('mock-admin-evidence-dry-run-preview')).toBeInTheDocument();
+    const verdict = within(page).getByTestId('admin-evidence-operational-verdict');
+    expect(within(verdict).getByText('等待人工复核')).toBeInTheDocument();
+    expect(within(verdict).getByText('先生成空白模板并脱敏填写，再运行 preflight。')).toBeInTheDocument();
+
     const workflowGrid = screen.getByTestId('admin-evidence-workflow-grid');
     const statusGrid = screen.getByTestId('admin-evidence-status-grid');
     workflowSteps.forEach((step) => {
       expect(within(workflowGrid).getByText(step)).toBeInTheDocument();
     });
-    expect(within(statusGrid).getByText('GO-REVIEW-REQUIRED')).toBeInTheDocument();
+    expect(within(statusGrid).getAllByTestId('admin-evidence-module-status')).toHaveLength(4);
     expect(within(statusGrid).getByText('NO-GO when evidence missing')).toBeInTheDocument();
     expect(within(statusGrid).getByText('manual review required')).toBeInTheDocument();
     expect(within(statusGrid).getByText('releaseApproved=false')).toBeInTheDocument();
     expect(page).toHaveTextContent('缺证据时保持 NO-GO');
   });
 
-  it('renders the diagnostics console and dry-run preview before the offline workflow reference blocks', () => {
+  it('keeps diagnostics and dry-run preview collapsed after the operator workflow by default', () => {
     render(<AdminEvidenceWorkflowPage />);
 
-    const consoleBlock = screen.getByTestId('mock-admin-evidence-diagnostics-console');
-    const dryRunPreview = screen.getByTestId('mock-admin-evidence-dry-run-preview');
     const workflowGrid = screen.getByTestId('admin-evidence-workflow-grid');
+    const diagnosticsDisclosure = screen.getByTestId('admin-evidence-diagnostics-disclosure');
 
-    expect(Boolean(consoleBlock.compareDocumentPosition(workflowGrid) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(dryRunPreview.compareDocumentPosition(workflowGrid) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(within(screen.getByTestId('admin-evidence-workflow-page')).queryByTestId('mock-admin-evidence-diagnostics-console')).not.toBeInTheDocument();
+    expect(within(screen.getByTestId('admin-evidence-workflow-page')).queryByTestId('mock-admin-evidence-dry-run-preview')).not.toBeInTheDocument();
+    expect(Boolean(workflowGrid.compareDocumentPosition(diagnosticsDisclosure) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+
+    openEvidenceDisclosure('二级细节：诊断与 Dry-run 预览');
+    expect(within(diagnosticsDisclosure).getByTestId('mock-admin-evidence-diagnostics-console')).toBeInTheDocument();
+    expect(within(diagnosticsDisclosure).getByTestId('mock-admin-evidence-dry-run-preview')).toBeInTheDocument();
   });
 
-  it('surfaces purpose, current state, and next operator action in the hero', () => {
+  it('surfaces the L0 verdict and action hint before the L2 operator path', () => {
     render(<AdminEvidenceWorkflowPage />);
 
     const page = screen.getByTestId('admin-evidence-workflow-page');
-    expect(within(page).getByText('页面用途')).toBeInTheDocument();
-    expect(within(page).getByText('当前状态')).toBeInTheDocument();
-    expect(within(page).getByText('下一步')).toBeInTheDocument();
-    expect(within(page).getByText('复核脱敏证据路径')).toBeInTheDocument();
-    expect(within(page).getByText('等待人工复核')).toBeInTheDocument();
-    expect(within(page).getByText('按本地操作手册生成复核材料')).toBeInTheDocument();
+    const verdict = screen.getByTestId('admin-evidence-operational-verdict');
+    const statusGrid = screen.getByTestId('admin-evidence-status-grid');
+    const workflowGrid = screen.getByTestId('admin-evidence-workflow-grid');
+
+    expect(within(verdict).getByText('L0 运维结论')).toBeInTheDocument();
+    expect(within(verdict).getByText('等待人工复核')).toBeInTheDocument();
+    expect(within(verdict).getByText('缺证据时保持 NO-GO；本页只展示复核路径，不提供审批动作。')).toBeInTheDocument();
+    expect(within(verdict).getByText('先生成空白模板并脱敏填写，再运行 preflight。')).toBeInTheDocument();
+    expect(Boolean(verdict.compareDocumentPosition(statusGrid) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(statusGrid.compareDocumentPosition(workflowGrid) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(page.querySelectorAll('[data-testid="admin-evidence-operational-verdict"]')).toHaveLength(1);
   });
 
   it('renders the preflight and manual review sequence in order', () => {
@@ -250,10 +261,11 @@ describe('AdminEvidenceWorkflowPage', () => {
     render(<AdminEvidenceWorkflowPage />);
 
     const statusGrid = screen.getByTestId('admin-evidence-status-grid');
-    expect(within(statusGrid).getByRole('article', { name: '复核入口：GO-REVIEW-REQUIRED' })).toBeInTheDocument();
-    expect(within(statusGrid).getByRole('article', { name: '缺证据状态：NO-GO when evidence missing' })).toBeInTheDocument();
-    expect(within(statusGrid).getByRole('article', { name: '人工门禁：manual review required' })).toBeInTheDocument();
-    expect(within(statusGrid).getByRole('article', { name: '发布字段：releaseApproved=false' })).toBeInTheDocument();
+    expect(within(statusGrid).getAllByTestId('admin-evidence-module-status')).toHaveLength(4);
+    expect(within(statusGrid).getByText('复核入口')).toBeInTheDocument();
+    expect(within(statusGrid).getByText('NO-GO when evidence missing')).toBeInTheDocument();
+    expect(within(statusGrid).getByText('manual review required')).toBeInTheDocument();
+    expect(within(statusGrid).getByText('releaseApproved=false')).toBeInTheDocument();
     expect(statusGrid.textContent || '').not.toMatch(/automatic[- ]?go|production[- ]?ready|launch[- ]?approved/i);
   });
 
@@ -280,26 +292,19 @@ describe('AdminEvidenceWorkflowPage', () => {
   it('uses terminal operator primitives and responsive grid layouts', () => {
     render(<AdminEvidenceWorkflowPage />);
 
-    openEvidenceDisclosure('二级细节：Runbook 参考');
-    openEvidenceDisclosure('二级细节：离线命令与空状态说明');
     const page = screen.getByTestId('admin-evidence-workflow-page');
     const workflowGrid = screen.getByTestId('admin-evidence-workflow-grid');
     const statusGrid = screen.getByTestId('admin-evidence-status-grid');
-    const commandList = screen.getByTestId('admin-evidence-command-snippets').querySelector('[data-terminal-primitive="dense-list"]');
-    const runbookList = screen.getByTestId('admin-evidence-runbook-references').querySelector('[data-terminal-primitive="dense-list"]');
     const workflowList = workflowGrid.closest('[data-terminal-primitive="dense-list"]') ?? workflowGrid;
 
     expect(page).toHaveClass('overflow-y-auto', 'overflow-x-hidden', 'no-scrollbar');
     expect(page.className).not.toContain('bg-[#050505]');
     expect(page.querySelector('[data-terminal-primitive="page-shell"]')).not.toBeNull();
-    expect(page.querySelectorAll('[data-terminal-primitive="panel"]').length).toBeGreaterThan(5);
-    expect(page.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThan(5);
-    expect(page.querySelectorAll('[data-terminal-primitive="disclosure"]').length).toBeGreaterThan(3);
-    expect(page.querySelectorAll('[data-terminal-primitive="nested-block"]').length).toBeGreaterThan(10);
+    expect(page.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeLessThanOrEqual(8);
+    expect(page.querySelectorAll('[data-terminal-primitive="nested-block"]').length).toBeLessThanOrEqual(12);
+    expect(page.querySelectorAll('[data-terminal-primitive="disclosure"]').length).toBeGreaterThanOrEqual(4);
     expect(workflowList).toHaveAttribute('data-terminal-primitive', 'dense-list');
     expect(statusGrid).toHaveClass('grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-4');
-    expect(commandList).toHaveAttribute('data-terminal-primitive', 'dense-list');
-    expect(runbookList).toHaveAttribute('data-terminal-primitive', 'dense-list');
   });
 
   it('keeps vertical shell spacing on TerminalPageShell instead of the route scroll wrapper', () => {

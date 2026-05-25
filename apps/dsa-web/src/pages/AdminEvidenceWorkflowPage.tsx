@@ -2,13 +2,9 @@ import type React from 'react';
 import {
   Archive,
   BookOpenCheck,
-  CheckCircle2,
   ClipboardCheck,
-  LockKeyhole,
   Route,
-  ShieldCheck,
   TerminalSquare,
-  TriangleAlert,
 } from 'lucide-react';
 import { AdminEvidenceDiagnosticsConsole } from '../components/evidence/AdminEvidenceDiagnosticsConsole';
 import { AdminEvidenceDryRunPreview } from '../components/evidence/AdminEvidenceDryRunPreview';
@@ -16,7 +12,6 @@ import {
   TerminalChip,
   TerminalDenseList,
   TerminalDisclosure,
-  TerminalMetric,
   TerminalNestedBlock,
   TerminalNotice,
   TerminalPageHeading,
@@ -25,7 +20,6 @@ import {
   TerminalSectionHeader,
 } from '../components/terminal';
 
-type Tone = 'info' | 'warn' | 'danger' | 'good';
 type CommandSnippet = {
   label: string;
   note: string;
@@ -50,14 +44,12 @@ const workflowSteps = [
 const statusCards: Array<{
   label: string;
   value: string;
-  tone: Tone;
-  icon: React.ComponentType<{ className?: string }>;
   note: string;
 }> = [
-  { label: '复核入口', value: 'GO-REVIEW-REQUIRED', tone: 'warn', icon: ShieldCheck, note: '进入人工复核之前不提升任何上线结论。' },
-  { label: '缺证据状态', value: 'NO-GO when evidence missing', tone: 'danger', icon: TriangleAlert, note: '缺少关键脱敏证据时保持 NO-GO。' },
-  { label: '人工门禁', value: 'manual review required', tone: 'info', icon: LockKeyhole, note: '页面仅展示门禁姿态，不提供审批动作。' },
-  { label: '发布字段', value: 'releaseApproved=false', tone: 'good', icon: CheckCircle2, note: '发布结论由线下复核流程决定。' },
+  { label: '复核入口', value: 'GO-REVIEW-REQUIRED', note: '进入人工复核前不提升结论。' },
+  { label: '缺证据状态', value: 'NO-GO when evidence missing', note: '关键脱敏证据缺失即阻塞。' },
+  { label: '人工门禁', value: 'manual review required', note: '线下复核决定结论。' },
+  { label: '发布字段', value: 'releaseApproved=false', note: '默认保持未放行。' },
 ];
 
 const commandSnippets: CommandSnippet[] = [
@@ -161,13 +153,6 @@ const schemaReferenceGroups = [
   },
 ];
 
-function toneVariant(tone: Tone): React.ComponentProps<typeof TerminalChip>['variant'] {
-  if (tone === 'good') return 'success';
-  if (tone === 'warn') return 'caution';
-  if (tone === 'danger') return 'danger';
-  return 'info';
-}
-
 const AdminEvidenceWorkflowPage: React.FC = () => (
   <div
     data-testid="admin-evidence-workflow-page"
@@ -181,41 +166,44 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
           action={(
             <div className="flex flex-wrap gap-2">
               <TerminalChip variant="info">只读视图</TerminalChip>
-              <TerminalChip variant="neutral">脱敏状态</TerminalChip>
               <TerminalChip variant="caution">人工门禁</TerminalChip>
             </div>
           )}
         />
-        <TerminalNotice variant="info" className="mt-4">
-          离线证据复核总览，只读、脱敏、人工门禁。
-        </TerminalNotice>
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <TerminalMetric
-            label="页面用途"
-            value="复核脱敏证据路径"
-            subvalue="模板、校验、归档、人工复核"
-            valueClassName="text-sm font-semibold"
-            className="min-w-0"
-          />
-          <TerminalMetric
-            label="当前状态"
-            value="等待人工复核"
-            subvalue="缺证据时保持 NO-GO"
-            valueClassName="text-sm font-semibold"
-            className="min-w-0"
-          />
-          <TerminalMetric
-            label="下一步"
-            value="按本地操作手册生成复核材料"
-            subvalue="先确认交接状态；命令、数据结构、参考文档默认折叠"
-            valueClassName="text-sm font-semibold"
-            className="min-w-0"
-          />
+        <div
+          data-testid="admin-evidence-operational-verdict"
+          className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.42fr)]"
+        >
+          <div className="min-w-0 rounded-lg border border-amber-300/18 bg-amber-300/[0.04] p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-100/62">L0 运维结论</p>
+            <h2 className="mt-2 text-lg font-semibold leading-7 text-white">等待人工复核</h2>
+            <p className="mt-2 text-sm leading-6 text-white/68">
+              缺证据时保持 NO-GO；本页只展示复核路径，不提供审批动作。
+            </p>
+          </div>
+          <TerminalNotice variant="info" className="self-stretch">
+            先生成空白模板并脱敏填写，再运行 preflight。
+          </TerminalNotice>
+        </div>
+        <div
+          data-testid="admin-evidence-status-grid"
+          className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4"
+          aria-label="静态复核状态"
+        >
+          {statusCards.map(({ label, value, note }) => (
+            <article
+              key={value}
+              data-testid="admin-evidence-module-status"
+              aria-label={`${label}：${value}`}
+              className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2"
+            >
+              <p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-white/36">{label}</p>
+              <p className="mt-1 break-words font-mono text-[12px] font-semibold leading-5 text-white/86">{value}</p>
+              <p className="mt-1 text-[11px] leading-5 text-white/42">{note}</p>
+            </article>
+          ))}
         </div>
       </TerminalPanel>
-
-      <AdminEvidenceDiagnosticsConsole />
-      <AdminEvidenceDryRunPreview />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
         <TerminalPanel as="section" className="xl:col-span-8">
@@ -247,7 +235,6 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
             <TerminalSectionHeader
               eyebrow="能力边界"
               title="页面不执行动作"
-              action={<TerminalChip variant="success">只读</TerminalChip>}
             />
             <div className="mt-4 space-y-3">
               <TerminalNotice variant="neutral">不提供上传入口，不调用后端写接口，不变更运行时配置。</TerminalNotice>
@@ -262,7 +249,6 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
             <TerminalSectionHeader
               eyebrow="LOCAL GUARD"
               title="本地目录保护"
-              action={<TerminalChip variant="info">仅占位路径</TerminalChip>}
             />
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
               {localWorkspaceGuards.map((guard) => (
@@ -276,38 +262,16 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
         </div>
       </div>
 
-      <TerminalPanel as="section">
-        <TerminalSectionHeader
-          eyebrow="静态门禁"
-          title="复核状态带"
-          action={<TerminalChip variant="caution">缺证据时 NO-GO</TerminalChip>}
-        />
-        <div
-          data-testid="admin-evidence-status-grid"
-          className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4"
-          aria-label="静态复核状态"
-        >
-          {statusCards.map(({ label, value, tone, icon: Icon, note }) => (
-            <article key={value} aria-label={`${label}：${value}`}>
-              <TerminalNestedBlock className="h-full">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/34">{label}</p>
-                    <p className="mt-2 break-words font-mono text-sm font-semibold text-white">{value}</p>
-                  </div>
-                  <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/8 bg-white/[0.03] text-white/70">
-                    <Icon className="h-4 w-4" aria-hidden="true" />
-                  </span>
-                </div>
-                <div className="mt-3 flex items-start justify-between gap-3">
-                  <TerminalChip variant={toneVariant(tone)}>{label}</TerminalChip>
-                  <p className="min-w-0 text-right text-[11px] leading-5 text-white/40">{note}</p>
-                </div>
-              </TerminalNestedBlock>
-            </article>
-          ))}
+      <TerminalDisclosure
+        data-testid="admin-evidence-diagnostics-disclosure"
+        title="二级细节：诊断与 Dry-run 预览"
+        summary="默认折叠"
+      >
+        <div className="space-y-4">
+          <AdminEvidenceDiagnosticsConsole />
+          <AdminEvidenceDryRunPreview />
         </div>
-      </TerminalPanel>
+      </TerminalDisclosure>
 
       <TerminalDisclosure title="二级细节：Runbook 参考" summary="默认折叠">
         <div data-testid="admin-evidence-runbook-references">
