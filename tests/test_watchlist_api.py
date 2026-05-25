@@ -420,6 +420,38 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(scanner["cap_reason"], "configured_cache_only_diagnostic")
         self.assertEqual(scanner["degradation_reason"], "configured_cache_only_diagnostic")
         self.assertFalse(scanner["score_grade_allowed"])
+        self.assertEqual(
+            scanner["reason_families"]["cap_reason"],
+            {
+                "raw_code": "configured_cache_only_diagnostic",
+                "family": "unclassified",
+                "scope": None,
+            },
+        )
+        self.assertEqual(
+            scanner["reason_families"]["degradation_reason"],
+            {
+                "raw_code": "configured_cache_only_diagnostic",
+                "family": "unclassified",
+                "scope": None,
+            },
+        )
+        self.assertEqual(
+            scanner["reason_families"]["source_confidence"]["cap_reason"],
+            {
+                "raw_code": "configured_cache_only_diagnostic",
+                "family": "unclassified",
+                "scope": None,
+            },
+        )
+        self.assertEqual(
+            scanner["reason_families"]["source_confidence"]["degradation_reason"],
+            {
+                "raw_code": "configured_cache_only_diagnostic",
+                "family": "unclassified",
+                "scope": None,
+            },
+        )
         self.assertEqual(scanner["source_confidence"]["source"], "local_us_parquet_dir")
         self.assertEqual(scanner["source_confidence"]["source_type"], "cache_snapshot")
         self.assertFalse(scanner["source_confidence"]["score_contribution_allowed"])

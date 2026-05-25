@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import and_, desc, select
 
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
+from src.services.reason_code_vocabulary import classify_reason_code
 from src.storage import AppUser, DatabaseManager, MarketScannerCandidate, MarketScannerRun, RuleBacktestRun, UserWatchlistItem
 from src.utils.symbol_normalization import canonical_stock_code
 
@@ -153,6 +154,40 @@ class WatchlistService:
         return normalized or None
 
     @classmethod
+    def _project_reason_family(cls, raw_code: Any) -> Optional[Dict[str, Any]]:
+        normalized = cls._optional_str(raw_code)
+        if normalized is None:
+            return None
+        classification = classify_reason_code(normalized)
+        return {
+            "raw_code": classification.raw_code,
+            "family": classification.family,
+            "scope": classification.scope,
+        }
+
+    @classmethod
+    def _project_source_confidence_reason_families(cls, payload: Any) -> Optional[Dict[str, Any]]:
+        if not isinstance(payload, dict):
+            return None
+        projected = {
+            "degradation_reason": cls._project_reason_family(payload.get("degradation_reason")),
+            "cap_reason": cls._project_reason_family(payload.get("cap_reason")),
+        }
+        return projected if any(value is not None for value in projected.values()) else None
+
+    @classmethod
+    def _project_scanner_reason_families(cls, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if not isinstance(payload, dict):
+            return None
+        source_confidence = payload.get("source_confidence")
+        projected = {
+            "cap_reason": cls._project_reason_family(payload.get("cap_reason")),
+            "degradation_reason": cls._project_reason_family(payload.get("degradation_reason")),
+            "source_confidence": cls._project_source_confidence_reason_families(source_confidence),
+        }
+        return projected if any(value is not None for value in projected.values()) else None
+
+    @classmethod
     def _project_source_confidence(cls, payload: Any) -> Optional[Dict[str, Any]]:
         if not isinstance(payload, dict):
             return None
@@ -196,6 +231,7 @@ class WatchlistService:
             "degradation_reason": cls._optional_str(explainability.get("degradation_reason")),
             "source_confidence": cls._project_source_confidence(explainability.get("source_confidence")),
         }
+        projected["reason_families"] = cls._project_scanner_reason_families(projected)
         return projected if any(value is not None for value in projected.values()) else None
 
     def _scanner_intelligence_context_by_item(self, items: List[Dict[str, Any]]) -> Dict[tuple[int, str], Dict[str, Dict[str, Any]]]:

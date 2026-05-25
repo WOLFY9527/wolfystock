@@ -78,6 +78,23 @@ class WatchlistOhlcvProvenanceResponse(BaseModel):
     source_label: str
 
 
+class WatchlistReasonFamilyResponse(BaseModel):
+    raw_code: str
+    family: str
+    scope: Optional[str] = None
+
+
+class WatchlistScannerSourceConfidenceReasonFamiliesResponse(BaseModel):
+    degradation_reason: Optional[WatchlistReasonFamilyResponse] = None
+    cap_reason: Optional[WatchlistReasonFamilyResponse] = None
+
+
+class WatchlistScannerReasonFamiliesResponse(BaseModel):
+    cap_reason: Optional[WatchlistReasonFamilyResponse] = None
+    degradation_reason: Optional[WatchlistReasonFamilyResponse] = None
+    source_confidence: Optional["WatchlistScannerSourceConfidenceReasonFamiliesResponse"] = None
+
+
 class WatchlistScannerIntelligenceResponse(BaseModel):
     last_score: Optional[float] = None
     last_rank: Optional[int] = None
@@ -93,6 +110,7 @@ class WatchlistScannerIntelligenceResponse(BaseModel):
     cap_reason: Optional[str] = None
     degradation_reason: Optional[str] = None
     source_confidence: Optional["WatchlistScannerSourceConfidenceResponse"] = None
+    reason_families: Optional["WatchlistScannerReasonFamiliesResponse"] = None
 
 
 class WatchlistScannerSourceConfidenceResponse(BaseModel):

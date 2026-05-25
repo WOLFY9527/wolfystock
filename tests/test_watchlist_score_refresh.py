@@ -181,6 +181,7 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         self.assertIsNone(item["intelligence"]["scanner"].get("degradation_reason"))
         self.assertIsNone(item["intelligence"]["scanner"].get("score_grade_allowed"))
         self.assertIsNone(item["intelligence"]["scanner"].get("source_confidence"))
+        self.assertIsNone(item["intelligence"]["scanner"].get("reason_families"))
 
     def test_refresh_projects_scanner_score_explainability_disclosure_metadata(self) -> None:
         self.service.add_item(
@@ -237,6 +238,38 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         self.assertEqual(disclosure["cap_reason"], "public_proxy_not_score_grade")
         self.assertEqual(disclosure["degradation_reason"], "fallback_source")
         self.assertFalse(disclosure["score_grade_allowed"])
+        self.assertEqual(
+            disclosure["reason_families"]["cap_reason"],
+            {
+                "raw_code": "public_proxy_not_score_grade",
+                "family": "source_confidence_cap",
+                "scope": "scanner_evidence_packet",
+            },
+        )
+        self.assertEqual(
+            disclosure["reason_families"]["degradation_reason"],
+            {
+                "raw_code": "fallback_source",
+                "family": "fallback",
+                "scope": "source_confidence",
+            },
+        )
+        self.assertEqual(
+            disclosure["reason_families"]["source_confidence"]["cap_reason"],
+            {
+                "raw_code": "public_proxy_not_score_grade",
+                "family": "source_confidence_cap",
+                "scope": "scanner_evidence_packet",
+            },
+        )
+        self.assertEqual(
+            disclosure["reason_families"]["source_confidence"]["degradation_reason"],
+            {
+                "raw_code": "fallback_source",
+                "family": "fallback",
+                "scope": "source_confidence",
+            },
+        )
         self.assertEqual(disclosure["source_confidence"]["source"], "yfinance_proxy")
         self.assertEqual(disclosure["source_confidence"]["source_type"], "proxy")
         self.assertEqual(disclosure["source_confidence"]["freshness"], "fallback")
@@ -303,11 +336,81 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         disclosure = item["intelligence"]["scanner"]
         self.assertEqual(disclosure["score_confidence"], 0.35)
         self.assertFalse(disclosure["score_grade_allowed"])
+        self.assertEqual(
+            disclosure["reason_families"]["cap_reason"],
+            {
+                "raw_code": "configured_cache_only_diagnostic",
+                "family": "unclassified",
+                "scope": None,
+            },
+        )
+        self.assertEqual(
+            disclosure["reason_families"]["degradation_reason"],
+            {
+                "raw_code": "configured_cache_only_diagnostic",
+                "family": "unclassified",
+                "scope": None,
+            },
+        )
         self.assertEqual(disclosure["source_confidence"]["source"], "local_us_parquet_dir")
         self.assertEqual(disclosure["source_confidence"]["source_type"], "cache_snapshot")
         self.assertEqual(disclosure["source_confidence"]["freshness"], "cached")
         self.assertTrue(disclosure["source_confidence"]["observation_only"])
         self.assertFalse(disclosure["source_confidence"]["score_contribution_allowed"])
+        get_daily_data.assert_not_called()
+        get_realtime_quote.assert_not_called()
+
+    def test_refresh_projects_unknown_reason_family_sidecar_without_provider_calls(self) -> None:
+        self.service.add_item(
+            owner_id="user-1",
+            symbol="WULF",
+            market="us",
+            scanner_score=60,
+            scanner_rank=8,
+        )
+        self._save_scanner_candidate(
+            symbol="WULF",
+            market="us",
+            score=72.5,
+            rank=3,
+            diagnostics_payload={
+                "score_explainability": {
+                    "score_confidence": 0.61,
+                    "cap_reason": "mystery_reason_code",
+                    "degradation_reason": "fallback_source",
+                    "score_grade_allowed": False,
+                },
+            },
+        )
+
+        with (
+            patch("data_provider.base.DataFetcherManager.get_daily_data", side_effect=AssertionError("watchlist reason families should not fetch provider history")) as get_daily_data,
+            patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=AssertionError("watchlist reason families should not fetch provider quotes")) as get_realtime_quote,
+        ):
+            result = self.service.refresh_scores(owner_id="user-1", market="us")
+            item = self.service.list_items(owner_id="user-1")[0]
+
+        self.assertEqual(result["updated_count"], 1)
+        self.assertEqual(item["scanner_score"], 72.5)
+        disclosure = item["intelligence"]["scanner"]
+        self.assertEqual(disclosure["cap_reason"], "mystery_reason_code")
+        self.assertEqual(disclosure["degradation_reason"], "fallback_source")
+        self.assertEqual(
+            disclosure["reason_families"]["cap_reason"],
+            {
+                "raw_code": "mystery_reason_code",
+                "family": "unclassified",
+                "scope": None,
+            },
+        )
+        self.assertEqual(
+            disclosure["reason_families"]["degradation_reason"],
+            {
+                "raw_code": "fallback_source",
+                "family": "fallback",
+                "scope": "source_confidence",
+            },
+        )
         get_daily_data.assert_not_called()
         get_realtime_quote.assert_not_called()
 
