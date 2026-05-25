@@ -358,6 +358,7 @@ export interface PortfolioRiskDiagnostics extends PortfolioEvidenceMetadata {
 }
 
 export interface PortfolioRiskDiagnosticsStateFields {
+  valuationLineageState?: string | null;
   sourceAuthorityState?: string | null;
   fxFreshnessState?: string | null;
   holdingsLineageState?: string | null;

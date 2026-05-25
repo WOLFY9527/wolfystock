@@ -213,6 +213,7 @@ function consumerFxLabel(state: 'fresh' | 'stale' | 'missing' | 'pending', langu
 
 function consumerPortfolioDataNotice(
   options: {
+    valuationLineageNotice?: string | null;
     hasPriceFallback: boolean;
     hasUpdatingPrice: boolean;
     hasLimitedConfidence: boolean;
@@ -225,6 +226,9 @@ function consumerPortfolioDataNotice(
     return language === 'zh'
       ? '部分汇率数据暂不可用，估值已暂停更新。'
       : 'Some exchange-rate data is temporarily unavailable; valuation updates are paused.';
+  }
+  if (options.valuationLineageNotice) {
+    return options.valuationLineageNotice;
   }
   if (options.hasFxStale) {
     return language === 'zh'
@@ -309,6 +313,85 @@ function consumerFxRefreshFeedback(stale: boolean, language: PortfolioLanguage):
 
 function normalizeTrustToken(value?: string | null): string {
   return String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+function mapValuationLineageState(
+  rawValue: string | null | undefined,
+  language: PortfolioLanguage,
+): { notice: string | null; trustItem: PortfolioTrustChipItem | null } {
+  const token = normalizeTrustToken(rawValue);
+  if (!token) {
+    return { notice: null, trustItem: null };
+  }
+
+  if (token === 'current') {
+    return {
+      notice: null,
+      trustItem: {
+        key: `valuation-lineage-${token}`,
+        label: language === 'zh' ? '估值已更新' : 'Valuation current',
+        variant: 'success',
+      },
+    };
+  }
+
+  if (token === 'price_fallback' || token === 'fx_stale') {
+    return {
+      notice: language === 'zh'
+        ? '当前估值可能存在延迟，仅供参考。'
+        : 'Current valuation may be delayed and is for reference only.',
+      trustItem: {
+        key: `valuation-lineage-${token}`,
+        label: language === 'zh' ? '估值可能延迟' : 'Valuation may be delayed',
+        variant: 'caution',
+      },
+    };
+  }
+
+  if (
+    token === 'fx_fallback_1_to_1'
+    || token === 'unavailable'
+    || token === 'missing_authority'
+    || token === 'authority_missing'
+    || token === 'missing_source_authority'
+    || token.includes('missing_authority')
+    || token.includes('authority_missing')
+  ) {
+    return {
+      notice: language === 'zh'
+        ? '部分汇率数据暂不可用，估值已暂停更新。'
+        : 'Some exchange-rate data is temporarily unavailable; valuation updates are paused.',
+      trustItem: {
+        key: `valuation-lineage-${token}`,
+        label: language === 'zh' ? '估值已暂停' : 'Valuation paused',
+        variant: 'danger',
+      },
+    };
+  }
+
+  if (token === 'partial_cash' || token === 'cash_missing') {
+    return {
+      notice: language === 'zh'
+        ? '现金流水不完整，估值仅供参考。'
+        : 'Cash ledger is incomplete; valuation is for reference only.',
+      trustItem: {
+        key: `valuation-lineage-${token}`,
+        label: language === 'zh' ? '现金流水不完整' : 'Cash ledger incomplete',
+        variant: 'caution',
+      },
+    };
+  }
+
+  return {
+    notice: language === 'zh'
+      ? '估值状态待确认，仅供参考。'
+      : 'Valuation status pending and is for reference only.',
+    trustItem: {
+      key: `valuation-lineage-${token}`,
+      label: language === 'zh' ? '估值待确认' : 'Valuation pending',
+      variant: 'neutral',
+    },
+  };
 }
 
 function isReadyTrustToken(token: string): boolean {
@@ -1735,7 +1818,12 @@ const PortfolioPage: React.FC = () => {
   const hasPriceFallback = positionRows.some((row) => row.isPriceFallback);
   const hasUpdatingPrice = hasHoldings && positionRows.some((row) => !row.priceAsOf && !row.isPriceFallback);
   const hasLimitedConfidence = positionRows.some(hasLimitedValuationConfidence);
+  const { notice: valuationLineageNotice, trustItem: valuationLineageTrustItem } = useMemo(
+    () => mapValuationLineageState(snapshot?.valuationLineageState, language),
+    [language, snapshot?.valuationLineageState],
+  );
   const consumerDataNotice = consumerPortfolioDataNotice({
+    valuationLineageNotice,
     hasPriceFallback,
     hasUpdatingPrice,
     hasLimitedConfidence,
@@ -1897,6 +1985,7 @@ const PortfolioPage: React.FC = () => {
     ),
   );
   const valuationTrustItems = useMemo(() => uniqueTrustItems([
+    valuationLineageTrustItem,
     hasPriceFallback
       ? { key: 'valuation-delayed', label: language === 'zh' ? '价格可能延迟' : 'Pricing may be delayed', variant: 'caution' }
       : hasLimitedConfidence
@@ -1925,6 +2014,7 @@ const PortfolioPage: React.FC = () => {
     snapshot?.cashLedgerCompletenessState,
     snapshot?.fxFreshnessState,
     snapshot?.holdingsLineageState,
+    valuationLineageTrustItem,
   ]);
   const riskTrustItems = useMemo(() => uniqueTrustItems([
     portfolioEvidenceSummary

@@ -68,6 +68,7 @@ const portfolioDiagnostics = {
     },
   },
   sourceAuthorityState: 'manual',
+  valuationLineageState: 'price_fallback',
   fxFreshnessState: 'stale',
   holdingsLineageState: 'manual',
   cashLedgerCompletenessState: 'missing',
@@ -135,6 +136,7 @@ export const portfolioRiskDiagnosticsTypeContract: PortfolioRiskResponse = {
 };
 
 export const portfolioDiagnosticsStateTypeContract = {
+  snapshotValuationLineageState: portfolioSnapshotDiagnosticsTypeContract.valuationLineageState,
   snapshotSourceAuthorityState: portfolioSnapshotDiagnosticsTypeContract.sourceAuthorityState,
   snapshotFxFreshnessState: portfolioSnapshotDiagnosticsTypeContract.fxFreshnessState,
   snapshotHoldingsLineageState: portfolioSnapshotDiagnosticsTypeContract.holdingsLineageState,
@@ -144,6 +146,7 @@ export const portfolioDiagnosticsStateTypeContract = {
   snapshotConfidenceCap: portfolioSnapshotDiagnosticsTypeContract.confidenceCap?.value,
   snapshotRiskDiagnostics: portfolioSnapshotDiagnosticsTypeContract.riskDiagnostics?.sourceAuthority?.state,
   snapshotRiskEvidenceSourceRefs: portfolioSnapshotDiagnosticsTypeContract.portfolioRiskEvidence?.sourceRefs?.length,
+  riskValuationLineageState: portfolioRiskDiagnosticsTypeContract.valuationLineageState,
   riskSourceAuthorityState: portfolioRiskDiagnosticsTypeContract.sourceAuthorityState,
   riskFxFreshnessState: portfolioRiskDiagnosticsTypeContract.fxFreshnessState,
   riskHoldingsLineageState: portfolioRiskDiagnosticsTypeContract.holdingsLineageState,

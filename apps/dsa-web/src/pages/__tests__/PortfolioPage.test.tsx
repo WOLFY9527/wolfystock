@@ -122,6 +122,7 @@ function makeSnapshot(options: {
   fxStale?: boolean;
   accountCount?: number;
   includePosition?: boolean;
+  valuationLineageState?: string | null;
   positionOverrides?: Record<string, unknown>;
   fxRates?: Array<{
     fromCurrency: string;
@@ -211,6 +212,7 @@ function makeSnapshot(options: {
     feeTotal: 0,
     taxTotal: 0,
     fxStale: options.fxStale ?? true,
+    ...(options.valuationLineageState !== undefined ? { valuationLineageState: options.valuationLineageState } : {}),
     fxRates: options.fxRates ?? [
       {
         fromCurrency: 'USD',
@@ -1116,6 +1118,92 @@ describe('PortfolioPage FX refresh', () => {
     expect(statusStrip).not.toHaveTextContent('Provider Ops');
     expect(statusStrip).not.toHaveTextContent('数据源设置');
     expect(statusStrip.textContent || '').not.toMatch(/provider|api key|setup|remediation|sourceAuthority|confidenceCap|reason_codes|fallback/i);
+  });
+
+  it('maps current valuation lineage state to consumer-safe positive trust copy', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({
+      includePosition: false,
+      fxStale: false,
+      valuationLineageState: 'current',
+    }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const statusStrip = screen.getByTestId('portfolio-account-status-strip');
+    const valuationTrust = within(statusStrip).getByTestId('portfolio-valuation-trust-strip');
+    expect(valuationTrust).toHaveTextContent('估值已更新');
+    expect(statusStrip.textContent || '').not.toMatch(/current|valuationLineageState/i);
+    expect(screen.queryByTestId('portfolio-consumer-data-notice')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['price_fallback', '当前估值可能存在延迟，仅供参考。'],
+    ['fx_stale', '当前估值可能存在延迟，仅供参考。'],
+    ['fx_fallback_1_to_1', '部分汇率数据暂不可用，估值已暂停更新。'],
+    ['partial_cash', '现金流水不完整，估值仅供参考。'],
+  ])('maps valuation lineage state %s to consumer-safe notice copy', async (valuationLineageState, expectedNotice) => {
+    getSnapshot.mockResolvedValue(makeSnapshot({
+      includePosition: false,
+      fxStale: false,
+      valuationLineageState,
+    }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const statusStrip = screen.getByTestId('portfolio-account-status-strip');
+    const valuationTrust = within(statusStrip).getByTestId('portfolio-valuation-trust-strip');
+    expect(screen.getByTestId('portfolio-consumer-data-notice')).toHaveTextContent(expectedNotice);
+    expect(valuationTrust.textContent || '').not.toContain(valuationLineageState);
+    expect(statusStrip.textContent || '').not.toContain(valuationLineageState);
+  });
+
+  it('does not leak nested valuation lineage diagnostics or raw provider fields into the consumer DOM', async () => {
+    const snapshot = makeSnapshot({
+      includePosition: false,
+      fxStale: false,
+      valuationLineageState: 'fx_fallback_1_to_1',
+    }) as ReturnType<typeof makeSnapshot> & Record<string, unknown>;
+    snapshot.riskDiagnostics = {
+      valuationLineage: {
+        state: 'price_fallback',
+        summary: 'source_refs required_evidence admin_diagnostics provider cache raw source reason',
+        details: {
+          source_refs: ['provider_cache_source_reason'],
+          required_evidence: ['provider_authority'],
+          admin_diagnostics: {
+            provider: 'raw_provider_name',
+            cache: 'cache_layer',
+            source: 'source_ref',
+            reason_code: 'internal_reason_code',
+            raw_payload: { valuationLineage: 'nested_raw_lineage' },
+          },
+        },
+        issues: [
+          {
+            code: 'provider_cache_source_reason',
+            label: 'raw provider cache source reason',
+            detail: 'admin_diagnostics raw JSON',
+          },
+        ],
+      },
+    };
+    snapshot.portfolioRiskEvidence = {
+      limitationLabels: ['仅供风险观察'],
+    };
+    getSnapshot.mockResolvedValue(snapshot);
+
+    const { container } = render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(screen.getByTestId('portfolio-consumer-data-notice')).toHaveTextContent('部分汇率数据暂不可用，估值已暂停更新。');
+    expect(container.textContent || '').not.toMatch(
+      /valuationLineage|source_refs|required_evidence|admin_diagnostics|provider|cache|raw|source|reason|fx_fallback_1_to_1|price_fallback/i,
+    );
   });
 
   it('keeps native exposure visible when FX conversion is unavailable', async () => {
