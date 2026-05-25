@@ -88,6 +88,30 @@ class WatchlistScannerIntelligenceResponse(BaseModel):
     reason: Optional[str] = None
     last_scanned_at: Optional[str] = None
     ohlcv_provenance: Optional[WatchlistOhlcvProvenanceResponse] = None
+    score_confidence: Optional[float] = None
+    score_grade_allowed: Optional[bool] = None
+    cap_reason: Optional[str] = None
+    degradation_reason: Optional[str] = None
+    source_confidence: Optional["WatchlistScannerSourceConfidenceResponse"] = None
+
+
+class WatchlistScannerSourceConfidenceResponse(BaseModel):
+    source: Optional[str] = None
+    source_label: Optional[str] = None
+    source_type: Optional[str] = None
+    as_of: Optional[str] = None
+    freshness: Optional[str] = None
+    is_fallback: Optional[bool] = None
+    is_stale: Optional[bool] = None
+    is_partial: Optional[bool] = None
+    is_synthetic: Optional[bool] = None
+    is_unavailable: Optional[bool] = None
+    coverage: Optional[float] = None
+    score_contribution_allowed: Optional[bool] = None
+    source_authority_allowed: Optional[bool] = None
+    observation_only: Optional[bool] = None
+    degradation_reason: Optional[str] = None
+    cap_reason: Optional[str] = None
 
 
 class WatchlistStrategySimulationIntelligenceResponse(BaseModel):

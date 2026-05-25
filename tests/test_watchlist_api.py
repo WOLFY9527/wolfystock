@@ -338,6 +338,93 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(provenance["source_type"], "cache_snapshot")
         self.assertEqual(provenance["source_label"], "本地 Parquet 历史")
 
+    def test_watchlist_items_project_scanner_confidence_disclosure_metadata(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        now = datetime.now()
+        run = MarketScannerRun(
+            market="us",
+            profile="us_preopen_v1",
+            universe_name="us_preopen_watchlist_v1",
+            status="completed",
+            run_at=now,
+            completed_at=now,
+            shortlist_size=1,
+        )
+        candidate = MarketScannerCandidate(
+            symbol="WULF",
+            name="WULF",
+            rank=2,
+            score=71.5,
+            reason_summary="Scanner score refreshed.",
+            diagnostics_json=json.dumps(
+                {
+                    "history": {
+                        "source": "local_us_parquet_dir",
+                        "latest_trade_date": "2026-05-22",
+                    },
+                    "score_explainability": {
+                        "score_confidence": 0.35,
+                        "cap_reason": "configured_cache_only_diagnostic",
+                        "degradation_reason": "configured_cache_only_diagnostic",
+                        "score_grade_allowed": False,
+                        "source_confidence": {
+                            "source": "local_us_parquet_dir",
+                            "sourceLabel": "本地 Parquet 历史",
+                            "sourceType": "cache_snapshot",
+                            "freshness": "cached",
+                            "isFallback": False,
+                            "isStale": False,
+                            "isPartial": False,
+                            "isSynthetic": False,
+                            "isUnavailable": False,
+                            "confidenceWeight": 0.35,
+                            "coverage": 1.0,
+                            "degradationReason": "configured_cache_only_diagnostic",
+                            "capReason": "configured_cache_only_diagnostic",
+                            "scoreContributionAllowed": False,
+                            "sourceAuthorityAllowed": False,
+                            "observationOnly": True,
+                        },
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            created_at=now,
+        )
+        with self.db.get_session() as session:
+            session.add(run)
+            session.flush()
+            run_id = run.id
+            candidate.run_id = run.id
+            session.add(candidate)
+            session.commit()
+
+        add_resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={
+                "symbol": "WULF",
+                "market": "us",
+                "source": "scanner",
+                "scanner_run_id": run_id,
+                "scanner_rank": 2,
+                "scanner_score": 71.5,
+            },
+        )
+        self.assertEqual(add_resp.status_code, 200)
+
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        scanner = list_resp.json()["items"][0]["intelligence"]["scanner"]
+        self.assertEqual(scanner["score_confidence"], 0.35)
+        self.assertEqual(scanner["cap_reason"], "configured_cache_only_diagnostic")
+        self.assertEqual(scanner["degradation_reason"], "configured_cache_only_diagnostic")
+        self.assertFalse(scanner["score_grade_allowed"])
+        self.assertEqual(scanner["source_confidence"]["source"], "local_us_parquet_dir")
+        self.assertEqual(scanner["source_confidence"]["source_type"], "cache_snapshot")
+        self.assertFalse(scanner["source_confidence"]["score_contribution_allowed"])
+        self.assertTrue(scanner["source_confidence"]["observation_only"])
+
     def test_watchlist_items_include_read_only_intelligence_from_saved_records(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
         add_resp = self.client.post(

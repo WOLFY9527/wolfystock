@@ -130,7 +130,75 @@ class WatchlistService:
             "source_label": resolve_source_label(source, source_type=source_type),
         }
 
-    def _scanner_ohlcv_provenance_by_item(self, items: List[Dict[str, Any]]) -> Dict[tuple[int, str], Dict[str, str]]:
+    @staticmethod
+    def _optional_bool(value: Any) -> Optional[bool]:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        normalized = str(value).strip().lower()
+        if normalized in {"true", "1", "yes"}:
+            return True
+        if normalized in {"false", "0", "no"}:
+            return False
+        return None
+
+    @staticmethod
+    def _optional_str(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None
+
+    @classmethod
+    def _project_source_confidence(cls, payload: Any) -> Optional[Dict[str, Any]]:
+        if not isinstance(payload, dict):
+            return None
+        projected = {
+            "source": cls._optional_str(payload.get("source")),
+            "source_label": cls._optional_str(payload.get("sourceLabel") or payload.get("source_label")),
+            "source_type": cls._optional_str(payload.get("sourceType") or payload.get("source_type")),
+            "as_of": cls._optional_str(payload.get("asOf") or payload.get("as_of")),
+            "freshness": cls._optional_str(payload.get("freshness")),
+            "is_fallback": cls._optional_bool(payload.get("isFallback", payload.get("is_fallback"))),
+            "is_stale": cls._optional_bool(payload.get("isStale", payload.get("is_stale"))),
+            "is_partial": cls._optional_bool(payload.get("isPartial", payload.get("is_partial"))),
+            "is_synthetic": cls._optional_bool(payload.get("isSynthetic", payload.get("is_synthetic"))),
+            "is_unavailable": cls._optional_bool(payload.get("isUnavailable", payload.get("is_unavailable"))),
+            "coverage": cls._safe_float(payload.get("coverage")),
+            "score_contribution_allowed": cls._optional_bool(
+                payload.get("scoreContributionAllowed", payload.get("score_contribution_allowed"))
+            ),
+            "source_authority_allowed": cls._optional_bool(
+                payload.get("sourceAuthorityAllowed", payload.get("source_authority_allowed"))
+            ),
+            "observation_only": cls._optional_bool(payload.get("observationOnly", payload.get("observation_only"))),
+            "degradation_reason": cls._optional_str(
+                payload.get("degradationReason") or payload.get("degradation_reason")
+            ),
+            "cap_reason": cls._optional_str(payload.get("capReason") or payload.get("cap_reason")),
+        }
+        return projected if any(value is not None for value in projected.values()) else None
+
+    @classmethod
+    def _project_scanner_score_disclosure(cls, diagnostics: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        explainability = diagnostics.get("score_explainability")
+        if not isinstance(explainability, dict):
+            return None
+        projected = {
+            "score_confidence": cls._safe_float(explainability.get("score_confidence")),
+            "score_grade_allowed": cls._optional_bool(
+                explainability.get("score_grade_allowed")
+            ),
+            "cap_reason": cls._optional_str(explainability.get("cap_reason")),
+            "degradation_reason": cls._optional_str(explainability.get("degradation_reason")),
+            "source_confidence": cls._project_source_confidence(explainability.get("source_confidence")),
+        }
+        return projected if any(value is not None for value in projected.values()) else None
+
+    def _scanner_intelligence_context_by_item(self, items: List[Dict[str, Any]]) -> Dict[tuple[int, str], Dict[str, Dict[str, Any]]]:
         keys = {key for item in items if (key := self._scanner_candidate_key(item)) is not None}
         if not keys:
             return {}
@@ -147,17 +215,22 @@ class WatchlistService:
                 )
             ).scalars().all()
 
-        provenance_by_key: Dict[tuple[int, str], Dict[str, str]] = {}
+        context_by_key: Dict[tuple[int, str], Dict[str, Dict[str, Any]]] = {}
         for candidate in candidates:
             key = (int(candidate.run_id), str(candidate.symbol or "").upper())
-            if key not in keys or key in provenance_by_key:
+            if key not in keys or key in context_by_key:
                 continue
-            provenance = self._project_local_ohlcv_provenance(
-                self._load_json_object(getattr(candidate, "diagnostics_json", None))
-            )
+            diagnostics = self._load_json_object(getattr(candidate, "diagnostics_json", None))
+            context: Dict[str, Dict[str, Any]] = {}
+            provenance = self._project_local_ohlcv_provenance(diagnostics)
+            disclosure = self._project_scanner_score_disclosure(diagnostics)
             if provenance is not None:
-                provenance_by_key[key] = provenance
-        return provenance_by_key
+                context["ohlcv_provenance"] = provenance
+            if disclosure is not None:
+                context["score_disclosure"] = disclosure
+            if context:
+                context_by_key[key] = context
+        return context_by_key
 
     @staticmethod
     def _build_intelligence_payload(
@@ -165,6 +238,7 @@ class WatchlistService:
         *,
         backtest: Optional[RuleBacktestRun] = None,
         scanner_ohlcv_provenance: Optional[Dict[str, str]] = None,
+        scanner_score_disclosure: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         scanner_score = WatchlistService._safe_float(item.get("scanner_score"))
         scanner_status = "selected" if scanner_score is not None or item.get("scanner_run_id") else "unknown"
@@ -224,6 +298,8 @@ class WatchlistService:
         }
         if scanner_ohlcv_provenance is not None:
             scanner_payload["ohlcv_provenance"] = scanner_ohlcv_provenance
+        if scanner_score_disclosure is not None:
+            scanner_payload.update(scanner_score_disclosure)
 
         return {
             "scanner": scanner_payload,
@@ -274,12 +350,15 @@ class WatchlistService:
             owner_id=owner_id,
             symbols=[str(item.get("symbol") or "") for item in items],
         )
-        scanner_provenance = self._scanner_ohlcv_provenance_by_item(items)
+        scanner_context = self._scanner_intelligence_context_by_item(items)
         for item in items:
+            item_key = self._scanner_candidate_key(item)
+            intelligence_context = scanner_context.get(item_key or (-1, "")) or {}
             item["intelligence"] = self._build_intelligence_payload(
                 item,
                 backtest=backtests.get(str(item.get("symbol") or "").upper()),
-                scanner_ohlcv_provenance=scanner_provenance.get(self._scanner_candidate_key(item)),
+                scanner_ohlcv_provenance=intelligence_context.get("ohlcv_provenance"),
+                scanner_score_disclosure=intelligence_context.get("score_disclosure"),
             )
         return items
 

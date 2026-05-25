@@ -47,6 +47,7 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         score: float,
         rank: int,
         diagnostics_source: str | None = None,
+        diagnostics_payload: dict | None = None,
     ) -> None:
         now = datetime.now()
         run = MarketScannerRun(
@@ -68,7 +69,9 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
             score=score,
             reason_summary="Latest scanner score.",
             diagnostics_json=(
-                json.dumps(
+                json.dumps(diagnostics_payload, ensure_ascii=False)
+                if diagnostics_payload is not None
+                else json.dumps(
                     {
                         "history": {
                             "source": diagnostics_source,
@@ -173,6 +176,140 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         self.assertEqual(item["scanner_score"], 72.5)
         self.assertEqual(item["scanner_rank"], 3)
         self.assertNotIn("ohlcv_provenance", item["intelligence"]["scanner"])
+        self.assertIsNone(item["intelligence"]["scanner"].get("score_confidence"))
+        self.assertIsNone(item["intelligence"]["scanner"].get("cap_reason"))
+        self.assertIsNone(item["intelligence"]["scanner"].get("degradation_reason"))
+        self.assertIsNone(item["intelligence"]["scanner"].get("score_grade_allowed"))
+        self.assertIsNone(item["intelligence"]["scanner"].get("source_confidence"))
+
+    def test_refresh_projects_scanner_score_explainability_disclosure_metadata(self) -> None:
+        self.service.add_item(
+            owner_id="user-1",
+            symbol="WULF",
+            market="us",
+            scanner_score=60,
+            scanner_rank=8,
+        )
+        self._save_scanner_candidate(
+            symbol="WULF",
+            market="us",
+            score=72.5,
+            rank=3,
+            diagnostics_payload={
+                "history": {
+                    "source": "yfinance_proxy",
+                    "latest_trade_date": "2026-05-22",
+                    "stale": True,
+                },
+                "score_explainability": {
+                    "score_confidence": 0.4,
+                    "cap_reason": "public_proxy_not_score_grade",
+                    "degradation_reason": "fallback_source",
+                    "score_grade_allowed": False,
+                    "source_confidence": {
+                        "source": "yfinance_proxy",
+                        "sourceLabel": "Yahoo Finance Proxy",
+                        "sourceType": "proxy",
+                        "freshness": "fallback",
+                        "isFallback": True,
+                        "isStale": True,
+                        "isPartial": True,
+                        "isSynthetic": False,
+                        "isUnavailable": False,
+                        "confidenceWeight": 0.4,
+                        "coverage": 0.58,
+                        "degradationReason": "fallback_source",
+                        "capReason": "public_proxy_not_score_grade",
+                        "scoreContributionAllowed": False,
+                        "sourceAuthorityAllowed": False,
+                        "observationOnly": True,
+                    },
+                },
+            },
+        )
+
+        result = self.service.refresh_scores(owner_id="user-1", market="us")
+
+        self.assertEqual(result["updated_count"], 1)
+        item = self.service.list_items(owner_id="user-1")[0]
+        disclosure = item["intelligence"]["scanner"]
+        self.assertEqual(disclosure["score_confidence"], 0.4)
+        self.assertEqual(disclosure["cap_reason"], "public_proxy_not_score_grade")
+        self.assertEqual(disclosure["degradation_reason"], "fallback_source")
+        self.assertFalse(disclosure["score_grade_allowed"])
+        self.assertEqual(disclosure["source_confidence"]["source"], "yfinance_proxy")
+        self.assertEqual(disclosure["source_confidence"]["source_type"], "proxy")
+        self.assertEqual(disclosure["source_confidence"]["freshness"], "fallback")
+        self.assertTrue(disclosure["source_confidence"]["is_fallback"])
+        self.assertTrue(disclosure["source_confidence"]["is_stale"])
+        self.assertTrue(disclosure["source_confidence"]["is_partial"])
+        self.assertFalse(disclosure["source_confidence"]["score_contribution_allowed"])
+        self.assertFalse(disclosure["source_confidence"]["source_authority_allowed"])
+        self.assertTrue(disclosure["source_confidence"]["observation_only"])
+
+    def test_refresh_projects_local_cache_score_disclosure_without_provider_calls(self) -> None:
+        self.service.add_item(
+            owner_id="user-1",
+            symbol="WULF",
+            market="us",
+            scanner_score=60,
+            scanner_rank=8,
+        )
+        self._save_scanner_candidate(
+            symbol="WULF",
+            market="us",
+            score=72.5,
+            rank=3,
+            diagnostics_payload={
+                "history": {
+                    "source": "local_us_parquet_dir",
+                    "latest_trade_date": "2026-05-22",
+                },
+                "score_explainability": {
+                    "score_confidence": 0.35,
+                    "cap_reason": "configured_cache_only_diagnostic",
+                    "degradation_reason": "configured_cache_only_diagnostic",
+                    "score_grade_allowed": False,
+                    "source_confidence": {
+                        "source": "local_us_parquet_dir",
+                        "sourceLabel": "本地 Parquet 历史",
+                        "sourceType": "cache_snapshot",
+                        "freshness": "cached",
+                        "isFallback": False,
+                        "isStale": False,
+                        "isPartial": False,
+                        "isSynthetic": False,
+                        "isUnavailable": False,
+                        "confidenceWeight": 0.35,
+                        "coverage": 1.0,
+                        "degradationReason": "configured_cache_only_diagnostic",
+                        "capReason": "configured_cache_only_diagnostic",
+                        "scoreContributionAllowed": False,
+                        "sourceAuthorityAllowed": False,
+                        "observationOnly": True,
+                    },
+                },
+            },
+        )
+
+        with (
+            patch("data_provider.base.DataFetcherManager.get_daily_data", side_effect=AssertionError("watchlist disclosure should not fetch provider history")) as get_daily_data,
+            patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=AssertionError("watchlist disclosure should not fetch provider quotes")) as get_realtime_quote,
+        ):
+            result = self.service.refresh_scores(owner_id="user-1", market="us")
+            item = self.service.list_items(owner_id="user-1")[0]
+
+        self.assertEqual(result["updated_count"], 1)
+        disclosure = item["intelligence"]["scanner"]
+        self.assertEqual(disclosure["score_confidence"], 0.35)
+        self.assertFalse(disclosure["score_grade_allowed"])
+        self.assertEqual(disclosure["source_confidence"]["source"], "local_us_parquet_dir")
+        self.assertEqual(disclosure["source_confidence"]["source_type"], "cache_snapshot")
+        self.assertEqual(disclosure["source_confidence"]["freshness"], "cached")
+        self.assertTrue(disclosure["source_confidence"]["observation_only"])
+        self.assertFalse(disclosure["source_confidence"]["score_contribution_allowed"])
+        get_daily_data.assert_not_called()
+        get_realtime_quote.assert_not_called()
 
     def test_refresh_preserves_candidate_when_scanner_data_is_missing(self) -> None:
         self.service.add_item(
