@@ -31,8 +31,57 @@ def _decision_grade_contract(contract_symbol: str):
     )
 
 
+def _clear_gate_contract(contract_symbol: str = "TEM260619C00055000"):
+    return _decision_grade_contract(contract_symbol).model_copy(
+        update={"bid": 2.60, "ask": 2.70, "mid": 2.65, "spread_pct": 3.77}
+    )
+
+
+def _evaluate_single_contract(contract, **overrides):
+    params = {
+        "strategy_key": "long_call",
+        "contracts": [contract],
+        "chain_as_of": "2026-05-06T13:45:00Z",
+        "source_type": "live",
+        "iv_rank_status": "available",
+        "iv_rank_source": "approved_live_iv_history",
+        "iv_percentile": 68.0,
+        "expected_move_source": "straddle_mid",
+    }
+    params.update(overrides)
+    return evaluate_options_data_quality_gates(**params)
+
+
 def _issue_codes(diagnostics) -> set[str]:
     return {issue.code for issue in diagnostics.gate_issues}
+
+
+def test_required_event_calendar_missing_fails_closed() -> None:
+    diagnostics = _evaluate_single_contract(
+        _clear_gate_contract(),
+        requires_event_calendar=True,
+        event_calendar=None,
+    )
+
+    assert diagnostics.gate_decision == "数据不足，禁止判断"
+    assert diagnostics.decision_grade is False
+    assert diagnostics.fail_closed_reason_codes == ["missing_event_calendar"]
+    assert _issue_codes(diagnostics) == {"missing_event_calendar"}
+    assert diagnostics.data_quality_gates.status == "blocked"
+
+
+def test_required_event_calendar_present_satisfies_event_requirement() -> None:
+    diagnostics = _evaluate_single_contract(
+        _clear_gate_contract(),
+        requires_event_calendar=True,
+        event_calendar={"events": [{"date": "2026-06-01", "type": "earnings"}]},
+    )
+
+    assert diagnostics.decision_grade is True
+    assert diagnostics.fail_closed_reason_codes == []
+    assert "missing_event_calendar" not in _issue_codes(diagnostics)
+    assert diagnostics.data_quality_gates.status == "clear"
+    assert diagnostics.liquidity_gates.status == "clear"
 
 
 def test_missing_bid_ask_fails_closed() -> None:
@@ -56,6 +105,45 @@ def test_missing_bid_ask_fails_closed() -> None:
     assert "missing_bid_ask" in diagnostics.fail_closed_reason_codes
     assert "missing_bid_ask" in _issue_codes(diagnostics)
     assert diagnostics.liquidity_gates.status == "blocked"
+
+
+def test_invalid_bid_ask_fails_closed() -> None:
+    contract = _clear_gate_contract().model_copy(
+        update={"bid": 2.80, "ask": 2.60, "mid": 2.70, "spread_pct": None}
+    )
+
+    diagnostics = _evaluate_single_contract(contract)
+
+    assert diagnostics.gate_decision == "数据不足，禁止判断"
+    assert diagnostics.decision_grade is False
+    assert "invalid_bid_ask" in diagnostics.fail_closed_reason_codes
+    assert "invalid_bid_ask" in _issue_codes(diagnostics)
+    assert "missing_bid_ask" not in _issue_codes(diagnostics)
+    assert diagnostics.liquidity_gates.status == "blocked"
+
+
+def test_missing_dte_fails_closed() -> None:
+    contract = _clear_gate_contract().model_copy(update={"dte": None})
+
+    diagnostics = _evaluate_single_contract(contract)
+
+    assert diagnostics.gate_decision == "数据不足，禁止判断"
+    assert diagnostics.decision_grade is False
+    assert diagnostics.fail_closed_reason_codes == ["missing_dte"]
+    assert _issue_codes(diagnostics) == {"missing_dte"}
+    assert diagnostics.data_quality_gates.status == "blocked"
+
+
+def test_missing_contract_identity_fails_closed() -> None:
+    contract = _clear_gate_contract().model_copy(update={"expiration": ""})
+
+    diagnostics = _evaluate_single_contract(contract)
+
+    assert diagnostics.gate_decision == "数据不足，禁止判断"
+    assert diagnostics.decision_grade is False
+    assert diagnostics.fail_closed_reason_codes == ["missing_contract_identity"]
+    assert _issue_codes(diagnostics) == {"missing_contract_identity"}
+    assert diagnostics.data_quality_gates.status == "blocked"
 
 
 def test_missing_volume_and_open_interest_fail_closed() -> None:
