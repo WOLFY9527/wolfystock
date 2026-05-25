@@ -44,6 +44,7 @@ import {
   type DecisionReadinessSummary,
   type LiquidityRegimeGaugeSummary,
 } from '../utils/marketIntelligenceGuidance';
+import { useProductSurface } from '../hooks/useProductSurface';
 
 const REGIME_LABELS: Record<LiquidityMonitorRegime, string> = {
   abundant: '充裕',
@@ -476,7 +477,10 @@ function scoreGradeEvidenceCount(indicators: LiquidityMonitorIndicator[]): numbe
   )).length;
 }
 
-function isObservationOnlyIndicator(indicator: LiquidityMonitorIndicator): boolean {
+function isObservationOnlyIndicator(indicator: LiquidityMonitorIndicator | null | undefined): boolean {
+  if (!indicator) {
+    return false;
+  }
   if (indicator.coverageDiagnostics?.observationOnly === true) {
     return true;
   }
@@ -487,7 +491,10 @@ function isObservationOnlyIndicator(indicator: LiquidityMonitorIndicator): boole
     && !inputs.some((input) => input.scoreContributionAllowed);
 }
 
-function isMissingOrUnavailableIndicator(indicator: LiquidityMonitorIndicator): boolean {
+function isMissingOrUnavailableIndicator(indicator: LiquidityMonitorIndicator | null | undefined): boolean {
+  if (!indicator) {
+    return false;
+  }
   if (indicator.status === 'unavailable') {
     return true;
   }
@@ -619,6 +626,7 @@ function topIndicatorNames(
   limit = 3,
 ): string[] {
   return indicators
+    .filter((indicator): indicator is LiquidityMonitorIndicator => Boolean(indicator))
     .filter(predicate)
     .map((indicator) => displayLabel(indicator))
     .filter((label, index, array) => array.indexOf(label) === index)
@@ -966,6 +974,99 @@ function buildLiquidityMainGapLine(
     : '关键来源仍待补齐。';
 }
 
+type ConsumerLiquidityStatusView = {
+  availabilityLabel: '可用' | '部分可用' | '暂不可用';
+  availabilityVariant: 'success' | 'info' | 'neutral';
+  scoringLabel: '评分可用' | '评分已暂停';
+  scoringVariant: 'success' | 'caution';
+  confidenceLabel: '置信度稳定' | '置信度受限';
+  confidenceVariant: 'success' | 'info';
+  freshnessChipLabel: string;
+  freshnessVariant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+  headline: string;
+  notice: string | null;
+  noticeVariant: 'info' | 'caution' | 'danger';
+  availabilityDetail: string;
+  scoringDetail: string;
+  freshnessSummary: string;
+  freshnessDetail: string;
+};
+
+function buildConsumerLiquidityStatusView(
+  data: LiquidityMonitorResponse,
+  coverageSummary: LiquidityCoverageReadinessSummary,
+  readinessSummary: DecisionReadinessSummary,
+  synthesisView: LiquidityImpulseSynthesisHeaderView,
+  indicators: LiquidityMonitorIndicator[],
+): ConsumerLiquidityStatusView {
+  const unavailableModules = topIndicatorNames(indicators, isMissingOrUnavailableIndicator, 2);
+  const limitedConfidence = readinessSummary.state !== 'ready'
+    || synthesisView.state !== 'ready'
+    || (data.score.confidence || 0) < 0.45;
+  const scoringPaused = limitedConfidence
+    || coverageSummary.missingOrUnavailableCount > 0
+    || coverageSummary.observationOnlyCount > 0
+    || data.score.regime === 'unavailable';
+  const availabilityLabel = data.score.regime === 'unavailable'
+    || coverageSummary.missingOrUnavailableCount >= Math.max(2, Math.ceil(indicators.length * 0.75))
+    ? '暂不可用'
+    : coverageSummary.missingOrUnavailableCount > 0 || limitedConfidence || coverageSummary.observationOnlyCount > 0
+      ? '部分可用'
+      : '可用';
+  const freshnessSummary = data.freshness.status === 'live'
+    ? '已更新'
+    : data.freshness.status === 'delayed'
+      ? '数据更新中'
+      : data.freshness.status === 'cached'
+        ? '已使用最近一次可用数据'
+        : data.freshness.status === 'stale' || data.freshness.status === 'fallback' || data.freshness.status === 'mock'
+          ? '已使用最近一次可用数据'
+          : '暂不可用';
+  const notice = availabilityLabel === '暂不可用'
+    ? '本模块暂不可用，请稍后重试。'
+    : scoringPaused && coverageSummary.missingOrUnavailableCount > 0
+      ? '部分流动性数据暂不可用，当前评分已暂停。'
+      : data.freshness.status === 'delayed'
+        ? '数据更新中，稍后将自动刷新。'
+        : limitedConfidence
+          ? '当前流动性信号置信度较低，仅供观察。'
+          : freshnessSummary === '已使用最近一次可用数据'
+            ? '已使用最近一次可用数据。'
+            : null;
+
+  return {
+    availabilityLabel,
+    availabilityVariant: availabilityLabel === '可用' ? 'success' : availabilityLabel === '部分可用' ? 'info' : 'neutral',
+    scoringLabel: scoringPaused ? '评分已暂停' : '评分可用',
+    scoringVariant: scoringPaused ? 'caution' : 'success',
+    confidenceLabel: limitedConfidence ? '置信度受限' : '置信度稳定',
+    confidenceVariant: limitedConfidence ? 'info' : 'success',
+    freshnessChipLabel: FRESHNESS_LABELS[data.freshness.status],
+    freshnessVariant: chipVariantForFreshness(data.freshness.status),
+    headline: availabilityLabel === '可用'
+      ? '当前流动性读数可继续观察。'
+      : availabilityLabel === '部分可用'
+        ? '当前流动性读数部分可用。'
+        : '当前流动性模块暂不可用。',
+    notice,
+    noticeVariant: availabilityLabel === '暂不可用' ? 'danger' : scoringPaused ? 'caution' : 'info',
+    availabilityDetail: unavailableModules.length > 0
+      ? `当前受限模块：${unavailableModules.join('、')}。`
+      : availabilityLabel === '可用'
+        ? '当前主要流动性读数已返回。'
+        : '当前部分流动性读数仍在恢复中。',
+    scoringDetail: availabilityLabel === '暂不可用'
+      ? '本模块暂不可用，请稍后重试。'
+      : limitedConfidence
+        ? '当前流动性信号置信度较低，仅供观察。'
+        : scoringPaused
+          ? '部分流动性数据暂不可用，当前评分已暂停。'
+          : '当前流动性评分可继续参考。',
+    freshnessSummary,
+    freshnessDetail: `最近更新：${formatDateTime(data.freshness.latestAsOf) || '待确认'}`,
+  };
+}
+
 const LiquiditySetupPath: React.FC<{ testId: string }> = ({ testId }) => (
   <div
     data-testid={testId}
@@ -1005,8 +1106,10 @@ const DecisionReadinessBand: React.FC<{
   missing: LiquidityIndicatorBucketSummary;
   nextWatch: string;
   data: LiquidityMonitorResponse;
+  indicators: LiquidityMonitorIndicator[];
   synthesisView: LiquidityImpulseSynthesisHeaderView;
-}> = ({ summary, coverageSummary, regimeGauge, scoring, observation, missing, nextWatch, data, synthesisView }) => {
+  showAdminDiagnostics: boolean;
+}> = ({ summary, coverageSummary, regimeGauge, scoring, observation, missing, nextWatch, data, indicators, synthesisView, showAdminDiagnostics }) => {
   const bias = buildLiquidityBiasSummary(data, summary, synthesisView);
   const mainGapLine = buildLiquidityMainGapLine(summary, coverageSummary, missing);
   const evidenceColumns = [
@@ -1014,6 +1117,58 @@ const DecisionReadinessBand: React.FC<{
     { key: 'observation', label: '哪些只观察', count: observation.count, detail: observation.namesLine, tone: 'text-cyan-100' },
     { key: 'missing', label: '阻塞/缺失证据', count: missing.count, detail: missing.namesLine, tone: 'text-amber-200' },
   ];
+  const consumerView = buildConsumerLiquidityStatusView(data, coverageSummary, summary, synthesisView, indicators);
+
+  if (!showAdminDiagnostics) {
+    return (
+      <section
+        data-testid="liquidity-decision-readiness"
+        className="min-w-0 border-b border-white/[0.06] pb-4"
+      >
+        <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-4 py-4">
+          <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold text-white/45">流动性状态</p>
+              <h2 className="mt-1 text-lg font-semibold leading-7 text-white/92 md:text-xl">
+                {consumerView.availabilityLabel}
+              </h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">{consumerView.headline}</p>
+            </div>
+            <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
+              <TerminalChip variant={consumerView.availabilityVariant}>{consumerView.availabilityLabel}</TerminalChip>
+              <TerminalChip variant={consumerView.scoringVariant}>{consumerView.scoringLabel}</TerminalChip>
+              <TerminalChip variant={consumerView.confidenceVariant}>{consumerView.confidenceLabel}</TerminalChip>
+              <TerminalChip variant={consumerView.freshnessVariant}>{consumerView.freshnessChipLabel}</TerminalChip>
+            </div>
+          </div>
+
+          {consumerView.notice ? (
+            <TerminalNotice variant={consumerView.noticeVariant} className="mt-4">
+              {consumerView.notice}
+            </TerminalNotice>
+          ) : null}
+
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+              <p className="text-[11px] font-medium text-white/48">流动性状态</p>
+              <p className="mt-2 text-sm font-semibold text-white/84">{consumerView.availabilityLabel}</p>
+              <p className="mt-1 text-[11px] leading-5 text-white/56">{consumerView.availabilityDetail}</p>
+            </div>
+            <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+              <p className="text-[11px] font-medium text-white/48">评分状态</p>
+              <p className="mt-2 text-sm font-semibold text-white/84">{consumerView.scoringLabel}</p>
+              <p className="mt-1 text-[11px] leading-5 text-white/56">{consumerView.scoringDetail}</p>
+            </div>
+            <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+              <p className="text-[11px] font-medium text-white/48">数据更新</p>
+              <p className="mt-2 text-sm font-semibold text-white/84">{consumerView.freshnessSummary}</p>
+              <p className="mt-1 text-[11px] leading-5 text-white/56">{consumerView.freshnessDetail}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
   <section
@@ -1132,7 +1287,8 @@ const LiquidityGuidancePanel: React.FC<{
   selectedIndicator: LiquidityMonitorIndicator | null;
   officialMacroDiagnostics: ReturnType<typeof buildOfficialMacroAuthorityDiagnosticsView>;
   onSelectIndicator: (key: string) => void;
-}> = ({ coverageSummary, synthesisView, regimeGauge, readinessSummary, indicators, data, selectedIndicator, officialMacroDiagnostics, onSelectIndicator }) => {
+  showAdminDiagnostics: boolean;
+}> = ({ coverageSummary, synthesisView, regimeGauge, readinessSummary, indicators, data, selectedIndicator, officialMacroDiagnostics, onSelectIndicator, showAdminDiagnostics }) => {
   const scoring = summarizeIndicatorBucket(
     indicators,
     (indicator) => indicator.coverageDiagnostics?.scoreContributionAllowed === true || indicator.includedInScore,
@@ -1162,46 +1318,49 @@ const LiquidityGuidancePanel: React.FC<{
         missing={missing}
         nextWatch={nextWatch}
         data={data}
+        indicators={indicators}
         synthesisView={synthesisView}
+        showAdminDiagnostics={showAdminDiagnostics}
       />
 
-      <TerminalDisclosure
-        data-testid="liquidity-monitor-indicator-disclosure"
-        title="技术证据与来源边界"
-        summary="流动性脉冲、完整指标矩阵、来源覆盖与运行边界默认折叠"
-        className="mt-4 bg-black/10"
-      >
-        <div className="grid gap-4">
-          <LiquidityImpulseSynthesisHeader view={synthesisView} />
+      {showAdminDiagnostics ? (
+        <TerminalDisclosure
+          data-testid="liquidity-monitor-admin-details"
+          title="技术细节"
+          summary="流动性脉冲、完整指标矩阵、来源覆盖与运行边界默认折叠"
+          className="mt-4 bg-black/10"
+        >
+          <div className="grid gap-4">
+            <LiquidityImpulseSynthesisHeader view={synthesisView} />
 
-          <TerminalPanel>
-            <TerminalSectionHeader
-              eyebrow="环境刻度"
-              title="流动性环境分数"
-              action={<TerminalChip variant={chipVariantForStatus(data.score.regime === 'unavailable' ? 'unavailable' : 'live')}>{REGIME_LABELS[data.score.regime]}</TerminalChip>}
-            />
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="rounded-xl border border-white/[0.04] bg-black/20 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest text-white/35">分数</p>
-                    <p className={cn('mt-2 font-mono text-5xl tracking-tight', REGIME_TONE[data.score.regime])}>{scoreLabel(data.score.value)}</p>
-                    <p className="mt-2 text-sm text-white/48">{REGIME_LABELS[data.score.regime]}</p>
+            <TerminalPanel>
+              <TerminalSectionHeader
+                eyebrow="环境刻度"
+                title="流动性环境分数"
+                action={<TerminalChip variant={chipVariantForStatus(data.score.regime === 'unavailable' ? 'unavailable' : 'live')}>{REGIME_LABELS[data.score.regime]}</TerminalChip>}
+              />
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-white/[0.04] bg-black/20 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-widest text-white/35">分数</p>
+                      <p className={cn('mt-2 font-mono text-5xl tracking-tight', REGIME_TONE[data.score.regime])}>{scoreLabel(data.score.value)}</p>
+                      <p className="mt-2 text-sm text-white/48">{REGIME_LABELS[data.score.regime]}</p>
+                    </div>
+                    <Gauge className="h-8 w-8 text-white/28" aria-hidden="true" />
                   </div>
-                  <Gauge className="h-8 w-8 text-white/28" aria-hidden="true" />
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <TerminalMetric label="置信度" value={confidenceLabel(data.score.confidence)} valueClassName="text-2xl" />
+                  <TerminalMetric label="最弱时效" value={FRESHNESS_LABELS[data.freshness.weakestIndicatorFreshness]} valueClassName="text-lg font-sans" />
+                  <TerminalMetric label="计分指标" value={data.score.includedIndicatorCount} valueClassName="text-2xl" />
+                  <TerminalMetric label="计分权重" value={`${data.score.includedIndicatorWeight} / ${data.score.possibleIndicatorWeight}`} valueClassName="text-lg font-sans" />
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <TerminalMetric label="置信度" value={confidenceLabel(data.score.confidence)} valueClassName="text-2xl" />
-                <TerminalMetric label="最弱时效" value={FRESHNESS_LABELS[data.freshness.weakestIndicatorFreshness]} valueClassName="text-lg font-sans" />
-                <TerminalMetric label="计分指标" value={data.score.includedIndicatorCount} valueClassName="text-2xl" />
-                <TerminalMetric label="计分权重" value={`${data.score.includedIndicatorWeight} / ${data.score.possibleIndicatorWeight}`} valueClassName="text-lg font-sans" />
-              </div>
-            </div>
-          </TerminalPanel>
+            </TerminalPanel>
 
-          <TerminalDenseTable>
-            <table className="w-full min-w-[760px] border-collapse text-left">
+            <TerminalDenseTable>
+              <table className="w-full min-w-[760px] border-collapse text-left">
               <thead className="border-b border-white/5 text-[10px] uppercase tracking-widest text-white/35">
                 <tr>
                   <th className="px-3 py-2">指标</th>
@@ -1250,59 +1409,61 @@ const LiquidityGuidancePanel: React.FC<{
                   );
                 })}
               </tbody>
-            </table>
-          </TerminalDenseTable>
+              </table>
+            </TerminalDenseTable>
 
-          <OfficialMacroAuthorityDiagnostics
-            testId="liquidity-monitor-official-macro-diagnostics"
-            title="来源覆盖诊断"
-            view={officialMacroDiagnostics}
-          />
+            <OfficialMacroAuthorityDiagnostics
+              testId="liquidity-monitor-official-macro-diagnostics"
+              title="来源覆盖诊断"
+              view={officialMacroDiagnostics}
+            />
 
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <TerminalPanel>
-              <TerminalSectionHeader eyebrow="选中指标" title="指标细节" action={<Waves className="h-4 w-4 text-white/28" aria-hidden="true" />} />
-              {selectedIndicator ? (
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              <TerminalPanel>
+                <TerminalSectionHeader eyebrow="选中指标" title="指标细节" action={<Waves className="h-4 w-4 text-white/28" aria-hidden="true" />} />
+                {selectedIndicator ? (
+                  <div className="mt-4 grid grid-cols-1 gap-3">
+                    <TerminalMetric label="当前指标" value={displayLabel(selectedIndicator)} valueClassName="text-sm font-sans leading-6" />
+                    <TerminalMetric label="状态" value={statusLabel(selectedIndicator.status)} valueClassName="text-lg font-sans" />
+                    <TerminalMetric label="评分贡献" value={contributionLabel(selectedIndicator)} valueClassName="text-lg font-sans" />
+                    <TerminalMetric label="更新时间" value={formatDateTime(selectedIndicator.updatedAt) || '待确认'} valueClassName="text-sm font-sans" />
+                    <TerminalMetric label="备注" value={detailReason(selectedIndicator)} valueClassName="text-sm font-sans leading-6" />
+                    {isUsBreadthIndicator(selectedIndicator) ? (
+                      <LiquidityBreadthTruthStrip
+                        indicator={selectedIndicator}
+                        testId="liquidity-breadth-truth-strip-detail"
+                      />
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-white/45">当前没有可展示的指标。</p>
+                )}
+              </TerminalPanel>
+
+              <TerminalPanel data-testid="liquidity-monitor-source-disclosure">
+                <TerminalSectionHeader eyebrow="运行边界" title="来源与约束" action={<Activity className="h-4 w-4 text-white/28" aria-hidden="true" />} />
                 <div className="mt-4 grid grid-cols-1 gap-3">
-                  <TerminalMetric label="当前指标" value={displayLabel(selectedIndicator)} valueClassName="text-sm font-sans leading-6" />
-                  <TerminalMetric label="状态" value={statusLabel(selectedIndicator.status)} valueClassName="text-lg font-sans" />
-                  <TerminalMetric label="评分贡献" value={contributionLabel(selectedIndicator)} valueClassName="text-lg font-sans" />
-                  <TerminalMetric label="更新时间" value={formatDateTime(selectedIndicator.updatedAt) || '待确认'} valueClassName="text-sm font-sans" />
-                  <TerminalMetric label="备注" value={detailReason(selectedIndicator)} valueClassName="text-sm font-sans leading-6" />
-                  {isUsBreadthIndicator(selectedIndicator) ? (
-                    <LiquidityBreadthTruthStrip
-                      indicator={selectedIndicator}
-                      testId="liquidity-breadth-truth-strip-detail"
-                    />
-                  ) : null}
+                  <TerminalMetric label="外部调用" value={data.sourceMetadata.externalProviderCalls ? '已发生' : '未发生'} valueClassName="text-sm font-sans" />
+                  <TerminalMetric label="运行顺序" value={data.sourceMetadata.providerRuntimeChanged ? '已变更' : '未变更'} valueClassName="text-sm font-sans" />
+                  <TerminalMetric label="缓存写入" value={data.sourceMetadata.marketCacheMutation ? '已发生' : '未发生'} valueClassName="text-sm font-sans" />
+                  <TerminalMetric label="最弱时效" value={FRESHNESS_LABELS[data.freshness.weakestIndicatorFreshness]} valueClassName="text-sm font-sans" />
+                  <TerminalMetric label="最新时间" value={formatDateTime(data.freshness.latestAsOf) || '待确认'} valueClassName="text-sm font-sans" />
+                  <TerminalMetric label="当前判断" value={data.score.regime === 'unavailable' ? '数据不足' : '仅供研究观察'} valueClassName="text-sm font-sans leading-6" />
                 </div>
-              ) : (
-                <p className="mt-4 text-sm text-white/45">当前没有可展示的指标。</p>
-              )}
-            </TerminalPanel>
-
-            <TerminalPanel data-testid="liquidity-monitor-source-disclosure">
-              <TerminalSectionHeader eyebrow="运行边界" title="来源与约束" action={<Activity className="h-4 w-4 text-white/28" aria-hidden="true" />} />
-              <div className="mt-4 grid grid-cols-1 gap-3">
-                <TerminalMetric label="外部调用" value={data.sourceMetadata.externalProviderCalls ? '已发生' : '未发生'} valueClassName="text-sm font-sans" />
-                <TerminalMetric label="运行顺序" value={data.sourceMetadata.providerRuntimeChanged ? '已变更' : '未变更'} valueClassName="text-sm font-sans" />
-                <TerminalMetric label="缓存写入" value={data.sourceMetadata.marketCacheMutation ? '已发生' : '未发生'} valueClassName="text-sm font-sans" />
-                <TerminalMetric label="最弱时效" value={FRESHNESS_LABELS[data.freshness.weakestIndicatorFreshness]} valueClassName="text-sm font-sans" />
-                <TerminalMetric label="最新时间" value={formatDateTime(data.freshness.latestAsOf) || '待确认'} valueClassName="text-sm font-sans" />
-                <TerminalMetric label="当前判断" value={data.score.regime === 'unavailable' ? '数据不足' : '仅供研究观察'} valueClassName="text-sm font-sans leading-6" />
-              </div>
-              <p className="mt-4 text-sm leading-6 text-white/52">
-                只读快照，不触发扫描、回测或组合动作，也不把 fallback 包装成实时结论。
-              </p>
-            </TerminalPanel>
+                <p className="mt-4 text-sm leading-6 text-white/52">
+                  只读快照，不触发扫描、回测或组合动作，也不把 fallback 包装成实时结论。
+                </p>
+              </TerminalPanel>
+            </div>
           </div>
-        </div>
-      </TerminalDisclosure>
+        </TerminalDisclosure>
+      ) : null}
     </TerminalPanel>
   );
 };
 
 const LiquidityMonitorPage: React.FC = () => {
+  const { isAdminMode, canReadProviders } = useProductSurface();
   const [data, setData] = useState<LiquidityMonitorResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
@@ -1414,6 +1575,7 @@ const LiquidityMonitorPage: React.FC = () => {
               selectedIndicator={selectedIndicator}
               officialMacroDiagnostics={officialMacroDiagnostics}
               onSelectIndicator={setSelectedKey}
+              showAdminDiagnostics={isAdminMode && canReadProviders}
             />
           </div>
         </TerminalGrid>

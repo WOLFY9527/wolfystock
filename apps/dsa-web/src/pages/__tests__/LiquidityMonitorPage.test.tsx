@@ -2,8 +2,9 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LiquidityMonitorPage from '../LiquidityMonitorPage';
 
-const { getLiquidityMonitor } = vi.hoisted(() => ({
+const { getLiquidityMonitor, useProductSurfaceMock } = vi.hoisted(() => ({
   getLiquidityMonitor: vi.fn(),
+  useProductSurfaceMock: vi.fn(),
 }));
 
 vi.mock('../../api/liquidityMonitor', () => ({
@@ -17,6 +18,10 @@ vi.mock('../../contexts/UiLanguageContext', () => ({
     language: 'zh',
     t: (key: string) => key,
   }),
+}));
+
+vi.mock('../../hooks/useProductSurface', () => ({
+  useProductSurface: useProductSurfaceMock,
 }));
 
 const payload = {
@@ -593,15 +598,19 @@ function withBreadthIndicator(indicator: Record<string, unknown>) {
 describe('LiquidityMonitorPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: false,
+      canReadProviders: false,
+    });
   });
 
-  function expandLiquidityDetails(): HTMLElement {
-    const disclosure = screen.getByTestId('liquidity-monitor-indicator-disclosure');
-    fireEvent.click(within(disclosure).getByRole('button', { name: '展开 技术证据与来源边界' }));
+  async function expandLiquidityDetails(): Promise<HTMLElement> {
+    const disclosure = await screen.findByTestId('liquidity-monitor-admin-details');
+    fireEvent.click(within(disclosure).getByRole('button', { name: '展开 技术细节' }));
     return disclosure;
   }
 
-  it('renders a compressed first-screen summary and keeps technical details collapsed', async () => {
+  it('renders a consumer-safe first-screen summary and hides technical diagnostics by default', async () => {
     getLiquidityMonitor.mockResolvedValueOnce(payload);
 
     render(<LiquidityMonitorPage />);
@@ -611,27 +620,34 @@ describe('LiquidityMonitorPage', () => {
     expect(pageShell).toHaveAttribute('data-workspace-width', 'near-full');
     expect(pageShell).toHaveClass('max-w-[1840px]');
     const guidancePanel = screen.getByTestId('liquidity-monitor-guidance-panel');
-    expect(guidancePanel).toHaveTextContent('流动性判断摘要');
-    expect(guidancePanel).toHaveTextContent('能否判断：可判断');
-    expect(guidancePanel).toHaveTextContent('当前方向');
-    expect(guidancePanel).toHaveTextContent('偏收紧');
-    expect(guidancePanel).toHaveTextContent('哪些证据在计分');
-    expect(guidancePanel).toHaveTextContent('哪些只观察');
-    expect(guidancePanel).toHaveTextContent('阻塞/缺失证据');
-    expect(guidancePanel).toHaveTextContent('下一步观察');
+    expect(guidancePanel).toHaveTextContent('流动性状态');
+    expect(guidancePanel).toHaveTextContent('部分可用');
+    expect(guidancePanel).toHaveTextContent('评分状态');
+    expect(guidancePanel).toHaveTextContent('评分已暂停');
+    expect(guidancePanel).toHaveTextContent('数据更新');
+    expect(guidancePanel).toHaveTextContent('当前流动性信号置信度较低，仅供观察。');
     expect(screen.getAllByText('延迟').length).toBeGreaterThan(0);
     expect(screen.getByText('仅用于观察市场流动性环境，非投资建议，不触发扫描、回测或组合动作。')).toBeInTheDocument();
-    expect(screen.getByTestId('liquidity-monitor-indicator-disclosure')).not.toHaveAttribute('open');
+    expect(screen.queryByTestId('liquidity-monitor-admin-details')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '展开 技术细节' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('liquidity-impulse-synthesis-header')).not.toBeInTheDocument();
+    expect(guidancePanel.textContent || '').not.toMatch(
+      /provider_unavailable|fallback_source|score_contribution_not_allowed|sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|routeRejectedReasonCodes|外部调用|运行顺序|缓存写入|来源覆盖诊断|来源与约束|查看提供方覆盖|前往数据源设置/i,
+    );
   });
 
-  it('renders the liquidity impulse synthesis header with evidence rows inside details', async () => {
+  it('renders the liquidity impulse synthesis header with evidence rows inside admin details', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: true,
+      canReadProviders: true,
+    });
     getLiquidityMonitor.mockResolvedValueOnce(payload);
 
     render(<LiquidityMonitorPage />);
 
     await screen.findByRole('heading', { name: '流动性监测' });
-    const details = expandLiquidityDetails();
+    await screen.findByTestId('liquidity-monitor-admin-details');
+    const details = await expandLiquidityDetails();
     expect(within(details).getByTestId('liquidity-impulse-synthesis-header')).toBeInTheDocument();
     expect(within(details).getByTestId('liquidity-impulse-synthesis-title')).toHaveTextContent('流动性收缩');
     expect(within(details).getByTestId('liquidity-impulse-synthesis-subtype-chip')).toHaveTextContent('利率驱动收紧');
@@ -642,41 +658,34 @@ describe('LiquidityMonitorPage', () => {
     expect(within(details).getByTestId('liquidity-impulse-synthesis-data-gaps')).toHaveTextContent('中港资金流');
   });
 
-  it('renders a compact direction summary with consistent first-screen counts', async () => {
+  it('renders a compact consumer summary without backend diagnostic wording', async () => {
     getLiquidityMonitor.mockResolvedValueOnce(payload);
 
     render(<LiquidityMonitorPage />);
 
     const guidancePanel = await screen.findByTestId('liquidity-monitor-guidance-panel');
-    const summary = await screen.findByTestId('liquidity-monitor-coverage-summary');
-    expect(summary).toHaveTextContent('当前流动性方向可参考');
-    expect(summary).toHaveTextContent('可计分证据 1');
-    expect(summary).toHaveTextContent('观察证据 1');
-    expect(summary).toHaveTextContent('缺失证据 2');
-    expect(guidancePanel).toHaveTextContent('当前证据可支持流动性方向的研究判断');
-    expect(guidancePanel).toHaveTextContent('波动率压力');
-    expect(guidancePanel).toHaveTextContent('信用利差');
+    expect(guidancePanel).toHaveTextContent('部分流动性数据暂不可用，当前评分已暂停。');
+    expect(guidancePanel).toHaveTextContent('当前受限模块');
+    expect(guidancePanel).toHaveTextContent('最近更新');
     expect(guidancePanel).toHaveTextContent('美国利率压力');
     expect(guidancePanel).toHaveTextContent('Crypto 资金费率');
-    expect(guidancePanel).toHaveTextContent('优先补齐');
-    expect(guidancePanel).not.toHaveTextContent('score-contributing coverage');
-    expect(guidancePanel).not.toHaveTextContent('Proxy-only');
-    expect(guidancePanel).not.toHaveTextContent('Liquidity Regime Gauge');
-    expect(summary.textContent || '').not.toMatch(/score_contribution_not_allowed|source_authority_router_rejected/);
+    expect(guidancePanel.textContent || '').not.toMatch(
+      /score_contribution_not_allowed|source_authority_router_rejected|provider_unavailable|fallback_source|sourceAuthorityAllowed|scoreContributionAllowed|Liquidity Regime Gauge|Proxy-only/i,
+    );
   });
 
-  it('renders liquidity decision readiness blockers for ready, observation-only, and unavailable evidence', async () => {
+  it('renders consumer-safe paused and unavailable states without provider remediation CTAs', async () => {
     getLiquidityMonitor.mockResolvedValueOnce(payload);
     const readyView = render(<LiquidityMonitorPage />);
 
-    const readyBand = await screen.findByTestId('liquidity-decision-readiness');
-    expect(readyBand).toHaveTextContent('判断可用性');
-    await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('可判断'));
+    await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('评分已暂停'));
     const resolvedReadyBand = screen.getByTestId('liquidity-decision-readiness');
-    expect(resolvedReadyBand).toHaveTextContent('证据质量');
-    expect(resolvedReadyBand).toHaveTextContent('阻塞项');
-    expect(resolvedReadyBand).toHaveTextContent('提升证据');
-    expect(within(resolvedReadyBand).queryByText('查看需配置的数据源')).not.toBeInTheDocument();
+    expect(resolvedReadyBand).toHaveTextContent('流动性状态');
+    expect(resolvedReadyBand).toHaveTextContent('当前流动性信号置信度较低，仅供观察。');
+    expect(resolvedReadyBand).not.toHaveTextContent('阻塞项');
+    expect(resolvedReadyBand).not.toHaveTextContent('提升证据');
+    expect(within(resolvedReadyBand).queryByText('查看提供方覆盖')).not.toBeInTheDocument();
+    expect(within(resolvedReadyBand).queryByText('前往数据源设置')).not.toBeInTheDocument();
     expect(resolvedReadyBand.textContent || '').not.toMatch(/买入|卖出|buy now|sell now|recommend/i);
     readyView.unmount();
 
@@ -719,17 +728,13 @@ describe('LiquidityMonitorPage', () => {
 
     const observationView = render(<LiquidityMonitorPage />);
     await screen.findByTestId('liquidity-decision-readiness');
-    await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('仅观察'));
+    await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('评分已暂停'));
     const observationBand = screen.getByTestId('liquidity-decision-readiness');
-    expect(observationBand).toHaveTextContent('当前只适合作为观察，不应用作方向判断');
-    expect(observationBand).toHaveTextContent('代理证据不能升级方向');
-    const observationSetupPath = within(observationBand).getByTestId('liquidity-setup-path');
-    expect(observationSetupPath).toHaveTextContent('补齐阻塞判断的数据源');
-    expect(observationSetupPath).toHaveTextContent('优先核对提供方覆盖');
-    expect(observationSetupPath).toHaveTextContent('是否进入计分仍由现有来源门槛决定');
-    expect(within(observationSetupPath).getByRole('link', { name: '查看提供方覆盖' })).toHaveAttribute('href', '/admin/market-providers?surface=liquidity_monitor');
-    expect(within(observationSetupPath).getByRole('link', { name: '前往数据源设置' })).toHaveAttribute('href', '/settings/system?panel=data_sources&surface=liquidity_monitor');
-    expect(observationSetupPath.textContent || '').not.toMatch(/买入|卖出|下单|立即交易|稳赚|保证收益|recommend|investment|profit|guarantee/i);
+    expect(observationBand).toHaveTextContent('当前流动性信号置信度较低，仅供观察。');
+    expect(observationBand).not.toHaveTextContent('代理证据不能升级方向');
+    expect(observationBand).not.toHaveTextContent('提供方');
+    expect(observationBand).not.toHaveTextContent('数据源设置');
+    expect(observationBand.textContent || '').not.toMatch(/买入|卖出|下单|立即交易|稳赚|保证收益|recommend|investment|profit|guarantee/i);
     observationView.unmount();
 
     getLiquidityMonitor.mockResolvedValueOnce({
@@ -789,18 +794,20 @@ describe('LiquidityMonitorPage', () => {
 
     render(<LiquidityMonitorPage />);
     await screen.findByTestId('liquidity-decision-readiness');
-    await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('不可判断'));
+    await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('本模块暂不可用，请稍后重试。'));
     const unavailableBand = screen.getByTestId('liquidity-decision-readiness');
-    expect(unavailableBand).toHaveTextContent('当前只适合作为观察，不应用作方向判断');
-    expect(unavailableBand).toHaveTextContent('能否判断：不可判断');
-    expect(unavailableBand).toHaveTextContent('当前方向');
-    expect(unavailableBand).toHaveTextContent('不可判断');
-    expect(unavailableBand).toHaveTextContent('没有足够评分级证据支撑方向');
-    expect(unavailableBand).toHaveTextContent(/数据源不可用|来源不可用|Provider unavailable/);
-    expect(within(unavailableBand).getByTestId('liquidity-setup-path')).toHaveTextContent('前往数据源设置');
+    expect(unavailableBand).toHaveTextContent('本模块暂不可用，请稍后重试。');
+    expect(unavailableBand).toHaveTextContent('评分已暂停');
+    expect(unavailableBand).not.toHaveTextContent('数据源不可用');
+    expect(unavailableBand).not.toHaveTextContent('Provider unavailable');
+    expect(unavailableBand).not.toHaveTextContent('前往数据源设置');
   });
 
-  it('renders a liquidity regime gauge and keeps proxy-only evidence insufficient', async () => {
+  it('renders admin-only technical diagnostics when provider readers open the disclosure', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: true,
+      canReadProviders: true,
+    });
     getLiquidityMonitor.mockResolvedValueOnce({
       ...payload,
       liquidityImpulseSynthesis: {
@@ -840,7 +847,12 @@ describe('LiquidityMonitorPage', () => {
 
     render(<LiquidityMonitorPage />);
 
-    const gauge = await screen.findByTestId('liquidity-regime-gauge');
+    const adminDetails = await screen.findByTestId('liquidity-monitor-admin-details');
+    expect(adminDetails).not.toHaveAttribute('open');
+    expect(screen.getByTestId('liquidity-regime-gauge')).toHaveTextContent('流动性刻度');
+
+    await expandLiquidityDetails();
+    const gauge = screen.getByTestId('liquidity-regime-gauge');
     expect(gauge).toHaveTextContent('流动性刻度');
     expect(gauge).toHaveTextContent('流动性状态：证据不足');
     expect(gauge).toHaveTextContent('刻度 69 / 100');
@@ -854,13 +866,17 @@ describe('LiquidityMonitorPage', () => {
     expect(gauge.textContent || '').not.toMatch(/Liquidity Regime Gauge|Proxy-only/);
   });
 
-  it('renders partial and unavailable indicators compactly', async () => {
+  it('renders partial and unavailable indicators compactly inside admin details', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: true,
+      canReadProviders: true,
+    });
     getLiquidityMonitor.mockResolvedValueOnce(payload);
 
     render(<LiquidityMonitorPage />);
 
     await screen.findByRole('heading', { name: '流动性监测' });
-    const indicatorDisclosure = expandLiquidityDetails();
+    const indicatorDisclosure = await expandLiquidityDetails();
     expect(within(indicatorDisclosure).getAllByText('部分可用').length).toBeGreaterThan(0);
     expect(within(indicatorDisclosure).getByText('暂不可用')).toBeInTheDocument();
     expect(within(indicatorDisclosure).getByText('Crypto 资金费率')).toBeVisible();
@@ -868,12 +884,16 @@ describe('LiquidityMonitorPage', () => {
   });
 
   it('shows compact official macro authority diagnostics for official, observation-only, fallback, and rejected rows', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: true,
+      canReadProviders: true,
+    });
     getLiquidityMonitor.mockResolvedValueOnce(payload);
 
     render(<LiquidityMonitorPage />);
 
     await screen.findByRole('heading', { name: '流动性监测' });
-    const details = expandLiquidityDetails();
+    const details = await expandLiquidityDetails();
     const diagnostics = within(details).getByTestId('liquidity-monitor-official-macro-diagnostics');
     expect(diagnostics).toHaveTextContent('可计分 4');
     expect(diagnostics).toHaveTextContent('官方 5');
@@ -894,12 +914,16 @@ describe('LiquidityMonitorPage', () => {
   });
 
   it('renders score-grade official breadth truth strips in the row and detail panel', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: true,
+      canReadProviders: true,
+    });
     getLiquidityMonitor.mockResolvedValueOnce(withBreadthIndicator(officialBreadthIndicator));
 
     render(<LiquidityMonitorPage />);
 
     await screen.findByRole('heading', { name: '流动性监测' });
-    const details = expandLiquidityDetails();
+    const details = await expandLiquidityDetails();
     const rowStrip = within(details).getByTestId('liquidity-breadth-truth-strip-row');
     expect(rowStrip).toHaveTextContent('评分级证据');
     expect(rowStrip).toHaveTextContent('官方宽度');
@@ -921,12 +945,16 @@ describe('LiquidityMonitorPage', () => {
   });
 
   it('renders proxy breadth as observation-only with stale partial coverage gaps', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: true,
+      canReadProviders: true,
+    });
     getLiquidityMonitor.mockResolvedValueOnce(withBreadthIndicator(degradedBreadthIndicator));
 
     render(<LiquidityMonitorPage />);
 
     await screen.findByRole('heading', { name: '流动性监测' });
-    const details = expandLiquidityDetails();
+    const details = await expandLiquidityDetails();
     const rowStrip = within(details).getByTestId('liquidity-breadth-truth-strip-row');
     expect(rowStrip).toHaveTextContent('仅观察');
     expect(rowStrip).toHaveTextContent('代理宽度');
@@ -950,12 +978,16 @@ describe('LiquidityMonitorPage', () => {
   });
 
   it('shows the selected indicator inspector and collapsed source details', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: true,
+      canReadProviders: true,
+    });
     getLiquidityMonitor.mockResolvedValueOnce(payload);
 
     render(<LiquidityMonitorPage />);
 
     await screen.findByRole('heading', { name: '流动性监测' });
-    const details = expandLiquidityDetails();
+    const details = await expandLiquidityDetails();
     expect(within(details).getAllByText('波动率压力').length).toBeGreaterThan(0);
     expect(within(details).getAllByText('均值 -2.50%').length).toBeGreaterThan(0);
     expect(within(details).getByText('指标细节')).toBeInTheDocument();
@@ -965,6 +997,10 @@ describe('LiquidityMonitorPage', () => {
   });
 
   it('shows low-confidence proxy-only synthesis without promoting expansion or contraction', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: true,
+      canReadProviders: true,
+    });
     getLiquidityMonitor.mockResolvedValueOnce({
       ...payload,
       liquidityImpulseSynthesis: {
@@ -1007,13 +1043,17 @@ describe('LiquidityMonitorPage', () => {
     const guidancePanel = await screen.findByTestId('liquidity-monitor-guidance-panel');
     expect(guidancePanel).toHaveTextContent('部分可参考');
     expect(screen.getByTestId('liquidity-monitor-coverage-summary')).toHaveTextContent('可计分证据 1');
-    const details = expandLiquidityDetails();
+    const details = await expandLiquidityDetails();
     expect(within(details).getByTestId('liquidity-impulse-synthesis-title')).toHaveTextContent('流动性方向待确认');
     expect(within(details).getByTestId('liquidity-impulse-synthesis-state-chip')).toHaveTextContent('代理证据');
     expect(within(details).getByTestId('liquidity-impulse-synthesis-summary')).toHaveTextContent('不升级为真实扩张或收缩结论');
   });
 
   it('shows a missing synthesis payload honestly without fabricating a call', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: true,
+      canReadProviders: true,
+    });
     const { liquidityImpulseSynthesis, ...payloadWithoutSynthesis } = payload;
     void liquidityImpulseSynthesis;
     getLiquidityMonitor.mockResolvedValueOnce(payloadWithoutSynthesis);
@@ -1021,7 +1061,7 @@ describe('LiquidityMonitorPage', () => {
     render(<LiquidityMonitorPage />);
 
     await screen.findByTestId('liquidity-monitor-guidance-panel');
-    const details = expandLiquidityDetails();
+    const details = await expandLiquidityDetails();
     expect(within(details).getByTestId('liquidity-impulse-synthesis-title')).toHaveTextContent('流动性方向待返回');
     expect(within(details).getByTestId('liquidity-impulse-synthesis-state-chip')).toHaveTextContent('载荷缺失');
     expect(within(details).getByTestId('liquidity-impulse-synthesis-summary')).toHaveTextContent('不推断扩张或收缩');

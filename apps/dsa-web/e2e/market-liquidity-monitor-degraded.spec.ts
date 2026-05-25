@@ -1,5 +1,6 @@
 import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures/appSmoke';
+import { openAuthenticatedRouteSmoke } from './fixtures/authenticatedRouteSmoke';
 
 const viewports = [
   { width: 1440, height: 1000 },
@@ -12,18 +13,6 @@ async function fulfillJson(route: Route, payload: unknown) {
     contentType: 'application/json',
     body: JSON.stringify(payload),
   });
-}
-
-async function signIn(page: Page, redirectPath: string) {
-  await page.goto(`/login?redirect=${encodeURIComponent(redirectPath)}`);
-  await page.locator('#username').fill('wolfy-user');
-  await page.locator('#password').fill('mock-password');
-  await Promise.all([
-    page.waitForResponse((response) => response.url().includes('/api/v1/auth/login') && response.status() === 200),
-    page.getByRole('button', { name: /sign in|登录继续|授权进入工作台|完成设置并登录/i }).click(),
-  ]);
-  await page.goto(redirectPath);
-  await page.waitForLoadState('domcontentloaded');
 }
 
 async function installDegradedLiquidityMonitorPayload(page: Page) {
@@ -180,32 +169,35 @@ async function expectNoRawDebugFields(page: Page) {
 
 test.describe('Liquidity Monitor degraded proxy-only state', () => {
   for (const viewport of viewports) {
-    test(`renders degraded synthesis honestly at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    test(`renders consumer-safe degraded states at ${viewport.width}x${viewport.height}`, async ({ page }) => {
       await page.setViewportSize(viewport);
       await installDegradedLiquidityMonitorPayload(page);
-      await signIn(page, '/zh/market/liquidity-monitor');
+      const smoke = await openAuthenticatedRouteSmoke(page, '/zh/market/liquidity-monitor');
 
-      await expect(page.getByRole('heading', { name: '流动性监测' })).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByTestId('liquidity-impulse-synthesis-header')).toBeVisible();
-      await expect(page.getByTestId('liquidity-impulse-synthesis-title')).toHaveText('流动性方向待确认');
-      await expect(page.getByTestId('liquidity-impulse-synthesis-title')).not.toHaveText(/流动性扩张|流动性收缩/);
-      await expect(page.getByTestId('liquidity-impulse-synthesis-state-chip')).toContainText('Proxy-only');
-      await expect(page.getByTestId('liquidity-impulse-synthesis-state-chip')).not.toContainText('主结论');
-      await expect(page.getByTestId('liquidity-impulse-synthesis-summary')).toContainText('不升级为真实扩张或收缩结论');
-      await expect(page.getByTestId('liquidity-impulse-synthesis-confidence-chip')).toContainText('低');
-      await expect(page.getByTestId('liquidity-impulse-synthesis-confidence-chip')).toContainText('32.0%');
-      await expect(page.getByTestId('liquidity-impulse-synthesis-quality-line')).toContainText('proxy-only');
-      await expect(page.getByTestId('liquidity-impulse-synthesis-dominant-drivers')).toContainText('proxy-only');
-      await expect(page.getByTestId('liquidity-impulse-synthesis-dominant-drivers')).toContainText('不计分');
-      await expect(page.getByTestId('liquidity-impulse-synthesis-data-gaps')).toContainText('Crypto Funding');
-      await expect(page.getByTestId('liquidity-impulse-synthesis-data-gaps')).toContainText('Missing scoring evidence for equity_flow_proxy');
-      await expect(page.locator('body')).toContainText('数据不足');
-      await expect(page.locator('body')).toContainText('暂不可用');
-      await expect(page.locator('body')).toContainText('不计分');
-      await expect(page.locator('body')).not.toContainText(/guaranteed|decision-grade|强结论|主结论/i);
+      try {
+        await expect(page.getByRole('heading', { name: '流动性监测' })).toBeVisible({ timeout: 15_000 });
+        const guidancePanel = page.getByTestId('liquidity-monitor-guidance-panel');
+        await expect(guidancePanel).toContainText('本模块暂不可用，请稍后重试。');
+        await expect(guidancePanel).toContainText('评分已暂停');
+        await expect(guidancePanel).toContainText('暂不可用');
+        await expect(guidancePanel).toContainText('当前受限模块');
+        await expect(guidancePanel).toContainText('已使用最近一次可用数据');
+        await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('数据更新');
+        await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('最近更新');
+        await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('评分状态');
+        await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('流动性状态');
+        await expect(page.getByTestId('liquidity-decision-readiness')).not.toContainText('不计分');
+        await expect(page.locator('body')).not.toContainText(/guaranteed|decision-grade|强结论|主结论|provider_unavailable|scoreContributionAllowed|proxy-only|Binance|official_or_authorized|yfinance_proxy|外部调用|运行顺序|缓存写入/i);
+        await expect(page.getByRole('button', { name: '展开 技术细节' })).toHaveCount(0);
+        await expect(page.getByTestId('liquidity-monitor-guidance-panel')).not.toContainText('流动性方向待确认');
+        await expect(page.getByTestId('liquidity-monitor-guidance-panel')).not.toContainText('不升级为真实扩张或收缩结论');
 
-      await expectNoRawDebugFields(page);
-      await expectNoHorizontalOverflow(page);
+        await expectNoRawDebugFields(page);
+        await expectNoHorizontalOverflow(page);
+        smoke.expectNoConsolePageErrors();
+      } finally {
+        await smoke.cleanup();
+      }
     });
   }
 });
