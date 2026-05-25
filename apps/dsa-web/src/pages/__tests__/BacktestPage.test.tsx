@@ -83,8 +83,10 @@ vi.mock('motion/react', async () => {
   StaticDiv.displayName = 'StaticMotionDiv';
 
   return {
+    LazyMotion: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
     AnimatePresence: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
-    motion: {
+    domAnimation: {},
+    m: {
       div: StaticDiv,
       section: StaticDiv,
     },

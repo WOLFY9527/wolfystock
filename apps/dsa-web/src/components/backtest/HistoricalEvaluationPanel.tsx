@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, domAnimation, LazyMotion, m } from 'motion/react';
 import { ApiErrorAlert, Button, Card, Pagination } from '../../components/common';
 import type { ParsedApiError } from '../../api/error';
 import type {
@@ -492,18 +492,20 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
             </div>
           ) : (
             <div className="backtest-control-window" data-testid="backtest-control-window">
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.div
-                  key={currentStep}
-                  className="backtest-control-window__frame"
-                  initial={{ opacity: 0, x: 18 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -14 }}
-                  transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-                >
-                  {historicalSections[currentStep]}
-                </motion.div>
-              </AnimatePresence>
+              <LazyMotion features={domAnimation}>
+                <AnimatePresence mode="wait" initial={false}>
+                  <m.div
+                    key={currentStep}
+                    className="backtest-control-window__frame"
+                    initial={{ opacity: 0, x: 18 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -14 }}
+                    transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    {historicalSections[currentStep]}
+                  </m.div>
+                </AnimatePresence>
+              </LazyMotion>
             </div>
           )}
         </section>

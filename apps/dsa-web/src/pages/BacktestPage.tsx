@@ -1,6 +1,6 @@
 import type React from 'react';
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, domAnimation, LazyMotion, m } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
@@ -1329,190 +1329,192 @@ const BacktestPage: React.FC = () => {
             </div>
           </section>
         ) : null}
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={activeModule === 'rule' ? `${activeModule}-${controlPanelMode}` : activeModule}
-            className={`backtest-v1-stage backtest-v1-stage--${activeModule} w-full min-w-0`}
-            data-testid="backtest-v1-stage"
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{
-              duration: 0.26,
-              ease: [0.22, 1, 0.36, 1] as const,
-            }}
-          >
-            <Suspense
-              fallback={(
-                <section
-                  data-testid="backtest-workspace-loading"
-                  aria-busy="true"
-                  className="workspace-loading-panel border border-white/10 bg-white/[0.02] backdrop-blur-md"
-                >
-                  <div className="workspace-loading-panel__header">
-                    <span className="workspace-loading-panel__status">
-                      {language === 'en' ? 'Loading workspace' : '加载工作区'}
-                    </span>
-                    <span className="text-xs text-white/45">
-                      {language === 'en' ? 'Preparing backtest surface' : '正在准备回测界面'}
-                    </span>
-                  </div>
-                  <div className="workspace-loading-panel__hero min-h-[240px]" />
-                  <div className="workspace-loading-panel__lines" aria-hidden="true">
-                    <span />
-                    <span />
-                    <span />
-                  </div>
-                </section>
-              )}
+        <LazyMotion features={domAnimation}>
+          <AnimatePresence mode="wait" initial={false}>
+            <m.div
+              key={activeModule === 'rule' ? `${activeModule}-${controlPanelMode}` : activeModule}
+              className={`backtest-v1-stage backtest-v1-stage--${activeModule} w-full min-w-0`}
+              data-testid="backtest-v1-stage"
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{
+                duration: 0.26,
+                ease: [0.22, 1, 0.36, 1] as const,
+              }}
             >
-              {activeModule === 'historical' ? (
-                <HistoricalEvaluationPanel
-                  normalizedCode={normalizedCode}
-                  codeFilter={codeFilter}
-                  onCodeChange={setCodeFilter}
-                  onCodeEnter={handleCodeKeyDown}
-                  evaluationBars={evaluationBars}
-                  onEvaluationBarsChange={setEvaluationBars}
-                  maturityDays={maturityDays}
-                  onMaturityDaysChange={setMaturityDays}
-                  samplePreset={samplePreset}
-                  onSamplePresetChange={setSamplePreset}
-                  customSampleCount={customSampleCount}
-                  onCustomSampleCountChange={setCustomSampleCount}
-                  resolvedSampleCount={resolvedSampleCount}
-                  forceReplaceResults={forceReplaceResults}
-                  onForceReplaceResultsChange={setForceReplaceResults}
-                  onFilter={handleFilter}
-                  onPrepareSamples={() => handlePrepareSamples({ forceRefresh: false })}
-                  onRebuildSamples={handleRebuildSamples}
-                  onClearSamples={handleClearSamples}
-                  onRunEvaluation={handleRunHistoricalEvaluation}
-                  onClearResults={handleClearResults}
-                  isPreparingSamples={isPreparingSamples}
-                  isRunningHistoricalEval={isRunningHistoricalEval}
-                  runResult={runResult}
-                  runError={runError}
-                  prepareResult={prepareResult}
-                  prepareError={prepareError}
-                  sampleStatus={sampleStatus}
-                  sampleStatusError={sampleStatusError}
-                  historicalAssumptions={historicalAssumptions}
-                  historicalSourceMetadata={historicalSourceMetadata}
-                  historicalSampleTransparency={historicalSampleTransparency}
-                  isLoadingSampleStatus={isLoadingSampleStatus}
-                  isLoadingPerf={isLoadingPerf}
-                  historicalSummaryItems={historicalSummaryItems}
-                  performanceNotice={performanceNotice}
-                  results={results}
-                  totalResults={totalResults}
-                  currentPage={currentPage}
-                  pageSize={HISTORICAL_PAGE_SIZE}
-                  onChangeResultsPage={handleResultsPageChange}
-                  pageError={pageError}
-                  isLoadingResults={isLoadingResults}
-                  historyItems={historyItems}
-                  historyTotal={historyTotal}
-                  historyPage={historyPage}
-                  historyPageSize={HISTORY_PAGE_SIZE}
-                  onChangeHistoryPage={(page) => {
-                    setHistoryPage(page);
-                    void fetchHistory(page, normalizedCode || undefined);
-                  }}
-                  onOpenHistoricalRun={handleOpenHistoricalRun}
-                  selectedRunId={selectedRunId}
-                  historyError={historyError}
-                  isLoadingHistory={isLoadingHistory}
-                  panelMode={controlPanelMode}
-                />
-              ) : (
-                controlPanelMode === 'normal' ? (
-                  <NormalBacktestWorkspace
-                    language={language}
-                    code={normalizedCode}
+              <Suspense
+                fallback={(
+                  <section
+                    data-testid="backtest-workspace-loading"
+                    aria-busy="true"
+                    className="workspace-loading-panel border border-white/10 bg-white/[0.02] backdrop-blur-md"
+                  >
+                    <div className="workspace-loading-panel__header">
+                      <span className="workspace-loading-panel__status">
+                        {language === 'en' ? 'Loading workspace' : '加载工作区'}
+                      </span>
+                      <span className="text-xs text-white/45">
+                        {language === 'en' ? 'Preparing backtest surface' : '正在准备回测界面'}
+                      </span>
+                    </div>
+                    <div className="workspace-loading-panel__hero min-h-[240px]" />
+                    <div className="workspace-loading-panel__lines" aria-hidden="true">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </section>
+                )}
+              >
+                {activeModule === 'historical' ? (
+                  <HistoricalEvaluationPanel
+                    normalizedCode={normalizedCode}
+                    codeFilter={codeFilter}
                     onCodeChange={setCodeFilter}
-                    startDate={ruleStartDate}
-                    onStartDateChange={setRuleStartDate}
-                    endDate={ruleEndDate}
-                    onEndDateChange={setRuleEndDate}
-                    initialCapital={ruleInitialCapital}
-                    onInitialCapitalChange={setRuleInitialCapital}
-                    feeBps={ruleFeeBps}
-                    onFeeBpsChange={setRuleFeeBps}
-                    slippageBps={ruleSlippageBps}
-                    onSlippageBpsChange={setRuleSlippageBps}
-                    benchmarkMode={ruleBenchmarkMode}
-                    onBenchmarkModeChange={setRuleBenchmarkMode}
-                    benchmarkCode={ruleBenchmarkCode}
-                    onBenchmarkCodeChange={setRuleBenchmarkCode}
-                    strategyTemplate={normalStrategyTemplate}
-                    onStrategyTemplateChange={setNormalStrategyTemplate}
-                    onLaunch={handleLaunchNormalRuleBacktest}
-                    isLaunching={isLaunchingNormalRuleBacktest || isSubmittingRuleBacktest || isParsingRuleStrategy}
-                    parseError={ruleParseError}
-                    runError={ruleRunError}
+                    onCodeEnter={handleCodeKeyDown}
+                    evaluationBars={evaluationBars}
+                    onEvaluationBarsChange={setEvaluationBars}
+                    maturityDays={maturityDays}
+                    onMaturityDaysChange={setMaturityDays}
+                    samplePreset={samplePreset}
+                    onSamplePresetChange={setSamplePreset}
+                    customSampleCount={customSampleCount}
+                    onCustomSampleCountChange={setCustomSampleCount}
+                    resolvedSampleCount={resolvedSampleCount}
+                    forceReplaceResults={forceReplaceResults}
+                    onForceReplaceResultsChange={setForceReplaceResults}
+                    onFilter={handleFilter}
+                    onPrepareSamples={() => handlePrepareSamples({ forceRefresh: false })}
+                    onRebuildSamples={handleRebuildSamples}
+                    onClearSamples={handleClearSamples}
+                    onRunEvaluation={handleRunHistoricalEvaluation}
+                    onClearResults={handleClearResults}
+                    isPreparingSamples={isPreparingSamples}
+                    isRunningHistoricalEval={isRunningHistoricalEval}
+                    runResult={runResult}
+                    runError={runError}
+                    prepareResult={prepareResult}
+                    prepareError={prepareError}
+                    sampleStatus={sampleStatus}
+                    sampleStatusError={sampleStatusError}
+                    historicalAssumptions={historicalAssumptions}
+                    historicalSourceMetadata={historicalSourceMetadata}
+                    historicalSampleTransparency={historicalSampleTransparency}
+                    isLoadingSampleStatus={isLoadingSampleStatus}
+                    isLoadingPerf={isLoadingPerf}
+                    historicalSummaryItems={historicalSummaryItems}
+                    performanceNotice={performanceNotice}
+                    results={results}
+                    totalResults={totalResults}
+                    currentPage={currentPage}
+                    pageSize={HISTORICAL_PAGE_SIZE}
+                    onChangeResultsPage={handleResultsPageChange}
+                    pageError={pageError}
+                    isLoadingResults={isLoadingResults}
+                    historyItems={historyItems}
+                    historyTotal={historyTotal}
+                    historyPage={historyPage}
+                    historyPageSize={HISTORY_PAGE_SIZE}
+                    onChangeHistoryPage={(page) => {
+                      setHistoryPage(page);
+                      void fetchHistory(page, normalizedCode || undefined);
+                    }}
+                    onOpenHistoricalRun={handleOpenHistoricalRun}
+                    selectedRunId={selectedRunId}
+                    historyError={historyError}
+                    isLoadingHistory={isLoadingHistory}
+                    panelMode={controlPanelMode}
                   />
                 ) : (
-                  <ProBacktestWorkspace
-                    language={language}
-                    code={normalizedCode}
-                    onCodeChange={setCodeFilter}
-                    onCodeEnter={handleRuleCodeKeyDown}
-                    strategyText={ruleStrategyText}
-                    onStrategyTextChange={handleRuleStrategyTextChange}
-                    startDate={ruleStartDate}
-                    onStartDateChange={setRuleStartDate}
-                    endDate={ruleEndDate}
-                    onEndDateChange={setRuleEndDate}
-                    initialCapital={ruleInitialCapital}
-                    onInitialCapitalChange={setRuleInitialCapital}
-                    lookbackBars={ruleLookbackBars}
-                    onLookbackBarsChange={setRuleLookbackBars}
-                    feeBps={ruleFeeBps}
-                    onFeeBpsChange={setRuleFeeBps}
-                    slippageBps={ruleSlippageBps}
-                    onSlippageBpsChange={setRuleSlippageBps}
-                    benchmarkMode={ruleBenchmarkMode}
-                    onBenchmarkModeChange={setRuleBenchmarkMode}
-                    benchmarkCode={ruleBenchmarkCode}
-                    onBenchmarkCodeChange={setRuleBenchmarkCode}
-                    monteCarloEnabled={proMonteCarloEnabled}
-                    onToggleMonteCarloEnabled={handleToggleProMonteCarlo}
-                    monteCarloSimulationCount={proMonteCarloSimulationCount}
-                    onMonteCarloSimulationCountChange={handleProMonteCarloSimulationCountChange}
-                    onMonteCarloSimulationCountBlur={handleProMonteCarloSimulationCountBlur}
-                    walkForwardPresetEnabled={proWalkForwardPresetEnabled}
-                    onToggleWalkForwardPresetEnabled={handleToggleProWalkForwardPreset}
-                    parsedStrategy={ruleParsedStrategy}
-                    confirmed={ruleConfirmed}
-                    onToggleConfirmed={setRuleConfirmed}
-                    isParsing={isParsingRuleStrategy}
-                    parseError={ruleParseError}
-                    onParse={handleParseRuleStrategy}
-                    isSubmitting={isSubmittingRuleBacktest}
-                    runError={ruleRunError}
-                    onRun={handleRunRuleBacktest}
-                    onReset={resetRuleFlow}
-                    historyItems={ruleHistoryItems}
-                    historyTotal={ruleHistoryTotal}
-                    historyPage={ruleHistoryPage}
-                    selectedRunId={selectedRuleRunId}
-                    isLoadingHistory={isLoadingRuleHistory}
-                    historyError={ruleHistoryError}
-                    onRefreshHistory={() => void fetchRuleHistory(1, normalizedCode || undefined)}
-                    onOpenHistoryRun={handleOpenRuleRun}
-                    previewAssumptions={previewRuleAssumptions}
-                    currentStep={ruleCurrentStep}
-                    onStepChange={setRuleCurrentStep}
-                    parseStale={isRuleParseStale}
-                    onApplyRewriteSuggestion={handleApplyRuleRewriteSuggestion}
-                    appliedRewriteText={appliedRewriteText}
-                  />
-                )
-              )}
-            </Suspense>
-          </motion.div>
-        </AnimatePresence>
+                  controlPanelMode === 'normal' ? (
+                    <NormalBacktestWorkspace
+                      language={language}
+                      code={normalizedCode}
+                      onCodeChange={setCodeFilter}
+                      startDate={ruleStartDate}
+                      onStartDateChange={setRuleStartDate}
+                      endDate={ruleEndDate}
+                      onEndDateChange={setRuleEndDate}
+                      initialCapital={ruleInitialCapital}
+                      onInitialCapitalChange={setRuleInitialCapital}
+                      feeBps={ruleFeeBps}
+                      onFeeBpsChange={setRuleFeeBps}
+                      slippageBps={ruleSlippageBps}
+                      onSlippageBpsChange={setRuleSlippageBps}
+                      benchmarkMode={ruleBenchmarkMode}
+                      onBenchmarkModeChange={setRuleBenchmarkMode}
+                      benchmarkCode={ruleBenchmarkCode}
+                      onBenchmarkCodeChange={setRuleBenchmarkCode}
+                      strategyTemplate={normalStrategyTemplate}
+                      onStrategyTemplateChange={setNormalStrategyTemplate}
+                      onLaunch={handleLaunchNormalRuleBacktest}
+                      isLaunching={isLaunchingNormalRuleBacktest || isSubmittingRuleBacktest || isParsingRuleStrategy}
+                      parseError={ruleParseError}
+                      runError={ruleRunError}
+                    />
+                  ) : (
+                    <ProBacktestWorkspace
+                      language={language}
+                      code={normalizedCode}
+                      onCodeChange={setCodeFilter}
+                      onCodeEnter={handleRuleCodeKeyDown}
+                      strategyText={ruleStrategyText}
+                      onStrategyTextChange={handleRuleStrategyTextChange}
+                      startDate={ruleStartDate}
+                      onStartDateChange={setRuleStartDate}
+                      endDate={ruleEndDate}
+                      onEndDateChange={setRuleEndDate}
+                      initialCapital={ruleInitialCapital}
+                      onInitialCapitalChange={setRuleInitialCapital}
+                      lookbackBars={ruleLookbackBars}
+                      onLookbackBarsChange={setRuleLookbackBars}
+                      feeBps={ruleFeeBps}
+                      onFeeBpsChange={setRuleFeeBps}
+                      slippageBps={ruleSlippageBps}
+                      onSlippageBpsChange={setRuleSlippageBps}
+                      benchmarkMode={ruleBenchmarkMode}
+                      onBenchmarkModeChange={setRuleBenchmarkMode}
+                      benchmarkCode={ruleBenchmarkCode}
+                      onBenchmarkCodeChange={setRuleBenchmarkCode}
+                      monteCarloEnabled={proMonteCarloEnabled}
+                      onToggleMonteCarloEnabled={handleToggleProMonteCarlo}
+                      monteCarloSimulationCount={proMonteCarloSimulationCount}
+                      onMonteCarloSimulationCountChange={handleProMonteCarloSimulationCountChange}
+                      onMonteCarloSimulationCountBlur={handleProMonteCarloSimulationCountBlur}
+                      walkForwardPresetEnabled={proWalkForwardPresetEnabled}
+                      onToggleWalkForwardPresetEnabled={handleToggleProWalkForwardPreset}
+                      parsedStrategy={ruleParsedStrategy}
+                      confirmed={ruleConfirmed}
+                      onToggleConfirmed={setRuleConfirmed}
+                      isParsing={isParsingRuleStrategy}
+                      parseError={ruleParseError}
+                      onParse={handleParseRuleStrategy}
+                      isSubmitting={isSubmittingRuleBacktest}
+                      runError={ruleRunError}
+                      onRun={handleRunRuleBacktest}
+                      onReset={resetRuleFlow}
+                      historyItems={ruleHistoryItems}
+                      historyTotal={ruleHistoryTotal}
+                      historyPage={ruleHistoryPage}
+                      selectedRunId={selectedRuleRunId}
+                      isLoadingHistory={isLoadingRuleHistory}
+                      historyError={ruleHistoryError}
+                      onRefreshHistory={() => void fetchRuleHistory(1, normalizedCode || undefined)}
+                      onOpenHistoryRun={handleOpenRuleRun}
+                      previewAssumptions={previewRuleAssumptions}
+                      currentStep={ruleCurrentStep}
+                      onStepChange={setRuleCurrentStep}
+                      parseStale={isRuleParseStale}
+                      onApplyRewriteSuggestion={handleApplyRuleRewriteSuggestion}
+                      appliedRewriteText={appliedRewriteText}
+                    />
+                  )
+                )}
+              </Suspense>
+            </m.div>
+          </AnimatePresence>
+        </LazyMotion>
         </main>
       </TerminalPageShell>
     </div>

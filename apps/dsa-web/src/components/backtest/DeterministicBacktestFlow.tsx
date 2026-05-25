@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, domAnimation, LazyMotion, m } from 'motion/react';
 import { ApiErrorAlert, Badge, Button } from '../../components/common';
 import type { ParsedApiError } from '../../api/error';
 import type {
@@ -858,24 +858,26 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         </div>
         <label className="product-field product-field--full gap-1.5">
           <span className={compactFieldLabelClass}>{language === 'en' ? 'Natural-language strategy' : '自然语言策略'}</span>
-          <AnimatePresence initial={false}>
-            {appliedRewriteText ? (
-              <motion.div
-                key="rewrite-banner"
-                className="mb-4"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={FLOW_PANEL_TRANSITION}
-              >
-                <Banner
-                  tone="info"
-                  title={language === 'en' ? 'Applied rewrite suggestion' : '已应用建议改写'}
-                  body={language === 'en' ? 'The strategy text has been replaced with the suggested version. Parse it again before continuing.' : '策略文本已替换为建议版本。请重新解析后继续。'}
-                />
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
+          <LazyMotion features={domAnimation}>
+            <AnimatePresence initial={false}>
+              {appliedRewriteText ? (
+                <m.div
+                  key="rewrite-banner"
+                  className="mb-4"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={FLOW_PANEL_TRANSITION}
+                >
+                  <Banner
+                    tone="info"
+                    title={language === 'en' ? 'Applied rewrite suggestion' : '已应用建议改写'}
+                    body={language === 'en' ? 'The strategy text has been replaced with the suggested version. Parse it again before continuing.' : '策略文本已替换为建议版本。请重新解析后继续。'}
+                  />
+                </m.div>
+              ) : null}
+            </AnimatePresence>
+          </LazyMotion>
           <textarea
             aria-label={language === 'en' ? 'Strategy text' : '策略文本'}
             value={strategyText}
