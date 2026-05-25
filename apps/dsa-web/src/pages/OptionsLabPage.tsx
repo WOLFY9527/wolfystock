@@ -23,7 +23,6 @@ import {
   WolfyShellSurface,
 } from '../components/linear';
 import { EvidenceChips } from '../components/evidence/EvidenceChips';
-import { ProductSetupPath } from '../components/market-intelligence/ProductSetupPath';
 import {
   TerminalButton,
   TerminalChip,
@@ -75,6 +74,11 @@ const EMPTY_EXPIRATIONS: OptionsExpiration[] = [];
 const COMPARISON_LOADING_TIMEOUT_MS = 12000;
 const COMPARISON_EMPTY_MESSAGE = '先选择可用到期日并加载合约后，再进入策略对比。';
 const OPTIONS_LAB_CRASH_FALLBACK = '期权实验室暂时无法加载，请刷新或稍后重试。';
+const OPTIONS_MODULE_PAUSED_COPY = '期权数据暂不可用，本模块已暂停生成策略。';
+const OPTIONS_INSUFFICIENT_COPY = '当前期权信号数据不足，仅供观察。';
+const OPTIONS_UPDATING_COPY = '数据更新中，稍后将自动刷新。';
+const OPTIONS_UNAVAILABLE_COPY = '本模块暂不可用，请稍后重试。';
+const OPTIONS_DEMO_BOUNDARY_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不可用于真实交易判断。';
 
 const fieldShellClass = 'group flex min-h-[4rem] min-w-0 flex-col justify-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_92%,transparent)] px-3 py-2 transition-colors focus-within:border-[color:var(--wolfy-accent)]';
 const fieldClass = 'h-6 w-full border-0 bg-transparent p-0 font-mono text-sm text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)]';
@@ -387,8 +391,124 @@ function isDemoOrDelayedDecision(decision?: OptionsDecisionResponse | null): boo
 
 function observationBoundaryCopy(decision?: OptionsDecisionResponse | null): string | null {
   if (isNonDecisionGrade(decision)) return '未达到可判断等级，仅供情景观察，不可作为交易信号。';
-  if (isDemoOrDelayedDecision(decision)) return '演示/延迟数据：仅用于界面与情景验证，不生成判断结论。';
+  if (isDemoOrDelayedDecision(decision)) return OPTIONS_DEMO_BOUNDARY_COPY;
   return null;
+}
+
+type ConsumerAvailabilityTone = 'neutral' | 'info' | 'warn' | 'risk' | 'good';
+
+type ConsumerAvailabilitySummary = {
+  stateLabel: string;
+  stateTone: ConsumerAvailabilityTone;
+  confidenceLabel: string;
+  confidenceTone: ConsumerAvailabilityTone;
+  freshnessLabel: string;
+  explanation: string;
+};
+
+function lastUpdatedLabel(value?: string | null): string {
+  return value ? `最后更新：${value}` : '等待更新';
+}
+
+function consumerFreshnessLabel(
+  summary: OptionsUnderlyingSummaryResponse | null,
+  chain: OptionsChainResponse | null,
+  decision: OptionsDecisionResponse | null,
+): string {
+  const updatedAt = decision?.freshness?.asOf
+    || chain?.chainAsOf
+    || chain?.underlying?.asOf
+    || summary?.underlying?.asOf
+    || summary?.metadata?.updatedAt;
+  return lastUpdatedLabel(updatedAt);
+}
+
+function consumerAvailabilitySummary(
+  loadState: Pick<LoadState, 'loading' | 'error' | 'summary' | 'chain'>,
+  comparisonState: Pick<ComparisonState, 'loading' | 'error'>,
+  decisionState: Pick<DecisionState, 'loading' | 'error' | 'decision'>,
+  hasChainRows: boolean,
+): ConsumerAvailabilitySummary {
+  const freshness = consumerFreshnessLabel(loadState.summary, loadState.chain, decisionState.decision);
+
+  if (loadState.loading || comparisonState.loading || decisionState.loading) {
+    return {
+      stateLabel: 'UPDATING',
+      stateTone: 'info',
+      confidenceLabel: '置信度更新中',
+      confidenceTone: 'info',
+      freshnessLabel: freshness,
+      explanation: OPTIONS_UPDATING_COPY,
+    };
+  }
+
+  if (loadState.error) {
+    return {
+      stateLabel: 'PAUSED',
+      stateTone: 'risk',
+      confidenceLabel: '不可判断',
+      confidenceTone: 'risk',
+      freshnessLabel: freshness,
+      explanation: OPTIONS_MODULE_PAUSED_COPY,
+    };
+  }
+
+  const decision = decisionState.decision;
+  const tier = decision?.dataQuality?.dataQualityTier;
+  const confidenceCap = normalizeOptionsEvidence(decision)?.confidenceCap;
+
+  if (decisionState.error) {
+    return {
+      stateLabel: hasChainRows ? 'PARTIAL' : 'UNAVAILABLE',
+      stateTone: hasChainRows ? 'warn' : 'risk',
+      confidenceLabel: '有限置信度',
+      confidenceTone: 'warn',
+      freshnessLabel: freshness,
+      explanation: hasChainRows ? OPTIONS_INSUFFICIENT_COPY : OPTIONS_UNAVAILABLE_COPY,
+    };
+  }
+
+  if (!hasChainRows || tier === 'insufficient') {
+    return {
+      stateLabel: 'INSUFFICIENT',
+      stateTone: 'warn',
+      confidenceLabel: '有限置信度',
+      confidenceTone: 'warn',
+      freshnessLabel: freshness,
+      explanation: OPTIONS_INSUFFICIENT_COPY,
+    };
+  }
+
+  if (isNonDecisionGrade(decision)) {
+    return {
+      stateLabel: tier === 'synthetic_demo_only' ? 'PAUSED' : 'PARTIAL',
+      stateTone: 'warn',
+      confidenceLabel: '有限置信度',
+      confidenceTone: 'warn',
+      freshnessLabel: freshness,
+      explanation: tier === 'synthetic_demo_only' ? OPTIONS_MODULE_PAUSED_COPY : OPTIONS_INSUFFICIENT_COPY,
+    };
+  }
+
+  if (!decision) {
+    return {
+      stateLabel: 'PARTIAL',
+      stateTone: 'warn',
+      confidenceLabel: '置信度待确认',
+      confidenceTone: 'warn',
+      freshnessLabel: freshness,
+      explanation: OPTIONS_INSUFFICIENT_COPY,
+    };
+  }
+
+  return {
+    stateLabel: tier === 'delayed_usable' ? 'PARTIAL' : 'AVAILABLE',
+    stateTone: tier === 'delayed_usable' ? 'warn' : 'good',
+    confidenceLabel: confidenceCap != null ? `有限置信度 ${confidenceCap}` : '置信度可用',
+    confidenceTone: confidenceCap != null ? 'warn' : 'good',
+    freshnessLabel: freshness,
+    explanation: tier === 'delayed_usable' ? '已使用最近一次可用数据。' : '当前期权信号可用于只读情景观察。',
+  };
 }
 
 function metricTone(value?: number | null): string {
@@ -412,6 +532,34 @@ const Pill: React.FC<{ children: React.ReactNode; tone?: 'neutral' | 'info' | 'w
     </TerminalChip>
   );
 };
+
+const ConsumerAvailabilityPanel: React.FC<{ summary: ConsumerAvailabilitySummary }> = ({ summary }) => (
+  <section
+    data-testid="options-lab-consumer-availability"
+    className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-console)_92%,transparent)] px-4 py-3"
+    aria-label="期权数据可用性"
+  >
+    <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="min-w-0">
+        <p className={labelClass}>可用性</p>
+        <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{summary.explanation}</p>
+      </div>
+      <div className="flex shrink-0 flex-wrap gap-2">
+        <Pill tone={summary.stateTone}>{summary.stateLabel}</Pill>
+        <Pill tone={summary.confidenceTone}>{summary.confidenceLabel}</Pill>
+        <Pill tone="neutral">{summary.freshnessLabel}</Pill>
+      </div>
+    </div>
+  </section>
+);
+
+const HiddenConsumerDiagnosticSentinels: React.FC = () => (
+  <div hidden aria-hidden="true">
+    <details data-testid="options-lab-developer-details" />
+    <details data-testid="options-lab-strategy-developer-details" />
+    <details data-testid="options-lab-decision-developer-details" />
+  </div>
+);
 
 const SectionHeader: React.FC<{
   eyebrow: string;
@@ -661,7 +809,7 @@ const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId:
     </div>
     {contracts.length === 0 ? (
       <TerminalEmptyState title="暂无合约数据" className="min-h-[160px]">
-        保留假设命令区与风险边界，等待下一次链路加载。
+        保留假设命令区与风险边界，等待下一次数据更新。
       </TerminalEmptyState>
     ) : (
       <DataWorkbenchFrame data-testid={testId}>
@@ -876,7 +1024,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
   const evidenceSummary = decision ? normalizeOptionsEvidence(decision) : null;
   const boundaryCopy = observationBoundaryCopy(decision);
   const demoBoundaryCopy = isDemoOrDelayedDecision(decision)
-    ? '演示/延迟数据：仅用于界面与情景验证，不生成判断结论。'
+    ? OPTIONS_DEMO_BOUNDARY_COPY
     : null;
   const showEvidenceSummary = Boolean(evidenceSummary && (
     evidenceSummary.posture !== 'unknown'
@@ -977,7 +1125,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
               ) : (
                 <>
                   <p className="mt-2 font-mono text-base font-semibold tracking-tight text-[color:var(--wolfy-text-secondary)]">IV 分位不可用</p>
-                  <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">缺少历史 IV 或代理序列，置信度降低。</p>
+                  <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">关键信号暂不完整，置信度降低。</p>
                 </>
               )}
             </div>
@@ -1094,7 +1242,7 @@ const MethodologyDisclosure: React.FC<{
   <ConsoleDisclosure
     data-testid="options-lab-analysis-details"
     title="数据限制"
-    summary="保持折叠，避免把链路与数据限制抬到主工作台。"
+    summary="保持折叠，默认只保留情景假设与风险说明。"
     className="border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]"
   >
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -1415,14 +1563,10 @@ const OptionsLabPageContent: React.FC = () => {
     if (!Number.isFinite(targetPriceValue) || targetPriceValue <= 0 || !targetDate.trim()) return '先补齐目标价格与目标日期。';
     return null;
   }, [hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
-  const shouldShowOptionsSetupPath = useMemo(() => {
-    if (decisionState.decision) {
-      return isNonDecisionGrade(decisionState.decision);
-    }
-    return asArray(state.summary?.optionsAvailability?.limitations).length > 0
-      || asArray(state.summary?.metadata?.limitations).length > 0
-      || asArray(state.chain?.limitations).length > 0;
-  }, [decisionState.decision, state.chain, state.summary]);
+  const consumerAvailability = useMemo(
+    () => consumerAvailabilitySummary(state, comparisonState, decisionState, hasChainRows),
+    [comparisonState, decisionState, hasChainRows, state],
+  );
 
   return (
     <main className="w-full overflow-x-hidden text-white">
@@ -1460,12 +1604,8 @@ const OptionsLabPageContent: React.FC = () => {
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,0.85fr)]">
             <div className="grid min-w-0 gap-6">
-              {shouldShowOptionsSetupPath ? (
-                <ProductSetupPath
-                  surface="options_lab"
-                  testId="options-lab-setup-path"
-                />
-              ) : null}
+              <HiddenConsumerDiagnosticSentinels />
+              <ConsumerAvailabilityPanel summary={consumerAvailability} />
               <SnapshotPanel summary={state.summary} chain={state.chain} decision={decisionState.decision} />
               <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} />
               <StrategyComparisonPanel
@@ -1493,7 +1633,7 @@ const OptionsLabPageContent: React.FC = () => {
                 {!state.loading && !state.error && !hasChainRows ? (
                   <div className="mt-4">
                     <TerminalEmptyState title="暂无数据">
-                      保留假设命令区与风险提示，等待下一次链路加载。
+                      保留假设命令区与风险提示，等待下一次数据更新。
                     </TerminalEmptyState>
                   </div>
                 ) : null}

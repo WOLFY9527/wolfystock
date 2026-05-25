@@ -409,6 +409,14 @@ describe('OptionsLabPage', () => {
     ['标的快照', '期权情景输入', '情景准备度', '风险边界', '策略候选', '数据限制', 'Call / Put 工作区'].forEach((label) => {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     });
+    const consumerAvailability = screen.getByTestId('options-lab-consumer-availability');
+    await waitFor(() => {
+      expect(consumerAvailability).toHaveTextContent('PAUSED');
+    });
+    expect(consumerAvailability).toHaveTextContent('可用性');
+    expect(consumerAvailability).toHaveTextContent('有限置信度');
+    expect(consumerAvailability).toHaveTextContent('期权数据暂不可用，本模块已暂停生成策略。');
+    expect(consumerAvailability).toHaveTextContent('最后更新：');
     expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('保持折叠');
 
     expect(await screen.findByTestId('options-lab-decision-engine')).toBeInTheDocument();
@@ -747,14 +755,18 @@ describe('OptionsLabPage', () => {
     expect(screen.queryByText('期权实验室暂时无法加载，请刷新或稍后重试。')).not.toBeInTheDocument();
   });
 
-  it('renders setup-path actions while keeping synthetic options output observation-only', async () => {
+  it('keeps maintainer setup actions out of the default consumer view', async () => {
     renderPage();
 
-    const setupPath = await screen.findByTestId('options-lab-setup-path');
-    expect(within(setupPath).getByRole('link', { name: '查看 Provider Ops' })).toHaveAttribute('href', '/admin/market-providers?surface=options_lab');
-    expect(within(setupPath).getByRole('link', { name: '前往数据源设置' })).toHaveAttribute('href', '/settings/system?panel=data_sources&surface=options_lab');
+    const consumerAvailability = await screen.findByTestId('options-lab-consumer-availability');
+    await waitFor(() => {
+      expect(consumerAvailability).toHaveTextContent('期权数据暂不可用，本模块已暂停生成策略。');
+    });
+    expect(screen.queryByTestId('options-lab-setup-path')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '查看 Provider Ops' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '前往数据源设置' })).not.toBeInTheDocument();
     expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('不可作为交易信号');
-    expect(setupPath.textContent || '').not.toMatch(/买入|卖出|推荐|live options/i);
+    expect(document.body.textContent || '').not.toMatch(/Provider Ops|数据源设置|fallback\/proxy|live options/i);
   });
 
   it('renders pass-but-review readiness gate strips for decision-grade payloads', async () => {
@@ -886,7 +898,7 @@ describe('OptionsLabPage', () => {
     const section = await screen.findByTestId('options-lab-decision-engine');
     const snapshotPanel = screen.getByTestId('options-lab-snapshot-panel');
     await waitFor(() => {
-      expect(within(section).getAllByText('演示/延迟数据：仅用于界面与情景验证，不生成判断结论。').length).toBeGreaterThan(0);
+      expect(within(section).getAllByText('演示数据：当前数据延迟，仅用于界面与情景验证，不可用于真实交易判断。').length).toBeGreaterThan(0);
     });
 
     expect(within(snapshotPanel).getAllByText('演示/延迟数据').length).toBeGreaterThan(0);
@@ -1237,13 +1249,20 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     expect(await screen.findByText('TEM260619C00055000')).toBeInTheDocument();
-    expect(screen.queryByTestId('options-lab-developer-details')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('options-lab-strategy-developer-details')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('options-lab-decision-developer-details')).not.toBeInTheDocument();
+    [
+      'options-lab-developer-details',
+      'options-lab-strategy-developer-details',
+      'options-lab-decision-developer-details',
+    ].forEach((testId) => {
+      const sentinel = screen.getByTestId(testId);
+      expect(sentinel.closest('[hidden]')).not.toBeNull();
+      expect(sentinel).not.toHaveAttribute('open');
+      expect(sentinel).toBeEmptyDOMElement();
+    });
     expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('风险边界');
     expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('数据限制');
     expect(within(screen.getByTestId('options-lab-analysis-details')).getByRole('button', { name: /展开/ })).toHaveAttribute('aria-expanded', 'false');
-    expect(document.body.textContent || '').not.toMatch(/开发者|Developer|provider_validation_required|mocked_frontend_shell|fixture_frontend_phase4/i);
+    expect(document.body.textContent || '').not.toMatch(/开发者|Developer|Provider Ops|数据源设置|backend|offline|provider_validation_required|mocked_frontend_shell|fixture_frontend_phase4/i);
   });
 
   it('renders the Options-only crash fallback with collapsed sanitized details', () => {
@@ -1329,6 +1348,14 @@ describe('OptionsLabPage', () => {
       'QUOTA PILOT',
       'MarketCache',
       'provider.example',
+      'Provider Ops',
+      'backend',
+      'offline',
+      'sourceAuthorityAllowed',
+      'scoreContributionAllowed',
+      'observationOnly',
+      'reasonCode',
+      'reasonFamilies',
     ].forEach((text) => {
       expect(domText.toLowerCase()).not.toContain(text.toLowerCase());
     });
