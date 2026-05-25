@@ -35,6 +35,9 @@ def test_unknown_source_is_degraded_fill_only_unknown_authority() -> None:
 @pytest.mark.parametrize(
     "source",
     [
+        "DatabaseCache",
+        "database-cache",
+        "database cache",
         "local_us_parquet",
         "local_us_parquet_dir",
         "local_db",
@@ -55,6 +58,15 @@ def test_explicit_local_and_cache_sources_remain_allowed_for_backtest_authority(
     assert result.rejected is False
     assert result.source_type == "cache_snapshot"
     assert result.reason_codes == ()
+
+
+@pytest.mark.parametrize("source", ["DatabaseCache", "database-cache", "database cache"])
+def test_database_cache_aliases_resolve_to_local_cache_provider(source: str) -> None:
+    result = assess_backtest_data_source_eligibility(code="AAPL", source=source)
+
+    assert result.source == source
+    assert result.provider_id == "local_cache"
+    assert result.source_type == "cache_snapshot"
 
 
 def test_local_stored_ohlcv_route_is_allowed_for_backtest_authority() -> None:

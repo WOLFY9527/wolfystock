@@ -25,6 +25,11 @@ _LOCAL_AUTHORITY_SOURCES = frozenset(
         "cached",
     }
 )
+_LOCAL_AUTHORITY_SOURCE_ALIASES = {
+    "databasecache": "database_cache",
+    "database-cache": "database_cache",
+    "database cache": "database_cache",
+}
 _UNKNOWN_AUTHORITY_SOURCES = frozenset({"unknown", "missing"})
 _UNKNOWN_AUTHORITY_REASON_CODE = "source_authority_unknown"
 _PROXY_FILL_ONLY_PROVIDERS = frozenset(
@@ -81,10 +86,11 @@ def assess_backtest_data_source_eligibility(
     )
     plan = DataSourceRouter.resolve(request)
     normalized_source = str(source or "").strip()
-    provider_id = _resolve_provider_id(normalized_source)
-    source_type = _resolve_backtest_source_type(normalized_source)
+    authority_source = _normalize_backtest_source_authority(normalized_source)
+    provider_id = _resolve_provider_id(authority_source)
+    source_type = _resolve_backtest_source_type(authority_source)
 
-    if not normalized_source or normalized_source.lower() in _UNKNOWN_AUTHORITY_SOURCES:
+    if not normalized_source or authority_source in _UNKNOWN_AUTHORITY_SOURCES:
         return BacktestDataSourceEligibility(
             request=request,
             plan=plan,
@@ -98,7 +104,7 @@ def assess_backtest_data_source_eligibility(
             reason_codes=(_UNKNOWN_AUTHORITY_REASON_CODE,),
         )
 
-    if normalized_source.lower() in _LOCAL_AUTHORITY_SOURCES or source_type == "cache_snapshot":
+    if authority_source in _LOCAL_AUTHORITY_SOURCES or source_type == "cache_snapshot":
         return BacktestDataSourceEligibility(
             request=request,
             plan=plan,
@@ -220,8 +226,15 @@ def _resolve_provider_id(source: str) -> str | None:
     return _SOURCE_PROVIDER_ALIASES.get(normalized, normalized)
 
 
-def _resolve_backtest_source_type(source: str) -> str:
+def _normalize_backtest_source_authority(source: str) -> str:
     normalized = str(source or "").strip().lower()
+    if not normalized:
+        return normalized
+    return _LOCAL_AUTHORITY_SOURCE_ALIASES.get(normalized, normalized)
+
+
+def _resolve_backtest_source_type(source: str) -> str:
+    normalized = _normalize_backtest_source_authority(source)
     if not normalized or normalized in _UNKNOWN_AUTHORITY_SOURCES:
         return "missing"
     if normalized in _LOCAL_AUTHORITY_SOURCES:

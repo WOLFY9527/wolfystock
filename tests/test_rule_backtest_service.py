@@ -1164,6 +1164,49 @@ class RuleBacktestTestCase(unittest.TestCase):
             self.assertEqual(unknown_response[key], local_response[key])
         self.assertEqual(unknown_response["trades"], local_response["trades"])
 
+    def test_rule_backtest_data_quality_allows_database_cache_alias_without_changing_results(self) -> None:
+        service = RuleBacktestService(self.db)
+        run_kwargs = {
+            "code": "600519",
+            "strategy_text": "Buy when Close > MA3. Sell when Close < MA3.",
+            "start_date": "2024-01-05",
+            "end_date": "2024-01-20",
+            "lookback_bars": 20,
+            "benchmark_mode": "same_symbol_buy_and_hold",
+            "confirmed": True,
+        }
+
+        with self.db.get_session() as session:
+            rows = session.query(StockDaily).filter(StockDaily.code == "600519").all()
+            for row in rows:
+                row.data_source = "database_cache"
+            session.commit()
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            canonical_response = service.run_backtest(**run_kwargs)
+
+        with self.db.get_session() as session:
+            rows = session.query(StockDaily).filter(StockDaily.code == "600519").all()
+            for row in rows:
+                row.data_source = "DatabaseCache"
+            session.commit()
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            alias_response = service.run_backtest(**run_kwargs)
+
+        data_quality = alias_response["data_quality"]
+        self.assertEqual(data_quality["source"], "DatabaseCache")
+        self.assertEqual(data_quality["authority_status"], "allowed")
+        self.assertEqual(data_quality["authority_source_type"], "cache_snapshot")
+        self.assertEqual(data_quality["authority_reason_codes"], [])
+        self.assertEqual(
+            alias_response["professionalReadiness"]["reproducibility_state"],
+            canonical_response["professionalReadiness"]["reproducibility_state"],
+        )
+        for key in ("trade_count", "total_return_pct", "max_drawdown_pct", "final_equity"):
+            self.assertEqual(alias_response[key], canonical_response[key])
+        self.assertEqual(alias_response["trades"], canonical_response["trades"])
+
     def test_rule_backtest_data_quality_reports_missing_bars_and_anomalies(self) -> None:
         service = RuleBacktestService(self.db)
         self._seed_history(
