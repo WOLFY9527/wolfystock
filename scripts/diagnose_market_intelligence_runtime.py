@@ -30,6 +30,9 @@ from src.services.options_market_data_provider import (
 from src.services.options_event_calendar_authority import (
     build_options_event_calendar_authority_diagnostic,
 )
+from src.services.options_expiration_calendar_authority import (
+    build_options_expiration_calendar_authority_diagnostic,
+)
 from src.services.options_iv_rank_authority import build_options_iv_rank_authority_diagnostic
 from src.services.polygon_us_breadth_provider import (
     diagnostic_summary as polygon_us_breadth_diagnostic_summary,
@@ -357,6 +360,69 @@ def _collect_options_event_calendar_authority() -> dict[str, Any]:
             "confirmationStatus": confirmation_status,
             "eventId": event_id,
             "coverageMetadata": {"eventCount": event_count} if event_count else {},
+            "sandboxOrProduction": "not_provider_sourced",
+        }
+    )
+
+
+def _collect_options_expiration_calendar_authority() -> dict[str, Any]:
+    try:
+        fixture = json.loads(DEFAULT_OPTIONS_FIXTURE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return build_options_expiration_calendar_authority_diagnostic(None)
+
+    expiration_rows = fixture.get("expirations") or []
+    if not isinstance(expiration_rows, list):
+        return build_options_expiration_calendar_authority_diagnostic(None)
+
+    expiration_dates: list[str] = []
+    expiration_types: list[str] = []
+    as_of = None
+    chain_available_count = 0
+
+    for item in expiration_rows:
+        if not isinstance(item, Mapping):
+            continue
+        expiration_date = item.get("date") or item.get("expiration")
+        if expiration_date:
+            expiration_date = str(expiration_date)
+            expiration_dates.append(expiration_date)
+        expiration_type = item.get("type")
+        if expiration_type and expiration_type not in expiration_types:
+            expiration_types.append(str(expiration_type))
+        if as_of is None:
+            as_of = item.get("asOf") or item.get("as_of")
+        if item.get("chainAvailable") is True:
+            chain_available_count += 1
+
+    expiration_dates = sorted({value for value in expiration_dates if value})
+    coverage_metadata = {}
+    if expiration_dates:
+        coverage_metadata = {
+            "expirationCoverage": "complete",
+            "expirationCount": len(expiration_dates),
+            "chainAvailability": "complete"
+            if chain_available_count == len(expiration_dates)
+            else "partial",
+        }
+
+    date_range = None
+    if expiration_dates:
+        date_range = {"start": expiration_dates[0], "end": expiration_dates[-1]}
+
+    return build_options_expiration_calendar_authority_diagnostic(
+        {
+            "providerId": fixture.get("source") or fixture.get("providerName"),
+            "sourceType": "fixture",
+            "expirationCalendarStatus": "available" if expiration_dates else "unavailable",
+            "asOf": as_of,
+            "underlying": fixture.get("symbol"),
+            "symbol": fixture.get("symbol"),
+            "expirationDates": expiration_dates,
+            "expirationCount": len(expiration_dates),
+            "expirationTypes": expiration_types,
+            "dateRange": date_range,
+            "coverageMetadata": coverage_metadata,
             "sandboxOrProduction": "not_provider_sourced",
         }
     )
@@ -1064,6 +1130,7 @@ def collect_diagnostic_bundle(
         ),
         "optionsIvRankAuthority": _collect_options_iv_rank_authority(),
         "optionsEventCalendarAuthority": _collect_options_event_calendar_authority(),
+        "optionsExpirationCalendarAuthority": _collect_options_expiration_calendar_authority(),
         "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
         "discrepancies": [],
     }
@@ -1201,6 +1268,7 @@ def main(argv: list[str] | None = None) -> int:
             "optionsLabProviderPreflight": _collect_options_lab_provider_preflight(),
             "optionsIvRankAuthority": _collect_options_iv_rank_authority(),
             "optionsEventCalendarAuthority": _collect_options_event_calendar_authority(),
+            "optionsExpirationCalendarAuthority": _collect_options_expiration_calendar_authority(),
             "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
             "discrepancies": [],
         }
