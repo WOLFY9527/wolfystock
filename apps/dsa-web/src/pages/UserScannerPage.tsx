@@ -1599,9 +1599,15 @@ function ScannerResultHistorySummary({
 
 function ScannerConclusionBand({
   model,
+  scopeLabel,
+  dataStateLabel,
+  latestLabel,
   language,
 }: {
   model: ScannerConclusionModel;
+  scopeLabel: string;
+  dataStateLabel: string;
+  latestLabel: string;
   language: 'zh' | 'en';
 }) {
   const toneVariant: React.ComponentProps<typeof TerminalChip>['variant'] = model.tone === 'success'
@@ -1619,24 +1625,59 @@ function ScannerConclusionBand({
       as="section"
       dense
       data-testid="scanner-conclusion-band"
-      className="grid gap-2 px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_auto]"
+      className="grid gap-3 px-3 py-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,0.44fr)]"
     >
       <div className="min-w-0">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <TerminalChip variant={toneVariant} className="shrink-0">{model.title}</TerminalChip>
-          <TerminalChip variant="neutral" className="font-mono">
-            {language === 'en' ? 'Candidates' : '候选'} {model.candidateCount}
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <TerminalChip variant={toneVariant} className="shrink-0">
+            {dataStateLabel}
+          </TerminalChip>
+          <TerminalChip variant="neutral" className="max-w-full font-mono">
+            {scopeLabel}
+          </TerminalChip>
+          <TerminalChip variant="neutral" className="shrink-0 font-mono">
+            {latestLabel}
           </TerminalChip>
         </div>
-        <p className="mt-1 text-pretty text-xs leading-relaxed text-white/64">
-          {model.detail}
-        </p>
+        <div className="mt-3 min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">
+            {language === 'en' ? 'Candidate discovery surface' : '候选发现工作台'}
+          </p>
+          <div className="mt-1 flex min-w-0 flex-wrap items-end gap-2">
+            <h2 className="truncate text-xl font-semibold text-white md:text-2xl">{model.title}</h2>
+            <span className="text-xs text-white/44">
+              {language === 'en' ? 'Candidates' : '候选'} {model.candidateCount}
+            </span>
+          </div>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/64">
+            {model.detail}
+          </p>
+        </div>
       </div>
-      {trustNotice ? (
-        <p className="min-w-0 text-xs leading-relaxed text-white/58 md:max-w-[18rem] md:text-right">
-          {trustNotice}
-        </p>
-      ) : null}
+      <div className="grid gap-2 rounded-2xl border border-white/8 bg-white/[0.02] p-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+            {language === 'en' ? 'Primary cue' : '当前提示'}
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-white/72">
+            {model.state === 'top-candidate'
+              ? (language === 'en' ? 'Review the ranked table first, then inspect the selected candidate rail.' : '先看排名主表，再查看右侧当前候选。')
+              : model.state === 'waiting'
+                ? (language === 'en' ? 'Choose the market scope, then run a scan or open history.' : '先确认市场范围，再启动扫描或打开历史记录。')
+                : (language === 'en' ? 'Use the ranked rows as evidence and keep diagnostics collapsed until needed.' : '先使用候选行作为主证据，只有需要时再展开数据说明。')}
+          </p>
+        </div>
+        {trustNotice ? (
+          <div className="border-t border-white/8 pt-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+              {language === 'en' ? 'Data cue' : '数据提示'}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-white/58">
+              {trustNotice}
+            </p>
+          </div>
+        ) : null}
+      </div>
     </TerminalPanel>
   );
 }
@@ -2419,6 +2460,7 @@ const UserScannerPage: React.FC = () => {
     candidate: ScannerCandidate,
     isTracked: boolean,
     isTrackPending: boolean,
+    summaryOverride?: string | null,
     backtestItem?: ScannerBacktestItem,
   ) => {
     if (!runDetail) return null;
@@ -2453,7 +2495,7 @@ const UserScannerPage: React.FC = () => {
               <div className="flex min-w-0 items-center gap-2">
                 <span className="truncate font-mono text-lg font-semibold text-white">{candidate.symbol || '--'}</span>
                 <span className="rounded border border-white/8 bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/72">
-                  {language === 'en' ? 'Candidate detail' : '候选详情'}
+                  {language === 'en' ? 'Focus candidate' : '当前候选'}
                 </span>
               </div>
               <p className="mt-1 truncate text-xs text-white/42">{candidate.companyName || candidate.name || candidate.symbol || '--'}</p>
@@ -2464,19 +2506,19 @@ const UserScannerPage: React.FC = () => {
               ) : null}
             </div>
             <div className="shrink-0 text-right">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-white/36">{language === 'en' ? 'Score' : '评分'}</p>
-              <p className="font-mono text-sm font-semibold text-white">{candidate.score != null ? `${candidate.score}/100` : '--'}</p>
-              <p className="text-[10px] uppercase tracking-[0.14em] text-white/36">{language === 'en' ? 'Rank' : '排名'}</p>
-              <p className="font-mono text-sm font-semibold text-white">{candidate.rank ? `#${candidate.rank}` : '--'}</p>
+              <div className="flex flex-wrap justify-end gap-1.5">
+                <FieldChip label={language === 'en' ? 'Score' : '评分'} value={candidate.score != null ? `${candidate.score}/100` : '--'} />
+                <FieldChip label={language === 'en' ? 'Rank' : '排名'} value={candidate.rank ? `#${candidate.rank}` : '--'} />
+              </div>
             </div>
           </div>
         </div>
 
         <div className="grid gap-2 rounded-xl border border-white/8 bg-white/[0.015] p-3">
           <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-2 border-b border-white/8 pb-2">
-            <span className="text-[10px] uppercase tracking-[0.14em] text-white/36">{language === 'en' ? 'Conclusion' : '结论'}</span>
+            <span className="text-[10px] uppercase tracking-[0.14em] text-white/36">{language === 'en' ? 'Why now' : '当前信号'}</span>
             <p className="min-w-0 text-xs leading-relaxed text-white/72">
-              {compactNotes[0] || candidate.reasonSummary || compactMetricItems[0]?.value || ai?.status || (language === 'en' ? 'No decision note' : '暂无结论')}
+              {summaryOverride || compactNotes[0] || candidate.reasonSummary || compactMetricItems[0]?.value || ai?.status || (language === 'en' ? 'No decision note' : '暂无结论')}
             </p>
           </div>
           <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-2 border-b border-white/8 pb-2">
@@ -2491,33 +2533,23 @@ const UserScannerPage: React.FC = () => {
               {getEntryRange(candidate) ? <FieldChip label={language === 'en' ? 'Observation zone' : '观察区'} value={getEntryRange(candidate) || '--'} /> : null}
               {getTargetPrice(candidate) ? <FieldChip label={language === 'en' ? 'Reference range' : '参考区间'} value={getTargetPrice(candidate) || '--'} /> : null}
               {getStopLoss(candidate) ? <FieldChip label={language === 'en' ? 'Risk boundary' : '风险边界'} value={getStopLoss(candidate) || '--'} /> : null}
+              {!getEntryRange(candidate) && !getTargetPrice(candidate) && !getStopLoss(candidate) ? (
+                <span className="text-xs text-white/44">
+                  {language === 'en' ? 'Watch the next update before acting on this idea.' : '先观察下一次更新，再决定是否继续跟踪。'}
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
 
-        {compactMetricItems.length ? (
-          <div className="grid gap-1.5 rounded-xl border border-white/8 bg-black/15 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] uppercase tracking-[0.14em] text-white/36">{language === 'en' ? 'Key metrics' : '关键指标'}</span>
-            </div>
-            <div className="grid gap-1.5">
-              {compactMetricItems.map((item) => (
-                <div key={`${item.label}-${item.value}`} className="flex min-w-0 items-center justify-between gap-2 border-t border-white/8 pt-1.5 first:border-t-0 first:pt-0">
-                  <span className="truncate text-[11px] text-white/42">{item.label}</span>
-                  <span className="truncate font-mono text-xs text-white/72">{item.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {outcomeItems.length ? (
-          <div className="flex flex-wrap gap-1.5 rounded-xl border border-white/8 bg-white/[0.02] p-3">
-            {outcomeItems.map((item) => (
-              <FieldChip key={`${item.label}-${item.value}`} label={item.label} value={item.value} />
-            ))}
-          </div>
-        ) : null}
+        <div className="flex flex-wrap gap-1.5">
+          {compactMetricItems.slice(0, 2).map((item) => (
+            <FieldChip key={`${item.label}-${item.value}`} label={item.label} value={item.value} />
+          ))}
+          {outcomeItems.slice(0, 2).map((item) => (
+            <FieldChip key={`${item.label}-${item.value}`} label={item.label} value={item.value} />
+          ))}
+        </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
           <ActionButton
@@ -2562,8 +2594,8 @@ const UserScannerPage: React.FC = () => {
 
         <AdvancedDisclosure
           testId={`scanner-result-detail-more-${getCandidateIdentity(candidate)}`}
-          title={language === 'en' ? 'More detail' : '更多细节'}
-          summary={language === 'en' ? 'Data notes, signals, supporting context' : '数据说明、信号、补充信息'}
+          title={language === 'en' ? 'Candidate notes' : '候选说明'}
+          summary={language === 'en' ? 'Metrics, signals, realized outcome, supporting context' : '指标、信号、复盘结果与补充说明'}
           icon="more"
         >
           <div className="max-h-[min(34vh,20rem)] overflow-y-auto no-scrollbar ui-scroll-y-quiet">
@@ -2632,17 +2664,29 @@ const UserScannerPage: React.FC = () => {
   const scannerDataStateLabel = runDetail
     ? `${normalizeRunState(runDetail.status) === 'failed' || normalizeRunState(runDetail.status) === 'error' ? `${currentRunSummary?.statusLabel || compactScannerStateLabel(runDetail.status, language)} · ` : ''}${getRunDataStatusLabel(runDetail, language)}`
     : (language === 'en' ? 'Waiting' : '等待');
-  const scannerStatusItems = [
-    { label: language === 'en' ? 'Universe' : '范围', value: scannerScopeLabel },
-    { label: language === 'en' ? 'Theme' : '主题', value: scannerThemeLabel },
-    { label: language === 'en' ? 'Selected / rejected / limited data' : '入选 / 淘汰 / 数据受限', value: `${shortlistCount} / ${runDetail?.summary?.rejectedCount ?? 0} / ${runDetail?.summary?.dataFailedCount ?? 0}` },
-    { label: language === 'en' ? 'Latest' : '最近', value: generatedAt ? formatTimestamp(generatedAt, language) : '--' },
-    { label: language === 'en' ? 'Data' : '数据', value: scannerDataStateLabel },
-  ];
   const scannerConclusion = useMemo(
     () => buildScannerConclusion(runDetail, language),
     [language, runDetail],
   );
+  const heroLatestLabel = `${language === 'en' ? 'Latest' : '最近'} ${generatedAt ? formatTimestamp(generatedAt, language) : '--'}`;
+  const scannerStatusItems = [
+    {
+      label: language === 'en' ? 'Best candidate' : '最佳候选',
+      value: activeDetailCandidate
+        ? `${activeDetailCandidate.symbol || '--'} · ${activeDetailCandidate.companyName || activeDetailCandidate.name || '--'}`
+        : (scannerConclusion.state === 'waiting'
+          ? (language === 'en' ? 'Waiting for a scan' : '等待扫描')
+          : (language === 'en' ? 'No candidate yet' : '暂无候选')),
+    },
+    {
+      label: language === 'en' ? 'Candidate mix' : '候选分布',
+      value: `${shortlistCount} / ${runDetail?.summary?.rejectedCount ?? 0} / ${runDetail?.summary?.dataFailedCount ?? 0}`,
+    },
+    {
+      label: language === 'en' ? 'Signal state' : '信号状态',
+      value: generatedAt ? `${scannerDataStateLabel} · ${formatTimestamp(generatedAt, language)}` : scannerDataStateLabel,
+    },
+  ];
 
   return (
     <>
@@ -2708,13 +2752,19 @@ const UserScannerPage: React.FC = () => {
                 </div>
               ) : null}
 
+              <ScannerConclusionBand
+                model={scannerConclusion}
+                scopeLabel={scannerScopeLabel}
+                dataStateLabel={scannerDataStateLabel}
+                latestLabel={heroLatestLabel}
+                language={language}
+              />
               <DenseStatusStrip
                 data-testid="scanner-status-strip"
-                ariaLabel={language === 'en' ? 'Scanner run summary' : '扫描运行摘要'}
+                ariaLabel={language === 'en' ? 'Scanner summary strip' : '扫描摘要条'}
                 items={scannerStatusItems}
                 className="ui-scroll-x-quiet flex-nowrap overflow-x-auto border-y border-white/10 bg-transparent px-2 py-1"
               />
-              <ScannerConclusionBand model={scannerConclusion} language={language} />
             </div>
 
 		          <div data-testid="scanner-workspace-grid" className="w-full flex-1 min-w-0">
@@ -3085,9 +3135,9 @@ const UserScannerPage: React.FC = () => {
                                 <span>{language === 'en' ? 'Symbol / name' : '代码 / 名称'}</span>
                                 <span>{language === 'en' ? 'Score' : '评分'}</span>
                                 <span>{language === 'en' ? 'Status' : '状态'}</span>
-                                <span>{language === 'en' ? 'Key reason' : '关键原因'}</span>
+                                <span>{language === 'en' ? 'Why now' : '当前信号'}</span>
                                 <span>{language === 'en' ? 'Data quality' : '数据质量'}</span>
-                                <span>{language === 'en' ? 'Watch / risk' : '观察 / 风险'}</span>
+                                <span>{language === 'en' ? 'Next / risk' : '下一步 / 风险'}</span>
                                 <span className="text-right">{language === 'en' ? 'Actions' : '操作'}</span>
                               </div>
                               <div data-testid="scanner-candidate-scroll-region" className="min-w-0 max-h-[min(52vh,34rem)] overflow-y-auto overscroll-y-contain no-scrollbar ui-scroll-y-quiet [-webkit-overflow-scrolling:touch]">
@@ -3168,22 +3218,35 @@ const UserScannerPage: React.FC = () => {
                             <div data-testid={`scanner-candidate-detail-${activeDetailCandidate.symbol || 'unknown'}`} className="contents">
                               <div data-testid="scanner-candidate-inspector" className="contents">
                                 <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/48">
-                                  <span className="font-semibold text-white/72">{language === 'en' ? 'Selected detail' : '当前详情'}</span>
+                                  <span className="font-semibold text-white/72">{language === 'en' ? 'Focus candidate' : '当前候选'}</span>
                                   <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 font-mono text-white/72">{activeDetailCandidate.symbol || '--'}</span>
                                   {activeDetailDiagnostic ? (
                                     <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5">
                                       {diagnosticStatusLabel(activeDetailDiagnostic.status, language)}
                                     </span>
                                   ) : null}
+                                  {activeDetailDiagnostic ? (
+                                    <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 text-white/58">
+                                      {formatCandidateDataQuality(activeDetailDiagnostic, language)}
+                                    </span>
+                                  ) : null}
                                 </div>
                                 {activeDetailDiagnostic ? (
                                   <p className="mb-2 text-xs text-white/58">
-                                    {isOfficialSelected(activeDetailDiagnostic)
-                                      ? getKeyReason(activeDetailCandidate, runDetail, language)
-                                      : formatFriendlyDiagnosticReason(activeDetailDiagnostic, language)}
+                                    {language === 'en' ? 'Keep the ranked rows visible and use this rail for the current candidate only.' : '先保持主表可见，右侧只保留当前候选的关键信息。'}
                                   </p>
                                 ) : null}
-                                {renderCandidateDetailPanel(activeDetailCandidate, activeDetailTracked, activeDetailTrackPending, activeDetailBacktestItem)}
+                                {renderCandidateDetailPanel(
+                                  activeDetailCandidate,
+                                  activeDetailTracked,
+                                  activeDetailTrackPending,
+                                  activeDetailDiagnostic
+                                    ? (isOfficialSelected(activeDetailDiagnostic)
+                                      ? getKeyReason(activeDetailCandidate, runDetail, language)
+                                      : formatFriendlyDiagnosticReason(activeDetailDiagnostic, language))
+                                    : null,
+                                  activeDetailBacktestItem,
+                                )}
                               </div>
                             </div>
                           </div>
@@ -3194,22 +3257,35 @@ const UserScannerPage: React.FC = () => {
                             <div data-testid={`scanner-candidate-detail-${activeDetailCandidate.symbol || 'unknown'}`} className="contents">
                               <div data-testid="scanner-candidate-inspector" className="contents">
                                 <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/48">
-                                  <span className="font-semibold text-white/72">{language === 'en' ? 'Candidate detail' : '候选详情'}</span>
+                                  <span className="font-semibold text-white/72">{language === 'en' ? 'Focus candidate' : '当前候选'}</span>
                                   <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 font-mono text-white/72">{activeDetailCandidate.symbol || '--'}</span>
                                   {activeDetailDiagnostic ? (
                                     <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5">
                                       {diagnosticStatusLabel(activeDetailDiagnostic.status, language)}
                                     </span>
                                   ) : null}
+                                  {activeDetailDiagnostic ? (
+                                    <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 text-white/58">
+                                      {formatCandidateDataQuality(activeDetailDiagnostic, language)}
+                                    </span>
+                                  ) : null}
                                 </div>
                                 {activeDetailDiagnostic ? (
                                   <p className="mb-2 text-xs text-white/58">
-                                    {isOfficialSelected(activeDetailDiagnostic)
-                                      ? getKeyReason(activeDetailCandidate, runDetail, language)
-                                      : formatFriendlyDiagnosticReason(activeDetailDiagnostic, language)}
+                                    {language === 'en' ? 'Keep the ranked rows visible and use this rail for the current candidate only.' : '先保持主表可见，右侧只保留当前候选的关键信息。'}
                                   </p>
                                 ) : null}
-                                {renderCandidateDetailPanel(activeDetailCandidate, activeDetailTracked, activeDetailTrackPending, activeDetailBacktestItem)}
+                                {renderCandidateDetailPanel(
+                                  activeDetailCandidate,
+                                  activeDetailTracked,
+                                  activeDetailTrackPending,
+                                  activeDetailDiagnostic
+                                    ? (isOfficialSelected(activeDetailDiagnostic)
+                                      ? getKeyReason(activeDetailCandidate, runDetail, language)
+                                      : formatFriendlyDiagnosticReason(activeDetailDiagnostic, language))
+                                    : null,
+                                  activeDetailBacktestItem,
+                                )}
                               </div>
                             </div>
                           </aside>
