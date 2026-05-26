@@ -52,6 +52,7 @@ _ENDPOINTS: tuple[tuple[str, str], ...] = (
 )
 _OPTIONS_LIVE_PROBE_PROVIDER = "tradier"
 _OPTIONS_LIVE_PROBE_ENDPOINT_CLASSES = ("quote", "expirations")
+_OPTIONS_CHAIN_PROBE_ENDPOINT_CLASS = "chain"
 
 
 def _skipped_official_macro_diagnostic(reason: str = "not_requested") -> dict[str, Any]:
@@ -291,6 +292,137 @@ def _response_shape_status(endpoint_class: str, payload: Mapping[str, Any]) -> d
     return {"status": "unknown", "count": 0}
 
 
+def _normalize_options_probe_expiration(expiration: str | None) -> str | None:
+    text = str(expiration or "").strip()
+    return text or None
+
+
+def _first_tradier_expiration_date(payload: Mapping[str, Any]) -> str | None:
+    expirations = payload.get("expirations") if isinstance(payload, Mapping) else None
+    if isinstance(expirations, Mapping):
+        raw_dates = expirations.get("date", expirations.get("expiration"))
+    else:
+        raw_dates = expirations
+    if isinstance(raw_dates, str):
+        values = [raw_dates]
+    elif isinstance(raw_dates, Mapping):
+        values = [raw_dates.get("date", raw_dates.get("expiration"))]
+    else:
+        values = [
+            item.get("date", item.get("expiration")) if isinstance(item, Mapping) else item
+            for item in list(raw_dates or [])
+        ]
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return None
+
+
+def _present_number(value: Any) -> bool:
+    if value is None:
+        return False
+    text = str(value).strip()
+    if not text:
+        return False
+    try:
+        float(text)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def _first_present_value(payload: Mapping[str, Any], keys: tuple[str, ...]) -> Any:
+    for key in keys:
+        if key in payload and payload.get(key) is not None:
+            return payload.get(key)
+    return None
+
+
+def _tradier_chain_option_rows_for_summary(payload: Mapping[str, Any]) -> tuple[list[Mapping[str, Any]], str]:
+    if not isinstance(payload, Mapping):
+        raise OptionsProviderUnavailable(
+            "tradier",
+            code="options_provider_payload_unmappable",
+            message="Options provider payload could not be mapped safely.",
+        )
+    raw_options = payload.get("options")
+    if raw_options is None:
+        return [], "missing"
+    if not isinstance(raw_options, Mapping):
+        raise OptionsProviderUnavailable(
+            "tradier",
+            code="options_provider_payload_unmappable",
+            message="Options provider payload could not be mapped safely.",
+        )
+    raw_rows = raw_options.get("option")
+    if raw_rows is None:
+        return [], "missing"
+    if isinstance(raw_rows, Mapping):
+        return [raw_rows], "object"
+    if isinstance(raw_rows, list):
+        if not all(isinstance(item, Mapping) for item in raw_rows):
+            raise OptionsProviderUnavailable(
+                "tradier",
+                code="options_provider_payload_unmappable",
+                message="Options provider payload could not be mapped safely.",
+            )
+        return list(raw_rows), "list"
+    raise OptionsProviderUnavailable(
+        "tradier",
+        code="options_provider_payload_unmappable",
+        message="Options provider payload could not be mapped safely.",
+    )
+
+
+def _summarize_tradier_chain_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    rows, shape_status = _tradier_chain_option_rows_for_summary(payload)
+    has_bid_ask_count = 0
+    has_open_interest_count = 0
+    has_iv_greeks_count = 0
+    for row in rows:
+        greeks = row.get("greeks") if isinstance(row.get("greeks"), Mapping) else {}
+        if _present_number(row.get("bid")) and _present_number(row.get("ask")):
+            has_bid_ask_count += 1
+        if _present_number(_first_present_value(row, ("open_interest", "openInterest", "openinterest"))):
+            has_open_interest_count += 1
+        iv_value = _first_present_value(
+            row,
+            ("implied_volatility", "impliedVolatility", "iv"),
+        )
+        if iv_value is None and isinstance(greeks, Mapping):
+            iv_value = _first_present_value(greeks, ("mid_iv", "smv_vol", "iv", "implied_volatility"))
+        has_iv = _present_number(iv_value)
+        has_greek = isinstance(greeks, Mapping) and any(
+            _present_number(greeks.get(key)) for key in ("delta", "gamma", "theta", "vega", "rho")
+        )
+        if has_iv and has_greek:
+            has_iv_greeks_count += 1
+    contract_count = len(rows)
+    return {
+        "responseShape": {"status": shape_status, "count": contract_count},
+        "chainContractCount": contract_count,
+        "chainHasBidAsk": has_bid_ask_count > 0,
+        "chainHasBidAskCount": has_bid_ask_count,
+        "chainHasOpenInterest": has_open_interest_count > 0,
+        "chainHasOpenInterestCount": has_open_interest_count,
+        "chainHasIvGreeks": has_iv_greeks_count > 0,
+        "chainHasIvGreeksCount": has_iv_greeks_count,
+    }
+
+
+def _empty_options_chain_summary() -> dict[str, Any]:
+    return {
+        "chainContractCount": 0,
+        "chainHasBidAsk": False,
+        "chainHasBidAskCount": 0,
+        "chainHasOpenInterest": False,
+        "chainHasOpenInterestCount": 0,
+        "chainHasIvGreeks": False,
+        "chainHasIvGreeksCount": 0,
+    }
+
+
 def _options_live_probe_result(
     *,
     provider_id: str,
@@ -300,8 +432,12 @@ def _options_live_probe_result(
     timeout_seconds: float,
     network_call_executed: bool,
     endpoint_results: list[dict[str, Any]],
-    sanitized_error_code: str | None,
+    quote_shape_status: str = "unknown",
+    expiration_count: int = 0,
+    chain_summary: dict[str, Any] | None = None,
+    sanitized_error_code: str | None = None,
 ) -> dict[str, Any]:
+    chain_summary = chain_summary or _empty_options_chain_summary()
     return {
         "providerId": provider_id,
         "status": status,
@@ -311,8 +447,21 @@ def _options_live_probe_result(
         "sanitizedErrorCode": sanitized_error_code,
         "timeoutSeconds": timeout_seconds,
         "networkCallExecuted": network_call_executed,
-        "endpointClasses": list(_OPTIONS_LIVE_PROBE_ENDPOINT_CLASSES),
+        "endpointClasses": [
+            str(result.get("endpointClass"))
+            for result in endpoint_results
+            if str(result.get("endpointClass") or "").strip()
+        ],
         "endpointResults": endpoint_results,
+        "quoteShapeStatus": str(quote_shape_status or "unknown"),
+        "expirationCount": _non_negative_int(expiration_count),
+        "chainContractCount": _non_negative_int(chain_summary.get("chainContractCount")),
+        "chainHasBidAsk": bool(chain_summary.get("chainHasBidAsk", False)),
+        "chainHasBidAskCount": _non_negative_int(chain_summary.get("chainHasBidAskCount")),
+        "chainHasOpenInterest": bool(chain_summary.get("chainHasOpenInterest", False)),
+        "chainHasOpenInterestCount": _non_negative_int(chain_summary.get("chainHasOpenInterestCount")),
+        "chainHasIvGreeks": bool(chain_summary.get("chainHasIvGreeks", False)),
+        "chainHasIvGreeksCount": _non_negative_int(chain_summary.get("chainHasIvGreeksCount")),
         "rawCredentialValuesIncluded": False,
         "providerPayloadValuesIncluded": False,
         "responseBodiesIncluded": False,
@@ -348,11 +497,14 @@ def _failed_options_live_probe(
     timeout_seconds: float,
     network_call_executed: bool,
     endpoint_results: list[dict[str, Any]],
+    failed_endpoint_class: str,
+    quote_shape_status: str = "unknown",
+    expiration_count: int = 0,
+    chain_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    failed_endpoint = _OPTIONS_LIVE_PROBE_ENDPOINT_CLASSES[min(len(endpoint_results), 1)]
     endpoint_results.append(
         {
-            "endpointClass": failed_endpoint,
+            "endpointClass": failed_endpoint_class,
             "status": "error",
             "responseShape": {"status": "unknown", "count": 0},
         }
@@ -366,6 +518,9 @@ def _failed_options_live_probe(
         timeout_seconds=timeout_seconds,
         network_call_executed=network_call_executed,
         endpoint_results=endpoint_results,
+        quote_shape_status=quote_shape_status,
+        expiration_count=expiration_count,
+        chain_summary=chain_summary,
     )
 
 
@@ -374,6 +529,8 @@ def _run_options_live_probe(
     provider_id: str,
     config: OptionsLiveProviderConfig,
     symbol: str,
+    probe_chain: bool = False,
+    probe_expiration: str | None = None,
     timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     normalized_provider = str(provider_id or "").strip().lower()
@@ -416,30 +573,61 @@ def _run_options_live_probe(
 
     endpoint_results: list[dict[str, Any]] = []
     network_call_executed = False
+    current_endpoint_class = _OPTIONS_LIVE_PROBE_ENDPOINT_CLASSES[0]
+    quote_shape_status = "unknown"
+    expiration_count = 0
+    chain_summary = _empty_options_chain_summary()
     try:
         transport = _build_tradier_options_live_probe_transport(
             api_token=api_token,
             timeout_seconds=bounded_timeout,
         )
         normalized_symbol = _normalize_options_probe_symbol(symbol)
+        current_endpoint_class = "quote"
         network_call_executed = True
         quote_payload = transport.get_quote(normalized_symbol)
+        quote_shape = _response_shape_status("quote", quote_payload)
+        quote_shape_status = str(quote_shape.get("status") or "unknown")
         endpoint_results.append(
             {
                 "endpointClass": "quote",
                 "status": "ok",
-                "responseShape": _response_shape_status("quote", quote_payload),
+                "responseShape": quote_shape,
             }
         )
+        current_endpoint_class = "expirations"
         network_call_executed = True
         expirations_payload = transport.get_expirations(normalized_symbol)
+        expirations_shape = _response_shape_status("expirations", expirations_payload)
+        expiration_count = _non_negative_int(expirations_shape.get("count"))
         endpoint_results.append(
             {
                 "endpointClass": "expirations",
                 "status": "ok",
-                "responseShape": _response_shape_status("expirations", expirations_payload),
+                "responseShape": expirations_shape,
             }
         )
+        if probe_chain:
+            current_endpoint_class = _OPTIONS_CHAIN_PROBE_ENDPOINT_CLASS
+            expiration = _normalize_options_probe_expiration(probe_expiration) or _first_tradier_expiration_date(
+                expirations_payload
+            )
+            if not expiration:
+                raise OptionsProviderUnavailable(
+                    "tradier",
+                    code="options_provider_probe_expiration_missing",
+                    message="Options provider chain probe expiration is missing.",
+                )
+            network_call_executed = True
+            chain_payload = transport.get_chain(normalized_symbol, expiration=expiration)
+            chain_summary = _summarize_tradier_chain_payload(chain_payload)
+            endpoint_results.append(
+                {
+                    "endpointClass": _OPTIONS_CHAIN_PROBE_ENDPOINT_CLASS,
+                    "status": "ok",
+                    "responseShape": chain_summary["responseShape"],
+                }
+            )
     except OptionsProviderUnavailable as exc:
         error_code = _sanitize_reason_code(exc.code) or "options_provider_error"
         return _failed_options_live_probe(
@@ -448,6 +636,10 @@ def _run_options_live_probe(
             timeout_seconds=bounded_timeout,
             network_call_executed=network_call_executed,
             endpoint_results=endpoint_results,
+            failed_endpoint_class=current_endpoint_class,
+            quote_shape_status=quote_shape_status,
+            expiration_count=expiration_count,
+            chain_summary=chain_summary,
         )
     except OptionsProviderError as exc:
         error_code = _sanitize_reason_code(exc.code) or "options_provider_error"
@@ -457,6 +649,10 @@ def _run_options_live_probe(
             timeout_seconds=bounded_timeout,
             network_call_executed=network_call_executed,
             endpoint_results=endpoint_results,
+            failed_endpoint_class=current_endpoint_class,
+            quote_shape_status=quote_shape_status,
+            expiration_count=expiration_count,
+            chain_summary=chain_summary,
         )
     except Exception:
         return _failed_options_live_probe(
@@ -465,6 +661,10 @@ def _run_options_live_probe(
             timeout_seconds=bounded_timeout,
             network_call_executed=network_call_executed,
             endpoint_results=endpoint_results,
+            failed_endpoint_class=current_endpoint_class,
+            quote_shape_status=quote_shape_status,
+            expiration_count=expiration_count,
+            chain_summary=chain_summary,
         )
 
     return _options_live_probe_result(
@@ -476,6 +676,9 @@ def _run_options_live_probe(
         timeout_seconds=bounded_timeout,
         network_call_executed=network_call_executed,
         endpoint_results=endpoint_results,
+        quote_shape_status=quote_shape_status,
+        expiration_count=expiration_count,
+        chain_summary=chain_summary,
     )
 
 
@@ -484,6 +687,8 @@ def _collect_options_lab_provider_preflight(
     options_live_probe: bool = False,
     options_provider: str = _OPTIONS_LIVE_PROBE_PROVIDER,
     options_probe_symbol: str = "TEM",
+    options_probe_chain: bool = False,
+    options_probe_expiration: str | None = None,
     options_probe_timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     config = OptionsLiveProviderConfig.from_env()
@@ -523,6 +728,8 @@ def _collect_options_lab_provider_preflight(
                     provider_id=normalized_options_provider,
                     config=config,
                     symbol=options_probe_symbol,
+                    probe_chain=options_probe_chain,
+                    probe_expiration=options_probe_expiration,
                     timeout_seconds=options_probe_timeout_seconds,
                 )
             )
@@ -720,6 +927,8 @@ def collect_diagnostic_bundle(
     options_live_probe: bool = False,
     options_provider: str = _OPTIONS_LIVE_PROBE_PROVIDER,
     options_probe_symbol: str = "TEM",
+    options_probe_chain: bool = False,
+    options_probe_expiration: str | None = None,
     options_probe_timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     if include_live_smoke:
@@ -740,6 +949,8 @@ def collect_diagnostic_bundle(
             options_live_probe=options_live_probe,
             options_provider=options_provider,
             options_probe_symbol=options_probe_symbol,
+            options_probe_chain=options_probe_chain,
+            options_probe_expiration=options_probe_expiration,
             options_probe_timeout_seconds=options_probe_timeout_seconds,
         ),
         "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
@@ -839,6 +1050,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="US equity symbol for the bounded Options live probe. Defaults to TEM.",
     )
     parser.add_argument(
+        "--options-probe-chain",
+        action="store_true",
+        help="Explicitly include one bounded Tradier option-chain endpoint call in the Options live probe.",
+    )
+    parser.add_argument(
+        "--options-probe-expiration",
+        default=None,
+        help="Optional explicit expiration for --options-probe-chain. Defaults to the first probed expiration.",
+    )
+    parser.add_argument(
         "--options-live-probe-timeout-seconds",
         type=float,
         default=None,
@@ -857,6 +1078,8 @@ def main(argv: list[str] | None = None) -> int:
             options_live_probe=args.options_live_probe,
             options_provider=args.options_provider,
             options_probe_symbol=args.options_probe_symbol,
+            options_probe_chain=args.options_probe_chain,
+            options_probe_expiration=args.options_probe_expiration,
             options_probe_timeout_seconds=args.options_live_probe_timeout_seconds,
         )
     except Exception:

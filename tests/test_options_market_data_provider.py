@@ -490,6 +490,23 @@ def test_tradier_http_transport_uses_expected_market_data_paths_headers_and_time
         assert headers["Authorization"] == f"Bearer {credential}"
 
 
+def test_tradier_http_transport_exposes_no_broker_order_or_portfolio_mutation_path() -> None:
+    transport = TradierOptionsHttpTransport(
+        api_token="synthetic_tradier_http_credential_1234567890",
+        session=_FakeTradierHttpSession(),
+    )
+    exposed_names = {name.lower() for name in dir(transport)}
+
+    assert "place_order" not in exposed_names
+    assert "submit_order" not in exposed_names
+    assert "create_order" not in exposed_names
+    assert "mutate_portfolio" not in exposed_names
+    assert "sync_broker" not in exposed_names
+    assert "get_chain" in exposed_names
+    assert "get_quote" in exposed_names
+    assert "get_expirations" in exposed_names
+
+
 def test_tradier_http_transport_converts_http_errors_to_sanitized_provider_errors() -> None:
     credential = "synthetic_tradier_http_credential_1234567890"
     session = _FakeTradierHttpSession(

@@ -23,9 +23,38 @@ def _load_script_module():
 
 
 class _FakeTradierProbeTransport:
-    def __init__(self, *, raw_secret: str = "synthetic_live_probe_secret_1234567890") -> None:
+    def __init__(
+        self,
+        *,
+        raw_secret: str = "synthetic_live_probe_secret_1234567890",
+        chain_payload: dict | None = None,
+    ) -> None:
         self.raw_secret = raw_secret
-        self.calls: list[tuple[str, str]] = []
+        self.chain_payload = chain_payload or {
+            "options": {
+                "option": [
+                    {
+                        "symbol": "TEM260619C00050000",
+                        "option_type": "call",
+                        "expiration_date": "2026-06-19",
+                        "bid": "4.80",
+                        "ask": "5.20",
+                        "open_interest": "1480",
+                        "greeks": {"mid_iv": "0.62", "delta": "0.61"},
+                    },
+                    {
+                        "symbol": "TEM260619P00050000",
+                        "option_type": "put",
+                        "expiration_date": "2026-06-19",
+                        "bid": None,
+                        "ask": None,
+                        "open_interest": None,
+                        "greeks": {},
+                    },
+                ]
+            },
+        }
+        self.calls: list[tuple[str, ...]] = []
 
     def get_quote(self, symbol: str) -> dict:
         self.calls.append(("quote", symbol))
@@ -47,6 +76,10 @@ class _FakeTradierProbeTransport:
                 "token": self.raw_secret,
             }
         }
+
+    def get_chain(self, symbol: str, expiration: str | None = None) -> dict:
+        self.calls.append(("chain", symbol, expiration or ""))
+        return self.chain_payload
 
 
 class _FailingTradierProbeTransport:
@@ -486,6 +519,29 @@ def test_runtime_diagnostic_parses_explicit_tradier_options_live_probe_cli() -> 
     assert args.options_live_probe is True
     assert args.options_provider == "tradier"
     assert args.options_probe_symbol == "TEM"
+    assert args.options_probe_chain is False
+    assert args.options_probe_expiration is None
+
+
+def test_runtime_diagnostic_parses_explicit_tradier_chain_probe_cli() -> None:
+    module = _load_script_module()
+
+    args = module._parse_args(
+        [
+            "--options-live-probe",
+            "--options-provider",
+            "tradier",
+            "--options-probe-symbol",
+            "TEM",
+            "--options-probe-chain",
+            "--options-probe-expiration",
+            "2026-06-19",
+        ]
+    )
+
+    assert args.options_live_probe is True
+    assert args.options_probe_chain is True
+    assert args.options_probe_expiration == "2026-06-19"
 
 
 def test_runtime_diagnostic_options_live_probe_missing_credentials_blocks_without_network(
@@ -504,6 +560,7 @@ def test_runtime_diagnostic_options_live_probe_missing_credentials_blocks_withou
         options_live_probe=True,
         options_provider="tradier",
         options_probe_symbol="TEM",
+        options_probe_chain=True,
     )
     tradier = _providers_by_id(payload)["tradier"]
     live_probe = tradier["liveProbe"]
@@ -513,6 +570,7 @@ def test_runtime_diagnostic_options_live_probe_missing_credentials_blocks_withou
     assert live_probe["status"] == "blocked_missing_credentials"
     assert live_probe["explicitOptIn"] is True
     assert live_probe["networkCallExecuted"] is False
+    assert live_probe["endpointClasses"] == []
     assert live_probe["providerId"] == "tradier"
     assert live_probe["endpointResults"] == []
     assert live_probe["sanitizedErrorCode"] == "options_provider_credentials_missing"
@@ -549,6 +607,16 @@ def test_runtime_diagnostic_options_live_probe_executes_mocked_tradier_transport
     assert live_probe["providerId"] == "tradier"
     assert live_probe["status"] == "passed"
     assert live_probe["networkCallExecuted"] is True
+    assert live_probe["endpointClasses"] == ["quote", "expirations"]
+    assert live_probe["quoteShapeStatus"] == "object"
+    assert live_probe["expirationCount"] == 2
+    assert live_probe["chainContractCount"] == 0
+    assert live_probe["chainHasBidAsk"] is False
+    assert live_probe["chainHasBidAskCount"] == 0
+    assert live_probe["chainHasOpenInterest"] is False
+    assert live_probe["chainHasOpenInterestCount"] == 0
+    assert live_probe["chainHasIvGreeks"] is False
+    assert live_probe["chainHasIvGreeksCount"] == 0
     assert live_probe["endpointResults"] == [
         {
             "endpointClass": "quote",
@@ -573,6 +641,114 @@ def test_runtime_diagnostic_options_live_probe_executes_mocked_tradier_transport
         "submit_order",
         "mutate_portfolio",
     ):
+        assert blocked not in serialized
+
+
+def test_runtime_diagnostic_options_chain_probe_executes_mocked_tradier_chain_safely(
+    monkeypatch,
+) -> None:
+    module = _load_script_module()
+    raw_secret = "synthetic_chain_probe_secret_1234567890"
+    transport = _FakeTradierProbeTransport(raw_secret=raw_secret)
+    monkeypatch.setenv("TRADIER_API_TOKEN", raw_secret)
+    monkeypatch.setattr(
+        module,
+        "_build_tradier_options_live_probe_transport",
+        lambda *args, **kwargs: transport,
+    )
+
+    payload = module.collect_diagnostic_bundle(
+        options_live_probe=True,
+        options_provider="tradier",
+        options_probe_symbol="TEM",
+        options_probe_chain=True,
+    )
+    tradier = _providers_by_id(payload)["tradier"]
+    live_probe = tradier["liveProbe"]
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+    assert transport.calls == [
+        ("quote", "TEM"),
+        ("expirations", "TEM"),
+        ("chain", "TEM", "2026-06-19"),
+    ]
+    assert tradier["liveCallsEnabled"] is False
+    assert tradier["brokerOrderEnabled"] is False
+    assert tradier["portfolioMutationEnabled"] is False
+    assert tradier["tradeable"] is False
+    assert "decisionGrade" not in serialized
+    assert live_probe["providerId"] == "tradier"
+    assert live_probe["status"] == "passed"
+    assert live_probe["networkCallExecuted"] is True
+    assert live_probe["endpointClasses"] == ["quote", "expirations", "chain"]
+    assert live_probe["quoteShapeStatus"] == "object"
+    assert live_probe["expirationCount"] == 2
+    assert live_probe["chainContractCount"] == 2
+    assert live_probe["chainHasBidAsk"] is True
+    assert live_probe["chainHasBidAskCount"] == 1
+    assert live_probe["chainHasOpenInterest"] is True
+    assert live_probe["chainHasOpenInterestCount"] == 1
+    assert live_probe["chainHasIvGreeks"] is True
+    assert live_probe["chainHasIvGreeksCount"] == 1
+    for blocked in (
+        raw_secret,
+        "Authorization",
+        "Bearer",
+        "token",
+        "rawPayload",
+        "options\": {",
+        "place_order",
+        "submit_order",
+        "create_order",
+        "mutate_portfolio",
+        "sync_broker",
+    ):
+        assert blocked not in serialized
+
+
+def test_runtime_diagnostic_options_chain_probe_malformed_payload_fails_closed_safely(
+    monkeypatch,
+) -> None:
+    module = _load_script_module()
+    raw_secret = "synthetic_malformed_chain_secret_1234567890"
+    transport = _FakeTradierProbeTransport(
+        raw_secret=raw_secret,
+        chain_payload={"options": {"option": f"not-a-contract {raw_secret}"}},
+    )
+    monkeypatch.setenv("TRADIER_API_TOKEN", raw_secret)
+    monkeypatch.setattr(
+        module,
+        "_build_tradier_options_live_probe_transport",
+        lambda *args, **kwargs: transport,
+    )
+
+    payload = module.collect_diagnostic_bundle(
+        options_live_probe=True,
+        options_provider="tradier",
+        options_probe_symbol="TEM",
+        options_probe_chain=True,
+    )
+    live_probe = _providers_by_id(payload)["tradier"]["liveProbe"]
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+    assert transport.calls == [
+        ("quote", "TEM"),
+        ("expirations", "TEM"),
+        ("chain", "TEM", "2026-06-19"),
+    ]
+    assert live_probe["status"] == "failed_sanitized_provider_error"
+    assert live_probe["sanitizedErrorCode"] == "options_provider_payload_unmappable"
+    assert live_probe["endpointClasses"] == ["quote", "expirations", "chain"]
+    assert live_probe["chainContractCount"] == 0
+    assert live_probe["chainHasBidAsk"] is False
+    assert live_probe["chainHasOpenInterest"] is False
+    assert live_probe["chainHasIvGreeks"] is False
+    assert live_probe["endpointResults"][-1] == {
+        "endpointClass": "chain",
+        "status": "error",
+        "responseShape": {"status": "unknown", "count": 0},
+    }
+    for blocked in (raw_secret, "not-a-contract", "token", "secret", "Authorization", "Bearer"):
         assert blocked not in serialized
 
 
