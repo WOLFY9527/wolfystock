@@ -616,26 +616,27 @@ describe('LiquidityMonitorPage', () => {
     render(<LiquidityMonitorPage />);
 
     expect(await screen.findByRole('heading', { name: '流动性监测' })).toBeInTheDocument();
-    const pageShell = screen.getByRole('heading', { name: '流动性监测' }).closest('[data-terminal-primitive="page-shell"]');
-    expect(pageShell).toHaveAttribute('data-workspace-width', 'near-full');
-    expect(pageShell).toHaveClass('max-w-[1840px]');
     const guidancePanel = screen.getByTestId('liquidity-monitor-guidance-panel');
     expect(guidancePanel).toHaveTextContent('流动性状态');
     expect(guidancePanel).toHaveTextContent('观察中');
-    expect(guidancePanel).toHaveTextContent('评分状态');
     expect(guidancePanel).toHaveTextContent('评分已暂停');
-    expect(guidancePanel).toHaveTextContent('最近更新');
-    expect(guidancePanel).toHaveTextContent('当前流动性信号置信度较低，仅供观察。');
-    expect(screen.getAllByText('延迟').length).toBeGreaterThan(0);
+    expect(guidancePanel).toHaveTextContent('当前流动性仍在观察中，主线索是美国利率压力。');
+    expect(screen.getByTestId('liquidity-summary-strip')).toHaveTextContent('当前读数');
+    expect(screen.getByTestId('liquidity-summary-strip')).toHaveTextContent('主线索');
+    expect(screen.getByTestId('liquidity-summary-strip')).toHaveTextContent('最近更新');
+    expect(screen.getByTestId('liquidity-consumer-evidence')).toHaveTextContent('当前证据');
+    expect(screen.getByTestId('liquidity-consumer-evidence')).toHaveTextContent('美国利率压力');
+    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('当前缺口');
+    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('下一次关注');
     const disclosure = screen.getByTestId('liquidity-monitor-consumer-details');
     expect(disclosure).toHaveAttribute('data-terminal-primitive', 'disclosure');
     expect(disclosure).not.toHaveAttribute('open');
-    expect(within(disclosure).getByRole('button', { name: '展开 查看数据说明' })).toHaveAttribute('aria-expanded', 'false');
+    expect(within(disclosure).getByRole('button', { name: '展开 数据说明与限制' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByTestId('liquidity-monitor-admin-details')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '展开 技术细节' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('liquidity-impulse-synthesis-header')).not.toBeInTheDocument();
     expect(guidancePanel.textContent || '').not.toMatch(
-      /provider_unavailable|fallback_source|score_contribution_not_allowed|sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|routeRejectedReasonCodes|外部调用|运行顺序|缓存写入|来源覆盖诊断|来源与约束|查看提供方覆盖|前往数据源设置/i,
+      /provider_unavailable|fallback_source|score_contribution_not_allowed|sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|routeRejectedReasonCodes|外部调用|运行顺序|缓存写入|来源覆盖诊断|来源与约束|查看提供方覆盖|前往数据源设置|marketCache|runtime|backend/i,
     );
   });
 
@@ -667,13 +668,13 @@ describe('LiquidityMonitorPage', () => {
     render(<LiquidityMonitorPage />);
 
     const guidancePanel = await screen.findByTestId('liquidity-monitor-guidance-panel');
-    expect(guidancePanel).toHaveTextContent('当前流动性信号仍在观察中，先关注状态变化。');
-    expect(guidancePanel).toHaveTextContent('流动性状态');
-    expect(guidancePanel).toHaveTextContent('评分状态');
+    expect(guidancePanel).toHaveTextContent('当前流动性仍在观察中，主线索是美国利率压力。');
+    expect(guidancePanel).toHaveTextContent('当前读数');
+    expect(guidancePanel).toHaveTextContent('主线索');
     expect(guidancePanel).toHaveTextContent('最近更新');
-    expect(screen.getByTestId('liquidity-monitor-consumer-details')).toHaveTextContent('查看数据说明');
-    expect(screen.queryByText('美国利率压力')).not.toBeInTheDocument();
-    expect(screen.queryByText('Crypto 资金费率')).not.toBeInTheDocument();
+    expect(screen.getByTestId('liquidity-monitor-consumer-details')).toHaveTextContent('数据说明与限制');
+    expect(screen.getByTestId('liquidity-consumer-evidence')).toHaveTextContent('美国利率压力');
+    expect(screen.getByTestId('liquidity-consumer-evidence')).toHaveTextContent('Crypto 资金费率');
     expect(guidancePanel.textContent || '').not.toMatch(
       /score_contribution_not_allowed|source_authority_router_rejected|provider_unavailable|fallback_source|sourceAuthorityAllowed|scoreContributionAllowed|Liquidity Regime Gauge|Proxy-only|Details|provider|fallback|reason|runtime|diagnostic/i,
     );
@@ -686,9 +687,9 @@ describe('LiquidityMonitorPage', () => {
     await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('评分已暂停'));
     const resolvedReadyBand = screen.getByTestId('liquidity-decision-readiness');
     expect(resolvedReadyBand).toHaveTextContent('流动性状态');
-    expect(resolvedReadyBand).toHaveTextContent('当前流动性信号置信度较低，仅供观察。');
-    expect(resolvedReadyBand).not.toHaveTextContent('阻塞项');
-    expect(resolvedReadyBand).not.toHaveTextContent('提升证据');
+    expect(resolvedReadyBand).toHaveTextContent('当前流动性仍在观察中，主线索是美国利率压力。');
+    expect(resolvedReadyBand).toHaveTextContent('下一次关注');
+    expect(resolvedReadyBand).toHaveTextContent('当前证据');
     expect(within(resolvedReadyBand).queryByText('查看提供方覆盖')).not.toBeInTheDocument();
     expect(within(resolvedReadyBand).queryByText('前往数据源设置')).not.toBeInTheDocument();
     expect(resolvedReadyBand.textContent || '').not.toMatch(/买入|卖出|buy now|sell now|recommend/i);
@@ -735,7 +736,7 @@ describe('LiquidityMonitorPage', () => {
     await screen.findByTestId('liquidity-decision-readiness');
     await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('评分已暂停'));
     const observationBand = screen.getByTestId('liquidity-decision-readiness');
-    expect(observationBand).toHaveTextContent('当前流动性信号置信度较低，仅供观察。');
+    expect(observationBand).toHaveTextContent('当前流动性仍在观察中');
     expect(observationBand).not.toHaveTextContent('代理证据不能升级方向');
     expect(observationBand).not.toHaveTextContent('提供方');
     expect(observationBand).not.toHaveTextContent('数据源设置');
@@ -799,9 +800,9 @@ describe('LiquidityMonitorPage', () => {
 
     render(<LiquidityMonitorPage />);
     await screen.findByTestId('liquidity-decision-readiness');
-    await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('本模块暂不可用，请稍后重试。'));
+    await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('当前流动性读数暂不可用，仅保留最近一次状态与更新时间。'));
     const unavailableBand = screen.getByTestId('liquidity-decision-readiness');
-    expect(unavailableBand).toHaveTextContent('本模块暂不可用，请稍后重试。');
+    expect(unavailableBand).toHaveTextContent('当前流动性读数暂不可用，仅保留最近一次状态与更新时间。');
     expect(unavailableBand).toHaveTextContent('评分已暂停');
     expect(unavailableBand).not.toHaveTextContent('数据源不可用');
     expect(unavailableBand).not.toHaveTextContent('Provider unavailable');
