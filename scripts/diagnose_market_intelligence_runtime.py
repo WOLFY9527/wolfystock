@@ -27,6 +27,9 @@ from src.services.options_market_data_provider import (
     TradierOptionsHttpTransport,
     build_options_provider_live_readiness_preflight,
 )
+from src.services.options_event_calendar_authority import (
+    build_options_event_calendar_authority_diagnostic,
+)
 from src.services.options_iv_rank_authority import build_options_iv_rank_authority_diagnostic
 from src.services.polygon_us_breadth_provider import (
     diagnostic_summary as polygon_us_breadth_diagnostic_summary,
@@ -304,6 +307,57 @@ def _collect_options_iv_rank_authority() -> dict[str, Any]:
             },
             "sandboxOrProduction": "not_provider_sourced",
             "notes": ["test_only_low_confidence"],
+        }
+    )
+
+
+def _collect_options_event_calendar_authority() -> dict[str, Any]:
+    try:
+        fixture = json.loads(DEFAULT_OPTIONS_FIXTURE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return build_options_event_calendar_authority_diagnostic(None)
+
+    event_calendar = fixture.get("eventCalendar") or fixture.get("event_calendar")
+    if not isinstance(event_calendar, Mapping):
+        return build_options_event_calendar_authority_diagnostic(None)
+
+    events = event_calendar.get("events") if isinstance(event_calendar, Mapping) else None
+    event_rows = events if isinstance(events, list) else []
+    event_types: list[str] = []
+    event_count = 0
+    confirmation_status = None
+    event_id = None
+    timezone = event_calendar.get("timezone") if isinstance(event_calendar, Mapping) else None
+    session_name = None
+
+    for item in event_rows:
+        if not isinstance(item, Mapping):
+            continue
+        event_count += 1
+        event_type = item.get("type")
+        if event_type and event_type not in event_types:
+            event_types.append(event_type)
+        if confirmation_status is None:
+            confirmation_status = item.get("confirmationStatus") or item.get("confirmation_status")
+        if event_id is None:
+            event_id = item.get("id") or item.get("eventId")
+        if session_name is None:
+            session_name = item.get("session")
+
+    session_metadata = {"session": session_name} if session_name else {}
+    return build_options_event_calendar_authority_diagnostic(
+        {
+            "providerId": fixture.get("source") or fixture.get("providerName"),
+            "sourceType": "fixture",
+            "eventCalendarStatus": "available" if event_count else "unavailable",
+            "eventTypesCovered": event_types,
+            "underlyingCoverage": [fixture.get("symbol")] if fixture.get("symbol") else [],
+            "timezone": timezone,
+            "sessionMetadata": session_metadata,
+            "confirmationStatus": confirmation_status,
+            "eventId": event_id,
+            "coverageMetadata": {"eventCount": event_count} if event_count else {},
+            "sandboxOrProduction": "not_provider_sourced",
         }
     )
 
@@ -1009,6 +1063,7 @@ def collect_diagnostic_bundle(
             options_probe_timeout_seconds=options_probe_timeout_seconds,
         ),
         "optionsIvRankAuthority": _collect_options_iv_rank_authority(),
+        "optionsEventCalendarAuthority": _collect_options_event_calendar_authority(),
         "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
         "discrepancies": [],
     }
@@ -1145,6 +1200,7 @@ def main(argv: list[str] | None = None) -> int:
             "polygonUsBreadthDiagnostic": _skipped_polygon_us_breadth_diagnostic("unexpected_error"),
             "optionsLabProviderPreflight": _collect_options_lab_provider_preflight(),
             "optionsIvRankAuthority": _collect_options_iv_rank_authority(),
+            "optionsEventCalendarAuthority": _collect_options_event_calendar_authority(),
             "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
             "discrepancies": [],
         }
