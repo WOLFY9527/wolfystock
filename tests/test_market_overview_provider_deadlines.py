@@ -219,6 +219,14 @@ def test_rates_macro_and_volatility_reuse_official_macro_observations_within_mic
             MacroObservation("SOFR", 5.31, latest, latest, "fred:SOFR", "official_public", "daily_fixing"),
             MacroObservation("SOFR", 5.32, previous, previous, "fred:SOFR", "official_public", "daily_fixing"),
         ],
+        "T10Y2Y": [
+            MacroObservation("T10Y2Y", -0.28, latest, latest, "fred:T10Y2Y", "official_public", "daily_rate"),
+            MacroObservation("T10Y2Y", -0.24, previous, previous, "fred:T10Y2Y", "official_public", "daily_rate"),
+        ],
+        "T10Y3M": [
+            MacroObservation("T10Y3M", -0.94, latest, latest, "fred:T10Y3M", "official_public", "daily_rate"),
+            MacroObservation("T10Y3M", -0.98, previous, previous, "fred:T10Y3M", "official_public", "daily_rate"),
+        ],
         "BAMLH0A0HYM2": [
             MacroObservation("BAMLH0A0HYM2", 3.31, latest, latest, "fred:BAMLH0A0HYM2", "official_public", "daily_credit_stress"),
             MacroObservation("BAMLH0A0HYM2", 3.45, previous, previous, "fred:BAMLH0A0HYM2", "official_public", "daily_credit_stress"),
@@ -252,7 +260,22 @@ def test_rates_macro_and_volatility_reuse_official_macro_observations_within_mic
     assert rates_payload["items"]
     assert macro_payload["items"]
     assert volatility_payload["items"]
-    assert calls == ["VIXCLS", "treasury", "SOFR", "DFF", "CPIAUCSL", "PPIACO", "BAMLH0A0HYM2"]
+    assert calls == [
+        "VIXCLS",
+        "treasury",
+        "SOFR",
+        "T10Y2Y",
+        "T10Y3M",
+        "DFF",
+        "CPIAUCSL",
+        "PPIACO",
+        "BAMLH0A0HYM2",
+        "WALCL",
+        "RRPONTSYD",
+        "WTREGEN",
+        "WRESBAL",
+        "DTWEXBGS",
+    ]
 
 
 def test_sentiment_deadline_skips_secondary_provider_and_fallback_is_not_live(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -31,8 +31,8 @@ TARGET_PANELS: tuple[dict[str, object], ...] = (
         "targetGroups": (
             {
                 "name": "us_rates",
-                "symbols": ("US2Y", "US10Y", "US30Y", "SOFR"),
-                "series": (*OFFICIAL_US_RATES_REQUIRED_SERIES, "SOFR"),
+                "symbols": ("US2Y", "US10Y", "US30Y", "SOFR", "US10Y2Y", "US10Y3M"),
+                "series": (*OFFICIAL_US_RATES_REQUIRED_SERIES, "SOFR", "T10Y2Y", "T10Y3M"),
             },
         ),
     },
@@ -47,8 +47,8 @@ TARGET_PANELS: tuple[dict[str, object], ...] = (
             },
             {
                 "name": "us_rates",
-                "symbols": ("US2Y", "US10Y", "US30Y", "SOFR"),
-                "series": (*OFFICIAL_US_RATES_REQUIRED_SERIES, "SOFR"),
+                "symbols": ("US2Y", "US10Y", "US30Y", "SOFR", "US10Y2Y", "US10Y3M"),
+                "series": (*OFFICIAL_US_RATES_REQUIRED_SERIES, "SOFR", "T10Y2Y", "T10Y3M"),
             },
             {
                 "name": "fed_liquidity",

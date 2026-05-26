@@ -150,6 +150,18 @@ OFFICIAL_DAILY_FRESHNESS_POLICIES = {
         "maxAcceptedLagDays": 4,
         "maxAcceptedBusinessLagDays": 2,
     },
+    "T10Y2Y": {
+        "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
+        "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
+        "maxAcceptedLagDays": 4,
+        "maxAcceptedBusinessLagDays": 2,
+    },
+    "T10Y3M": {
+        "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
+        "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
+        "maxAcceptedLagDays": 4,
+        "maxAcceptedBusinessLagDays": 2,
+    },
     "DTWEXBGS": {
         "freshnessPolicy": OFFICIAL_USD_PRESSURE_FRESHNESS_POLICY_ID,
         "calendarAssumption": "Federal Reserve H.10 weekly Monday release; daily rows through prior Friday; holidays not modeled",
@@ -781,11 +793,17 @@ class MarketOverviewService:
         "US10Y": ("DGS10", "US 10Y", "%", "US"),
         "US30Y": ("DGS30", "US 30Y", "%", "US"),
     }
+    OFFICIAL_RATE_CONTEXT_SERIES = {
+        "US10Y2Y": ("T10Y2Y", "10Y-2Y 利差", "bp", "US"),
+        "US10Y3M": ("T10Y3M", "10Y-3M 利差", "bp", "US"),
+    }
     OFFICIAL_OVERLAY_SERIES_BY_SYMBOL = {
         "VIX": "VIXCLS",
         "US2Y": "DGS2",
         "US10Y": "DGS10",
         "US30Y": "DGS30",
+        "US10Y2Y": "T10Y2Y",
+        "US10Y3M": "T10Y3M",
     }
     OFFICIAL_MACRO_CRITICAL_FRED_SERIES_IDS = ("DGS10", "DGS30")
     STATIC_FALLBACK_ACTIVATION_SYMBOLS = {"CN00Y"}
@@ -2077,7 +2095,35 @@ class MarketOverviewService:
                 series_id="SOFR",
             )
 
-        aligned = {**payload, "items": self._ordered_runtime_items(payload, item_map, ("US2Y", "US10Y", "US30Y", "SOFR"))}
+        for symbol, (series_id, label, unit, market) in self.OFFICIAL_RATE_CONTEXT_SERIES.items():
+            official_item, official_failure = self._official_macro_overlay_item(
+                symbol,
+                label,
+                official_points.get(series_id, []),
+                series_id=series_id,
+                unit=unit,
+                market=market,
+                value_scale=100.0,
+                change_scale=100.0,
+            )
+            if official_item:
+                item_map[symbol] = official_item
+                official_available = True
+            elif symbol in item_map and official_failure:
+                item_map[symbol] = self._with_official_overlay_failure(
+                    item_map[symbol],
+                    official_failure,
+                    series_id=series_id,
+                )
+
+        aligned = {
+            **payload,
+            "items": self._ordered_runtime_items(
+                payload,
+                item_map,
+                ("US2Y", "US10Y", "US30Y", "US10Y2Y", "US10Y3M", "SOFR"),
+            ),
+        }
         if official_available:
             self._mark_official_macro_runtime_payload(aligned)
         return aligned
@@ -2139,6 +2185,27 @@ class MarketOverviewService:
                     series_id=series_id,
                 )
 
+        for symbol, (series_id, label, unit, market) in self.OFFICIAL_RATE_CONTEXT_SERIES.items():
+            official_item, official_failure = self._official_macro_overlay_item(
+                symbol,
+                label,
+                official_points.get(series_id, []),
+                series_id=series_id,
+                unit=unit,
+                market=market,
+                value_scale=100.0,
+                change_scale=100.0,
+            )
+            if official_item:
+                item_map[symbol] = official_item
+                official_available = True
+            elif symbol in item_map and official_failure:
+                item_map[symbol] = self._with_official_overlay_failure(
+                    item_map[symbol],
+                    official_failure,
+                    series_id=series_id,
+                )
+
         fed_items = self._official_fed_liquidity_items(official_points)
         if fed_items:
             item_map.update(fed_items)
@@ -2157,6 +2224,8 @@ class MarketOverviewService:
             "US10Y",
             "US30Y",
             "SOFR",
+            "US10Y2Y",
+            "US10Y3M",
             "VIX",
             "USD_TWI",
             "DXY",
@@ -4092,6 +4161,25 @@ class MarketOverviewService:
         official_sofr = self._official_macro_item("SOFR", "SOFR", official_points.get("SOFR", []), unit="%", market="US")
         if official_sofr:
             item_map["SOFR"] = official_sofr
+        for panel_symbol, (series_id, label, unit, market) in self.OFFICIAL_RATE_CONTEXT_SERIES.items():
+            official_item, official_failure = self._official_macro_overlay_item(
+                panel_symbol,
+                label,
+                official_points.get(series_id, []),
+                series_id=series_id,
+                unit=unit,
+                market=market,
+                value_scale=100.0,
+                change_scale=100.0,
+            )
+            if official_item:
+                item_map[panel_symbol] = official_item
+            elif panel_symbol in item_map and official_failure:
+                item_map[panel_symbol] = self._with_official_overlay_failure(
+                    item_map[panel_symbol],
+                    official_failure,
+                    series_id=series_id,
+                )
         official_vix, official_vix_failure = self._official_macro_overlay_item(
             "VIX",
             "VIX",
@@ -4143,6 +4231,8 @@ class MarketOverviewService:
             "US10Y",
             "US30Y",
             "SOFR",
+            "US10Y2Y",
+            "US10Y3M",
             "VIX",
             "USD_TWI",
             "DXY",
@@ -4780,10 +4870,28 @@ class MarketOverviewService:
                         series_id=series_id,
                     )
                 )
-        if "US10Y2Y" in fallback_items:
-            items.append(fallback_items["US10Y2Y"])
-        if "US10Y3M" in fallback_items:
-            items.append(fallback_items["US10Y3M"])
+        for symbol, (series_id, label, unit, market) in self.OFFICIAL_RATE_CONTEXT_SERIES.items():
+            official_item, official_failure = self._official_macro_overlay_item(
+                symbol,
+                label,
+                official_points.get(series_id, []),
+                series_id=series_id,
+                unit=unit,
+                market=market,
+                value_scale=100.0,
+                change_scale=100.0,
+            )
+            if official_item:
+                items.append(official_item)
+                official_count += 1
+            elif symbol in fallback_items:
+                items.append(
+                    self._with_official_overlay_failure(
+                        fallback_items[symbol],
+                        official_failure,
+                        series_id=series_id,
+                    )
+                )
         official_sofr = self._official_macro_item("SOFR", "SOFR", official_points.get("SOFR", []), unit="%", market="US")
         if official_sofr:
             items.append(official_sofr)
@@ -4981,7 +5089,7 @@ class MarketOverviewService:
         diagnostic_details: Dict[str, Dict[str, Any]] = {}
         provider_attempt_details: Dict[str, List[Dict[str, Any]]] = {}
         fetched_at = time.monotonic()
-        fred_series_ids = ["VIXCLS", "DGS10", "DGS30", "DGS2", "SOFR"]
+        fred_series_ids = ["VIXCLS", "DGS10", "DGS30", "DGS2", "SOFR", "T10Y2Y", "T10Y3M"]
         if include_policy_and_inflation:
             fred_series_ids.extend(["DFF", "CPIAUCSL", "PPIACO"])
         if include_credit_stress:

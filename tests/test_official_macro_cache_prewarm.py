@@ -11,6 +11,7 @@ import scripts.official_macro_cache_prewarm as prewarm
 from src.services.market_cache import market_cache
 from src.services.market_overview_service import MarketOverviewService
 from src.services.official_macro_liquidity_cache_contracts import build_official_us_rates_cache_bundle
+from src.services.official_macro_transport import build_fred_observations_request
 
 
 @pytest.fixture(autouse=True)
@@ -52,6 +53,8 @@ def _official_rates_payload() -> dict[str, object]:
             _official_item("US10Y", "DGS10", 4.3),
             _official_item("US30Y", "DGS30", 4.5),
             _official_item("SOFR", "SOFR", 4.8),
+            _official_item("US10Y2Y", "T10Y2Y", -0.2),
+            _official_item("US10Y3M", "T10Y3M", -0.9),
         ],
     }
 
@@ -67,6 +70,8 @@ def _official_macro_payload() -> dict[str, object]:
             _official_item("US10Y", "DGS10", 4.3),
             _official_item("US30Y", "DGS30", 4.5),
             _official_item("SOFR", "SOFR", 4.8),
+            _official_item("US10Y2Y", "T10Y2Y", -0.2),
+            _official_item("US10Y3M", "T10Y3M", -0.9),
             _official_item("USD_TWI", "DTWEXBGS", 128.0),
             _official_item("FED_ASSETS", "WALCL", 7400000.0),
             _official_item("FED_RRP", "RRPONTSYD", 450.0),
@@ -74,6 +79,11 @@ def _official_macro_payload() -> dict[str, object]:
             _official_item("RESERVES", "WRESBAL", 3300000.0),
         ],
     }
+
+
+def test_transport_supports_curve_spread_fred_series_requests() -> None:
+    assert build_fred_observations_request("T10Y2Y").params["series_id"] == "T10Y2Y"
+    assert build_fred_observations_request("T10Y3M").params["series_id"] == "T10Y3M"
 
 
 def test_dry_run_reports_targets_without_constructing_service() -> None:
@@ -89,7 +99,12 @@ def test_dry_run_reports_targets_without_constructing_service() -> None:
     rates_panel = next(panel for panel in result["targetPanels"] if panel["cacheKey"] == "rates")
     assert rates_panel["writeAttempted"] is False
     assert rates_panel["writeWouldBeAttemptedWithWrite"] is True
-    assert rates_panel["targetGroups"][0]["series"] == ["DGS2", "DGS10", "DGS30", "SOFR"]
+    assert rates_panel["targetGroups"][0]["symbols"] == ["US2Y", "US10Y", "US30Y", "SOFR", "US10Y2Y", "US10Y3M"]
+    assert rates_panel["targetGroups"][0]["series"] == ["DGS2", "DGS10", "DGS30", "SOFR", "T10Y2Y", "T10Y3M"]
+    macro_panel = next(panel for panel in result["targetPanels"] if panel["cacheKey"] == "macro")
+    macro_us_rates_group = next(group for group in macro_panel["targetGroups"] if group["name"] == "us_rates")
+    assert macro_us_rates_group["symbols"] == ["US2Y", "US10Y", "US30Y", "SOFR", "US10Y2Y", "US10Y3M"]
+    assert macro_us_rates_group["series"] == ["DGS2", "DGS10", "DGS30", "SOFR", "T10Y2Y", "T10Y3M"]
 
 
 def test_service_prewarm_uses_existing_cached_payload_and_snapshot_writer(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -147,6 +162,13 @@ def test_write_mode_invokes_market_overview_prewarm_callable() -> None:
     assert created[0].calls == 1
     assert created[0]._market_cache.wait_calls == [prewarm.REFRESH_WAIT_TIMEOUT_SECONDS]
     assert {panel["cacheKey"] for panel in result["panels"]} == {"rates", "macro"}
+    rates_panel = next(panel for panel in result["panels"] if panel["cacheKey"] == "rates")
+    macro_panel = next(panel for panel in result["panels"] if panel["cacheKey"] == "macro")
+    assert rates_panel["targetSymbolsFound"] == ["US2Y", "US10Y", "US30Y", "SOFR", "US10Y2Y", "US10Y3M"]
+    assert "T10Y2Y" in {item["series"] for item in rates_panel["targetDiagnostics"]}
+    assert "T10Y3M" in {item["series"] for item in rates_panel["targetDiagnostics"]}
+    assert "US10Y2Y" in macro_panel["targetSymbolsFound"]
+    assert "US10Y3M" in macro_panel["targetSymbolsFound"]
 
 
 def test_budget_blocked_and_missing_key_diagnostics_remain_non_scoring() -> None:

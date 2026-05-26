@@ -1463,6 +1463,45 @@ def test_mixed_raw_rates_snapshot_with_fallback_used_still_accepts_official_yiel
                     "asOf": FROZEN_GOLDEN_NOW_ISO,
                 },
                 {
+                    "symbol": "SOFR",
+                    "label": "SOFR",
+                    "value": 5.31,
+                    "source": "fred",
+                    "sourceId": "fred:SOFR",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED SOFR",
+                    "unit": "%",
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "officialSeriesId": "SOFR",
+                },
+                {
+                    "symbol": "US10Y2Y",
+                    "label": "10Y-2Y 利差",
+                    "value": -0.28,
+                    "source": "fred",
+                    "sourceId": "fred:T10Y2Y",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED",
+                    "unit": "%",
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "officialSeriesId": "T10Y2Y",
+                },
+                {
+                    "symbol": "US10Y3M",
+                    "label": "10Y-3M 利差",
+                    "value": -0.94,
+                    "source": "fred",
+                    "sourceId": "fred:T10Y3M",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED",
+                    "unit": "%",
+                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
+                    "asOf": FROZEN_GOLDEN_NOW_ISO,
+                    "officialSeriesId": "T10Y3M",
+                },
+                {
                     "symbol": "LEGACY_FILLER",
                     "label": "legacy",
                     "value": 0.0,
@@ -1497,7 +1536,13 @@ def test_mixed_raw_rates_snapshot_with_fallback_used_still_accepts_official_yiel
     assert bundle["requiredSeries"] == ["DGS2", "DGS10", "DGS30"]
     assert bundle["fulfilledSeries"] == ["DGS2", "DGS10", "DGS30"]
     assert bundle["missingSeries"] == []
+    assert bundle["contextSeries"] == ["SOFR", "US10Y2Y", "US10Y3M"]
+    assert bundle["fulfilledContextSeries"] == ["SOFR", "US10Y2Y", "US10Y3M"]
     assert bundle["externalProviderCalls"] is False
+    evidence_inputs = {str(item["key"]): item for item in indicator["evidence"]["inputs"]}
+    assert evidence_inputs["SOFR"]["officialSeriesId"] == "SOFR"
+    assert evidence_inputs["US10Y2Y"]["officialSeriesId"] == "T10Y2Y"
+    assert evidence_inputs["US10Y3M"]["officialSeriesId"] == "T10Y3M"
 
 
 def test_us_rates_readiness_diagnostics_fail_closed_for_budget_blocked_official_rows(
