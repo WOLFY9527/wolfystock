@@ -130,6 +130,38 @@ _CONTRACTS = tuple(
                 ),
             ),
             OfficialMacroSourceContract(
+                source_id="FRED_T10Y2Y",
+                display_name="FRED 10-Year Treasury Constant Maturity Minus 2-Year Treasury Constant Maturity",
+                source_type=_SOURCE_TYPE_OFFICIAL_PUBLIC,
+                cadence="business_daily",
+                expected_freshness_window="Expect official daily publication on the next business-day refresh cycle.",
+                series_codes=("T10Y2Y",),
+                requires_api_key_or_config=True,
+                live_eligible=False,
+                delayed_eligible=True,
+                observation_only=True,
+                notes=_notes(
+                    "FRED relays the official Treasury curve-spread series; do not treat it as an intraday live spread feed.",
+                    "Use the dedicated curve-spread mapping so provenance labels stay specific for US10Y2Y readbacks.",
+                ),
+            ),
+            OfficialMacroSourceContract(
+                source_id="FRED_T10Y3M",
+                display_name="FRED 10-Year Treasury Constant Maturity Minus 3-Month Treasury Constant Maturity",
+                source_type=_SOURCE_TYPE_OFFICIAL_PUBLIC,
+                cadence="business_daily",
+                expected_freshness_window="Expect official daily publication on the next business-day refresh cycle.",
+                series_codes=("T10Y3M",),
+                requires_api_key_or_config=True,
+                live_eligible=False,
+                delayed_eligible=True,
+                observation_only=True,
+                notes=_notes(
+                    "FRED relays the official Treasury curve-spread series; do not treat it as an intraday live spread feed.",
+                    "Use the dedicated curve-spread mapping so provenance labels stay specific for US10Y3M readbacks.",
+                ),
+            ),
+            OfficialMacroSourceContract(
                 source_id="FRED_DTWEXBGS",
                 display_name="FRED Nominal Broad U.S. Dollar Index",
                 source_type=_SOURCE_TYPE_OFFICIAL_PUBLIC,
@@ -291,6 +323,13 @@ _CONTRACTS = tuple(
 )
 
 _CONTRACTS_BY_ID = MappingProxyType({item.source_id: item for item in _CONTRACTS})
+_CONTRACT_IDS_BY_LOOKUP = MappingProxyType({
+    **{item.source_id: item.source_id for item in _CONTRACTS},
+    "T10Y2Y": "FRED_T10Y2Y",
+    "T10Y3M": "FRED_T10Y3M",
+    "US10Y2Y": "FRED_T10Y2Y",
+    "US10Y3M": "FRED_T10Y3M",
+})
 _CONTRACT_IDS_BY_TRANSPORT_SOURCE = MappingProxyType({
     "fred:BAMLH0A0HYM2": "FRED_BAMLH0A0HYM2",
     "fred:CPIAUCSL": "FRED_CPIAUCSL",
@@ -298,6 +337,8 @@ _CONTRACT_IDS_BY_TRANSPORT_SOURCE = MappingProxyType({
     "fred:DGS10": "FRED_DGS10",
     "fred:DGS2": "FRED_DGS2",
     "fred:DGS30": "FRED_DGS30",
+    "fred:T10Y2Y": "FRED_T10Y2Y",
+    "fred:T10Y3M": "FRED_T10Y3M",
     "fred:DTWEXBGS": "FRED_DTWEXBGS",
     "fred:PPIACO": "FRED_PPIACO",
     "fred:RRPONTSYD": "FRED_RRPONTSYD",
@@ -321,7 +362,10 @@ def get_official_macro_source(source_id: str | None) -> OfficialMacroSourceContr
     normalized = str(source_id or "").strip().upper()
     if not normalized:
         return None
-    return _CONTRACTS_BY_ID.get(normalized)
+    contract_id = _CONTRACT_IDS_BY_LOOKUP.get(normalized)
+    if not contract_id:
+        return None
+    return _CONTRACTS_BY_ID.get(contract_id)
 
 
 def get_official_macro_source_for_transport_source(source_id: str | None) -> OfficialMacroSourceContract | None:

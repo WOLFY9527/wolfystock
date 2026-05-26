@@ -23,6 +23,8 @@ EXPECTED_SOURCE_SERIES = {
     "FRED_DGS2": ("DGS2",),
     "FRED_DGS10": ("DGS10",),
     "FRED_DGS30": ("DGS30",),
+    "FRED_T10Y2Y": ("T10Y2Y",),
+    "FRED_T10Y3M": ("T10Y3M",),
     "FRED_DTWEXBGS": ("DTWEXBGS",),
     "FRED_PPIACO": ("PPIACO",),
     "FRED_RRPONTSYD": ("RRPONTSYD",),
@@ -72,6 +74,8 @@ def test_transport_source_lookup_maps_runtime_source_ids_back_to_contracts() -> 
     fed_funds_contract = get_official_macro_source_for_transport_source("fred:DFF")
     cpi_contract = get_official_macro_source_for_transport_source("fred:CPIAUCSL")
     ppi_contract = get_official_macro_source_for_transport_source("fred:PPIACO")
+    spread_2y_contract = get_official_macro_source_for_transport_source("fred:T10Y2Y")
+    spread_3m_contract = get_official_macro_source_for_transport_source("fred:T10Y3M")
     usd_contract = get_official_macro_source_for_transport_source("fred:DTWEXBGS")
     walcl_contract = get_official_macro_source_for_transport_source("fred:WALCL")
     rrp_contract = get_official_macro_source_for_transport_source("fred:RRPONTSYD")
@@ -88,6 +92,10 @@ def test_transport_source_lookup_maps_runtime_source_ids_back_to_contracts() -> 
     assert cpi_contract.source_id == "FRED_CPIAUCSL"
     assert ppi_contract is not None
     assert ppi_contract.source_id == "FRED_PPIACO"
+    assert spread_2y_contract is not None
+    assert spread_2y_contract.source_id == "FRED_T10Y2Y"
+    assert spread_3m_contract is not None
+    assert spread_3m_contract.source_id == "FRED_T10Y3M"
     assert usd_contract is not None
     assert usd_contract.source_id == "FRED_DTWEXBGS"
     assert walcl_contract is not None
@@ -154,6 +162,38 @@ def test_new_macro_contracts_cover_daily_policy_rate_and_monthly_inflation_relea
     assert ppi.cadence == "monthly"
     assert ppi.live_eligible is False
     assert ppi.delayed_eligible is True
+
+
+def test_curve_spread_contracts_have_dedicated_labels_and_alias_resolution() -> None:
+    spread_2y = get_official_macro_source("T10Y2Y")
+    spread_3m = get_official_macro_source("T10Y3M")
+    spread_2y_alias = get_official_macro_source("US10Y2Y")
+    spread_3m_alias = get_official_macro_source("US10Y3M")
+
+    assert spread_2y is not None
+    assert spread_2y.source_id == "FRED_T10Y2Y"
+    assert spread_2y.display_name == "FRED 10-Year Treasury Constant Maturity Minus 2-Year Treasury Constant Maturity"
+    assert spread_2y.series_codes == ("T10Y2Y",)
+    assert spread_2y.cadence == "business_daily"
+    assert spread_2y.live_eligible is False
+    assert spread_2y.delayed_eligible is True
+
+    assert spread_3m is not None
+    assert spread_3m.source_id == "FRED_T10Y3M"
+    assert spread_3m.display_name == "FRED 10-Year Treasury Constant Maturity Minus 3-Month Treasury Constant Maturity"
+    assert spread_3m.series_codes == ("T10Y3M",)
+    assert spread_3m.cadence == "business_daily"
+    assert spread_3m.live_eligible is False
+    assert spread_3m.delayed_eligible is True
+
+    assert spread_2y_alias == spread_2y
+    assert spread_3m_alias == spread_3m
+
+
+def test_unknown_curve_spread_like_ids_still_fail_closed() -> None:
+    assert get_official_macro_source("US10Y5Y") is None
+    assert get_official_macro_source("T10Y5Y") is None
+    assert get_official_macro_source_for_transport_source("fred:T10Y5Y") is None
 
 
 def test_fed_liquidity_contracts_cover_required_official_fred_series() -> None:
