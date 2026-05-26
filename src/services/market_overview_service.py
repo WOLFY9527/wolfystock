@@ -960,6 +960,25 @@ class MarketOverviewService:
             actor=actor,
         )
 
+    def prewarm_official_macro_cache(self) -> Dict[str, Dict[str, Any]]:
+        """Refresh official macro panels through the existing Market Overview cache path."""
+        return {
+            "rates": self._cached_payload(
+                "rates",
+                self._fetch_rates_snapshot,
+                self._fallback_rates_snapshot,
+            ),
+            "macro": self._cached_payload(
+                "macro",
+                self._fetch_macro,
+                lambda: self._fallback_overview_panel(
+                    "macro",
+                    "MacroIndicatorsCard",
+                    "数据源刷新超时，当前显示备用快照",
+                ),
+            ),
+        }
+
     def get_fx_commodities(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         return self._classified_snapshot(
             cache_key="fx_commodities",
