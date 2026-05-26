@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Provider-neutral options market data contract for Options Lab.
 
-The implementations in this module are fixture-only. Live providers such as
-Tradier, IBKR, and Polygon are intentionally represented as disabled names so
-future adapters have a contract without creating credentials or network paths.
+Fixture providers remain the default. The Tradier HTTP transport is an
+explicit-construction foundation only; it is not wired into default provider
+selection or Options Lab decision paths.
 """
 
 from __future__ import annotations
@@ -17,6 +17,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Protocol
 
+import requests
+
 from src.utils.security import sanitize_message
 
 
@@ -28,6 +30,8 @@ TRADIER_OPTIONS_DRY_RUN_AS_OF = "2026-05-06T13:45:00Z"
 TRADIER_OPTIONS_ADAPTER_SOURCE = "tradier_adapter_contract"
 TRADIER_OPTIONS_ADAPTER_FRESHNESS = "unknown"
 TRADIER_OPTIONS_ADAPTER_QUALITY = "tradier_adapter_contract_not_tradeable"
+TRADIER_OPTIONS_HTTP_BASE_URL = "https://api.tradier.com/v1"
+TRADIER_OPTIONS_HTTP_TIMEOUT_SECONDS = 2.0
 TRADIER_OPTIONS_ADAPTER_NOTES = (
     "tradier_adapter_contract",
     "mock_transport_only",
@@ -265,6 +269,14 @@ def _safe_probe_timeout_seconds(value: Optional[str]) -> float:
     return max(0.25, min(parsed, 5.0))
 
 
+def _safe_http_timeout_seconds(value: Any) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return TRADIER_OPTIONS_HTTP_TIMEOUT_SECONDS
+    return max(0.25, min(parsed, 5.0))
+
+
 @dataclass(frozen=True)
 class OptionsProviderCapabilityMetadata:
     provider_name: str
@@ -329,6 +341,99 @@ class TradierOptionsTransport(Protocol):
 
     def get_chain(self, symbol: str, expiration: Optional[str] = None) -> Mapping[str, Any]:
         """Return a Tradier-shaped option-chain payload."""
+
+
+class TradierOptionsHttpTransport:
+    """Explicit opt-in Tradier market-data HTTP transport.
+
+    This class only fetches Tradier-shaped market data. It never reads
+    environment variables, prints credentials, submits orders, or mutates
+    portfolio state. Callers must construct and inject it explicitly.
+    """
+
+    def __init__(
+        self,
+        *,
+        api_token: str,
+        base_url: str = TRADIER_OPTIONS_HTTP_BASE_URL,
+        timeout_seconds: float = TRADIER_OPTIONS_HTTP_TIMEOUT_SECONDS,
+        session: Optional[Any] = None,
+    ) -> None:
+        credential = str(api_token or "").strip()
+        if not credential:
+            raise OptionsProviderUnavailable(
+                "tradier",
+                code="options_provider_credentials_missing",
+                message="Options live provider credentials are not configured.",
+            )
+        self._api_token = credential
+        self.base_url = str(base_url or TRADIER_OPTIONS_HTTP_BASE_URL).strip().rstrip("/")
+        self.timeout_seconds = _safe_http_timeout_seconds(timeout_seconds)
+        self._session = session or requests.Session()
+
+    def get_quote(self, symbol: str) -> Mapping[str, Any]:
+        normalized_symbol = self._normalize_symbol(symbol)
+        return self._get_json("markets/quotes", {"symbols": normalized_symbol})
+
+    def get_expirations(self, symbol: str) -> Mapping[str, Any]:
+        normalized_symbol = self._normalize_symbol(symbol)
+        return self._get_json("markets/options/expirations", {"symbol": normalized_symbol})
+
+    def get_chain(self, symbol: str, expiration: Optional[str] = None) -> Mapping[str, Any]:
+        normalized_symbol = self._normalize_symbol(symbol)
+        params = {"symbol": normalized_symbol, "greeks": "true"}
+        if expiration:
+            params["expiration"] = str(expiration)
+        return self._get_json("markets/options/chains", params)
+
+    def _get_json(self, path: str, params: Mapping[str, str]) -> Mapping[str, Any]:
+        try:
+            response = self._session.request(
+                "GET",
+                f"{self.base_url}/{path.lstrip('/')}",
+                params=dict(params),
+                headers=self._headers(),
+                timeout=self.timeout_seconds,
+            )
+            response.raise_for_status()
+            status_code = getattr(response, "status_code", None)
+            if status_code is not None and int(status_code) >= 400:
+                raise requests.HTTPError("tradier_http_status_error")
+        except Exception as exc:
+            raise OptionsProviderUnavailable(
+                "tradier",
+                code="options_provider_http_error",
+                message="Tradier options market-data request failed.",
+            ) from exc
+
+        try:
+            payload = response.json()
+        except Exception as exc:
+            raise OptionsProviderUnavailable(
+                "tradier",
+                code="options_provider_payload_unmappable",
+                message="Options provider payload could not be mapped safely.",
+            ) from exc
+        if not isinstance(payload, Mapping):
+            raise OptionsProviderUnavailable(
+                "tradier",
+                code="options_provider_payload_unmappable",
+                message="Options provider payload could not be mapped safely.",
+            )
+        return payload
+
+    def _headers(self) -> Dict[str, str]:
+        return {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {self._api_token}",
+        }
+
+    @staticmethod
+    def _normalize_symbol(symbol: str) -> str:
+        normalized_symbol = _normalize_us_symbol(symbol)
+        if not _is_us_equity_symbol(normalized_symbol):
+            raise OptionsProviderUnsupportedSymbol(normalized_symbol)
+        return normalized_symbol
 
 
 class _FixtureOptionsProvider:

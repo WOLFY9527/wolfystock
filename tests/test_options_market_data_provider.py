@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import requests
 
 from src.services.options_lab_service import OptionsLabProviderUnavailable, OptionsLabService
 from src.services.options_market_data_provider import (
@@ -18,6 +19,7 @@ from src.services.options_market_data_provider import (
     OptionsLiveProviderConfig,
     OptionsProviderUnavailable,
     SyntheticFixtureOptionsProvider,
+    TradierOptionsHttpTransport,
     TradierOptionsProviderStub,
     build_options_provider_live_readiness_preflight,
     create_options_market_data_provider,
@@ -411,6 +413,176 @@ def _tradier_chain_payload(contract_overrides: dict | None = None) -> dict:
     if contract_overrides:
         base_contract.update(contract_overrides)
     return {"options": {"option": [base_contract]}}
+
+
+class _FakeTradierHttpResponse:
+    def __init__(
+        self,
+        payload: object | None = None,
+        *,
+        status_code: int = 200,
+        json_error: Exception | None = None,
+        http_error: Exception | None = None,
+    ) -> None:
+        self.payload = payload if payload is not None else {}
+        self.status_code = status_code
+        self.json_error = json_error
+        self.http_error = http_error
+
+    def raise_for_status(self) -> None:
+        if self.http_error is not None:
+            raise self.http_error
+
+    def json(self) -> object:
+        if self.json_error is not None:
+            raise self.json_error
+        return self.payload
+
+
+class _FakeTradierHttpSession:
+    def __init__(self, *responses: object) -> None:
+        self.responses = list(responses)
+        self.calls: list[dict] = []
+
+    def request(self, method: str, url: str, **kwargs: object) -> object:
+        self.calls.append({"method": method, "url": url, **kwargs})
+        if not self.responses:
+            raise AssertionError("unexpected HTTP request")
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
+def test_tradier_http_transport_uses_expected_market_data_paths_headers_and_timeout() -> None:
+    credential = "synthetic_tradier_http_credential_1234567890"
+    session = _FakeTradierHttpSession(
+        _FakeTradierHttpResponse(_tradier_quote_payload()),
+        _FakeTradierHttpResponse(_tradier_expirations_payload()),
+        _FakeTradierHttpResponse(_tradier_chain_payload()),
+    )
+    transport = TradierOptionsHttpTransport(
+        api_token=credential,
+        base_url="https://sandbox.tradier.example/v1/",
+        timeout_seconds=1.75,
+        session=session,
+    )
+
+    assert transport.get_quote("TEM") == _tradier_quote_payload()
+    assert transport.get_expirations("TEM") == _tradier_expirations_payload()
+    assert transport.get_chain("TEM", expiration="2026-06-19") == _tradier_chain_payload()
+
+    assert [call["method"] for call in session.calls] == ["GET", "GET", "GET"]
+    assert [call["url"] for call in session.calls] == [
+        "https://sandbox.tradier.example/v1/markets/quotes",
+        "https://sandbox.tradier.example/v1/markets/options/expirations",
+        "https://sandbox.tradier.example/v1/markets/options/chains",
+    ]
+    assert [call["params"] for call in session.calls] == [
+        {"symbols": "TEM"},
+        {"symbol": "TEM"},
+        {"symbol": "TEM", "expiration": "2026-06-19", "greeks": "true"},
+    ]
+    assert all(call["timeout"] == 1.75 for call in session.calls)
+    for call in session.calls:
+        headers = call["headers"]
+        assert headers["Accept"] == "application/json"
+        assert headers["Authorization"] == f"Bearer {credential}"
+
+
+def test_tradier_http_transport_converts_http_errors_to_sanitized_provider_errors() -> None:
+    credential = "synthetic_tradier_http_credential_1234567890"
+    session = _FakeTradierHttpSession(
+        _FakeTradierHttpResponse(
+            {},
+            status_code=403,
+            http_error=requests.HTTPError(
+                f"403 authorization bearer {credential} https://provider.invalid/raw"
+            ),
+        )
+    )
+    transport = TradierOptionsHttpTransport(api_token=credential, session=session)
+
+    with pytest.raises(OptionsProviderUnavailable) as exc_info:
+        transport.get_quote("TEM")
+
+    assert exc_info.value.code == "options_provider_http_error"
+    text = str(exc_info.value).lower()
+    for blocked in (credential.lower(), "authorization", "bearer", "provider.invalid", "raw"):
+        assert blocked not in text
+
+
+def test_tradier_http_transport_converts_malformed_json_to_sanitized_provider_errors() -> None:
+    credential = "synthetic_tradier_http_credential_1234567890"
+    session = _FakeTradierHttpSession(
+        _FakeTradierHttpResponse(
+            json_error=ValueError(f"malformed json for {credential}")
+        )
+    )
+    transport = TradierOptionsHttpTransport(api_token=credential, session=session)
+
+    with pytest.raises(OptionsProviderUnavailable) as exc_info:
+        transport.get_expirations("TEM")
+
+    assert exc_info.value.code == "options_provider_payload_unmappable"
+    assert credential.lower() not in str(exc_info.value).lower()
+
+
+def test_tradier_http_transport_normalizes_valid_mocked_response_without_decision_grade() -> None:
+    credential = "synthetic_tradier_http_credential_1234567890"
+    session = _FakeTradierHttpSession(
+        _FakeTradierHttpResponse(_tradier_quote_payload()),
+        _FakeTradierHttpResponse(_tradier_expirations_payload()),
+        _FakeTradierHttpResponse(_tradier_chain_payload()),
+    )
+    provider = TradierOptionsProviderStub(
+        config=_tradier_enabled_config(),
+        transport=TradierOptionsHttpTransport(api_token=credential, session=session),
+    )
+
+    chain = provider.get_chain("TEM", expiration="2026-06-19")
+
+    assert provider.capabilities.live_enabled is False
+    assert provider.capabilities.tradeable_data is False
+    assert provider.capabilities.source_type == "tradier_adapter_contract"
+    contract = chain["contracts"][0]
+    assert contract["contractSymbol"] == "TEM260619C00050000"
+    assert contract["side"] == "call"
+    assert contract["expiration"] == "2026-06-19"
+    assert contract["strike"] == 50.0
+    assert contract["bid"] == 4.8
+    assert contract["ask"] == 5.2
+    assert contract["volume"] == 320
+    assert contract["openInterest"] == 1480
+    assert contract["impliedVolatility"] == 0.62
+    assert contract["greeks"] == {
+        "delta": 0.61,
+        "gamma": 0.044,
+        "theta": -0.072,
+        "vega": 0.118,
+        "rho": 0.031,
+    }
+    assert chain["expirations"][0]["date"] == "2026-06-19"
+    assert chain["dataQuality"]["tradeable"] is False
+    assert "not_decision_grade" in chain["dataQuality"]["hints"]
+    assert credential.lower() not in _json_lower(chain)
+
+
+def test_tradier_default_factory_does_not_construct_or_call_http_transport() -> None:
+    provider = create_options_market_data_provider(
+        "tradier",
+        live_provider_config=_tradier_enabled_config(),
+    )
+
+    with patch("requests.sessions.Session.request") as request_mock:
+        with pytest.raises(OptionsProviderUnavailable) as exc_info:
+            provider.get_chain("TEM")
+
+    assert exc_info.value.code == "options_provider_dry_run_not_enabled"
+    assert provider.capabilities.live_enabled is False
+    assert provider.capabilities.tradeable_data is False
+    assert "decision_grade" not in {name.lower() for name in dir(provider)}
+    request_mock.assert_not_called()
 
 
 def test_tradier_mock_transport_normalizes_quote_expirations_and_chain_without_default_network() -> None:
