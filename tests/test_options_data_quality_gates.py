@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from src.services.options_data_quality_gates import evaluate_options_data_quality_gates
@@ -37,6 +38,17 @@ def _clear_gate_contract(contract_symbol: str = "TEM260619C00055000"):
     )
 
 
+def _authorized_live_provider_authority() -> dict[str, object]:
+    return {
+        "providerId": "approved_live_test_provider",
+        "sourceType": "live",
+        "fixtureOnly": False,
+        "liveEnabled": True,
+        "tradeableData": True,
+        "providerDecisionAuthority": True,
+    }
+
+
 def _evaluate_single_contract(contract, **overrides):
     params = {
         "strategy_key": "long_call",
@@ -47,6 +59,7 @@ def _evaluate_single_contract(contract, **overrides):
         "iv_rank_source": "approved_live_iv_history",
         "iv_percentile": 68.0,
         "expected_move_source": "straddle_mid",
+        "provider_authority": _authorized_live_provider_authority(),
     }
     params.update(overrides)
     return evaluate_options_data_quality_gates(**params)
@@ -84,6 +97,97 @@ def test_required_event_calendar_present_satisfies_event_requirement() -> None:
     assert diagnostics.liquidity_gates.status == "clear"
 
 
+def test_otherwise_clean_live_shaped_contract_without_provider_authority_fails_closed() -> None:
+    diagnostics = _evaluate_single_contract(_clear_gate_contract(), provider_authority=None)
+
+    assert diagnostics.gate_decision == "数据不足，禁止判断"
+    assert diagnostics.decision_grade is False
+    assert diagnostics.fail_closed_reason_codes == ["provider_authority_missing"]
+    assert _issue_codes(diagnostics) == {"provider_authority_missing"}
+    assert diagnostics.data_quality_gates.status == "clear"
+    assert diagnostics.data_quality_gates.decision_grade is True
+    assert diagnostics.liquidity_gates.status == "clear"
+    assert diagnostics.liquidity_gates.decision_grade is True
+
+
+def test_otherwise_clean_live_shaped_contract_without_decision_authority_fails_closed() -> None:
+    provider_authority = {
+        **_authorized_live_provider_authority(),
+        "providerDecisionAuthority": False,
+    }
+
+    diagnostics = _evaluate_single_contract(
+        _clear_gate_contract(),
+        provider_authority=provider_authority,
+    )
+
+    assert diagnostics.decision_grade is False
+    assert diagnostics.fail_closed_reason_codes == ["provider_decision_authority_not_granted"]
+    assert _issue_codes(diagnostics) == {"provider_decision_authority_not_granted"}
+    assert diagnostics.data_quality_gates.status == "clear"
+    assert diagnostics.liquidity_gates.status == "clear"
+
+
+def test_provider_authority_requires_live_enabled_and_tradeable_data() -> None:
+    provider_authority = {
+        **_authorized_live_provider_authority(),
+        "liveEnabled": False,
+        "tradeableData": False,
+    }
+
+    diagnostics = _evaluate_single_contract(
+        _clear_gate_contract(),
+        provider_authority=provider_authority,
+    )
+
+    assert diagnostics.decision_grade is False
+    assert diagnostics.fail_closed_reason_codes == [
+        "provider_live_disabled",
+        "provider_tradeable_data_false",
+    ]
+    assert _issue_codes(diagnostics) == {
+        "provider_live_disabled",
+        "provider_tradeable_data_false",
+    }
+
+
+def test_fixture_dry_run_stub_and_adapter_contract_authority_flags_fail_closed() -> None:
+    scenarios = [
+        (
+            {"providerId": "synthetic_fixture", "sourceType": "synthetic", "fixtureOnly": True},
+            "provider_fixture_not_decision_grade",
+        ),
+        (
+            {"providerId": "tradier", "sourceType": "delayed_dry_run", "dryRun": True},
+            "provider_dry_run_not_decision_grade",
+        ),
+        (
+            {"providerId": "tradier", "sourceType": "live_stub", "stub": True},
+            "provider_stub_not_decision_grade",
+        ),
+        (
+            {"providerId": "tradier", "sourceType": "tradier_adapter_contract", "adapterContract": True},
+            "provider_adapter_contract_not_decision_grade",
+        ),
+    ]
+
+    for provider_authority, expected_code in scenarios:
+        diagnostics = _evaluate_single_contract(
+            _clear_gate_contract(),
+            provider_authority={
+                **provider_authority,
+                "liveEnabled": True,
+                "tradeableData": True,
+                "providerDecisionAuthority": True,
+            },
+        )
+
+        assert diagnostics.decision_grade is False
+        assert expected_code in diagnostics.fail_closed_reason_codes
+        assert diagnostics.data_quality_gates.status == "clear"
+        assert diagnostics.liquidity_gates.status == "clear"
+
+
 def test_missing_bid_ask_fails_closed() -> None:
     contract = _decision_grade_contract("TEM260619C00055000").model_copy(
         update={"bid": None, "ask": None, "mid": None}
@@ -98,6 +202,7 @@ def test_missing_bid_ask_fails_closed() -> None:
         iv_rank_source="approved_live_iv_history",
         iv_percentile=68.0,
         expected_move_source="straddle_mid",
+        provider_authority=_authorized_live_provider_authority(),
     )
 
     assert diagnostics.gate_decision == "数据不足，禁止判断"
@@ -160,6 +265,7 @@ def test_missing_volume_and_open_interest_fail_closed() -> None:
         iv_rank_source="approved_live_iv_history",
         iv_percentile=68.0,
         expected_move_source="straddle_mid",
+        provider_authority=_authorized_live_provider_authority(),
     )
 
     assert diagnostics.gate_decision == "数据不足，禁止判断"
@@ -196,6 +302,7 @@ def test_fixture_fallback_dry_run_stale_and_unknown_freshness_are_not_decision_g
             iv_rank_source="approved_live_iv_history",
             iv_percentile=68.0,
             expected_move_source="straddle_mid",
+            provider_authority=_authorized_live_provider_authority(),
         )
 
         assert diagnostics.decision_grade is False
@@ -217,6 +324,7 @@ def test_missing_iv_greeks_and_iv_rank_block_recommendation_grade_output() -> No
         iv_rank_source=None,
         iv_percentile=None,
         expected_move_source="iv_dte",
+        provider_authority=_authorized_live_provider_authority(),
     )
 
     assert diagnostics.gate_decision == "数据不足，禁止判断"
@@ -254,6 +362,7 @@ def test_snapshot_mapped_contract_preserves_gate_decision() -> None:
         iv_rank_source="approved_live_iv_history",
         iv_percentile=68.0,
         expected_move_source="straddle_mid",
+        provider_authority=_authorized_live_provider_authority(),
     )
     snapshot_diagnostics = evaluate_options_data_quality_gates(
         strategy_key="long_call",
@@ -264,6 +373,7 @@ def test_snapshot_mapped_contract_preserves_gate_decision() -> None:
         iv_rank_source="approved_live_iv_history",
         iv_percentile=68.0,
         expected_move_source="straddle_mid",
+        provider_authority=_authorized_live_provider_authority(),
     )
 
     assert snapshot_diagnostics.to_dict() == direct_diagnostics.to_dict()
@@ -281,6 +391,7 @@ def test_unsupported_strategy_returns_fail_closed_diagnostics() -> None:
         iv_rank_source="approved_live_iv_history",
         iv_percentile=68.0,
         expected_move_source="straddle_mid",
+        provider_authority=_authorized_live_provider_authority(),
     )
 
     assert diagnostics.gate_decision == "数据不足，禁止判断"
@@ -306,8 +417,10 @@ def test_gate_diagnostics_do_not_expose_raw_provider_payloads_or_secrets() -> No
         iv_rank_source="approved_live_iv_history",
         iv_percentile=68.0,
         expected_move_source="straddle_mid",
+        provider_authority=_authorized_live_provider_authority(),
     )
 
     text = json.dumps(diagnostics.to_dict(), ensure_ascii=False, sort_keys=True).lower()
+    assert all(re.fullmatch(r"[a-z][a-z0-9_]{2,80}", code) for code in diagnostics.fail_closed_reason_codes)
     for blocked in ("authorization", "bearer", "token=", "secret", "request", "response", "header", "cookie"):
         assert blocked not in text

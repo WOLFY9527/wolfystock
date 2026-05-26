@@ -468,6 +468,7 @@ class OptionsLabService:
             expected_move_source=expected_move.expected_move_source,
             event_calendar=fixture.get("eventCalendar"),
             requires_event_calendar=bool(parsed.scenario_assumptions.get("requireEventCalendar")),
+            provider_authority=self._provider_authority(fixture),
         )
         raw_score = (
             data_quality.data_quality_score * 0.25
@@ -1133,6 +1134,7 @@ class OptionsLabService:
             expected_move_source=expected_move.expected_move_source,
             event_calendar=fixture.get("eventCalendar"),
             requires_event_calendar=False,
+            provider_authority=self._provider_authority(fixture),
         )
         raw_score = (
             data_quality.data_quality_score * 0.23
@@ -1379,6 +1381,57 @@ class OptionsLabService:
             provider_capabilities=capabilities,
             live_provider_enabled=bool(capabilities.get("liveEnabled", False)),
         )
+
+    @staticmethod
+    def _first_present(*values: Any) -> Any:
+        for value in values:
+            if value is not None:
+                return value
+        return None
+
+    @classmethod
+    def _provider_authority(cls, fixture: Dict[str, Any]) -> Dict[str, Any]:
+        capabilities = dict(fixture.get("providerCapabilities") or {})
+        data_quality = dict(fixture.get("dataQuality") or {})
+        underlying = cls._safe_underlying(fixture)
+        source_type = cls._first_present(capabilities.get("sourceType"), fixture.get("source"))
+        notes = [
+            *list(capabilities.get("notes") or []),
+            *list(data_quality.get("hints") or []),
+        ]
+        source_text = " ".join(
+            str(item or "")
+            for item in (
+                fixture.get("providerName"),
+                fixture.get("source"),
+                fixture.get("providerQuality"),
+                source_type,
+                underlying.get("source"),
+                underlying.get("freshness"),
+                underlying.get("providerQuality"),
+                *notes,
+            )
+        ).lower()
+        return {
+            "providerId": str(fixture.get("providerName") or fixture.get("source") or "unknown"),
+            "sourceType": source_type,
+            "fixtureOnly": bool(capabilities.get("fixtureOnly", False)),
+            "liveEnabled": capabilities.get("liveEnabled", False),
+            "tradeableData": cls._first_present(capabilities.get("tradeableData"), data_quality.get("tradeable"), False),
+            "dryRun": "dry_run" in source_text or "dry-run" in source_text,
+            "synthetic": "synthetic" in source_text,
+            "stub": "stub" in source_text,
+            "adapterContract": "adapter_contract" in source_text or "adapter-contract" in source_text,
+            "providerDecisionAuthority": cls._first_present(
+                fixture.get("providerDecisionAuthority"),
+                capabilities.get("providerDecisionAuthority"),
+            ),
+            "recommendationAuthority": cls._first_present(
+                fixture.get("recommendationAuthority"),
+                capabilities.get("recommendationAuthority"),
+            ),
+            "notes": notes,
+        }
 
     @staticmethod
     def _safe_underlying(fixture: Dict[str, Any]) -> Dict[str, Any]:

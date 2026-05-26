@@ -24,6 +24,17 @@ _SECRET_MARKERS = (
     "secret",
     "token",
 )
+_PROVIDER_AUTHORITY_LABELS = {
+    "provider_authority_missing": "缺少 provider 决策授权元数据",
+    "provider_fixture_not_decision_grade": "fixture provider 不能作为决策级证据",
+    "provider_synthetic_not_decision_grade": "synthetic provider 不能作为决策级证据",
+    "provider_dry_run_not_decision_grade": "dry-run provider 不能作为决策级证据",
+    "provider_stub_not_decision_grade": "stub provider 不能作为决策级证据",
+    "provider_adapter_contract_not_decision_grade": "adapter contract provider 不能作为决策级证据",
+    "provider_live_disabled": "provider live 模式未启用",
+    "provider_tradeable_data_false": "provider 未声明 tradeable data",
+    "provider_decision_authority_not_granted": "provider 未显式授予决策级权限",
+}
 
 
 class OptionsGateStatus(str, Enum):
@@ -59,9 +70,32 @@ def _coerce_int(value: Any) -> int | None:
         return None
 
 
+def _coerce_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if value is None or value == "":
+        return None
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in {"1", "true", "yes", "on", "enabled"}:
+            return True
+        if text in {"0", "false", "no", "off", "disabled"}:
+            return False
+        return None
+    return bool(value)
+
+
 def _contains_marker(*values: Any, markers: Iterable[str]) -> bool:
     text = " ".join(_coerce_text(value).lower() for value in values if value is not None)
     return any(marker in text for marker in markers)
+
+
+def _flatten_authority_text(value: Any) -> str:
+    if isinstance(value, Mapping):
+        return " ".join(_flatten_authority_text(item) for item in value.values())
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return " ".join(_flatten_authority_text(item) for item in value)
+    return _coerce_text(value).lower()
 
 
 @dataclass(slots=True)
@@ -168,6 +202,76 @@ def _issue(
         leg_index=leg_index,
         contract_symbol=contract_symbol,
     )
+
+
+def _provider_authority_issue(code: str) -> OptionsGateIssue:
+    return _issue(
+        code=code,
+        category="provider_authority",
+        status=OptionsGateStatus.BLOCKED,
+        label=_PROVIDER_AUTHORITY_LABELS[code],
+    )
+
+
+def _provider_authority_flag(data: Mapping[str, Any], *keys: str) -> bool | None:
+    for key in keys:
+        if key in data:
+            return _coerce_bool(data.get(key))
+    return None
+
+
+def _provider_authority_source_code(data: Mapping[str, Any]) -> str | None:
+    text = _flatten_authority_text(data)
+    if _provider_authority_flag(data, "adapterContract", "adapter_contract") is True or _contains_marker(
+        text,
+        markers=("adapter_contract", "adapter-contract"),
+    ):
+        return "provider_adapter_contract_not_decision_grade"
+    if _provider_authority_flag(data, "dryRun", "dry_run") is True or _contains_marker(
+        text,
+        markers=("dry_run", "dry-run"),
+    ):
+        return "provider_dry_run_not_decision_grade"
+    if _provider_authority_flag(data, "stub") is True or _contains_marker(text, markers=("stub",)):
+        return "provider_stub_not_decision_grade"
+    if _provider_authority_flag(data, "fixtureOnly", "fixture_only") is True or _contains_marker(
+        text,
+        markers=("fixture",),
+    ):
+        return "provider_fixture_not_decision_grade"
+    if _provider_authority_flag(data, "synthetic") is True or _contains_marker(text, markers=("synthetic",)):
+        return "provider_synthetic_not_decision_grade"
+    return None
+
+
+def _provider_authority_granted(data: Mapping[str, Any]) -> bool:
+    return any(
+        _provider_authority_flag(data, key) is True
+        for key in (
+            "providerDecisionAuthority",
+            "provider_decision_authority",
+            "recommendationAuthority",
+            "recommendation_authority",
+        )
+    )
+
+
+def _provider_authority_issues(provider_authority: Mapping[str, Any] | None) -> list[OptionsGateIssue]:
+    data = _coerce_mapping(provider_authority)
+    if not data:
+        return [_provider_authority_issue("provider_authority_missing")]
+
+    issues: list[OptionsGateIssue] = []
+    source_code = _provider_authority_source_code(data)
+    if source_code is not None:
+        issues.append(_provider_authority_issue(source_code))
+    if _provider_authority_flag(data, "liveEnabled", "live_enabled") is not True:
+        issues.append(_provider_authority_issue("provider_live_disabled"))
+    if _provider_authority_flag(data, "tradeableData", "tradeable_data") is not True:
+        issues.append(_provider_authority_issue("provider_tradeable_data_false"))
+    if not _provider_authority_granted(data):
+        issues.append(_provider_authority_issue("provider_decision_authority_not_granted"))
+    return issues
 
 
 def _bucket_status(issues: Sequence[OptionsGateIssue]) -> OptionsGateStatus:
@@ -543,6 +647,7 @@ def evaluate_options_data_quality_gates(
     expected_move_source: str,
     event_calendar: Mapping[str, Any] | None = None,
     requires_event_calendar: bool = False,
+    provider_authority: Mapping[str, Any] | None = None,
 ) -> OptionsStrategyGateDiagnostics:
     data_quality_issues: list[OptionsGateIssue] = []
     liquidity_issues: list[OptionsGateIssue] = []
@@ -659,11 +764,15 @@ def evaluate_options_data_quality_gates(
         leg_diagnostics,
     )
     liquidity_gates = _bucket_from_leg_diagnostics(liquidity_issues, leg_diagnostics)
+    provider_authority_issues = _provider_authority_issues(provider_authority)
     gate_decision, decision_grade = _strategy_gate_decision(
         data_quality_gates.status,
         liquidity_gates.status,
     )
-    gate_issues = [*data_quality_issues, *liquidity_issues]
+    if provider_authority_issues:
+        gate_decision = "数据不足，禁止判断"
+        decision_grade = False
+    gate_issues = [*data_quality_issues, *liquidity_issues, *provider_authority_issues]
     return OptionsStrategyGateDiagnostics(
         strategy_key=strategy_key,
         gate_decision=gate_decision,

@@ -76,6 +76,8 @@ def test_delayed_fixture_provider_is_real_shaped_but_not_tradeable() -> None:
     assert chain.calls[0].provider_quality == "delayed_fixture_only"
     assert chain.calls[0].data_quality["tradeable"] is False
     assert decision.data_quality.data_quality_tier == "delayed_usable"
+    assert decision.decision_grade is False
+    assert "provider_fixture_not_decision_grade" in decision.fail_closed_reason_codes
     assert decision.decision_label != "有条件可交易"
     assert all(item.decision_label != "有条件可交易" for item in decision.ranked_alternatives)
 
@@ -333,6 +335,7 @@ def test_tradier_dry_run_fixture_remains_non_decision_grade_in_service() -> None
     assert decision.decision_grade is False
     assert decision.decision_label == "数据不足，禁止判断"
     assert "dry_run_source_not_decision_grade" in decision.fail_closed_reason_codes
+    assert "provider_dry_run_not_decision_grade" in decision.fail_closed_reason_codes
     assert all(item.decision_label != "有条件可交易" for item in decision.ranked_alternatives)
     request_mock.assert_not_called()
 
@@ -681,6 +684,37 @@ def test_tradier_mock_transport_normalizes_quote_expirations_and_chain_without_d
         "authorization",
     ):
         assert blocked not in text
+
+
+def test_tradier_adapter_contract_remains_non_decision_grade_with_clean_payload() -> None:
+    provider = TradierOptionsProviderStub(
+        config=_tradier_enabled_config(),
+        transport=_FakeTradierOptionsTransport(),
+    )
+    service = OptionsLabService(market_data_provider=provider, provider_name="tradier")
+
+    with patch("requests.sessions.Session.request") as request_mock:
+        decision = service.evaluate_decision(
+            {
+                "symbol": "TEM",
+                "marketDataProvider": "tradier",
+                "strategy": "long_call",
+                "expiration": "2026-06-19",
+                "targetPrice": 65,
+                "targetDate": "2026-06-19",
+                "riskBudget": 600,
+            }
+        )
+
+    assert decision.metadata.provider_name == "tradier"
+    assert decision.metadata.provider_capabilities["sourceType"] == "tradier_adapter_contract"
+    assert decision.metadata.provider_capabilities["liveEnabled"] is False
+    assert decision.metadata.provider_capabilities["tradeableData"] is False
+    assert decision.decision_grade is False
+    assert decision.decision_label == "数据不足，禁止判断"
+    assert "provider_adapter_contract_not_decision_grade" in decision.fail_closed_reason_codes
+    assert all(item.decision_label != "有条件可交易" for item in decision.ranked_alternatives)
+    request_mock.assert_not_called()
 
 
 @pytest.mark.parametrize(
