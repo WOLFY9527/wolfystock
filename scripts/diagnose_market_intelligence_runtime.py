@@ -11,7 +11,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -21,6 +21,9 @@ from src.services.official_macro_transport import run_official_macro_live_smoke
 from src.services.options_market_data_provider import (
     LIVE_OPTIONS_PROVIDER_NAMES,
     OptionsLiveProviderConfig,
+    OptionsProviderError,
+    OptionsProviderUnavailable,
+    TradierOptionsHttpTransport,
     build_options_provider_live_readiness_preflight,
 )
 from src.services.polygon_us_breadth_provider import (
@@ -47,6 +50,8 @@ _ENDPOINTS: tuple[tuple[str, str], ...] = (
     ("marketTemperature", "/api/v1/market/temperature"),
     ("dataReadiness", "/api/v1/market/data-readiness"),
 )
+_OPTIONS_LIVE_PROBE_PROVIDER = "tradier"
+_OPTIONS_LIVE_PROBE_ENDPOINT_CLASSES = ("quote", "expirations")
 
 
 def _skipped_official_macro_diagnostic(reason: str = "not_requested") -> dict[str, Any]:
@@ -149,6 +154,19 @@ def _non_negative_int(value: Any) -> int:
     return max(0, parsed)
 
 
+def _bounded_options_probe_timeout_seconds(value: Any) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return 2.0
+    return max(0.25, min(parsed, 5.0))
+
+
+def _normalize_options_probe_symbol(symbol: str) -> str:
+    text = str(symbol or "TEM").strip().upper()
+    return text if text else "TEM"
+
+
 def _compact_official_macro_diagnostic(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "credentialsPresent": bool(payload.get("credentialsPresent", False)),
@@ -234,9 +252,243 @@ def _compact_options_lab_provider_preflight(payload: dict[str, Any]) -> dict[str
     }
 
 
-def _collect_options_lab_provider_preflight() -> dict[str, Any]:
+def _tradier_options_api_token_from_env() -> str | None:
+    for env_name in ("TRADIER_API_TOKEN", "TRADIER_SANDBOX_API_TOKEN"):
+        value = str(os.environ.get(env_name) or "").strip()
+        if value:
+            return value
+    return None
+
+
+def _build_tradier_options_live_probe_transport(
+    *,
+    api_token: str,
+    timeout_seconds: float,
+) -> TradierOptionsHttpTransport:
+    return TradierOptionsHttpTransport(
+        api_token=api_token,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def _response_shape_status(endpoint_class: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+    if endpoint_class == "quote":
+        quotes = payload.get("quotes") if isinstance(payload, Mapping) else None
+        quote = quotes.get("quote") if isinstance(quotes, Mapping) else None
+        if isinstance(quote, list):
+            return {"status": "list", "count": len(quote)}
+        if isinstance(quote, Mapping):
+            return {"status": "object", "count": 1}
+        return {"status": "missing", "count": 0}
+    if endpoint_class == "expirations":
+        expirations = payload.get("expirations") if isinstance(payload, Mapping) else None
+        dates = expirations.get("date") if isinstance(expirations, Mapping) else None
+        if isinstance(dates, list):
+            return {"status": "list", "count": len(dates)}
+        if isinstance(dates, str) and dates.strip():
+            return {"status": "list", "count": 1}
+        return {"status": "missing", "count": 0}
+    return {"status": "unknown", "count": 0}
+
+
+def _options_live_probe_result(
+    *,
+    provider_id: str,
+    status: str,
+    enabled: bool,
+    reason_code: str,
+    timeout_seconds: float,
+    network_call_executed: bool,
+    endpoint_results: list[dict[str, Any]],
+    sanitized_error_code: str | None,
+) -> dict[str, Any]:
+    return {
+        "providerId": provider_id,
+        "status": status,
+        "enabled": enabled,
+        "explicitOptIn": True,
+        "reasonCode": reason_code,
+        "sanitizedErrorCode": sanitized_error_code,
+        "timeoutSeconds": timeout_seconds,
+        "networkCallExecuted": network_call_executed,
+        "endpointClasses": list(_OPTIONS_LIVE_PROBE_ENDPOINT_CLASSES),
+        "endpointResults": endpoint_results,
+        "rawCredentialValuesIncluded": False,
+        "providerPayloadValuesIncluded": False,
+        "responseBodiesIncluded": False,
+        "brokerOrderPathEnabled": False,
+        "portfolioMutationPathEnabled": False,
+        "tradeableData": False,
+    }
+
+
+def _blocked_options_live_probe(
+    *,
+    provider_id: str,
+    status: str,
+    reason_code: str,
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    return _options_live_probe_result(
+        provider_id=provider_id,
+        status=status,
+        enabled=False,
+        reason_code=reason_code,
+        sanitized_error_code=reason_code,
+        timeout_seconds=timeout_seconds,
+        network_call_executed=False,
+        endpoint_results=[],
+    )
+
+
+def _failed_options_live_probe(
+    *,
+    provider_id: str,
+    error_code: str,
+    timeout_seconds: float,
+    network_call_executed: bool,
+    endpoint_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    failed_endpoint = _OPTIONS_LIVE_PROBE_ENDPOINT_CLASSES[min(len(endpoint_results), 1)]
+    endpoint_results.append(
+        {
+            "endpointClass": failed_endpoint,
+            "status": "error",
+            "responseShape": {"status": "unknown", "count": 0},
+        }
+    )
+    return _options_live_probe_result(
+        provider_id=provider_id,
+        status="failed_sanitized_provider_error",
+        enabled=True,
+        reason_code=error_code,
+        sanitized_error_code=error_code,
+        timeout_seconds=timeout_seconds,
+        network_call_executed=network_call_executed,
+        endpoint_results=endpoint_results,
+    )
+
+
+def _run_options_live_probe(
+    *,
+    provider_id: str,
+    config: OptionsLiveProviderConfig,
+    symbol: str,
+    timeout_seconds: float | None = None,
+) -> dict[str, Any]:
+    normalized_provider = str(provider_id or "").strip().lower()
+    bounded_timeout = _bounded_options_probe_timeout_seconds(
+        timeout_seconds if timeout_seconds is not None else config.live_probe_timeout_seconds
+    )
+    if normalized_provider != _OPTIONS_LIVE_PROBE_PROVIDER:
+        return _blocked_options_live_probe(
+            provider_id=normalized_provider or "unknown",
+            status="blocked_unsupported_provider",
+            reason_code="options_provider_live_probe_unsupported_provider",
+            timeout_seconds=bounded_timeout,
+        )
+
+    credential_state = config.credential_state(normalized_provider)
+    if credential_state != "present":
+        reason_code = {
+            "malformed": "options_provider_credentials_malformed",
+            "partial": "options_provider_credentials_partial",
+        }.get(credential_state, "options_provider_credentials_missing")
+        status = {
+            "malformed": "blocked_malformed_credentials",
+            "partial": "blocked_partial_credentials",
+        }.get(credential_state, "blocked_missing_credentials")
+        return _blocked_options_live_probe(
+            provider_id=normalized_provider,
+            status=status,
+            reason_code=reason_code,
+            timeout_seconds=bounded_timeout,
+        )
+
+    api_token = _tradier_options_api_token_from_env()
+    if not api_token:
+        return _blocked_options_live_probe(
+            provider_id=normalized_provider,
+            status="blocked_missing_credentials",
+            reason_code="options_provider_credentials_missing",
+            timeout_seconds=bounded_timeout,
+        )
+
+    endpoint_results: list[dict[str, Any]] = []
+    network_call_executed = False
+    try:
+        transport = _build_tradier_options_live_probe_transport(
+            api_token=api_token,
+            timeout_seconds=bounded_timeout,
+        )
+        normalized_symbol = _normalize_options_probe_symbol(symbol)
+        network_call_executed = True
+        quote_payload = transport.get_quote(normalized_symbol)
+        endpoint_results.append(
+            {
+                "endpointClass": "quote",
+                "status": "ok",
+                "responseShape": _response_shape_status("quote", quote_payload),
+            }
+        )
+        network_call_executed = True
+        expirations_payload = transport.get_expirations(normalized_symbol)
+        endpoint_results.append(
+            {
+                "endpointClass": "expirations",
+                "status": "ok",
+                "responseShape": _response_shape_status("expirations", expirations_payload),
+            }
+        )
+    except OptionsProviderUnavailable as exc:
+        error_code = _sanitize_reason_code(exc.code) or "options_provider_error"
+        return _failed_options_live_probe(
+            provider_id=normalized_provider,
+            error_code=error_code,
+            timeout_seconds=bounded_timeout,
+            network_call_executed=network_call_executed,
+            endpoint_results=endpoint_results,
+        )
+    except OptionsProviderError as exc:
+        error_code = _sanitize_reason_code(exc.code) or "options_provider_error"
+        return _failed_options_live_probe(
+            provider_id=normalized_provider,
+            error_code=error_code,
+            timeout_seconds=bounded_timeout,
+            network_call_executed=network_call_executed,
+            endpoint_results=endpoint_results,
+        )
+    except Exception:
+        return _failed_options_live_probe(
+            provider_id=normalized_provider,
+            error_code="unexpected_error",
+            timeout_seconds=bounded_timeout,
+            network_call_executed=network_call_executed,
+            endpoint_results=endpoint_results,
+        )
+
+    return _options_live_probe_result(
+        provider_id=normalized_provider,
+        status="passed",
+        enabled=True,
+        reason_code="options_provider_live_probe_passed",
+        sanitized_error_code=None,
+        timeout_seconds=bounded_timeout,
+        network_call_executed=network_call_executed,
+        endpoint_results=endpoint_results,
+    )
+
+
+def _collect_options_lab_provider_preflight(
+    *,
+    options_live_probe: bool = False,
+    options_provider: str = _OPTIONS_LIVE_PROBE_PROVIDER,
+    options_probe_symbol: str = "TEM",
+    options_probe_timeout_seconds: float | None = None,
+) -> dict[str, Any]:
     config = OptionsLiveProviderConfig.from_env()
     providers: list[dict[str, Any]] = []
+    normalized_options_provider = str(options_provider or _OPTIONS_LIVE_PROBE_PROVIDER).strip().lower()
     for provider_name in sorted(LIVE_OPTIONS_PROVIDER_NAMES):
         try:
             preflight = build_options_provider_live_readiness_preflight(provider_name, config=config)
@@ -264,7 +516,17 @@ def _collect_options_lab_provider_preflight() -> dict[str, Any]:
                     "networkCallExecuted": False,
                 },
             }
-        providers.append(_compact_options_lab_provider_preflight(preflight))
+        compact = _compact_options_lab_provider_preflight(preflight)
+        if options_live_probe and provider_name == normalized_options_provider:
+            compact["liveProbe"].update(
+                _run_options_live_probe(
+                    provider_id=normalized_options_provider,
+                    config=config,
+                    symbol=options_probe_symbol,
+                    timeout_seconds=options_probe_timeout_seconds,
+                )
+            )
+        providers.append(compact)
     return {"providers": providers}
 
 
@@ -455,6 +717,10 @@ def collect_diagnostic_bundle(
     base_url: str | None = None,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     include_live_smoke: bool = False,
+    options_live_probe: bool = False,
+    options_provider: str = _OPTIONS_LIVE_PROBE_PROVIDER,
+    options_probe_symbol: str = "TEM",
+    options_probe_timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     if include_live_smoke:
         official_macro_diagnostic = _compact_official_macro_diagnostic(run_official_macro_live_smoke())
@@ -470,7 +736,12 @@ def collect_diagnostic_bundle(
         "officialMacroDiagnostic": official_macro_diagnostic,
         "alpacaRotationDiagnostic": alpaca_rotation_diagnostic,
         "polygonUsBreadthDiagnostic": polygon_us_breadth_diagnostic,
-        "optionsLabProviderPreflight": _collect_options_lab_provider_preflight(),
+        "optionsLabProviderPreflight": _collect_options_lab_provider_preflight(
+            options_live_probe=options_live_probe,
+            options_provider=options_provider,
+            options_probe_symbol=options_probe_symbol,
+            options_probe_timeout_seconds=options_probe_timeout_seconds,
+        ),
         "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
         "discrepancies": [],
     }
@@ -551,6 +822,28 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_TIMEOUT_SECONDS,
         help="Per-endpoint timeout when querying the optional local backend.",
     )
+    parser.add_argument(
+        "--options-live-probe",
+        action="store_true",
+        help="Explicitly run the opt-in Options market-data live probe. Default mode stays offline.",
+    )
+    parser.add_argument(
+        "--options-provider",
+        choices=(_OPTIONS_LIVE_PROBE_PROVIDER,),
+        default=_OPTIONS_LIVE_PROBE_PROVIDER,
+        help="Options provider for --options-live-probe. Initial diagnostic support is Tradier only.",
+    )
+    parser.add_argument(
+        "--options-probe-symbol",
+        default="TEM",
+        help="US equity symbol for the bounded Options live probe. Defaults to TEM.",
+    )
+    parser.add_argument(
+        "--options-live-probe-timeout-seconds",
+        type=float,
+        default=None,
+        help="Optional bounded timeout for the Options live probe. Defaults to existing Options env convention.",
+    )
     return parser.parse_args(argv)
 
 
@@ -561,6 +854,10 @@ def main(argv: list[str] | None = None) -> int:
             base_url=args.base_url,
             timeout_seconds=args.timeout_seconds,
             include_live_smoke=args.live_smoke,
+            options_live_probe=args.options_live_probe,
+            options_provider=args.options_provider,
+            options_probe_symbol=args.options_probe_symbol,
+            options_probe_timeout_seconds=args.options_live_probe_timeout_seconds,
         )
     except Exception:
         fallback = {

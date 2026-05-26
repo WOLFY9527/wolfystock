@@ -4,6 +4,10 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
+from src.services.options_market_data_provider import OptionsProviderUnavailable
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "diagnose_market_intelligence_runtime.py"
@@ -16,6 +20,59 @@ def _load_script_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+class _FakeTradierProbeTransport:
+    def __init__(self, *, raw_secret: str = "synthetic_live_probe_secret_1234567890") -> None:
+        self.raw_secret = raw_secret
+        self.calls: list[tuple[str, str]] = []
+
+    def get_quote(self, symbol: str) -> dict:
+        self.calls.append(("quote", symbol))
+        return {
+            "quotes": {
+                "quote": {
+                    "symbol": symbol,
+                    "last": 52.4,
+                    "Authorization": f"Bearer {self.raw_secret}",
+                }
+            }
+        }
+
+    def get_expirations(self, symbol: str) -> dict:
+        self.calls.append(("expirations", symbol))
+        return {
+            "expirations": {
+                "date": ["2026-06-19", "2026-08-21"],
+                "token": self.raw_secret,
+            }
+        }
+
+
+class _FailingTradierProbeTransport:
+    def __init__(self, code: str, raw_secret: str) -> None:
+        self.code = code
+        self.raw_secret = raw_secret
+        self.calls: list[tuple[str, str]] = []
+
+    def get_quote(self, symbol: str) -> dict:
+        self.calls.append(("quote", symbol))
+        raise OptionsProviderUnavailable(
+            "tradier",
+            code=self.code,
+            message=f"provider failed with Authorization Bearer {self.raw_secret}",
+        )
+
+    def get_expirations(self, symbol: str) -> dict:
+        self.calls.append(("expirations", symbol))
+        raise AssertionError("expirations should not run after quote failure")
+
+
+def _providers_by_id(payload: dict) -> dict[str, dict]:
+    return {
+        str(item["providerId"]): item
+        for item in payload["optionsLabProviderPreflight"]["providers"]
+    }
 
 
 def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
@@ -41,6 +98,11 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
         module,
         "_fetch_json",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("endpoint fetch should not run")),
+    )
+    monkeypatch.setattr(
+        module,
+        "_build_tradier_options_live_probe_transport",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("tradier live probe should not run")),
     )
 
     payload = module.collect_diagnostic_bundle()
@@ -405,6 +467,153 @@ def test_runtime_diagnostic_includes_offline_options_lab_provider_preflight(monk
         ]
     }
     for blocked in ("must-not-leak", "token", "apiKey", "accountId"):
+        assert blocked not in serialized
+
+
+def test_runtime_diagnostic_parses_explicit_tradier_options_live_probe_cli() -> None:
+    module = _load_script_module()
+
+    args = module._parse_args(
+        [
+            "--options-live-probe",
+            "--options-provider",
+            "tradier",
+            "--options-probe-symbol",
+            "TEM",
+        ]
+    )
+
+    assert args.options_live_probe is True
+    assert args.options_provider == "tradier"
+    assert args.options_probe_symbol == "TEM"
+
+
+def test_runtime_diagnostic_options_live_probe_missing_credentials_blocks_without_network(
+    monkeypatch,
+) -> None:
+    module = _load_script_module()
+    monkeypatch.delenv("TRADIER_API_TOKEN", raising=False)
+    monkeypatch.delenv("TRADIER_SANDBOX_API_TOKEN", raising=False)
+    monkeypatch.setattr(
+        module,
+        "_build_tradier_options_live_probe_transport",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("transport should not be built")),
+    )
+
+    payload = module.collect_diagnostic_bundle(
+        options_live_probe=True,
+        options_provider="tradier",
+        options_probe_symbol="TEM",
+    )
+    tradier = _providers_by_id(payload)["tradier"]
+    live_probe = tradier["liveProbe"]
+
+    assert tradier["liveCallsEnabled"] is False
+    assert tradier["tradeable"] is False
+    assert live_probe["status"] == "blocked_missing_credentials"
+    assert live_probe["explicitOptIn"] is True
+    assert live_probe["networkCallExecuted"] is False
+    assert live_probe["providerId"] == "tradier"
+    assert live_probe["endpointResults"] == []
+    assert live_probe["sanitizedErrorCode"] == "options_provider_credentials_missing"
+
+
+def test_runtime_diagnostic_options_live_probe_executes_mocked_tradier_transport_safely(
+    monkeypatch,
+) -> None:
+    module = _load_script_module()
+    raw_secret = "synthetic_live_probe_secret_1234567890"
+    transport = _FakeTradierProbeTransport(raw_secret=raw_secret)
+    monkeypatch.setenv("TRADIER_API_TOKEN", raw_secret)
+    monkeypatch.setattr(
+        module,
+        "_build_tradier_options_live_probe_transport",
+        lambda *args, **kwargs: transport,
+    )
+
+    payload = module.collect_diagnostic_bundle(
+        options_live_probe=True,
+        options_provider="tradier",
+        options_probe_symbol="TEM",
+    )
+    tradier = _providers_by_id(payload)["tradier"]
+    live_probe = tradier["liveProbe"]
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+    assert transport.calls == [("quote", "TEM"), ("expirations", "TEM")]
+    assert tradier["liveCallsEnabled"] is False
+    assert tradier["brokerOrderEnabled"] is False
+    assert tradier["portfolioMutationEnabled"] is False
+    assert tradier["tradeable"] is False
+    assert "decisionGrade" not in serialized
+    assert live_probe["providerId"] == "tradier"
+    assert live_probe["status"] == "passed"
+    assert live_probe["networkCallExecuted"] is True
+    assert live_probe["endpointResults"] == [
+        {
+            "endpointClass": "quote",
+            "status": "ok",
+            "responseShape": {"status": "object", "count": 1},
+        },
+        {
+            "endpointClass": "expirations",
+            "status": "ok",
+            "responseShape": {"status": "list", "count": 2},
+        },
+    ]
+    for blocked in (
+        raw_secret,
+        "Authorization",
+        "Bearer",
+        "token",
+        "rawPayload",
+        "quote\": {",
+        "expirations\": {",
+        "place_order",
+        "submit_order",
+        "mutate_portfolio",
+    ):
+        assert blocked not in serialized
+
+
+@pytest.mark.parametrize(
+    "error_code",
+    ["options_provider_http_error", "options_provider_payload_unmappable"],
+)
+def test_runtime_diagnostic_options_live_probe_sanitizes_provider_errors(
+    monkeypatch,
+    error_code: str,
+) -> None:
+    module = _load_script_module()
+    raw_secret = "synthetic_error_probe_secret_1234567890"
+    transport = _FailingTradierProbeTransport(error_code, raw_secret)
+    monkeypatch.setenv("TRADIER_API_TOKEN", raw_secret)
+    monkeypatch.setattr(
+        module,
+        "_build_tradier_options_live_probe_transport",
+        lambda *args, **kwargs: transport,
+    )
+
+    payload = module.collect_diagnostic_bundle(
+        options_live_probe=True,
+        options_provider="tradier",
+        options_probe_symbol="TEM",
+    )
+    live_probe = _providers_by_id(payload)["tradier"]["liveProbe"]
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+    assert transport.calls == [("quote", "TEM")]
+    assert live_probe["status"] == "failed_sanitized_provider_error"
+    assert live_probe["networkCallExecuted"] is True
+    assert live_probe["sanitizedErrorCode"] == error_code
+    assert live_probe["endpointResults"] == [
+        {
+            "endpointClass": "quote",
+            "status": "error",
+            "responseShape": {"status": "unknown", "count": 0},
+        }
+    ]
+    for blocked in (raw_secret, "Authorization", "Bearer", "provider failed", "token", "secret"):
         assert blocked not in serialized
 
 
