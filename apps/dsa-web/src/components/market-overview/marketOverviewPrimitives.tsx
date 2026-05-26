@@ -14,24 +14,24 @@ import { resolveMarketOverviewDisplayLabel } from './marketOverviewLabels';
 
 const FRESHNESS_LABELS: Record<MarketDataFreshness, string> = {
   live: '实时',
-  delayed: '缓存',
-  cached: '缓存',
-  stale: '过期',
-  fallback: '备用',
-  mock: '备用',
-  error: '数据异常',
+  delayed: '最近可用',
+  cached: '最近可用',
+  stale: '可能延迟',
+  fallback: '最近可用',
+  mock: '最近可用',
+  error: '暂不可用',
   unavailable: '暂不可用',
 };
 
 const STATUS_LABELS: Record<MarketProviderHealthStatus, string> = {
   live: '实时',
-  cache: '缓存',
-  stale: '过期',
-  fallback: '备用',
-  partial: '部分数据',
+  cache: '最近可用',
+  stale: '可能延迟',
+  fallback: '最近可用',
+  partial: '部分可用',
   unavailable: '暂不可用',
-  error: '数据异常',
-  refreshing: '刷新中',
+  error: '暂不可用',
+  refreshing: '更新中',
 };
 
 const FRESHNESS_CLASSES: Record<MarketProviderHealthStatus, string> = {
@@ -44,6 +44,8 @@ const FRESHNESS_CLASSES: Record<MarketProviderHealthStatus, string> = {
   error: 'border-rose-300/35 bg-rose-400/10 text-rose-200',
   refreshing: 'border-sky-300/25 bg-sky-400/10 text-sky-200',
 };
+
+const CONSUMER_UNSAFE_DETAIL_PATTERN = /provider|fallback|proxy|raw|debug|reason|sourceauthority|scorecontribution|marketcache|runtime|diagnostic|json/i;
 
 export type MarketOverviewCardSize = 'compact' | 'standard' | 'list' | 'large' | 'rail';
 
@@ -160,8 +162,7 @@ export const DataFreshnessBadge: React.FC<{ freshness?: MarketDataFreshness; sta
 };
 
 function metaText(meta?: Partial<MarketDataMeta>): string[] {
-  const sourceLabel = meta?.sourceLabel || meta?.source;
-  const parts = sourceLabel ? [sourceLabel] : [];
+  const parts: string[] = [];
   const asOf = formatMarketOverviewTimestamp(meta?.asOf);
   const updatedAt = formatMarketOverviewTimestamp(meta?.updatedAt);
   if (asOf) {
@@ -179,8 +180,15 @@ function compactMetaText(meta?: Partial<MarketDataMeta>): string {
     || '';
 }
 
+function sanitizeConsumerDetails(details?: string[] | null): string[] {
+  return (details || [])
+    .map((detail) => String(detail || '').trim())
+    .filter((detail) => detail && !CONSUMER_UNSAFE_DETAIL_PATTERN.test(detail))
+    .slice(0, 2);
+}
+
 function metadataTitle(parts: string[], warning?: string | null, hoverDetails?: string[] | null): string | undefined {
-  return [...parts, warning, ...(hoverDetails || [])].filter(Boolean).join(' · ') || undefined;
+  return [...parts, warning, ...sanitizeConsumerDetails(hoverDetails)].filter(Boolean).join(' · ') || undefined;
 }
 
 function shouldShowInlineWarning(meta?: Partial<MarketDataMeta>): boolean {
@@ -326,9 +334,6 @@ export const MarketDataRow: React.FC<{
         >
           {!suppressFreshnessBadge ? <DataFreshnessBadge status={freshness} className="shrink-0 px-1.5 text-[9px]" /> : null}
           {compactDetails ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{compactDetails}</span> : null}
-          {item.hoverDetails?.map((detail, index) => (
-            <span key={`${detail}-${index}`} className="shrink-0 leading-4 text-white/28">{detail}</span>
-          ))}
         </div>
       ) : null}
       <div data-testid="market-overview-dense-quote-sparkline" className="col-start-3 w-[64px] shrink-0 self-center max-[640px]:hidden">
@@ -395,9 +400,6 @@ export const MarketOverviewDenseQuoteItem: React.FC<{
       >
         {!suppressFreshnessBadge ? <DataFreshnessBadge status={freshness} className="shrink-0 px-1.5 text-[9px]" /> : null}
         {compactDetails ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{compactDetails}</span> : null}
-        {item.hoverDetails?.map((detail, index) => (
-          <span key={`${detail}-${index}`} className="shrink-0 leading-4 text-white/28">{detail}</span>
-        ))}
       </div>
 
       <div data-testid="market-overview-dense-quote-sparkline" className="col-start-3 w-[76px] shrink-0 self-center max-[720px]:col-start-2 max-[720px]:row-span-2 max-[720px]:row-start-1">

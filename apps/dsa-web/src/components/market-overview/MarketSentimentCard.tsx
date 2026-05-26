@@ -18,6 +18,11 @@ function resolvePrimaryItem(items: MarketOverviewItem[]): MarketOverviewItem | u
   return items.find((item) => item.symbol.toUpperCase() === 'FGI') || items[0];
 }
 
+function isConsumerSafeSupportItem(item: MarketOverviewItem): boolean {
+  const label = `${item.symbol} ${item.label || ''}`.toLowerCase();
+  return !label.includes('provider') && !label.includes('source');
+}
+
 function describeSentiment(score: number | null | undefined, t: (key: string) => string): string {
   if (score === null || score === undefined) {
     return t('marketOverviewPage.cards.sentiment.states.neutral');
@@ -51,7 +56,10 @@ export const MarketSentimentCard: React.FC<{
   };
   const items = panel?.items || [];
   const primary = resolvePrimaryItem(items);
-  const supporting = items.filter((item) => item.symbol !== primary?.symbol).slice(0, 2);
+  const supporting = items
+    .filter((item) => item.symbol !== primary?.symbol)
+    .filter(isConsumerSafeSupportItem)
+    .slice(0, 2);
   const score = primary?.value ?? 50;
   const gaugeRatio = Math.min(1, Math.max(0, score / 100));
   const title = t('marketOverviewPage.cards.sentiment.title');

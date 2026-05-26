@@ -26,11 +26,8 @@ import { MarketSentimentCard } from './MarketSentimentCard';
 import { MarketOverviewCard } from './MarketOverviewCard';
 import { VolatilityCard } from './VolatilityCard';
 import type {
-  MarketOverviewActionHintView,
-  MarketOverviewCoverageRailView,
+  MarketOverviewContextHighlightView,
   MarketOverviewExecutiveGroupView,
-  MarketOverviewQualityRailView,
-  MarketOverviewSignalWatchRailItem,
 } from './MarketOverviewWorkbenchGrid';
 import {
   MarketOverviewWorkbenchTopSurface,
@@ -106,6 +103,11 @@ type MarketOverviewLayoutRow = {
   allowSingleFullWidth?: boolean;
 };
 type WorkbenchRail = MarketOverviewRowTier;
+type MarketOverviewSectionMeta = {
+  eyebrow: string;
+  title: string;
+  detail: string;
+};
 type HeroAnchor = {
   key: string;
   label: string;
@@ -245,19 +247,6 @@ const US_BREADTH_INPUT_LABELS: Record<string, string> = {
   NEW_LOWS: '新低家数',
   HIGH_LOW_RATIO: '新高/新低比',
 };
-const US_BREADTH_LIMITATION_LABELS: Record<string, string> = {
-  representative_sample_not_full_market_breadth: '代表性样本，不等于全市场宽度',
-  proxy_only_missing_real_source: '缺少官方/授权宽度主源',
-  partial_coverage: '覆盖不完整',
-  proxy_or_placeholder_not_authorized_breadth: '来源层级未达到官方/授权宽度',
-  source_authority_router_rejected: '来源权限未通过',
-  provider_forbidden_for_use_case: '当前用例禁止该来源',
-  provider_unavailable: '数据源不可用',
-  unavailable_source: '来源不可用',
-  polygon_high_low_history_unavailable: '高低点宽度缺失',
-  official_exchange_published_breadth_unavailable: '缺少官方发布宽度',
-  'requires_official_or_authorized.us_market_breadth': '缺少官方/授权宽度提供方',
-};
 const US_BREADTH_FRESHNESS_LABELS: Record<string, string> = {
   live: '实时',
   delayed: '延迟',
@@ -279,9 +268,7 @@ type UsBreadthTruthStripView = {
   coverageLabel: string;
   coverageVariant: 'neutral' | 'success' | 'caution' | 'info';
   summary: string;
-  sourceDetail: string | null;
   missingSummary: string | null;
-  limitationSummary: string | null;
 };
 
 function buildCategoryLayout(tab: MarketOverviewTab): MarketOverviewLayoutRow[] {
@@ -315,6 +302,37 @@ const CATEGORY_LAYOUT: Record<MarketOverviewTab, MarketOverviewLayoutRow[]> = {
   cn: buildCategoryLayout('cn'),
   global: buildCategoryLayout('global'),
   crypto: buildCategoryLayout('crypto'),
+};
+
+const CATEGORY_SECTION_META: Record<MarketOverviewTab, Record<string, MarketOverviewSectionMeta>> = {
+  all: {
+    'all-hero': { eyebrow: '核心指数', title: '先看大盘方向', detail: '用全球核心指数判断风险偏好是否同向。' },
+    'all-modules-1': { eyebrow: '风险与资金', title: '再看波动、资金与情绪', detail: '确认上涨或下跌是否得到波动和资金面的支持。' },
+    'all-modules-2': { eyebrow: '利率与大类', title: '跟踪利率、汇率与商品压力', detail: '判断宏观约束是否开始压制风险资产。' },
+    'all-modules-3': { eyebrow: '跨市场补充', title: '补看加密与中港市场', detail: '观察是否出现跨资产背离或区域分化。' },
+  },
+  us: {
+    'us-hero': { eyebrow: '美股基准', title: '先看四大指数是否共振', detail: '指数方向先于风格与行业细节。' },
+    'us-modules-1': { eyebrow: '压力与利率', title: '确认波动与利率是否抬头', detail: '风险偏好改善需要波动回落与利率稳定配合。' },
+    'us-modules-2': { eyebrow: '情绪与宽度', title: '看上涨是否扩散', detail: '情绪与宽度决定行情是否只是权重股驱动。' },
+    'us-modules-3': { eyebrow: '轮动与宏观', title: '观察行业切换与外部约束', detail: '宏观压力若转强，宽度改善往往难以持续。' },
+  },
+  cn: {
+    'cn-hero': { eyebrow: 'A/H 核心', title: '先看 A 股与港股主指数', detail: '指数状态决定后续对宽度和短线情绪的解释方式。' },
+    'cn-modules-1': { eyebrow: '宽度与资金', title: '确认赚钱效应是否扩散', detail: '宽度与资金流决定反弹是全面修复还是局部抱团。' },
+    'cn-modules-2': { eyebrow: '轮动与短线', title: '看主题轮动和短线热度', detail: '用于判断情绪是否过热或仍处于修复早期。' },
+    'cn-modules-3': { eyebrow: '外部压力', title: '补看汇率与外部扰动', detail: 'CNH 与外部利率压力常决定持续性。' },
+  },
+  global: {
+    'global-hero': { eyebrow: '利率主线', title: '先看全球利率约束', detail: '利率是当前跨资产最核心的定价变量之一。' },
+    'global-modules-1': { eyebrow: '外汇与商品', title: '观察美元与实物资产', detail: '美元、黄金、原油常用于识别避险或再通胀交易。' },
+    'global-modules-2': { eyebrow: '风险状态', title: '补看波动与情绪', detail: '确认宏观定价是否已传导到风险资产。' },
+  },
+  crypto: {
+    'crypto-hero': { eyebrow: '加密核心', title: '先看主流币方向', detail: 'BTC 与 ETH 先决定市场是风险扩张还是防守切换。' },
+    'crypto-modules-1': { eyebrow: '动量与流动性', title: '确认上涨是否有资金支持', detail: '动量延续需要流动性与资金费率配合。' },
+    'crypto-modules-2': { eyebrow: '外部压力', title: '补看宏观与情绪约束', detail: '美元、利率与波动压力会改变加密风险承受力。' },
+  },
 };
 
 const MARKET_OVERVIEW_METRIC_REGISTRY: Record<MarketOverviewPulseMetricId, MetricRegistryEntry> = {
@@ -482,41 +500,8 @@ function hasStructuredUsBreadthMetrics(panel?: MarketOverviewPanel): boolean {
   return US_BREADTH_ALL_SYMBOLS.some((symbol) => itemSymbols.has(symbol) || fulfilledMetrics.has(symbol));
 }
 
-function isOfficialUsBreadth(panel?: MarketOverviewPanel): boolean {
-  const sourceText = [
-    panel?.source,
-    panel?.sourceLabel,
-    panel?.sourceType,
-    panel?.sourceTier,
-  ].filter(Boolean).join(' ').toLowerCase();
-  return panel?.officialExchangePublishedBreadth === true
-    || sourceText.includes('official_public')
-    || sourceText.includes('official breadth')
-    || sourceText.includes('nyse_official_breadth')
-    || sourceText.includes('nasdaq_official_breadth');
-}
-
 function formatUsBreadthInputLabel(symbol: string): string {
   return US_BREADTH_INPUT_LABELS[symbol] || US_BREADTH_HIGH_LOW_LABELS[symbol] || symbol;
-}
-
-function formatUsBreadthLimitation(value?: string | null): string | null {
-  if (!value) return null;
-  return US_BREADTH_LIMITATION_LABELS[value] || marketIntelligenceReasonLabel(value);
-}
-
-function uniqueCompactValues(values: Array<string | null | undefined>, limit: number): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  values.forEach((value) => {
-    const normalized = String(value || '').trim();
-    if (!normalized || seen.has(normalized)) {
-      return;
-    }
-    seen.add(normalized);
-    result.push(normalized);
-  });
-  return result.slice(0, limit);
 }
 
 function missingUsBreadthMetricItem(symbol: string, panel?: MarketOverviewPanel): MarketOverviewItem {
@@ -599,28 +584,27 @@ function buildUsBreadthDisclosure(panel?: MarketOverviewPanel): {
 } {
   if (hasStructuredUsBreadthMetrics(panel) && !isPolygonComputedUsBreadth(panel)) {
     const fullCoverage = !panel?.isPartial && (panel?.missingMetrics || []).length === 0;
-    const official = isOfficialUsBreadth(panel);
     return {
-      eyebrow: official ? '官方宽度' : '授权宽度',
-      description: fullCoverage ? 'AD 与新高/新低宽度齐备' : 'AD 与高低点宽度待补齐',
-      sourceLabel: panel?.sourceLabel || (official ? '官方宽度快照' : '授权宽度快照'),
-      notice: official ? '官方/授权宽度快照，用于研究判断' : '授权宽度快照，用于研究判断',
+      eyebrow: '市场宽度',
+      description: fullCoverage ? '上涨/下跌与新高/新低统计较完整' : '上涨/下跌与高低点统计仍待补齐',
+      sourceLabel: '宽度快照',
+      notice: fullCoverage ? '宽度统计较完整，可配合风险判断。' : '宽度统计仍有缺口，建议先结合其他风险信号观察。',
     };
   }
   if (isPolygonComputedUsBreadth(panel)) {
     const highLowMissing = (panel?.missingMetrics || []).some((symbol) => US_BREADTH_HIGH_LOW_SYMBOLS.includes(symbol));
     return {
-      eyebrow: 'Polygon EOD',
-      description: `Polygon EOD 计算宽度 · AD 指标可用${highLowMissing ? ' · 高低点宽度缺失' : ''}`,
-      sourceLabel: 'Polygon EOD 计算宽度',
-      notice: '非 NYSE/Nasdaq 官方发布宽度',
+      eyebrow: '市场宽度',
+      description: `上涨/下跌统计可用${highLowMissing ? '，新高/新低仍待补齐' : '，可辅助判断扩散度'}`,
+      sourceLabel: '宽度快照',
+      notice: '当前宽度统计仍不完整，仅供观察。',
     };
   }
   return {
-    eyebrow: '宽度代理',
-    description: '行业 ETF 代理（代表性 / 非评分）',
-    sourceLabel: '行业 ETF 代理（非评分）',
-    notice: '代表性行业 ETF 代理，非完整市场宽度，非评分',
+    eyebrow: '市场宽度',
+    description: '行业强弱快照',
+    sourceLabel: '宽度快照',
+    notice: '当前只能看到局部广度线索，先作为观察参考。',
   };
 }
 
@@ -664,7 +648,6 @@ function buildUsBreadthCoverage(panel?: MarketOverviewPanel): {
 function buildUsBreadthTruthStripView(panel?: MarketOverviewPanel): UsBreadthTruthStripView {
   const coverage = buildUsBreadthCoverage(panel);
   const structuredMetrics = hasStructuredUsBreadthMetrics(panel);
-  const official = isOfficialUsBreadth(panel);
   const sourceText = [
     panel?.source,
     panel?.sourceLabel,
@@ -692,21 +675,19 @@ function buildUsBreadthTruthStripView(panel?: MarketOverviewPanel): UsBreadthTru
     && !coverageGap;
 
   const sourceLabel = unavailable
-    ? '宽度不可用'
-    : official
-      ? '官方宽度'
-      : structuredMetrics && panel?.sourceAuthorityAllowed === true
-        ? '授权宽度'
-        : proxyOnly
-          ? '代理宽度'
-          : staleOrFallback
-            ? '备用宽度'
-            : '宽度待复核';
+    ? '待补数据'
+    : scoreGradeReady
+      ? '统计较完整'
+      : coverageGap
+        ? '统计待补'
+        : proxyOnly || staleOrFallback
+          ? '仅作观察'
+          : '宽度待确认';
   const stateLabel = scoreGradeReady
-    ? '评分级证据'
+    ? '宽度可参考'
     : unavailable
-      ? '证据不足'
-      : '仅观察';
+      ? '宽度不足'
+      : '宽度仅观察';
   const stateVariant = scoreGradeReady
     ? 'success'
     : unavailable
@@ -734,26 +715,19 @@ function buildUsBreadthTruthStripView(panel?: MarketOverviewPanel): UsBreadthTru
       : structuredMetrics
         ? 'info'
         : 'neutral';
-  const limitationSummary = uniqueCompactValues([
-    coverageGap ? '覆盖不完整' : null,
-    formatUsBreadthLimitation(panel?.sourceAuthorityReason),
-    ...((panel?.routeRejectedReasonCodes || []).map((reason) => formatUsBreadthLimitation(reason))),
-    ...((panel?.reasonCodes || []).map((reason) => formatUsBreadthLimitation(reason))),
-    panel?.warning || null,
-  ], 3).join('；') || null;
   const limitedMissing = coverage.missingSymbols.slice(0, 4).map((symbol) => formatUsBreadthInputLabel(symbol));
   const missingSummary = coverageGap && (structuredMetrics || unavailable)
     ? `缺口：${limitedMissing.join('、')}${coverage.missingSymbols.length > 4 ? ` 等${coverage.missingSymbols.length}项` : ''}`
     : null;
   const summary = scoreGradeReady
-    ? `当前以${sourceLabel}作为可计分宽度证据。`
+    ? '当前宽度扩散统计较完整，可与指数和波动一起参考。'
     : unavailable
-      ? '当前宽度证据不足，仅展示可用性与覆盖缺口。'
+      ? '当前宽度统计不足，先观察指数与波动是否继续共振。'
       : coverageGap
-        ? `当前仅展示${sourceLabel}观察，宽度覆盖不完整，不按完整评分级宽度展示。`
+        ? '当前宽度统计仍有缺口，只适合作为辅助观察。'
         : staleOrFallback
-          ? `当前仅展示${sourceLabel}观察，时效未满足计分展示。`
-          : `当前仅展示${sourceLabel}观察，不进入计分。`;
+          ? '当前显示最近一次可用宽度快照，时效可能延迟。'
+          : '当前宽度线索可见，但仍需结合更多信号确认。';
 
   return {
     stateLabel,
@@ -765,9 +739,7 @@ function buildUsBreadthTruthStripView(panel?: MarketOverviewPanel): UsBreadthTru
     coverageLabel,
     coverageVariant,
     summary,
-    sourceDetail: panel?.sourceLabel || null,
     missingSummary,
-    limitationSummary,
   };
 }
 
@@ -787,14 +759,8 @@ const UsBreadthTruthStrip: React.FC<{
         <TerminalChip variant={view.coverageVariant}>{view.coverageLabel}</TerminalChip>
       </div>
       <p className="mt-2 text-[11px] leading-5 text-white/68">{view.summary}</p>
-      {view.sourceDetail ? (
-        <p className="mt-1 text-[11px] leading-5 text-white/52">来源：{view.sourceDetail}</p>
-      ) : null}
       {view.missingSummary ? (
         <p className="mt-1 text-[11px] leading-5 text-white/52">{view.missingSummary}</p>
-      ) : null}
-      {view.limitationSummary ? (
-        <p className="mt-1 text-[11px] leading-5 text-white/52">限制：{view.limitationSummary}</p>
       ) : null}
     </div>
   );
@@ -1902,6 +1868,23 @@ const MarketOverviewRow: React.FC<{
   </section>
 );
 
+const MarketOverviewSection: React.FC<{
+  rowId: string;
+  meta: MarketOverviewSectionMeta;
+  children: React.ReactNode;
+}> = ({ rowId, meta, children }) => (
+  <section data-testid={`market-overview-section-${rowId}`} className="flex min-w-0 flex-col gap-3">
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/36">{meta.eyebrow}</p>
+      <div className="flex min-w-0 flex-col gap-1 lg:flex-row lg:items-end lg:justify-between">
+        <h2 className="text-base font-semibold text-white/86">{meta.title}</h2>
+        <p className="max-w-3xl text-[11px] leading-5 text-white/44">{meta.detail}</p>
+      </div>
+    </div>
+    {children}
+  </section>
+);
+
 const CnShortSentimentCard: React.FC<{
   data: CnShortSentimentResponse;
   loading?: boolean;
@@ -1956,7 +1939,7 @@ const CnShortSentimentCard: React.FC<{
             </div>
           ))}
         </div>
-        {metrics.length > 6 ? <p className="text-[10px] text-white/38">+{metrics.length - 6} 项保留在数据源快照中</p> : null}
+        {metrics.length > 6 ? <p className="text-[10px] text-white/38">其余 {metrics.length - 6} 项已折叠</p> : null}
         {loading ? <div className="mt-3 rounded-lg border border-white/8 bg-white/[0.03] p-3 text-sm text-white/60">{t('marketOverviewPage.loading')}</div> : null}
         <MarketOverviewPanelFooter panel={panel} sourceLabel={data.sourceLabel || `${t('marketOverviewPage.cards.cnShortSentiment.source')}: ${data.source.toUpperCase()}`} />
       </div>
@@ -2025,7 +2008,7 @@ const ContextMetricModuleCard: React.FC<{
           ))}
         </div>
         {hiddenItemCount > 0 ? (
-          <p className="text-[10px] text-white/38">+{hiddenItemCount} 项保留在数据源快照中</p>
+          <p className="text-[10px] text-white/38">其余 {hiddenItemCount} 项已折叠</p>
         ) : null}
         <MarketOverviewPanelFooter panel={panel} sourceLabel={sourceLabel} />
       </div>
@@ -2106,7 +2089,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     <div className="flex h-full min-h-0 flex-col gap-2">
       <div className="flex items-center justify-end">
         <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold uppercase text-white/55">
-          {cryptoRealtimeStatus === 'live' ? 'Live' : cryptoRealtimeStatus === 'reconnecting' ? 'Reconnecting' : 'Snapshot'}
+          {cryptoRealtimeStatus === 'live' ? '实时' : cryptoRealtimeStatus === 'reconnecting' ? '重连中' : '最近快照'}
         </span>
       </div>
       {cryptoRealtimeStatus === 'reconnecting' ? (
@@ -2533,7 +2516,16 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
       ? { ...row, columns: 1 as const }
       : { ...row, columns: Math.min(row.columns, modules.length) as MarketOverviewRowColumns };
     const children = modules.map((moduleId, moduleIndex) => renderModule(moduleId, rowIndex * 10 + moduleIndex, row.tier));
-    return <MarketOverviewRow key={row.id} row={plannedRow}>{children}</MarketOverviewRow>;
+    const sectionMeta = CATEGORY_SECTION_META[activeCategory][row.id] || {
+      eyebrow: '市场分组',
+      title: '市场分组',
+      detail: '按主题查看当前市场状态。',
+    };
+    return (
+      <MarketOverviewSection key={row.id} rowId={row.id} meta={sectionMeta}>
+        <MarketOverviewRow row={plannedRow}>{children}</MarketOverviewRow>
+      </MarketOverviewSection>
+    );
   };
 
   const handleExportSummary = useCallback(async () => {
@@ -2641,39 +2633,32 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
       changeToneClass: heroToneClass(anchor.item),
     };
   });
-  const coverageRail: MarketOverviewCoverageRailView = {
-    label: activeCategoryLabel,
-    real: coverageSummary.real,
-    mixed: coverageSummary.mixed,
-    fallback: coverageSummary.fallback,
-    total: coverageSummary.real + coverageSummary.mixed + coverageSummary.fallback,
-  };
-  const qualityRail: MarketOverviewQualityRailView = {
-    status: dataQuality.status,
-    availableCount: dataQuality.counts.live + dataQuality.counts.delayed + dataQuality.counts.cached,
-    fallbackCount: dataQuality.counts.fallback,
-    staleCount: dataQuality.counts.stale,
-    errorCount: dataQuality.counts.error + dataQuality.counts.unavailable,
-    hasConcern: dataQuality.hasConcern,
-  };
-  const signalWatchItems = MARKET_OVERVIEW_SIGNAL_WATCH[activeCategory].map<MarketOverviewSignalWatchRailItem>((metricId) => {
-    const item = findMetricItem(panels, metricId) || missingMetricItem(metricId);
-    return {
-      label: metricId,
-      changeText: formatHeroChange(item.changePct),
-      changeToneClass: heroToneClass(item),
-    };
-  });
-  const actionHint: MarketOverviewActionHintView = {
-    title: decisionReliable ? '同步观察' : topLevelDataStatus.hasUsableData ? '可用快照' : topLevelDataStatus.kind === 'refreshing' ? '刷新中' : '缺口提示',
-    line: decisionReliable
-      ? '优先观察风险、流动性、宽度是否同向变化'
-      : topLevelDataStatus.kind === 'refreshing'
-        ? '等待刷新完成后再生成强判断'
-        : topLevelDataStatus.hasUsableData
-          ? '优先观察已验证信号，暂不生成强判断'
-          : '部分关键面板暂不可用，暂不生成强判断',
-  };
+  const watchMetricLabels = MARKET_OVERVIEW_SIGNAL_WATCH[activeCategory]
+    .slice(0, 3)
+    .map((metricId) => findMetricItem(panels, metricId)?.label || metricId)
+    .join(' · ');
+  const contextHighlights: MarketOverviewContextHighlightView[] = [
+    {
+      id: 'top-risk',
+      eyebrow: '当前风险',
+      title: decisionSemanticsView?.counterEvidence[0]?.label || directionalSummaryView.blockingDrivers[0] || '暂无突出反证',
+      detail: decisionSemanticsView?.counterEvidence[0]?.meta || directionalSummaryView.blockingTitle,
+    },
+    {
+      id: 'next-watch',
+      eyebrow: '下一观察',
+      title: decisionSemanticsView?.invalidationTriggers[0]?.label || directionalSummaryView.watchItems[0] || '等待下一项确认信号',
+      detail: decisionSemanticsView?.invalidationTriggers[0]?.meta || watchMetricLabels || directionalSummaryView.watchTitle,
+    },
+    {
+      id: 'data-status',
+      eyebrow: '数据状态',
+      title: formatTopLevelDataStatus(topLevelDataStatus),
+      detail: dataStateView.updatedAtLabel
+        ? `最近更新：${dataStateView.updatedAtLabel}`
+        : explainTopLevelDataStatus(topLevelDataStatus),
+    },
+  ];
   const executiveGroups: MarketOverviewExecutiveGroupView[] = [
     { id: 'us', label: 'US', focus: 'SPX / VIX', cardKey: 'indices', item: findMetricItem(panels, 'SPX') },
     { id: 'cn', label: 'CN/HK', focus: 'CSI300 / HSI', cardKey: 'cnIndices', item: findMetricItem(panels, 'CSI300') || findMetricItem(panels, 'HSI') },
@@ -2731,14 +2716,8 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
             secondaryRows={secondaryRows}
             deepRows={deepRows}
             showDeepSection={activeRows.some((row) => row.tier === 'deep') || activeCategory === 'all'}
-            showCoverageRail={activeTabConfig.rail.includes('coverage')}
-            showQualityRail={activeTabConfig.rail.includes('quality')}
-            showSignalWatchRail={activeTabConfig.rail.includes('signalWatch')}
-            showActionHintRail={activeTabConfig.rail.includes('actionHint')}
-            coverageRail={coverageRail}
-            qualityRail={qualityRail}
-            signalWatchItems={signalWatchItems}
-            actionHint={actionHint}
+            showContextRail={activeTabConfig.rail.length > 0}
+            contextHighlights={contextHighlights}
             executiveGroups={executiveGroups}
             showExecutiveGroups={activeCategory === 'all'}
           />

@@ -71,7 +71,7 @@ export const VolatilityCard: React.FC<{
 
         {hiddenItemCount > 0 ? (
           <p className="text-[10px] text-white/38">
-            已优先显示关键 {compactItems.length} 项，其余 {hiddenItemCount} 项保留在数据源快照中。
+            已优先显示关键 {compactItems.length} 项，其余 {hiddenItemCount} 项已折叠。
           </p>
         ) : null}
 
