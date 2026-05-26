@@ -19,6 +19,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.services.official_macro_transport import run_official_macro_live_smoke
 from src.services.options_market_data_provider import (
+    DEFAULT_OPTIONS_FIXTURE_PATH,
     LIVE_OPTIONS_PROVIDER_NAMES,
     OptionsLiveProviderConfig,
     OptionsProviderError,
@@ -26,6 +27,7 @@ from src.services.options_market_data_provider import (
     TradierOptionsHttpTransport,
     build_options_provider_live_readiness_preflight,
 )
+from src.services.options_iv_rank_authority import build_options_iv_rank_authority_diagnostic
 from src.services.polygon_us_breadth_provider import (
     diagnostic_summary as polygon_us_breadth_diagnostic_summary,
     run_polygon_us_breadth_activation,
@@ -251,6 +253,59 @@ def _compact_options_lab_provider_preflight(payload: dict[str, Any]) -> dict[str
             "networkCallExecuted": bool(live_probe.get("networkCallExecuted", False)),
         },
     }
+
+
+def _collect_options_iv_rank_authority() -> dict[str, Any]:
+    try:
+        fixture = json.loads(DEFAULT_OPTIONS_FIXTURE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return build_options_iv_rank_authority_diagnostic(None)
+
+    proxy_rows = fixture.get("historicalIvProxy") or fixture.get("historical_iv_proxy") or []
+    proxy_history_points = 0
+    for item in proxy_rows:
+        if not isinstance(item, dict):
+            continue
+        try:
+            value = float(item.get("iv"))
+        except (TypeError, ValueError):
+            continue
+        if 0.01 <= value <= 3.0:
+            proxy_history_points += 1
+    current_iv_sample_count = 0
+    for contract in fixture.get("contracts") or []:
+        if not isinstance(contract, dict):
+            continue
+        try:
+            value = float(contract.get("impliedVolatility"))
+        except (TypeError, ValueError):
+            continue
+        if 0.01 <= value <= 3.0:
+            current_iv_sample_count += 1
+
+    first_proxy_source = None
+    for item in proxy_rows:
+        if isinstance(item, dict) and item.get("source"):
+            first_proxy_source = item.get("source")
+            break
+
+    return build_options_iv_rank_authority_diagnostic(
+        {
+            "providerId": fixture.get("source") or fixture.get("providerName"),
+            "sourceType": first_proxy_source or "synthetic_fixture_proxy",
+            "ivRankStatus": "available" if proxy_history_points and current_iv_sample_count else "unavailable",
+            "ivRankSource": first_proxy_source or "synthetic_fixture_proxy",
+            "methodology": "local_min_max_percentile_from_proxy_history_plus_selected_contract_iv",
+            "historicalOptionIvSeriesAvailable": False,
+            "coverageMetadata": {
+                "proxyHistoryPoints": proxy_history_points,
+                "currentIvSampleCount": current_iv_sample_count,
+                "currentIvDerivedFrom": "selected_contract_implied_volatility",
+            },
+            "sandboxOrProduction": "not_provider_sourced",
+            "notes": ["test_only_low_confidence"],
+        }
+    )
 
 
 def _tradier_options_api_token_from_env() -> str | None:
@@ -953,6 +1008,7 @@ def collect_diagnostic_bundle(
             options_probe_expiration=options_probe_expiration,
             options_probe_timeout_seconds=options_probe_timeout_seconds,
         ),
+        "optionsIvRankAuthority": _collect_options_iv_rank_authority(),
         "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
         "discrepancies": [],
     }
@@ -1088,6 +1144,7 @@ def main(argv: list[str] | None = None) -> int:
             "alpacaRotationDiagnostic": _skipped_alpaca_rotation_diagnostic("unexpected_error"),
             "polygonUsBreadthDiagnostic": _skipped_polygon_us_breadth_diagnostic("unexpected_error"),
             "optionsLabProviderPreflight": _collect_options_lab_provider_preflight(),
+            "optionsIvRankAuthority": _collect_options_iv_rank_authority(),
             "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
             "discrepancies": [],
         }

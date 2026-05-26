@@ -559,6 +559,25 @@ def test_missing_iv_greeks_and_iv_rank_block_recommendation_grade_output() -> No
     }.issubset(_issue_codes(diagnostics))
 
 
+def test_synthetic_iv_rank_source_stays_fail_closed_for_decision_grade() -> None:
+    diagnostics = evaluate_options_data_quality_gates(
+        strategy_key="long_call",
+        contracts=[_clear_gate_contract()],
+        chain_as_of="2026-05-06T13:45:00Z",
+        source_type="live",
+        iv_rank_status="available",
+        iv_rank_source="synthetic_fixture_proxy",
+        iv_percentile=71.43,
+        expected_move_source="straddle_mid",
+        provider_authority=_authorized_live_provider_authority(),
+    )
+
+    assert diagnostics.gate_decision == "数据不足，禁止判断"
+    assert diagnostics.decision_grade is False
+    assert diagnostics.fail_closed_reason_codes == ["iv_rank_not_decision_grade"]
+    assert _issue_codes(diagnostics) == {"iv_rank_not_decision_grade"}
+
+
 def test_snapshot_mapped_contract_preserves_gate_decision() -> None:
     service = _service()
     fixture = service._fixture_for_symbol("TEM")
