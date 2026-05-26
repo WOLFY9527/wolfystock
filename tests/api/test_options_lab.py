@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -99,6 +100,71 @@ def _assert_no_safety_leaks(payload) -> None:
     text = _json_text(payload).lower()
     for value in SAFETY_BLOCKED_MARKERS:
         assert value not in text
+
+
+class _MockTradierHttpResponse:
+    def __init__(self, payload: object) -> None:
+        self.payload = payload
+        self.status_code = 200
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> object:
+        return self.payload
+
+
+def _tradier_runtime_env(credential: str) -> dict[str, str]:
+    return {
+        "OPTIONS_LIVE_PROVIDERS_ENABLED": "1",
+        "OPTIONS_LIVE_PROVIDER_KEYS": "tradier",
+        "TRADIER_API_TOKEN": credential,
+    }
+
+
+def _tradier_quote_payload() -> dict:
+    return {
+        "quotes": {
+            "quote": {
+                "symbol": "TEM",
+                "last": "52.40",
+                "change_percentage": "1.15",
+                "trade_date": "2026-05-06T13:45:00Z",
+            }
+        }
+    }
+
+
+def _tradier_expirations_payload() -> dict:
+    return {"expirations": {"date": ["2026-06-19", "2026-08-21"]}}
+
+
+def _tradier_chain_payload() -> dict:
+    return {
+        "options": {
+            "option": [
+                {
+                    "symbol": "TEM260619C00050000",
+                    "option_type": "call",
+                    "expiration_date": "2026-06-19",
+                    "strike": "50.0",
+                    "bid": "4.80",
+                    "ask": "5.20",
+                    "last": "5.00",
+                    "volume": "320",
+                    "open_interest": "1480",
+                    "greeks": {
+                        "mid_iv": "0.62",
+                        "delta": "0.61",
+                        "gamma": "0.044",
+                        "theta": "-0.072",
+                        "vega": "0.118",
+                        "rho": "0.031",
+                    },
+                }
+            ]
+        }
+    }
 
 
 def test_summary_endpoint_returns_safe_normalized_fixture_response() -> None:
@@ -342,10 +408,11 @@ def test_unsupported_symbol_returns_sanitized_error() -> None:
 def test_chain_endpoint_rejects_live_provider_selection_without_live_calls() -> None:
     client = _client()
     try:
-        response = client.get(
-            "/api/v1/options/underlyings/TEM/chain",
-            params={"marketDataProvider": "tradier"},
-        )
+        with patch.dict(os.environ, {}, clear=True):
+            response = client.get(
+                "/api/v1/options/underlyings/TEM/chain",
+                params={"marketDataProvider": "tradier"},
+            )
         assert response.status_code == 400
         assert response.json()["detail"] == {
             "error": "options_provider_disabled",
@@ -362,6 +429,7 @@ def test_live_provider_stub_selection_does_not_call_external_paths_or_expose_sec
     client = _client()
     try:
         with (
+            patch.dict(os.environ, {}, clear=True),
             patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=forbidden),
             patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
             patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
@@ -444,6 +512,7 @@ def test_options_launch_surfaces_reject_live_provider_selection_safely_without_m
     client = _client()
     try:
         with (
+            patch.dict(os.environ, {}, clear=True),
             patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=forbidden),
             patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
             patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
@@ -472,6 +541,7 @@ def test_endpoint_does_not_call_live_provider_llm_market_cache_or_mutation_paths
     client = _client()
     try:
         with (
+            patch.dict(os.environ, {}, clear=True),
             patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=forbidden),
             patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
             patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
@@ -585,6 +655,7 @@ def test_analyze_endpoint_filters_max_premium_and_does_not_call_external_paths()
     client = _client()
     try:
         with (
+            patch.dict(os.environ, {}, clear=True),
             patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=forbidden),
             patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
             patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
@@ -1092,6 +1163,7 @@ def test_strategy_compare_endpoint_does_not_call_external_or_mutating_paths() ->
     client = _client()
     try:
         with (
+            patch.dict(os.environ, {}, clear=True),
             patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=forbidden),
             patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
             patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
@@ -1197,6 +1269,7 @@ def test_decision_endpoint_live_provider_unavailable_fails_closed_without_secret
     client = _client()
     try:
         with (
+            patch.dict(os.environ, {}, clear=True),
             patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=forbidden),
             patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
             patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
@@ -1222,6 +1295,67 @@ def test_decision_endpoint_live_provider_unavailable_fails_closed_without_secret
         assert "live confidence" not in text
         for value in ("api_key", "apikey", "token=", "secret", "requesturl", "traceback", "stack trace"):
             assert value not in text
+    finally:
+        client.close()
+
+
+def test_decision_endpoint_tradier_live_provider_opt_in_uses_mocked_http_and_fails_authority_gate() -> None:
+    credential = "synthetic_api_tradier_runtime_credential_1234567890"
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("forbidden mutation or analysis path was called")
+
+    client = _client()
+    try:
+        with (
+            patch.dict(os.environ, _tradier_runtime_env(credential), clear=True),
+            patch(
+                "requests.sessions.Session.request",
+                side_effect=[
+                    _MockTradierHttpResponse(_tradier_quote_payload()),
+                    _MockTradierHttpResponse(_tradier_expirations_payload()),
+                    _MockTradierHttpResponse(_tradier_chain_payload()),
+                ],
+            ) as request_mock,
+            patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=forbidden),
+            patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
+            patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
+            patch("src.services.portfolio_service.PortfolioService.add_lot", side_effect=forbidden, create=True),
+        ):
+            response = client.post(
+                "/api/v1/options/decision/evaluate",
+                json={
+                    "symbol": "TEM",
+                    "marketDataProvider": "tradier",
+                    "strategy": "long_call",
+                    "expiration": "2026-06-19",
+                    "targetPrice": 65,
+                    "targetDate": "2026-06-19",
+                    "riskBudget": 600,
+                },
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert request_mock.call_count == 3
+        assert payload["metadata"]["providerName"] == "tradier"
+        assert payload["metadata"]["liveProviderEnabled"] is True
+        assert payload["metadata"]["fixtureBacked"] is False
+        assert payload["metadata"]["noExternalCalls"] is False
+        capabilities = payload["metadata"]["providerCapabilities"]
+        assert capabilities["providerName"] == "tradier"
+        assert capabilities["sourceType"] == "tradier_adapter_contract"
+        assert capabilities["liveEnabled"] is True
+        assert capabilities["tradeableData"] is False
+        assert capabilities.get("providerDecisionAuthority") is not True
+        assert capabilities.get("recommendationAuthority") is not True
+        assert payload["decisionGrade"] is False
+        assert payload["decisionLabel"] == "数据不足，禁止判断"
+        assert "provider_decision_authority_not_granted" in payload["failClosedReasonCodes"]
+        assert "provider_tradeable_data_false" in payload["failClosedReasonCodes"]
+        assert all(item["decisionLabel"] != "有条件可交易" for item in payload["rankedAlternatives"])
+        assert credential.lower() not in _json_text(payload).lower()
+        _assert_no_safety_leaks(payload)
     finally:
         client.close()
 

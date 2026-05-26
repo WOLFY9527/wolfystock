@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -209,8 +210,9 @@ def test_options_provider_selection_contract_keeps_fixture_default_and_allowed_k
 def test_options_lab_service_surfaces_live_stub_safe_errors(provider_name: str) -> None:
     service = OptionsLabService()
 
-    with pytest.raises(OptionsLabProviderUnavailable) as exc_info:
-        service.get_chain("TEM", market_data_provider=provider_name)
+    with patch.dict(os.environ, {}, clear=True):
+        with pytest.raises(OptionsLabProviderUnavailable) as exc_info:
+            service.get_chain("TEM", market_data_provider=provider_name)
 
     assert exc_info.value.provider_name == provider_name
     assert exc_info.value.code == "options_provider_disabled"
@@ -374,6 +376,14 @@ def _tradier_enabled_config() -> OptionsLiveProviderConfig:
             "TRADIER_API_TOKEN": "valid_synthetic_readiness_value_contract_1234567890",
         }
     )
+
+
+def _tradier_runtime_env(credential: str = "valid_synthetic_readiness_value_contract_1234567890") -> dict[str, str]:
+    return {
+        "OPTIONS_LIVE_PROVIDERS_ENABLED": "1",
+        "OPTIONS_LIVE_PROVIDER_KEYS": "tradier",
+        "TRADIER_API_TOKEN": credential,
+    }
 
 
 def _tradier_quote_payload() -> dict:
@@ -562,7 +572,7 @@ def test_tradier_http_transport_normalizes_valid_mocked_response_without_decisio
 
     chain = provider.get_chain("TEM", expiration="2026-06-19")
 
-    assert provider.capabilities.live_enabled is False
+    assert provider.capabilities.live_enabled is True
     assert provider.capabilities.tradeable_data is False
     assert provider.capabilities.source_type == "tradier_adapter_contract"
     contract = chain["contracts"][0]
@@ -589,10 +599,11 @@ def test_tradier_http_transport_normalizes_valid_mocked_response_without_decisio
 
 
 def test_tradier_default_factory_does_not_construct_or_call_http_transport() -> None:
-    provider = create_options_market_data_provider(
-        "tradier",
-        live_provider_config=_tradier_enabled_config(),
-    )
+    with patch.dict(os.environ, {}, clear=True):
+        provider = create_options_market_data_provider(
+            "tradier",
+            live_provider_config=_tradier_enabled_config(),
+        )
 
     with patch("requests.sessions.Session.request") as request_mock:
         with pytest.raises(OptionsProviderUnavailable) as exc_info:
@@ -603,6 +614,102 @@ def test_tradier_default_factory_does_not_construct_or_call_http_transport() -> 
     assert provider.capabilities.tradeable_data is False
     assert "decision_grade" not in {name.lower() for name in dir(provider)}
     request_mock.assert_not_called()
+
+
+def test_tradier_factory_opt_in_constructs_http_transport_and_uses_mocked_market_data() -> None:
+    credential = "synthetic_tradier_runtime_credential_1234567890"
+    with patch.dict(os.environ, _tradier_runtime_env(credential), clear=True):
+        provider = create_options_market_data_provider(
+            "tradier",
+            live_provider_config=OptionsLiveProviderConfig.from_env(),
+        )
+
+    assert isinstance(provider, TradierOptionsProviderStub)
+    assert isinstance(provider.transport, TradierOptionsHttpTransport)
+    assert provider.capabilities.provider_name == "tradier"
+    assert provider.capabilities.source_type == "tradier_adapter_contract"
+    assert provider.capabilities.live_enabled is True
+    assert provider.capabilities.tradeable_data is False
+    assert "decision_grade" not in {name.lower() for name in dir(provider)}
+
+    with patch(
+        "requests.sessions.Session.request",
+        side_effect=[
+            _FakeTradierHttpResponse(_tradier_quote_payload()),
+            _FakeTradierHttpResponse(_tradier_expirations_payload()),
+            _FakeTradierHttpResponse(_tradier_chain_payload()),
+        ],
+    ) as request_mock:
+        chain = provider.get_chain("TEM", expiration="2026-06-19")
+
+    assert request_mock.call_count == 3
+    assert [call.kwargs["params"] for call in request_mock.call_args_list] == [
+        {"symbols": "TEM"},
+        {"symbol": "TEM"},
+        {"symbol": "TEM", "expiration": "2026-06-19", "greeks": "true"},
+    ]
+    assert all(call.kwargs["headers"]["Authorization"] == f"Bearer {credential}" for call in request_mock.call_args_list)
+    assert chain["providerName"] == "tradier"
+    assert chain["providerCapabilities"]["liveEnabled"] is True
+    assert chain["providerCapabilities"]["tradeableData"] is False
+    assert chain["providerCapabilities"].get("providerDecisionAuthority") is not True
+    assert chain["providerCapabilities"].get("recommendationAuthority") is not True
+    assert chain["dataQuality"]["tradeable"] is False
+    assert chain["contracts"][0]["contractSymbol"] == "TEM260619C00050000"
+    assert credential.lower() not in _json_lower(chain)
+
+
+def test_tradier_factory_opt_in_missing_credentials_fails_closed_without_network() -> None:
+    with patch.dict(
+        os.environ,
+        {
+            "OPTIONS_LIVE_PROVIDERS_ENABLED": "1",
+            "OPTIONS_LIVE_PROVIDER_KEYS": "tradier",
+        },
+        clear=True,
+    ):
+        provider = create_options_market_data_provider(
+            "tradier",
+            live_provider_config=OptionsLiveProviderConfig.from_env(),
+        )
+
+    assert isinstance(provider, TradierOptionsProviderStub)
+    assert provider.transport is None
+    with patch("requests.sessions.Session.request") as request_mock:
+        with pytest.raises(OptionsProviderUnavailable) as exc_info:
+            provider.get_chain("TEM")
+
+    assert exc_info.value.code == "options_provider_credentials_missing"
+    text = str(exc_info.value).lower()
+    for blocked in ("tradier_api_token", "api_token", "token=", "secret", "authorization", "bearer"):
+        assert blocked not in text
+    request_mock.assert_not_called()
+
+
+def test_tradier_factory_http_error_is_sanitized_and_fails_closed() -> None:
+    credential = "synthetic_tradier_runtime_credential_1234567890"
+    with patch.dict(os.environ, _tradier_runtime_env(credential), clear=True):
+        provider = create_options_market_data_provider(
+            "tradier",
+            live_provider_config=OptionsLiveProviderConfig.from_env(),
+        )
+
+    with patch(
+        "requests.sessions.Session.request",
+        return_value=_FakeTradierHttpResponse(
+            {},
+            status_code=503,
+            http_error=requests.HTTPError(f"503 bearer {credential} https://tradier.invalid/raw"),
+        ),
+    ) as request_mock:
+        with pytest.raises(OptionsProviderUnavailable) as exc_info:
+            provider.get_chain("TEM")
+
+    assert exc_info.value.code == "options_provider_http_error"
+    text = str(exc_info.value).lower()
+    for blocked in (credential.lower(), "authorization", "bearer", "tradier.invalid", "raw"):
+        assert blocked not in text
+    assert request_mock.call_count == 1
 
 
 def test_tradier_mock_transport_normalizes_quote_expirations_and_chain_without_default_network() -> None:

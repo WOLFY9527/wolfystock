@@ -2,8 +2,8 @@
 """Provider-neutral options market data contract for Options Lab.
 
 Fixture providers remain the default. The Tradier HTTP transport is an
-explicit-construction foundation only; it is not wired into default provider
-selection or Options Lab decision paths.
+explicit opt-in market-data path only; it is never enabled by default and does
+not grant Options Lab decision or recommendation authority.
 """
 
 from __future__ import annotations
@@ -35,6 +35,12 @@ TRADIER_OPTIONS_HTTP_TIMEOUT_SECONDS = 2.0
 TRADIER_OPTIONS_ADAPTER_NOTES = (
     "tradier_adapter_contract",
     "mock_transport_only",
+    "not_tradeable",
+    "not_decision_grade",
+)
+TRADIER_OPTIONS_HTTP_NOTES = (
+    "tradier_adapter_contract",
+    "http_market_data_transport",
     "not_tradeable",
     "not_decision_grade",
 )
@@ -679,14 +685,20 @@ class TradierOptionsProviderStub(_DisabledLiveOptionsProviderStub):
                 notes=("tradier_dry_run", "no_external_calls", "not_tradeable"),
             )
         elif self.transport is not None:
+            runtime_live_enabled = (
+                isinstance(self.transport, TradierOptionsHttpTransport)
+                and self.config.live_providers_enabled
+                and self.config.is_provider_enabled(self.provider_name)
+                and self.config.has_credentials(self.provider_name)
+            )
             self.capabilities = OptionsProviderCapabilityMetadata(
                 provider_name=self.provider_name,
                 source_type=TRADIER_OPTIONS_ADAPTER_SOURCE,
                 fixture_only=False,
-                live_enabled=False,
+                live_enabled=runtime_live_enabled,
                 delayed=False,
                 tradeable_data=False,
-                notes=TRADIER_OPTIONS_ADAPTER_NOTES,
+                notes=TRADIER_OPTIONS_HTTP_NOTES if runtime_live_enabled else TRADIER_OPTIONS_ADAPTER_NOTES,
             )
 
     def get_expirations(self, symbol: str) -> List[Dict[str, Any]]:
@@ -1433,6 +1445,31 @@ def _create_live_options_provider_stub(
     raise OptionsProviderUnavailable(provider_name)
 
 
+def _tradier_api_token_from_env() -> Optional[str]:
+    for env_name in ("TRADIER_API_TOKEN", "TRADIER_SANDBOX_API_TOKEN"):
+        value = str(os.environ.get(env_name) or "").strip()
+        if _credential_value_state(value) == "present":
+            return value
+    return None
+
+
+def _create_tradier_runtime_transport(
+    config: OptionsLiveProviderConfig,
+) -> Optional[TradierOptionsHttpTransport]:
+    if not config.live_providers_enabled:
+        return None
+    if not config.is_provider_enabled("tradier"):
+        return None
+    if config.is_dry_run_enabled("tradier"):
+        return None
+    if not config.has_credentials("tradier"):
+        return None
+    api_token = _tradier_api_token_from_env()
+    if api_token is None:
+        return None
+    return TradierOptionsHttpTransport(api_token=api_token)
+
+
 def _empty_provider_sla_readiness() -> Dict[str, Any]:
     """Normalized SLA fields for read-only preflight responses with no probes."""
     return {
@@ -1551,7 +1588,11 @@ def create_options_market_data_provider(
     if normalized in {"malformed_fixture", "missing_greeks_fixture"}:
         return MalformedGreeksFixtureOptionsProvider(fixture_path=fixture_path)
     if normalized == "tradier":
-        return TradierOptionsProviderStub(config=live_provider_config)
+        live_config = live_provider_config or OptionsLiveProviderConfig()
+        return TradierOptionsProviderStub(
+            config=live_config,
+            transport=_create_tradier_runtime_transport(live_config),
+        )
     if normalized == "ibkr":
         return IbkrOptionsProviderStub(config=live_provider_config)
     if normalized == "polygon":

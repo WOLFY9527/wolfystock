@@ -56,6 +56,7 @@ from src.services.options_lab_domain_models import (
 from src.services.options_market_data_provider import (
     DEFAULT_OPTIONS_FIXTURE_PATH,
     DEFAULT_OPTIONS_PROVIDER_NAME,
+    OptionsLiveProviderConfig,
     OptionsMarketDataProvider,
     OptionsProviderError,
     OptionsProviderUnavailable,
@@ -149,6 +150,7 @@ class OptionsLabService:
                 self.market_data_provider = create_options_market_data_provider(
                     provider_name=provider_name,
                     fixture_path=self.fixture_path,
+                    live_provider_config=OptionsLiveProviderConfig.from_env(),
                 )
             except OptionsProviderUnavailable as exc:
                 raise OptionsLabProviderUnavailable(exc.provider_name, code=exc.code) from exc
@@ -1352,6 +1354,7 @@ class OptionsLabService:
             return create_options_market_data_provider(
                 provider_name=market_data_provider,
                 fixture_path=self.fixture_path,
+                live_provider_config=OptionsLiveProviderConfig.from_env(),
             )
         except OptionsProviderUnavailable as exc:
             raise OptionsLabProviderUnavailable(exc.provider_name, code=exc.code) from exc
@@ -1373,13 +1376,17 @@ class OptionsLabService:
     ) -> OptionsLabMetadataModel:
         capabilities = dict((fixture or {}).get("providerCapabilities") or {})
         provider_name = str((fixture or {}).get("providerName") or DEFAULT_OPTIONS_PROVIDER_NAME)
+        live_provider_enabled = bool(capabilities.get("liveEnabled", False))
         return OptionsLabMetadataModel(
+            fixture_backed=bool(capabilities.get("fixtureOnly", not live_provider_enabled)),
+            synthetic_data=not live_provider_enabled,
+            no_external_calls=not live_provider_enabled,
             force_refresh_ignored=bool(force_refresh),
             scoring_engine=scoring_engine,
             strategy_engine=strategy_engine,
             provider_name=provider_name,
             provider_capabilities=capabilities,
-            live_provider_enabled=bool(capabilities.get("liveEnabled", False)),
+            live_provider_enabled=live_provider_enabled,
         )
 
     @staticmethod
