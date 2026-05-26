@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BellRing, LockKeyhole, ShieldCheck } from 'lucide-react';
+import { BellRing, ShieldCheck } from 'lucide-react';
 import { ApiErrorAlert } from '../components/common';
 import {
   ConsoleBoard,
@@ -33,6 +33,7 @@ const SETTINGS_ROW_CLASS = 'grid gap-3 px-4 py-4 md:grid-cols-[180px_minmax(0,1f
 const SETTINGS_TEXT_INPUT_CLASS = 'h-10 w-full rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 text-sm text-[color:var(--wolfy-text-primary)] outline-none transition-colors placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)] focus:shadow-[0_0_0_1px_var(--wolfy-accent)]';
 const SETTINGS_CHECKBOX_CLASS = 'h-4 w-4 rounded border border-[color:var(--wolfy-border-subtle)] bg-transparent accent-[var(--wolfy-accent)]';
 const SETTINGS_LINK_CLASS = 'inline-flex min-h-9 items-center justify-center rounded-md border px-3 text-xs font-medium transition-colors';
+const SETTINGS_PANEL_CLASS = 'rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3';
 
 const buildChoiceButtonClass = (active: boolean, compact = false) => cn(
   'rounded-md border px-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]',
@@ -91,6 +92,44 @@ function SettingsConsoleSection({
         {children}
       </div>
     </section>
+  );
+}
+
+function SettingsInfoPanel({
+  title,
+  body,
+  chips,
+  tone = 'default',
+  children,
+}: {
+  title: string;
+  body: string;
+  chips?: React.ReactNode;
+  tone?: 'default' | 'accent';
+  children?: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        SETTINGS_PANEL_CLASS,
+        tone === 'accent'
+          ? 'border-amber-300/20 bg-amber-300/5'
+          : null,
+      )}
+    >
+      <div className="space-y-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{title}</p>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{body}</p>
+        </div>
+        {chips ? (
+          <div className="flex flex-wrap gap-2">
+            {chips}
+          </div>
+        ) : null}
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -169,84 +208,110 @@ const PersonalSettingsPage: React.FC = () => {
     ? {
       consoleEyebrow: 'Account center',
       pageTitle: 'Account Center',
+      heroSummarySignedIn: 'Manage sign-in security, delivery targets, and local reading defaults from one account page.',
+      heroSummaryGuest: 'Sign in to unlock password and delivery controls. Local reading defaults are still available now.',
       guestTitle: 'Guest session',
-      guestSubtitle: 'Sign in to sync notification targets and manage password changes.',
-      securityTitle: 'Account & security',
-      securityDescription: 'Access state, password changes, and delivery targets stay scoped to this account page.',
-      privacyTitle: 'Privacy settings',
-      privacyDescription: 'Personal notifications, saved preferences, and sign-out behavior stay scoped to your own account surface.',
-      privacyBoundaryTitle: 'Account privacy boundary',
-      privacyBoundaryBody: 'This account center keeps account details, notification targets, and local preferences separate from broader workspace management.',
-      privacySessionTitle: 'Session and local defaults',
-      privacySessionBody: 'Signing out closes the current authenticated session. Display density, number formatting, and font size remain local browser preferences until you change them again.',
-      preferencesTitle: 'Display & preferences',
-      preferencesDescription: 'Compact, local display defaults for density, number formatting, fonts, and portfolio currency.',
-      accountLabel: 'Account',
-      authLabel: 'Password',
+      accountSectionTitle: 'Account',
+      accountSectionDescription: 'Who is using this account center and where personal controls apply.',
+      securityTitle: 'Security',
+      securityDescription: 'Password access stays on this page and follows the current auth policy.',
+      notificationsTitle: 'Notifications',
+      notificationsDescription: 'Choose how this account receives personal delivery updates.',
+      privacyTitle: 'Privacy & session',
+      privacyDescription: 'Keep account-level boundaries clear and explain what remains local to this browser.',
+      preferencesTitle: 'Local preferences',
+      preferencesDescription: 'Reading density, number formatting, fonts, and portfolio display currency stay local to this device.',
+      accountLabel: 'Identity',
+      securityLabel: 'Security',
       notificationLabel: 'Notifications',
-      scopeLabel: 'Scope',
+      localLabel: 'Saved in',
       signedInStatus: 'Signed in',
       guestStatus: 'Guest',
       authReadyState: 'Change available',
-      guestOnly: 'Guest only',
+      authLimitedState: 'No password changes',
       signInRequired: 'Sign in required',
-      savedHere: 'Personal route only',
+      localOnlyState: 'This browser',
       loadingTargets: 'Loading targets',
       targetsReady: 'Ready',
+      notificationsPaused: 'Connect after sign-in',
+      accountCardTitle: 'Current account',
+      accountCardBody: 'Your personal delivery targets and security actions stay attached to this account only.',
+      guestCardTitle: 'Guest preferences',
+      guestCardBody: 'Sign in before saving delivery targets or changing your password.',
+      securityCardTitle: 'Password access',
+      securityCardBodyReady: 'You can change the password for this signed-in account here.',
+      securityCardBodyLocked: 'Password controls stay unavailable until the current auth policy allows changes.',
+      securityGuestBody: 'Password management appears after sign-in when account security is available.',
+      sessionCardTitle: 'Session behavior',
+      sessionCardBody: 'Signing out closes the current authenticated session. Local display defaults stay in this browser until you change them again.',
+      boundaryDisclosureTitle: 'What this page covers',
+      boundaryDisclosureSummary: 'Account, privacy, notifications, and local reading defaults only.',
+      boundaryDisclosureBody: 'Workspace-wide controls, system operations, and shared management stay outside this account center by design.',
+      preferenceDisclosureTitle: 'Where local preferences live',
+      preferenceDisclosureSummary: 'Display density, number format, fonts, and portfolio currency remain device-local.',
+      preferenceDisclosureBody: 'These options change how this consumer workspace reads on this browser. They do not change sign-in behavior or other people’s experience.',
       guestNotificationHint: 'Sign in before editing email and Discord delivery targets.',
       notificationHelper: 'Save both delivery channels together from personal settings.',
-      signedInHint: 'Your password and notification targets stay tied to this account page.',
-      railEyebrow: 'Secondary details',
-      railTitle: 'Personal settings boundary',
-      railBody: 'This route now focuses on your account, UI defaults, and notification targets only.',
-      boundaryTitle: 'Account page scope',
-      boundarySummary: 'Only account, privacy, notification, and local preference actions appear here.',
-      boundaryBody: 'Broader workspace controls are managed separately. This page is intentionally limited to account-level choices and local display defaults.',
-      preferenceTitle: 'Preference notes',
-      preferenceSummary: 'Density, number formatting, font size, and portfolio display currency remain local UI preferences.',
-      preferenceBody: 'These controls do not change sign-in behavior or affect other people in the workspace. They only adjust how this user-facing workspace renders data.',
-      guestAccessTitle: 'Sign in for account controls',
+      signedInHint: 'Review your account state, update notifications, and keep local reading defaults tidy here.',
+      railEyebrow: 'Next action',
+      railTitle: 'Unlock account controls',
+      railBody: 'Sign in to save delivery targets and use account-level security actions.',
+      railLinkPrimary: 'Sign in',
+      railLinkSecondary: 'Create account',
     }
     : {
       consoleEyebrow: '账户中心',
       pageTitle: '账户中心',
+      heroSummarySignedIn: '在一个账户中心内管理登录安全、通知方式和本地阅读偏好。',
+      heroSummaryGuest: '登录后即可启用密码与通知控制；本地阅读偏好现在就能调整。',
       guestTitle: '访客会话',
-      guestSubtitle: '登录后可同步通知目标并管理密码修改。',
-      securityTitle: '账户与安全',
-      securityDescription: '访问状态、密码变更和通知目标都只保留在个人设置内。',
-      privacyTitle: '隐私设置',
-      privacyDescription: '个人通知、本地偏好和退出登录行为都只保留在你自己的账户界面内。',
-      privacyBoundaryTitle: '账户隐私边界',
-      privacyBoundaryBody: '账户中心只承载账户资料、通知目标和本地偏好，与更广的工作区管理保持分离。',
-      privacySessionTitle: '会话与本地默认项',
-      privacySessionBody: '退出登录只会结束当前认证会话。显示密度、数字格式和字体大小仍然保存在当前浏览器，直到你再次修改。',
-      preferencesTitle: '显示与偏好',
-      preferencesDescription: '用紧凑的本地偏好统一控制密度、数字格式、字体和组合显示货币。',
-      accountLabel: '账户',
-      authLabel: '密码',
+      accountSectionTitle: '账户',
+      accountSectionDescription: '说明当前是谁在使用这个账户中心，以及个人控制项归属到哪里。',
+      securityTitle: '安全',
+      securityDescription: '密码相关操作只留在这里，并遵循当前认证策略。',
+      notificationsTitle: '通知',
+      notificationsDescription: '选择这个账户接收个人通知更新的方式。',
+      privacyTitle: '隐私与会话',
+      privacyDescription: '明确账户边界，并说明哪些设置仍然只保存在当前浏览器。',
+      preferencesTitle: '本地偏好',
+      preferencesDescription: '阅读密度、数字格式、字体和组合显示货币都只保存在当前设备。',
+      accountLabel: '身份',
+      securityLabel: '安全',
       notificationLabel: '通知',
-      scopeLabel: '范围',
+      localLabel: '保存位置',
       signedInStatus: '已登录',
       guestStatus: '访客',
       authReadyState: '可修改',
-      guestOnly: '仅访客偏好',
+      authLimitedState: '暂不可改',
       signInRequired: '登录后可用',
-      savedHere: '仅个人设置',
+      localOnlyState: '当前浏览器',
       loadingTargets: '正在加载',
       targetsReady: '可编辑',
+      notificationsPaused: '登录后连接',
+      accountCardTitle: '当前账户',
+      accountCardBody: '你的通知目标和安全操作只绑定到这个账户，不会扩散到更大的工作区设置。',
+      guestCardTitle: '访客偏好',
+      guestCardBody: '登录前只能调整本地阅读偏好，通知目标和密码操作会保持关闭。',
+      securityCardTitle: '密码访问',
+      securityCardBodyReady: '当前已登录账户可在这里修改密码。',
+      securityCardBodyLocked: '当前认证策略暂未开放密码修改，这里不会显示额外系统控制。',
+      securityGuestBody: '登录后如果认证策略允许，就会在这里启用密码管理。',
+      sessionCardTitle: '会话行为',
+      sessionCardBody: '退出登录只会结束当前认证会话。本地显示默认项会继续保存在这个浏览器，直到你再次修改。',
+      boundaryDisclosureTitle: '这页负责什么',
+      boundaryDisclosureSummary: '只处理账户、隐私、通知和本地阅读偏好。',
+      boundaryDisclosureBody: '更广的工作区控制、系统操作和共享管理故意不放在这个账户中心里。',
+      preferenceDisclosureTitle: '本地偏好保存在哪里',
+      preferenceDisclosureSummary: '显示密度、数字格式、字体和组合显示货币都保存在当前设备。',
+      preferenceDisclosureBody: '这些选项只改变当前浏览器里的消费端阅读体验，不会修改登录行为，也不会影响其他人的界面。',
       guestNotificationHint: '登录后才能编辑邮件和 Discord 通知目标。',
       notificationHelper: '在个人设置内统一保存邮件与 Discord 目标。',
-      signedInHint: '当前密码与通知目标只绑定这个账户页面。',
-      railEyebrow: '辅助说明',
-      railTitle: '个人设置边界',
-      railBody: '这个路由现在只承载你的账户、界面偏好与通知目标。',
-      boundaryTitle: '账户页面范围',
-      boundarySummary: '这里只显示账户、隐私、通知和本地偏好操作。',
-      boundaryBody: '更广的工作区管理在单独页面处理。这里刻意只保留账户级选择和本地显示默认项。',
-      preferenceTitle: '偏好说明',
-      preferenceSummary: '密度、数字格式、字体大小和组合显示货币都还是本地 UI 偏好。',
-      preferenceBody: '这些控件不会改变登录行为或其他用户体验，只会影响当前用户界面对数据的呈现方式。',
-      guestAccessTitle: '登录后启用账户控制',
+      signedInHint: '在这里检查账户状态、更新通知方式，并整理你的本地阅读默认项。',
+      railEyebrow: '下一步',
+      railTitle: '登录后启用账户控制',
+      railBody: '登录后可保存通知目标，并使用账户级安全操作。',
+      railLinkPrimary: '去登录',
+      railLinkSecondary: '创建账户',
     };
 
   useEffect(() => {
@@ -329,26 +394,21 @@ const PersonalSettingsPage: React.FC = () => {
   };
 
   const signedInName = currentUser?.displayName || currentUser?.username || t('settings.personalFallbackUser');
+  const showGuestRail = !loggedIn && authEnabled;
   const statusItems = [
     {
       label: copy.accountLabel,
       value: loggedIn ? copy.signedInStatus : copy.guestStatus,
     },
     {
-      label: copy.authLabel,
-      value: loggedIn
-        ? (passwordChangeable ? copy.authReadyState : copy.guestOnly)
-        : (authEnabled ? copy.signInRequired : copy.guestOnly),
-    },
-    {
       label: copy.notificationLabel,
       value: loggedIn
         ? (notificationLoading ? copy.loadingTargets : copy.targetsReady)
-        : copy.signInRequired,
+        : copy.notificationsPaused,
     },
     {
-      label: copy.scopeLabel,
-      value: copy.savedHere,
+      label: copy.localLabel,
+      value: copy.localOnlyState,
     },
   ];
 
@@ -372,7 +432,7 @@ const PersonalSettingsPage: React.FC = () => {
           data-testid="personal-settings-profile-header"
           className="overflow-hidden"
         >
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-[11px] uppercase tracking-[0.12em] text-[color:var(--wolfy-text-muted)]">
@@ -385,100 +445,116 @@ const PersonalSettingsPage: React.FC = () => {
               <h2 className="mt-2 text-lg font-semibold text-[color:var(--wolfy-text-primary)]">
                 {loggedIn ? signedInName : copy.guestTitle}
               </h2>
-              <p className="mt-1 max-w-3xl text-sm text-[color:var(--wolfy-text-secondary)]">
-                {loggedIn
-                  ? t('settings.personalSignedInAs', { name: signedInName })
-                  : copy.guestSubtitle}
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+                {loggedIn ? copy.heroSummarySignedIn : copy.heroSummaryGuest}
               </p>
             </div>
           </div>
 
-          <ConsoleStatusStrip items={statusItems} className="mt-4" />
+          <ConsoleStatusStrip data-testid="personal-settings-summary-strip" items={statusItems} className="mt-4" />
         </WolfyShellSurface>
 
         <div
           data-testid="personal-settings-console"
-          className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]"
+          className={cn(
+            'grid gap-4',
+            showGuestRail ? 'xl:grid-cols-[minmax(0,1fr)_320px]' : null,
+          )}
         >
           <ConsoleBoard data-testid="personal-settings-primary-board">
+            <SettingsConsoleSection
+              id="account"
+              data-testid="personal-settings-account-section"
+              title={copy.accountSectionTitle}
+              description={copy.accountSectionDescription}
+            >
+              <div data-testid="personal-settings-account-row" className={SETTINGS_ROW_CLASS}>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+                    {loggedIn ? copy.accountCardTitle : copy.guestCardTitle}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                    {loggedIn ? copy.accountCardBody : copy.guestCardBody}
+                  </p>
+                </div>
+                {loggedIn ? (
+                  <SettingsInfoPanel
+                    title={signedInName}
+                    body={t('settings.personalSignedInAs', { name: signedInName })}
+                    chips={(
+                      <>
+                        <TerminalChip variant="info">{copy.signedInStatus}</TerminalChip>
+                        <TerminalChip variant={passwordChangeable ? 'success' : 'neutral'}>
+                          {passwordChangeable ? copy.authReadyState : copy.authLimitedState}
+                        </TerminalChip>
+                      </>
+                    )}
+                  />
+                ) : (
+                  <SettingsInfoPanel
+                    title={t('settings.personalGuestPreferencesTitle')}
+                    body={copy.guestNotificationHint}
+                    tone="accent"
+                  />
+                )}
+              </div>
+            </SettingsConsoleSection>
+
             <SettingsConsoleSection
               id="security"
               data-testid="personal-settings-security-section"
               title={copy.securityTitle}
               description={copy.securityDescription}
             >
-              <div data-testid="personal-settings-account-row" className={SETTINGS_ROW_CLASS}>
+              <div className={SETTINGS_ROW_CLASS}>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
-                    {loggedIn ? copy.accountLabel : copy.guestAccessTitle}
+                    {copy.securityCardTitle}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
-                    {loggedIn ? copy.signedInHint : copy.guestSubtitle}
+                    {loggedIn ? copy.signedInHint : copy.securityGuestBody}
                   </p>
                 </div>
-                {loggedIn ? (
-                  <div className="flex min-w-0 flex-col gap-3 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                <SettingsInfoPanel
+                  title={loggedIn
+                    ? (passwordChangeable ? copy.authReadyState : copy.authLimitedState)
+                    : copy.signInRequired}
+                  body={loggedIn
+                    ? (passwordChangeable ? copy.securityCardBodyReady : copy.securityCardBodyLocked)
+                    : copy.securityGuestBody}
+                  chips={(
+                    <>
+                      <TerminalChip variant={loggedIn ? 'info' : 'neutral'}>
+                        {loggedIn ? copy.signedInStatus : copy.guestStatus}
+                      </TerminalChip>
+                      <TerminalChip variant={passwordChangeable ? 'success' : 'neutral'}>
+                        {loggedIn
+                          ? (passwordChangeable ? copy.authReadyState : copy.authLimitedState)
+                          : copy.signInRequired}
+                      </TerminalChip>
+                    </>
+                  )}
+                >
+                  {loggedIn && passwordChangeable ? (
                     <div className="flex items-start gap-3">
                       <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] text-[color:var(--wolfy-text-primary)]">
                         <ShieldCheck className="h-4 w-4" />
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
-                          {signedInName}
-                        </p>
-                        <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
-                          {t('settings.personalSignedInAs', { name: signedInName })}
-                        </p>
+                      <div className="min-w-0 flex-1">
+                        <ChangePasswordCard />
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <TerminalChip variant="info">{copy.signedInStatus}</TerminalChip>
-                      <TerminalChip variant={passwordChangeable ? 'success' : 'neutral'}>
-                        {passwordChangeable ? copy.authReadyState : copy.guestOnly}
-                      </TerminalChip>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex min-w-0 flex-col gap-3 rounded-md border border-amber-300/20 bg-amber-300/5 p-3">
-                    <div className="flex items-start gap-3">
-                      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-amber-300/25 bg-amber-300/10 text-amber-100">
-                        <LockKeyhole className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
-                          {t('settings.personalGuestPreferencesTitle')}
-                        </p>
-                        <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
-                          {copy.guestNotificationHint}
-                        </p>
-                      </div>
-                    </div>
-                    {authEnabled ? (
-                      <div className="flex flex-wrap gap-2">
-                        <Link
-                          to={loginPath}
-                          className={cn(
-                            SETTINGS_LINK_CLASS,
-                            'border-[color:var(--wolfy-accent)] bg-[var(--wolfy-accent)] text-[#f7f8ff] hover:bg-[#6f79dc]',
-                          )}
-                        >
-                          {t('settings.personalGuestSignInAction')}
-                        </Link>
-                        <Link
-                          to={registrationPath}
-                          className={cn(
-                            SETTINGS_LINK_CLASS,
-                            'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)]',
-                          )}
-                        >
-                          {t('settings.personalGuestCreateAccountAction')}
-                        </Link>
-                      </div>
-                    ) : null}
-                  </div>
-                )}
+                  ) : null}
+                </SettingsInfoPanel>
               </div>
+            </SettingsConsoleSection>
 
+            <SettingsConsoleSection
+              id="notifications"
+              data-testid="personal-settings-notifications-section"
+              title={copy.notificationsTitle}
+              description={copy.notificationsDescription}
+            >
               <div data-testid="personal-settings-notification-row" className={SETTINGS_ROW_CLASS}>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -493,7 +569,7 @@ const PersonalSettingsPage: React.FC = () => {
                 </div>
 
                 {loggedIn ? (
-                  <div className="min-w-0 space-y-3 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                  <div className={cn(SETTINGS_PANEL_CLASS, 'min-w-0 space-y-3')}>
                     <div className="grid gap-3 lg:grid-cols-2">
                       <div className="space-y-2">
                         <label className="flex items-center gap-3 text-xs text-[color:var(--wolfy-text-secondary)]">
@@ -570,14 +646,10 @@ const PersonalSettingsPage: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-sm text-[color:var(--wolfy-text-secondary)]">
+                  <div className={cn(SETTINGS_PANEL_CLASS, 'text-sm text-[color:var(--wolfy-text-secondary)]')}>
                     {copy.guestNotificationHint}
                   </div>
                 )}
-              </div>
-
-              <div id="password" className="scroll-mt-28">
-                {loggedIn && passwordChangeable ? <ChangePasswordCard /> : null}
               </div>
             </SettingsConsoleSection>
 
@@ -590,22 +662,27 @@ const PersonalSettingsPage: React.FC = () => {
               <div className={SETTINGS_ROW_CLASS}>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
-                    {copy.privacyBoundaryTitle}
+                    {copy.sessionCardTitle}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                    {copy.sessionCardBody}
                   </p>
                 </div>
-                <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-                  {copy.privacyBoundaryBody}
-                </div>
-              </div>
-
-              <div className={SETTINGS_ROW_CLASS}>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
-                    {copy.privacySessionTitle}
-                  </p>
-                </div>
-                <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-                  {copy.privacySessionBody}
+                <div className="min-w-0 space-y-3">
+                  <SettingsInfoPanel
+                    title={copy.boundaryDisclosureSummary}
+                    body={copy.sessionCardBody}
+                    chips={<TerminalChip variant="neutral">{copy.localOnlyState}</TerminalChip>}
+                  />
+                  <ConsoleDisclosure
+                    data-testid="personal-settings-boundary-disclosure"
+                    title={copy.boundaryDisclosureTitle}
+                    summary={copy.boundaryDisclosureSummary}
+                  >
+                    <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                      {copy.boundaryDisclosureBody}
+                    </p>
+                  </ConsoleDisclosure>
                 </div>
               </div>
             </SettingsConsoleSection>
@@ -680,42 +757,65 @@ const PersonalSettingsPage: React.FC = () => {
               </div>
 
               <FontSizeSettingsCard />
+
+              <div className={SETTINGS_ROW_CLASS}>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+                    {copy.preferenceDisclosureTitle}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                    {copy.preferenceDisclosureSummary}
+                  </p>
+                </div>
+                <ConsoleDisclosure
+                  data-testid="personal-settings-help-disclosure"
+                  title={copy.preferenceDisclosureTitle}
+                  summary={copy.preferenceDisclosureSummary}
+                >
+                  <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                    {copy.preferenceDisclosureBody}
+                  </p>
+                </ConsoleDisclosure>
+              </div>
             </SettingsConsoleSection>
           </ConsoleBoard>
 
-          <ConsoleContextRail data-testid="personal-settings-help-rail">
-            <div className="px-1 py-1">
-              <p className="text-[11px] uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
-                {copy.railEyebrow}
-              </p>
-              <p className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">
-                {copy.railTitle}
-              </p>
-              <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
-                {copy.railBody}
-              </p>
-            </div>
+          {showGuestRail ? (
+            <ConsoleContextRail data-testid="personal-settings-help-rail">
+              <div className="px-1 py-1">
+                <p className="text-[11px] uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
+                  {copy.railEyebrow}
+                </p>
+                <p className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+                  {copy.railTitle}
+                </p>
+                <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                  {copy.railBody}
+                </p>
+              </div>
 
-            <ConsoleDisclosure
-              data-testid="personal-settings-boundary-disclosure"
-              title={copy.boundaryTitle}
-              summary={copy.boundarySummary}
-            >
-              <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
-                {copy.boundaryBody}
-              </p>
-            </ConsoleDisclosure>
-
-            <ConsoleDisclosure
-              data-testid="personal-settings-help-disclosure"
-              title={copy.preferenceTitle}
-              summary={copy.preferenceSummary}
-            >
-              <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
-                {copy.preferenceBody}
-              </p>
-            </ConsoleDisclosure>
-          </ConsoleContextRail>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  to={loginPath}
+                  className={cn(
+                    SETTINGS_LINK_CLASS,
+                    'border-[color:var(--wolfy-accent)] bg-[var(--wolfy-accent)] text-[#f7f8ff] hover:bg-[#6f79dc]',
+                  )}
+                >
+                  {copy.railLinkPrimary}
+                </Link>
+                <Link
+                  to={registrationPath}
+                  className={cn(
+                    SETTINGS_LINK_CLASS,
+                    'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)]',
+                  )}
+                >
+                  {copy.railLinkSecondary}
+                </Link>
+              </div>
+            </ConsoleContextRail>
+          ) : null}
         </div>
       </section>
     </ConsumerWorkspacePageShell>
