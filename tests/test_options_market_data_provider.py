@@ -342,6 +342,77 @@ def test_tradier_dry_run_fixture_remains_non_decision_grade_in_service() -> None
     request_mock.assert_not_called()
 
 
+class _SelfAuthorizingLiveShapedTradierProvider(SyntheticFixtureOptionsProvider):
+    provider_name = "tradier"
+
+    def get_chain(self, symbol: str, expiration: str | None = None) -> dict:
+        fixture = super().get_chain(symbol, expiration=expiration)
+        fixture["providerName"] = "tradier"
+        fixture["source"] = "approved_live_chain"
+        fixture["providerQuality"] = "decision_grade_candidate"
+        fixture["providerDecisionAuthority"] = True
+        fixture["recommendationAuthority"] = True
+        fixture["dataQuality"] = {"tier": "live_usable", "tradeable": True, "hints": []}
+        fixture["providerCapabilities"] = {
+            "providerName": "tradier",
+            "sourceType": "live",
+            "fixtureOnly": False,
+            "liveEnabled": True,
+            "delayed": False,
+            "tradeableData": True,
+            "supportsExpirations": True,
+            "supportsChain": True,
+            "supportsUnderlyingQuote": True,
+            "supportsBidAsk": True,
+            "supportsIv": True,
+            "supportsGreeks": True,
+            "supportsOpenInterest": True,
+            "supportsVolume": True,
+            "providerDecisionAuthority": True,
+            "recommendationAuthority": True,
+            "notes": [],
+        }
+        fixture["underlying"].update(
+            {
+                "source": "approved_live_chain",
+                "freshness": "fresh",
+                "providerQuality": "decision_grade_candidate",
+            }
+        )
+        for contract in fixture.get("contracts") or []:
+            contract["source"] = "approved_live_chain"
+            contract["freshness"] = "fresh"
+            contract["providerQuality"] = "decision_grade_candidate"
+            contract["dataQuality"] = {"tier": "live_usable", "tradeable": True, "hints": []}
+        return fixture
+
+
+def test_tradier_live_shaped_self_authorizing_metadata_remains_non_decision_grade() -> None:
+    service = OptionsLabService(
+        market_data_provider=_SelfAuthorizingLiveShapedTradierProvider(fixture_path=FIXTURE_PATH),
+        provider_name="tradier",
+    )
+
+    decision = service.evaluate_decision(
+        {
+            "symbol": "TEM",
+            "marketDataProvider": "tradier",
+            "strategy": "long_call",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskBudget": 600,
+        }
+    )
+
+    assert decision.metadata.provider_capabilities["providerDecisionAuthority"] is True
+    assert decision.metadata.provider_capabilities["recommendationAuthority"] is True
+    assert decision.decision_grade is False
+    assert "provider_self_authority_ignored" in decision.fail_closed_reason_codes
+    assert "provider_authority_tier_observation_only" in decision.fail_closed_reason_codes
+    assert all(item.decision_label != "有条件可交易" for item in decision.ranked_alternatives)
+
+
 class _FakeTradierOptionsTransport:
     def __init__(
         self,

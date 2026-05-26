@@ -1351,7 +1351,7 @@ def test_decision_endpoint_tradier_live_provider_opt_in_uses_mocked_http_and_fai
         assert capabilities.get("recommendationAuthority") is not True
         assert payload["decisionGrade"] is False
         assert payload["decisionLabel"] == "数据不足，禁止判断"
-        assert "provider_decision_authority_not_granted" in payload["failClosedReasonCodes"]
+        assert "provider_authority_tier_observation_only" in payload["failClosedReasonCodes"]
         assert "provider_tradeable_data_false" in payload["failClosedReasonCodes"]
         assert all(item["decisionLabel"] != "有条件可交易" for item in payload["rankedAlternatives"])
         assert credential.lower() not in _json_text(payload).lower()

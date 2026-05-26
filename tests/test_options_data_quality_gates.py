@@ -7,7 +7,11 @@ import json
 import re
 from pathlib import Path
 
-from src.services.options_data_quality_gates import evaluate_options_data_quality_gates
+from src.services.options_data_quality_gates import (
+    INTERNAL_OPTIONS_PROVIDER_AUTHORITY_POLICY_SOURCE,
+    build_options_provider_authority_contract,
+    evaluate_options_data_quality_gates,
+)
 from src.services.options_lab_service import OptionsLabService
 
 
@@ -45,7 +49,8 @@ def _authorized_live_provider_authority() -> dict[str, object]:
         "fixtureOnly": False,
         "liveEnabled": True,
         "tradeableData": True,
-        "providerDecisionAuthority": True,
+        "authorityPolicySource": INTERNAL_OPTIONS_PROVIDER_AUTHORITY_POLICY_SOURCE,
+        "authorityTier": "decision_grade",
     }
 
 
@@ -113,7 +118,7 @@ def test_otherwise_clean_live_shaped_contract_without_provider_authority_fails_c
 def test_otherwise_clean_live_shaped_contract_without_decision_authority_fails_closed() -> None:
     provider_authority = {
         **_authorized_live_provider_authority(),
-        "providerDecisionAuthority": False,
+        "authorityTier": "live_analysis_grade",
     }
 
     diagnostics = _evaluate_single_contract(
@@ -122,10 +127,107 @@ def test_otherwise_clean_live_shaped_contract_without_decision_authority_fails_c
     )
 
     assert diagnostics.decision_grade is False
-    assert diagnostics.fail_closed_reason_codes == ["provider_decision_authority_not_granted"]
-    assert _issue_codes(diagnostics) == {"provider_decision_authority_not_granted"}
+    assert diagnostics.fail_closed_reason_codes == ["provider_authority_tier_analysis_only"]
+    assert _issue_codes(diagnostics) == {"provider_authority_tier_analysis_only"}
     assert diagnostics.data_quality_gates.status == "clear"
     assert diagnostics.liquidity_gates.status == "clear"
+
+
+def test_provider_payload_self_authority_claim_cannot_self_authorize_without_internal_policy() -> None:
+    diagnostics = _evaluate_single_contract(
+        _clear_gate_contract(),
+        provider_authority={
+            "providerId": "over_eager_provider",
+            "sourceType": "live",
+            "fixtureOnly": False,
+            "liveEnabled": True,
+            "tradeableData": True,
+            "providerDecisionAuthority": True,
+        },
+    )
+
+    assert diagnostics.gate_decision == "数据不足，禁止判断"
+    assert diagnostics.decision_grade is False
+    assert "provider_self_authority_ignored" in diagnostics.fail_closed_reason_codes
+    assert "provider_authority_tier_missing" in diagnostics.fail_closed_reason_codes
+    assert diagnostics.data_quality_gates.status == "clear"
+    assert diagnostics.liquidity_gates.status == "clear"
+
+
+def test_provider_capability_recommendation_claim_cannot_self_authorize_without_internal_policy() -> None:
+    diagnostics = _evaluate_single_contract(
+        _clear_gate_contract(),
+        provider_authority={
+            "providerId": "over_eager_provider",
+            "sourceType": "live",
+            "fixtureOnly": False,
+            "liveEnabled": True,
+            "tradeableData": True,
+            "recommendationAuthority": True,
+        },
+    )
+
+    assert diagnostics.gate_decision == "数据不足，禁止判断"
+    assert diagnostics.decision_grade is False
+    assert "provider_self_authority_ignored" in diagnostics.fail_closed_reason_codes
+    assert "provider_authority_tier_missing" in diagnostics.fail_closed_reason_codes
+    assert diagnostics.data_quality_gates.status == "clear"
+    assert diagnostics.liquidity_gates.status == "clear"
+
+
+def test_live_probe_success_alone_cannot_authorize_decision_grade() -> None:
+    diagnostics = _evaluate_single_contract(
+        _clear_gate_contract(),
+        provider_authority={
+            "providerId": "tradier",
+            "sourceType": "live",
+            "fixtureOnly": False,
+            "liveEnabled": True,
+            "tradeableData": True,
+            "liveProbe": {
+                "enabled": True,
+                "reasonCode": "options_provider_live_probe_operator_opt_in_ready",
+                "networkCallExecuted": False,
+            },
+        },
+    )
+
+    assert diagnostics.gate_decision == "数据不足，禁止判断"
+    assert diagnostics.decision_grade is False
+    assert "provider_authority_tier_missing" in diagnostics.fail_closed_reason_codes
+    assert diagnostics.data_quality_gates.status == "clear"
+    assert diagnostics.liquidity_gates.status == "clear"
+
+
+def test_internal_policy_keeps_current_provider_ids_below_decision_grade() -> None:
+    current_provider_ids = [
+        "synthetic_fixture",
+        "delayed_fixture",
+        "malformed_fixture",
+        "tradier",
+        "ibkr",
+        "polygon",
+    ]
+
+    for provider_id in current_provider_ids:
+        provider_authority = build_options_provider_authority_contract(
+            provider_id=provider_id,
+            source_type="live",
+            fixture_only=False,
+            live_enabled=True,
+            tradeable_data=True,
+        )
+
+        diagnostics = _evaluate_single_contract(
+            _clear_gate_contract(),
+            provider_authority=provider_authority,
+        )
+
+        assert provider_authority["authorityTier"] == "live_observation_only"
+        assert diagnostics.decision_grade is False
+        assert "provider_authority_tier_observation_only" in diagnostics.fail_closed_reason_codes
+        assert diagnostics.data_quality_gates.status == "clear"
+        assert diagnostics.liquidity_gates.status == "clear"
 
 
 def test_provider_authority_requires_live_enabled_and_tradeable_data() -> None:

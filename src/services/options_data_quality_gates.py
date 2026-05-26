@@ -26,6 +26,11 @@ _SECRET_MARKERS = (
 )
 _PROVIDER_AUTHORITY_LABELS = {
     "provider_authority_missing": "缺少 provider 决策授权元数据",
+    "provider_authority_tier_missing": "缺少内部 provider authority tier",
+    "provider_authority_tier_observation_only": "内部 provider authority tier 仅允许观察",
+    "provider_authority_tier_analysis_only": "内部 provider authority tier 仅允许分析",
+    "provider_authority_policy_not_granted": "内部 provider authority policy 未授予决策级权限",
+    "provider_self_authority_ignored": "provider 自声明决策权限已忽略",
     "provider_fixture_not_decision_grade": "fixture provider 不能作为决策级证据",
     "provider_synthetic_not_decision_grade": "synthetic provider 不能作为决策级证据",
     "provider_dry_run_not_decision_grade": "dry-run provider 不能作为决策级证据",
@@ -35,6 +40,19 @@ _PROVIDER_AUTHORITY_LABELS = {
     "provider_tradeable_data_false": "provider 未声明 tradeable data",
     "provider_decision_authority_not_granted": "provider 未显式授予决策级权限",
 }
+INTERNAL_OPTIONS_PROVIDER_AUTHORITY_POLICY_SOURCE = "wolfystock_options_provider_authority_policy_v1"
+_INTERNAL_PROVIDER_AUTHORITY_TIER_POLICY = {
+    "synthetic_fixture": "live_observation_only",
+    "synthetic": "live_observation_only",
+    "fixture": "live_observation_only",
+    "delayed_fixture": "live_observation_only",
+    "real_shaped_delayed_fixture": "live_observation_only",
+    "malformed_fixture": "live_observation_only",
+    "missing_greeks_fixture": "live_observation_only",
+    "tradier": "live_observation_only",
+    "ibkr": "live_observation_only",
+    "polygon": "live_observation_only",
+}
 
 
 class OptionsGateStatus(str, Enum):
@@ -42,6 +60,12 @@ class OptionsGateStatus(str, Enum):
     BLOCKED = "blocked"
     OBSERVE_ONLY = "observe_only"
     MANUAL_REVIEW = "manual_review"
+
+
+class OptionsProviderAuthorityTier(str, Enum):
+    LIVE_OBSERVATION_ONLY = "live_observation_only"
+    LIVE_ANALYSIS_GRADE = "live_analysis_grade"
+    DECISION_GRADE = "decision_grade"
 
 
 def _coerce_mapping(value: Any) -> dict[str, Any]:
@@ -213,6 +237,85 @@ def _provider_authority_issue(code: str) -> OptionsGateIssue:
     )
 
 
+def _normalize_provider_id(value: Any) -> str:
+    return _coerce_text(value).lower().replace("-", "_")
+
+
+def _internal_provider_authority_tier(
+    *,
+    provider_id: str,
+    source_type: str,
+    fixture_only: bool,
+    live_enabled: bool,
+    tradeable_data: bool,
+    dry_run: bool,
+    synthetic: bool,
+    stub: bool,
+    adapter_contract: bool,
+) -> OptionsProviderAuthorityTier | None:
+    normalized_provider = _normalize_provider_id(provider_id)
+    normalized_source_type = _normalize_provider_id(source_type)
+    if not normalized_provider:
+        return None
+    if any((fixture_only, dry_run, synthetic, stub, adapter_contract)):
+        return OptionsProviderAuthorityTier.LIVE_OBSERVATION_ONLY
+    if normalized_source_type in {"fixture", "synthetic", "dry_run", "delayed_dry_run", "live_stub"}:
+        return OptionsProviderAuthorityTier.LIVE_OBSERVATION_ONLY
+    del live_enabled, tradeable_data
+    tier = _INTERNAL_PROVIDER_AUTHORITY_TIER_POLICY.get(normalized_provider)
+    if tier is None:
+        return None
+    return OptionsProviderAuthorityTier(tier)
+
+
+def build_options_provider_authority_contract(
+    *,
+    provider_id: str,
+    source_type: str,
+    fixture_only: bool,
+    live_enabled: bool,
+    tradeable_data: bool,
+    dry_run: bool = False,
+    synthetic: bool = False,
+    stub: bool = False,
+    adapter_contract: bool = False,
+    provider_decision_authority_claim: Any = None,
+    recommendation_authority_claim: Any = None,
+    notes: Sequence[Any] | None = None,
+    live_probe: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    tier = _internal_provider_authority_tier(
+        provider_id=provider_id,
+        source_type=source_type,
+        fixture_only=fixture_only,
+        live_enabled=live_enabled,
+        tradeable_data=tradeable_data,
+        dry_run=dry_run,
+        synthetic=synthetic,
+        stub=stub,
+        adapter_contract=adapter_contract,
+    )
+    payload: dict[str, Any] = {
+        "providerId": provider_id,
+        "sourceType": source_type,
+        "fixtureOnly": fixture_only,
+        "liveEnabled": live_enabled,
+        "tradeableData": tradeable_data,
+        "dryRun": dry_run,
+        "synthetic": synthetic,
+        "stub": stub,
+        "adapterContract": adapter_contract,
+        "authorityPolicySource": INTERNAL_OPTIONS_PROVIDER_AUTHORITY_POLICY_SOURCE,
+        "authorityTier": tier.value if tier is not None else None,
+        "providerDecisionAuthorityClaim": provider_decision_authority_claim,
+        "recommendationAuthorityClaim": recommendation_authority_claim,
+        "notes": list(notes or []),
+    }
+    if live_probe is not None:
+        payload["liveProbe"] = _coerce_mapping(live_probe)
+    return payload
+
+
 def _provider_authority_flag(data: Mapping[str, Any], *keys: str) -> bool | None:
     for key in keys:
         if key in data:
@@ -244,7 +347,7 @@ def _provider_authority_source_code(data: Mapping[str, Any]) -> str | None:
     return None
 
 
-def _provider_authority_granted(data: Mapping[str, Any]) -> bool:
+def _provider_self_authority_claimed(data: Mapping[str, Any]) -> bool:
     return any(
         _provider_authority_flag(data, key) is True
         for key in (
@@ -252,8 +355,21 @@ def _provider_authority_granted(data: Mapping[str, Any]) -> bool:
             "provider_decision_authority",
             "recommendationAuthority",
             "recommendation_authority",
+            "providerDecisionAuthorityClaim",
+            "provider_decision_authority_claim",
+            "recommendationAuthorityClaim",
+            "recommendation_authority_claim",
         )
     )
+
+
+def _provider_authority_tier(data: Mapping[str, Any]) -> OptionsProviderAuthorityTier | None:
+    if data.get("authorityPolicySource") != INTERNAL_OPTIONS_PROVIDER_AUTHORITY_POLICY_SOURCE:
+        return None
+    try:
+        return OptionsProviderAuthorityTier(_coerce_text(data.get("authorityTier")).lower())
+    except ValueError:
+        return None
 
 
 def _provider_authority_issues(provider_authority: Mapping[str, Any] | None) -> list[OptionsGateIssue]:
@@ -265,12 +381,21 @@ def _provider_authority_issues(provider_authority: Mapping[str, Any] | None) -> 
     source_code = _provider_authority_source_code(data)
     if source_code is not None:
         issues.append(_provider_authority_issue(source_code))
+    if _provider_self_authority_claimed(data):
+        issues.append(_provider_authority_issue("provider_self_authority_ignored"))
     if _provider_authority_flag(data, "liveEnabled", "live_enabled") is not True:
         issues.append(_provider_authority_issue("provider_live_disabled"))
     if _provider_authority_flag(data, "tradeableData", "tradeable_data") is not True:
         issues.append(_provider_authority_issue("provider_tradeable_data_false"))
-    if not _provider_authority_granted(data):
-        issues.append(_provider_authority_issue("provider_decision_authority_not_granted"))
+    authority_tier = _provider_authority_tier(data)
+    if authority_tier is None:
+        issues.append(_provider_authority_issue("provider_authority_tier_missing"))
+    elif authority_tier == OptionsProviderAuthorityTier.LIVE_OBSERVATION_ONLY:
+        issues.append(_provider_authority_issue("provider_authority_tier_observation_only"))
+    elif authority_tier == OptionsProviderAuthorityTier.LIVE_ANALYSIS_GRADE:
+        issues.append(_provider_authority_issue("provider_authority_tier_analysis_only"))
+    elif authority_tier != OptionsProviderAuthorityTier.DECISION_GRADE:
+        issues.append(_provider_authority_issue("provider_authority_policy_not_granted"))
     return issues
 
 

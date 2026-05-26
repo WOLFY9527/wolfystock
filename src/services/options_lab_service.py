@@ -23,7 +23,10 @@ from api.v1.schemas.options import (
     OptionsScenarioRequest,
     OptionsStrategyCompareRequest,
 )
-from src.services.options_data_quality_gates import evaluate_options_data_quality_gates
+from src.services.options_data_quality_gates import (
+    build_options_provider_authority_contract,
+    evaluate_options_data_quality_gates,
+)
 from src.services.options_lab_domain_models import (
     AnalyzeCandidateModel,
     AnalyzeResultModel,
@@ -1419,26 +1422,28 @@ class OptionsLabService:
                 *notes,
             )
         ).lower()
-        return {
-            "providerId": str(fixture.get("providerName") or fixture.get("source") or "unknown"),
-            "sourceType": source_type,
-            "fixtureOnly": bool(capabilities.get("fixtureOnly", False)),
-            "liveEnabled": capabilities.get("liveEnabled", False),
-            "tradeableData": cls._first_present(capabilities.get("tradeableData"), data_quality.get("tradeable"), False),
-            "dryRun": "dry_run" in source_text or "dry-run" in source_text,
-            "synthetic": "synthetic" in source_text,
-            "stub": "stub" in source_text,
-            "adapterContract": "adapter_contract" in source_text or "adapter-contract" in source_text,
-            "providerDecisionAuthority": cls._first_present(
+        return build_options_provider_authority_contract(
+            provider_id=str(fixture.get("providerName") or fixture.get("source") or "unknown"),
+            source_type=str(source_type or "unknown"),
+            fixture_only=bool(capabilities.get("fixtureOnly", False)),
+            live_enabled=bool(capabilities.get("liveEnabled", False)),
+            tradeable_data=bool(
+                cls._first_present(capabilities.get("tradeableData"), data_quality.get("tradeable"), False)
+            ),
+            dry_run="dry_run" in source_text or "dry-run" in source_text,
+            synthetic="synthetic" in source_text,
+            stub="stub" in source_text,
+            adapter_contract="adapter_contract" in source_text or "adapter-contract" in source_text,
+            provider_decision_authority_claim=cls._first_present(
                 fixture.get("providerDecisionAuthority"),
                 capabilities.get("providerDecisionAuthority"),
             ),
-            "recommendationAuthority": cls._first_present(
+            recommendation_authority_claim=cls._first_present(
                 fixture.get("recommendationAuthority"),
                 capabilities.get("recommendationAuthority"),
             ),
-            "notes": notes,
-        }
+            notes=notes,
+        )
 
     @staticmethod
     def _safe_underlying(fixture: Dict[str, Any]) -> Dict[str, Any]:
