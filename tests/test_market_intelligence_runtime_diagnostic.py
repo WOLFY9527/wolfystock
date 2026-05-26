@@ -95,6 +95,82 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
             ],
             "reasonCodes": ["not_requested"],
         },
+        "optionsLabProviderPreflight": {
+            "providers": [
+                {
+                    "providerId": "ibkr",
+                    "readinessState": "disabled",
+                    "credentialsPresent": False,
+                    "credentialCounts": {
+                        "required": 1,
+                        "configured": 0,
+                        "invalid": 0,
+                        "partial": 0,
+                    },
+                    "dryRunEnabled": False,
+                    "liveCallsEnabled": False,
+                    "brokerOrderEnabled": False,
+                    "portfolioMutationEnabled": False,
+                    "tradeable": False,
+                    "liveProbe": {
+                        "status": "disabled",
+                        "enabled": False,
+                        "explicitOptIn": False,
+                        "reasonCode": "options_provider_live_probe_disabled_by_default",
+                        "timeoutSeconds": 2.0,
+                        "networkCallExecuted": False,
+                    },
+                },
+                {
+                    "providerId": "polygon",
+                    "readinessState": "disabled",
+                    "credentialsPresent": False,
+                    "credentialCounts": {
+                        "required": 1,
+                        "configured": 0,
+                        "invalid": 0,
+                        "partial": 0,
+                    },
+                    "dryRunEnabled": False,
+                    "liveCallsEnabled": False,
+                    "brokerOrderEnabled": False,
+                    "portfolioMutationEnabled": False,
+                    "tradeable": False,
+                    "liveProbe": {
+                        "status": "disabled",
+                        "enabled": False,
+                        "explicitOptIn": False,
+                        "reasonCode": "options_provider_live_probe_disabled_by_default",
+                        "timeoutSeconds": 2.0,
+                        "networkCallExecuted": False,
+                    },
+                },
+                {
+                    "providerId": "tradier",
+                    "readinessState": "disabled",
+                    "credentialsPresent": False,
+                    "credentialCounts": {
+                        "required": 1,
+                        "configured": 0,
+                        "invalid": 0,
+                        "partial": 0,
+                    },
+                    "dryRunEnabled": False,
+                    "liveCallsEnabled": False,
+                    "brokerOrderEnabled": False,
+                    "portfolioMutationEnabled": False,
+                    "tradeable": False,
+                    "liveProbe": {
+                        "status": "disabled",
+                        "enabled": False,
+                        "explicitOptIn": False,
+                        "reasonCode": "options_provider_live_probe_disabled_by_default",
+                        "timeoutSeconds": 2.0,
+                        "networkCallExecuted": False,
+                    },
+                },
+            ]
+        },
         "usBreadthAuthorityDiagnostic": {
             "providerConstructed": False,
             "probePassed": False,
@@ -193,6 +269,143 @@ def test_runtime_diagnostic_live_smoke_is_explicit_opt_in(monkeypatch) -> None:
     assert payload["polygonUsBreadthDiagnostic"]["reasonCodes"] == [
         "authorized_us_market_breadth_feed_not_configured"
     ]
+
+
+def test_runtime_diagnostic_includes_offline_options_lab_provider_preflight(monkeypatch) -> None:
+    module = _load_script_module()
+    sentinel_config = object()
+    preflight_calls: list[tuple[str, object]] = []
+
+    class FakeOptionsLiveProviderConfig:
+        @staticmethod
+        def from_env():
+            return sentinel_config
+
+    def fake_build_options_provider_live_readiness_preflight(provider_name: str, config=None, **kwargs):
+        preflight_calls.append((provider_name, config))
+        return {
+            "providerName": provider_name,
+            "readinessState": "dry_run_enabled" if provider_name == "tradier" else "disabled",
+            "credentialsPresent": provider_name == "tradier",
+            "credentialContract": {
+                "requiredCredentialCount": 1,
+                "configuredCredentialCount": 1 if provider_name == "tradier" else 0,
+                "invalidCredentialCount": 0,
+                "partialCredentialCount": 0,
+            },
+            "dryRunEnabled": provider_name == "tradier",
+            "liveHttpCallsEnabled": False,
+            "brokerOrderPathEnabled": False,
+            "portfolioMutationPathEnabled": False,
+            "tradeableData": False,
+            "liveProbe": {
+                "enabled": provider_name == "tradier",
+                "explicitOptIn": provider_name == "tradier",
+                "reasonCode": "options_provider_live_probe_operator_opt_in_ready"
+                if provider_name == "tradier"
+                else "options_provider_live_probe_disabled_by_default",
+                "timeoutSeconds": 2.0,
+                "networkCallExecuted": False,
+                "apiKey": "must-not-leak",
+            },
+            "message": "token=must-not-leak",
+            "providerCapabilities": {"accountId": "must-not-leak"},
+        }
+
+    monkeypatch.setattr(module, "OptionsLiveProviderConfig", FakeOptionsLiveProviderConfig)
+    monkeypatch.setattr(
+        module,
+        "build_options_provider_live_readiness_preflight",
+        fake_build_options_provider_live_readiness_preflight,
+    )
+    monkeypatch.setattr(
+        module,
+        "_fetch_json",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("endpoint fetch should not run")),
+    )
+
+    payload = module.collect_diagnostic_bundle()
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+    assert preflight_calls == [("ibkr", sentinel_config), ("polygon", sentinel_config), ("tradier", sentinel_config)]
+    assert payload["optionsLabProviderPreflight"] == {
+        "providers": [
+            {
+                "providerId": "ibkr",
+                "readinessState": "disabled",
+                "credentialsPresent": False,
+                "credentialCounts": {
+                    "required": 1,
+                    "configured": 0,
+                    "invalid": 0,
+                    "partial": 0,
+                },
+                "dryRunEnabled": False,
+                "liveCallsEnabled": False,
+                "brokerOrderEnabled": False,
+                "portfolioMutationEnabled": False,
+                "tradeable": False,
+                "liveProbe": {
+                    "status": "disabled",
+                    "enabled": False,
+                    "explicitOptIn": False,
+                    "reasonCode": "options_provider_live_probe_disabled_by_default",
+                    "timeoutSeconds": 2.0,
+                    "networkCallExecuted": False,
+                },
+            },
+            {
+                "providerId": "polygon",
+                "readinessState": "disabled",
+                "credentialsPresent": False,
+                "credentialCounts": {
+                    "required": 1,
+                    "configured": 0,
+                    "invalid": 0,
+                    "partial": 0,
+                },
+                "dryRunEnabled": False,
+                "liveCallsEnabled": False,
+                "brokerOrderEnabled": False,
+                "portfolioMutationEnabled": False,
+                "tradeable": False,
+                "liveProbe": {
+                    "status": "disabled",
+                    "enabled": False,
+                    "explicitOptIn": False,
+                    "reasonCode": "options_provider_live_probe_disabled_by_default",
+                    "timeoutSeconds": 2.0,
+                    "networkCallExecuted": False,
+                },
+            },
+            {
+                "providerId": "tradier",
+                "readinessState": "dry_run_enabled",
+                "credentialsPresent": True,
+                "credentialCounts": {
+                    "required": 1,
+                    "configured": 1,
+                    "invalid": 0,
+                    "partial": 0,
+                },
+                "dryRunEnabled": True,
+                "liveCallsEnabled": False,
+                "brokerOrderEnabled": False,
+                "portfolioMutationEnabled": False,
+                "tradeable": False,
+                "liveProbe": {
+                    "status": "ready",
+                    "enabled": True,
+                    "explicitOptIn": True,
+                    "reasonCode": "options_provider_live_probe_operator_opt_in_ready",
+                    "timeoutSeconds": 2.0,
+                    "networkCallExecuted": False,
+                },
+            },
+        ]
+    }
+    for blocked in ("must-not-leak", "token", "apiKey", "accountId"):
+        assert blocked not in serialized
 
 
 def test_runtime_diagnostic_sanitizes_endpoint_and_provider_output(monkeypatch) -> None:

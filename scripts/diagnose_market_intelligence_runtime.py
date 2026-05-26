@@ -18,6 +18,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.services.official_macro_transport import run_official_macro_live_smoke
+from src.services.options_market_data_provider import (
+    LIVE_OPTIONS_PROVIDER_NAMES,
+    OptionsLiveProviderConfig,
+    build_options_provider_live_readiness_preflight,
+)
 from src.services.polygon_us_breadth_provider import (
     diagnostic_summary as polygon_us_breadth_diagnostic_summary,
     run_polygon_us_breadth_activation,
@@ -189,6 +194,78 @@ def _compact_polygon_us_breadth_diagnostic(payload: dict[str, Any]) -> dict[str,
         "missingMetrics": _string_list(payload.get("missingMetrics")),
         "reasonCodes": _sanitized_string_list(payload.get("reasonCodes")),
     }
+
+
+def _compact_options_lab_provider_preflight(payload: dict[str, Any]) -> dict[str, Any]:
+    credential_contract = dict(payload.get("credentialContract") or {})
+    live_probe = dict(payload.get("liveProbe") or {})
+    live_probe_enabled = bool(live_probe.get("enabled", False))
+    live_probe_explicit_opt_in = bool(live_probe.get("explicitOptIn", False))
+    if live_probe_enabled:
+        live_probe_status = "ready"
+    elif live_probe_explicit_opt_in:
+        live_probe_status = "blocked"
+    else:
+        live_probe_status = "disabled"
+
+    return {
+        "providerId": str(payload.get("providerName") or "unknown"),
+        "readinessState": str(payload.get("readinessState") or "unknown"),
+        "credentialsPresent": bool(payload.get("credentialsPresent", False)),
+        "credentialCounts": {
+            "required": _non_negative_int(credential_contract.get("requiredCredentialCount")),
+            "configured": _non_negative_int(credential_contract.get("configuredCredentialCount")),
+            "invalid": _non_negative_int(credential_contract.get("invalidCredentialCount")),
+            "partial": _non_negative_int(credential_contract.get("partialCredentialCount")),
+        },
+        "dryRunEnabled": bool(payload.get("dryRunEnabled", False)),
+        "liveCallsEnabled": bool(payload.get("liveHttpCallsEnabled", False)),
+        "brokerOrderEnabled": bool(payload.get("brokerOrderPathEnabled", False)),
+        "portfolioMutationEnabled": bool(payload.get("portfolioMutationPathEnabled", False)),
+        "tradeable": bool(payload.get("tradeableData", False)),
+        "liveProbe": {
+            "status": live_probe_status,
+            "enabled": live_probe_enabled,
+            "explicitOptIn": live_probe_explicit_opt_in,
+            "reasonCode": _sanitize_reason_code(live_probe.get("reasonCode")) or "unknown",
+            "timeoutSeconds": float(live_probe.get("timeoutSeconds") or 0.0),
+            "networkCallExecuted": bool(live_probe.get("networkCallExecuted", False)),
+        },
+    }
+
+
+def _collect_options_lab_provider_preflight() -> dict[str, Any]:
+    config = OptionsLiveProviderConfig.from_env()
+    providers: list[dict[str, Any]] = []
+    for provider_name in sorted(LIVE_OPTIONS_PROVIDER_NAMES):
+        try:
+            preflight = build_options_provider_live_readiness_preflight(provider_name, config=config)
+        except Exception:
+            preflight = {
+                "providerName": provider_name,
+                "readinessState": "unexpected_error",
+                "credentialsPresent": False,
+                "credentialContract": {
+                    "requiredCredentialCount": 1,
+                    "configuredCredentialCount": 0,
+                    "invalidCredentialCount": 0,
+                    "partialCredentialCount": 0,
+                },
+                "dryRunEnabled": False,
+                "liveHttpCallsEnabled": False,
+                "brokerOrderPathEnabled": False,
+                "portfolioMutationPathEnabled": False,
+                "tradeableData": False,
+                "liveProbe": {
+                    "enabled": False,
+                    "explicitOptIn": False,
+                    "reasonCode": "unexpected_error",
+                    "timeoutSeconds": 0.0,
+                    "networkCallExecuted": False,
+                },
+            }
+        providers.append(_compact_options_lab_provider_preflight(preflight))
+    return {"providers": providers}
 
 
 def _collect_polygon_us_breadth_diagnostic() -> dict[str, Any]:
@@ -393,6 +470,7 @@ def collect_diagnostic_bundle(
         "officialMacroDiagnostic": official_macro_diagnostic,
         "alpacaRotationDiagnostic": alpaca_rotation_diagnostic,
         "polygonUsBreadthDiagnostic": polygon_us_breadth_diagnostic,
+        "optionsLabProviderPreflight": _collect_options_lab_provider_preflight(),
         "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
         "discrepancies": [],
     }
@@ -489,6 +567,7 @@ def main(argv: list[str] | None = None) -> int:
             "officialMacroDiagnostic": _skipped_official_macro_diagnostic("unexpected_error"),
             "alpacaRotationDiagnostic": _skipped_alpaca_rotation_diagnostic("unexpected_error"),
             "polygonUsBreadthDiagnostic": _skipped_polygon_us_breadth_diagnostic("unexpected_error"),
+            "optionsLabProviderPreflight": _collect_options_lab_provider_preflight(),
             "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
             "discrepancies": [],
         }
