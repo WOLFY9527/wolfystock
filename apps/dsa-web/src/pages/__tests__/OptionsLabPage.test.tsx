@@ -398,29 +398,28 @@ describe('OptionsLabPage', () => {
     expect(within(commandArea).getByText('区间情景')).toBeInTheDocument();
     expect(within(commandArea).getByText('波动扩张')).toBeInTheDocument();
 
-    const snapshotPanel = screen.getByTestId('options-lab-snapshot-panel');
-    expect(snapshotPanel).toHaveTextContent('标的快照');
-    expect(snapshotPanel).toHaveTextContent('状态总览');
-    expect(snapshotPanel).toHaveTextContent('只读观察');
-    expect(within(snapshotPanel).getByTestId('options-lab-snapshot-metric-grid')).toHaveClass('grid-cols-2', 'md:grid-cols-3', 'xl:grid-cols-6');
-    expect(within(snapshotPanel).getAllByText('标的').length).toBeGreaterThan(0);
-    expect(within(snapshotPanel).getAllByText('IV 分位').length).toBeGreaterThan(0);
+    const productHero = screen.getByTestId('options-lab-product-hero');
+    expect(productHero).toHaveTextContent('决策实验室');
+    await waitFor(() => {
+      expect(productHero).toHaveTextContent('TEM');
+      expect(productHero).toHaveTextContent('PAUSED');
+      expect(productHero).toHaveTextContent('有限置信度');
+      expect(productHero).toHaveTextContent('期权数据暂不可用，本模块已暂停生成策略。');
+      expect(productHero).toHaveTextContent('最后更新：');
+    });
+    const summaryStrip = screen.getByTestId('options-lab-summary-strip');
+    expect(summaryStrip).toHaveTextContent('输入情景');
+    expect(summaryStrip).toHaveTextContent('首个候选');
+    expect(summaryStrip).toHaveTextContent('风险边界');
     expect(screen.getByTestId('options-lab-bento-grid')).toHaveClass('mt-5', 'grid', 'gap-6');
-    ['标的快照', '期权情景输入', '情景准备度', '风险边界', '策略候选', '数据限制', 'Call / Put 工作区'].forEach((label) => {
+    ['期权情景输入', '候选策略', '情景判断', '风险边界', '数据注记', 'Call / Put 链', '流动性与下一步'].forEach((label) => {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     });
-    const consumerAvailability = screen.getByTestId('options-lab-consumer-availability');
-    await waitFor(() => {
-      expect(consumerAvailability).toHaveTextContent('PAUSED');
-    });
-    expect(consumerAvailability).toHaveTextContent('可用性');
-    expect(consumerAvailability).toHaveTextContent('有限置信度');
-    expect(consumerAvailability).toHaveTextContent('期权数据暂不可用，本模块已暂停生成策略。');
-    expect(consumerAvailability).toHaveTextContent('最后更新：');
-    expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('保持折叠');
+    expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('默认折叠');
 
     expect(await screen.findByTestId('options-lab-decision-engine')).toBeInTheDocument();
     expect(screen.getByTestId('options-lab-risk-boundary-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('options-lab-context-rail-panel')).toBeInTheDocument();
     expect(screen.queryByTestId('options-lab-chain-details')).not.toBeInTheDocument();
     expect(screen.queryByTestId('options-lab-strategy-details')).not.toBeInTheDocument();
     expect((await screen.findAllByText('Call 链')).length).toBeGreaterThan(0);
@@ -435,7 +434,7 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-strategy-comparison');
-    expect(within(section).getByText('策略候选')).toBeInTheDocument();
+    expect(within(section).getByText('候选策略')).toBeInTheDocument();
     await waitFor(() => {
       expect(within(section).getByText('看涨期权多头')).toBeInTheDocument();
       expect(within(section).getByText('看跌期权多头')).toBeInTheDocument();
@@ -449,7 +448,7 @@ describe('OptionsLabPage', () => {
     expect(within(section).getByTestId('options-lab-primary-strategy-row')).toHaveTextContent('未达判断等级');
     expect(within(section).queryByText('流动性提示')).not.toBeInTheDocument();
     expect(within(section).queryByText('波动率 / 时间价值提示')).not.toBeInTheDocument();
-    expect(within(section).getByText('风险提示已合并')).toBeInTheDocument();
+    expect(within(section).getByText('先看排序靠前的结构，再复核最大亏损、盈亏平衡与可成交性。')).toBeInTheDocument();
     expect(document.body.textContent || '').not.toContain('Bull Call Spread');
     expect(document.body.textContent || '').not.toContain('Long Call');
   });
@@ -458,7 +457,7 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-decision-engine');
-    expect(within(section).getByText('情景准备度')).toBeInTheDocument();
+    expect(within(section).getByText('情景判断')).toBeInTheDocument();
     await waitFor(() => {
       expect(within(section).getAllByText('预期波动').length).toBeGreaterThan(0);
     });
@@ -594,19 +593,16 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     const decisionStrip = await screen.findByTestId('options-lab-decision-readiness-strip');
-    const primaryStrip = await screen.findByTestId('options-lab-primary-strategy-readiness-strip');
 
-    [decisionStrip, primaryStrip].forEach((strip) => {
-      expect(strip).toHaveTextContent('未达判断等级');
-      expect(strip).toHaveTextContent('仅观察');
-      expect(strip).toHaveTextContent('数据质量受限');
-      expect(strip).toHaveTextContent('流动性受限');
-      expect(strip).toHaveTextContent('演示/延迟数据');
-      expect(strip).toHaveTextContent('价差偏宽');
-      expect(strip.textContent || '').not.toContain('synthetic_or_fixture_data_not_decision_grade');
-      expect(strip.textContent || '').not.toContain('wide_bid_ask_spread');
-      expect(strip.textContent || '').not.toMatch(/买入|卖出|推荐/);
-    });
+    expect(decisionStrip).toHaveTextContent('未达判断等级');
+    expect(decisionStrip).toHaveTextContent('仅观察');
+    expect(decisionStrip).toHaveTextContent('数据质量受限');
+    expect(decisionStrip).toHaveTextContent('流动性受限');
+    expect(decisionStrip).toHaveTextContent('演示/延迟数据');
+    expect(decisionStrip).toHaveTextContent('价差偏宽');
+    expect(decisionStrip.textContent || '').not.toContain('synthetic_or_fixture_data_not_decision_grade');
+    expect(decisionStrip.textContent || '').not.toContain('wide_bid_ask_spread');
+    expect(decisionStrip.textContent || '').not.toMatch(/买入|卖出|推荐/);
   });
 
   it('renders safe guarded UI when gateIssues arrive as API issue objects', async () => {
@@ -742,25 +738,22 @@ describe('OptionsLabPage', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: '期权实验室' })).toBeInTheDocument();
     const decisionStrip = await screen.findByTestId('options-lab-decision-readiness-strip');
-    const primaryStrip = await screen.findByTestId('options-lab-primary-strategy-readiness-strip');
 
-    [decisionStrip, primaryStrip].forEach((strip) => {
-      expect(strip).toHaveTextContent('未达判断等级');
-      expect(strip).toHaveTextContent('演示/延迟数据');
-      expect(strip).toHaveTextContent('价差偏宽');
-      expect(strip.textContent || '').not.toContain('synthetic_or_fixture_data_not_decision_grade');
-      expect(strip.textContent || '').not.toContain('wide_bid_ask_spread');
-      expect(strip.textContent || '').not.toMatch(/买入|卖出|推荐/);
-    });
+    expect(decisionStrip).toHaveTextContent('未达判断等级');
+    expect(decisionStrip).toHaveTextContent('演示/延迟数据');
+    expect(decisionStrip).toHaveTextContent('价差偏宽');
+    expect(decisionStrip.textContent || '').not.toContain('synthetic_or_fixture_data_not_decision_grade');
+    expect(decisionStrip.textContent || '').not.toContain('wide_bid_ask_spread');
+    expect(decisionStrip.textContent || '').not.toMatch(/买入|卖出|推荐/);
     expect(screen.queryByText('期权实验室暂时无法加载，请刷新或稍后重试。')).not.toBeInTheDocument();
   });
 
   it('keeps maintainer setup actions out of the default consumer view', async () => {
     renderPage();
 
-    const consumerAvailability = await screen.findByTestId('options-lab-consumer-availability');
+    const productHero = await screen.findByTestId('options-lab-product-hero');
     await waitFor(() => {
-      expect(consumerAvailability).toHaveTextContent('期权数据暂不可用，本模块已暂停生成策略。');
+      expect(productHero).toHaveTextContent('期权数据暂不可用，本模块已暂停生成策略。');
     });
     expect(screen.queryByTestId('options-lab-setup-path')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '查看 Provider Ops' })).not.toBeInTheDocument();
@@ -883,25 +876,22 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     const decisionStrip = await screen.findByTestId('options-lab-decision-readiness-strip');
-    const primaryStrip = await screen.findByTestId('options-lab-primary-strategy-readiness-strip');
-
-    [decisionStrip, primaryStrip].forEach((strip) => {
-      expect(strip).toHaveTextContent('通过基础门控');
-      expect(strip).toHaveTextContent('仍需人工复核');
-      expect(strip.textContent || '').not.toMatch(/买入|卖出|推荐/);
-    });
+    expect(decisionStrip).toHaveTextContent('通过基础门控');
+    expect(decisionStrip).toHaveTextContent('仍需人工复核');
+    expect(decisionStrip.textContent || '').not.toMatch(/买入|卖出|推荐/);
   });
 
   it('keeps delayed and demo fixture states explicitly observation-only', async () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-decision-engine');
-    const snapshotPanel = screen.getByTestId('options-lab-snapshot-panel');
+    const productHero = screen.getByTestId('options-lab-product-hero');
     await waitFor(() => {
       expect(within(section).getAllByText('演示数据：当前数据延迟，仅用于界面与情景验证，不可用于真实交易判断。').length).toBeGreaterThan(0);
     });
 
-    expect(within(snapshotPanel).getAllByText('演示/延迟数据').length).toBeGreaterThan(0);
+    expect(within(productHero).getByText('PAUSED')).toBeInTheDocument();
+    expect(within(productHero).getByText('数据不足，禁止判断')).toBeInTheDocument();
     expect(within(section).getAllByText('演示/延迟数据').length).toBeGreaterThan(0);
     expect(document.body.textContent || '').not.toContain('适合等待更好定价');
   });
@@ -947,7 +937,7 @@ describe('OptionsLabPage', () => {
 
     const assumptions = screen.getByTestId('options-lab-assumptions-panel');
     expect(decision).toContainElement(summary);
-    expect(summary).toHaveTextContent('观察状态');
+    expect(summary).toHaveTextContent('判断状态');
     expect(summary).toHaveTextContent('数据不足，禁止判断');
     expect(summary).toHaveTextContent('牛市看涨价差');
     expect(summary).toHaveTextContent('边界原因：数据质量未达到可判断等级');
@@ -956,7 +946,7 @@ describe('OptionsLabPage', () => {
     expect(Boolean(decision.compareDocumentPosition(analysisDetails) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(callsTable).toBeInTheDocument();
     expect(putsTable).toBeInTheDocument();
-    expect(strategyDetails).toHaveTextContent('策略候选');
+    expect(strategyDetails).toHaveTextContent('候选策略');
   });
 
   it('renders no-trade optimizer state without black-screening', async () => {
@@ -1073,7 +1063,7 @@ describe('OptionsLabPage', () => {
     });
     expect(within(riskPanel).getAllByText('买卖价差过宽').length).toBeGreaterThan(0);
     expect(within(riskPanel).getAllByText('敏感度缺失').length).toBeGreaterThan(0);
-    expect(section).toHaveTextContent('情景准备度');
+    expect(section).toHaveTextContent('情景判断');
   });
 
   it('does not fire compare before required assumptions are ready and shows a compact empty state', async () => {
@@ -1121,9 +1111,9 @@ describe('OptionsLabPage', () => {
     });
     renderPage();
 
-    expect((await screen.findAllByText('标的快照')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('决策实验室')).length).toBeGreaterThan(0);
     const section = await screen.findByTestId('options-lab-strategy-comparison');
-    expect(within(section).getByText('策略候选')).toBeInTheDocument();
+    expect(within(section).getByText('候选策略')).toBeInTheDocument();
     await waitFor(() => {
       expect(within(section).getByText('策略对比暂不可用。请稍后重试或调整假设。')).toBeInTheDocument();
     });
@@ -1156,7 +1146,7 @@ describe('OptionsLabPage', () => {
 
     renderPage();
 
-    expect((await screen.findAllByText('标的快照')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('决策实验室')).length).toBeGreaterThan(0);
     const section = await screen.findByTestId('options-lab-strategy-comparison');
     await waitFor(() => {
       expect(within(section).getByText('看涨期权多头')).toBeInTheDocument();
@@ -1172,9 +1162,9 @@ describe('OptionsLabPage', () => {
     });
     renderPage();
 
-    expect((await screen.findAllByText('标的快照')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('决策实验室')).length).toBeGreaterThan(0);
     const section = await screen.findByTestId('options-lab-strategy-comparison');
-    expect(within(section).getByText('策略候选')).toBeInTheDocument();
+    expect(within(section).getByText('候选策略')).toBeInTheDocument();
     await waitFor(() => {
       expect(within(section).getByText('策略对比暂不可用。请稍后重试或调整假设。')).toBeInTheDocument();
     });
@@ -1188,7 +1178,7 @@ describe('OptionsLabPage', () => {
     });
     renderPage();
 
-    expect((await screen.findAllByText('标的快照')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('决策实验室')).length).toBeGreaterThan(0);
     const section = await screen.findByTestId('options-lab-strategy-comparison');
     await waitFor(() => {
       expect(within(section).getByText('策略对比暂不可用。请稍后重试或调整假设。')).toBeInTheDocument();
@@ -1256,17 +1246,19 @@ describe('OptionsLabPage', () => {
     ].forEach((testId) => {
       expect(screen.queryByTestId(testId)).not.toBeInTheDocument();
     });
-    const consumerAvailability = screen.getByTestId('options-lab-consumer-availability');
-    expect(consumerAvailability).toHaveTextContent('可用性');
-    expect(consumerAvailability).toHaveTextContent(/当前期权信号数据不足，仅供观察。|期权数据暂不可用，本模块已暂停生成策略。/);
-    expect(consumerAvailability).toHaveTextContent('最后更新：');
+    const productHero = screen.getByTestId('options-lab-product-hero');
+    expect(productHero).toHaveTextContent(/当前期权信号数据不足，仅供观察。|期权数据暂不可用，本模块已暂停生成策略。/);
+    expect(productHero).toHaveTextContent('最后更新：');
     const decision = await screen.findByTestId('options-lab-decision-engine');
+    await waitFor(() => {
+      expect(screen.getByTestId('options-lab-decision-summary')).toBeInTheDocument();
+    });
     expect(decision).toHaveTextContent('数据不足，禁止判断');
     expect(decision).toHaveTextContent('演示数据');
     expect(decision).toHaveTextContent('不可用于真实交易判断');
     expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('风险边界');
-    expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('数据限制');
-    expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('保持折叠');
+    expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('数据注记');
+    expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('默认折叠');
     expect(within(screen.getByTestId('options-lab-analysis-details')).getByRole('button', { name: /展开/ })).toHaveAttribute('aria-expanded', 'false');
     expect(document.body.textContent || '').not.toMatch(/开发者|Developer|Provider Ops|数据源设置|backend|offline|provider_validation_required|mocked_frontend_shell|fixture_frontend_phase4|synthetic_or_fixture_data_not_decision_grade|provider_timeout/i);
   });
@@ -1372,7 +1364,7 @@ describe('OptionsLabPage', () => {
 
     await screen.findByText('TEM260619C00055000');
     [
-      'options-lab-snapshot-panel',
+      'options-lab-product-hero',
       'options-lab-decision-engine',
       'options-lab-risk-boundary-panel',
       'options-lab-strategy-comparison',
@@ -1404,7 +1396,7 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-decision-engine');
-    expect(within(section).getByText('情景准备度')).toBeInTheDocument();
+    expect(within(section).getByText('情景判断')).toBeInTheDocument();
     await waitFor(() => {
       expect(within(section).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
     });
@@ -1470,7 +1462,7 @@ describe('OptionsLabPage', () => {
 
     renderPage();
 
-    expect((await screen.findAllByText('标的快照')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('决策实验室')).length).toBeGreaterThan(0);
     expect(await screen.findByText('暂无可用到期日')).toBeInTheDocument();
     expect(screen.getByText('先选择可用到期日并加载合约后，再进入策略对比。')).toBeInTheDocument();
     expect(vi.mocked(optionsLabApi.compareStrategies)).not.toHaveBeenCalled();
