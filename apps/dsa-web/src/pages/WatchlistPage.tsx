@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState, type ComponentProps } from '
 import {
   BarChart3,
   CheckSquare,
-  Clipboard,
   Copy,
   ExternalLink,
   Play,
@@ -27,6 +26,7 @@ import {
   CompactEmptyRow,
   DenseCommandBar,
   DensePageHeader,
+  DenseSecondaryDisclosure,
   DenseStatusStrip,
   DenseTableShell,
   TerminalButton,
@@ -68,6 +68,8 @@ type BatchProgress = {
   currentSymbol: string | null;
   failures: Record<string, BatchFailure>;
 } | null;
+
+type WatchlistMonitoringTone = 'success' | 'caution' | 'neutral';
 
 const ROW_SELECTION_BUTTON_CLASS = 'inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-lg border transition hover:border-white/30 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/35';
 
@@ -205,10 +207,6 @@ function getLatestIntelligenceTime(item: WatchlistItem): string | null {
     item.updatedAt,
   ].filter(Boolean) as string[];
   return values.sort((left, right) => getTime(right) - getTime(left))[0] || null;
-}
-
-function getTrustUpdatedTime(item: WatchlistItem): string | null {
-  return item.lastScoredAt || item.intelligence?.scanner?.lastScannedAt || null;
 }
 
 function formatFreshness(value?: string | null): string {
@@ -350,11 +348,6 @@ function getTrustState(item: WatchlistItem): WatchlistTrustState {
   return 'stale';
 }
 
-function formatTrustUpdatedLabel(value: string | null | undefined, language: 'zh' | 'en'): string | null {
-  if (!value) return null;
-  return `${language === 'en' ? 'Updated' : '更新'} ${formatDateTime(value, language)}`;
-}
-
 function hasLimitedConfidenceDisclosure(item: WatchlistItem): boolean {
   return isFallbackTrustSource(item.scoreSource)
     || isFallbackTrustSource(item.source)
@@ -435,6 +428,72 @@ function buildWatchlistConclusion(items: WatchlistItem[], language: 'zh' | 'en')
     limitedConfidenceCount,
     tone: staleCount || unknownCount || limitedConfidenceCount ? 'caution' : 'success',
   };
+}
+
+function formatMonitoringStateLabel(tone: WatchlistMonitoringTone, total: number, language: 'zh' | 'en'): string {
+  if (total === 0) return language === 'en' ? 'Waiting for watch items' : '等待加入观察';
+  if (tone === 'success') return language === 'en' ? 'Ready to monitor' : '可继续观察';
+  if (tone === 'caution') return language === 'en' ? 'Needs attention' : '需要留意';
+  return language === 'en' ? 'Monitoring' : '监控中';
+}
+
+function buildObservationSummary(item: WatchlistItem, language: 'zh' | 'en'): string {
+  const latestTime = getLatestIntelligenceTime(item);
+  const hitRate = item.intelligence?.strategySimulation?.hitRate;
+  const returnPct = item.intelligence?.backtest?.totalReturnPct;
+  const parts: string[] = [];
+
+  if (latestTime) {
+    parts.push(`${language === 'en' ? 'Updated' : '更新'} ${formatDateTime(latestTime, language)}`);
+  }
+  if (typeof hitRate === 'number') {
+    parts.push(`${language === 'en' ? 'Hit' : '命中'} ${Math.round(hitRate * 100)}%`);
+  }
+  if (typeof returnPct === 'number') {
+    parts.push(`${language === 'en' ? 'Backtest' : '回测'} ${formatPct(returnPct)}`);
+  }
+
+  if (parts.length === 0) {
+    return language === 'en' ? 'Waiting for more watch evidence.' : '等待更多观察数据。';
+  }
+
+  return parts.join(' · ');
+}
+
+function buildWatchRiskNote(item: WatchlistItem, language: 'zh' | 'en'): string | null {
+  const state = getScoreDisclosureState(item);
+  const notice = formatScoreDisclosureNotice(state, language);
+  if (notice) return notice;
+  if (state === 'failed') {
+    return language === 'en'
+      ? 'This signal is temporarily unavailable. Refresh before using it.'
+      : '当前信号暂不可用，刷新后再参考。';
+  }
+  if (!hasScannerEvidence(item) && !hasBacktestEvidence(item)) {
+    return language === 'en'
+      ? 'Data is updating and will refresh shortly.'
+      : '数据更新中，稍后将自动刷新。';
+  }
+  if (normalizeText(item.intelligence?.strategySimulation?.status).toLowerCase() === 'insufficient_history') {
+    return language === 'en'
+      ? 'History is still limited, so keep this item in observation mode.'
+      : '样本仍然有限，先保持观察。';
+  }
+  return null;
+}
+
+function buildNextActionLabel(item: WatchlistItem, language: 'zh' | 'en'): string {
+  const state = getScoreDisclosureState(item);
+  if (state === 'failed' || state === 'unknown') {
+    return language === 'en' ? 'Refresh and review' : '刷新后再看';
+  }
+  if (!hasBacktestEvidence(item)) {
+    return language === 'en' ? 'Run backtest' : '补充回测';
+  }
+  if (hasLimitedConfidenceDisclosure(item)) {
+    return language === 'en' ? 'Keep observing' : '保持观察';
+  }
+  return language === 'en' ? 'Open analysis' : '进入分析';
 }
 
 function formatBacktestStatus(item: WatchlistItem, failure?: BatchFailure): string {
@@ -521,7 +580,7 @@ function getCopy(language: 'zh' | 'en') {
   if (language === 'en') {
     return {
       title: 'Watchlist',
-    subtitle: 'Compact evidence queue for scanner candidates.',
+      subtitle: 'Clean monitoring list for scanner candidates.',
       totalTracked: 'Total tracked',
       marketsRepresented: 'Markets represented',
       scannerSourced: 'Scanner-sourced',
@@ -534,7 +593,7 @@ function getCopy(language: 'zh' | 'en') {
       latestUpdate: 'Latest update',
       filters: 'Filters',
       advancedFilters: 'Advanced filters',
-      runtimeStatus: 'Runtime status',
+      runtimeStatus: 'Batch progress',
       batchActions: 'Batch actions',
       historyPrefix: 'HIST',
       hitPrefix: 'HIT',
@@ -600,8 +659,8 @@ function getCopy(language: 'zh' | 'en') {
       emptyTitle: 'No tracked candidates yet.',
       emptyBody: 'No watched symbols yet. Add candidates from Scanner, or adjust filters to review existing evidence.',
       openScanner: 'Open Scanner',
-      tableTitle: 'Tracked candidates',
-      tableDescription: 'Freshness, confidence, and backtest summary stay visible.',
+      tableTitle: 'Monitoring list',
+      tableDescription: 'Rows keep state, observation, and actions aligned.',
       loading: 'Loading watchlist...',
       removed: 'Removed from watchlist.',
       copyFailed: 'Copy failed.',
@@ -615,7 +674,7 @@ function getCopy(language: 'zh' | 'en') {
   }
   return {
     title: '观察列表',
-    subtitle: '紧凑观察队列',
+    subtitle: '清晰跟踪每个标的的状态变化',
     totalTracked: '追踪总数',
     marketsRepresented: '覆盖市场',
     scannerSourced: '扫描来源',
@@ -628,7 +687,7 @@ function getCopy(language: 'zh' | 'en') {
     latestUpdate: '最近更新时间',
     filters: '筛选',
     advancedFilters: '高级筛选',
-    runtimeStatus: '运行状态',
+    runtimeStatus: '批量进度',
     batchActions: '批量操作',
     historyPrefix: '历史',
     hitPrefix: '命中',
@@ -691,11 +750,11 @@ function getCopy(language: 'zh' | 'en') {
     removing: '移除中...',
     copySymbol: '复制代码',
     copied: '已复制',
-    emptyTitle: '暂无追踪候选。',
-    emptyBody: '暂无观察标的，可先从扫描器加入候选。',
+    emptyTitle: '还没有观察标的',
+    emptyBody: '先从扫描器加入候选，再回到这里持续跟踪状态变化。',
     openScanner: '打开扫描器',
-    tableTitle: '追踪候选',
-    tableDescription: '展示鲜度、置信度和回测概览。',
+    tableTitle: '监控列表',
+    tableDescription: '按行查看状态、观察与操作。',
     loading: '正在加载观察列表...',
     removed: '已从观察列表移除。',
     copyFailed: '复制失败。',
@@ -710,9 +769,13 @@ function getCopy(language: 'zh' | 'en') {
 
 function WatchlistConclusionBand({
   model,
+  trackedCount,
+  monitoringStateLabel,
   language,
 }: {
   model: WatchlistConclusionModel;
+  trackedCount: number;
+  monitoringStateLabel: string;
   language: 'zh' | 'en';
 }) {
   const toneVariant: ComponentProps<typeof TerminalChip>['variant'] = model.tone === 'success'
@@ -725,27 +788,36 @@ function WatchlistConclusionBand({
       as="section"
       dense
       data-testid="watchlist-conclusion-band"
-      className="grid gap-2 px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_auto]"
+      className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start"
     >
       <div className="min-w-0">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <TerminalChip variant={toneVariant} className="shrink-0">{model.title}</TerminalChip>
-          <TerminalChip variant="success" className="font-mono">
-            {language === 'en' ? 'Fresh' : '最新'} {model.freshCount}
+        <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
+          {language === 'en' ? 'Monitoring state' : '监控状态'}
+        </p>
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+          <h2 className="truncate text-xl font-semibold text-white md:text-2xl">{model.title}</h2>
+          <TerminalChip variant={toneVariant} className="shrink-0">
+            {monitoringStateLabel}
           </TerminalChip>
-          <TerminalChip variant={model.staleCount > 0 ? 'caution' : 'neutral'} className="font-mono">
-            {language === 'en' ? 'Recent available' : '最近可用'} {model.staleCount}
-          </TerminalChip>
-          <TerminalChip variant={model.unknownCount > 0 ? 'caution' : 'neutral'} className="font-mono">
-            {language === 'en' ? 'Updating' : '更新中'} {model.unknownCount}
-          </TerminalChip>
-          <TerminalChip variant={model.limitedConfidenceCount > 0 ? 'caution' : 'neutral'} className="font-mono">
-            {language === 'en' ? 'Limited confidence' : '置信度低'} {model.limitedConfidenceCount}
+          <TerminalChip variant="neutral" className="font-mono">
+            {language === 'en' ? 'Tracked' : '观察标的'} {trackedCount}
           </TerminalChip>
         </div>
-        <p className="mt-1 text-pretty text-xs leading-relaxed text-white/64">
+        <p className="mt-2 text-sm leading-6 text-white/72">
           {model.detail}
         </p>
+      </div>
+      <div className="grid min-w-[180px] grid-cols-2 gap-2 text-xs md:w-[220px]">
+        <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
+          <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Fresh' : '最新'}</p>
+          <p className="mt-1 font-mono text-base font-semibold text-white">{model.freshCount}</p>
+        </div>
+        <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
+          <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Attention' : '需留意'}</p>
+          <p className="mt-1 font-mono text-base font-semibold text-white">
+            {model.staleCount + model.unknownCount + model.limitedConfidenceCount}
+          </p>
+        </div>
       </div>
     </TerminalPanel>
   );
@@ -1212,12 +1284,11 @@ const WatchlistPage: React.FC = () => {
       : 'border-emerald-400/20 bg-emerald-400/5 text-emerald-100/80';
   const autoRefreshStatus = describeBooleanEnabled(refreshStatus?.enabled, { language });
   const scannerPath = buildLocalizedPath('/scanner', language);
+  const attentionCount = watchlistConclusion.staleCount + watchlistConclusion.unknownCount + watchlistConclusion.limitedConfidenceCount;
+  const monitoringStateLabel = formatMonitoringStateLabel(watchlistConclusion.tone, filteredItems.length, language);
   const statusItems = [
     { label: copy.trackedSymbols, value: summary.total },
-    { label: copy.scannerCoverage, value: summary.scannerResults || (summary.total ? copy.noEvidence : copy.noEvidence) },
-    { label: copy.backtestCoverage, value: summary.backtestResults || (summary.total ? copy.noEvidence : copy.noEvidence) },
-    { label: copy.staleCoverage, value: summary.stale },
-    { label: copy.failureCoverage, value: summary.failedOrNoData },
+    { label: language === 'en' ? 'Needs attention' : '需留意项目', value: attentionCount },
     { label: copy.latestUpdate, value: summary.latestTime ? formatDateTime(summary.latestTime, language) : (language === 'zh' ? '暂无情报' : 'No intelligence') },
   ];
   const activeScanner = activeItem?.intelligence?.scanner;
@@ -1235,6 +1306,9 @@ const WatchlistPage: React.FC = () => {
   const activeBacktestSummary = activeItem && hasBacktestMetrics(activeItem)
     ? `${language === 'zh' ? '收益' : 'Return'} ${formatPct(activeBacktest?.totalReturnPct)} · ${language === 'zh' ? '回撤' : 'DD'} ${formatPct(activeBacktest?.maxDrawdownPct)} · Sharpe ${formatRatio(activeBacktest?.sharpe)} · ${language === 'zh' ? '交易' : 'Trades'} ${activeBacktest?.tradeCount ?? '--'}`
     : copy.noEvidence;
+  const activeObservationSummary = activeItem ? buildObservationSummary(activeItem, language) : copy.noEvidence;
+  const activeRiskNote = activeItem ? buildWatchRiskNote(activeItem, language) : null;
+  const activeNextActionLabel = activeItem ? buildNextActionLabel(activeItem, language) : '--';
   const activeContextTags = activeItem
     ? [
         activeItem.themeId ? `${copy.themePrefix}: ${activeItem.themeId}` : null,
@@ -1264,8 +1338,26 @@ const WatchlistPage: React.FC = () => {
       <ConsumerWorkspacePageShell data-testid="watchlist-page" className="flex-1">
       <div data-layout-zone="HeaderStrip" data-testid="watchlist-header-strip" className="flex min-w-0 flex-col gap-3">
         <DensePageHeader
-          eyebrow={language === 'zh' ? '扫描候选' : 'Scanner candidates'}
+          eyebrow={language === 'zh' ? '监控队列' : 'Monitoring board'}
           title={copy.title}
+          action={(
+            <TerminalButton
+              type="button"
+              variant="secondary"
+              className="h-9 px-3 text-xs"
+              onClick={() => navigate(scannerPath)}
+            >
+              <ExternalLink className="h-4 w-4" />
+              {copy.openScanner}
+            </TerminalButton>
+          )}
+        />
+
+        <WatchlistConclusionBand
+          model={watchlistConclusion}
+          trackedCount={summary.total}
+          monitoringStateLabel={monitoringStateLabel}
+          language={language}
         />
 
         <DenseStatusStrip
@@ -1273,7 +1365,6 @@ const WatchlistPage: React.FC = () => {
           ariaLabel="watchlist summary"
           items={statusItems}
         />
-        <WatchlistConclusionBand model={watchlistConclusion} language={language} />
 
         {notice ? (
           <TerminalNotice className={noticeClassName} role="status">
@@ -1293,24 +1384,13 @@ const WatchlistPage: React.FC = () => {
           data-testid="watchlist-compact-filter-bar"
           className="min-h-0 rounded-none border-x-0 border-t-0 px-3 py-2"
           leading={<span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.filters}</span>}
-          trailing={(
-            <TerminalButton
-              type="button"
-              variant="secondary"
-              className="h-9 px-3 text-xs"
-              onClick={() => navigate(scannerPath)}
-            >
-              <ExternalLink className="h-4 w-4" />
-              {copy.openScanner}
-            </TerminalButton>
-          )}
         >
           <div className="flex min-w-0 flex-col gap-2">
             <div
-              data-testid="watchlist-primary-filters"
+              data-testid="watchlist-filter-grid"
               className="grid min-w-0 grid-cols-2 gap-2 md:flex md:flex-wrap md:items-end"
             >
-              <div className="col-span-2 min-w-0 md:flex-[2_1_20rem]">
+              <div data-testid="watchlist-primary-filters" className="col-span-2 min-w-0 md:flex-[2_1_20rem]">
                 <Input
                   label={copy.search}
                   value={query}
@@ -1399,50 +1479,51 @@ const WatchlistPage: React.FC = () => {
         >
           <div data-layout-zone="PrimaryWorkRegion" data-testid="watchlist-primary-work-region" className="min-w-0">
             <ConsoleBoard className="rounded-none border-0 bg-transparent">
-                <div className="flex min-w-0 items-center justify-between gap-3 border-b border-[color:var(--wolfy-divider)] px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.tableTitle}</p>
-                    <p className="truncate text-xs text-[color:var(--wolfy-text-secondary)]">{copy.tableDescription}</p>
-                  </div>
-                  <TerminalChip variant="neutral" className="font-mono">
-                    {actionScopeLabel}
-                  </TerminalChip>
+              <div className="flex min-w-0 items-center justify-between gap-3 border-b border-[color:var(--wolfy-divider)] px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.tableTitle}</p>
+                  <p className="truncate text-xs text-[color:var(--wolfy-text-secondary)]">{copy.tableDescription}</p>
                 </div>
-                {isLoading ? (
-                  <TerminalPanel as="section" dense className="py-8 text-center text-sm text-white/45" role="status">
-                    {copy.loading}
-                  </TerminalPanel>
-                ) : filteredItems.length > 0 ? (
-                  <DenseRows data-testid="watchlist-candidate-list">
-                    {filteredItems.map((item) => {
+                <TerminalChip variant="neutral" className="font-mono">
+                  {actionScopeLabel}
+                </TerminalChip>
+              </div>
+              <div
+                data-testid="watchlist-list-header"
+                className="hidden min-w-0 grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_auto] gap-4 border-b border-[color:var(--wolfy-divider)] px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)] lg:grid"
+              >
+                <span>{language === 'en' ? 'Symbol' : '标的'}</span>
+                <span>{language === 'en' ? 'State' : '状态'}</span>
+                <span>{language === 'en' ? 'Observation' : '观察'}</span>
+                <span className="text-right">{copy.actions}</span>
+              </div>
+              {isLoading ? (
+                <TerminalPanel as="section" dense className="py-8 text-center text-sm text-white/45" role="status">
+                  {copy.loading}
+                </TerminalPanel>
+              ) : filteredItems.length > 0 ? (
+                <DenseRows data-testid="watchlist-candidate-list">
+                  {filteredItems.map((item) => {
                     const scanner = item.intelligence?.scanner;
                     const strategySimulation = item.intelligence?.strategySimulation;
                     const backtest = item.intelligence?.backtest;
                     const score = getScannerScore(item);
                     const hitRate = strategySimulation?.hitRate;
                     const avgForward = strategySimulation?.avgForwardReturnPct;
-                    const returnPct = backtest?.totalReturnPct;
-                    const hasAnyEvidence = hasScannerEvidence(item)
-                      || strategySimulation?.status === 'ready'
-                      || hasBacktestEvidence(item);
                     const batchStatus = batchStatuses[item.symbol];
                     const batchFailure = batchFailures[item.symbol];
                     const scannerFailure = item.scoreError || scanner?.reason
                       ? sanitizeFailureReason(item.scoreError || scanner?.reason || '', '扫描失败')
                       : null;
-                    const scannerReasonLabel = formatScannerReason(scanner?.reason, language);
                     const latestTime = getLatestIntelligenceTime(item);
                     const scannerStatusLabel = formatScannerStatus(item);
                     const backtestStatusLabel = formatBacktestStatus(item, batchFailure);
                     const isActive = activeItem?.id === item.id;
                     const scoreDisclosureState = getScoreDisclosureState(item);
                     const scoreDisclosureStatusLabel = formatScoreDisclosureStatus(scoreDisclosureState, language);
-                    const scoreDisclosureNotice = formatScoreDisclosureNotice(scoreDisclosureState, language);
-                    const trustUpdatedLabel = formatTrustUpdatedLabel(getTrustUpdatedTime(item), language);
+                    const rowRiskNote = buildWatchRiskNote(item, language);
                     const originLabel = formatWatchlistOrigin(item.source, language);
                     const scoreFreshnessVariant = scoreDisclosureChipVariant(scoreDisclosureState);
-                    const trustStateVariant = scoreDisclosureChipVariant(scoreDisclosureState);
-                    const scannerStatusVariant = scannerStatusChipVariant(scannerStatusLabel);
                     const backtestStatusVariant = backtestStatusLabel === '已回测'
                       ? 'success'
                       : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(backtestStatusLabel)
@@ -1465,224 +1546,177 @@ const WatchlistPage: React.FC = () => {
                           { language },
                         )
                       : null;
+                    const rowObservation = buildObservationSummary(item, language);
+                    const rowNextAction = buildNextActionLabel(item, language);
+                    const rowStateLine = [
+                      `${copy.score} ${formatScore(score)}`,
+                      typeof avgForward === 'number' ? `${copy.historyPrefix} ${formatPct(avgForward)}` : null,
+                      typeof hitRate === 'number' ? `${copy.hitPrefix} ${Math.round(hitRate * 100)}%` : null,
+                    ].filter(Boolean).join(' · ');
+
                     return (
                       <article
                         key={item.id}
                         data-testid={`watchlist-row-${item.symbol}`}
-                        className={`min-w-0 px-3 py-3 transition-colors md:px-4 ${isActive ? 'bg-white/[0.045]' : 'bg-transparent hover:bg-white/[0.02]'}`}
+                        className={`min-w-0 border-b border-[color:var(--wolfy-divider)] px-3 py-3 transition-colors md:px-4 ${isActive ? 'bg-white/[0.045]' : 'bg-transparent hover:bg-white/[0.02]'}`}
                       >
-                        <div className="flex min-w-0 flex-col gap-3">
-                          <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                            <div className="flex min-w-0 gap-3">
-                              <button
-                                type="button"
-                                className={`${ROW_SELECTION_BUTTON_CLASS} ${
+                        <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_auto] lg:items-start lg:gap-4">
+                          <div className="flex min-w-0 gap-3">
+                            <button
+                              type="button"
+                              className={`${ROW_SELECTION_BUTTON_CLASS} ${
+                                selectedIds.has(item.id)
+                                  ? 'border-cyan-300 bg-cyan-300/30 shadow-[0_0_10px_rgba(103,232,249,0.25)]'
+                                  : 'border-white/15 bg-white/[0.03] hover:border-white/30'
+                              }`}
+                              role="checkbox"
+                              aria-checked={selectedIds.has(item.id)}
+                              aria-label={`${language === 'zh' ? '选择' : 'Select'} ${item.symbol}`}
+                              onClick={() => toggleSelected(item)}
+                            >
+                              <span
+                                aria-hidden="true"
+                                className={`h-3 w-3 rounded-sm border transition ${
                                   selectedIds.has(item.id)
-                                    ? 'border-cyan-300 bg-cyan-300/30 shadow-[0_0_10px_rgba(103,232,249,0.25)]'
-                                    : 'border-white/15 bg-white/[0.03] hover:border-white/30'
+                                    ? 'border-cyan-100 bg-cyan-100 shadow-[0_0_8px_rgba(103,232,249,0.35)]'
+                                    : 'border-white/20 bg-transparent'
                                 }`}
-                                role="checkbox"
-                                aria-checked={selectedIds.has(item.id)}
-                                aria-label={`${language === 'zh' ? '选择' : 'Select'} ${item.symbol}`}
-                                onClick={() => toggleSelected(item)}
-                              >
-                                <span
-                                  aria-hidden="true"
-                                  className={`h-3 w-3 rounded-sm border transition ${
-                                    selectedIds.has(item.id)
-                                      ? 'border-cyan-100 bg-cyan-100 shadow-[0_0_8px_rgba(103,232,249,0.35)]'
-                                      : 'border-white/20 bg-transparent'
-                                  }`}
-                                />
-                              </button>
-                              <button
-                                type="button"
-                                aria-pressed={isActive}
-                                aria-label={`${language === 'zh' ? '查看详情' : 'View details'} ${item.symbol}`}
-                                className={`flex min-w-0 flex-1 flex-col items-start gap-1 rounded-lg border px-3 py-2 text-left transition ${
-                                  isActive
-                                    ? 'border-[color:var(--wolfy-accent)] bg-[var(--wolfy-surface-input)]'
-                                    : 'border-transparent bg-transparent hover:border-[color:var(--wolfy-border-subtle)] hover:bg-white/[0.02]'
-                                }`}
-                                onClick={() => setActiveItemId(item.id)}
-                              >
-                                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                  <Clipboard className="h-4 w-4 text-white/30" />
-                                  <span className="font-semibold text-white">{item.symbol}</span>
-                                  <TerminalChip variant="neutral">{formatMarket(item.market)}</TerminalChip>
-                                  {isRecentlyAdded(item) ? (
-                                    <TerminalChip variant="info">{copy.recentlyAdded}</TerminalChip>
-                                  ) : null}
-                                  {batchDisplayStatus ? (
-                                    <TerminalChip variant={terminalChipVariant(batchDisplayStatus.tone)} className="font-mono">
-                                      {batchDisplayStatus.label}
-                                    </TerminalChip>
-                                  ) : null}
-                                </div>
-                                <p className="truncate text-sm text-white/78">{item.name || '--'}</p>
-                                <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/45">
-                                  <span>{originLabel}</span>
-                                  {item.themeId ? <TerminalChip variant="neutral">{item.themeId}</TerminalChip> : null}
-                                  {item.universeType ? <TerminalChip variant="neutral">{item.universeType}</TerminalChip> : null}
-                                </div>
-                              </button>
-                            </div>
-                            <div className="flex min-w-0 flex-wrap items-center gap-1.5 xl:max-w-[22rem] xl:justify-end">
-                              <TerminalChip variant="info" className="min-w-[3.5rem] justify-center font-mono font-semibold text-cyan-100">
-                                {formatScore(score)}
-                              </TerminalChip>
+                              />
+                            </button>
+                            <button
+                              type="button"
+                              aria-pressed={isActive}
+                              aria-label={`${language === 'zh' ? '查看详情' : 'View details'} ${item.symbol}`}
+                              className={`flex min-w-0 flex-1 flex-col items-start gap-1 rounded-lg border px-3 py-2 text-left transition ${
+                                isActive
+                                  ? 'border-[color:var(--wolfy-accent)] bg-[var(--wolfy-surface-input)]'
+                                  : 'border-transparent bg-transparent hover:border-[color:var(--wolfy-border-subtle)] hover:bg-white/[0.02]'
+                              }`}
+                              onClick={() => setActiveItemId(item.id)}
+                            >
+                              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                <span className="font-semibold text-white">{item.symbol}</span>
+                                <TerminalChip variant="neutral">{formatMarket(item.market)}</TerminalChip>
+                                {isRecentlyAdded(item) ? <TerminalChip variant="info">{copy.recentlyAdded}</TerminalChip> : null}
+                              </div>
+                              <p className="truncate text-sm text-white/78">{item.name || '--'}</p>
+                              <p className="truncate text-[11px] text-white/45">{originLabel}</p>
+                            </button>
+                          </div>
+
+                          <div className="min-w-0 space-y-2">
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
+                              {language === 'en' ? 'State' : '状态'}
+                            </p>
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                               <TerminalChip variant={scoreFreshnessVariant} className="font-mono uppercase tracking-widest">
-                                {formatScoreDisclosureFreshness(item, item.lastScoredAt || scanner?.lastScannedAt, language)}
+                                {scoreDisclosureStatusLabel}
                               </TerminalChip>
-                              {(scanner?.lastRank ?? item.scannerRank) ? (
-                                <TerminalChip variant="neutral">
-                                  {language === 'zh' ? '排名' : 'Rank'} #{scanner?.lastRank ?? item.scannerRank}
+                              <TerminalChip variant={scannerStatusChipVariant(scannerStatusLabel)}>
+                                {scannerStatusLabel}
+                              </TerminalChip>
+                              <TerminalChip variant={backtestStatusVariant}>{backtestStatusLabel}</TerminalChip>
+                              {batchDisplayStatus ? (
+                                <TerminalChip variant={terminalChipVariant(batchDisplayStatus.tone)} className="font-mono">
+                                  {batchDisplayStatus.label}
                                 </TerminalChip>
                               ) : null}
-                              <TerminalChip variant="neutral" className="font-mono">
-                                {formatDateTime(item.createdAt || item.updatedAt, language)}
-                              </TerminalChip>
                             </div>
+                            <p className="truncate text-xs font-mono text-white/55">{rowStateLine || `${copy.score} ${formatScore(score)}`}</p>
                           </div>
 
-                          <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px]">
-                            <div data-testid={`watchlist-trust-strip-${item.symbol}`} className="flex min-w-0 flex-wrap items-center gap-1.5">
-                              {scoreDisclosureState !== 'failed' ? <TerminalChip variant={trustStateVariant}>{scoreDisclosureStatusLabel}</TerminalChip> : null}
-                              {trustUpdatedLabel ? <TerminalChip variant="neutral" className="font-mono">{trustUpdatedLabel}</TerminalChip> : null}
-                              {scoreDisclosureNotice ? (
-                                <TerminalNotice variant="caution" className="px-2.5 py-1 text-[11px] leading-5">
-                                  {scoreDisclosureNotice}
-                                </TerminalNotice>
-                              ) : null}
+                          <div className="min-w-0 space-y-2">
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
+                              {language === 'en' ? 'Observation' : '观察'}
+                            </p>
+                            <p className="text-sm leading-6 text-white/72">{rowObservation}</p>
+                            <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
+                              {latestTime ? <span className="font-mono text-white/45">{copy.latestUpdate} {formatDateTime(latestTime, language)}</span> : null}
+                              <span className="text-white/55">{language === 'en' ? 'Next' : '下一步'} {rowNextAction}</span>
                             </div>
-                            {!hasAnyEvidence ? (
-                              <>
-                                <TerminalChip variant="neutral">{copy.noEvidence}</TerminalChip>
-                                <TerminalNotice variant="caution" className="px-2.5 py-1 text-[11px] leading-5" data-testid={`watchlist-no-evidence-note-${item.symbol}`}>
-                                  {copy.sourceUnknownNeedsRefresh}
-                                </TerminalNotice>
-                              </>
-                            ) : null}
-                            <TerminalChip variant={scannerStatusVariant}>{scannerStatusLabel}</TerminalChip>
-                            {scannerStatusLabel === '扫描失败' && scannerFailure ? (
-                              <TerminalChip variant="danger">{scannerFailure.label}</TerminalChip>
-                            ) : null}
-                            {score !== null ? (
-                              <TerminalChip variant="info" className="font-mono text-cyan-100">
-                                {language === 'zh' ? '分数' : 'SCORE'} {formatScore(score)}
-                              </TerminalChip>
-                            ) : null}
-                            {scannerReasonLabel ? (
-                              <TerminalChip variant="neutral" className="max-w-[180px] truncate">
-                                {scannerReasonLabel}
-                              </TerminalChip>
-                            ) : null}
-                            <TerminalChip variant={scoreFreshnessVariant}>{formatScoreDisclosureFreshness(item, latestTime, language)}</TerminalChip>
-                            {typeof avgForward === 'number' || typeof hitRate === 'number' ? (
-                              <TerminalChip
-                                variant={(avgForward ?? 0) >= 0 ? 'success' : 'danger'}
-                                className="font-mono"
-                              >
-                                {copy.historyPrefix} {formatPct(avgForward)} · {copy.hitPrefix} {typeof hitRate === 'number' ? `${Math.round(hitRate * 100)}%` : '--'}
-                              </TerminalChip>
-                            ) : null}
-                            <TerminalChip variant={backtestStatusVariant}>{backtestStatusLabel}</TerminalChip>
-                            {hasBacktestMetrics(item) ? (
-                              <>
-                                <TerminalChip
-                                  variant={(returnPct ?? 0) >= 0 ? 'success' : 'danger'}
-                                  className="font-mono"
-                                >
-                                  {language === 'zh' ? '收益' : 'Return'} {formatPct(returnPct)} · {language === 'zh' ? '回撤' : 'DD'} {formatPct(backtest?.maxDrawdownPct)} · Sharpe {formatRatio(backtest?.sharpe)} · {language === 'zh' ? '交易' : 'Trades'} {backtest?.tradeCount ?? '--'}
-                                </TerminalChip>
-                                {backtest?.lastResultId != null ? (
-                                  <TerminalButton
-                                    type="button"
-                                    variant="compact"
-                                    className="min-h-6 px-2 py-0.5 font-mono text-[11px] text-white/55"
-                                    onClick={() => navigate(buildLocalizedPath(`/backtest/results/${backtest.lastResultId}`, language))}
-                                  >
-                                    {copy.resultPrefix} {backtest.lastResultId}
-                                  </TerminalButton>
-                                ) : null}
-                              </>
-                            ) : null}
-                            {batchFailure?.detail ? (
-                              <TerminalChip variant="caution" className="max-w-[180px] truncate">
-                                {language === 'zh' ? '错误详情已隐藏' : 'Error details hidden'}
-                              </TerminalChip>
+                            {rowRiskNote ? (
+                              <p className="text-xs leading-5 text-white/52" data-testid={`watchlist-row-note-${item.symbol}`}>
+                                {rowRiskNote}
+                              </p>
+                            ) : scannerFailure && scannerStatusLabel === '扫描失败' ? (
+                              <p className="text-xs leading-5 text-rose-100/75">{scannerFailure.label}</p>
                             ) : null}
                           </div>
 
-                          <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                            <div className="min-w-0 text-[11px] text-white/45">
-                              <span className="font-mono">{copy.lastScored} {formatDateTime(item.lastScoredAt, language)}</span>
-                            </div>
-                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+                            <TerminalButton
+                              type="button"
+                              variant="compact"
+                              onClick={() => void handleAnalyze(item)}
+                              disabled={pendingAnalyzeId === item.id}
+                            >
+                              <Play className="h-3.5 w-3.5" />
+                              {pendingAnalyzeId === item.id ? copy.analyzing : copy.analyze}
+                            </TerminalButton>
+                            <TerminalButton
+                              type="button"
+                              variant="compact"
+                              onClick={() => navigate(buildBacktestPath(item, language))}
+                            >
+                              <BarChart3 className="h-3.5 w-3.5" />
+                              {copy.backtest}
+                            </TerminalButton>
+                            {backtest?.lastResultId != null ? (
                               <TerminalButton
                                 type="button"
                                 variant="compact"
-                                onClick={() => void handleAnalyze(item)}
-                                disabled={pendingAnalyzeId === item.id}
+                                className="font-mono text-[11px]"
+                                onClick={() => navigate(buildLocalizedPath(`/backtest/results/${backtest.lastResultId}`, language))}
                               >
-                                <Play className="h-3.5 w-3.5" />
-                                {pendingAnalyzeId === item.id ? copy.analyzing : copy.analyze}
+                                {copy.resultPrefix} {backtest.lastResultId}
                               </TerminalButton>
-                              <TerminalButton
-                                type="button"
-                                variant="compact"
-                                onClick={() => navigate(buildBacktestPath(item, language))}
-                              >
-                                <BarChart3 className="h-3.5 w-3.5" />
-                                {copy.backtest}
-                              </TerminalButton>
-                              <TerminalButton
-                                type="button"
-                                aria-label={`${copy.copySymbol} ${item.symbol}`}
-                                title={copiedId === item.id ? copy.copied : copy.copySymbol}
-                                variant="compact"
-                                className="h-[34px] min-h-[34px] w-[34px] px-0 text-white/55"
-                                onClick={() => void handleCopy(item)}
-                              >
-                                <Copy className="h-3.5 w-3.5" />
-                              </TerminalButton>
-                              <TerminalButton
-                                type="button"
-                                aria-label={`${copy.remove} ${item.symbol}`}
-                                variant="danger"
-                                className="h-[34px] min-h-[34px] w-[34px] px-0"
-                                onClick={() => void handleRemove(item)}
-                                disabled={pendingRemoveId === item.id}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </TerminalButton>
-                            </div>
+                            ) : null}
+                            <TerminalButton
+                              type="button"
+                              aria-label={`${copy.copySymbol} ${item.symbol}`}
+                              title={copiedId === item.id ? copy.copied : copy.copySymbol}
+                              variant="compact"
+                              className="h-[34px] min-h-[34px] w-[34px] px-0 text-white/55"
+                              onClick={() => void handleCopy(item)}
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                            </TerminalButton>
+                            <TerminalButton
+                              type="button"
+                              aria-label={`${copy.remove} ${item.symbol}`}
+                              variant="danger"
+                              className="h-[34px] min-h-[34px] w-[34px] px-0"
+                              onClick={() => void handleRemove(item)}
+                              disabled={pendingRemoveId === item.id}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </TerminalButton>
                           </div>
                         </div>
                       </article>
                     );
-                    })}
-                  </DenseRows>
-                ) : (
-                  <CompactEmptyRow
-                    data-testid="watchlist-compact-empty-state"
-                    title={copy.emptyTitle}
-                    className="rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent px-4 py-3 min-h-[64px]"
-                    action={(
-                      <TerminalButton
-                        type="button"
-                        variant="secondary"
-                        className="h-9 px-3 text-xs"
-                        onClick={() => navigate(scannerPath)}
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        {copy.openScanner}
-                      </TerminalButton>
-                    )}
-                  >
-                    {copy.emptyBody}
-                  </CompactEmptyRow>
-                )}
+                  })}
+                </DenseRows>
+              ) : (
+                <CompactEmptyRow
+                  data-testid="watchlist-compact-empty-state"
+                  title={copy.emptyTitle}
+                  className="rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent px-4 py-4 min-h-[72px]"
+                  action={(
+                    <TerminalButton
+                      type="button"
+                      variant="secondary"
+                      className="h-9 px-3 text-xs"
+                      onClick={() => navigate(scannerPath)}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      {copy.openScanner}
+                    </TerminalButton>
+                  )}
+                >
+                  {copy.emptyBody}
+                </CompactEmptyRow>
+              )}
             </ConsoleBoard>
           </div>
 
@@ -1694,132 +1728,148 @@ const WatchlistPage: React.FC = () => {
               className="min-w-0 border-t border-[color:var(--wolfy-divider)] lg:border-l lg:border-t-0"
             >
               <ConsoleContextRail className="rounded-none border-0 bg-[var(--wolfy-surface-rail)] px-4 py-4">
-                  {activeItem ? (
-                    <>
-                      <section className="min-w-0 pb-4">
-                        <div className="flex min-w-0 items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-[11px] text-white/40">{language === 'zh' ? '已选详情' : 'Selected detail'}</p>
-                            <h2 className="truncate text-base font-semibold text-white">{activeItem.symbol}</h2>
-                            <p className="truncate text-xs text-white/58">{activeItem.name || '--'}</p>
-                          </div>
-                          <TerminalChip variant="neutral">{formatMarket(activeItem.market)}</TerminalChip>
-                        </div>
-                        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                          <TerminalChip variant="info" className="font-mono text-cyan-100">
-                            {language === 'zh' ? '分数' : 'SCORE'} {formatScore(activeScore)}
-                          </TerminalChip>
-                          <TerminalChip variant={scannerStatusChipVariant(activeScannerStatusLabel)}>
-                            {activeScannerStatusLabel}
-                          </TerminalChip>
-                          <TerminalChip variant={activeBacktestStatusLabel === '已回测' ? 'success' : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(activeBacktestStatusLabel) ? 'danger' : ['样本不足', '数据缺失'].includes(activeBacktestStatusLabel) ? 'caution' : 'neutral'}>
-                            {activeBacktestStatusLabel}
-                          </TerminalChip>
-                          <TerminalChip variant={scoreDisclosureChipVariant(activeScoreDisclosureState)}>
-                            {activeItem ? formatScoreDisclosureFreshness(activeItem, activeLatestTime, language) : '--'}
-                          </TerminalChip>
-                        </div>
-                        {activeContextTags.length ? (
-                          <div className="mt-3 flex flex-wrap gap-1.5">
-                            {activeContextTags.map((tag) => (
-                              <TerminalChip key={tag} variant="neutral">{tag}</TerminalChip>
-                            ))}
-                          </div>
-                        ) : null}
-                      </section>
+                <section className="min-w-0 pb-4">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-white/40">{language === 'zh' ? '已选项目' : 'Selected item'}</p>
+                      <h2 className="truncate text-base font-semibold text-white">{activeItem.symbol}</h2>
+                      <p className="truncate text-xs text-white/58">{activeItem.name || '--'}</p>
+                    </div>
+                    <TerminalChip variant="neutral">{formatMarket(activeItem.market)}</TerminalChip>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                    <TerminalChip variant="info" className="font-mono text-cyan-100">
+                      {language === 'zh' ? '分数' : 'SCORE'} {formatScore(activeScore)}
+                    </TerminalChip>
+                    <TerminalChip variant={scoreDisclosureChipVariant(activeScoreDisclosureState)}>
+                      {formatScoreDisclosureStatus(activeScoreDisclosureState, language)}
+                    </TerminalChip>
+                    <TerminalChip variant={activeBacktestStatusLabel === '已回测' ? 'success' : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(activeBacktestStatusLabel) ? 'danger' : ['样本不足', '数据缺失'].includes(activeBacktestStatusLabel) ? 'caution' : 'neutral'}>
+                      {activeBacktestStatusLabel}
+                    </TerminalChip>
+                  </div>
+                </section>
 
-                      <section className="min-w-0 py-4">
-                        <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
-                          <h3 className="text-sm font-semibold text-white">{language === 'zh' ? '观察摘要' : 'Observation summary'}</h3>
-                        </div>
-                        <div className="divide-y divide-[color:var(--wolfy-divider)]">
-                          {[
-                            { label: copy.signalTrust, value: formatScoreDisclosureStatus(activeScoreDisclosureState, language) },
-                            { label: copy.scoreFreshness, value: formatScoreDisclosureFreshness(activeItem, activeLatestTime, language) },
-                            { label: copy.lastScored, value: formatDateTime(activeItem.lastScoredAt, language) },
-                            { label: copy.added, value: formatDateTime(activeItem.createdAt || activeItem.updatedAt, language) },
-                            { label: copy.latestUpdate, value: activeLatestTime ? formatDateTime(activeLatestTime, language) : '--' },
-                          ].map((row) => (
-                            <div key={String(row.label)} className="flex min-w-0 items-start justify-between gap-4 py-2.5 text-[11px]">
-                              <span className="truncate text-white/38">{row.label}</span>
-                              <span className="min-w-0 text-right text-white/68">{row.value}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </section>
+                <section className="grid min-w-0 gap-3 border-y border-[color:var(--wolfy-divider)] py-4">
+                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+                    <p className="text-[11px] text-white/40">{language === 'zh' ? '当前状态' : 'Current state'}</p>
+                    <p className="mt-1 text-sm text-white/78">{formatScoreDisclosureFreshness(activeItem, activeLatestTime, language)}</p>
+                  </div>
+                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+                    <p className="text-[11px] text-white/40">{language === 'zh' ? '风险提示' : 'Risk note'}</p>
+                    <p className="mt-1 text-sm text-white/78">{activeRiskNote || (language === 'en' ? 'State is stable for observation.' : '当前状态适合继续观察。')}</p>
+                  </div>
+                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+                    <p className="text-[11px] text-white/40">{language === 'zh' ? '下一步' : 'Next step'}</p>
+                    <p className="mt-1 text-sm text-white/78">{activeNextActionLabel}</p>
+                  </div>
+                </section>
 
-                      <section className="min-w-0 py-4">
-                        <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
-                          <h3 className="text-sm font-semibold text-white">{copy.intelligence}</h3>
+                <section className="min-w-0 py-4">
+                  <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-white">{language === 'zh' ? '观察摘要' : 'Observation summary'}</h3>
+                  </div>
+                  <div className="space-y-3">
+                    <p className="text-sm leading-6 text-white/72">{activeObservationSummary}</p>
+                    <div className="divide-y divide-[color:var(--wolfy-divider)]">
+                      {[
+                        { label: copy.lastScored, value: formatDateTime(activeItem.lastScoredAt, language) },
+                        { label: copy.added, value: formatDateTime(activeItem.createdAt || activeItem.updatedAt, language) },
+                        { label: copy.latestUpdate, value: activeLatestTime ? formatDateTime(activeLatestTime, language) : '--' },
+                      ].map((row) => (
+                        <div key={String(row.label)} className="flex min-w-0 items-start justify-between gap-4 py-2.5 text-[11px]">
+                          <span className="truncate text-white/38">{row.label}</span>
+                          <span className="min-w-0 text-right text-white/68">{row.value}</span>
                         </div>
-                        <div className="flex min-w-0 flex-wrap gap-1.5">
-                          {!activeHasEvidence ? <TerminalChip variant="neutral">{copy.noEvidence}</TerminalChip> : null}
-                          {activeScannerReason ? <TerminalChip variant="neutral" className="max-w-full truncate">{activeScannerReason}</TerminalChip> : null}
-                          {activeScannerFailure && activeScannerStatusLabel === '扫描失败' ? <TerminalChip variant="danger">{activeScannerFailure.label}</TerminalChip> : null}
-                          {typeof activeSimulation?.avgForwardReturnPct === 'number' || typeof activeSimulation?.hitRate === 'number' ? (
-                            <TerminalChip
-                              variant={(activeSimulation?.avgForwardReturnPct ?? 0) >= 0 ? 'success' : 'danger'}
-                              className="font-mono"
-                            >
-                              {copy.historyPrefix} {formatPct(activeSimulation?.avgForwardReturnPct)} · {copy.hitPrefix} {typeof activeSimulation?.hitRate === 'number' ? `${Math.round(activeSimulation.hitRate * 100)}%` : '--'}
-                            </TerminalChip>
-                          ) : null}
-                        </div>
-                        <div className="mt-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs leading-5 text-white/68">
-                          {activeBacktestSummary}
-                        </div>
-                      </section>
+                      ))}
+                    </div>
+                  </div>
+                </section>
 
-                      <section className="min-w-0 pt-4">
-                        <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          <TerminalButton
-                            type="button"
-                            variant="secondary"
-                            onClick={() => void handleAnalyze(activeItem)}
-                            disabled={pendingAnalyzeId === activeItem.id}
-                          >
-                            <Play className="h-3.5 w-3.5" />
-                            {pendingAnalyzeId === activeItem.id ? copy.analyzing : copy.analyze}
-                          </TerminalButton>
-                          <TerminalButton
-                            type="button"
-                            variant="compact"
-                            onClick={() => navigate(buildBacktestPath(activeItem, language))}
-                          >
-                            <BarChart3 className="h-3.5 w-3.5" />
-                            {copy.backtest}
-                          </TerminalButton>
-                          {activeBacktest?.lastResultId != null ? (
-                            <TerminalButton
-                              type="button"
-                              variant="compact"
-                              onClick={() => navigate(buildLocalizedPath(`/backtest/results/${activeBacktest.lastResultId}`, language))}
-                            >
-                              {copy.resultPrefix} {activeBacktest.lastResultId}
-                            </TerminalButton>
-                          ) : null}
-                          <TerminalButton
-                            type="button"
-                            aria-label={`${copy.copySymbol} ${activeItem.symbol}`}
-                            variant="compact"
-                            onClick={() => void handleCopy(activeItem)}
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                            {copy.copySymbol}
-                          </TerminalButton>
-                          <TerminalButton
-                            type="button"
-                            variant="danger"
-                            onClick={() => void handleRemove(activeItem)}
-                            disabled={pendingRemoveId === activeItem.id}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            {copy.remove}
-                          </TerminalButton>
-                        </div>
-                      </section>
-                    </>
-                  ) : null}
+                <section className="min-w-0 py-4">
+                  <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-white">{copy.intelligence}</h3>
+                  </div>
+                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs leading-5 text-white/68">
+                    {activeBacktestSummary}
+                  </div>
+                </section>
+
+                <DenseSecondaryDisclosure
+                  data-testid="watchlist-data-notes"
+                  variant="row"
+                  title={language === 'zh' ? '数据备注' : 'Data notes'}
+                  summary={language === 'zh' ? '默认收起' : 'Collapsed by default'}
+                  className="pt-4"
+                >
+                  <div className="space-y-3 text-xs leading-5 text-white/62">
+                    <p>{formatWatchlistOrigin(activeItem.source, language)}</p>
+                    {activeScannerReason ? <p>{activeScannerReason}</p> : null}
+                    {!activeHasEvidence ? <p>{copy.sourceUnknownNeedsRefresh}</p> : null}
+                    {activeContextTags.length ? (
+                      <div className="flex min-w-0 flex-wrap gap-1.5">
+                        {activeContextTags.map((tag) => (
+                          <TerminalChip key={tag} variant="neutral">{tag}</TerminalChip>
+                        ))}
+                      </div>
+                    ) : null}
+                    {activeScannerFailure && activeScannerStatusLabel === '扫描失败' ? <p>{activeScannerFailure.label}</p> : null}
+                    {typeof activeSimulation?.avgForwardReturnPct === 'number' || typeof activeSimulation?.hitRate === 'number' ? (
+                      <p>
+                        {copy.historyPrefix} {formatPct(activeSimulation?.avgForwardReturnPct)} · {copy.hitPrefix} {typeof activeSimulation?.hitRate === 'number' ? `${Math.round(activeSimulation.hitRate * 100)}%` : '--'}
+                      </p>
+                    ) : null}
+                  </div>
+                </DenseSecondaryDisclosure>
+
+                <section className="min-w-0 pt-4">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <TerminalButton
+                      type="button"
+                      variant="secondary"
+                      onClick={() => void handleAnalyze(activeItem)}
+                      disabled={pendingAnalyzeId === activeItem.id}
+                    >
+                      <Play className="h-3.5 w-3.5" />
+                      {pendingAnalyzeId === activeItem.id ? copy.analyzing : copy.analyze}
+                    </TerminalButton>
+                    <TerminalButton
+                      type="button"
+                      variant="compact"
+                      onClick={() => navigate(buildBacktestPath(activeItem, language))}
+                    >
+                      <BarChart3 className="h-3.5 w-3.5" />
+                      {copy.backtest}
+                    </TerminalButton>
+                    {activeBacktest?.lastResultId != null ? (
+                      <TerminalButton
+                        type="button"
+                        variant="compact"
+                        onClick={() => navigate(buildLocalizedPath(`/backtest/results/${activeBacktest.lastResultId}`, language))}
+                      >
+                        {copy.resultPrefix} {activeBacktest.lastResultId}
+                      </TerminalButton>
+                    ) : null}
+                    <TerminalButton
+                      type="button"
+                      aria-label={`${copy.copySymbol} ${activeItem.symbol}`}
+                      variant="compact"
+                      onClick={() => void handleCopy(activeItem)}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      {copy.copySymbol}
+                    </TerminalButton>
+                    <TerminalButton
+                      type="button"
+                      variant="danger"
+                      onClick={() => void handleRemove(activeItem)}
+                      disabled={pendingRemoveId === activeItem.id}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {copy.remove}
+                    </TerminalButton>
+                  </div>
+                </section>
               </ConsoleContextRail>
             </div>
           ) : null}
@@ -1830,7 +1880,7 @@ const WatchlistPage: React.FC = () => {
             data-testid="watchlist-command-bar"
             className="border-t-0"
             heading={copy.batchActions}
-            summary={<span data-testid="watchlist-action-scope">{copy.runtimeStatus} · {actionScopeLabel} · {language === 'zh' ? '并发 2' : 'concurrency 2'}</span>}
+            summary={<span data-testid="watchlist-action-scope">{copy.runtimeStatus} · {actionScopeLabel}</span>}
             notice={actionItems.length === 0 ? <TerminalChip variant="caution">{copy.noMatchedSymbols}</TerminalChip> : null}
             progress={batchProgress ? (
               <p data-testid="watchlist-batch-progress" className="text-xs text-white/55">
