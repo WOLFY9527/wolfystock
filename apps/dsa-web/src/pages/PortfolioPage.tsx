@@ -14,7 +14,6 @@ import {
   TerminalChip,
   TerminalEmptyState,
   TerminalGrid,
-  TerminalMetric,
   TerminalNestedBlock,
   TerminalNotice,
   TerminalPanel,
@@ -152,7 +151,7 @@ function hasLimitedValuationConfidence(position: Pick<PortfolioPositionItem, 'va
 
 function positionPriceFreshnessLabel(position: Pick<PortfolioPositionItem, 'isPriceFallback' | 'priceAsOf'>, language: PortfolioLanguage): string {
   if (position.isPriceFallback) {
-    return language === 'zh' ? '价格延迟' : 'Pricing delayed';
+    return language === 'zh' ? '价格可能延迟' : 'Pricing may be delayed';
   }
   if (position.priceAsOf) {
     return language === 'zh' ? '价格快照' : 'Price snapshot';
@@ -176,14 +175,6 @@ function positionPriceFreshnessExplanation(position: Pick<PortfolioPositionItem,
 
 function limitedConfidenceLabel(language: PortfolioLanguage): string {
   return language === 'zh' ? '置信度有限' : 'Limited confidence';
-}
-
-function positionPriceDisclosure(position: PortfolioPositionItem, language: PortfolioLanguage): string {
-  return [
-    positionPriceFreshnessExplanation(position, language),
-    position.priceAsOf ? (language === 'zh' ? `截至 ${position.priceAsOf}` : `As of ${position.priceAsOf}`) : null,
-    hasLimitedValuationConfidence(position) ? limitedConfidenceLabel(language) : null,
-  ].filter(Boolean).join(' · ');
 }
 
 function consumerFxLabel(state: 'fresh' | 'stale' | 'missing' | 'pending', language: PortfolioLanguage): string {
@@ -1893,15 +1884,6 @@ const PortfolioPage: React.FC = () => {
     if (value === 0) return formatMoney(0, displayCurrency);
     return formatMoney(value, currency);
   };
-  const renderPnlTile = (key: 'realized' | 'unrealized' | 'total', value: number, converted: ConvertedMoney) => (
-    <TerminalMetric
-      data-testid={`portfolio-pnl-${key}`}
-      label={pnlLabels[key]}
-      value={converted ? formatSignedMoney(converted.value, displayCurrency) : formatSignedMoney(value, pnlSourceCurrency)}
-      valueClassName={value >= 0 ? 'text-emerald-400' : 'text-rose-400'}
-      subvalue={pnlSourceCurrency !== displayCurrency ? `${pnlLabels.native} ${formatSignedMoney(value, pnlSourceCurrency)}` : undefined}
-    />
-  );
   const renderExposureValue = (row: PortfolioExposureItem) => {
     const currency = row.displayCurrency || snapshotCurrency;
     const display = formatAnalyticsMoney(row.displayValue ?? row.marketValue ?? 0, currency);
@@ -1909,6 +1891,12 @@ const PortfolioPage: React.FC = () => {
       ? formatMoney(row.nativeValue, row.nativeCurrency)
       : null;
     return { display, native };
+  };
+  const formatExposureRowLabel = (row: PortfolioExposureItem) => {
+    if (exposureTab === 'market') {
+      return formatExposureMarketLabel(row, language);
+    }
+    return row.label || row.key;
   };
   const symbolExposureRows = [...(analytics?.exposure.bySymbol || [])]
     .sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0));
@@ -1941,26 +1929,6 @@ const PortfolioPage: React.FC = () => {
     : language === 'zh'
       ? `最大持仓占 ${formatPercent(topPositionPercent)}，按持仓市值占比判定为${concentrationLabel}。`
       : `Largest holding is ${formatPercent(topPositionPercent)} of exposure, classified as ${concentrationLabel}.`;
-  const gainContributors = [...symbolExposureRows]
-    .filter((row) => Number(row.unrealizedPnl || 0) > 0)
-    .sort((a, b) => Number(b.unrealizedPnl || 0) - Number(a.unrealizedPnl || 0))
-    .slice(0, 3);
-  const lossContributors = [...symbolExposureRows]
-    .filter((row) => Number(row.unrealizedPnl || 0) < 0)
-    .sort((a, b) => Number(a.unrealizedPnl || 0) - Number(b.unrealizedPnl || 0))
-    .slice(0, 3);
-  const marketRiskHint = !marketExposureRows.length
-    ? (language === 'zh' ? '暂无市场分类' : 'No market category')
-    : marketExposureRows.length === 1
-      ? (language === 'zh' ? '单一市场集中' : 'Single-market concentration')
-      : Number(topMarket?.percent || 0) >= 80
-        ? (language === 'zh' ? '单一市场集中' : 'Single-market concentration')
-        : (language === 'zh' ? '跨市场持仓' : 'Cross-market holdings');
-  const currencyFxContext = topCurrency?.fxStatus === 'unavailable'
-    ? consumerFxLabel('pending', language)
-    : topCurrency?.nativeCurrency && topCurrency.nativeCurrency !== displayCurrency
-      ? (language === 'zh' ? '原币统计可用' : 'Native analytics available')
-      : (language === 'zh' ? '主币种' : 'Primary currency');
   const riskHintTexts = [
     topPositionPercent >= 35 ? (language === 'zh' ? '最大持仓偏高' : 'Largest holding elevated') : null,
     Number(topCurrency?.percent || 0) >= 80 ? (language === 'zh' ? '币种集中' : 'Currency concentrated') : null,
@@ -2072,6 +2040,7 @@ const PortfolioPage: React.FC = () => {
   const addHoldingActionLabel = language === 'zh' ? '添加持仓' : 'Add holding';
   const importTradesActionLabel = language === 'zh' ? '导入交易' : 'Import transactions';
   const manualLedgerActionLabel = language === 'zh' ? '手工记账' : 'Manual ledger';
+  const syncDataActionLabel = language === 'zh' ? '同步数据' : 'Sync data';
   const openManualLedger = (nextLeftTab: 'trade' | 'account' | 'sync' | 'fx', nextTradeType?: TradeFormType) => {
     setLeftTab(nextLeftTab);
     if (nextTradeType) {
@@ -2079,37 +2048,111 @@ const PortfolioPage: React.FC = () => {
     }
     setManualLedgerOpen(true);
   };
-  const renderMiniExposureRow = (
-    row: PortfolioExposureItem,
-    options: { testIdPrefix: string; label?: string; showNative?: boolean },
-  ) => {
-    const values = renderExposureValue(row);
-    return (
-      <TerminalNestedBlock key={`${options.testIdPrefix}-${row.key}`} data-testid={`${options.testIdPrefix}-${row.key}`} className="min-w-0 px-3 py-2">
-        <div className="flex min-w-0 items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="truncate text-xs font-medium text-white">{options.label || row.label || row.key}</div>
-            <div className="mt-0.5 font-mono text-[11px] text-white/40">{formatPercent(row.percent)}</div>
-          </div>
-          <div className="min-w-0 shrink-0 text-right">
-            <div className="font-mono text-xs text-white tabular-nums">{values.display}</div>
-            {options.showNative && values.native ? <div className="mt-0.5 font-mono text-[10px] text-white/35">{values.native}</div> : null}
-          </div>
-        </div>
-      </TerminalNestedBlock>
-    );
-  };
-  const renderContributorRow = (row: PortfolioExposureItem, toneClass: string, prefix: string) => (
-    <TerminalNestedBlock key={`${prefix}-${row.key}`} data-testid={`${prefix}-${row.key}`} className="flex min-w-0 items-center justify-between gap-3 px-3 py-2">
-      <div className="min-w-0">
-        <div className="truncate text-xs font-medium text-white">{row.label || row.symbol || row.key}</div>
-        <div className="mt-0.5 font-mono text-[11px] text-white/40">{formatPercent(row.unrealizedPnlPct)}</div>
-      </div>
-      <div className={`shrink-0 font-mono text-xs tabular-nums ${toneClass}`}>
-        {formatSignedMoney(Number(row.unrealizedPnl || 0), row.displayCurrency || snapshotCurrency)}
-      </div>
-    </TerminalNestedBlock>
-  );
+  const heroStatusChips = uniqueTrustItems([
+    {
+      key: 'hero-account-scope',
+      label: selectedAccount === 'all'
+        ? (language === 'zh' ? '全账户视角' : 'All accounts')
+        : (scopedAccount?.name || copy.allAccounts),
+      variant: 'neutral',
+    },
+    hasFxUnavailable
+      ? {
+        key: 'hero-valuation-paused',
+        label: language === 'zh' ? '估值已暂停' : 'Valuation paused',
+        variant: 'danger',
+      }
+      : hasPriceFallback || snapshot?.fxStale || hasLimitedConfidence
+        ? {
+          key: 'hero-valuation-delayed',
+          label: language === 'zh' ? '估值可能延迟' : 'Valuation may be delayed',
+          variant: 'caution',
+        }
+        : hasHoldings
+          ? {
+            key: 'hero-valuation-current',
+            label: language === 'zh' ? '估值已更新' : 'Valuation current',
+            variant: 'success',
+          }
+          : {
+            key: 'hero-valuation-pending',
+            label: language === 'zh' ? '等待估值' : 'Valuation pending',
+            variant: 'neutral',
+          },
+    !hasHoldings
+      ? {
+        key: 'hero-risk-pending',
+        label: language === 'zh' ? '风险待生成' : 'Risk pending',
+        variant: 'neutral',
+      }
+      : topPositionPercent >= 50
+        ? {
+          key: 'hero-risk-high',
+          label: language === 'zh' ? '风险偏高' : 'Elevated risk',
+          variant: 'danger',
+        }
+        : topPositionPercent >= 35
+          ? {
+            key: 'hero-risk-focused',
+            label: language === 'zh' ? '风险偏集中' : 'Focused risk',
+            variant: 'caution',
+          }
+          : {
+            key: 'hero-risk-balanced',
+            label: language === 'zh' ? '风险可控' : 'Risk balanced',
+            variant: 'success',
+          },
+  ]).slice(0, 3);
+  const heroConclusion = !hasActiveAccounts
+    ? (language === 'zh'
+      ? '先创建账户，再开始记录持仓、现金与组合表现。'
+      : 'Create an account first to start tracking holdings, cash, and portfolio performance.')
+    : !hasHoldings
+      ? compactNoHoldingText
+      : consumerDataNotice
+        ? `${holdingsPrimaryValue} · ${concentrationLabel} · ${consumerDataNotice}`
+        : language === 'zh'
+          ? `${holdingsPrimaryValue}，当前为${concentrationLabel}结构，可继续查看持仓、风险与近期活动。`
+          : `${holdingsPrimaryValue} with a ${concentrationLabel.toLowerCase()} profile. Review holdings, risk, and recent activity next.`;
+  const holdingsHeaderNote = hasHoldings
+    ? (language === 'zh'
+      ? `${accountStateSummary} · ${positionRows.length} 项持仓`
+      : `${accountStateSummary} · ${positionRows.length} holdings`)
+    : (language === 'zh' ? '持仓列表将在保存记录后出现' : 'Holdings appear after records are saved');
+  const valuationSnapshotNote = hasHoldings
+    ? summarizePortfolioPriceAsOf(positionRows, language)?.label
+      || (language === 'zh' ? '价格快照待确认' : 'Price snapshot pending')
+    : (language === 'zh' ? '暂无价格快照' : 'No price snapshot yet');
+  const nextActionHeadline = !hasAccounts
+    ? (language === 'zh' ? '先创建一个组合账户' : 'Create your first portfolio account')
+    : !hasHoldings
+      ? (language === 'zh' ? '先补第一笔持仓或导入交易' : 'Add the first holding or import transactions')
+      : hasFxUnavailable
+        ? (language === 'zh' ? '先确认汇率与估值状态' : 'Check FX and valuation status first')
+        : hasHistory
+          ? (language === 'zh' ? '继续跟踪近期活动与调仓节奏' : 'Review recent activity and rebalance pace')
+          : (language === 'zh' ? '继续补充记录，完善组合画像' : 'Add more records to complete the portfolio picture');
+  const nextActionBody = !hasAccounts
+    ? (language === 'zh'
+      ? '账户创建后即可记录持仓、导入交易并查看组合风险。'
+      : 'After the account is created, you can record holdings, import transactions, and review risk.')
+    : !hasHoldings
+      ? (language === 'zh'
+        ? '当前组合仍为空；建议优先添加持仓，或从现有券商流水导入。'
+        : 'The portfolio is still empty. Add holdings first or import an existing broker ledger.')
+      : hasFxUnavailable
+        ? (language === 'zh'
+          ? '部分汇率或折算暂不可用，先查看估值说明，再决定是否同步或刷新。'
+          : 'Some FX or conversion data is unavailable. Review valuation notes before syncing or refreshing.')
+        : hasHistory
+          ? (language === 'zh'
+            ? '近期活动已保留在下方时间线，可继续核对风险与持仓集中度。'
+            : 'Recent activity remains in the timeline below. Continue by checking risk and concentration.')
+          : (language === 'zh'
+            ? '当前组合已可观察，下一步可补录现金、公司行为或同步新数据。'
+            : 'The portfolio is ready to observe. Next you can add cash flows, corporate actions, or sync new data.');
+  const hasFreshValuationState = !hasFxUnavailable && !hasPriceFallback && !snapshot?.fxStale && !hasLimitedConfidence;
+  const holdingsTableStatusLabel = language === 'zh' ? '状态' : 'Status';
 
   const renderTradeActions = (item: PortfolioTradeListItem, context: 'history' | 'recent') => {
     if (item.isActive === false) {
@@ -2397,42 +2440,40 @@ const PortfolioPage: React.FC = () => {
                 as="section"
                 dense
                 data-testid="portfolio-account-status-strip"
-                className="grid gap-4 xl:grid-cols-[minmax(0,1.85fr)_minmax(0,1.15fr)]"
+                className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(360px,1fr)]"
               >
                 <div data-testid="portfolio-total-assets-card" className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <h1 className="text-[10px] font-bold uppercase tracking-widest text-white/40">{totalAssetsTitle}</h1>
+                    <h1 className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">
+                      {language === 'zh' ? '组合总览' : 'Portfolio Overview'}
+                    </h1>
                     <TerminalChip variant="neutral">
                       {selectedAccount === 'all' ? copy.allAccounts : scopedAccount?.name || copy.allAccounts}
                     </TerminalChip>
-                    {hasFxUnavailable ? <TerminalChip variant="caution">{fxUnavailableLabel}</TerminalChip> : null}
                   </div>
+                  <h2 className="mt-3 text-[12px] font-medium uppercase tracking-[0.18em] text-white/38">
+                    {totalAssetsTitle}
+                  </h2>
                   <div
                     data-testid="portfolio-total-assets-value"
-                    className="mt-2 font-mono text-2xl font-semibold leading-none text-white tabular-nums md:text-3xl"
+                    className="mt-2 font-mono text-[2.2rem] font-semibold leading-none text-white tabular-nums md:text-[2.75rem]"
                   >
                     {formatDisplayMoney(totalEquity, totalEquityDisplay, snapshotCurrency)}
                   </div>
-                  <p className="mt-2 text-xs leading-5 text-white/35">
-                    {hasHoldings ? `${holdingsPrimaryValue} · ${accountStateSummary}` : compactNoHoldingText}
+                  <p className="mt-3 max-w-[72ch] text-sm leading-6 text-white/62">
+                    {heroConclusion}
                   </p>
-                  {consumerDataNotice ? (
-                    <p data-testid="portfolio-consumer-data-notice" className="mt-2 text-xs leading-5 text-amber-200/80">
-                      {consumerDataNotice}
-                    </p>
-                  ) : null}
-                  {hasPortfolioEvidenceSummary || valuationTrustItems.length ? (
-                    <PortfolioTrustStrip
-                      title={language === 'zh' ? '估值信任' : 'Valuation trust'}
-                      items={valuationTrustItems}
-                      className="mt-3"
-                      data-testid="portfolio-valuation-trust-strip"
-                    />
-                  ) : null}
+                  <div className="mt-4 flex min-w-0 flex-wrap gap-2">
+                    {heroStatusChips.map((item) => (
+                      <TerminalChip key={item.key} variant={item.variant || 'neutral'}>
+                        {item.label}
+                      </TerminalChip>
+                    ))}
+                  </div>
                 </div>
 
-                <div data-testid="portfolio-command-strip" className="min-w-0 flex flex-col gap-3">
-                  <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
+                <div data-testid="portfolio-command-strip" className="min-w-0 flex flex-col gap-4">
+                  <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
                     <Select
                       label={copy.accountView}
                       labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
@@ -2457,15 +2498,17 @@ const PortfolioPage: React.FC = () => {
                     />
                   </div>
 
-                  <div className="grid min-w-0 grid-cols-2 gap-2">
-                    <TerminalMetric label={copy.totalCash} value={formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)} />
-                    <TerminalMetric label={copy.totalMarketValue} value={formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)} />
-                    <TerminalMetric
-                      label={copy.positionUnrealized}
-                      value={totalUnrealizedDisplay ? formatSignedMoney(totalUnrealizedDisplay.value, displayCurrency) : formatSignedMoney(0, displayCurrency)}
-                      valueClassName={totalUnrealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}
-                    />
-                    <TerminalMetric label={language === 'zh' ? '持仓数' : 'Holdings'} value={positionRows.length} />
+                  <div className="rounded-[14px] border border-white/[0.05] bg-white/[0.03] px-4 py-3">
+                    <div className="grid grid-cols-2 gap-3 text-xs text-white/45">
+                      <div>
+                        <div className="uppercase tracking-[0.18em] text-white/32">{language === 'zh' ? '账户范围' : 'Scope'}</div>
+                        <div className="mt-1 text-sm text-white/72">{accountStateSummary}</div>
+                      </div>
+                      <div>
+                        <div className="uppercase tracking-[0.18em] text-white/32">{language === 'zh' ? '当前状态' : 'State'}</div>
+                        <div className="mt-1 text-sm text-white/72">{holdingsPrimaryValue}</div>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="flex min-w-0 flex-wrap gap-2">
@@ -2475,33 +2518,62 @@ const PortfolioPage: React.FC = () => {
                     <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
                       {importTradesActionLabel}
                     </TerminalButton>
-                    <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('trade')}>
-                      {manualLedgerActionLabel}
+                    <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
+                      {syncDataActionLabel}
                     </TerminalButton>
                   </div>
                 </div>
               </TerminalPanel>
             </div>
 
-            <div data-testid="portfolio-row-routing" className="order-2 col-span-12 min-w-0 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(360px,5fr)] 2xl:gap-5 items-start">
+            <div data-testid="portfolio-row-summary" className="order-2 col-span-12 min-w-0">
+              <div data-testid="portfolio-summary-strip" className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-3">
+                <TerminalPanel as="section" data-testid="portfolio-summary-cash-card" className="min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{copy.totalCash}</div>
+                  <div className="mt-2 font-mono text-xl text-white tabular-nums">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</div>
+                  <div className="mt-2 text-xs text-white/40">{language === 'zh' ? '可用于继续配置或缓冲波动。' : 'Available for new allocation or downside buffer.'}</div>
+                </TerminalPanel>
+                <TerminalPanel as="section" data-testid="portfolio-summary-market-value-card" className="min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{copy.totalMarketValue}</div>
+                  <div className="mt-2 font-mono text-xl text-white tabular-nums">{formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}</div>
+                  <div className="mt-2 text-xs text-white/40">{holdingsHeaderNote}</div>
+                </TerminalPanel>
+                <TerminalPanel as="section" data-testid="portfolio-pnl-summary" className="min-w-0">
+                  <div data-testid="portfolio-pnl-total" className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{pnlLabels.total}</div>
+                  <div className={`mt-2 font-mono text-xl tabular-nums ${totalPnl >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                    {totalPnlDisplay ? formatSignedMoney(totalPnlDisplay.value, displayCurrency) : formatSignedMoney(totalPnl, pnlSourceCurrency)}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/40">
+                    <span data-testid="portfolio-pnl-realized">{pnlLabels.realized} {realizedPnlDisplay ? formatSignedMoney(realizedPnlDisplay.value, displayCurrency) : formatSignedMoney(realizedPnl, pnlSourceCurrency)}</span>
+                    <span data-testid="portfolio-pnl-unrealized">{pnlLabels.unrealized} {unrealizedPnlDisplay ? formatSignedMoney(unrealizedPnlDisplay.value, displayCurrency) : formatSignedMoney(unrealizedPnl, pnlSourceCurrency)}</span>
+                  </div>
+                </TerminalPanel>
+              </div>
+            </div>
+
+            <div data-testid="portfolio-row-routing" className="order-3 col-span-12 min-w-0 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(340px,5fr)] 2xl:gap-5 items-start">
               <div data-testid="portfolio-primary-lane" className="min-w-0 flex flex-col gap-4">
                 <TerminalPanel
                   as="section"
                   data-testid="portfolio-current-holdings-panel"
                   className="min-w-0 flex flex-col overflow-hidden"
                 >
-                  <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 pb-4">
-                    <h2 className="min-w-0 text-xs uppercase tracking-widest text-muted-text">
-                      {hasHoldings
-                        ? (language === 'zh' ? `当前持仓（共 ${positionRows.length} 项）` : `Current Holdings (${positionRows.length})`)
-                        : (language === 'zh' ? '当前持仓' : 'Current holdings')}
-                    </h2>
-                    {!hasHoldings ? (
-                      <span className="text-xs text-white/35">{language === 'zh' ? '等待流水' : 'Awaiting records'}</span>
-                    ) : null}
+                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/5 pb-4">
+                    <div className="min-w-0">
+                      <h2 className="min-w-0 text-xs uppercase tracking-widest text-muted-text">
+                        {hasHoldings
+                          ? (language === 'zh' ? `当前持仓（共 ${positionRows.length} 项）` : `Current Holdings (${positionRows.length})`)
+                          : (language === 'zh' ? '当前持仓' : 'Current holdings')}
+                      </h2>
+                      <p className="mt-2 text-sm text-white/45">{holdingsHeaderNote}</p>
+                    </div>
+                    <div className="shrink-0 text-right text-xs text-white/38">
+                      <div>{language === 'zh' ? '价格快照' : 'Pricing snapshot'}</div>
+                      <div className="mt-1 text-white/60">{valuationSnapshotNote}</div>
+                    </div>
                   </div>
 
-                  <div className="pt-3 lg:max-h-[460px] lg:min-h-0 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]">
+                  <div className="pt-3 lg:max-h-[560px] lg:min-h-0 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]">
                     {hasHoldings ? (
                       <TerminalDenseTable className="border-0 bg-transparent">
                         <table className="min-w-[760px] w-full text-left text-xs">
@@ -2513,7 +2585,7 @@ const PortfolioPage: React.FC = () => {
                                 language === 'zh' ? '成本' : 'Cost',
                                 language === 'zh' ? '市值' : 'Market Value',
                                 language === 'zh' ? '盈亏' : 'P&L',
-                                language === 'zh' ? '风险/状态' : 'Risk/State',
+                                holdingsTableStatusLabel,
                                 language === 'zh' ? '操作' : 'Action',
                               ].map((label) => (
                                 <th key={label} className="px-3 py-2 font-semibold">{label}</th>
@@ -2523,36 +2595,11 @@ const PortfolioPage: React.FC = () => {
                           <tbody>
                             {positionRows.map((row) => {
                               const rowTrustItems = uniqueTrustItems([
-                                topPosition?.key === row.symbol && topPositionPercent >= 35
-                                  ? {
-                                    key: `${row.symbol}-concentration`,
-                                    label: language === 'zh' ? '集中' : 'Concentrated',
-                                    variant: topPositionPercent >= 50 ? 'danger' : 'caution',
-                                  }
-                                  : {
-                                    key: `${row.symbol}-observe`,
-                                    label: language === 'zh' ? '观察' : 'Observe',
-                                    variant: 'neutral',
-                                  },
-                                row.isPriceFallback
-                                  ? {
-                                    key: `${row.symbol}-pricing-delayed`,
-                                    label: language === 'zh' ? '价格可能延迟' : 'Pricing may be delayed',
-                                    variant: 'caution',
-                                  }
-                                  : null,
                                 {
                                   key: `${row.symbol}-freshness`,
                                   label: positionPriceFreshnessLabel(row, language),
                                   variant: row.isPriceFallback ? 'caution' : 'neutral',
                                 },
-                                row.priceFallbackReason
-                                  ? {
-                                    key: `${row.symbol}-pricing-explanation`,
-                                    label: positionPriceFreshnessExplanation(row, language),
-                                    variant: 'neutral',
-                                  }
-                                  : null,
                                 hasLimitedValuationConfidence(row)
                                   ? {
                                     key: `${row.symbol}-limited-confidence`,
@@ -2560,14 +2607,14 @@ const PortfolioPage: React.FC = () => {
                                     variant: 'caution',
                                   }
                                   : null,
-                                row.priceAsOf
+                                topPosition?.key === row.symbol && topPositionPercent >= 35
                                   ? {
-                                    key: `${row.symbol}-asof`,
-                                    label: language === 'zh' ? `截至 ${row.priceAsOf}` : `As of ${row.priceAsOf}`,
-                                    variant: 'neutral',
+                                    key: `${row.symbol}-concentration`,
+                                    label: language === 'zh' ? '集中' : 'Concentrated',
+                                    variant: topPositionPercent >= 50 ? 'danger' : 'caution',
                                   }
                                   : null,
-                              ]);
+                              ]).slice(0, 3);
 
                               return (
                                 <tr key={`${row.accountId}-${row.symbol}-${row.market}`} className="border-b border-white/5 text-white/62 transition-colors hover:bg-white/[0.03]">
@@ -2588,7 +2635,9 @@ const PortfolioPage: React.FC = () => {
                                     {formatMoney(row.marketValueBase, row.valuationCurrency)}
                                     {row.valuationCurrency !== displayCurrency ? <div className="mt-1 text-[11px] text-white/35">{renderConvertedDisplay(row.marketValueBase, row.valuationCurrency)}</div> : null}
                                     <div className={`mt-1 text-[11px] ${row.isPriceFallback ? 'text-amber-300' : 'text-white/35'}`}>
-                                      {`${formatMoney(row.lastPrice, row.currency)} · ${positionPriceDisclosure(row, language)}`}
+                                      {row.priceAsOf
+                                        ? `${formatMoney(row.lastPrice, row.currency)} · ${language === 'zh' ? `截至 ${row.priceAsOf}` : `As of ${row.priceAsOf}`}`
+                                        : `${formatMoney(row.lastPrice, row.currency)} · ${positionPriceFreshnessExplanation(row, language)}`}
                                     </div>
                                   </td>
                                   <td className={`px-3 py-2 font-mono ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -2596,12 +2645,16 @@ const PortfolioPage: React.FC = () => {
                                     <div className="mt-1 text-[11px] text-white/40">{formatPercent(row.unrealizedPnlPct)}</div>
                                   </td>
                                   <td className="px-3 py-2">
-                                    <PortfolioTrustStrip
-                                      items={rowTrustItems}
-                                      className="border-0 bg-transparent p-0"
-                                      chipsClassName="gap-1"
-                                      data-testid={`portfolio-holding-trust-${row.symbol}`}
-                                    />
+                                    {rowTrustItems.length ? (
+                                      <PortfolioTrustStrip
+                                        items={rowTrustItems}
+                                        className="border-0 bg-transparent p-0"
+                                        chipsClassName="gap-1"
+                                        data-testid={`portfolio-holding-trust-${row.symbol}`}
+                                      />
+                                    ) : (
+                                      <span className="text-white/35">--</span>
+                                    )}
                                   </td>
                                   <td className="px-3 py-2">
                                     <Button type="button" variant="ghost" className={PORTFOLIO_TEXT_BUTTON_CLASS} onClick={() => openManualLedger('trade', 'stock')}>
@@ -2620,9 +2673,18 @@ const PortfolioPage: React.FC = () => {
                           data-testid="portfolio-start-card"
                           title={language === 'zh' ? '暂无持仓' : 'No holdings'}
                           action={hasHistory ? <TerminalChip variant="caution" className="shrink-0">{noHoldingsHistoryNote}</TerminalChip> : undefined}
+                          className="min-h-[72px]"
                         >
                           {compactNoHoldingText}
                         </TerminalEmptyState>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={() => openManualLedger('trade', 'stock')}>
+                            {addHoldingActionLabel}
+                          </TerminalButton>
+                          <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
+                            {importTradesActionLabel}
+                          </TerminalButton>
+                        </div>
                         {!hasWritableAccounts ? (
                           <TerminalNotice variant="caution" className="mt-3">
                             {hasActiveAccounts
@@ -2637,94 +2699,227 @@ const PortfolioPage: React.FC = () => {
               </div>
 
               <div data-testid="portfolio-secondary-lane" className="min-w-0 flex flex-col gap-4">
-                <TerminalPanel
-                  as="section"
-                  data-testid="portfolio-pnl-summary"
-                  className="min-w-0 grid gap-2 sm:grid-cols-3"
-                >
-                  {renderPnlTile('realized', realizedPnl, realizedPnlDisplay)}
-                  {renderPnlTile('unrealized', unrealizedPnl, unrealizedPnlDisplay)}
-                  {renderPnlTile('total', totalPnl, totalPnlDisplay)}
+                <TerminalPanel as="section" data-testid="portfolio-risk-card" className="min-w-0 flex flex-col gap-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">{riskTitle}</h2>
+                      <p className="mt-1 text-sm text-white/45">
+                        {hasHoldings
+                          ? (language === 'zh' ? '先看集中度，再看币种与市场暴露。' : 'Start with concentration, then review currency and market exposure.')
+                          : (language === 'zh' ? '暂无持仓，风险画像将在持仓出现后自动生成。' : 'Risk profile appears automatically once holdings exist.')}
+                      </p>
+                    </div>
+                    <span data-testid="portfolio-concentration-label">
+                      <PillBadge
+                        variant={topPositionPercent >= 50 ? 'danger' : topPositionPercent >= 20 ? 'warning' : hasHoldings ? 'success' : 'default'}
+                        className={hasHoldings ? concentrationToneClass : 'text-white/35'}
+                      >
+                        {concentrationLabel}
+                      </PillBadge>
+                    </span>
+                  </div>
+                  <div data-testid="portfolio-risk-overview" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '最大持仓' : 'Largest Position'}</div>
+                      <div className="mt-2 truncate text-sm text-white">{topPosition?.label || '--'}</div>
+                      <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topPosition?.percent)}</div>
+                    </div>
+                    <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '主币种' : 'Primary Currency'}</div>
+                      <div className="mt-2 truncate text-sm text-white">{topCurrency?.label || '--'}</div>
+                      <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topCurrency?.percent)}</div>
+                    </div>
+                    <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '主市场' : 'Primary Market'}</div>
+                      <div className="mt-2 truncate text-sm text-white">{formatExposureMarketLabel(topMarket, language)}</div>
+                      <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topMarket?.percent)}</div>
+                    </div>
+                  </div>
+                  <div data-testid="portfolio-concentration-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '持仓集中度' : 'Concentration'}</div>
+                      <div className={`font-mono text-xs ${hasHoldings ? concentrationToneClass : 'text-white/35'}`}>{formatPercent(topPosition?.percent)}</div>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-white/45">{concentrationDescription}</p>
+                  </div>
+                  <div data-testid="portfolio-risk-hints" className="flex flex-wrap gap-1.5">
+                    {(riskHintTexts.length ? riskHintTexts : [language === 'zh' ? '暂无显著集中风险' : 'No notable concentration risk']).map((hint) => (
+                      <PillBadge key={hint} variant="default" className="text-white/55">{hint}</PillBadge>
+                    ))}
+                    {safeRiskWarningLabels.map((warning) => (
+                      <PillBadge key={warning} variant="warning" className="text-white/55">{warning}</PillBadge>
+                    ))}
+                  </div>
                 </TerminalPanel>
 
-                <TerminalPanel
-                  as="section"
-                  data-testid="portfolio-exposure-card"
-                  className="min-w-0 flex flex-col gap-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="text-xs uppercase tracking-widest text-muted-text">{exposureTitle}</h2>
-                    <PortfolioSegmentedControl
-                      value={exposureTab}
-                      onChange={(value) => setExposureTab(value as ExposureTab)}
-                      options={exposureTabs}
-                      className="sm:w-auto"
-                      itemClassName="px-3 text-xs sm:flex-none"
-                      dataTestId="portfolio-exposure-tabs"
-                    />
+                <TerminalPanel as="section" data-testid="portfolio-valuation-panel" className="min-w-0 flex flex-col gap-4">
+                  <div>
+                    <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">{language === 'zh' ? '估值与新鲜度' : 'Valuation freshness'}</h2>
+                    <p className="mt-1 text-sm text-white/45">
+                      {hasFreshValuationState
+                        ? (language === 'zh' ? '当前估值可直接用于观察组合表现。' : 'Current valuation is ready for portfolio observation.')
+                        : consumerDataNotice || (language === 'zh' ? '部分估值信息仍在确认，请结合下方数据说明阅读。' : 'Some valuation details are still being confirmed. Review the notes below for context.')}
+                    </p>
                   </div>
-                  {exposureRows.length ? (
-                    <TerminalDenseList className="gap-2">
-                      {exposureRows.map((row) => {
-                        const values = renderExposureValue(row);
-                        return (
-                          <TerminalNestedBlock key={`${exposureTab}-${row.key}`} className="min-w-0 px-3 py-3">
-                            <div className="flex min-w-0 items-center justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="truncate text-sm font-medium text-white">{row.label}</div>
-                                <div className="mt-1 text-xs text-white/40">
-                                  {formatPercent(row.percent)}
-                                  {row.fxStatus === 'unavailable' ? ` · ${fxUnavailableLabel}` : ''}
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '价格快照' : 'Pricing snapshot'}</div>
+                      <div className="mt-2 text-sm text-white">{valuationSnapshotNote}</div>
+                    </div>
+                    <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '汇率更新时间' : 'FX updated'}</div>
+                      <div className="mt-2 text-sm text-white">{hasFxUnavailable ? fxUnavailableLabel : fxLastUpdated}</div>
+                    </div>
+                  </div>
+                  {valuationTrustItems.length ? (
+                    <PortfolioTrustStrip
+                      title={language === 'zh' ? '估值状态' : 'Valuation state'}
+                      items={valuationTrustItems.slice(0, 3)}
+                      data-testid="portfolio-valuation-trust-strip"
+                    />
+                  ) : null}
+                </TerminalPanel>
+
+                <TerminalPanel as="section" data-testid="portfolio-next-action-panel" className="min-w-0 flex flex-col gap-4">
+                  <div>
+                    <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">{language === 'zh' ? '下一步' : 'Next action'}</h2>
+                    <p className="mt-1 text-sm text-white">{nextActionHeadline}</p>
+                    <p className="mt-2 text-xs leading-5 text-white/45">{nextActionBody}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {!hasAccounts ? (
+                      <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={() => openManualLedger('account')}>
+                        {copy.createAccount}
+                      </TerminalButton>
+                    ) : (
+                      <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={() => openManualLedger('trade', 'stock')}>
+                        {addHoldingActionLabel}
+                      </TerminalButton>
+                    )}
+                    <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('trade')}>
+                      {manualLedgerActionLabel}
+                    </TerminalButton>
+                    <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
+                      {syncDataActionLabel}
+                    </TerminalButton>
+                  </div>
+                  <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3 text-xs text-white/45">
+                    {hasHistory
+                      ? (language === 'zh' ? `近期已记录 ${totalHistoryRows} 条活动，可在下方时间线继续核对。` : `${totalHistoryRows} recent records are available in the timeline below.`)
+                      : (language === 'zh' ? '近期活动会在保存持仓、现金或公司行为后出现在下方。' : 'Recent activity appears below after holdings, cash, or corporate records are saved.')}
+                  </div>
+                </TerminalPanel>
+              </div>
+            </div>
+
+            <div data-testid="portfolio-row-notes" className="order-4 col-span-12 min-w-0">
+              <details data-testid="portfolio-data-notes" className="group rounded-[16px] border border-white/[0.05] bg-white/[0.02]">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm text-white/72 outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 [&::-webkit-details-marker]:hidden">
+                  <span>{language === 'zh' ? '查看数据说明与配置细节' : 'View data notes and allocation detail'}</span>
+                  <span className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-1 text-[11px] font-semibold text-white/45 group-open:text-cyan-100">
+                    {language === 'zh' ? '展开' : 'Expand'}
+                  </span>
+                </summary>
+                <div className="grid gap-4 border-t border-white/[0.04] px-4 pb-4 pt-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+                  <TerminalPanel
+                    as="section"
+                    data-testid="portfolio-exposure-card"
+                    className="min-w-0 flex flex-col gap-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h2 className="text-xs uppercase tracking-widest text-muted-text">{exposureTitle}</h2>
+                      <PortfolioSegmentedControl
+                        value={exposureTab}
+                        onChange={(value) => setExposureTab(value as ExposureTab)}
+                        options={exposureTabs}
+                        className="sm:w-auto"
+                        itemClassName="px-3 text-xs sm:flex-none"
+                        dataTestId="portfolio-exposure-tabs"
+                      />
+                    </div>
+                    {exposureRows.length ? (
+                      <TerminalDenseList className="gap-2">
+                        {exposureRows.map((row) => {
+                          const values = renderExposureValue(row);
+                          return (
+                            <TerminalNestedBlock key={`${exposureTab}-${row.key}`} className="min-w-0 px-3 py-3">
+                              <div className="flex min-w-0 items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-medium text-white">{formatExposureRowLabel(row)}</div>
+                                  <div className="mt-1 text-xs text-white/40">
+                                    {formatPercent(row.percent)}
+                                    {row.fxStatus === 'unavailable' ? ` · ${fxUnavailableLabel}` : ''}
+                                  </div>
+                                </div>
+                                <div className="shrink-0 text-right">
+                                  <div className="font-mono text-sm text-white tabular-nums">{values.display}</div>
+                                  {values.native ? <div className="mt-1 font-mono text-[11px] text-white/35">{values.native}</div> : null}
                                 </div>
                               </div>
-                              <div className="shrink-0 text-right">
-                                <div className="font-mono text-sm text-white tabular-nums">{values.display}</div>
-                                {values.native ? <div className="mt-1 font-mono text-[11px] text-white/35">{values.native}</div> : null}
+                              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.04]">
+                                <div className="h-full rounded-full bg-emerald-400/70" style={{ width: `${Math.max(2, Math.min(100, row.percent || 0))}%` }} />
                               </div>
-                            </div>
-                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.04]">
-                              <div className="h-full rounded-full bg-emerald-400/70" style={{ width: `${Math.max(2, Math.min(100, row.percent || 0))}%` }} />
-                            </div>
-                            {exposureTab === 'symbol' && row.unrealizedPnl != null ? (
-                              <div className="mt-2 flex justify-between gap-3 text-xs text-white/40">
-                                <span>{copy.positionUnrealized}</span>
-                                <span className={Number(row.unrealizedPnl) >= 0 ? 'text-emerald-300' : 'text-rose-300'}>
-                                  {formatSignedMoney(Number(row.unrealizedPnl), row.displayCurrency || snapshotCurrency)}
-                                  {' '}
-                                  {formatPercent(row.unrealizedPnlPct)}
-                                </span>
-                              </div>
-                            ) : null}
-                          </TerminalNestedBlock>
-                        );
-                      })}
-                    </TerminalDenseList>
-                  ) : (
-                    <TerminalEmptyState title={hasHoldings ? exposureEmpty : analyticsEmptyText} />
-                  )}
-                </TerminalPanel>
+                              {exposureTab === 'symbol' && row.unrealizedPnl != null ? (
+                                <div className="mt-2 flex justify-between gap-3 text-xs text-white/40">
+                                  <span>{copy.positionUnrealized}</span>
+                                  <span className={Number(row.unrealizedPnl) >= 0 ? 'text-emerald-300' : 'text-rose-300'}>
+                                    {formatSignedMoney(Number(row.unrealizedPnl), row.displayCurrency || snapshotCurrency)}
+                                    {' '}
+                                    {formatPercent(row.unrealizedPnlPct)}
+                                  </span>
+                                </div>
+                              ) : null}
+                            </TerminalNestedBlock>
+                          );
+                        })}
+                      </TerminalDenseList>
+                    ) : (
+                      <TerminalEmptyState title={hasHoldings ? exposureEmpty : analyticsEmptyText} />
+                    )}
+                  </TerminalPanel>
 
-		                  <TerminalPanel
-                      as="section"
-		                    data-testid="portfolio-risk-card"
-		                    className="min-w-0 flex flex-col gap-3"
-		                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <h2 className="text-[10px] font-bold uppercase tracking-widest text-white/40">{riskTitle}</h2>
-                        <p className="mt-1 text-xs leading-5 text-white/40">
-                          {hasHoldings ? (language === 'zh' ? '集中度、币种与市场敞口。' : 'Concentration, currency, and market exposure.') : (language === 'zh' ? '暂无持仓，风险指标待生成。' : 'No holdings yet. Risk metrics pending.')}
+                  <TerminalPanel as="section" data-testid="portfolio-valuation-notes" className="min-w-0 flex flex-col gap-4">
+                    <div>
+                      <h2 className="text-xs uppercase tracking-widest text-muted-text">{language === 'zh' ? '数据说明' : 'Data notes'}</h2>
+                      {consumerDataNotice ? (
+                        <p data-testid="portfolio-consumer-data-notice" className="mt-2 text-sm leading-6 text-amber-200/80">
+                          {consumerDataNotice}
                         </p>
-                      </div>
-                      <span data-testid="portfolio-concentration-label">
-                        <PillBadge
-                          variant={topPositionPercent >= 50 ? 'danger' : topPositionPercent >= 20 ? 'warning' : hasHoldings ? 'success' : 'default'}
-                          className={hasHoldings ? concentrationToneClass : 'text-white/35'}
-                        >
-                          {concentrationLabel}
-                        </PillBadge>
-                      </span>
+                      ) : (
+                        <p className="mt-2 text-sm leading-6 text-white/45">
+                          {language === 'zh' ? '这里保留估值来源、风险参考与折算状态的消费者可读说明。' : 'This section keeps consumer-readable notes about valuation lineage, risk references, and conversion state.'}
+                        </p>
+                      )}
                     </div>
+                    <div className="grid grid-cols-1 gap-2">
+                      <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3 text-sm text-white/72">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.snapshotBasisTitle}</div>
+                        <div className="mt-2">{valuationSnapshotNote}</div>
+                      </div>
+                      <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3 text-sm text-white/72">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.fxState}</div>
+                        <div className="mt-2">{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</div>
+                      </div>
+                      <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3 text-sm text-white/72">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.costMethod}</div>
+                        <div className="mt-2">
+                          {costMethod === 'fifo'
+                            ? copy.costFifo
+                            : costMethod === 'avg'
+                              ? copy.costAvg
+                              : costMethod === 'futu_diluted'
+                                ? copy.costFutuDiluted
+                                : copy.costThsPnl}
+                        </div>
+                      </div>
+                    </div>
+                    {valuationTrustItems.length ? (
+                      <PortfolioTrustStrip
+                        title={language === 'zh' ? '估值信任' : 'Valuation trust'}
+                        items={valuationTrustItems}
+                        data-testid="portfolio-valuation-trust-details"
+                      />
+                    ) : null}
                     {riskTrustItems.length ? (
                       <PortfolioTrustStrip
                         title={language === 'zh' ? '风险信任' : 'Risk trust'}
@@ -2732,135 +2927,12 @@ const PortfolioPage: React.FC = () => {
                         data-testid="portfolio-risk-trust-strip"
                       />
                     ) : null}
-
-                    <div data-testid="portfolio-risk-overview" className="grid grid-cols-2 gap-2">
-                      <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '最大持仓' : 'Largest Position'}</div>
-                        <div className="mt-1 truncate text-sm text-white">{topPosition?.label || '--'}</div>
-                        <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topPosition?.percent)}</div>
-                      </div>
-                      <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '持仓数量' : 'Holdings'}</div>
-                        <div className="mt-1 font-mono text-sm text-white">{analytics?.risk.holdingCount ?? positionRows.length}</div>
-                        <div className="mt-1 font-mono text-xs text-white/45">{language === 'zh' ? '账户' : 'Accounts'} {analytics?.risk.accountCount ?? snapshot?.accountCount ?? 0}</div>
-                      </div>
-                    </div>
-
-                    {hasHoldings ? (<>
-                    <div data-testid="portfolio-concentration-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '持仓集中度' : 'Concentration'}</div>
-                        <div className={`font-mono text-xs ${hasHoldings ? concentrationToneClass : 'text-white/35'}`}>{formatPercent(topPosition?.percent)}</div>
-                      </div>
-                      <p className="mt-2 text-xs leading-5 text-white/45">{concentrationDescription}</p>
-                      {symbolExposureRows.length ? (
-                        <div className="mt-2 flex flex-col gap-1.5">
-                          {symbolExposureRows.slice(0, 3).map((row) => renderMiniExposureRow(row, { testIdPrefix: 'portfolio-top-position' }))}
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="grid gap-2">
-                      <div data-testid="portfolio-currency-exposure-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '币种敞口' : 'Currency Exposure'}</div>
-                          <PillBadge variant={topCurrency?.fxStatus === 'unavailable' ? 'warning' : 'info'} className="shrink-0 text-cyan-200">{currencyFxContext}</PillBadge>
-                        </div>
-                        <div className="mt-2 text-[10px] uppercase tracking-widest text-white/35">{language === 'zh' ? '最大币种' : 'Largest Currency'}</div>
-                        <div className="mt-2 text-sm text-white">{topCurrency?.label || '--'}</div>
-                        <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topCurrency?.percent)}</div>
-                        {topCurrency ? (
-                          <div className="mt-2">{renderMiniExposureRow(topCurrency, { testIdPrefix: 'portfolio-top-currency', showNative: true })}</div>
-                        ) : (
-                          <div className="mt-2 text-xs text-white/35">{language === 'zh' ? '暂无持仓，风险指标待生成。' : 'No holdings yet. Risk metrics pending.'}</div>
-                        )}
-                        {topCurrency?.fxStatus === 'unavailable' ? (
-                          <div className="mt-2 text-[11px] text-amber-200">{language === 'zh' ? '折算值仅供参考，原币统计可用。' : 'Converted value is indicative; native analytics remain available.'}</div>
-                        ) : null}
-                      </div>
-
-                      <div data-testid="portfolio-market-exposure-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '市场敞口' : 'Market Exposure'}</div>
-                          <PillBadge variant={marketExposureRows.length <= 1 || Number(topMarket?.percent || 0) >= 80 ? 'warning' : 'info'} className="shrink-0 text-cyan-200">{marketRiskHint}</PillBadge>
-                        </div>
-                        <div className="mt-2 text-[10px] uppercase tracking-widest text-white/35">{language === 'zh' ? '最大市场' : 'Largest Market'}</div>
-                        <div className="mt-2 text-sm text-white">{formatExposureMarketLabel(topMarket, language)}</div>
-                        <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topMarket?.percent)} · {language === 'zh' ? '市场数' : 'Markets'} {marketExposureRows.length}</div>
-                        {topMarket ? (
-                          <div className="mt-2">{renderMiniExposureRow(topMarket, { testIdPrefix: 'portfolio-top-market', label: formatExposureMarketLabel(topMarket, language) })}</div>
-                        ) : (
-                          <div className="mt-2 text-xs text-white/35">{language === 'zh' ? '暂无市场分类。' : 'No market category.'}</div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div data-testid="portfolio-pnl-contributors" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '盈亏贡献' : 'P&L Contribution'}</div>
-                        <div className="font-mono text-[11px] text-white/40">
-                          {pnlLabels.realized} {formatSignedMoney(realizedPnl, pnlSourceCurrency)} · {pnlLabels.unrealized} {formatSignedMoney(unrealizedPnl, pnlSourceCurrency)}
-                        </div>
-                      </div>
-                      <div className="mt-2 grid gap-2">
-                        <div className="min-w-0">
-                          <div className="mb-1 text-[10px] text-emerald-300">{language === 'zh' ? '贡献盈利' : 'Gain contributors'}</div>
-                          {gainContributors.length ? (
-                            <div className="flex flex-col gap-1.5">
-                              {gainContributors.map((row) => renderContributorRow(row, 'text-emerald-300', 'portfolio-gain-contributor'))}
-                            </div>
-                          ) : (
-                            <div className="rounded-lg bg-white/[0.015] px-3 py-2 text-xs text-white/35">{language === 'zh' ? '暂无盈利贡献' : 'No gain contributor'}</div>
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="mb-1 text-[10px] text-rose-300">{language === 'zh' ? '拖累亏损' : 'Loss contributors'}</div>
-                          {lossContributors.length ? (
-                            <div className="flex flex-col gap-1.5">
-                              {lossContributors.map((row) => renderContributorRow(row, 'text-rose-300', 'portfolio-loss-contributor'))}
-                            </div>
-                          ) : (
-                            <div className="rounded-lg bg-white/[0.015] px-3 py-2 text-xs text-white/35">{language === 'zh' ? '暂无亏损拖累' : 'No loss contributor'}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div data-testid="portfolio-risk-hints" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3 text-xs text-white/45">
-                      <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '风险提示' : 'Risk Hints'}</div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {(riskHintTexts.length ? riskHintTexts : [language === 'zh' ? '暂无显著集中风险' : 'No notable concentration risk']).map((hint) => (
-                          <PillBadge key={hint} variant="default" className="text-white/55">{hint}</PillBadge>
-                        ))}
-                        {safeRiskWarningLabels.map((warning) => (
-                          <PillBadge key={warning} variant="warning" className="text-white/55">{warning}</PillBadge>
-                        ))}
-                      </div>
-                    </div>
-                    </>) : (
-                      <div className="grid gap-2">
-                        <div data-testid="portfolio-concentration-drilldown" className="min-h-[72px] rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3 text-xs leading-5 text-white/35">
-                          {language === 'zh' ? '暂无持仓，风险指标待生成。' : 'No holdings yet. Risk metrics pending.'}
-                        </div>
-                        <div data-testid="portfolio-currency-exposure-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2 text-xs text-white/35">
-                          {language === 'zh' ? '暂无持仓，风险指标待生成。' : 'No holdings yet. Risk metrics pending.'}
-                        </div>
-                        <div data-testid="portfolio-market-exposure-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2 text-xs text-white/35">
-                          {language === 'zh' ? '暂无市场分类。' : 'No market category.'}
-                        </div>
-                        <div data-testid="portfolio-pnl-contributors" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2 text-xs text-white/35">
-                          {language === 'zh' ? '暂无盈亏贡献。' : 'No P&L contribution.'}
-                        </div>
-                        <div data-testid="portfolio-risk-hints" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2 text-xs text-white/35">
-                          {language === 'zh' ? '暂无显著集中风险。' : 'No notable concentration risk.'}
-                        </div>
-                      </div>
-                    )}
-		                  </TerminalPanel>
-              </div>
+                  </TerminalPanel>
+                </div>
+              </details>
             </div>
 
-            <div data-testid="portfolio-workspace-lanes" className="order-3 col-span-12 min-w-0 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(320px,5fr)] 2xl:gap-5 items-start">
+            <div data-testid="portfolio-workspace-lanes" className="order-5 col-span-12 min-w-0 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(320px,5fr)] 2xl:gap-5 items-start">
               <div data-testid="portfolio-activity-lane" className="min-w-0 flex flex-col gap-4">
                 {shouldRenderFullHistory ? (
                   <TerminalPanel

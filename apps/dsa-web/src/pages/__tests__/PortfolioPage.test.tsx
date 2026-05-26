@@ -357,6 +357,16 @@ function openFxPanel(language: 'zh' | 'en' = 'zh') {
   return within(screen.getByTestId('portfolio-fx-panel')).getByRole('button', { name: translate(language, 'portfolio.refreshFx') });
 }
 
+function openPortfolioDataNotes(language: 'zh' | 'en' = 'zh') {
+  const dataNotes = screen.getByTestId('portfolio-data-notes');
+  if (!dataNotes.hasAttribute('open')) {
+    fireEvent.click(
+      within(dataNotes).getByText(language === 'en' ? 'View data notes and allocation detail' : '查看数据说明与配置细节'),
+    );
+  }
+  return dataNotes;
+}
+
 function getLeftTabButton(name: string) {
   return within(screen.getByTestId('portfolio-left-tab-switcher')).getByRole('button', { name });
 }
@@ -489,26 +499,26 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('max-w-[1920px]', 'mx-auto', 'px-4', 'py-2');
     expect(screen.queryByTestId('portfolio-bento-hero')).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-row-status')).toHaveClass('col-span-12', 'min-w-0');
-    expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('grid', 'xl:grid-cols-[minmax(0,1.85fr)_minmax(0,1.15fr)]');
+    expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('grid', 'xl:grid-cols-[minmax(0,1.6fr)_minmax(360px,1fr)]');
     expect(screen.getByTestId('portfolio-account-status-strip')).toHaveAttribute('data-terminal-primitive', 'panel');
     expect(screen.getByTestId('portfolio-total-assets-card')).toHaveClass('min-w-0');
     expect(screen.getByTestId('portfolio-account-status-strip')).toHaveTextContent('暂无持仓。添加持仓或导入交易后显示组合状态。');
-    expect(screen.getByRole('button', { name: '添加持仓' })).toHaveAttribute('data-terminal-primitive', 'button');
-    expect(screen.getByRole('button', { name: '导入交易' })).toHaveAttribute('data-terminal-primitive', 'button');
-    expect(screen.getByRole('button', { name: '手工记账' })).toHaveAttribute('data-terminal-primitive', 'button');
+    const commandStrip = screen.getByTestId('portfolio-command-strip');
+    expect(within(commandStrip).getByRole('button', { name: '添加持仓' })).toHaveAttribute('data-terminal-primitive', 'button');
+    expect(within(commandStrip).getByRole('button', { name: '导入交易' })).toHaveAttribute('data-terminal-primitive', 'button');
+    expect(within(commandStrip).getByRole('button', { name: '同步数据' })).toHaveAttribute('data-terminal-primitive', 'button');
     expect(screen.getByRole('heading', { name: /总资产|Total Assets/ })).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveClass('text-white');
     expect(screen.getByTestId('portfolio-command-strip')).toContainElement(screen.getByTestId('portfolio-display-currency-select'));
     expect(screen.queryByTestId('portfolio-row-macro')).not.toBeInTheDocument();
-    expect(within(screen.getByTestId('portfolio-account-status-strip')).getByText(translate('zh', 'portfolio.totalCash'))).toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-account-status-strip')).toHaveTextContent('持仓数');
-    expect(within(screen.getByTestId('portfolio-account-status-strip')).getByText(translate('zh', 'portfolio.positionUnrealized'))).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-summary-strip')).toHaveTextContent(translate('zh', 'portfolio.totalCash'));
+    expect(screen.getByTestId('portfolio-summary-strip')).toHaveTextContent(translate('zh', 'portfolio.totalMarketValue'));
     expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('已实现盈亏');
     expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('未实现盈亏');
     expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('总盈亏');
     expect(screen.getByTestId('portfolio-exposure-card')).toHaveTextContent('暂无持仓，保存持仓流水后生成盈亏与资产配置。');
     expect(screen.getByTestId('portfolio-risk-card')).toHaveTextContent('暂无持仓');
-    expect(await screen.findByText(translate('zh', 'portfolio.fxStale'))).toBeInTheDocument();
+    expect((await screen.findAllByText(translate('zh', 'portfolio.fxStale'))).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: '手工记账台' })).toBeInTheDocument();
     expect(screen.getAllByText('手工记账入口').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '持仓流水' })).toBeInTheDocument();
@@ -557,13 +567,15 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(costMethodSelect).getByRole('option', { name: translate('zh', 'portfolio.costFifo') })).toBeInTheDocument();
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
     const holdingsPanel = screen.getByTestId('portfolio-empty-workflow-column');
+    const summaryStrip = screen.getByTestId('portfolio-summary-strip');
     const tradeStationSection = screen.getByRole('heading', { name: /手工记账台|Trade Station/ }).closest('section');
+    expect(Boolean(totalAssetsCard.compareDocumentPosition(summaryStrip) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(summaryStrip.compareDocumentPosition(holdingsPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(totalAssetsCard.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(totalAssetsCard.compareDocumentPosition(holdingsPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(holdingsPanel.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
-  it('renders the mobile empty portfolio order as hero, pnl, exposure, holdings, risk, recent activity, trade station', async () => {
+  it('renders the mobile empty portfolio order as hero, summary, holdings, risk, notes, recent activity, trade station', async () => {
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
 
     render(<PortfolioPage />);
@@ -571,20 +583,22 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
+    const summaryStrip = screen.getByTestId('portfolio-summary-strip');
     const pnlSummary = screen.getByTestId('portfolio-pnl-summary');
     const startCard = screen.getByTestId('portfolio-start-card');
-    const exposureCard = screen.getByTestId('portfolio-exposure-card');
     const riskCard = screen.getByTestId('portfolio-risk-card');
+    const dataNotes = screen.getByTestId('portfolio-data-notes');
     const tradeStationSection = screen.getByRole('heading', { name: /手工记账台|Trade Station/ }).closest('section') as HTMLElement;
     const recentActivity = screen.getByTestId('portfolio-recent-activity');
 
-    expect(Boolean(totalAssetsCard.compareDocumentPosition(startCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(startCard.compareDocumentPosition(pnlSummary) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(pnlSummary.compareDocumentPosition(exposureCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(exposureCard.compareDocumentPosition(riskCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(riskCard.compareDocumentPosition(recentActivity) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(totalAssetsCard.compareDocumentPosition(summaryStrip) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(summaryStrip.compareDocumentPosition(startCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(startCard.compareDocumentPosition(riskCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(riskCard.compareDocumentPosition(dataNotes) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(dataNotes.compareDocumentPosition(recentActivity) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(recentActivity.compareDocumentPosition(tradeStationSection) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
+    expect(pnlSummary).toBeInTheDocument();
   });
 
   it('renders the main RiskConsole as a two-column holdings and risk workspace on desktop', async () => {
@@ -595,7 +609,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-row-routing')).toHaveClass(
       'grid',
       'grid-cols-1',
-      'xl:grid-cols-[minmax(0,7fr)_minmax(360px,5fr)]',
+      'xl:grid-cols-[minmax(0,7fr)_minmax(340px,5fr)]',
     );
     expect(screen.getByTestId('portfolio-primary-lane')).toHaveClass(
       'min-w-0',
@@ -672,11 +686,12 @@ describe('PortfolioPage FX refresh', () => {
     expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex-1', 'min-w-0', 'min-h-0');
     expect(workspace).toHaveClass('grid', 'grid-cols-1', 'xl:grid-cols-12', 'gap-6', 'items-start');
     expect(screen.getByTestId('portfolio-bento-page').className).not.toMatch(/\bbg-(black|\[#050505\]|gray-|zinc-|slate-|neutral-)/);
-    expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('grid', 'xl:grid-cols-[minmax(0,1.85fr)_minmax(0,1.15fr)]');
-    expect(screen.getByRole('button', { name: '添加持仓' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '导入交易' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '手工记账' })).toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-command-strip')).toContainElement(screen.getByTestId('portfolio-display-currency-select'));
+    expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('grid', 'xl:grid-cols-[minmax(0,1.6fr)_minmax(360px,1fr)]');
+    const commandStrip = screen.getByTestId('portfolio-command-strip');
+    expect(within(commandStrip).getByRole('button', { name: '添加持仓' })).toBeInTheDocument();
+    expect(within(commandStrip).getByRole('button', { name: '导入交易' })).toBeInTheDocument();
+    expect(within(commandStrip).getByRole('button', { name: '同步数据' })).toBeInTheDocument();
+    expect(commandStrip).toContainElement(screen.getByTestId('portfolio-display-currency-select'));
 
     const startCard = screen.getByTestId('portfolio-start-card');
     expect(startCard).toHaveAttribute('data-terminal-primitive', 'empty-state');
@@ -696,14 +711,15 @@ describe('PortfolioPage FX refresh', () => {
     const activityLane = screen.getByTestId('portfolio-activity-lane');
     const manualLane = screen.getByTestId('portfolio-manual-lane');
     expect(screen.getByTestId('portfolio-row-status')).toHaveClass('col-span-12', 'min-w-0');
-    expect(screen.getByTestId('portfolio-row-routing')).toHaveClass('order-2', 'col-span-12', 'grid', 'grid-cols-1', 'xl:grid-cols-[minmax(0,7fr)_minmax(360px,5fr)]', 'items-start');
-    expect(workspaceLanes).toHaveClass('order-3', 'col-span-12', 'grid', 'grid-cols-1', 'xl:grid-cols-[minmax(0,7fr)_minmax(320px,5fr)]', 'items-start');
+    expect(screen.getByTestId('portfolio-row-routing')).toHaveClass('order-3', 'col-span-12', 'grid', 'grid-cols-1', 'xl:grid-cols-[minmax(0,7fr)_minmax(340px,5fr)]', 'items-start');
+    expect(workspaceLanes).toHaveClass('order-5', 'col-span-12', 'grid', 'grid-cols-1', 'xl:grid-cols-[minmax(0,7fr)_minmax(320px,5fr)]', 'items-start');
     expect(primaryLane).toHaveClass('min-w-0', 'flex', 'flex-col', 'gap-4');
     expect(secondaryLane).toHaveClass('min-w-0', 'flex', 'flex-col', 'gap-4');
     expect(activityLane).toHaveClass('min-w-0', 'flex', 'flex-col', 'gap-4');
     expect(manualLane).toHaveClass('min-w-0', 'flex', 'flex-col', 'gap-4');
     expect(primaryLane).toContainElement(screen.getByTestId('portfolio-current-holdings-panel'));
     expect(secondaryLane).toContainElement(screen.getByTestId('portfolio-risk-card'));
+    expect(screen.getByTestId('portfolio-row-notes')).toContainElement(screen.getByTestId('portfolio-data-notes'));
     expect(activityLane).toContainElement(screen.getByTestId('portfolio-recent-activity'));
     expect(manualLane).toContainElement(screen.getByTestId('portfolio-trade-station-card'));
     expect(
@@ -737,9 +753,9 @@ describe('PortfolioPage FX refresh', () => {
     expect(exposure).toHaveTextContent('6.7%');
     const risk = screen.getByTestId('portfolio-risk-card');
     expect(risk).toHaveTextContent('最大持仓');
-    expect(risk).toHaveTextContent('最大币种');
-    expect(risk).toHaveTextContent('最大市场');
-    expect(risk).toHaveTextContent('单一标的占比较高');
+    expect(risk).toHaveTextContent('主币种');
+    expect(risk).toHaveTextContent('主市场');
+    expect(risk).toHaveTextContent('最大持仓偏高');
   });
 
   it('translates delayed fallback prices into consumer-safe valuation language', async () => {
@@ -885,7 +901,6 @@ describe('PortfolioPage FX refresh', () => {
 
     const fallbackTrust = screen.getByTestId('portfolio-holding-trust-COST');
     expect(fallbackTrust).toHaveTextContent('价格可能延迟');
-    expect(fallbackTrust).toHaveTextContent('价格延迟');
     expect(fallbackTrust).toHaveTextContent('置信度有限');
   });
 
@@ -1003,20 +1018,24 @@ describe('PortfolioPage FX refresh', () => {
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
+    openPortfolioDataNotes();
 
     const risk = screen.getByTestId('portfolio-risk-card');
     expect(within(risk).getByTestId('portfolio-concentration-label')).toHaveTextContent('集中');
     expect(within(risk).getByTestId('portfolio-concentration-drilldown')).toHaveTextContent('持仓集中度');
-    expect(within(risk).getByTestId('portfolio-concentration-drilldown')).toHaveTextContent('AAPL');
     expect(within(risk).getByTestId('portfolio-concentration-drilldown')).toHaveTextContent('42.0%');
-    expect(within(risk).getByTestId('portfolio-currency-exposure-drilldown')).toHaveTextContent('币种敞口');
-    expect(within(risk).getByTestId('portfolio-currency-exposure-drilldown')).toHaveTextContent('USD');
-    expect(within(risk).getByTestId('portfolio-market-exposure-drilldown')).toHaveTextContent('市场敞口');
-    expect(within(risk).getByTestId('portfolio-market-exposure-drilldown')).toHaveTextContent('美股');
-    expect(within(risk).getByTestId('portfolio-pnl-contributors')).toHaveTextContent('盈亏贡献');
-    expect(within(risk).getByTestId('portfolio-pnl-contributors')).toHaveTextContent('AAPL');
-    expect(within(risk).getByTestId('portfolio-pnl-contributors')).toHaveTextContent('00700');
+    expect(within(risk).getByTestId('portfolio-risk-overview')).toHaveTextContent('主币种');
+    expect(within(risk).getByTestId('portfolio-risk-overview')).toHaveTextContent('AAPL');
+    expect(within(risk).getByTestId('portfolio-risk-overview')).toHaveTextContent('USD');
+    expect(within(risk).getByTestId('portfolio-risk-overview')).toHaveTextContent('主市场');
+    expect(within(risk).getByTestId('portfolio-risk-overview')).toHaveTextContent('美股');
     expect(within(risk).getByTestId('portfolio-risk-hints')).toHaveTextContent('最大持仓偏高');
+    const exposure = screen.getByTestId('portfolio-exposure-card');
+    fireEvent.click(within(exposure).getByRole('button', { name: '标的' }));
+    expect(exposure).toHaveTextContent('AAPL');
+    expect(exposure).toHaveTextContent('00700');
+    expect(exposure).toHaveTextContent('12.5%');
+    expect(exposure).toHaveTextContent('-3.1%');
     expect(risk).not.toHaveTextContent('provider_debug_payload');
   });
 
@@ -1057,21 +1076,18 @@ describe('PortfolioPage FX refresh', () => {
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
+    openPortfolioDataNotes();
 
-    const snapshotStrip = screen.getByTestId('portfolio-account-status-strip');
-    const valuationTrust = within(snapshotStrip).getByTestId('portfolio-valuation-trust-strip');
-    expect(valuationTrust).toHaveTextContent('仅供观察');
+    const valuationPanel = screen.getByTestId('portfolio-valuation-panel');
+    const valuationTrust = within(valuationPanel).getByTestId('portfolio-valuation-trust-strip');
+    expect(valuationTrust.textContent || '').toMatch(/仅供.*观察/);
     expect(valuationTrust).toHaveTextContent('价格可能延迟');
-    expect(valuationTrust).toHaveTextContent('价格延迟');
-    expect(valuationTrust).toHaveTextContent('汇率可能延迟');
-    expect(valuationTrust).toHaveTextContent('现金流水不完整');
-    expect(valuationTrust).toHaveTextContent('持仓数据待核验');
+    expect(valuationTrust).toHaveTextContent('截至 2026-03-18');
     expect(screen.getByTestId('portfolio-consumer-data-notice')).toHaveTextContent('当前估值可能存在延迟，仅供参考。');
-    expect(within(snapshotStrip).queryByTestId('portfolio-snapshot-evidence-chips')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-snapshot-evidence-chips')).not.toBeInTheDocument();
     expect(valuationTrust.textContent || '').not.toMatch(/Daily close quote|current_quote_unavailable|sourceAuthority|syncImportStatus|confidenceCap|stale_fx|FX 汇率|基准映射|因子映射/i);
 
-    const risk = screen.getByTestId('portfolio-risk-card');
-    const riskTrust = within(risk).getByTestId('portfolio-risk-trust-strip');
+    const riskTrust = screen.getByTestId('portfolio-risk-trust-strip');
     expect(riskTrust).toHaveTextContent('仅供风险观察');
     expect(riskTrust).toHaveTextContent('汇率可能延迟');
     expect(riskTrust).toHaveTextContent('持仓数据待核验');
@@ -1082,10 +1098,8 @@ describe('PortfolioPage FX refresh', () => {
 
     const holdingTrust = screen.getByTestId('portfolio-holding-trust-AAPL');
     expect(holdingTrust).toHaveTextContent('价格可能延迟');
-    expect(holdingTrust).toHaveTextContent('价格延迟');
-    expect(holdingTrust).toHaveTextContent('部分价格数据暂不可用，已使用最近一次可用数据。');
     expect(holdingTrust).toHaveTextContent('置信度有限');
-    expect(holdingTrust).toHaveTextContent('截至 2026-03-18');
+    expect(screen.getByTestId('portfolio-current-holdings-panel')).toHaveTextContent('截至 2026-03-18');
   });
 
   it('shows consumer-safe data quality copy instead of provider setup remediation by default', async () => {
@@ -1110,14 +1124,15 @@ describe('PortfolioPage FX refresh', () => {
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
+    openPortfolioDataNotes();
 
-    const statusStrip = screen.getByTestId('portfolio-account-status-strip');
-    expect(within(statusStrip).getByTestId('portfolio-valuation-trust-strip')).toHaveTextContent('价格可能延迟');
+    const valuationPanel = screen.getByTestId('portfolio-valuation-panel');
+    expect(within(valuationPanel).getByTestId('portfolio-valuation-trust-strip')).toHaveTextContent('价格可能延迟');
     expect(screen.getByTestId('portfolio-consumer-data-notice')).toHaveTextContent('当前估值可能存在延迟，仅供参考。');
-    expect(within(statusStrip).queryByTestId('portfolio-setup-path')).not.toBeInTheDocument();
-    expect(statusStrip).not.toHaveTextContent('Provider Ops');
-    expect(statusStrip).not.toHaveTextContent('数据源设置');
-    expect(statusStrip.textContent || '').not.toMatch(/provider|api key|setup|remediation|sourceAuthority|confidenceCap|reason_codes|fallback/i);
+    expect(screen.queryByTestId('portfolio-setup-path')).not.toBeInTheDocument();
+    expect(valuationPanel).not.toHaveTextContent('Provider Ops');
+    expect(valuationPanel).not.toHaveTextContent('数据源设置');
+    expect(screen.getByTestId('portfolio-bento-page').textContent || '').not.toMatch(/provider|api key|setup|remediation|sourceAuthority|confidenceCap|reason_codes|fallback/i);
   });
 
   it('maps current valuation lineage state to consumer-safe positive trust copy', async () => {
@@ -1131,10 +1146,9 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const statusStrip = screen.getByTestId('portfolio-account-status-strip');
-    const valuationTrust = within(statusStrip).getByTestId('portfolio-valuation-trust-strip');
+    const valuationTrust = screen.getByTestId('portfolio-valuation-trust-strip');
     expect(valuationTrust).toHaveTextContent('估值已更新');
-    expect(statusStrip.textContent || '').not.toMatch(/current|valuationLineageState/i);
+    expect(screen.getByTestId('portfolio-bento-page').textContent || '').not.toMatch(/current|valuationLineageState/i);
     expect(screen.queryByTestId('portfolio-consumer-data-notice')).not.toBeInTheDocument();
   });
 
@@ -1154,11 +1168,10 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const statusStrip = screen.getByTestId('portfolio-account-status-strip');
-    const valuationTrust = within(statusStrip).getByTestId('portfolio-valuation-trust-strip');
+    const valuationTrust = screen.getByTestId('portfolio-valuation-trust-strip');
     expect(screen.getByTestId('portfolio-consumer-data-notice')).toHaveTextContent(expectedNotice);
     expect(valuationTrust.textContent || '').not.toContain(valuationLineageState);
-    expect(statusStrip.textContent || '').not.toContain(valuationLineageState);
+    expect(screen.getByTestId('portfolio-bento-page').textContent || '').not.toContain(valuationLineageState);
   });
 
   it('does not leak nested valuation lineage diagnostics or raw provider fields into the consumer DOM', async () => {
@@ -1212,15 +1225,14 @@ describe('PortfolioPage FX refresh', () => {
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
+    openPortfolioDataNotes();
     fireEvent.click(within(screen.getByTestId('portfolio-exposure-card')).getByRole('button', { name: '币种' }));
 
     const exposure = screen.getByTestId('portfolio-exposure-card');
     expect(exposure).toHaveTextContent('折算暂不可用');
     expect(exposure).toHaveTextContent('USD 1,600.00');
-    const risk = screen.getByTestId('portfolio-risk-card');
-    expect(within(risk).getByTestId('portfolio-currency-exposure-drilldown')).toHaveTextContent('汇率待确认');
-    expect(within(risk).getByTestId('portfolio-currency-exposure-drilldown')).toHaveTextContent('原币统计可用');
-    expect(within(risk).getByTestId('portfolio-risk-hints')).toHaveTextContent('汇率数据暂不可用');
+    expect(screen.getByTestId('portfolio-consumer-data-notice')).toHaveTextContent('当前估值可能存在延迟，仅供参考。');
+    expect(screen.getByTestId('portfolio-risk-card')).toHaveTextContent('汇率数据暂不可用');
   });
 
   it('renders missing market category cleanly without raw unknown text', async () => {
@@ -1247,10 +1259,13 @@ describe('PortfolioPage FX refresh', () => {
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
+    openPortfolioDataNotes();
 
-    const marketDrilldown = screen.getByTestId('portfolio-market-exposure-drilldown');
-    expect(marketDrilldown).toHaveTextContent('暂无市场分类');
-    expect(marketDrilldown).not.toHaveTextContent('UNKNOWN');
+    fireEvent.click(within(screen.getByTestId('portfolio-exposure-card')).getByRole('button', { name: '市场' }));
+    const exposure = screen.getByTestId('portfolio-exposure-card');
+    expect(exposure).toHaveTextContent('暂无市场分类');
+    expect(exposure).not.toHaveTextContent('UNKNOWN');
+    expect(screen.getByTestId('portfolio-risk-card')).toHaveTextContent('暂无市场分类');
   });
 
   it('shows the disabled trade reason if the trade account is all accounts', async () => {
@@ -1317,7 +1332,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     expect(screen.getAllByText('USD 1,600.00').length).toBeGreaterThan(0);
-    expect(within(screen.getByTestId('portfolio-account-status-strip')).getAllByText('折算暂不可用').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('portfolio-valuation-panel')).toHaveTextContent('折算暂不可用');
     expect(screen.getByTestId('portfolio-consumer-data-notice')).toHaveTextContent('部分汇率数据暂不可用，估值已暂停更新。');
     expect(screen.queryByText(/≈ CNY/)).not.toBeInTheDocument();
   });
