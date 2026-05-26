@@ -335,6 +335,208 @@ def test_tradier_dry_run_fixture_remains_non_decision_grade_in_service() -> None
     request_mock.assert_not_called()
 
 
+class _FakeTradierOptionsTransport:
+    def __init__(
+        self,
+        *,
+        quote_payload: dict | None = None,
+        expirations_payload: dict | None = None,
+        chain_payload: dict | None = None,
+    ) -> None:
+        self.calls: list[tuple[str, ...]] = []
+        self.quote_payload = quote_payload or _tradier_quote_payload()
+        self.expirations_payload = expirations_payload or _tradier_expirations_payload()
+        self.chain_payload = chain_payload or _tradier_chain_payload()
+
+    def get_quote(self, symbol: str) -> dict:
+        self.calls.append(("quote", symbol))
+        return self.quote_payload
+
+    def get_expirations(self, symbol: str) -> dict:
+        self.calls.append(("expirations", symbol))
+        return self.expirations_payload
+
+    def get_chain(self, symbol: str, expiration: str | None = None) -> dict:
+        self.calls.append(("chain", symbol, expiration or ""))
+        return self.chain_payload
+
+
+def _tradier_enabled_config() -> OptionsLiveProviderConfig:
+    return OptionsLiveProviderConfig.from_env(
+        {
+            "OPTIONS_LIVE_PROVIDERS_ENABLED": "1",
+            "OPTIONS_LIVE_PROVIDER_KEYS": "tradier",
+            "TRADIER_API_TOKEN": "valid_synthetic_readiness_value_contract_1234567890",
+        }
+    )
+
+
+def _tradier_quote_payload() -> dict:
+    return {
+        "quotes": {
+            "quote": {
+                "symbol": "TEM",
+                "last": "52.40",
+                "change_percentage": "1.15",
+                "trade_date": "2026-05-06T13:45:00Z",
+            }
+        }
+    }
+
+
+def _tradier_expirations_payload() -> dict:
+    return {"expirations": {"date": ["2026-06-19", "2026-08-21"]}}
+
+
+def _tradier_chain_payload(contract_overrides: dict | None = None) -> dict:
+    base_contract = {
+        "symbol": "TEM260619C00050000",
+        "option_type": "call",
+        "expiration_date": "2026-06-19",
+        "strike": "50.0",
+        "bid": "4.80",
+        "ask": "5.20",
+        "last": "5.00",
+        "volume": "320",
+        "open_interest": "1480",
+        "greeks": {
+            "mid_iv": "0.62",
+            "delta": "0.61",
+            "gamma": "0.044",
+            "theta": "-0.072",
+            "vega": "0.118",
+            "rho": "0.031",
+        },
+    }
+    if contract_overrides:
+        base_contract.update(contract_overrides)
+    return {"options": {"option": [base_contract]}}
+
+
+def test_tradier_mock_transport_normalizes_quote_expirations_and_chain_without_default_network() -> None:
+    transport = _FakeTradierOptionsTransport()
+    provider = TradierOptionsProviderStub(config=_tradier_enabled_config(), transport=transport)
+
+    with patch("requests.sessions.Session.request") as request_mock:
+        quote = provider.get_underlying_quote("TEM")
+        expirations = provider.get_expirations("TEM")
+        chain = provider.get_chain("TEM", expiration="2026-06-19")
+
+    assert transport.calls == [
+        ("quote", "TEM"),
+        ("expirations", "TEM"),
+        ("quote", "TEM"),
+        ("expirations", "TEM"),
+        ("chain", "TEM", "2026-06-19"),
+    ]
+    request_mock.assert_not_called()
+    assert provider.capabilities.provider_name == "tradier"
+    assert provider.capabilities.live_enabled is False
+    assert provider.capabilities.tradeable_data is False
+    assert provider.capabilities.source_type == "tradier_adapter_contract"
+    assert provider.capabilities.notes == (
+        "tradier_adapter_contract",
+        "mock_transport_only",
+        "not_tradeable",
+        "not_decision_grade",
+    )
+
+    assert quote == {
+        "price": 52.4,
+        "changePct": 1.15,
+        "asOf": "2026-05-06T13:45:00Z",
+        "source": "tradier_adapter_contract",
+        "freshness": "unknown",
+        "providerQuality": "tradier_adapter_contract_not_tradeable",
+    }
+    assert [item["date"] for item in expirations] == ["2026-06-19", "2026-08-21"]
+    assert all(item["source"] == "tradier_adapter_contract" for item in expirations)
+    assert all(item["freshness"] == "unknown" for item in expirations)
+    assert chain["providerName"] == "tradier"
+    assert chain["source"] == "tradier_adapter_contract"
+    assert chain["providerQuality"] == "tradier_adapter_contract_not_tradeable"
+    assert chain["providerCapabilities"]["providerName"] == "tradier"
+    assert chain["providerCapabilities"]["liveEnabled"] is False
+    assert chain["providerCapabilities"]["tradeableData"] is False
+    assert chain["dataQuality"] == {
+        "tier": "insufficient",
+        "tradeable": False,
+        "hints": ["tradier_adapter_contract", "mock_transport_only", "not_tradeable", "not_decision_grade"],
+    }
+    contract = chain["contracts"][0]
+    assert contract["contractSymbol"] == "TEM260619C00050000"
+    assert contract["side"] == "call"
+    assert contract["expiration"] == "2026-06-19"
+    assert contract["strike"] == 50.0
+    assert contract["bid"] == 4.8
+    assert contract["ask"] == 5.2
+    assert contract["volume"] == 320
+    assert contract["openInterest"] == 1480
+    assert contract["impliedVolatility"] == 0.62
+    assert contract["greeks"] == {
+        "delta": 0.61,
+        "gamma": 0.044,
+        "theta": -0.072,
+        "vega": 0.118,
+        "rho": 0.031,
+    }
+    assert contract["dataQuality"]["tradeable"] is False
+    assert contract["freshness"] == "unknown"
+    text = _json_lower(chain)
+    for blocked in (
+        "valid_synthetic_readiness_value_contract",
+        "tradier_api_token",
+        "api_token",
+        "token",
+        "secret",
+        "authorization",
+    ):
+        assert blocked not in text
+
+
+@pytest.mark.parametrize(
+    ("contract_overrides", "expected_code"),
+    [
+        ({"bid": None, "ask": None}, "missing_bid_ask"),
+        ({"greeks": {}, "implied_volatility": None}, "missing_greeks"),
+    ],
+)
+def test_tradier_mock_transport_missing_market_fields_remain_data_quality_blocked(
+    contract_overrides: dict,
+    expected_code: str,
+) -> None:
+    provider = TradierOptionsProviderStub(
+        config=_tradier_enabled_config(),
+        transport=_FakeTradierOptionsTransport(
+            chain_payload=_tradier_chain_payload(contract_overrides=contract_overrides)
+        ),
+    )
+    service = OptionsLabService(market_data_provider=provider, provider_name="tradier")
+
+    with patch("requests.sessions.Session.request") as request_mock:
+        decision = service.evaluate_decision(
+            {
+                "symbol": "TEM",
+                "marketDataProvider": "tradier",
+                "strategy": "long_call",
+                "expiration": "2026-06-19",
+                "targetPrice": 65,
+                "targetDate": "2026-06-19",
+                "riskBudget": 600,
+            }
+        )
+
+    assert decision.metadata.provider_name == "tradier"
+    assert decision.metadata.live_provider_enabled is False
+    assert decision.metadata.provider_capabilities["sourceType"] == "tradier_adapter_contract"
+    assert decision.metadata.provider_capabilities["tradeableData"] is False
+    assert decision.decision_grade is False
+    assert decision.decision_label == "数据不足，禁止判断"
+    assert expected_code in decision.fail_closed_reason_codes
+    assert decision.data_quality.data_quality_tier == "insufficient"
+    request_mock.assert_not_called()
+
+
 def test_tradier_dry_run_sanitizes_provider_mapping_errors() -> None:
     provider = TradierOptionsProviderStub(
         config=OptionsLiveProviderConfig(

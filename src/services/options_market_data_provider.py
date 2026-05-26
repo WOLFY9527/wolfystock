@@ -25,6 +25,15 @@ DEFAULT_OPTIONS_PROVIDER_NAME = "synthetic_fixture"
 TRADIER_OPTIONS_DRY_RUN_SOURCE = "tradier_dry_run_fixture"
 TRADIER_OPTIONS_DRY_RUN_FRESHNESS = "delayed_dry_run"
 TRADIER_OPTIONS_DRY_RUN_AS_OF = "2026-05-06T13:45:00Z"
+TRADIER_OPTIONS_ADAPTER_SOURCE = "tradier_adapter_contract"
+TRADIER_OPTIONS_ADAPTER_FRESHNESS = "unknown"
+TRADIER_OPTIONS_ADAPTER_QUALITY = "tradier_adapter_contract_not_tradeable"
+TRADIER_OPTIONS_ADAPTER_NOTES = (
+    "tradier_adapter_contract",
+    "mock_transport_only",
+    "not_tradeable",
+    "not_decision_grade",
+)
 DEFAULT_TRADIER_OPTIONS_DRY_RUN_RESPONSE: Dict[str, Any] = {
     "underlying": {
         "symbol": "TEM",
@@ -309,6 +318,19 @@ class OptionsMarketDataProvider(Protocol):
         """Return a sanitized normalized option-chain snapshot."""
 
 
+class TradierOptionsTransport(Protocol):
+    """Small injectable transport seam for mocked Tradier payload contracts."""
+
+    def get_quote(self, symbol: str) -> Mapping[str, Any]:
+        """Return a Tradier-shaped quote payload."""
+
+    def get_expirations(self, symbol: str) -> Mapping[str, Any]:
+        """Return a Tradier-shaped expirations payload."""
+
+    def get_chain(self, symbol: str, expiration: Optional[str] = None) -> Mapping[str, Any]:
+        """Return a Tradier-shaped option-chain payload."""
+
+
 class _FixtureOptionsProvider:
     provider_name = DEFAULT_OPTIONS_PROVIDER_NAME
     source = "synthetic_options_lab_fixture"
@@ -536,8 +558,10 @@ class TradierOptionsProviderStub(_DisabledLiveOptionsProviderStub):
         self,
         config: Optional[OptionsLiveProviderConfig] = None,
         dry_run_response: Optional[Mapping[str, Any]] = None,
+        transport: Optional[TradierOptionsTransport] = None,
     ) -> None:
         super().__init__("tradier", config=config)
+        self.transport = transport
         self.dry_run_response = copy.deepcopy(dict(dry_run_response or DEFAULT_TRADIER_OPTIONS_DRY_RUN_RESPONSE))
         if self.config.is_dry_run_enabled(self.provider_name):
             self.capabilities = OptionsProviderCapabilityMetadata(
@@ -549,20 +573,41 @@ class TradierOptionsProviderStub(_DisabledLiveOptionsProviderStub):
                 tradeable_data=False,
                 notes=("tradier_dry_run", "no_external_calls", "not_tradeable"),
             )
+        elif self.transport is not None:
+            self.capabilities = OptionsProviderCapabilityMetadata(
+                provider_name=self.provider_name,
+                source_type=TRADIER_OPTIONS_ADAPTER_SOURCE,
+                fixture_only=False,
+                live_enabled=False,
+                delayed=False,
+                tradeable_data=False,
+                notes=TRADIER_OPTIONS_ADAPTER_NOTES,
+            )
 
     def get_expirations(self, symbol: str) -> List[Dict[str, Any]]:
+        if self._should_use_transport():
+            return copy.deepcopy(self._transport_expirations(symbol))
         return copy.deepcopy(self._normalized_snapshot(symbol).get("expirations") or [])
 
     def get_underlying_quote(self, symbol: str) -> Dict[str, Any]:
+        if self._should_use_transport():
+            return copy.deepcopy(self._transport_underlying_quote(symbol))
         return copy.deepcopy(self._normalized_snapshot(symbol).get("underlying") or {})
 
     def get_chain(self, symbol: str, expiration: Optional[str] = None) -> Dict[str, Any]:
-        snapshot = self._normalized_snapshot(symbol)
+        snapshot = (
+            self._transport_snapshot(symbol, expiration=expiration)
+            if self._should_use_transport()
+            else self._normalized_snapshot(symbol)
+        )
         if expiration:
             snapshot["contracts"] = [
                 contract for contract in snapshot.get("contracts") or [] if str(contract.get("expiration") or "") == expiration
             ]
         return snapshot
+
+    def _should_use_transport(self) -> bool:
+        return self.transport is not None and not self.config.is_dry_run_enabled(self.provider_name)
 
     def _normalized_snapshot(self, symbol: str) -> Dict[str, Any]:
         self._validate_live_provider_config()
@@ -580,6 +625,212 @@ class TradierOptionsProviderStub(_DisabledLiveOptionsProviderStub):
                 code="options_provider_payload_unmappable",
                 message="Options provider payload could not be mapped safely.",
             ) from exc
+
+    def _transport_underlying_quote(self, symbol: str) -> Dict[str, Any]:
+        self._validate_live_provider_config()
+        normalized_symbol = _normalize_us_symbol(symbol)
+        if not _is_us_equity_symbol(normalized_symbol):
+            raise OptionsProviderUnsupportedSymbol(normalized_symbol)
+        try:
+            return self._map_tradier_transport_quote(
+                normalized_symbol,
+                self._require_transport().get_quote(normalized_symbol),
+            )
+        except OptionsProviderError:
+            raise
+        except (KeyError, TypeError, ValueError) as exc:
+            raise OptionsProviderUnavailable(
+                self.provider_name,
+                code="options_provider_payload_unmappable",
+                message="Options provider payload could not be mapped safely.",
+            ) from exc
+
+    def _transport_expirations(self, symbol: str) -> List[Dict[str, Any]]:
+        self._validate_live_provider_config()
+        normalized_symbol = _normalize_us_symbol(symbol)
+        if not _is_us_equity_symbol(normalized_symbol):
+            raise OptionsProviderUnsupportedSymbol(normalized_symbol)
+        try:
+            return self._map_tradier_transport_expirations(
+                normalized_symbol,
+                self._require_transport().get_expirations(normalized_symbol),
+                TRADIER_OPTIONS_DRY_RUN_AS_OF,
+            )
+        except OptionsProviderError:
+            raise
+        except (KeyError, TypeError, ValueError) as exc:
+            raise OptionsProviderUnavailable(
+                self.provider_name,
+                code="options_provider_payload_unmappable",
+                message="Options provider payload could not be mapped safely.",
+            ) from exc
+
+    def _transport_snapshot(self, symbol: str, expiration: Optional[str] = None) -> Dict[str, Any]:
+        self._validate_live_provider_config()
+        normalized_symbol = _normalize_us_symbol(symbol)
+        if not _is_us_equity_symbol(normalized_symbol):
+            raise OptionsProviderUnsupportedSymbol(normalized_symbol)
+        try:
+            transport = self._require_transport()
+            quote_payload = transport.get_quote(normalized_symbol)
+            expirations_payload = transport.get_expirations(normalized_symbol)
+            chain_payload = transport.get_chain(normalized_symbol, expiration)
+            return self._map_tradier_transport_response(
+                normalized_symbol,
+                quote_payload=quote_payload,
+                expirations_payload=expirations_payload,
+                chain_payload=chain_payload,
+            )
+        except OptionsProviderError:
+            raise
+        except (KeyError, TypeError, ValueError) as exc:
+            raise OptionsProviderUnavailable(
+                self.provider_name,
+                code="options_provider_payload_unmappable",
+                message="Options provider payload could not be mapped safely.",
+            ) from exc
+
+    def _require_transport(self) -> TradierOptionsTransport:
+        if self.transport is None:
+            raise OptionsProviderUnavailable(
+                self.provider_name,
+                code="options_provider_dry_run_not_enabled",
+                message="Options live provider dry run is not enabled.",
+            )
+        return self.transport
+
+    def _map_tradier_transport_response(
+        self,
+        symbol: str,
+        *,
+        quote_payload: Mapping[str, Any],
+        expirations_payload: Mapping[str, Any],
+        chain_payload: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        underlying = self._map_tradier_transport_quote(symbol, quote_payload)
+        chain_as_of = str(underlying.get("asOf") or TRADIER_OPTIONS_DRY_RUN_AS_OF)
+        expirations_by_date: Dict[str, Dict[str, Any]] = {
+            str(item["date"]): item
+            for item in self._map_tradier_transport_expirations(symbol, expirations_payload, chain_as_of)
+            if item.get("date")
+        }
+        option_rows = _tradier_option_rows(chain_payload)
+        if not option_rows:
+            raise ValueError("missing option rows")
+
+        contracts: List[Dict[str, Any]] = []
+        for item in option_rows:
+            expiration = str(item.get("expiration_date") or item.get("expiration") or "").strip()
+            if expiration:
+                expirations_by_date.setdefault(
+                    expiration,
+                    self._transport_expiration_row(expiration, chain_as_of),
+                )
+            greeks_payload = _mapping_or_empty(item.get("greeks"))
+            greeks = {
+                greek: _float_or_none(greeks_payload.get(greek))
+                for greek in ("delta", "gamma", "theta", "vega", "rho")
+                if greeks_payload.get(greek) is not None
+            }
+            contracts.append(
+                {
+                    "contractSymbol": str(item.get("symbol") or item.get("contractSymbol") or "").strip(),
+                    "side": _tradier_option_side(item),
+                    "expiration": expiration,
+                    "strike": _float_or_none(item.get("strike")),
+                    "bid": _float_or_none(item.get("bid")),
+                    "ask": _float_or_none(item.get("ask")),
+                    "last": _float_or_none(item.get("last")),
+                    "volume": _int_or_none(item.get("volume")),
+                    "openInterest": _int_or_none(
+                        item.get("open_interest") if "open_interest" in item else item.get("openInterest")
+                    ),
+                    "impliedVolatility": _float_or_none(
+                        _first_present(
+                            item,
+                            ("implied_volatility", "impliedVolatility"),
+                            fallback=greeks_payload.get("mid_iv", greeks_payload.get("smv_vol")),
+                        )
+                    ),
+                    "greeks": greeks,
+                    "multiplier": _int_or_none(item.get("multiplier")) or 100,
+                    "source": TRADIER_OPTIONS_ADAPTER_SOURCE,
+                    "freshness": TRADIER_OPTIONS_ADAPTER_FRESHNESS,
+                    "providerQuality": TRADIER_OPTIONS_ADAPTER_QUALITY,
+                    "dataQuality": self._transport_data_quality(),
+                    "warnings": ["tradier_adapter_contract_not_tradeable", "freshness_unknown"],
+                }
+            )
+
+        return {
+            "symbol": symbol,
+            "market": "us",
+            "currency": "USD",
+            "underlying": underlying,
+            "chainAsOf": chain_as_of,
+            "source": TRADIER_OPTIONS_ADAPTER_SOURCE,
+            "providerName": self.provider_name,
+            "providerQuality": TRADIER_OPTIONS_ADAPTER_QUALITY,
+            "dataQuality": self._transport_data_quality(),
+            "providerCapabilities": self.capabilities.to_dict(),
+            "expirations": [expirations_by_date[key] for key in sorted(expirations_by_date)],
+            "contracts": contracts,
+        }
+
+    def _map_tradier_transport_quote(self, symbol: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
+        quote_payload = _tradier_quote_row(payload)
+        payload_symbol = _normalize_us_symbol(str(quote_payload.get("symbol") or symbol))
+        if payload_symbol != symbol:
+            raise OptionsProviderUnsupportedSymbol(symbol)
+        return {
+            "price": _float_or_none(_first_present(quote_payload, ("last", "price", "last_price", "close"))),
+            "changePct": _float_or_none(
+                _first_present(
+                    quote_payload,
+                    ("change_percentage", "changePct", "change_percent", "changePercentage"),
+                )
+            ),
+            "asOf": str(
+                _first_present(
+                    quote_payload,
+                    ("trade_date", "timestamp", "as_of", "asOf"),
+                    fallback=TRADIER_OPTIONS_DRY_RUN_AS_OF,
+                )
+            ),
+            "source": TRADIER_OPTIONS_ADAPTER_SOURCE,
+            "freshness": TRADIER_OPTIONS_ADAPTER_FRESHNESS,
+            "providerQuality": TRADIER_OPTIONS_ADAPTER_QUALITY,
+        }
+
+    def _map_tradier_transport_expirations(
+        self,
+        symbol: str,
+        payload: Mapping[str, Any],
+        as_of: str,
+    ) -> List[Dict[str, Any]]:
+        del symbol
+        return [self._transport_expiration_row(expiration, as_of) for expiration in _tradier_expiration_dates(payload)]
+
+    @staticmethod
+    def _transport_expiration_row(expiration: str, as_of: str) -> Dict[str, Any]:
+        return {
+            "date": expiration,
+            "dte": _dte(expiration, as_of),
+            "type": "monthly",
+            "chainAvailable": True,
+            "asOf": as_of,
+            "source": TRADIER_OPTIONS_ADAPTER_SOURCE,
+            "freshness": TRADIER_OPTIONS_ADAPTER_FRESHNESS,
+            "warnings": ["tradier_adapter_contract_not_tradeable", "freshness_unknown"],
+        }
+
+    @staticmethod
+    def _transport_data_quality() -> Dict[str, Any]:
+        return {
+            "tier": "insufficient",
+            "tradeable": False,
+            "hints": list(TRADIER_OPTIONS_ADAPTER_NOTES),
+        }
 
     def _map_tradier_dry_run_response(self, symbol: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
         normalized_symbol = _normalize_us_symbol(symbol)
@@ -1111,6 +1362,67 @@ def _int_or_none(value: Any) -> Optional[int]:
     if value is None or value == "":
         return None
     return int(value)
+
+
+def _mapping_or_empty(value: Any) -> Dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _first_present(payload: Mapping[str, Any], keys: tuple[str, ...], fallback: Any = None) -> Any:
+    for key in keys:
+        if key in payload and payload.get(key) not in (None, ""):
+            return payload.get(key)
+    return fallback
+
+
+def _tradier_quote_row(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    if isinstance(payload.get("quotes"), Mapping):
+        quote = payload["quotes"].get("quote")
+        if isinstance(quote, list):
+            return _mapping_or_empty(quote[0] if quote else {})
+        return _mapping_or_empty(quote)
+    if isinstance(payload.get("quote"), Mapping):
+        return _mapping_or_empty(payload.get("quote"))
+    if isinstance(payload.get("underlying"), Mapping):
+        return _mapping_or_empty(payload.get("underlying"))
+    return _mapping_or_empty(payload)
+
+
+def _tradier_option_rows(payload: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    raw_options = (payload.get("options") or {}).get("option") if isinstance(payload.get("options"), Mapping) else []
+    if isinstance(raw_options, Mapping):
+        return [dict(raw_options)]
+    return [dict(item) for item in list(raw_options or []) if isinstance(item, Mapping)]
+
+
+def _tradier_expiration_dates(payload: Mapping[str, Any]) -> List[str]:
+    raw_expirations = payload.get("expirations")
+    if isinstance(raw_expirations, Mapping):
+        raw_dates = raw_expirations.get("date", raw_expirations.get("expiration"))
+    else:
+        raw_dates = raw_expirations
+    if isinstance(raw_dates, str):
+        values = [raw_dates]
+    elif isinstance(raw_dates, Mapping):
+        values = [raw_dates.get("date")]
+    else:
+        values = [
+            item.get("date") if isinstance(item, Mapping) else item
+            for item in list(raw_dates or [])
+        ]
+    return sorted({str(item).strip() for item in values if str(item or "").strip()})
+
+
+def _tradier_option_side(item: Mapping[str, Any]) -> str:
+    text = str(item.get("option_type") or item.get("side") or item.get("type") or "").strip().lower()
+    if text in {"call", "c"}:
+        return "call"
+    if text in {"put", "p"}:
+        return "put"
+    match = re.search(r"\d{6}([CP])\d{8}$", str(item.get("symbol") or item.get("contractSymbol") or ""))
+    if match:
+        return "call" if match.group(1) == "C" else "put"
+    return text
 
 
 def _dte(expiration: str, as_of: str) -> int:
