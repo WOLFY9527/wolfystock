@@ -17,9 +17,9 @@ const routes = [
   {
     path: '/zh/market/rotation-radar',
     root: 'market-rotation-radar-page',
-    first: ['rotation-radar-summary-band', 'rotation-radar-leader-list'],
+    first: ['rotation-radar-summary-band', 'rotation-radar-universe-list'],
     collapsedDisclosures: [
-      { testId: 'rotation-theme-proxy-details-ai_applications', hiddenTestId: 'rotation-proxy-row-QQQ' },
+      { testId: 'rotation-theme-data-notes', hiddenText: '方法口径' },
       { testId: 'rotation-radar-mechanics-details', hiddenText: '当前为静态主题库，本地行情覆盖后可计算轮动强度。' },
     ],
   },

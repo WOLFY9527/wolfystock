@@ -633,11 +633,12 @@ describe('MarketRotationRadarPage', () => {
     render(<MarketRotationRadarPage />);
 
     const page = await screen.findByTestId('market-rotation-radar-page');
+    const workspaceShell = page.querySelector('[data-workspace-width="near-full"]');
     const shell = page.querySelector('[data-terminal-primitive="page-shell"]');
 
     expect(page).not.toHaveClass('py-5', 'md:py-6');
-    expect(shell).toHaveAttribute('data-workspace-width', 'near-full');
-    expect(shell).toHaveClass('max-w-[1840px]');
+    expect(workspaceShell).toHaveAttribute('data-workspace-width', 'near-full');
+    expect(workspaceShell).toHaveClass('[--wolfy-consumer-shell-max:1880px]');
     expect(shell).toHaveClass('py-5', 'md:py-6');
   });
 
@@ -652,34 +653,43 @@ describe('MarketRotationRadarPage', () => {
 
     const guidance = screen.getByTestId('rotation-radar-guidance');
     expect(guidance).toHaveTextContent('观察中');
-    expect(guidance).toHaveTextContent('当前轮动信号仍在观察中，先关注持续性与广度变化。');
+    expect(guidance).toHaveTextContent('AI 应用');
+    expect(guidance).toHaveTextContent('当前以相对强弱、成交额扩张、广度和同步性作为观察依据。');
     expect(within(guidance).getAllByText('观察中').length).toBeGreaterThanOrEqual(2);
     expect(guidance.querySelectorAll('[data-terminal-primitive="chip"]')).toHaveLength(3);
 
     const summaryBand = screen.getByTestId('rotation-radar-summary-band');
     expect(summaryBand).toHaveAttribute('data-terminal-primitive', 'panel');
     expect(summaryBand.children).toHaveLength(3);
-    expect(summaryBand).toHaveTextContent('当前状态');
-    expect(summaryBand).toHaveTextContent('当前主题');
-    expect(summaryBand).toHaveTextContent('最近更新');
+    expect(summaryBand).toHaveTextContent('当前市场');
+    expect(summaryBand).toHaveTextContent('当前信号');
+    expect(summaryBand).toHaveTextContent('置信 / 更新');
 
     const mechanics = screen.getByTestId('rotation-radar-mechanics-details');
     expect(mechanics).toHaveAttribute('data-terminal-primitive', 'disclosure');
     expect(mechanics).not.toHaveAttribute('open');
     expect(within(mechanics).getByRole('button', { name: '展开 查看轮动说明' })).toHaveAttribute('aria-expanded', 'false');
 
+    const universeList = screen.getByTestId('rotation-radar-universe-list');
     const leaderList = screen.getByTestId('rotation-radar-leader-list');
+    expect(universeList.compareDocumentPosition(leaderList) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(universeList).toHaveTextContent('AI 应用');
     expect(leaderList).toHaveAttribute('data-linear-primitive', 'data-workbench-frame');
     expect(within(leaderList).getAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(3);
     expect(within(leaderList).getByText('AI 应用')).toBeInTheDocument();
+    expect(within(screen.getByTestId('rotation-radar-leader-row-ai_applications')).getByText(/置信 \d+%/)).toBeInTheDocument();
 
     const detail = screen.getByTestId('rotation-theme-detail-panel');
     expect(detail).toHaveAttribute('data-linear-primitive', 'context-rail');
     expect(detail).toHaveTextContent('当前主题');
     expect(detail).toHaveTextContent('AI 应用');
-    expect(detail).toHaveTextContent('短因由');
+    expect(detail).toHaveTextContent('当前结论');
+    expect(detail).toHaveTextContent('风险 / 弱点');
     expect(detail).toHaveTextContent('下一步');
     expect(detail).toHaveTextContent('观察标的');
+    const dataNotes = screen.getByTestId('rotation-theme-data-notes');
+    expect(dataNotes).toHaveAttribute('data-terminal-primitive', 'disclosure');
+    expect(within(dataNotes).getByRole('button', { name: '展开 查看数据说明' })).toHaveAttribute('aria-expanded', 'false');
 
     expect(screen.queryByTestId('rotation-capital-summary')).not.toBeInTheDocument();
     expect(screen.queryByTestId('rotation-decision-readiness')).not.toBeInTheDocument();
@@ -752,7 +762,7 @@ describe('MarketRotationRadarPage', () => {
 
     const observationGuidance = await screen.findByTestId('rotation-radar-guidance');
     expect(observationGuidance).toHaveTextContent('观察中');
-    expect(observationGuidance).toHaveTextContent('当前轮动信号仍在观察中，先关注持续性与广度变化。');
+    expect(observationGuidance).toHaveTextContent('AI 应用');
     expect(observationGuidance.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
 
     vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(insufficientEvidenceFixture());
@@ -760,7 +770,7 @@ describe('MarketRotationRadarPage', () => {
 
     const unavailableGuidance = await screen.findByTestId('rotation-radar-guidance');
     expect(unavailableGuidance).toHaveTextContent('证据不足');
-    expect(unavailableGuidance).toHaveTextContent('当前轮动证据不足，稍后自动刷新并继续观察。');
+    expect(unavailableGuidance).toHaveTextContent('当前证据不足，不能把主题、行业或概念列表解释为轮动方向。');
     expect(screen.getByTestId('rotation-radar-insufficient-empty')).toHaveTextContent('当前无法判断轮动方向');
     expect(screen.queryByTestId('rotation-theme-detail-panel')).not.toBeInTheDocument();
 
@@ -777,7 +787,7 @@ describe('MarketRotationRadarPage', () => {
 
     const guidance = await screen.findByTestId('rotation-radar-guidance');
     expect(guidance).toHaveTextContent('正常');
-    expect(guidance).toHaveTextContent('当前主题强弱较完整，可继续观察轮动节奏。');
+    expect(guidance).toHaveTextContent('半导体真实流向');
     const leaderList = screen.getByTestId('rotation-radar-leader-list');
     expect(within(leaderList).getAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(1);
     expect(within(leaderList).getByTestId('rotation-radar-leader-row-real_flow_semis')).toHaveTextContent('半导体真实流向');
@@ -785,6 +795,7 @@ describe('MarketRotationRadarPage', () => {
     expect(detail).toHaveTextContent('当前主题');
     expect(detail).toHaveTextContent('半导体真实流向');
     expect(detail).toHaveTextContent('确认轮动');
+    expect(detail.textContent || '').toMatch(/置信 \d+%/);
     expect(detail).toHaveTextContent('下一步');
     expect(document.body.textContent || '').not.toMatch(forbiddenTradingActionPattern);
   });

@@ -300,6 +300,23 @@ function mapDataStateLabel(theme: DataStateFields): string {
   return '缓存/部分';
 }
 
+function formatConfidenceValue(confidence?: number | null): string {
+  if (!Number.isFinite(Number(confidence))) {
+    return '待确认';
+  }
+  return `${Math.round(Number(confidence) * 100)}%`;
+}
+
+function themeConfidenceSummary(theme?: MarketRotationTheme): string {
+  if (!theme) {
+    return '待确认';
+  }
+  if (isTaxonomyOnlyTheme(theme)) {
+    return '分类观察';
+  }
+  return `置信 ${formatConfidenceValue(theme.confidence)}`;
+}
+
 function isInternalRotationIssue(value?: string | null): boolean {
   const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
   return /provider|timeout|schema|debug|raw|trace|cache|quote|source|proxy|fallback|static|taxonomy|not_enough|unavailable|missing|insufficient|technical_indicators|fundamentals|earnings|optional_news/.test(normalized);
@@ -723,6 +740,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
   const decisionSummary = buildRotationDecisionReadiness(payload);
   const capitalSummary = deriveCapitalRotationSummary(payload);
   const primaryThemes = derivePrimaryDisplayThemes(payload, tiers);
+  const selectedTheme = primaryThemes[0] || payload.themes[0];
   const topThemeTitle = tiers.libraryMode
     ? summaryTitle(payload.summary.strongestThemes, '按主题分类浏览')
     : themeNamesSummary(primaryThemes, '等待主题更新');
@@ -731,24 +749,41 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
     : decisionSummary.state === 'observe'
       ? '观察中'
       : '证据不足';
+  const heroTitle = selectedTheme?.name || topThemeTitle;
+  const heroSummary = selectedTheme
+    ? sanitizeRotationText(
+      selectedTheme.stageExplanation,
+      decisionSummary.state === 'ready'
+        ? `${selectedTheme.name} 当前信号较完整，继续观察节奏与回落风险。`
+        : decisionSummary.state === 'observe'
+          ? `${selectedTheme.name} 仍在观察阶段，先看持续性、广度与量能是否继续同步。`
+          : `${selectedTheme.name} 当前证据不足，先保留分类与观察结论。`,
+    )
+    : guidance.detail;
   const heroCards = [
     {
-      key: 'status',
-      label: '当前状态',
-      value: surfaceState,
-      detail: guidance.detail,
+      key: 'market',
+      label: '当前市场',
+      value: marketLabel(payload.market || 'US'),
+      detail: tiers.libraryMode ? '当前以主题分类浏览为主。' : '当前市场下按主题与信号强弱组织内容。',
     },
     {
-      key: 'theme',
-      label: '当前主题',
-      value: topThemeTitle,
-      detail: capitalSummary.cards[0]?.detail || '当前只保留产品态概览。',
+      key: 'signal',
+      label: '当前信号',
+      value: selectedTheme ? themeConsumerStateLabel(selectedTheme) : surfaceState,
+      detail: selectedTheme
+        ? (selectedTheme.riskExplanations?.length ? '已保留主要弱点与风险提示。' : '当前仅保留对用户有用的信号层结论。')
+        : guidance.detail,
     },
     {
-      key: 'freshness',
-      label: '最近更新',
-      value: formatDateTime(payload.generatedAt) || '待确认',
-      detail: consumerFreshnessLabel(payload.freshness, payload.isFallback, payload.isStale),
+      key: 'confidence',
+      label: '置信 / 更新',
+      value: selectedTheme
+        ? `${themeConfidenceSummary(selectedTheme)} · ${mapDataStateLabel(selectedTheme)}`
+        : formatDateTime(payload.generatedAt) || '待确认',
+      detail: selectedTheme
+        ? consumerFreshnessLabel(selectedTheme.freshness, selectedTheme.isFallback, isThemeStale(selectedTheme))
+        : consumerFreshnessLabel(payload.freshness, payload.isFallback, payload.isStale),
     },
   ];
 
@@ -762,13 +797,8 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
         <div className="min-w-0">
           <p className="text-[10px] font-medium tracking-[0.24em] text-white/38">轮动状态</p>
           <p className="mt-2 text-base font-semibold leading-6 text-white/90 md:text-lg">{surfaceState}</p>
-          <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">
-            {decisionSummary.state === 'ready'
-              ? '当前主题强弱较完整，可继续观察轮动节奏。'
-              : decisionSummary.state === 'observe'
-                ? '当前轮动信号仍在观察中，先关注持续性与广度变化。'
-                : '当前轮动证据不足，稍后自动刷新并继续观察。'}
-          </p>
+          <h2 className="mt-3 break-words text-xl font-semibold leading-7 text-white md:text-2xl">{heroTitle}</h2>
+          <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">{heroSummary}</p>
         </div>
         <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
           <TerminalChip variant={decisionSummary.state === 'ready' ? 'success' : decisionSummary.state === 'observe' ? 'info' : 'caution'}>
@@ -922,7 +952,7 @@ const LeaderRow: React.FC<{
     data-testid={`rotation-radar-leader-row-${theme.id}`}
     onClick={onSelect}
     className={cn(
-      'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_4rem_5.5rem] items-center gap-2 px-3 py-3 text-left transition-colors',
+      'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_5.5rem_6.25rem] items-center gap-2 px-3 py-3 text-left transition-colors',
       selected ? 'bg-cyan-200/[0.06]' : 'hover:bg-white/[0.025]',
     )}
   >
@@ -930,8 +960,11 @@ const LeaderRow: React.FC<{
       <span className="block truncate text-sm font-semibold text-white/84">{theme.name}</span>
       <span className="mt-1 block truncate text-[11px] text-white/38">{consumerThemeSubtitle(theme)}</span>
     </span>
-    <span className="truncate text-right text-[11px] text-white/44">{marketLabelText}</span>
-    <span className="text-right text-[11px] font-semibold text-white/62">{themeConsumerStateLabel(theme)}</span>
+    <span className="truncate text-right text-[11px] font-semibold text-white/62">{themeConsumerStateLabel(theme)}</span>
+    <span className="text-right">
+      <span className="block truncate text-[11px] font-semibold text-white/70">{themeConfidenceSummary(theme)}</span>
+      <span className="block truncate text-[10px] text-white/38">{marketLabelText} · {mapDataStateLabel(theme)}</span>
+    </span>
   </button>
 );
 
@@ -946,7 +979,7 @@ const CompactThemeRow: React.FC<{
     data-testid={`rotation-radar-universe-row-${theme.id}`}
     onClick={onSelect}
     className={cn(
-      'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_4rem_5.5rem] items-center gap-2 px-3 py-2.5 text-left text-xs transition-colors',
+      'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_5.5rem_6.25rem] items-center gap-2 px-3 py-2.5 text-left text-xs transition-colors',
       selected ? 'bg-cyan-200/[0.06]' : 'hover:bg-white/[0.025]',
     )}
   >
@@ -954,8 +987,11 @@ const CompactThemeRow: React.FC<{
       <span className="block truncate font-semibold text-white/76">{theme.name}</span>
       <span className="block truncate text-[10px] text-white/35">{consumerThemeSubtitle(theme)}</span>
     </span>
-    <span className="truncate text-right text-[11px] text-white/44">{marketLabelText}</span>
-    <span className="text-right text-[11px] text-white/58">{themeConsumerStateLabel(theme)}</span>
+    <span className="truncate text-right text-[11px] text-white/58">{themeConsumerStateLabel(theme)}</span>
+    <span className="text-right">
+      <span className="block truncate text-[10px] font-semibold text-white/62">{themeConfidenceSummary(theme)}</span>
+      <span className="block truncate text-[10px] text-white/35">{marketLabelText} · {mapDataStateLabel(theme)}</span>
+    </span>
   </button>
 );
 
@@ -972,6 +1008,25 @@ const ThemeDetailPanel: React.FC<{
   const dataWarning = Boolean(theme.isFallback || theme.freshness === 'fallback' || isThemeStale(theme));
   const evidenceNotes = sanitizeRotationNotes(theme.evidence);
   const riskExplanationNotes = sanitizeRotationNotes(theme.riskExplanations);
+  const weaknessNotes = uniqueReadinessItems(
+    [
+      ...riskExplanationNotes,
+      ...themeDataGaps(theme).map(formatGapLabel),
+      taxonomyOnly ? '当前仍以分类与观察为主。' : '',
+      dataWarning ? '当前数据略有延迟，先看节奏是否继续保持。' : '',
+    ],
+    3,
+    taxonomyOnly ? '当前仍以分类与观察为主。' : '继续观察广度、量能与持续性是否继续同步。',
+  );
+  const supportNotes = uniqueReadinessItems(
+    [
+      ...evidenceNotes,
+      sanitizeRotationText(theme.stageExplanation, ''),
+      theme.persistenceEvidence?.label ? `${theme.persistenceEvidence.label}已纳入观察。` : '',
+    ],
+    3,
+    taxonomyOnly ? '当前只保留分类与观察范围。' : '当前仅保留对用户有用的支持证据。',
+  );
   const representativeItems = (theme.themeDetail?.representativeLabels || theme.representativeLabels || theme.membersConfigured || []).slice(0, 4);
   const nextWatch = theme.alertCandidates?.[0];
   const shortReason = sanitizeRotationText(
@@ -1002,24 +1057,26 @@ const ThemeDetailPanel: React.FC<{
         <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
           <TerminalChip variant={taxonomyOnly ? 'neutral' : dataWarning ? 'caution' : 'info'}>{themeConsumerStateLabel(theme)}</TerminalChip>
           <TerminalChip variant="neutral">{marketLabelText}</TerminalChip>
+          <TerminalChip variant={taxonomyOnly ? 'neutral' : theme.confidence != null && theme.confidence >= 0.65 ? 'success' : 'info'}>
+            {themeConfidenceSummary(theme)}
+          </TerminalChip>
           <TerminalChip variant={dataWarning ? 'caution' : 'success'}>{mapDataStateLabel(theme)}</TerminalChip>
           {!taxonomyOnly ? <DataFreshnessBadge freshness={theme.freshness} className="px-1.5 text-[9px]" /> : null}
         </div>
       </div>
 
       <div className="min-w-0 px-1 py-3">
-        <TerminalNotice variant={taxonomyOnly ? 'info' : dataWarning ? 'caution' : 'neutral'} className="text-[12px] leading-5 text-white/58">
-          {taxonomyOnly
-            ? '当前以分类浏览为主，先把它当作主题观察线索。'
-            : dataWarning
-              ? '已使用最近一次可用数据，当前只保留观察节奏。'
-              : '当前主题仍以观察结论为主，不扩展为交易动作。'}
+        <p className="text-[10px] font-bold uppercase text-white/35">当前结论</p>
+        <TerminalNotice variant={taxonomyOnly ? 'info' : dataWarning ? 'caution' : 'neutral'} className="mt-2 text-[12px] leading-5 text-white/58">
+          {shortReason}
         </TerminalNotice>
       </div>
 
       <div className="min-w-0 px-1 py-3">
-        <p className="text-[10px] font-bold uppercase text-white/35">短因由</p>
-        <p className="mt-2 text-[11px] leading-5 text-white/58">{shortReason}</p>
+        <p className="text-[10px] font-bold uppercase text-white/35">风险 / 弱点</p>
+        <div className="mt-2 grid gap-1 text-[11px] leading-5 text-white/58">
+          {weaknessNotes.map((item) => <p key={item}>· {item}</p>)}
+        </div>
       </div>
 
       <div className="min-w-0 px-1 py-3">
@@ -1036,15 +1093,30 @@ const ThemeDetailPanel: React.FC<{
         </div>
       </div>
 
-      {(evidenceNotes.length || riskExplanationNotes.length) ? (
-        <div className="min-w-0 px-1 py-3">
-          <p className="text-[10px] font-bold uppercase text-white/35">补充观察</p>
-          <div className="mt-2 grid gap-1 text-[11px] leading-5 text-white/48">
-            {evidenceNotes.slice(0, 2).map((item) => <p key={item}>· {item}</p>)}
-            {riskExplanationNotes.slice(0, 1).map((item) => <p key={item}>· {item}</p>)}
+      <div className="min-w-0 px-1 py-3">
+        <ConsumerDisclosure
+          testId="rotation-theme-data-notes"
+          title="查看数据说明"
+          summary="支持证据与方法默认折叠"
+        >
+          <div className="grid gap-3 text-[11px] leading-5 text-white/56">
+            <div>
+              <p className="font-semibold text-white/74">支持证据</p>
+              <div className="mt-1 grid gap-1">
+                {supportNotes.map((item) => <p key={item}>· {item}</p>)}
+              </div>
+            </div>
+            <div>
+              <p className="font-semibold text-white/74">方法口径</p>
+              <p className="mt-1">
+                {taxonomyOnly
+                  ? '当前页面先保留分类、观察范围与后续跟踪方向，等待更多行情覆盖后再确认强弱。'
+                  : '默认先展示主题、当前信号、置信与新鲜度，再把更深一层的支持证据与方法说明折叠起来。'}
+              </p>
+            </div>
           </div>
-        </div>
-      ) : null}
+        </ConsumerDisclosure>
+      </div>
     </ConsoleContextRail>
   );
 };
@@ -1147,13 +1219,41 @@ const MarketRotationRadarPage: React.FC = () => {
 
             <TerminalGrid className="gap-4" data-workbench-split="8:4">
               <section className="min-w-0 space-y-4 xl:col-span-8" aria-label={libraryMode ? '分类浏览与观察线索' : primaryTierLabel}>
+                <DataWorkbenchFrame data-testid="rotation-radar-universe-list">
+                  <div className="border-b border-white/[0.05] px-3 py-3">
+                    <TerminalSectionHeader
+                      eyebrow="主题 / 分类"
+                      title={libraryMode ? `${filteredThemes.length}/${payload.themes.length} 个分类条目` : `${filteredThemes.length}/${payload.themes.length} 个条目，先看主题再看信号。`}
+                    />
+                  </div>
+                  <div className="max-h-80 overflow-y-auto no-scrollbar">
+                    {filteredThemes.length ? (
+                      <DenseRows>
+                        {filteredThemes.map((theme) => (
+                          <CompactThemeRow
+                            key={theme.id}
+                            theme={theme}
+                            marketLabelText={marketLabelText}
+                            selected={selectedTheme?.id === theme.id}
+                            onSelect={() => setSelectedThemeId(theme.id)}
+                          />
+                        ))}
+                      </DenseRows>
+                    ) : (
+                      <div className="p-3">
+                        <TerminalEmptyState className="min-h-[72px] justify-start text-sm text-white/42">没有匹配主题。</TerminalEmptyState>
+                      </div>
+                    )}
+                  </div>
+                </DataWorkbenchFrame>
+
                 <DataWorkbenchFrame data-testid="rotation-radar-leader-list">
                   <div className="border-b border-white/[0.05] px-3 py-3">
                     <TerminalSectionHeader
                       eyebrow={primaryTierLabel}
                       title={headlineThemes.length
                         ? (libraryMode
-                          ? `${headlineThemes.length} 个分类条目`
+                          ? `${headlineThemes.length} 个分类焦点`
                           : rotationTiers?.confirmedLeaders.length
                             ? `前 ${headlineThemes.length} 个确认信号`
                             : `前 ${headlineThemes.length} 个观察信号`)
@@ -1190,34 +1290,6 @@ const MarketRotationRadarPage: React.FC = () => {
                       </TerminalEmptyState>
                     </div>
                   )}
-                </DataWorkbenchFrame>
-
-                <DataWorkbenchFrame data-testid="rotation-radar-universe-list">
-                  <div className="border-b border-white/[0.05] px-3 py-3">
-                    <TerminalSectionHeader
-                      eyebrow="主题 / 行业板"
-                      title={libraryMode ? `${filteredThemes.length}/${payload.themes.length} 个分类条目` : `${filteredThemes.length}/${payload.themes.length} 个条目，紧凑选择。`}
-                    />
-                  </div>
-                  <div className="max-h-80 overflow-y-auto no-scrollbar">
-                    {filteredThemes.length ? (
-                      <DenseRows>
-                        {filteredThemes.map((theme) => (
-                          <CompactThemeRow
-                            key={theme.id}
-                            theme={theme}
-                            marketLabelText={marketLabelText}
-                            selected={selectedTheme?.id === theme.id}
-                            onSelect={() => setSelectedThemeId(theme.id)}
-                          />
-                        ))}
-                      </DenseRows>
-                    ) : (
-                      <div className="p-3">
-                        <TerminalEmptyState className="min-h-[72px] justify-start text-sm text-white/42">没有匹配主题。</TerminalEmptyState>
-                      </div>
-                    )}
-                  </div>
                 </DataWorkbenchFrame>
               </section>
 
