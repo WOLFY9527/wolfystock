@@ -11,6 +11,7 @@ import pytest
 import requests
 
 from src.services.options_lab_service import OptionsLabProviderUnavailable, OptionsLabService
+from src.services.options_data_quality_gates import build_options_provider_live_evidence_from_snapshot
 from src.services.options_market_data_provider import (
     ALLOWED_OPTIONS_PROVIDER_KEYS,
     ALLOWED_STAGING_PROBE_ARTIFACT_KEYS,
@@ -862,6 +863,43 @@ def test_tradier_mock_transport_normalizes_quote_expirations_and_chain_without_d
         "authorization",
     ):
         assert blocked not in text
+
+
+def test_tradier_mock_transport_snapshot_projects_fail_closed_live_evidence() -> None:
+    provider = TradierOptionsProviderStub(config=_tradier_enabled_config(), transport=_FakeTradierOptionsTransport())
+
+    with patch("requests.sessions.Session.request") as request_mock:
+        chain = provider.get_chain("TEM", expiration="2026-06-19")
+
+    evidence = build_options_provider_live_evidence_from_snapshot(
+        chain,
+        iv_rank_authority=None,
+        requires_event_calendar=True,
+    )
+
+    assert request_mock.call_count == 0
+    assert evidence["providerId"] == "tradier"
+    assert evidence["providerKind"] == "market_data"
+    assert evidence["sourceType"] == "tradier_adapter_contract"
+    assert evidence["adapterContract"] is True
+    assert evidence["tradeableData"] is False
+    assert evidence["expirationCoverage"] == "complete"
+    assert evidence["bidAskCoverage"] == "complete"
+    assert evidence["openInterestCoverage"] == "complete"
+    assert evidence["volumeCoverage"] == "complete"
+    assert evidence["ivCoverage"] == "complete"
+    assert evidence["greeksCoverage"] == "complete"
+    assert evidence["analysisReady"] is False
+    assert evidence["decisionReady"] is False
+    assert "decisionGrade" not in evidence
+    assert {
+        "live_evidence_adapter_contract_blocked",
+        "live_evidence_tradeable_data_false",
+        "live_evidence_quote_freshness_unknown",
+        "live_evidence_chain_freshness_unknown",
+        "live_evidence_iv_rank_authority_missing",
+        "live_evidence_event_calendar_authority_missing",
+    }.issubset(set(evidence["reasonCodes"]))
 
 
 def test_tradier_adapter_contract_remains_non_decision_grade_with_clean_payload() -> None:

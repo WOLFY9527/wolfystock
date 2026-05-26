@@ -10,6 +10,7 @@ from pathlib import Path
 from src.services.options_data_quality_gates import (
     INTERNAL_OPTIONS_PROVIDER_AUTHORITY_POLICY_SOURCE,
     build_options_provider_authority_contract,
+    build_options_provider_live_evidence_contract,
     evaluate_options_data_quality_gates,
 )
 from src.services.options_lab_service import OptionsLabService
@@ -54,6 +55,32 @@ def _authorized_live_provider_authority() -> dict[str, object]:
     }
 
 
+def _complete_live_evidence(**overrides) -> dict[str, object]:
+    payload = {
+        "provider_id": "approved_live_test_provider",
+        "provider_kind": "market_data",
+        "source_type": "live",
+        "live_enabled": True,
+        "tradeable_data": True,
+        "quote_freshness": "fresh",
+        "quote_as_of": "2026-05-06T13:45:00Z",
+        "chain_freshness": "fresh",
+        "chain_as_of": "2026-05-06T13:45:00Z",
+        "expiration_coverage": "complete",
+        "bid_ask_coverage": "complete",
+        "open_interest_coverage": "complete",
+        "volume_coverage": "complete",
+        "iv_coverage": "complete",
+        "greeks_coverage": "complete",
+        "iv_rank_authority": "authorized_live",
+        "event_calendar_authority": "authorized_live",
+        "provider_sla_status": "unknown",
+        "sandbox_or_production": "sandbox",
+    }
+    payload.update(overrides)
+    return build_options_provider_live_evidence_contract(**payload)
+
+
 def _evaluate_single_contract(contract, **overrides):
     params = {
         "strategy_key": "long_call",
@@ -72,6 +99,100 @@ def _evaluate_single_contract(contract, **overrides):
 
 def _issue_codes(diagnostics) -> set[str]:
     return {issue.code for issue in diagnostics.gate_issues}
+
+
+def test_complete_tradier_live_evidence_still_cannot_override_internal_observation_only_policy() -> None:
+    provider_authority = build_options_provider_authority_contract(
+        provider_id="tradier",
+        source_type="live",
+        fixture_only=False,
+        live_enabled=True,
+        tradeable_data=True,
+    )
+    evidence = _complete_live_evidence(provider_id="tradier")
+
+    diagnostics = _evaluate_single_contract(
+        _clear_gate_contract(),
+        provider_authority=provider_authority,
+        provider_live_evidence=evidence,
+    )
+
+    assert evidence["analysisReady"] is True
+    assert evidence["decisionReady"] is True
+    assert "decisionGrade" not in evidence
+    assert provider_authority["authorityTier"] == "live_observation_only"
+    assert diagnostics.decision_grade is False
+    assert diagnostics.gate_decision == "数据不足，禁止判断"
+    assert diagnostics.fail_closed_reason_codes == ["provider_authority_tier_observation_only"]
+
+
+def test_live_evidence_identifies_missing_freshness_coverage_and_authority_gaps() -> None:
+    evidence = _complete_live_evidence(
+        quote_freshness=None,
+        chain_freshness="unknown",
+        iv_coverage="missing",
+        greeks_coverage="missing",
+        iv_rank_authority=None,
+        event_calendar_authority=None,
+        requires_event_calendar=True,
+    )
+
+    assert evidence["analysisReady"] is False
+    assert evidence["decisionReady"] is False
+    assert evidence["reasonCodes"] == [
+        "live_evidence_quote_freshness_missing",
+        "live_evidence_chain_freshness_unknown",
+        "live_evidence_iv_coverage_missing",
+        "live_evidence_greeks_coverage_missing",
+        "live_evidence_iv_rank_authority_missing",
+        "live_evidence_event_calendar_authority_missing",
+    ]
+    assert all(re.fullmatch(r"[a-z][a-z0-9_]{2,80}", code) for code in evidence["reasonCodes"])
+
+
+def test_live_evidence_blocks_fixture_dry_run_stub_adapter_and_synthetic_sources() -> None:
+    scenarios = [
+        ({"fixture": True}, "live_evidence_fixture_blocked"),
+        ({"dry_run": True}, "live_evidence_dry_run_blocked"),
+        ({"stub": True}, "live_evidence_stub_blocked"),
+        ({"adapter_contract": True}, "live_evidence_adapter_contract_blocked"),
+        ({"synthetic": True}, "live_evidence_synthetic_blocked"),
+    ]
+
+    for flags, expected_code in scenarios:
+        evidence = _complete_live_evidence(**flags)
+
+        assert evidence["analysisReady"] is False
+        assert evidence["decisionReady"] is False
+        assert expected_code in evidence["reasonCodes"]
+        assert "decisionGrade" not in evidence
+
+
+def test_provider_self_claims_cannot_override_live_evidence_contract() -> None:
+    complete_claimed_evidence = _complete_live_evidence(
+        provider_decision_authority_claim=True,
+        recommendation_authority_claim=True,
+    )
+    evidence = _complete_live_evidence(
+        provider_decision_authority_claim=True,
+        recommendation_authority_claim=True,
+        quote_freshness=None,
+    )
+
+    diagnostics = _evaluate_single_contract(
+        _clear_gate_contract(),
+        provider_live_evidence=evidence,
+    )
+
+    assert complete_claimed_evidence["analysisReady"] is True
+    assert complete_claimed_evidence["decisionReady"] is False
+    assert complete_claimed_evidence["reasonCodes"] == ["live_evidence_provider_self_claim_ignored"]
+    assert evidence["analysisReady"] is False
+    assert evidence["decisionReady"] is False
+    assert "live_evidence_provider_self_claim_ignored" in evidence["reasonCodes"]
+    assert "live_evidence_quote_freshness_missing" in evidence["reasonCodes"]
+    assert diagnostics.decision_grade is False
+    assert "live_evidence_quote_freshness_missing" in diagnostics.fail_closed_reason_codes
 
 
 def test_required_event_calendar_missing_fails_closed() -> None:

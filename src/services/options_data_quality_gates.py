@@ -40,6 +40,50 @@ _PROVIDER_AUTHORITY_LABELS = {
     "provider_tradeable_data_false": "provider 未声明 tradeable data",
     "provider_decision_authority_not_granted": "provider 未显式授予决策级权限",
 }
+_PROVIDER_LIVE_EVIDENCE_LABELS = {
+    "live_evidence_live_disabled": "live provider 未启用",
+    "live_evidence_fixture_blocked": "fixture 数据不能进入 live evidence ready",
+    "live_evidence_synthetic_blocked": "synthetic 数据不能进入 live evidence ready",
+    "live_evidence_dry_run_blocked": "dry-run 数据不能进入 live evidence ready",
+    "live_evidence_stub_blocked": "stub 数据不能进入 live evidence ready",
+    "live_evidence_adapter_contract_blocked": "adapter contract 数据不能进入 live evidence ready",
+    "live_evidence_tradeable_data_false": "provider 未提供 tradeable data 证据",
+    "live_evidence_quote_freshness_missing": "缺少 quote freshness",
+    "live_evidence_quote_freshness_unknown": "quote freshness 未知",
+    "live_evidence_quote_freshness_not_fresh": "quote freshness 不满足 live evidence 要求",
+    "live_evidence_chain_freshness_missing": "缺少 chain freshness",
+    "live_evidence_chain_freshness_unknown": "chain freshness 未知",
+    "live_evidence_chain_freshness_not_fresh": "chain freshness 不满足 live evidence 要求",
+    "live_evidence_expiration_coverage_missing": "缺少 expiration coverage",
+    "live_evidence_expiration_coverage_partial": "expiration coverage 不完整",
+    "live_evidence_bid_ask_coverage_missing": "缺少 bid/ask coverage",
+    "live_evidence_bid_ask_coverage_partial": "bid/ask coverage 不完整",
+    "live_evidence_open_interest_coverage_missing": "缺少 open interest coverage",
+    "live_evidence_open_interest_coverage_partial": "open interest coverage 不完整",
+    "live_evidence_volume_coverage_missing": "缺少 volume coverage",
+    "live_evidence_volume_coverage_partial": "volume coverage 不完整",
+    "live_evidence_iv_coverage_missing": "缺少 IV coverage",
+    "live_evidence_iv_coverage_partial": "IV coverage 不完整",
+    "live_evidence_greeks_coverage_missing": "缺少 Greeks coverage",
+    "live_evidence_greeks_coverage_partial": "Greeks coverage 不完整",
+    "live_evidence_iv_rank_authority_missing": "缺少 IV rank authority 证据",
+    "live_evidence_event_calendar_authority_missing": "缺少 event calendar authority 证据",
+    "live_evidence_provider_self_claim_ignored": "provider 自声明 readiness 已忽略",
+}
+_LIVE_EVIDENCE_FRESHNESS_READY = frozenset(
+    {"fresh", "live", "realtime", "real_time", "real-time"}
+)
+_LIVE_EVIDENCE_AUTHORITY_READY = frozenset(
+    {"authorized", "authorized_live", "live_authorized", "authority_present", "present", "available"}
+)
+_LIVE_EVIDENCE_COVERAGE_FIELDS = (
+    "expiration",
+    "bid_ask",
+    "open_interest",
+    "volume",
+    "iv",
+    "greeks",
+)
 INTERNAL_OPTIONS_PROVIDER_AUTHORITY_POLICY_SOURCE = "wolfystock_options_provider_authority_policy_v1"
 _INTERNAL_PROVIDER_AUTHORITY_TIER_POLICY = {
     "synthetic_fixture": "live_observation_only",
@@ -177,6 +221,68 @@ class OptionsGateBucket:
             "issueCodes": list(self.issue_codes),
             "decisionGrade": self.decision_grade,
             "legDiagnostics": [item.to_dict() for item in self.leg_diagnostics],
+        }
+
+
+@dataclass(slots=True)
+class OptionsProviderLiveEvidenceContract:
+    provider_id: str
+    provider_kind: str
+    source_type: str
+    live_enabled: bool
+    dry_run: bool
+    fixture: bool
+    synthetic: bool
+    stub: bool
+    adapter_contract: bool
+    tradeable_data: bool
+    quote_freshness: str | None
+    quote_as_of: str | None
+    chain_freshness: str | None
+    chain_as_of: str | None
+    expiration_coverage: str
+    bid_ask_coverage: str
+    open_interest_coverage: str
+    volume_coverage: str
+    iv_coverage: str
+    greeks_coverage: str
+    iv_rank_authority: str
+    event_calendar_authority: str
+    provider_sla_status: str
+    sandbox_or_production: str | None
+    analysis_ready: bool
+    decision_ready: bool
+    reason_codes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "providerId": self.provider_id,
+            "providerKind": self.provider_kind,
+            "sourceType": self.source_type,
+            "liveEnabled": self.live_enabled,
+            "dryRun": self.dry_run,
+            "fixture": self.fixture,
+            "synthetic": self.synthetic,
+            "stub": self.stub,
+            "adapterContract": self.adapter_contract,
+            "tradeableData": self.tradeable_data,
+            "quoteFreshness": self.quote_freshness,
+            "quoteAsOf": self.quote_as_of,
+            "chainFreshness": self.chain_freshness,
+            "chainAsOf": self.chain_as_of,
+            "expirationCoverage": self.expiration_coverage,
+            "bidAskCoverage": self.bid_ask_coverage,
+            "openInterestCoverage": self.open_interest_coverage,
+            "volumeCoverage": self.volume_coverage,
+            "ivCoverage": self.iv_coverage,
+            "greeksCoverage": self.greeks_coverage,
+            "ivRankAuthority": self.iv_rank_authority,
+            "eventCalendarAuthority": self.event_calendar_authority,
+            "providerSlaStatus": self.provider_sla_status,
+            "sandboxOrProduction": self.sandbox_or_production,
+            "analysisReady": self.analysis_ready,
+            "decisionReady": self.decision_ready,
+            "reasonCodes": list(self.reason_codes),
         }
 
 
@@ -417,6 +523,372 @@ def _dedupe_codes(issues: Sequence[OptionsGateIssue]) -> list[str]:
             seen.add(issue.code)
             ordered.append(issue.code)
     return ordered
+
+
+def _dedupe_reason_codes(codes: Sequence[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for code in codes:
+        text = _coerce_text(code).lower()
+        if text in seen:
+            continue
+        if text not in _PROVIDER_LIVE_EVIDENCE_LABELS:
+            continue
+        seen.add(text)
+        ordered.append(text)
+    return ordered
+
+
+def _live_evidence_text(value: Any, default: str = "unknown") -> str:
+    text = _coerce_text(value).lower().replace("-", "_")
+    return text or default
+
+
+def _live_evidence_optional_text(value: Any) -> str | None:
+    text = _coerce_text(value)
+    return text or None
+
+
+def _source_marker_flags(
+    provider_id: str,
+    source_type: str,
+    notes: Sequence[Any] | None = None,
+) -> dict[str, bool]:
+    source_text = " ".join(
+        _coerce_text(item).lower()
+        for item in (provider_id, source_type, *(notes or []))
+        if item is not None
+    )
+    return {
+        "fixture": "fixture" in source_text,
+        "synthetic": "synthetic" in source_text,
+        "dry_run": "dry_run" in source_text or "dry-run" in source_text,
+        "stub": "stub" in source_text,
+        "adapter_contract": "adapter_contract" in source_text or "adapter-contract" in source_text,
+    }
+
+
+def _freshness_reason_code(prefix: str, freshness: Any) -> str | None:
+    normalized = _live_evidence_text(freshness, default="")
+    if not normalized:
+        return f"live_evidence_{prefix}_freshness_missing"
+    if normalized == "unknown":
+        return f"live_evidence_{prefix}_freshness_unknown"
+    if normalized not in _LIVE_EVIDENCE_FRESHNESS_READY:
+        return f"live_evidence_{prefix}_freshness_not_fresh"
+    return None
+
+
+def _coverage_reason_code(field_name: str, coverage: Any) -> str | None:
+    normalized = _live_evidence_text(coverage)
+    if normalized == "complete":
+        return None
+    suffix = "partial" if normalized == "partial" else "missing"
+    return f"live_evidence_{field_name}_coverage_{suffix}"
+
+
+def _authority_missing(value: Any) -> bool:
+    normalized = _live_evidence_text(value)
+    return normalized not in _LIVE_EVIDENCE_AUTHORITY_READY
+
+
+def build_options_provider_live_evidence_contract(
+    *,
+    provider_id: str,
+    source_type: str,
+    live_enabled: bool,
+    tradeable_data: bool,
+    provider_kind: str = "market_data",
+    dry_run: bool = False,
+    fixture: bool = False,
+    synthetic: bool = False,
+    stub: bool = False,
+    adapter_contract: bool = False,
+    quote_freshness: Any = None,
+    quote_as_of: Any = None,
+    chain_freshness: Any = None,
+    chain_as_of: Any = None,
+    expiration_coverage: Any = "missing",
+    bid_ask_coverage: Any = "missing",
+    open_interest_coverage: Any = "missing",
+    volume_coverage: Any = "missing",
+    iv_coverage: Any = "missing",
+    greeks_coverage: Any = "missing",
+    iv_rank_authority: Any = None,
+    event_calendar_authority: Any = None,
+    requires_event_calendar: bool = False,
+    provider_sla_status: Any = "unknown",
+    sandbox_or_production: Any = None,
+    provider_decision_authority_claim: Any = None,
+    recommendation_authority_claim: Any = None,
+    notes: Sequence[Any] | None = None,
+) -> dict[str, Any]:
+    normalized_provider_id = _normalize_provider_id(provider_id) or "unknown"
+    normalized_source_type = _live_evidence_text(source_type)
+    marker_flags = _source_marker_flags(normalized_provider_id, normalized_source_type, notes)
+    fixture = fixture or marker_flags["fixture"]
+    synthetic = synthetic or marker_flags["synthetic"]
+    dry_run = dry_run or marker_flags["dry_run"]
+    stub = stub or marker_flags["stub"]
+    adapter_contract = adapter_contract or marker_flags["adapter_contract"]
+
+    reason_codes: list[str] = []
+    if _coerce_bool(provider_decision_authority_claim) is True or _coerce_bool(recommendation_authority_claim) is True:
+        reason_codes.append("live_evidence_provider_self_claim_ignored")
+    if not live_enabled:
+        reason_codes.append("live_evidence_live_disabled")
+    if fixture:
+        reason_codes.append("live_evidence_fixture_blocked")
+    if synthetic:
+        reason_codes.append("live_evidence_synthetic_blocked")
+    if dry_run:
+        reason_codes.append("live_evidence_dry_run_blocked")
+    if stub:
+        reason_codes.append("live_evidence_stub_blocked")
+    if adapter_contract:
+        reason_codes.append("live_evidence_adapter_contract_blocked")
+    if not tradeable_data:
+        reason_codes.append("live_evidence_tradeable_data_false")
+
+    quote_freshness_code = _freshness_reason_code("quote", quote_freshness)
+    if quote_freshness_code is not None:
+        reason_codes.append(quote_freshness_code)
+    chain_freshness_code = _freshness_reason_code("chain", chain_freshness)
+    if chain_freshness_code is not None:
+        reason_codes.append(chain_freshness_code)
+
+    coverage_values = {
+        "expiration": _live_evidence_text(expiration_coverage),
+        "bid_ask": _live_evidence_text(bid_ask_coverage),
+        "open_interest": _live_evidence_text(open_interest_coverage),
+        "volume": _live_evidence_text(volume_coverage),
+        "iv": _live_evidence_text(iv_coverage),
+        "greeks": _live_evidence_text(greeks_coverage),
+    }
+    for field_name in _LIVE_EVIDENCE_COVERAGE_FIELDS:
+        coverage_code = _coverage_reason_code(field_name, coverage_values[field_name])
+        if coverage_code is not None:
+            reason_codes.append(coverage_code)
+
+    iv_rank_authority_text = _live_evidence_text(iv_rank_authority, default="missing")
+    event_calendar_authority_text = (
+        _live_evidence_text(event_calendar_authority, default="missing")
+        if requires_event_calendar
+        else _live_evidence_text(event_calendar_authority, default="not_required")
+    )
+    if _authority_missing(iv_rank_authority_text):
+        reason_codes.append("live_evidence_iv_rank_authority_missing")
+    if requires_event_calendar and _authority_missing(event_calendar_authority_text):
+        reason_codes.append("live_evidence_event_calendar_authority_missing")
+
+    deduped_reason_codes = _dedupe_reason_codes(reason_codes)
+    analysis_blocking_codes = [
+        code
+        for code in deduped_reason_codes
+        if code
+        not in {
+            "live_evidence_iv_rank_authority_missing",
+            "live_evidence_event_calendar_authority_missing",
+            "live_evidence_provider_self_claim_ignored",
+        }
+    ]
+    decision_blocking_codes = list(deduped_reason_codes)
+    analysis_ready = not analysis_blocking_codes
+    decision_ready = analysis_ready and not decision_blocking_codes
+
+    return OptionsProviderLiveEvidenceContract(
+        provider_id=normalized_provider_id,
+        provider_kind=_live_evidence_text(provider_kind),
+        source_type=normalized_source_type,
+        live_enabled=bool(live_enabled),
+        dry_run=bool(dry_run),
+        fixture=bool(fixture),
+        synthetic=bool(synthetic),
+        stub=bool(stub),
+        adapter_contract=bool(adapter_contract),
+        tradeable_data=bool(tradeable_data),
+        quote_freshness=_live_evidence_optional_text(quote_freshness),
+        quote_as_of=_live_evidence_optional_text(quote_as_of),
+        chain_freshness=_live_evidence_optional_text(chain_freshness),
+        chain_as_of=_live_evidence_optional_text(chain_as_of),
+        expiration_coverage=coverage_values["expiration"],
+        bid_ask_coverage=coverage_values["bid_ask"],
+        open_interest_coverage=coverage_values["open_interest"],
+        volume_coverage=coverage_values["volume"],
+        iv_coverage=coverage_values["iv"],
+        greeks_coverage=coverage_values["greeks"],
+        iv_rank_authority=iv_rank_authority_text,
+        event_calendar_authority=event_calendar_authority_text,
+        provider_sla_status=_live_evidence_text(provider_sla_status),
+        sandbox_or_production=_live_evidence_optional_text(sandbox_or_production),
+        analysis_ready=analysis_ready,
+        decision_ready=decision_ready,
+        reason_codes=deduped_reason_codes,
+    ).to_dict()
+
+
+def _mapping_value(data: Mapping[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in data and data.get(key) not in (None, ""):
+            return data.get(key)
+    return None
+
+
+def _coverage_from_items(items: Sequence[Mapping[str, Any]], predicate) -> str:
+    if not items:
+        return "missing"
+    present = sum(1 for item in items if predicate(item))
+    if present == len(items):
+        return "complete"
+    if present == 0:
+        return "missing"
+    return "partial"
+
+
+def _expiration_coverage(
+    expirations: Sequence[Mapping[str, Any]],
+    contracts: Sequence[Mapping[str, Any]],
+) -> str:
+    if not expirations and not contracts:
+        return "missing"
+    expiration_rows_complete = bool(expirations) and all(
+        _mapping_value(item, "date", "expiration") for item in expirations
+    )
+    contract_rows_complete = bool(contracts) and all(_mapping_value(item, "expiration") for item in contracts)
+    if expiration_rows_complete and contract_rows_complete:
+        return "complete"
+    if expiration_rows_complete or contract_rows_complete:
+        return "partial"
+    return "missing"
+
+
+def _has_bid_ask(item: Mapping[str, Any]) -> bool:
+    return _mapping_value(item, "bid") is not None and _mapping_value(item, "ask") is not None
+
+
+def _has_open_interest(item: Mapping[str, Any]) -> bool:
+    return _mapping_value(item, "openInterest", "open_interest") is not None
+
+
+def _has_volume(item: Mapping[str, Any]) -> bool:
+    return _mapping_value(item, "volume") is not None
+
+
+def _has_iv(item: Mapping[str, Any]) -> bool:
+    return _mapping_value(item, "impliedVolatility", "implied_volatility") is not None
+
+
+def _has_complete_greeks(item: Mapping[str, Any]) -> bool:
+    greeks = _coerce_mapping(item.get("greeks"))
+    return all(greeks.get(name) is not None for name in ("delta", "gamma", "theta", "vega", "rho"))
+
+
+def build_options_provider_live_evidence_from_snapshot(
+    snapshot: Mapping[str, Any],
+    *,
+    iv_rank_authority: Any = None,
+    event_calendar_authority: Any = None,
+    requires_event_calendar: bool = False,
+    provider_sla_status: Any = None,
+    sandbox_or_production: Any = None,
+) -> dict[str, Any]:
+    data = _coerce_mapping(snapshot)
+    capabilities = _coerce_mapping(data.get("providerCapabilities"))
+    data_quality = _coerce_mapping(data.get("dataQuality"))
+    underlying = _coerce_mapping(data.get("underlying"))
+    contracts = [
+        _coerce_mapping(item)
+        for item in list(data.get("contracts") or [])
+        if isinstance(item, Mapping)
+    ]
+    expirations = [
+        _coerce_mapping(item)
+        for item in list(data.get("expirations") or [])
+        if isinstance(item, Mapping)
+    ]
+    source_type = _mapping_value(capabilities, "sourceType", "source_type") or data.get("source") or "unknown"
+    source_notes = [
+        *list(capabilities.get("notes") or []),
+        *list(data_quality.get("hints") or []),
+        data.get("providerQuality"),
+        data.get("source"),
+        underlying.get("source"),
+        underlying.get("freshness"),
+    ]
+    first_contract = contracts[0] if contracts else {}
+    return build_options_provider_live_evidence_contract(
+        provider_id=str(
+            data.get("providerName")
+            or capabilities.get("providerName")
+            or data.get("source")
+            or "unknown"
+        ),
+        provider_kind="market_data",
+        source_type=str(source_type),
+        live_enabled=_coerce_bool(capabilities.get("liveEnabled")) is True,
+        tradeable_data=_coerce_bool(
+            _mapping_value(capabilities, "tradeableData", "tradeable_data")
+            if _mapping_value(capabilities, "tradeableData", "tradeable_data") is not None
+            else data_quality.get("tradeable")
+        )
+        is True,
+        fixture=_coerce_bool(_mapping_value(capabilities, "fixtureOnly", "fixture_only")) is True,
+        quote_freshness=_mapping_value(underlying, "freshness"),
+        quote_as_of=_mapping_value(underlying, "asOf", "as_of") or data.get("chainAsOf"),
+        chain_freshness=(
+            _mapping_value(data, "chainFreshness", "freshness")
+            or _mapping_value(first_contract, "freshness")
+            or _mapping_value(underlying, "freshness")
+        ),
+        chain_as_of=_mapping_value(data, "chainAsOf", "chain_as_of") or _mapping_value(first_contract, "asOf", "as_of"),
+        expiration_coverage=_expiration_coverage(expirations, contracts),
+        bid_ask_coverage=_coverage_from_items(contracts, _has_bid_ask),
+        open_interest_coverage=_coverage_from_items(contracts, _has_open_interest),
+        volume_coverage=_coverage_from_items(contracts, _has_volume),
+        iv_coverage=_coverage_from_items(contracts, _has_iv),
+        greeks_coverage=_coverage_from_items(contracts, _has_complete_greeks),
+        iv_rank_authority=iv_rank_authority,
+        event_calendar_authority=event_calendar_authority,
+        requires_event_calendar=requires_event_calendar,
+        provider_sla_status=provider_sla_status
+        or capabilities.get("providerSlaStatus")
+        or data.get("providerSlaStatus")
+        or "unknown",
+        sandbox_or_production=sandbox_or_production
+        or capabilities.get("sandboxOrProduction")
+        or data.get("sandboxOrProduction"),
+        provider_decision_authority_claim=_mapping_value(
+            data,
+            "providerDecisionAuthority",
+            "provider_decision_authority",
+        )
+        if _mapping_value(data, "providerDecisionAuthority", "provider_decision_authority") is not None
+        else _mapping_value(capabilities, "providerDecisionAuthority", "provider_decision_authority"),
+        recommendation_authority_claim=_mapping_value(
+            data,
+            "recommendationAuthority",
+            "recommendation_authority",
+        )
+        if _mapping_value(data, "recommendationAuthority", "recommendation_authority") is not None
+        else _mapping_value(capabilities, "recommendationAuthority", "recommendation_authority"),
+        notes=source_notes,
+    )
+
+
+def _provider_live_evidence_issues(provider_live_evidence: Mapping[str, Any] | None) -> list[OptionsGateIssue]:
+    data = _coerce_mapping(provider_live_evidence)
+    reason_codes = data.get("reasonCodes") if data else []
+    issues: list[OptionsGateIssue] = []
+    for code in _dedupe_reason_codes(list(reason_codes or [])):
+        issues.append(
+            _issue(
+                code=code,
+                category="provider_live_evidence",
+                status=OptionsGateStatus.BLOCKED,
+                label=_PROVIDER_LIVE_EVIDENCE_LABELS[code],
+            )
+        )
+    return issues
 
 
 def _bucket_from_leg_diagnostics(
@@ -773,6 +1245,7 @@ def evaluate_options_data_quality_gates(
     event_calendar: Mapping[str, Any] | None = None,
     requires_event_calendar: bool = False,
     provider_authority: Mapping[str, Any] | None = None,
+    provider_live_evidence: Mapping[str, Any] | None = None,
 ) -> OptionsStrategyGateDiagnostics:
     data_quality_issues: list[OptionsGateIssue] = []
     liquidity_issues: list[OptionsGateIssue] = []
@@ -890,14 +1363,20 @@ def evaluate_options_data_quality_gates(
     )
     liquidity_gates = _bucket_from_leg_diagnostics(liquidity_issues, leg_diagnostics)
     provider_authority_issues = _provider_authority_issues(provider_authority)
+    provider_live_evidence_issues = _provider_live_evidence_issues(provider_live_evidence)
     gate_decision, decision_grade = _strategy_gate_decision(
         data_quality_gates.status,
         liquidity_gates.status,
     )
-    if provider_authority_issues:
+    if provider_authority_issues or provider_live_evidence_issues:
         gate_decision = "数据不足，禁止判断"
         decision_grade = False
-    gate_issues = [*data_quality_issues, *liquidity_issues, *provider_authority_issues]
+    gate_issues = [
+        *data_quality_issues,
+        *liquidity_issues,
+        *provider_authority_issues,
+        *provider_live_evidence_issues,
+    ]
     return OptionsStrategyGateDiagnostics(
         strategy_key=strategy_key,
         gate_decision=gate_decision,
