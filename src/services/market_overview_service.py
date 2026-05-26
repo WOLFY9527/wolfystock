@@ -47,7 +47,11 @@ from src.services.official_macro_transport import (
 from src.services.official_macro_liquidity_cache_contracts import (
     build_official_cn_money_market_cache_bundle,
     build_official_fed_liquidity_cache_bundle,
+    build_official_us_rates_cache_bundle,
+    build_official_usd_pressure_cache_bundle,
     official_cn_money_market_series_id,
+    official_us_rates_series_id,
+    official_usd_pressure_series_id,
 )
 from src.services.market_overview_binance_transport import (
     fetch_binance_funding_row,
@@ -2350,6 +2354,29 @@ class MarketOverviewService:
                 }
             )
             items[symbol] = unavailable
+
+        if items:
+            cache_bundle = build_official_usd_pressure_cache_bundle(list(items.values()))
+            ready = bool(cache_bundle.get("scoreGradeEvidenceAllowed"))
+            reason_codes = [str(code) for code in cache_bundle.get("reasonCodes") or []]
+            for item in items.values():
+                item["cacheBundleDiagnostics"] = copy.deepcopy(cache_bundle)
+                item["externalProviderCalls"] = False
+                item["cacheOnly"] = True
+                item["readinessEligible"] = ready
+                item["scoreGradeEvidenceAllowed"] = ready
+                item["cacheSafeOfficialEvidenceAllowed"] = ready
+                if ready:
+                    item["sourceAuthorityAllowed"] = True
+                    item["scoreContributionAllowed"] = True
+                    item["sourceAuthorityReason"] = None
+                    item["routeRejectedReasonCodes"] = []
+                    continue
+                reason = str(item.get("sourceAuthorityReason") or cache_bundle.get("degradationReason") or "usd_pressure_readiness_not_eligible")
+                item["sourceAuthorityAllowed"] = False
+                item["scoreContributionAllowed"] = False
+                item["sourceAuthorityReason"] = reason
+                item["routeRejectedReasonCodes"] = list(dict.fromkeys([*list(item.get("routeRejectedReasonCodes") or []), *reason_codes]))
 
         return items
 
@@ -6821,12 +6848,114 @@ class MarketOverviewService:
             if isinstance(item, dict)
         ]
         if key == "rates":
+            items = self._with_official_us_rates_readiness_items(items)
             items = self._with_cn_money_market_readiness_items(items)
+        elif key in {"macro", "fx"}:
+            items = self._with_official_usd_pressure_readiness_items(items)
         panel["items"] = [
             self._guard_market_temperature_score_input(item, panel_key=key)
             for item in items
         ]
         return self._with_temperature_input_meta(panel, category)
+
+    @staticmethod
+    def _with_official_us_rates_readiness_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        rate_rows = [
+            item
+            for item in items
+            if isinstance(item, dict) and official_us_rates_series_id(item) is not None
+        ]
+        if not rate_rows:
+            return items
+
+        cache_bundle = build_official_us_rates_cache_bundle(rate_rows)
+        eligible_series = {str(series_id) for series_id in cache_bundle.get("eligibleSeries") or []}
+        reason = str(cache_bundle.get("degradationReason") or "us_rates_readiness_not_eligible")
+        route_codes = [str(code) for code in cache_bundle.get("reasonCodes") or []]
+        next_items: List[Dict[str, Any]] = []
+        for item in items:
+            series_id = official_us_rates_series_id(item)
+            if series_id is None:
+                next_items.append(item)
+                continue
+            row_eligible = series_id in eligible_series
+            normalized = {
+                **item,
+                "cacheBundleDiagnostics": copy.deepcopy(cache_bundle),
+                "requiredProviderClass": "official_public.us_treasury_curve",
+                "readinessEligible": row_eligible,
+                "scoreGradeEvidenceAllowed": row_eligible,
+                "cacheSafeOfficialEvidenceAllowed": row_eligible,
+                "externalProviderCalls": False,
+                "cacheOnly": True,
+            }
+            if row_eligible:
+                normalized["sourceAuthorityAllowed"] = True
+                normalized["scoreContributionAllowed"] = True
+                normalized["sourceAuthorityReason"] = None
+                normalized["routeRejectedReasonCodes"] = []
+            else:
+                row_reason = str(item.get("sourceAuthorityReason") or reason)
+                normalized["sourceAuthorityAllowed"] = False
+                normalized["scoreContributionAllowed"] = False
+                normalized["sourceAuthorityReason"] = row_reason
+                normalized["routeRejectedReasonCodes"] = list(
+                    dict.fromkeys([*(str(code) for code in item.get("routeRejectedReasonCodes") or []), *route_codes])
+                )
+                normalized["excluded"] = True
+                normalized["excludeReason"] = row_reason
+                normalized["confidenceWeight"] = 0.0
+            next_items.append(normalized)
+        return next_items
+
+    @staticmethod
+    def _with_official_usd_pressure_readiness_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        usd_rows = [
+            item
+            for item in items
+            if isinstance(item, dict) and official_usd_pressure_series_id(item) is not None
+        ]
+        if not usd_rows:
+            return items
+
+        cache_bundle = build_official_usd_pressure_cache_bundle(usd_rows)
+        readiness_eligible = bool(cache_bundle.get("readinessEligible"))
+        reason = str(cache_bundle.get("degradationReason") or "usd_pressure_readiness_not_eligible")
+        route_codes = [str(code) for code in cache_bundle.get("reasonCodes") or []]
+        next_items: List[Dict[str, Any]] = []
+        for item in items:
+            series_id = official_usd_pressure_series_id(item)
+            if series_id is None:
+                next_items.append(item)
+                continue
+            normalized = {
+                **item,
+                "cacheBundleDiagnostics": copy.deepcopy(cache_bundle),
+                "requiredProviderClass": "official_public.usd_pressure",
+                "readinessEligible": readiness_eligible,
+                "scoreGradeEvidenceAllowed": readiness_eligible,
+                "cacheSafeOfficialEvidenceAllowed": readiness_eligible,
+                "externalProviderCalls": False,
+                "cacheOnly": True,
+            }
+            if readiness_eligible:
+                normalized["sourceAuthorityAllowed"] = True
+                normalized["scoreContributionAllowed"] = True
+                normalized["sourceAuthorityReason"] = None
+                normalized["routeRejectedReasonCodes"] = []
+            else:
+                row_reason = str(item.get("sourceAuthorityReason") or reason)
+                normalized["sourceAuthorityAllowed"] = False
+                normalized["scoreContributionAllowed"] = False
+                normalized["sourceAuthorityReason"] = row_reason
+                normalized["routeRejectedReasonCodes"] = list(
+                    dict.fromkeys([*(str(code) for code in item.get("routeRejectedReasonCodes") or []), *route_codes])
+                )
+                normalized["excluded"] = True
+                normalized["excludeReason"] = row_reason
+                normalized["confidenceWeight"] = 0.0
+            next_items.append(normalized)
+        return next_items
 
     @staticmethod
     def _with_cn_money_market_readiness_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

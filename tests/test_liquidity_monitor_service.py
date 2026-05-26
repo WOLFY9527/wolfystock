@@ -1489,6 +1489,108 @@ def test_mixed_raw_rates_snapshot_with_fallback_used_still_accepts_official_yiel
     assert indicator["freshness"] == "delayed"
     assert "US Treasury" in indicator["summary"]
     assert "official_public" in indicator["summary"]
+    bundle = indicator["evidence"]["cacheBundleDiagnostics"]
+    assert bundle["providerId"] == "official_public.us_rates"
+    assert bundle["readinessEligible"] is True
+    assert bundle["scoreGradeEvidenceAllowed"] is True
+    assert bundle["cacheSafeOfficialEvidenceAllowed"] is True
+    assert bundle["requiredSeries"] == ["DGS2", "DGS10", "DGS30"]
+    assert bundle["fulfilledSeries"] == ["DGS2", "DGS10", "DGS30"]
+    assert bundle["missingSeries"] == []
+    assert bundle["externalProviderCalls"] is False
+
+
+def test_us_rates_readiness_diagnostics_fail_closed_for_budget_blocked_official_rows(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    as_of = "2026-05-20T10:00:00+08:00"
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "US2Y",
+                    "label": "US 2Y",
+                    "value": 4.62,
+                    "changePercent": -0.22,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS2",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "freshness": "cached",
+                    "unit": "%",
+                    "updatedAt": as_of,
+                    "asOf": as_of,
+                    "officialSeriesId": "DGS2",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                },
+                {
+                    "symbol": "US10Y",
+                    "label": "US 10Y",
+                    "value": 4.31,
+                    "changePercent": -0.31,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS10",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "freshness": "cached",
+                    "unit": "%",
+                    "updatedAt": as_of,
+                    "asOf": as_of,
+                    "officialSeriesId": "DGS10",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "US 30Y",
+                    "value": 4.58,
+                    "changePercent": -0.18,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS30",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "freshness": "cached",
+                    "unit": "%",
+                    "updatedAt": as_of,
+                    "asOf": as_of,
+                    "officialSeriesId": "DGS30",
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "sourceAuthorityReason": "budget_exhausted",
+                    "routeRejectedReasonCodes": ["budget_exhausted"],
+                },
+            ],
+            updated_at=as_of,
+            as_of=as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["us_rates_pressure"]
+    bundle = indicator["evidence"]["cacheBundleDiagnostics"]
+    diagnostics = indicator["coverageDiagnostics"]
+
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["scoreExclusionReason"] == "budget_exhausted"
+    assert bundle["readinessEligible"] is False
+    assert bundle["scoreGradeEvidenceAllowed"] is False
+    assert bundle["budgetBlockedSeries"] == ["DGS30"]
+    assert "budget_blocked_official_macro_route" in bundle["reasonCodes"]
+    assert bundle["externalProviderCalls"] is False
 
 
 def test_expired_proxy_rates_cache_yields_to_newer_official_snapshot_without_proxy_refetch(
@@ -5816,6 +5918,14 @@ def test_usd_pressure_scores_when_official_trade_weighted_usd_is_fresh(
     assert diagnostics["sourceTier"] == "official_public"
     assert diagnostics["sourceAuthorityReason"] is None
     assert diagnostics["routeRejectedReasonCodes"] == []
+    bundle = indicator["evidence"]["cacheBundleDiagnostics"]
+    assert bundle["providerId"] == "official_public.usd_pressure"
+    assert bundle["readinessEligible"] is True
+    assert bundle["scoreGradeEvidenceAllowed"] is True
+    assert bundle["cacheSafeOfficialEvidenceAllowed"] is True
+    assert bundle["fulfilledSeries"] == ["DTWEXBGS"]
+    assert bundle["missingSeries"] == []
+    assert bundle["externalProviderCalls"] is False
     assert inputs["USD_TWI"]["officialSeriesId"] == "DTWEXBGS"
     assert inputs["USD_TWI"]["sourceAuthorityAllowed"] is True
     assert inputs["USD_TWI"]["scoreContributionAllowed"] is True
@@ -5879,6 +5989,11 @@ def test_usd_pressure_lists_official_trade_weighted_series_when_missing(
     assert inputs["USD_TWI"]["scoreContributionAllowed"] is False
     assert inputs["USD_TWI"]["sourceAuthorityReason"] == "usd_pressure_missing_series"
     assert inputs["USD_TWI"]["routeRejectedReasonCodes"] == ["usd_pressure_missing_series"]
+    bundle = indicator["evidence"]["cacheBundleDiagnostics"]
+    assert bundle["readinessEligible"] is False
+    assert bundle["scoreGradeEvidenceAllowed"] is False
+    assert bundle["unavailableSeries"] == ["DTWEXBGS"]
+    assert "unavailable_official_usd_pressure_evidence" in bundle["reasonCodes"]
 
 
 def test_usd_pressure_reports_official_stale_reason_when_trade_weighted_row_is_stale(
@@ -5935,6 +6050,11 @@ def test_usd_pressure_reports_official_stale_reason_when_trade_weighted_row_is_s
     assert diagnostics["missingInputs"] == ["USD_TWI"]
     assert inputs["USD_TWI"]["sourceAuthorityReason"] == "official_usd_pressure_stale"
     assert inputs["USD_TWI"]["scoreContributionAllowed"] is False
+    bundle = indicator["evidence"]["cacheBundleDiagnostics"]
+    assert bundle["readinessEligible"] is False
+    assert bundle["scoreGradeEvidenceAllowed"] is False
+    assert bundle["staleSeries"] == ["DTWEXBGS"]
+    assert "stale_official_usd_pressure_evidence" in bundle["reasonCodes"]
 
 
 LIQUIDITY_GOLDEN_SCENARIOS = (

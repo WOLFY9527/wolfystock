@@ -27,6 +27,10 @@ from src.services.market_overview_yfinance_transport import fetch_yfinance_quote
 from src.services.official_macro_liquidity_cache_contracts import (
     build_official_cn_money_market_cache_bundle,
     build_official_fed_liquidity_cache_bundle,
+    build_official_us_rates_cache_bundle,
+    build_official_usd_pressure_cache_bundle,
+    official_us_rates_series_id,
+    official_usd_pressure_series_id,
 )
 from src.services.us_breadth_contracts import (
     US_BREADTH_AUTHORITY_PROVIDER_ID,
@@ -770,12 +774,18 @@ class LiquidityMonitorService:
 
     def _usd_pressure_indicator(self, macro_panel: PanelState) -> Dict[str, Any]:
         official_components = self._extract_official_usd_pressure_components(macro_panel)
+        cache_bundle = build_official_usd_pressure_cache_bundle(official_components)
+        official_components = self._apply_official_macro_readiness_to_components(
+            official_components,
+            cache_bundle,
+            official_usd_pressure_series_id,
+        )
         score_grade_components = [
             component
             for component in official_components
             if self._usd_pressure_component_score_grade(component)
         ]
-        if score_grade_components:
+        if bool(cache_bundle.get("scoreGradeEvidenceAllowed")) and score_grade_components:
             components = score_grade_components
             positive = sum(1 for component in components if float(component["signal"]) > 0)
             negative = sum(1 for component in components if float(component["signal"]) < 0)
@@ -785,6 +795,16 @@ class LiquidityMonitorService:
                 for component in components
             )
             freshness = self._weakest_freshness([str(component["freshness"]) for component in components])
+            evidence = self._indicator_evidence(
+                status="live",
+                freshness=freshness,
+                inputs=[
+                    self._source_confidence_input_from_component(component)
+                    for component in components
+                ],
+                expected_input_count=len(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["usd_pressure"]),
+            )
+            evidence["cacheBundleDiagnostics"] = cache_bundle
             return self._indicator(
                 "usd_pressure",
                 "USD Pressure / 美元压力",
@@ -795,18 +815,16 @@ class LiquidityMonitorService:
                 True,
                 self._summary_with_component_metadata(summary, components, freshness=freshness),
                 freshness=freshness,
-                evidence=self._indicator_evidence(
-                    status="live",
-                    freshness=freshness,
-                    inputs=[
-                        self._source_confidence_input_from_component(component)
-                        for component in components
-                    ],
-                    expected_input_count=len(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["usd_pressure"]),
-                ),
+                evidence=evidence,
             )
 
         official_components = official_components or [self._missing_official_usd_pressure_component(macro_panel)]
+        cache_bundle = build_official_usd_pressure_cache_bundle(official_components)
+        official_components = self._apply_official_macro_readiness_to_components(
+            official_components,
+            cache_bundle,
+            official_usd_pressure_series_id,
+        )
         freshness = self._weakest_freshness([str(component.get("freshness") or "unavailable") for component in official_components])
         reason = (
             self._text(official_components[0].get("sourceAuthorityReason"))
@@ -823,6 +841,7 @@ class LiquidityMonitorService:
             expected_input_count=len(LIQUIDITY_INDICATOR_REQUIRED_INPUTS["usd_pressure"]),
         )
         evidence["degradationReason"] = reason
+        evidence["cacheBundleDiagnostics"] = cache_bundle
         return self._indicator(
             "usd_pressure",
             "USD Pressure / 美元压力",
@@ -902,6 +921,12 @@ class LiquidityMonitorService:
             credit_summary = f"CREDIT {self._signed_number_text(float(credit_observation['value']))}{credit_observation['unit']}"
             summary = f"{summary} | {credit_summary}" if summary else credit_summary
         freshness = self._weakest_freshness([str(component["freshness"]) for component in components])
+        cache_bundle = build_official_us_rates_cache_bundle(components)
+        components = self._apply_official_macro_readiness_to_components(
+            components,
+            cache_bundle,
+            official_us_rates_series_id,
+        )
         status = (
             "live"
             if len(yield_components) >= 2
@@ -910,6 +935,20 @@ class LiquidityMonitorService:
             and all(str(component.get("sourceType") or "") != "official_public" for component in yield_components)
             else "partial"
         )
+        evidence = self._indicator_evidence(
+            status=status,
+            freshness=freshness,
+            inputs=(
+                [self._source_confidence_input_from_component(component) for component in components]
+                + (
+                    [self._source_confidence_input_from_component(credit_observation)]
+                    if credit_observation is not None
+                    else []
+                )
+            ),
+            expected_input_count=max(2, len(yield_components)) if components else 2,
+        )
+        evidence["cacheBundleDiagnostics"] = cache_bundle
         return self._indicator(
             "us_rates_pressure",
             "US Rates / 利率压力",
@@ -920,19 +959,7 @@ class LiquidityMonitorService:
             True,
             self._summary_with_component_metadata(summary, components, freshness=freshness),
             freshness=freshness,
-            evidence=self._indicator_evidence(
-                status=status,
-                freshness=freshness,
-                inputs=(
-                    [self._source_confidence_input_from_component(component) for component in components]
-                    + (
-                        [self._source_confidence_input_from_component(credit_observation)]
-                        if credit_observation is not None
-                        else []
-                    )
-                ),
-                expected_input_count=max(2, len(yield_components)) if components else 2,
-            ),
+            evidence=evidence,
         )
 
     def _fed_liquidity_indicator(self, panel: PanelState) -> Dict[str, Any]:
@@ -1529,6 +1556,8 @@ class LiquidityMonitorService:
                 {
                     "symbol": symbol,
                     "kind": "yield",
+                    "value": self._numeric(item.get("value") if item.get("value") is not None else item.get("price")),
+                    "unit": str(item.get("unit") or ""),
                     "change": change,
                     "signal": -change,
                     **self._component_projection_meta(item, panel),
@@ -2004,6 +2033,58 @@ class LiquidityMonitorService:
             if field in item:
                 metadata[field] = copy.deepcopy(item.get(field))
         return metadata
+
+    @staticmethod
+    def _apply_official_macro_readiness_to_components(
+        components: List[Dict[str, Any]],
+        cache_bundle: Dict[str, Any],
+        series_resolver: Callable[[Dict[str, Any]], str | None],
+    ) -> List[Dict[str, Any]]:
+        if not components or not isinstance(cache_bundle, dict):
+            return components
+        blocked_reasons: dict[str, str] = {}
+        for field, reason in (
+            ("budgetBlockedSeries", "budget_exhausted"),
+            ("staleSeries", "stale_official_macro_evidence"),
+            ("malformedSeries", "malformed_official_value"),
+            ("unavailableSeries", "unavailable_official_macro_evidence"),
+            ("policyRejectedSeries", "cache_safety_policy_mismatch"),
+            ("blockedSeries", "source_authority_or_score_gate_blocked"),
+        ):
+            for series_id in cache_bundle.get(field) or []:
+                blocked_reasons[str(series_id)] = reason
+        if not blocked_reasons:
+            return components
+
+        route_codes = [str(code) for code in cache_bundle.get("reasonCodes") or []]
+        next_components: List[Dict[str, Any]] = []
+        for component in components:
+            series_id = series_resolver(component)
+            if not series_id or series_id not in blocked_reasons:
+                next_components.append(component)
+                continue
+            reason = str(
+                component.get("sourceAuthorityReason")
+                or component.get("degradationReason")
+                or blocked_reasons[series_id]
+            )
+            existing_codes = component.get("routeRejectedReasonCodes")
+            existing_route_codes = (
+                [str(code) for code in existing_codes]
+                if isinstance(existing_codes, list)
+                else ([str(existing_codes)] if existing_codes else [])
+            )
+            next_components.append(
+                {
+                    **component,
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "sourceAuthorityReason": reason,
+                    "degradationReason": reason,
+                    "routeRejectedReasonCodes": list(dict.fromkeys(existing_route_codes or route_codes)),
+                }
+            )
+        return next_components
 
     def _extract_cn_breadth_summary(self, panel: PanelState) -> Optional[Dict[str, Any]]:
         symbol_map = self._reliable_symbol_map(panel, {"EFFECT", "ADV_RATIO"})

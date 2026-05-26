@@ -380,6 +380,104 @@ class MarketOverviewApiTestCase(unittest.TestCase):
                         0.0,
                     )
 
+    def test_market_temperature_us_rates_readiness_marks_budget_blocked_row_non_score_grade(self) -> None:
+        from src.services.market_overview_service import MarketOverviewService
+
+        service = MarketOverviewService(cn_hk_connect_flow_provider=lambda: None)
+        as_of = "2026-05-20T10:00:00+08:00"
+
+        def rate_row(symbol: str, series_id: str, **overrides: object) -> dict:
+            row = {
+                "symbol": symbol,
+                "label": symbol,
+                "officialSeriesId": series_id,
+                "value": 4.0,
+                "changePercent": -0.2,
+                "source": "treasury",
+                "sourceId": f"treasury:{series_id}",
+                "sourceType": "official_public",
+                "sourceTier": "official_public",
+                "freshness": "cached",
+                "asOf": as_of,
+                "updatedAt": as_of,
+                "confidenceWeight": 1.0,
+                "excluded": False,
+                "isFallback": False,
+                "isUnavailable": False,
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+            }
+            row.update(overrides)
+            return row
+
+        rows = [
+            rate_row("US2Y", "DGS2"),
+            rate_row("US10Y", "DGS10"),
+            rate_row(
+                "US30Y",
+                "DGS30",
+                sourceAuthorityAllowed=False,
+                scoreContributionAllowed=False,
+                sourceAuthorityReason="budget_exhausted",
+                routeRejectedReasonCodes=["budget_exhausted"],
+            ),
+        ]
+
+        readiness_rows = service._with_official_us_rates_readiness_items(rows)
+        guarded = [
+            service._guard_market_temperature_score_input(row, panel_key="rates")
+            for row in readiness_rows
+        ]
+        blocked = next(row for row in guarded if row["symbol"] == "US30Y")
+        bundle = blocked["cacheBundleDiagnostics"]
+
+        self.assertFalse(bundle["readinessEligible"])
+        self.assertFalse(blocked["sourceAuthorityAllowed"])
+        self.assertFalse(blocked["scoreContributionAllowed"])
+        self.assertEqual(blocked["sourceAuthorityReason"], "budget_exhausted")
+        self.assertEqual(bundle["budgetBlockedSeries"], ["DGS30"])
+        self.assertIn("budget_blocked_official_macro_route", bundle["reasonCodes"])
+        self.assertEqual(service._market_temperature_input_confidence(blocked, "macro_rate"), 0.0)
+
+    def test_market_temperature_usd_pressure_readiness_uses_cache_only_official_row(self) -> None:
+        from src.services.market_overview_service import MarketOverviewService
+
+        service = MarketOverviewService(cn_hk_connect_flow_provider=lambda: None)
+        row = {
+            "symbol": "USD_TWI",
+            "label": "Trade-weighted USD",
+            "officialSeriesId": "DTWEXBGS",
+            "value": 128.42,
+            "changePercent": -0.25,
+            "source": "fred",
+            "sourceId": "fred:DTWEXBGS",
+            "sourceType": "official_public",
+            "sourceTier": "official_public",
+            "freshness": "cached",
+            "asOf": "2026-05-20",
+            "updatedAt": "2026-05-20",
+            "confidenceWeight": 1.0,
+            "excluded": False,
+            "isFallback": False,
+            "isUnavailable": False,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+        }
+
+        readiness_rows = service._with_official_usd_pressure_readiness_items([row])
+        guarded = [
+            service._guard_market_temperature_score_input(item, panel_key="fx")
+            for item in readiness_rows
+        ]
+        usd = guarded[0]
+        bundle = usd["cacheBundleDiagnostics"]
+
+        self.assertTrue(bundle["readinessEligible"])
+        self.assertTrue(bundle["scoreGradeEvidenceAllowed"])
+        self.assertFalse(bundle["externalProviderCalls"])
+        self.assertTrue(usd["sourceAuthorityAllowed"])
+        self.assertTrue(usd["scoreContributionAllowed"])
+
 
 if __name__ == "__main__":
     unittest.main()
