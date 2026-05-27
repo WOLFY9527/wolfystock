@@ -1898,12 +1898,18 @@ const PortfolioPage: React.FC = () => {
     }
     return row.label || row.key;
   };
-  const symbolExposureRows = [...(analytics?.exposure.bySymbol || [])]
-    .sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0));
-  const currencyExposureRows = [...(analytics?.exposure.byCurrency || [])]
-    .sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0));
-  const marketExposureRows = [...(analytics?.exposure.byMarket || [])]
-    .sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0));
+  const symbolExposureRows = useMemo(
+    () => [...(analytics?.exposure.bySymbol || [])].sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0)),
+    [analytics?.exposure.bySymbol],
+  );
+  const currencyExposureRows = useMemo(
+    () => [...(analytics?.exposure.byCurrency || [])].sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0)),
+    [analytics?.exposure.byCurrency],
+  );
+  const marketExposureRows = useMemo(
+    () => [...(analytics?.exposure.byMarket || [])].sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0)),
+    [analytics?.exposure.byMarket],
+  );
   const topPosition = symbolExposureRows[0] || analytics?.risk.largestPosition || null;
   const topCurrency = currencyExposureRows[0] || analytics?.risk.largestCurrency || null;
   const topMarket = marketExposureRows[0] || analytics?.risk.largestMarket || null;
