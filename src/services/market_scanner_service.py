@@ -57,6 +57,7 @@ MAX_US_SCANNER_SUPPLEMENT_TARGET = 80
 MAX_HK_SCANNER_SUPPLEMENT_TARGET = 60
 SCANNER_DETAIL_HISTORY_MAX_WORKERS = 4
 SCANNER_SCORE_CAP_FALLBACK_SOURCES = {"fallback", "history_only_us_scan", "history_only_hk_scan", "mock", "synthetic"}
+SCANNER_SCORE_CAP_FALLBACK_SOURCE_TYPES = frozenset({"fallback", "fallback_static", "mock", "synthetic"})
 SCANNER_SCORE_CAP_PARTIAL_SOURCES = {"local_partial_fallback"}
 SCANNER_PROXY_QUOTE_CONFIDENCE_CAP = 0.75
 SCANNER_PROXY_QUOTE_CAP_REASON = "proxy_quote_source_capped"
@@ -258,6 +259,14 @@ def _format_pct(value: Optional[float], digits: int = 1) -> str:
     if value is None:
         return "--"
     return f"{float(value):.{digits}f}%"
+
+
+def _is_fallback_score_cap_source(source: str, *, source_type: str = "") -> bool:
+    normalized_source = str(source or "").strip().lower()
+    normalized_source_type = str(source_type or "").strip().lower()
+    if normalized_source in SCANNER_SCORE_CAP_FALLBACK_SOURCES:
+        return True
+    return normalized_source_type in SCANNER_SCORE_CAP_FALLBACK_SOURCE_TYPES or normalized_source_type.startswith("fallback")
 
 
 def _format_price(value: Optional[float], digits: int = 2) -> str:
@@ -846,6 +855,7 @@ class MarketScannerService:
                 history_diag=history_diag,
                 profile=profile_config,
                 snapshot_source=snapshot_source,
+                degraded_mode_used=bool(snapshot_resolution.get("degraded_mode_used")),
             )
             if candidate is None:
                 history_diag_rollup["skipped_for_history"] += 1
@@ -5443,6 +5453,7 @@ class MarketScannerService:
         history_diag: Dict[str, Any],
         profile: ScannerMarketProfile,
         snapshot_source: str,
+        degraded_mode_used: bool,
     ) -> Optional[Dict[str, Any]]:
         if history_df.empty or len(history_df) < 40:
             return None
@@ -5525,6 +5536,7 @@ class MarketScannerService:
                 "history": history_diag,
                 "history_source": history_diag.get("source"),
                 "snapshot_source": snapshot_source,
+                "degraded_mode_used": bool(degraded_mode_used),
                 "profile": profile.key,
             },
         }
@@ -5995,7 +6007,11 @@ class MarketScannerService:
 
         quote_source = str(quote_diag.get("source") or "").strip().lower()
         history_source = str(history_diag.get("source") or candidate.get("history_source") or "").strip().lower()
+        snapshot_source = str(candidate.get("snapshot_source") or diagnostics.get("snapshot_source") or "").strip().lower()
+        degraded_mode_used = bool(candidate.get("degraded_mode_used")) or bool(diagnostics.get("degraded_mode_used"))
         quote_source_type = self._quote_source_type(quote_diag, quote_source) if quote_source else ""
+        history_source_type = resolve_source_type(history_source) if history_source else ""
+        snapshot_source_type = resolve_source_type(snapshot_source) if snapshot_source else ""
         is_proxy_quote = self._is_proxy_quote_context(
             quote_diag,
             quote_source_type=quote_source_type,
@@ -6003,8 +6019,10 @@ class MarketScannerService:
         quote_context_present = bool(quote_diag) or "quote_available" in candidate or "quote_available" in diagnostics
         is_fallback = (
             (quote_context_present and not quote_diag.get("available"))
-            or quote_source in SCANNER_SCORE_CAP_FALLBACK_SOURCES
-            or history_source in SCANNER_SCORE_CAP_FALLBACK_SOURCES
+            or degraded_mode_used
+            or _is_fallback_score_cap_source(quote_source, source_type=quote_source_type)
+            or _is_fallback_score_cap_source(history_source, source_type=history_source_type)
+            or _is_fallback_score_cap_source(snapshot_source, source_type=snapshot_source_type)
         )
         is_stale = bool(history_diag.get("stale"))
         is_partial = history_source in SCANNER_SCORE_CAP_PARTIAL_SOURCES or bool(core_missing)

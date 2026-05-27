@@ -1070,6 +1070,64 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertIn("quote_context", explainability["missing_evidence"])
         self.assertEqual(explainability["source_confidence"]["capReason"], "fallback_source")
 
+    def test_apply_score_caps_and_explainability_caps_degraded_snapshot_provenance(self) -> None:
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeScannerDataManager(),
+        )
+        candidate = {
+            "symbol": "600001",
+            "name": "算力龙头",
+            "score": 87.4,
+            "reason_summary": "趋势与量能完整。",
+            "ret_5d": 7.8,
+            "ret_20d": 22.1,
+            "avg_amount_20": 9.4e8,
+            "amount": 1.26e9,
+            "avg_volume_20": 48_000_000,
+            "volume_expansion_20": 1.8,
+            "atr20_pct": 4.1,
+            "_relative_strength_pct": 0.95,
+            "snapshot_source": "local_history_degraded",
+            "_component_scores": {
+                "trend": 18.8,
+                "momentum": 13.8,
+                "liquidity": 15.2,
+                "activity": 10.6,
+                "volatility_quality": 6.7,
+                "relative_strength": 9.5,
+                "benchmark_relative": 7.0,
+                "gap_context": 5.8,
+                "penalties": 0.0,
+            },
+            "_diagnostics": {
+                "history": {
+                    "source": "local_db",
+                    "latest_trade_date": "2026-05-16",
+                    "rows": 130,
+                },
+                "quote_context": {
+                    "available": True,
+                    "source": "akshare",
+                },
+                "snapshot_source": "local_history_degraded",
+                "degraded_mode_used": True,
+            },
+        }
+
+        service._apply_score_caps_and_explainability(candidate)
+
+        explainability = candidate["_diagnostics"]["score_explainability"]
+        self.assertEqual(candidate["raw_score"], 87.4)
+        self.assertEqual(candidate["final_score"], 40.0)
+        self.assertEqual(candidate["score"], 40.0)
+        self.assertEqual(explainability["cap_reason"], "fallback_source")
+        self.assertEqual(explainability["degradation_reason"], "fallback_source")
+        self.assertEqual(explainability["score_confidence"], 0.4)
+        self.assertTrue(explainability["cap_applied"])
+        self.assertEqual(explainability["source_confidence"]["capReason"], "fallback_source")
+        self.assertTrue(explainability["source_confidence"]["isFallback"])
+
     def test_apply_score_caps_and_explainability_caps_stale_and_partial_candidates(self) -> None:
         service = MarketScannerService(
             self.db,
@@ -2047,6 +2105,11 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertIn("snapshot=local_history_degraded", result["source_summary"])
         self.assertIn("degraded=yes", result["source_summary"])
         self.assertTrue(any("降级快照" in note for note in result["universe_notes"]))
+        self.assertTrue(result["shortlist"])
+        for item in result["shortlist"]:
+            self.assertLessEqual(float(item["score"]), 40.0)
+            self.assertEqual(item["diagnostics"]["score_explainability"]["cap_reason"], "fallback_source")
+            self.assertEqual(item["diagnostics"]["score_explainability"]["degradation_reason"], "fallback_source")
 
     def test_run_scan_raises_structured_error_when_no_snapshot_and_no_degraded_mode(self) -> None:
         DatabaseManager.reset_instance()

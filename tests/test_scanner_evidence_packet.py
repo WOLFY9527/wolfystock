@@ -113,6 +113,7 @@ def test_build_scanner_evidence_packet_maps_missing_and_internal_terms_to_safe_l
         "provider_unavailable",
         "external_optional_unavailable",
         "fundamental_context_unavailable",
+        "fallback_source",
     ]
 
     serialized = json.dumps(packet, ensure_ascii=False)
