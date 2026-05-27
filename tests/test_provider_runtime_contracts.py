@@ -713,6 +713,70 @@ def test_stock_evidence_quote_surfaces_runtime_errors_as_error_status() -> None:
     assert payload["error"] == "provider down"
 
 
+def test_runtime_fallback_quote_keeps_provider_trace_but_packet_downgrades_live_claims() -> None:
+    service = StockEvidenceService(
+        fetcher_manager=SimpleNamespace(
+            get_realtime_quote=lambda symbol: UnifiedRealtimeQuote(
+                code=symbol,
+                name="Fallback Apple",
+                source=RealtimeSource.FALLBACK,
+                price=214.55,
+                change_pct=-0.42,
+                market_timestamp="2026-05-13T08:30:00Z",
+            )
+        ),
+        stock_repo=MagicMock(),
+        analysis_repo=MagicMock(),
+    )
+
+    payload = service.get_stock_evidence(["AAPL"])
+
+    item = payload["items"][0]
+    packet = item["stockEvidencePacket"]
+    quote_ref = next(ref for ref in packet["sourceRefs"] if ref["evidenceClass"] == "quote")
+    blocked = {boundary["claim"]: boundary for boundary in packet["claimBoundaries"] if not boundary["allowed"]}
+
+    assert item["quote"] == {
+        "status": "available",
+        "price": 214.55,
+        "changePct": -0.42,
+        "currency": "USD",
+        "provider": "fallback",
+        "updatedAt": "2026-05-13T08:30:00Z",
+    }
+    assert quote_ref["provider"] == "fallback"
+    assert quote_ref["asOf"] == "2026-05-13T08:30:00Z"
+    assert quote_ref["freshness"] == "unknown"
+    assert all(evidence["evidenceClass"] != "quote" for evidence in packet["scoreEligibleEvidence"])
+    assert blocked["price_is_live"]["reasonCode"] == "quote_freshness_not_proven"
+    assert "weak_or_fallback_provider_evidence" in packet["confidenceCap"]["reasonCodes"]
+
+
+def test_runtime_unavailable_quote_keeps_unknown_contract_and_no_fake_live_fields() -> None:
+    service = StockEvidenceService(
+        fetcher_manager=SimpleNamespace(get_realtime_quote=lambda symbol: None),
+        stock_repo=MagicMock(),
+        analysis_repo=MagicMock(),
+    )
+
+    payload = service.get_stock_evidence(["AAPL"])
+
+    item = payload["items"][0]
+    packet = item["stockEvidencePacket"]
+    quote_ref = next(ref for ref in packet["sourceRefs"] if ref["evidenceClass"] == "quote")
+    blocked = {boundary["claim"]: boundary for boundary in packet["claimBoundaries"] if not boundary["allowed"]}
+
+    assert item["quote"] == {
+        "status": "unknown",
+        "provider": "realtime_quote",
+    }
+    assert quote_ref["status"] == "unknown"
+    assert quote_ref["asOf"] is None
+    assert quote_ref["freshness"] == "unknown"
+    assert all(evidence["evidenceClass"] != "quote" for evidence in packet["scoreEligibleEvidence"])
+    assert blocked["price_is_live"]["reasonCode"] == "quote_freshness_not_proven"
+
+
 def test_cn_scanner_degraded_snapshot_preserves_labels_and_provider_diagnostics() -> None:
     db = _in_memory_db()
     stock_repo = StockRepository(db)

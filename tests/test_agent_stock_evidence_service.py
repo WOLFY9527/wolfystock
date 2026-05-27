@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from data_provider.realtime_types import RealtimeSource, UnifiedRealtimeQuote
 from data_provider.sec_edgar_provider import parse_companyfacts_payload
 from src.services.agent_stock_evidence_service import StockEvidenceService
 from src.services.data_source_router import DataSourceRoutePlan, ProviderRouteCandidate
@@ -294,3 +295,45 @@ def test_stock_evidence_accepts_injected_sec_filing_sidecar_instance() -> None:
     )
 
     assert payload["items"][0]["secFilingEvidence"] == sidecar.to_dict()
+
+
+def test_service_packet_keeps_quote_provenance_but_blocks_live_claim_without_freshness_metadata() -> None:
+    service = StockEvidenceService(
+        fetcher_manager=MagicMock(
+            get_realtime_quote=lambda symbol: UnifiedRealtimeQuote(
+                code=symbol,
+                name="Apple",
+                source=RealtimeSource.ALPACA,
+                price=214.55,
+                change_pct=1.23,
+                total_mv=None,
+                pe_ratio=None,
+                pb_ratio=None,
+                market_timestamp="2026-05-13T08:30:00Z",
+            )
+        ),
+        stock_repo=MagicMock(get_recent_daily_rows=lambda code, limit=80: []),
+        analysis_repo=MagicMock(get_latest_record=lambda code: None),
+    )
+
+    payload = service.get_stock_evidence(["AAPL"])
+
+    item = payload["items"][0]
+    packet = item["stockEvidencePacket"]
+    quote_ref = next(ref for ref in packet["sourceRefs"] if ref["evidenceClass"] == "quote")
+    blocked = {boundary["claim"]: boundary for boundary in packet["claimBoundaries"] if not boundary["allowed"]}
+
+    assert item["quote"] == {
+        "status": "available",
+        "price": 214.55,
+        "changePct": 1.23,
+        "currency": "USD",
+        "provider": "alpaca",
+        "updatedAt": "2026-05-13T08:30:00Z",
+    }
+    assert quote_ref["status"] == "available"
+    assert quote_ref["provider"] == "alpaca"
+    assert quote_ref["asOf"] == "2026-05-13T08:30:00Z"
+    assert quote_ref["sourceType"] == "local_or_reported"
+    assert quote_ref["freshness"] == "unknown"
+    assert blocked["price_is_live"]["reasonCode"] == "quote_freshness_not_proven"

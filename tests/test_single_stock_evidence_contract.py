@@ -176,6 +176,59 @@ def test_stale_or_partial_evidence_triggers_confidence_cap(
     assert contract["observationOnly"] is True
 
 
+@pytest.mark.parametrize(
+    ("payload", "expected_freshness", "expected_cap_reason"),
+    [
+        (
+            {
+                "domain": "history",
+                "symbol": "QQQ",
+                "providerId": "synthetic_fixture",
+                "sourceType": "synthetic_fixture",
+                "asOf": "2026-05-27T09:30:00Z",
+                "freshness": "fresh",
+                "isSynthetic": True,
+                "confidenceWeight": 0.99,
+            },
+            "synthetic",
+            "synthetic_source",
+        ),
+        (
+            {
+                "domain": "quote",
+                "symbol": "QQQ",
+                "providerId": "primary_quote",
+                "sourceType": "direct_feed",
+                "freshness": "unavailable",
+                "confidenceWeight": 0.99,
+            },
+            "unavailable",
+            None,
+        ),
+    ],
+)
+def test_synthetic_or_unavailable_evidence_never_claims_live_or_fresh_reliable(
+    payload: dict[str, object],
+    expected_freshness: str,
+    expected_cap_reason: str | None,
+) -> None:
+    contract = build_single_stock_evidence_contract(payload)
+    boundary = _boundary(contract, "live_or_fresh_reliable")
+
+    assert contract["authorityGrant"] is False
+    assert contract["observationOnly"] is True
+    assert contract["freshness"] == expected_freshness
+    assert boundary["allowed"] is False
+    if expected_cap_reason is None:
+        assert contract["capReason"] is None
+        assert contract["degradationReason"] is None
+        assert boundary["reasonCode"] == "freshness_not_proven"
+    else:
+        assert contract["capReason"] == expected_cap_reason
+        assert contract["degradationReason"] == expected_cap_reason
+        assert boundary["reasonCode"] == expected_cap_reason
+
+
 def test_url_like_secret_like_and_payload_shaped_strings_are_sanitized() -> None:
     contract = build_single_stock_evidence_contract(
         {

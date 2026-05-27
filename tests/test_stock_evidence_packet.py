@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from src.services.single_stock_evidence_contract import build_single_stock_evidence_contract
 from src.services.stock_evidence_packet import project_stock_evidence_packet
 
 
@@ -195,6 +196,45 @@ def test_weak_fallback_unknown_provider_data_cannot_support_strong_claim_boundar
     assert blocked["fundamentals_are_complete"]["reasonCode"] == "fundamentals_missing_or_fallback"
     assert blocked["sec_filing_supports_trading_signal"]["reasonCode"] == "sec_observation_only_non_scoring"
     assert blocked["news_catalyst_exists"]["reasonCode"] == "news_unknown_or_placeholder"
+    assert "weak_or_fallback_provider_evidence" in packet["confidenceCap"]["reasonCodes"]
+
+
+def test_quote_source_refs_preserve_degraded_provenance_parity_with_single_stock_contract() -> None:
+    item = _strong_item()
+    item["quote"] = {
+        "status": "available",
+        "price": 190.12,
+        "provider": "fallback_cache",
+        "sourceType": "fallback",
+        "freshness": "stale",
+        "updatedAt": "2026-05-20T13:45:00Z",
+    }
+
+    packet = project_stock_evidence_packet(item)
+    contract = build_single_stock_evidence_contract(
+        {
+            "domain": "quote",
+            "symbol": "AAPL",
+            "providerId": "fallback_cache",
+            "sourceType": "fallback",
+            "asOf": "2026-05-20T13:45:00Z",
+            "freshness": "stale",
+            "isStale": True,
+        }
+    )
+
+    quote_ref = next(ref for ref in packet["sourceRefs"] if ref["evidenceClass"] == "quote")
+    packet_boundary = next(boundary for boundary in packet["claimBoundaries"] if boundary["claim"] == "price_is_live")
+    contract_boundary = next(
+        boundary for boundary in contract["claimBoundaries"] if boundary["claim"] == "live_or_fresh_reliable"
+    )
+
+    assert quote_ref["provider"] == contract["providerId"]
+    assert quote_ref["sourceType"] == contract["sourceType"]
+    assert quote_ref["freshness"] == contract["freshness"]
+    assert quote_ref["asOf"] == contract["asOf"]
+    assert packet_boundary["allowed"] is False
+    assert contract_boundary["allowed"] is False
     assert "weak_or_fallback_provider_evidence" in packet["confidenceCap"]["reasonCodes"]
 
 
