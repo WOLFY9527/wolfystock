@@ -13,6 +13,7 @@ from src.services.options_authority_policy_matrix import (
     OPTIONS_AUTHORITY_SURFACES,
     build_options_event_calendar_source_candidate_gap,
     build_options_expiration_source_candidate_gap,
+    build_options_iv_rank_source_candidate_gap,
     get_options_authority_policy_matrix,
     get_options_authority_surface_policy,
     is_options_authority_provider_granted,
@@ -631,3 +632,144 @@ def test_iv_rank_policy_encodes_future_authority_checklist_families() -> None:
             "coverage_metadata",
         ),
     }
+
+
+def test_iv_rank_source_candidate_gap_contract_is_inert_and_observation_only() -> None:
+    policy = get_options_authority_surface_policy("iv_rank")
+    contract = build_options_iv_rank_source_candidate_gap("provider_reported_iv_rank")
+
+    assert policy["source_candidate_gap_contract"]["surface"] == "iv_rank"
+    assert contract["diagnosticOnly"] is True
+    assert contract["surface"] == "iv_rank"
+    assert contract["candidateOnly"] is True
+    assert contract["authorityGrant"] is False
+    assert contract["candidateSourceClass"] == "provider_reported_iv_rank"
+    assert set(contract["missingEvidenceFamilies"]) >= {
+        "internal_policy_grant_missing",
+        "source_identity_provenance_chain_missing",
+        "entitlement_use_rights_missing",
+        "license_use_rights_missing",
+        "decision_redistribution_use_rights_missing",
+        "sla_freshness_missing",
+        "methodology_missing",
+        "lookback_date_range_missing",
+        "option_iv_evidence_missing",
+        "provider_reported_iv_rank_or_percentile_missing",
+        "approved_historical_option_iv_series_missing",
+        "contract_universe_missing",
+        "moneyness_expiry_selection_rules_missing",
+        "moneyness_selection_rules_missing",
+        "expiry_selection_rules_missing",
+        "missing_data_policy_missing",
+        "coverage_scope_missing",
+    }
+    assert set(contract["forbiddenAuthorityInputs"]) >= {
+        "current_iv",
+        "selected_contract_iv",
+        "greeks",
+        "historicalIvProxy",
+        "underlying_realized_volatility",
+        "source_labels",
+        "provider_capability_metadata",
+        "provider_capabilities",
+        "provider_self_claims",
+        "current_provider_id:tradier",
+        "current_provider_id:ibkr",
+        "current_provider_id:polygon",
+        "docs_only_evidence",
+        "fixtures",
+        "request_shaped_evidence",
+        "proxy",
+        "coverage_completeness",
+    }
+    assert contract["requiredEvidenceFamilies"] == {
+        "internal_policy_grant": (
+            "wolfystock_internal_policy_grant",
+            "surface_authority_approval",
+        ),
+        "source_identity_provenance_chain": (
+            "non_blocked_source_class",
+            "source_identity",
+            "source_authority",
+            "provenance_chain",
+        ),
+        "iv_rank_source_authority": (
+            "provider_reported_iv_rank_or_percentile",
+            "approved_historical_option_iv_series",
+        ),
+        "entitlement_use_rights": (
+            "options_iv_history_entitlement",
+            "decision_use_rights",
+            "redistribution_rights",
+            "live_delayed_status",
+            "sandbox_or_production",
+        ),
+        "sla_freshness": (
+            "as_of",
+            "freshness",
+            "max_age_policy",
+            "provider_sla_status",
+        ),
+        "methodology": (
+            "methodology_version",
+            "percentile_or_rank_definition",
+            "calculation_basis",
+        ),
+        "lookback_date_range": (
+            "lookback_window",
+            "date_range_start",
+            "date_range_end",
+        ),
+        "contract_universe": (
+            "contract_universe",
+            "option_chain_scope",
+        ),
+        "moneyness_expiry_selection_rules": (
+            "moneyness_selection_rules",
+            "expiry_selection_rules",
+        ),
+        "missing_data_policy": (
+            "missing_data_policy",
+            "outlier_policy",
+        ),
+        "coverage_scope": (
+            "symbol_or_underlying_coverage",
+            "contract_universe_coverage",
+            "coverage_metadata",
+        ),
+    }
+    assert contract["nextSafeStep"] == "collect_observation_only_metadata_without_granting_authority"
+
+
+@pytest.mark.parametrize(
+    "source_class",
+    tuple(
+        dict.fromkeys(
+            (
+                *CURRENT_KNOWN_OPTIONS_AUTHORITY_SOURCE_TYPES,
+                *BLOCKED_OPTIONS_AUTHORITY_SOURCE_CLASSES,
+                *(
+                    f"current_provider_id:{provider_id}"
+                    for provider_id in CURRENT_KNOWN_OPTIONS_AUTHORITY_PROVIDER_IDS
+                ),
+                *get_options_authority_surface_policy("iv_rank")[
+                    "future_candidate_source_classes"
+                ],
+            )
+        )
+    ),
+)
+def test_iv_rank_source_candidate_gap_never_grants_authority(
+    source_class: str,
+) -> None:
+    contract = build_options_iv_rank_source_candidate_gap(source_class)
+
+    assert contract["diagnosticOnly"] is True
+    assert contract["authorityGrant"] is False
+    assert contract["candidateOnly"] is True
+    assert contract["candidateSourceClass"] == source_class
+
+    if source_class not in get_options_authority_surface_policy("iv_rank")[
+        "future_candidate_source_classes"
+    ]:
+        assert "non_blocked_source_class_missing" in contract["missingEvidenceFamilies"]

@@ -99,6 +99,128 @@ IV_RANK_REQUIRED_FUTURE_EVIDENCE_FAMILIES = {
         "coverage_metadata",
     ),
 }
+_IV_RANK_SOURCE_CANDIDATE_GAP_REQUIRED_EVIDENCE_FAMILIES = {
+    "internal_policy_grant": (
+        "wolfystock_internal_policy_grant",
+        "surface_authority_approval",
+    ),
+    "source_identity_provenance_chain": (
+        "non_blocked_source_class",
+        "source_identity",
+        "source_authority",
+        "provenance_chain",
+    ),
+    "iv_rank_source_authority": (
+        "provider_reported_iv_rank_or_percentile",
+        "approved_historical_option_iv_series",
+    ),
+    "entitlement_use_rights": (
+        "options_iv_history_entitlement",
+        "decision_use_rights",
+        "redistribution_rights",
+        "live_delayed_status",
+        "sandbox_or_production",
+    ),
+    "sla_freshness": (
+        "as_of",
+        "freshness",
+        "max_age_policy",
+        "provider_sla_status",
+    ),
+    "methodology": (
+        "methodology_version",
+        "percentile_or_rank_definition",
+        "calculation_basis",
+    ),
+    "lookback_date_range": (
+        "lookback_window",
+        "date_range_start",
+        "date_range_end",
+    ),
+    "contract_universe": (
+        "contract_universe",
+        "option_chain_scope",
+    ),
+    "moneyness_expiry_selection_rules": (
+        "moneyness_selection_rules",
+        "expiry_selection_rules",
+    ),
+    "missing_data_policy": (
+        "missing_data_policy",
+        "outlier_policy",
+    ),
+    "coverage_scope": (
+        "symbol_or_underlying_coverage",
+        "contract_universe_coverage",
+        "coverage_metadata",
+    ),
+}
+_IV_RANK_SOURCE_CANDIDATE_GAP_MISSING_EVIDENCE_FAMILIES = (
+    "internal_policy_grant_missing",
+    "source_identity_provenance_chain_missing",
+    "iv_rank_source_authority_missing",
+    "provider_reported_iv_rank_or_percentile_missing",
+    "approved_historical_option_iv_series_missing",
+    "entitlement_use_rights_missing",
+    "license_use_rights_missing",
+    "decision_redistribution_use_rights_missing",
+    "live_delayed_status_missing",
+    "sandbox_or_production_missing",
+    "sla_freshness_missing",
+    "methodology_missing",
+    "methodology_version_missing",
+    "percentile_rank_definition_missing",
+    "lookback_date_range_missing",
+    "calculation_basis_missing",
+    "option_iv_evidence_missing",
+    "contract_universe_missing",
+    "moneyness_expiry_selection_rules_missing",
+    "moneyness_selection_rules_missing",
+    "expiry_selection_rules_missing",
+    "missing_data_policy_missing",
+    "coverage_scope_missing",
+)
+_IV_RANK_SOURCE_CANDIDATE_GAP_FORBIDDEN_AUTHORITY_INPUTS = (
+    "current_iv",
+    "selected_contract_iv",
+    "greeks",
+    "historicalIvProxy",
+    "historical_iv_proxy",
+    "underlying_realized_volatility",
+    "source_labels",
+    "provider_capability_metadata",
+    "provider_capabilities",
+    "provider_self_claims",
+    "current_provider_id:tradier",
+    "current_provider_id:ibkr",
+    "current_provider_id:polygon",
+    "docs_only_evidence",
+    "fixture",
+    "fixtures",
+    "synthetic",
+    "fallback",
+    "dry_run",
+    "stub",
+    "adapter_contract",
+    "request_shaped",
+    "request_supplied",
+    "request_shaped_evidence",
+    "adapter_contract_evidence",
+    "synthetic_fallback_dry_run_stub_evidence",
+    "proxy",
+    "coverage_completeness",
+)
+_IV_RANK_SOURCE_CANDIDATE_GAP_CONTRACT = {
+    "diagnosticOnly": True,
+    "surface": "iv_rank",
+    "candidateOnly": True,
+    "authorityGrant": False,
+    "candidateSourceClass": "",
+    "missingEvidenceFamilies": _IV_RANK_SOURCE_CANDIDATE_GAP_MISSING_EVIDENCE_FAMILIES,
+    "forbiddenAuthorityInputs": _IV_RANK_SOURCE_CANDIDATE_GAP_FORBIDDEN_AUTHORITY_INPUTS,
+    "requiredEvidenceFamilies": _IV_RANK_SOURCE_CANDIDATE_GAP_REQUIRED_EVIDENCE_FAMILIES,
+    "nextSafeStep": "collect_observation_only_metadata_without_granting_authority",
+}
 _EVENT_CALENDAR_FUTURE_CANDIDATE_SOURCE_CLASSES = (
     "licensed_event_calendar_provider",
 )
@@ -417,6 +539,7 @@ _OPTIONS_AUTHORITY_POLICY_MATRIX = {
         ),
         "required_future_evidence_families": IV_RANK_REQUIRED_FUTURE_EVIDENCE_FAMILIES,
         "future_candidate_source_classes": _IV_RANK_FUTURE_CANDIDATE_SOURCE_CLASSES,
+        "source_candidate_gap_contract": _IV_RANK_SOURCE_CANDIDATE_GAP_CONTRACT,
     },
     "event_calendar": {
         **_COMMON_POLICY_FLAGS,
@@ -523,6 +646,32 @@ def is_options_authority_provider_granted(surface: str, provider_id: str) -> boo
     return normalized_provider_id in {
         _normalize_token(item) for item in policy["authority_grants"]["provider_ids"]
     }
+
+
+def build_options_iv_rank_source_candidate_gap(
+    candidate_source_class: str,
+) -> dict[str, Any]:
+    """Return inert IV-rank source-candidate gap metadata."""
+
+    policy = get_options_authority_surface_policy("iv_rank")
+    contract = deepcopy(policy["source_candidate_gap_contract"])
+    normalized_source_class = _normalize_token(candidate_source_class)
+    approved_candidate_classes = {
+        _normalize_token(item) for item in policy["future_candidate_source_classes"]
+    }
+    missing_evidence_families = list(contract["missingEvidenceFamilies"])
+
+    contract["candidateSourceClass"] = normalized_source_class
+
+    if normalized_source_class not in approved_candidate_classes:
+        missing_evidence_families.insert(1, "non_blocked_source_class_missing")
+
+    contract["missingEvidenceFamilies"] = tuple(dict.fromkeys(missing_evidence_families))
+    contract["authorityGrant"] = False
+    contract["candidateOnly"] = True
+    contract["diagnosticOnly"] = True
+    contract["surface"] = "iv_rank"
+    return contract
 
 
 def build_options_expiration_source_candidate_gap(
