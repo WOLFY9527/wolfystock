@@ -306,6 +306,106 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
                 },
             ],
         },
+        "optionsEventSourceCandidateGap": {
+            "diagnosticOnly": True,
+            "surface": "event_calendar",
+            "candidateOnly": True,
+            "authorityGrant": False,
+            "candidateSourceClass": "licensed_event_calendar_provider",
+            "missingEvidenceFamilies": [
+                "internal_policy_grant_missing",
+                "source_identity_provenance_chain_missing",
+                "licensed_backing_missing",
+                "entitlement_use_rights_missing",
+                "sla_freshness_missing",
+                "event_taxonomy_missing",
+                "confirmation_status_missing",
+                "event_identity_missing",
+                "timezone_session_missing",
+                "coverage_scope_missing",
+            ],
+            "forbiddenAuthorityInputs": [
+                "event_presence",
+                "event_count",
+                "event_type",
+                "timeline_evidence",
+                "generic_macro_context",
+                "provider_capabilities",
+                "source_labels",
+                "provider_self_claims",
+                "fixture",
+                "synthetic",
+                "fallback",
+                "dry_run",
+                "stub",
+                "adapter_contract",
+                "request_shaped_evidence",
+                "proxy",
+                "current_provider_id:tradier",
+                "current_provider_id:ibkr",
+                "current_provider_id:polygon",
+            ],
+            "requiredEvidenceFamilies": {
+                "internal_policy_grant": [
+                    "wolfystock_internal_policy_grant",
+                    "surface_authority_approval",
+                ],
+                "source_identity_provenance_chain": [
+                    "non_blocked_source_class",
+                    "source_identity",
+                    "source_authority",
+                    "provenance_chain",
+                ],
+                "licensed_backing": [
+                    "licensed_provider",
+                    "exchange",
+                    "issuer",
+                    "official_calendar",
+                    "approved_calendar_scope",
+                ],
+                "entitlement_use_rights": [
+                    "event_calendar_entitlement",
+                    "decision_use_rights",
+                    "redistribution_rights",
+                    "live_delayed_status",
+                    "sandbox_or_production",
+                ],
+                "sla_freshness": [
+                    "as_of",
+                    "freshness",
+                    "max_age_policy",
+                    "provider_sla_status",
+                ],
+                "event_taxonomy": [
+                    "earnings",
+                    "dividends",
+                    "ex_dividend",
+                    "splits",
+                    "corporate_actions",
+                    "fomc_macro_context_policy_scope",
+                ],
+                "confirmation_status": [
+                    "confirmed_or_estimated",
+                    "announcement_status",
+                ],
+                "event_identity": [
+                    "provider_event_id",
+                    "event_identity",
+                ],
+                "timezone_session": [
+                    "event_date",
+                    "event_time",
+                    "session",
+                    "timezone",
+                ],
+                "coverage_scope": [
+                    "symbol_or_underlying_coverage",
+                    "lookahead_window_or_date_range",
+                    "coverage_metadata",
+                ],
+            },
+            "nextSafeStep": "collect_observation_only_metadata_without_granting_authority",
+        },
         "optionsExpirationSourceCandidateGap": {
             "diagnosticOnly": True,
             "surface": "expiration_calendar",
@@ -692,6 +792,7 @@ def test_runtime_diagnostic_options_authority_summary_is_sanitized_and_non_autho
     serialized = json.dumps(summary, ensure_ascii=False, sort_keys=True)
 
     assert "optionsIvRankAuthority" in payload
+    assert "optionsEventSourceCandidateGap" in payload
     assert "optionsEventCalendarAuthority" in payload
     assert "optionsExpirationCalendarAuthority" in payload
     assert summary["diagnosticOnly"] is True
@@ -862,6 +963,126 @@ def test_runtime_diagnostic_projects_expiration_source_candidate_gap_safely(monk
         assert blocked not in serialized
 
 
+def test_runtime_diagnostic_projects_event_source_candidate_gap_safely(monkeypatch) -> None:
+    module = _load_script_module()
+
+    monkeypatch.setattr(
+        module,
+        "_fetch_json",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("endpoint fetch should not run")),
+    )
+    monkeypatch.setattr(
+        module,
+        "_build_tradier_options_live_probe_transport",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("tradier live probe should not run")),
+    )
+
+    payload = module.collect_diagnostic_bundle()
+    projection = payload["optionsEventSourceCandidateGap"]
+    serialized = json.dumps(projection, ensure_ascii=False, sort_keys=True)
+
+    assert projection["diagnosticOnly"] is True
+    assert projection["surface"] == "event_calendar"
+    assert projection["candidateOnly"] is True
+    assert projection["authorityGrant"] is False
+    assert projection["candidateSourceClass"] == "licensed_event_calendar_provider"
+    assert projection["missingEvidenceFamilies"] == [
+        "internal_policy_grant_missing",
+        "source_identity_provenance_chain_missing",
+        "licensed_backing_missing",
+        "entitlement_use_rights_missing",
+        "sla_freshness_missing",
+        "event_taxonomy_missing",
+        "confirmation_status_missing",
+        "event_identity_missing",
+        "timezone_session_missing",
+        "coverage_scope_missing",
+    ]
+    assert projection["forbiddenAuthorityInputs"] == [
+        "event_presence",
+        "event_count",
+        "event_type",
+        "timeline_evidence",
+        "generic_macro_context",
+        "provider_capabilities",
+        "source_labels",
+        "provider_self_claims",
+        "fixture",
+        "synthetic",
+        "fallback",
+        "dry_run",
+        "stub",
+        "adapter_contract",
+        "request_shaped_evidence",
+        "proxy",
+        "current_provider_id:tradier",
+        "current_provider_id:ibkr",
+        "current_provider_id:polygon",
+    ]
+    assert projection["requiredEvidenceFamilies"] == {
+        "internal_policy_grant": [
+            "wolfystock_internal_policy_grant",
+            "surface_authority_approval",
+        ],
+        "source_identity_provenance_chain": [
+            "non_blocked_source_class",
+            "source_identity",
+            "source_authority",
+            "provenance_chain",
+        ],
+        "licensed_backing": [
+            "licensed_provider",
+            "exchange",
+            "issuer",
+            "official_calendar",
+            "approved_calendar_scope",
+        ],
+        "entitlement_use_rights": [
+            "event_calendar_entitlement",
+            "decision_use_rights",
+            "redistribution_rights",
+            "live_delayed_status",
+            "sandbox_or_production",
+        ],
+        "sla_freshness": [
+            "as_of",
+            "freshness",
+            "max_age_policy",
+            "provider_sla_status",
+        ],
+        "event_taxonomy": [
+            "earnings",
+            "dividends",
+            "ex_dividend",
+            "splits",
+            "corporate_actions",
+            "fomc_macro_context_policy_scope",
+        ],
+        "confirmation_status": [
+            "confirmed_or_estimated",
+            "announcement_status",
+        ],
+        "event_identity": [
+            "provider_event_id",
+            "event_identity",
+        ],
+        "timezone_session": [
+            "event_date",
+            "event_time",
+            "session",
+            "timezone",
+        ],
+        "coverage_scope": [
+            "symbol_or_underlying_coverage",
+            "lookahead_window_or_date_range",
+            "coverage_metadata",
+        ],
+    }
+    assert projection["nextSafeStep"] == "collect_observation_only_metadata_without_granting_authority"
+    for blocked in ("http://", "https://", "Authorization", "Bearer", "token", "secret", "rawPayload"):
+        assert blocked not in serialized
+
+
 def test_runtime_diagnostic_projects_expiration_source_registry_candidate_safely(monkeypatch) -> None:
     module = _load_script_module()
 
@@ -981,6 +1202,7 @@ def test_runtime_diagnostic_projects_expiration_source_candidate_evidence_safely
     projection = payload["optionsExpirationSourceCandidateEvidence"]
     serialized = json.dumps(projection, ensure_ascii=False, sort_keys=True)
 
+    assert "optionsEventSourceCandidateGap" in payload
     assert "optionsExpirationSourceCandidateGap" in payload
     assert "optionsExpirationSourceRegistryCandidate" in payload
     assert "optionsAuthorityDiagnostics" in payload

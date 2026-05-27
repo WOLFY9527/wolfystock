@@ -37,6 +37,7 @@ from src.services.options_expiration_source_candidate_evidence import (
     build_expiration_calendar_source_candidate_evidence,
 )
 from src.services.options_authority_policy_matrix import (
+    build_options_event_calendar_source_candidate_gap,
     build_options_expiration_source_candidate_gap,
 )
 from src.services.options_iv_rank_authority import build_options_iv_rank_authority_diagnostic
@@ -74,6 +75,7 @@ _OPTIONS_CHAIN_PROBE_ENDPOINT_CLASS = "chain"
 _OPTIONS_AUTHORITY_DIAGNOSTIC_WARNING = (
     "Authority diagnostics and checklist completeness are diagnostic-only and not decisionGrade."
 )
+_EVENT_SOURCE_CANDIDATE_CLASS = "licensed_event_calendar_provider"
 _EXPIRATION_SOURCE_CANDIDATE_CLASS = "occ_opra_exchange_or_licensed_expiration_calendar"
 _EXPIRATION_SOURCE_REGISTRY_KEY = "options_lab.expiration_calendar_candidate_evidence"
 _EXPIRATION_SOURCE_REGISTRY_WARNING = (
@@ -357,6 +359,21 @@ def _collect_options_expiration_source_candidate_gap() -> dict[str, Any]:
     return {
         "diagnosticOnly": bool(contract.get("diagnosticOnly", True)),
         "surface": str(contract.get("surface") or "expiration_calendar"),
+        "candidateOnly": bool(contract.get("candidateOnly", True)),
+        "authorityGrant": bool(contract.get("authorityGrant", False)),
+        "candidateSourceClass": str(contract.get("candidateSourceClass") or ""),
+        "missingEvidenceFamilies": _normalize_contract_value(contract.get("missingEvidenceFamilies") or []),
+        "forbiddenAuthorityInputs": _normalize_contract_value(contract.get("forbiddenAuthorityInputs") or []),
+        "requiredEvidenceFamilies": _normalize_contract_value(contract.get("requiredEvidenceFamilies") or {}),
+        "nextSafeStep": str(contract.get("nextSafeStep") or ""),
+    }
+
+
+def _collect_options_event_source_candidate_gap() -> dict[str, Any]:
+    contract = build_options_event_calendar_source_candidate_gap(_EVENT_SOURCE_CANDIDATE_CLASS)
+    return {
+        "diagnosticOnly": bool(contract.get("diagnosticOnly", True)),
+        "surface": str(contract.get("surface") or "event_calendar"),
         "candidateOnly": bool(contract.get("candidateOnly", True)),
         "authorityGrant": bool(contract.get("authorityGrant", False)),
         "candidateSourceClass": str(contract.get("candidateSourceClass") or ""),
@@ -1276,6 +1293,7 @@ def collect_diagnostic_bundle(
         official_macro_diagnostic = _skipped_official_macro_diagnostic()
         alpaca_rotation_diagnostic = _skipped_alpaca_rotation_diagnostic()
         polygon_us_breadth_diagnostic = _skipped_polygon_us_breadth_diagnostic()
+    options_event_source_candidate_gap = _collect_options_event_source_candidate_gap()
     options_expiration_source_candidate_gap = _collect_options_expiration_source_candidate_gap()
     options_expiration_source_registry_candidate = _collect_options_expiration_source_registry_candidate()
     options_iv_rank_authority = _collect_options_iv_rank_authority()
@@ -1298,6 +1316,7 @@ def collect_diagnostic_bundle(
             options_event_calendar_authority,
             options_expiration_calendar_authority,
         ),
+        "optionsEventSourceCandidateGap": options_event_source_candidate_gap,
         "optionsExpirationSourceCandidateGap": options_expiration_source_candidate_gap,
         "optionsExpirationSourceCandidateEvidence": _collect_options_expiration_source_candidate_evidence(),
         "optionsExpirationSourceRegistryCandidate": options_expiration_source_registry_candidate,
@@ -1447,6 +1466,7 @@ def main(argv: list[str] | None = None) -> int:
                 options_event_calendar_authority,
                 options_expiration_calendar_authority,
             ),
+            "optionsEventSourceCandidateGap": _collect_options_event_source_candidate_gap(),
             "optionsExpirationSourceCandidateGap": _collect_options_expiration_source_candidate_gap(),
             "optionsExpirationSourceCandidateEvidence": _collect_options_expiration_source_candidate_evidence(),
             "optionsExpirationSourceRegistryCandidate": _collect_options_expiration_source_registry_candidate(),
