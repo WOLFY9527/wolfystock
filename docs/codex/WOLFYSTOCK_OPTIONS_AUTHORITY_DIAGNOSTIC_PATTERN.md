@@ -68,11 +68,11 @@ Use checklist families as diagnostic structure only. They help explain readiness
 
 ## Current trilogy behavior
 
-Current diagnostic behavior is intentionally asymmetric:
+Current diagnostic behavior is input-dependent but diagnostic-only:
 
-- `event-calendar` and `expiration-calendar` may emit `authorityEvidenceChecklist` when checklist evidence or policy context is supplied.
-- `iv-rank` may remain reason-code and checklist-family driven unless a future implementation explicitly adds an emitted checklist object.
-- This asymmetry is allowed only when it stays documented and tested as diagnostic-only behavior.
+- `iv-rank`, `event-calendar`, and `expiration-calendar` may emit `authorityEvidenceChecklist` or equivalent checklist/gap output when checklist evidence or policy context is supplied.
+- When that context is absent, a surface may still fall back to reason codes or checklist-family gap summaries.
+- Emitted checklist completeness remains diagnostic readiness only, not authority, not decision readiness, and not `decisionGrade`.
 
 ## Interpretation warning
 
