@@ -148,6 +148,48 @@ def test_internal_policy_is_required_before_any_expiration_calendar_payload_can_
             },
             "exchange": "OPRA",
             "authorizedSourceMetadata": {"venue": "opra", "calendarType": "listed_options"},
+            "provenanceEvidence": {
+                "primarySources": ["occ", "opra", "exchange", "licensed_provider"],
+                "calendarSource": "listed_options_calendar",
+            },
+            "entitlementMetadata": {
+                "optionsEntitlement": "enabled",
+                "liveDelayedStatus": "delayed",
+                "environment": "production",
+                "decisionUseRights": "approved_internal_diagnostic_only",
+                "redistributionRights": "internal_only",
+                "auditTimestamp": "2026-05-26T12:00:10Z",
+            },
+            "slaEvidence": {
+                "maxAgePolicy": "pt15m",
+                "providerSlaStatus": "within_policy",
+                "freshnessSeconds": 32,
+                "freshnessState": "fresh",
+                "latencyState": "nominal",
+                "errorState": "none",
+            },
+            "expirationTaxonomyEvidence": {
+                "weekly": True,
+                "monthly": True,
+                "quarterly": True,
+                "standard": True,
+                "leaps": True,
+                "specialExpirations": False,
+                "classificationSource": "occ_calendar_taxonomy",
+            },
+            "adjustedDeliverableEvidence": {
+                "occMemoReference": "occ_memo_2026_042",
+                "effectiveDate": "2026-05-20",
+                "adjustedRootClass": "TEM1",
+                "deliverableComponents": ["100 TEM"],
+                "multiplier": 100,
+                "cashInLieu": 0,
+                "standardContract": False,
+                "contractSymbolMapping": {
+                    "preAdjustment": "TEM260619C00050000",
+                    "postAdjustment": "TEM1260619C00050000",
+                },
+            },
             "sandboxOrProduction": "production",
         }
     )
@@ -160,6 +202,65 @@ def test_internal_policy_is_required_before_any_expiration_calendar_payload_can_
     assert authorized["authoritative"] is True
     assert authorized["authorityState"] == "authoritative"
     assert authorized["reasonCodes"] == []
+    assert authorized["authorityEvidenceChecklist"] == {
+        "provenance": {
+            "present": True,
+            "required": True,
+            "fields": ["occ", "opra", "exchange", "licensed_provider"],
+        },
+        "entitlement": {
+            "present": True,
+            "required": True,
+            "fields": [
+                "options_entitlement",
+                "live_delayed_status",
+                "environment",
+                "decision_use_rights",
+                "redistribution_rights",
+                "audit_timestamp",
+            ],
+        },
+        "sla_freshness": {
+            "present": True,
+            "required": True,
+            "fields": [
+                "as_of",
+                "freshness",
+                "max_age_policy",
+                "provider_sla_status",
+                "freshness_seconds",
+                "freshness_state",
+                "latency_or_error_state",
+            ],
+        },
+        "expiration_taxonomy": {
+            "present": True,
+            "required": True,
+            "fields": [
+                "weekly",
+                "monthly",
+                "quarterly",
+                "standard",
+                "leaps",
+                "special_expirations",
+                "classification_source",
+            ],
+        },
+        "adjusted_deliverable": {
+            "present": True,
+            "required": True,
+            "fields": [
+                "occ_memo_or_equivalent",
+                "effective_date",
+                "adjusted_root_or_class",
+                "deliverable_components",
+                "multiplier",
+                "cash_in_lieu",
+                "standard_or_non_standard",
+                "contract_symbol_mapping",
+            ],
+        },
+    }
 
 
 def test_provider_id_marker_keeps_expiration_calendar_non_authoritative_even_when_other_fields_look_authoritative() -> None:
@@ -194,8 +295,114 @@ def test_provider_id_marker_keeps_expiration_calendar_non_authoritative_even_whe
     assert diagnostic["reasonCodes"] == [
         "expiration_calendar_authority_missing",
         "expiration_calendar_fallback_not_authoritative",
+        "expiration_calendar_provenance_evidence_missing",
+        "expiration_calendar_entitlement_evidence_missing",
+        "expiration_calendar_sla_evidence_missing",
+        "expiration_calendar_taxonomy_evidence_missing",
+        "expiration_calendar_adjusted_deliverable_evidence_missing",
         "expiration_calendar_coverage_not_authority",
     ]
+
+
+def test_internal_policy_payload_without_checklist_evidence_stays_non_authoritative_even_when_coverage_looks_complete() -> None:
+    diagnostic = build_options_expiration_calendar_authority_diagnostic(
+        {
+            "providerId": "future_authorized_provider",
+            "sourceType": "live",
+            "sourceAuthority": "authorized",
+            "authorityPolicySource": INTERNAL_OPTIONS_EXPIRATION_CALENDAR_AUTHORITY_POLICY_SOURCE,
+            "expirationCalendarStatus": "available",
+            "asOf": "2026-05-26T12:00:00Z",
+            "freshness": "fresh",
+            "underlying": "TEM",
+            "symbol": "TEM",
+            "expirationDates": ["2026-06-19", "2026-06-26", "2026-08-21", "2027-01-15"],
+            "expirationCount": 4,
+            "expirationTypes": ["weekly", "monthly", "quarterly", "leaps"],
+            "dateRange": {"start": "2026-06-19", "end": "2027-01-15"},
+            "lookaheadWindow": "210d",
+            "coverageMetadata": {
+                "expirationCoverage": "complete",
+                "expirationCount": 4,
+                "chainAvailability": "complete",
+            },
+            "exchange": "OPRA",
+            "authorizedSourceMetadata": {"venue": "opra", "calendarType": "listed_options"},
+            "sandboxOrProduction": "production",
+        }
+    )
+
+    assert diagnostic["diagnosticOnly"] is True
+    assert diagnostic["authorityState"] == "non_authoritative"
+    assert diagnostic["authoritative"] is False
+    assert diagnostic["reasonCodes"] == [
+        "expiration_calendar_authority_missing",
+        "expiration_calendar_provenance_evidence_missing",
+        "expiration_calendar_entitlement_evidence_missing",
+        "expiration_calendar_sla_evidence_missing",
+        "expiration_calendar_taxonomy_evidence_missing",
+        "expiration_calendar_adjusted_deliverable_evidence_missing",
+        "expiration_calendar_coverage_not_authority",
+    ]
+    assert diagnostic["authorityEvidenceChecklist"] == {
+        "provenance": {
+            "present": False,
+            "required": True,
+            "fields": ["occ", "opra", "exchange", "licensed_provider"],
+        },
+        "entitlement": {
+            "present": False,
+            "required": True,
+            "fields": [
+                "options_entitlement",
+                "live_delayed_status",
+                "environment",
+                "decision_use_rights",
+                "redistribution_rights",
+                "audit_timestamp",
+            ],
+        },
+        "sla_freshness": {
+            "present": False,
+            "required": True,
+            "fields": [
+                "as_of",
+                "freshness",
+                "max_age_policy",
+                "provider_sla_status",
+                "freshness_seconds",
+                "freshness_state",
+                "latency_or_error_state",
+            ],
+        },
+        "expiration_taxonomy": {
+            "present": False,
+            "required": True,
+            "fields": [
+                "weekly",
+                "monthly",
+                "quarterly",
+                "standard",
+                "leaps",
+                "special_expirations",
+                "classification_source",
+            ],
+        },
+        "adjusted_deliverable": {
+            "present": False,
+            "required": True,
+            "fields": [
+                "occ_memo_or_equivalent",
+                "effective_date",
+                "adjusted_root_or_class",
+                "deliverable_components",
+                "multiplier",
+                "cash_in_lieu",
+                "standard_or_non_standard",
+                "contract_symbol_mapping",
+            ],
+        },
+    }
 
 
 def test_snake_case_provider_self_claim_alias_is_ignored_for_expiration_calendar() -> None:
@@ -311,5 +518,10 @@ def test_proxy_expiration_calendar_and_provider_self_claim_only_marker_stay_non_
         "expiration_calendar_authority_missing",
         "expiration_calendar_proxy_not_authoritative",
         "expiration_calendar_provider_self_claim_only_not_authoritative",
+        "expiration_calendar_provenance_evidence_missing",
+        "expiration_calendar_entitlement_evidence_missing",
+        "expiration_calendar_sla_evidence_missing",
+        "expiration_calendar_taxonomy_evidence_missing",
+        "expiration_calendar_adjusted_deliverable_evidence_missing",
         "expiration_calendar_coverage_not_authority",
     ]

@@ -79,3 +79,52 @@ def test_required_evidence_includes_authority_policy_source(surface: str) -> Non
     assert policy["authority_grants"]["provider_ids"] == ()
     assert policy["authority_grants"]["source_types"] == ()
     assert policy["authoritative_by_default"] is False
+
+
+def test_expiration_calendar_policy_encodes_future_authority_checklist_families() -> None:
+    policy = get_options_authority_surface_policy("expiration_calendar")
+
+    assert policy["required_future_evidence_families"] == {
+        "provenance": (
+            "occ",
+            "opra",
+            "exchange",
+            "licensed_provider",
+        ),
+        "entitlement": (
+            "options_entitlement",
+            "live_delayed_status",
+            "environment",
+            "decision_use_rights",
+            "redistribution_rights",
+            "audit_timestamp",
+        ),
+        "sla_freshness": (
+            "as_of",
+            "freshness",
+            "max_age_policy",
+            "provider_sla_status",
+            "freshness_seconds",
+            "freshness_state",
+            "latency_or_error_state",
+        ),
+        "expiration_taxonomy": (
+            "weekly",
+            "monthly",
+            "quarterly",
+            "standard",
+            "leaps",
+            "special_expirations",
+            "classification_source",
+        ),
+        "adjusted_deliverable": (
+            "occ_memo_or_equivalent",
+            "effective_date",
+            "adjusted_root_or_class",
+            "deliverable_components",
+            "multiplier",
+            "cash_in_lieu",
+            "standard_or_non_standard",
+            "contract_symbol_mapping",
+        ),
+    }

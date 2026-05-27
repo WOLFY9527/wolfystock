@@ -56,6 +56,50 @@ _EVENT_CALENDAR_FUTURE_CANDIDATE_SOURCE_CLASSES = (
 _EXPIRATION_CALENDAR_FUTURE_CANDIDATE_SOURCE_CLASSES = (
     "occ_opra_exchange_or_licensed_expiration_calendar",
 )
+EXPIRATION_CALENDAR_REQUIRED_FUTURE_EVIDENCE_FAMILIES = {
+    "provenance": (
+        "occ",
+        "opra",
+        "exchange",
+        "licensed_provider",
+    ),
+    "entitlement": (
+        "options_entitlement",
+        "live_delayed_status",
+        "environment",
+        "decision_use_rights",
+        "redistribution_rights",
+        "audit_timestamp",
+    ),
+    "sla_freshness": (
+        "as_of",
+        "freshness",
+        "max_age_policy",
+        "provider_sla_status",
+        "freshness_seconds",
+        "freshness_state",
+        "latency_or_error_state",
+    ),
+    "expiration_taxonomy": (
+        "weekly",
+        "monthly",
+        "quarterly",
+        "standard",
+        "leaps",
+        "special_expirations",
+        "classification_source",
+    ),
+    "adjusted_deliverable": (
+        "occ_memo_or_equivalent",
+        "effective_date",
+        "adjusted_root_or_class",
+        "deliverable_components",
+        "multiplier",
+        "cash_in_lieu",
+        "standard_or_non_standard",
+        "contract_symbol_mapping",
+    ),
+}
 
 _COMMON_POLICY_FLAGS = {
     "diagnostic_only": True,
@@ -143,6 +187,7 @@ _OPTIONS_AUTHORITY_POLICY_MATRIX = {
             "adjustmentHandling",
             "deliverableHandling",
         ),
+        "required_future_evidence_families": EXPIRATION_CALENDAR_REQUIRED_FUTURE_EVIDENCE_FAMILIES,
         "future_candidate_source_classes": _EXPIRATION_CALENDAR_FUTURE_CANDIDATE_SOURCE_CLASSES,
     },
 }

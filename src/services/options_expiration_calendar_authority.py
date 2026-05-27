@@ -6,6 +6,10 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping, Sequence
 
+from src.services.options_authority_policy_matrix import (
+    EXPIRATION_CALENDAR_REQUIRED_FUTURE_EVIDENCE_FAMILIES,
+)
+
 
 INTERNAL_OPTIONS_EXPIRATION_CALENDAR_AUTHORITY_POLICY_SOURCE = (
     "wolfystock_options_expiration_calendar_authority_policy_v1"
@@ -48,6 +52,13 @@ _URL_LIKE_HOST_RE = re.compile(r"^[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?(?:[/?#].*
 _AUTHORITATIVE_SOURCE_AUTHORITIES = frozenset(
     {"authorized", "authoritative", "licensed", "internal_authorized", "provider_reported_authorized"}
 )
+_CHECKLIST_REASON_CODES = {
+    "provenance": "expiration_calendar_provenance_evidence_missing",
+    "entitlement": "expiration_calendar_entitlement_evidence_missing",
+    "sla_freshness": "expiration_calendar_sla_evidence_missing",
+    "expiration_taxonomy": "expiration_calendar_taxonomy_evidence_missing",
+    "adjusted_deliverable": "expiration_calendar_adjusted_deliverable_evidence_missing",
+}
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -177,6 +188,18 @@ def _date_range(value: Any) -> dict[str, str] | None:
     return result or None
 
 
+def _has_value(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        return any(_has_value(item) for item in value.values())
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return any(_has_value(item) for item in value)
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, (int, float)):
+        return True
+    return bool(_text(value))
+
+
 def _string_list(value: Any) -> list[str]:
     if isinstance(value, str):
         sanitized = _sanitize_text(value)
@@ -267,6 +290,143 @@ def _dedupe(codes: Sequence[str]) -> list[str]:
     return ordered
 
 
+def _family_mapping(data: Mapping[str, Any], *keys: str) -> dict[str, Any]:
+    for key in keys:
+        value = _value(data, key)
+        if isinstance(value, Mapping):
+            return _mapping(value)
+    return {}
+
+
+def _family_present_provenance(data: Mapping[str, Any]) -> bool:
+    provenance = _family_mapping(
+        data,
+        "provenanceEvidence",
+        "provenance_evidence",
+        "authorityProvenanceEvidence",
+        "authority_provenance_evidence",
+    )
+    primary_sources = _string_list(_value(provenance, "primarySources", "primary_sources"))
+    calendar_source = _sanitize_text(_value(provenance, "calendarSource", "calendar_source"))
+    allowed_sources = {"occ", "opra", "exchange", "licensed_provider"}
+    return bool(primary_sources and allowed_sources.intersection({_normalized_text(item) for item in primary_sources}) and calendar_source)
+
+
+def _family_present_entitlement(data: Mapping[str, Any]) -> bool:
+    entitlement = _family_mapping(
+        data,
+        "entitlementMetadata",
+        "entitlement_metadata",
+        "authorityEntitlementMetadata",
+        "authority_entitlement_metadata",
+    )
+    return all(
+        _has_value(_value(entitlement, *keys))
+        for keys in (
+            ("optionsEntitlement", "options_entitlement"),
+            ("liveDelayedStatus", "live_delayed_status"),
+            ("environment",),
+            ("decisionUseRights", "decision_use_rights"),
+            ("redistributionRights", "redistribution_rights"),
+            ("auditTimestamp", "audit_timestamp"),
+        )
+    )
+
+
+def _family_present_sla(data: Mapping[str, Any], as_of: str | None, freshness: str | None) -> bool:
+    sla = _family_mapping(
+        data,
+        "slaEvidence",
+        "sla_evidence",
+        "freshnessEvidence",
+        "freshness_evidence",
+    )
+    has_latency_or_error_state = any(
+        _has_value(_value(sla, *keys))
+        for keys in (
+            ("latencyState", "latency_state"),
+            ("errorState", "error_state"),
+        )
+    )
+    return bool(
+        as_of
+        and freshness
+        and _has_value(_value(sla, "maxAgePolicy", "max_age_policy"))
+        and _has_value(_value(sla, "providerSlaStatus", "provider_sla_status"))
+        and _has_value(_value(sla, "freshnessSeconds", "freshness_seconds"))
+        and _has_value(_value(sla, "freshnessState", "freshness_state"))
+        and has_latency_or_error_state
+    )
+
+
+def _family_present_taxonomy(data: Mapping[str, Any]) -> bool:
+    taxonomy = _family_mapping(
+        data,
+        "expirationTaxonomyEvidence",
+        "expiration_taxonomy_evidence",
+        "taxonomyEvidence",
+        "taxonomy_evidence",
+    )
+    return all(
+        _has_value(_value(taxonomy, *keys))
+        for keys in (
+            ("weekly",),
+            ("monthly",),
+            ("quarterly",),
+            ("standard",),
+            ("leaps", "LEAPS"),
+            ("specialExpirations", "special_expirations"),
+            ("classificationSource", "classification_source"),
+        )
+    )
+
+
+def _family_present_adjusted_deliverable(data: Mapping[str, Any]) -> bool:
+    adjusted = _family_mapping(
+        data,
+        "adjustedDeliverableEvidence",
+        "adjusted_deliverable_evidence",
+        "deliverableEvidence",
+        "deliverable_evidence",
+    )
+    return all(
+        _has_value(_value(adjusted, *keys))
+        for keys in (
+            ("occMemoReference", "occ_memo_reference", "equivalentReference", "equivalent_reference"),
+            ("effectiveDate", "effective_date"),
+            ("adjustedRootClass", "adjusted_root_class", "adjustedRootOrClass", "adjusted_root_or_class"),
+            ("deliverableComponents", "deliverable_components"),
+            ("multiplier",),
+            ("cashInLieu", "cash_in_lieu"),
+            ("standardContract", "standard_contract", "nonStandardFlag", "non_standard_flag"),
+            ("contractSymbolMapping", "contract_symbol_mapping"),
+        )
+    )
+
+
+def _build_authority_evidence_checklist(
+    data: Mapping[str, Any],
+    *,
+    as_of: str | None,
+    freshness: str | None,
+) -> dict[str, dict[str, Any]]:
+    family_presence = {
+        "provenance": _family_present_provenance(data),
+        "entitlement": _family_present_entitlement(data),
+        "sla_freshness": _family_present_sla(data, as_of, freshness),
+        "expiration_taxonomy": _family_present_taxonomy(data),
+        "adjusted_deliverable": _family_present_adjusted_deliverable(data),
+    }
+    return {
+        family: {
+            "present": family_presence[family],
+            "required": True,
+            "fields": list(fields),
+        }
+        for family, fields in EXPIRATION_CALENDAR_REQUIRED_FUTURE_EVIDENCE_FAMILIES.items()
+    }
+
+
 def build_options_expiration_calendar_authority_diagnostic(
     evidence: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
@@ -302,6 +462,20 @@ def build_options_expiration_calendar_authority_diagnostic(
     sandbox_or_production = _sanitize_text(
         _value(data, "sandboxOrProduction", "sandbox_or_production")
     )
+    checklist_requested = any(
+        (
+            authority_policy_source == INTERNAL_OPTIONS_EXPIRATION_CALENDAR_AUTHORITY_POLICY_SOURCE,
+            isinstance(_value(data, "provenanceEvidence", "provenance_evidence"), Mapping),
+            isinstance(_value(data, "entitlementMetadata", "entitlement_metadata"), Mapping),
+            isinstance(_value(data, "slaEvidence", "sla_evidence"), Mapping),
+            isinstance(
+                _value(data, "expirationTaxonomyEvidence", "expiration_taxonomy_evidence"), Mapping
+            ),
+            isinstance(
+                _value(data, "adjustedDeliverableEvidence", "adjusted_deliverable_evidence"), Mapping
+            ),
+        )
+    )
 
     evidence_present = any(
         (
@@ -336,6 +510,15 @@ def build_options_expiration_calendar_authority_diagnostic(
         reason_codes.append("expiration_calendar_coverage_metadata_missing")
     if not date_range and not lookahead_window:
         reason_codes.append("expiration_calendar_date_range_missing")
+    authority_evidence_checklist = (
+        _build_authority_evidence_checklist(data, as_of=as_of, freshness=freshness)
+        if checklist_requested
+        else None
+    )
+    if authority_evidence_checklist:
+        for family, checklist_entry in authority_evidence_checklist.items():
+            if not checklist_entry["present"]:
+                reason_codes.append(_CHECKLIST_REASON_CODES[family])
 
     authoritative = bool(
         evidence_present
@@ -347,6 +530,8 @@ def build_options_expiration_calendar_authority_diagnostic(
         and (expiration_dates or expiration_count)
         and (date_range or lookahead_window)
         and coverage_metadata
+        and authority_evidence_checklist
+        and all(entry["present"] for entry in authority_evidence_checklist.values())
         and not _source_reason_codes(data)
     )
     if evidence_present and not authoritative and coverage_metadata.get("expirationCoverage"):
@@ -380,5 +565,10 @@ def build_options_expiration_calendar_authority_diagnostic(
         "reasonCodes": [] if authoritative else _dedupe(reason_codes),
         "requiredFutureAuthorityEvidence": list(
             REQUIRED_FUTURE_EXPIRATION_CALENDAR_AUTHORITY_EVIDENCE_FIELDS
+        ),
+        **(
+            {"authorityEvidenceChecklist": authority_evidence_checklist}
+            if authority_evidence_checklist
+            else {}
         ),
     }
