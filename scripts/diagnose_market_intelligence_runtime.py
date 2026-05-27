@@ -46,6 +46,10 @@ from src.services.us_breadth_contracts import (
     US_BREADTH_SYMBOLS,
     build_us_breadth_missing_authority_diagnostic,
 )
+from src.services.market_data_source_registry import (
+    project_source_registry_metadata,
+    resolve_source_label,
+)
 
 
 DEFAULT_TIMEOUT_SECONDS = 3.0
@@ -68,6 +72,10 @@ _OPTIONS_AUTHORITY_DIAGNOSTIC_WARNING = (
     "Authority diagnostics and checklist completeness are diagnostic-only and not decisionGrade."
 )
 _EXPIRATION_SOURCE_CANDIDATE_CLASS = "occ_opra_exchange_or_licensed_expiration_calendar"
+_EXPIRATION_SOURCE_REGISTRY_KEY = "options_lab.expiration_calendar_candidate_evidence"
+_EXPIRATION_SOURCE_REGISTRY_WARNING = (
+    "Registry metadata is diagnostic-only, candidate-only, and non-authoritative."
+)
 
 
 def _skipped_official_macro_diagnostic(reason: str = "not_requested") -> dict[str, Any]:
@@ -353,6 +361,31 @@ def _collect_options_expiration_source_candidate_gap() -> dict[str, Any]:
         "forbiddenAuthorityInputs": _normalize_contract_value(contract.get("forbiddenAuthorityInputs") or []),
         "requiredEvidenceFamilies": _normalize_contract_value(contract.get("requiredEvidenceFamilies") or {}),
         "nextSafeStep": str(contract.get("nextSafeStep") or ""),
+    }
+
+
+def _collect_options_expiration_source_registry_candidate() -> dict[str, Any]:
+    metadata = project_source_registry_metadata(_EXPIRATION_SOURCE_REGISTRY_KEY)
+    source_type = str(metadata.get("sourceType") or "missing")
+    return {
+        "diagnosticOnly": bool(metadata.get("diagnosticOnly", True)),
+        "candidateOnly": bool(metadata.get("candidateOnly", True)),
+        "sourceKey": _EXPIRATION_SOURCE_REGISTRY_KEY,
+        "sourceType": source_type,
+        "sourceLabel": resolve_source_label(_EXPIRATION_SOURCE_REGISTRY_KEY, source_type=source_type),
+        "candidateSourceClass": str(metadata.get("candidateSourceClass") or ""),
+        "metadataFamilies": {
+            "provenance": _normalize_contract_value(metadata.get("provenanceFamily") or []),
+            "entitlement": _normalize_contract_value(metadata.get("entitlementFamily") or []),
+            "slaFreshness": _normalize_contract_value(metadata.get("slaFreshnessFamily") or []),
+            "expirationTaxonomy": _normalize_contract_value(metadata.get("expirationTaxonomyFamily") or []),
+            "adjustedDeliverableCorporateAction": _normalize_contract_value(
+                metadata.get("adjustedDeliverableCorporateActionFamily") or []
+            ),
+        },
+        "forbiddenAuthorityInputs": _normalize_contract_value(metadata.get("forbiddenAuthorityInputs") or []),
+        "warning": _EXPIRATION_SOURCE_REGISTRY_WARNING,
+        "nextSafeStep": str(metadata.get("nextSafeStep") or ""),
     }
 
 
@@ -1212,6 +1245,7 @@ def collect_diagnostic_bundle(
         alpaca_rotation_diagnostic = _skipped_alpaca_rotation_diagnostic()
         polygon_us_breadth_diagnostic = _skipped_polygon_us_breadth_diagnostic()
     options_expiration_source_candidate_gap = _collect_options_expiration_source_candidate_gap()
+    options_expiration_source_registry_candidate = _collect_options_expiration_source_registry_candidate()
     options_iv_rank_authority = _collect_options_iv_rank_authority()
     options_event_calendar_authority = _collect_options_event_calendar_authority()
     options_expiration_calendar_authority = _collect_options_expiration_calendar_authority()
@@ -1233,6 +1267,7 @@ def collect_diagnostic_bundle(
             options_expiration_calendar_authority,
         ),
         "optionsExpirationSourceCandidateGap": options_expiration_source_candidate_gap,
+        "optionsExpirationSourceRegistryCandidate": options_expiration_source_registry_candidate,
         "optionsIvRankAuthority": options_iv_rank_authority,
         "optionsEventCalendarAuthority": options_event_calendar_authority,
         "optionsExpirationCalendarAuthority": options_expiration_calendar_authority,
@@ -1380,6 +1415,7 @@ def main(argv: list[str] | None = None) -> int:
                 options_expiration_calendar_authority,
             ),
             "optionsExpirationSourceCandidateGap": _collect_options_expiration_source_candidate_gap(),
+            "optionsExpirationSourceRegistryCandidate": _collect_options_expiration_source_registry_candidate(),
             "optionsIvRankAuthority": options_iv_rank_authority,
             "optionsEventCalendarAuthority": options_event_calendar_authority,
             "optionsExpirationCalendarAuthority": options_expiration_calendar_authority,
