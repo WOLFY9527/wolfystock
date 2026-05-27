@@ -1341,6 +1341,44 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(payload.capacity_cleanup_plan["estimated_candidate_sessions"], 1)
         self.assertEqual(remaining.total_log_count, 1)
 
+    def test_storage_summary_read_path_with_read_capability_never_calls_cleanup(self) -> None:
+        now = datetime.now()
+        self._record_event(
+            session_id="old-error",
+            event_name="AnalysisFailed",
+            level="ERROR",
+            category="analysis",
+            message="old failure",
+            status="failed",
+            event_at=now - timedelta(days=120),
+        )
+
+        with (
+            patch("src.services.admin_logs_service.get_db", return_value=self.db),
+            patch(
+                "src.services.admin_logs_service.get_config",
+                return_value=_admin_logs_config(
+                    admin_logs_storage_soft_limit_mb=1,
+                    admin_logs_storage_hard_limit_mb=2,
+                    admin_logs_auto_cleanup_enabled=True,
+                ),
+            ),
+            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_measurement", return_value=_storage_measurement(3 * 1024 * 1024)),
+            patch(
+                "src.services.admin_logs_service.AdminLogsRetentionService.cleanup",
+                side_effect=AssertionError("storage summary must not invoke cleanup"),
+            ),
+        ):
+            payload = admin_logs.get_log_storage_summary(_=_admin_user_with_capabilities("ops:logs:read"))
+            remaining = admin_logs.get_log_storage_summary(_=_admin_user_with_capabilities("ops:logs:read"))
+
+        self.assertTrue(payload.capacity_cleanup_recommended)
+        self.assertTrue(payload.auto_cleanup_enabled)
+        self.assertFalse(payload.auto_cleanup_performed)
+        self.assertEqual(payload.capacity_cleanup_plan["mode"], "capacity")
+        self.assertEqual(payload.capacity_cleanup_plan["estimated_candidate_sessions"], 1)
+        self.assertEqual(remaining.total_log_count, 1)
+
     def test_storage_summary_capacity_cleanup_plan_keeps_preview_metadata_explicit(self) -> None:
         now = datetime.now()
         self._record_event(

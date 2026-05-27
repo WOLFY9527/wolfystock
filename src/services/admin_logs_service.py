@@ -1218,29 +1218,15 @@ class AdminLogsRetentionService:
         capacity_plan = self.capacity_cleanup_plan()
         auto_cleanup_performed = False
         auto_cleanup_message = None
-        auto_cleanup_recent = (
-            self.__class__._last_auto_cleanup_at is not None
-            and now - self.__class__._last_auto_cleanup_at < self.__class__._auto_cleanup_min_interval
-        )
-        cleanup_failed_message = None
         if (
             policy.auto_cleanup_enabled
             and storage_bytes is not None
             and storage_bytes >= policy.storage_hard_limit_bytes
             and capacity_plan["estimated_candidate_sessions"] > 0
-            and not auto_cleanup_recent
         ):
-            try:
-                cleanup_result = self.cleanup(mode="capacity", dry_run=False, batch_size=policy.cleanup_batch_size)
-                auto_cleanup_performed = cleanup_result["deleted_log_count"] > 0
-                if auto_cleanup_performed:
-                    self.__class__._last_auto_cleanup_at = now
-                auto_cleanup_message = cleanup_result.get("message")
-            except ValueError as exc:
-                auto_cleanup_message = str(exc)
-                cleanup_failed_message = str(exc)
-        elif auto_cleanup_recent:
-            auto_cleanup_message = "Automatic cleanup was recently attempted; waiting before the next batch."
+            auto_cleanup_message = (
+                "Storage summary is advisory only. Use the explicit cleanup endpoint with write capability to run capacity cleanup."
+            )
         summary = {
             "total_log_count": total_logs,
             "session_count": total_logs,
@@ -1303,26 +1289,6 @@ class AdminLogsRetentionService:
                     "capacity_cleanup_recommended": capacity_cleanup_recommended,
                 },
                 fingerprint=f"admin_logs.storage:{status}:{','.join(sorted(set(reasons))) or 'health'}",
-                dedupe_window=timedelta(minutes=30),
-            )
-        if auto_cleanup_performed:
-            self._emit_notification_event(
-                event_type="admin_logs.cleanup",
-                severity="warning",
-                title="Admin Logs capacity cleanup performed",
-                message=auto_cleanup_message or "Automatic Admin Logs capacity cleanup deleted old sessions.",
-                payload={"mode": "capacity", "status": status, "auto_cleanup_performed": True},
-                fingerprint="admin_logs.cleanup:auto",
-                dedupe_window=timedelta(minutes=30),
-            )
-        if cleanup_failed_message:
-            self._emit_notification_event(
-                event_type="admin_logs.cleanup",
-                severity="critical",
-                title="Admin Logs capacity cleanup failed",
-                message=cleanup_failed_message,
-                payload={"mode": "capacity", "status": status},
-                fingerprint=f"admin_logs.cleanup:failed:{cleanup_failed_message}",
                 dedupe_window=timedelta(minutes=30),
             )
         return summary
