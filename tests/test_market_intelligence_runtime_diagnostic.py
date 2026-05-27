@@ -304,6 +304,7 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
                 "providerId",
                 "sourceType",
                 "sourceAuthority",
+                "authorityPolicySource",
                 "asOf",
                 "freshness",
                 "lookbackWindow",
@@ -403,6 +404,7 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
             "reasonCodes": [
                 "expiration_calendar_authority_missing",
                 "expiration_calendar_fixture_not_authoritative",
+                "expiration_calendar_synthetic_not_authoritative",
                 "expiration_calendar_source_authority_missing",
                 "expiration_calendar_asof_or_freshness_missing",
                 "expiration_calendar_coverage_not_authority",

@@ -56,6 +56,7 @@ def test_fixture_event_calendar_stays_non_authoritative_with_explicit_gap_codes(
     assert diagnostic["reasonCodes"] == [
         "event_calendar_authority_missing",
         "event_calendar_fixture_not_authoritative",
+        "event_calendar_synthetic_not_authoritative",
         "event_calendar_source_authority_missing",
         "event_calendar_asof_or_freshness_missing",
         "event_calendar_confirmation_status_missing",
@@ -149,3 +150,70 @@ def test_internal_policy_is_required_before_any_event_calendar_payload_can_be_au
     assert authorized["authoritative"] is True
     assert authorized["authorityState"] == "authoritative"
     assert authorized["reasonCodes"] == []
+
+
+def test_provider_id_marker_keeps_event_calendar_non_authoritative_even_when_other_fields_look_authoritative() -> None:
+    diagnostic = build_options_event_calendar_authority_diagnostic(
+        {
+            "providerId": "request_payload",
+            "sourceType": "live",
+            "sourceAuthority": "authorized",
+            "authorityPolicySource": INTERNAL_OPTIONS_EVENT_CALENDAR_AUTHORITY_POLICY_SOURCE,
+            "eventCalendarStatus": "available",
+            "asOf": "2026-05-26T12:00:00Z",
+            "freshness": "fresh",
+            "eventTypesCovered": ["earnings", "dividends", "splits", "fomc"],
+            "underlyingCoverage": ["TEM"],
+            "dateRange": {"start": "2026-05-26", "end": "2026-06-26"},
+            "timezone": "America/New_York",
+            "sessionMetadata": {"session": "regular"},
+            "confirmationStatus": "confirmed",
+            "eventId": "evt-001",
+            "providerEventId": "provider-evt-001",
+            "coverageMetadata": {"eventCount": 4},
+            "sandboxOrProduction": "production",
+        }
+    )
+
+    assert diagnostic["authorityState"] == "non_authoritative"
+    assert diagnostic["authoritative"] is False
+    assert diagnostic["reasonCodes"] == [
+        "event_calendar_authority_missing",
+        "event_calendar_request_supplied_not_authoritative",
+    ]
+
+
+def test_snake_case_provider_self_claim_alias_is_ignored_for_event_calendar() -> None:
+    diagnostic = build_options_event_calendar_authority_diagnostic(
+        {
+            "providerId": "request_payload",
+            "sourceType": "request_supplied",
+            "sourceAuthority": "provider_self_claim",
+            "authorityPolicySource": "provider_documentation",
+            "eventCalendarStatus": "available",
+            "asOf": "2026-05-26T12:00:00Z",
+            "freshness": "fresh",
+            "eventTypesCovered": ["earnings", "dividends", "splits", "fomc"],
+            "symbolCoverage": ["TEM"],
+            "lookaheadWindow": "30d",
+            "timezone": "America/New_York",
+            "sessionMetadata": {"session": "pre_market"},
+            "confirmationStatus": "confirmed",
+            "eventId": "evt-001",
+            "providerEventId": "provider-evt-001",
+            "coverageMetadata": {"eventCount": 4},
+            "sandboxOrProduction": "production",
+            "provider_decision_authority_claim": True,
+            "recommendation_authority_claim": True,
+            "notes": ["request_shaped"],
+        }
+    )
+
+    assert diagnostic["authorityState"] == "non_authoritative"
+    assert diagnostic["authoritative"] is False
+    assert diagnostic["reasonCodes"] == [
+        "event_calendar_authority_missing",
+        "event_calendar_request_supplied_not_authoritative",
+        "event_calendar_request_shaped_not_authoritative",
+        "event_calendar_provider_self_claim_ignored",
+    ]

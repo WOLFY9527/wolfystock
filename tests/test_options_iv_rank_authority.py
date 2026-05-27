@@ -30,6 +30,7 @@ def test_missing_iv_rank_authority_is_distinct_from_non_authoritative_proxy_data
     assert diagnostic["requiredFutureAuthorityEvidence"] == list(
         REQUIRED_FUTURE_IV_RANK_AUTHORITY_EVIDENCE_FIELDS
     )
+    assert "authorityPolicySource" in diagnostic["requiredFutureAuthorityEvidence"]
 
 
 def test_synthetic_fixture_proxy_iv_rank_stays_non_authoritative_with_explicit_gap_codes() -> None:
@@ -142,3 +143,34 @@ def test_internal_policy_is_required_before_any_iv_rank_payload_can_be_authorita
     assert authorized["authoritative"] is True
     assert authorized["authorityState"] == "authoritative"
     assert authorized["reasonCodes"] == []
+
+
+def test_snake_case_provider_self_claim_alias_is_ignored_for_iv_rank() -> None:
+    diagnostic = build_options_iv_rank_authority_diagnostic(
+        {
+            "providerId": "request_payload",
+            "sourceType": "request_supplied",
+            "sourceAuthority": "provider_self_claim",
+            "ivRankStatus": "available",
+            "ivRankSource": "request_shaped",
+            "providerReportedIvPercentile": 64.0,
+            "asOf": "2026-05-26T12:00:00Z",
+            "freshness": "fresh",
+            "lookbackWindow": "252d",
+            "methodology": "user_supplied_rank",
+            "coverageMetadata": {"contractsCovered": 12},
+            "sandboxOrProduction": "production",
+            "provider_decision_authority_claim": True,
+            "recommendation_authority_claim": True,
+        }
+    )
+
+    assert diagnostic["authorityState"] == "non_authoritative"
+    assert diagnostic["authoritative"] is False
+    assert diagnostic["reasonCodes"] == [
+        "iv_rank_authority_missing",
+        "iv_rank_request_supplied_not_authoritative",
+        "iv_rank_request_shaped_not_authoritative",
+        "iv_rank_provider_self_claim_ignored",
+        "iv_rank_historical_option_iv_series_missing",
+    ]

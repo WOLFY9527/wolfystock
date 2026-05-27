@@ -11,6 +11,7 @@ REQUIRED_FUTURE_IV_RANK_AUTHORITY_EVIDENCE_FIELDS = (
     "providerId",
     "sourceType",
     "sourceAuthority",
+    "authorityPolicySource",
     "asOf",
     "freshness",
     "lookbackWindow",
@@ -195,21 +196,25 @@ def _source_reason_codes(data: Mapping[str, Any]) -> list[str]:
         reason_codes.append("iv_rank_stub_not_authoritative")
     if "adapter_contract" in text:
         reason_codes.append("iv_rank_adapter_contract_not_authoritative")
-    if "request_supplied" in text:
+    if "request_supplied" in text or "request_payload" in text:
         reason_codes.append("iv_rank_request_supplied_not_authoritative")
-    if "request_shaped" in text or "request_shaped" in _normalized_text(_value(data, "sourceType", "source_type")):
+    if (
+        "request_shaped" in text
+        or "request_style" in text
+        or "request_shaped" in _normalized_text(_value(data, "sourceType", "source_type"))
+    ):
         reason_codes.append("iv_rank_request_shaped_not_authoritative")
     return reason_codes
 
 
 def _provider_self_claimed(data: Mapping[str, Any]) -> bool:
     return any(
-        _bool(_value(data, key, key.lower())) is True
-        for key in (
-            "providerDecisionAuthority",
-            "providerDecisionAuthorityClaim",
-            "recommendationAuthority",
-            "recommendationAuthorityClaim",
+        _bool(_value(data, *keys)) is True
+        for keys in (
+            ("providerDecisionAuthority", "provider_decision_authority"),
+            ("providerDecisionAuthorityClaim", "provider_decision_authority_claim"),
+            ("recommendationAuthority", "recommendation_authority"),
+            ("recommendationAuthorityClaim", "recommendation_authority_claim"),
         )
     )
 
