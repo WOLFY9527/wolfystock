@@ -425,7 +425,8 @@ export function useSystemConfig() {
     } catch (error: unknown) {
       handleSaveFailure(error, false);
       throw error;
-    } finally {
+    }
+    finally {
       setIsSaving(false);
     }
   }, [handleSaveFailure, persistItems]);

@@ -133,9 +133,8 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
         addItems(res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })));
       } catch (e) {
         setError(getApiErrorMessage(e, '识别失败，请重试'));
-      } finally {
-        setIsLoading(false);
       }
+      setIsLoading(false);
     },
     [addItems],
   );
@@ -153,9 +152,8 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
         addItems(res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })));
       } catch (e) {
         setError(getApiErrorMessage(e, '解析失败'));
-      } finally {
-        setIsLoading(false);
       }
+      setIsLoading(false);
     },
     [addItems],
   );
@@ -178,7 +176,9 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
       .catch((e) => {
         setError(getApiErrorMessage(e, '解析失败'));
       })
-      .finally(() => setIsLoading(false));
+      .then(() => {
+        setIsLoading(false);
+      });
   }, [pasteText, addItems]);
 
   const onDrop = useCallback(

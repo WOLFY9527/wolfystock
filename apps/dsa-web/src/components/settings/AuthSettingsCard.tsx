@@ -76,9 +76,8 @@ export const AuthSettingsCard: React.FC = () => {
       resetForm();
     } catch (err: unknown) {
       setError(getParsedApiError(err));
-    } finally {
-      setIsSubmitting(false);
     }
+    setIsSubmitting(false);
   };
 
   return (

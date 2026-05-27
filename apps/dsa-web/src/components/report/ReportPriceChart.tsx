@@ -489,10 +489,9 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
         if (!cancelled) {
           setError(fetchError instanceof Error ? fetchError.message : t('chart.noData'));
         }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+      }
+      if (!cancelled) {
+        setLoading(false);
       }
     };
 

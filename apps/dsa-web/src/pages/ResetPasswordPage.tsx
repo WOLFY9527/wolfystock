@@ -58,9 +58,8 @@ const ResetPasswordPage: React.FC = () => {
       setSuccess(response.message || resetCopy(language, 'successBody'));
     } catch (requestError: unknown) {
       setError(getParsedApiError(requestError).message || resetCopy(language, 'validationRequired'));
-    } finally {
-      setSubmitting(false);
     }
+    setSubmitting(false);
   };
 
   return (
