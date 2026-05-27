@@ -237,3 +237,41 @@ def test_snake_case_provider_self_claim_alias_is_ignored_for_expiration_calendar
         "expiration_calendar_provider_self_claim_ignored",
         "expiration_calendar_coverage_not_authority",
     ]
+
+
+def test_url_shaped_expiration_calendar_labels_are_redacted_but_safe_labels_remain() -> None:
+    diagnostic = build_options_expiration_calendar_authority_diagnostic(
+        {
+            "providerId": "https://provider.example/expirations",
+            "sourceType": "www.provider.example",
+            "sourceAuthority": "http://provider.example/policy",
+            "expirationCalendarStatus": "available",
+            "asOf": "2026-05-26T12:00:00Z",
+            "freshness": "fresh",
+            "underlying": "TEM",
+            "expirationDates": ["2026-06-19", "2026-08-21"],
+            "expirationCount": 2,
+            "expirationTypes": ["monthly"],
+            "dateRange": {"start": "2026-06-19", "end": "2026-08-21"},
+            "coverageMetadata": {
+                "providerLabel": "tradier",
+                "sourceUrl": "https://provider.example/expirations?token=demo",
+            },
+            "authorizedSourceMetadata": {
+                "calendarLandingPage": "www.provider.example/calendar",
+                "providerLabel": "tradier",
+            },
+            "exchange": "OPRA",
+            "sandboxOrProduction": "sandbox",
+        }
+    )
+
+    assert diagnostic["diagnosticOnly"] is True
+    assert diagnostic["authoritative"] is False
+    assert diagnostic["providerId"] == "redacted"
+    assert diagnostic["sourceType"] == "redacted"
+    assert diagnostic["sourceAuthority"] == "redacted"
+    assert diagnostic["coverageMetadata"]["providerLabel"] == "tradier"
+    assert diagnostic["coverageMetadata"]["sourceUrl"] == "redacted"
+    assert diagnostic["authorizedSourceMetadata"]["calendarLandingPage"] == "redacted"
+    assert diagnostic["authorizedSourceMetadata"]["providerLabel"] == "tradier"

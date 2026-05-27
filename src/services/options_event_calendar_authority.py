@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Mapping, Sequence
 
 
@@ -42,6 +43,7 @@ _BLOCKED_TEXT_MARKERS = (
     "secret",
     "token",
 )
+_URL_LIKE_HOST_RE = re.compile(r"^[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?(?:[/?#].*)?$")
 _AUTHORITATIVE_SOURCE_AUTHORITIES = frozenset(
     {"authorized", "authoritative", "licensed", "internal_authorized", "provider_reported_authorized"}
 )
@@ -62,9 +64,18 @@ def _sanitize_text(value: Any) -> str | None:
     lowered = text.lower()
     if any(marker in lowered for marker in _BLOCKED_TEXT_MARKERS):
         return _REDACTED
+    if _looks_like_url_text(text):
+        return _REDACTED
     if len(text) > 120 or any(character.lower() not in _SAFE_TEXT_CHARS for character in text):
         return _REDACTED
     return text
+
+
+def _looks_like_url_text(text: str) -> bool:
+    lowered = text.lower()
+    if lowered.startswith(("http://", "https://", "www.")):
+        return True
+    return bool(_URL_LIKE_HOST_RE.fullmatch(lowered))
 
 
 def _normalized_text(value: Any) -> str:

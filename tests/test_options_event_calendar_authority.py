@@ -217,3 +217,42 @@ def test_snake_case_provider_self_claim_alias_is_ignored_for_event_calendar() ->
         "event_calendar_request_shaped_not_authoritative",
         "event_calendar_provider_self_claim_ignored",
     ]
+
+
+def test_url_shaped_event_calendar_labels_are_redacted_but_safe_labels_remain() -> None:
+    diagnostic = build_options_event_calendar_authority_diagnostic(
+        {
+            "providerId": "https://provider.example/events",
+            "sourceType": "www.provider.example",
+            "sourceAuthority": "http://provider.example/policy",
+            "eventCalendarStatus": "available",
+            "asOf": "2026-05-26T12:00:00Z",
+            "freshness": "fresh",
+            "eventTypesCovered": ["earnings"],
+            "underlyingCoverage": ["TEM"],
+            "dateRange": {"start": "2026-05-26", "end": "2026-06-26"},
+            "timezone": "America/New_York",
+            "confirmationStatus": "confirmed",
+            "eventId": "evt-001",
+            "providerEventId": "provider-evt-001",
+            "coverageMetadata": {
+                "providerLabel": "tradier",
+                "sourceUrl": "https://provider.example/events?token=demo",
+            },
+            "sessionMetadata": {
+                "calendarLandingPage": "www.provider.example/calendar",
+                "providerLabel": "tradier",
+            },
+            "sandboxOrProduction": "sandbox",
+        }
+    )
+
+    assert diagnostic["diagnosticOnly"] is True
+    assert diagnostic["authoritative"] is False
+    assert diagnostic["providerId"] == "redacted"
+    assert diagnostic["sourceType"] == "redacted"
+    assert diagnostic["sourceAuthority"] == "redacted"
+    assert diagnostic["coverageMetadata"]["providerLabel"] == "tradier"
+    assert diagnostic["coverageMetadata"]["sourceUrl"] == "redacted"
+    assert diagnostic["sessionMetadata"]["calendarLandingPage"] == "redacted"
+    assert diagnostic["sessionMetadata"]["providerLabel"] == "tradier"
