@@ -542,8 +542,6 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     () => resolveAnnotationLines(decisionPanel),
     [decisionPanel],
   );
-  const analysisPrice = decisionPanel?.analysisPrice;
-
   const chartGeometry = useMemo<ChartGeometry | null>(() => {
     if (size.width <= 0 || size.height <= 0) {
       return null;
@@ -584,9 +582,11 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
 
   const priceDomain = useMemo(() => {
     const values = visibleData.flatMap((item) => [item.low, item.high]);
-    annotationLines.forEach((item) => values.push(item.value));
-    if (isFiniteNumber(analysisPrice)) {
-      values.push(analysisPrice);
+    const currentAnnotationLines = resolveAnnotationLines(decisionPanel);
+    currentAnnotationLines.forEach((item) => values.push(item.value));
+    const currentAnalysisPrice = decisionPanel?.analysisPrice;
+    if (isFiniteNumber(currentAnalysisPrice)) {
+      values.push(currentAnalysisPrice);
     }
     if (values.length === 0) {
       return null;
@@ -599,7 +599,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
       min: minValue - padding,
       max: maxValue + padding,
     };
-  }, [analysisPrice, annotationLines, visibleData]);
+  }, [decisionPanel, visibleData]);
 
   const volumeMax = useMemo(
     () => Math.max(...visibleData.map((item) => item.volume || 0), 1),
@@ -836,12 +836,12 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     return items;
   }, [t]);
 
-  const activeViewConfig = VIEW_CONFIGS.find((item) => item.key === activeView);
-  const compactContextLine = [
+  const activeViewConfig = useMemo(() => VIEW_CONFIGS.find((item) => item.key === activeView), [activeView]);
+  const compactContextLine = useMemo(() => [
     summary?.priceBasis,
     summary?.referenceSession,
     summary?.snapshotTime ? `${t('chart.updated')} ${summary.snapshotTime}` : undefined,
-  ].filter(Boolean).join(' · ');
+  ].filter(Boolean).join(' · '), [summary?.priceBasis, summary?.referenceSession, summary?.snapshotTime, t]);
 
   const inspectorRows = useMemo(() => {
     if (!activeBar) {
