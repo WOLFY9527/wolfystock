@@ -939,7 +939,7 @@ describe('AdminLogsPage', () => {
     await expandStorageDisclosure();
     expect(await screen.findByText('严重')).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('日志容量 1.2 GB');
-    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('需要自动清理');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('建议执行显式容量清理。');
     fireEvent.click(screen.getByRole('button', { name: '预览容量清理' }));
     await waitFor(() => expect(cleanupLogs).toHaveBeenCalledWith({ mode: 'capacity', dryRun: true }));
     expect(await screen.findByText(/容量清理预览：将删除 80 个会话和 160 个事件/)).toBeInTheDocument();

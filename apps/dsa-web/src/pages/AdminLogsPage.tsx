@@ -747,6 +747,11 @@ function compactHealthList(items: AdminLogHealthSummary['failuresByProvider'] | 
 function localizedRecommendedCleanupAction(value: string | null | undefined, locale: AdminLogsLanguage): string {
   const message = String(value || '').trim();
   if (!message) return locale === 'zh' ? '存储摘要暂不可用' : 'Storage summary unavailable';
+  if (/Auto cleanup required/i.test(message)) {
+    return locale === 'zh'
+      ? '建议执行显式容量清理。存储摘要仅提供建议，不会自动删除日志。'
+      : 'Explicit capacity cleanup recommended. Storage summary is advisory only.';
+  }
   if (locale !== 'zh') return message;
   if (/over the hard limit/i.test(message)) return '存储已超过硬限制。请运行容量清理；最早可删日志仍受最小保留天数保护。';
   if (/over the soft limit/i.test(message)) return '存储已超过软限制。请先预览保留期清理或容量清理。';
@@ -1801,8 +1806,8 @@ const AdminLogsPage: React.FC = () => {
 
         <AdminLogsTerminalSection
           data-testid="admin-logs-storage-disclosure"
-          title={locale === 'zh' ? '二级细节：日志容量与破坏性清理' : 'Secondary details: storage and destructive cleanup'}
-          summary={locale === 'zh' ? '需确认' : 'confirmation required'}
+          title={locale === 'zh' ? '二级细节：日志容量建议与显式清理' : 'Secondary details: storage advisory and explicit cleanup'}
+          summary={locale === 'zh' ? '仅建议' : 'advisory only'}
           className="px-4 py-3"
         >
           <section
@@ -1864,6 +1869,11 @@ const AdminLogsPage: React.FC = () => {
               <TerminalNotice variant={storageSummary?.status === 'critical' ? 'danger' : storageSummary?.status === 'warning' ? 'caution' : 'neutral'}>
                 <p className="font-medium text-white/88">{locale === 'zh' ? '清理建议' : 'Cleanup guidance'}</p>
                 <p className="mt-1">{localizedRecommendedCleanupAction(storageSummary?.recommendedCleanupAction, locale)}</p>
+                <p className="mt-1 text-[11px] opacity-80">
+                  {locale === 'zh'
+                    ? '存储摘要仅提供建议，不会在读取摘要时自动删除日志。'
+                    : 'Storage summary is advisory only and does not delete log rows when read.'}
+                </p>
                 {storageSummary && ['warning', 'critical'].includes(String(storageSummary.status)) ? (
                   <a
                     href="/admin/notifications"
@@ -1878,9 +1888,11 @@ const AdminLogsPage: React.FC = () => {
                   {locale === 'zh' ? '删除行后可能需要 PostgreSQL autovacuum 回收物理磁盘空间。' : storageSummary.postgresVacuumNote}
                 </TerminalNotice>
               ) : null}
-              {storageSummary?.autoCleanupEnabled && storageSummary?.status === 'critical' ? (
-                <TerminalNotice variant="danger">
-                  {locale === 'zh' ? '需要自动清理' : 'Auto cleanup required'}
+              {(storageSummary?.autoCleanupMessage || (storageSummary?.autoCleanupEnabled && storageSummary?.status === 'critical')) ? (
+                <TerminalNotice variant={storageSummary?.status === 'critical' ? 'caution' : 'info'}>
+                  {storageSummary?.autoCleanupMessage
+                    ? localizedRecommendedCleanupAction(storageSummary.autoCleanupMessage, locale)
+                    : (locale === 'zh' ? '建议执行显式容量清理。' : 'Explicit capacity cleanup recommended.')}
                 </TerminalNotice>
               ) : null}
               {cleanupMessage ? (
