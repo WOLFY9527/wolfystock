@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
 
@@ -20,6 +20,8 @@ class StockServiceQuoteSnapshot:
     prev_close: Optional[float]
     volume: Optional[float]
     amount: Optional[float]
+    source: Optional[str] = field(default=None, compare=False)
+    market_timestamp: Optional[str] = field(default=None, compare=False)
 
 
 class StockServiceProviderAdapter:
@@ -37,6 +39,8 @@ class StockServiceProviderAdapter:
         quote = self._get_manager().get_realtime_quote(stock_code)
         if quote is None:
             return None
+        raw_source = getattr(quote, "source", None)
+        source = getattr(raw_source, "value", raw_source)
         return StockServiceQuoteSnapshot(
             stock_code=getattr(quote, "code", stock_code),
             stock_name=getattr(quote, "name", None),
@@ -49,6 +53,8 @@ class StockServiceProviderAdapter:
             prev_close=getattr(quote, "pre_close", None),
             volume=getattr(quote, "volume", None),
             amount=getattr(quote, "amount", None),
+            source=None if source is None else str(source).strip() or None,
+            market_timestamp=getattr(quote, "market_timestamp", None),
         )
 
     def _get_manager(self) -> Any:

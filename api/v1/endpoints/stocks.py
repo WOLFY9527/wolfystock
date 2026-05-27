@@ -325,7 +325,17 @@ def get_stock_quote(stock_code: str) -> StockQuote:
             prev_close=result.get("prev_close"),
             volume=result.get("volume"),
             amount=result.get("amount"),
-            update_time=result.get("update_time")
+            update_time=result.get("update_time"),
+            source=result.get("source"),
+            source_type=result.get("sourceType") or result.get("source_type"),
+            market_timestamp=result.get("marketTimestamp") or result.get("market_timestamp"),
+            observed_at=result.get("observedAt") or result.get("observed_at"),
+            freshness=result.get("freshness"),
+            is_fallback=result.get("isFallback") if "isFallback" in result else result.get("is_fallback"),
+            is_stale=result.get("isStale") if "isStale" in result else result.get("is_stale"),
+            is_partial=result.get("isPartial") if "isPartial" in result else result.get("is_partial"),
+            is_synthetic=result.get("isSynthetic") if "isSynthetic" in result else result.get("is_synthetic"),
+            source_confidence=result.get("sourceConfidence") or result.get("source_confidence"),
         )
         
     except HTTPException:

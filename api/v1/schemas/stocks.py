@@ -18,6 +18,7 @@ class StockQuote(BaseModel):
     """股票实时行情"""
 
     model_config = ConfigDict(
+        populate_by_name=True,
         json_schema_extra={
             "example": {
                 "stock_code": "600519",
@@ -32,6 +33,15 @@ class StockQuote(BaseModel):
                 "volume": 10000000,
                 "amount": 18000000000,
                 "update_time": "2024-01-01T15:00:00",
+                "source": "efinance",
+                "sourceType": "provider_runtime",
+                "marketTimestamp": "2024-01-01T14:59:57+08:00",
+                "observedAt": "2024-01-01T15:00:00+08:00",
+                "freshness": "live",
+                "isFallback": False,
+                "isStale": False,
+                "isPartial": False,
+                "isSynthetic": False,
             }
         }
     )
@@ -47,7 +57,17 @@ class StockQuote(BaseModel):
     prev_close: Optional[float] = Field(None, description="昨收价")
     volume: Optional[float] = Field(None, description="成交量（股）")
     amount: Optional[float] = Field(None, description="成交额（元）")
-    update_time: Optional[str] = Field(None, description="更新时间")
+    update_time: Optional[str] = Field(None, description="服务端观察/封装该行情的时间（兼容旧字段）")
+    source: Optional[str] = Field(None, description="上游 provider 报告的行情来源")
+    source_type: Optional[str] = Field(None, alias="sourceType", description="行情来源类型")
+    market_timestamp: Optional[str] = Field(None, alias="marketTimestamp", description="上游 provider 报告的市场时间")
+    observed_at: Optional[str] = Field(None, alias="observedAt", description="服务端观察到该行情的时间")
+    freshness: Optional[str] = Field(None, description="行情新鲜度标签")
+    is_fallback: Optional[bool] = Field(None, alias="isFallback", description="是否为 fallback 行情")
+    is_stale: Optional[bool] = Field(None, alias="isStale", description="是否已标记为 stale")
+    is_partial: Optional[bool] = Field(None, alias="isPartial", description="是否缺少部分 freshness/provenance 信息")
+    is_synthetic: Optional[bool] = Field(None, alias="isSynthetic", description="是否为本地合成/占位行情")
+    source_confidence: Optional[Dict[str, Any]] = Field(None, alias="sourceConfidence", description="行情来源可信度元信息")
 
 
 class KLineData(BaseModel):

@@ -117,6 +117,7 @@ class StockService:
         Returns:
             实时行情数据字典
         """
+        observed_at = datetime.now().isoformat()
         try:
             adapter = StockServiceProviderAdapter()
             quote = adapter.get_quote_snapshot(stock_code)
@@ -125,6 +126,12 @@ class StockService:
                 logger.warning(f"获取 {stock_code} 实时行情失败")
                 return None
 
+            quote_metadata = self._build_quote_metadata(
+                source=quote.source,
+                market_timestamp=quote.market_timestamp,
+                observed_at=observed_at,
+                has_price=quote.current_price > 0,
+            )
             return {
                 "stock_code": quote.stock_code,
                 "stock_name": quote.stock_name,
@@ -137,12 +144,22 @@ class StockService:
                 "prev_close": quote.prev_close,
                 "volume": quote.volume,
                 "amount": quote.amount,
-                "update_time": datetime.now().isoformat(),
+                "update_time": observed_at,
+                "source": quote_metadata["source"],
+                "source_type": quote_metadata["source_type"],
+                "market_timestamp": quote_metadata["market_timestamp"],
+                "observed_at": quote_metadata["observed_at"],
+                "freshness": quote_metadata["freshness"],
+                "is_fallback": quote_metadata["is_fallback"],
+                "is_stale": quote_metadata["is_stale"],
+                "is_partial": quote_metadata["is_partial"],
+                "is_synthetic": quote_metadata["is_synthetic"],
+                "sourceConfidence": quote_metadata["sourceConfidence"],
             }
             
         except ImportError:
             logger.warning("DataFetcherManager 未找到，使用占位数据")
-            return self._get_placeholder_quote(stock_code)
+            return self._get_placeholder_quote(stock_code, observed_at=observed_at)
         except Exception as e:
             logger.error(f"获取实时行情失败: {e}", exc_info=True)
             return None
@@ -630,8 +647,72 @@ class StockService:
             degradation_reason=str(diagnostics.get("reason") or "") or None,
         )
         return contract.to_dict()
+
+    def _build_quote_metadata(
+        self,
+        *,
+        source: Optional[str],
+        market_timestamp: Optional[str],
+        observed_at: str,
+        has_price: bool,
+        is_placeholder: bool = False,
+    ) -> Dict[str, Any]:
+        normalized_source = str(source or "").strip() or ("placeholder" if is_placeholder else "unknown")
+        normalized_market_timestamp = str(market_timestamp or "").strip() or None
+        source_type = "provider_runtime"
+        freshness = SourceFreshness.UNKNOWN
+        is_fallback = normalized_source == "fallback"
+        is_partial = False
+        is_synthetic = False
+        confidence_weight = 0.5 if has_price else 0.0
+        degradation_reason = None
+
+        if is_placeholder:
+            source_type = "synthetic_placeholder"
+            freshness = SourceFreshness.SYNTHETIC
+            is_partial = True
+            is_synthetic = True
+            confidence_weight = 0.0
+            degradation_reason = "provider_runtime_unavailable_placeholder"
+        elif is_fallback:
+            source_type = "fallback"
+            freshness = SourceFreshness.FALLBACK
+            confidence_weight = 0.2 if has_price else 0.0
+            degradation_reason = "provider_reported_fallback_source"
+        elif normalized_market_timestamp:
+            freshness = SourceFreshness.LIVE
+            confidence_weight = 1.0 if has_price else 0.6
+        else:
+            is_partial = True
+            degradation_reason = "market_timestamp_missing"
+
+        source_confidence = SourceConfidenceContract(
+            source=normalized_source,
+            source_label=normalized_source.replace("_", " ").title(),
+            as_of=normalized_market_timestamp,
+            freshness=freshness,
+            is_fallback=is_fallback,
+            is_stale=freshness == SourceFreshness.STALE,
+            is_partial=is_partial,
+            is_synthetic=is_synthetic,
+            confidence_weight=confidence_weight,
+            degradation_reason=degradation_reason,
+        ).to_dict()
+
+        return {
+            "source": normalized_source,
+            "source_type": source_type,
+            "market_timestamp": normalized_market_timestamp,
+            "observed_at": observed_at,
+            "freshness": source_confidence["freshness"],
+            "is_fallback": source_confidence["isFallback"],
+            "is_stale": source_confidence["isStale"],
+            "is_partial": source_confidence["isPartial"],
+            "is_synthetic": source_confidence["isSynthetic"],
+            "sourceConfidence": source_confidence,
+        }
     
-    def _get_placeholder_quote(self, stock_code: str) -> Dict[str, Any]:
+    def _get_placeholder_quote(self, stock_code: str, *, observed_at: Optional[str] = None) -> Dict[str, Any]:
         """
         获取占位行情数据（用于测试）
         
@@ -641,6 +722,14 @@ class StockService:
         Returns:
             占位行情数据
         """
+        observed_time = observed_at or datetime.now().isoformat()
+        quote_metadata = self._build_quote_metadata(
+            source="placeholder",
+            market_timestamp=None,
+            observed_at=observed_time,
+            has_price=False,
+            is_placeholder=True,
+        )
         return {
             "stock_code": stock_code,
             "stock_name": f"股票{stock_code}",
@@ -653,5 +742,15 @@ class StockService:
             "prev_close": None,
             "volume": None,
             "amount": None,
-            "update_time": datetime.now().isoformat(),
+            "update_time": observed_time,
+            "source": quote_metadata["source"],
+            "source_type": quote_metadata["source_type"],
+            "market_timestamp": quote_metadata["market_timestamp"],
+            "observed_at": quote_metadata["observed_at"],
+            "freshness": quote_metadata["freshness"],
+            "is_fallback": quote_metadata["is_fallback"],
+            "is_stale": quote_metadata["is_stale"],
+            "is_partial": quote_metadata["is_partial"],
+            "is_synthetic": quote_metadata["is_synthetic"],
+            "sourceConfidence": quote_metadata["sourceConfidence"],
         }
