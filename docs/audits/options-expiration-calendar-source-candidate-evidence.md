@@ -19,6 +19,17 @@ This packet is:
 
 This packet must not be used as proof that any current provider or source is authoritative.
 
+## Current Repo Status
+
+Current repository state remains observation-only and non-authoritative:
+
+- fixture-backed API/service expiration rows are observation-only
+- Tradier adapter-contract expiration rows are observation-only
+- runtime diagnostics are local/offline scaffolding
+- no current path proves OCC/OPRA/exchange/licensed-source authority
+
+Do not read current fixture rows, adapter-contract rows, provider IDs, or runtime diagnostic output as proof of production authority.
+
 ## Required Field Groups
 
 Every future packet should capture sanitized evidence for all groups below.
@@ -126,6 +137,45 @@ The packet should show whether each taxonomy is proven, missing, partial, or unv
 - reviewer or collection owner
 - notes on unresolved ambiguity
 
+## External Verification Worksheet
+
+Use this worksheet before any future feasibility claim about OCC/OPRA/exchange/licensed expiration-calendar access.
+
+| Check | Required evidence | Status |
+| --- | --- | --- |
+| Source identity | Legal source name, distributor/provider name, product/SKU name, sanitized contract/doc reference | `verified` / `partial` / `unverified` |
+| Provenance chain | Upstream-to-downstream chain from original source to current distributor, including any sublicense hop | `verified` / `partial` / `unverified` |
+| OCC / OPRA / exchange / licensed-source backing | Documented proof of OCC, OPRA, exchange, or other licensed-source backing; otherwise mark explicitly unverified | `verified` / `partial` / `unverified` |
+| Entitlement / license / use rights | Entitlement tier, license scope, account/org boundary, allowed internal use | `verified` / `partial` / `unverified` |
+| Redistribution and decision-use rights | Written proof for redistribution, storage, internal display, and decision-support use; note prohibitions explicitly | `verified` / `partial` / `unverified` |
+| Live vs delayed status | Written live/delayed statement, delay window, label/disclaimer requirements | `verified` / `partial` / `unverified` |
+| Production vs sandbox status | Proof whether evidence came from production, sandbox, mock, or contract-only materials | `verified` / `partial` / `unverified` |
+| As-of / freshness / SLA / max-age policy | `asOf`, cadence, SLA, freshness language, max-age policy, stale-data handling terms | `verified` / `partial` / `unverified` |
+| Expiration taxonomy source | Source proof for weekly/monthly/quarterly/standard/LEAPS/special taxonomy definitions and coverage | `verified` / `partial` / `unverified` |
+| Adjusted deliverable / corporate-action / OCC memo evidence | Adjustment handling proof, deliverable/multiplier evidence, corporate-action notes, OCC memo or equivalent reference | `verified` / `partial` / `unverified` |
+
+Suggested capture notes:
+
+- record the exact as-of date for every external document or contract reference
+- mark missing proof as `unverified`, not inferred
+- treat provider marketing copy and adapter-contract shape as non-authoritative
+- keep citations sanitized and prompt-friendly
+
+## Must Not Proceed To Implementation Until Verified
+
+- [ ] Source identity is verified with a sanitized source reference.
+- [ ] Provenance chain is verified end to end.
+- [ ] OCC / OPRA / exchange / licensed-source backing is verified, or the gap is still blocking.
+- [ ] Entitlement / license / use rights are verified for intended internal use.
+- [ ] Redistribution and decision-use rights are verified.
+- [ ] Live vs delayed status is verified.
+- [ ] Production vs sandbox status is verified.
+- [ ] As-of / freshness / SLA / max-age policy is verified.
+- [ ] Expiration taxonomy source is verified.
+- [ ] Adjusted deliverable / corporate-action / OCC memo evidence is verified.
+
+If any box remains unchecked, do not proceed to provider integration, runtime projection, or authority policy work.
+
 ## Forbidden Authority Outputs
 
 This packet must not emit, imply, or unlock any of the following:
@@ -188,6 +238,21 @@ Before any observation-only implementation is proposed, confirm:
 - OCC memo or equivalent references are linked when applicable
 - sanitized error/audit state is defined
 - no authority, gate, recommendation, routing, or live-enable field is introduced
+
+## Safe Future Sequence
+
+1. External source/license verification
+   Confirm source identity, provenance, rights, freshness, taxonomy, and adjustment evidence using the worksheet above.
+2. Docs update with verified source facts
+   Update this document only after verified facts exist; do not backfill assumptions or provider self-claims.
+3. Read-only implementation audit
+   Inspect current adapter, diagnostic, API, and policy boundaries without editing runtime code.
+4. Inert adapter/packet task only if approved
+   If separately approved, limit the first implementation to inert packet/contract shaping with no live calls and no authority grant.
+5. Runtime projection only after inert contract validation
+   Any runtime-facing projection must wait until the inert contract is validated and still remains diagnostic-only.
+6. Authority grant only in a separate future policy task
+   Any authority decision requires a distinct policy task with explicit approval, verified facts, and separate validation.
 
 ## Locked Invariants
 
