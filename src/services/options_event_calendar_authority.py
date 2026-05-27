@@ -6,6 +6,10 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping, Sequence
 
+from src.services.options_authority_policy_matrix import (
+    EVENT_CALENDAR_REQUIRED_FUTURE_EVIDENCE_FAMILIES,
+)
+
 
 INTERNAL_OPTIONS_EVENT_CALENDAR_AUTHORITY_POLICY_SOURCE = (
     "wolfystock_options_event_calendar_authority_policy_v1"
@@ -47,6 +51,14 @@ _URL_LIKE_HOST_RE = re.compile(r"^[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?(?:[/?#].*
 _AUTHORITATIVE_SOURCE_AUTHORITIES = frozenset(
     {"authorized", "authoritative", "licensed", "internal_authorized", "provider_reported_authorized"}
 )
+_CHECKLIST_REASON_CODES = {
+    "provenance": "event_calendar_provenance_evidence_missing",
+    "entitlement": "event_calendar_entitlement_evidence_missing",
+    "sla_freshness": "event_calendar_sla_evidence_missing",
+    "event_taxonomy": "event_calendar_event_taxonomy_evidence_missing",
+    "confirmation": "event_calendar_confirmation_evidence_missing",
+    "coverage_scope": "event_calendar_coverage_scope_evidence_missing",
+}
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -175,6 +187,18 @@ def _string_list(value: Any) -> list[str]:
     return [item for item in _sanitize_sequence(value) if isinstance(item, str)]
 
 
+def _has_value(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        return any(_has_value(item) for item in value.values())
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return any(_has_value(item) for item in value)
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, (int, float)):
+        return True
+    return bool(_text(value))
+
+
 def _flatten_text(values: Sequence[Any]) -> str:
     chunks: list[str] = []
     for value in values:
@@ -258,6 +282,190 @@ def _dedupe(codes: Sequence[str]) -> list[str]:
     return ordered
 
 
+def _family_mapping(data: Mapping[str, Any], *keys: str) -> dict[str, Any]:
+    for key in keys:
+        value = _value(data, key)
+        if isinstance(value, Mapping):
+            return _mapping(value)
+    return {}
+
+
+def _family_present_provenance(data: Mapping[str, Any]) -> bool:
+    provenance = _family_mapping(
+        data,
+        "provenanceEvidence",
+        "provenance_evidence",
+        "authorityProvenanceEvidence",
+        "authority_provenance_evidence",
+    )
+    primary_sources = _string_list(_value(provenance, "primarySources", "primary_sources"))
+    allowed_sources = {
+        "licensed_provider",
+        "exchange",
+        "issuer",
+        "official_calendar",
+        "approved_internal_source",
+    }
+    return bool(
+        primary_sources
+        and allowed_sources.intersection({_normalized_text(item) for item in primary_sources})
+        and _has_value(_value(provenance, "sourceReference", "source_reference"))
+    )
+
+
+def _family_present_entitlement(data: Mapping[str, Any]) -> bool:
+    entitlement = _family_mapping(
+        data,
+        "entitlementMetadata",
+        "entitlement_metadata",
+        "authorityEntitlementMetadata",
+        "authority_entitlement_metadata",
+    )
+    return all(
+        _has_value(_value(entitlement, *keys))
+        for keys in (
+            ("eventCalendarEntitlement", "event_calendar_entitlement"),
+            ("liveDelayedStatus", "live_delayed_status"),
+            ("environment",),
+            ("decisionUseRights", "decision_use_rights"),
+            ("redistributionRights", "redistribution_rights"),
+            ("auditTimestamp", "audit_timestamp"),
+        )
+    )
+
+
+def _family_present_sla(data: Mapping[str, Any], as_of: str | None, freshness: str | None) -> bool:
+    sla = _family_mapping(
+        data,
+        "slaEvidence",
+        "sla_evidence",
+        "freshnessEvidence",
+        "freshness_evidence",
+    )
+    has_latency_or_error_state = any(
+        _has_value(_value(sla, *keys))
+        for keys in (
+            ("latencyState", "latency_state"),
+            ("errorState", "error_state"),
+        )
+    )
+    return bool(
+        as_of
+        and freshness
+        and _has_value(_value(sla, "maxAgePolicy", "max_age_policy"))
+        and _has_value(_value(sla, "providerSlaStatus", "provider_sla_status"))
+        and _has_value(_value(sla, "freshnessSeconds", "freshness_seconds"))
+        and _has_value(_value(sla, "freshnessState", "freshness_state"))
+        and has_latency_or_error_state
+    )
+
+
+def _family_present_event_taxonomy(data: Mapping[str, Any]) -> bool:
+    taxonomy = _family_mapping(
+        data,
+        "eventTaxonomyEvidence",
+        "event_taxonomy_evidence",
+        "taxonomyEvidence",
+        "taxonomy_evidence",
+    )
+    return all(
+        _has_value(_value(taxonomy, *keys))
+        for keys in (
+            ("earnings",),
+            ("dividendsExDividend", "dividends_ex_dividend"),
+            ("splits",),
+            ("corporateActions", "corporate_actions"),
+            ("macroContextRelevance", "macro_context_relevance"),
+        )
+    )
+
+
+def _family_present_confirmation(data: Mapping[str, Any]) -> bool:
+    confirmation = _family_mapping(
+        data,
+        "confirmationEvidence",
+        "confirmation_evidence",
+        "eventIdentityEvidence",
+        "event_identity_evidence",
+    )
+    has_event_date_or_time = any(
+        _has_value(_value(confirmation, *keys))
+        for keys in (
+            ("eventDate", "event_date"),
+            ("eventTime", "event_time"),
+        )
+    )
+    return bool(
+        _has_value(_value(confirmation, "confirmedOrEstimated", "confirmed_or_estimated"))
+        and has_event_date_or_time
+        and _has_value(_value(confirmation, "session"))
+        and _has_value(_value(confirmation, "timezone"))
+        and _has_value(
+            _value(
+                confirmation,
+                "providerEventIdentity",
+                "provider_event_identity",
+                "providerEventId",
+                "provider_event_id",
+                "eventIdentity",
+                "event_identity",
+            )
+        )
+    )
+
+
+def _family_present_coverage_scope(data: Mapping[str, Any]) -> bool:
+    coverage_scope = _family_mapping(
+        data,
+        "coverageScopeEvidence",
+        "coverage_scope_evidence",
+        "coverageEvidence",
+        "coverage_evidence",
+    )
+    has_symbol_or_underlying_coverage = any(
+        _string_list(_value(coverage_scope, *keys))
+        for keys in (
+            ("symbolCoverage", "symbol_coverage"),
+            ("underlyingCoverage", "underlying_coverage"),
+        )
+    )
+    has_window_or_range = any(
+        (
+            _sanitize_text(_value(coverage_scope, "lookaheadWindow", "lookahead_window")),
+            _date_range(_value(coverage_scope, "dateRange", "date_range")),
+        )
+    )
+    return bool(
+        has_symbol_or_underlying_coverage
+        and has_window_or_range
+        and _sanitize_mapping(_value(coverage_scope, "coverageMetadata", "coverage_metadata"))
+    )
+
+
+def _build_authority_evidence_checklist(
+    data: Mapping[str, Any],
+    *,
+    as_of: str | None,
+    freshness: str | None,
+) -> dict[str, dict[str, Any]]:
+    family_presence = {
+        "provenance": _family_present_provenance(data),
+        "entitlement": _family_present_entitlement(data),
+        "sla_freshness": _family_present_sla(data, as_of, freshness),
+        "event_taxonomy": _family_present_event_taxonomy(data),
+        "confirmation": _family_present_confirmation(data),
+        "coverage_scope": _family_present_coverage_scope(data),
+    }
+    return {
+        family: {
+            "present": family_presence[family],
+            "required": True,
+            "fields": list(fields),
+        }
+        for family, fields in EVENT_CALENDAR_REQUIRED_FUTURE_EVIDENCE_FAMILIES.items()
+    }
+
+
 def build_options_event_calendar_authority_diagnostic(
     evidence: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
@@ -288,6 +496,17 @@ def build_options_event_calendar_authority_diagnostic(
     coverage_metadata = _sanitize_mapping(_value(data, "coverageMetadata", "coverage_metadata"))
     sandbox_or_production = _sanitize_text(
         _value(data, "sandboxOrProduction", "sandbox_or_production")
+    )
+    checklist_requested = any(
+        (
+            authority_policy_source == INTERNAL_OPTIONS_EVENT_CALENDAR_AUTHORITY_POLICY_SOURCE,
+            isinstance(_value(data, "provenanceEvidence", "provenance_evidence"), Mapping),
+            isinstance(_value(data, "entitlementMetadata", "entitlement_metadata"), Mapping),
+            isinstance(_value(data, "slaEvidence", "sla_evidence"), Mapping),
+            isinstance(_value(data, "eventTaxonomyEvidence", "event_taxonomy_evidence"), Mapping),
+            isinstance(_value(data, "confirmationEvidence", "confirmation_evidence"), Mapping),
+            isinstance(_value(data, "coverageScopeEvidence", "coverage_scope_evidence"), Mapping),
+        )
     )
 
     evidence_present = any(
@@ -327,6 +546,15 @@ def build_options_event_calendar_authority_diagnostic(
         reason_codes.append("event_calendar_confirmation_status_missing")
     if not event_id and not provider_event_id:
         reason_codes.append("event_calendar_event_identity_missing")
+    authority_evidence_checklist = (
+        _build_authority_evidence_checklist(data, as_of=as_of, freshness=freshness)
+        if checklist_requested
+        else None
+    )
+    if authority_evidence_checklist:
+        for family, checklist_entry in authority_evidence_checklist.items():
+            if not checklist_entry["present"]:
+                reason_codes.append(_CHECKLIST_REASON_CODES[family])
 
     authoritative = bool(
         evidence_present
@@ -341,8 +569,14 @@ def build_options_event_calendar_authority_diagnostic(
         and confirmation_status
         and (event_id or provider_event_id)
         and coverage_metadata
+        and authority_evidence_checklist
+        and all(entry["present"] for entry in authority_evidence_checklist.values())
         and not _source_reason_codes(data)
     )
+    if evidence_present and not authoritative and (
+        coverage_metadata or event_types_covered or symbol_coverage or underlying_coverage
+    ):
+        reason_codes.append("event_calendar_coverage_not_authority")
     authority_state = "authoritative" if authoritative else ("non_authoritative" if evidence_present else "missing")
 
     return {
@@ -371,5 +605,10 @@ def build_options_event_calendar_authority_diagnostic(
         "reasonCodes": [] if authoritative else _dedupe(reason_codes),
         "requiredFutureAuthorityEvidence": list(
             REQUIRED_FUTURE_EVENT_CALENDAR_AUTHORITY_EVIDENCE_FIELDS
+        ),
+        **(
+            {"authorityEvidenceChecklist": authority_evidence_checklist}
+            if authority_evidence_checklist
+            else {}
         ),
     }

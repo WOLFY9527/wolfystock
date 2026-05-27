@@ -128,3 +128,53 @@ def test_expiration_calendar_policy_encodes_future_authority_checklist_families(
             "contract_symbol_mapping",
         ),
     }
+
+
+def test_event_calendar_policy_encodes_future_authority_checklist_families() -> None:
+    policy = get_options_authority_surface_policy("event_calendar")
+
+    assert policy["required_future_evidence_families"] == {
+        "provenance": (
+            "licensed_provider",
+            "exchange",
+            "issuer",
+            "official_calendar",
+            "approved_internal_source",
+        ),
+        "entitlement": (
+            "event_calendar_entitlement",
+            "live_delayed_status",
+            "environment",
+            "decision_use_rights",
+            "redistribution_rights",
+            "audit_timestamp",
+        ),
+        "sla_freshness": (
+            "as_of",
+            "freshness",
+            "max_age_policy",
+            "provider_sla_status",
+            "freshness_seconds",
+            "freshness_state",
+            "latency_or_error_state",
+        ),
+        "event_taxonomy": (
+            "earnings",
+            "dividends_ex_dividend",
+            "splits",
+            "corporate_actions",
+            "macro_context_relevance",
+        ),
+        "confirmation": (
+            "confirmed_or_estimated",
+            "event_date_or_time",
+            "session",
+            "timezone",
+            "provider_event_id_or_event_identity",
+        ),
+        "coverage_scope": (
+            "symbol_or_underlying_coverage",
+            "lookahead_window_or_date_range",
+            "coverage_metadata",
+        ),
+    }
