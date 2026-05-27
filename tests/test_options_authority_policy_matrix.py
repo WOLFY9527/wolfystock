@@ -178,3 +178,54 @@ def test_event_calendar_policy_encodes_future_authority_checklist_families() -> 
             "coverage_metadata",
         ),
     }
+
+
+def test_iv_rank_policy_encodes_future_authority_checklist_families() -> None:
+    policy = get_options_authority_surface_policy("iv_rank")
+
+    assert policy["required_future_evidence_families"] == {
+        "provenance": (
+            "approved_provider",
+            "licensed_source",
+            "approved_internal_derived_source",
+        ),
+        "entitlement": (
+            "options_iv_history_entitlement",
+            "live_delayed_status",
+            "environment",
+            "decision_use_rights",
+            "redistribution_rights",
+            "audit_timestamp",
+        ),
+        "sla_freshness": (
+            "as_of",
+            "freshness",
+            "max_age_policy",
+            "provider_sla_status",
+            "freshness_seconds",
+            "freshness_state",
+            "latency_or_error_state",
+        ),
+        "methodology": (
+            "provider_reported_iv_rank_or_percentile",
+            "deterministic_derived_iv_rank",
+            "methodology_version",
+            "calculation_basis",
+            "percentile_or_rank_definition",
+        ),
+        "lookback_window": (
+            "lookback_window",
+            "date_range_start",
+            "date_range_end",
+        ),
+        "iv_evidence_source": (
+            "provider_reported_iv_rank",
+            "provider_reported_iv_percentile",
+            "approved_historical_option_iv_series_availability",
+        ),
+        "coverage_scope": (
+            "symbol_or_underlying_coverage",
+            "contract_universe_coverage",
+            "coverage_metadata",
+        ),
+    }
