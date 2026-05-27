@@ -310,13 +310,15 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
             "diagnosticOnly": True,
             "decisionGrade": False,
             "warning": "Checklist or candidate completeness is diagnostic-only and not authority; candidate evidence is not decision readiness; this summary is not decisionGrade.",
-            "surfaceCount": 8,
+            "surfaceCount": 10,
             "authoritySurfaces": [
                 "iv_rank",
                 "event_calendar",
                 "expiration_calendar",
             ],
             "candidateSurfaces": [
+                "iv_rank_candidate_gap",
+                "iv_rank_registry_candidate",
                 "event_calendar_candidate_gap",
                 "event_calendar_registry_candidate",
                 "expiration_calendar_candidate_gap",
@@ -360,6 +362,30 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
                         "expiration_calendar_authority_missing",
                         "expiration_calendar_fixture_not_authoritative",
                         "expiration_calendar_synthetic_not_authoritative",
+                    ],
+                },
+                {
+                    "surface": "iv_rank_candidate_gap",
+                    "sourceType": "provider_reported_iv_rank",
+                    "authoritative": False,
+                    "candidateOnly": True,
+                    "authorityGrant": False,
+                    "missingEvidenceFamilies": [
+                        "internal_policy_grant_missing",
+                        "source_identity_provenance_chain_missing",
+                        "iv_rank_source_authority_missing",
+                    ],
+                },
+                {
+                    "surface": "iv_rank_registry_candidate",
+                    "sourceType": "missing",
+                    "authoritative": False,
+                    "candidateOnly": True,
+                    "authorityGrant": False,
+                    "metadataFamilies": [
+                        "provenance",
+                        "entitlement",
+                        "slaFreshness",
                     ],
                 },
                 {
@@ -1043,13 +1069,15 @@ def test_runtime_diagnostic_options_authority_operator_summary_is_compact_and_sa
     assert "not authority" in summary["warning"].lower()
     assert "not decision readiness" in summary["warning"].lower()
     assert "not decisiongrade" in summary["warning"].lower()
-    assert summary["surfaceCount"] == 8
+    assert summary["surfaceCount"] == 10
     assert summary["authoritySurfaces"] == [
         "iv_rank",
         "event_calendar",
         "expiration_calendar",
     ]
     assert summary["candidateSurfaces"] == [
+        "iv_rank_candidate_gap",
+        "iv_rank_registry_candidate",
         "event_calendar_candidate_gap",
         "event_calendar_registry_candidate",
         "expiration_calendar_candidate_gap",
@@ -1064,6 +1092,16 @@ def test_runtime_diagnostic_options_authority_operator_summary_is_compact_and_sa
         "iv_rank_authority_missing",
         "iv_rank_synthetic_fixture_proxy",
         "iv_rank_fixture_not_authoritative",
+    ]
+    assert rows["iv_rank_candidate_gap"]["missingEvidenceFamilies"] == [
+        "internal_policy_grant_missing",
+        "source_identity_provenance_chain_missing",
+        "iv_rank_source_authority_missing",
+    ]
+    assert rows["iv_rank_registry_candidate"]["metadataFamilies"] == [
+        "provenance",
+        "entitlement",
+        "slaFreshness",
     ]
     assert rows["event_calendar_candidate_gap"]["missingEvidenceFamilies"] == [
         "internal_policy_grant_missing",

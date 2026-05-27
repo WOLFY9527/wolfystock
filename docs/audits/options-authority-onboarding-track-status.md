@@ -16,7 +16,7 @@ All three tracks remain non-authoritative. Current artifacts are diagnostic-only
 | --- | --- | --- | --- |
 | `expiration-calendar` | Most complete | Full observation-only scaffold exists end to end | Source/license/use-rights verification still missing |
 | `event-calendar` | Partial but close | Gap + registry + runtime projections exist; candidate-evidence contract/runtime projection still missing | Source/license/use-rights verification still missing |
-| `IV-rank` | Earliest | Gap contract + worksheet exist; registry/runtime candidate scaffold still missing | Source/license/use-rights + methodology verification still missing |
+| `IV-rank` | Earlier but no longer gap-only | Gap contract + registry metadata + worksheet exist; compact operator-summary rows now cover candidate gap/registry metadata, but no standalone runtime candidate sections or evidence packet exist | Source/license/use-rights + methodology verification still missing |
 
 ## Per Surface
 
@@ -69,11 +69,12 @@ All three tracks remain non-authoritative. Current artifacts are diagnostic-only
 
 - Complete observation-only scaffolding:
   - gap contract
+  - registry metadata
+  - compact operator-summary row coverage for candidate gap and registry metadata
   - external verification worksheet
 - Missing scaffolding:
-  - registry metadata
-  - runtime gap projection
-  - registry runtime projection
+  - standalone runtime gap projection
+  - standalone registry runtime projection
   - source-candidate evidence packet as a runtime-safe artifact
   - evidence runtime projection
 - External verification still required:
