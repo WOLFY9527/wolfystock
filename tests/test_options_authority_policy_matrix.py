@@ -10,6 +10,7 @@ from src.services.options_authority_policy_matrix import (
     CURRENT_KNOWN_OPTIONS_AUTHORITY_PROVIDER_IDS,
     CURRENT_KNOWN_OPTIONS_AUTHORITY_SOURCE_TYPES,
     OPTIONS_AUTHORITY_SURFACES,
+    build_options_expiration_source_candidate_gap,
     get_options_authority_policy_matrix,
     get_options_authority_surface_policy,
     is_options_authority_provider_granted,
@@ -128,6 +129,119 @@ def test_expiration_calendar_policy_encodes_future_authority_checklist_families(
             "contract_symbol_mapping",
         ),
     }
+
+
+def test_expiration_calendar_source_candidate_gap_contract_is_inert_and_observation_only() -> None:
+    contract = build_options_expiration_source_candidate_gap(
+        "occ_opra_exchange_or_licensed_expiration_calendar"
+    )
+
+    assert contract["diagnosticOnly"] is True
+    assert contract["surface"] == "expiration_calendar"
+    assert contract["candidateOnly"] is True
+    assert contract["authorityGrant"] is False
+    assert contract["candidateSourceClass"] == "occ_opra_exchange_or_licensed_expiration_calendar"
+    assert set(contract["missingEvidenceFamilies"]) >= {
+        "internal_policy_grant_missing",
+        "source_authority_provenance_missing",
+        "occ_opra_exchange_licensed_source_metadata_missing",
+        "entitlement_use_rights_missing",
+        "sla_freshness_missing",
+        "expiration_taxonomy_missing",
+        "adjusted_deliverable_corporate_action_evidence_missing",
+    }
+    assert set(contract["forbiddenAuthorityInputs"]) >= {
+        "coverage_completeness",
+        "provider_self_claims",
+        "provider_capabilities",
+        "fixtures",
+        "dry_run",
+        "adapter_contract",
+        "request_shaped_evidence",
+        "proxy",
+        "current_provider_id:tradier",
+        "current_provider_id:ibkr",
+        "current_provider_id:polygon",
+    }
+    assert contract["requiredEvidenceFamilies"] == {
+        "internal_policy_grant": (
+            "wolfystock_internal_policy_grant",
+            "surface_authority_approval",
+        ),
+        "source_authority_provenance": (
+            "source_authority",
+            "provenance_chain",
+            "approved_source_class",
+        ),
+        "occ_opra_exchange_licensed_source_metadata": (
+            "occ_or_opra_or_exchange_or_licensed_source",
+            "venue",
+            "calendar_scope",
+            "source_license",
+        ),
+        "entitlement_use_rights": (
+            "options_entitlement",
+            "decision_use_rights",
+            "redistribution_rights",
+            "environment",
+        ),
+        "sla_freshness": (
+            "as_of",
+            "freshness",
+            "max_age_policy",
+            "provider_sla_status",
+        ),
+        "expiration_taxonomy": (
+            "weekly",
+            "monthly",
+            "quarterly",
+            "standard",
+            "leaps",
+            "special_expirations",
+            "classification_source",
+        ),
+        "adjusted_deliverable_corporate_action_evidence": (
+            "occ_memo_or_equivalent",
+            "effective_date",
+            "adjusted_root_or_class",
+            "deliverable_components",
+            "multiplier",
+            "cash_in_lieu",
+            "standard_or_non_standard",
+            "contract_symbol_mapping",
+            "corporate_action_evidence",
+        ),
+    }
+    assert contract["nextSafeStep"] == "collect_observation_only_metadata_without_granting_authority"
+
+
+@pytest.mark.parametrize(
+    "source_class",
+    tuple(
+        dict.fromkeys(
+            (
+                *CURRENT_KNOWN_OPTIONS_AUTHORITY_SOURCE_TYPES,
+                *BLOCKED_OPTIONS_AUTHORITY_SOURCE_CLASSES,
+                *get_options_authority_surface_policy("expiration_calendar")[
+                    "future_candidate_source_classes"
+                ],
+            )
+        )
+    ),
+)
+def test_expiration_calendar_source_candidate_gap_never_grants_authority(
+    source_class: str,
+) -> None:
+    contract = build_options_expiration_source_candidate_gap(source_class)
+
+    assert contract["authorityGrant"] is False
+    assert contract["candidateOnly"] is True
+    assert contract["candidateSourceClass"] == source_class
+
+    if source_class not in get_options_authority_surface_policy("expiration_calendar")[
+        "future_candidate_source_classes"
+    ]:
+        assert "non_blocked_source_class_missing" in contract["missingEvidenceFamilies"]
 
 
 def test_event_calendar_policy_encodes_future_authority_checklist_families() -> None:

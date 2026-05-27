@@ -194,6 +194,88 @@ EXPIRATION_CALENDAR_REQUIRED_FUTURE_EVIDENCE_FAMILIES = {
         "contract_symbol_mapping",
     ),
 }
+_EXPIRATION_CALENDAR_SOURCE_CANDIDATE_GAP_REQUIRED_EVIDENCE_FAMILIES = {
+    "internal_policy_grant": (
+        "wolfystock_internal_policy_grant",
+        "surface_authority_approval",
+    ),
+    "source_authority_provenance": (
+        "source_authority",
+        "provenance_chain",
+        "approved_source_class",
+    ),
+    "occ_opra_exchange_licensed_source_metadata": (
+        "occ_or_opra_or_exchange_or_licensed_source",
+        "venue",
+        "calendar_scope",
+        "source_license",
+    ),
+    "entitlement_use_rights": (
+        "options_entitlement",
+        "decision_use_rights",
+        "redistribution_rights",
+        "environment",
+    ),
+    "sla_freshness": (
+        "as_of",
+        "freshness",
+        "max_age_policy",
+        "provider_sla_status",
+    ),
+    "expiration_taxonomy": (
+        "weekly",
+        "monthly",
+        "quarterly",
+        "standard",
+        "leaps",
+        "special_expirations",
+        "classification_source",
+    ),
+    "adjusted_deliverable_corporate_action_evidence": (
+        "occ_memo_or_equivalent",
+        "effective_date",
+        "adjusted_root_or_class",
+        "deliverable_components",
+        "multiplier",
+        "cash_in_lieu",
+        "standard_or_non_standard",
+        "contract_symbol_mapping",
+        "corporate_action_evidence",
+    ),
+}
+_EXPIRATION_CALENDAR_SOURCE_CANDIDATE_GAP_MISSING_EVIDENCE_FAMILIES = (
+    "internal_policy_grant_missing",
+    "source_authority_provenance_missing",
+    "occ_opra_exchange_licensed_source_metadata_missing",
+    "entitlement_use_rights_missing",
+    "sla_freshness_missing",
+    "expiration_taxonomy_missing",
+    "adjusted_deliverable_corporate_action_evidence_missing",
+)
+_EXPIRATION_CALENDAR_SOURCE_CANDIDATE_GAP_FORBIDDEN_AUTHORITY_INPUTS = (
+    "coverage_completeness",
+    "provider_self_claims",
+    "provider_capabilities",
+    "fixtures",
+    "dry_run",
+    "adapter_contract",
+    "request_shaped_evidence",
+    "proxy",
+    "current_provider_id:tradier",
+    "current_provider_id:ibkr",
+    "current_provider_id:polygon",
+)
+_EXPIRATION_CALENDAR_SOURCE_CANDIDATE_GAP_CONTRACT = {
+    "diagnosticOnly": True,
+    "surface": "expiration_calendar",
+    "candidateOnly": True,
+    "authorityGrant": False,
+    "candidateSourceClass": "",
+    "missingEvidenceFamilies": _EXPIRATION_CALENDAR_SOURCE_CANDIDATE_GAP_MISSING_EVIDENCE_FAMILIES,
+    "forbiddenAuthorityInputs": _EXPIRATION_CALENDAR_SOURCE_CANDIDATE_GAP_FORBIDDEN_AUTHORITY_INPUTS,
+    "requiredEvidenceFamilies": _EXPIRATION_CALENDAR_SOURCE_CANDIDATE_GAP_REQUIRED_EVIDENCE_FAMILIES,
+    "nextSafeStep": "collect_observation_only_metadata_without_granting_authority",
+}
 
 _COMMON_POLICY_FLAGS = {
     "diagnostic_only": True,
@@ -285,6 +367,7 @@ _OPTIONS_AUTHORITY_POLICY_MATRIX = {
         ),
         "required_future_evidence_families": EXPIRATION_CALENDAR_REQUIRED_FUTURE_EVIDENCE_FAMILIES,
         "future_candidate_source_classes": _EXPIRATION_CALENDAR_FUTURE_CANDIDATE_SOURCE_CLASSES,
+        "source_candidate_gap_contract": _EXPIRATION_CALENDAR_SOURCE_CANDIDATE_GAP_CONTRACT,
     },
 }
 
@@ -336,3 +419,29 @@ def is_options_authority_provider_granted(surface: str, provider_id: str) -> boo
     return normalized_provider_id in {
         _normalize_token(item) for item in policy["authority_grants"]["provider_ids"]
     }
+
+
+def build_options_expiration_source_candidate_gap(
+    candidate_source_class: str,
+) -> dict[str, Any]:
+    """Return inert expiration-calendar source-candidate gap metadata."""
+
+    policy = get_options_authority_surface_policy("expiration_calendar")
+    contract = deepcopy(policy["source_candidate_gap_contract"])
+    normalized_source_class = _normalize_token(candidate_source_class)
+    approved_candidate_classes = {
+        _normalize_token(item) for item in policy["future_candidate_source_classes"]
+    }
+    missing_evidence_families = list(contract["missingEvidenceFamilies"])
+
+    contract["candidateSourceClass"] = normalized_source_class
+
+    if normalized_source_class not in approved_candidate_classes:
+        missing_evidence_families.insert(1, "non_blocked_source_class_missing")
+
+    contract["missingEvidenceFamilies"] = tuple(dict.fromkeys(missing_evidence_families))
+    contract["authorityGrant"] = False
+    contract["candidateOnly"] = True
+    contract["diagnosticOnly"] = True
+    contract["surface"] = "expiration_calendar"
+    return contract
