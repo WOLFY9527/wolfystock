@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Input } from '../components/common';
 import type { ParsedApiError } from '../api/error';
@@ -119,7 +119,7 @@ const LoginPage: React.FC = () => {
   const createModeRequested = searchParams.get('mode') === 'create';
   const routeLanguage = parseLocaleFromPathname(window.location.pathname);
   const language: LoginLanguage = routeLanguage === 'en' ? 'en' : 'zh';
-  const copy = useMemo(() => buildLoginCopy(language), [language]);
+  const copy = buildLoginCopy(language);
   const homePath = routeLanguage ? buildLocalizedPath('/', routeLanguage) : '/';
   const guestPath = routeLanguage ? buildLocalizedPath('/guest', routeLanguage) : '/guest';
   const resetPasswordPath = routeLanguage ? buildLocalizedPath('/reset-password', routeLanguage) : '/reset-password';

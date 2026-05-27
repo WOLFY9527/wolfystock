@@ -289,7 +289,7 @@ const BacktestPage: React.FC = () => {
     };
   }, [overallPerf, prepareResult, runResult, sampleStatus, selectedHistoricalRun, stockPerf]);
 
-  const historicalSummaryItems = useMemo(() => ([
+  const historicalSummaryItems = [
     {
       label: bt(language, 'page.historicalSummary.preparedSamplesLabel'),
       value: sampleStatus?.preparedCount != null ? String(sampleStatus.preparedCount) : '--',
@@ -324,18 +324,7 @@ const BacktestPage: React.FC = () => {
       value: historicalPerfSnapshot?.avgStockReturnPct != null ? `${historicalPerfSnapshot.avgStockReturnPct.toFixed(2)}%` : '--',
       note: bt(language, 'page.historicalSummary.averageInstrumentReturnNote'),
     },
-  ]), [
-    language,
-    historicalPerfSnapshot?.completedCount,
-    historicalPerfSnapshot?.directionAccuracyPct,
-    historicalPerfSnapshot?.avgSimulatedReturnPct,
-    historicalPerfSnapshot?.avgStockReturnPct,
-    historicalPerfSnapshot?.totalEvaluations,
-    historicalPerfSnapshot?.winRatePct,
-    sampleStatus?.preparedCount,
-    sampleStatus?.preparedEndDate,
-    sampleStatus?.preparedStartDate,
-  ]);
+  ];
 
   const historicalSampleTransparency = useMemo(() => {
     const latestPreparedSampleDate = runResult?.latestPreparedSampleDate

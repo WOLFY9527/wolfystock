@@ -1260,7 +1260,7 @@ const RuleBacktestComparePage: React.FC = () => {
     const query = searchParams.toString();
     return `${window.location.origin}/backtest/compare${query ? `?${query}` : ''}`;
   }, [searchParams]);
-  const compareSummaryText = useMemo(() => buildCompareShareSummary({
+  const compareSummaryText = buildCompareShareSummary({
     runIds,
     baselineRunId,
     baselineCode: baselineItem?.metadata.code || comparisonSummary?.baseline.code || '--',
@@ -1268,16 +1268,7 @@ const RuleBacktestComparePage: React.FC = () => {
     primaryProfile: comparisonProfile?.primaryProfile,
     comparableCount: response?.comparableRunIds.length,
     requestedCount: response?.requestedRunIds.length,
-  }), [
-    baselineItem?.metadata.code,
-    baselineRunId,
-    comparisonProfile?.primaryProfile,
-    comparisonSummary?.baseline.code,
-    response?.comparableRunIds.length,
-    response?.requestedRunIds.length,
-    robustnessSummary?.overallState,
-    runIds,
-  ]);
+  });
   const advancedDiagnostics = collectCompareDiagnostics(
     comparisonHighlights?.diagnostics,
     robustnessSummary?.diagnostics,

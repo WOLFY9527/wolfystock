@@ -542,6 +542,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     () => resolveAnnotationLines(decisionPanel),
     [decisionPanel],
   );
+  const analysisPrice = decisionPanel?.analysisPrice;
 
   const chartGeometry = useMemo<ChartGeometry | null>(() => {
     if (size.width <= 0 || size.height <= 0) {
@@ -584,8 +585,8 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
   const priceDomain = useMemo(() => {
     const values = visibleData.flatMap((item) => [item.low, item.high]);
     annotationLines.forEach((item) => values.push(item.value));
-    if (isFiniteNumber(decisionPanel?.analysisPrice)) {
-      values.push(decisionPanel.analysisPrice);
+    if (isFiniteNumber(analysisPrice)) {
+      values.push(analysisPrice);
     }
     if (values.length === 0) {
       return null;
@@ -598,7 +599,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
       min: minValue - padding,
       max: maxValue + padding,
     };
-  }, [annotationLines, decisionPanel?.analysisPrice, visibleData]);
+  }, [analysisPrice, annotationLines, visibleData]);
 
   const volumeMax = useMemo(
     () => Math.max(...visibleData.map((item) => item.volume || 0), 1),
@@ -836,14 +837,11 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
   }, [t]);
 
   const activeViewConfig = VIEW_CONFIGS.find((item) => item.key === activeView);
-  const compactContextLine = useMemo(() => {
-    const parts = [
-      summary?.priceBasis,
-      summary?.referenceSession,
-      summary?.snapshotTime ? `${t('chart.updated')} ${summary.snapshotTime}` : undefined,
-    ].filter(Boolean);
-    return parts.join(' · ');
-  }, [summary?.priceBasis, summary?.referenceSession, summary?.snapshotTime, t]);
+  const compactContextLine = [
+    summary?.priceBasis,
+    summary?.referenceSession,
+    summary?.snapshotTime ? `${t('chart.updated')} ${summary.snapshotTime}` : undefined,
+  ].filter(Boolean).join(' · ');
 
   const inspectorRows = useMemo(() => {
     if (!activeBar) {
