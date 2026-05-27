@@ -266,6 +266,46 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
                 },
             ]
         },
+        "optionsAuthorityDiagnostics": {
+            "diagnosticOnly": True,
+            "decisionGrade": False,
+            "warning": "Authority diagnostics and checklist completeness are diagnostic-only and not decisionGrade.",
+            "surfaces": [
+                {
+                    "surface": "iv_rank",
+                    "authorityState": "non_authoritative",
+                    "authoritative": False,
+                    "diagnosticOnly": True,
+                    "reasonCodes": [
+                        "iv_rank_authority_missing",
+                        "iv_rank_synthetic_fixture_proxy",
+                        "iv_rank_fixture_not_authoritative",
+                    ],
+                },
+                {
+                    "surface": "event_calendar",
+                    "authorityState": "missing",
+                    "authoritative": False,
+                    "diagnosticOnly": True,
+                    "reasonCodes": [
+                        "event_calendar_authority_missing",
+                        "event_calendar_missing",
+                        "event_calendar_source_authority_missing",
+                    ],
+                },
+                {
+                    "surface": "expiration_calendar",
+                    "authorityState": "non_authoritative",
+                    "authoritative": False,
+                    "diagnosticOnly": True,
+                    "reasonCodes": [
+                        "expiration_calendar_authority_missing",
+                        "expiration_calendar_fixture_not_authoritative",
+                        "expiration_calendar_synthetic_not_authoritative",
+                    ],
+                },
+            ],
+        },
         "optionsIvRankAuthority": {
             "diagnosticOnly": True,
             "authorityState": "non_authoritative",
@@ -455,6 +495,96 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
             "trustLevel": "score_grade_when_configured",
         },
         "discrepancies": [],
+    }
+
+
+def test_runtime_diagnostic_options_authority_summary_is_sanitized_and_non_authoritative(monkeypatch) -> None:
+    module = _load_script_module()
+
+    monkeypatch.setattr(
+        module,
+        "_fetch_json",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("endpoint fetch should not run")),
+    )
+    monkeypatch.setattr(
+        module,
+        "_build_tradier_options_live_probe_transport",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("tradier live probe should not run")),
+    )
+
+    payload = module.collect_diagnostic_bundle()
+    summary = payload["optionsAuthorityDiagnostics"]
+    serialized = json.dumps(summary, ensure_ascii=False, sort_keys=True)
+
+    assert "optionsIvRankAuthority" in payload
+    assert "optionsEventCalendarAuthority" in payload
+    assert "optionsExpirationCalendarAuthority" in payload
+    assert summary["diagnosticOnly"] is True
+    assert summary["decisionGrade"] is False
+    assert "not decisiongrade" in summary["warning"].lower()
+    assert [item["surface"] for item in summary["surfaces"]] == [
+        "iv_rank",
+        "event_calendar",
+        "expiration_calendar",
+    ]
+    assert all(item["authoritative"] is False for item in summary["surfaces"])
+    assert all(item["diagnosticOnly"] is True for item in summary["surfaces"])
+    assert all(len(item["reasonCodes"]) <= 3 for item in summary["surfaces"])
+    for blocked in ("http://", "https://", "Authorization", "Bearer", "token", "secret"):
+        assert blocked not in serialized
+
+
+def test_runtime_diagnostic_options_authority_summary_includes_safe_checklist_summary(monkeypatch) -> None:
+    module = _load_script_module()
+
+    monkeypatch.setattr(
+        module,
+        "_collect_options_iv_rank_authority",
+        lambda: {
+            "diagnosticOnly": True,
+            "authorityState": "non_authoritative",
+            "authoritative": False,
+            "reasonCodes": [
+                "iv_rank_authority_missing",
+                "iv_rank_provenance_evidence_missing",
+                "iv_rank_methodology_evidence_missing",
+                "iv_rank_sla_evidence_missing",
+            ],
+            "authorityEvidenceChecklist": {
+                "provenance": {"present": False},
+                "methodology": {"present": False},
+                "coverage_scope": {"present": True},
+            },
+            "authorityEvidenceGapFamilies": ["provenance", "methodology"],
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "_collect_options_event_calendar_authority",
+        lambda: {
+            "diagnosticOnly": True,
+            "authorityState": "missing",
+            "authoritative": False,
+            "reasonCodes": ["event_calendar_authority_missing"],
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "_collect_options_expiration_calendar_authority",
+        lambda: {
+            "diagnosticOnly": True,
+            "authorityState": "non_authoritative",
+            "authoritative": False,
+            "reasonCodes": ["expiration_calendar_authority_missing"],
+        },
+    )
+
+    payload = module.collect_diagnostic_bundle()
+    iv_rank_summary = payload["optionsAuthorityDiagnostics"]["surfaces"][0]
+
+    assert iv_rank_summary["checklistSummary"] == {
+        "presentFamilies": ["coverage_scope"],
+        "missingFamilies": ["provenance", "methodology"],
     }
 
 
@@ -768,7 +898,14 @@ def test_runtime_diagnostic_options_live_probe_executes_mocked_tradier_transport
     assert tradier["brokerOrderEnabled"] is False
     assert tradier["portfolioMutationEnabled"] is False
     assert tradier["tradeable"] is False
-    assert "decisionGrade" not in serialized
+    assert payload["optionsAuthorityDiagnostics"]["decisionGrade"] is False
+    assert "decisionGrade" not in json.dumps(payload["optionsIvRankAuthority"], ensure_ascii=False, sort_keys=True)
+    assert "decisionGrade" not in json.dumps(
+        payload["optionsEventCalendarAuthority"], ensure_ascii=False, sort_keys=True
+    )
+    assert "decisionGrade" not in json.dumps(
+        payload["optionsExpirationCalendarAuthority"], ensure_ascii=False, sort_keys=True
+    )
     assert live_probe["providerId"] == "tradier"
     assert live_probe["status"] == "passed"
     assert live_probe["networkCallExecuted"] is True
@@ -841,7 +978,14 @@ def test_runtime_diagnostic_options_chain_probe_executes_mocked_tradier_chain_sa
     assert tradier["brokerOrderEnabled"] is False
     assert tradier["portfolioMutationEnabled"] is False
     assert tradier["tradeable"] is False
-    assert "decisionGrade" not in serialized
+    assert payload["optionsAuthorityDiagnostics"]["decisionGrade"] is False
+    assert "decisionGrade" not in json.dumps(payload["optionsIvRankAuthority"], ensure_ascii=False, sort_keys=True)
+    assert "decisionGrade" not in json.dumps(
+        payload["optionsEventCalendarAuthority"], ensure_ascii=False, sort_keys=True
+    )
+    assert "decisionGrade" not in json.dumps(
+        payload["optionsExpirationCalendarAuthority"], ensure_ascii=False, sort_keys=True
+    )
     assert live_probe["providerId"] == "tradier"
     assert live_probe["status"] == "passed"
     assert live_probe["networkCallExecuted"] is True

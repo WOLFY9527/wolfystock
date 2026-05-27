@@ -61,6 +61,9 @@ _ENDPOINTS: tuple[tuple[str, str], ...] = (
 _OPTIONS_LIVE_PROBE_PROVIDER = "tradier"
 _OPTIONS_LIVE_PROBE_ENDPOINT_CLASSES = ("quote", "expirations")
 _OPTIONS_CHAIN_PROBE_ENDPOINT_CLASS = "chain"
+_OPTIONS_AUTHORITY_DIAGNOSTIC_WARNING = (
+    "Authority diagnostics and checklist completeness are diagnostic-only and not decisionGrade."
+)
 
 
 def _skipped_official_macro_diagnostic(reason: str = "not_requested") -> dict[str, Any]:
@@ -258,6 +261,69 @@ def _compact_options_lab_provider_preflight(payload: dict[str, Any]) -> dict[str
             "timeoutSeconds": float(live_probe.get("timeoutSeconds") or 0.0),
             "networkCallExecuted": bool(live_probe.get("networkCallExecuted", False)),
         },
+    }
+
+
+def _safe_family_names(value: Any) -> list[str]:
+    return _sanitized_string_list(value)
+
+
+def _compact_options_authority_checklist_summary(payload: Mapping[str, Any]) -> dict[str, list[str]] | None:
+    checklist = payload.get("authorityEvidenceChecklist")
+    present_families: list[str] = []
+    missing_families: list[str] = []
+
+    if isinstance(checklist, Mapping):
+        for raw_family, raw_entry in checklist.items():
+            family = _sanitize_reason_code(raw_family)
+            if not family:
+                continue
+            entry = dict(raw_entry) if isinstance(raw_entry, Mapping) else {}
+            if bool(entry.get("present")):
+                present_families.append(family)
+            else:
+                missing_families.append(family)
+
+    missing_families.extend(_safe_family_names(payload.get("authorityEvidenceGapFamilies")))
+
+    deduped_present = list(dict.fromkeys(present_families))
+    deduped_missing = list(dict.fromkeys(missing_families))
+    summary: dict[str, list[str]] = {}
+    if deduped_present:
+        summary["presentFamilies"] = deduped_present
+    if deduped_missing:
+        summary["missingFamilies"] = deduped_missing
+    return summary or None
+
+
+def _compact_options_authority_surface(surface: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+    summary: dict[str, Any] = {
+        "surface": surface,
+        "authorityState": str(payload.get("authorityState") or "missing"),
+        "authoritative": bool(payload.get("authoritative", False)),
+        "diagnosticOnly": bool(payload.get("diagnosticOnly", True)),
+        "reasonCodes": _sanitized_string_list(payload.get("reasonCodes"))[:3],
+    }
+    checklist_summary = _compact_options_authority_checklist_summary(payload)
+    if checklist_summary:
+        summary["checklistSummary"] = checklist_summary
+    return summary
+
+
+def _collect_options_authority_diagnostics(
+    iv_rank_authority: Mapping[str, Any],
+    event_calendar_authority: Mapping[str, Any],
+    expiration_calendar_authority: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "diagnosticOnly": True,
+        "decisionGrade": False,
+        "warning": _OPTIONS_AUTHORITY_DIAGNOSTIC_WARNING,
+        "surfaces": [
+            _compact_options_authority_surface("iv_rank", iv_rank_authority),
+            _compact_options_authority_surface("event_calendar", event_calendar_authority),
+            _compact_options_authority_surface("expiration_calendar", expiration_calendar_authority),
+        ],
     }
 
 
@@ -1116,6 +1182,9 @@ def collect_diagnostic_bundle(
         official_macro_diagnostic = _skipped_official_macro_diagnostic()
         alpaca_rotation_diagnostic = _skipped_alpaca_rotation_diagnostic()
         polygon_us_breadth_diagnostic = _skipped_polygon_us_breadth_diagnostic()
+    options_iv_rank_authority = _collect_options_iv_rank_authority()
+    options_event_calendar_authority = _collect_options_event_calendar_authority()
+    options_expiration_calendar_authority = _collect_options_expiration_calendar_authority()
     result: dict[str, Any] = {
         "officialMacroDiagnostic": official_macro_diagnostic,
         "alpacaRotationDiagnostic": alpaca_rotation_diagnostic,
@@ -1128,9 +1197,14 @@ def collect_diagnostic_bundle(
             options_probe_expiration=options_probe_expiration,
             options_probe_timeout_seconds=options_probe_timeout_seconds,
         ),
-        "optionsIvRankAuthority": _collect_options_iv_rank_authority(),
-        "optionsEventCalendarAuthority": _collect_options_event_calendar_authority(),
-        "optionsExpirationCalendarAuthority": _collect_options_expiration_calendar_authority(),
+        "optionsAuthorityDiagnostics": _collect_options_authority_diagnostics(
+            options_iv_rank_authority,
+            options_event_calendar_authority,
+            options_expiration_calendar_authority,
+        ),
+        "optionsIvRankAuthority": options_iv_rank_authority,
+        "optionsEventCalendarAuthority": options_event_calendar_authority,
+        "optionsExpirationCalendarAuthority": options_expiration_calendar_authority,
         "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
         "discrepancies": [],
     }
@@ -1261,14 +1335,22 @@ def main(argv: list[str] | None = None) -> int:
             options_probe_timeout_seconds=args.options_live_probe_timeout_seconds,
         )
     except Exception:
+        options_iv_rank_authority = _collect_options_iv_rank_authority()
+        options_event_calendar_authority = _collect_options_event_calendar_authority()
+        options_expiration_calendar_authority = _collect_options_expiration_calendar_authority()
         fallback = {
             "officialMacroDiagnostic": _skipped_official_macro_diagnostic("unexpected_error"),
             "alpacaRotationDiagnostic": _skipped_alpaca_rotation_diagnostic("unexpected_error"),
             "polygonUsBreadthDiagnostic": _skipped_polygon_us_breadth_diagnostic("unexpected_error"),
             "optionsLabProviderPreflight": _collect_options_lab_provider_preflight(),
-            "optionsIvRankAuthority": _collect_options_iv_rank_authority(),
-            "optionsEventCalendarAuthority": _collect_options_event_calendar_authority(),
-            "optionsExpirationCalendarAuthority": _collect_options_expiration_calendar_authority(),
+            "optionsAuthorityDiagnostics": _collect_options_authority_diagnostics(
+                options_iv_rank_authority,
+                options_event_calendar_authority,
+                options_expiration_calendar_authority,
+            ),
+            "optionsIvRankAuthority": options_iv_rank_authority,
+            "optionsEventCalendarAuthority": options_event_calendar_authority,
+            "optionsExpirationCalendarAuthority": options_expiration_calendar_authority,
             "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
             "discrepancies": [],
         }
