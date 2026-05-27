@@ -174,3 +174,33 @@ def test_snake_case_provider_self_claim_alias_is_ignored_for_iv_rank() -> None:
         "iv_rank_provider_self_claim_ignored",
         "iv_rank_historical_option_iv_series_missing",
     ]
+
+
+def test_proxy_iv_rank_and_provider_self_claim_only_marker_stay_non_authoritative() -> None:
+    diagnostic = build_options_iv_rank_authority_diagnostic(
+        {
+            "providerId": "tradier",
+            "sourceType": "proxy",
+            "sourceAuthority": "provider_self_claim_only",
+            "authorityPolicySource": INTERNAL_OPTIONS_IV_RANK_AUTHORITY_POLICY_SOURCE,
+            "ivRankStatus": "available",
+            "ivRankSource": "provider_reported",
+            "providerReportedIvRank": 61.0,
+            "providerReportedIvPercentile": 63.0,
+            "historicalOptionIvSeriesAvailable": True,
+            "asOf": "2026-05-26T12:00:00Z",
+            "freshness": "fresh",
+            "lookbackWindow": "252d",
+            "methodology": "provider_reported_iv_percentile",
+            "coverageMetadata": {"contractsCovered": 84},
+            "sandboxOrProduction": "sandbox",
+        }
+    )
+
+    assert diagnostic["authorityState"] == "non_authoritative"
+    assert diagnostic["authoritative"] is False
+    assert diagnostic["reasonCodes"] == [
+        "iv_rank_authority_missing",
+        "iv_rank_proxy_not_authoritative",
+        "iv_rank_provider_self_claim_only_not_authoritative",
+    ]

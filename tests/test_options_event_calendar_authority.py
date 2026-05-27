@@ -256,3 +256,35 @@ def test_url_shaped_event_calendar_labels_are_redacted_but_safe_labels_remain() 
     assert diagnostic["coverageMetadata"]["sourceUrl"] == "redacted"
     assert diagnostic["sessionMetadata"]["calendarLandingPage"] == "redacted"
     assert diagnostic["sessionMetadata"]["providerLabel"] == "tradier"
+
+
+def test_proxy_event_calendar_and_provider_self_claim_only_marker_stay_non_authoritative() -> None:
+    diagnostic = build_options_event_calendar_authority_diagnostic(
+        {
+            "providerId": "future_authorized_provider",
+            "sourceType": "proxy",
+            "sourceAuthority": "provider_self_claim_only",
+            "authorityPolicySource": INTERNAL_OPTIONS_EVENT_CALENDAR_AUTHORITY_POLICY_SOURCE,
+            "eventCalendarStatus": "available",
+            "asOf": "2026-05-26T12:00:00Z",
+            "freshness": "fresh",
+            "eventTypesCovered": ["earnings", "dividends", "splits", "corporate_actions"],
+            "underlyingCoverage": ["TEM"],
+            "dateRange": {"start": "2026-05-26", "end": "2026-06-26"},
+            "timezone": "America/New_York",
+            "sessionMetadata": {"session": "regular"},
+            "confirmationStatus": "confirmed",
+            "eventId": "evt-001",
+            "providerEventId": "provider-evt-001",
+            "coverageMetadata": {"eventCount": 4},
+            "sandboxOrProduction": "production",
+        }
+    )
+
+    assert diagnostic["authorityState"] == "non_authoritative"
+    assert diagnostic["authoritative"] is False
+    assert diagnostic["reasonCodes"] == [
+        "event_calendar_authority_missing",
+        "event_calendar_proxy_not_authoritative",
+        "event_calendar_provider_self_claim_only_not_authoritative",
+    ]

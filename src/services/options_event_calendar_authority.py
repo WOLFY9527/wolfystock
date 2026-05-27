@@ -200,7 +200,17 @@ def _source_reason_codes(data: Mapping[str, Any]) -> list[str]:
             _value(data, "notes"),
         ]
     )
+    exact_markers = {
+        _normalized_text(_value(data, "providerId", "provider_id")),
+        _normalized_text(_value(data, "sourceType", "source_type")),
+        _normalized_text(_value(data, "sourceAuthority", "source_authority")),
+        _normalized_text(_value(data, "eventCalendarSource", "event_calendar_source")),
+    }
     reason_codes: list[str] = []
+    if "proxy" in exact_markers:
+        reason_codes.append("event_calendar_proxy_not_authoritative")
+    if "provider_self_claim_only" in exact_markers:
+        reason_codes.append("event_calendar_provider_self_claim_only_not_authoritative")
     if "fixture" in text:
         reason_codes.append("event_calendar_fixture_not_authoritative")
     if "synthetic" in text:
