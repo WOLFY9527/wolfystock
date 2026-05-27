@@ -306,6 +306,85 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
                 },
             ],
         },
+        "optionsExpirationSourceCandidateGap": {
+            "diagnosticOnly": True,
+            "surface": "expiration_calendar",
+            "candidateOnly": True,
+            "authorityGrant": False,
+            "candidateSourceClass": "occ_opra_exchange_or_licensed_expiration_calendar",
+            "missingEvidenceFamilies": [
+                "internal_policy_grant_missing",
+                "source_authority_provenance_missing",
+                "occ_opra_exchange_licensed_source_metadata_missing",
+                "entitlement_use_rights_missing",
+                "sla_freshness_missing",
+                "expiration_taxonomy_missing",
+                "adjusted_deliverable_corporate_action_evidence_missing",
+            ],
+            "forbiddenAuthorityInputs": [
+                "coverage_completeness",
+                "provider_self_claims",
+                "provider_capabilities",
+                "fixtures",
+                "dry_run",
+                "adapter_contract",
+                "request_shaped_evidence",
+                "proxy",
+                "current_provider_id:tradier",
+                "current_provider_id:ibkr",
+                "current_provider_id:polygon",
+            ],
+            "requiredEvidenceFamilies": {
+                "internal_policy_grant": [
+                    "wolfystock_internal_policy_grant",
+                    "surface_authority_approval",
+                ],
+                "source_authority_provenance": [
+                    "source_authority",
+                    "provenance_chain",
+                    "approved_source_class",
+                ],
+                "occ_opra_exchange_licensed_source_metadata": [
+                    "occ_or_opra_or_exchange_or_licensed_source",
+                    "venue",
+                    "calendar_scope",
+                    "source_license",
+                ],
+                "entitlement_use_rights": [
+                    "options_entitlement",
+                    "decision_use_rights",
+                    "redistribution_rights",
+                    "environment",
+                ],
+                "sla_freshness": [
+                    "as_of",
+                    "freshness",
+                    "max_age_policy",
+                    "provider_sla_status",
+                ],
+                "expiration_taxonomy": [
+                    "weekly",
+                    "monthly",
+                    "quarterly",
+                    "standard",
+                    "leaps",
+                    "special_expirations",
+                    "classification_source",
+                ],
+                "adjusted_deliverable_corporate_action_evidence": [
+                    "occ_memo_or_equivalent",
+                    "effective_date",
+                    "adjusted_root_or_class",
+                    "deliverable_components",
+                    "multiplier",
+                    "cash_in_lieu",
+                    "standard_or_non_standard",
+                    "contract_symbol_mapping",
+                    "corporate_action_evidence",
+                ],
+            },
+            "nextSafeStep": "collect_observation_only_metadata_without_granting_authority",
+        },
         "optionsIvRankAuthority": {
             "diagnosticOnly": True,
             "authorityState": "non_authoritative",
@@ -586,6 +665,105 @@ def test_runtime_diagnostic_options_authority_summary_includes_safe_checklist_su
         "presentFamilies": ["coverage_scope"],
         "missingFamilies": ["provenance", "methodology"],
     }
+
+
+def test_runtime_diagnostic_projects_expiration_source_candidate_gap_safely(monkeypatch) -> None:
+    module = _load_script_module()
+
+    monkeypatch.setattr(
+        module,
+        "_fetch_json",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("endpoint fetch should not run")),
+    )
+    monkeypatch.setattr(
+        module,
+        "_build_tradier_options_live_probe_transport",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("tradier live probe should not run")),
+    )
+
+    payload = module.collect_diagnostic_bundle()
+    projection = payload["optionsExpirationSourceCandidateGap"]
+    serialized = json.dumps(projection, ensure_ascii=False, sort_keys=True)
+
+    assert projection["diagnosticOnly"] is True
+    assert projection["surface"] == "expiration_calendar"
+    assert projection["candidateOnly"] is True
+    assert projection["authorityGrant"] is False
+    assert projection["candidateSourceClass"] == "occ_opra_exchange_or_licensed_expiration_calendar"
+    assert projection["missingEvidenceFamilies"] == [
+        "internal_policy_grant_missing",
+        "source_authority_provenance_missing",
+        "occ_opra_exchange_licensed_source_metadata_missing",
+        "entitlement_use_rights_missing",
+        "sla_freshness_missing",
+        "expiration_taxonomy_missing",
+        "adjusted_deliverable_corporate_action_evidence_missing",
+    ]
+    assert projection["forbiddenAuthorityInputs"] == [
+        "coverage_completeness",
+        "provider_self_claims",
+        "provider_capabilities",
+        "fixtures",
+        "dry_run",
+        "adapter_contract",
+        "request_shaped_evidence",
+        "proxy",
+        "current_provider_id:tradier",
+        "current_provider_id:ibkr",
+        "current_provider_id:polygon",
+    ]
+    assert projection["requiredEvidenceFamilies"] == {
+        "internal_policy_grant": [
+            "wolfystock_internal_policy_grant",
+            "surface_authority_approval",
+        ],
+        "source_authority_provenance": [
+            "source_authority",
+            "provenance_chain",
+            "approved_source_class",
+        ],
+        "occ_opra_exchange_licensed_source_metadata": [
+            "occ_or_opra_or_exchange_or_licensed_source",
+            "venue",
+            "calendar_scope",
+            "source_license",
+        ],
+        "entitlement_use_rights": [
+            "options_entitlement",
+            "decision_use_rights",
+            "redistribution_rights",
+            "environment",
+        ],
+        "sla_freshness": [
+            "as_of",
+            "freshness",
+            "max_age_policy",
+            "provider_sla_status",
+        ],
+        "expiration_taxonomy": [
+            "weekly",
+            "monthly",
+            "quarterly",
+            "standard",
+            "leaps",
+            "special_expirations",
+            "classification_source",
+        ],
+        "adjusted_deliverable_corporate_action_evidence": [
+            "occ_memo_or_equivalent",
+            "effective_date",
+            "adjusted_root_or_class",
+            "deliverable_components",
+            "multiplier",
+            "cash_in_lieu",
+            "standard_or_non_standard",
+            "contract_symbol_mapping",
+            "corporate_action_evidence",
+        ],
+    }
+    assert projection["nextSafeStep"] == "collect_observation_only_metadata_without_granting_authority"
+    for blocked in ("http://", "https://", "Authorization", "Bearer", "token", "secret", "rawPayload"):
+        assert blocked not in serialized
 
 
 def test_runtime_diagnostic_live_smoke_is_explicit_opt_in(monkeypatch) -> None:
