@@ -579,17 +579,14 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     };
   }, [activeView, size.height, size.width, visibleData.length]);
 
-  const priceDomain = useMemo(() => {
-    const values = visibleData.flatMap((item) => [item.low, item.high]);
-    const currentAnnotationLines = resolveAnnotationLines(decisionPanel);
-    currentAnnotationLines.forEach((item) => values.push(item.value));
-    const currentAnalysisPrice = decisionPanel?.analysisPrice;
-    if (isFiniteNumber(currentAnalysisPrice)) {
-      values.push(currentAnalysisPrice);
-    }
-    if (values.length === 0) {
-      return null;
-    }
+  const values = visibleData.flatMap((item) => [item.low, item.high]);
+  const currentAnnotationLines = resolveAnnotationLines(decisionPanel);
+  currentAnnotationLines.forEach((item) => values.push(item.value));
+  const currentAnalysisPrice = decisionPanel?.analysisPrice;
+  if (isFiniteNumber(currentAnalysisPrice)) {
+    values.push(currentAnalysisPrice);
+  }
+  const priceDomain = values.length === 0 ? null : (() => {
     const minValue = Math.min(...values);
     const maxValue = Math.max(...values);
     const range = Math.max(maxValue - minValue, Math.max(Math.abs(maxValue) * 0.02, 1));
@@ -598,7 +595,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
       min: minValue - padding,
       max: maxValue + padding,
     };
-  }, [decisionPanel, visibleData]);
+  })();
 
   const volumeMax = useMemo(
     () => Math.max(...visibleData.map((item) => item.volume || 0), 1),
@@ -835,12 +832,12 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     return items;
   }, [t]);
 
-  const activeViewConfig = useMemo(() => VIEW_CONFIGS.find((item) => item.key === activeView), [activeView]);
-  const compactContextLine = useMemo(() => [
+  const activeViewConfig = VIEW_CONFIGS.find((item) => item.key === activeView);
+  const compactContextLine = [
     summary?.priceBasis,
     summary?.referenceSession,
     summary?.snapshotTime ? `${t('chart.updated')} ${summary.snapshotTime}` : undefined,
-  ].filter(Boolean).join(' · '), [summary?.priceBasis, summary?.referenceSession, summary?.snapshotTime, t]);
+  ].filter(Boolean).join(' · ');
 
   const inspectorRows = useMemo(() => {
     if (!activeBar) {
