@@ -355,6 +355,92 @@ def _collect_options_authority_diagnostics(
     }
 
 
+def _limited_mapping_keys(value: Any, *, limit: int = 3) -> list[str]:
+    if not isinstance(value, Mapping):
+        return []
+    keys: list[str] = []
+    for raw_key in value.keys():
+        key = _sanitize_reason_code(raw_key)
+        if not key:
+            continue
+        keys.append(key)
+        if len(keys) >= limit:
+            break
+    return keys
+
+
+def _compact_operator_authority_row(payload: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "surface": str(payload.get("surface") or "missing"),
+        "authorityState": str(payload.get("authorityState") or "missing"),
+        "authoritative": bool(payload.get("authoritative", False)),
+        "candidateOnly": False,
+        "authorityGrant": False,
+        "reasonCodes": _sanitized_string_list(payload.get("reasonCodes"))[:3],
+    }
+
+
+def _compact_operator_candidate_row(
+    surface: str,
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "surface": surface,
+        "authoritative": False,
+        "candidateOnly": bool(payload.get("candidateOnly", True)),
+        "authorityGrant": bool(payload.get("authorityGrant", False)),
+    }
+    source_type = payload.get("sourceType") or payload.get("candidateSourceClass")
+    if source_type:
+        row["sourceType"] = str(source_type)
+    missing_families = _sanitized_string_list(payload.get("missingEvidenceFamilies"))[:3]
+    if missing_families:
+        row["missingEvidenceFamilies"] = missing_families
+    metadata_families = _limited_mapping_keys(payload.get("metadataFamilies"))
+    if metadata_families:
+        row["metadataFamilies"] = metadata_families
+    return row
+
+
+def _collect_options_authority_operator_summary(
+    authority_diagnostics: Mapping[str, Any],
+    event_source_candidate_gap: Mapping[str, Any],
+    expiration_source_candidate_gap: Mapping[str, Any],
+    event_source_registry_candidate: Mapping[str, Any],
+    expiration_source_registry_candidate: Mapping[str, Any],
+    expiration_source_candidate_evidence: Mapping[str, Any],
+) -> dict[str, Any]:
+    authority_rows = [
+        _compact_operator_authority_row(payload)
+        for payload in authority_diagnostics.get("surfaces", [])
+        if isinstance(payload, Mapping)
+    ]
+    candidate_rows = [
+        _compact_operator_candidate_row("event_calendar_candidate_gap", event_source_candidate_gap),
+        _compact_operator_candidate_row("event_calendar_registry_candidate", event_source_registry_candidate),
+        _compact_operator_candidate_row("expiration_calendar_candidate_gap", expiration_source_candidate_gap),
+        _compact_operator_candidate_row("expiration_calendar_registry_candidate", expiration_source_registry_candidate),
+        _compact_operator_candidate_row("expiration_calendar_candidate_evidence", expiration_source_candidate_evidence),
+    ]
+    rows = authority_rows + candidate_rows
+    authority_surfaces = [str(row.get("surface") or "missing") for row in authority_rows]
+    candidate_surfaces = [str(row.get("surface") or "missing") for row in candidate_rows]
+    return {
+        "diagnosticOnly": bool(authority_diagnostics.get("diagnosticOnly", True)),
+        "decisionGrade": False,
+        "warning": (
+            "Checklist or candidate completeness is diagnostic-only and not authority; "
+            "candidate evidence is not decision readiness; this summary is not decisionGrade."
+        ),
+        "surfaceCount": len(rows),
+        "authoritySurfaces": authority_surfaces,
+        "candidateSurfaces": candidate_surfaces,
+        "allAuthoritative": bool(authority_rows) and all(bool(row.get("authoritative", False)) for row in authority_rows),
+        "anyAuthorityGrant": any(bool(row.get("authorityGrant", False)) for row in candidate_rows),
+        "rows": rows,
+    }
+
+
 def _collect_options_expiration_source_candidate_gap() -> dict[str, Any]:
     contract = build_options_expiration_source_candidate_gap(_EXPIRATION_SOURCE_CANDIDATE_CLASS)
     return {
@@ -1324,9 +1410,15 @@ def collect_diagnostic_bundle(
     options_expiration_source_candidate_gap = _collect_options_expiration_source_candidate_gap()
     options_event_source_registry_candidate = _collect_options_event_source_registry_candidate()
     options_expiration_source_registry_candidate = _collect_options_expiration_source_registry_candidate()
+    options_expiration_source_candidate_evidence = _collect_options_expiration_source_candidate_evidence()
     options_iv_rank_authority = _collect_options_iv_rank_authority()
     options_event_calendar_authority = _collect_options_event_calendar_authority()
     options_expiration_calendar_authority = _collect_options_expiration_calendar_authority()
+    options_authority_diagnostics = _collect_options_authority_diagnostics(
+        options_iv_rank_authority,
+        options_event_calendar_authority,
+        options_expiration_calendar_authority,
+    )
     result: dict[str, Any] = {
         "officialMacroDiagnostic": official_macro_diagnostic,
         "alpacaRotationDiagnostic": alpaca_rotation_diagnostic,
@@ -1339,14 +1431,18 @@ def collect_diagnostic_bundle(
             options_probe_expiration=options_probe_expiration,
             options_probe_timeout_seconds=options_probe_timeout_seconds,
         ),
-        "optionsAuthorityDiagnostics": _collect_options_authority_diagnostics(
-            options_iv_rank_authority,
-            options_event_calendar_authority,
-            options_expiration_calendar_authority,
+        "optionsAuthorityDiagnostics": options_authority_diagnostics,
+        "optionsAuthorityOperatorSummary": _collect_options_authority_operator_summary(
+            options_authority_diagnostics,
+            options_event_source_candidate_gap,
+            options_expiration_source_candidate_gap,
+            options_event_source_registry_candidate,
+            options_expiration_source_registry_candidate,
+            options_expiration_source_candidate_evidence,
         ),
         "optionsEventSourceCandidateGap": options_event_source_candidate_gap,
         "optionsExpirationSourceCandidateGap": options_expiration_source_candidate_gap,
-        "optionsExpirationSourceCandidateEvidence": _collect_options_expiration_source_candidate_evidence(),
+        "optionsExpirationSourceCandidateEvidence": options_expiration_source_candidate_evidence,
         "optionsEventSourceRegistryCandidate": options_event_source_registry_candidate,
         "optionsExpirationSourceRegistryCandidate": options_expiration_source_registry_candidate,
         "optionsIvRankAuthority": options_iv_rank_authority,
@@ -1485,21 +1581,35 @@ def main(argv: list[str] | None = None) -> int:
         options_iv_rank_authority = _collect_options_iv_rank_authority()
         options_event_calendar_authority = _collect_options_event_calendar_authority()
         options_expiration_calendar_authority = _collect_options_expiration_calendar_authority()
+        options_authority_diagnostics = _collect_options_authority_diagnostics(
+            options_iv_rank_authority,
+            options_event_calendar_authority,
+            options_expiration_calendar_authority,
+        )
+        options_event_source_candidate_gap = _collect_options_event_source_candidate_gap()
+        options_expiration_source_candidate_gap = _collect_options_expiration_source_candidate_gap()
+        options_event_source_registry_candidate = _collect_options_event_source_registry_candidate()
+        options_expiration_source_registry_candidate = _collect_options_expiration_source_registry_candidate()
+        options_expiration_source_candidate_evidence = _collect_options_expiration_source_candidate_evidence()
         fallback = {
             "officialMacroDiagnostic": _skipped_official_macro_diagnostic("unexpected_error"),
             "alpacaRotationDiagnostic": _skipped_alpaca_rotation_diagnostic("unexpected_error"),
             "polygonUsBreadthDiagnostic": _skipped_polygon_us_breadth_diagnostic("unexpected_error"),
             "optionsLabProviderPreflight": _collect_options_lab_provider_preflight(),
-            "optionsAuthorityDiagnostics": _collect_options_authority_diagnostics(
-                options_iv_rank_authority,
-                options_event_calendar_authority,
-                options_expiration_calendar_authority,
+            "optionsAuthorityDiagnostics": options_authority_diagnostics,
+            "optionsAuthorityOperatorSummary": _collect_options_authority_operator_summary(
+                options_authority_diagnostics,
+                options_event_source_candidate_gap,
+                options_expiration_source_candidate_gap,
+                options_event_source_registry_candidate,
+                options_expiration_source_registry_candidate,
+                options_expiration_source_candidate_evidence,
             ),
-            "optionsEventSourceCandidateGap": _collect_options_event_source_candidate_gap(),
-            "optionsExpirationSourceCandidateGap": _collect_options_expiration_source_candidate_gap(),
-            "optionsExpirationSourceCandidateEvidence": _collect_options_expiration_source_candidate_evidence(),
-            "optionsEventSourceRegistryCandidate": _collect_options_event_source_registry_candidate(),
-            "optionsExpirationSourceRegistryCandidate": _collect_options_expiration_source_registry_candidate(),
+            "optionsEventSourceCandidateGap": options_event_source_candidate_gap,
+            "optionsExpirationSourceCandidateGap": options_expiration_source_candidate_gap,
+            "optionsExpirationSourceCandidateEvidence": options_expiration_source_candidate_evidence,
+            "optionsEventSourceRegistryCandidate": options_event_source_registry_candidate,
+            "optionsExpirationSourceRegistryCandidate": options_expiration_source_registry_candidate,
             "optionsIvRankAuthority": options_iv_rank_authority,
             "optionsEventCalendarAuthority": options_event_calendar_authority,
             "optionsExpirationCalendarAuthority": options_expiration_calendar_authority,

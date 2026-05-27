@@ -306,6 +306,123 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
                 },
             ],
         },
+        "optionsAuthorityOperatorSummary": {
+            "diagnosticOnly": True,
+            "decisionGrade": False,
+            "warning": "Checklist or candidate completeness is diagnostic-only and not authority; candidate evidence is not decision readiness; this summary is not decisionGrade.",
+            "surfaceCount": 8,
+            "authoritySurfaces": [
+                "iv_rank",
+                "event_calendar",
+                "expiration_calendar",
+            ],
+            "candidateSurfaces": [
+                "event_calendar_candidate_gap",
+                "event_calendar_registry_candidate",
+                "expiration_calendar_candidate_gap",
+                "expiration_calendar_registry_candidate",
+                "expiration_calendar_candidate_evidence",
+            ],
+            "allAuthoritative": False,
+            "anyAuthorityGrant": False,
+            "rows": [
+                {
+                    "surface": "iv_rank",
+                    "authorityState": "non_authoritative",
+                    "authoritative": False,
+                    "candidateOnly": False,
+                    "authorityGrant": False,
+                    "reasonCodes": [
+                        "iv_rank_authority_missing",
+                        "iv_rank_synthetic_fixture_proxy",
+                        "iv_rank_fixture_not_authoritative",
+                    ],
+                },
+                {
+                    "surface": "event_calendar",
+                    "authorityState": "missing",
+                    "authoritative": False,
+                    "candidateOnly": False,
+                    "authorityGrant": False,
+                    "reasonCodes": [
+                        "event_calendar_authority_missing",
+                        "event_calendar_missing",
+                        "event_calendar_source_authority_missing",
+                    ],
+                },
+                {
+                    "surface": "expiration_calendar",
+                    "authorityState": "non_authoritative",
+                    "authoritative": False,
+                    "candidateOnly": False,
+                    "authorityGrant": False,
+                    "reasonCodes": [
+                        "expiration_calendar_authority_missing",
+                        "expiration_calendar_fixture_not_authoritative",
+                        "expiration_calendar_synthetic_not_authoritative",
+                    ],
+                },
+                {
+                    "surface": "event_calendar_candidate_gap",
+                    "sourceType": "licensed_event_calendar_provider",
+                    "authoritative": False,
+                    "candidateOnly": True,
+                    "authorityGrant": False,
+                    "missingEvidenceFamilies": [
+                        "internal_policy_grant_missing",
+                        "source_identity_provenance_chain_missing",
+                        "licensed_backing_missing",
+                    ],
+                },
+                {
+                    "surface": "event_calendar_registry_candidate",
+                    "sourceType": "missing",
+                    "authoritative": False,
+                    "candidateOnly": True,
+                    "authorityGrant": False,
+                    "metadataFamilies": [
+                        "provenance",
+                        "entitlement",
+                        "slaFreshness",
+                    ],
+                },
+                {
+                    "surface": "expiration_calendar_candidate_gap",
+                    "sourceType": "occ_opra_exchange_or_licensed_expiration_calendar",
+                    "authoritative": False,
+                    "candidateOnly": True,
+                    "authorityGrant": False,
+                    "missingEvidenceFamilies": [
+                        "internal_policy_grant_missing",
+                        "source_authority_provenance_missing",
+                        "occ_opra_exchange_licensed_source_metadata_missing",
+                    ],
+                },
+                {
+                    "surface": "expiration_calendar_registry_candidate",
+                    "sourceType": "missing",
+                    "authoritative": False,
+                    "candidateOnly": True,
+                    "authorityGrant": False,
+                    "metadataFamilies": [
+                        "provenance",
+                        "entitlement",
+                        "slaFreshness",
+                    ],
+                },
+                {
+                    "surface": "expiration_calendar_candidate_evidence",
+                    "authoritative": False,
+                    "candidateOnly": True,
+                    "authorityGrant": False,
+                    "missingEvidenceFamilies": [
+                        "source_identity_and_provenance_chain",
+                        "licensed_source_backing",
+                        "venue_and_calendar_scope",
+                    ],
+                },
+            ],
+        },
         "optionsEventSourceCandidateGap": {
             "diagnosticOnly": True,
             "surface": "event_calendar",
@@ -893,6 +1010,81 @@ def test_runtime_diagnostic_options_authority_summary_is_sanitized_and_non_autho
     assert all(item["diagnosticOnly"] is True for item in summary["surfaces"])
     assert all(len(item["reasonCodes"]) <= 3 for item in summary["surfaces"])
     for blocked in ("http://", "https://", "Authorization", "Bearer", "token", "secret"):
+        assert blocked not in serialized
+
+
+def test_runtime_diagnostic_options_authority_operator_summary_is_compact_and_safe(monkeypatch) -> None:
+    module = _load_script_module()
+
+    monkeypatch.setattr(
+        module,
+        "_fetch_json",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("endpoint fetch should not run")),
+    )
+    monkeypatch.setattr(
+        module,
+        "_build_tradier_options_live_probe_transport",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("tradier live probe should not run")),
+    )
+
+    payload = module.collect_diagnostic_bundle()
+    summary = payload["optionsAuthorityOperatorSummary"]
+    rows = {row["surface"]: row for row in summary["rows"]}
+    serialized = json.dumps(summary, ensure_ascii=False, sort_keys=True)
+
+    assert "optionsAuthorityDiagnostics" in payload
+    assert "optionsEventSourceCandidateGap" in payload
+    assert "optionsExpirationSourceCandidateGap" in payload
+    assert "optionsEventSourceRegistryCandidate" in payload
+    assert "optionsExpirationSourceRegistryCandidate" in payload
+    assert "optionsExpirationSourceCandidateEvidence" in payload
+    assert summary["diagnosticOnly"] is True
+    assert summary["decisionGrade"] is False
+    assert "not authority" in summary["warning"].lower()
+    assert "not decision readiness" in summary["warning"].lower()
+    assert "not decisiongrade" in summary["warning"].lower()
+    assert summary["surfaceCount"] == 8
+    assert summary["authoritySurfaces"] == [
+        "iv_rank",
+        "event_calendar",
+        "expiration_calendar",
+    ]
+    assert summary["candidateSurfaces"] == [
+        "event_calendar_candidate_gap",
+        "event_calendar_registry_candidate",
+        "expiration_calendar_candidate_gap",
+        "expiration_calendar_registry_candidate",
+        "expiration_calendar_candidate_evidence",
+    ]
+    assert summary["allAuthoritative"] is False
+    assert summary["anyAuthorityGrant"] is False
+    assert all(row["authoritative"] is False for row in summary["rows"])
+    assert all(row["authorityGrant"] is False for row in summary["rows"])
+    assert rows["iv_rank"]["reasonCodes"] == [
+        "iv_rank_authority_missing",
+        "iv_rank_synthetic_fixture_proxy",
+        "iv_rank_fixture_not_authoritative",
+    ]
+    assert rows["event_calendar_candidate_gap"]["missingEvidenceFamilies"] == [
+        "internal_policy_grant_missing",
+        "source_identity_provenance_chain_missing",
+        "licensed_backing_missing",
+    ]
+    assert rows["event_calendar_registry_candidate"]["metadataFamilies"] == [
+        "provenance",
+        "entitlement",
+        "slaFreshness",
+    ]
+    assert rows["expiration_calendar_candidate_evidence"]["missingEvidenceFamilies"] == [
+        "source_identity_and_provenance_chain",
+        "licensed_source_backing",
+        "venue_and_calendar_scope",
+    ]
+    for row in summary["rows"]:
+        assert "providerRouting" not in row
+        assert "liveCallEnablement" not in row
+        assert "networkCallExecuted" not in row
+    for blocked in ("http://", "https://", "Authorization", "Bearer", "token", "secret", "rawPayload"):
         assert blocked not in serialized
 
 
