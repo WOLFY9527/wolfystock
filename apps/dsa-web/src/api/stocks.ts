@@ -103,6 +103,80 @@ export type StockValidationResponse = {
   stockName?: string | null;
 };
 
+export type StockQuoteSourceConfidence = {
+  source?: string | null;
+  sourceLabel?: string | null;
+  asOf?: string | null;
+  freshness?: string | null;
+  isFallback?: boolean;
+  isStale?: boolean;
+  isPartial?: boolean;
+  isSynthetic?: boolean;
+  isUnavailable?: boolean;
+  confidenceWeight?: number | null;
+  coverage?: number | null;
+  degradationReason?: string | null;
+  capReason?: string | null;
+};
+
+export type StockQuote = {
+  stockCode: string;
+  stockName?: string | null;
+  currentPrice: number;
+  change?: number | null;
+  changePercent?: number | null;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  prevClose?: number | null;
+  volume?: number | null;
+  amount?: number | null;
+  updateTime?: string | null;
+  update_time?: string | null;
+  source?: string | null;
+  sourceType?: string | null;
+  marketTimestamp?: string | null;
+  observedAt?: string | null;
+  freshness?: string | null;
+  isFallback?: boolean;
+  isStale?: boolean;
+  isPartial?: boolean;
+  isSynthetic?: boolean;
+  sourceConfidence?: StockQuoteSourceConfidence | null;
+};
+
+function normalizeStockQuoteResponse(payload: unknown): StockQuote {
+  const normalized = toCamelCase<StockQuote>(payload);
+  const raw = (payload ?? {}) as { update_time?: string | null };
+  const updateTime = normalized.updateTime ?? raw.update_time ?? null;
+
+  return {
+    stockCode: normalized.stockCode,
+    stockName: normalized.stockName ?? null,
+    currentPrice: normalized.currentPrice,
+    change: normalized.change ?? null,
+    changePercent: normalized.changePercent ?? null,
+    open: normalized.open ?? null,
+    high: normalized.high ?? null,
+    low: normalized.low ?? null,
+    prevClose: normalized.prevClose ?? null,
+    volume: normalized.volume ?? null,
+    amount: normalized.amount ?? null,
+    updateTime,
+    update_time: updateTime,
+    source: normalized.source ?? null,
+    sourceType: normalized.sourceType ?? null,
+    marketTimestamp: normalized.marketTimestamp ?? null,
+    observedAt: normalized.observedAt ?? null,
+    freshness: normalized.freshness ?? null,
+    isFallback: normalized.isFallback,
+    isStale: normalized.isStale,
+    isPartial: normalized.isPartial,
+    isSynthetic: normalized.isSynthetic,
+    sourceConfidence: normalized.sourceConfidence ?? null,
+  };
+}
+
 function normalizeStockHistoryResponse(payload: unknown): StockHistoryResponse {
   const normalized = toCamelCase<StockHistoryResponse>(payload);
   return {
@@ -132,6 +206,11 @@ export const stocksApi = {
   async verifyTickerExists(stockCode: string): Promise<StockValidationResponse> {
     const response = await apiClient.get(`/api/v1/stocks/${encodeURIComponent(stockCode)}/validate`);
     return toCamelCase<StockValidationResponse>(response.data);
+  },
+
+  async getQuote(stockCode: string): Promise<StockQuote> {
+    const response = await apiClient.get(`/api/v1/stocks/${encodeURIComponent(stockCode)}/quote`);
+    return normalizeStockQuoteResponse(response.data);
   },
 
   async getHistory(
