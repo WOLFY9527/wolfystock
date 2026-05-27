@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from api.v1.schemas.event_intelligence import EventIntelligenceItem
 from src.services.options_event_calendar_authority import (
     INTERNAL_OPTIONS_EVENT_CALENDAR_AUTHORITY_POLICY_SOURCE,
     REQUIRED_FUTURE_EVENT_CALENDAR_AUTHORITY_EVIDENCE_FIELDS,
@@ -452,6 +453,144 @@ def test_event_presence_count_and_types_do_not_grant_authority_without_checklist
             ],
         },
     }
+
+
+def test_event_count_type_and_coverage_without_internal_policy_stay_observation_only() -> None:
+    diagnostic = build_options_event_calendar_authority_diagnostic(
+        {
+            "providerId": "tradier",
+            "sourceType": "live",
+            "sourceAuthority": "authorized",
+            "eventCalendarStatus": "available",
+            "asOf": "2026-05-26T12:00:00Z",
+            "freshness": "fresh",
+            "eventTypesCovered": ["earnings", "fomc", "macro"],
+            "symbolCoverage": ["TEM"],
+            "lookaheadWindow": "30d",
+            "timezone": "America/New_York",
+            "confirmationStatus": "observed",
+            "eventId": "obs-001",
+            "coverageMetadata": {
+                "eventCount": 7,
+                "coverage": "broad",
+                "eventTypesCovered": ["earnings", "fomc", "macro"],
+            },
+            "sandboxOrProduction": "production",
+        }
+    )
+
+    assert diagnostic["diagnosticOnly"] is True
+    assert diagnostic["authorityState"] == "non_authoritative"
+    assert diagnostic["authoritative"] is False
+    assert diagnostic["reasonCodes"] == [
+        "event_calendar_authority_missing",
+        "event_calendar_coverage_not_authority",
+    ]
+
+
+def test_generic_macro_fomc_context_stays_non_authoritative_without_full_policy_checklist() -> None:
+    diagnostic = build_options_event_calendar_authority_diagnostic(
+        {
+            "providerId": "future_authorized_provider",
+            "sourceType": "live",
+            "sourceAuthority": "authorized",
+            "authorityPolicySource": INTERNAL_OPTIONS_EVENT_CALENDAR_AUTHORITY_POLICY_SOURCE,
+            "eventCalendarStatus": "available",
+            "asOf": "2026-05-26T12:00:00Z",
+            "freshness": "fresh",
+            "eventTypesCovered": ["fomc", "macro"],
+            "symbolCoverage": ["SPY"],
+            "lookaheadWindow": "14d",
+            "timezone": "America/New_York",
+            "confirmationStatus": "confirmed",
+            "eventId": "macro-001",
+            "coverageMetadata": {"eventCount": 2, "coverage": "complete"},
+            "eventTaxonomyEvidence": {
+                "earnings": False,
+                "dividendsExDividend": False,
+                "splits": False,
+                "corporateActions": False,
+                "macroContextRelevance": "fomc_macro_context",
+            },
+        }
+    )
+
+    assert diagnostic["diagnosticOnly"] is True
+    assert diagnostic["authorityState"] == "non_authoritative"
+    assert diagnostic["authoritative"] is False
+    assert diagnostic["reasonCodes"] == [
+        "event_calendar_authority_missing",
+        "event_calendar_provenance_evidence_missing",
+        "event_calendar_entitlement_evidence_missing",
+        "event_calendar_sla_evidence_missing",
+        "event_calendar_confirmation_evidence_missing",
+        "event_calendar_coverage_scope_evidence_missing",
+        "event_calendar_coverage_not_authority",
+    ]
+    assert diagnostic["authorityEvidenceChecklist"]["event_taxonomy"]["present"] is True
+    assert diagnostic["authorityEvidenceChecklist"]["provenance"]["present"] is False
+    assert diagnostic["authorityEvidenceChecklist"]["coverage_scope"]["present"] is False
+
+
+def test_event_intelligence_timeline_payload_stays_non_authoritative_observation_only() -> None:
+    timeline_item = EventIntelligenceItem.model_validate(
+        {
+            "id": "evt-1",
+            "symbol": "TEM",
+            "market": "US",
+            "event_type": "earnings",
+            "subtype": "earnings_call",
+            "title": "Q1 earnings call",
+            "summary": "Observation-only timeline item",
+            "source_type": "company_ir",
+            "source_name": "Issuer IR",
+            "published_at": "2026-05-20T12:00:00Z",
+            "event_at": "2026-06-01T20:00:00Z",
+            "as_of": "2026-05-26T12:00:00Z",
+            "confidence": 0.81,
+            "importance_score": 0.72,
+            "direction": "neutral",
+            "freshness_status": "fresh",
+            "provenance": "company_primary",
+        }
+    )
+    diagnostic = build_options_event_calendar_authority_diagnostic(
+        {
+            "providerId": "timeline_observation_bundle",
+            "sourceType": "request_supplied",
+            "sourceAuthority": "authorized",
+            "authorityPolicySource": INTERNAL_OPTIONS_EVENT_CALENDAR_AUTHORITY_POLICY_SOURCE,
+            "eventCalendarStatus": "available",
+            "asOf": "2026-05-26T12:00:00Z",
+            "freshness": "fresh",
+            "eventTypesCovered": ["earnings", "fomc"],
+            "symbolCoverage": ["TEM"],
+            "lookaheadWindow": "21d",
+            "timezone": "America/New_York",
+            "confirmationStatus": "observed",
+            "eventId": "timeline-evt-001",
+            "coverageMetadata": {"eventCount": 2, "coverage": "timeline_only"},
+            "sessionMetadata": {
+                "timelineItems": [timeline_item.model_dump(mode="json")],
+            },
+        }
+    )
+
+    assert diagnostic["diagnosticOnly"] is True
+    assert diagnostic["authorityState"] == "non_authoritative"
+    assert diagnostic["authoritative"] is False
+    assert diagnostic["reasonCodes"] == [
+        "event_calendar_authority_missing",
+        "event_calendar_request_supplied_not_authoritative",
+        "event_calendar_provenance_evidence_missing",
+        "event_calendar_entitlement_evidence_missing",
+        "event_calendar_sla_evidence_missing",
+        "event_calendar_event_taxonomy_evidence_missing",
+        "event_calendar_confirmation_evidence_missing",
+        "event_calendar_coverage_scope_evidence_missing",
+        "event_calendar_coverage_not_authority",
+    ]
+    assert diagnostic["authorityEvidenceChecklist"]["event_taxonomy"]["present"] is False
 
 
 def test_complete_coverage_without_confirmation_or_identity_stays_non_authoritative() -> None:
