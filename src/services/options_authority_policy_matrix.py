@@ -147,6 +147,109 @@ EVENT_CALENDAR_REQUIRED_FUTURE_EVIDENCE_FAMILIES = {
         "coverage_metadata",
     ),
 }
+_EVENT_CALENDAR_SOURCE_CANDIDATE_GAP_REQUIRED_EVIDENCE_FAMILIES = {
+    "internal_policy_grant": (
+        "wolfystock_internal_policy_grant",
+        "surface_authority_approval",
+    ),
+    "source_identity_provenance_chain": (
+        "non_blocked_source_class",
+        "source_identity",
+        "source_authority",
+        "provenance_chain",
+    ),
+    "licensed_backing": (
+        "licensed_provider",
+        "exchange",
+        "issuer",
+        "official_calendar",
+        "approved_calendar_scope",
+    ),
+    "entitlement_use_rights": (
+        "event_calendar_entitlement",
+        "decision_use_rights",
+        "redistribution_rights",
+        "live_delayed_status",
+        "sandbox_or_production",
+    ),
+    "sla_freshness": (
+        "as_of",
+        "freshness",
+        "max_age_policy",
+        "provider_sla_status",
+    ),
+    "event_taxonomy": (
+        "earnings",
+        "dividends",
+        "ex_dividend",
+        "splits",
+        "corporate_actions",
+        "fomc_macro_context_policy_scope",
+    ),
+    "confirmation_status": (
+        "confirmed_or_estimated",
+        "announcement_status",
+    ),
+    "event_identity": (
+        "provider_event_id",
+        "event_identity",
+    ),
+    "timezone_session": (
+        "event_date",
+        "event_time",
+        "session",
+        "timezone",
+    ),
+    "coverage_scope": (
+        "symbol_or_underlying_coverage",
+        "lookahead_window_or_date_range",
+        "coverage_metadata",
+    ),
+}
+_EVENT_CALENDAR_SOURCE_CANDIDATE_GAP_MISSING_EVIDENCE_FAMILIES = (
+    "internal_policy_grant_missing",
+    "source_identity_provenance_chain_missing",
+    "licensed_backing_missing",
+    "entitlement_use_rights_missing",
+    "sla_freshness_missing",
+    "event_taxonomy_missing",
+    "confirmation_status_missing",
+    "event_identity_missing",
+    "timezone_session_missing",
+    "coverage_scope_missing",
+)
+_EVENT_CALENDAR_SOURCE_CANDIDATE_GAP_FORBIDDEN_AUTHORITY_INPUTS = (
+    "event_presence",
+    "event_count",
+    "event_type",
+    "timeline_evidence",
+    "generic_macro_context",
+    "provider_capabilities",
+    "source_labels",
+    "provider_self_claims",
+    "fixture",
+    "synthetic",
+    "fallback",
+    "dry_run",
+    "stub",
+    "adapter_contract",
+    "request_shaped_evidence",
+    "proxy",
+    "current_provider_id:tradier",
+    "current_provider_id:ibkr",
+    "current_provider_id:polygon",
+)
+_EVENT_CALENDAR_SOURCE_CANDIDATE_GAP_CONTRACT = {
+    "diagnosticOnly": True,
+    "surface": "event_calendar",
+    "candidateOnly": True,
+    "authorityGrant": False,
+    "candidateSourceClass": "",
+    "missingEvidenceFamilies": _EVENT_CALENDAR_SOURCE_CANDIDATE_GAP_MISSING_EVIDENCE_FAMILIES,
+    "forbiddenAuthorityInputs": _EVENT_CALENDAR_SOURCE_CANDIDATE_GAP_FORBIDDEN_AUTHORITY_INPUTS,
+    "requiredEvidenceFamilies": _EVENT_CALENDAR_SOURCE_CANDIDATE_GAP_REQUIRED_EVIDENCE_FAMILIES,
+    "nextSafeStep": "collect_observation_only_metadata_without_granting_authority",
+}
 _EXPIRATION_CALENDAR_FUTURE_CANDIDATE_SOURCE_CLASSES = (
     "occ_opra_exchange_or_licensed_expiration_calendar",
 )
@@ -339,6 +442,7 @@ _OPTIONS_AUTHORITY_POLICY_MATRIX = {
         ),
         "required_future_evidence_families": EVENT_CALENDAR_REQUIRED_FUTURE_EVIDENCE_FAMILIES,
         "future_candidate_source_classes": _EVENT_CALENDAR_FUTURE_CANDIDATE_SOURCE_CLASSES,
+        "source_candidate_gap_contract": _EVENT_CALENDAR_SOURCE_CANDIDATE_GAP_CONTRACT,
     },
     "expiration_calendar": {
         **_COMMON_POLICY_FLAGS,
@@ -444,4 +548,30 @@ def build_options_expiration_source_candidate_gap(
     contract["candidateOnly"] = True
     contract["diagnosticOnly"] = True
     contract["surface"] = "expiration_calendar"
+    return contract
+
+
+def build_options_event_calendar_source_candidate_gap(
+    candidate_source_class: str,
+) -> dict[str, Any]:
+    """Return inert event-calendar source-candidate gap metadata."""
+
+    policy = get_options_authority_surface_policy("event_calendar")
+    contract = deepcopy(policy["source_candidate_gap_contract"])
+    normalized_source_class = _normalize_token(candidate_source_class)
+    approved_candidate_classes = {
+        _normalize_token(item) for item in policy["future_candidate_source_classes"]
+    }
+    missing_evidence_families = list(contract["missingEvidenceFamilies"])
+
+    contract["candidateSourceClass"] = normalized_source_class
+
+    if normalized_source_class not in approved_candidate_classes:
+        missing_evidence_families.insert(1, "non_blocked_source_class_missing")
+
+    contract["missingEvidenceFamilies"] = tuple(dict.fromkeys(missing_evidence_families))
+    contract["authorityGrant"] = False
+    contract["candidateOnly"] = True
+    contract["diagnosticOnly"] = True
+    contract["surface"] = "event_calendar"
     return contract
