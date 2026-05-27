@@ -18,6 +18,16 @@ serializable source-confidence and provider-capability DTOs with the fields
 helpers cap fallback, stale, partial, synthetic, or unavailable sources so they
 cannot be represented as live/fresh confidence evidence.
 
+The market data source registry may also carry narrow candidate-source
+metadata for future evidence families. The expiration-calendar candidate source
+entry is `options_lab.expiration_calendar_candidate_evidence`; it projects as
+`sourceType=missing` and describes only provenance, entitlement,
+SLA/freshness, expiration taxonomy, and adjusted-deliverable/corporate-action
+evidence families plus forbidden authority inputs. This is source metadata
+only. It is not provider capability authority, not decision-use approval, not
+an Options Lab authority grant, and not approval for gates, recommendations,
+`decisionGrade`, provider routing, or live calls.
+
 The matrix documents provider domains, market coverage, quota class, freshness
 class, recommended TTL hints, scanner/backtest eligibility, analysis-route
 eligibility, and domain priority hints. It is intended for reviews, tests, and

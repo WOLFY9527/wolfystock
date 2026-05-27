@@ -3,8 +3,12 @@
 
 from __future__ import annotations
 
+import json
+from typing import Any
+
 from src.services.market_data_source_registry import (
     CANONICAL_SOURCE_TYPES,
+    project_source_registry_metadata,
     project_source_provenance,
     resolve_freshness_label,
     resolve_source_label,
@@ -591,3 +595,131 @@ def test_options_lab_offline_gate_rows_stay_non_live_observation_only_metadata()
             "public_proxy",
             "unofficial_proxy",
         }
+
+
+def _payload_keys(payload: Any) -> set[str]:
+    if isinstance(payload, dict):
+        keys: set[str] = set()
+        for key, value in payload.items():
+            keys.add(str(key))
+            keys.update(_payload_keys(value))
+        return keys
+    if isinstance(payload, (list, tuple)):
+        keys = set()
+        for item in payload:
+            keys.update(_payload_keys(item))
+        return keys
+    return set()
+
+
+def test_options_expiration_candidate_source_registry_metadata_is_diagnostic_only() -> None:
+    source = "options_lab.expiration_calendar_candidate_evidence"
+
+    provenance = project_source_provenance(source=source, freshness="unavailable")
+    metadata = project_source_registry_metadata(source)
+
+    assert provenance == {
+        "sourceType": "missing",
+        "sourceLabel": "Expiration Calendar Candidate Evidence (diagnostic only)",
+        "freshnessLabel": "不可用",
+    }
+    assert metadata == {
+        "diagnosticOnly": True,
+        "candidateOnly": True,
+        "surface": "expiration_calendar",
+        "sourceType": "missing",
+        "candidateSourceClass": "occ_opra_exchange_or_licensed_expiration_calendar",
+        "provenanceFamily": [
+            "occ",
+            "opra",
+            "exchange",
+            "licensed_provider",
+        ],
+        "entitlementFamily": [
+            "options_entitlement",
+            "live_delayed_status",
+            "environment",
+            "decision_use_rights_evidence",
+            "redistribution_rights",
+            "audit_timestamp",
+        ],
+        "slaFreshnessFamily": [
+            "as_of",
+            "freshness",
+            "max_age_policy",
+            "provider_sla_status",
+            "freshness_state",
+            "latency_or_error_state",
+        ],
+        "expirationTaxonomyFamily": [
+            "weekly",
+            "monthly",
+            "quarterly",
+            "standard",
+            "leaps",
+            "special_expirations",
+            "classification_source",
+        ],
+        "adjustedDeliverableCorporateActionFamily": [
+            "occ_memo_or_equivalent",
+            "effective_date",
+            "adjusted_root_or_class",
+            "deliverable_components",
+            "multiplier",
+            "cash_in_lieu",
+            "standard_or_non_standard",
+            "contract_symbol_mapping",
+            "corporate_action_evidence",
+        ],
+        "forbiddenAuthorityInputs": [
+            "coverage_completeness",
+            "provider_capabilities",
+            "provider_self_claims",
+            "current_provider_id",
+            "fixture",
+            "synthetic",
+            "fallback",
+            "dry_run",
+            "adapter_contract",
+            "request_shaped_evidence",
+            "proxy",
+        ],
+        "nextSafeStep": "document_candidate_evidence_only_without_approval",
+    }
+
+
+def test_options_expiration_candidate_source_registry_payload_has_no_decision_or_gate_authority_fields() -> None:
+    metadata = project_source_registry_metadata("options_lab.expiration_calendar_candidate_evidence")
+    serialized = json.dumps(metadata, ensure_ascii=False, sort_keys=True)
+    forbidden_keys = {
+        "authorityGrant",
+        "decisionGrade",
+        "providerDecisionAuthority",
+        "recommendationAuthority",
+        "gateDecision",
+        "sourceAuthorityAllowed",
+        "providerAuthority",
+        "providerRouting",
+        "liveCallEnabled",
+        "liveProviderEnabled",
+        "sourceAuthority",
+        "providerSelfClaimAuthority",
+    }
+
+    assert _payload_keys(metadata).isdisjoint(forbidden_keys)
+    for forbidden in forbidden_keys:
+        assert forbidden not in serialized
+    assert "live-call" not in serialized
+    assert "routing" not in serialized
+
+
+def test_source_registry_metadata_helper_preserves_existing_projection_contract() -> None:
+    assert project_source_registry_metadata("binance") == {}
+
+    provenance = project_source_provenance(source="binance", freshness="live")
+
+    assert provenance == {
+        "sourceType": "exchange_public",
+        "sourceLabel": "Binance",
+        "freshnessLabel": "实时",
+    }

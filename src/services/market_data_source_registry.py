@@ -111,6 +111,7 @@ SOURCE_TYPE_BY_SOURCE = {
     "watchlist.source_confidence_preservation": "cache_snapshot",
     "options_lab.bid_ask_liquidity_gate": "missing",
     "options_lab.disabled_live_provider_stubs": "disabled_live_stub",
+    "options_lab.expiration_calendar_candidate_evidence": "missing",
     "options_lab.iv_greeks_gate": "missing",
     "options_lab.iv_rank_history": "missing",
     "options_lab.oi_volume_gate": "missing",
@@ -228,6 +229,7 @@ SOURCE_LABEL_BY_SOURCE = {
     "unit_fixture": "Unit Fixture",
     "unavailable": "未接入",
     "options_lab.bid_ask_liquidity_gate": "Offline Bid/Ask Liquidity Gate (no authorized live decision-grade evidence)",
+    "options_lab.expiration_calendar_candidate_evidence": "Expiration Calendar Candidate Evidence (diagnostic only)",
     "options_lab.iv_greeks_gate": "Offline IV/Greeks Gate (no authorized live decision-grade evidence)",
     "options_lab.oi_volume_gate": "Offline OI/Volume Gate (no authorized live decision-grade evidence)",
     "yahoo": "Yahoo Finance",
@@ -268,9 +270,93 @@ _OFFICIAL_CN_MONEY_MARKET_RATES_LABEL = "Official CN Money Market Rates"
 _OFFICIAL_FED_LIQUIDITY_SOURCE = "official_public.fed_liquidity"
 _OFFICIAL_FED_LIQUIDITY_LABEL = "Official Fed Liquidity"
 
+SOURCE_REGISTRY_METADATA_BY_SOURCE = {
+    "options_lab.expiration_calendar_candidate_evidence": {
+        "diagnosticOnly": True,
+        "candidateOnly": True,
+        "surface": "expiration_calendar",
+        "sourceType": "missing",
+        "candidateSourceClass": "occ_opra_exchange_or_licensed_expiration_calendar",
+        "provenanceFamily": (
+            "occ",
+            "opra",
+            "exchange",
+            "licensed_provider",
+        ),
+        "entitlementFamily": (
+            "options_entitlement",
+            "live_delayed_status",
+            "environment",
+            "decision_use_rights_evidence",
+            "redistribution_rights",
+            "audit_timestamp",
+        ),
+        "slaFreshnessFamily": (
+            "as_of",
+            "freshness",
+            "max_age_policy",
+            "provider_sla_status",
+            "freshness_state",
+            "latency_or_error_state",
+        ),
+        "expirationTaxonomyFamily": (
+            "weekly",
+            "monthly",
+            "quarterly",
+            "standard",
+            "leaps",
+            "special_expirations",
+            "classification_source",
+        ),
+        "adjustedDeliverableCorporateActionFamily": (
+            "occ_memo_or_equivalent",
+            "effective_date",
+            "adjusted_root_or_class",
+            "deliverable_components",
+            "multiplier",
+            "cash_in_lieu",
+            "standard_or_non_standard",
+            "contract_symbol_mapping",
+            "corporate_action_evidence",
+        ),
+        "forbiddenAuthorityInputs": (
+            "coverage_completeness",
+            "provider_capabilities",
+            "provider_self_claims",
+            "current_provider_id",
+            "fixture",
+            "synthetic",
+            "fallback",
+            "dry_run",
+            "adapter_contract",
+            "request_shaped_evidence",
+            "proxy",
+        ),
+        "nextSafeStep": "document_candidate_evidence_only_without_approval",
+    },
+}
+
 
 def _text(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _project_registry_metadata_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _project_registry_metadata_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_project_registry_metadata_value(item) for item in value]
+    if isinstance(value, list):
+        return [_project_registry_metadata_value(item) for item in value]
+    return value
+
+
+def project_source_registry_metadata(source: Any) -> Dict[str, Any]:
+    """Return inert candidate/source metadata for registry-only source ids."""
+    metadata = SOURCE_REGISTRY_METADATA_BY_SOURCE.get(_text(source).lower())
+    if not metadata:
+        return {}
+    return _project_registry_metadata_value(metadata)
 
 
 def resolve_source_type(
