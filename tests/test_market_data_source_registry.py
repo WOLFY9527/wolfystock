@@ -6,6 +6,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from src.services.options_authority_policy_matrix import (
+    build_options_expiration_source_candidate_gap,
+)
+from src.services.options_expiration_source_candidate_evidence import (
+    build_expiration_calendar_source_candidate_evidence,
+)
 from src.services.market_data_source_registry import (
     CANONICAL_SOURCE_TYPES,
     project_source_registry_metadata,
@@ -711,6 +717,51 @@ def test_options_expiration_candidate_source_registry_payload_has_no_decision_or
         assert forbidden not in serialized
     assert "live-call" not in serialized
     assert "routing" not in serialized
+
+
+def test_options_expiration_candidate_source_registry_metadata_stays_metadata_only_across_contracts() -> None:
+    source = "options_lab.expiration_calendar_candidate_evidence"
+    provenance = project_source_provenance(source=source, freshness="unavailable")
+    metadata = project_source_registry_metadata(source)
+    gap = build_options_expiration_source_candidate_gap(metadata["candidateSourceClass"])
+    contract = build_expiration_calendar_source_candidate_evidence(
+        {
+            "providerId": "tradier",
+            "providerDecisionAuthority": True,
+            "recommendationAuthority": True,
+            "decisionGrade": "tradeable",
+            "gateDecision": "pass",
+            "sourceAuthorityAllowed": True,
+            "providerRouting": {"target": "tradier"},
+            "liveCallEnablement": True,
+            "expirationTaxonomy": {"specialExpirations": "partial"},
+        }
+    )
+
+    assert provenance["sourceType"] == "missing"
+    assert provenance["sourceLabel"] == "Expiration Calendar Candidate Evidence (diagnostic only)"
+    assert metadata["sourceType"] == "missing"
+    assert metadata["diagnosticOnly"] is True
+    assert metadata["candidateOnly"] is True
+    assert metadata["nextSafeStep"] == "document_candidate_evidence_only_without_approval"
+    assert "provider_capabilities" in metadata["forbiddenAuthorityInputs"]
+    assert "provider_self_claims" in metadata["forbiddenAuthorityInputs"]
+    assert "current_provider_id" in metadata["forbiddenAuthorityInputs"]
+    assert gap["authorityGrant"] is False
+    assert contract["authorityGrant"] is False
+
+    for forbidden_field in (
+        "providerDecisionAuthority",
+        "recommendationAuthority",
+        "decisionGrade",
+        "gateDecision",
+        "sourceAuthorityAllowed",
+        "providerRouting",
+        "liveCallEnablement",
+    ):
+        assert forbidden_field not in metadata
+        assert forbidden_field not in contract
+        assert forbidden_field not in gap
 
 
 def test_source_registry_metadata_helper_preserves_existing_projection_contract() -> None:

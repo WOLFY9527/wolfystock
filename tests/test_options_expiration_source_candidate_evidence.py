@@ -3,11 +3,19 @@
 
 from __future__ import annotations
 
+from src.services.market_data_source_registry import project_source_registry_metadata
+from src.services.options_authority_policy_matrix import (
+    build_options_expiration_source_candidate_gap,
+)
 from src.services.options_expiration_source_candidate_evidence import (
     FORBIDDEN_AUTHORITY_OUTPUTS,
     REQUIRED_EVIDENCE_FAMILIES,
     build_expiration_calendar_source_candidate_evidence,
 )
+
+
+def _normalize_expiration_taxonomy_keys(keys: list[str] | tuple[str, ...] | set[str]) -> set[str]:
+    return {str(key).replace("specialExpirations", "special_expirations") for key in keys}
 
 
 def test_empty_candidate_evidence_stays_diagnostic_candidate_only_and_non_authoritative() -> None:
@@ -25,6 +33,36 @@ def test_empty_candidate_evidence_stays_diagnostic_candidate_only_and_non_author
     assert contract["adjustedDeliverableEvidence"] == {}
     assert contract["missingEvidenceFamilies"] == list(REQUIRED_EVIDENCE_FAMILIES)
     assert contract["forbiddenAuthorityOutputs"] == list(FORBIDDEN_AUTHORITY_OUTPUTS)
+
+
+def test_empty_candidate_evidence_family_names_map_to_policy_gap_and_registry_semantics() -> None:
+    contract = build_expiration_calendar_source_candidate_evidence(None)
+    registry = project_source_registry_metadata("options_lab.expiration_calendar_candidate_evidence")
+    gap = build_options_expiration_source_candidate_gap(registry["candidateSourceClass"])
+
+    assert "source_identity_and_provenance_chain" in contract["missingEvidenceFamilies"]
+    assert "licensed_source_backing" in contract["missingEvidenceFamilies"]
+    assert "venue_and_calendar_scope" in contract["missingEvidenceFamilies"]
+    assert "source_authority_provenance_missing" in gap["missingEvidenceFamilies"]
+    assert "occ_opra_exchange_licensed_source_metadata_missing" in gap["missingEvidenceFamilies"]
+    assert registry["provenanceFamily"] == ["occ", "opra", "exchange", "licensed_provider"]
+
+    assert "entitlement_and_decision_use_rights" in contract["missingEvidenceFamilies"]
+    assert "entitlement_use_rights_missing" in gap["missingEvidenceFamilies"]
+    assert "decision_use_rights_evidence" in registry["entitlementFamily"]
+
+    assert "freshness_sla_and_max_age" in contract["missingEvidenceFamilies"]
+    assert "sla_freshness_missing" in gap["missingEvidenceFamilies"]
+    assert "max_age_policy" in registry["slaFreshnessFamily"]
+
+    assert "expiration_taxonomy" in contract["missingEvidenceFamilies"]
+    assert "expiration_taxonomy_missing" in gap["missingEvidenceFamilies"]
+    assert "special_expirations" in registry["expirationTaxonomyFamily"]
+
+    assert "adjusted_deliverable_and_corporate_action_proof" in contract["missingEvidenceFamilies"]
+    assert "occ_memo_or_equivalent_reference" in contract["missingEvidenceFamilies"]
+    assert "adjusted_deliverable_corporate_action_evidence_missing" in gap["missingEvidenceFamilies"]
+    assert "corporate_action_evidence" in registry["adjustedDeliverableCorporateActionFamily"]
 
 
 def test_full_mocked_candidate_evidence_remains_observation_only_without_authority() -> None:
@@ -106,6 +144,9 @@ def test_full_mocked_candidate_evidence_remains_observation_only_without_authori
             "decisionGrade": "A",
         }
     )
+    registry = project_source_registry_metadata("options_lab.expiration_calendar_candidate_evidence")
+    gap = build_options_expiration_source_candidate_gap(registry["candidateSourceClass"])
+    normalized_taxonomy = _normalize_expiration_taxonomy_keys(contract["expirationTaxonomy"])
 
     assert contract["authorityGrant"] is False
     assert contract["diagnosticOnly"] is True
@@ -117,8 +158,22 @@ def test_full_mocked_candidate_evidence_remains_observation_only_without_authori
     assert contract["freshnessSla"]["maxAgePolicy"] == "pt15m"
     assert contract["expirationCoverage"]["observedExpirationCount"] == 3
     assert contract["expirationTaxonomy"]["specialExpirations"] == "partial"
+    assert normalized_taxonomy == set(gap["requiredEvidenceFamilies"]["expiration_taxonomy"]) - {
+        "classification_source"
+    }
+    assert normalized_taxonomy == set(registry["expirationTaxonomyFamily"]) - {
+        "classification_source"
+    }
     assert contract["adjustedDeliverableEvidence"]["occMemoReference"] == "occ_memo_2026_042"
     assert contract["forbiddenAuthorityOutputs"] == list(FORBIDDEN_AUTHORITY_OUTPUTS)
+    assert "providerDecisionAuthority" not in registry
+    assert "recommendationAuthority" not in registry
+    assert "decisionGrade" not in registry
+    assert "gateDecision" not in registry
+    assert "sourceAuthorityAllowed" not in registry
+    assert "providerRouting" not in registry
+    assert "liveCallEnablement" not in registry
+
 
 
 def test_coverage_alone_does_not_remove_provenance_entitlement_sla_taxonomy_or_adjusted_gaps() -> None:

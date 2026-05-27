@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import pytest
 
+from src.services.market_data_source_registry import project_source_registry_metadata
 from src.services.options_authority_policy_matrix import (
     BLOCKED_OPTIONS_AUTHORITY_SOURCE_CLASSES,
     CURRENT_KNOWN_OPTIONS_AUTHORITY_PROVIDER_IDS,
@@ -17,6 +18,22 @@ from src.services.options_authority_policy_matrix import (
     is_options_authority_source_blocked,
     is_options_authority_source_granted,
 )
+
+
+def _normalize_entitlement_family(values: tuple[str, ...] | list[str]) -> set[str]:
+    return {str(value).replace("decision_use_rights_evidence", "decision_use_rights") for value in values}
+
+
+def _normalize_forbidden_authority_inputs(values: tuple[str, ...] | list[str]) -> set[str]:
+    normalized: set[str] = set()
+    for value in values:
+        token = str(value)
+        if token == "fixtures":
+            token = "fixture"
+        if token.startswith("current_provider_id:"):
+            token = "current_provider_id"
+        normalized.add(token)
+    return normalized
 
 
 def test_all_required_options_authority_surfaces_exist() -> None:
@@ -129,6 +146,70 @@ def test_expiration_calendar_policy_encodes_future_authority_checklist_families(
             "contract_symbol_mapping",
         ),
     }
+
+
+def test_expiration_calendar_policy_gap_and_registry_metadata_stay_cross_contract_aligned() -> None:
+    policy = get_options_authority_surface_policy("expiration_calendar")
+    registry = project_source_registry_metadata("options_lab.expiration_calendar_candidate_evidence")
+    gap = build_options_expiration_source_candidate_gap(registry["candidateSourceClass"])
+
+    assert policy["surface"] == registry["surface"] == gap["surface"] == "expiration_calendar"
+    assert registry["candidateSourceClass"] == gap["candidateSourceClass"]
+    assert registry["diagnosticOnly"] is True
+    assert registry["candidateOnly"] is True
+    assert gap["diagnosticOnly"] is True
+    assert gap["candidateOnly"] is True
+    assert gap["authorityGrant"] is False
+
+    assert tuple(registry["provenanceFamily"]) == policy["required_future_evidence_families"]["provenance"]
+    assert _normalize_entitlement_family(registry["entitlementFamily"]) == set(
+        policy["required_future_evidence_families"]["entitlement"]
+    )
+    assert set(gap["requiredEvidenceFamilies"]["entitlement_use_rights"]) <= _normalize_entitlement_family(
+        registry["entitlementFamily"]
+    )
+
+    assert set(gap["requiredEvidenceFamilies"]["sla_freshness"]) <= set(registry["slaFreshnessFamily"])
+    assert set(registry["slaFreshnessFamily"]) <= set(policy["required_future_evidence_families"]["sla_freshness"])
+    assert set(policy["required_future_evidence_families"]["sla_freshness"]) - set(
+        registry["slaFreshnessFamily"]
+    ) == {"freshness_seconds"}
+
+    assert tuple(registry["expirationTaxonomyFamily"]) == policy["required_future_evidence_families"][
+        "expiration_taxonomy"
+    ]
+    assert set(gap["requiredEvidenceFamilies"]["expiration_taxonomy"]) == set(
+        registry["expirationTaxonomyFamily"]
+    )
+
+    assert set(policy["required_future_evidence_families"]["adjusted_deliverable"]) <= set(
+        registry["adjustedDeliverableCorporateActionFamily"]
+    )
+    assert set(gap["requiredEvidenceFamilies"]["adjusted_deliverable_corporate_action_evidence"]) == set(
+        registry["adjustedDeliverableCorporateActionFamily"]
+    )
+    assert set(registry["adjustedDeliverableCorporateActionFamily"]) - set(
+        policy["required_future_evidence_families"]["adjusted_deliverable"]
+    ) == {"corporate_action_evidence"}
+
+    assert _normalize_forbidden_authority_inputs(gap["forbiddenAuthorityInputs"]) <= set(
+        registry["forbiddenAuthorityInputs"]
+    )
+    assert set(registry["forbiddenAuthorityInputs"]) - _normalize_forbidden_authority_inputs(
+        gap["forbiddenAuthorityInputs"]
+    ) == {"fallback", "synthetic"}
+
+    for forbidden_field in (
+        "providerDecisionAuthority",
+        "recommendationAuthority",
+        "decisionGrade",
+        "gateDecision",
+        "sourceAuthorityAllowed",
+        "providerRouting",
+        "liveCallEnablement",
+    ):
+        assert forbidden_field not in gap
+        assert forbidden_field not in registry
 
 
 def test_expiration_calendar_source_candidate_gap_contract_is_inert_and_observation_only() -> None:
