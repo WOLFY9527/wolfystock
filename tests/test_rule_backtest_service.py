@@ -279,6 +279,14 @@ class RuleBacktestTestCase(unittest.TestCase):
             assert authority.get("parameter_sweep_executed") is False
 
     @staticmethod
+    def _assert_regime_attribution_readiness_payload_stays_diagnostic_only(payload: dict) -> None:
+        assert payload.get("exportKind") == "rule_backtest_regime_attribution_readiness"
+        assert payload.get("diagnosticOnly") is True
+        assert payload.get("engineReexecuted") is False
+        assert payload.get("attributionEngineAvailable") is False
+        assert payload.get("pnlCausalityAvailable") is False
+
+    @staticmethod
     def _compare_run_payload(
         *,
         run_id: int,
@@ -2293,6 +2301,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                 "execution_trace_json",
                 "execution_trace_csv",
                 "robustness_evidence_json",
+                "regime_attribution_readiness_json",
             ],
         )
         manifest_item = export_index["exports"][0]
@@ -2334,6 +2343,21 @@ class RuleBacktestTestCase(unittest.TestCase):
             f"/api/v1/backtest/rule/runs/{response['id']}/robustness-evidence.json",
         )
         self.assertEqual(robustness_item["payload_class"], "heavy")
+        readiness_item = export_index["exports"][5]
+        self.assertTrue(readiness_item["available"])
+        self.assertEqual(
+            readiness_item["availability_reason"],
+            "run_exists_readiness_projection_available",
+        )
+        self.assertEqual(readiness_item["delivery_mode"], "api")
+        self.assertEqual(
+            readiness_item["endpoint_path"],
+            f"/api/v1/backtest/rule/runs/{response['id']}/regime-attribution-readiness.json",
+        )
+        self.assertEqual(readiness_item["payload_class"], "compact")
+        self._assert_regime_attribution_readiness_payload_stays_diagnostic_only(
+            service.get_regime_attribution_readiness_export(response["id"])
+        )
         self._assert_public_backtest_text_is_analytical(json.dumps(export_index, ensure_ascii=False, sort_keys=True))
 
     def test_support_export_helpers_project_materialized_run_payloads_purely(self) -> None:
@@ -2483,6 +2507,10 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(export_index["run_id"], 321)
         self.assertTrue(export_index["exports"][2]["available"])
         self.assertEqual(export_index["exports"][4]["availability_reason"], "stored_robustness_analysis_present")
+        self.assertEqual(
+            export_index["exports"][5]["availability_reason"],
+            "run_exists_readiness_projection_available",
+        )
         self.assertEqual(trace_json["trace_rows"][0]["动作"], "买")
         self.assertEqual(trace_json["benchmark_summary"]["requested_mode"], "auto")
         self.assertEqual(trace_csv.splitlines()[0].split(","), EXPECTED_TRACE_EXPORT_FIELD_LABELS)
@@ -2844,6 +2872,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                 "execution_trace_json",
                 "execution_trace_csv",
                 "robustness_evidence_json",
+                "regime_attribution_readiness_json",
             ],
         )
 
@@ -2996,6 +3025,16 @@ class RuleBacktestTestCase(unittest.TestCase):
                 f"/api/v1/backtest/rule/runs/{run_id}/robustness-evidence.json",
                 "heavy",
             ),
+            (
+                "regime_attribution_readiness_json",
+                True,
+                "run_exists_readiness_projection_available",
+                "json",
+                "application/json",
+                "api",
+                f"/api/v1/backtest/rule/runs/{run_id}/regime-attribution-readiness.json",
+                "compact",
+            ),
         ]
         for item, expected in zip(export_index["exports"], expected_exports):
             (
@@ -3099,6 +3138,10 @@ class RuleBacktestTestCase(unittest.TestCase):
         else:
             with self.assertRaisesRegex(ValueError, "has no stored robustness evidence to export"):
                 service.get_robustness_evidence_export_json(run_id)
+
+        self._assert_regime_attribution_readiness_payload_stays_diagnostic_only(
+            service.get_regime_attribution_readiness_export(run_id)
+        )
 
     def test_support_bundle_artifact_exports_form_coherent_handoff_surface(self) -> None:
         service = RuleBacktestService(self.db)
