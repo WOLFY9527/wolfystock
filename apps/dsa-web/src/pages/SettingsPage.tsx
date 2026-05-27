@@ -433,9 +433,12 @@ const SettingsPage: React.FC = () => {
 
   const rawActiveItems = itemsByCategory[activeCategory] || [];
   const rawActiveItemMap = new Map(rawActiveItems.map((item) => [item.key, String(item.value ?? '')]));
-  const allItems = Object.values(itemsByCategory).flat();
-  const allItemMap = new Map(allItems.map((item) => [item.key, String(item.value ?? '')]));
-  const categoryDomainMap = (() => {
+  const allItems = useMemo(() => Object.values(itemsByCategory).flat(), [itemsByCategory]);
+  const allItemMap = useMemo(
+    () => new Map(allItems.map((item) => [item.key, String(item.value ?? '')])),
+    [allItems],
+  );
+  const categoryDomainMap = useMemo(() => {
     const map = new Map<string, SettingsDomain>();
     categories.forEach((category) => {
       map.set(
@@ -444,19 +447,28 @@ const SettingsPage: React.FC = () => {
       );
     });
     return map;
-  })();
-  const domainCategories = categories.filter((category) => (categoryDomainMap.get(category.category) || 'advanced') === activeDomain);
-  const domainCategorySet = new Set(domainCategories.map((category) => category.category));
+  }, [categories]);
+  const domainCategories = useMemo(
+    () => categories.filter((category) => (categoryDomainMap.get(category.category) || 'advanced') === activeDomain),
+    [activeDomain, categories, categoryDomainMap],
+  );
+  const domainCategorySet = useMemo(
+    () => new Set(domainCategories.map((category) => category.category)),
+    [domainCategories],
+  );
   const hasConfiguredChannels = Boolean((rawActiveItemMap.get('LLM_CHANNELS') || '').trim());
   const hasLitellmConfig = Boolean((rawActiveItemMap.get('LITELLM_CONFIG') || '').trim());
-  const rawEditableActiveItems = (itemsByCategory[activeCategory] || []).filter(isRawEditableConfigItem);
-  const rawPanelState = buildRawSettingsPanelState({
+  const rawEditableActiveItems = useMemo(
+    () => (itemsByCategory[activeCategory] || []).filter(isRawEditableConfigItem),
+    [activeCategory, itemsByCategory],
+  );
+  const rawPanelState = useMemo(() => buildRawSettingsPanelState({
     activeCategory,
     rawEditableActiveItems,
     hasConfiguredChannels,
     hasLitellmConfig,
     t,
-  });
+  }), [activeCategory, hasConfiguredChannels, hasLitellmConfig, rawEditableActiveItems, t]);
   const { activeItems, rawFieldsSummaryText } = rawPanelState;
   const activeCategoryDescription = getCategoryDescription(language, activeCategory as SystemConfigCategory, '') || t('settings.currentCategoryDesc');
   const activeCategoryLabel = getCategoryTitle(
