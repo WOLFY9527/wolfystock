@@ -371,6 +371,10 @@ def _activation(payload: Dict[str, Any], key: str) -> Dict[str, Any]:
     return _indicators_by_key(payload)[key]["coverageDiagnostics"]
 
 
+def _observation_evidence_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return payload["observationEvidenceSnapshot"]
+
+
 def _assert_activation_fields(diagnostics: Dict[str, Any]) -> None:
     for field in (
         "indicatorId",
@@ -2112,6 +2116,77 @@ def test_liquidity_monitor_metadata_declares_read_only_runtime_boundary(isolated
     }
     assert "不触发扫描、回测或组合动作" in payload["advisoryDisclosure"]
 
+
+def test_liquidity_monitor_adds_observation_evidence_snapshot_with_read_only_contract(
+    isolated_db: DatabaseManager,
+) -> None:
+    payload = _make_service().get_liquidity_monitor()
+    snapshot = _observation_evidence_snapshot(payload)
+
+    assert snapshot["diagnosticOnly"] is True
+    assert snapshot["observationOnly"] is True
+    assert snapshot["authorityGrant"] is False
+    assert snapshot["decisionGrade"] is False
+    assert snapshot["externalProviderCalls"] is False
+    assert snapshot["providerRuntimeChanged"] is False
+    assert snapshot["marketCacheMutation"] is False
+    assert snapshot["indicatorCount"] == len(payload["indicators"])
+    assert len(snapshot["indicatorEvidence"]) == len(payload["indicators"])
+    assert isinstance(snapshot["warnings"], list)
+    assert isinstance(snapshot["missingInputs"], list)
+
+
+def test_liquidity_monitor_observation_evidence_snapshot_preserves_proxy_fallback_stale_partial_and_missing_signals(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    quote_map: dict[str, _FakeHistoryFrame] = {}
+    _seed_provider_unavailable_stale_malformed_context(service, quote_map)
+
+    with (
+        patch.object(LiquidityMonitorService, "_now", return_value=FROZEN_GOLDEN_NOW),
+        patch(
+            "src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame",
+            side_effect=lambda ticker: quote_map.get(ticker, _FakeHistoryFrame([])),
+            create=True,
+        ),
+        patch(
+            "src.services.liquidity_monitor_service.fetch_binance_funding_row",
+            side_effect=RuntimeError("network disabled for evidence snapshot test"),
+        ),
+    ):
+        payload = service.get_liquidity_monitor()
+
+    snapshot = _observation_evidence_snapshot(payload)
+    evidence_by_key = {item["key"]: item for item in snapshot["indicatorEvidence"]}
+
+    assert snapshot["proxyInputCount"] >= 1
+    assert snapshot["fallbackInputCount"] >= 1
+    assert snapshot["staleInputCount"] >= 1
+    assert snapshot["partialInputCount"] >= 1
+    assert snapshot["missingInputCount"] >= 1
+    assert "US2Y" in snapshot["missingInputs"]
+    assert "DR007" in snapshot["missingInputs"]
+
+    vix_snapshot = evidence_by_key["vix_pressure"]
+    assert vix_snapshot["diagnosticOnly"] is True
+    assert vix_snapshot["observationOnly"] is True
+    assert vix_snapshot["authorityGrant"] is False
+    assert vix_snapshot["decisionGrade"] is False
+    assert vix_snapshot["partialInputCount"] >= 1
+    assert vix_snapshot["proxyInputCount"] >= 1
+    assert any(item["source"] == "yfinance_proxy" for item in vix_snapshot["inputs"])
+
+    rates_snapshot = evidence_by_key["us_rates_pressure"]
+    assert rates_snapshot["staleInputCount"] >= 1
+    assert rates_snapshot["proxyInputCount"] >= 1
+    assert "US2Y" in rates_snapshot["missingInputs"]
+    assert any("proxy_only_missing_real_source" in warning for warning in rates_snapshot["warnings"])
+
+    cn_rates_snapshot = evidence_by_key["cn_money_market_rates"]
+    assert cn_rates_snapshot["staleInputCount"] >= 1
+    assert "DR007" in cn_rates_snapshot["missingInputs"]
+    assert any("observation_only" in warning for warning in cn_rates_snapshot["warnings"])
 
 def test_unavailable_when_fewer_than_three_reliable_indicators(isolated_db: DatabaseManager) -> None:
     service = _make_service()

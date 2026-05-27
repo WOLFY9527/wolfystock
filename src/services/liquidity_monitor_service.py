@@ -46,6 +46,7 @@ ADVISORY_DISCLOSURE = "仅用于观察市场流动性环境，非买卖建议，
 FRESHNESS_ORDER = {"live": 0, "cached": 1, "delayed": 2, "stale": 3, "fallback": 4, "mock": 5, "error": 6, "unavailable": 7}
 EVIDENCE_FRESHNESS_ORDER = {**FRESHNESS_ORDER, "fresh": 0, "partial": 2.5, "synthetic": 5}
 RELIABLE_FRESHNESS = {"live", "cached", "delayed"}
+PROXY_SOURCE_TYPES = {"public_proxy", "proxy_public", "unofficial_proxy"}
 POSSIBLE_WEIGHT = 49
 CRYPTO_FUNDING_BACKFILL_MAX_AGE = timedelta(hours=12)
 SOURCE_CONFIDENCE_BY_TYPE = {
@@ -355,6 +356,7 @@ class LiquidityMonitorService:
                 "latestAsOf": max(available_as_of) if available_as_of else None,
             },
             "indicators": indicators,
+            "observationEvidenceSnapshot": self._build_observation_evidence_snapshot(indicators),
             "liquidityImpulseSynthesis": self._build_liquidity_impulse_synthesis_payload(indicators),
             "advisoryDisclosure": ADVISORY_DISCLOSURE,
             "sourceMetadata": {
@@ -367,6 +369,136 @@ class LiquidityMonitorService:
     @staticmethod
     def _build_liquidity_impulse_synthesis_payload(indicators: List[Dict[str, Any]]) -> Dict[str, Any]:
         return build_liquidity_impulse_synthesis_payload(indicators)
+
+    def _build_observation_evidence_snapshot(self, indicators: List[Dict[str, Any]]) -> Dict[str, Any]:
+        indicator_evidence: List[Dict[str, Any]] = []
+        missing_inputs: List[str] = []
+        warnings: List[str] = []
+        proxy_input_count = 0
+        fallback_input_count = 0
+        stale_input_count = 0
+        partial_input_count = 0
+        missing_input_count = 0
+
+        for indicator in indicators:
+            evidence = copy.deepcopy(indicator.get("evidence") or {})
+            diagnostics = copy.deepcopy(indicator.get("coverageDiagnostics") or {})
+            inputs = [dict(item) for item in evidence.get("inputs", []) if isinstance(item, dict)]
+            indicator_missing_inputs = [
+                str(item)
+                for item in diagnostics.get("missingInputs") or []
+                if str(item or "").strip()
+            ]
+            indicator_proxy_input_count = sum(1 for item in inputs if self._observation_snapshot_input_is_proxy(item))
+            indicator_fallback_input_count = sum(1 for item in inputs if bool(item.get("isFallback")))
+            indicator_stale_input_count = sum(1 for item in inputs if bool(item.get("isStale")))
+            indicator_partial_input_count = sum(1 for item in inputs if bool(item.get("isPartial")))
+            if bool(evidence.get("isPartial")):
+                indicator_partial_input_count = max(1, indicator_partial_input_count)
+            indicator_missing_input_count = len(indicator_missing_inputs)
+            if indicator_missing_input_count == 0:
+                indicator_missing_input_count = sum(1 for item in inputs if bool(item.get("isUnavailable")))
+
+            indicator_warnings = self._observation_snapshot_warnings(evidence, diagnostics, inputs)
+            indicator_evidence.append(
+                {
+                    "key": str(indicator.get("key") or ""),
+                    "label": str(indicator.get("label") or ""),
+                    "status": str(indicator.get("status") or "unavailable"),
+                    "freshness": str(indicator.get("freshness") or evidence.get("freshness") or "unavailable"),
+                    "asOf": indicator.get("updatedAt") or evidence.get("asOf"),
+                    "source": evidence.get("source"),
+                    "sourceLabel": evidence.get("sourceLabel"),
+                    "diagnosticOnly": True,
+                    "observationOnly": True,
+                    "authorityGrant": False,
+                    "decisionGrade": False,
+                    "scoreContributionAllowed": bool(diagnostics.get("scoreContributionAllowed")),
+                    "requiredRealSourceForScore": bool(diagnostics.get("requiredRealSourceForScore")),
+                    "proxyOnly": bool(diagnostics.get("proxyOnly")),
+                    "coverageObservationOnly": bool(diagnostics.get("observationOnly")),
+                    "degradationReason": self._text(evidence.get("degradationReason") or diagnostics.get("degradationReason")),
+                    "capReason": self._text(evidence.get("capReason") or diagnostics.get("capReason")),
+                    "proxyInputCount": indicator_proxy_input_count,
+                    "fallbackInputCount": indicator_fallback_input_count,
+                    "staleInputCount": indicator_stale_input_count,
+                    "partialInputCount": indicator_partial_input_count,
+                    "missingInputCount": indicator_missing_input_count,
+                    "missingInputs": indicator_missing_inputs,
+                    "inputs": inputs,
+                    "warnings": indicator_warnings,
+                }
+            )
+            proxy_input_count += indicator_proxy_input_count
+            fallback_input_count += indicator_fallback_input_count
+            stale_input_count += indicator_stale_input_count
+            partial_input_count += indicator_partial_input_count
+            missing_input_count += indicator_missing_input_count
+            missing_inputs.extend(indicator_missing_inputs)
+            warnings.extend(indicator_warnings)
+
+        return {
+            "diagnosticOnly": True,
+            "observationOnly": True,
+            "authorityGrant": False,
+            "decisionGrade": False,
+            "externalProviderCalls": False,
+            "providerRuntimeChanged": False,
+            "marketCacheMutation": False,
+            "indicatorCount": len(indicator_evidence),
+            "proxyInputCount": proxy_input_count,
+            "fallbackInputCount": fallback_input_count,
+            "staleInputCount": stale_input_count,
+            "partialInputCount": partial_input_count,
+            "missingInputCount": missing_input_count,
+            "indicatorEvidence": indicator_evidence,
+            "missingInputs": list(dict.fromkeys(missing_inputs)),
+            "warnings": list(dict.fromkeys(warnings)),
+        }
+
+    @staticmethod
+    def _observation_snapshot_input_is_proxy(item: Dict[str, Any]) -> bool:
+        source_type = str(item.get("sourceType") or "").lower()
+        source = str(item.get("source") or "").lower()
+        return source_type in PROXY_SOURCE_TYPES or source in {"yfinance_proxy", "yahoo", "yfinance"}
+
+    @staticmethod
+    def _observation_snapshot_warnings(
+        evidence: Dict[str, Any],
+        diagnostics: Dict[str, Any],
+        inputs: List[Dict[str, Any]],
+    ) -> List[str]:
+        warnings: List[str] = []
+        for value in (
+            diagnostics.get("scoreExclusionReason"),
+            diagnostics.get("proxyObservationOnlyReason"),
+            diagnostics.get("missingProviderReason"),
+            diagnostics.get("sourceAuthorityReason"),
+            diagnostics.get("degradationReason"),
+            evidence.get("degradationReason"),
+            evidence.get("capReason"),
+        ):
+            text = str(value or "").strip()
+            if text:
+                warnings.append(text)
+        for code in diagnostics.get("routeRejectedReasonCodes") or []:
+            text = str(code or "").strip()
+            if text:
+                warnings.append(text)
+        for item in inputs:
+            for value in (
+                item.get("sourceAuthorityReason"),
+                item.get("degradationReason"),
+                item.get("capReason"),
+            ):
+                text = str(value or "").strip()
+                if text:
+                    warnings.append(text)
+            for code in item.get("routeRejectedReasonCodes") or []:
+                text = str(code or "").strip()
+                if text:
+                    warnings.append(text)
+        return list(dict.fromkeys(warnings))
 
     def _read_panel(self, key: str) -> PanelState:
         cache_candidate = self._read_market_cache_candidate(key)
