@@ -91,6 +91,63 @@ _RANK_UNAVAILABLE_MARKERS = {"unavailable", "missing", "disabled_live_stub", "ma
 ROTATION_RADAR_SOURCE_AUTHORITY_REJECTED_REASON = "source_authority_router_rejected"
 _ROTATION_RADAR_PROXY_AUTHORITY_SOURCES = {"yahoo", "yahooquery", "yfinance", "yfinance_proxy"}
 _ROTATION_RADAR_PROXY_AUTHORITY_SOURCE_TYPES = {"unofficial_proxy", "unofficial_public_api"}
+_ROTATION_EVIDENCE_FORBIDDEN_RELIABLE_CLAIMS = (
+    (
+        "proxy",
+        "proxy_reliable_provenance_forbidden",
+        "Proxy evidence is observation-only and cannot claim reliable provenance.",
+    ),
+    (
+        "fallback",
+        "fallback_reliable_provenance_forbidden",
+        "Fallback evidence preserves shape only and cannot claim reliable provenance.",
+    ),
+    (
+        "cached",
+        "cached_reliable_provenance_forbidden",
+        "Cached evidence is a snapshot and cannot claim fresh reliable provenance.",
+    ),
+    (
+        "stale",
+        "stale_reliable_provenance_forbidden",
+        "Stale evidence cannot claim fresh reliable provenance.",
+    ),
+    (
+        "partial",
+        "partial_reliable_provenance_forbidden",
+        "Partial coverage cannot claim complete reliable provenance.",
+    ),
+    (
+        "static",
+        "static_reliable_provenance_forbidden",
+        "Static evidence is classification context only.",
+    ),
+    (
+        "taxonomy_only",
+        "taxonomy_only_reliable_provenance_forbidden",
+        "Taxonomy-only evidence is classification context only.",
+    ),
+    (
+        "synthetic",
+        "synthetic_reliable_provenance_forbidden",
+        "Synthetic evidence cannot claim live reliable provenance.",
+    ),
+    (
+        "unofficial_public_api",
+        "unofficial_public_api_reliable_provenance_forbidden",
+        "Unofficial public API evidence cannot claim authoritative provenance.",
+    ),
+    (
+        "yfinance_proxy",
+        "yfinance_proxy_reliable_provenance_forbidden",
+        "YFinance proxy evidence cannot claim authoritative provenance.",
+    ),
+    (
+        "etf_price_proxy_as_fund_flow_evidence",
+        "etf_price_proxy_fund_flow_forbidden",
+        "ETF price proxy evidence is not real fund-flow evidence.",
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -370,6 +427,7 @@ class MarketRotationRadarService:
                 "newslessRotationMeaning": "未配置新闻催化证据时，价格/量能/广度/同步性同时满足阈值的保守观察标记，不代表因果确认。",
             },
         }
+        payload["metadata"]["rotationEvidenceSnapshot"] = self._rotation_evidence_snapshot(payload)
         if shared_cache_key and not payload_fallback:
             _store_shared_rotation_radar_snapshot(shared_cache_key, payload)
         return payload
@@ -402,7 +460,7 @@ class MarketRotationRadarService:
             self._annotate_signal_taxonomy(theme, quote_source_authority_allowed=False)
             for theme in themes
         ]
-        return {
+        payload = {
             "endpoint": RADAR_ENDPOINT,
             "market": market,
             "supportedMarkets": list(SUPPORTED_ROTATION_MARKETS),
@@ -458,6 +516,8 @@ class MarketRotationRadarService:
                 "observedEvidence": self._observed_evidence_metadata(None),
             },
         }
+        payload["metadata"]["rotationEvidenceSnapshot"] = self._rotation_evidence_snapshot(payload)
+        return payload
 
     def _taxonomy_only_theme(self, entry: RotationTaxonomyEntry, generated_at: str, index: int) -> Dict[str, Any]:
         representative = list(entry.representativeSymbols or entry.representativeLabels)
@@ -1251,6 +1311,12 @@ class MarketRotationRadarService:
             freshness_counts[freshness] = freshness_counts.get(freshness, 0) + 1
             source = str(quote.get("source") or "unknown")
             source_counts[source] = source_counts.get(source, 0) + 1
+            source_tier = str(quote.get("sourceTier") or "").strip()
+            provider_tier = str(quote.get("providerTier") or "").strip()
+            if source_tier:
+                metadata["sourceTier"] = metadata.get("sourceTier") or source_tier
+            if provider_tier:
+                metadata["providerTier"] = metadata.get("providerTier") or provider_tier
             provenance = project_source_provenance(
                 source=quote.get("source"),
                 source_type=quote.get("sourceType"),
@@ -1315,7 +1381,10 @@ class MarketRotationRadarService:
                 "coveragePercent": coverage_percent,
             },
             "quoteMode": str(metadata.get("quoteMode") or "proxy"),
+            "source": str(metadata.get("source") or self._dominant_label(source_counts, default="")) or None,
             "sourceType": canonical_source_type,
+            "sourceTier": str(metadata.get("sourceTier") or "") or None,
+            "providerTier": str(metadata.get("providerTier") or "") or None,
             "freshness": metadata_freshness,
             "asOf": str(metadata.get("asOf") or max(as_of_candidates)) if as_of_candidates or metadata.get("asOf") else None,
             "fallbackQuoteCount": fallback_count,
@@ -1325,9 +1394,253 @@ class MarketRotationRadarService:
             "unavailableReason": unavailable_reason,
             "sourceCounts": source_counts,
             "sourceLabelCounts": source_label_counts,
+            "sourceTypeCounts": source_type_counts,
             "freshnessCounts": freshness_counts,
             "noExternalCalls": no_external_calls,
         }
+
+    def _rotation_evidence_snapshot(self, payload: Mapping[str, Any]) -> Dict[str, Any]:
+        metadata = payload.get("metadata")
+        metadata = dict(metadata) if isinstance(metadata, Mapping) else {}
+        themes = payload.get("themes")
+        theme_rows = list(themes) if isinstance(themes, Sequence) and not isinstance(themes, (str, bytes)) else []
+        source_meta = self._rotation_snapshot_source_metadata(metadata)
+        diagnostics = source_meta.get("providerDiagnostics")
+        diagnostics = dict(diagnostics) if isinstance(diagnostics, Mapping) else {}
+        source_type = self._rotation_snapshot_source_type(payload, source_meta)
+        source_tier = self._rotation_snapshot_source_tier(source_meta, diagnostics, source_type)
+        provider_tier = self._rotation_snapshot_provider_tier(source_meta, source_type)
+        freshness = str(source_meta.get("freshness") or payload.get("freshness") or "fallback")
+        fallback_count = max(
+            self._safe_int(metadata.get("fallbackThemeCount")),
+            sum(1 for theme in theme_rows if isinstance(theme, Mapping) and bool(theme.get("isFallback"))),
+            self._safe_int(source_meta.get("fallbackQuoteCount")),
+        )
+        stale_count = max(
+            self._safe_int(metadata.get("staleThemeCount")),
+            sum(1 for theme in theme_rows if isinstance(theme, Mapping) and bool(theme.get("isStale"))),
+            self._safe_int(source_meta.get("staleQuoteCount")),
+        )
+        partial_count = max(
+            sum(1 for theme in theme_rows if isinstance(theme, Mapping) and bool(theme.get("isPartial"))),
+            1 if str(source_meta.get("status") or "") == "partial" else 0,
+        )
+        snapshot_count = self._rotation_snapshot_count(source_meta, source_type)
+        failed_symbol_count = self._safe_int(source_meta.get("failedSymbolCount"))
+        score_allowed = bool(
+            source_meta.get("sourceAuthorityAllowed") is True
+            and source_meta.get("scoreContributionAllowed") is True
+        )
+        coverage = {
+            "themeCount": self._safe_int(metadata.get("themeCount"), len(theme_rows)),
+            "liveThemeCount": self._safe_int(metadata.get("liveThemeCount")),
+            "fallbackThemeCount": fallback_count,
+            "staleThemeCount": stale_count,
+            "partialThemeCount": partial_count,
+            "requestedSymbolCount": self._safe_int(source_meta.get("requestedSymbolCount")),
+            "usableSymbolCount": self._safe_int(source_meta.get("usableSymbolCount")),
+            "coveragePercent": float(source_meta.get("coveragePercent") or 0.0),
+        }
+        reason_codes = self._rotation_snapshot_reason_codes(
+            payload=payload,
+            source_meta=source_meta,
+            diagnostics=diagnostics,
+            source_type=source_type,
+            source_tier=source_tier,
+            quote_mode=str(source_meta.get("quoteMode") or "proxy"),
+            score_allowed=score_allowed,
+            fallback_count=fallback_count,
+            stale_count=stale_count,
+            partial_count=partial_count,
+            snapshot_count=snapshot_count,
+        )
+        return {
+            "diagnosticOnly": True,
+            "observationOnly": True,
+            "authorityGrant": False,
+            "scoreContributionAllowed": score_allowed,
+            "providerRuntimeChanged": False,
+            "externalProviderCalls": False,
+            "marketCacheMutation": False,
+            "sourceType": source_type,
+            "sourceTier": source_tier,
+            "providerTier": provider_tier,
+            "quoteMode": str(source_meta.get("quoteMode") or ("taxonomy" if source_type == "taxonomy_only" else "proxy")),
+            "freshness": freshness,
+            "coverage": coverage,
+            "fallbackCount": fallback_count,
+            "staleCount": stale_count,
+            "partialCount": partial_count,
+            "snapshotCount": snapshot_count,
+            "failedSymbolCount": failed_symbol_count,
+            "forbiddenReliableClaims": self._rotation_forbidden_reliable_claims(),
+            "reasonCodes": reason_codes,
+        }
+
+    @staticmethod
+    def _rotation_forbidden_reliable_claims() -> List[Dict[str, Any]]:
+        return [
+            {
+                "claim": claim,
+                "reliableProvenanceAllowed": False,
+                "authorityGrant": False,
+                "reasonCode": reason_code,
+                "boundary": boundary,
+            }
+            for claim, reason_code, boundary in _ROTATION_EVIDENCE_FORBIDDEN_RELIABLE_CLAIMS
+        ]
+
+    def _rotation_snapshot_source_metadata(self, metadata: Mapping[str, Any]) -> Dict[str, Any]:
+        quote_meta = metadata.get("quoteProvider")
+        observed_meta = metadata.get("observedEvidence")
+        if isinstance(observed_meta, Mapping) and observed_meta.get("present") and not (
+            isinstance(quote_meta, Mapping) and quote_meta.get("present")
+        ):
+            return dict(observed_meta)
+        return dict(quote_meta) if isinstance(quote_meta, Mapping) else {}
+
+    def _rotation_snapshot_source_type(
+        self,
+        payload: Mapping[str, Any],
+        source_meta: Mapping[str, Any],
+    ) -> str:
+        if str(payload.get("source") or "").strip().lower() == "local_taxonomy":
+            return "taxonomy_only"
+        provenance = project_source_provenance(
+            source=source_meta.get("source") or payload.get("source"),
+            source_type=source_meta.get("sourceType"),
+            freshness=source_meta.get("freshness") or payload.get("freshness"),
+            is_fallback=bool(payload.get("isFallback")),
+            is_stale=bool(payload.get("isStale")),
+            no_external_calls=bool(source_meta.get("noExternalCalls", True)),
+        )
+        return str(provenance.get("sourceType") or "missing")
+
+    @staticmethod
+    def _rotation_snapshot_source_tier(
+        source_meta: Mapping[str, Any],
+        diagnostics: Mapping[str, Any],
+        source_type: str,
+    ) -> str:
+        source_tier = str(
+            source_meta.get("sourceTier")
+            or diagnostics.get("finalSourceTier")
+            or ""
+        ).strip()
+        if source_tier in {"fallback_static", "missing"}:
+            return "static_fallback"
+        if source_tier:
+            return source_tier
+        if source_type in {"fallback_static", "taxonomy_only", "missing"}:
+            return "static_fallback"
+        if source_type == "cache_snapshot":
+            return "snapshot"
+        return source_type or "unknown"
+
+    @staticmethod
+    def _rotation_snapshot_provider_tier(source_meta: Mapping[str, Any], source_type: str) -> str:
+        provider_tier = str(source_meta.get("providerTier") or "").strip()
+        if provider_tier:
+            return provider_tier
+        if source_type in {"fallback_static", "taxonomy_only", "missing"}:
+            return "fallback"
+        return "unknown"
+
+    def _rotation_snapshot_count(self, source_meta: Mapping[str, Any], source_type: str) -> int:
+        source_type_counts = source_meta.get("sourceTypeCounts")
+        if isinstance(source_type_counts, Mapping):
+            count = self._safe_int(source_type_counts.get("cache_snapshot"))
+            if count:
+                return count
+        if source_type == "cache_snapshot":
+            return self._safe_int(source_meta.get("usableSymbolCount"))
+        return self._safe_int(source_meta.get("snapshotCount"))
+
+    def _rotation_snapshot_reason_codes(
+        self,
+        *,
+        payload: Mapping[str, Any],
+        source_meta: Mapping[str, Any],
+        diagnostics: Mapping[str, Any],
+        source_type: str,
+        source_tier: str,
+        quote_mode: str,
+        score_allowed: bool,
+        fallback_count: int,
+        stale_count: int,
+        partial_count: int,
+        snapshot_count: int,
+    ) -> List[str]:
+        reason_codes: List[str] = ["diagnostic_observation_only", "authority_grant_false"]
+        if not score_allowed:
+            reason_codes.append("score_contribution_disallowed")
+        if not bool(source_meta.get("present")):
+            reason_codes.append("provider_absent")
+        if fallback_count or bool(payload.get("isFallback")) or source_type == "fallback_static":
+            reason_codes.append("fallback_source")
+        if source_tier == "static_fallback" or source_type in {"fallback_static", "missing"}:
+            reason_codes.append("static_source")
+        if source_type == "taxonomy_only":
+            reason_codes.append("taxonomy_only")
+        if stale_count:
+            reason_codes.append("stale_source")
+        if partial_count or str(source_meta.get("status") or "") == "partial":
+            reason_codes.append("partial_coverage")
+        if snapshot_count or source_type == "cache_snapshot":
+            reason_codes.append("cache_snapshot_observation_only")
+        if source_type == "synthetic_fixture" or source_tier == "synthetic":
+            reason_codes.append("synthetic_source")
+        source_markers = self._rotation_source_markers(source_meta, diagnostics, source_type, source_tier)
+        if quote_mode == "proxy" or "proxy" in source_type or "proxy" in source_markers:
+            reason_codes.append("proxy_reliable_provenance_forbidden")
+        if "unofficial_public_api" in source_markers or source_type == "unofficial_proxy":
+            reason_codes.append("unofficial_public_api_reliable_provenance_forbidden")
+        if source_type == "unofficial_proxy" or source_markers.intersection(_ROTATION_RADAR_PROXY_AUTHORITY_SOURCES):
+            reason_codes.append("yfinance_proxy_reliable_provenance_forbidden")
+        if (
+            bool(source_meta.get("sourceAuthorityRouteRejected"))
+            or source_meta.get("sourceAuthorityReason") == ROTATION_RADAR_SOURCE_AUTHORITY_REJECTED_REASON
+        ):
+            reason_codes.append(ROTATION_RADAR_SOURCE_AUTHORITY_REJECTED_REASON)
+        if self._provider_readiness_observed(source_meta, diagnostics):
+            reason_codes.append("provider_readiness_observation_only")
+        reason_codes.append("etf_price_proxy_fund_flow_forbidden")
+        return list(dict.fromkeys(reason_codes))
+
+    @staticmethod
+    def _rotation_source_markers(
+        source_meta: Mapping[str, Any],
+        diagnostics: Mapping[str, Any],
+        source_type: str,
+        source_tier: str,
+    ) -> set[str]:
+        markers = {
+            str(source_meta.get("source") or "").strip().lower(),
+            str(source_meta.get("sourceType") or "").strip().lower(),
+            str(source_meta.get("sourceTier") or "").strip().lower(),
+            str(source_meta.get("providerTier") or "").strip().lower(),
+            str(diagnostics.get("finalSourceTier") or "").strip().lower(),
+            str(source_type or "").strip().lower(),
+            str(source_tier or "").strip().lower(),
+        }
+        source_counts = source_meta.get("sourceCounts")
+        if isinstance(source_counts, Mapping):
+            markers.update(str(key or "").strip().lower() for key in source_counts)
+        return {marker for marker in markers if marker}
+
+    @staticmethod
+    def _provider_readiness_observed(
+        source_meta: Mapping[str, Any],
+        diagnostics: Mapping[str, Any],
+    ) -> bool:
+        if not bool(source_meta.get("present")):
+            return False
+        return bool(
+            diagnostics.get("configuredProviderAttempted")
+            or diagnostics.get("providerAttempted")
+            or diagnostics.get("providerConstructed")
+            or str(diagnostics.get("liveActivationStatus") or "").strip()
+        )
 
     def _failed_symbols(
         self,

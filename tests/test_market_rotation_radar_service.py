@@ -209,6 +209,13 @@ def _runtime_probe_symbols() -> tuple[str, ...]:
     )
 
 
+def _forbidden_claims_by_name(snapshot: dict) -> dict[str, dict]:
+    return {
+        str(item["claim"]): item
+        for item in snapshot["forbiddenReliableClaims"]
+    }
+
+
 def _utc_dt(year: int, month: int, day: int, hour: int, minute: int = 0) -> datetime:
     return datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
 
@@ -333,6 +340,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         service = MarketRotationRadarService(now_provider=lambda: datetime(2026, 5, 7, tzinfo=timezone.utc))
 
         payload = service.get_rotation_radar()
+        snapshot = payload["metadata"]["rotationEvidenceSnapshot"]
 
         self.assertTrue(payload["isFallback"])
         self.assertEqual(payload["freshness"], "fallback")
@@ -351,6 +359,41 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertIn("fallback/static", payload["summary"]["headlineWarning"])
         self.assertIn("没有可用于头部排名", payload["warning"])
         self.assertTrue(all(item["rankingLane"] == "observation" for item in payload["summary"]["observationThemes"]))
+        self.assertTrue(snapshot["diagnosticOnly"])
+        self.assertTrue(snapshot["observationOnly"])
+        self.assertFalse(snapshot["authorityGrant"])
+        self.assertFalse(snapshot["scoreContributionAllowed"])
+        self.assertFalse(snapshot["providerRuntimeChanged"])
+        self.assertFalse(snapshot["externalProviderCalls"])
+        self.assertFalse(snapshot["marketCacheMutation"])
+        self.assertEqual(snapshot["sourceType"], "fallback_static")
+        self.assertEqual(snapshot["sourceTier"], "static_fallback")
+        self.assertEqual(snapshot["providerTier"], "fallback")
+        self.assertEqual(snapshot["freshness"], "fallback")
+        self.assertEqual(snapshot["fallbackCount"], len(payload["themes"]))
+        self.assertEqual(snapshot["staleCount"], 0)
+        self.assertEqual(snapshot["partialCount"], 0)
+        self.assertEqual(snapshot["snapshotCount"], 0)
+        self.assertEqual(snapshot["failedSymbolCount"], payload["metadata"]["quoteProvider"]["failedSymbolCount"])
+        self.assertIn("provider_absent", snapshot["reasonCodes"])
+        self.assertIn("fallback_source", snapshot["reasonCodes"])
+        self.assertIn("static_source", snapshot["reasonCodes"])
+        claims = _forbidden_claims_by_name(snapshot)
+        for claim in (
+            "proxy",
+            "fallback",
+            "cached",
+            "stale",
+            "partial",
+            "static",
+            "taxonomy_only",
+            "synthetic",
+            "unofficial_public_api",
+            "yfinance_proxy",
+            "etf_price_proxy_as_fund_flow_evidence",
+        ):
+            self.assertIn(claim, claims)
+            self.assertFalse(claims[claim]["reliableProvenanceAllowed"])
         self.assertEqual(
             [(theme["id"], theme["rotationScore"], theme["stage"]) for theme in payload["themes"][:5]],
             [
@@ -602,6 +645,112 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertIn("participation proxy", dumped)
         self.assertIn("relative strength proxy", dumped)
         self.assertNotIn("real fund-flow dollars", dumped.replace("no real fund-flow dollars", ""))
+
+    def test_rotation_evidence_snapshot_keeps_yfinance_proxy_and_readiness_non_authoritative(self) -> None:
+        ai_members = ("APP", "PLTR", "CRM", "SNOW", "ADBE", "NOW", "DUOL", "MDB", "TEAM", "WDAY")
+        quotes = {
+            "QQQ": _quote(
+                "QQQ",
+                0.4,
+                freshness="delayed",
+                is_fallback=True,
+                source="yfinance_proxy",
+                source_type="unofficial_public_api",
+                source_tier="unofficial_public_api",
+            ),
+            "SPY": _quote(
+                "SPY",
+                0.2,
+                freshness="delayed",
+                is_fallback=True,
+                source="yfinance_proxy",
+                source_type="unofficial_public_api",
+                source_tier="unofficial_public_api",
+            ),
+            "IWM": _quote(
+                "IWM",
+                0.1,
+                freshness="delayed",
+                is_fallback=True,
+                source="yfinance_proxy",
+                source_type="unofficial_public_api",
+                source_tier="unofficial_public_api",
+            ),
+            "IGV": _quote(
+                "IGV",
+                0.8,
+                freshness="delayed",
+                is_fallback=True,
+                source="yfinance_proxy",
+                source_type="unofficial_public_api",
+                source_tier="unofficial_public_api",
+            ),
+        }
+        for symbol in ai_members:
+            quotes[symbol] = _quote(
+                symbol,
+                3.0,
+                volume_ratio=1.8,
+                freshness="delayed",
+                is_fallback=True,
+                source="yfinance_proxy",
+                source_type="unofficial_public_api",
+                source_tier="unofficial_public_api",
+            )
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "proxy",
+                    "source": "yfinance_proxy",
+                    "sourceType": "unofficial_public_api",
+                    "sourceTier": "unofficial_public_api",
+                    "providerTier": "tier_2_delayed_proxy",
+                    "freshness": "delayed",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "noExternalCalls": False,
+                    "providerDiagnostics": {
+                        "configuredProviderAttempted": True,
+                        "providerAttempted": True,
+                        "providerConstructed": True,
+                        "liveActivationStatus": "active",
+                        "finalSourceTier": "unofficial_public_api",
+                        "trustLevel": "degraded",
+                    },
+                },
+            },
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        snapshot = payload["metadata"]["rotationEvidenceSnapshot"]
+        theme = next(item for item in payload["themes"] if item["id"] == "ai_applications")
+
+        self.assertTrue(snapshot["diagnosticOnly"])
+        self.assertTrue(snapshot["observationOnly"])
+        self.assertFalse(snapshot["authorityGrant"])
+        self.assertFalse(snapshot["scoreContributionAllowed"])
+        self.assertFalse(snapshot["providerRuntimeChanged"])
+        self.assertFalse(snapshot["externalProviderCalls"])
+        self.assertFalse(snapshot["marketCacheMutation"])
+        self.assertEqual(snapshot["sourceType"], "unofficial_proxy")
+        self.assertEqual(snapshot["sourceTier"], "unofficial_public_api")
+        self.assertEqual(snapshot["providerTier"], "tier_2_delayed_proxy")
+        self.assertEqual(snapshot["quoteMode"], "proxy")
+        self.assertEqual(snapshot["freshness"], "delayed")
+        self.assertGreater(snapshot["fallbackCount"], 0)
+        self.assertGreater(snapshot["partialCount"], 0)
+        self.assertEqual(snapshot["failedSymbolCount"], payload["metadata"]["quoteProvider"]["failedSymbolCount"])
+        self.assertIn("source_authority_router_rejected", snapshot["reasonCodes"])
+        self.assertIn("provider_readiness_observation_only", snapshot["reasonCodes"])
+        self.assertIn("yfinance_proxy_reliable_provenance_forbidden", snapshot["reasonCodes"])
+        self.assertFalse(theme["headlineEligible"])
+        self.assertFalse(theme["scoreContributionAllowed"])
+        self.assertEqual(theme["rankingLane"], "observation")
+        self.assertEqual(payload["summary"]["headlineEligibleThemeCount"], 0)
+        claims = _forbidden_claims_by_name(snapshot)
+        self.assertFalse(claims["yfinance_proxy"]["reliableProvenanceAllowed"])
+        self.assertFalse(claims["etf_price_proxy_as_fund_flow_evidence"]["reliableProvenanceAllowed"])
 
     def test_quote_provider_success_metadata_can_mark_local_proxy_snapshot_without_external_calls(self) -> None:
         def provider(symbols):
@@ -2346,6 +2495,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         )
 
         payload = service.get_rotation_radar(market="CN")
+        snapshot = payload["metadata"]["rotationEvidenceSnapshot"]
 
         self.assertEqual(provider_calls, [])
         self.assertEqual(payload["market"], "CN")
@@ -2372,6 +2522,14 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertIn("没有可用于头部排名", payload["summary"]["noHeadlineReason"])
         self.assertTrue(all(theme["rankingLane"] == "taxonomy" for theme in payload["summary"]["taxonomyThemes"]))
         self.assertIn("AI算力", [theme["name"] for theme in payload["themes"]])
+        self.assertTrue(snapshot["diagnosticOnly"])
+        self.assertTrue(snapshot["observationOnly"])
+        self.assertFalse(snapshot["authorityGrant"])
+        self.assertFalse(snapshot["scoreContributionAllowed"])
+        self.assertEqual(snapshot["sourceType"], "taxonomy_only")
+        self.assertEqual(snapshot["sourceTier"], "static_fallback")
+        self.assertIn("taxonomy_only", snapshot["reasonCodes"])
+        self.assertFalse(_forbidden_claims_by_name(snapshot)["taxonomy_only"]["reliableProvenanceAllowed"])
 
     def test_stale_and_missing_data_penalizes_confidence_and_blocks_clean_rotation_claims(self) -> None:
         quotes = {
