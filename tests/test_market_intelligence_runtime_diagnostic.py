@@ -406,6 +406,92 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
             },
             "nextSafeStep": "collect_observation_only_metadata_without_granting_authority",
         },
+        "optionsEventSourceRegistryCandidate": {
+            "diagnosticOnly": True,
+            "candidateOnly": True,
+            "sourceKey": "options_lab.event_calendar_candidate_evidence",
+            "sourceType": "missing",
+            "sourceLabel": "Event Calendar Candidate Evidence (diagnostic only)",
+            "candidateSourceClass": "licensed_event_calendar_provider",
+            "metadataFamilies": {
+                "provenance": [
+                    "licensed_provider",
+                    "exchange",
+                    "issuer",
+                    "official_calendar",
+                    "approved_internal_source",
+                ],
+                "entitlement": [
+                    "event_calendar_entitlement",
+                    "live_delayed_status",
+                    "environment",
+                    "sandbox_or_production",
+                    "decision_use_rights_evidence",
+                    "redistribution_rights",
+                    "audit_timestamp",
+                ],
+                "slaFreshness": [
+                    "as_of",
+                    "freshness",
+                    "max_age_policy",
+                    "provider_sla_status",
+                    "freshness_state",
+                    "latency_or_error_state",
+                ],
+                "eventTaxonomy": [
+                    "earnings",
+                    "dividends",
+                    "ex_dividend",
+                    "dividends_ex_dividend",
+                    "splits",
+                    "corporate_actions",
+                    "macro_context_relevance",
+                    "fomc_macro_context_policy_scope",
+                ],
+                "confirmation": [
+                    "confirmed_or_estimated",
+                    "announcement_status",
+                ],
+                "eventIdentity": [
+                    "provider_event_id",
+                    "event_identity",
+                ],
+                "timezoneSession": [
+                    "event_date",
+                    "event_time",
+                    "session",
+                    "timezone",
+                ],
+                "coverageScope": [
+                    "symbol_or_underlying_coverage",
+                    "lookahead_window_or_date_range",
+                    "coverage_metadata",
+                ],
+            },
+            "forbiddenAuthorityInputs": [
+                "event_presence",
+                "event_count",
+                "event_type",
+                "timeline_evidence",
+                "generic_macro_context",
+                "provider_capabilities",
+                "provider_capability_metadata",
+                "candidate_gap_metadata",
+                "source_labels",
+                "provider_self_claims",
+                "current_provider_id",
+                "fixture",
+                "synthetic",
+                "fallback",
+                "dry_run",
+                "stub",
+                "adapter_contract",
+                "request_shaped_evidence",
+                "proxy",
+            ],
+            "warning": "Registry metadata is diagnostic-only, candidate-only, and non-authoritative.",
+            "nextSafeStep": "document_candidate_evidence_only_without_approval",
+        },
         "optionsExpirationSourceCandidateGap": {
             "diagnosticOnly": True,
             "surface": "expiration_calendar",
@@ -1083,6 +1169,124 @@ def test_runtime_diagnostic_projects_event_source_candidate_gap_safely(monkeypat
         assert blocked not in serialized
 
 
+def test_runtime_diagnostic_projects_event_source_registry_candidate_safely(monkeypatch) -> None:
+    module = _load_script_module()
+
+    monkeypatch.setattr(
+        module,
+        "_fetch_json",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("endpoint fetch should not run")),
+    )
+    monkeypatch.setattr(
+        module,
+        "_build_tradier_options_live_probe_transport",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("tradier live probe should not run")),
+    )
+
+    payload = module.collect_diagnostic_bundle()
+    projection = payload["optionsEventSourceRegistryCandidate"]
+    serialized = json.dumps(projection, ensure_ascii=False, sort_keys=True)
+
+    assert projection["diagnosticOnly"] is True
+    assert projection["candidateOnly"] is True
+    assert projection["sourceKey"] == "options_lab.event_calendar_candidate_evidence"
+    assert projection["sourceType"] == "missing"
+    assert projection["sourceLabel"] == "Event Calendar Candidate Evidence (diagnostic only)"
+    assert projection["candidateSourceClass"] == "licensed_event_calendar_provider"
+    assert projection["metadataFamilies"] == {
+        "provenance": [
+            "licensed_provider",
+            "exchange",
+            "issuer",
+            "official_calendar",
+            "approved_internal_source",
+        ],
+        "entitlement": [
+            "event_calendar_entitlement",
+            "live_delayed_status",
+            "environment",
+            "sandbox_or_production",
+            "decision_use_rights_evidence",
+            "redistribution_rights",
+            "audit_timestamp",
+        ],
+        "slaFreshness": [
+            "as_of",
+            "freshness",
+            "max_age_policy",
+            "provider_sla_status",
+            "freshness_state",
+            "latency_or_error_state",
+        ],
+        "eventTaxonomy": [
+            "earnings",
+            "dividends",
+            "ex_dividend",
+            "dividends_ex_dividend",
+            "splits",
+            "corporate_actions",
+            "macro_context_relevance",
+            "fomc_macro_context_policy_scope",
+        ],
+        "confirmation": [
+            "confirmed_or_estimated",
+            "announcement_status",
+        ],
+        "eventIdentity": [
+            "provider_event_id",
+            "event_identity",
+        ],
+        "timezoneSession": [
+            "event_date",
+            "event_time",
+            "session",
+            "timezone",
+        ],
+        "coverageScope": [
+            "symbol_or_underlying_coverage",
+            "lookahead_window_or_date_range",
+            "coverage_metadata",
+        ],
+    }
+    assert projection["forbiddenAuthorityInputs"] == [
+        "event_presence",
+        "event_count",
+        "event_type",
+        "timeline_evidence",
+        "generic_macro_context",
+        "provider_capabilities",
+        "provider_capability_metadata",
+        "candidate_gap_metadata",
+        "source_labels",
+        "provider_self_claims",
+        "current_provider_id",
+        "fixture",
+        "synthetic",
+        "fallback",
+        "dry_run",
+        "stub",
+        "adapter_contract",
+        "request_shaped_evidence",
+        "proxy",
+    ]
+    assert "non-authoritative" in projection["warning"].lower()
+    assert projection["nextSafeStep"] == "document_candidate_evidence_only_without_approval"
+    for forbidden_field in (
+        "authorityGrant",
+        "decisionGrade",
+        "providerDecisionAuthority",
+        "recommendationAuthority",
+        "gateDecision",
+        "sourceAuthorityAllowed",
+        "providerRouting",
+        "liveCallEnablement",
+        "providerSelfClaimAuthority",
+    ):
+        assert forbidden_field not in projection
+    for blocked in ("http://", "https://", "Authorization", "Bearer", "token", "secret", "rawPayload"):
+        assert blocked not in serialized
+
+
 def test_runtime_diagnostic_projects_expiration_source_registry_candidate_safely(monkeypatch) -> None:
     module = _load_script_module()
 
@@ -1204,6 +1408,7 @@ def test_runtime_diagnostic_projects_expiration_source_candidate_evidence_safely
 
     assert "optionsEventSourceCandidateGap" in payload
     assert "optionsExpirationSourceCandidateGap" in payload
+    assert "optionsEventSourceRegistryCandidate" in payload
     assert "optionsExpirationSourceRegistryCandidate" in payload
     assert "optionsAuthorityDiagnostics" in payload
     assert "optionsIvRankAuthority" in payload

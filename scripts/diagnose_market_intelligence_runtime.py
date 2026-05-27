@@ -76,9 +76,10 @@ _OPTIONS_AUTHORITY_DIAGNOSTIC_WARNING = (
     "Authority diagnostics and checklist completeness are diagnostic-only and not decisionGrade."
 )
 _EVENT_SOURCE_CANDIDATE_CLASS = "licensed_event_calendar_provider"
+_EVENT_SOURCE_REGISTRY_KEY = "options_lab.event_calendar_candidate_evidence"
 _EXPIRATION_SOURCE_CANDIDATE_CLASS = "occ_opra_exchange_or_licensed_expiration_calendar"
 _EXPIRATION_SOURCE_REGISTRY_KEY = "options_lab.expiration_calendar_candidate_evidence"
-_EXPIRATION_SOURCE_REGISTRY_WARNING = (
+_SOURCE_REGISTRY_CANDIDATE_WARNING = (
     "Registry metadata is diagnostic-only, candidate-only, and non-authoritative."
 )
 
@@ -433,7 +434,33 @@ def _collect_options_expiration_source_registry_candidate() -> dict[str, Any]:
             ),
         },
         "forbiddenAuthorityInputs": _normalize_contract_value(metadata.get("forbiddenAuthorityInputs") or []),
-        "warning": _EXPIRATION_SOURCE_REGISTRY_WARNING,
+        "warning": _SOURCE_REGISTRY_CANDIDATE_WARNING,
+        "nextSafeStep": str(metadata.get("nextSafeStep") or ""),
+    }
+
+
+def _collect_options_event_source_registry_candidate() -> dict[str, Any]:
+    metadata = project_source_registry_metadata(_EVENT_SOURCE_REGISTRY_KEY)
+    source_type = str(metadata.get("sourceType") or "missing")
+    return {
+        "diagnosticOnly": bool(metadata.get("diagnosticOnly", True)),
+        "candidateOnly": bool(metadata.get("candidateOnly", True)),
+        "sourceKey": _EVENT_SOURCE_REGISTRY_KEY,
+        "sourceType": source_type,
+        "sourceLabel": resolve_source_label(_EVENT_SOURCE_REGISTRY_KEY, source_type=source_type),
+        "candidateSourceClass": str(metadata.get("candidateSourceClass") or ""),
+        "metadataFamilies": {
+            "provenance": _normalize_contract_value(metadata.get("provenanceFamily") or []),
+            "entitlement": _normalize_contract_value(metadata.get("entitlementFamily") or []),
+            "slaFreshness": _normalize_contract_value(metadata.get("slaFreshnessFamily") or []),
+            "eventTaxonomy": _normalize_contract_value(metadata.get("eventTaxonomyFamily") or []),
+            "confirmation": _normalize_contract_value(metadata.get("confirmationFamily") or []),
+            "eventIdentity": _normalize_contract_value(metadata.get("eventIdentityFamily") or []),
+            "timezoneSession": _normalize_contract_value(metadata.get("timezoneSessionFamily") or []),
+            "coverageScope": _normalize_contract_value(metadata.get("coverageScopeFamily") or []),
+        },
+        "forbiddenAuthorityInputs": _normalize_contract_value(metadata.get("forbiddenAuthorityInputs") or []),
+        "warning": _SOURCE_REGISTRY_CANDIDATE_WARNING,
         "nextSafeStep": str(metadata.get("nextSafeStep") or ""),
     }
 
@@ -1295,6 +1322,7 @@ def collect_diagnostic_bundle(
         polygon_us_breadth_diagnostic = _skipped_polygon_us_breadth_diagnostic()
     options_event_source_candidate_gap = _collect_options_event_source_candidate_gap()
     options_expiration_source_candidate_gap = _collect_options_expiration_source_candidate_gap()
+    options_event_source_registry_candidate = _collect_options_event_source_registry_candidate()
     options_expiration_source_registry_candidate = _collect_options_expiration_source_registry_candidate()
     options_iv_rank_authority = _collect_options_iv_rank_authority()
     options_event_calendar_authority = _collect_options_event_calendar_authority()
@@ -1319,6 +1347,7 @@ def collect_diagnostic_bundle(
         "optionsEventSourceCandidateGap": options_event_source_candidate_gap,
         "optionsExpirationSourceCandidateGap": options_expiration_source_candidate_gap,
         "optionsExpirationSourceCandidateEvidence": _collect_options_expiration_source_candidate_evidence(),
+        "optionsEventSourceRegistryCandidate": options_event_source_registry_candidate,
         "optionsExpirationSourceRegistryCandidate": options_expiration_source_registry_candidate,
         "optionsIvRankAuthority": options_iv_rank_authority,
         "optionsEventCalendarAuthority": options_event_calendar_authority,
@@ -1469,6 +1498,7 @@ def main(argv: list[str] | None = None) -> int:
             "optionsEventSourceCandidateGap": _collect_options_event_source_candidate_gap(),
             "optionsExpirationSourceCandidateGap": _collect_options_expiration_source_candidate_gap(),
             "optionsExpirationSourceCandidateEvidence": _collect_options_expiration_source_candidate_evidence(),
+            "optionsEventSourceRegistryCandidate": _collect_options_event_source_registry_candidate(),
             "optionsExpirationSourceRegistryCandidate": _collect_options_expiration_source_registry_candidate(),
             "optionsIvRankAuthority": options_iv_rank_authority,
             "optionsEventCalendarAuthority": options_event_calendar_authority,
