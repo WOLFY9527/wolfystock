@@ -223,10 +223,26 @@ const BacktestPage: React.FC = () => {
   const [ruleCurrentStep, setRuleCurrentStep] = useState<RuleWizardStep>('symbol');
   const [ruleParseSignature, setRuleParseSignature] = useState<string | null>(null);
   const [appliedRewriteText, setAppliedRewriteText] = useState<string | null>(null);
-  const showRuleModuleButton = useSafariWarmActivation<HTMLButtonElement>(() => setActiveModule('rule'));
-  const showHistoricalModuleButton = useSafariWarmActivation<HTMLButtonElement>(() => setActiveModule('historical'));
-  const showNormalModeButton = useSafariWarmActivation<HTMLButtonElement>(() => setControlPanelMode('normal'));
-  const showProfessionalModeButton = useSafariWarmActivation<HTMLButtonElement>(() => setControlPanelMode('professional'));
+  const {
+    ref: showRuleModuleButtonRef,
+    onClick: handleShowRuleModuleClick,
+    onPointerUp: handleShowRuleModulePointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(() => setActiveModule('rule'));
+  const {
+    ref: showHistoricalModuleButtonRef,
+    onClick: handleShowHistoricalModuleClick,
+    onPointerUp: handleShowHistoricalModulePointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(() => setActiveModule('historical'));
+  const {
+    ref: showNormalModeButtonRef,
+    onClick: handleShowNormalModeClick,
+    onPointerUp: handleShowNormalModePointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(() => setControlPanelMode('normal'));
+  const {
+    ref: showProfessionalModeButtonRef,
+    onClick: handleShowProfessionalModeClick,
+    onPointerUp: handleShowProfessionalModePointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(() => setControlPanelMode('professional'));
 
   const normalizedCode = String(codeFilter || '').trim().toUpperCase();
   const resolvedSampleCount = samplePreset === 'custom'
@@ -1218,24 +1234,24 @@ const BacktestPage: React.FC = () => {
   const moduleTabs = (
     <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.moduleTabsLabel')}>
       <button
-        ref={showRuleModuleButton.ref}
+        ref={showRuleModuleButtonRef}
         type="button"
         role="tab"
         aria-selected={activeModule === 'rule'}
         className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${activeModule === 'rule' ? ' is-active' : ''}`}
-        onClick={showRuleModuleButton.onClick}
-        onPointerUp={showRuleModuleButton.onPointerUp}
+        onClick={handleShowRuleModuleClick}
+        onPointerUp={handleShowRuleModulePointerUp}
       >
         {bt(language, 'page.ruleTab')}
       </button>
       <button
-        ref={showHistoricalModuleButton.ref}
+        ref={showHistoricalModuleButtonRef}
         type="button"
         role="tab"
         aria-selected={activeModule === 'historical'}
         className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${activeModule === 'historical' ? ' is-active' : ''}`}
-        onClick={showHistoricalModuleButton.onClick}
-        onPointerUp={showHistoricalModuleButton.onPointerUp}
+        onClick={handleShowHistoricalModuleClick}
+        onPointerUp={handleShowHistoricalModulePointerUp}
       >
         {bt(language, 'page.historicalTab')}
       </button>
@@ -1245,24 +1261,24 @@ const BacktestPage: React.FC = () => {
   const controlModeTabs = (
     <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.controlModeLabel')}>
       <button
-        ref={showNormalModeButton.ref}
+        ref={showNormalModeButtonRef}
         type="button"
         role="tab"
         aria-selected={controlPanelMode === 'normal'}
         className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${controlPanelMode === 'normal' ? ' is-active' : ''}`}
-        onClick={showNormalModeButton.onClick}
-        onPointerUp={showNormalModeButton.onPointerUp}
+        onClick={handleShowNormalModeClick}
+        onPointerUp={handleShowNormalModePointerUp}
       >
         {bt(language, 'page.normalMode')}
       </button>
       <button
-        ref={showProfessionalModeButton.ref}
+        ref={showProfessionalModeButtonRef}
         type="button"
         role="tab"
         aria-selected={controlPanelMode === 'professional'}
         className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${controlPanelMode === 'professional' ? ' is-active' : ''}`}
-        onClick={showProfessionalModeButton.onClick}
-        onPointerUp={showProfessionalModeButton.onPointerUp}
+        onClick={handleShowProfessionalModeClick}
+        onPointerUp={handleShowProfessionalModePointerUp}
       >
         {bt(language, 'page.professionalMode')}
       </button>
