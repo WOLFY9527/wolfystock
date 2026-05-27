@@ -38,6 +38,7 @@ They exist to explain whether current evidence is authoritative enough for futur
 ## Locked invariants
 
 - Diagnostic output must never feed gates, recommendations, or `decisionGrade`.
+- Checklist completeness is diagnostic readiness only, not authority, not decision readiness, and not `decisionGrade`.
 - Coverage does not equal authority.
 - Provider self-claims are ignored.
 - Fixture, synthetic, fallback, dry-run, stub, adapter-contract, and request-shaped evidence is non-authoritative.
@@ -47,12 +48,45 @@ They exist to explain whether current evidence is authoritative enough for futur
 
 ## Authority decision rule
 
-Treat a surface as authoritative only when both conditions are true:
+Treat a surface as authoritative only when all conditions below are true:
 
-1. Evidence is present in a sanitized diagnostic payload.
-2. An internal WolfyStock authority policy source explicitly marks that evidence path as authoritative.
+1. Sanitized evidence exists in the diagnostic payload.
+2. No blocked source class is present.
+3. An internal WolfyStock authority policy source explicitly grants that evidence path.
+4. Required checklist and evidence families are complete where policy requires them.
 
-If coverage exists without internal policy authority, return a non-authoritative diagnostic state. Do not upgrade authority because a provider reports broad coverage, completeness, or authorization.
+If coverage or checklist completeness exists without all four conditions, return a non-authoritative diagnostic state. Do not upgrade authority because a provider reports broad coverage, completeness, or authorization.
+
+## Checklist evidence families
+
+Use checklist families as diagnostic structure only. They help explain readiness gaps but do not grant authority by themselves.
+
+- Common families: provenance, entitlement, SLA/freshness
+- IV-rank families: methodology, lookback, IV evidence
+- event-calendar families: event taxonomy, confirmation, coverage scope
+- expiration-calendar families: expiration taxonomy, adjusted deliverable, corporate-action evidence
+
+## Current trilogy behavior
+
+Current diagnostic behavior is intentionally asymmetric:
+
+- `event-calendar` and `expiration-calendar` may emit `authorityEvidenceChecklist` when checklist evidence or policy context is supplied.
+- `iv-rank` may remain reason-code and checklist-family driven unless a future implementation explicitly adds an emitted checklist object.
+- This asymmetry is allowed only when it stays documented and tested as diagnostic-only behavior.
+
+## Interpretation warning
+
+Do not interpret any of the following as decision readiness:
+
+- `authoritative`
+- `authorityEvidenceChecklist.present`
+- `authorizedSourceMetadata`
+- `expirationCoverage`
+- event count or event type
+- current IV
+- provider capability metadata
+
+Those fields may describe diagnostic availability, sanitized evidence shape, or policy context. They must not be used as a proxy for gate readiness, recommendation readiness, or `decisionGrade`.
 
 ## Recommended helper shape
 
@@ -85,12 +119,15 @@ Notes:
 - `authorityState` is the user-safe summary; `authoritative` is the boolean decision.
 - `providerId`, `sourceType`, and `sourceAuthority` must remain sanitized labels, not raw payloads.
 - `authorityPolicySource` must point to an internal WolfyStock policy source, not a provider claim.
+- `authorityEvidenceChecklist.present` indicates diagnostic checklist emission only, not authority or decision readiness.
 - `reasonCodes` should explain why evidence is non-authoritative without leaking runtime internals.
 - `requiredFutureAuthorityEvidence` should list what internal evidence would be needed before authority can be granted.
 
 ## Reusable examples
 
 - Enough rows/events/expirations are present, but no internal authority policy source exists:
+  return `non_authoritative`.
+- A checklist is complete but a blocked source class is present, or policy does not grant the path:
   return `non_authoritative`.
 - Provider payload says `authorized` or equivalent:
   ignore the self-claim unless an internal WolfyStock policy source independently authorizes it.
