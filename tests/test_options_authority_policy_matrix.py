@@ -483,6 +483,73 @@ def test_event_calendar_source_candidate_gap_contract_is_inert_and_observation_o
     assert contract["nextSafeStep"] == "collect_observation_only_metadata_without_granting_authority"
 
 
+def test_event_calendar_policy_gap_and_registry_metadata_stay_cross_contract_aligned() -> None:
+    policy = get_options_authority_surface_policy("event_calendar")
+    registry = project_source_registry_metadata("options_lab.event_calendar_candidate_evidence")
+    gap = build_options_event_calendar_source_candidate_gap(registry["candidateSourceClass"])
+
+    assert policy["surface"] == registry["surface"] == gap["surface"] == "event_calendar"
+    assert registry["candidateSourceClass"] == gap["candidateSourceClass"]
+    assert registry["diagnosticOnly"] is True
+    assert registry["candidateOnly"] is True
+    assert gap["diagnosticOnly"] is True
+    assert gap["candidateOnly"] is True
+    assert gap["authorityGrant"] is False
+
+    assert tuple(registry["provenanceFamily"]) == policy["required_future_evidence_families"]["provenance"]
+    assert set(policy["required_future_evidence_families"]["entitlement"]) <= _normalize_entitlement_family(
+        registry["entitlementFamily"]
+    )
+    assert set(gap["requiredEvidenceFamilies"]["entitlement_use_rights"]) <= _normalize_entitlement_family(
+        registry["entitlementFamily"]
+    )
+
+    assert set(gap["requiredEvidenceFamilies"]["sla_freshness"]) <= set(registry["slaFreshnessFamily"])
+    assert set(registry["slaFreshnessFamily"]) <= set(policy["required_future_evidence_families"]["sla_freshness"])
+    assert set(policy["required_future_evidence_families"]["sla_freshness"]) - set(
+        registry["slaFreshnessFamily"]
+    ) == {"freshness_seconds"}
+
+    assert set(policy["required_future_evidence_families"]["event_taxonomy"]) <= set(registry["eventTaxonomyFamily"])
+    assert set(gap["requiredEvidenceFamilies"]["event_taxonomy"]) <= set(registry["eventTaxonomyFamily"])
+
+    assert set(gap["requiredEvidenceFamilies"]["confirmation_status"]) == set(registry["confirmationFamily"])
+    assert set(gap["requiredEvidenceFamilies"]["event_identity"]) == set(registry["eventIdentityFamily"])
+    assert set(gap["requiredEvidenceFamilies"]["timezone_session"]) == set(registry["timezoneSessionFamily"])
+    assert set(policy["required_future_evidence_families"]["coverage_scope"]) == set(
+        registry["coverageScopeFamily"]
+    )
+    assert set(gap["requiredEvidenceFamilies"]["coverage_scope"]) == set(registry["coverageScopeFamily"])
+
+    assert _normalize_forbidden_authority_inputs(gap["forbiddenAuthorityInputs"]) <= set(
+        registry["forbiddenAuthorityInputs"]
+    )
+    assert {
+        "event_presence",
+        "event_count",
+        "event_type",
+        "timeline_evidence",
+        "generic_macro_context",
+        "provider_capabilities",
+        "provider_capability_metadata",
+        "candidate_gap_metadata",
+        "provider_self_claims",
+        "current_provider_id",
+    } <= set(registry["forbiddenAuthorityInputs"])
+
+    for forbidden_field in (
+        "providerDecisionAuthority",
+        "recommendationAuthority",
+        "decisionGrade",
+        "gateDecision",
+        "sourceAuthorityAllowed",
+        "providerRouting",
+        "liveCallEnablement",
+    ):
+        assert forbidden_field not in gap
+        assert forbidden_field not in registry
+
+
 @pytest.mark.parametrize(
     "source_class",
     tuple(

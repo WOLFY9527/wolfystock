@@ -23,10 +23,17 @@ metadata for future evidence families. The expiration-calendar candidate source
 entry is `options_lab.expiration_calendar_candidate_evidence`; it projects as
 `sourceType=missing` and describes only provenance, entitlement,
 SLA/freshness, expiration taxonomy, and adjusted-deliverable/corporate-action
-evidence families plus forbidden authority inputs. This is source metadata
-only. It is not provider capability authority, not decision-use approval, not
-an Options Lab authority grant, and not approval for gates, recommendations,
-`decisionGrade`, provider routing, or live calls.
+evidence families plus forbidden authority inputs. The event-calendar
+candidate source entry is `options_lab.event_calendar_candidate_evidence`; it
+also projects as `sourceType=missing` and describes only candidate-source
+families such as provenance, entitlement, SLA/freshness, event taxonomy,
+confirmation/event identity, timezone/session, coverage scope, and forbidden
+authority inputs.
+
+This is source metadata only. It is not provider capability authority, not
+data-access proof, not decision-use approval, not event-calendar authority,
+not an Options Lab authority grant, and not approval for gates,
+recommendations, `decisionGrade`, provider routing, or live calls.
 
 The matrix documents provider domains, market coverage, quota class, freshness
 class, recommended TTL hints, scanner/backtest eligibility, analysis-route

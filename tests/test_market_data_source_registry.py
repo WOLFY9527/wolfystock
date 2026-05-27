@@ -7,6 +7,7 @@ import json
 from typing import Any
 
 from src.services.options_authority_policy_matrix import (
+    build_options_event_calendar_source_candidate_gap,
     build_options_expiration_source_candidate_gap,
 )
 from src.services.options_expiration_source_candidate_evidence import (
@@ -761,6 +762,162 @@ def test_options_expiration_candidate_source_registry_metadata_stays_metadata_on
     ):
         assert forbidden_field not in metadata
         assert forbidden_field not in contract
+        assert forbidden_field not in gap
+
+
+def test_options_event_candidate_source_registry_metadata_is_diagnostic_only() -> None:
+    source = "options_lab.event_calendar_candidate_evidence"
+
+    provenance = project_source_provenance(source=source, freshness="unavailable")
+    metadata = project_source_registry_metadata(source)
+
+    assert provenance == {
+        "sourceType": "missing",
+        "sourceLabel": "Event Calendar Candidate Evidence (diagnostic only)",
+        "freshnessLabel": "不可用",
+    }
+    assert metadata == {
+        "diagnosticOnly": True,
+        "candidateOnly": True,
+        "surface": "event_calendar",
+        "sourceType": "missing",
+        "candidateSourceClass": "licensed_event_calendar_provider",
+        "provenanceFamily": [
+            "licensed_provider",
+            "exchange",
+            "issuer",
+            "official_calendar",
+            "approved_internal_source",
+        ],
+        "entitlementFamily": [
+            "event_calendar_entitlement",
+            "live_delayed_status",
+            "environment",
+            "sandbox_or_production",
+            "decision_use_rights_evidence",
+            "redistribution_rights",
+            "audit_timestamp",
+        ],
+        "slaFreshnessFamily": [
+            "as_of",
+            "freshness",
+            "max_age_policy",
+            "provider_sla_status",
+            "freshness_state",
+            "latency_or_error_state",
+        ],
+        "eventTaxonomyFamily": [
+            "earnings",
+            "dividends",
+            "ex_dividend",
+            "dividends_ex_dividend",
+            "splits",
+            "corporate_actions",
+            "macro_context_relevance",
+            "fomc_macro_context_policy_scope",
+        ],
+        "confirmationFamily": [
+            "confirmed_or_estimated",
+            "announcement_status",
+        ],
+        "eventIdentityFamily": [
+            "provider_event_id",
+            "event_identity",
+        ],
+        "timezoneSessionFamily": [
+            "event_date",
+            "event_time",
+            "session",
+            "timezone",
+        ],
+        "coverageScopeFamily": [
+            "symbol_or_underlying_coverage",
+            "lookahead_window_or_date_range",
+            "coverage_metadata",
+        ],
+        "forbiddenAuthorityInputs": [
+            "event_presence",
+            "event_count",
+            "event_type",
+            "timeline_evidence",
+            "generic_macro_context",
+            "provider_capabilities",
+            "provider_capability_metadata",
+            "candidate_gap_metadata",
+            "source_labels",
+            "provider_self_claims",
+            "current_provider_id",
+            "fixture",
+            "synthetic",
+            "fallback",
+            "dry_run",
+            "stub",
+            "adapter_contract",
+            "request_shaped_evidence",
+            "proxy",
+        ],
+        "nextSafeStep": "document_candidate_evidence_only_without_approval",
+    }
+
+
+def test_options_event_candidate_source_registry_payload_has_no_decision_or_gate_authority_fields() -> None:
+    metadata = project_source_registry_metadata("options_lab.event_calendar_candidate_evidence")
+    serialized = json.dumps(metadata, ensure_ascii=False, sort_keys=True)
+    forbidden_keys = {
+        "authorityGrant",
+        "decisionGrade",
+        "providerDecisionAuthority",
+        "recommendationAuthority",
+        "gateDecision",
+        "sourceAuthorityAllowed",
+        "providerAuthority",
+        "providerRouting",
+        "liveCallEnabled",
+        "liveProviderEnabled",
+        "sourceAuthority",
+        "providerSelfClaimAuthority",
+    }
+
+    assert _payload_keys(metadata).isdisjoint(forbidden_keys)
+    for forbidden in forbidden_keys:
+        assert forbidden not in serialized
+    assert "live-call" not in serialized
+    assert "routing" not in serialized
+
+
+def test_options_event_candidate_source_registry_metadata_stays_metadata_only_across_gap_contracts() -> None:
+    source = "options_lab.event_calendar_candidate_evidence"
+    provenance = project_source_provenance(source=source, freshness="unavailable")
+    metadata = project_source_registry_metadata(source)
+    gap = build_options_event_calendar_source_candidate_gap(metadata["candidateSourceClass"])
+
+    assert provenance["sourceType"] == "missing"
+    assert provenance["sourceLabel"] == "Event Calendar Candidate Evidence (diagnostic only)"
+    assert metadata["sourceType"] == "missing"
+    assert metadata["diagnosticOnly"] is True
+    assert metadata["candidateOnly"] is True
+    assert metadata["nextSafeStep"] == "document_candidate_evidence_only_without_approval"
+    assert "event_presence" in metadata["forbiddenAuthorityInputs"]
+    assert "event_count" in metadata["forbiddenAuthorityInputs"]
+    assert "event_type" in metadata["forbiddenAuthorityInputs"]
+    assert "timeline_evidence" in metadata["forbiddenAuthorityInputs"]
+    assert "generic_macro_context" in metadata["forbiddenAuthorityInputs"]
+    assert "provider_capability_metadata" in metadata["forbiddenAuthorityInputs"]
+    assert "candidate_gap_metadata" in metadata["forbiddenAuthorityInputs"]
+    assert "provider_self_claims" in metadata["forbiddenAuthorityInputs"]
+    assert "current_provider_id" in metadata["forbiddenAuthorityInputs"]
+    assert gap["authorityGrant"] is False
+
+    for forbidden_field in (
+        "providerDecisionAuthority",
+        "recommendationAuthority",
+        "decisionGrade",
+        "gateDecision",
+        "sourceAuthorityAllowed",
+        "providerRouting",
+        "liveCallEnablement",
+    ):
+        assert forbidden_field not in metadata
         assert forbidden_field not in gap
 
 
