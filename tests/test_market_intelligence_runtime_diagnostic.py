@@ -108,6 +108,68 @@ def _providers_by_id(payload: dict) -> dict[str, dict]:
     }
 
 
+def _market_overview_macro_payload(
+    *,
+    provider_status: str = "success",
+    item_value: float | None = 15.2,
+    evidence_overrides: dict | None = None,
+) -> dict:
+    evidence = {
+        "diagnosticOnly": True,
+        "scoreReliabilityAllowed": True,
+        "isFallback": False,
+        "isStale": False,
+        "isPartial": False,
+        "isUnavailable": False,
+        "isFromSnapshot": False,
+        "isRefreshing": False,
+    }
+    evidence.update(evidence_overrides or {})
+    return {
+        "freshness": "live",
+        "providerHealth": {"status": provider_status},
+        "items": [{"symbol": "VIX", "value": item_value, "isUnavailable": False}],
+        "evidenceSnapshot": evidence,
+    }
+
+
+@pytest.mark.parametrize(
+    ("case_name", "evidence_overrides"),
+    [
+        ("score_reliability_not_allowed", {"scoreReliabilityAllowed": False}),
+        ("fallback", {"isFallback": True}),
+        ("stale", {"isStale": True}),
+        ("partial", {"isPartial": True}),
+        ("unavailable", {"isUnavailable": True}),
+        ("from_snapshot", {"isFromSnapshot": True}),
+        ("refreshing", {"isRefreshing": True}),
+    ],
+)
+def test_market_overview_macro_summary_fails_closed_for_degraded_evidence(
+    case_name: str,
+    evidence_overrides: dict,
+) -> None:
+    module = _load_script_module()
+
+    summary = module._summarize_market_overview_macro(
+        _market_overview_macro_payload(evidence_overrides=evidence_overrides)
+    )
+
+    assert summary["available"] is False, case_name
+    assert summary["availableItemCount"] == 1
+    assert summary["providerHealthStatus"] == "success"
+
+
+def test_market_overview_macro_summary_keeps_reliable_evidence_available() -> None:
+    module = _load_script_module()
+
+    summary = module._summarize_market_overview_macro(_market_overview_macro_payload())
+
+    assert summary["available"] is True
+    assert summary["availableItemCount"] == 1
+    assert summary["providerHealthStatus"] == "success"
+
+
 def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
     module = _load_script_module()
 

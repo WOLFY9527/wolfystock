@@ -62,6 +62,14 @@ BASE_URL_ENV_VAR = "MARKET_INTELLIGENCE_BASE_URL"
 REDACTED = "redacted"
 _BLOCKED_REASON_TOKENS = ("token", "secret", "auth", "cookie", "header", "bearer", "apikey", "api_key")
 _SAFE_REASON_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789_:-")
+_MARKET_OVERVIEW_MACRO_DEGRADED_FLAGS = (
+    "isFallback",
+    "isStale",
+    "isPartial",
+    "isUnavailable",
+    "isFromSnapshot",
+    "isRefreshing",
+)
 _ENDPOINTS: tuple[tuple[str, str], ...] = (
     ("marketOverviewMacro", "/api/v1/market-overview/macro"),
     ("usBreadth", "/api/v1/market/us-breadth"),
@@ -1303,12 +1311,27 @@ def _item_has_value(item: Any) -> bool:
     return isinstance(item, dict) and item.get("value") is not None and not bool(item.get("isUnavailable"))
 
 
+def _market_overview_macro_evidence_allows_availability(payload: Mapping[str, Any]) -> bool | None:
+    evidence = payload.get("evidenceSnapshot")
+    if not isinstance(evidence, Mapping):
+        return None
+    if evidence.get("scoreReliabilityAllowed") is not True:
+        return False
+    if any(bool(evidence.get(flag)) for flag in _MARKET_OVERVIEW_MACRO_DEGRADED_FLAGS):
+        return False
+    return True
+
+
 def _summarize_market_overview_macro(payload: dict[str, Any]) -> dict[str, Any]:
     items = payload.get("items") if isinstance(payload.get("items"), list) else []
     available_item_count = sum(1 for item in items if _item_has_value(item))
     provider_status = str(dict(payload.get("providerHealth") or {}).get("status") or "unknown")
+    evidence_allows_availability = _market_overview_macro_evidence_allows_availability(payload)
+    available = available_item_count > 0 and provider_status != "unavailable"
+    if evidence_allows_availability is not None:
+        available = bool(evidence_allows_availability and available)
     return {
-        "available": available_item_count > 0 and provider_status != "unavailable",
+        "available": available,
         "providerHealthStatus": provider_status,
         "freshness": str(payload.get("freshness") or "unknown"),
         "availableItemCount": available_item_count,
