@@ -896,7 +896,7 @@ const PortfolioPage: React.FC = () => {
   const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
-  const copy = useMemo(() => getPortfolioCopy(t, language), [language, t]);
+  const copy = getPortfolioCopy(t, language);
 
   useEffect(() => {
     document.title = copy.documentTitle;
@@ -998,7 +998,7 @@ const PortfolioPage: React.FC = () => {
   const queryAccountId = selectedAccount === 'all' ? undefined : selectedAccount;
   const refreshViewKey = `${selectedAccount === 'all' ? 'all' : `account:${selectedAccount}`}:cost:${costMethod}`;
   const refreshContextRef = useRef<FxRefreshContext>({ viewKey: refreshViewKey, requestId: 0 });
-  const activeAccounts = useMemo(() => accounts.filter((item) => item.isActive !== false), [accounts]);
+  const activeAccounts = accounts.filter((item) => item.isActive !== false);
   const writableAccounts = activeAccounts;
   const hasAccounts = accounts.length > 0;
   const hasActiveAccounts = activeAccounts.length > 0;
@@ -1008,19 +1008,13 @@ const PortfolioPage: React.FC = () => {
   const writableAccountId = writableAccount?.id;
   const writeBlocked = !writableAccountId;
   const editingAccount = editingTrade ? activeAccounts.find((item) => item.id === editingTrade.accountId) : undefined;
-  const ibkrConnection = useMemo(
-    () => brokerConnections.find((item) => item.brokerType === 'ibkr') || null,
-    [brokerConnections],
-  );
+  const ibkrConnection = brokerConnections.find((item) => item.brokerType === 'ibkr') || null;
   const currentEventCount = eventType === 'trade'
     ? tradeEvents.length
     : eventType === 'cash'
       ? cashEvents.length
       : corporateEvents.length;
-  const inferredTradeCurrency = useMemo(
-    () => inferSettlementCurrency(tradeForm.symbol, writableAccount?.baseCurrency),
-    [tradeForm.symbol, writableAccount?.baseCurrency],
-  );
+  const inferredTradeCurrency = inferSettlementCurrency(tradeForm.symbol, writableAccount?.baseCurrency);
   const tradeCurrencyWarning = writableAccount?.baseCurrency
     && tradeForm.currency !== normalizePortfolioDisplayCurrency(writableAccount.baseCurrency)
     ? (language === 'zh'
@@ -1046,10 +1040,7 @@ const PortfolioPage: React.FC = () => {
   const manualLedgerDisclosure = language === 'zh'
     ? '手工记账入口'
     : 'Manual ledger';
-  const inferredEditTradeCurrency = useMemo(
-    () => inferSettlementCurrency(editingTrade?.symbol || '', editingAccount?.baseCurrency),
-    [editingAccount?.baseCurrency, editingTrade?.symbol],
-  );
+  const inferredEditTradeCurrency = inferSettlementCurrency(editingTrade?.symbol || '', editingAccount?.baseCurrency);
 
   useEffect(() => {
     savePortfolioDisplayCurrency(displayCurrency);

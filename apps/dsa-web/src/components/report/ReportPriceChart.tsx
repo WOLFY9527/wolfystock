@@ -503,17 +503,14 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
   }, [activeView, fixtures, locale, stockCode, t]);
 
   const activeData = chartData[activeView];
-  const activeWindow = useMemo(() => {
+  const activeWindow = (() => {
     const existing = viewWindowByView[activeView];
     if (!existing) {
       return createDefaultViewWindow(activeView, activeData.length);
     }
     return normalizeViewWindow(existing, activeData.length);
-  }, [activeData.length, activeView, viewWindowByView]);
-  const visibleData = useMemo(
-    () => activeData.slice(activeWindow.start, activeWindow.end + 1),
-    [activeData, activeWindow.end, activeWindow.start],
-  );
+  })();
+  const visibleData = activeData.slice(activeWindow.start, activeWindow.end + 1);
   const activeIndex = hoveredIndex != null
     ? clamp(hoveredIndex, 0, Math.max(visibleData.length - 1, 0))
     : Math.max(visibleData.length - 1, 0);
@@ -537,11 +534,8 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     }
   }, [activeData.length, activeView, viewWindowByView]);
 
-  const annotationLines = useMemo(
-    () => resolveAnnotationLines(decisionPanel),
-    [decisionPanel],
-  );
-  const chartGeometry = useMemo<ChartGeometry | null>(() => {
+  const annotationLines = resolveAnnotationLines(decisionPanel);
+  const chartGeometry: ChartGeometry | null = (() => {
     if (size.width <= 0 || size.height <= 0) {
       return null;
     }
@@ -577,7 +571,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
       candleWidth,
       step,
     };
-  }, [activeView, size.height, size.width, visibleData.length]);
+  })();
 
   const values = visibleData.flatMap((item) => [item.low, item.high]);
   const currentAnnotationLines = resolveAnnotationLines(decisionPanel);

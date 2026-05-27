@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, domAnimation, LazyMotion, m } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
@@ -147,7 +147,7 @@ const BacktestPage: React.FC = () => {
   const navigate = useNavigate();
   const { search: routeSearch, state: routeState } = useLocation();
   const { language } = useI18n();
-  const scannerHandoff = useMemo(() => parseScannerBacktestHandoff(routeSearch), [routeSearch]);
+  const scannerHandoff = parseScannerBacktestHandoff(routeSearch);
 
   useEffect(() => {
     document.title = bt(language, 'page.documentTitle');
@@ -249,7 +249,7 @@ const BacktestPage: React.FC = () => {
     ? parsePositiveInt(customSampleCount, 252)
     : parsePositiveInt(samplePreset, 60);
 
-  const currentRuleParseSignature = useMemo(() => buildRuleParseSignature({
+  const currentRuleParseSignature = buildRuleParseSignature({
     code: normalizedCode,
     strategyText: ruleStrategyText,
     startDate: ruleStartDate,
@@ -257,7 +257,7 @@ const BacktestPage: React.FC = () => {
     initialCapital: ruleInitialCapital,
     feeBps: ruleFeeBps,
     slippageBps: ruleSlippageBps,
-  }), [normalizedCode, ruleEndDate, ruleFeeBps, ruleInitialCapital, ruleSlippageBps, ruleStartDate, ruleStrategyText]);
+  });
 
   const isRuleParseStale = Boolean(ruleParsedStrategy && ruleParseSignature && ruleParseSignature !== currentRuleParseSignature);
 
@@ -267,12 +267,9 @@ const BacktestPage: React.FC = () => {
     || null;
 
   const historicalPerfSnapshot = stockPerf || overallPerf;
-  const selectedHistoricalRun = useMemo(
-    () => historyItems.find((item) => item.id === selectedRunId) || null,
-    [historyItems, selectedRunId],
-  );
+  const selectedHistoricalRun = historyItems.find((item) => item.id === selectedRunId) || null;
 
-  const historicalSourceMetadata = useMemo(() => {
+  const historicalSourceMetadata = (() => {
     const candidates = [
       runResult,
       selectedHistoricalRun,
@@ -303,7 +300,7 @@ const BacktestPage: React.FC = () => {
       resolvedSource: firstString((candidate) => candidate?.resolvedSource),
       fallbackUsed: firstBoolean((candidate) => candidate?.fallbackUsed),
     };
-  }, [overallPerf, prepareResult, runResult, sampleStatus, selectedHistoricalRun, stockPerf]);
+  })();
 
   const historicalSummaryItems = [
     {
@@ -342,7 +339,7 @@ const BacktestPage: React.FC = () => {
     },
   ];
 
-  const historicalSampleTransparency = useMemo(() => {
+  const historicalSampleTransparency = (() => {
     const latestPreparedSampleDate = runResult?.latestPreparedSampleDate
       || sampleStatus?.latestPreparedSampleDate
       || prepareResult?.latestPreparedSampleDate
@@ -389,28 +386,9 @@ const BacktestPage: React.FC = () => {
       );
     }
     return parts.join(' · ');
-  }, [
-    language,
-    historicalSourceMetadata.fallbackUsed,
-    historicalSourceMetadata.resolvedSource,
-    prepareResult?.excludedRecentMessage,
-    prepareResult?.latestEligibleSampleDate,
-    prepareResult?.latestPreparedSampleDate,
-    prepareResult?.pricingFallbackUsed,
-    prepareResult?.pricingResolvedSource,
-    runResult?.excludedRecentMessage,
-    runResult?.latestEligibleSampleDate,
-    runResult?.latestPreparedSampleDate,
-    runResult?.pricingFallbackUsed,
-    runResult?.pricingResolvedSource,
-    sampleStatus?.excludedRecentMessage,
-    sampleStatus?.latestEligibleSampleDate,
-    sampleStatus?.latestPreparedSampleDate,
-    sampleStatus?.pricingFallbackUsed,
-    sampleStatus?.pricingResolvedSource,
-  ]);
+  })();
 
-  const previewRuleAssumptions = useMemo<AssumptionMap>(() => ({
+  const previewRuleAssumptions: AssumptionMap = {
     timeframe: ruleParsedStrategy?.parsedStrategy.timeframe || 'daily',
     price_basis: 'close',
     signal_evaluation_timing: 'bar close',
@@ -419,7 +397,7 @@ const BacktestPage: React.FC = () => {
     position_sizing: '100% capital when long, otherwise cash',
     fee_bps_per_side: Number.parseFloat(ruleFeeBps) || 0,
     slippage_bps_per_side: Number.parseFloat(ruleSlippageBps) || 0,
-  }), [ruleFeeBps, ruleParsedStrategy?.parsedStrategy.timeframe, ruleSlippageBps]);
+  };
 
   const applyRuleRunDraft = useCallback((data: RuleBacktestRunResponse) => {
     const parsedStrategyPayload = data.parsedStrategy as unknown as Record<string, unknown>;
