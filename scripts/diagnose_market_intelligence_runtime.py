@@ -33,6 +33,9 @@ from src.services.options_event_calendar_authority import (
 from src.services.options_expiration_calendar_authority import (
     build_options_expiration_calendar_authority_diagnostic,
 )
+from src.services.options_expiration_source_candidate_evidence import (
+    build_expiration_calendar_source_candidate_evidence,
+)
 from src.services.options_authority_policy_matrix import (
     build_options_expiration_source_candidate_gap,
 )
@@ -362,6 +365,35 @@ def _collect_options_expiration_source_candidate_gap() -> dict[str, Any]:
         "requiredEvidenceFamilies": _normalize_contract_value(contract.get("requiredEvidenceFamilies") or {}),
         "nextSafeStep": str(contract.get("nextSafeStep") or ""),
     }
+
+
+def _collect_options_expiration_source_candidate_evidence() -> dict[str, Any]:
+    contract = build_expiration_calendar_source_candidate_evidence(None)
+    summary: dict[str, Any] = {
+        "diagnosticOnly": bool(contract.get("diagnosticOnly", True)),
+        "candidateOnly": bool(contract.get("candidateOnly", True)),
+        "authorityGrant": bool(contract.get("authorityGrant", False)),
+        "missingEvidenceFamilies": _safe_family_names(contract.get("missingEvidenceFamilies") or []),
+        "forbiddenAuthorityOutputs": _normalize_contract_value(contract.get("forbiddenAuthorityOutputs") or []),
+    }
+
+    present_family_summaries = {
+        family: sorted(_normalize_contract_value(payload).keys())
+        for family, payload in {
+            "sourceIdentity": contract.get("sourceIdentity"),
+            "provenance": contract.get("provenance"),
+            "entitlement": contract.get("entitlement"),
+            "freshnessSla": contract.get("freshnessSla"),
+            "expirationCoverage": contract.get("expirationCoverage"),
+            "expirationTaxonomy": contract.get("expirationTaxonomy"),
+            "adjustedDeliverableEvidence": contract.get("adjustedDeliverableEvidence"),
+            "errorAuditState": contract.get("errorAuditState"),
+        }.items()
+        if isinstance(payload, Mapping) and payload
+    }
+    if present_family_summaries:
+        summary["presentFamilySummaries"] = present_family_summaries
+    return summary
 
 
 def _collect_options_expiration_source_registry_candidate() -> dict[str, Any]:
@@ -1267,6 +1299,7 @@ def collect_diagnostic_bundle(
             options_expiration_calendar_authority,
         ),
         "optionsExpirationSourceCandidateGap": options_expiration_source_candidate_gap,
+        "optionsExpirationSourceCandidateEvidence": _collect_options_expiration_source_candidate_evidence(),
         "optionsExpirationSourceRegistryCandidate": options_expiration_source_registry_candidate,
         "optionsIvRankAuthority": options_iv_rank_authority,
         "optionsEventCalendarAuthority": options_event_calendar_authority,
@@ -1415,6 +1448,7 @@ def main(argv: list[str] | None = None) -> int:
                 options_expiration_calendar_authority,
             ),
             "optionsExpirationSourceCandidateGap": _collect_options_expiration_source_candidate_gap(),
+            "optionsExpirationSourceCandidateEvidence": _collect_options_expiration_source_candidate_evidence(),
             "optionsExpirationSourceRegistryCandidate": _collect_options_expiration_source_registry_candidate(),
             "optionsIvRankAuthority": options_iv_rank_authority,
             "optionsEventCalendarAuthority": options_event_calendar_authority,

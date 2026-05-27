@@ -385,6 +385,35 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
             },
             "nextSafeStep": "collect_observation_only_metadata_without_granting_authority",
         },
+        "optionsExpirationSourceCandidateEvidence": {
+            "diagnosticOnly": True,
+            "candidateOnly": True,
+            "authorityGrant": False,
+            "missingEvidenceFamilies": [
+                "source_identity_and_provenance_chain",
+                "licensed_source_backing",
+                "venue_and_calendar_scope",
+                "entitlement_and_decision_use_rights",
+                "production_vs_sandbox",
+                "delayed_vs_live_status",
+                "freshness_sla_and_max_age",
+                "expiration_dates_count_and_range",
+                "expiration_taxonomy",
+                "adjusted_deliverable_and_corporate_action_proof",
+                "occ_memo_or_equivalent_reference",
+                "sanitized_error_and_audit_state",
+            ],
+            "forbiddenAuthorityOutputs": [
+                "authorityGrant true",
+                "providerDecisionAuthority",
+                "recommendationAuthority",
+                "decisionGrade",
+                "gateDecision",
+                "sourceAuthorityAllowed",
+                "provider routing",
+                "live-call enablement",
+            ],
+        },
         "optionsExpirationSourceRegistryCandidate": {
             "diagnosticOnly": True,
             "candidateOnly": True,
@@ -928,6 +957,72 @@ def test_runtime_diagnostic_projects_expiration_source_registry_candidate_safely
         "providerSelfClaimAuthority",
     ):
         assert forbidden_field not in projection
+    for blocked in ("http://", "https://", "Authorization", "Bearer", "token", "secret", "rawPayload"):
+        assert blocked not in serialized
+
+
+def test_runtime_diagnostic_projects_expiration_source_candidate_evidence_safely(
+    monkeypatch,
+) -> None:
+    module = _load_script_module()
+
+    monkeypatch.setattr(
+        module,
+        "_fetch_json",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("endpoint fetch should not run")),
+    )
+    monkeypatch.setattr(
+        module,
+        "_build_tradier_options_live_probe_transport",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("tradier live probe should not run")),
+    )
+
+    payload = module.collect_diagnostic_bundle()
+    projection = payload["optionsExpirationSourceCandidateEvidence"]
+    serialized = json.dumps(projection, ensure_ascii=False, sort_keys=True)
+
+    assert "optionsExpirationSourceCandidateGap" in payload
+    assert "optionsExpirationSourceRegistryCandidate" in payload
+    assert "optionsAuthorityDiagnostics" in payload
+    assert "optionsIvRankAuthority" in payload
+    assert "optionsEventCalendarAuthority" in payload
+    assert "optionsExpirationCalendarAuthority" in payload
+    assert projection == {
+        "diagnosticOnly": True,
+        "candidateOnly": True,
+        "authorityGrant": False,
+        "missingEvidenceFamilies": [
+            "source_identity_and_provenance_chain",
+            "licensed_source_backing",
+            "venue_and_calendar_scope",
+            "entitlement_and_decision_use_rights",
+            "production_vs_sandbox",
+            "delayed_vs_live_status",
+            "freshness_sla_and_max_age",
+            "expiration_dates_count_and_range",
+            "expiration_taxonomy",
+            "adjusted_deliverable_and_corporate_action_proof",
+            "occ_memo_or_equivalent_reference",
+            "sanitized_error_and_audit_state",
+        ],
+        "forbiddenAuthorityOutputs": [
+            "authorityGrant true",
+            "providerDecisionAuthority",
+            "recommendationAuthority",
+            "decisionGrade",
+            "gateDecision",
+            "sourceAuthorityAllowed",
+            "provider routing",
+            "live-call enablement",
+        ],
+    }
+    assert projection["diagnosticOnly"] is True
+    assert projection["candidateOnly"] is True
+    assert projection["authorityGrant"] is False
+    assert projection["missingEvidenceFamilies"]
+    assert "decisionGrade" not in {
+        key for key, value in projection.items() if key != "forbiddenAuthorityOutputs" and value is not False
+    }
     for blocked in ("http://", "https://", "Authorization", "Bearer", "token", "secret", "rawPayload"):
         assert blocked not in serialized
 
