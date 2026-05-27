@@ -28,11 +28,18 @@ candidate source entry is `options_lab.event_calendar_candidate_evidence`; it
 also projects as `sourceType=missing` and describes only candidate-source
 families such as provenance, entitlement, SLA/freshness, event taxonomy,
 confirmation/event identity, timezone/session, coverage scope, and forbidden
-authority inputs.
+authority inputs. The IV-rank candidate source entry is
+`options_lab.iv_rank_candidate_evidence`; it also projects as
+`sourceType=missing` and describes only candidate-source classes
+(`provider_reported_iv_rank`, `approved_historical_option_iv_series`),
+provenance, entitlement, SLA/freshness, methodology, lookback/date-range,
+option-IV evidence, contract-universe/moneyness/expiry/missing-data coverage
+families, and forbidden authority inputs.
 
 This is source metadata only. It is not provider capability authority, not
-data-access proof, not decision-use approval, not event-calendar authority,
-not an Options Lab authority grant, and not approval for gates,
+data-access proof, not decision-use approval, not IV-rank authority, not
+event-calendar authority, not an Options Lab authority grant, and not approval
+for gates,
 recommendations, `decisionGrade`, provider routing, or live calls.
 
 The matrix documents provider domains, market coverage, quota class, freshness

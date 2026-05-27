@@ -634,6 +634,101 @@ def test_iv_rank_policy_encodes_future_authority_checklist_families() -> None:
     }
 
 
+def test_iv_rank_policy_gap_and_registry_metadata_stay_cross_contract_aligned() -> None:
+    policy = get_options_authority_surface_policy("iv_rank")
+    registry = project_source_registry_metadata("options_lab.iv_rank_candidate_evidence")
+    primary_gap = build_options_iv_rank_source_candidate_gap(registry["candidateSourceClass"])
+
+    assert policy["surface"] == registry["surface"] == primary_gap["surface"] == "iv_rank"
+    assert registry["candidateSourceClass"] == "provider_reported_iv_rank"
+    assert set(registry["candidateSourceClasses"]) == {
+        "provider_reported_iv_rank",
+        "approved_historical_option_iv_series",
+    }
+    assert registry["diagnosticOnly"] is True
+    assert registry["candidateOnly"] is True
+    assert primary_gap["diagnosticOnly"] is True
+    assert primary_gap["candidateOnly"] is True
+    assert primary_gap["authorityGrant"] is False
+
+    assert tuple(registry["provenanceFamily"]) == policy["required_future_evidence_families"]["provenance"]
+    assert _normalize_entitlement_family(registry["entitlementFamily"]) >= set(
+        policy["required_future_evidence_families"]["entitlement"]
+    )
+    assert set(primary_gap["requiredEvidenceFamilies"]["entitlement_use_rights"]) <= _normalize_entitlement_family(
+        registry["entitlementFamily"]
+    )
+
+    assert set(primary_gap["requiredEvidenceFamilies"]["sla_freshness"]) <= set(registry["slaFreshnessFamily"])
+    assert set(registry["slaFreshnessFamily"]) <= set(policy["required_future_evidence_families"]["sla_freshness"])
+    assert set(policy["required_future_evidence_families"]["sla_freshness"]) - set(
+        registry["slaFreshnessFamily"]
+    ) == {"freshness_seconds"}
+
+    assert tuple(registry["methodologyFamily"]) == policy["required_future_evidence_families"]["methodology"]
+    assert set(primary_gap["requiredEvidenceFamilies"]["methodology"]) <= set(registry["methodologyFamily"])
+
+    assert tuple(registry["lookbackDateRangeFamily"]) == policy["required_future_evidence_families"][
+        "lookback_date_range"
+    ]
+    assert set(primary_gap["requiredEvidenceFamilies"]["lookback_date_range"]) == set(
+        registry["lookbackDateRangeFamily"]
+    )
+
+    assert tuple(registry["optionIvEvidenceFamily"]) == policy["required_future_evidence_families"][
+        "option_iv_evidence"
+    ]
+    assert {
+        "provider_reported_iv_rank_or_percentile",
+        "approved_historical_option_iv_series",
+    } <= set(primary_gap["requiredEvidenceFamilies"]["iv_rank_source_authority"])
+
+    assert tuple(registry["coverageScopeFamily"]) == policy["required_future_evidence_families"]["coverage_scope"]
+    assert set(primary_gap["requiredEvidenceFamilies"]["coverage_scope"]) <= set(registry["coverageScopeFamily"])
+    assert {
+        "contract_universe_coverage",
+        "moneyness_selection_rules",
+        "expiry_selection_rules",
+        "missing_data_policy",
+    } <= set(registry["coverageScopeFamily"])
+
+    assert _normalize_forbidden_authority_inputs(primary_gap["forbiddenAuthorityInputs"]) <= set(
+        registry["forbiddenAuthorityInputs"]
+    )
+    assert {
+        "current_iv",
+        "selected_contract_iv",
+        "greeks",
+        "historicalIvProxy",
+        "underlying_realized_volatility",
+        "provider_capability_metadata",
+        "provider_capabilities",
+        "provider_self_claims",
+        "current_provider_id",
+        "docs_only_evidence",
+        "request_shaped_evidence",
+        "proxy",
+        "coverage_completeness",
+    } <= set(registry["forbiddenAuthorityInputs"])
+
+    for source_class in registry["candidateSourceClasses"]:
+        gap = build_options_iv_rank_source_candidate_gap(source_class)
+        assert gap["authorityGrant"] is False
+        assert gap["candidateOnly"] is True
+
+    for forbidden_field in (
+        "providerDecisionAuthority",
+        "recommendationAuthority",
+        "decisionGrade",
+        "gateDecision",
+        "sourceAuthorityAllowed",
+        "providerRouting",
+        "liveCallEnablement",
+    ):
+        assert forbidden_field not in primary_gap
+        assert forbidden_field not in registry
+
+
 def test_iv_rank_source_candidate_gap_contract_is_inert_and_observation_only() -> None:
     policy = get_options_authority_surface_policy("iv_rank")
     contract = build_options_iv_rank_source_candidate_gap("provider_reported_iv_rank")

@@ -9,6 +9,7 @@ from typing import Any
 from src.services.options_authority_policy_matrix import (
     build_options_event_calendar_source_candidate_gap,
     build_options_expiration_source_candidate_gap,
+    build_options_iv_rank_source_candidate_gap,
 )
 from src.services.options_expiration_source_candidate_evidence import (
     build_expiration_calendar_source_candidate_evidence,
@@ -552,6 +553,11 @@ def test_provider_ops_gap_metadata_ids_project_safe_inert_provenance() -> None:
             "missing",
             "Offline IV/Greeks Gate (no authorized live decision-grade evidence)",
         ),
+        "options_lab.iv_rank_candidate_evidence": (
+            "unavailable",
+            "missing",
+            "IV Rank Candidate Evidence (diagnostic only)",
+        ),
         "options_lab.iv_rank_history": ("unavailable", "missing", "未接入"),
     }
 
@@ -693,6 +699,184 @@ def test_options_expiration_candidate_source_registry_metadata_is_diagnostic_onl
         ],
         "nextSafeStep": "document_candidate_evidence_only_without_approval",
     }
+
+
+def test_options_iv_rank_candidate_source_registry_metadata_is_diagnostic_only() -> None:
+    source = "options_lab.iv_rank_candidate_evidence"
+
+    provenance = project_source_provenance(source=source, freshness="unavailable")
+    metadata = project_source_registry_metadata(source)
+
+    assert provenance == {
+        "sourceType": "missing",
+        "sourceLabel": "IV Rank Candidate Evidence (diagnostic only)",
+        "freshnessLabel": "不可用",
+    }
+    assert metadata == {
+        "diagnosticOnly": True,
+        "candidateOnly": True,
+        "surface": "iv_rank",
+        "sourceType": "missing",
+        "candidateSourceClass": "provider_reported_iv_rank",
+        "candidateSourceClasses": [
+            "provider_reported_iv_rank",
+            "approved_historical_option_iv_series",
+        ],
+        "provenanceFamily": [
+            "approved_provider",
+            "licensed_source",
+            "approved_internal_derived_source",
+        ],
+        "entitlementFamily": [
+            "options_iv_history_entitlement",
+            "live_delayed_status",
+            "environment",
+            "sandbox_or_production",
+            "decision_use_rights_evidence",
+            "redistribution_rights",
+            "audit_timestamp",
+        ],
+        "slaFreshnessFamily": [
+            "as_of",
+            "freshness",
+            "max_age_policy",
+            "provider_sla_status",
+            "freshness_state",
+            "latency_or_error_state",
+        ],
+        "methodologyFamily": [
+            "provider_reported_iv_rank_or_percentile",
+            "deterministic_derived_iv_rank",
+            "methodology_version",
+            "percentile_or_rank_definition",
+            "calculation_basis",
+        ],
+        "lookbackDateRangeFamily": [
+            "lookback_window",
+            "date_range_start",
+            "date_range_end",
+        ],
+        "optionIvEvidenceFamily": [
+            "approved_historical_option_iv_series_availability",
+            "provider_reported_iv_rank",
+            "provider_reported_iv_percentile",
+        ],
+        "coverageScopeFamily": [
+            "symbol_or_underlying_coverage",
+            "contract_universe_coverage",
+            "moneyness_selection_rules",
+            "expiry_selection_rules",
+            "missing_data_policy",
+            "coverage_metadata",
+        ],
+        "forbiddenAuthorityInputs": [
+            "current_iv",
+            "selected_contract_iv",
+            "selected_contract_greeks",
+            "greeks",
+            "historicalIvProxy",
+            "historical_iv_proxy",
+            "underlying_realized_volatility",
+            "realized_volatility_proxy",
+            "coverage_completeness",
+            "source_labels",
+            "provider_capability_metadata",
+            "provider_capabilities",
+            "provider_self_claims",
+            "current_provider_id",
+            "docs_only_evidence",
+            "fixture",
+            "synthetic",
+            "fallback",
+            "dry_run",
+            "stub",
+            "adapter_contract",
+            "request_shaped",
+            "request_supplied",
+            "request_shaped_evidence",
+            "adapter_contract_evidence",
+            "synthetic_fallback_dry_run_stub_evidence",
+            "proxy",
+            "candidate_gap_metadata",
+        ],
+        "nextSafeStep": "document_candidate_evidence_only_without_approval",
+    }
+
+
+def test_options_iv_rank_candidate_source_registry_payload_has_no_decision_or_gate_authority_fields() -> None:
+    metadata = project_source_registry_metadata("options_lab.iv_rank_candidate_evidence")
+    serialized = json.dumps(metadata, ensure_ascii=False, sort_keys=True)
+    forbidden_keys = {
+        "authorityGrant",
+        "decisionGrade",
+        "providerDecisionAuthority",
+        "recommendationAuthority",
+        "gateDecision",
+        "sourceAuthorityAllowed",
+        "providerAuthority",
+        "providerRouting",
+        "liveCallEnabled",
+        "liveProviderEnabled",
+        "sourceAuthority",
+        "providerSelfClaimAuthority",
+    }
+
+    assert _payload_keys(metadata).isdisjoint(forbidden_keys)
+    for forbidden in forbidden_keys:
+        assert forbidden not in serialized
+    assert "live-call" not in serialized
+    assert "routing" not in serialized
+
+
+def test_options_iv_rank_candidate_source_registry_metadata_stays_metadata_only_across_gap_contracts() -> None:
+    source = "options_lab.iv_rank_candidate_evidence"
+    provenance = project_source_provenance(source=source, freshness="unavailable")
+    metadata = project_source_registry_metadata(source)
+
+    assert provenance["sourceType"] == "missing"
+    assert provenance["sourceLabel"] == "IV Rank Candidate Evidence (diagnostic only)"
+    assert metadata["sourceType"] == "missing"
+    assert metadata["diagnosticOnly"] is True
+    assert metadata["candidateOnly"] is True
+    assert metadata["nextSafeStep"] == "document_candidate_evidence_only_without_approval"
+    assert metadata["candidateSourceClasses"] == [
+        "provider_reported_iv_rank",
+        "approved_historical_option_iv_series",
+    ]
+    assert "current_iv" in metadata["forbiddenAuthorityInputs"]
+    assert "selected_contract_iv" in metadata["forbiddenAuthorityInputs"]
+    assert "selected_contract_greeks" in metadata["forbiddenAuthorityInputs"]
+    assert "greeks" in metadata["forbiddenAuthorityInputs"]
+    assert "historicalIvProxy" in metadata["forbiddenAuthorityInputs"]
+    assert "historical_iv_proxy" in metadata["forbiddenAuthorityInputs"]
+    assert "underlying_realized_volatility" in metadata["forbiddenAuthorityInputs"]
+    assert "provider_capability_metadata" in metadata["forbiddenAuthorityInputs"]
+    assert "provider_capabilities" in metadata["forbiddenAuthorityInputs"]
+    assert "provider_self_claims" in metadata["forbiddenAuthorityInputs"]
+    assert "current_provider_id" in metadata["forbiddenAuthorityInputs"]
+    assert "docs_only_evidence" in metadata["forbiddenAuthorityInputs"]
+    assert "request_shaped" in metadata["forbiddenAuthorityInputs"]
+    assert "request_supplied" in metadata["forbiddenAuthorityInputs"]
+    assert "request_shaped_evidence" in metadata["forbiddenAuthorityInputs"]
+    assert "adapter_contract_evidence" in metadata["forbiddenAuthorityInputs"]
+    assert "synthetic_fallback_dry_run_stub_evidence" in metadata["forbiddenAuthorityInputs"]
+    assert "proxy" in metadata["forbiddenAuthorityInputs"]
+    assert "coverage_completeness" in metadata["forbiddenAuthorityInputs"]
+
+    for source_class in metadata["candidateSourceClasses"]:
+        gap = build_options_iv_rank_source_candidate_gap(source_class)
+        assert gap["authorityGrant"] is False
+        for forbidden_field in (
+            "providerDecisionAuthority",
+            "recommendationAuthority",
+            "decisionGrade",
+            "gateDecision",
+            "sourceAuthorityAllowed",
+            "providerRouting",
+            "liveCallEnablement",
+        ):
+            assert forbidden_field not in metadata
+            assert forbidden_field not in gap
 
 
 def test_options_expiration_candidate_source_registry_payload_has_no_decision_or_gate_authority_fields() -> None:
