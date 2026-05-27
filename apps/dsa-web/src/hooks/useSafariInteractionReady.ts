@@ -64,11 +64,13 @@ type SafariActivationEvent =
   | React.PointerEvent<HTMLElement>;
 
 export function useSafariWarmActivation<T extends HTMLElement>(onActivate: () => void) {
-  const ref = useRef<T | null>(null);
+  const [element, setElement] = useState<T | null>(null);
   const lastActivationAtRef = useRef(0);
+  const ref = useCallback((node: T | null) => {
+    setElement(node);
+  }, []);
 
   useEffect(() => {
-    const element = ref.current;
     if (!element) {
       return;
     }
@@ -92,7 +94,7 @@ export function useSafariWarmActivation<T extends HTMLElement>(onActivate: () =>
       window.clearTimeout(releaseTimer);
       element.removeEventListener('pointerdown', noop);
     };
-  }, []);
+  }, [element]);
 
   const handleActivate = useCallback((event?: SafariActivationEvent) => {
     const now = Date.now();
