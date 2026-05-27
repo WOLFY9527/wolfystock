@@ -3,6 +3,11 @@
 
 from __future__ import annotations
 
+import pytest
+
+from src.services.options_authority_policy_matrix import (
+    CURRENT_KNOWN_OPTIONS_AUTHORITY_PROVIDER_IDS,
+)
 from src.services.options_iv_rank_authority import (
     INTERNAL_OPTIONS_IV_RANK_AUTHORITY_POLICY_SOURCE,
     REQUIRED_FUTURE_IV_RANK_AUTHORITY_EVIDENCE_FIELDS,
@@ -135,6 +140,9 @@ def test_internal_policy_is_required_before_any_iv_rank_payload_can_be_authorita
                 "symbolCoverage": ["TEM"],
                 "underlyingCoverage": ["TEM"],
                 "contractUniverseCoverage": "complete",
+                "moneynessSelectionRules": "delta_25_to_75",
+                "expirySelectionRules": "monthly_atm_preferred",
+                "missingDataPolicy": "skip_sparse_contracts",
                 "contractsCovered": 84,
             },
             "sandboxOrProduction": "production",
@@ -168,6 +176,84 @@ def test_internal_policy_is_required_before_any_iv_rank_payload_can_be_authorita
     assert authorized["authoritative"] is True
     assert authorized["authorityState"] == "authoritative"
     assert authorized["reasonCodes"] == []
+    assert authorized["authorityEvidenceGapFamilies"] == []
+    assert authorized["authorityEvidenceChecklist"] == {
+        "provenance": {
+            "present": True,
+            "required": True,
+            "fields": [
+                "approved_provider",
+                "licensed_source",
+                "approved_internal_derived_source",
+            ],
+        },
+        "entitlement": {
+            "present": True,
+            "required": True,
+            "fields": [
+                "options_iv_history_entitlement",
+                "live_delayed_status",
+                "environment",
+                "decision_use_rights",
+                "redistribution_rights",
+                "audit_timestamp",
+            ],
+        },
+        "sla_freshness": {
+            "present": True,
+            "required": True,
+            "fields": [
+                "as_of",
+                "freshness",
+                "max_age_policy",
+                "provider_sla_status",
+                "freshness_seconds",
+                "freshness_state",
+                "latency_or_error_state",
+            ],
+        },
+        "methodology": {
+            "present": True,
+            "required": True,
+            "fields": [
+                "provider_reported_iv_rank_or_percentile",
+                "deterministic_derived_iv_rank",
+                "methodology_version",
+                "percentile_or_rank_definition",
+                "calculation_basis",
+            ],
+        },
+        "lookback_date_range": {
+            "present": True,
+            "required": True,
+            "fields": [
+                "lookback_window",
+                "date_range_start",
+                "date_range_end",
+            ],
+        },
+        "option_iv_evidence": {
+            "present": True,
+            "required": True,
+            "fields": [
+                "approved_historical_option_iv_series_availability",
+                "provider_reported_iv_rank",
+                "provider_reported_iv_percentile",
+            ],
+        },
+        "coverage_scope": {
+            "present": True,
+            "required": True,
+            "fields": [
+                "symbol_or_underlying_coverage",
+                "contract_universe_coverage",
+                "moneyness_selection_rules",
+                "expiry_selection_rules",
+                "missing_data_policy",
+                "coverage_metadata",
+            ],
+        },
+    }
 
 
 def test_snake_case_provider_self_claim_alias_is_ignored_for_iv_rank() -> None:
@@ -224,18 +310,15 @@ def test_proxy_iv_rank_and_provider_self_claim_only_marker_stay_non_authoritativ
 
     assert diagnostic["authorityState"] == "non_authoritative"
     assert diagnostic["authoritative"] is False
-    assert diagnostic["reasonCodes"] == [
-        "iv_rank_authority_missing",
-        "iv_rank_proxy_not_authoritative",
-        "iv_rank_provider_self_claim_only_not_authoritative",
-    ]
+    assert "iv_rank_proxy_not_authoritative" in diagnostic["reasonCodes"]
+    assert "iv_rank_provider_self_claim_only_not_authoritative" in diagnostic["reasonCodes"]
 
 
 def test_historical_iv_proxy_payload_remains_non_authoritative() -> None:
     diagnostic = build_options_iv_rank_authority_diagnostic(
         {
-            "providerId": "tradier",
-            "sourceType": "proxy",
+            "providerId": "synthetic_options_lab_fixture",
+            "sourceType": "fixture",
             "sourceAuthority": "authorized",
             "authorityPolicySource": INTERNAL_OPTIONS_IV_RANK_AUTHORITY_POLICY_SOURCE,
             "ivRankStatus": "available",
@@ -253,7 +336,79 @@ def test_historical_iv_proxy_payload_remains_non_authoritative() -> None:
     assert diagnostic["diagnosticOnly"] is True
     assert diagnostic["authorityState"] == "non_authoritative"
     assert diagnostic["authoritative"] is False
-    assert "iv_rank_proxy_not_authoritative" in diagnostic["reasonCodes"]
+    assert "iv_rank_fixture_not_authoritative" in diagnostic["reasonCodes"]
+
+
+@pytest.mark.parametrize(
+    ("provider_id", "source_type", "expected_reason_code"),
+    (
+        ("synthetic_options_lab_fixture", "fixture", "iv_rank_fixture_not_authoritative"),
+        ("synthetic_options_lab_fixture", "synthetic", "iv_rank_synthetic_not_authoritative"),
+        ("tradier", "fallback", "iv_rank_fallback_not_authoritative"),
+        ("tradier", "dry_run", "iv_rank_dry_run_not_authoritative"),
+        ("tradier", "adapter_contract", "iv_rank_adapter_contract_not_authoritative"),
+        ("request_payload", "request_shaped", "iv_rank_request_shaped_not_authoritative"),
+        ("request_payload", "request_supplied", "iv_rank_request_supplied_not_authoritative"),
+        ("tradier", "proxy", "iv_rank_proxy_not_authoritative"),
+    ),
+)
+def test_blocked_iv_rank_source_classes_stay_non_authoritative(
+    provider_id: str,
+    source_type: str,
+    expected_reason_code: str,
+) -> None:
+    diagnostic = build_options_iv_rank_authority_diagnostic(
+        {
+            "providerId": provider_id,
+            "sourceType": source_type,
+            "sourceAuthority": "authorized",
+            "authorityPolicySource": INTERNAL_OPTIONS_IV_RANK_AUTHORITY_POLICY_SOURCE,
+            "ivRankStatus": "available",
+            "ivRankSource": "provider_reported",
+            "providerReportedIvRank": 61.0,
+            "providerReportedIvPercentile": 63.0,
+            "historicalOptionIvSeriesAvailable": True,
+            "asOf": "2026-05-26T12:00:00Z",
+            "freshness": "fresh",
+            "lookbackWindow": "252d",
+            "methodology": "provider_reported_iv_percentile",
+            "coverageMetadata": {
+                "symbolCoverage": ["TEM"],
+                "underlyingCoverage": ["TEM"],
+                "contractUniverseCoverage": "complete",
+                "moneynessSelectionRules": "delta_25_to_75",
+                "expirySelectionRules": "monthly_atm_preferred",
+                "missingDataPolicy": "skip_sparse_contracts",
+                "contractsCovered": 84,
+            },
+            "sandboxOrProduction": "production",
+            "provenance": {"approvedProvider": "future_authorized_provider"},
+            "entitlementMetadata": {
+                "optionsIvHistoryEntitlement": True,
+                "liveDelayedStatus": "live",
+                "environment": "production",
+                "decisionUseRights": True,
+                "redistributionRights": True,
+                "auditTimestamp": "2026-05-26T12:01:00Z",
+            },
+            "slaMetadata": {
+                "maxAgePolicy": "300s",
+                "providerSlaStatus": "within_sla",
+                "freshnessSeconds": 12,
+                "freshnessState": "fresh",
+            },
+            "methodologyMetadata": {
+                "methodologyVersion": "provider_v2",
+                "calculationBasis": "provider_reported_iv_surface_history",
+                "percentileRankDefinition": "1y_percentile",
+            },
+        }
+    )
+
+    assert diagnostic["diagnosticOnly"] is True
+    assert diagnostic["authorityState"] == "non_authoritative"
+    assert diagnostic["authoritative"] is False
+    assert expected_reason_code in diagnostic["reasonCodes"]
 
 
 def test_selected_contract_current_iv_and_greeks_alone_do_not_create_iv_rank_authority() -> None:
@@ -380,12 +535,103 @@ def test_coverage_complete_without_checklist_evidence_stays_non_authoritative() 
     assert diagnostic["diagnosticOnly"] is True
     assert diagnostic["authorityState"] == "non_authoritative"
     assert diagnostic["authoritative"] is False
-    assert "iv_rank_provenance_missing" in diagnostic["reasonCodes"]
-    assert "iv_rank_entitlement_missing" in diagnostic["reasonCodes"]
-    assert "iv_rank_asof_or_freshness_missing" in diagnostic["reasonCodes"]
-    assert "iv_rank_sla_missing" in diagnostic["reasonCodes"]
-    assert "iv_rank_lookback_missing" in diagnostic["reasonCodes"]
-    assert "iv_rank_methodology_missing" in diagnostic["reasonCodes"]
+    assert diagnostic["authorityEvidenceGapFamilies"] == [
+        "provenance",
+        "entitlement",
+        "sla_freshness",
+        "methodology",
+        "lookback_date_range",
+        "coverage_scope",
+    ]
+    assert diagnostic["reasonCodes"] == [
+        "iv_rank_authority_missing",
+        "iv_rank_historical_option_iv_series_missing",
+        "iv_rank_provenance_evidence_missing",
+        "iv_rank_entitlement_evidence_missing",
+        "iv_rank_sla_evidence_missing",
+        "iv_rank_methodology_evidence_missing",
+        "iv_rank_lookback_evidence_missing",
+        "iv_rank_coverage_scope_evidence_missing",
+        "iv_rank_current_provider_not_authoritative",
+        "iv_rank_coverage_not_authority",
+    ]
+    assert diagnostic["authorityEvidenceChecklist"] == {
+        "provenance": {
+            "present": False,
+            "required": True,
+            "fields": [
+                "approved_provider",
+                "licensed_source",
+                "approved_internal_derived_source",
+            ],
+        },
+        "entitlement": {
+            "present": False,
+            "required": True,
+            "fields": [
+                "options_iv_history_entitlement",
+                "live_delayed_status",
+                "environment",
+                "decision_use_rights",
+                "redistribution_rights",
+                "audit_timestamp",
+            ],
+        },
+        "sla_freshness": {
+            "present": False,
+            "required": True,
+            "fields": [
+                "as_of",
+                "freshness",
+                "max_age_policy",
+                "provider_sla_status",
+                "freshness_seconds",
+                "freshness_state",
+                "latency_or_error_state",
+            ],
+        },
+        "methodology": {
+            "present": False,
+            "required": True,
+            "fields": [
+                "provider_reported_iv_rank_or_percentile",
+                "deterministic_derived_iv_rank",
+                "methodology_version",
+                "percentile_or_rank_definition",
+                "calculation_basis",
+            ],
+        },
+        "lookback_date_range": {
+            "present": False,
+            "required": True,
+            "fields": [
+                "lookback_window",
+                "date_range_start",
+                "date_range_end",
+            ],
+        },
+        "option_iv_evidence": {
+            "present": True,
+            "required": True,
+            "fields": [
+                "approved_historical_option_iv_series_availability",
+                "provider_reported_iv_rank",
+                "provider_reported_iv_percentile",
+            ],
+        },
+        "coverage_scope": {
+            "present": False,
+            "required": True,
+            "fields": [
+                "symbol_or_underlying_coverage",
+                "contract_universe_coverage",
+                "moneyness_selection_rules",
+                "expiry_selection_rules",
+                "missing_data_policy",
+                "coverage_metadata",
+            ],
+        },
+    }
 
 
 def test_authoritative_iv_rank_requires_full_checklist_evidence() -> None:
@@ -406,6 +652,9 @@ def test_authoritative_iv_rank_requires_full_checklist_evidence() -> None:
                 "symbolCoverage": ["TEM"],
                 "underlyingCoverage": ["TEM"],
                 "contractUniverseCoverage": "complete",
+                "moneynessSelectionRules": "delta_25_to_75",
+                "expirySelectionRules": "monthly_atm_preferred",
+                "missingDataPolicy": "skip_sparse_contracts",
                 "contractsCovered": 84,
             },
             "sandboxOrProduction": "production",
@@ -436,3 +685,119 @@ def test_authoritative_iv_rank_requires_full_checklist_evidence() -> None:
     assert diagnostic["authorityState"] == "authoritative"
     assert diagnostic["authoritative"] is True
     assert diagnostic["reasonCodes"] == []
+
+
+@pytest.mark.parametrize("provider_id", CURRENT_KNOWN_OPTIONS_AUTHORITY_PROVIDER_IDS)
+def test_current_runtime_providers_do_not_become_iv_rank_authoritative(
+    provider_id: str,
+) -> None:
+    diagnostic = build_options_iv_rank_authority_diagnostic(
+        {
+            "providerId": provider_id,
+            "sourceType": "live",
+            "sourceAuthority": "authorized",
+            "authorityPolicySource": INTERNAL_OPTIONS_IV_RANK_AUTHORITY_POLICY_SOURCE,
+            "ivRankStatus": "available",
+            "ivRankSource": "provider_reported",
+            "providerReportedIvRank": 61.0,
+            "providerReportedIvPercentile": 63.0,
+            "historicalOptionIvSeriesAvailable": True,
+            "asOf": "2026-05-26T12:00:00Z",
+            "freshness": "fresh",
+            "lookbackWindow": "252d",
+            "methodology": "provider_reported_iv_percentile",
+            "coverageMetadata": {
+                "symbolCoverage": ["TEM"],
+                "underlyingCoverage": ["TEM"],
+                "contractUniverseCoverage": "complete",
+                "moneynessSelectionRules": "delta_25_to_75",
+                "expirySelectionRules": "monthly_atm_preferred",
+                "missingDataPolicy": "skip_sparse_contracts",
+                "contractsCovered": 84,
+            },
+            "sandboxOrProduction": "production",
+            "provenance": {"approvedProvider": provider_id},
+            "entitlementMetadata": {
+                "optionsIvHistoryEntitlement": True,
+                "liveDelayedStatus": "live",
+                "environment": "production",
+                "decisionUseRights": True,
+                "redistributionRights": True,
+                "auditTimestamp": "2026-05-26T12:01:00Z",
+            },
+            "slaMetadata": {
+                "maxAgePolicy": "300s",
+                "providerSlaStatus": "within_sla",
+                "freshnessSeconds": 12,
+                "freshnessState": "fresh",
+            },
+            "methodologyMetadata": {
+                "methodologyVersion": "provider_v2",
+                "calculationBasis": "provider_reported_iv_surface_history",
+                "percentileRankDefinition": "1y_percentile",
+            },
+        }
+    )
+
+    assert diagnostic["diagnosticOnly"] is True
+    assert diagnostic["authorityState"] == "non_authoritative"
+    assert diagnostic["authoritative"] is False
+    assert "iv_rank_current_provider_not_authoritative" in diagnostic["reasonCodes"]
+
+
+def test_provider_capabilities_and_coverage_metadata_do_not_create_iv_rank_authority() -> None:
+    diagnostic = build_options_iv_rank_authority_diagnostic(
+        {
+            "providerId": "future_candidate_provider",
+            "sourceType": "live",
+            "sourceAuthority": "authorized",
+            "authorityPolicySource": INTERNAL_OPTIONS_IV_RANK_AUTHORITY_POLICY_SOURCE,
+            "ivRankStatus": "available",
+            "ivRankSource": "provider_capabilities",
+            "asOf": "2026-05-26T12:00:00Z",
+            "freshness": "fresh",
+            "lookbackWindow": "252d",
+            "methodology": "provider_capability_self_claim",
+            "coverageMetadata": {
+                "symbolCoverage": ["TEM"],
+                "underlyingCoverage": ["TEM"],
+                "contractUniverseCoverage": "complete",
+                "moneynessSelectionRules": "delta_25_to_75",
+                "expirySelectionRules": "monthly_atm_preferred",
+                "missingDataPolicy": "skip_sparse_contracts",
+                "contractsCovered": 84,
+            },
+            "providerCapabilities": {
+                "historicalIvHistory": True,
+                "ivRankPercentile": True,
+                "redistributionRights": True,
+            },
+            "sandboxOrProduction": "production",
+            "provenance": {"approvedProvider": "future_candidate_provider"},
+            "entitlementMetadata": {
+                "optionsIvHistoryEntitlement": True,
+                "liveDelayedStatus": "live",
+                "environment": "production",
+                "decisionUseRights": True,
+                "redistributionRights": True,
+                "auditTimestamp": "2026-05-26T12:01:00Z",
+            },
+            "slaMetadata": {
+                "maxAgePolicy": "300s",
+                "providerSlaStatus": "within_sla",
+                "freshnessSeconds": 12,
+                "freshnessState": "fresh",
+            },
+            "methodologyMetadata": {
+                "methodologyVersion": "provider_v2",
+                "calculationBasis": "provider_capability_claim",
+                "percentileRankDefinition": "self_claim_only",
+            },
+        }
+    )
+
+    assert diagnostic["diagnosticOnly"] is True
+    assert diagnostic["authorityState"] == "non_authoritative"
+    assert diagnostic["authoritative"] is False
+    assert "iv_rank_option_iv_evidence_missing" in diagnostic["reasonCodes"]
+    assert "iv_rank_coverage_not_authority" in diagnostic["reasonCodes"]

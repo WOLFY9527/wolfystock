@@ -5,6 +5,11 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+from src.services.options_authority_policy_matrix import (
+    CURRENT_KNOWN_OPTIONS_AUTHORITY_PROVIDER_IDS,
+    IV_RANK_REQUIRED_FUTURE_EVIDENCE_FAMILIES,
+)
+
 
 INTERNAL_OPTIONS_IV_RANK_AUTHORITY_POLICY_SOURCE = "wolfystock_options_iv_rank_authority_policy_v1"
 REQUIRED_FUTURE_IV_RANK_AUTHORITY_EVIDENCE_FIELDS = (
@@ -39,6 +44,15 @@ _BLOCKED_TEXT_MARKERS = (
 _AUTHORITATIVE_SOURCE_AUTHORITIES = frozenset(
     {"authorized", "authoritative", "licensed", "internal_authorized", "provider_reported_authorized"}
 )
+_CHECKLIST_REASON_CODES = {
+    "provenance": "iv_rank_provenance_evidence_missing",
+    "entitlement": "iv_rank_entitlement_evidence_missing",
+    "sla_freshness": "iv_rank_sla_evidence_missing",
+    "methodology": "iv_rank_methodology_evidence_missing",
+    "lookback_date_range": "iv_rank_lookback_evidence_missing",
+    "option_iv_evidence": "iv_rank_option_iv_evidence_missing",
+    "coverage_scope": "iv_rank_coverage_scope_evidence_missing",
+}
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -141,6 +155,13 @@ def _sanitize_mapping(value: Any) -> dict[str, Any]:
     return sanitized
 
 
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        sanitized = _sanitize_text(value)
+        return [sanitized] if sanitized else []
+    return [item for item in _sanitize_sequence(value) if isinstance(item, str)]
+
+
 def _date_range(value: Any) -> dict[str, str] | None:
     data = _mapping(value)
     start = _sanitize_text(_value(data, "start", "from"))
@@ -226,7 +247,7 @@ def _source_reason_codes(data: Mapping[str, Any]) -> list[str]:
 
 
 def _iv_rank_provenance_present(data: Mapping[str, Any]) -> bool:
-    provenance = _nested_mapping(data, "provenance")
+    provenance = _nested_mapping(data, "provenance", "provenanceEvidence", "provenance_evidence")
     return any(
         (
             _sanitize_text(_value(provenance, "approvedProvider", "approved_provider")),
@@ -279,7 +300,13 @@ def _iv_rank_sla_present(data: Mapping[str, Any], as_of: str | None, freshness: 
 
 
 def _iv_rank_methodology_metadata_present(data: Mapping[str, Any], methodology: str | None) -> bool:
-    metadata = _nested_mapping(data, "methodologyMetadata", "methodologyDetails")
+    metadata = _nested_mapping(
+        data,
+        "methodologyMetadata",
+        "methodologyDetails",
+        "methodologyEvidence",
+        "methodology_evidence",
+    )
     return all(
         (
             methodology,
@@ -298,25 +325,151 @@ def _iv_rank_methodology_metadata_present(data: Mapping[str, Any], methodology: 
     )
 
 
+def _iv_rank_methodology_family_present(
+    data: Mapping[str, Any],
+    methodology: str | None,
+    *,
+    provider_reported_iv_rank_available: bool,
+    provider_reported_iv_percentile_available: bool,
+) -> bool:
+    metadata = _nested_mapping(
+        data,
+        "methodologyMetadata",
+        "methodologyDetails",
+        "methodologyEvidence",
+        "methodology_evidence",
+    )
+    calculation_basis = _sanitize_text(_value(metadata, "calculationBasis", "calculation_basis"))
+    methodology_text = " ".join(
+        chunk
+        for chunk in (
+            _normalized_text(methodology),
+            _normalized_text(calculation_basis),
+            _normalized_text(_value(metadata, "methodType", "method_type")),
+        )
+        if chunk
+    )
+    deterministic_derived = (
+        _bool(_value(metadata, "deterministicDerivedIvRank", "deterministic_derived_iv_rank")) is True
+        or "deterministic_derived" in methodology_text
+        or "derived_iv_rank" in methodology_text
+    )
+    return bool(
+        _iv_rank_methodology_metadata_present(data, methodology)
+        and (provider_reported_iv_rank_available or provider_reported_iv_percentile_available or deterministic_derived)
+    )
+
+
+def _iv_rank_date_range_present(date_range: Mapping[str, Any] | None) -> bool:
+    return bool(date_range and date_range.get("start") and date_range.get("end"))
+
+
+def _iv_rank_lookback_family_present(
+    lookback_window: str | None,
+    date_range: Mapping[str, Any] | None,
+) -> bool:
+    return bool(lookback_window or _iv_rank_date_range_present(date_range))
+
+
+def _iv_rank_option_iv_evidence_present(
+    *,
+    provider_reported_iv_rank_available: bool,
+    provider_reported_iv_percentile_available: bool,
+    historical_option_iv_series_available: bool,
+) -> bool:
+    return bool(
+        historical_option_iv_series_available
+        or provider_reported_iv_rank_available
+        or provider_reported_iv_percentile_available
+    )
+
+
 def _iv_rank_coverage_scope_present(
     data: Mapping[str, Any],
     coverage_metadata: Mapping[str, Any],
 ) -> bool:
-    symbol_coverage = _sanitize_sequence(
-        _value(data, "symbolCoverage", "symbol_coverage")
+    coverage_scope = _nested_mapping(data, "coverageScopeEvidence", "coverage_scope_evidence")
+    symbol_coverage = _string_list(
+        _value(coverage_scope, "symbolCoverage", "symbol_coverage")
+        or _value(data, "symbolCoverage", "symbol_coverage")
         or _value(coverage_metadata, "symbolCoverage", "symbol_coverage")
     )
-    underlying_coverage = _sanitize_sequence(
-        _value(data, "underlyingCoverage", "underlying_coverage")
+    underlying_coverage = _string_list(
+        _value(coverage_scope, "underlyingCoverage", "underlying_coverage")
+        or _value(data, "underlyingCoverage", "underlying_coverage")
         or _value(coverage_metadata, "underlyingCoverage", "underlying_coverage")
     )
     contract_universe_coverage = _sanitize_text(
-        _value(data, "contractUniverseCoverage", "contract_universe_coverage")
+        _value(coverage_scope, "contractUniverseCoverage", "contract_universe_coverage")
+        or _value(data, "contractUniverseCoverage", "contract_universe_coverage")
         or _value(coverage_metadata, "contractUniverseCoverage", "contract_universe_coverage")
+    )
+    moneyness_selection_rules = _sanitize_text(
+        _value(coverage_scope, "moneynessSelectionRules", "moneyness_selection_rules")
+        or _value(data, "moneynessSelectionRules", "moneyness_selection_rules")
+        or _value(coverage_metadata, "moneynessSelectionRules", "moneyness_selection_rules")
+    )
+    expiry_selection_rules = _sanitize_text(
+        _value(coverage_scope, "expirySelectionRules", "expiry_selection_rules")
+        or _value(data, "expirySelectionRules", "expiry_selection_rules")
+        or _value(coverage_metadata, "expirySelectionRules", "expiry_selection_rules")
+    )
+    missing_data_policy = _sanitize_text(
+        _value(coverage_scope, "missingDataPolicy", "missing_data_policy")
+        or _value(data, "missingDataPolicy", "missing_data_policy")
+        or _value(coverage_metadata, "missingDataPolicy", "missing_data_policy")
     )
     return bool(coverage_metadata) and bool(contract_universe_coverage) and bool(
         symbol_coverage or underlying_coverage
-    )
+    ) and bool(moneyness_selection_rules) and bool(expiry_selection_rules) and bool(missing_data_policy)
+
+
+def _build_authority_evidence_checklist(
+    data: Mapping[str, Any],
+    *,
+    as_of: str | None,
+    freshness: str | None,
+    lookback_window: str | None,
+    date_range: Mapping[str, Any] | None,
+    methodology: str | None,
+    provider_reported_iv_rank_available: bool,
+    provider_reported_iv_percentile_available: bool,
+    historical_option_iv_series_available: bool,
+    coverage_metadata: Mapping[str, Any],
+    sandbox_or_production: str | None,
+) -> dict[str, dict[str, Any]]:
+    family_presence = {
+        "provenance": _iv_rank_provenance_present(data),
+        "entitlement": _iv_rank_entitlement_present(data, sandbox_or_production),
+        "sla_freshness": _iv_rank_sla_present(data, as_of, freshness),
+        "methodology": _iv_rank_methodology_family_present(
+            data,
+            methodology,
+            provider_reported_iv_rank_available=provider_reported_iv_rank_available,
+            provider_reported_iv_percentile_available=provider_reported_iv_percentile_available,
+        ),
+        "lookback_date_range": _iv_rank_lookback_family_present(lookback_window, date_range),
+        "option_iv_evidence": _iv_rank_option_iv_evidence_present(
+            provider_reported_iv_rank_available=provider_reported_iv_rank_available,
+            provider_reported_iv_percentile_available=provider_reported_iv_percentile_available,
+            historical_option_iv_series_available=historical_option_iv_series_available,
+        ),
+        "coverage_scope": _iv_rank_coverage_scope_present(data, coverage_metadata),
+    }
+    return {
+        family: {
+            "present": family_presence[family],
+            "required": True,
+            "fields": list(fields),
+        }
+        for family, fields in IV_RANK_REQUIRED_FUTURE_EVIDENCE_FAMILIES.items()
+    }
+
+
+def _current_known_provider_live_path(provider_id: str | None, source_type: str | None) -> bool:
+    return _normalized_text(source_type) == "live" and _normalized_text(provider_id) in {
+        _normalized_text(item) for item in CURRENT_KNOWN_OPTIONS_AUTHORITY_PROVIDER_IDS
+    }
 
 
 def _iv_rank_current_iv_or_greeks_context_only(data: Mapping[str, Any]) -> bool:
@@ -454,11 +607,25 @@ def build_options_iv_rank_authority_diagnostic(
             )
         )
     ) and not source_reason_codes and _normalized_text(source_type) == "live"
-    provenance_present = _iv_rank_provenance_present(data)
-    entitlement_present = _iv_rank_entitlement_present(data, sandbox_or_production)
-    sla_present = _iv_rank_sla_present(data, as_of, freshness)
-    methodology_metadata_present = _iv_rank_methodology_metadata_present(data, methodology)
-    coverage_scope_present = _iv_rank_coverage_scope_present(data, coverage_metadata)
+    checklist_requested = any(
+        (
+            authority_policy_source == INTERNAL_OPTIONS_IV_RANK_AUTHORITY_POLICY_SOURCE,
+            isinstance(_value(data, "provenance", "provenanceEvidence", "provenance_evidence"), Mapping),
+            isinstance(_value(data, "entitlementMetadata", "entitlement", "entitlement_metadata"), Mapping),
+            isinstance(_value(data, "slaMetadata", "sla", "slaEvidence", "sla_evidence"), Mapping),
+            isinstance(
+                _value(
+                    data,
+                    "methodologyMetadata",
+                    "methodologyDetails",
+                    "methodologyEvidence",
+                    "methodology_evidence",
+                ),
+                Mapping,
+            ),
+            isinstance(_value(data, "coverageScopeEvidence", "coverage_scope_evidence"), Mapping),
+        )
+    )
     current_iv_or_greeks_context_only = live_like_checklist_required and (
         _iv_rank_current_iv_or_greeks_context_only(data)
         and not (
@@ -470,6 +637,29 @@ def build_options_iv_rank_authority_diagnostic(
     underlying_realized_volatility_context_only = live_like_checklist_required and (
         _iv_rank_underlying_realized_volatility_context_only(data)
     )
+    authority_evidence_checklist = (
+        _build_authority_evidence_checklist(
+            data,
+            as_of=as_of,
+            freshness=freshness,
+            lookback_window=lookback_window,
+            date_range=date_range,
+            methodology=methodology,
+            provider_reported_iv_rank_available=provider_reported_iv_rank_available,
+            provider_reported_iv_percentile_available=provider_reported_iv_percentile_available,
+            historical_option_iv_series_available=historical_option_iv_series_available,
+            coverage_metadata=coverage_metadata,
+            sandbox_or_production=sandbox_or_production,
+        )
+        if checklist_requested
+        else None
+    )
+    authority_evidence_gap_families = (
+        [family for family, entry in authority_evidence_checklist.items() if not entry["present"]]
+        if authority_evidence_checklist
+        else []
+    )
+    current_known_provider_live_path = _current_known_provider_live_path(provider_id, source_type)
     reason_codes: list[str] = []
     if not evidence_present:
         reason_codes.extend(["iv_rank_authority_missing", "iv_rank_source_unknown_or_missing"])
@@ -486,29 +676,24 @@ def build_options_iv_rank_authority_diagnostic(
         reason_codes.append("iv_rank_provider_reported_percentile_missing")
     if not source_authority:
         reason_codes.append("iv_rank_source_authority_missing")
-    if not as_of or not freshness:
+    if not checklist_requested and (not as_of or not freshness):
         reason_codes.append("iv_rank_asof_or_freshness_missing")
-    if not lookback_window and not date_range:
+    if not checklist_requested and not lookback_window and not date_range:
         reason_codes.append("iv_rank_lookback_missing")
-    if not methodology:
+    if not checklist_requested and not methodology:
         reason_codes.append("iv_rank_methodology_missing")
     if not coverage_metadata:
         reason_codes.append("iv_rank_coverage_metadata_missing")
+    if authority_evidence_checklist:
+        for family in authority_evidence_gap_families:
+            reason_codes.append(_CHECKLIST_REASON_CODES[family])
     if live_like_checklist_required:
-        if not provenance_present:
-            reason_codes.append("iv_rank_provenance_missing")
-        if not entitlement_present:
-            reason_codes.append("iv_rank_entitlement_missing")
-        if not sla_present:
-            reason_codes.append("iv_rank_sla_missing")
-        if not methodology_metadata_present:
-            reason_codes.append("iv_rank_methodology_metadata_missing")
-        if not coverage_scope_present:
-            reason_codes.append("iv_rank_coverage_scope_missing")
         if current_iv_or_greeks_context_only:
             reason_codes.append("iv_rank_current_iv_or_greeks_context_only")
         if underlying_realized_volatility_context_only:
             reason_codes.append("iv_rank_underlying_realized_volatility_context_only")
+    if current_known_provider_live_path and not source_reason_codes:
+        reason_codes.append("iv_rank_current_provider_not_authoritative")
 
     authoritative = bool(
         evidence_present
@@ -525,14 +710,19 @@ def build_options_iv_rank_authority_diagnostic(
             or historical_option_iv_series_available
         )
         and not source_reason_codes
-        and (not live_like_checklist_required or provenance_present)
-        and (not live_like_checklist_required or entitlement_present)
-        and (not live_like_checklist_required or sla_present)
-        and (not live_like_checklist_required or methodology_metadata_present)
-        and (not live_like_checklist_required or coverage_scope_present)
+        and not current_known_provider_live_path
+        and authority_evidence_checklist
+        and not authority_evidence_gap_families
         and not current_iv_or_greeks_context_only
         and not underlying_realized_volatility_context_only
     )
+    if authority_evidence_checklist and evidence_present and not authoritative and (
+        coverage_metadata
+        or provider_reported_iv_rank_available
+        or provider_reported_iv_percentile_available
+        or historical_option_iv_series_available
+    ):
+        reason_codes.append("iv_rank_coverage_not_authority")
     authority_state = "authoritative" if authoritative else ("non_authoritative" if evidence_present else "missing")
 
     return {
@@ -557,4 +747,12 @@ def build_options_iv_rank_authority_diagnostic(
         "sandboxOrProduction": sandbox_or_production,
         "reasonCodes": [] if authoritative else _dedupe(reason_codes),
         "requiredFutureAuthorityEvidence": list(REQUIRED_FUTURE_IV_RANK_AUTHORITY_EVIDENCE_FIELDS),
+        **(
+            {
+                "authorityEvidenceChecklist": authority_evidence_checklist,
+                "authorityEvidenceGapFamilies": authority_evidence_gap_families,
+            }
+            if authority_evidence_checklist
+            else {}
+        ),
     }

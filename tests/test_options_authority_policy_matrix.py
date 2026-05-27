@@ -210,22 +210,25 @@ def test_iv_rank_policy_encodes_future_authority_checklist_families() -> None:
             "provider_reported_iv_rank_or_percentile",
             "deterministic_derived_iv_rank",
             "methodology_version",
-            "calculation_basis",
             "percentile_or_rank_definition",
+            "calculation_basis",
         ),
-        "lookback_window": (
+        "lookback_date_range": (
             "lookback_window",
             "date_range_start",
             "date_range_end",
         ),
-        "iv_evidence_source": (
+        "option_iv_evidence": (
+            "approved_historical_option_iv_series_availability",
             "provider_reported_iv_rank",
             "provider_reported_iv_percentile",
-            "approved_historical_option_iv_series_availability",
         ),
         "coverage_scope": (
             "symbol_or_underlying_coverage",
             "contract_universe_coverage",
+            "moneyness_selection_rules",
+            "expiry_selection_rules",
+            "missing_data_policy",
             "coverage_metadata",
         ),
     }
