@@ -229,6 +229,26 @@ OFFICIAL_OVERLAY_FAILURE_REASONS = {
 MARKET_TEMPERATURE_REQUIRED_RELIABLE_INPUT_COUNT = 5
 MARKET_TEMPERATURE_REQUIRED_RELIABLE_PANEL_COUNT = 3
 MARKET_TEMPERATURE_MIN_COVERAGE = 0.25
+MARKET_OVERVIEW_EVIDENCE_CONTRACT_VERSION = "market_overview_evidence.v1"
+MARKET_OVERVIEW_ENDPOINTS = {
+    "indices": "/api/v1/market-overview/indices",
+    "sentiment": "/api/v1/market-overview/sentiment",
+    "funds_flow": "/api/v1/market-overview/funds-flow",
+    "macro": "/api/v1/market-overview/macro",
+    "crypto": "/api/v1/market/crypto",
+    "market_sentiment": "/api/v1/market/sentiment",
+    "cn_indices": "/api/v1/market/cn-indices",
+    "cn_breadth": "/api/v1/market/cn-breadth",
+    "cn_flows": "/api/v1/market/cn-flows",
+    "sector_rotation": "/api/v1/market/sector-rotation",
+    "us_breadth": "/api/v1/market/us-breadth",
+    "rates": "/api/v1/market/rates",
+    "fx_commodities": "/api/v1/market/fx-commodities",
+    "temperature": "/api/v1/market/temperature",
+    "market_briefing": "/api/v1/market/briefing",
+    "futures": "/api/v1/market/futures",
+    "cn_short_sentiment": "/api/v1/market/cn-short-sentiment",
+}
 
 CONFIDENCE_BY_FRESHNESS = {
     "live": 1.0,
@@ -3081,6 +3101,7 @@ class MarketOverviewService:
     def _build_evidence_snapshot(self, payload: Dict[str, Any], category: str) -> Dict[str, Any]:
         source = str(payload.get("source") or "")
         coverage = self._evidence_snapshot_coverage(payload, category)
+        updated_at = payload.get("updatedAt") or payload.get("last_update") or payload.get("last_refresh_at")
         contract = coerce_source_confidence_contract(
             {
                 "source": source,
@@ -3097,6 +3118,20 @@ class MarketOverviewService:
             }
         )
         evidence = contract.to_dict()
+        evidence.update(
+            {
+                "contractVersion": MARKET_OVERVIEW_EVIDENCE_CONTRACT_VERSION,
+                "diagnosticOnly": True,
+                "cardKey": self._evidence_snapshot_card_key(payload, category),
+                "endpoint": self._evidence_snapshot_endpoint(payload, category),
+                "updatedAt": updated_at,
+                "isFromSnapshot": bool(payload.get("isFromSnapshot")),
+                "isRefreshing": bool(payload.get("isRefreshing")),
+                "providerHealth": {
+                    "status": self._evidence_snapshot_provider_status(payload),
+                },
+            }
+        )
         evidence["coverage"] = round(float(evidence["coverage"]), 2) if isinstance(evidence.get("coverage"), (int, float)) else evidence.get("coverage")
         evidence["confidenceWeight"] = round(float(evidence["confidenceWeight"]), 2)
         score_gate_meta = self._evidence_snapshot_score_gate_meta(payload)
@@ -3105,8 +3140,63 @@ class MarketOverviewService:
         if score_gate_meta.get("capReason") is None:
             score_gate_meta["capReason"] = evidence.get("capReason")
         evidence.update(score_gate_meta)
-        evidence["reasonFamilies"] = self._evidence_snapshot_reason_families(evidence)
+        evidence["scoreReliabilityAllowed"] = self._evidence_snapshot_score_reliability_allowed(payload, evidence)
+        evidence["reasonFamilies"] = self._evidence_snapshot_reason_families(evidence, payload)
         return evidence
+
+    def _evidence_snapshot_card_key(self, payload: Mapping[str, Any], category: str) -> str:
+        provider_health = payload.get("providerHealth") if isinstance(payload.get("providerHealth"), Mapping) else {}
+        card_key = (
+            payload.get("cardKey")
+            or provider_health.get("card")
+            or payload.get("cacheKey")
+            or payload.get("panelKey")
+            or category
+        )
+        return str(card_key or category)
+
+    def _evidence_snapshot_endpoint(self, payload: Mapping[str, Any], category: str) -> Optional[str]:
+        endpoint = payload.get("endpoint")
+        if endpoint:
+            return str(endpoint)
+        card_key = self._evidence_snapshot_card_key(payload, category)
+        return MARKET_OVERVIEW_ENDPOINTS.get(card_key)
+
+    def _evidence_snapshot_provider_status(self, payload: Mapping[str, Any]) -> str:
+        provider_health = payload.get("providerHealth") if isinstance(payload.get("providerHealth"), Mapping) else {}
+        status = str(provider_health.get("status") or "").strip().lower()
+        if status:
+            return status
+        return self._provider_health_status(dict(payload))
+
+    @classmethod
+    def _evidence_snapshot_score_reliability_allowed(
+        cls,
+        payload: Mapping[str, Any],
+        evidence: Mapping[str, Any],
+    ) -> bool:
+        freshness = str(evidence.get("freshness") or "").strip().lower()
+        provider_health = evidence.get("providerHealth") if isinstance(evidence.get("providerHealth"), Mapping) else {}
+        provider_status = str(provider_health.get("status") or "").strip().lower()
+        if evidence.get("scoreContributionAllowed") is not True:
+            return False
+        if evidence.get("sourceAuthorityAllowed") is False:
+            return False
+        if evidence.get("observationOnly") is True:
+            return False
+        if not freshness or freshness in {"cached", "delayed", "fallback", "stale", "partial", "unavailable", "mock", "error"}:
+            return False
+        if any(
+            bool(evidence.get(key))
+            for key in ("isFallback", "isStale", "isPartial", "isSynthetic", "isUnavailable", "isFromSnapshot", "isRefreshing")
+        ):
+            return False
+        if provider_status and provider_status != "live":
+            return False
+        candidate_freshnesses = cls._evidence_snapshot_candidate_freshnesses(payload)
+        if any(state in {"cached", "delayed", "fallback", "stale", "partial", "unavailable", "mock", "error"} for state in candidate_freshnesses):
+            return False
+        return True
 
     def _evidence_snapshot_score_gate_meta(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         candidates = self._evidence_snapshot_gate_candidates(payload)
@@ -3253,10 +3343,14 @@ class MarketOverviewService:
                 return str(cap_reason)
         return None
 
-    @staticmethod
-    def _evidence_snapshot_reason_families(evidence: Mapping[str, Any]) -> List[Dict[str, Any]]:
-        source_fields: List[str] = []
-        raw_codes: List[str] = []
+    @classmethod
+    def _evidence_snapshot_reason_families(
+        cls,
+        evidence: Mapping[str, Any],
+        payload: Mapping[str, Any],
+    ) -> List[Dict[str, Any]]:
+        reason_families: List[Dict[str, Any]] = []
+        seen_families: set[str] = set()
 
         for field in ("degradationReason", "capReason"):
             raw_code = evidence.get(field)
@@ -3265,18 +3359,94 @@ class MarketOverviewService:
             normalized_code = str(raw_code).strip()
             if not normalized_code:
                 continue
-            source_fields.append(field)
-            raw_codes.append(normalized_code)
+            for classification in classify_reason_codes([normalized_code]):
+                entry = {
+                    "rawCode": classification.raw_code,
+                    "family": classification.family,
+                    "scope": classification.scope,
+                    "sourceField": field,
+                }
+                seen_families.add(str(entry["family"]))
+                reason_families.append(entry)
 
-        return [
-            {
-                "rawCode": classification.raw_code,
-                "family": classification.family,
-                "scope": classification.scope,
-                "sourceField": source_field,
-            }
-            for source_field, classification in zip(source_fields, classify_reason_codes(raw_codes))
-        ]
+        freshness = str(evidence.get("freshness") or "").strip().lower()
+        candidate_freshnesses = cls._evidence_snapshot_candidate_freshnesses(payload)
+        derived_entries = []
+        if not freshness and not candidate_freshnesses:
+            derived_entries.append(
+                {
+                    "rawCode": "freshness_missing",
+                    "family": "missing_freshness",
+                    "scope": "freshness",
+                    "sourceField": "freshness",
+                }
+            )
+        elif candidate_freshnesses.intersection({"cached", "delayed"}) and evidence.get("scoreReliabilityAllowed") is not True:
+            derived_entries.append(
+                {
+                    "rawCode": "delayed" if "delayed" in candidate_freshnesses else "cached",
+                    "family": "cached_delayed_only",
+                    "scope": "freshness",
+                    "sourceField": "freshness",
+                }
+            )
+
+        for key, family in (
+            ("isFallback", "fallback"),
+            ("isStale", "stale"),
+            ("isPartial", "partial"),
+            ("isUnavailable", "unavailable"),
+            ("isSynthetic", "synthetic"),
+        ):
+            if bool(evidence.get(key)):
+                if key == "isFallback" and bool(evidence.get("isUnavailable")):
+                    continue
+                derived_entries.append(
+                    {
+                        "rawCode": key,
+                        "family": family,
+                        "scope": "freshness",
+                        "sourceField": key,
+                    }
+                )
+
+        if evidence.get("sourceAuthorityAllowed") is False and not bool(evidence.get("isUnavailable")):
+            derived_entries.append(
+                {
+                    "rawCode": "source_authority_blocked",
+                    "family": "source_authority_blocked",
+                    "scope": "score_gate",
+                    "sourceField": "sourceAuthorityAllowed",
+                }
+            )
+        if bool(evidence.get("observationOnly")) and not bool(evidence.get("isUnavailable")):
+            derived_entries.append(
+                {
+                    "rawCode": "observation_only_source",
+                    "family": "observation_only_source",
+                    "scope": "score_gate",
+                    "sourceField": "observationOnly",
+                }
+            )
+
+        for entry in derived_entries:
+            family_key = str(entry["family"])
+            if family_key in seen_families:
+                continue
+            seen_families.add(family_key)
+            reason_families.append(entry)
+        return reason_families
+
+    @classmethod
+    def _evidence_snapshot_candidate_freshnesses(cls, payload: Mapping[str, Any]) -> set[str]:
+        freshness_values = {str(payload.get("freshness") or "").strip().lower()}
+        candidates = cls._evidence_snapshot_gate_candidates(dict(payload))
+        for candidate in candidates:
+            freshness_values.add(str(candidate.get("freshness") or "").strip().lower())
+            source_freshness = candidate.get("sourceFreshnessEvidence")
+            if isinstance(source_freshness, Mapping):
+                freshness_values.add(str(source_freshness.get("freshness") or "").strip().lower())
+        return {value for value in freshness_values if value}
 
     def _evidence_snapshot_coverage(self, payload: Dict[str, Any], category: str) -> float:
         explicit_coverage = self._clean_number(payload.get("coverage"))

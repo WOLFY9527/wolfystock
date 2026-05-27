@@ -52,15 +52,24 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
             payload = service.get_indices()
 
         assert payload["evidenceSnapshot"] == {
+            "contractVersion": "market_overview_evidence.v1",
+            "diagnosticOnly": True,
+            "scoreReliabilityAllowed": False,
+            "cardKey": "indices",
+            "endpoint": "/api/v1/market-overview/indices",
             "source": "yfinance",
             "sourceLabel": "Yahoo Finance",
             "asOf": as_of,
+            "updatedAt": as_of,
             "freshness": "live",
             "isFallback": False,
             "isStale": False,
             "isPartial": False,
             "isSynthetic": False,
             "isUnavailable": False,
+            "isFromSnapshot": False,
+            "isRefreshing": False,
+            "providerHealth": {"status": "live"},
             "confidenceWeight": 0.7,
             "coverage": 1.0,
             "degradationReason": None,
@@ -286,9 +295,18 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
         assert evidence["sourceAuthorityAllowed"] is True
         assert evidence["scoreContributionAllowed"] is True
         assert evidence["observationOnly"] is False
+        assert evidence["diagnosticOnly"] is True
+        assert evidence["scoreReliabilityAllowed"] is False
         assert evidence["degradationReason"] is None
         assert evidence["capReason"] is None
-        assert evidence["reasonFamilies"] == []
+        assert evidence["reasonFamilies"] == [
+            {
+                "rawCode": "cached",
+                "family": "cached_delayed_only",
+                "scope": "freshness",
+                "sourceField": "freshness",
+            }
+        ]
 
     def test_evidence_snapshot_exposes_observation_only_blocked_flags_for_cn_money_market_gate(self) -> None:
         service = MarketOverviewService()
@@ -332,6 +350,8 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
         assert evidence["sourceAuthorityAllowed"] is False
         assert evidence["scoreContributionAllowed"] is False
         assert evidence["observationOnly"] is True
+        assert evidence["diagnosticOnly"] is True
+        assert evidence["scoreReliabilityAllowed"] is False
         assert evidence["degradationReason"] == "cn_money_market_required_series_missing_or_stale"
         assert evidence["capReason"] is None
         assert evidence["reasonFamilies"] == [
@@ -340,8 +360,108 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
                 "family": "observation_only",
                 "scope": "official_cache_readiness",
                 "sourceField": "degradationReason",
-            }
+            },
+            {
+                "rawCode": "delayed",
+                "family": "cached_delayed_only",
+                "scope": "freshness",
+                "sourceField": "freshness",
+            },
+            {
+                "rawCode": "source_authority_blocked",
+                "family": "source_authority_blocked",
+                "scope": "score_gate",
+                "sourceField": "sourceAuthorityAllowed",
+            },
+            {
+                "rawCode": "observation_only_source",
+                "family": "observation_only_source",
+                "scope": "score_gate",
+                "sourceField": "observationOnly",
+            },
         ]
+
+    def test_evidence_snapshot_requires_explicit_gate_not_health_timestamps_or_weights(self) -> None:
+        service = MarketOverviewService()
+        as_of = _iso_now()
+
+        payload = service._with_evidence_snapshot(
+            {
+                "source": "yfinance",
+                "sourceLabel": "Yahoo Finance",
+                "sourceType": "official_public",
+                "updatedAt": as_of,
+                "asOf": as_of,
+                "freshness": "live",
+                "confidenceWeight": 1.0,
+                "coverage": 1.0,
+                "providerHealth": {
+                    "status": "live",
+                    "card": "rates",
+                },
+                "items": [
+                    {
+                        "symbol": "SPX",
+                        "label": "S&P 500",
+                        "value": 5200.12,
+                        "source": "yfinance",
+                        "updatedAt": as_of,
+                        "asOf": as_of,
+                    }
+                ],
+            },
+            "rates",
+        )
+
+        evidence = payload["evidenceSnapshot"]
+        assert evidence["diagnosticOnly"] is True
+        assert evidence["scoreReliabilityAllowed"] is False
+        assert evidence["sourceAuthorityAllowed"] is None
+        assert evidence["scoreContributionAllowed"] is None
+        assert evidence["confidenceWeight"] == 1.0
+        assert evidence["coverage"] == 1.0
+
+    def test_evidence_snapshot_marks_snapshot_refreshing_data_non_reliable(self) -> None:
+        service = MarketOverviewService()
+        as_of = _iso_now()
+
+        payload = service._with_evidence_snapshot(
+            {
+                "source": "yfinance",
+                "sourceLabel": "Yahoo Finance",
+                "updatedAt": as_of,
+                "asOf": as_of,
+                "freshness": "stale",
+                "isStale": True,
+                "isFromSnapshot": True,
+                "isRefreshing": True,
+                "providerHealth": {
+                    "status": "refreshing",
+                    "card": "indices",
+                },
+                "items": [
+                    {
+                        "symbol": "SPX",
+                        "label": "S&P 500",
+                        "value": 5200.12,
+                        "source": "yfinance",
+                        "updatedAt": as_of,
+                        "asOf": as_of,
+                        "freshness": "stale",
+                        "isStale": True,
+                    }
+                ],
+            },
+            "equity_index",
+        )
+
+        evidence = payload["evidenceSnapshot"]
+        assert evidence["isFromSnapshot"] is True
+        assert evidence["isRefreshing"] is True
+        assert evidence["providerHealth"] == {"status": "refreshing"}
+        assert evidence["scoreReliabilityAllowed"] is False
+        assert any(item["family"] == "stale" for item in evidence["reasonFamilies"])
+        assert any(item["family"] == "source_authority_blocked" for item in evidence["reasonFamilies"]) is False
 
     def test_evidence_snapshot_unknown_reason_code_maps_to_unclassified_sidecar(self) -> None:
         service = MarketOverviewService()
