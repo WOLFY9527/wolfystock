@@ -128,7 +128,7 @@ const LoginPage: React.FC = () => {
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
-  const [createUser, setCreateUser] = useState(createModeRequested);
+  const [createUser, setCreateUser] = useState(() => createModeRequested);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | ParsedApiError | null>(null);
 
@@ -139,12 +139,6 @@ const LoginPage: React.FC = () => {
   useEffect(() => {
     document.title = copy.documentTitle;
   }, [copy.documentTitle]);
-
-  useEffect(() => {
-    if (!isAdminBootstrap) {
-      setCreateUser(createModeRequested);
-    }
-  }, [createModeRequested, isAdminBootstrap]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
