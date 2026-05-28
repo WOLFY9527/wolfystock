@@ -195,7 +195,7 @@ function conciseField(record: Record<string, unknown> | undefined, keys: string[
 
 function conciseList(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return uniqueText(value.map((item) => conciseText(item)).filter(Boolean));
+    return uniqueText(value.flatMap((item) => { const t = conciseText(item); return t ? [t] : []; }));
   }
   const text = conciseText(value);
   return text ? [text] : [];
@@ -356,6 +356,16 @@ function buildEvidenceBoundaryLines(report: AnalysisReport | null): string[] {
   return lines.length ? ['## 证据边界 / Evidence Boundaries', ...lines, ''] : [];
 }
 
+const REPORT_DATE_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
 function formatReportDateTime(value?: string): string {
   const text = String(value || '').trim();
   if (!text) {
@@ -365,15 +375,7 @@ function formatReportDateTime(value?: string): string {
   if (Number.isNaN(date.getTime())) {
     return text;
   }
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date);
+  return REPORT_DATE_FORMATTER.format(date);
 }
 
 export function buildInstitutionalReportMarkdown(
@@ -411,7 +413,7 @@ export function buildInstitutionalReportMarkdown(
   const generatedAt = override?.generatedAt || report?.meta.reportGeneratedAt || report?.meta.createdAt;
   const dataSources = report?.decisionTrace?.dataSources || [];
   const dataStatus = [
-    ...new Set(dataSources.map((source) => source.status).filter(Boolean)),
+    ...new Set(dataSources.flatMap((source) => source.status ? [source.status] : [])),
   ].join(' / ') || EMPTY_DISPLAY_VALUE;
   const alphaVantage = readObjectField(report, ['details', 'rawResult', 'dashboard', 'data_perspective', 'alpha_vantage']);
   const alphaEntries = alphaVantage && typeof alphaVantage === 'object'
