@@ -265,8 +265,7 @@ function assumptionEntries(run: RuleBacktestRunResponse): Array<[string, string]
   const hasStructured = Boolean(recordValue(source, 'engine', 'feeModel', 'fee_model', 'slippageModel', 'slippage_model'));
   if (hasStructured) {
     return structured
-      .filter(([, value]) => value != null && value !== '')
-      .map(([key, value]) => [key, String(value)]);
+      .flatMap(([key, value]) => value != null && value !== '' ? [[key, String(value)]] : []);
   }
 
   const explicit = Object.entries(source)
@@ -283,8 +282,7 @@ function assumptionEntries(run: RuleBacktestRunResponse): Array<[string, string]
     ['单边滑点', run.slippageBps],
   ];
   return inferred
-    .filter(([, value]) => value != null && value !== '')
-    .map(([key, value]) => [key, String(value)]);
+    .flatMap(([key, value]) => value != null && value !== '' ? [[key, String(value)]] : []);
 }
 
 function dataQualityEntries(run: RuleBacktestRunResponse, normalized: DeterministicBacktestNormalizedResult): Array<[string, string]> {
@@ -303,8 +301,7 @@ function dataQualityEntries(run: RuleBacktestRunResponse, normalized: Determinis
       ['质量提示', warnings],
     ];
     return entries
-      .filter(([, value]) => value != null && value !== '')
-      .map(([key, value]) => [key, String(value)]);
+      .flatMap(([key, value]) => value != null && value !== '' ? [[key, String(value)]] : []);
   }
 
   const benchmark = run.benchmarkSummary || {};
@@ -327,8 +324,7 @@ function dataQualityEntries(run: RuleBacktestRunResponse, normalized: Determinis
       : null],
   ];
   return entries
-    .filter(([, value]) => value != null && value !== '')
-    .map(([key, value]) => [key, String(value)]);
+    .flatMap(([key, value]) => value != null && value !== '' ? [[key, String(value)]] : []);
 }
 
 function getBenchmarkVerdict(totalReturnPct: number | null, benchmarkReturnPct: number | null, excessReturnPct: number | null): { label: string; tone: MetricItem['tone']; note: string } {
