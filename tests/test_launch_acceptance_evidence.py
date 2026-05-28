@@ -368,6 +368,71 @@ def test_launch_acceptance_evidence_missing_new_operator_categories_keep_no_go(t
     assert blocker_ids == NEW_OPERATOR_CATEGORY_IDS
 
 
+def test_launch_acceptance_evidence_admin_log_retention_capacity_rehearsal_is_backed_by_repo_local_offline_anchors() -> None:
+    result = _run_checker("--evidence", str(ACCEPTED_FIXTURE))
+
+    assert result.returncode == 0
+    evidence = _json(result)
+    category = next(item for item in evidence["categories"] if item["id"] == "admin_log_retention_capacity_rehearsal")
+    assert category["status"] == "accepted"
+    assert category["requiredChecks"] == [
+        "retentionPolicyRecorded",
+        "previewFirstCleanupVerified",
+        "minimumRetentionGuardVerified",
+        "storagePressureRehearsalPassed",
+        "cleanupAuditSanitized",
+        "runtimeDefaultUnchanged",
+    ]
+
+    accepted_payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
+    fixture_category = accepted_payload["categories"]["admin_log_retention_capacity_rehearsal"]
+    assert fixture_category["evidenceRef"] == "admin-log-retention-capacity-rehearsal-synthetic-json"
+    assert fixture_category["sanitization"] == {
+        "externalServicesCalledByChecker": False,
+        "realSecretsIncluded": False,
+        "rawCredentialValuesIncluded": False,
+        "rawProviderPayloadsIncluded": False,
+        "responseBodiesIncluded": False,
+        "productionDataPathsIncluded": False,
+    }
+
+    admin_logs_source = (REPO_ROOT / "tests" / "api" / "test_admin_logs.py").read_text(encoding="utf-8")
+    execution_log_source = (REPO_ROOT / "tests" / "test_execution_log_service.py").read_text(encoding="utf-8")
+    expected_anchor_tests = {
+        "retentionPolicyRecorded": [
+            ("admin_logs", "def test_storage_summary_exposes_explicit_admin_log_retention_tiers(self) -> None:"),
+        ],
+        "previewFirstCleanupVerified": [
+            ("admin_logs", "def test_storage_summary_capacity_cleanup_plan_keeps_preview_metadata_explicit(self) -> None:"),
+            ("admin_logs", "def test_cleanup_defaults_to_preview_and_does_not_emit_vacuum_note(self) -> None:"),
+        ],
+        "minimumRetentionGuardVerified": [
+            ("admin_logs", "def test_capacity_cleanup_actual_run_preserves_min_retention(self) -> None:"),
+        ],
+        "storagePressureRehearsalPassed": [
+            ("admin_logs", "def test_storage_summary_capacity_plan_is_preview_only_without_auto_cleanup(self) -> None:"),
+            ("admin_logs", "def test_storage_summary_read_path_with_read_capability_never_calls_cleanup(self) -> None:"),
+            ("admin_logs", "def test_capacity_cleanup_dry_run_does_not_delete_logs(self) -> None:"),
+        ],
+        "cleanupAuditSanitized": [
+            ("admin_logs", "def test_capacity_cleanup_actual_run_emits_sanitized_audit_event(self) -> None:"),
+            ("execution_log", "def test_admin_security_cost_provider_and_quota_actions_sanitize_incident_evidence(self) -> None:"),
+        ],
+        "runtimeDefaultUnchanged": [
+            ("admin_logs", "def test_storage_summary_read_path_with_read_capability_never_calls_cleanup(self) -> None:"),
+        ],
+    }
+
+    for check_name, anchor_tests in expected_anchor_tests.items():
+        assert check_name in category["requiredChecks"]
+        for source_name, anchor_test in anchor_tests:
+            source = execution_log_source if source_name == "execution_log" else admin_logs_source
+            assert anchor_test in source
+
+    assert "storage summary must not invoke cleanup" in admin_logs_source
+    assert "\"synthetic\"" in execution_log_source
+
+
 def test_launch_acceptance_evidence_api_abuse_request_safety_is_backed_by_repo_local_offline_anchors() -> None:
     result = _run_checker("--evidence", str(ACCEPTED_FIXTURE))
 
