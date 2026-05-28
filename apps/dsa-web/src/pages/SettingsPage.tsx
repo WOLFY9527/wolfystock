@@ -12,7 +12,7 @@ import {
 } from '../components/settings/dataSourceLibraryShared';
 import { useDataSourceLibraryController } from '../components/settings/useDataSourceLibraryController';
 import { useI18n } from '../contexts/UiLanguageContext';
-import { useAuth, useSystemConfig } from '../hooks';
+import { useAuth, useSystemConfig } from '../hooks/useAuth';
 import type { SystemConfigCategory } from '../types/systemConfig';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { productSetupSurfaceFromCurrentQuery } from '../utils/productSetupSurface';

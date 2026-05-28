@@ -5,7 +5,7 @@ import { Button, Input } from '../components/common/Button';
 import type { ParsedApiError } from '../api/error';
 import { isParsedApiError } from '../api/error';
 import { SettingsAlert } from '../components/settings/SettingsAlert';
-import { useAuth } from '../hooks';
+import { useAuth } from '../hooks/useAuth';
 import { translate, type UiLanguage } from '../i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 

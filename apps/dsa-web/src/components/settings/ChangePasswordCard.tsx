@@ -6,7 +6,7 @@ import { useI18n } from '../../contexts/UiLanguageContext';
 import { useAuth } from '../../hooks/useAuth';
 import { Input } from '../common/Input';
 import { SettingsAlert } from './SettingsAlert';
-import { TerminalButton } from '../terminal';
+import { TerminalButton } from '../terminal/TerminalPrimitives';
 
 export const ChangePasswordCard: React.FC = () => {
   const { language, t } = useI18n();
