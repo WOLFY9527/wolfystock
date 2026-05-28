@@ -22,7 +22,9 @@ The current DuckDB boundary is:
 - DuckDB is disabled by default with `QUANT_DUCKDB_ENABLED=false`.
 - The default runtime engine remains `QUANT_ENGINE=python`.
 - Disabled mode must not create `*.duckdb`, `*.duckdb.wal`, Parquet, or other generated database artifacts.
-- DuckDB writes require explicit admin/operator actions such as init, ingest, or factor build.
+- Read diagnostics require authenticated operator/admin context plus `quant:admin:read`.
+- Init, ingest, and factor build require authenticated operator/admin context plus `quant:admin:write`.
+- DuckDB writes require explicit operator actions such as init, ingest, or factor build; no auto-run or background trigger is allowed.
 - Health, coverage, benchmark, factor snapshot, factor validation, and runtime-context comparison are diagnostic endpoints only.
 - `compare-runtime-context` diagnostics must keep `diagnostics.productionRuntimeChanged=false`.
 - Scanner scoring, ranking, selection, thresholds, and generated candidates must not consume DuckDB output.
@@ -96,7 +98,8 @@ All gates below must pass before any production integration can be proposed.
 
 ### Permission And Auth Boundaries
 
-- DuckDB endpoints must remain admin-only unless a separate access model is approved.
+- DuckDB routes must remain authenticated operator/admin surfaces unless a separate access model is approved.
+- Read diagnostics must continue to require `quant:admin:read`; write-like routes must continue to require `quant:admin:write`.
 - Guest, public, and non-admin users must not trigger writes, factor builds, benchmarks with sensitive data, or artifact creation.
 - Any future read exposure must define tenant/user ownership, symbol scope, privacy rules, and audit logging.
 
@@ -132,7 +135,7 @@ Any item below blocks DuckDB production consideration:
 - Any changed backtest accounting, fills, fees, return calculations, deterministic result semantics, or benchmark semantics without dedicated approval.
 - Any changed portfolio accounting, cash ledger, positions, realized/unrealized PnL, FX handling, ownership, or permission semantics without dedicated approval.
 - Any hidden scheduled factor job, hidden background ingest, or implicit full-market refresh.
-- Any non-admin path that can initialize, ingest, build, mutate, or clean DuckDB files.
+- Any path without the required authenticated operator/admin context and capability guard that can initialize, ingest, build, mutate, or clean DuckDB files.
 - Any unbounded ingest/build/benchmark operation exposed without hard limits and operator-visible scope.
 - Any unsafe file path, token, secret, stack trace, or private account identifier exposed in UI, logs, or API responses.
 
@@ -193,7 +196,8 @@ For docs-only governance changes, full `ci_gate` is not required unless the task
 
 ### Admin Permissions
 
-- Init, ingest, build, cleanup, benchmark, factor snapshot, validation, and runtime comparison must remain admin-only while DuckDB is diagnostic.
+- Read diagnostics such as health, coverage, benchmark, factor snapshot, validation, and runtime comparison must remain operator/admin routes guarded by `quant:admin:read` while DuckDB is diagnostic.
+- Write-like actions such as init, ingest, build, and cleanup must remain operator/admin routes guarded by `quant:admin:write`.
 - Any future non-admin read path requires a separate permission model, privacy review, tenant/user boundary review, and audit logging plan.
 
 ### Backup And Restore Expectations

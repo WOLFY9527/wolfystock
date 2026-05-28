@@ -125,7 +125,7 @@ Both tables use `(symbol, trade_date)` uniqueness. Ingest and factor builds use 
 
 ## Admin API
 
-Admin-only endpoints:
+DuckDB quant routes remain authenticated operator/admin surfaces. Read diagnostics require `quant:admin:read`. Deliberate write-like actions such as init, ingest, and factor build require `quant:admin:write`. This capability split does not enable DuckDB by default and does not turn DuckDB into a production source of truth.
 
 ```text
 GET  /api/v1/quant/duckdb/health
@@ -138,6 +138,21 @@ POST /api/v1/quant/duckdb/factor-snapshot
 POST /api/v1/quant/duckdb/validate-factor-path
 POST /api/v1/quant/duckdb/compare-runtime-context
 ```
+
+Read diagnostics:
+
+- `GET /api/v1/quant/duckdb/health`
+- `GET /api/v1/quant/duckdb/coverage`
+- `POST /api/v1/quant/duckdb/benchmark`
+- `POST /api/v1/quant/duckdb/factor-snapshot`
+- `POST /api/v1/quant/duckdb/validate-factor-path`
+- `POST /api/v1/quant/duckdb/compare-runtime-context`
+
+Write-like operator actions:
+
+- `POST /api/v1/quant/duckdb/init`
+- `POST /api/v1/quant/duckdb/ingest-ohlcv`
+- `POST /api/v1/quant/duckdb/build-factors`
 
 Example payload ingest:
 

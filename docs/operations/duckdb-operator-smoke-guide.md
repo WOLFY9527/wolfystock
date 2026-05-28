@@ -36,19 +36,19 @@ Phase 1.5 introduces no additional config beyond the keys above.
 
 ## API Endpoints
 
-All endpoints are admin-only. If admin auth is enabled, include the same authenticated session/cookie/header used by local admin API calls. Examples below use `API_BASE` and `AUTH_HEADER` placeholders.
+DuckDB routes remain authenticated operator/admin surfaces. Read diagnostics require `quant:admin:read`. Deliberate write-like actions such as init, ingest, and factor build require `quant:admin:write`. If admin auth is enabled, include the same authenticated session/cookie/header used by local admin API calls. Examples below use `API_BASE` and `AUTH_HEADER` placeholders.
 
-| Endpoint | Purpose | Writes when | Disabled behavior | Key response fields |
-| --- | --- | --- | --- | --- |
-| `GET /api/v1/quant/duckdb/health` | Report safe availability and schema state. | Never writes in disabled mode; checks schema only when enabled and available. | Returns `status=disabled`, `enabled=false`, and must not create the DB file. | `enabled`, `available`, `databasePath`, `parquetRoot`, `version`, `schemaInitialized`, `status`, `engine`, `error` |
-| `POST /api/v1/quant/duckdb/init` | Create DuckDB quant tables. | Writes only when enabled, unless `allowWhenDisabled=true` is deliberately sent. | Default request returns `status=disabled` and does not write. | `status`, `engine`, `version`, `schemaInitialized`, `error` |
-| `POST /api/v1/quant/duckdb/ingest-ohlcv` | Ingest normalized payload rows or bounded local `StockDaily` rows. | Writes only when enabled, schema exists, and `dryRun=false`. | Returns `status=disabled`, zero row counts, and does not write. | `status`, `source`, `ingestedRows`, `availableRows`, `symbolCount`, `symbolsRequested`, `durationMs`, `error` |
-| `POST /api/v1/quant/duckdb/build-factors` | Build basic daily factors from ingested OHLCV rows. | Writes only when enabled and schema exists. | Returns `status=disabled` and does not write. | `status`, `ohlcvRows`, `factorRows`, `factorCount`, `durationMs`, `error` |
-| `GET /api/v1/quant/duckdb/coverage` | Report OHLCV/factor coverage and sample symbols. | Reads only after connecting to an enabled DuckDB database. | Returns disabled/empty coverage with `emptyReason`. | `status`, `enabled`, `databasePath`, `totalOhlcvRows`, `totalFactorRows`, `symbolCount`, `minTradeDate`, `maxTradeDate`, `latestFactorDate`, `symbols`, `emptyReason` |
-| `POST /api/v1/quant/duckdb/benchmark` | Run a bounded read-only query over `factor_daily`. | Read-only after connecting to an enabled DuckDB database. | Returns `status=disabled`, empty counts, and no top results. | `durationMs`, `rowsScanned`, `symbolsScanned`, `queryType`, `dataMode`, `startDate`, `endDate`, `topResults` |
-| `POST /api/v1/quant/duckdb/factor-snapshot` | Return read-only factor rows for requested symbols/date windows. | Never writes; reads existing `factor_daily` only. | Returns `status=disabled`, `dataMode=disabled`, no rows, and no DB file. | `status`, `dataMode`, `coverage`, `rowCount`, `factorDates`, `missingSymbols`, `snapshots`, `durationMs` |
-| `POST /api/v1/quant/duckdb/validate-factor-path` | Validate factor coverage for scanner/backtest-like symbol sets. | Never writes; reads existing `factor_daily` only. | Returns disabled coverage diagnostics and no DB file. | `status`, `dataMode`, `coverage`, `rowCount`, `factorDates`, `missingSymbols`, `insufficientSymbols`, `durationMs` |
-| `POST /api/v1/quant/duckdb/compare-runtime-context` | Compare caller-provided scanner/backtest context against factor coverage. | Never writes; diagnostics only. | Returns disabled diagnostics with `productionRuntimeChanged=false`. | `status`, `dataMode`, `runtimeContexts`, `coverage`, `diagnostics`, `snapshots`, `durationMs` |
+| Endpoint | Capability | Purpose | Writes when | Disabled behavior | Key response fields |
+| --- | --- | --- | --- | --- | --- |
+| `GET /api/v1/quant/duckdb/health` | `quant:admin:read` | Report safe availability and schema state. | Never writes in disabled mode; checks schema only when enabled and available. | Returns `status=disabled`, `enabled=false`, and must not create the DB file. | `enabled`, `available`, `databasePath`, `parquetRoot`, `version`, `schemaInitialized`, `status`, `engine`, `error` |
+| `POST /api/v1/quant/duckdb/init` | `quant:admin:write` | Create DuckDB quant tables. | Writes only when enabled, unless `allowWhenDisabled=true` is deliberately sent. | Default request returns `status=disabled` and does not write. | `status`, `engine`, `version`, `schemaInitialized`, `error` |
+| `POST /api/v1/quant/duckdb/ingest-ohlcv` | `quant:admin:write` | Ingest normalized payload rows or bounded local `StockDaily` rows. | Writes only when enabled, schema exists, and `dryRun=false`. | Returns `status=disabled`, zero row counts, and does not write. | `status`, `source`, `ingestedRows`, `availableRows`, `symbolCount`, `symbolsRequested`, `durationMs`, `error` |
+| `POST /api/v1/quant/duckdb/build-factors` | `quant:admin:write` | Build basic daily factors from ingested OHLCV rows. | Writes only when enabled and schema exists. | Returns `status=disabled` and does not write. | `status`, `ohlcvRows`, `factorRows`, `factorCount`, `durationMs`, `error` |
+| `GET /api/v1/quant/duckdb/coverage` | `quant:admin:read` | Report OHLCV/factor coverage and sample symbols. | Reads only after connecting to an enabled DuckDB database. | Returns disabled/empty coverage with `emptyReason`. | `status`, `enabled`, `databasePath`, `totalOhlcvRows`, `totalFactorRows`, `symbolCount`, `minTradeDate`, `maxTradeDate`, `latestFactorDate`, `symbols`, `emptyReason` |
+| `POST /api/v1/quant/duckdb/benchmark` | `quant:admin:read` | Run a bounded read-only query over `factor_daily`. | Read-only after connecting to an enabled DuckDB database. | Returns `status=disabled`, empty counts, and no top results. | `durationMs`, `rowsScanned`, `symbolsScanned`, `queryType`, `dataMode`, `startDate`, `endDate`, `topResults` |
+| `POST /api/v1/quant/duckdb/factor-snapshot` | `quant:admin:read` | Return read-only factor rows for requested symbols/date windows. | Never writes; reads existing `factor_daily` only. | Returns `status=disabled`, `dataMode=disabled`, no rows, and no DB file. | `status`, `dataMode`, `coverage`, `rowCount`, `factorDates`, `missingSymbols`, `snapshots`, `durationMs` |
+| `POST /api/v1/quant/duckdb/validate-factor-path` | `quant:admin:read` | Validate factor coverage for scanner/backtest-like symbol sets. | Never writes; reads existing `factor_daily` only. | Returns disabled coverage diagnostics and no DB file. | `status`, `dataMode`, `coverage`, `rowCount`, `factorDates`, `missingSymbols`, `insufficientSymbols`, `durationMs` |
+| `POST /api/v1/quant/duckdb/compare-runtime-context` | `quant:admin:read` | Compare caller-provided scanner/backtest context against factor coverage. | Never writes; diagnostics only. | Returns disabled diagnostics with `productionRuntimeChanged=false`. | `status`, `dataMode`, `runtimeContexts`, `coverage`, `diagnostics`, `snapshots`, `durationMs` |
 
 ## Disabled No-Write Smoke Check
 
@@ -107,7 +107,7 @@ find /tmp -maxdepth 1 \( -name 'wolfystock-disabled-smoke.duckdb' -o -name 'wolf
 
 Expected result: health reports disabled, write endpoints return disabled status, benchmark returns disabled/empty counts, and no DuckDB file appears.
 
-Do not send `{"allowWhenDisabled": true}` during this check. That flag exists only for deliberate operator override and can initialize a DB while disabled.
+Do not send `{"allowWhenDisabled": true}` during this check. That flag exists only for deliberate operator override on a write-capability path and can initialize a DB while disabled.
 
 ## Enabled Temp DB Smoke Check
 
