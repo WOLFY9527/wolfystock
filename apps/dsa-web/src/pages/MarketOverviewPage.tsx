@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { MarketDataMeta, MarketOverviewPanel } from '../api/marketOverview';
 import { marketOverviewApi } from '../api/marketOverview';
 import type {
@@ -745,7 +745,7 @@ const MarketOverviewPage = () => {
     await Promise.allSettled([...primaryPromises, ...stagedPromises]);
   };
 
-  const refreshPanel = useCallback(async (
+  const refreshPanel = async (
     panelKey: PanelKey,
     loadPanel: () => Promise<PanelState[PanelKey]>,
     options?: { silent?: boolean },
@@ -787,7 +787,7 @@ const MarketOverviewPage = () => {
         setRefreshingPanel((currentPanel) => (currentPanel === panelKey ? null : currentPanel));
       }
     }
-  }, []);
+  };
 
   useEffect(() => {
     const cancelledRef = { current: false };

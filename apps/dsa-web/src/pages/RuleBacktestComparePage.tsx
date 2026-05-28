@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
@@ -1279,9 +1279,9 @@ const RuleBacktestComparePage: React.FC = () => {
     Object.values(robustnessSummary?.dimensions || {}).flatMap((dimension) => dimension.diagnostics || []),
   );
 
-  const handleOpenRun = useCallback((runId: number) => {
+  const handleOpenRun = (runId: number) => {
     navigate(`/backtest/results/${runId}`);
-  }, [navigate]);
+  };
 
   const handleCopyText = async (content: string, successMessage: string) => {
     try {
