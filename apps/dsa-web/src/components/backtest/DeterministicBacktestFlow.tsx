@@ -314,8 +314,7 @@ function getUnsupportedMessages(parsed: RuleBacktestParseResponse, language: Bac
   }
   const messages = parsed.ambiguities
     .slice(0, 3)
-    .map((item) => String(item.message || item.suggestion || '').trim())
-    .filter(Boolean);
+    .flatMap((item) => { const v = String(item.message || item.suggestion || '').trim(); return v ? [v] : []; });
 
   if (messages.length > 0) return messages;
   return language === 'en'
@@ -475,8 +474,7 @@ function buildAssumptionCards(
       ...assumptionGroups.map((group, index) => ({
         label: String(group.label || (language === 'en' ? `Default assumption ${index + 1}` : `默认假设 ${index + 1}`)),
         items: (Array.isArray(group.items) ? group.items : [])
-          .map((item) => formatAssumptionRecord(item as Record<string, unknown>, language))
-          .filter(Boolean),
+          .flatMap((item) => { const v = formatAssumptionRecord(item as Record<string, unknown>, language); return v ? [v] : []; }),
       })),
     );
   } else if (assumptionItems.length > 0) {
