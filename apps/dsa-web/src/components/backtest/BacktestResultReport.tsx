@@ -274,7 +274,7 @@ function assumptionEntries(run: RuleBacktestRunResponse): Array<[string, string]
       if (value == null || value === '') return null;
       return [humanToken(key), typeof value === 'object' ? JSON.stringify(value) : humanToken(value)];
     })
-    .filter((entry): entry is [string, string] => entry != null);
+    .flatMap((entry) => entry != null ? [entry] : []);
   if (explicit.length) return explicit;
 
   const inferred: Array<[string, string | number | null | undefined]> = [
