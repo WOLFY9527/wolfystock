@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MoreHorizontal, PenSquare, RefreshCw, Trash2 } from 'lucide-react';
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
@@ -1228,9 +1228,9 @@ const PortfolioPage: React.FC = () => {
     await loadEventsPage(eventPage);
   };
 
-  const refreshPortfolioData = useCallback(async (page = eventPage) => {
+  const refreshPortfolioData = async (page = eventPage) => {
     await Promise.all([loadSnapshotAndRisk(), loadEventsPage(page)]);
-  }, [eventPage, loadEventsPage, loadSnapshotAndRisk]);
+  };
 
   useEffect(() => {
     void loadAccounts();
@@ -1303,7 +1303,7 @@ const PortfolioPage: React.FC = () => {
     ));
   }, [editingTrade, inferredEditTradeCurrency, tradeEditCurrencyManuallyEdited]);
 
-  const positionRows: FlatPosition[] = useMemo(() => {
+  const positionRows: FlatPosition[] = (() => {
     if (!snapshot) return [];
     const rows: FlatPosition[] = [];
     for (const account of snapshot.accounts || []) {
@@ -1317,7 +1317,7 @@ const PortfolioPage: React.FC = () => {
     }
     rows.sort((a, b) => Number(b.marketValueBase || 0) - Number(a.marketValueBase || 0));
     return rows;
-  }, [snapshot]);
+  })();
 
   const handleTradeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1473,7 +1473,7 @@ const PortfolioPage: React.FC = () => {
     }
   };
 
-  const openTradeEditor = useCallback((item: PortfolioTradeListItem) => {
+  const openTradeEditor = (item: PortfolioTradeListItem) => {
     setOpenTradeActionMenuId(null);
     setTradeEditCurrencyManuallyEdited(false);
     setEditingTrade({
@@ -1489,7 +1489,7 @@ const PortfolioPage: React.FC = () => {
       tax: String(item.tax ?? 0),
       note: item.note || '',
     });
-  }, []);
+  };
 
   const openTradeVoidDialog = (item: PortfolioTradeListItem) => {
     setOpenTradeActionMenuId(null);
@@ -1702,16 +1702,16 @@ const PortfolioPage: React.FC = () => {
   };
 
   const snapshotCurrency = snapshot?.currency || 'CNY';
-  const fxRateRows = useMemo<PortfolioFxRateItem[]>(() => snapshot?.fxRates || [], [snapshot?.fxRates]);
-  const fxLastUpdated = useMemo(() => {
+  const fxRateRows: PortfolioFxRateItem[] = snapshot?.fxRates || [];
+  const fxLastUpdated = (() => {
     const timestamps = fxRateRows
       .map((item) => item.updatedAt || item.rateDate)
       .filter((value): value is string => Boolean(value));
     if (timestamps.length === 0) return '--';
     const sorted = timestamps.sort();
     return formatFxTimestamp(sorted[sorted.length - 1]);
-  }, [fxRateRows]);
-  const selectedFxRate = useMemo<DisplayFxRate | null>(() => {
+  })();
+  const selectedFxRate: DisplayFxRate | null = (() => {
     if (
       liveFxRate
       && liveFxRate.baseCurrency === fxBaseCurrency
@@ -1751,12 +1751,12 @@ const PortfolioPage: React.FC = () => {
     }
 
     return null;
-  }, [fxBaseCurrency, fxQuoteCurrency, fxLastUpdated, fxRateRows, liveFxRate]);
+  })();
   const totalEquity = snapshot?.totalEquity ?? 0;
   const totalCash = snapshot?.totalCash ?? 0;
   const totalMarketValue = snapshot?.totalMarketValue ?? 0;
   const totalUnrealizedPnl = positionRows.reduce((sum, row) => sum + row.unrealizedPnlBase, 0);
-  const convertMoney = useCallback((value: number, fromCurrency: string | undefined | null): ConvertedMoney => {
+  const convertMoney = (value: number, fromCurrency: string | undefined | null): ConvertedMoney => {
     const rate = getFxRateForDisplay(fxRateRows, fromCurrency, displayCurrency);
     if (!rate) {
       return null;
@@ -1767,7 +1767,7 @@ const PortfolioPage: React.FC = () => {
       rate: rate.rate,
       stale: rate.stale,
     };
-  }, [displayCurrency, fxRateRows]);
+  };
   const totalEquityDisplay = convertMoney(totalEquity, snapshotCurrency);
   const totalCashDisplay = convertMoney(totalCash, snapshotCurrency);
   const totalMarketValueDisplay = convertMoney(totalMarketValue, snapshotCurrency);
@@ -1791,10 +1791,7 @@ const PortfolioPage: React.FC = () => {
   const hasPriceFallback = positionRows.some((row) => row.isPriceFallback);
   const hasUpdatingPrice = hasHoldings && positionRows.some((row) => !row.priceAsOf && !row.isPriceFallback);
   const hasLimitedConfidence = positionRows.some(hasLimitedValuationConfidence);
-  const { notice: valuationLineageNotice, trustItem: valuationLineageTrustItem } = useMemo(
-    () => mapValuationLineageState(snapshot?.valuationLineageState, language),
-    [language, snapshot?.valuationLineageState],
-  );
+  const { notice: valuationLineageNotice, trustItem: valuationLineageTrustItem } = mapValuationLineageState(snapshot?.valuationLineageState, language);
   const consumerDataNotice = consumerPortfolioDataNotice({
     valuationLineageNotice,
     hasPriceFallback,
@@ -1880,18 +1877,9 @@ const PortfolioPage: React.FC = () => {
     }
     return row.label || row.key;
   };
-  const symbolExposureRows = useMemo(
-    () => [...(analytics?.exposure.bySymbol || [])].sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0)),
-    [analytics?.exposure.bySymbol],
-  );
-  const currencyExposureRows = useMemo(
-    () => [...(analytics?.exposure.byCurrency || [])].sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0)),
-    [analytics?.exposure.byCurrency],
-  );
-  const marketExposureRows = useMemo(
-    () => [...(analytics?.exposure.byMarket || [])].sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0)),
-    [analytics?.exposure.byMarket],
-  );
+  const symbolExposureRows = [...(analytics?.exposure.bySymbol || [])].sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0));
+  const currencyExposureRows = [...(analytics?.exposure.byCurrency || [])].sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0));
+  const marketExposureRows = [...(analytics?.exposure.byMarket || [])].sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0));
   const topPosition = symbolExposureRows[0] || analytics?.risk.largestPosition || null;
   const topCurrency = currencyExposureRows[0] || analytics?.risk.largestCurrency || null;
   const topMarket = marketExposureRows[0] || analytics?.risk.largestMarket || null;
@@ -1927,10 +1915,7 @@ const PortfolioPage: React.FC = () => {
   const safeRiskWarningLabels = (analytics?.risk.warnings || [])
     .map((warning) => riskWarningLabels[warning])
     .filter(Boolean);
-  const portfolioEvidenceSummary = useMemo(
-    () => (snapshot ? normalizePortfolioRiskEvidence(snapshot, { maxLimitationLabels: 6 }) : null),
-    [snapshot],
-  );
+  const portfolioEvidenceSummary = snapshot ? normalizePortfolioRiskEvidence(snapshot, { maxLimitationLabels: 6 }) : null;
   const hasPortfolioEvidenceSummary = Boolean(
     portfolioEvidenceSummary
     && (
@@ -1940,7 +1925,7 @@ const PortfolioPage: React.FC = () => {
       || portfolioEvidenceSummary.freshnessLabel != null
     ),
   );
-  const valuationTrustItems = useMemo(() => uniqueTrustItems([
+  const valuationTrustItems = uniqueTrustItems([
     valuationLineageTrustItem,
     hasPriceFallback
       ? { key: 'valuation-delayed', label: language === 'zh' ? '价格可能延迟' : 'Pricing may be delayed', variant: 'caution' }
@@ -1957,22 +1942,8 @@ const PortfolioPage: React.FC = () => {
     buildTrustStateItem('fxFreshness', snapshot?.fxFreshnessState, language),
     buildTrustStateItem('holdingsLineage', snapshot?.holdingsLineageState, language),
     buildTrustStateItem('cashLedgerCompleteness', snapshot?.cashLedgerCompletenessState, language),
-  ]), [
-    hasLimitedConfidence,
-    hasHoldings,
-    hasPriceFallback,
-    language,
-    portfolioEvidenceSummary?.confidenceCap,
-    portfolioEvidenceSummary?.displayLabel,
-    portfolioEvidenceSummary?.freshnessLabel,
-    positionRows,
-    hasPortfolioEvidenceSummary,
-    snapshot?.cashLedgerCompletenessState,
-    snapshot?.fxFreshnessState,
-    snapshot?.holdingsLineageState,
-    valuationLineageTrustItem,
   ]);
-  const riskTrustItems = useMemo(() => uniqueTrustItems([
+  const riskTrustItems = uniqueTrustItems([
     portfolioEvidenceSummary
       ? {
         key: `risk-posture-${portfolioEvidenceSummary.posture}`,
@@ -2005,14 +1976,6 @@ const PortfolioPage: React.FC = () => {
     buildTrustStateItem('fxFreshness', snapshot?.fxFreshnessState, language),
     buildTrustStateItem('holdingsLineage', snapshot?.holdingsLineageState, language),
     buildTrustStateItem('cashLedgerCompleteness', snapshot?.cashLedgerCompletenessState, language),
-  ]), [
-    language,
-    portfolioEvidenceSummary,
-    snapshot?.benchmarkMappingState,
-    snapshot?.cashLedgerCompletenessState,
-    snapshot?.factorMappingState,
-    snapshot?.fxFreshnessState,
-    snapshot?.holdingsLineageState,
   ]);
   const holdingsPrimaryValue = hasHoldings
     ? (language === 'zh' ? `${positionRows.length} 项持仓` : `${positionRows.length} holdings`)
