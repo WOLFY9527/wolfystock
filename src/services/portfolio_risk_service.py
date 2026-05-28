@@ -13,6 +13,10 @@ from src.services.portfolio_risk_diagnostics import build_portfolio_risk_diagnos
 from src.services.portfolio_service import PortfolioService
 
 
+SECTOR_SOURCE_PROVENANCE_VERSION = "portfolio_sector_source_provenance_v1"
+SECTOR_SOURCE_PROVENANCE_INTERNAL_FIELD = "_sectorSourceProvenance"
+
+
 class PortfolioRiskService:
     """Compute portfolio risk blocks on top of replayed snapshot data."""
 
@@ -64,6 +68,11 @@ class PortfolioRiskService:
         industry_attribution = self._build_industry_attribution(
             snapshot=snapshot,
             as_of_date=as_of_date,
+            include_sector_source_provenance=True,
+        )
+        sector_source_provenance = industry_attribution.pop(
+            SECTOR_SOURCE_PROVENANCE_INTERNAL_FIELD,
+            self._build_sector_source_provenance([]),
         )
         self._ensure_drawdown_snapshot_window(
             account_id=account_id,
@@ -101,6 +110,7 @@ class PortfolioRiskService:
             "concentration": concentration,
             "sector_concentration": sector_concentration,
             "industry_attribution": industry_attribution,
+            "sectorSourceProvenance": sector_source_provenance,
             "drawdown": drawdown,
             "stop_loss": stop_loss,
             "account_attribution": account_attribution,
@@ -231,7 +241,7 @@ class PortfolioRiskService:
         *,
         as_of_date: date,
     ) -> Dict[str, Any]:
-        total_mv, industry_rows, coverage, errors = self._collect_industry_rows(
+        total_mv, industry_rows, coverage, errors, _ = self._collect_industry_rows(
             snapshot=snapshot,
             as_of_date=as_of_date,
         )
@@ -262,24 +272,30 @@ class PortfolioRiskService:
         *,
         snapshot: Dict[str, Any],
         as_of_date: date,
+        include_sector_source_provenance: bool = False,
     ) -> Dict[str, Any]:
-        total_mv, rows, coverage, errors = self._collect_industry_rows(
+        total_mv, rows, coverage, errors, provenance = self._collect_industry_rows(
             snapshot=snapshot,
             as_of_date=as_of_date,
+            include_sector_source_provenance=include_sector_source_provenance,
         )
-        return {
+        payload = {
             "total_market_value": round(total_mv, 6),
             "top_industries": rows[:10],
             "coverage": coverage,
             "errors": errors[:20],
         }
+        if include_sector_source_provenance:
+            payload[SECTOR_SOURCE_PROVENANCE_INTERNAL_FIELD] = provenance
+        return payload
 
     def _collect_industry_rows(
         self,
         *,
         snapshot: Dict[str, Any],
         as_of_date: date,
-    ) -> Tuple[float, List[Dict[str, Any]], Dict[str, int], List[str]]:
+        include_sector_source_provenance: bool = False,
+    ) -> Tuple[float, List[Dict[str, Any]], Dict[str, int], List[str], Dict[str, Any]]:
         total_mv = float(snapshot.get("total_market_value", 0.0) or 0.0)
         report_currency = str(snapshot.get("currency") or "CNY")
         industry_exposure: Dict[str, float] = {}
@@ -290,7 +306,8 @@ class PortfolioRiskService:
             "failed_count": 0,
         }
         errors: List[str] = []
-        board_cache: Dict[Tuple[str, str], str] = {}
+        board_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        provenance_items: List[Dict[str, Any]] = []
 
         for account in snapshot.get("accounts", []):
             for pos in account.get("positions", []):
@@ -308,13 +325,17 @@ class PortfolioRiskService:
                     as_of_date=as_of_date,
                 )
 
-                industry = self._resolve_primary_sector(
+                cache_key = (symbol, market)
+                was_cached = cache_key in board_cache
+                industry, provenance_item = self._resolve_primary_sector_with_provenance(
                     symbol=symbol,
                     market=market,
                     board_cache=board_cache,
                     coverage=coverage,
                     errors=errors,
                 )
+                if include_sector_source_provenance and not was_cached:
+                    provenance_items.append(provenance_item)
                 industry_exposure[industry] = industry_exposure.get(industry, 0.0) + converted
                 industry_symbols.setdefault(industry, set()).add(symbol)
 
@@ -330,40 +351,238 @@ class PortfolioRiskService:
                 }
             )
         rows.sort(key=lambda item: item["market_value_base"], reverse=True)
-        return total_mv, rows, coverage, errors
+        return total_mv, rows, coverage, errors, self._build_sector_source_provenance(provenance_items)
 
     def _resolve_primary_sector(
         self,
         *,
         symbol: str,
         market: str,
-        board_cache: Dict[Tuple[str, str], str],
+        board_cache: Dict[Tuple[str, str], Dict[str, Any]],
         coverage: Dict[str, int],
         errors: List[str],
     ) -> str:
+        sector, _ = self._resolve_primary_sector_with_provenance(
+            symbol=symbol,
+            market=market,
+            board_cache=board_cache,
+            coverage=coverage,
+            errors=errors,
+        )
+        return sector
+
+    def _resolve_primary_sector_with_provenance(
+        self,
+        *,
+        symbol: str,
+        market: str,
+        board_cache: Dict[Tuple[str, str], Dict[str, Any]],
+        coverage: Dict[str, int],
+        errors: List[str],
+    ) -> Tuple[str, Dict[str, Any]]:
         cache_key = (symbol, market)
         if cache_key in board_cache:
-            return board_cache[cache_key]
+            cached = board_cache[cache_key]
+            return str(cached.get("industryLabel") or "UNCLASSIFIED"), cached
 
         if market != "cn":
             coverage["unclassified_count"] += 1
-            board_cache[cache_key] = "UNCLASSIFIED"
-            return board_cache[cache_key]
+            provenance = self._build_sector_source_provenance_item(
+                symbol=symbol,
+                market=market,
+                industry_label="UNCLASSIFIED",
+                classification_state="non_cn_not_applicable",
+                source_kind="not_applicable",
+                source_detail_state="not_applicable",
+                detected_source_states=["not_applicable"],
+                reason_codes=["non_cn_classification_not_applicable", "unclassified"],
+            )
+            board_cache[cache_key] = provenance
+            return "UNCLASSIFIED", provenance
 
         try:
             boards = self._fetch_belong_boards(symbol)
             sector_name = self._pick_primary_board_name(boards)
             if sector_name:
                 coverage["classified_count"] += 1
-                board_cache[cache_key] = sector_name
-                return board_cache[cache_key]
+                detected_source_states = self._detect_board_source_states(boards)
+                provenance = self._build_sector_source_provenance_item(
+                    symbol=symbol,
+                    market=market,
+                    industry_label=sector_name,
+                    classification_state="cn_board_lookup_resolved",
+                    source_kind=self._primary_source_kind(detected_source_states, default="provider_observed"),
+                    source_detail_state=self._board_source_detail_state(boards),
+                    detected_source_states=detected_source_states,
+                    reason_codes=["cn_board_lookup_resolved"],
+                )
+                board_cache[cache_key] = provenance
+                return sector_name, provenance
+
+            classification_state = "cn_board_lookup_empty" if not boards else "unresolved"
+            detected_source_states = self._detect_board_source_states(boards)
+            provenance = self._build_sector_source_provenance_item(
+                symbol=symbol,
+                market=market,
+                industry_label="UNCLASSIFIED",
+                classification_state=classification_state,
+                source_kind=self._primary_source_kind(detected_source_states, default="missing"),
+                source_detail_state=self._board_source_detail_state(boards),
+                detected_source_states=detected_source_states,
+                reason_codes=[classification_state, "unclassified"],
+            )
         except Exception as exc:
             coverage["failed_count"] += 1
             errors.append(f"{symbol}: {exc}")
+            provenance = self._build_sector_source_provenance_item(
+                symbol=symbol,
+                market=market,
+                industry_label="UNCLASSIFIED",
+                classification_state="lookup_failure",
+                source_kind="unknown",
+                source_detail_state="unknown",
+                detected_source_states=["unknown"],
+                reason_codes=["lookup_failed", "unclassified"],
+            )
 
         coverage["unclassified_count"] += 1
-        board_cache[cache_key] = "UNCLASSIFIED"
-        return board_cache[cache_key]
+        board_cache[cache_key] = provenance
+        return "UNCLASSIFIED", provenance
+
+    @staticmethod
+    def _build_sector_source_provenance_item(
+        *,
+        symbol: str,
+        market: str,
+        industry_label: str,
+        classification_state: str,
+        source_kind: str,
+        source_detail_state: str,
+        detected_source_states: List[str],
+        reason_codes: List[str],
+    ) -> Dict[str, Any]:
+        normalized_market = market or "unknown"
+        normalized_label = industry_label or "UNCLASSIFIED"
+        return {
+            "symbol": symbol,
+            "market": normalized_market,
+            "sectorLabel": normalized_label,
+            "industryLabel": normalized_label,
+            "classificationState": classification_state,
+            "sourceKind": source_kind,
+            "sourceDetailState": source_detail_state,
+            "detectedSourceStates": list(dict.fromkeys(detected_source_states)),
+            "resolved": normalized_label != "UNCLASSIFIED",
+            "boardLookupApplicable": normalized_market == "cn",
+            "authorityGrant": False,
+            "decisionGrade": False,
+            "accountingMutation": False,
+            "providerRoutingChanged": False,
+            "externalProviderCallsAdded": False,
+            "marketCacheMutation": False,
+            "rawProviderPayloadStored": False,
+            "reasonCodes": list(dict.fromkeys(reason_codes)),
+        }
+
+    @staticmethod
+    def _build_sector_source_provenance(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        sorted_items = sorted(
+            items,
+            key=lambda item: (
+                str(item.get("market") or ""),
+                str(item.get("symbol") or ""),
+            ),
+        )
+        summary = {
+            "symbolMarketCount": len(sorted_items),
+            "resolvedCount": sum(1 for item in sorted_items if bool(item.get("resolved"))),
+            "cnBoardLookupResolvedCount": sum(
+                1 for item in sorted_items if item.get("classificationState") == "cn_board_lookup_resolved"
+            ),
+            "nonCnNotApplicableCount": sum(
+                1 for item in sorted_items if item.get("classificationState") == "non_cn_not_applicable"
+            ),
+            "emptyBoardLookupCount": sum(
+                1 for item in sorted_items if item.get("classificationState") == "cn_board_lookup_empty"
+            ),
+            "lookupFailureCount": sum(
+                1 for item in sorted_items if item.get("classificationState") == "lookup_failure"
+            ),
+            "unresolvedCount": sum(1 for item in sorted_items if item.get("industryLabel") == "UNCLASSIFIED"),
+            "fallbackOrProxySourceCount": sum(
+                1 for item in sorted_items if item.get("sourceKind") in {"fallback", "proxy"}
+            ),
+            "providerObservedCount": sum(
+                1
+                for item in sorted_items
+                if item.get("sourceKind") == "provider_observed"
+                or "provider_observed" in list(item.get("detectedSourceStates") or [])
+            ),
+            "missingSourceDetailCount": sum(
+                1 for item in sorted_items if item.get("sourceDetailState") in {"missing", "unknown"}
+            ),
+        }
+        return {
+            "provenanceVersion": SECTOR_SOURCE_PROVENANCE_VERSION,
+            "diagnosticOnly": True,
+            "observationOnly": True,
+            "authorityGrant": False,
+            "decisionGrade": False,
+            "accountingMutation": False,
+            "providerRoutingChanged": False,
+            "externalProviderCallsAdded": False,
+            "marketCacheMutation": False,
+            "classificationAuthority": "not_authoritative",
+            "summary": summary,
+            "items": sorted_items,
+        }
+
+    @staticmethod
+    def _detect_board_source_states(boards: List[Dict[str, Any]]) -> List[str]:
+        if not boards:
+            return ["missing"]
+
+        states = {"provider_observed"}
+        for item in boards:
+            if not isinstance(item, dict):
+                continue
+            text = " ".join(f"{key}={value}" for key, value in item.items()).lower()
+            if "fallback" in text or "回退" in text:
+                states.add("fallback")
+            if "proxy" in text or "代理" in text:
+                states.add("proxy")
+            if "missing" in text or "缺失" in text:
+                states.add("missing")
+        return sorted(states)
+
+    @staticmethod
+    def _primary_source_kind(states: List[str], *, default: str) -> str:
+        for candidate in ("fallback", "proxy", "provider_observed", "missing", "unknown"):
+            if candidate in states:
+                return candidate
+        return default
+
+    @staticmethod
+    def _board_source_detail_state(boards: List[Dict[str, Any]]) -> str:
+        if not boards:
+            return "missing"
+        detail_keys = {
+            "source",
+            "source_name",
+            "source_type",
+            "provider",
+            "data_source",
+            "freshness",
+            "freshness_status",
+            "observed_at",
+            "as_of",
+        }
+        for item in boards:
+            if not isinstance(item, dict):
+                continue
+            if any(str(key).strip().lower() in detail_keys for key in item):
+                return "present_not_authoritative"
+        return "missing"
 
     def _fetch_belong_boards(self, symbol: str) -> List[Dict[str, Any]]:
         return self._board_lookup.fetch_belong_boards(symbol)

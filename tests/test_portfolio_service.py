@@ -685,6 +685,23 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertEqual(self.service.list_trade_events(account_id=aid)["total"], 1)
         self.assertEqual(self.service.list_cash_ledger_events(account_id=aid)["total"], 1)
         self.assertEqual(self.service.list_corporate_action_events(account_id=aid)["total"], 1)
+        provenance = PortfolioRiskService(portfolio_service=self.service).get_risk_report(
+            account_id=aid,
+            as_of=date(2026, 4, 4),
+            cost_method="fifo",
+        )["sectorSourceProvenance"]
+        self.assertTrue(provenance["diagnosticOnly"])
+        self.assertTrue(provenance["observationOnly"])
+        self.assertFalse(provenance["authorityGrant"])
+        self.assertFalse(provenance["decisionGrade"])
+        self.assertFalse(provenance["accountingMutation"])
+        self.assertFalse(provenance["providerRoutingChanged"])
+        self.assertFalse(provenance["externalProviderCallsAdded"])
+        self.assertFalse(provenance["marketCacheMutation"])
+        self.assertEqual(provenance["summary"]["nonCnNotApplicableCount"], 1)
+        self.assertEqual(provenance["items"][0]["classificationState"], "non_cn_not_applicable")
+        self.assertEqual(provenance["items"][0]["industryLabel"], "UNCLASSIFIED")
+        self.assertFalse(provenance["items"][0]["authorityGrant"])
 
     def test_risk_read_projection_cache_writes_remain_distinct_from_ledger_authority_rows(self) -> None:
         account = self.service.create_account(name="Risk Cache", broker="Demo", market="us", base_currency="USD")
@@ -823,14 +840,58 @@ class PortfolioServiceTestCase(unittest.TestCase):
 
     def test_snapshot_and_risk_reads_keep_ledger_rows_stable_across_risk_board_outcomes(self) -> None:
         scenarios = (
-            ("success", [{"name": "白酒", "type": "行业"}], "白酒", 0, 0),
-            ("empty", [], "UNCLASSIFIED", 0, 0),
-            ("failure", ValueError("provider lookup failed"), "UNCLASSIFIED", 1, 1),
+            (
+                "success",
+                [{"name": "白酒", "type": "行业"}],
+                "白酒",
+                0,
+                0,
+                "cn_board_lookup_resolved",
+                "provider_observed",
+                "missing",
+            ),
+            (
+                "fallback_proxy",
+                [{"name": "代理行业", "type": "行业", "source_type": "fallback_proxy"}],
+                "代理行业",
+                0,
+                0,
+                "cn_board_lookup_resolved",
+                "fallback",
+                "present_not_authoritative",
+            ),
+            (
+                "empty",
+                [],
+                "UNCLASSIFIED",
+                0,
+                0,
+                "cn_board_lookup_empty",
+                "missing",
+                "missing",
+            ),
+            (
+                "failure",
+                ValueError("provider lookup failed"),
+                "UNCLASSIFIED",
+                1,
+                1,
+                "lookup_failure",
+                "unknown",
+                "unknown",
+            ),
         )
 
-        for offset, (label, board_result, expected_industry, expected_failed_count, expected_error_count) in enumerate(
-            scenarios
-        ):
+        for offset, (
+            label,
+            board_result,
+            expected_industry,
+            expected_failed_count,
+            expected_error_count,
+            expected_state,
+            expected_source_kind,
+            expected_source_detail_state,
+        ) in enumerate(scenarios):
             as_of_date = date(2026, 4, 10 + offset)
             account = self.service.create_account(
                 name=f"Board {label}",
@@ -932,6 +993,32 @@ class PortfolioServiceTestCase(unittest.TestCase):
             else:
                 self.assertEqual(report["industry_attribution"]["errors"], [])
                 self.assertEqual(report["sector_concentration"]["errors"], [])
+            provenance = report["sectorSourceProvenance"]
+            self.assertTrue(provenance["diagnosticOnly"])
+            self.assertTrue(provenance["observationOnly"])
+            self.assertFalse(provenance["authorityGrant"])
+            self.assertFalse(provenance["decisionGrade"])
+            self.assertFalse(provenance["accountingMutation"])
+            self.assertFalse(provenance["providerRoutingChanged"])
+            self.assertFalse(provenance["externalProviderCallsAdded"])
+            self.assertFalse(provenance["marketCacheMutation"])
+            self.assertEqual(provenance["classificationAuthority"], "not_authoritative")
+            self.assertEqual(provenance["summary"]["symbolMarketCount"], 1)
+            self.assertEqual(provenance["summary"]["lookupFailureCount"], expected_failed_count)
+            resolved_label = label in {"success", "fallback_proxy"}
+            self.assertEqual(provenance["summary"]["cnBoardLookupResolvedCount"], 1 if resolved_label else 0)
+            self.assertEqual(provenance["summary"]["emptyBoardLookupCount"], 1 if label == "empty" else 0)
+            self.assertEqual(provenance["summary"]["providerObservedCount"], 1 if resolved_label else 0)
+            self.assertEqual(provenance["summary"]["fallbackOrProxySourceCount"], 1 if label == "fallback_proxy" else 0)
+            item = provenance["items"][0]
+            self.assertEqual(item["symbol"], "600519")
+            self.assertEqual(item["market"], "cn")
+            self.assertEqual(item["classificationState"], expected_state)
+            self.assertEqual(item["sourceKind"], expected_source_kind)
+            self.assertEqual(item["sourceDetailState"], expected_source_detail_state)
+            self.assertEqual(item["industryLabel"], expected_industry)
+            self.assertFalse(item["authorityGrant"])
+            self.assertFalse(item["decisionGrade"])
 
     def test_corporate_actions_dividend_and_split(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")

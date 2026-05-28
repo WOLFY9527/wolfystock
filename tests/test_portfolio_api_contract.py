@@ -175,6 +175,15 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
         self.assertIn("confidenceCap", payload)
         self.assertIn("benchmarkMappingState", payload)
         self.assertIn("factorMappingState", payload)
+        self.assertIn("sectorSourceProvenance", payload)
+        self.assertTrue(payload["sectorSourceProvenance"]["diagnosticOnly"])
+        self.assertTrue(payload["sectorSourceProvenance"]["observationOnly"])
+        self.assertFalse(payload["sectorSourceProvenance"]["authorityGrant"])
+        self.assertFalse(payload["sectorSourceProvenance"]["decisionGrade"])
+        self.assertEqual(
+            payload["sectorSourceProvenance"]["items"][0]["classificationState"],
+            "non_cn_not_applicable",
+        )
 
     def test_risk_endpoint_provider_lookup_failure_stays_bounded_and_contract_compatible(self) -> None:
         create_resp = self.client.post(
@@ -230,6 +239,21 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
         self.assertEqual(payload["sector_concentration"]["coverage"]["failed_count"], 1)
         self.assertIn("provider lookup failed", payload["industry_attribution"]["errors"][0])
         self.assertIn("provider lookup failed", payload["sector_concentration"]["errors"][0])
+        self.assertIn("sectorSourceProvenance", payload)
+        self.assertTrue(payload["sectorSourceProvenance"]["diagnosticOnly"])
+        self.assertTrue(payload["sectorSourceProvenance"]["observationOnly"])
+        self.assertFalse(payload["sectorSourceProvenance"]["authorityGrant"])
+        self.assertFalse(payload["sectorSourceProvenance"]["accountingMutation"])
+        self.assertFalse(payload["sectorSourceProvenance"]["providerRoutingChanged"])
+        self.assertFalse(payload["sectorSourceProvenance"]["externalProviderCallsAdded"])
+        self.assertFalse(payload["sectorSourceProvenance"]["marketCacheMutation"])
+        self.assertEqual(payload["sectorSourceProvenance"]["summary"]["lookupFailureCount"], 1)
+        self.assertEqual(
+            payload["sectorSourceProvenance"]["items"][0]["classificationState"],
+            "lookup_failure",
+        )
+        self.assertEqual(payload["sectorSourceProvenance"]["items"][0]["industryLabel"], "UNCLASSIFIED")
+        self.assertFalse(payload["sectorSourceProvenance"]["items"][0]["authorityGrant"])
 
 
 if __name__ == "__main__":

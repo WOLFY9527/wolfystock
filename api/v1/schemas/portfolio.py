@@ -519,6 +519,7 @@ class PortfolioRiskResponse(BaseModel):
     concentration: Dict[str, Any] = Field(default_factory=dict)
     sector_concentration: Dict[str, Any] = Field(default_factory=dict)
     industry_attribution: Dict[str, Any] = Field(default_factory=dict)
+    sectorSourceProvenance: Optional[Dict[str, Any]] = None
     drawdown: Dict[str, Any] = Field(default_factory=dict)
     stop_loss: Dict[str, Any] = Field(default_factory=dict)
     account_attribution: Dict[str, Any] = Field(default_factory=dict)
