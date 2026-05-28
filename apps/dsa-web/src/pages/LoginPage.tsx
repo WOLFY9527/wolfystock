@@ -140,6 +140,12 @@ const LoginPage: React.FC = () => {
     document.title = copy.documentTitle;
   }, [copy.documentTitle]);
 
+  useEffect(() => {
+    if (!isAdminBootstrap) {
+      setCreateUser(createModeRequested);
+    }
+  }, [createModeRequested, isAdminBootstrap]);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);

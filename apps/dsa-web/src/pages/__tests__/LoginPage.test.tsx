@@ -87,6 +87,32 @@ describe('LoginPage', () => {
     expect(screen.getByLabelText(translate('zh', 'auth.login.displayNameLabel'))).toBeInTheDocument();
   });
 
+  it('syncs create mode when search params change after mount', async () => {
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('')]);
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login: vi.fn(),
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    const { rerender } = renderPage();
+
+    expect(screen.getByRole('heading', { name: translate('zh', 'auth.login.heroTitleLogin') })).toBeInTheDocument();
+
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('mode=create')]);
+    rerender(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: translate('zh', 'auth.login.heroTitleCreate') })).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText(translate('zh', 'auth.login.displayNameLabel'))).toBeInTheDocument();
+  });
+
   it('offers a single guest-mode exit path for direct login entry', () => {
     useSearchParamsMock.mockReturnValue([new URLSearchParams('')]);
     useAuthMock.mockReturnValue({
