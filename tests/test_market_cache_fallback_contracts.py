@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 import time
@@ -18,6 +19,10 @@ from src.storage import DatabaseManager
 
 
 CN_TZ = timezone(timedelta(hours=8))
+
+
+def _json_round_trip(payload: dict) -> dict:
+    return json.loads(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
 
 def test_cold_start_timeout_fallback_returns_quickly_and_is_not_live() -> None:
@@ -368,3 +373,157 @@ def test_process_local_item_fallback_marks_items_stale_and_preserves_item_source
     assert payload["items"][0]["isStale"] is True
     assert payload["items"][0]["source"] == "sina"
     assert payload["items"][0]["sourceLabel"] == "新浪财经"
+
+
+def test_market_overview_live_payload_round_trips_through_json() -> None:
+    service = MarketOverviewService()
+    service._market_cache.clear()
+    service._market_data_cache.clear()
+    as_of = datetime.now(CN_TZ).isoformat(timespec="seconds")
+
+    with patch.object(
+        service,
+        "_fetch_indices",
+        return_value={
+            "source": "yfinance",
+            "sourceLabel": "Yahoo Finance",
+            "updatedAt": as_of,
+            "asOf": as_of,
+            "providerHealth": {"status": "live", "sourceLabel": "Yahoo Finance"},
+            "sourceConfidence": {
+                "source": "yfinance",
+                "sourceLabel": "Yahoo Finance",
+                "freshness": "live",
+                "scoreReliabilityAllowed": False,
+                "isFallback": False,
+                "isStale": False,
+                "isPartial": False,
+                "asOf": as_of,
+                "updatedAt": as_of,
+            },
+            "items": [
+                {
+                    "symbol": "SPX",
+                    "label": "S&P 500",
+                    "value": 5200.12,
+                    "changePercent": 0.42,
+                    "trend": [5180.0, 5200.12],
+                    "source": "yfinance",
+                    "sourceLabel": "Yahoo Finance",
+                    "updatedAt": as_of,
+                    "asOf": as_of,
+                }
+            ],
+        },
+    ):
+        payload = service.get_indices()
+
+    round_tripped = _json_round_trip(payload)
+
+    assert round_tripped["freshness"] == "live"
+    assert round_tripped["isFallback"] is False
+    assert round_tripped["isStale"] is False
+    assert round_tripped["isPartial"] is False
+    assert round_tripped["isRefreshing"] is False
+    assert round_tripped["source"] == "yfinance"
+    assert round_tripped["sourceLabel"] == "Yahoo Finance"
+    assert round_tripped["asOf"] == as_of
+    assert round_tripped["updatedAt"] == as_of
+    assert round_tripped["providerHealth"]["status"] == "live"
+    assert round_tripped["evidenceSnapshot"]["freshness"] == "live"
+    assert round_tripped["evidenceSnapshot"]["scoreReliabilityAllowed"] is False
+    assert round_tripped["sourceConfidence"]["freshness"] == "live"
+
+
+def test_market_overview_stale_refreshing_payload_round_trips_through_json() -> None:
+    service = MarketOverviewService()
+    service._market_cache.clear()
+    service._market_data_cache.clear()
+    stale_as_of = datetime(2026, 5, 3, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service._market_cache.set(
+        "cn_indices",
+        {
+            "source": "sina",
+            "sourceLabel": "新浪财经",
+            "updatedAt": stale_as_of,
+            "asOf": stale_as_of,
+            "items": [
+                {
+                    "name": "上证指数",
+                    "symbol": "000001.SH",
+                    "value": 4100.0,
+                    "change": 1.0,
+                    "changePercent": 0.1,
+                    "sparkline": [4090.0, 4100.0],
+                    "source": "sina",
+                    "sourceLabel": "新浪财经",
+                    "asOf": stale_as_of,
+                }
+            ],
+        },
+        ttl_seconds=1,
+    )
+    entry = service._market_cache.get("cn_indices")
+    assert entry is not None
+    entry.expires_at = entry.fetched_at - timedelta(seconds=1)
+    refresh_started = threading.Event()
+    release_refresh = threading.Event()
+
+    def fetcher() -> dict:
+        refresh_started.set()
+        release_refresh.wait(2)
+        return {
+            "source": "sina",
+            "items": [{"symbol": "000001.SH", "value": 4200.0, "source": "sina"}],
+            "updatedAt": datetime(2026, 5, 28, 9, 31, tzinfo=CN_TZ).isoformat(timespec="seconds"),
+        }
+
+    with patch.object(service, "_fetch_cn_indices_snapshot", side_effect=fetcher):
+        payload = service.get_cn_indices()
+
+    assert refresh_started.wait(1)
+    round_tripped = _json_round_trip(payload)
+
+    assert round_tripped["freshness"] == "stale"
+    assert round_tripped["isFallback"] is False
+    assert round_tripped["isStale"] is True
+    assert round_tripped["isPartial"] is False
+    assert round_tripped["isRefreshing"] is True
+    assert round_tripped["lastError"] is None
+    assert round_tripped["source"] == "sina"
+    assert round_tripped["sourceLabel"] == "新浪财经"
+    assert round_tripped["asOf"] == stale_as_of
+    assert round_tripped["updatedAt"] == stale_as_of
+    assert round_tripped["providerHealth"]["status"] == "refreshing"
+    assert round_tripped["evidenceSnapshot"]["freshness"] == "stale"
+    assert round_tripped["evidenceSnapshot"]["isRefreshing"] is True
+    assert round_tripped["evidenceSnapshot"]["providerHealth"]["status"] == "refreshing"
+    assert round_tripped["items"][0]["isStale"] is True
+
+    release_refresh.set()
+    assert service._market_cache.wait_for_refreshes(timeout=2)
+
+
+def test_market_overview_fallback_payload_round_trips_through_json() -> None:
+    service = MarketOverviewService()
+    service._market_cache.clear()
+    service._market_data_cache.clear()
+
+    with patch.object(service, "_fetch_cn_breadth_snapshot", side_effect=RuntimeError("provider down")):
+        payload = service.get_cn_breadth()
+
+    round_tripped = _json_round_trip(payload)
+
+    assert round_tripped["freshness"] == "fallback"
+    assert round_tripped["isFallback"] is True
+    assert round_tripped["isStale"] is False
+    assert round_tripped["isPartial"] is False
+    assert round_tripped["isRefreshing"] is False
+    assert round_tripped["lastError"] is not None
+    assert round_tripped["source"] == "fallback"
+    assert round_tripped["sourceLabel"] == "备用数据"
+    assert round_tripped["providerHealth"]["status"] == "fallback"
+    assert round_tripped["evidenceSnapshot"]["freshness"] == "fallback"
+    assert round_tripped["evidenceSnapshot"]["isFallback"] is True
+    assert round_tripped["evidenceSnapshot"]["scoreReliabilityAllowed"] is False
+    assert "isSynthetic" not in round_tripped

@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 import unittest
+from concurrent.futures import Future
 from datetime import timedelta
 from unittest.mock import Mock
 
@@ -439,6 +441,101 @@ class MarketCacheTestCase(unittest.TestCase):
 
         self.assertEqual(payload["value"], 1)
         self.assertEqual(self._event_counts().get("market_cache_hit"), 1)
+
+    def test_entry_metadata_can_be_projected_to_json_safe_shape(self) -> None:
+        cache = MarketCache(max_workers=1)
+        cache.set(
+            "market_overview:indices",
+            {
+                "source": "mixed",
+                "sourceLabel": "多来源",
+                "freshness": "partial",
+                "isFallback": False,
+                "isStale": True,
+                "isPartial": True,
+                "isSynthetic": False,
+                "asOf": "2026-05-28T09:30:00+08:00",
+                "updatedAt": "2026-05-28T09:31:00+08:00",
+                "providerHealth": {
+                    "provider": "mixed",
+                    "status": "refreshing",
+                    "sourceLabel": "多来源",
+                    "asOf": "2026-05-28T09:30:00+08:00",
+                    "updatedAt": "2026-05-28T09:31:00+08:00",
+                    "isFallback": False,
+                    "isStale": True,
+                    "isRefreshing": True,
+                },
+                "evidenceSnapshot": {
+                    "contractVersion": "market_overview_evidence.v1",
+                    "diagnosticOnly": True,
+                    "scoreReliabilityAllowed": False,
+                    "source": "mixed",
+                    "sourceLabel": "多来源",
+                    "freshness": "partial",
+                    "isFallback": False,
+                    "isStale": True,
+                    "isPartial": True,
+                    "isSynthetic": False,
+                    "isRefreshing": True,
+                    "asOf": "2026-05-28T09:30:00+08:00",
+                    "updatedAt": "2026-05-28T09:31:00+08:00",
+                    "providerHealth": {"status": "refreshing"},
+                },
+                "sourceConfidence": {
+                    "freshness": "partial",
+                    "source": "mixed",
+                    "sourceLabel": "多来源",
+                    "scoreReliabilityAllowed": False,
+                    "isFallback": False,
+                    "isStale": True,
+                    "isPartial": True,
+                    "asOf": "2026-05-28T09:30:00+08:00",
+                    "updatedAt": "2026-05-28T09:31:00+08:00",
+                },
+            },
+            ttl_seconds=30,
+        )
+        entry = cache.get("market_overview:indices")
+        self.assertIsNotNone(entry)
+        assert entry is not None
+        entry.is_refreshing = True
+        entry.last_error = "provider timeout"
+
+        runtime_only = {
+            "lock": cache._lock_for("market_overview:indices"),
+            "future": Future(),
+            "executor": cache._executor,
+            "fetcher": Mock(return_value={"source": "live"}),
+        }
+        projected = {
+            "key": entry.key,
+            "ttlSeconds": entry.ttl_seconds,
+            "fetchedAt": entry.fetched_at.isoformat(timespec="seconds"),
+            "expiresAt": entry.expires_at.isoformat(timespec="seconds"),
+            "isRefreshing": entry.is_refreshing,
+            "lastError": entry.last_error,
+            "data": cache._payload(entry, is_stale=True),
+        }
+
+        round_tripped = json.loads(json.dumps(projected, ensure_ascii=False, sort_keys=True))
+
+        self.assertEqual(round_tripped["key"], "market_overview:indices")
+        self.assertEqual(round_tripped["data"]["freshness"], "partial")
+        self.assertTrue(round_tripped["data"]["isStale"])
+        self.assertTrue(round_tripped["data"]["isPartial"])
+        self.assertFalse(round_tripped["data"]["isFallback"])
+        self.assertFalse(round_tripped["data"]["isSynthetic"])
+        self.assertTrue(round_tripped["data"]["isRefreshing"])
+        self.assertEqual(round_tripped["data"]["lastError"], "provider timeout")
+        self.assertEqual(round_tripped["data"]["source"], "mixed")
+        self.assertEqual(round_tripped["data"]["sourceLabel"], "多来源")
+        self.assertEqual(round_tripped["data"]["asOf"], "2026-05-28T09:30:00+08:00")
+        self.assertEqual(round_tripped["data"]["updatedAt"], "2026-05-28T09:31:00+08:00")
+        self.assertEqual(round_tripped["data"]["providerHealth"]["status"], "refreshing")
+        self.assertFalse(round_tripped["data"]["evidenceSnapshot"]["scoreReliabilityAllowed"])
+        self.assertEqual(round_tripped["data"]["sourceConfidence"]["freshness"], "partial")
+        self.assertTrue(all(name not in projected for name in runtime_only))
 
 
 if __name__ == "__main__":
