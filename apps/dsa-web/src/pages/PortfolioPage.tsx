@@ -1608,7 +1608,7 @@ const PortfolioPage: React.FC = () => {
     await Promise.all([loadAccounts(), loadSnapshotAndRisk(), loadEvents(), loadBrokers(), loadBrokerConnections(writableAccountId)]);
   };
 
-  const reloadSnapshotAndRiskForScope = useCallback(async (
+  const reloadSnapshotAndRiskForScope = async (
     requestedViewKey: string,
     requestedRequestId: number,
     requestedAccountId: number | undefined,
@@ -1656,7 +1656,7 @@ const PortfolioPage: React.FC = () => {
       setError(getParsedApiError(err));
       return false;
     }
-  }, [copy.riskFallback]);
+  };
 
   const handleRefreshFx = async () => {
     if (isLoading || fxRefreshing) {
