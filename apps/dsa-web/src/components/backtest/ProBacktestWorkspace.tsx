@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   BookOpen,
   CheckCircle2,
@@ -237,10 +237,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   const riskRows = readRiskControls(parsedStrategy);
   const assumptionItems = getAssumptionItems(parsedStrategy, language);
   const strategyCatalogGroups = getStrategyCatalogGroups();
-  const activeCatalogGroup = useMemo(
-    () => strategyCatalogGroups.find((group) => group.id === catalogGroupId) || strategyCatalogGroups[0],
-    [catalogGroupId, strategyCatalogGroups],
-  );
+  const activeCatalogGroup = strategyCatalogGroups.find((group) => group.id === catalogGroupId) || strategyCatalogGroups[0];
   const latestHistory = historyItems[0] as RuleBacktestHistoryItem | undefined;
 
   useEffect(() => {

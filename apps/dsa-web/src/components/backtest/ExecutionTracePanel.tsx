@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Button, Card } from '../../components/common';
 import type { RuleBacktestExecutionTraceRowItem, RuleBacktestRunResponse } from '../../types/backtest';
 import { formatDeterministicActionLabel } from './normalizeDeterministicBacktestResult';
@@ -40,15 +40,12 @@ const ExecutionTracePanel: React.FC<{ run: RuleBacktestRunResponse }> = ({ run }
   const { language } = useI18n();
   const [viewMode, setViewMode] = useState<TraceViewMode>('highlights');
   const trace = getExecutionTracePayload(run);
-  const rows = useMemo(() => getExecutionTraceRows(run), [run]);
-  const highlightRows = useMemo(
-    () => rows.filter((row) => isHighlightTraceRow(row)),
-    [rows],
-  );
-  const previewRows = useMemo(() => {
+  const rows = getExecutionTraceRows(run);
+  const highlightRows = rows.filter((row) => isHighlightTraceRow(row));
+  const previewRows = (() => {
     const sourceRows = viewMode === 'highlights' ? highlightRows : rows;
     return [...sourceRows].reverse().slice(0, TRACE_PREVIEW_LIMIT);
-  }, [highlightRows, rows, viewMode]);
+  })();
   const fallbackNote = String(trace?.fallback?.note || '').trim();
   const assumptionsSummary = String(trace?.assumptionsDefaults?.summaryText || '').trim();
   const activeRowCount = viewMode === 'highlights' ? highlightRows.length : rows.length;

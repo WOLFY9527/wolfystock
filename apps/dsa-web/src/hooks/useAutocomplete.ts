@@ -4,7 +4,7 @@
  * Manage autocomplete interaction logic
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { StockIndexItem, StockSuggestion } from '../types/stockIndex';
 import { searchStocks } from '../utils/searchStocks';
 import { SEARCH_CONFIG } from '../utils/stockIndexFields';
@@ -80,7 +80,7 @@ export function useAutocomplete(
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Search function (debounced)
-  const search = useCallback((q: string) => {
+  const search = (q: string) => {
     if (runtimeFallback) {
       return;
     }
@@ -106,10 +106,10 @@ export function useAutocomplete(
       setIsOpen(false);
       setHighlightedIndex(-1);
     }
-  }, [index, minLength, limit, runtimeFallback]);
+  };
 
   // Input handling (with debounce)
-  const handleInputChange = useCallback((value: string) => {
+  const handleInputChange = (value: string) => {
     setQuery(value);
 
     // Clear previous timer
@@ -125,45 +125,45 @@ export function useAutocomplete(
     debounceTimerRef.current = setTimeout(() => {
       search(value);
     }, debounceMs);
-  }, [search, debounceMs, runtimeFallback]);
+  };
 
   // Select suggestion item
-  const handleSelect = useCallback((suggestion: StockSuggestion) => {
+  const handleSelect = (suggestion: StockSuggestion) => {
     setQuery(suggestion.displayCode);
     setIsOpen(false);
     setSuggestions([]);
     setHighlightedIndex(-1);
-  }, []);
+  };
 
   // Highlight previous item
-  const highlightPrevious = useCallback(() => {
+  const highlightPrevious = () => {
     setHighlightedIndex(prev => {
       if (prev <= 0) return suggestions.length - 1;
       return prev - 1;
     });
-  }, [suggestions.length]);
+  };
 
   // Highlight next item
-  const highlightNext = useCallback(() => {
+  const highlightNext = () => {
     setHighlightedIndex(prev => {
       if (prev >= suggestions.length - 1) return 0;
       return prev + 1;
     });
-  }, [suggestions.length]);
+  };
 
   // Close dropdown
-  const close = useCallback(() => {
+  const close = () => {
     setIsOpen(false);
     setHighlightedIndex(-1);
-  }, []);
+  };
 
   // Reset
-  const reset = useCallback(() => {
+  const reset = () => {
     setQuery('');
     setSuggestions([]);
     setIsOpen(false);
     setHighlightedIndex(-1);
-  }, []);
+  };
 
   // Cleanup timer (on component unmount)
   useEffect(() => {

@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { AnimatePresence, domAnimation, LazyMotion, m } from 'motion/react';
 import { ApiErrorAlert, Badge, Button } from '../../components/common';
 import type { ParsedApiError } from '../../api/error';
@@ -634,7 +634,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   const canProceedFromConfirm = (parseState === 'ready' || parseState === 'assumed') && confirmed && !parseStale;
   const [presets, setPresets] = useState<RuleBacktestPreset[]>(() => loadRuleBacktestPresets());
 
-  const handleApplyPreset = useCallback((preset: RuleBacktestPreset) => {
+  const handleApplyPreset = (preset: RuleBacktestPreset) => {
     onCodeChange(preset.code);
     onStrategyTextChange(preset.strategyText);
     onStartDateChange(preset.startDate);
@@ -647,24 +647,11 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
     onBenchmarkCodeChange(preset.benchmarkCode);
     onToggleConfirmed(false);
     onStepChange('symbol');
-  }, [
-    onBenchmarkCodeChange,
-    onBenchmarkModeChange,
-    onCodeChange,
-    onEndDateChange,
-    onFeeBpsChange,
-    onInitialCapitalChange,
-    onLookbackBarsChange,
-    onSlippageBpsChange,
-    onStartDateChange,
-    onStepChange,
-    onStrategyTextChange,
-    onToggleConfirmed,
-  ]);
+  };
 
-  const handleDeletePreset = useCallback((presetId: string) => {
+  const handleDeletePreset = (presetId: string) => {
     setPresets(deleteRuleBacktestPreset(presetId));
-  }, []);
+  };
 
   const compactInputClass = 'w-full min-w-0 min-h-[44px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm leading-6 text-white outline-none transition-all focus:border-emerald-500/50 focus:bg-white/[0.05]';
   const compactCheckboxClass = 'h-4 w-4 shrink-0 rounded border border-white/15 bg-white/[0.03] text-emerald-400 accent-emerald-400 disabled:opacity-45';
