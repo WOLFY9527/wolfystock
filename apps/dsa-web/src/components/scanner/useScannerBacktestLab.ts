@@ -86,12 +86,12 @@ export function useScannerBacktestLab({
     batchCandidatesBySource.top_5,
   ]);
 
-  const getRuntime = useCallback(() => {
+  const getRuntime = () => {
     if (!runtimeRef.current) {
       runtimeRef.current = loadScannerBacktestRuntime();
     }
     return runtimeRef.current;
-  }, []);
+  };
 
   const runScannerBacktests = useCallback(async (source: ScannerBacktestSource, candidates: ScannerCandidate[]) => {
     const targetCandidates = dedupeBacktestCandidates(candidates);
@@ -189,9 +189,9 @@ export function useScannerBacktestLab({
     void runScannerBacktests(source, batchCandidatesBySource[source]);
   }, [batchCandidatesBySource, runScannerBacktests]);
 
-  const getBacktestItem = useCallback((symbol?: string | null) => (
+  const getBacktestItem = (symbol?: string | null) => (
     backtestItemsBySymbol[normalizeCandidateSymbol(symbol) || '']
-  ), [backtestItemsBySymbol]);
+  );
 
   const backtestUnavailableLabel = language === 'en'
     ? 'Backtest handoff requires a candidate symbol.'
