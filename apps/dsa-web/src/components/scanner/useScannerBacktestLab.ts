@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { getParsedApiError } from '../../api/error';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 import type { ScannerCandidate } from '../../types/scanner';
@@ -69,31 +69,23 @@ export function useScannerBacktestLab({
   const completedBacktestKeysRef = useRef<Map<string, ScannerBacktestItem>>(new Map());
   const runtimeRef = useRef<Promise<ScannerBacktestRuntime> | null>(null);
 
-  const backtestItems = useMemo(
-    () => Object.values(backtestItemsBySymbol).sort((left, right) => left.symbol.localeCompare(right.symbol)),
-    [backtestItemsBySymbol],
-  );
+  const backtestItems = Object.values(backtestItemsBySymbol).sort((left, right) => left.symbol.localeCompare(right.symbol));
 
-  const backtestCounts = useMemo<Record<ScannerBacktestBatchSource, number>>(() => ({
+  const backtestCounts: Record<ScannerBacktestBatchSource, number> = {
     official_selected: dedupeBacktestCandidates(batchCandidatesBySource.official_selected).length,
     preview_selected: dedupeBacktestCandidates(batchCandidatesBySource.preview_selected).length,
     top_5: dedupeBacktestCandidates(batchCandidatesBySource.top_5).length,
     current_filter: dedupeBacktestCandidates(batchCandidatesBySource.current_filter).length,
-  }), [
-    batchCandidatesBySource.current_filter,
-    batchCandidatesBySource.official_selected,
-    batchCandidatesBySource.preview_selected,
-    batchCandidatesBySource.top_5,
-  ]);
+  };
 
-  const getRuntime = useCallback(() => {
+  const getRuntime = () => {
     if (!runtimeRef.current) {
       runtimeRef.current = loadScannerBacktestRuntime();
     }
     return runtimeRef.current;
-  }, []);
+  };
 
-  const runScannerBacktests = useCallback(async (source: ScannerBacktestSource, candidates: ScannerCandidate[]) => {
+  const runScannerBacktests = async (source: ScannerBacktestSource, candidates: ScannerCandidate[]) => {
     const targetCandidates = dedupeBacktestCandidates(candidates);
     if (!targetCandidates.length) return;
     if (source !== 'manual' && isBacktestBatchRunning) return;
@@ -179,15 +171,15 @@ export function useScannerBacktestLab({
     } finally {
       if (source !== 'manual') setIsBacktestBatchRunning(false);
     }
-  }, [getRuntime, isBacktestBatchRunning, language]);
+  };
 
-  const handleBacktestCandidate = useCallback((candidate: ScannerCandidate) => {
+  const handleBacktestCandidate = (candidate: ScannerCandidate) => {
     void runScannerBacktests('manual', [candidate]);
-  }, [runScannerBacktests]);
+  };
 
-  const handleBacktestBatch = useCallback((source: ScannerBacktestBatchSource) => {
+  const handleBacktestBatch = (source: ScannerBacktestBatchSource) => {
     void runScannerBacktests(source, batchCandidatesBySource[source]);
-  }, [batchCandidatesBySource, runScannerBacktests]);
+  };
 
   const getBacktestItem = (symbol?: string | null) => (
     backtestItemsBySymbol[normalizeCandidateSymbol(symbol) || '']
