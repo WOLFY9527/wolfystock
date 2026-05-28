@@ -2188,6 +2188,154 @@ def test_liquidity_monitor_observation_evidence_snapshot_preserves_proxy_fallbac
     assert "DR007" in cn_rates_snapshot["missingInputs"]
     assert any("observation_only" in warning for warning in cn_rates_snapshot["warnings"])
 
+
+def test_liquidity_monitor_observation_evidence_snapshot_preserves_indicator_level_metadata_parity(
+    isolated_db: DatabaseManager,
+) -> None:
+    del isolated_db
+    service = _make_service()
+    quote_map: dict[str, _FakeHistoryFrame] = {}
+    _seed_provider_unavailable_stale_malformed_context(service, quote_map)
+
+    with (
+        patch.object(LiquidityMonitorService, "_now", return_value=FROZEN_GOLDEN_NOW),
+        patch(
+            "src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame",
+            side_effect=lambda ticker: quote_map.get(ticker, _FakeHistoryFrame([])),
+            create=True,
+        ),
+        patch(
+            "src.services.liquidity_monitor_service.fetch_binance_funding_row",
+            side_effect=RuntimeError("network disabled for evidence snapshot parity test"),
+        ),
+    ):
+        payload = service.get_liquidity_monitor()
+
+    snapshot = _observation_evidence_snapshot(payload)
+    evidence_by_key = {item["key"]: item for item in snapshot["indicatorEvidence"]}
+
+    assert snapshot["diagnosticOnly"] is True
+    assert snapshot["observationOnly"] is True
+    assert snapshot["authorityGrant"] is False
+    assert snapshot["decisionGrade"] is False
+    assert snapshot["externalProviderCalls"] is False
+    assert snapshot["providerRuntimeChanged"] is False
+    assert snapshot["marketCacheMutation"] is False
+
+    vix_snapshot = evidence_by_key["vix_pressure"]
+    assert vix_snapshot["source"] == "yfinance_proxy"
+    assert vix_snapshot["freshness"] == "delayed"
+    assert vix_snapshot["asOf"] == "2026-05-07T02:00:00+08:00"
+    assert vix_snapshot["proxyOnly"] is True
+    assert vix_snapshot["partialInputCount"] == 1
+    assert vix_snapshot["warnings"] == [
+        "proxy_only_missing_real_source",
+        "requires_official_public.vix_or_volatility",
+        "partial_coverage",
+    ]
+
+    rates_snapshot = evidence_by_key["us_rates_pressure"]
+    assert rates_snapshot["source"] == "yahoo"
+    assert rates_snapshot["freshness"] == "stale"
+    assert rates_snapshot["asOf"] == "2026-05-07T02:00:00+08:00"
+    assert rates_snapshot["proxyOnly"] is True
+    assert rates_snapshot["staleInputCount"] == 1
+    assert rates_snapshot["missingInputs"] == ["US2Y", "US10Y", "US30Y", "SOFR", "US10Y2Y", "US10Y3M"]
+    assert rates_snapshot["warnings"] == [
+        "proxy_only_missing_real_source",
+        "requires_official_public.us_treasury_curve",
+        "stale_source",
+        "unavailable_source",
+        "liquidity_input_unavailable",
+    ]
+
+    cn_flows_snapshot = evidence_by_key["cn_hk_flows"]
+    assert cn_flows_snapshot["source"] == "fallback"
+    assert cn_flows_snapshot["freshness"] == "fallback"
+    assert cn_flows_snapshot["asOf"] == FROZEN_GOLDEN_NOW_ISO
+    assert cn_flows_snapshot["fallbackInputCount"] == 1
+    assert cn_flows_snapshot["coverageObservationOnly"] is True
+    assert cn_flows_snapshot["requiredRealSourceForScore"] is False
+    assert cn_flows_snapshot["missingInputs"] == [
+        "NORTHBOUND",
+        "SOUTHBOUND",
+        "CN_ETF",
+        "MARGIN_BALANCE",
+        "MAINLAND_MAIN",
+    ]
+    assert cn_flows_snapshot["warnings"] == [
+        "observation_only",
+        "requires_authorized.cn_hk_connect_flow",
+        "fallback_source",
+        "unavailable_source",
+        "备用快照",
+    ]
+
+    assert vix_snapshot["authorityGrant"] is False
+    assert vix_snapshot["decisionGrade"] is False
+    assert rates_snapshot["authorityGrant"] is False
+    assert rates_snapshot["decisionGrade"] is False
+    assert cn_flows_snapshot["authorityGrant"] is False
+    assert cn_flows_snapshot["decisionGrade"] is False
+
+    assert vix_snapshot["inputs"] == [
+        {
+            "key": "VIX",
+            "label": "VIX",
+            "source": "yfinance_proxy",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_proxy",
+            "asOf": "2026-05-07T02:00:00+08:00",
+            "freshness": "delayed",
+            "isFallback": False,
+            "isStale": False,
+            "isPartial": False,
+            "isUnavailable": False,
+            "coverage": 1.0,
+            "confidenceWeight": 0.7,
+            "degradationReason": None,
+            "capReason": None,
+        }
+    ]
+    assert rates_snapshot["inputs"] == [
+        {
+            "key": "rates",
+            "label": "US Rates / 利率压力",
+            "source": "yahoo",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_proxy",
+            "asOf": "2026-05-07T02:00:00+08:00",
+            "freshness": "stale",
+            "isFallback": False,
+            "isStale": True,
+            "isPartial": False,
+            "isUnavailable": False,
+            "coverage": 0.0,
+            "confidenceWeight": 0.6,
+            "degradationReason": "liquidity_input_unavailable",
+            "capReason": "stale_source",
+        }
+    ]
+    assert cn_flows_snapshot["inputs"] == [
+        {
+            "key": "cn_flows",
+            "label": "CN/HK 资金流",
+            "source": "fallback",
+            "sourceLabel": "备用数据",
+            "sourceType": "fallback_static",
+            "asOf": FROZEN_GOLDEN_NOW_ISO,
+            "freshness": "fallback",
+            "isFallback": True,
+            "isStale": False,
+            "isPartial": False,
+            "isUnavailable": False,
+            "coverage": 0.0,
+            "confidenceWeight": 0.4,
+            "degradationReason": "备用快照",
+            "capReason": "fallback_source",
+        }
+    ]
+
 def test_unavailable_when_fewer_than_three_reliable_indicators(isolated_db: DatabaseManager) -> None:
     service = _make_service()
     now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
