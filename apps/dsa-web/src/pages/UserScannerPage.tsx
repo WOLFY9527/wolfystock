@@ -1748,29 +1748,17 @@ const UserScannerPage: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const profileOptions = useMemo(() => getScannerProfileOptions(market, t), [market, t]);
-  const universeOptions = useMemo(() => getScannerUniverseOptions(market, language), [language, market]);
-  const detailOptions = useMemo(() => getScannerDetailOptions(market, language), [language, market]);
-  const marketThemes = useMemo(
-    () => themes.filter((theme) => theme.market === market),
-    [market, themes],
-  );
-  const configuredMarketThemes = useMemo(
-    () => marketThemes.filter((theme) => theme.symbols.length > 0),
-    [marketThemes],
-  );
-  const unconfiguredMarketThemes = useMemo(
-    () => marketThemes.filter((theme) => theme.symbols.length === 0),
-    [marketThemes],
-  );
-  const selectedTheme = useMemo(
-    () => marketThemes.find((theme) => theme.id === themeId) || null,
-    [marketThemes, themeId],
-  );
-  const parsedCustomSymbols = useMemo(() => parseCustomSymbols(customSymbols), [customSymbols]);
-  const parsedThemeManualSymbols = useMemo(() => parseCustomSymbols(customThemeManualSymbols), [customThemeManualSymbols]);
-  const customSymbolTokenCount = useMemo(() => getSymbolTokenCount(customSymbols), [customSymbols]);
-  const customThemeManualSymbolTokenCount = useMemo(() => getSymbolTokenCount(customThemeManualSymbols), [customThemeManualSymbols]);
+  const profileOptions = getScannerProfileOptions(market, t);
+  const universeOptions = getScannerUniverseOptions(market, language);
+  const detailOptions = getScannerDetailOptions(market, language);
+  const marketThemes = themes.filter((theme) => theme.market === market);
+  const configuredMarketThemes = marketThemes.filter((theme) => theme.symbols.length > 0);
+  const unconfiguredMarketThemes = marketThemes.filter((theme) => theme.symbols.length === 0);
+  const selectedTheme = marketThemes.find((theme) => theme.id === themeId) || null;
+  const parsedCustomSymbols = parseCustomSymbols(customSymbols);
+  const parsedThemeManualSymbols = parseCustomSymbols(customThemeManualSymbols);
+  const customSymbolTokenCount = getSymbolTokenCount(customSymbols);
+  const customThemeManualSymbolTokenCount = getSymbolTokenCount(customThemeManualSymbols);
 
   const handleMarketChange = useCallback((nextMarket: string) => {
     const normalizedMarket = nextMarket === 'us' ? 'us' : nextMarket === 'hk' ? 'hk' : 'cn';
@@ -1995,23 +1983,17 @@ const UserScannerPage: React.FC = () => {
     }
   }, [customThemeLabel, customThemeManualSymbolTokenCount, customThemePrompt, language, market, parsedThemeManualSymbols]);
 
-  const handleSortChange = useCallback((nextSortKey: SortKey) => {
+  const handleSortChange = (nextSortKey: SortKey) => {
     if (sortKey === nextSortKey) {
       setSortDirection((current) => current === 'asc' ? 'desc' : 'asc');
       return;
     }
     setSortKey(nextSortKey);
     setSortDirection(nextSortKey === 'symbol' ? 'asc' : 'desc');
-  }, [sortKey]);
+  };
 
-  const totalHistoryPages = useMemo(
-    () => Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE)),
-    [historyTotal],
-  );
-  const trackedWatchlistIdentitySet = useMemo(
-    () => new Set(watchlistItems.map((item) => getWatchlistIdentity(item.market, item.symbol))),
-    [watchlistItems],
-  );
+  const totalHistoryPages = Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE));
+  const trackedWatchlistIdentitySet = useMemo(() => new Set(watchlistItems.map((item) => getWatchlistIdentity(item.market, item.symbol))), [watchlistItems]);
   const {
     ref: runScannerButtonRef,
     onClick: handleRunScannerClick,
@@ -2036,7 +2018,7 @@ const UserScannerPage: React.FC = () => {
   const runDisabled = isRunning;
   const generateThemeDisabled = isGeneratingTheme;
 
-  const sortedCandidates = useMemo(() => {
+  const sortedCandidates = (() => {
     const candidates = [...(runDetail?.shortlist || [])];
     const directionMultiplier = sortDirection === 'asc' ? 1 : -1;
     return candidates.sort((left, right) => {
@@ -2057,50 +2039,23 @@ const UserScannerPage: React.FC = () => {
       if (compare === 0) return left.rank - right.rank;
       return compare * directionMultiplier;
     });
-  }, [runDetail?.shortlist, sortDirection, sortKey]);
-  const diagnosticCandidates = useMemo(() => getCandidateDiagnostics(runDetail), [runDetail]);
+  })();
+  const diagnosticCandidates = getCandidateDiagnostics(runDetail);
   const hasCandidateDiagnostics = diagnosticCandidates.length > 0;
-  const inferredPreviewThreshold = useMemo(
-    () => inferPreviewThreshold(runDetail, diagnosticCandidates),
-    [diagnosticCandidates, runDetail],
-  );
+  const inferredPreviewThreshold = inferPreviewThreshold(runDetail, diagnosticCandidates);
   useEffect(() => {
     if (!runDetail) return;
     setPreviewThreshold(inferredPreviewThreshold);
   }, [inferredPreviewThreshold, runDetail]);
-  const previewSelectedDiagnostics = useMemo(
-    () => diagnosticCandidates.filter((candidate) => isPreviewSelected(candidate, previewThreshold)),
-    [diagnosticCandidates, previewThreshold],
-  );
-  const officialSelectedDiagnostics = useMemo(
-    () => diagnosticCandidates.filter(isOfficialSelected),
-    [diagnosticCandidates],
-  );
-  const rejectionBuckets = useMemo(
-    () => buildRejectionBuckets(diagnosticCandidates, language),
-    [diagnosticCandidates, language],
-  );
-  const comparisonState = useMemo(
-    () => buildRunComparison(runDetail, previousRunDetail, previewThreshold, language),
-    [language, previewThreshold, previousRunDetail, runDetail],
-  );
-  const currentRunSummary = useMemo(
-    () => buildScannerRunSummary(language === 'en' ? 'Current scan' : '本次扫描', runDetail, language),
-    [language, runDetail],
-  );
-  const recentRunSummary = useMemo(
-    () => buildHistoryItemSummary(language === 'en' ? 'Latest scan' : '最近扫描', historyItems[0] || null, language),
-    [historyItems, language],
-  );
-  const previousRunSummary = useMemo(
-    () => buildScannerRunSummary(language === 'en' ? 'Previous scan' : '上次扫描', previousRunDetail, language),
-    [language, previousRunDetail],
-  );
-  const comparisonHighlights = useMemo(
-    () => buildRunComparisonHighlights(runDetail, previousRunDetail, comparisonState, language),
-    [comparisonState, language, previousRunDetail, runDetail],
-  );
-  const filteredDiagnosticCandidates = useMemo(() => {
+  const previewSelectedDiagnostics = diagnosticCandidates.filter((candidate) => isPreviewSelected(candidate, previewThreshold));
+  const officialSelectedDiagnostics = diagnosticCandidates.filter(isOfficialSelected);
+  const rejectionBuckets = buildRejectionBuckets(diagnosticCandidates, language);
+  const comparisonState = buildRunComparison(runDetail, previousRunDetail, previewThreshold, language);
+  const currentRunSummary = buildScannerRunSummary(language === 'en' ? 'Current scan' : '本次扫描', runDetail, language);
+  const recentRunSummary = buildHistoryItemSummary(language === 'en' ? 'Latest scan' : '最近扫描', historyItems[0] || null, language);
+  const previousRunSummary = buildScannerRunSummary(language === 'en' ? 'Previous scan' : '上次扫描', previousRunDetail, language);
+  const comparisonHighlights = buildRunComparisonHighlights(runDetail, previousRunDetail, comparisonState, language);
+  const filteredDiagnosticCandidates = (() => {
     if (candidateFilter === 'selected') {
       return diagnosticCandidates.filter((candidate) => candidate.status === 'selected');
     }
@@ -2114,20 +2069,11 @@ const UserScannerPage: React.FC = () => {
       return diagnosticCandidates.filter((candidate) => candidate.status === 'data_failed' || candidate.status === 'error');
     }
     return diagnosticCandidates;
-  }, [candidateFilter, diagnosticCandidates]);
-  const decisionSortedDiagnosticCandidates = useMemo(
-    () => sortDiagnosticsForDecision(filteredDiagnosticCandidates, previewThreshold),
-    [filteredDiagnosticCandidates, previewThreshold],
-  );
-  const shortlistCandidateBySymbol = useMemo(
-    () => new Map(sortedCandidates.map((candidate) => [normalizeCandidateSymbol(candidate.symbol), candidate] as const)),
-    [sortedCandidates],
-  );
-  const workbenchDiagnostics = useMemo(
-    () => (hasCandidateDiagnostics ? decisionSortedDiagnosticCandidates : sortedCandidates.map(fallbackDiagnosticFromCandidate)),
-    [decisionSortedDiagnosticCandidates, hasCandidateDiagnostics, sortedCandidates],
-  );
-  const activeDetailDiagnostic = useMemo(() => {
+  })();
+  const decisionSortedDiagnosticCandidates = sortDiagnosticsForDecision(filteredDiagnosticCandidates, previewThreshold);
+  const shortlistCandidateBySymbol = new Map(sortedCandidates.map((candidate) => [normalizeCandidateSymbol(candidate.symbol), candidate] as const));
+  const workbenchDiagnostics = hasCandidateDiagnostics ? decisionSortedDiagnosticCandidates : sortedCandidates.map(fallbackDiagnosticFromCandidate);
+  const activeDetailDiagnostic = (() => {
     if (!workbenchDiagnostics.length) return null;
     const normalizedInspector = normalizeCandidateSymbol(inspectorSymbol);
     if (normalizedInspector) {
@@ -2135,15 +2081,12 @@ const UserScannerPage: React.FC = () => {
       if (matched) return matched;
     }
     return workbenchDiagnostics[0] || null;
-  }, [inspectorSymbol, workbenchDiagnostics]);
-  const activeDetailCandidate = useMemo(() => {
+  })();
+  const activeDetailCandidate = (() => {
     if (!activeDetailDiagnostic) return null;
     return shortlistCandidateBySymbol.get(normalizeCandidateSymbol(activeDetailDiagnostic.symbol)) || diagnosticToCandidate(activeDetailDiagnostic);
-  }, [activeDetailDiagnostic, shortlistCandidateBySymbol]);
-  const topFiveDiagnostics = useMemo(
-    () => sortDiagnosticsForDecision(diagnosticCandidates, previewThreshold).slice(0, 5),
-    [diagnosticCandidates, previewThreshold],
-  );
+  })();
+  const topFiveDiagnostics = sortDiagnosticsForDecision(diagnosticCandidates, previewThreshold).slice(0, 5);
   const {
     backtestCounts,
     backtestItems,
@@ -2171,7 +2114,7 @@ const UserScannerPage: React.FC = () => {
   const strategySimulationDisabled = !runDetail || (runDetail.universeType === 'theme' && !runDetail.themeId);
   const showDetailRail = viewportWidth >= 1600 && Boolean(activeDetailCandidate);
 
-  const handleStrategySimulation = useCallback(async () => {
+  const handleStrategySimulation = async () => {
     if (!runDetail) return;
     setIsStrategySimulationLoading(true);
     try {
@@ -2191,7 +2134,7 @@ const UserScannerPage: React.FC = () => {
     } finally {
       setIsStrategySimulationLoading(false);
     }
-  }, [activeSimulationTheme, language, market, profile, runDetail, simulationForwardDays, simulationLookbackDays]);
+  };
 
   useEffect(() => {
     if (!hasCandidateDiagnostics && candidateFilter !== 'selected') {
@@ -2676,10 +2619,7 @@ const UserScannerPage: React.FC = () => {
   const scannerDataStateLabel = runDetail
     ? `${normalizeRunState(runDetail.status) === 'failed' || normalizeRunState(runDetail.status) === 'error' ? `${currentRunSummary?.statusLabel || compactScannerStateLabel(runDetail.status, language)} · ` : ''}${getRunDataStatusLabel(runDetail, language)}`
     : (language === 'en' ? 'Waiting' : '等待');
-  const scannerConclusion = useMemo(
-    () => buildScannerConclusion(runDetail, language),
-    [language, runDetail],
-  );
+  const scannerConclusion = buildScannerConclusion(runDetail, language);
   const heroLatestLabel = `${language === 'en' ? 'Latest' : '最近'} ${generatedAt ? formatTimestamp(generatedAt, language) : '--'}`;
   const scannerStatusItems = [
     {
