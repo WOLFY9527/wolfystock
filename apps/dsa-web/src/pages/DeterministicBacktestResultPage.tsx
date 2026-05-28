@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
@@ -267,14 +267,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { language, t } = useI18n();
-  const backtestCopy = useCallback(
-    (key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.${key}`, vars),
-    [t],
-  );
-  const resultPage = useCallback(
-    (key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.resultPage.${key}`, vars),
-    [t],
-  );
+  const backtestCopy = (key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.${key}`, vars);
+  const resultPage = (key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.resultPage.${key}`, vars);
   const { runId } = useParams<{ runId: string }>();
   const locationState = location.state as ResultPageLocationState | null;
   const initialRun = locationState?.initialRun || null;
@@ -308,35 +302,29 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const [activeRobustnessKey, setActiveRobustnessKey] = useState<string | null>(null);
   const [activeRiskControlKey, setActiveRiskControlKey] = useState<RiskControlVisualRow['key'] | null>(null);
   const density = useDeterministicResultDensity();
-  const robustnessAnalysis = useMemo(() => asObjectRecord(run?.robustnessAnalysis), [run?.robustnessAnalysis]);
-  const robustnessConfiguration = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'configuration')), [robustnessAnalysis]);
-  const walkForward = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'walkForward')), [robustnessAnalysis]);
-  const walkForwardConfig = useMemo(() => asObjectRecord(getObjectField(robustnessConfiguration, 'walkForward')), [robustnessConfiguration]);
-  const walkForwardAggregate = useMemo(() => asObjectRecord(getObjectField(walkForward, 'aggregateMetrics')), [walkForward]);
-  const monteCarlo = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'monteCarlo')), [robustnessAnalysis]);
-  const monteCarloConfig = useMemo(() => asObjectRecord(getObjectField(robustnessConfiguration, 'monteCarlo')), [robustnessConfiguration]);
-  const monteCarloAggregate = useMemo(() => asObjectRecord(getObjectField(monteCarlo, 'aggregateMetrics')), [monteCarlo]);
-  const stressTests = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'stressTests')), [robustnessAnalysis]);
-  const stressTestsConfig = useMemo(() => asObjectRecord(getObjectField(robustnessConfiguration, 'stressTests')), [robustnessConfiguration]);
-  const worstScenario = useMemo(() => asObjectRecord(getObjectField(stressTests, 'worstScenario')), [stressTests]);
-  const stressScenarios = useMemo(
-    () => {
-      const value = getObjectField(stressTests, 'scenarios');
-      return Array.isArray(value) ? value : [];
-    },
-    [stressTests],
-  );
-  const worstScenarioLabel = useMemo(
-    () => getStressScenarioLabel(getObjectField(worstScenario, 'scenarioKey'), language),
-    [language, worstScenario],
-  );
+  const robustnessAnalysis = asObjectRecord(run?.robustnessAnalysis);
+  const robustnessConfiguration = asObjectRecord(getObjectField(robustnessAnalysis, 'configuration'));
+  const walkForward = asObjectRecord(getObjectField(robustnessAnalysis, 'walkForward'));
+  const walkForwardConfig = asObjectRecord(getObjectField(robustnessConfiguration, 'walkForward'));
+  const walkForwardAggregate = asObjectRecord(getObjectField(walkForward, 'aggregateMetrics'));
+  const monteCarlo = asObjectRecord(getObjectField(robustnessAnalysis, 'monteCarlo'));
+  const monteCarloConfig = asObjectRecord(getObjectField(robustnessConfiguration, 'monteCarlo'));
+  const monteCarloAggregate = asObjectRecord(getObjectField(monteCarlo, 'aggregateMetrics'));
+  const stressTests = asObjectRecord(getObjectField(robustnessAnalysis, 'stressTests'));
+  const stressTestsConfig = asObjectRecord(getObjectField(robustnessConfiguration, 'stressTests'));
+  const worstScenario = asObjectRecord(getObjectField(stressTests, 'worstScenario'));
+  const stressScenarios = (() => {
+    const value = getObjectField(stressTests, 'scenarios');
+    return Array.isArray(value) ? value : [];
+  })();
+  const worstScenarioLabel = getStressScenarioLabel(getObjectField(worstScenario, 'scenarioKey'), language);
   const hasRobustnessAnalysis = Boolean(
     getObjectField(robustnessAnalysis, 'state')
     || hasObjectFields(walkForward)
     || hasObjectFields(monteCarlo)
     || hasObjectFields(stressTests)
   );
-  const robustnessLensRows = useMemo<CoverageTrackItem[]>(() => {
+  const robustnessLensRows: CoverageTrackItem[] = (() => {
     const walkForwardCount = getFiniteNumber(getObjectField(walkForward, 'windowCount'));
     const walkForwardMax = getFiniteNumber(getObjectField(walkForwardConfig, 'maxWindows'));
     const monteCarloCount = getFiniteNumber(getObjectField(monteCarlo, 'simulationCount'));
@@ -371,20 +359,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
         ratio: clampRatio(stressScenarioCount != null && stressScenarioMax ? stressScenarioCount / stressScenarioMax : (hasObjectFields(stressTests) ? 1 : 0)),
       },
     ];
-  }, [
-    monteCarlo,
-    monteCarloAggregate,
-    monteCarloConfig,
-    language,
-    robustnessAnalysis,
-    stressTests,
-    stressTestsConfig,
-    walkForward,
-    walkForwardAggregate,
-    walkForwardConfig,
-    worstScenarioLabel,
-  ]);
-  const monteCarloDetailRows = useMemo<RobustnessMetricRow[]>(() => {
+  })();
+  const monteCarloDetailRows: RobustnessMetricRow[] = (() => {
     const rows: RobustnessMetricRow[] = [];
     const p05Return = getFiniteNumber(getObjectField(monteCarloAggregate, 'p05TotalReturnPct'));
     const medianReturn = getFiniteNumber(getObjectField(monteCarloAggregate, 'medianTotalReturnPct'));
@@ -407,9 +383,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
     }
 
     return rows;
-  }, [language, monteCarlo, monteCarloAggregate]);
-  const stressScenarioRows = useMemo<StressScenarioDetail[]>(
-    () => stressScenarios
+  })();
+  const stressScenarioRows: StressScenarioDetail[] = (() => stressScenarios
       .map((scenario, index) => {
         const record = asObjectRecord(scenario);
         const metrics = asObjectRecord(getObjectField(record, 'metrics'));
@@ -433,9 +408,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
           isWorst: getStringValue(getObjectField(worstScenario, 'scenarioKey')) === scenarioKey,
         };
       })
-      .filter((row) => row.totalReturn != null || row.sharpe != null || row.maxDrawdown != null),
-    [language, stressScenarios, worstScenario],
-  );
+      .filter((row) => row.totalReturn != null || row.sharpe != null || row.maxDrawdown != null)
+  )();
   const monteCarloDetailEmptyText = (() => {
     const state = normalizeRobustnessState(getObjectField(monteCarlo, 'state'));
     return state === 'insufficient_history'
@@ -448,7 +422,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
       ? btr(language, 'riskControls.stressScenarioDetailsEmptyInsufficient')
       : btr(language, 'riskControls.stressScenarioDetailsEmpty');
   })();
-  const walkForwardOverview = useMemo<BacktestWalkForwardOverview>(() => {
+  const walkForwardOverview: BacktestWalkForwardOverview = (() => {
     const walkForwardState = normalizeRobustnessState(getObjectField(walkForward, 'state'));
     const robustnessState = normalizeRobustnessState(getObjectField(robustnessAnalysis, 'state'));
     const windowCount = getFiniteNumber(getObjectField(walkForward, 'windowCount'));
@@ -474,13 +448,13 @@ const DeterministicBacktestResultPage: React.FC = () => {
       meanReturn: meanReturn == null ? null : pct(meanReturn),
       maxDrawdown,
     };
-  }, [language, robustnessAnalysis, walkForward, walkForwardAggregate]);
+  })();
   const tabs = RESULT_PAGE_TAB_KEYS.map((key) => ({
     key,
     label: backtestCopy(`resultPage.tabs.${key}`),
   }));
 
-  const fetchRun = useCallback(async (options: { suppressLoading?: boolean } = {}) => {
+  const fetchRun = async (options: { suppressLoading?: boolean } = {}) => {
     if (!hasValidRunId) return;
     const { suppressLoading = false } = options;
     if (!suppressLoading) setIsLoadingRun(true);
@@ -495,9 +469,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
     } finally {
       if (!suppressLoading) setIsLoadingRun(false);
     }
-  }, [hasValidRunId, parsedRunId]);
+  };
 
-  const fetchHistory = useCallback(async (code?: string) => {
+  const fetchHistory = async (code?: string) => {
     if (!code) {
       setHistoryItems([]);
       setHistoryError(null);
@@ -517,7 +491,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     } finally {
       setIsLoadingHistory(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     if (!hasValidRunId) {
@@ -709,24 +683,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
           : resultPage('benchmarkNotes.sameWindow'))
     )
     : resultPage('benchmarkNotes.pending');
-  const normalized = useMemo(
-    () => (run?.status === 'completed' ? normalizeDeterministicBacktestResult(run, language) : null),
-    [run, language],
-  );
-  const scenarioPlans = useMemo<RuleScenarioPlan[]>(
-    () => (run?.status === 'completed' ? getRuleScenarioPlans(run) : []),
-    [run],
-  );
-  const selectedScenarioPlan = useMemo(
-    () => scenarioPlans.find((plan) => plan.id === selectedScenarioPlanId) || scenarioPlans[0] || null,
-    [scenarioPlans, selectedScenarioPlanId],
-  );
+  const normalized = run?.status === 'completed' ? normalizeDeterministicBacktestResult(run, language) : null;
+  const scenarioPlans: RuleScenarioPlan[] = run?.status === 'completed' ? getRuleScenarioPlans(run) : [];
+  const selectedScenarioPlan = scenarioPlans.find((plan) => plan.id === selectedScenarioPlanId) || scenarioPlans[0] || null;
   useEffect(() => {
     if (!selectedScenarioPlanId && scenarioPlans[0]) {
       setSelectedScenarioPlanId(scenarioPlans[0].id);
     }
   }, [scenarioPlans, selectedScenarioPlanId]);
-  const comparisonItems = useMemo<RuleComparisonItem[]>(() => {
+  const comparisonItems: RuleComparisonItem[] = (() => {
     if (!run || !normalized) return [];
     const items: RuleComparisonItem[] = [{
       run,
@@ -744,8 +709,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
       });
     });
     return items;
-  }, [compareRunIds, compareRunMap, language, normalized, resultPage, run]);
-  const scenarioComparisonItems = useMemo<RuleComparisonItem[]>(() => {
+  })();
+  const scenarioComparisonItems: RuleComparisonItem[] = (() => {
     if (!run || !normalized) return [];
     const completedScenarioRuns = scenarioRuns.filter((item) => item.result?.status === 'completed' && item.result);
     return [
@@ -761,18 +726,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
         label: item.label,
       })),
     ];
-  }, [language, normalized, resultPage, run, scenarioRuns]);
-  const decisionReportMarkdown = useMemo(
-    () => (run && normalized
-      ? buildRuleRunReportMarkdown({
-        run,
-        normalized,
-        comparedRuns: comparisonItems.slice(1).map((item) => item.run),
-        language,
-      })
-      : ''),
-    [comparisonItems, normalized, run, language],
-  );
+  })();
+  const decisionReportMarkdown = run && normalized
+    ? buildRuleRunReportMarkdown({
+      run,
+      normalized,
+      comparedRuns: comparisonItems.slice(1).map((item) => item.run),
+      language,
+    })
+    : '';
   const headerDescription = run
     ? resultPage('headerDescriptionLoaded', {
       code: run.code,
@@ -790,16 +752,10 @@ const DeterministicBacktestResultPage: React.FC = () => {
         .trim(),
       value: String(value),
     }));
-  const strategySummaryRows = useMemo(
-    () => (run
-      ? buildRuleStrategySummaryRows(run.parsedStrategy, run.code, run.startDate || '', run.endDate || '', undefined, language)
-      : []),
-    [run, language],
-  );
-  const riskControlRows = useMemo(
-    () => getRiskControlVisualRows(run?.parsedStrategy, language),
-    [language, run?.parsedStrategy],
-  );
+  const strategySummaryRows = run
+    ? buildRuleStrategySummaryRows(run.parsedStrategy, run.code, run.startDate || '', run.endDate || '', undefined, language)
+    : [];
+  const riskControlRows = getRiskControlVisualRows(run?.parsedStrategy, language);
   const strategyWarningEntries = Array.from(
     new Set([
       ...(run?.parsedStrategy?.parseWarnings || []).map((warning, index) => formatWarningText(warning, index)),
@@ -902,7 +858,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     navigate(`/backtest/compare?${params.toString()}`);
   };
 
-  const handleSavePreset = useCallback(() => {
+  const handleSavePreset = () => {
     if (!run) return;
     const suggestedName = `${run.code} · ${getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language)}`;
     const name = window.prompt(resultPage('promptSavePreset'), suggestedName);
@@ -913,7 +869,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     }));
     setAvailablePresets(next);
     setPresetNotice(resultPage('presetSaved', { name: name.trim() }));
-  }, [language, resultPage, run]);
+  };
 
   const handleExportDecisionReport = (format: 'md' | 'html') => {
     if (!run || !normalized || !decisionReportMarkdown) return;
@@ -934,7 +890,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     downloadTextFile(`backtest-run-${run.id}-summary.html`, html, 'text/html;charset=utf-8');
   };
 
-  const handleRunScenarioPlan = useCallback(async () => {
+  const handleRunScenarioPlan = async () => {
     if (!run || !selectedScenarioPlan) return;
     setIsSubmittingScenarioRuns(true);
     setScenarioError(null);
@@ -968,9 +924,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
     } finally {
       setIsSubmittingScenarioRuns(false);
     }
-  }, [run, selectedScenarioPlan]);
+  };
 
-  const handleCancelRun = useCallback(async () => {
+  const handleCancelRun = async () => {
     if (!run || !canCancelRuleRun(run.status) || isCancellingRun) return;
     const confirmed = window.confirm(resultPage('cancelConfirm'));
     if (!confirmed) return;
@@ -992,7 +948,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     } finally {
       setIsCancellingRun(false);
     }
-  }, [fetchHistory, fetchRun, isCancellingRun, resultPage, run]);
+  };
 
   const renderRunStatusSection = () => {
     if (!run && isLoadingRun) {
