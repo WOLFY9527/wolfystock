@@ -21,7 +21,7 @@ import {
   ConsoleContextRail,
   CompactFilterBar,
   DenseRows,
-} from '../components/linear';
+} from '../components/linear/LinearPrimitives';
 import {
   CompactEmptyRow,
   DenseCommandBar,

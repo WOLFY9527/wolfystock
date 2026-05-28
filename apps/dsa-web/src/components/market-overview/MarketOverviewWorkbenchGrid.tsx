@@ -4,7 +4,7 @@ import { DataFreshnessBadge, MarketOverviewCardFrame } from './marketOverviewPri
 import {
   ConsoleBoard,
   ConsoleContextRail,
-} from '../linear';
+} from '../linear/LinearPrimitives';
 import { TerminalGrid } from '../terminal';
 import { cn } from '../../utils/cn';
 

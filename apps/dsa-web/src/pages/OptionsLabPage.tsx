@@ -20,7 +20,7 @@ import {
   DataWorkbenchFrame,
   DenseRows,
   WolfyShellSurface,
-} from '../components/linear';
+} from '../components/linear/LinearPrimitives';
 import {
   TerminalButton,
   TerminalChip,

@@ -31,7 +31,7 @@ import {
   TerminalPageShell,
   TerminalPanel,
   TerminalSectionHeader,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 import type { MarketProviderHealthStatus } from '../api/marketOverview';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { cn } from '../utils/cn';

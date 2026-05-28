@@ -68,7 +68,7 @@ import {
   KeyLevelStrip,
   ResearchConsoleShell,
   WolfyCommandBar,
-} from '../components/linear';
+} from '../components/linear/LinearPrimitives';
 import { TerminalPageShell } from '../components/terminal';
 import { StatusBadge } from '../components/ui/StatusBadge';
 

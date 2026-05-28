@@ -7,7 +7,7 @@ import {
   DataWorkbenchFrame,
   DenseRows,
   WolfyCommandBar,
-} from '../components/linear';
+} from '../components/linear/LinearPrimitives';
 import { DataFreshnessBadge } from '../components/market-overview/marketOverviewPrimitives';
 import {
   TerminalButton,

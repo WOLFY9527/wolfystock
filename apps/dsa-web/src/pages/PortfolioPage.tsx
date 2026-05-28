@@ -17,7 +17,7 @@ import {
   TerminalNestedBlock,
   TerminalNotice,
   TerminalPanel,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
   getSafariReadySurfaceClassName,

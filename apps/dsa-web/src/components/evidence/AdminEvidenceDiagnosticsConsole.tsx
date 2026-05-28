@@ -24,7 +24,7 @@ import {
   TerminalNotice,
   TerminalPanel,
   TerminalSectionHeader,
-} from '../terminal';
+} from '../terminal/TerminalPrimitives';
 
 type EngineId = 'scanner' | 'rotation' | 'options' | 'backtest' | 'portfolio_risk';
 type LoadState = 'loading' | 'ready' | 'empty' | 'error';

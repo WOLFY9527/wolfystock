@@ -9,7 +9,7 @@ import { withFallback } from '../api/withFallback';
 import {
   DeepReportDrawer,
   type SignalTone,
-} from '../components/home-bento';
+} from '../components/home-bento/DeepReportDrawer';
 import type { HomeCandlestickChartContext } from '../components/home-bento/HomeCandlestickChart';
 import {
   CompactFilterBar,

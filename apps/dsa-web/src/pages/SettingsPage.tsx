@@ -39,7 +39,7 @@ import {
   SettingsField,
   SettingsLoading,
   SettingsSectionCard,
-} from '../components/settings';
+} from '../components/settings/AuthSettingsCard';
 
 type SettingsDomain = 'ai_models' | 'data_sources' | 'notifications' | 'advanced';
 type SettingsWorkspacePanel = 'overview' | SettingsDomain;

@@ -43,7 +43,7 @@ import {
   TerminalChip,
   TerminalNestedBlock,
   TerminalPanel,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 import {
   CompactEmptyRow,
   DenseCommandBar,

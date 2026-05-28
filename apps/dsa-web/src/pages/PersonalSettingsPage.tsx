@@ -9,7 +9,7 @@ import {
   ConsoleDisclosure,
   ConsoleStatusStrip,
   WolfyShellSurface,
-} from '../components/linear';
+} from '../components/linear/LinearPrimitives';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { TerminalButton, TerminalChip, TerminalPageHeading } from '../components/terminal';
 import { authApi } from '../api/auth';

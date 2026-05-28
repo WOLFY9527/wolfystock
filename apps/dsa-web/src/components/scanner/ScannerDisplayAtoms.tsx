@@ -12,7 +12,7 @@ import type { ScannerLabeledValue } from '../../types/scanner';
 import {
   TerminalChip,
   TerminalPanel,
-} from '../terminal';
+} from '../terminal/TerminalPrimitives';
 
 export type ScannerDisclosureIcon = 'info' | 'history' | 'backtest' | 'watchlist' | 'more';
 

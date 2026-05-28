@@ -11,7 +11,7 @@ import {
   TerminalNestedBlock,
   TerminalPageShell,
   TerminalSectionHeader,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 import {
   ConsoleBoard,
   ConsoleContextRail,

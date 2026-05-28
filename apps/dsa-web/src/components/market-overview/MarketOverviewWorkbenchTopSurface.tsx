@@ -4,7 +4,7 @@ import type { MarketOverviewTab } from '../../pages/MarketOverviewTabConfig';
 import {
   ConsoleBoard,
   KeyLevelStrip,
-} from '../linear';
+} from '../linear/LinearPrimitives';
 import { TerminalChip, TerminalDisclosure, TerminalNotice } from '../terminal';
 import { cn } from '../../utils/cn';
 import type { MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
