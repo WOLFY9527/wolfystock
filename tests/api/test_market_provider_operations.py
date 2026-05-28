@@ -121,6 +121,39 @@ def test_endpoint_requires_admin_provider_read_capability_consistent_with_admin_
     assert admin_response.json()["metadata"]["readOnly"] is True
 
 
+def test_endpoint_preserves_market_cache_event_summary_as_diagnostic_read_only_metadata() -> None:
+    app = FastAPI()
+    app.include_router(market_provider_operations.router, prefix="/api/v1/admin")
+    app.dependency_overrides[get_current_user] = _admin_user
+    client = TestClient(app)
+    payload = _service([]).get_operations(window="24h")
+
+    with patch(
+        "api.v1.endpoints.market_provider_operations.MarketProviderOperationsService",
+        return_value=SimpleNamespace(get_operations=lambda *, window="24h": payload),
+    ):
+        response = client.get("/api/v1/admin/market-providers/operations")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["marketCacheEventSummary"] == payload["marketCacheEventSummary"]
+
+    summary = body["marketCacheEventSummary"]
+    assert summary["metadata"] == {
+        "countersSource": "process_local",
+        "readOnly": True,
+        "externalProviderCalls": False,
+        "cacheMutation": False,
+        "exactness": "observational_not_billing",
+        "durability": "process_local_not_durable",
+    }
+    assert set(summary) == {"metadata", "totals", "byPanelKey"}
+    assert "providerRouting" not in str(summary)
+    assert "budget" not in str(summary).lower()
+    assert "authority" not in str(summary).lower()
+    assert "decision" not in str(summary).lower()
+
+
 def test_aggregator_does_not_call_external_providers_or_cache_refresh() -> None:
     market_cache.set(
         "crypto",

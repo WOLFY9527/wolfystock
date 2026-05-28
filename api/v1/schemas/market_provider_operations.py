@@ -92,12 +92,43 @@ class MarketProviderCacheStateModel(BaseModel):
     status: str = "unavailable"
 
 
+class MarketCacheEventSummaryCountsModel(BaseModel):
+    hits: int = 0
+    misses: int = 0
+    staleServed: int = 0
+    coldFallbacks: int = 0
+    refreshStarted: int = 0
+    refreshCompleted: int = 0
+    refreshFailed: int = 0
+
+
+class MarketCacheEventSummaryMetadataModel(BaseModel):
+    countersSource: str = "process_local"
+    readOnly: bool = True
+    externalProviderCalls: bool = False
+    cacheMutation: bool = False
+    exactness: str = "observational_not_billing"
+    durability: str = "process_local_not_durable"
+
+
+class MarketCacheEventSummaryPanelModel(MarketCacheEventSummaryCountsModel):
+    panelKey: str = "unknown"
+    endpointFamily: str = "unknown"
+
+
+class MarketCacheEventSummaryModel(BaseModel):
+    metadata: MarketCacheEventSummaryMetadataModel
+    totals: MarketCacheEventSummaryCountsModel
+    byPanelKey: List[MarketCacheEventSummaryPanelModel] = Field(default_factory=list)
+
+
 class MarketProviderOperationsResponse(BaseModel):
     generatedAt: str
     window: MarketProviderOperationsWindowModel
     summary: MarketProviderOperationsSummaryModel
     items: List[MarketProviderOperationItemModel] = Field(default_factory=list)
     eventRollups: List[MarketProviderEventRollupModel] = Field(default_factory=list)
+    marketCacheEventSummary: Optional[MarketCacheEventSummaryModel] = None
     cacheStates: List[MarketProviderCacheStateModel] = Field(default_factory=list)
     limitations: List[str] = Field(default_factory=list)
     adminLogDrillThrough: AdminLogDrillThroughModel
