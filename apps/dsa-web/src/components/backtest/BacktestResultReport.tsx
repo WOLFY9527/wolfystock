@@ -767,7 +767,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
     () => providedNormalized ?? normalizeDeterministicBacktestResult(run, language),
     [language, providedNormalized, run],
   );
-  const trades = Array.isArray(run.trades) ? run.trades : [];
+  const trades = useMemo(() => (Array.isArray(run.trades) ? run.trades : []), [run.trades]);
   const tradeSummary = useMemo(() => getTradeSummary(run, trades), [run, trades]);
   const attributionByMonth = useMemo(() => buildAttribution(trades, getTradeMonth), [trades]);
   const attributionByYear = useMemo(() => buildAttribution(trades, getTradeYear), [trades]);
@@ -796,9 +796,11 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
   const dataQuality = useMemo(() => dataQualityEntries(run, normalized), [run, normalized]);
   const assumptions = assumptionEntries(run);
   const dataQualityWarnings = (run.dataQuality?.warnings || []).map(warningText);
-  const assumptionsPayload = (run.executionAssumptions || {}) as Record<string, unknown>;
-  const executionWarningItems = recordValue(assumptionsPayload, 'warnings') as Array<Record<string, unknown>> | null;
-  const executionWarnings = Array.isArray(executionWarningItems) ? executionWarningItems.map(warningText) : [];
+  const executionWarnings = useMemo(() => {
+    const assumptionsPayload = (run.executionAssumptions || {}) as Record<string, unknown>;
+    const executionWarningItems = recordValue(assumptionsPayload, 'warnings') as Array<Record<string, unknown>> | null;
+    return Array.isArray(executionWarningItems) ? executionWarningItems.map(warningText) : [];
+  }, [run.executionAssumptions]);
   const hasExplicitAssumptions = Object.keys(run.executionAssumptions || {}).length > 0;
   const diagnosisItems = useMemo(
     () => getDiagnosisItems(normalized, tradeSummary, dataQualityWarnings, executionWarnings, hasExplicitAssumptions),
