@@ -626,10 +626,20 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
                 "admin_users.py": 4,
                 "market_provider_operations.py": 1,
                 "provider_usage_ledger.py": 1,
+                "quant.py": 9,
                 "system_config.py": 9,
             },
             usages,
         )
+
+    def test_quant_duckdb_routes_use_split_read_write_capability_guards(self) -> None:
+        quant_source = (Path(__file__).resolve().parents[1] / "api" / "v1" / "endpoints" / "quant.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertEqual(6, quant_source.count('require_admin_capability("quant:admin:read")'))
+        self.assertEqual(3, quant_source.count('require_admin_capability("quant:admin:write")'))
+        self.assertNotIn("Depends(require_admin_user)", quant_source)
 
     def test_public_launch_admin_route_capability_inventory_is_explicit(self) -> None:
         inventory = inventory_public_launch_admin_route_capabilities()
@@ -664,7 +674,6 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
         self.assertEqual(
             {
                 "agent.py": 1,
-                "quant.py": 9,
                 "scanner.py": 3,
                 "usage.py": 1,
             },

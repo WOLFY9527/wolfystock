@@ -85,27 +85,13 @@ EXPECTED_TRANSITIONAL_ADMIN_USER_ALLOWLIST = {
         "note_fragment": "usage summary",
         "routes": [("GET", "/api/v1/usage/summary")],
     },
-    "quant.duckdb.admin_surface": {
-        "surface": "quant_duckdb_admin",
-        "note_fragment": "duckdb admin routes",
-        "routes": [
-            ("GET", "/api/v1/quant/duckdb/coverage"),
-            ("GET", "/api/v1/quant/duckdb/health"),
-            ("POST", "/api/v1/quant/duckdb/benchmark"),
-            ("POST", "/api/v1/quant/duckdb/build-factors"),
-            ("POST", "/api/v1/quant/duckdb/compare-runtime-context"),
-            ("POST", "/api/v1/quant/duckdb/factor-snapshot"),
-            ("POST", "/api/v1/quant/duckdb/ingest-ohlcv"),
-            ("POST", "/api/v1/quant/duckdb/init"),
-            ("POST", "/api/v1/quant/duckdb/validate-factor-path"),
-        ],
-    },
 }
 EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS = {
     "agent.admin_send": 1,
     "scanner.admin_watchlists_and_status": 3,
     "usage.admin_summary": 1,
-    "quant.duckdb.admin_surface": 9,
+    "quant.duckdb.read": 6,
+    "quant.duckdb.write": 3,
     "admin.users.read": 2,
     "admin.users.activity_read": 1,
     "admin.users.portfolio_read": 4,
@@ -370,6 +356,8 @@ def test_admin_observability_route_inventory_keeps_capabilities_and_transitional
     fixture = _load_json(BACKEND_FIXTURE)
     groups = {group["route_id"]: group for group in fixture["protected_groups"]}
 
+    quant_duckdb_read = groups["quant.duckdb.read"]
+    quant_duckdb_write = groups["quant.duckdb.write"]
     admin_logs_read = groups["admin.logs.read"]
     admin_logs_write = groups["admin.logs.write"]
     admin_users_read = groups["admin.users.read"]
@@ -383,6 +371,12 @@ def test_admin_observability_route_inventory_keeps_capabilities_and_transitional
     assert admin_users_activity_read["auth_dependency_label"] == "admin_capability"
     assert admin_users_activity_read["capability_label"] == "users:activity:read"
     assert admin_users_activity_read["transitional_note"] is None
+    assert quant_duckdb_read["auth_dependency_label"] == "admin_capability"
+    assert quant_duckdb_read["capability_label"] == "quant:admin:read"
+    assert quant_duckdb_read["transitional_note"] is None
+    assert quant_duckdb_write["auth_dependency_label"] == "admin_capability"
+    assert quant_duckdb_write["capability_label"] == "quant:admin:write"
+    assert quant_duckdb_write["transitional_note"] is None
     assert admin_activity_read["auth_dependency_label"] == "admin_capability"
     assert admin_activity_read["capability_label"] == "users:activity:read"
     assert admin_activity_read["transitional_note"] is None
@@ -397,9 +391,12 @@ def test_admin_observability_route_inventory_keeps_capabilities_and_transitional
     admin_users_source = ADMIN_USERS_ENDPOINT_TS.read_text(encoding="utf-8")
     admin_logs_source = ADMIN_LOGS_ENDPOINT_TS.read_text(encoding="utf-8")
     market_provider_source = MARKET_PROVIDER_OPERATIONS_ENDPOINT_TS.read_text(encoding="utf-8")
+    quant_source = (REPO_ROOT / "api" / "v1" / "endpoints" / "quant.py").read_text(encoding="utf-8")
 
     assert 'require_admin_capability("users:read")' in admin_users_source
     assert 'require_admin_capability("users:activity:read")' in admin_users_source
+    assert 'require_admin_capability("quant:admin:read")' in quant_source
+    assert 'require_admin_capability("quant:admin:write")' in quant_source
     assert 'require_admin_capability("ops:logs:read")' in admin_logs_source
     assert 'require_admin_capability("ops:logs:write")' in admin_logs_source
     assert 'require_admin_capability("ops:providers:read")' in market_provider_source

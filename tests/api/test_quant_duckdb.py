@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
-from api.deps import CurrentUser
+from api.deps import CurrentUser, get_current_user
 from api.v1.schemas.quant import (
     QuantDuckDBBuildFactorsRequest,
     QuantDuckDBCompareRuntimeContextRequest,
@@ -19,7 +21,7 @@ from api.v1.endpoints import quant
 from src.services.quant_analytics.duckdb_service import QuantDuckDBService
 
 
-def _admin_user() -> CurrentUser:
+def _admin_user(*, admin_capabilities: tuple[str, ...] = ()) -> CurrentUser:
     return CurrentUser(
         user_id="admin",
         username="admin",
@@ -29,7 +31,97 @@ def _admin_user() -> CurrentUser:
         is_authenticated=True,
         transitional=False,
         auth_enabled=True,
+        admin_capabilities=admin_capabilities,
     )
+
+
+def _regular_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="user-1",
+        username="alice",
+        display_name="Alice",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
+
+
+def _unauthenticated_user() -> CurrentUser:
+    raise HTTPException(status_code=401, detail={"error": "unauthorized", "message": "Login required"})
+
+
+def _client(*, user_factory, service: QuantDuckDBService) -> TestClient:
+    app = FastAPI()
+    app.include_router(quant.router, prefix="/api/v1/quant")
+    app.dependency_overrides[get_current_user] = user_factory
+    app.dependency_overrides[quant.get_quant_duckdb_service] = lambda: service
+    return TestClient(app)
+
+
+def test_health_endpoint_requires_quant_admin_read_capability(tmp_path) -> None:
+    db_path = tmp_path / "quant.duckdb"
+    service = QuantDuckDBService(database_path=str(db_path), enabled=False)
+
+    response = _client(
+        user_factory=lambda: _admin_user(admin_capabilities=("quant:admin:read",)),
+        service=service,
+    ).get("/api/v1/quant/duckdb/health")
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["enabled"] is False
+    assert payload["status"] == "disabled"
+    assert payload["schemaInitialized"] is False
+    assert "databasePath" in payload
+    assert str(tmp_path) not in payload["databasePath"]
+    assert not db_path.exists()
+
+
+def test_init_endpoint_rejects_read_only_quant_admin_capability(tmp_path) -> None:
+    db_path = tmp_path / "quant.duckdb"
+    service = QuantDuckDBService(database_path=str(db_path), enabled=False)
+
+    response = _client(
+        user_factory=lambda: _admin_user(admin_capabilities=("quant:admin:read",)),
+        service=service,
+    ).post("/api/v1/quant/duckdb/init", json={})
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["error"] == "admin_capability_required"
+    assert "quant:admin:write" not in response.text
+    assert not db_path.exists()
+
+
+def test_init_endpoint_accepts_quant_admin_write_capability_without_enabling_duckdb(tmp_path) -> None:
+    db_path = tmp_path / "quant.duckdb"
+    service = QuantDuckDBService(database_path=str(db_path), enabled=False)
+
+    response = _client(
+        user_factory=lambda: _admin_user(admin_capabilities=("quant:admin:write",)),
+        service=service,
+    ).post("/api/v1/quant/duckdb/init", json={})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "disabled"
+    assert payload["engine"] == "duckdb"
+    assert payload["schemaInitialized"] is False
+    assert not db_path.exists()
+
+
+def test_quant_duckdb_routes_keep_unauthenticated_and_non_capable_requests_rejected(tmp_path) -> None:
+    service = QuantDuckDBService(database_path=str(tmp_path / "quant.duckdb"), enabled=False)
+
+    unauthenticated = _client(user_factory=_unauthenticated_user, service=service).get("/api/v1/quant/duckdb/health")
+    assert unauthenticated.status_code == 401
+    assert unauthenticated.json()["detail"]["error"] == "unauthorized"
+
+    forbidden = _client(user_factory=_regular_user, service=service).get("/api/v1/quant/duckdb/health")
+    assert forbidden.status_code == 403
+    assert forbidden.json()["detail"]["error"] == "admin_required"
 
 
 def test_health_endpoint_returns_safe_disabled_status(tmp_path) -> None:

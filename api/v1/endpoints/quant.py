@@ -7,7 +7,7 @@ import logging
 
 from fastapi import APIRouter, Depends
 
-from api.deps import CurrentUser, get_config_dep, require_admin_user
+from api.deps import CurrentUser, get_config_dep, require_admin_capability
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.quant import (
     QuantDuckDBBenchmarkRequest,
@@ -47,7 +47,7 @@ def get_quant_duckdb_service(config: Config = Depends(get_config_dep)) -> QuantD
 )
 def get_duckdb_health(
     service: QuantDuckDBService = Depends(get_quant_duckdb_service),
-    _admin: CurrentUser = Depends(require_admin_user),
+    _admin: CurrentUser = Depends(require_admin_capability("quant:admin:read")),
 ) -> QuantDuckDBHealthResponse:
     return QuantDuckDBHealthResponse.model_validate(service.health())
 
@@ -62,7 +62,7 @@ def get_duckdb_health(
 def initialize_duckdb_schema(
     request: QuantDuckDBInitRequest = QuantDuckDBInitRequest(),
     service: QuantDuckDBService = Depends(get_quant_duckdb_service),
-    _admin: CurrentUser = Depends(require_admin_user),
+    _admin: CurrentUser = Depends(require_admin_capability("quant:admin:write")),
 ) -> QuantDuckDBInitResponse:
     payload = service.initialize_schema(force=request.allow_when_disabled)
     return QuantDuckDBInitResponse.model_validate(payload)
@@ -78,7 +78,7 @@ def initialize_duckdb_schema(
 def ingest_duckdb_ohlcv(
     request: QuantDuckDBIngestRequest = QuantDuckDBIngestRequest(),
     service: QuantDuckDBService = Depends(get_quant_duckdb_service),
-    _admin: CurrentUser = Depends(require_admin_user),
+    _admin: CurrentUser = Depends(require_admin_capability("quant:admin:write")),
 ) -> QuantDuckDBIngestResponse:
     if request.source == "payload":
         rows = [row.model_dump(by_alias=True) for row in request.rows or []]
@@ -105,7 +105,7 @@ def ingest_duckdb_ohlcv(
 def build_duckdb_factors(
     request: QuantDuckDBBuildFactorsRequest = QuantDuckDBBuildFactorsRequest(),
     service: QuantDuckDBService = Depends(get_quant_duckdb_service),
-    _admin: CurrentUser = Depends(require_admin_user),
+    _admin: CurrentUser = Depends(require_admin_capability("quant:admin:write")),
 ) -> QuantDuckDBBuildFactorsResponse:
     payload = service.build_basic_factors(
         symbols=request.symbols,
@@ -125,7 +125,7 @@ def build_duckdb_factors(
 def get_duckdb_factor_snapshot(
     request: QuantDuckDBFactorSnapshotRequest = QuantDuckDBFactorSnapshotRequest(),
     service: QuantDuckDBService = Depends(get_quant_duckdb_service),
-    _admin: CurrentUser = Depends(require_admin_user),
+    _admin: CurrentUser = Depends(require_admin_capability("quant:admin:read")),
 ) -> QuantDuckDBFactorSnapshotResponse:
     payload = service.get_factor_snapshot(
         symbols=request.symbols,
@@ -146,7 +146,7 @@ def get_duckdb_factor_snapshot(
 def validate_duckdb_factor_path(
     request: QuantDuckDBValidateFactorPathRequest = QuantDuckDBValidateFactorPathRequest(),
     service: QuantDuckDBService = Depends(get_quant_duckdb_service),
-    _admin: CurrentUser = Depends(require_admin_user),
+    _admin: CurrentUser = Depends(require_admin_capability("quant:admin:read")),
 ) -> QuantDuckDBValidateFactorPathResponse:
     payload = service.validate_factor_coverage(
         symbols=request.symbols,
@@ -167,7 +167,7 @@ def validate_duckdb_factor_path(
 def compare_duckdb_runtime_context(
     request: QuantDuckDBCompareRuntimeContextRequest = QuantDuckDBCompareRuntimeContextRequest(),
     service: QuantDuckDBService = Depends(get_quant_duckdb_service),
-    _admin: CurrentUser = Depends(require_admin_user),
+    _admin: CurrentUser = Depends(require_admin_capability("quant:admin:read")),
 ) -> QuantDuckDBCompareRuntimeContextResponse:
     payload = service.compare_factor_context(
         symbols=request.symbols,
@@ -187,7 +187,7 @@ def compare_duckdb_runtime_context(
 )
 def get_duckdb_coverage(
     service: QuantDuckDBService = Depends(get_quant_duckdb_service),
-    _admin: CurrentUser = Depends(require_admin_user),
+    _admin: CurrentUser = Depends(require_admin_capability("quant:admin:read")),
 ) -> QuantDuckDBCoverageResponse:
     payload = service.get_coverage()
     return QuantDuckDBCoverageResponse.model_validate(payload)
@@ -203,7 +203,7 @@ def get_duckdb_coverage(
 def run_duckdb_benchmark(
     request: QuantDuckDBBenchmarkRequest = QuantDuckDBBenchmarkRequest(),
     service: QuantDuckDBService = Depends(get_quant_duckdb_service),
-    _admin: CurrentUser = Depends(require_admin_user),
+    _admin: CurrentUser = Depends(require_admin_capability("quant:admin:read")),
 ) -> QuantDuckDBBenchmarkResponse:
     payload = service.benchmark_factor_query(
         symbol_limit=request.symbol_limit,

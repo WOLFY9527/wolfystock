@@ -91,13 +91,22 @@
       "transitional_note": "Usage summary is still admin-role gated instead of explicit capability gated."
     },
     {
-      "route_id": "quant.duckdb.admin_surface",
-      "path_pattern": "^/api/v1/quant/duckdb/(?:health|init|ingest-ohlcv|build-factors|factor-snapshot|validate-factor-path|compare-runtime-context|coverage|benchmark)$",
+      "route_id": "quant.duckdb.read",
+      "path_pattern": "^/api/v1/quant/duckdb/(?:health|factor-snapshot|validate-factor-path|compare-runtime-context|coverage|benchmark)$",
       "methods": ["GET", "POST"],
       "surface": "quant_duckdb_admin",
-      "auth_dependency_label": "admin_user",
-      "capability_label": null,
-      "transitional_note": "DuckDB admin routes remain protected by coarse admin gating."
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "quant:admin:read",
+      "transitional_note": null
+    },
+    {
+      "route_id": "quant.duckdb.write",
+      "path_pattern": "^/api/v1/quant/duckdb/(?:init|ingest-ohlcv|build-factors)$",
+      "methods": ["POST"],
+      "surface": "quant_duckdb_admin",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "quant:admin:write",
+      "transitional_note": null
     },
     {
       "route_id": "admin.users.read",
