@@ -330,14 +330,11 @@ const DeterministicBacktestResultPage: React.FC = () => {
     () => getStressScenarioLabel(getObjectField(worstScenario, 'scenarioKey'), language),
     [language, worstScenario],
   );
-  const hasRobustnessAnalysis = useMemo(
-    () => Boolean(
-      getObjectField(robustnessAnalysis, 'state')
-      || hasObjectFields(walkForward)
-      || hasObjectFields(monteCarlo)
-      || hasObjectFields(stressTests)
-    ),
-    [monteCarlo, robustnessAnalysis, stressTests, walkForward],
+  const hasRobustnessAnalysis = Boolean(
+    getObjectField(robustnessAnalysis, 'state')
+    || hasObjectFields(walkForward)
+    || hasObjectFields(monteCarlo)
+    || hasObjectFields(stressTests)
   );
   const robustnessLensRows = useMemo<CoverageTrackItem[]>(() => {
     const walkForwardCount = getFiniteNumber(getObjectField(walkForward, 'windowCount'));
@@ -439,18 +436,18 @@ const DeterministicBacktestResultPage: React.FC = () => {
       .filter((row) => row.totalReturn != null || row.sharpe != null || row.maxDrawdown != null),
     [language, stressScenarios, worstScenario],
   );
-  const monteCarloDetailEmptyText = useMemo(() => {
+  const monteCarloDetailEmptyText = (() => {
     const state = normalizeRobustnessState(getObjectField(monteCarlo, 'state'));
     return state === 'insufficient_history'
       ? btr(language, 'riskControls.monteCarloDetailsEmptyInsufficient')
       : btr(language, 'riskControls.monteCarloDetailsEmpty');
-  }, [language, monteCarlo]);
-  const stressScenarioDetailEmptyText = useMemo(() => {
+  })();
+  const stressScenarioDetailEmptyText = (() => {
     const state = normalizeRobustnessState(getObjectField(stressTests, 'state'));
     return state === 'insufficient_history'
       ? btr(language, 'riskControls.stressScenarioDetailsEmptyInsufficient')
       : btr(language, 'riskControls.stressScenarioDetailsEmpty');
-  }, [language, stressTests]);
+  })();
   const walkForwardOverview = useMemo<BacktestWalkForwardOverview>(() => {
     const walkForwardState = normalizeRobustnessState(getObjectField(walkForward, 'state'));
     const robustnessState = normalizeRobustnessState(getObjectField(robustnessAnalysis, 'state'));
@@ -679,9 +676,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
     };
   }, [scenarioRuns]);
 
-  const handleOpenHistoryRun = useCallback((item: RuleBacktestHistoryItem) => {
+  const handleOpenHistoryRun = (item: RuleBacktestHistoryItem) => {
     navigate(`/backtest/results/${item.id}`);
-  }, [navigate]);
+  };
 
   const benchmarkSummary = run?.benchmarkSummary;
   const buyAndHoldSummary = run?.buyAndHoldSummary;
@@ -811,10 +808,6 @@ const DeterministicBacktestResultPage: React.FC = () => {
   );
   const canCancelCurrentRun = Boolean(run && canCancelRuleRun(run.status));
   const canExportTrace = Boolean(run && hasExecutionTraceRows(run));
-  const compareWorkbenchRunIds = useMemo(
-    () => (run ? [run.id, ...compareRunIds] : []),
-    [compareRunIds, run],
-  );
   const localizedNoResultMessage = isCanonicalNoEntrySignalMessage(run?.noResultMessage)
     ? resultPage('noEntrySignal')
     : null;
@@ -894,20 +887,20 @@ const DeterministicBacktestResultPage: React.FC = () => {
     },
   ] : [];
 
-  const handleToggleCompareRun = useCallback((item: RuleBacktestHistoryItem) => {
+  const handleToggleCompareRun = (item: RuleBacktestHistoryItem) => {
     setCompareRunIds((current) => {
       if (current.includes(item.id)) return current.filter((id) => id !== item.id);
       return [...current, item.id].slice(0, 3);
     });
-  }, []);
+  };
 
-  const handleOpenCompareWorkbench = useCallback(() => {
+  const handleOpenCompareWorkbench = () => {
     if (!run || compareRunIds.length === 0) return;
     const params = new URLSearchParams({
-      runIds: compareWorkbenchRunIds.join(','),
+      runIds: [run.id, ...compareRunIds].join(','),
     });
     navigate(`/backtest/compare?${params.toString()}`);
-  }, [compareRunIds.length, compareWorkbenchRunIds, navigate, run]);
+  };
 
   const handleSavePreset = useCallback(() => {
     if (!run) return;
@@ -922,7 +915,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     setPresetNotice(resultPage('presetSaved', { name: name.trim() }));
   }, [language, resultPage, run]);
 
-  const handleExportDecisionReport = useCallback((format: 'md' | 'html') => {
+  const handleExportDecisionReport = (format: 'md' | 'html') => {
     if (!run || !normalized || !decisionReportMarkdown) return;
     if (format === 'md') {
       downloadTextFile(`backtest-run-${run.id}-summary.md`, decisionReportMarkdown, 'text/markdown;charset=utf-8');
@@ -939,7 +932,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
       '</body></html>',
     ].join('');
     downloadTextFile(`backtest-run-${run.id}-summary.html`, html, 'text/html;charset=utf-8');
-  }, [decisionReportMarkdown, normalized, resultPage, run]);
+  };
 
   const handleRunScenarioPlan = useCallback(async () => {
     if (!run || !selectedScenarioPlan) return;
