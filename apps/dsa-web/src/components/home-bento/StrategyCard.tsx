@@ -55,8 +55,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
   };
   const positionParagraphs = positionBody
     .split(/\n+/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
+    .flatMap((paragraph) => { const t = paragraph.trim(); return t ? [t] : []; });
   const entryMetric = metrics.find((metric) => isEntryMetric(metric.label));
   const targetMetrics = metrics.filter((metric) => !isEntryMetric(metric.label));
 
