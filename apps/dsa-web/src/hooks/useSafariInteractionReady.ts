@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const READY_DELAY_MS = 80;
 const WARMUP_INTERVAL_MS = 100;
@@ -66,9 +66,9 @@ type SafariActivationEvent =
 export function useSafariWarmActivation<T extends HTMLElement>(onActivate: () => void) {
   const [element, setElement] = useState<T | null>(null);
   const lastActivationAtRef = useRef(0);
-  const ref = useCallback((node: T | null) => {
+  const ref = (node: T | null) => {
     setElement(node);
-  }, []);
+  };
 
   useEffect(() => {
     if (!element) {
@@ -96,7 +96,7 @@ export function useSafariWarmActivation<T extends HTMLElement>(onActivate: () =>
     };
   }, [element]);
 
-  const handleActivate = useCallback((event?: SafariActivationEvent) => {
+  const handleActivate = (event?: SafariActivationEvent) => {
     const now = Date.now();
     if (now - lastActivationAtRef.current < ACTIVATION_GUARD_MS) {
       return;
@@ -106,7 +106,7 @@ export function useSafariWarmActivation<T extends HTMLElement>(onActivate: () =>
       event.preventDefault();
     }
     onActivate();
-  }, [onActivate]);
+  };
 
   return {
     ref,

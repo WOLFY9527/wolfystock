@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Activity, ChevronDown, ChevronRight } from 'lucide-react';
 import {
   adminProviderCircuitsApi,
@@ -960,13 +960,10 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
     };
   }, [canReadProviders]);
 
-  const summary = useMemo(() => buildOperationalSummary(data), [data]);
-  const operationalVerdict = useMemo(
-    () => buildOperationalVerdict(summary, isLoading, Boolean(data), Boolean(error)),
-    [data, error, isLoading, summary],
-  );
-  const summaryMetrics = useMemo(() => buildSummaryMetrics(summary), [summary]);
-  const operatorActions = useMemo(() => buildOperatorActions(data), [data]);
+  const summary = buildOperationalSummary(data);
+  const operationalVerdict = buildOperationalVerdict(summary, isLoading, Boolean(data), Boolean(error));
+  const summaryMetrics = buildSummaryMetrics(summary);
+  const operatorActions = buildOperatorActions(data);
 
   if (!canReadProviders) {
     return null;

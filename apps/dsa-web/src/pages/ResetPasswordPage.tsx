@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Input } from '../components/common';
 import { SettingsAlert } from '../components/settings';
@@ -19,18 +19,15 @@ const ResetPasswordPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const routeLanguage = parseLocaleFromPathname(window.location.pathname);
   const language: ResetLanguage = routeLanguage === 'en' ? 'en' : 'zh';
-  const loginPath = useMemo(
-    () => (routeLanguage ? buildLocalizedPath('/login', routeLanguage) : '/login'),
-    [routeLanguage],
-  );
-  const loginPathWithRedirect = useMemo(() => {
+  const loginPath = routeLanguage ? buildLocalizedPath('/login', routeLanguage) : '/login';
+  const loginPathWithRedirect = (() => {
     const redirect = searchParams.get('redirect');
     if (!redirect) {
       return loginPath;
     }
     const suffix = `?redirect=${encodeURIComponent(redirect)}`;
     return routeLanguage ? buildLocalizedPath(`/login${suffix}`, routeLanguage) : `/login${suffix}`;
-  }, [loginPath, routeLanguage, searchParams]);
+  })();
 
   const [identifier, setIdentifier] = useState('');
   const [submitting, setSubmitting] = useState(false);

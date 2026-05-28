@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Activity, AlertTriangle, BarChart3, Coins, DatabaseZap, Gauge, Radar, ShieldCheck, Tags } from 'lucide-react';
 import {
   adminCostApi,
@@ -946,7 +946,7 @@ const AdminCostObservabilityPage: React.FC = () => {
   };
 
   const data = state.data;
-  const emptyCounters = useMemo(() => data ? !hasCounters(data) : false, [data]);
+  const emptyCounters = data ? !hasCounters(data) : false;
   const operatorState = data
     ? `${compactNumber(data.summary.llmCalls)} 次 AI / ${compactNumber(data.summary.providerCalls)} 次数据源`
     : state.loading
