@@ -313,7 +313,7 @@ function detectPosture(...values: unknown[]): NormalizedEvidencePosture {
 }
 
 function buildLimitationLabels(values: string[], options: NormalizeEvidenceOptions): string[] {
-  const mapped = unique(values.map((value) => mapKnownLabel(value)).filter((value): value is string => Boolean(value)));
+  const mapped = unique(values.flatMap((value) => { const v = mapKnownLabel(value); return v ? [v] : []; }));
   const maxLimitationLabels = options.maxLimitationLabels ?? mapped.length;
   return mapped.slice(0, maxLimitationLabels);
 }

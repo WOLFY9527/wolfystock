@@ -85,6 +85,23 @@ const HOME_CHART_FALLBACK_INDICATORS = ['MA5', 'MA10', 'MA20', 'MA60', 'VWAP'];
 const HOME_CHART_FALLBACK_GRID_ROWS = ['price-top', 'price-upper', 'price-mid', 'volume'];
 const HOME_CHART_IDLE_TIMEOUT_MS = 240;
 
+const HISTORY_TIMESTAMP_FMT_EN = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Shanghai',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+const HISTORY_TIMESTAMP_FMT_ZH = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
 function useDeferredHomeChartMount() {
   const [shouldRenderChart, setShouldRenderChart] = useState(false);
 
@@ -898,7 +915,7 @@ function buildDataQualityPreview(report: DataQualityReport, locale: DashboardLoc
 }
 
 function uniqueCompactLabels(values: Array<string | undefined | null>, limit = 4): string[] {
-  return Array.from(new Set(values.map((item) => String(item || '').trim()).filter(Boolean))).slice(0, limit);
+  return Array.from(new Set(values.flatMap((item) => { const v = String(item || '').trim(); return v ? [v] : []; }))).slice(0, limit);
 }
 
 function buildAvailableDataCopy(report: DataQualityReport | undefined, trace: DecisionTrace | undefined, locale: DashboardLocale): string {
@@ -2255,7 +2272,7 @@ function resolveInsightBody(
   candidates: Array<string | undefined>,
   technicalFields?: StandardReportField[],
 ): string {
-  const normalizedCandidates = candidates.map((value) => String(value || '').trim()).filter(Boolean);
+  const normalizedCandidates = candidates.flatMap((value) => { const v = String(value || '').trim(); return v ? [v] : []; });
   const primary = normalizedCandidates.find((value) => value !== EMPTY_FIELD_VALUE && !isGenericInsightText(value));
   if (!primary) {
     return buildTechnicalInsightFallback(locale, tone, technicalFields);
@@ -2942,7 +2959,7 @@ function readHomePriceContextHint(report: HomePriceContextReport, stockCode: str
     readObjectField(standardReport, ['summaryPanel', 'priceContextNote']),
     readObjectField(standardReport, ['market', 'currency']),
   ];
-  return values.map((value) => String(value || '').trim()).filter(Boolean).join(' ');
+  return values.flatMap((value) => { const v = String(value || '').trim(); return v ? [v] : []; }).join(' ');
 }
 
 function resolveHomePriceDisplayContext(report: HomePriceContextReport, stockCode: string): HomePriceDisplayContext {
@@ -3073,14 +3090,7 @@ function formatHistoryTimestamp(value?: string, locale: DashboardLocale = 'zh'):
     return text;
   }
 
-  const parts = new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(date);
+  const parts = (locale === 'en' ? HISTORY_TIMESTAMP_FMT_EN : HISTORY_TIMESTAMP_FMT_ZH).formatToParts(date);
   const get = (type: string) => parts.find((part) => part.type === type)?.value || '';
   return `${get('month')}/${get('day')} ${get('hour')}:${get('minute')}`;
 }

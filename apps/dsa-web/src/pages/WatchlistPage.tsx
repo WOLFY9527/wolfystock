@@ -106,16 +106,24 @@ function formatWatchlistOrigin(value?: string | null, language: 'zh' | 'en' = 'z
   return language === 'en' ? 'Watch item' : '观察标的';
 }
 
+const WATCHLIST_DATE_FMT_EN = new Intl.DateTimeFormat('en-US', {
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+const WATCHLIST_DATE_FMT_ZH = new Intl.DateTimeFormat('zh-CN', {
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
 function formatDateTime(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
   if (!value) return '--';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
+  return (language === 'en' ? WATCHLIST_DATE_FMT_EN : WATCHLIST_DATE_FMT_ZH).format(date);
 }
 
 function getItemTime(item: WatchlistItem): number {
@@ -898,7 +906,7 @@ const WatchlistPage: React.FC = () => {
   }, [isGuest]);
 
   const marketOptions = (() => {
-    const markets = Array.from(new Set(items.map((item) => normalizeText(item.market).toLowerCase()).filter(Boolean))).sort();
+    const markets = Array.from(new Set(items.flatMap((item) => { const v = normalizeText(item.market).toLowerCase(); return v ? [v] : []; }))).sort();
     return [
       { value: 'all', label: copy.all },
       ...markets.map((market) => ({ value: market, label: formatMarket(market) })),
@@ -906,7 +914,7 @@ const WatchlistPage: React.FC = () => {
   })();
 
   const sourceOptions = (() => {
-    const sources = Array.from(new Set(items.map((item) => normalizeText(item.source).toLowerCase()).filter(Boolean))).sort();
+    const sources = Array.from(new Set(items.flatMap((item) => { const v = normalizeText(item.source).toLowerCase(); return v ? [v] : []; }))).sort();
     return [
       { value: 'all', label: copy.all },
       ...sources.map((source) => ({ value: source, label: formatWatchlistOrigin(source, language) })),
@@ -926,9 +934,9 @@ const WatchlistPage: React.FC = () => {
   })();
 
   const summary = (() => {
-    const markets = new Set(items.map((item) => normalizeText(item.market).toLowerCase()).filter(Boolean));
+    const markets = new Set(items.flatMap((item) => { const v = normalizeText(item.market).toLowerCase(); return v ? [v] : []; }));
     const scannerSourced = items.filter((item) => normalizeText(item.source).toLowerCase() === 'scanner').length;
-    const latestTime = items.map(getLatestIntelligenceTime).filter(Boolean).sort((left, right) => getTime(right) - getTime(left))[0] || null;
+    const latestTime = items.flatMap((item) => { const v = getLatestIntelligenceTime(item); return v ? [v] : []; }).sort((left, right) => getTime(right) - getTime(left))[0] || null;
     return {
       total: items.length,
       markets: markets.size,
@@ -1114,7 +1122,7 @@ const WatchlistPage: React.FC = () => {
     try {
       const response = await watchlistApi.refreshScores(targetItems ? {
         force: true,
-        symbols: targets.map((item) => item.symbol).filter(Boolean),
+        symbols: targets.flatMap((item) => item.symbol ? [item.symbol] : []),
       } : { force: true });
       const listResponse = await watchlistApi.listWatchlistItems();
       const failures = Object.fromEntries(

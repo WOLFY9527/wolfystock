@@ -112,7 +112,7 @@ function formatDeliveryError(
   }
 
   const troubleshooting = Array.isArray(diagnostics?.troubleshooting)
-    ? diagnostics.troubleshooting.map((item) => String(item)).filter(Boolean)
+    ? diagnostics.troubleshooting.flatMap((item) => { const v = String(item); return v ? [v] : []; })
     : [];
 
   if (isSslDeliveryError(rawMessage, code)) {

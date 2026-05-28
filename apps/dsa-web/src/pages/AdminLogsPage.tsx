@@ -2008,18 +2008,18 @@ const AdminLogsPage: React.FC = () => {
                     item.source,
                     item.model,
                     item.channel,
-                  ].map((value) => safeOperatorText(value, '')).filter(Boolean).join(' · ');
+                  ].flatMap((value) => { const v = safeOperatorText(value, ''); return v ? [v] : []; }).join(' · ');
                   const contextLine = [
                     ...(item.affectedSurfaces || []),
                     ...(item.affectedDomains || []),
-                  ].map((value) => safeOperatorText(value, '')).filter(Boolean).join(' · ');
+                  ].flatMap((value) => { const v = safeOperatorText(value, ''); return v ? [v] : []; }).join(' · ');
                   const reasonLine = [
                     item.reasonCode,
                     item.eventType,
                     item.freshnessStatus,
                     item.status,
-                  ].map((value) => safeOperatorText(value, '')).filter(Boolean).join(' · ');
-                  const sampleEventIds = (item.sampleEventIds || []).map((value) => safeOperatorText(value, '')).filter(Boolean).slice(0, 3);
+                  ].flatMap((value) => { const v = safeOperatorText(value, ''); return v ? [v] : []; }).join(' · ');
+                  const sampleEventIds = (item.sampleEventIds || []).flatMap((value) => { const v = safeOperatorText(value, ''); return v ? [v] : []; }).slice(0, 3);
                   return (
                     <div
                       key={item.issueId}
@@ -2411,7 +2411,7 @@ const AdminLogsPage: React.FC = () => {
                 {businessSteps.length ? businessSteps.map((step: ExecutionStep, index: number) => {
                   const status = normalizeStatus(step.status);
                   return (
-                    <AdminLogsTerminalSection key={`${step.name}-${index}`} title={`${text(step.label || step.name)} · ${formatDuration(step.durationMs)}`} summary={[step.category, step.provider, step.model, step.endpoint || step.apiPath].map((value) => String(value || '').trim()).filter(Boolean).join(' · ') || '--'} defaultOpen={index === 0 || status === 'failed' || status === 'error' || status === 'skipped' || status === 'unknown'} className="bg-black/20 px-3 py-3 text-xs">
+                    <AdminLogsTerminalSection key={`${step.name}-${index}`} title={`${text(step.label || step.name)} · ${formatDuration(step.durationMs)}`} summary={[step.category, step.provider, step.model, step.endpoint || step.apiPath].flatMap((value) => { const v = String(value || '').trim(); return v ? [v] : []; }).join(' · ') || '--'} defaultOpen={index === 0 || status === 'failed' || status === 'error' || status === 'skipped' || status === 'unknown'} className="bg-black/20 px-3 py-3 text-xs">
                       <div className="mb-3 flex justify-end">
                         <StatusChip status={status} locale={locale} />
                       </div>

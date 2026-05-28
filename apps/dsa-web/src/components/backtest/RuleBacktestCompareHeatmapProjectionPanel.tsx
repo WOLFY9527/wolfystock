@@ -106,7 +106,7 @@ function formatSensitivityValue(value: unknown): string {
     return trimmed || '--';
   }
   if (Array.isArray(value)) {
-    const parts = value.map((entry) => formatSensitivityValue(entry)).filter(Boolean);
+    const parts = value.flatMap((entry) => { const v = formatSensitivityValue(entry); return v ? [v] : []; });
     return parts.length ? parts.join(' / ') : '--';
   }
   return '复杂值';

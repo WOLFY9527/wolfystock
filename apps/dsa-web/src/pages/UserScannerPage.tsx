@@ -102,6 +102,29 @@ const {
 
 const HISTORY_PAGE_SIZE = 8;
 
+const SCANNER_TIMESTAMP_FMT_EN = new Intl.DateTimeFormat('en-US', {
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+const SCANNER_TIMESTAMP_FMT_ZH = new Intl.DateTimeFormat('zh-CN', {
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+const SCANNER_DATE_FMT_EN = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+const SCANNER_DATE_FMT_ZH = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
 type PillOption = { value: string; label: string };
 type CandidateFilter = 'selected' | 'pool' | 'rejected' | 'data_failed' | 'all';
 type SortKey = 'score' | 'symbol' | 'target' | 'risk';
@@ -353,12 +376,7 @@ function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): s
   if (!value) return '--';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
+  return (language === 'en' ? SCANNER_TIMESTAMP_FMT_EN : SCANNER_TIMESTAMP_FMT_ZH).format(date);
 }
 
 function formatDurationMs(startedAt?: string | null, completedAt?: string | null): string {
@@ -418,11 +436,7 @@ function formatDateOnly(value?: string | null, language: 'zh' | 'en' = 'zh'): st
   if (!value) return '--';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date);
+  return (language === 'en' ? SCANNER_DATE_FMT_EN : SCANNER_DATE_FMT_ZH).format(date);
 }
 
 function findCandidateValue(
@@ -1301,7 +1315,7 @@ function parseCustomSymbols(value: string): string[] {
 }
 
 function getSymbolTokenCount(value: string): number {
-  return value.split(/[\s,，;；]+/).map((symbol) => symbol.trim()).filter(Boolean).length;
+  return value.split(/[\s,，;；]+/).reduce((count, symbol) => count + (symbol.trim() ? 1 : 0), 0);
 }
 
 function getThemeLabel(theme: ScannerTheme, language: 'zh' | 'en'): string {

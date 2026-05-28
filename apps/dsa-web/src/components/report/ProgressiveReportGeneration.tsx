@@ -129,7 +129,7 @@ function sourceLine(t: TranslateFn, label: string, source?: string | null, statu
 }
 
 function uniqueEntries(entries: Array<string | null | undefined>): string[] {
-  return Array.from(new Set(entries.map((item) => String(item || '').trim()).filter(Boolean)));
+  return Array.from(new Set(entries.flatMap((item) => { const v = String(item || '').trim(); return v ? [v] : []; })));
 }
 
 function buildDraftSections(

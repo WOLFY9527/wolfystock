@@ -311,17 +311,16 @@ function buildProviderOpsTopSummary(
   checks: MarketDataReadinessCheck[],
 ): ProviderOpsTopSummaryData {
   const availableSources = uniqueLabels([
-    ...items.filter(operationItemIsAvailable).map(providerLabel),
-    ...rows.filter(matrixRowIsPrimaryAvailable).map(sourceGapName),
+    ...items.flatMap((item) => operationItemIsAvailable(item) ? [providerLabel(item)] : []),
+    ...rows.flatMap((row) => matrixRowIsPrimaryAvailable(row) ? [sourceGapName(row)] : []),
   ]);
   const missingSources = uniqueLabels([
-    ...rows.filter(matrixRowHasMissingSetup).map(sourceGapName),
-    ...checks.filter(shouldIncludeChecklistReadinessCheck).map(readinessCheckName),
+    ...rows.flatMap((row) => matrixRowHasMissingSetup(row) ? [sourceGapName(row)] : []),
+    ...checks.flatMap((check) => shouldIncludeChecklistReadinessCheck(check) ? [readinessCheckName(check)] : []),
   ]);
   const diagnosticSources = uniqueLabels(
     rows
-      .filter(matrixRowIsDiagnosticOnly)
-      .map(sourceGapName),
+      .flatMap((row) => matrixRowIsDiagnosticOnly(row) ? [sourceGapName(row)] : []),
   );
   const affectedSurfaces = uniqueLabels([
     ...rows.flatMap(resolveChecklistMatrixSurfaces),
@@ -346,12 +345,12 @@ function summarizeReadinessFacts(check: MarketDataReadinessCheck): string[] {
   }
 
   const facts: string[] = [];
-  const envKeys = Array.isArray(details.envKeys) ? details.envKeys.map((key) => String(key)).filter(Boolean) : [];
+  const envKeys = Array.isArray(details.envKeys) ? details.envKeys.flatMap((key) => { const v = String(key); return v ? [v] : []; }) : [];
   const envKey = typeof details.envKey === 'string' ? details.envKey.trim() : '';
-  const availableModules = Array.isArray(details.availableModules) ? details.availableModules.map((name) => String(name)).filter(Boolean) : [];
-  const missingModules = Array.isArray(details.missingModules) ? details.missingModules.map((name) => String(name)).filter(Boolean) : [];
-  const representativeSymbols = Array.isArray(details.representativeSymbols) ? details.representativeSymbols.map((symbol) => String(symbol)).filter(Boolean) : [];
-  const missingSymbols = Array.isArray(details.missingSymbols) ? details.missingSymbols.map((symbol) => String(symbol)).filter(Boolean) : [];
+  const availableModules = Array.isArray(details.availableModules) ? details.availableModules.flatMap((name) => { const v = String(name); return v ? [v] : []; }) : [];
+  const missingModules = Array.isArray(details.missingModules) ? details.missingModules.flatMap((name) => { const v = String(name); return v ? [v] : []; }) : [];
+  const representativeSymbols = Array.isArray(details.representativeSymbols) ? details.representativeSymbols.flatMap((symbol) => { const v = String(symbol); return v ? [v] : []; }) : [];
+  const missingSymbols = Array.isArray(details.missingSymbols) ? details.missingSymbols.flatMap((symbol) => { const v = String(symbol); return v ? [v] : []; }) : [];
   const existingCount = typeof details.existingCount === 'number' ? details.existingCount : null;
 
   if (envKeys.length) {

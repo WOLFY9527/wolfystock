@@ -598,7 +598,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
 
       const freshPage = await fetchHistory(get, set, { reset: true });
       const nextItems = freshPage?.items ?? [];
-      const nextStockCodes = new Set(nextItems.map((item) => normalizeSnapshotKey(item.stockCode)).filter(Boolean));
+      const nextStockCodes = new Set(nextItems.flatMap((item) => { const v = normalizeSnapshotKey(item.stockCode); return v ? [v] : []; }));
       const nextSnapshots = Object.fromEntries(
         Object.entries(get().reportSnapshotsByStockCode).filter(([stockCode]) => nextStockCodes.has(stockCode)),
       );

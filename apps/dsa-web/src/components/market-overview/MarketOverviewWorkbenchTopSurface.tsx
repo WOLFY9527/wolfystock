@@ -694,7 +694,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
   const rawDebugCodes = [
     ...(view?.capReasons || []),
     ...(view?.directionReadiness?.blockingReasons || []),
-    ...((view?.claimBoundaries || []).map((boundary) => boundary.reasonCode || '').filter(Boolean)),
+    ...((view?.claimBoundaries || []).flatMap((boundary) => { const v = boundary.reasonCode || ''; return v ? [v] : []; })),
   ];
   const readinessSummary = buildOverviewDecisionReadiness({
     view,

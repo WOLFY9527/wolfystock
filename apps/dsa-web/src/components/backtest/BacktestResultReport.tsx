@@ -141,7 +141,7 @@ function getTradeReturn(trade: RuleBacktestTradeItem): number | null {
 }
 
 function getTradeSummary(run: RuleBacktestRunResponse, trades: RuleBacktestTradeItem[]): TradeSummary {
-  const returns = trades.map(getTradeReturn).filter((value): value is number => value != null);
+  const returns = trades.reduce<number[]>((acc, trade) => { const v = getTradeReturn(trade); if (v != null) acc.push(v); return acc; }, []);
   const wins = returns.filter((value) => value > 0);
   const losses = returns.filter((value) => value < 0);
   const winCount = safeNumber(run.winCount) ?? (returns.length ? wins.length : null);
@@ -159,7 +159,7 @@ function getTradeSummary(run: RuleBacktestRunResponse, trades: RuleBacktestTrade
     avgLossPct: average(losses),
     profitFactor: grossLossAbs > 0 ? grossWin / grossLossAbs : null,
     avgHoldingDays: safeNumber(run.avgHoldingDays)
-      ?? average(trades.map((trade) => safeNumber(trade.holdingDays)).filter((value): value is number => value != null)),
+      ?? average(trades.reduce<number[]>((acc, trade) => { const v = safeNumber(trade.holdingDays); if (v != null) acc.push(v); return acc; }, [])),
     bestTradePct: returns.length ? Math.max(...returns) : null,
     worstTradePct: returns.length ? Math.min(...returns) : null,
   };
@@ -550,8 +550,8 @@ function buildAttribution(
     groups.set(key, [...(groups.get(key) || []), trade]);
   });
   return Array.from(groups.entries()).map(([key, group]) => {
-    const returns = group.map(getTradeReturn).filter((value): value is number => value != null);
-    const pnls = group.map(tradeNetPnl).filter((value): value is number => value != null);
+    const returns = group.reduce<number[]>((acc, trade) => { const v = getTradeReturn(trade); if (v != null) acc.push(v); return acc; }, []);
+    const pnls = group.reduce<number[]>((acc, trade) => { const v = tradeNetPnl(trade); if (v != null) acc.push(v); return acc; }, []);
     return {
       key,
       trades: group.length,

@@ -271,6 +271,16 @@ type UsBreadthTruthStripView = {
   missingSummary: string | null;
 };
 
+const numberFormatCache = new Map<number, Intl.NumberFormat>();
+function getCachedNumberFormat(maximumFractionDigits: number): Intl.NumberFormat {
+  let fmt = numberFormatCache.get(maximumFractionDigits);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat('en-US', { maximumFractionDigits });
+    numberFormatCache.set(maximumFractionDigits, fmt);
+  }
+  return fmt;
+}
+
 function buildCategoryLayout(tab: MarketOverviewTab): MarketOverviewLayoutRow[] {
   const config = MARKET_OVERVIEW_TAB_CONFIG[tab];
   const rows: MarketOverviewLayoutRow[] = [];
@@ -825,9 +835,7 @@ function formatHeroValue(value: number | null | undefined): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return '待确认';
   }
-  return new Intl.NumberFormat('en-US', {
-    maximumFractionDigits: Math.abs(value) >= 100 ? 2 : 3,
-  }).format(value);
+  return getCachedNumberFormat(Math.abs(value) >= 100 ? 2 : 3).format(value);
 }
 
 function formatHeroChange(value: number | null | undefined): string {
@@ -912,7 +920,7 @@ function formatNumber(value: number | null | undefined, digits = 2): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return '-';
   }
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: digits }).format(value);
+  return getCachedNumberFormat(digits).format(value);
 }
 
 function formatPercent(value?: number | null): string {
@@ -2677,9 +2685,9 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
       coverage,
     };
   });
-  const heroRows = activeRows.filter((row) => row.tier === 'hero').map(renderPlannedRow).filter(Boolean) as React.ReactNode[];
-  const secondaryRows = activeRows.filter((row) => row.tier === 'secondary').map(renderPlannedRow).filter(Boolean) as React.ReactNode[];
-  const deepRows = activeRows.filter((row) => row.tier === 'deep').map(renderPlannedRow).filter(Boolean) as React.ReactNode[];
+  const heroRows = activeRows.flatMap((row) => row.tier === 'hero' ? [renderPlannedRow(row)] : []).filter(Boolean) as React.ReactNode[];
+  const secondaryRows = activeRows.flatMap((row) => row.tier === 'secondary' ? [renderPlannedRow(row)] : []).filter(Boolean) as React.ReactNode[];
+  const deepRows = activeRows.flatMap((row) => row.tier === 'deep' ? [renderPlannedRow(row)] : []).filter(Boolean) as React.ReactNode[];
 
   return (
     <div
