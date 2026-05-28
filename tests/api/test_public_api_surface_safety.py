@@ -184,6 +184,25 @@ def _liquidity_monitor_fallback_payload() -> dict[str, object]:
             "latestAsOf": "2026-05-15T10:00:00+08:00",
         },
         "indicators": [],
+        "liquidityImpulseSynthesis": {
+            "liquidityImpulse": "data_insufficient",
+            "impulseLabel": "Data insufficient for a reliable liquidity call",
+            "subtype": "data_insufficient",
+            "confidence": 0.0,
+            "confidenceLabel": "insufficient",
+            "pillarScores": {
+                "dollar_pressure": 0.0,
+                "rates_pressure": 0.0,
+                "volatility_stress": 0.0,
+            },
+            "directionScore": 0.0,
+            "dominantDrivers": [],
+            "counterEvidence": [],
+            "dataGaps": [{"key": "liquidity_monitor:fallback", "reason": "fallback_payload"}],
+            "narrativeBullets": ["Fallback payload preserves route availability without reliable liquidity evidence."],
+            "evidenceQuality": {"dataGapCount": 1},
+            "notInvestmentAdvice": True,
+        },
         "advisoryDisclosure": "仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。",
         "sourceMetadata": {
             "externalProviderCalls": False,
@@ -1065,16 +1084,20 @@ def test_public_api_abuse_limiter_excludes_auth_routes(monkeypatch) -> None:
 def test_public_api_abuse_limiter_excludes_auth_login_failures_from_buckets(monkeypatch) -> None:
     _reset_auth_globals()
     _reset_public_limiter_state_if_available()
+    monkeypatch.setenv("TRUST_X_FORWARDED_FOR", "true")
     monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
     monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    username = "public-limiter-auth-route-safety"
+    ip_address = "203.0.113.211"
+    auth.clear_rate_limit(ip_address, username)
     client = _auth_guarded_client()
     try:
         with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
             responses = [
                 client.post(
                     "/api/v1/auth/login",
-                    json={"username": "admin", "password": "wrong-password"},
-                    headers={"X-Forwarded-For": "203.0.113.211"},
+                    json={"username": username, "password": "wrong-password"},
+                    headers={"X-Forwarded-For": ip_address},
                 )
                 for _ in range(3)
             ]
@@ -1085,6 +1108,7 @@ def test_public_api_abuse_limiter_excludes_auth_login_failures_from_buckets(monk
             _assert_public_surface_safe(response.json())
     finally:
         client.close()
+        auth.clear_rate_limit(ip_address, username)
         _reset_public_limiter_state_if_available()
         _reset_auth_globals()
 

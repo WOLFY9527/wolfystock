@@ -368,6 +368,58 @@ def test_launch_acceptance_evidence_missing_new_operator_categories_keep_no_go(t
     assert blocker_ids == NEW_OPERATOR_CATEGORY_IDS
 
 
+def test_launch_acceptance_evidence_api_abuse_request_safety_is_backed_by_repo_local_offline_anchors() -> None:
+    result = _run_checker("--evidence", str(ACCEPTED_FIXTURE))
+
+    assert result.returncode == 0
+    evidence = _json(result)
+    category = next(item for item in evidence["categories"] if item["id"] == "api_abuse_request_safety")
+    assert category["status"] == "accepted"
+    assert category["requiredChecks"] == [
+        "abuseRehearsalPassed",
+        "invalidRequestHandlingVerified",
+        "oversizedPayloadSafetyVerified",
+        "denialAuditEvidenceSanitized",
+        "debugTracebackAndRequestBodiesRedacted",
+        "runtimeDefaultUnchanged",
+    ]
+
+    public_api_safety_source = (
+        REPO_ROOT / "tests" / "api" / "test_public_api_surface_safety.py"
+    ).read_text(encoding="utf-8")
+    assert "def _assert_public_surface_safe(payload: object) -> None:" in public_api_safety_source
+    assert "def test_launch_surface_route_inventory_remains_stable_and_fixture_safe() -> None:" in public_api_safety_source
+
+    expected_anchor_tests = {
+        "abuseRehearsalPassed": [
+            "def test_api_abuse_rate_limit_readiness_has_global_public_limiter() -> None:",
+            "def test_public_api_abuse_limiter_429_exposes_no_request_or_client_details(monkeypatch, caplog) -> None:",
+        ],
+        "invalidRequestHandlingVerified": [
+            "def test_public_request_shape_errors_are_sanitized_for_malformed_json_and_unsupported_methods() -> None:",
+        ],
+        "oversizedPayloadSafetyVerified": [
+            "def test_unauthenticated_admin_abuse_payloads_fail_closed_before_request_body_is_exposed() -> None:",
+        ],
+        "denialAuditEvidenceSanitized": [
+            "def test_public_api_abuse_limiter_does_not_log_or_expose_raw_request_values(monkeypatch, caplog) -> None:",
+            "def test_public_api_abuse_limiter_429_exposes_no_request_or_client_details(monkeypatch, caplog) -> None:",
+        ],
+        "debugTracebackAndRequestBodiesRedacted": [
+            "def test_public_api_abuse_limiter_does_not_log_or_expose_raw_request_values(monkeypatch, caplog) -> None:",
+            "def test_public_api_abuse_limiter_429_exposes_no_request_or_client_details(monkeypatch, caplog) -> None:",
+        ],
+        "runtimeDefaultUnchanged": [
+            "def test_api_abuse_rate_limit_readiness_has_global_public_limiter() -> None:",
+        ],
+    }
+
+    for check_name, anchor_tests in expected_anchor_tests.items():
+        assert check_name in category["requiredChecks"]
+        for anchor_test in anchor_tests:
+            assert anchor_test in public_api_safety_source
+
+
 def test_launch_acceptance_evidence_input_release_approved_true_is_ignored(tmp_path: Path) -> None:
     payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
     payload["releaseApproved"] = True
