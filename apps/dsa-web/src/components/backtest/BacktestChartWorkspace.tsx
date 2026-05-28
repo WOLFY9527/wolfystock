@@ -71,7 +71,7 @@ export function RobustnessCoverageTrack({
             <div className="flex items-start justify-between gap-3">
               <p className="metric-card__label">{row.label}</p>
               <span
-                className="inline-block h-2.5 w-2.5 rounded-full"
+                className="inline-block size-2.5 rounded-full"
                 style={{ backgroundColor: COVERAGE_TRACK_COLORS[index % COVERAGE_TRACK_COLORS.length] }}
               />
             </div>

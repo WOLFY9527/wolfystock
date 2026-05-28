@@ -113,7 +113,7 @@ export function AdvancedDisclosure({
 }) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
   const open = controlledOpen ?? uncontrolledOpen;
-  const iconClassName = 'h-3.5 w-3.5 shrink-0 text-white/38';
+  const iconClassName = 'size-3.5 shrink-0 text-white/38';
   const leadingIcon = {
     info: <Info className={iconClassName} aria-hidden="true" />,
     history: <History className={iconClassName} aria-hidden="true" />,
@@ -153,7 +153,7 @@ export function AdvancedDisclosure({
             onToggle?.(nextOpen);
           }}
         >
-          {open ? <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" /> : <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />}
+          {open ? <ChevronDown className="size-3.5" aria-hidden="true" /> : <ChevronRight className="size-3.5" aria-hidden="true" />}
           <span>{open ? (title.match(/[A-Za-z]/) ? 'Collapse' : '收起') : (title.match(/[A-Za-z]/) ? 'Expand' : '展开')}</span>
         </button>
       </div>

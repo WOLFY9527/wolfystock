@@ -67,8 +67,8 @@ const PORTFOLIO_PRIMARY_BUTTON_CLASS = 'border border-[color:var(--wolfy-accent)
 const PORTFOLIO_SUBMIT_BUTTON_CLASS = 'mt-5 w-full border border-[color:var(--wolfy-accent)] bg-[var(--wolfy-accent)] text-[#f7f8ff] font-medium px-5 py-2.5 rounded-md transition-colors hover:bg-[#6f79dc] disabled:opacity-50 disabled:cursor-not-allowed';
 const PORTFOLIO_SECONDARY_BUTTON_CLASS = 'border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-divider)] px-4 py-2.5 rounded-md transition-colors';
 const PORTFOLIO_TEXT_BUTTON_CLASS = 'border border-[color:var(--wolfy-border-subtle)] bg-transparent text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)] px-3 py-1.5 rounded-md text-xs transition-colors disabled:text-white/15 disabled:opacity-50';
-const PORTFOLIO_ICON_BUTTON_CLASS = 'h-9 w-9 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-0 text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)]';
-const PORTFOLIO_DANGER_GHOST_CLASS = 'h-8 w-8 rounded-md border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-transparent p-0 text-[color:var(--wolfy-market-down)] hover:bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_10%,transparent)]';
+const PORTFOLIO_ICON_BUTTON_CLASS = 'size-9 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-0 text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)]';
+const PORTFOLIO_DANGER_GHOST_CLASS = 'size-8 rounded-md border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-transparent p-0 text-[color:var(--wolfy-market-down)] hover:bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_10%,transparent)]';
 const CASH_CURRENCY_OPTIONS = ['CNY', 'HKD', 'USD'] as const;
 const FX_CURRENCY_OPTIONS = ['USD', 'CNY', 'HKD', 'EUR', 'JPY', 'GBP'] as const;
 
@@ -2171,7 +2171,7 @@ const PortfolioPage: React.FC = () => {
             className={PORTFOLIO_TEXT_BUTTON_CLASS}
             onClick={() => setOpenTradeActionMenuId((prev) => (prev === item.id ? null : item.id))}
           >
-            <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+            <MoreHorizontal className="size-3.5" aria-hidden="true" />
             {moreTradeActionsLabel}
           </Button>
           {isOpen ? (
@@ -2180,11 +2180,11 @@ const PortfolioPage: React.FC = () => {
               className="absolute right-0 z-20 mt-2 flex min-w-[132px] flex-col gap-1 bg-[#0f1726] p-2 shadow-2xl"
             >
               <Button type="button" variant="ghost" className="justify-start rounded-lg px-2 text-xs text-white/75" onClick={() => openTradeEditor(item)}>
-                <PenSquare className="h-3.5 w-3.5" aria-hidden="true" />
+                <PenSquare className="size-3.5" aria-hidden="true" />
                 {editTradeActionLabel}
               </Button>
               <Button type="button" variant="ghost" className="justify-start rounded-lg px-2 text-xs text-red-300 hover:text-red-200" onClick={() => openTradeVoidDialog(item)}>
-                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                <Trash2 className="size-3.5" aria-hidden="true" />
                 {deleteTradeActionLabel}
               </Button>
             </TerminalNestedBlock>
@@ -2196,11 +2196,11 @@ const PortfolioPage: React.FC = () => {
     return (
       <div className="flex shrink-0 items-center gap-1">
         <Button type="button" variant="ghost" className={PORTFOLIO_TEXT_BUTTON_CLASS} onClick={() => openTradeEditor(item)}>
-          <PenSquare className="h-3.5 w-3.5" aria-hidden="true" />
+          <PenSquare className="size-3.5" aria-hidden="true" />
           {editTradeActionLabel}
         </Button>
         <Button type="button" variant="ghost" className={`${PORTFOLIO_TEXT_BUTTON_CLASS} text-red-300 hover:text-red-200`} onClick={() => openTradeVoidDialog(item)}>
-          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+          <Trash2 className="size-3.5" aria-hidden="true" />
           {deleteTradeActionLabel}
         </Button>
       </div>
@@ -2223,7 +2223,7 @@ const PortfolioPage: React.FC = () => {
             aria-label={copy.refreshLedger}
             title={copy.refreshLedger}
           >
-            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            <RefreshCw className="size-4" aria-hidden="true" />
           </Button>
         </div>
       </div>
@@ -2295,7 +2295,7 @@ const PortfolioPage: React.FC = () => {
                       <div className="mt-1 text-xs text-muted-text">{item.eventDate} · {formatMoney(item.amount, item.currency)}</div>
                     </div>
                     <Button type="button" variant="ghost" className={PORTFOLIO_DANGER_GHOST_CLASS} onClick={() => setPendingDelete({ eventType: 'cash', id: item.id, message: copy.cashDeleteMessage(item) })} aria-label={copy.deleteConfirm} title={copy.deleteConfirm}>
-                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      <Trash2 className="size-4" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
@@ -2323,7 +2323,7 @@ const PortfolioPage: React.FC = () => {
                       </div>
                     </div>
                     <Button type="button" variant="ghost" className={PORTFOLIO_DANGER_GHOST_CLASS} onClick={() => setPendingDelete({ eventType: 'corporate', id: item.id, message: copy.corporateDeleteMessage(item) })} aria-label={copy.deleteConfirm} title={copy.deleteConfirm}>
-                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      <Trash2 className="size-4" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
@@ -2716,23 +2716,23 @@ const PortfolioPage: React.FC = () => {
                     </span>
                   </div>
                   <div data-testid="portfolio-risk-overview" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
+                    <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
                       <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '最大持仓' : 'Largest Position'}</div>
                       <div className="mt-2 truncate text-sm text-white">{topPosition?.label || '--'}</div>
                       <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topPosition?.percent)}</div>
                     </div>
-                    <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
+                    <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
                       <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '主币种' : 'Primary Currency'}</div>
                       <div className="mt-2 truncate text-sm text-white">{topCurrency?.label || '--'}</div>
                       <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topCurrency?.percent)}</div>
                     </div>
-                    <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
+                    <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
                       <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '主市场' : 'Primary Market'}</div>
                       <div className="mt-2 truncate text-sm text-white">{formatExposureMarketLabel(topMarket, language)}</div>
                       <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topMarket?.percent)}</div>
                     </div>
                   </div>
-                  <div data-testid="portfolio-concentration-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
+                  <div data-testid="portfolio-concentration-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '持仓集中度' : 'Concentration'}</div>
                       <div className={`font-mono text-xs ${hasHoldings ? concentrationToneClass : 'text-white/35'}`}>{formatPercent(topPosition?.percent)}</div>
@@ -2759,11 +2759,11 @@ const PortfolioPage: React.FC = () => {
                     </p>
                   </div>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
+                    <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
                       <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '价格快照' : 'Pricing snapshot'}</div>
                       <div className="mt-2 text-sm text-white">{valuationSnapshotNote}</div>
                     </div>
-                    <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
+                    <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
                       <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '汇率更新时间' : 'FX updated'}</div>
                       <div className="mt-2 text-sm text-white">{hasFxUnavailable ? fxUnavailableLabel : fxLastUpdated}</div>
                     </div>
@@ -2800,7 +2800,7 @@ const PortfolioPage: React.FC = () => {
                       {syncDataActionLabel}
                     </TerminalButton>
                   </div>
-                  <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3 text-xs text-white/45">
+                  <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3 text-xs text-white/45">
                     {hasHistory
                       ? (language === 'zh' ? `近期已记录 ${totalHistoryRows} 条活动，可在下方时间线继续核对。` : `${totalHistoryRows} recent records are available in the timeline below.`)
                       : (language === 'zh' ? '近期活动会在保存持仓、现金或公司行为后出现在下方。' : 'Recent activity appears below after holdings, cash, or corporate records are saved.')}
@@ -2839,7 +2839,7 @@ const PortfolioPage: React.FC = () => {
                         {exposureRows.map((row) => {
                           const values = renderExposureValue(row);
                           return (
-                            <TerminalNestedBlock key={`${exposureTab}-${row.key}`} className="min-w-0 px-3 py-3">
+                            <TerminalNestedBlock key={`${exposureTab}-${row.key}`} className="min-w-0 p-3">
                               <div className="flex min-w-0 items-center justify-between gap-3">
                                 <div className="min-w-0">
                                   <div className="truncate text-sm font-medium text-white">{formatExposureRowLabel(row)}</div>
@@ -2889,15 +2889,15 @@ const PortfolioPage: React.FC = () => {
                       )}
                     </div>
                     <div className="grid grid-cols-1 gap-2">
-                      <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3 text-sm text-white/72">
+                      <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3 text-sm text-white/72">
                         <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.snapshotBasisTitle}</div>
                         <div className="mt-2">{valuationSnapshotNote}</div>
                       </div>
-                      <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3 text-sm text-white/72">
+                      <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3 text-sm text-white/72">
                         <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.fxState}</div>
                         <div className="mt-2">{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</div>
                       </div>
-                      <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3 text-sm text-white/72">
+                      <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3 text-sm text-white/72">
                         <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.costMethod}</div>
                         <div className="mt-2">
                           {costMethod === 'fifo'
@@ -3181,7 +3181,7 @@ const PortfolioPage: React.FC = () => {
                         {showCreateAccount ? copy.collapseCreate : copy.createAccount}
                       </Button>
                       <Button type="button" variant="ghost" className={PORTFOLIO_ICON_BUTTON_CLASS} onClick={() => void handleRefresh()} disabled={isLoading} aria-label={isLoading ? copy.refreshingData : copy.refreshData} title={isLoading ? copy.refreshingData : copy.refreshData}>
-                        <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
+                        <RefreshCw className={`size-4 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
                       </Button>
                     </div>
                   </div>
@@ -3202,7 +3202,7 @@ const PortfolioPage: React.FC = () => {
 	                              aria-label={language === 'en' ? `Delete ${account.name}` : `删除 ${account.name}`}
 	                              title={copy.accountDeleteTitle}
 	                            >
-	                              <Trash2 className="h-4 w-4" aria-hidden="true" />
+	                              <Trash2 className="size-4" aria-hidden="true" />
 	                            </Button>
 	                          </div>
 	                        </div>
@@ -3211,7 +3211,7 @@ const PortfolioPage: React.FC = () => {
                     ))}
                   </div>
                   {(showCreateAccount || !hasAccounts) ? (
-                    <form className="space-y-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-3" onSubmit={handleCreateAccount}>
+                    <form className="space-y-3 rounded-xl border border-white/5 bg-white/[0.02] p-3" onSubmit={handleCreateAccount}>
                       <Input label={language === 'zh' ? '账户名称' : 'Account name'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.accountNamePlaceholder} value={accountForm.name} onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))} />
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <Input label={language === 'zh' ? '券商' : 'Broker'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.brokerPlaceholder} value={accountForm.broker} onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))} />
@@ -3229,7 +3229,7 @@ const PortfolioPage: React.FC = () => {
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.dataSyncTitle}</p>
                     <Button type="button" variant="ghost" className={PORTFOLIO_ICON_BUTTON_CLASS} onClick={() => void handleRefresh()} disabled={isLoading} aria-label={isLoading ? copy.refreshingData : copy.refreshData} title={isLoading ? copy.refreshingData : copy.refreshData}>
-                      <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
+                      <RefreshCw className={`size-4 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
                     </Button>
                   </div>
                   <div className="text-xs text-secondary-text space-y-1">
@@ -3266,7 +3266,7 @@ const PortfolioPage: React.FC = () => {
                       ) : null}
                     </SectionShell>
                   ) : (
-                    <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4 text-xs text-secondary-text">
+                    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 text-xs text-secondary-text">
                       {copy.brokerImportHint}
                     </div>
                   )}

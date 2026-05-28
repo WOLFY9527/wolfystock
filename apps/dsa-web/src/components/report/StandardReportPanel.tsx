@@ -45,11 +45,11 @@ interface StandardReportPanelProps {
 }
 
 const solidCardClass =
-  'theme-panel-solid rounded-[var(--cohere-radius-signature)] px-4 py-4 md:px-5 md:py-5 xl:px-6 xl:py-6';
+  'theme-panel-solid rounded-[var(--cohere-radius-signature)] p-4 md:px-5 md:py-5 xl:px-6 xl:py-6';
 const chartLayerCardClass =
   'theme-panel-solid rounded-[var(--cohere-radius-signature)] py-4 md:py-5 xl:py-6';
 const glassCardClass =
-  'theme-panel-glass rounded-[var(--cohere-radius-signature)] px-4 py-4 md:px-5 md:py-5 xl:px-6 xl:py-6';
+  'theme-panel-glass rounded-[var(--cohere-radius-signature)] p-4 md:px-5 md:py-5 xl:px-6 xl:py-6';
 const subtlePanelClass = 'theme-panel-subtle rounded-[var(--cohere-radius-medium)] px-3.5 py-3';
 const rowGridClass = 'grid gap-4 lg:grid-cols-2';
 const primaryReportGridClass = 'grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] xl:items-start';
@@ -515,7 +515,7 @@ const ExecutionListCard: React.FC<{
       <ul className="mt-3.5 space-y-2 text-sm leading-6 text-secondary-text">
         {items.map((item, index) => (
           <li key={`${item}-${index}`} className="flex items-start gap-2.5 border-b border-[var(--theme-panel-subtle-border)] pb-2 last:border-b-0 last:pb-0">
-            <span className="mt-2 inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent-primary)]" />
+            <span className="mt-2 inline-flex size-1.5 shrink-0 rounded-full bg-[var(--accent-primary)]" />
             <span className="min-w-0 flex-1">{item}</span>
           </li>
         ))}
@@ -564,7 +564,7 @@ const DenseTable: React.FC<{
               <div
                 key={`${field.label}-${index}`}
                 className={cn(
-                  'grid gap-3 px-3 py-3.5',
+                  'grid gap-3 p-3.5',
                   columnClass,
                 )}
               >
@@ -619,7 +619,7 @@ const DecisionExecutionPanel: React.FC<{
     <SectionHeader eyebrow={ui('report.executionRiskLayerTitle')} title={ui('report.tradeExecution')} />
 
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
-      <div className="theme-panel-subtle rounded-[1rem] px-4 py-4">
+      <div className="theme-panel-subtle rounded-[1rem] p-4">
         <div className="flex flex-wrap items-center gap-2.5">
           <Badge variant="info">{softenControlledValue(decisionPanel?.setupType)}</Badge>
           <Badge variant="history">{ui('report.confidenceLabel')} {softenControlledValue(decisionPanel?.confidence)}</Badge>
@@ -636,7 +636,7 @@ const DecisionExecutionPanel: React.FC<{
         </div>
       </div>
 
-      <div className="theme-panel-subtle rounded-[1rem] px-4 py-4">
+      <div className="theme-panel-subtle rounded-[1rem] p-4">
         <p className={renderGroupLabelClass()}>{ui('report.structureSnapshot')}</p>
         <p className="mt-2 text-sm leading-6 text-secondary-text">
           {softenControlledValue(decisionPanel?.marketStructure)}
@@ -1112,7 +1112,7 @@ const BattlePlanPanel: React.FC<{
               className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-4"
             >
               {topGridItems.map((item, index) => (
-                <div key={`${item.label}-${index}`} className="theme-panel-subtle rounded-[1rem] px-3.5 py-3.5">
+                <div key={`${item.label}-${index}`} className="theme-panel-subtle rounded-[1rem] p-3.5">
                   <div className="flex items-center justify-between gap-3">
                     <p className={renderGroupLabelClass()}>{localizeReportHeadingLabel(item.label, isEnglishUi() ? 'en' : 'zh')}</p>
                     <Badge variant={badgeTone(item.tone)} className="min-w-[3.75rem]">

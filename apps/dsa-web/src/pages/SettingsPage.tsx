@@ -79,7 +79,7 @@ const CONSOLE_NAV_BUTTON_CLASS = 'w-full rounded-xl px-3 py-2 text-left text-sm 
 const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
 const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
 const DRAWER_PANEL_CLASS = 'rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3';
-const DRAWER_SECTION_CLASS = 'rounded-xl border border-white/5 bg-white/[0.015] px-4 py-4';
+const DRAWER_SECTION_CLASS = 'rounded-xl border border-white/5 bg-white/[0.015] p-4';
 const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-6 flex cursor-pointer list-none items-center gap-1.5 border-t border-white/5 pt-4 text-xs text-white/30 transition-colors hover:text-white [&::-webkit-details-marker]:hidden';
 const SETTINGS_DRAWER_GHOST_FORM_SCOPE_CLASS = '[&_.input-surface]:!rounded-lg [&_.input-surface]:!border-white/5 [&_.input-surface]:!bg-white/[0.02] [&_.input-surface]:!py-2 [&_.input-surface]:!text-sm [&_.input-surface]:!text-white [&_.input-surface]:!transition-all [&_.input-surface]:placeholder:!text-white/20 [&_.input-surface]:focus:!border-indigo-500/50 [&_.input-surface]:focus:!bg-white/[0.05] [&_.input-surface]:focus:!outline-none [&_.input-surface]:focus:!ring-1 [&_.input-surface]:focus:!ring-indigo-500/50 [&_.theme-field-label]:!mb-1.5 [&_.theme-field-label]:!block [&_.theme-field-label]:!text-[10px] [&_.theme-field-label]:!font-bold [&_.theme-field-label]:!uppercase [&_.theme-field-label]:!tracking-widest [&_.theme-field-label]:!text-white/40';
 
@@ -119,11 +119,11 @@ const SettingsDomainPanelFallback: React.FC<{
     data-testid="settings-domain-panel-loading"
     className="overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02]"
   >
-    <div className="border-b border-white/5 px-4 py-4 sm:px-5">
+    <div className="border-b border-white/5 p-4 sm:px-5">
       <h2 className="text-sm font-semibold text-white">{title}</h2>
       <p className="mt-1 text-xs text-secondary-text">{description}</p>
     </div>
-    <div className="space-y-3 px-4 py-4 sm:px-5">
+    <div className="space-y-3 p-4 sm:px-5">
       <p className="text-xs text-secondary-text">{loadingLabel}</p>
       <div aria-hidden="true" className="space-y-2">
         <div className="settings-skeleton-strong h-3 w-28 rounded" />
@@ -2152,7 +2152,7 @@ const SettingsPage: React.FC = () => {
     <div
       data-testid="settings-bento-page"
       data-bento-surface="true"
-      className="flex-1 flex w-full h-full min-h-0 overflow-hidden"
+      className="flex-1 flex size-full min-h-0 overflow-hidden"
     >
       <div
         data-testid="settings-workspace"
@@ -2220,7 +2220,7 @@ const SettingsPage: React.FC = () => {
                     data-testid="settings-bento-drawer-trigger"
                     onClick={() => setIsBriefDrawerOpen(true)}
                   >
-                    <PanelRightOpen className="h-4 w-4" />
+                    <PanelRightOpen className="size-4" />
                     <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
                   </button>
                   <Button
@@ -2390,7 +2390,7 @@ const SettingsPage: React.FC = () => {
                       title={rawFieldsSectionTitle}
                       description={rawFieldsSectionDescription}
                     >
-                      <GlassCard className="px-4 py-4">
+                      <GlassCard className="p-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <p className="text-sm font-semibold text-foreground">{activeCategoryLabel}</p>
@@ -2515,7 +2515,7 @@ const SettingsPage: React.FC = () => {
         bodyClassName={SETTINGS_DRAWER_GHOST_FORM_SCOPE_CLASS}
       >
         <div className="space-y-4">
-          <GlassCard className="px-4 py-4">
+          <GlassCard className="p-4">
             <p className="text-sm font-semibold text-foreground">{t('settings.runtimeSummaryVisibilityDesc')}</p>
           </GlassCard>
           <div className={SEGMENT_WRAPPER_CLASS}>
@@ -2603,7 +2603,7 @@ const SettingsPage: React.FC = () => {
           </div>
 
           <div className="grid gap-3 xl:grid-cols-2">
-            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-4">
+            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 p-4">
               <p className="text-sm font-semibold text-foreground">{t('settings.aiPrimaryRoute')}</p>
               <div className="mt-3 space-y-2">
                 <Select
@@ -2741,7 +2741,7 @@ const SettingsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-4">
+            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 p-4">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-foreground">{t('settings.aiBackupRoute')}</p>
                 <Button
@@ -2919,7 +2919,7 @@ const SettingsPage: React.FC = () => {
             </Button>
           </div>
 
-          <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-4">
+          <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 p-4">
             <p className="text-sm font-semibold text-foreground">{t('settings.aiTaskModelTitle')}</p>
             <p className="mt-1 text-xs text-secondary-text">{t('settings.aiTaskModelDesc')}</p>
             <div className="mt-3 grid gap-3 xl:grid-cols-2">
@@ -3261,7 +3261,7 @@ const SettingsPage: React.FC = () => {
                 className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3"
               >
                 <div className="flex items-center gap-3">
-                  <span aria-hidden="true" className="h-2 w-2 rounded-full bg-cyan-300/80 animate-pulse" />
+                  <span aria-hidden="true" className="size-2 rounded-full bg-cyan-300/80 animate-pulse" />
                   <div className="space-y-1">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200/80">
                       高级渠道终端

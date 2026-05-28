@@ -654,7 +654,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   };
 
   const compactInputClass = 'w-full min-w-0 min-h-[44px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm leading-6 text-white outline-none transition-all focus:border-emerald-500/50 focus:bg-white/[0.05]';
-  const compactCheckboxClass = 'h-4 w-4 shrink-0 rounded border border-white/15 bg-white/[0.03] text-emerald-400 accent-emerald-400 disabled:opacity-45';
+  const compactCheckboxClass = 'size-4 shrink-0 rounded border border-white/15 bg-white/[0.03] text-emerald-400 accent-emerald-400 disabled:opacity-45';
   const compactFieldLabelClass = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
   const denseCardClass = 'h-full bg-white/[0.02] border border-white/5 rounded-[24px] p-6 flex flex-col gap-5';
   const subCardClass = 'rounded-[24px] border border-white/5 bg-white/[0.02] p-6';
@@ -1248,7 +1248,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/45">{presets.length}</span>
       </div>
       {visiblePresets.length === 0 ? (
-        <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-white/45">
+        <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] p-4 text-sm text-white/45">
           {language === 'en' ? 'No saved presets yet. Recent drafts will appear here after your first run.' : '当前还没有保存的预设。完成一次回测后，最近草稿会显示在这里。'}
         </div>
       ) : (
@@ -1293,7 +1293,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
       </div>
       {historyError ? <ApiErrorAlert error={historyError} className="mb-4" /> : null}
       {visibleHistoryItems.length === 0 ? (
-        <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-white/45">
+        <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] p-4 text-sm text-white/45">
           {isEmptyHistory
             ? (language === 'en' ? 'No saved rule-backtest runs yet. Your first completed run will appear here.' : '当前还没有已保存的规则回测记录。完成第一次回测后，最近历史会显示在这里。')
             : (language === 'en' ? 'History is loading or temporarily unavailable.' : '历史记录正在加载，或暂时不可用。')}

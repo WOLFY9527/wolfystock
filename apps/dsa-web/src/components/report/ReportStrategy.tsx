@@ -19,7 +19,7 @@ const StrategyItem: React.FC<StrategyItemProps> = ({
   value,
   tone,
 }) => (
-  <div className="theme-panel-subtle relative overflow-hidden rounded-[var(--cohere-radius-medium)] px-4 py-4">
+  <div className="theme-panel-subtle relative overflow-hidden rounded-[var(--cohere-radius-medium)] p-4">
     <div className="flex flex-col">
       <span className="label-uppercase">{label}</span>
       <span

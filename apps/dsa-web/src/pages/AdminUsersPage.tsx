@@ -357,8 +357,8 @@ const UserRow: React.FC<{ user: AdminUserListItem; locale: 'zh' | 'en'; canReadO
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <Link to={href} className="group inline-flex min-w-0 items-center gap-2">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-cyan-300/15 bg-cyan-400/10 text-cyan-100">
-              <UserRound className="h-4 w-4" aria-hidden="true" />
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-cyan-300/15 bg-cyan-400/10 text-cyan-100">
+              <UserRound className="size-4" aria-hidden="true" />
             </span>
             <span className="min-w-0">
               <span className="block truncate text-base font-semibold text-white group-hover:text-cyan-100">
@@ -390,7 +390,7 @@ const UserRow: React.FC<{ user: AdminUserListItem; locale: 'zh' | 'en'; canReadO
         {adminLogs ? (
           <Link to={adminLogs} className={TERMINAL_LINK_ACTION_CLASSNAME}>
             Admin Logs
-            <ExternalLink className="h-3 w-3" aria-hidden="true" />
+            <ExternalLink className="size-3" aria-hidden="true" />
           </Link>
         ) : null}
       </div>
@@ -444,7 +444,7 @@ const DirectoryView: React.FC<{
               onChange={(sort) => setFilters({ ...filters, sort, offset: 0 })}
             />
             <TerminalButton type="button" variant="secondary" className="h-10 text-sm" onClick={reload}>
-              <Search className="h-4 w-4" aria-hidden="true" />
+              <Search className="size-4" aria-hidden="true" />
               刷新目录
             </TerminalButton>
             <TerminalNotice variant="info">
@@ -931,7 +931,7 @@ const DetailOverview: React.FC<{ detail: AdminUserDetailResponse; locale: 'zh' |
             {adminLogs ? (
               <Link to={adminLogs} className={TERMINAL_LINK_ACTION_CLASSNAME}>
                 查看 Admin Logs
-                <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                <ExternalLink className="size-3" aria-hidden="true" />
               </Link>
             ) : null}
             <TerminalChip variant="neutral">当前面板只读</TerminalChip>
@@ -1005,7 +1005,7 @@ const ActivityEventCard: React.FC<{ event: AdminActivityEvent }> = ({ event }) =
   const hiddenCount = sensitiveFieldCount(event.redactedMetadata);
   return (
     <TerminalNestedBlock className="relative">
-      <div className="absolute left-5 top-5 h-2.5 w-2.5 rounded-full border border-cyan-200/60 bg-cyan-300 shadow-[0_0_18px_rgba(103,232,249,0.28)]" aria-hidden="true" />
+      <div className="absolute left-5 top-5 size-2.5 rounded-full border border-cyan-200/60 bg-cyan-300 shadow-[0_0_18px_rgba(103,232,249,0.28)]" aria-hidden="true" />
       <div className="pl-7">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -1323,7 +1323,7 @@ const AdminUsersPage: React.FC = () => {
           ) : <span />}
         <div className="flex flex-wrap items-center gap-2">
           <TerminalChip variant="info">
-            <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+            <Clock3 className="size-3.5" aria-hidden="true" />
               只读 F1/F2
           </TerminalChip>
           <TerminalChip variant="neutral">无原始凭证</TerminalChip>
@@ -1333,7 +1333,7 @@ const AdminUsersPage: React.FC = () => {
         {content}
         <TerminalNotice variant="caution">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-200" aria-hidden="true" />
+            <AlertTriangle className="mt-0.5 size-4 text-amber-200" aria-hidden="true" />
             <p className="text-xs leading-5 text-white/46">
               本页面只展示账号、会话和活动的安全投影；凭证材料、原始会话材料、底层调试载荷、模型上下文、第三方原始响应和异常堆栈均不进入界面。
             </p>

@@ -1172,7 +1172,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   <p className="truncate text-sm text-white/78">{activeTabLabel}</p>
                 </div>
                 <span
-                  className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
+                  className="inline-flex size-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
                   aria-hidden="true"
                 />
               </div>
@@ -1434,7 +1434,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                           <p className="truncate text-sm text-white/78">{run.code}</p>
                         </div>
                         <span
-                          className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
+                          className="inline-flex size-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
                           aria-hidden="true"
                         />
                       </div>

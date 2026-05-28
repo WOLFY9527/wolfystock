@@ -877,7 +877,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
                 onClick={() => handleIndicatorToggle(key)}
                 title={title}
               >
-                <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
+                <span className="inline-block size-1.5 rounded-full" style={{ backgroundColor: color }} />
                 <span>{label}</span>
               </button>
             );
@@ -897,7 +897,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
         >
           <div
             ref={chartNodeRef}
-            className="h-full w-full"
+            className="size-full"
             role="img"
             aria-label={language === 'en' ? `Interactive ${activeTimeframe} OHLC candlestick chart` : `可交互 ${activeTimeframe} OHLC K 线图`}
             data-testid="home-candlestick-echarts-node"

@@ -101,14 +101,14 @@ function getValidationBadgeStatus(state: DataSourceValidationState): string {
 const StatusDot: React.FC<{ active: boolean }> = ({ active }) => (
   <span
     className={active
-      ? 'h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
-      : 'h-1.5 w-1.5 shrink-0 rounded-full bg-white/20'}
+      ? 'size-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
+      : 'size-1.5 shrink-0 rounded-full bg-white/20'}
     aria-hidden="true"
   />
 );
 
 const CoverageGapsPanel: React.FC<{ gaps: DataCoverageGapView[]; t: TranslateFn }> = ({ gaps, t }) => (
-  <GlassCard className="px-4 py-4">
+  <GlassCard className="p-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">
@@ -178,7 +178,7 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
           </GlassCard>
         ) : null}
         <CoverageGapsPanel gaps={coverageGaps} t={t} />
-      <GlassCard className="px-4 py-4">
+      <GlassCard className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">
@@ -243,7 +243,7 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
         </div>
       </GlassCard>
 
-      <GlassCard className="px-4 py-4">
+      <GlassCard className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">

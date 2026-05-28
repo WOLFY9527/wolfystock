@@ -23,7 +23,7 @@ const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10
 const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
 const DISCLOSURE_SUMMARY_CLASS = 'flex min-h-[58px] cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 [&::-webkit-details-marker]:hidden';
 const INTENT_PANEL_CLASS = 'min-w-0 rounded-[16px] border border-white/5 bg-black/20 p-3';
-const STATUS_ROW_CLASS = 'min-w-0 rounded-xl border border-white/[0.04] bg-white/[0.025] px-3 py-3';
+const STATUS_ROW_CLASS = 'min-w-0 rounded-xl border border-white/[0.04] bg-white/[0.025] p-3';
 const STATUS_CLASS: Record<DisplayStatusTone, string> = {
   success: 'border-emerald-400/20 text-emerald-300 bg-emerald-400/[0.06]',
   warning: 'border-amber-300/20 text-amber-300 bg-amber-300/[0.06]',
@@ -163,7 +163,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
               {summaryCards.map((item) => (
-                <div key={item.key} className="min-w-0 rounded-xl border border-white/5 bg-black/20 px-3 py-3">
+                <div key={item.key} className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3">
                   <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-white/35">{item.label}</p>
                   <p className={`mt-2 truncate text-sm font-semibold ${item.status ? STATUS_TEXT_CLASS[describeSettingsSystemHealthStatus(item.status).tone] : 'text-white'}`}>
                     {item.value}
@@ -283,7 +283,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
           {riskBoundaryCards.map((card) => {
             const status = describeSettingsSystemHealthStatus(card.status);
             return (
-              <article key={card.key} className="rounded-xl border border-white/[0.04] bg-black/20 px-3 py-3">
+              <article key={card.key} className="rounded-xl border border-white/[0.04] bg-black/20 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="truncate text-sm font-semibold text-foreground">{card.label}</p>
                   <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${STATUS_CLASS[status.tone]}`}>
@@ -311,7 +311,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
             <span className={GHOST_TAG_CLASS}>二级动作区</span>
           </summary>
           <div className="border-t border-white/[0.04] p-4">
-            <div className="rounded-2xl border border-amber-300/16 bg-black/25 px-4 py-4">
+            <div className="rounded-2xl border border-amber-300/16 bg-black/25 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--accent-warning-hsl))]">
@@ -322,7 +322,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
                 </div>
               </div>
               <div className="mt-4 divide-y divide-white/5 rounded-2xl border border-white/5 bg-white/[0.025]">
-                <div className="px-3 py-3">
+                <div className="p-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">{t('settings.adminMaintenanceTitle')}</p>
@@ -342,7 +342,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
                     </Button>
                   </div>
                 </div>
-                <div className="px-3 py-3">
+                <div className="p-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">{t('settings.adminFactoryResetTitle')}</p>
@@ -413,7 +413,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
           professional={(
             <div className="grid gap-3">
               {developerDetails.map((detail) => (
-                <div key={detail.key} className="min-w-0 rounded-xl border border-white/5 bg-black/20 px-3 py-3">
+                <div key={detail.key} className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/35">{detail.label}</p>
                   <p className="mt-2 text-xs leading-5 text-white/55">{detail.detail}</p>
                 </div>

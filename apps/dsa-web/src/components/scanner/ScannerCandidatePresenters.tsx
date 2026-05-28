@@ -155,14 +155,14 @@ export function ScannerCandidateDetailPanel({
       <div className="md:col-span-4 flex flex-wrap items-center gap-1.5 border-t border-white/8 py-2">
         <ActionButton
           label={isAnalyzing ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
-          icon={<Play className="h-3.5 w-3.5" />}
+          icon={<Play className="size-3.5" />}
           onClick={() => onAnalyze()}
           disabled={isAnalyzing}
           variant="compact"
         />
         <ActionButton
           label={watchlistActionLabel}
-          icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
+          icon={isTracked ? <BookmarkCheck className="size-3.5" /> : <BookmarkPlus className="size-3.5" />}
           onClick={() => onTrack()}
           disabled={isTrackPending || isTracked || isWatchlistAuthBlocked}
           variant="compact"
@@ -170,19 +170,19 @@ export function ScannerCandidateDetailPanel({
         />
         <ActionButton
           label={backtestLabel}
-          icon={<TestTubeDiagonal className="h-3.5 w-3.5" />}
+          icon={<TestTubeDiagonal className="size-3.5" />}
           onClick={() => onBacktest()}
           disabled={!candidate.symbol || backtestItem?.status === 'running' || backtestItem?.status === 'queued'}
           title={backtestTitle}
         />
         <ActionButton
           label={isCopied ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy symbol' : '复制代码')}
-          icon={<Copy className="h-3.5 w-3.5" />}
+          icon={<Copy className="size-3.5" />}
           onClick={() => onCopy()}
         />
         <ActionButton
           label={language === 'en' ? 'Export candidate' : '导出该候选'}
-          icon={<Download className="h-3.5 w-3.5" />}
+          icon={<Download className="size-3.5" />}
           onClick={() => onExport()}
         />
       </div>
@@ -286,7 +286,7 @@ export function ScannerCandidateInspector({
       data-testid={testId}
       className="flex max-h-full min-h-0 flex-col overflow-hidden rounded-xl border border-white/5 bg-white/[0.02] text-sm backdrop-blur-md transition-all hover:border-white/10"
     >
-      <div className="border-b border-white/5 px-3 py-3">
+      <div className="border-b border-white/5 p-3">
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
@@ -335,17 +335,17 @@ export function ScannerCandidateInspector({
           <div className="grid grid-cols-2 gap-1.5">
             <ActionButton
               label={isCopied ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy symbol' : '复制代码')}
-              icon={<Copy className="h-3.5 w-3.5" />}
+              icon={<Copy className="size-3.5" />}
               onClick={() => onCopy()}
             />
             <ActionButton
               label={language === 'en' ? 'Export' : '导出'}
-              icon={<Download className="h-3.5 w-3.5" />}
+              icon={<Download className="size-3.5" />}
               onClick={() => onExport()}
             />
             <ActionButton
               label={watchlistActionLabel}
-              icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
+              icon={isTracked ? <BookmarkCheck className="size-3.5" /> : <BookmarkPlus className="size-3.5" />}
               onClick={() => onTrack()}
               disabled={isTracked || isTrackPending || isWatchlistAuthBlocked}
               title={watchlistActionTitle}
@@ -712,7 +712,7 @@ export function ScannerCandidateCard({
           }}
         >
           {language === 'en' ? 'Detail' : '详情'}
-          {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
         </TerminalButton>
       </div>
 
@@ -753,7 +753,7 @@ export function ScannerCandidateCard({
         <div className="flex flex-wrap gap-1.5 pt-0.5">
           <ActionButton
             label={watchlistActionLabel}
-            icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
+            icon={isTracked ? <BookmarkCheck className="size-3.5" /> : <BookmarkPlus className="size-3.5" />}
             onClick={() => onTrack()}
             disabled={isTracked || isTrackPending}
             variant="compact"
@@ -761,7 +761,7 @@ export function ScannerCandidateCard({
           />
           <ActionButton
             label={language === 'en' ? 'View evidence' : '查看证据'}
-            icon={isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            icon={isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
             onClick={() => onViewEvidence()}
           />
         </div>
@@ -870,7 +870,7 @@ export function ScannerCandidateTableRow({
             <div data-testid={`scanner-result-row-more-${candidateIdentity}`} className="mt-1.5 flex flex-wrap justify-end gap-1.5 border-t border-white/8 pt-1.5">
               <ActionButton
                 label={watchlistActionLabel}
-                icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
+                icon={isTracked ? <BookmarkCheck className="size-3.5" /> : <BookmarkPlus className="size-3.5" />}
                 onClick={() => onTrack()}
                 disabled={isTracked || isTrackPending}
                 variant="compact"

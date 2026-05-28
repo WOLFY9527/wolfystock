@@ -209,8 +209,8 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
           title={stockName || stockCode}
           body={text.fullReport}
           icon={(
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--home-action-report-bg)] text-[var(--home-action-report-text)]">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-[var(--home-action-report-bg)] text-[var(--home-action-report-text)]">
+              <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
@@ -223,18 +223,18 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
         {isLoading ? (
           <SupportPanel
             centered
-            className="flex h-64 flex-col items-center justify-center px-6 py-6"
-            icon={<div className="home-spinner h-10 w-10 animate-spin border-[3px]" />}
+            className="flex h-64 flex-col items-center justify-center p-6"
+            icon={<div className="home-spinner size-10 animate-spin border-[3px]" />}
             title={text.loadingReport}
             body={text.markdownLoadingBody}
           />
         ) : error ? (
           <SupportPanel
             centered
-            className="flex h-64 flex-col items-center justify-center px-6 py-6"
+            className="flex h-64 flex-col items-center justify-center p-6"
             icon={(
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-danger/10">
-                <svg className="h-6 w-6 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="flex size-12 items-center justify-center rounded-xl bg-danger/10">
+                <svg className="size-6 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
@@ -333,7 +333,7 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
                         aria-live="polite"
                         aria-busy="true"
                         data-testid="report-technical-details-loading"
-                        className="rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/35 px-3 py-3 text-sm text-secondary-text"
+                        className="rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/35 p-3 text-sm text-secondary-text"
                       >
                         {normalizedLanguage === 'en' ? 'Loading technical details…' : '正在加载技术细节…'}
                       </div>

@@ -796,7 +796,7 @@ function WatchlistConclusionBand({
       as="section"
       dense
       data-testid="watchlist-conclusion-band"
-      className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start"
+      className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start"
     >
       <div className="min-w-0">
         <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
@@ -1352,7 +1352,7 @@ const WatchlistPage: React.FC = () => {
               className="h-9 px-3 text-xs"
               onClick={() => navigate(scannerPath)}
             >
-              <ExternalLink className="h-4 w-4" />
+              <ExternalLink className="size-4" />
               {copy.openScanner}
             </TerminalButton>
           )}
@@ -1402,7 +1402,7 @@ const WatchlistPage: React.FC = () => {
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder={copy.searchPlaceholder}
                   containerClassName="min-w-0"
-                  trailingAction={<Search className="h-4 w-4 text-white/35" />}
+                  trailingAction={<Search className="size-4 text-white/35" />}
                 />
               </div>
               <div className="min-w-0 md:flex-[0_0_9rem]">
@@ -1563,7 +1563,7 @@ const WatchlistPage: React.FC = () => {
                       <article
                         key={item.id}
                         data-testid={`watchlist-row-${item.symbol}`}
-                        className={`min-w-0 border-b border-[color:var(--wolfy-divider)] px-3 py-3 transition-colors md:px-4 ${isActive ? 'bg-white/[0.045]' : 'bg-transparent hover:bg-white/[0.02]'}`}
+                        className={`min-w-0 border-b border-[color:var(--wolfy-divider)] p-3 transition-colors md:px-4 ${isActive ? 'bg-white/[0.045]' : 'bg-transparent hover:bg-white/[0.02]'}`}
                       >
                         <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_auto] lg:items-start lg:gap-4">
                           <div className="flex min-w-0 gap-3">
@@ -1581,7 +1581,7 @@ const WatchlistPage: React.FC = () => {
                             >
                               <span
                                 aria-hidden="true"
-                                className={`h-3 w-3 rounded-sm border transition ${
+                                className={`size-3 rounded-sm border transition ${
                                   selectedIds.has(item.id)
                                     ? 'border-cyan-100 bg-cyan-100 shadow-[0_0_8px_rgba(103,232,249,0.35)]'
                                     : 'border-white/20 bg-transparent'
@@ -1655,7 +1655,7 @@ const WatchlistPage: React.FC = () => {
                               onClick={() => void handleAnalyze(item)}
                               disabled={pendingAnalyzeId === item.id}
                             >
-                              <Play className="h-3.5 w-3.5" />
+                              <Play className="size-3.5" />
                               {pendingAnalyzeId === item.id ? copy.analyzing : copy.analyze}
                             </TerminalButton>
                             <TerminalButton
@@ -1663,7 +1663,7 @@ const WatchlistPage: React.FC = () => {
                               variant="compact"
                               onClick={() => navigate(buildBacktestPath(item, language))}
                             >
-                              <BarChart3 className="h-3.5 w-3.5" />
+                              <BarChart3 className="size-3.5" />
                               {copy.backtest}
                             </TerminalButton>
                             {backtest?.lastResultId != null ? (
@@ -1684,7 +1684,7 @@ const WatchlistPage: React.FC = () => {
                               className="h-[34px] min-h-[34px] w-[34px] px-0 text-white/55"
                               onClick={() => void handleCopy(item)}
                             >
-                              <Copy className="h-3.5 w-3.5" />
+                              <Copy className="size-3.5" />
                             </TerminalButton>
                             <TerminalButton
                               type="button"
@@ -1694,7 +1694,7 @@ const WatchlistPage: React.FC = () => {
                               onClick={() => void handleRemove(item)}
                               disabled={pendingRemoveId === item.id}
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Trash2 className="size-3.5" />
                             </TerminalButton>
                           </div>
                         </div>
@@ -1706,7 +1706,7 @@ const WatchlistPage: React.FC = () => {
                 <CompactEmptyRow
                   data-testid="watchlist-compact-empty-state"
                   title={copy.emptyTitle}
-                  className="rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent px-4 py-4 min-h-[72px]"
+                  className="rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent p-4 min-h-[72px]"
                   action={(
                     <TerminalButton
                       type="button"
@@ -1714,7 +1714,7 @@ const WatchlistPage: React.FC = () => {
                       className="h-9 px-3 text-xs"
                       onClick={() => navigate(scannerPath)}
                     >
-                      <ExternalLink className="h-4 w-4" />
+                      <ExternalLink className="size-4" />
                       {copy.openScanner}
                     </TerminalButton>
                   )}
@@ -1732,7 +1732,7 @@ const WatchlistPage: React.FC = () => {
               data-testid="watchlist-detail-rail"
               className="min-w-0 border-t border-[color:var(--wolfy-divider)] lg:border-l lg:border-t-0"
             >
-              <ConsoleContextRail className="rounded-none border-0 bg-[var(--wolfy-surface-rail)] px-4 py-4">
+              <ConsoleContextRail className="rounded-none border-0 bg-[var(--wolfy-surface-rail)] p-4">
                 <section className="min-w-0 pb-4">
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -1756,15 +1756,15 @@ const WatchlistPage: React.FC = () => {
                 </section>
 
                 <section className="grid min-w-0 gap-3 border-y border-[color:var(--wolfy-divider)] py-4">
-                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
                     <p className="text-[11px] text-white/40">{language === 'zh' ? '当前状态' : 'Current state'}</p>
                     <p className="mt-1 text-sm text-white/78">{formatScoreDisclosureFreshness(activeItem, activeLatestTime, language)}</p>
                   </div>
-                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
                     <p className="text-[11px] text-white/40">{language === 'zh' ? '风险提示' : 'Risk note'}</p>
                     <p className="mt-1 text-sm text-white/78">{activeRiskNote || (language === 'en' ? 'State is stable for observation.' : '当前状态适合继续观察。')}</p>
                   </div>
-                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
                     <p className="text-[11px] text-white/40">{language === 'zh' ? '下一步' : 'Next step'}</p>
                     <p className="mt-1 text-sm text-white/78">{activeNextActionLabel}</p>
                   </div>
@@ -1795,7 +1795,7 @@ const WatchlistPage: React.FC = () => {
                   <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
                     <h3 className="text-sm font-semibold text-white">{copy.intelligence}</h3>
                   </div>
-                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs leading-5 text-white/68">
+                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-xs leading-5 text-white/68">
                     {activeBacktestSummary}
                   </div>
                 </section>
@@ -1835,7 +1835,7 @@ const WatchlistPage: React.FC = () => {
                       onClick={() => void handleAnalyze(activeItem)}
                       disabled={pendingAnalyzeId === activeItem.id}
                     >
-                      <Play className="h-3.5 w-3.5" />
+                      <Play className="size-3.5" />
                       {pendingAnalyzeId === activeItem.id ? copy.analyzing : copy.analyze}
                     </TerminalButton>
                     <TerminalButton
@@ -1843,7 +1843,7 @@ const WatchlistPage: React.FC = () => {
                       variant="compact"
                       onClick={() => navigate(buildBacktestPath(activeItem, language))}
                     >
-                      <BarChart3 className="h-3.5 w-3.5" />
+                      <BarChart3 className="size-3.5" />
                       {copy.backtest}
                     </TerminalButton>
                     {activeBacktest?.lastResultId != null ? (
@@ -1861,7 +1861,7 @@ const WatchlistPage: React.FC = () => {
                       variant="compact"
                       onClick={() => void handleCopy(activeItem)}
                     >
-                      <Copy className="h-3.5 w-3.5" />
+                      <Copy className="size-3.5" />
                       {copy.copySymbol}
                     </TerminalButton>
                     <TerminalButton
@@ -1870,7 +1870,7 @@ const WatchlistPage: React.FC = () => {
                       onClick={() => void handleRemove(activeItem)}
                       disabled={pendingRemoveId === activeItem.id}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="size-3.5" />
                       {copy.remove}
                     </TerminalButton>
                   </div>
@@ -1905,7 +1905,7 @@ const WatchlistPage: React.FC = () => {
                 onClick={() => void handleRefreshScores(actionItems)}
                 disabled={isActionDisabled}
               >
-                <RefreshCw className={`h-3.5 w-3.5 ${isBatchScanning ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`size-3.5 ${isBatchScanning ? 'animate-spin' : ''}`} />
                 {copy.batchScanFilter}
               </TerminalButton>
               <TerminalButton
@@ -1914,7 +1914,7 @@ const WatchlistPage: React.FC = () => {
                 onClick={() => void handleBatchBacktestCurrentFilter()}
                 disabled={isActionDisabled}
               >
-                <BarChart3 className="h-3.5 w-3.5" />
+                <BarChart3 className="size-3.5" />
                 {isBatchBacktesting ? copy.batchBacktesting : copy.batchBacktestFilter}
               </TerminalButton>
               <TerminalButton
@@ -1924,7 +1924,7 @@ const WatchlistPage: React.FC = () => {
                 onClick={() => setUseSelectedScope((current) => selectedItems.length > 0 ? !current : current)}
                 disabled={selectedItems.length === 0}
               >
-                <CheckSquare className="h-3.5 w-3.5" />
+                <CheckSquare className="size-3.5" />
                 {copy.selectedOnly}
               </TerminalButton>
               <TerminalButton
@@ -1939,7 +1939,7 @@ const WatchlistPage: React.FC = () => {
                 {copy.clearSelection}
               </TerminalButton>
               <TerminalButton type="button" variant="compact" onClick={() => void handleRefreshIntelligence()}>
-                <RefreshCw className="h-3.5 w-3.5" />
+                <RefreshCw className="size-3.5" />
                 {copy.refreshIntelligence}
               </TerminalButton>
               <TerminalButton
@@ -1949,7 +1949,7 @@ const WatchlistPage: React.FC = () => {
                 onClick={() => void handleRefreshScores()}
                 disabled={isRefreshingScores}
               >
-                <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingScores ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`size-3.5 ${isRefreshingScores ? 'animate-spin' : ''}`} />
                 {isRefreshingScores ? copy.refreshingScores : copy.refreshScores}
               </TerminalButton>
               </>

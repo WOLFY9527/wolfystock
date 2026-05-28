@@ -300,7 +300,7 @@ const FilterRail: React.FC<{
   <TerminalPanel as="aside">
     <TerminalSectionHeader
       eyebrow="观测过滤"
-      title={iconTitle(<ShieldCheck className="h-4 w-4" />, '窗口与范围')}
+      title={iconTitle(<ShieldCheck className="size-4" />, '窗口与范围')}
       action={<TerminalChip variant="neutral">只读筛选</TerminalChip>}
     />
     <div className="mt-5 grid gap-4">
@@ -392,7 +392,7 @@ const LimitationsPanel: React.FC<{ data: AdminCostSummaryResponse }> = ({ data }
   <TerminalPanel as="section">
     <TerminalSectionHeader
       eyebrow="Limitations"
-      title={iconTitle(<AlertTriangle className="h-4 w-4" />, '限制与数据质量')}
+      title={iconTitle(<AlertTriangle className="size-4" />, '限制与数据质量')}
       action={(
         <TerminalChip variant={data.limitations.length ? 'caution' : 'neutral'}>
           {data.limitations.length ? `${data.limitations.length} 条限制` : '暂无限制'}
@@ -541,7 +541,7 @@ const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = 
     <TerminalPanel as="section" data-testid="llm-ledger-panel">
       <TerminalSectionHeader
         eyebrow="AI 调用账本"
-        title={iconTitle(<Coins className="h-4 w-4" />, 'AI 调用账本')}
+        title={iconTitle(<Coins className="size-4" />, 'AI 调用账本')}
         action={<TerminalChip variant="neutral">估算值，不等同于供应商账单</TerminalChip>}
       />
 
@@ -655,7 +655,7 @@ const PricingPolicyPanel: React.FC = () => {
     <TerminalPanel as="section" data-testid="model-pricing-policy-panel">
       <TerminalSectionHeader
         eyebrow="Pricing Policies"
-        title={iconTitle(<Tags className="h-4 w-4" />, '模型价格策略')}
+        title={iconTitle(<Tags className="size-4" />, '模型价格策略')}
         action={(
           <div className="flex flex-wrap gap-2">
             <TerminalChip variant="info">激活 {compactNumber(state.data?.activeCount)}</TerminalChip>
@@ -804,7 +804,7 @@ const QuotaDryRunPanel: React.FC = () => {
     <TerminalPanel as="section" data-testid="quota-dry-run-panel">
       <TerminalSectionHeader
         eyebrow="Quota Pilot"
-        title={iconTitle(<Gauge className="h-4 w-4" />, '配额试运行诊断')}
+        title={iconTitle(<Gauge className="size-4" />, '配额试运行诊断')}
         action={<TerminalChip variant="info">只读诊断</TerminalChip>}
       />
 
@@ -1065,32 +1065,32 @@ const AdminCostObservabilityPage: React.FC = () => {
                   <PricingPolicyPanel />
                   <div className="grid grid-cols-1 gap-6 2xl:grid-cols-2">
                     <TerminalPanel as="section">
-                      <TerminalSectionHeader eyebrow="LLM" title={iconTitle(<Activity className="h-4 w-4" />, 'LLM 调用')} />
+                      <TerminalSectionHeader eyebrow="LLM" title={iconTitle(<Activity className="size-4" />, 'LLM 调用')} />
                       <div className="mt-4">
                         <RollupList items={data.llm.byCallType} empty="暂无 LLM 调用计数" />
                       </div>
                     </TerminalPanel>
                     <TerminalPanel as="section">
-                      <TerminalSectionHeader eyebrow="Duplicate" title={iconTitle(<BarChart3 className="h-4 w-4" />, 'Guest Preview / Report duplicate candidates')} />
+                      <TerminalSectionHeader eyebrow="Duplicate" title={iconTitle(<BarChart3 className="size-4" />, 'Guest Preview / Report duplicate candidates')} />
                       <div className="mt-4">
                         <RollupList items={[...data.llm.duplicateCandidates, ...data.providers.duplicateCandidates, ...data.scannerAi.duplicateCandidates]} empty="暂无重复候选" />
                       </div>
                     </TerminalPanel>
                     <TerminalPanel as="section">
-                      <TerminalSectionHeader eyebrow="数据源状态" title={iconTitle(<DatabaseZap className="h-4 w-4" />, '数据源状态 / 备用链路')} />
+                      <TerminalSectionHeader eyebrow="数据源状态" title={iconTitle(<DatabaseZap className="size-4" />, '数据源状态 / 备用链路')} />
                       <div className="mt-4 grid gap-3">
                         <RollupList items={[...data.providers.byCategory, ...data.providers.fallbackDepth, ...data.llm.fallbacks]} empty="暂无数据源备用计数" />
                         <CacheEfficiencyList items={data.providers.cacheEfficiency} />
                       </div>
                     </TerminalPanel>
                     <TerminalPanel as="section">
-                      <TerminalSectionHeader eyebrow="市场缓存" title={iconTitle(<DatabaseZap className="h-4 w-4" />, '市场缓存命中 / 过期 / 缺失')} />
+                      <TerminalSectionHeader eyebrow="市场缓存" title={iconTitle(<DatabaseZap className="size-4" />, '市场缓存命中 / 过期 / 缺失')} />
                       <div className="mt-4">
                         <RollupList items={[...data.marketCache.byPanelKey, ...data.marketCache.staleServed, ...data.marketCache.coldFallbacks, ...data.marketCache.refreshes]} empty="暂无市场缓存计数" />
                       </div>
                     </TerminalPanel>
                     <TerminalPanel as="section">
-                      <TerminalSectionHeader eyebrow="Scanner AI" title={iconTitle(<Radar className="h-4 w-4" />, 'Scanner AI 解释')} />
+                      <TerminalSectionHeader eyebrow="Scanner AI" title={iconTitle(<Radar className="size-4" />, 'Scanner AI 解释')} />
                       <div className="mt-4">
                         <RollupList items={[...data.scannerAi.interpretations, ...data.scannerAi.skips]} empty="暂无 Scanner AI 计数" />
                       </div>

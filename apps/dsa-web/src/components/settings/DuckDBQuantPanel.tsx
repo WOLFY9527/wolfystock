@@ -33,7 +33,7 @@ const DEFAULT_LOOKBACK_DAYS = 5;
 const DEFAULT_BENCHMARK_SYMBOL_LIMIT = 2;
 const BUTTON_CLASS = 'rounded-lg px-3 py-1.5 text-xs';
 const CHIP_CLASS = 'inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-semibold';
-const PANEL_CLASS = 'rounded-xl border border-white/5 bg-black/20 px-3 py-3';
+const PANEL_CLASS = 'rounded-xl border border-white/5 bg-black/20 p-3';
 
 function parseSymbolInput(value: string): string[] {
   return Array.from(new Set(
@@ -81,7 +81,7 @@ function detailWithCompactPaths<T extends { databasePath?: string | null; parque
 }
 
 const MetricTile: React.FC<{ label: string; value: string; detail?: string }> = ({ label, value, detail }) => (
-  <div className="min-w-0 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-3">
+  <div className="min-w-0 rounded-xl border border-white/5 bg-white/[0.02] p-3">
     <p className="truncate text-[10px] font-semibold uppercase text-white/35">{label}</p>
     <p className="mt-2 truncate text-sm font-semibold text-white tabular-nums">{value}</p>
     {detail ? <p className="mt-1 truncate text-[11px] text-white/45">{detail}</p> : null}
@@ -229,7 +229,7 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
   };
 
   return (
-    <GlassCard className="px-4 py-4" data-testid="duckdb-quant-panel">
+    <GlassCard className="p-4" data-testid="duckdb-quant-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase text-cyan-300">DuckDB 诊断</p>

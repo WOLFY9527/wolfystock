@@ -77,7 +77,7 @@ export function ScannerStrategySimulationPanel({
       className="rounded-xl border border-white/5 bg-white/[0.015] p-3 text-xs"
     >
       <div className="flex min-w-0 items-center gap-2">
-        <Clock className="h-3.5 w-3.5 text-white/38" aria-hidden="true" />
+        <Clock className="size-3.5 text-white/38" aria-hidden="true" />
         <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">
           {language === 'en' ? `History sim · ${lookbackDays}D · Forward ${forwardDays}D` : `历史模拟 · 回看 ${lookbackDays}D · 持有 ${forwardDays}D`}
         </h3>
@@ -117,7 +117,7 @@ export function ScannerStrategySimulationPanel({
           <div className="flex items-end">
             <ScannerActionButton
               label={isLoading ? (language === 'en' ? 'Running' : '运行中') : (language === 'en' ? 'Run sim' : '运行模拟')}
-              icon={<Play className="h-3.5 w-3.5" />}
+              icon={<Play className="size-3.5" />}
               onClick={onRun}
               disabled={disabled || isLoading}
               variant="primary"
@@ -157,25 +157,25 @@ export function ScannerStrategySimulationPanel({
             <table className="min-w-[720px] w-full text-left text-[11px]">
               <thead className="border-b border-white/5 text-[10px] uppercase tracking-widest text-white/40">
                 <tr>
-                  <th className="px-2 py-2">Run</th>
-                  <th className="px-2 py-2">{language === 'en' ? 'Selected' : '入选'}</th>
-                  <th className="px-2 py-2">{language === 'en' ? 'Rejected' : '淘汰'}</th>
-                  <th className="px-2 py-2">{language === 'en' ? 'Symbols' : '标的'}</th>
-                  <th className="px-2 py-2">Forward</th>
-                  <th className="px-2 py-2">Benchmark</th>
-                  <th className="px-2 py-2">Excess</th>
+                  <th className="p-2">Run</th>
+                  <th className="p-2">{language === 'en' ? 'Selected' : '入选'}</th>
+                  <th className="p-2">{language === 'en' ? 'Rejected' : '淘汰'}</th>
+                  <th className="p-2">{language === 'en' ? 'Symbols' : '标的'}</th>
+                  <th className="p-2">Forward</th>
+                  <th className="p-2">Benchmark</th>
+                  <th className="p-2">Excess</th>
                 </tr>
               </thead>
               <tbody>
                 {result.runs.map((item) => (
                   <tr key={item.runId} className="border-b border-white/5 text-white/62">
-                    <td className="px-2 py-2 font-mono text-white">#{item.runId}</td>
-                    <td className="px-2 py-2 font-mono">{item.selectedCount}</td>
-                    <td className="px-2 py-2 font-mono">{item.rejectedCount}</td>
-                    <td className="max-w-[180px] truncate px-2 py-2 font-mono text-white/72" title={item.selectedSymbols.join(', ')}>{item.selectedSymbols.join(', ') || '--'}</td>
-                    <td className={`px-2 py-2 ${simulationToneClass(item.avgForwardReturnPct)}`}>{formatPercent(item.avgForwardReturnPct)}</td>
-                    <td className={`px-2 py-2 ${simulationToneClass(item.benchmarkReturnPct)}`}>{formatPercent(item.benchmarkReturnPct)}</td>
-                    <td className={`px-2 py-2 ${simulationToneClass(item.excessReturnPct)}`}>{formatPercent(item.excessReturnPct)}</td>
+                    <td className="p-2 font-mono text-white">#{item.runId}</td>
+                    <td className="p-2 font-mono">{item.selectedCount}</td>
+                    <td className="p-2 font-mono">{item.rejectedCount}</td>
+                    <td className="max-w-[180px] truncate p-2 font-mono text-white/72" title={item.selectedSymbols.join(', ')}>{item.selectedSymbols.join(', ') || '--'}</td>
+                    <td className={`p-2 ${simulationToneClass(item.avgForwardReturnPct)}`}>{formatPercent(item.avgForwardReturnPct)}</td>
+                    <td className={`p-2 ${simulationToneClass(item.benchmarkReturnPct)}`}>{formatPercent(item.benchmarkReturnPct)}</td>
+                    <td className={`p-2 ${simulationToneClass(item.excessReturnPct)}`}>{formatPercent(item.excessReturnPct)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -187,25 +187,25 @@ export function ScannerStrategySimulationPanel({
             <table className="min-w-[680px] w-full text-left text-[11px]">
               <thead className="border-b border-white/5 text-[10px] uppercase tracking-widest text-white/40">
                 <tr>
-                  <th className="px-2 py-2">Symbol</th>
-                  <th className="px-2 py-2">{language === 'en' ? 'Count' : '次数'}</th>
-                  <th className="px-2 py-2">Score</th>
-                  <th className="px-2 py-2">Forward</th>
-                  <th className="px-2 py-2">Hit</th>
-                  <th className="px-2 py-2">Best</th>
-                  <th className="px-2 py-2">Worst</th>
+                  <th className="p-2">Symbol</th>
+                  <th className="p-2">{language === 'en' ? 'Count' : '次数'}</th>
+                  <th className="p-2">Score</th>
+                  <th className="p-2">Forward</th>
+                  <th className="p-2">Hit</th>
+                  <th className="p-2">Best</th>
+                  <th className="p-2">Worst</th>
                 </tr>
               </thead>
               <tbody>
                 {result.symbols.map((item) => (
                   <tr key={item.symbol} className="border-b border-white/5 text-white/62">
-                    <td className="px-2 py-2 font-mono text-white">{item.symbol}</td>
-                    <td className="px-2 py-2 font-mono">{item.selectionCount}</td>
-                    <td className="px-2 py-2 font-mono">{formatMetricNumber(item.avgScore, 1)}</td>
-                    <td className={`px-2 py-2 ${simulationToneClass(item.avgForwardReturnPct)}`}>{formatPercent(item.avgForwardReturnPct)}</td>
-                    <td className="px-2 py-2 font-mono">{formatRatio(item.hitRate)}</td>
-                    <td className={`px-2 py-2 ${simulationToneClass(item.bestForwardReturnPct)}`}>{formatPercent(item.bestForwardReturnPct)}</td>
-                    <td className={`px-2 py-2 ${simulationToneClass(item.worstForwardReturnPct)}`}>{formatPercent(item.worstForwardReturnPct)}</td>
+                    <td className="p-2 font-mono text-white">{item.symbol}</td>
+                    <td className="p-2 font-mono">{item.selectionCount}</td>
+                    <td className="p-2 font-mono">{formatMetricNumber(item.avgScore, 1)}</td>
+                    <td className={`p-2 ${simulationToneClass(item.avgForwardReturnPct)}`}>{formatPercent(item.avgForwardReturnPct)}</td>
+                    <td className="p-2 font-mono">{formatRatio(item.hitRate)}</td>
+                    <td className={`p-2 ${simulationToneClass(item.bestForwardReturnPct)}`}>{formatPercent(item.bestForwardReturnPct)}</td>
+                    <td className={`p-2 ${simulationToneClass(item.worstForwardReturnPct)}`}>{formatPercent(item.worstForwardReturnPct)}</td>
                   </tr>
                 ))}
               </tbody>

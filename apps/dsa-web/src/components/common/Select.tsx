@@ -121,7 +121,7 @@ export const Select: React.FC<SelectProps> = ({
           disabled={disabled}
           {...props}
           className={cn(
-            'select-surface absolute inset-0 z-10 h-full w-full min-w-0 cursor-pointer appearance-none truncate rounded-lg pr-10 opacity-0 outline-none',
+            'select-surface absolute inset-0 z-10 size-full min-w-0 cursor-pointer appearance-none truncate rounded-lg pr-10 opacity-0 outline-none',
             disabled ? 'cursor-not-allowed' : '',
           )}
           onChange={(e) => {
@@ -156,7 +156,7 @@ export const Select: React.FC<SelectProps> = ({
           )}
         >
           <span className="select-field__value min-w-0 flex-1 truncate">{selectedLabel}</span>
-          <ChevronDown className="select-field__icon ui-control-icon ml-2 h-4 w-4 shrink-0 text-white/40" />
+          <ChevronDown className="select-field__icon ui-control-icon ml-2 size-4 shrink-0 text-white/40" />
         </div>
       </div>
     </div>

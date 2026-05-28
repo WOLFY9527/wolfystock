@@ -1247,7 +1247,7 @@ function buildConsumerLiquidityStatusView(
 const LiquiditySetupPath: React.FC<{ testId: string }> = ({ testId }) => (
   <div
     data-testid={testId}
-    className="mt-4 rounded-lg border border-cyan-200/12 bg-cyan-300/[0.035] px-3 py-3"
+    className="mt-4 rounded-lg border border-cyan-200/12 bg-cyan-300/[0.035] p-3"
   >
     <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div className="min-w-0">
@@ -1344,7 +1344,7 @@ const DecisionReadinessBand: React.FC<{
         className="min-w-0 border-b border-white/[0.06] pb-4"
       >
         <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.28fr)_minmax(280px,0.72fr)]">
-          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-4 py-4">
+          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-4">
             <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold text-white/45">流动性状态</p>
@@ -1365,7 +1365,7 @@ const DecisionReadinessBand: React.FC<{
               className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3"
             >
               {consumerSummaryFacts.map((fact) => (
-                <div key={fact.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+                <div key={fact.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
                   <p className="text-[11px] font-medium text-white/48">{fact.label}</p>
                   <p className="mt-2 truncate text-sm font-semibold text-white/84">{fact.value}</p>
                   {fact.detail ? (
@@ -1378,7 +1378,7 @@ const DecisionReadinessBand: React.FC<{
             {consumerEvidenceRows.length ? (
               <div
                 data-testid="liquidity-consumer-evidence"
-                className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3"
+                className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3"
               >
                 <div className="flex min-w-0 items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -1388,7 +1388,7 @@ const DecisionReadinessBand: React.FC<{
                 </div>
                 <div className="mt-3 grid gap-2">
                   {consumerEvidenceRows.map((row) => (
-                    <div key={row.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+                    <div key={row.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
                       <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-white/84">{row.label}</p>
@@ -1428,14 +1428,14 @@ const DecisionReadinessBand: React.FC<{
             data-testid="liquidity-context-rail"
             className="grid min-w-0 gap-3 self-start"
           >
-            <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+            <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
               <p className="text-[11px] font-medium text-white/48">当前缺口</p>
               <p className="mt-2 text-sm leading-6 text-white/76">{consumerGapSummary}</p>
               <p className="mt-2 text-[11px] leading-5 text-white/48">
                 {missing.count > 0 ? `优先恢复：${missing.namesLine}` : '当前没有新增缺口，继续观察后续变化。'}
               </p>
             </div>
-            <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+            <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
               <p className="text-[11px] font-medium text-white/48">下一次关注</p>
               <p className="mt-2 text-sm leading-6 text-white/76">{nextWatch}</p>
               <p className="mt-2 text-[11px] leading-5 text-white/48">
@@ -1454,7 +1454,7 @@ const DecisionReadinessBand: React.FC<{
     className="min-w-0 border-b border-white/[0.06] pb-4"
   >
     <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1.15fr)]">
-      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-4 py-4">
+      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-4">
         <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold text-white/45">流动性判断摘要</p>
@@ -1477,30 +1477,30 @@ const DecisionReadinessBand: React.FC<{
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
             <p className="text-[11px] font-medium text-white/48">当前方向</p>
             <p className={cn('mt-2 text-sm font-semibold', bias.toneClassName)}>{bias.label}</p>
             <p className="mt-1 text-[11px] leading-5 text-white/56">{bias.detail}</p>
           </div>
-          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
             <p className="text-[11px] font-medium text-white/48">主要缺口</p>
             <p className="mt-2 text-[11px] leading-5 text-white/60">{mainGapLine}</p>
           </div>
-          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
             <p className="text-[11px] font-medium text-white/48">下一步观察</p>
             <p className="mt-2 text-[11px] leading-5 text-white/60">{nextWatch}</p>
           </div>
         </div>
       </div>
 
-      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-4 py-4">
+      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-4">
         <div className="mb-3 min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
           <p className="text-[11px] font-medium text-white/48">证据质量</p>
           <p className="mt-1 text-[11px] leading-5 text-white/62">{summary.qualityLabel}</p>
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {evidenceColumns.map((column) => (
-            <div key={column.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+            <div key={column.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
               <p className="text-[11px] font-medium text-white/48">{column.label}</p>
               <p className={cn('mt-2 font-mono text-2xl font-semibold', column.tone)}>{column.count}</p>
               <p className="mt-2 text-[11px] leading-5 text-white/58">{column.detail}</p>
@@ -1508,7 +1508,7 @@ const DecisionReadinessBand: React.FC<{
           ))}
         </div>
 
-        <section data-testid="liquidity-regime-gauge" className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+        <section data-testid="liquidity-regime-gauge" className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
           <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className="min-w-0">
               <p className="text-[11px] font-medium text-white/48">流动性刻度</p>
@@ -1531,7 +1531,7 @@ const DecisionReadinessBand: React.FC<{
     </div>
 
     <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
-      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
         <p className="text-[11px] font-medium text-white/48">阻塞项</p>
         <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
           {summary.blockers.map((item) => (
@@ -1539,7 +1539,7 @@ const DecisionReadinessBand: React.FC<{
           ))}
         </div>
       </div>
-      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
         <p className="text-[11px] font-medium text-white/48">提升证据</p>
         <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
           {summary.nextEvidence.map((item) => (
@@ -1625,7 +1625,7 @@ const LiquidityGuidancePanel: React.FC<{
                       <p className={cn('mt-2 font-mono text-5xl tracking-tight', REGIME_TONE[data.score.regime])}>{scoreLabel(data.score.value)}</p>
                       <p className="mt-2 text-sm text-white/48">{REGIME_LABELS[data.score.regime]}</p>
                     </div>
-                    <Gauge className="h-8 w-8 text-white/28" aria-hidden="true" />
+                    <Gauge className="size-8 text-white/28" aria-hidden="true" />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1698,7 +1698,7 @@ const LiquidityGuidancePanel: React.FC<{
 
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               <TerminalPanel>
-                <TerminalSectionHeader eyebrow="选中指标" title="指标细节" action={<Waves className="h-4 w-4 text-white/28" aria-hidden="true" />} />
+                <TerminalSectionHeader eyebrow="选中指标" title="指标细节" action={<Waves className="size-4 text-white/28" aria-hidden="true" />} />
                 {selectedIndicator ? (
                   <div className="mt-4 grid grid-cols-1 gap-3">
                     <TerminalMetric label="当前指标" value={displayLabel(selectedIndicator)} valueClassName="text-sm font-sans leading-6" />
@@ -1719,7 +1719,7 @@ const LiquidityGuidancePanel: React.FC<{
               </TerminalPanel>
 
               <TerminalPanel data-testid="liquidity-monitor-source-disclosure">
-                <TerminalSectionHeader eyebrow="运行边界" title="来源与约束" action={<Activity className="h-4 w-4 text-white/28" aria-hidden="true" />} />
+                <TerminalSectionHeader eyebrow="运行边界" title="来源与约束" action={<Activity className="size-4 text-white/28" aria-hidden="true" />} />
                 <div className="mt-4 grid grid-cols-1 gap-3">
                   <TerminalMetric label="外部调用" value={data.sourceMetadata.externalProviderCalls ? '已发生' : '未发生'} valueClassName="text-sm font-sans" />
                   <TerminalMetric label="运行顺序" value={data.sourceMetadata.providerRuntimeChanged ? '已变更' : '未变更'} valueClassName="text-sm font-sans" />

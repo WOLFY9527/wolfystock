@@ -512,7 +512,7 @@ const AdminNotificationsPage: React.FC = () => {
           title={channels.length
             ? text('Log notification rules mapped to safe operator channels.', '日志通知规则与安全运维通道的覆盖情况。')
             : text('No rules exist yet.', '暂无通知规则。')}
-          action={<TerminalChip variant="info"><ShieldCheck className="h-3.5 w-3.5" />{text('Operator route', '运维路由')}</TerminalChip>}
+          action={<TerminalChip variant="info"><ShieldCheck className="size-3.5" />{text('Operator route', '运维路由')}</TerminalChip>}
         />
         <TerminalGrid data-testid="admin-notifications-summary-grid" className="mt-4">
           <div className="col-span-12 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -649,7 +649,7 @@ const AdminNotificationsPage: React.FC = () => {
             <TerminalSectionHeader
               eyebrow={text('Notification rules', '通知规则')}
               title={text(`${channels.length} configured routes`, `${channels.length} 条已配置路由`)}
-              action={<TerminalChip variant="info"><BellRing className="h-3.5 w-3.5" />{text('Route bindings', '路由绑定')}</TerminalChip>}
+              action={<TerminalChip variant="info"><BellRing className="size-3.5" />{text('Route bindings', '路由绑定')}</TerminalChip>}
             />
             <TerminalDenseList className="mt-4 gap-3">
                 {channels.length ? channels.map((channel) => {
@@ -663,7 +663,7 @@ const AdminNotificationsPage: React.FC = () => {
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-white/90">{channel.name}</p>
                         <p className="mt-1 flex items-center gap-1 text-[11px] text-white/40">
-                          {channel.type === 'webhook' ? <Webhook className="h-3 w-3" /> : <BellRing className="h-3 w-3" />}
+                          {channel.type === 'webhook' ? <Webhook className="size-3" /> : <BellRing className="size-3" />}
                           {scopeLabel(channel, language as 'zh' | 'en')} · {channel.type === 'system_channel'
                             ? text('Existing channel', '已有通道')
                             : channel.type === 'webhook'
@@ -704,7 +704,7 @@ const AdminNotificationsPage: React.FC = () => {
                         onClick={() => void testChannel(channel.id, true)}
                         disabled={busyId === channel.id}
                       >
-                        <ShieldCheck className="h-3 w-3" />
+                        <ShieldCheck className="size-3" />
                         {text('Dry run', '仅验证')}
                       </TerminalButton>
                       <TerminalButton
@@ -713,7 +713,7 @@ const AdminNotificationsPage: React.FC = () => {
                         onClick={() => void toggleChannel(channel)}
                         disabled={busyId === channel.id}
                       >
-                        <Power className="h-3 w-3" />
+                        <Power className="size-3" />
                         {channel.enabled ? text('Disable', '停用') : text('Enable', '启用')}
                       </TerminalButton>
                       <TerminalButton
@@ -722,7 +722,7 @@ const AdminNotificationsPage: React.FC = () => {
                         onClick={() => void testChannel(channel.id, false)}
                         disabled={busyId === channel.id}
                       >
-                        <Send className="h-3 w-3" />
+                        <Send className="size-3" />
                         {text('Test send', '测试发送')}
                       </TerminalButton>
                       <TerminalButton
@@ -732,7 +732,7 @@ const AdminNotificationsPage: React.FC = () => {
                         disabled={busyId === channel.id}
                         title={text('Only unbind the log notification route; system channel is not deleted.', '仅解除日志路由绑定；不会删除系统通道。')}
                       >
-                        <Trash2 className="h-3 w-3" />
+                        <Trash2 className="size-3" />
                         {text('Unbind', '解除绑定')}
                       </TerminalButton>
                       <p className="basis-full text-[11px] leading-4 text-white/40 lg:text-right">
@@ -752,7 +752,7 @@ const AdminNotificationsPage: React.FC = () => {
             <TerminalSectionHeader
               eyebrow={text('Notifications', '通知事件')}
               title={text('Recent operational alert events and acknowledgement state.', '最近的运维告警事件与确认状态。')}
-              action={<TerminalChip variant="info"><CheckCircle2 className="h-3.5 w-3.5" />{text('Recent events', '最近事件')}</TerminalChip>}
+              action={<TerminalChip variant="info"><CheckCircle2 className="size-3.5" />{text('Recent events', '最近事件')}</TerminalChip>}
             />
             <TerminalDenseList className="mt-4 gap-3">
                 {events.length ? events.map((event) => (

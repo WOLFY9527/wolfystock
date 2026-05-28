@@ -296,8 +296,8 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
                     </p>
                     <p className="mt-3 text-xs leading-5 text-white/44">{stage}</p>
                   </div>
-                  <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-cyan-300/15 bg-cyan-400/8 text-cyan-100">
-                    <Icon className="h-4 w-4" aria-hidden="true" />
+                  <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-cyan-300/15 bg-cyan-400/8 text-cyan-100">
+                    <Icon className="size-4" aria-hidden="true" />
                   </span>
                 </TerminalNestedBlock>
               </article>

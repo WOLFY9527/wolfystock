@@ -441,7 +441,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
               <div className="shell-mobile-strip">
                 <NavLink to="/" end className="shell-mobile-brand shell-brand-link" aria-label="WolfyStock">
                   <span className="inline-flex min-w-0 items-center gap-3">
-                    <BrandLogo className="h-8 w-8" />
+                    <BrandLogo className="size-8" />
                     <span className={`shell-wordmark ${BRAND_WORDMARK_CLASSNAME}`}>WolfyStock</span>
                   </span>
                 </NavLink>
@@ -455,7 +455,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                   aria-label={t('shell.openMenu')}
                   title={t('shell.openMenu')}
                 >
-                  <Menu className="h-4 w-4" />
+                  <Menu className="size-4" />
                 </button>
               </div>
             )}
@@ -498,13 +498,13 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
               onKeyDown={handleAccountTriggerKeyDown}
             >
               <span
-                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.06] text-[10px] font-semibold text-white/82"
+                className="flex size-5 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.06] text-[10px] font-semibold text-white/82"
                 aria-hidden="true"
               >
                 {accountDisplayName.slice(0, 1)}
               </span>
               <span className="min-w-0 truncate">{accountDisplayName}</span>
-              <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-white/44 transition-transform', accountMenuOpen ? 'rotate-180 text-white/70' : '')} />
+              <ChevronDown className={cn('size-3.5 shrink-0 text-white/44 transition-transform', accountMenuOpen ? 'rotate-180 text-white/70' : '')} />
             </button>
 
             {accountMenuOpen ? (
@@ -532,7 +532,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                     )}
                     onClick={() => closeAccountMenu()}
                   >
-                    <Icon className="h-4 w-4 shrink-0 text-white/56" />
+                    <Icon className="size-4 shrink-0 text-white/56" />
                     <span className="truncate">{label}</span>
                   </NavLink>
                 ))}
@@ -550,7 +550,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                     setShowLogoutConfirm(true);
                   }}
                 >
-                  <LogOut className="h-4 w-4 shrink-0 text-red-200/70" />
+                  <LogOut className="size-4 shrink-0 text-red-200/70" />
                   <span className="truncate">{accountCopy.logout}</span>
                 </button>
               </div>
@@ -595,7 +595,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                       aria-label={label}
                     >
                       <span className="shell-nav-item__icon" aria-hidden="true">
-                        <Icon className="h-4 w-4" />
+                        <Icon className="size-4" />
                       </span>
                       <span className="shell-nav-item__copy">
                         <span className="shell-nav-item__label">{label}</span>
@@ -612,7 +612,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                     }}
                   >
                     <span className="shell-nav-item__icon" aria-hidden="true">
-                      <LogOut className="h-4 w-4" />
+                      <LogOut className="size-4" />
                     </span>
                     <span className="shell-nav-item__copy">
                       <span className="shell-nav-item__label">{accountCopy.logout}</span>

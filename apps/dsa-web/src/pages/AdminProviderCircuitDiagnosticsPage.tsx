@@ -109,7 +109,7 @@ const DiagnosticsDisclosure: React.FC<DiagnosticsDisclosureProps> = ({ title, su
           className="shrink-0 px-2 py-1 text-[11px]"
           onClick={() => setOpen((current) => !current)}
         >
-          {open ? <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" /> : <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />}
+          {open ? <ChevronDown className="size-3.5" aria-hidden="true" /> : <ChevronRight className="size-3.5" aria-hidden="true" />}
           <span>{open ? '收起' : '展开'}</span>
         </TerminalButton>
       </div>
@@ -889,7 +889,7 @@ const OperatorActionListPanel: React.FC<{ actions: OperatorActionItem[]; isLoadi
           <li key={action.id}>
             <TerminalNestedBlock className="h-full min-w-0">
               <div className="flex min-w-0 items-start gap-3">
-                <span className={cn('mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-[11px] font-semibold', METRIC_VALUE_CLASS_BY_TONE[action.tone])}>
+                <span className={cn('mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border text-[11px] font-semibold', METRIC_VALUE_CLASS_BY_TONE[action.tone])}>
                   {index + 1}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -922,7 +922,7 @@ const OperatorActionListPanel: React.FC<{ actions: OperatorActionItem[]; isLoadi
 const LoadingState: React.FC = () => (
   <TerminalPanel as="section" role="status" aria-label="正在读取 provider 熔断诊断">
     <div className="flex items-center gap-3">
-      <Activity className="h-4 w-4 animate-pulse text-cyan-200" aria-hidden="true" />
+      <Activity className="size-4 animate-pulse text-cyan-200" aria-hidden="true" />
       <div>
         <p className="text-sm font-semibold text-white">正在读取 provider 熔断诊断</p>
         <p className="mt-1 text-xs text-white/46">只读取现有诊断 API，不触发 provider 调用。</p>
@@ -1016,7 +1016,7 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
         <DiagnosticsDisclosure
           title="L3 诊断细节：熔断、SLA、事件、配额、探测"
           summary="Provider blocks、bucket、quota、probe 与技术边界默认折叠"
-          className="px-3 py-3"
+          className="p-3"
         >
           <TerminalGrid>
             <div className="col-span-12 xl:col-span-8">

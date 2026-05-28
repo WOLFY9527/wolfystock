@@ -77,7 +77,7 @@ const TaskProgressCard: React.FC<TaskProgressCardProps> = ({
         {modules.map((module) => (
           <div
             key={module.key}
-            className={`rounded-[28px] border px-4 py-4 transition-all duration-500 ${statusTone(module.status)}`}
+            className={`rounded-[28px] border p-4 transition-all duration-500 ${statusTone(module.status)}`}
             data-testid={`home-bento-progress-module-${module.key}`}
           >
             <div className="flex items-start justify-between gap-3">
@@ -88,7 +88,7 @@ const TaskProgressCard: React.FC<TaskProgressCardProps> = ({
                 <p className="mt-2 text-base font-semibold text-white">{module.name}</p>
               </div>
               {module.status === 'running' ? (
-                <span className="mt-1 inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-sky-200" aria-hidden="true" />
+                <span className="mt-1 inline-flex size-2.5 animate-pulse rounded-full bg-sky-200" aria-hidden="true" />
               ) : null}
             </div>
             <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.18em] text-current">

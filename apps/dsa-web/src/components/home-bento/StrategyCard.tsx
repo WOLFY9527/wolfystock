@@ -76,7 +76,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
           onClick={handleOpenDetailsClick}
           onPointerUp={handleOpenDetailsPointerUp}
         >
-          <PanelRightOpen className="h-3.5 w-3.5" />
+          <PanelRightOpen className="size-3.5" />
           <span>{detailLabel}</span>
         </button>
       )}

@@ -248,7 +248,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                   <div className="mt-4 h-5 w-40 rounded-full bg-white/10" aria-hidden="true" />
                   <div className="mt-3 space-y-2" aria-hidden="true">
                     <div className="h-4 rounded-full bg-white/10" />
-                    <div className="h-4 w-4/5 rounded-full bg-white/10" />
+                    <div className="size-4/5 rounded-full bg-white/10" />
                     <div className="h-4 w-3/5 rounded-full bg-white/10" />
                   </div>
                 </div>
@@ -288,7 +288,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
               onClick={() => void onLaunch()}
               disabled={isLaunching}
             >
-              <Play className="h-4 w-4" />
+              <Play className="size-4" />
               <span>
                 {isLaunching
                   ? (language === 'en' ? 'Submitting...' : '提交中...')

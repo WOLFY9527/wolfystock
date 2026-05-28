@@ -171,7 +171,7 @@ const MARKET_OVERVIEW_SETUP_ACTION_CLASS = 'inline-flex min-h-8 items-center rou
 const MarketOverviewSetupPath: React.FC<{ testId: string }> = ({ testId }) => (
   <div
     data-testid={testId}
-    className="mt-3 rounded-lg border border-cyan-200/12 bg-cyan-300/[0.035] px-3 py-3"
+    className="mt-3 rounded-lg border border-cyan-200/12 bg-cyan-300/[0.035] p-3"
   >
     <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div className="min-w-0">
@@ -195,7 +195,7 @@ const MarketOverviewSetupPath: React.FC<{ testId: string }> = ({ testId }) => (
 const MarketOverviewDirectionSummary: React.FC<{ summary: MarketDirectionalSummary }> = ({ summary }) => (
   <section
     data-testid="market-overview-direction-summary"
-    className="relative overflow-hidden border-t border-[color:var(--wolfy-divider)] bg-white/[0.022] px-3 py-3 md:px-4"
+    className="relative overflow-hidden border-t border-[color:var(--wolfy-divider)] bg-white/[0.022] p-3 md:px-4"
   >
     <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-cyan-400/0 via-cyan-200/38 to-sky-400/0" aria-hidden="true" />
     <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -219,7 +219,7 @@ const MarketOverviewDirectionSummary: React.FC<{ summary: MarketDirectionalSumma
         { key: 'blocking', title: summary.blockingTitle, items: summary.blockingDrivers, tone: 'text-amber-200' },
         { key: 'watch', title: summary.watchTitle, items: summary.watchItems, tone: 'text-cyan-100' },
       ].map((block) => (
-        <div key={block.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+        <div key={block.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
           <p className="text-[11px] font-medium text-white/48">{block.title}</p>
           <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
             {block.items.map((item) => (
@@ -528,7 +528,7 @@ const MarketOverviewConclusionLayer: React.FC<{
     <section
       data-testid={testId}
       data-market-research-flow="conclusion"
-      className="min-w-0 border-b border-[color:var(--wolfy-divider)] bg-white/[0.018] px-3 py-3 md:px-4"
+      className="min-w-0 border-b border-[color:var(--wolfy-divider)] bg-white/[0.018] p-3 md:px-4"
     >
       <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
@@ -634,7 +634,7 @@ const MarketOverviewDataNotesDisclosure: React.FC<{
       />
     </div>
 
-    <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+    <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/10 p-3">
       <p className="text-[11px] font-medium text-white/48">下一步观察</p>
       <div
         data-testid="market-decision-semantics-watch-next"
@@ -711,7 +711,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
       data-testid="market-decision-semantics-strip"
       data-market-research-flow="decision-semantics"
       className={cn(
-        'relative overflow-hidden border-t border-[color:var(--wolfy-divider)] bg-white/[0.018] px-3 py-3 md:px-4',
+        'relative overflow-hidden border-t border-[color:var(--wolfy-divider)] bg-white/[0.018] p-3 md:px-4',
         view?.insufficient ? 'opacity-85' : '',
       )}
     >
@@ -771,7 +771,7 @@ const MarketDecisionDebugLoadingFallback: React.FC = () => (
     role="status"
     aria-live="polite"
     aria-busy="true"
-    className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3"
+    className="rounded-lg border border-white/[0.06] bg-black/10 p-3"
   >
     <p className="text-[11px] font-semibold text-white/72">正在加载技术细节</p>
     <p className="mt-1 text-[11px] leading-5 text-white/42">
@@ -869,7 +869,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
               officialMacroRecords={officialMacroRecords}
               showAdminDiagnostics={showAdminDiagnostics}
             />
-            <div className="border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4">
+            <div className="border-t border-[color:var(--wolfy-divider)] p-3 md:px-4">
               <MarketOverviewCategoryControls
                 categoryTabs={categoryTabs}
                 activeCategory={activeCategory}

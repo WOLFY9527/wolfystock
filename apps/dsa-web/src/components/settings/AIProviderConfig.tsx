@@ -90,8 +90,8 @@ const groupedProviders = (providers: ProviderCard[]) => {
 const StatusDot: React.FC<{ active: boolean }> = ({ active }) => (
   <span
     className={active
-      ? 'h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
-      : 'h-1.5 w-1.5 shrink-0 rounded-full bg-white/20'}
+      ? 'size-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
+      : 'size-1.5 shrink-0 rounded-full bg-white/20'}
     aria-hidden="true"
   />
 );
@@ -120,7 +120,7 @@ const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
     description={t('settings.aiEffectiveDesc')}
   >
     <div className="space-y-3">
-      <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
+      <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border p-4">
         <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">{t('settings.aiHierarchyTaskTitle')}</p>
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -157,8 +157,8 @@ const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
               key={routeRow.key}
               data-testid={`ai-task-row-${routeRow.key}`}
               className={routeRow.highlighted
-                ? 'flex items-start gap-3 rounded-2xl border border-[var(--border-strong)] bg-[var(--pill-active-bg)]/35 px-3 py-3'
-                : 'flex items-start gap-3 rounded-2xl border border-border/50 bg-base/40 px-3 py-3'}
+                ? 'flex items-start gap-3 rounded-2xl border border-[var(--border-strong)] bg-[var(--pill-active-bg)]/35 p-3'
+                : 'flex items-start gap-3 rounded-2xl border border-border/50 bg-base/40 p-3'}
             >
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
@@ -201,7 +201,7 @@ const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
         ) : null}
       </div>
 
-      <div className="settings-surface rounded-xl border settings-border px-4 py-4" data-testid="ai-provider-quick-section">
+      <div className="settings-surface rounded-xl border settings-border p-4" data-testid="ai-provider-quick-section">
         <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">{t('settings.aiHierarchyProviderTitle')}</p>
         <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.aiDirectProviderTitle')}</p>
         <div className="mt-3 flex flex-col" data-testid="ai-provider-library-list">

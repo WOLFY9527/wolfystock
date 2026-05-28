@@ -239,7 +239,7 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
           type="checkbox"
           checked={channel.enabled}
           disabled={busy}
-          className="settings-input-checkbox h-4 w-4 shrink-0 rounded border-border/70 bg-base"
+          className="settings-input-checkbox size-4 shrink-0 rounded border-border/70 bg-base"
           onClick={(e) => e.stopPropagation()}
           onChange={(e) => onUpdate(index, 'enabled', e.target.checked)}
         />
@@ -257,9 +257,9 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
         </div>
 
         <span className="flex shrink-0 items-center gap-2">
-          {testState?.status === 'success' ? <span className="h-2 w-2 rounded-full bg-[var(--accent-positive)]" title={t('settings.llmEditor.statusSuccess')} /> : null}
-          {testState?.status === 'error' ? <span className="h-2 w-2 rounded-full bg-[var(--accent-danger)]" title={t('settings.llmEditor.statusError')} /> : null}
-          {testState?.status === 'loading' ? <span className="h-2 w-2 rounded-full bg-[var(--accent-warning)] animate-pulse" title={t('settings.llmEditor.statusLoading')} /> : null}
+          {testState?.status === 'success' ? <span className="size-2 rounded-full bg-[var(--accent-positive)]" title={t('settings.llmEditor.statusSuccess')} /> : null}
+          {testState?.status === 'error' ? <span className="size-2 rounded-full bg-[var(--accent-danger)]" title={t('settings.llmEditor.statusError')} /> : null}
+          {testState?.status === 'loading' ? <span className="size-2 rounded-full bg-[var(--accent-warning)] animate-pulse" title={t('settings.llmEditor.statusLoading')} /> : null}
           {!hasKey && channel.protocol !== 'ollama' ? <Badge variant="warning">{t('settings.llmEditor.statusMissingKey')}</Badge> : null}
           {testState?.status !== 'idle' ? (
             <Badge variant={statusVariant}>
@@ -290,7 +290,7 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
       </div>
 
       {expanded ? (
-        <div className="space-y-3 bg-white/[0.01] px-4 py-4">
+        <div className="space-y-3 bg-white/[0.01] p-4">
           <Input
             label={t('settings.llmEditor.fieldApiKey')}
             type="password"
@@ -1206,7 +1206,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
 
               {availableModels.length === 0 ? (
                 <SupportPanel
-                  className="rounded-xl border border-dashed settings-border-soft settings-surface-overlay-soft px-3 py-3"
+                  className="rounded-xl border border-dashed settings-border-soft settings-surface-overlay-soft p-3"
                   title={t('settings.llmEditor.runtimeEmptyTitle')}
                   body={t('settings.llmEditor.runtimeEmptyBody')}
                 />
@@ -1244,7 +1244,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                         <label key={model} className="flex items-center gap-2 text-sm text-secondary-text">
                           <input
                             type="checkbox"
-                            className="settings-input-checkbox h-4 w-4 rounded border-border/70 bg-base"
+                            className="settings-input-checkbox size-4 rounded border-border/70 bg-base"
                             checked={runtimeConfig.fallbackModels.includes(model)}
                             disabled={busy || model === runtimeConfig.primaryModel}
                             onChange={() => toggleFallbackModel(model)}

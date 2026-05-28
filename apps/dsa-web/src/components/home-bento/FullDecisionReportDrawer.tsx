@@ -479,7 +479,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
                 onClick={handleMarkdownExport}
                 className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
               >
-                <Download className="h-4 w-4" />
+                <Download className="size-4" />
                 导出 Markdown
               </button>
               <button
@@ -487,7 +487,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
                 onClick={handlePrintReport}
                 className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
               >
-                <Printer className="h-4 w-4" />
+                <Printer className="size-4" />
                 导出 PDF
               </button>
               <button
@@ -495,7 +495,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
                 className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
                 onClick={() => { void handleCopyReport(); }}
               >
-                <Copy className="h-4 w-4" />
+                <Copy className="size-4" />
                 {copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制报告'}
               </button>
             </div>
@@ -529,7 +529,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
               { label: '置信度', value: confidenceLine },
               { label: '关键风险', value: riskLine },
             ].map((item) => (
-              <div key={item.label} className="min-w-0 rounded-2xl border border-white/[0.06] bg-black/20 px-3 py-3">
+              <div key={item.label} className="min-w-0 rounded-2xl border border-white/[0.06] bg-black/20 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">{item.label}</p>
                 <p className="mt-1.5 break-words text-sm leading-6 text-white/76">{item.value}</p>
               </div>

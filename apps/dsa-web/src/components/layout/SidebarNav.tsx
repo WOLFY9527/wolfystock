@@ -71,7 +71,7 @@ const BrandWordmark: React.FC<{
     className={({ isActive }) => cn('shell-brand-link', className || '', isActive ? 'is-active' : '')}
   >
     <span className="inline-flex min-w-0 items-center gap-3">
-      <BrandLogo className="h-8 w-8" />
+      <BrandLogo className="size-8" />
       <span className={`shell-wordmark ${BRAND_WORDMARK_CLASSNAME}`}>WolfyStock</span>
     </span>
   </NavLink>
@@ -231,7 +231,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       >
         {isDrawer ? (
           <span className="shell-nav-item__icon" aria-hidden="true">
-            <Icon className="h-4 w-4" />
+            <Icon className="size-4" />
           </span>
         ) : null}
         <span className={isDrawer ? 'shell-nav-item__label' : 'shell-header-link__label'}>
@@ -254,7 +254,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       {isDrawer ? (
         <>
           <span className="shell-nav-item__icon" aria-hidden="true">
-            <Archive className="h-4 w-4" />
+            <Archive className="size-4" />
           </span>
           <DrawerUtilityLabel label={t('shell.archiveTitle')} />
         </>
@@ -277,7 +277,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       {isDrawer ? (
         <>
           <span className="shell-nav-item__icon" aria-hidden="true">
-            <Globe className="h-4 w-4" />
+            <Globe className="size-4" />
           </span>
           <DrawerUtilityLabel
             label={t('language.toggle')}
@@ -304,7 +304,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       {isDrawer ? (
         <>
           <span className="shell-nav-item__icon" aria-hidden="true">
-            <Settings2 className="h-4 w-4" />
+            <Settings2 className="size-4" />
           </span>
           <DrawerUtilityLabel label={t('nav.settings')} />
         </>
@@ -325,10 +325,10 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
           aria-controls="shell-admin-utility-menu"
         >
           <span className="shell-nav-item__icon" aria-hidden="true">
-            <ShieldCheck className="h-4 w-4" />
+            <ShieldCheck className="size-4" />
           </span>
           <DrawerUtilityLabel label={consoleLabel} />
-          <ChevronDown className={cn('ml-auto h-4 w-4 text-white/48 transition-transform', showAdminMenu ? 'rotate-180' : '')} />
+          <ChevronDown className={cn('ml-auto size-4 text-white/48 transition-transform', showAdminMenu ? 'rotate-180' : '')} />
         </button>
         {showAdminMenu ? (
           <div
@@ -345,7 +345,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
                 aria-label={label}
               >
                 <span className="shell-nav-item__icon" aria-hidden="true">
-                  <Icon className="h-4 w-4" />
+                  <Icon className="size-4" />
                 </span>
                 <DrawerUtilityLabel label={label} />
               </NavLink>
@@ -363,9 +363,9 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
           aria-controls="shell-admin-utility-menu"
         >
           <span className="inline-flex items-center gap-1.5">
-            <ShieldCheck className="h-3.5 w-3.5" />
+            <ShieldCheck className="size-3.5" />
             <span>{consoleLabel}</span>
-            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showAdminMenu ? 'rotate-180' : '')} />
+            <ChevronDown className={cn('size-3.5 transition-transform', showAdminMenu ? 'rotate-180' : '')} />
           </span>
         </button>
         {showAdminMenu ? (
@@ -386,7 +386,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
                 )}
                 aria-label={label}
               >
-                <Icon className="h-4 w-4 shrink-0 text-white/56" />
+                <Icon className="size-4 shrink-0 text-white/56" />
                 <span className="truncate">{label}</span>
               </NavLink>
             ))}
@@ -410,7 +410,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       {isDrawer ? (
         <>
           <span className="shell-nav-item__icon" aria-hidden="true">
-            <LogIn className="h-4 w-4" />
+            <LogIn className="size-4" />
           </span>
           <DrawerUtilityLabel label={signInLabel} />
         </>
@@ -430,7 +430,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       {isDrawer ? (
         <>
           <span className="shell-nav-item__icon" aria-hidden="true">
-            <LogOut className="h-4 w-4" />
+            <LogOut className="size-4" />
           </span>
           <DrawerUtilityLabel label={t('nav.logout')} />
         </>

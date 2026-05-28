@@ -23,7 +23,7 @@ const SystemLogsConfig: React.FC<SystemLogsConfigProps> = ({
     title={t('settings.runtimeSummaryVisibilityTitle')}
     description={t('settings.runtimeSummaryVisibilityDesc')}
   >
-    <GlassCard className="px-4 py-4">
+    <GlassCard className="p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-foreground">

@@ -29,9 +29,9 @@ import {
 } from '../utils/portfolioPreferences';
 import { cn } from '../utils/cn';
 
-const SETTINGS_ROW_CLASS = 'grid gap-3 px-4 py-4 md:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)]';
+const SETTINGS_ROW_CLASS = 'grid gap-3 p-4 md:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)]';
 const SETTINGS_TEXT_INPUT_CLASS = 'h-10 w-full rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 text-sm text-[color:var(--wolfy-text-primary)] outline-none transition-colors placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)] focus:shadow-[0_0_0_1px_var(--wolfy-accent)]';
-const SETTINGS_CHECKBOX_CLASS = 'h-4 w-4 rounded border border-[color:var(--wolfy-border-subtle)] bg-transparent accent-[var(--wolfy-accent)]';
+const SETTINGS_CHECKBOX_CLASS = 'size-4 rounded border border-[color:var(--wolfy-border-subtle)] bg-transparent accent-[var(--wolfy-accent)]';
 const SETTINGS_LINK_CLASS = 'inline-flex min-h-9 items-center justify-center rounded-md border px-3 text-xs font-medium transition-colors';
 const SETTINGS_PANEL_CLASS = 'rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3';
 
@@ -84,7 +84,7 @@ function SettingsConsoleSection({
 }) {
   return (
     <section id={id} data-testid={dataTestId} className="min-w-0 scroll-mt-28">
-      <div className="px-4 py-4 md:px-5">
+      <div className="p-4 md:px-5">
         <h2 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{title}</h2>
         <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{description}</p>
       </div>
@@ -537,8 +537,8 @@ const PersonalSettingsPage: React.FC = () => {
                 >
                   {loggedIn && passwordChangeable ? (
                     <div className="flex items-start gap-3">
-                      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] text-[color:var(--wolfy-text-primary)]">
-                        <ShieldCheck className="h-4 w-4" />
+                      <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] text-[color:var(--wolfy-text-primary)]">
+                        <ShieldCheck className="size-4" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <ChangePasswordCard />
@@ -558,7 +558,7 @@ const PersonalSettingsPage: React.FC = () => {
               <div data-testid="personal-settings-notification-row" className={SETTINGS_ROW_CLASS}>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <BellRing className="h-4 w-4 text-[color:var(--wolfy-text-secondary)]" />
+                    <BellRing className="size-4 text-[color:var(--wolfy-text-secondary)]" />
                     <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
                       {t('settings.personalNotificationScopeTitle')}
                     </p>
@@ -782,7 +782,7 @@ const PersonalSettingsPage: React.FC = () => {
 
           {showGuestRail ? (
             <ConsoleContextRail data-testid="personal-settings-help-rail">
-              <div className="px-1 py-1">
+              <div className="p-1">
                 <p className="text-[11px] uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
                   {copy.railEyebrow}
                 </p>

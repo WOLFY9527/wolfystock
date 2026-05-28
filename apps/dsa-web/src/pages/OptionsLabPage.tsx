@@ -541,7 +541,7 @@ const SectionHeader: React.FC<{
   <TerminalSectionHeader
     eyebrow={(
       <span className="inline-flex items-center gap-2">
-        <Icon className="h-4 w-4 text-[color:var(--wolfy-accent)]" aria-hidden="true" />
+        <Icon className="size-4 text-[color:var(--wolfy-accent)]" aria-hidden="true" />
         <span>{eyebrow}</span>
       </span>
     )}
@@ -678,7 +678,7 @@ const AssumptionPanel: React.FC<{
                   </option>
                 ))}
               </select>
-              <ChevronDown className="pointer-events-none absolute right-0 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--wolfy-text-muted)]" aria-hidden="true" />
+              <ChevronDown className="pointer-events-none absolute right-0 top-1/2 size-4 -translate-y-1/2 text-[color:var(--wolfy-text-muted)]" aria-hidden="true" />
             </div>
           </label>
           <label className={fieldShellClass}>
@@ -785,7 +785,7 @@ const ProductHero: React.FC<{
   return (
     <section
       data-testid="options-lab-product-hero"
-      className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-console)_94%,transparent)] px-4 py-4 md:px-5"
+      className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-console)_94%,transparent)] p-4 md:px-5"
     >
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
@@ -1006,7 +1006,7 @@ const StrategyComparisonPanel: React.FC<{
         先看排序靠前的结构，再复核最大亏损、盈亏平衡与可成交性。
       </p>
       {emptyMessage ? (
-        <div className={cn(innerBlockClass, 'mt-5 border-dashed px-4 py-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
+        <div className={cn(innerBlockClass, 'mt-5 border-dashed p-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
           <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">等待策略对比前提</p>
           <p className="mt-2">{emptyMessage}</p>
         </div>
@@ -1088,7 +1088,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
         </div>
       </SectionHeader>
       {emptyMessage ? (
-        <p className={cn(innerBlockClass, 'mt-5 border-dashed px-4 py-4 text-sm text-[color:var(--wolfy-text-secondary)]')}>{emptyMessage}</p>
+        <p className={cn(innerBlockClass, 'mt-5 border-dashed p-4 text-sm text-[color:var(--wolfy-text-secondary)]')}>{emptyMessage}</p>
       ) : null}
       {!emptyMessage && decisionState.loading ? (
         <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 font-mono text-sm text-[color:var(--wolfy-accent-soft)]')}>正在计算情景准备度...</p>
@@ -1245,7 +1245,7 @@ const RiskBoundaryPanel: React.FC<{
               data-testid="options-lab-visible-risk-warning"
               className="flex gap-2 rounded-md border border-amber-300/20 bg-amber-300/5 px-3 py-2 text-xs leading-5 text-amber-200"
             >
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-200" aria-hidden="true" />
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-200" aria-hidden="true" />
               <span>{warningLabel(warning)}</span>
             </li>
           ))}
@@ -1386,7 +1386,7 @@ export class OptionsLabErrorBoundary extends React.Component<{ children: React.R
         <TerminalPageShell>
           <section className="mx-auto flex w-full max-w-[920px] flex-col gap-4 rounded-lg border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-[var(--wolfy-surface-console)] p-5 md:p-6">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="mt-1 h-5 w-5 shrink-0 text-amber-200" aria-hidden="true" />
+              <AlertTriangle className="mt-1 size-5 shrink-0 text-amber-200" aria-hidden="true" />
               <div className="min-w-0">
                 <p className={labelClass}>期权实验室</p>
                 <h1 className="mt-2 text-xl font-semibold text-[color:var(--wolfy-text-primary)]">{OPTIONS_LAB_CRASH_FALLBACK}</h1>

@@ -93,7 +93,7 @@ function renderFieldControl(
         <input
           id={controlId}
           type="checkbox"
-          className="settings-input-checkbox h-4 w-4 rounded border-border/70 bg-base"
+          className="settings-input-checkbox size-4 rounded border-border/70 bg-base"
           checked={checked}
           disabled={disabled || !schema?.isEditable}
           onChange={(event) => onChange(event.target.checked ? 'true' : 'false')}

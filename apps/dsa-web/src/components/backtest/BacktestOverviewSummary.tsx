@@ -188,7 +188,7 @@ const BacktestOverviewSummary: React.FC<BacktestOverviewSummaryProps> = ({
                     : (language === 'en' ? 'Copy full report' : '复制完整报告')}
                 </TerminalButton>
               </div>
-              <pre className="overflow-x-auto no-scrollbar rounded-lg border border-white/5 bg-black/30 px-3 py-3 text-xs leading-6 text-white/75">
+              <pre className="overflow-x-auto no-scrollbar rounded-lg border border-white/5 bg-black/30 p-3 text-xs leading-6 text-white/75">
                 {decisionReportMarkdown}
               </pre>
             </TerminalNestedBlock>

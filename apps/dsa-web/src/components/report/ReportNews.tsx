@@ -75,7 +75,7 @@ export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, lan
         </div>
         <div className="flex items-center gap-2">
           {isLoading && (
-            <div className="home-spinner h-3.5 w-3.5 animate-spin border-2" />
+            <div className="home-spinner size-3.5 animate-spin border-2" />
           )}
           <button
             type="button"
@@ -104,7 +104,7 @@ export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, lan
           body={(
             <div className="flex items-center gap-2 text-xs text-secondary-text">
               <span>{loadingCopy}</span>
-              <div className="home-spinner h-4 w-4 animate-spin border-2" />
+              <div className="home-spinner size-4 animate-spin border-2" />
             </div>
           )}
         />
@@ -146,7 +146,7 @@ export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, lan
                     className="home-accent-pill-link shrink-0 whitespace-nowrap px-2.5 py-1 text-xs"
                   >
                     {text.openLink}
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"

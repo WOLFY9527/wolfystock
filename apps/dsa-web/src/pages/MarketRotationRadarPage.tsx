@@ -813,7 +813,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
 
       <div data-testid="rotation-radar-summary-band" data-terminal-primitive="panel" className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-3">
         {heroCards.map((card) => (
-          <div key={card.key} className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+          <div key={card.key} className="rounded-lg border border-white/[0.06] bg-black/10 p-3">
             <p className="text-[11px] font-medium text-white/48">{card.label}</p>
             <p className="mt-2 break-words text-sm font-semibold leading-5 text-white/84">{card.value}</p>
             <p className="mt-2 text-[11px] leading-5 text-white/58">{card.detail}</p>
@@ -821,7 +821,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
         ))}
       </div>
 
-      <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+      <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/10 p-3">
         <p className="text-[11px] font-medium text-white/48">下一步</p>
         <p className="mt-2 text-[11px] leading-5 text-white/60">{conclusion.nextStep}</p>
       </div>
@@ -867,7 +867,7 @@ const CommandBar: React.FC<{
     leading={(
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase text-white/35">
-          <SlidersHorizontal className="h-3.5 w-3.5 text-cyan-200/70" aria-hidden="true" />
+          <SlidersHorizontal className="size-3.5 text-cyan-200/70" aria-hidden="true" />
           市场
         </div>
         <div className="flex min-w-0 gap-2 overflow-x-auto no-scrollbar">
@@ -900,19 +900,19 @@ const CommandBar: React.FC<{
         </TerminalNestedBlock>
         <TerminalButton
           variant="compact"
-          className="h-10 w-10 rounded-xl px-0 py-0 text-white/50 disabled:cursor-wait disabled:text-white/30"
+          className="size-10 rounded-xl p-0 text-white/50 disabled:cursor-wait disabled:text-white/30"
           onClick={onRefresh}
           disabled={loading}
           aria-label="刷新主题轮动雷达"
         >
-          <RefreshCcw className={cn('h-4 w-4', loading ? 'animate-spin' : '')} aria-hidden="true" />
+          <RefreshCcw className={cn('size-4', loading ? 'animate-spin' : '')} aria-hidden="true" />
         </TerminalButton>
       </div>
     )}
   >
     <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:gap-2">
       <label className="relative min-w-0 flex-1">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" aria-hidden="true" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/35" aria-hidden="true" />
         <input
           className="h-10 w-full rounded-lg border border-white/10 bg-black/25 py-2 pl-9 pr-3 text-sm text-white/78 outline-none transition-all placeholder:text-white/30 focus:border-cyan-200/30 focus:bg-white/[0.035]"
           value={searchQuery}
@@ -925,7 +925,7 @@ const CommandBar: React.FC<{
         className="inline-flex min-h-8 shrink-0 items-center gap-2 rounded-md border border-white/[0.06] bg-white/[0.025] px-2.5 text-[11px] text-white/46"
       >
         <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase text-white/35">
-          <Gauge className="h-3.5 w-3.5 text-cyan-200/70" aria-hidden="true" />
+          <Gauge className="size-3.5 text-cyan-200/70" aria-hidden="true" />
           分类
         </div>
         <span>主题优先，行业/概念随结果展开</span>
@@ -952,7 +952,7 @@ const LeaderRow: React.FC<{
     data-testid={`rotation-radar-leader-row-${theme.id}`}
     onClick={onSelect}
     className={cn(
-      'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_5.5rem_6.25rem] items-center gap-2 px-3 py-3 text-left transition-colors',
+      'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_5.5rem_6.25rem] items-center gap-2 p-3 text-left transition-colors',
       selected ? 'bg-cyan-200/[0.06]' : 'hover:bg-white/[0.025]',
     )}
   >
@@ -1124,7 +1124,7 @@ const ThemeDetailPanel: React.FC<{
 const LoadingPanel: React.FC = () => (
   <TerminalPanel as="section" role="status" aria-label="正在读取主题轮动 / 相对强弱雷达">
     <div className="flex items-center gap-3 text-white/60">
-      <RefreshCcw className="h-4 w-4 animate-spin" aria-hidden="true" />
+      <RefreshCcw className="size-4 animate-spin" aria-hidden="true" />
       <span className="text-sm">正在读取主题轮动 / 相对强弱雷达...</span>
     </div>
   </TerminalPanel>
@@ -1221,7 +1221,7 @@ const MarketRotationRadarPage: React.FC = () => {
             <TerminalGrid className="gap-4" data-workbench-split="8:4">
               <section className="min-w-0 space-y-4 xl:col-span-8" aria-label={libraryMode ? '分类浏览与观察线索' : primaryTierLabel}>
                 <DataWorkbenchFrame data-testid="rotation-radar-universe-list">
-                  <div className="border-b border-white/[0.05] px-3 py-3">
+                  <div className="border-b border-white/[0.05] p-3">
                     <TerminalSectionHeader
                       eyebrow="主题 / 分类"
                       title={libraryMode ? `${filteredThemes.length}/${payload.themes.length} 个分类条目` : `${filteredThemes.length}/${payload.themes.length} 个条目，先看主题再看信号。`}
@@ -1249,7 +1249,7 @@ const MarketRotationRadarPage: React.FC = () => {
                 </DataWorkbenchFrame>
 
                 <DataWorkbenchFrame data-testid="rotation-radar-leader-list">
-                  <div className="border-b border-white/[0.05] px-3 py-3">
+                  <div className="border-b border-white/[0.05] p-3">
                     <TerminalSectionHeader
                       eyebrow={primaryTierLabel}
                       title={headlineThemes.length
@@ -1277,7 +1277,7 @@ const MarketRotationRadarPage: React.FC = () => {
                     <div className="p-3">
                       <TerminalEmptyState
                         data-testid="rotation-radar-insufficient-empty"
-                        className="min-h-[104px] items-start justify-start px-3 py-3 text-left text-sm text-white/52"
+                        className="min-h-[104px] items-start justify-start p-3 text-left text-sm text-white/52"
                       >
                         <span className="block font-semibold text-white/82">
                           {rotationConclusion?.title || '当前无法判断轮动方向'}

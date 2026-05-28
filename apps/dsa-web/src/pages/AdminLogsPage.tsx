@@ -1780,7 +1780,7 @@ const AdminLogsPage: React.FC = () => {
                     className={`relative h-4 w-8 rounded-full border transition ${showDebugLogs ? 'border-cyan-300/60 bg-cyan-400/35' : 'border-white/15 bg-black/30'}`}
                     aria-hidden="true"
                   >
-                    <span className={`absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-white transition ${showDebugLogs ? 'left-[1.05rem]' : 'left-0.5'}`} />
+                    <span className={`absolute top-1/2 size-3 -translate-y-1/2 rounded-full bg-white transition ${showDebugLogs ? 'left-[1.05rem]' : 'left-0.5'}`} />
                   </span>
                   <span>{locale === 'zh' ? '显示调试日志' : 'Show debug logs'}</span>
                 </button>
@@ -2327,7 +2327,7 @@ const AdminLogsPage: React.FC = () => {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <div className="mb-3 flex items-center gap-2">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-bold text-emerald-100">{text(businessDetail.category).slice(0, 1).toUpperCase()}</span>
+                    <span className="inline-flex size-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-bold text-emerald-100">{text(businessDetail.category).slice(0, 1).toUpperCase()}</span>
                     <StatusChip status={drawerStatus} locale={locale} />
                     <SeverityChip severity={businessSeverity} locale={locale} />
                   </div>
@@ -2379,7 +2379,7 @@ const AdminLogsPage: React.FC = () => {
                 </TerminalPanel>
               </div>
               <div className="mt-4">
-                <AdminLogsTerminalSection title={locale === 'zh' ? '元数据' : 'Metadata'} defaultOpen={false} className="bg-black/20 px-3 py-3">
+                <AdminLogsTerminalSection title={locale === 'zh' ? '元数据' : 'Metadata'} defaultOpen={false} className="bg-black/20 p-3">
                   <JsonBlock value={businessDetail.metadata || {}} />
                 </AdminLogsTerminalSection>
               </div>
@@ -2411,7 +2411,7 @@ const AdminLogsPage: React.FC = () => {
                 {businessSteps.length ? businessSteps.map((step: ExecutionStep, index: number) => {
                   const status = normalizeStatus(step.status);
                   return (
-                    <AdminLogsTerminalSection key={`${step.name}-${index}`} title={`${text(step.label || step.name)} · ${formatDuration(step.durationMs)}`} summary={[step.category, step.provider, step.model, step.endpoint || step.apiPath].flatMap((value) => { const v = String(value || '').trim(); return v ? [v] : []; }).join(' · ') || '--'} defaultOpen={index === 0 || status === 'failed' || status === 'error' || status === 'skipped' || status === 'unknown'} className="bg-black/20 px-3 py-3 text-xs">
+                    <AdminLogsTerminalSection key={`${step.name}-${index}`} title={`${text(step.label || step.name)} · ${formatDuration(step.durationMs)}`} summary={[step.category, step.provider, step.model, step.endpoint || step.apiPath].flatMap((value) => { const v = String(value || '').trim(); return v ? [v] : []; }).join(' · ') || '--'} defaultOpen={index === 0 || status === 'failed' || status === 'error' || status === 'skipped' || status === 'unknown'} className="bg-black/20 p-3 text-xs">
                       <div className="mb-3 flex justify-end">
                         <StatusChip status={status} locale={locale} />
                       </div>
@@ -2440,7 +2440,7 @@ const AdminLogsPage: React.FC = () => {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <div className="mb-3 flex items-center gap-2">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-bold text-emerald-100">{operationIcon(drawerOperationType)}</span>
+                    <span className="inline-flex size-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-bold text-emerald-100">{operationIcon(drawerOperationType)}</span>
                     <StatusChip status={drawerStatus} locale={locale} />
                     <SeverityChip severity={rawSeverity} locale={locale} />
                   </div>

@@ -1063,7 +1063,7 @@ const DrillLink: React.FC<{ drill?: AdminLogDrillThrough; className?: string }> 
       className={cn('inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-semibold text-white/62 transition hover:border-cyan-300/25 hover:text-cyan-100', className)}
     >
       {drill.label}
-      <ExternalLink className="h-3 w-3" aria-hidden="true" />
+      <ExternalLink className="size-3" aria-hidden="true" />
     </a>
   );
 };
@@ -1241,7 +1241,7 @@ const ProviderSetupChecklistPanel: React.FC<{
     .filter((group) => group.items.length > 0);
 
   return (
-    <TerminalNestedBlock data-testid="market-provider-setup-checklist" className="mt-4 bg-black/10 px-3 py-3">
+    <TerminalNestedBlock data-testid="market-provider-setup-checklist" className="mt-4 bg-black/10 p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">配置动作</p>
@@ -1277,7 +1277,7 @@ const ProviderSetupChecklistPanel: React.FC<{
       {groups.length ? (
         <div className="mt-3 grid gap-3 xl:grid-cols-2">
           {groups.map((group) => (
-            <div key={group.surface} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+            <div key={group.surface} className="rounded-md border border-white/[0.06] bg-white/[0.025] p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs font-semibold text-white/82">{group.surface}</p>
                 <TerminalChip variant="neutral">{formatNumber(group.items.length, 0)} 项</TerminalChip>
@@ -1374,11 +1374,11 @@ const ProviderOperationsMatrixPanel: React.FC<{
               <table className="min-w-full table-fixed">
                 <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
                   <tr className="border-b border-white/5 text-left">
-                    <th className="px-3 py-3 font-medium">数据源</th>
-                    <th className="px-3 py-3 font-medium">来源</th>
-                    <th className="px-3 py-3 font-medium">就绪状态</th>
-                    <th className="px-3 py-3 font-medium">门槛</th>
-                    <th className="px-3 py-3 font-medium">原因代码</th>
+                    <th className="p-3 font-medium">数据源</th>
+                    <th className="p-3 font-medium">来源</th>
+                    <th className="p-3 font-medium">就绪状态</th>
+                    <th className="p-3 font-medium">门槛</th>
+                    <th className="p-3 font-medium">原因代码</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1386,26 +1386,26 @@ const ProviderOperationsMatrixPanel: React.FC<{
                     const reasonCodes = matrixReasonCodes(row);
                     return (
                       <tr key={row.providerId} className="border-b border-white/[0.04] align-top">
-                        <td className="px-3 py-3">
+                        <td className="p-3">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-white">{row.providerName || row.providerId}</p>
                             <p className="mt-1 truncate font-mono text-[11px] text-white/42">{row.providerId}</p>
                           </div>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="p-3">
                           <div className="flex flex-wrap gap-1.5">
                             {row.sourceType ? <TerminalChip variant="neutral">{sanitizeCodeLabel(row.sourceType)}</TerminalChip> : null}
                             {row.sourceTier ? <TerminalChip variant="neutral">{sanitizeCodeLabel(row.sourceTier)}</TerminalChip> : null}
                           </div>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="p-3">
                           <div className="flex flex-wrap gap-1.5">
                             {row.runtimeState ? <TerminalChip variant={matrixStateVariant(row.runtimeState)}>{sanitizeCodeLabel(row.runtimeState)}</TerminalChip> : null}
                             {row.credentialState ? <TerminalChip variant={matrixStateVariant(row.credentialState)}>{sanitizeCodeLabel(row.credentialState)}</TerminalChip> : null}
                             {row.dependencyState ? <TerminalChip variant={matrixStateVariant(row.dependencyState)}>{sanitizeCodeLabel(row.dependencyState)}</TerminalChip> : null}
                           </div>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="p-3">
                           <div className="flex flex-wrap gap-1.5">
                             <TerminalChip variant={matrixCacheRequired(row) ? 'info' : 'neutral'}>
                               {matrixCacheRequired(row) ? 'cache-required' : 'cache-optional'}
@@ -1420,7 +1420,7 @@ const ProviderOperationsMatrixPanel: React.FC<{
                             ) : null}
                           </div>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="p-3">
                           {reasonCodes.length ? (
                             <div className="flex flex-wrap gap-1.5">
                               {reasonCodes.map((reason) => (
@@ -1463,12 +1463,12 @@ const ProviderOperationsTable: React.FC<{
           <table className="min-w-full table-fixed">
             <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
               <tr className="border-b border-white/5 text-left">
-                <th className="px-3 py-3 font-medium">数据源</th>
-                <th className="px-3 py-3 font-medium">状态</th>
-                <th className="px-3 py-3 font-medium">新鲜度</th>
-                <th className="px-3 py-3 font-medium">熔断</th>
-                <th className="px-3 py-3 font-medium">最近异常</th>
-                <th className="px-3 py-3 font-medium">操作</th>
+                <th className="p-3 font-medium">数据源</th>
+                <th className="p-3 font-medium">状态</th>
+                <th className="p-3 font-medium">新鲜度</th>
+                <th className="p-3 font-medium">熔断</th>
+                <th className="p-3 font-medium">最近异常</th>
+                <th className="p-3 font-medium">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -1478,31 +1478,31 @@ const ProviderOperationsTable: React.FC<{
                 const status = normalizeStatus(item.status);
                 return (
                   <tr key={key} className={cn('border-b border-white/[0.04] align-top', selected ? 'bg-white/[0.03]' : 'bg-transparent')}>
-                    <td className="px-3 py-3">
+                    <td className="p-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-white">{providerLabel(item)}</p>
                         <p className="mt-1 truncate font-mono text-[11px] text-white/42">{item.provider} · {item.domain}</p>
                       </div>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="p-3">
                       <div className="flex flex-wrap gap-1.5">
                         <TerminalChip variant={statusChipVariant(status)}>{statusLabel(status)}</TerminalChip>
                         {item.isRefreshing ? <TerminalChip variant="info">刷新中</TerminalChip> : null}
                       </div>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="p-3">
                       <div className="space-y-1">
                         <DataFreshnessBadge status={status as MarketProviderHealthStatus} />
                         <p className="text-[11px] text-white/42">{formatDisplayDate(item.updatedAt, '待统计')}</p>
                       </div>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="p-3">
                       <TerminalChip variant={circuitVariant(item)}>{circuitLabel(item)}</TerminalChip>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="p-3">
                       <p className="line-clamp-2 text-[11px] leading-5 text-white/60">{lastFailureLabel(item)}</p>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="p-3">
                       <TerminalButton
                         variant={selected ? 'secondary' : 'compact'}
                         className="w-full sm:w-auto"
@@ -1710,7 +1710,7 @@ const MarketDataReadinessPanel: React.FC<{
         action={data ? <TerminalChip variant={readinessStatusVariant(data.readinessStatus)}>{readinessStatusLabel(data.readinessStatus)}</TerminalChip> : <TerminalChip variant="neutral">待读取</TerminalChip>}
       />
       <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <TerminalNestedBlock className="px-3 py-3">
+        <TerminalNestedBlock className="p-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[10px] uppercase tracking-widest text-white/35">representative symbols</p>
@@ -1827,7 +1827,7 @@ const MarketDataReadinessPanel: React.FC<{
 const LoadingOperationsState: React.FC = () => (
   <TerminalPanel as="section" role="status" aria-label="正在读取市场数据源运维快照">
     <div className="flex items-center gap-3">
-      <Activity className="h-4 w-4 animate-pulse text-cyan-200" aria-hidden="true" />
+      <Activity className="size-4 animate-pulse text-cyan-200" aria-hidden="true" />
       <div>
         <p className="text-sm font-semibold text-white">正在读取只读运维快照</p>
         <p className="mt-1 text-xs text-white/46">不会触发外部 provider 调用，也不会变更缓存。</p>
@@ -1844,7 +1844,7 @@ const LoadingOperationsState: React.FC = () => (
 const EmptyErrorState: React.FC = () => (
   <TerminalPanel as="section">
     <div className="flex items-center gap-2 text-sm text-white/50">
-      <Activity className="h-4 w-4" aria-hidden="true" />
+      <Activity className="size-4" aria-hidden="true" />
       运维快照暂不可用
     </div>
   </TerminalPanel>

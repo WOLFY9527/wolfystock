@@ -54,7 +54,7 @@ type ProBacktestWorkspaceProps = Omit<FlowProps, 'panelMode'> & {
 
 const ghostCardClass = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md transition-all hover:border-white/10';
 const fieldClass = 'w-full min-w-0 min-h-[42px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-white outline-none transition-all focus:border-blue-500/50 focus:bg-white/[0.05]';
-const checkboxClass = 'h-4 w-4 shrink-0 rounded border border-white/15 bg-white/[0.03] text-blue-300 accent-blue-400 disabled:opacity-45';
+const checkboxClass = 'size-4 shrink-0 rounded border border-white/15 bg-white/[0.03] text-blue-300 accent-blue-400 disabled:opacity-45';
 const labelClass = 'text-[10px] font-bold uppercase tracking-widest text-white/40';
 const primaryButtonClass = 'inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all hover:from-blue-500 hover:to-purple-500 disabled:cursor-not-allowed disabled:opacity-45';
 const secondaryButtonClass = 'inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white/70 transition-all hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45';
@@ -667,15 +667,15 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           ))}
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <button type="button" className={secondaryButtonClass} onClick={() => setIsCatalogDrawerOpen(true)} data-testid="pro-open-template-drawer">
-              <PanelRightOpen className="h-4 w-4" />
+              <PanelRightOpen className="size-4" />
               {language === 'en' ? 'Templates' : '从模板库导入...'}
             </button>
             <button type="button" className={secondaryButtonClass} onClick={() => void handleParse()} disabled={isParsing || !strategyText.trim()}>
-              <Sparkles className="h-4 w-4" />
+              <Sparkles className="size-4" />
               {isParsing ? (language === 'en' ? 'Parsing...' : '解析中...') : (language === 'en' ? 'Parse strategy' : '解析策略')}
             </button>
             <button type="button" className={secondaryButtonClass} onClick={onReset}>
-              <RotateCw className="h-4 w-4" />
+              <RotateCw className="size-4" />
               {language === 'en' ? 'Reset' : '重置'}
             </button>
           </div>
@@ -1101,7 +1101,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         <div className="mt-3 grid gap-2">
           {readiness.map((item) => (
             <div key={item.key} className="flex items-center gap-2 text-xs text-white/60">
-              {item.ready ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" /> : <XCircle className="h-3.5 w-3.5 text-rose-300" />}
+              {item.ready ? <CheckCircle2 className="size-3.5 text-emerald-300" /> : <XCircle className="size-3.5 text-rose-300" />}
               <span>{item.label}</span>
             </div>
           ))}
@@ -1119,15 +1119,15 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             onClick={() => void handleRun()}
             disabled={!canRun || isSubmitting}
           >
-            <Play className="h-4 w-4" />
+            <Play className="size-4" />
             {isSubmitting ? (language === 'en' ? 'Opening result...' : '正在打开结果...') : (language === 'en' ? 'Execute backtest task' : '执行回测任务')}
           </button>
           <button type="button" className={secondaryButtonClass} onClick={() => goToStep(stepDefinitions[2])}>
-            <ShieldCheck className="h-4 w-4" />
+            <ShieldCheck className="size-4" />
             {language === 'en' ? 'Review risk' : '查看风控'}
           </button>
           <button type="button" className={secondaryButtonClass} onClick={() => goToStep(stepDefinitions[1])}>
-            <Sparkles className="h-4 w-4" />
+            <Sparkles className="size-4" />
             {language === 'en' ? 'Edit strategy' : '编辑策略'}
           </button>
         </div>
@@ -1164,11 +1164,11 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className={secondaryButtonClass} onClick={() => setResultsOpen((value) => !value)}>
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="size-4" />
             {resultsOpen ? (language === 'en' ? 'Collapse' : '收起') : (language === 'en' ? 'Expand result' : '展开结果')}
           </button>
           <button type="button" className={secondaryButtonClass} onClick={() => setResultsOpen(true)}>
-            <BookOpen className="h-4 w-4" />
+            <BookOpen className="size-4" />
             {language === 'en' ? 'History' : '历史记录'}
           </button>
         </div>
@@ -1317,7 +1317,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             onClick={() => void handleRun()}
             disabled={!canRun || isSubmitting}
           >
-            <Play className="h-4 w-4" />
+            <Play className="size-4" />
             {language === 'en' ? 'Execute backtest task' : '执行回测任务'}
           </button>
         </div>

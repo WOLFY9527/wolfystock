@@ -1126,7 +1126,7 @@ function HomeConclusionFirstConsole({
       data-first-screen-priority="conclusion-first"
       data-visual-role="conclusion-research-console"
     >
-      <div className="min-w-0 px-5 py-5 md:px-6">
+      <div className="min-w-0 p-5 md:px-6">
         <div
           className="mb-4 flex min-w-0 flex-wrap items-center gap-2"
           data-testid="home-research-judgment-gate"
@@ -1758,7 +1758,7 @@ function LinearObservationPanel({
   );
 
   return (
-    <div className="home-research-rail-body relative flex min-w-0 flex-col gap-3 px-0 py-0">
+    <div className="home-research-rail-body relative flex min-w-0 flex-col gap-3 p-0">
       <section
         className="home-research-rail-card min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-5 py-4"
         data-testid="home-bento-card-strategy"
@@ -4232,7 +4232,7 @@ function InPlaceDecisionSkeleton({
                   className="relative grid grid-cols-[1.5rem_minmax(0,1fr)_4.5rem] items-start gap-3 border-b border-white/[0.06] py-2 last:border-b-0"
                   data-testid={`home-bento-progress-stage-${stage.key}`}
                 >
-                  <span className={`mt-1.5 h-2 w-2 rounded-full ${timelineDotTone(stage.status)}`} />
+                  <span className={`mt-1.5 size-2 rounded-full ${timelineDotTone(stage.status)}`} />
                   <div className="min-w-0">
                     <p className={cn('truncate text-sm font-medium', isRunning ? 'text-white' : 'text-white/58')}>{stage.label}</p>
                     {stage.detail ? <p className="mt-1 truncate text-xs text-white/40">{stage.detail}</p> : null}
@@ -4284,7 +4284,7 @@ function InPlaceListSkeleton({
 
   return (
     <section
-      className="min-w-0 rounded-lg border border-white/[0.07] bg-white/[0.018] px-3 py-3"
+      className="min-w-0 rounded-lg border border-white/[0.07] bg-white/[0.018] p-3"
       data-testid={kind === 'tech' ? 'home-bento-card-tech' : 'home-bento-card-fundamentals'}
     >
       <p className="text-sm font-semibold text-white">{title}</p>
@@ -4312,7 +4312,7 @@ function GuestPaywallOverlay({ locale, registrationPath }: { locale: DashboardLo
       className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-[rgba(8,12,24,0.58)] px-6 text-center backdrop-blur-[8px]"
       data-testid="guest-home-frosted-lock"
     >
-      <Lock className="h-7 w-7 text-white/85 drop-shadow-[0_0_14px_rgba(99,102,241,0.55)]" />
+      <Lock className="size-7 text-white/85 drop-shadow-[0_0_14px_rgba(99,102,241,0.55)]" />
       <p className="mt-4 max-w-xs text-sm font-medium leading-6 text-white/80">
         解锁完整 AI 量化策略与深度技术形态解析
       </p>
@@ -4849,7 +4849,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         className="home-research-action-button inline-flex min-h-9 min-w-0 items-center gap-2 rounded-[7px] border px-3.5 py-1.5 text-xs font-medium text-white/72 transition-colors hover:text-white/90"
         onClick={() => { void handleCopyActiveReport(); }}
       >
-        <Star className="h-3.5 w-3.5 shrink-0" />
+        <Star className="size-3.5 shrink-0" />
         <span className="truncate">{mainCopyState === 'copied' ? (locale === 'en' ? 'Added' : '已加入') : (locale === 'en' ? 'Watch' : '加入观察')}</span>
       </button>
       <button
@@ -4858,17 +4858,17 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         className="home-research-action-button home-research-action-button--primary inline-flex min-h-9 min-w-0 items-center gap-2 rounded-[7px] border px-3.5 py-1.5 text-xs font-medium text-white/82 transition-colors hover:text-white"
         onClick={() => setFullReportDrawerOpen(true)}
       >
-        <Upload className="h-3.5 w-3.5 shrink-0" />
+        <Upload className="size-3.5 shrink-0" />
         <span className="truncate">{locale === 'en' ? 'Generate report' : '生成报告'}</span>
       </button>
       <button
         type="button"
-        className="home-research-action-button inline-flex min-h-9 w-9 items-center justify-center rounded-[7px] border text-white/58 transition-colors hover:text-white/82"
+        className="home-research-action-button inline-flex min-size-9 items-center justify-center rounded-[7px] border text-white/58 transition-colors hover:text-white/82"
         onClick={() => setTraceDrawerOpen(true)}
         data-testid="home-bento-decision-trace-trigger"
         aria-label={locale === 'en' ? 'Sources' : '决策来源'}
       >
-        <MoreHorizontal className="h-4 w-4" />
+        <MoreHorizontal className="size-4" />
       </button>
       <button
         type="button"
@@ -4948,7 +4948,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   className="home-research-action-button flex min-h-10 shrink-0 items-center justify-center rounded-lg border px-4 text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] disabled:cursor-wait disabled:text-white/34"
                   data-testid="home-bento-history-drawer-trigger"
                 >
-                  <History className="h-4 w-4" aria-hidden="true" />
+                  <History className="size-4" aria-hidden="true" />
                 </button>
               ) : null}
             </>
@@ -4959,7 +4959,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             data-testid="home-bento-omnibar-input-shell"
           >
             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-              <Search className="h-4 w-4 text-white/40" />
+              <Search className="size-4 text-white/40" />
             </div>
             <input
               data-testid="home-bento-omnibar-input"
@@ -5009,12 +5009,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       <main className="w-full flex-1 flex flex-col min-h-0 min-w-0" data-testid="home-bento-main">
         {!shouldRenderDashboardPanels ? (
           <section
-            className="mx-auto flex w-full max-w-[1880px] flex-1 min-w-0 flex-col px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
+            className="mx-auto flex w-full max-w-[1880px] flex-1 min-w-0 flex-col p-3 sm:px-4 xl:px-6 2xl:px-8"
             data-testid="guest-home-clean-search"
           >
             <div className="flex w-full min-w-0 flex-col gap-3" data-testid="guest-home-first-screen-stack">
               <section
-                className="min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-4 sm:px-5 sm:py-5"
+                className="min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] p-4 sm:px-5 sm:py-5"
                 data-testid="guest-home-command-surface"
                 data-layout-zone="RouteConsole"
                 data-visual-role="guest-command-console"
@@ -5138,7 +5138,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           );
           return (
             <div
-              className="home-research-stage mx-auto flex w-full max-w-[1880px] min-w-0 flex-col gap-2.5 px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
+              className="home-research-stage mx-auto flex w-full max-w-[1880px] min-w-0 flex-col gap-2.5 p-3 sm:px-4 xl:px-6 2xl:px-8"
               data-testid="home-research-stage"
             >
               {omnibarModule}
@@ -5233,7 +5233,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       </div>
                     ) : null}
                     <div
-                      className="min-w-0 rounded-none border-0 bg-transparent px-0 py-0"
+                      className="min-w-0 rounded-none border-0 bg-transparent p-0"
                       data-testid="home-research-primary-workspace"
                     >
                       {isHomeAnalyzing ? (
@@ -5398,7 +5398,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             return (
               <div
                 key={item.id}
-                className={`flex min-w-0 items-center gap-3 rounded-2xl border px-3 py-3 transition-colors ${
+                className={`flex min-w-0 items-center gap-3 rounded-2xl border p-3 transition-colors ${
                   isSelected
                     ? 'border-white/15 bg-white/[0.08] text-white'
                     : 'border-white/5 bg-white/[0.02] text-white/72 hover:bg-white/[0.05]'

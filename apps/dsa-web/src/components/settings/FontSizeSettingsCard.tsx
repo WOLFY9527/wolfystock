@@ -10,7 +10,7 @@ export const FontSizeSettingsCard: React.FC = () => {
   const { fontSize, setFontSize } = useUiPreferences();
 
   return (
-    <div data-testid="font-size-card" className="grid gap-3 px-4 py-4 md:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)]">
+    <div data-testid="font-size-card" className="grid gap-3 p-4 md:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)]">
       <div className="min-w-0">
         <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">{t('settings.fontSizeTitle')}</p>
         <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">

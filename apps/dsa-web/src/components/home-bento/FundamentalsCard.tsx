@@ -63,7 +63,7 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
   return (
     <BentoCard
       eyebrow={title}
-      className="w-full h-full rounded-[12px] px-4 py-3"
+      className="size-full rounded-[12px] px-4 py-3"
       researchCard={researchCard}
       testId="home-bento-card-fundamentals"
       action={(
@@ -75,7 +75,7 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
           onClick={handleOpenDetailsClick}
           onPointerUp={handleOpenDetailsPointerUp}
         >
-          <PanelRightOpen className="h-3.5 w-3.5" />
+          <PanelRightOpen className="size-3.5" />
           <span>{detailLabel}</span>
         </button>
       )}
