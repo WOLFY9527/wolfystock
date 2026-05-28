@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import type React from 'react';
-import { Button, Checkbox, Disclosure } from '../../components/common';
+import { Button, Checkbox, Disclosure } from '../common/Button';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { translate } from '../../i18n/core';
 import {

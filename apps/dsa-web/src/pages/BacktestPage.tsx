@@ -35,7 +35,7 @@ import {
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
 import { translate } from '../i18n/core';
-import { TerminalPageHeading, TerminalPageShell } from '../components/terminal';
+import { TerminalPageHeading, TerminalPageShell } from '../components/terminal/TerminalPrimitives';
 
 const HISTORICAL_PAGE_SIZE = 20;
 const HISTORY_PAGE_SIZE = 10;

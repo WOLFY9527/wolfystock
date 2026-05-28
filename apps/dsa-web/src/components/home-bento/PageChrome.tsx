@@ -1,5 +1,5 @@
 import type React from 'react';
-import { WorkspacePageHeader } from '../common';
+import { WorkspacePageHeader } from '../common/WorkspacePageHeader';
 import { cn } from '../../utils/cn';
 import {
   BENTO_SURFACE_ROOT_CLASS,

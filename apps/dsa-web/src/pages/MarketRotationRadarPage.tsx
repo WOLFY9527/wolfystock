@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { Gauge, RefreshCcw, Search, SlidersHorizontal } from 'lucide-react';
-import { ApiErrorAlert } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import {
   ConsoleContextRail,
   DataWorkbenchFrame,

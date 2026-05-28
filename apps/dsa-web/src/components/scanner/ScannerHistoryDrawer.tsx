@@ -1,5 +1,5 @@
 import type { ParsedApiError } from '../../api/error';
-import { ApiErrorAlert, Drawer, Pagination, PillBadge } from '../common';
+import { ApiErrorAlert, Drawer, Pagination, PillBadge } from '../common/ApiErrorAlert';
 import { TerminalEmptyState } from '../terminal';
 
 type Language = 'zh' | 'en';

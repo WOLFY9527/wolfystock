@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
-import { Button, Disclosure, GlassCard, Input } from '../common';
+import { Button, Disclosure, GlassCard, Input } from '../common/Button';
 import { getApiErrorMessage } from '../../api/error';
 import {
   describeSettingsDuckDBDataMode,

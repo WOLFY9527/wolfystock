@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Button } from '../common';
+import { Button } from '../common/Button';
 import type { BentoHeroItem } from '../home-bento';
 import { DensityRail, GuidedDisclosure, InsightStack, SectionIntro } from '../guidance';
 import {

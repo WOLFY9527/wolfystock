@@ -3,7 +3,7 @@ import { RefreshCcw } from 'lucide-react';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import type { MarketDataFreshness, MarketDataMeta, MarketOverviewItem, MarketOverviewPanel, MarketProviderHealthStatus } from '../../api/marketOverview';
 import { cn } from '../../utils/cn';
-import { TerminalPanel } from '../terminal';
+import { TerminalPanel } from '../terminal/TerminalPrimitives';
 import { formatMarketOverviewTimestamp } from './marketOverviewFormat';
 import {
   formatChangeSummary,

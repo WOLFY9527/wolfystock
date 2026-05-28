@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useState } from 'react';
 import { AnimatePresence, domAnimation, LazyMotion, m } from 'motion/react';
-import { ApiErrorAlert, Button, Card, Pagination } from '../../components/common';
+import { ApiErrorAlert, Button, Card, Pagination } from '../common/ApiErrorAlert';
 import type { ParsedApiError } from '../../api/error';
 import type {
   AssumptionMap,

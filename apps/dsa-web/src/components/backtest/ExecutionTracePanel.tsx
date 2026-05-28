@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useState } from 'react';
-import { Button, Card } from '../../components/common';
+import { Button, Card } from '../common/Button';
 import type { RuleBacktestExecutionTraceRowItem, RuleBacktestRunResponse } from '../../types/backtest';
 import { formatDeterministicActionLabel } from './normalizeDeterministicBacktestResult';
 import {

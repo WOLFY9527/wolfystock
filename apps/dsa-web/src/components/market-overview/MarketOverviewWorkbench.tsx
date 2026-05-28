@@ -52,7 +52,7 @@ import {
   MarketOverviewRefreshButton,
 } from './marketOverviewPrimitives';
 import { ConsumerWorkspacePageShell } from '../layout/ConsumerWorkspaceShell';
-import { TerminalChip, TerminalGrid, TerminalPanel } from '../terminal';
+import { TerminalChip, TerminalGrid, TerminalPanel } from '../terminal/TerminalPrimitives';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
 import type { OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';

@@ -1,5 +1,5 @@
 import type React from 'react';
-import { TerminalDenseList } from '../terminal';
+import { TerminalDenseList } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
 
 export type SynthesisEvidenceItem = {

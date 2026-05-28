@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
-import { Button, GlassCard, Input } from '../common';
+import { Button, GlassCard, Input } from '../common/Button';
 import type { SystemConfigItem, SystemConfigUpdateItem } from '../../types/systemConfig';
 import { SettingsSectionCard } from './SettingsSectionCard';
 

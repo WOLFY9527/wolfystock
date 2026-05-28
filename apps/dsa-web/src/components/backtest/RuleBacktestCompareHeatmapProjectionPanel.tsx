@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { TerminalChip, TerminalEmptyState, TerminalNestedBlock, TerminalSectionHeader } from '../terminal';
+import { TerminalChip, TerminalEmptyState, TerminalNestedBlock, TerminalSectionHeader } from '../terminal/TerminalPrimitives';
 import { formatNumber, pct } from './shared';
 import type { RuleBacktestCompareHeatmapProjection } from '../../types/backtest';
 

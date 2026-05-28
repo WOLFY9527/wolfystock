@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Label } from '../common';
+import { Label } from '../common/Label';
 import { useUiPreferences } from '../../contexts/UiPreferencesContext';
 import { BentoCard } from './BentoCard';
 import {

@@ -10,7 +10,7 @@ import { ReportStrategy } from './ReportStrategy';
 import { ReportNews } from './ReportNews';
 import { ReportDetails } from './ReportDetails';
 import { StandardReportPanel } from './StandardReportPanel';
-import { SupportPanel } from '../common';
+import { SupportPanel } from '../common/SupportSurface';
 import { ExecutionSummaryCard } from '../runtime/ExecutionSummaryCard';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';

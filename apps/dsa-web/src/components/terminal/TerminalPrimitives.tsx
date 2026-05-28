@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '../../utils/cn';
-import { WolfyShellSurface } from '../linear';
+import { WolfyShellSurface } from '../linear/LinearPrimitives';
 
 type PrimitiveProps<T extends HTMLElement = HTMLElement> = React.HTMLAttributes<T> & {
   children?: React.ReactNode;

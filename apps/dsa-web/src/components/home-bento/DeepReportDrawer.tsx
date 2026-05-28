@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Drawer } from '../common';
+import { Drawer } from '../common/Drawer';
 import { cn } from '../../utils/cn';
 import { getToneTextClass, getToneTextStyle, type SignalTone } from './theme';
 

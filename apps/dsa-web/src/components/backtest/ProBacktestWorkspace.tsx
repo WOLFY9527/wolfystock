@@ -11,7 +11,7 @@ import {
   Sparkles,
   XCircle,
 } from 'lucide-react';
-import { ApiErrorAlert, Drawer } from '../../components/common';
+import { ApiErrorAlert, Drawer } from '../common/ApiErrorAlert';
 import type { RuleBacktestHistoryItem, RuleBacktestParseResponse } from '../../types/backtest';
 import type { FlowProps, RuleWizardStep } from './DeterministicBacktestFlow';
 import { RULE_BACKTEST_PRESET_STORAGE_KEY } from './ruleBacktestP6';

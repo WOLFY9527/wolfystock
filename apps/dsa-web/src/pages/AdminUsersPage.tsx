@@ -25,7 +25,7 @@ import {
   type AdminUserListResponse,
 } from '../api/adminUsers';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert, Checkbox, Input, Select } from '../components/common';
+import { ApiErrorAlert, Checkbox, Input, Select } from '../components/common/ApiErrorAlert';
 import {
   TerminalButton,
   TerminalChip,

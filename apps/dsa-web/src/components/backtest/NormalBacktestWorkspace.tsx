@@ -1,7 +1,7 @@
 import type React from 'react';
 import { Suspense, lazy } from 'react';
 import { Play } from 'lucide-react';
-import { ApiErrorAlert, GlassCard } from '../../components/common';
+import { ApiErrorAlert, GlassCard } from '../common/ApiErrorAlert';
 import type { ParsedApiError } from '../../api/error';
 import {
   RULE_BENCHMARK_OPTIONS,

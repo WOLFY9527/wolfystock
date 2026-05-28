@@ -1,6 +1,6 @@
 import type React from 'react';
 import type { ReportMeta, ReportSummary as ReportSummaryType } from '../../types/analysis';
-import { ScoreGauge, Card } from '../common';
+import { ScoreGauge, Card } from '../common/ScoreGauge';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { formatDateTime } from '../../utils/format';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';

@@ -4,7 +4,7 @@ import { createParsedApiError, getParsedApiError, type ParsedApiError } from '..
 import type { CurrentUser } from '../api/auth';
 import { authApi } from '../api/auth';
 import { resetAdminSurfaceMode } from '../hooks/productSurfaceMode';
-import { useStockPoolStore } from '../stores';
+import { useStockPoolStore } from '../stores/stockPoolStore';
 import { hardRedirect } from '../utils/browserRedirect';
 
 const LOCAL_STORAGE_KEYS_TO_CLEAR = [

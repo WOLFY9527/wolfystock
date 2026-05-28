@@ -2,7 +2,7 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BellRing, ShieldCheck } from 'lucide-react';
-import { ApiErrorAlert } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import {
   ConsoleBoard,
   ConsoleContextRail,

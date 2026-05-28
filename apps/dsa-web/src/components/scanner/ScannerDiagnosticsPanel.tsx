@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
-import { TerminalChip } from '../terminal';
+import { TerminalChip } from '../terminal/TerminalPrimitives';
 import type {
   ScannerCandidate,
   ScannerCoverageSummary,

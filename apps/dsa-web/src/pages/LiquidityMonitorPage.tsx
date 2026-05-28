@@ -11,7 +11,7 @@ import {
   type LiquidityMonitorRegime,
   type LiquidityMonitorResponse,
 } from '../api/liquidityMonitor';
-import { ApiErrorAlert } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import {
   LiquidityImpulseSynthesisHeader,
   type LiquidityImpulseHeaderEvidenceView,

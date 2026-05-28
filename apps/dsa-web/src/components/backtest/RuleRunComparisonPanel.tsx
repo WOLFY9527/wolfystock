@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Card } from '../../components/common';
+import { Card } from '../common/Card';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 import type { DeterministicBacktestNormalizedResult } from './normalizeDeterministicBacktestResult';
 import { Banner, SummaryStrip, formatDateTime, formatNumber, pct } from './shared';

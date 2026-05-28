@@ -1,6 +1,6 @@
 import { LineChart, TestTubeDiagonal } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { TerminalChip } from '../terminal';
+import { TerminalChip } from '../terminal/TerminalPrimitives';
 import { buildLocalizedPath } from '../../utils/localeRouting';
 import type {
   ScannerBacktestBatchSource,

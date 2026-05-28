@@ -15,7 +15,7 @@ import { backtestApi } from '../api/backtest';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { watchlistApi } from '../api/watchlist';
 import { ConsumerProtectedFrame, ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
-import { ApiErrorAlert, Input, Select } from '../components/common';
+import { ApiErrorAlert, Input, Select } from '../components/common/ApiErrorAlert';
 import {
   ConsoleBoard,
   ConsoleContextRail,

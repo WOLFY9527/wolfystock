@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { ReportDetails as ReportDetailsType, ReportLanguage } from '../../types/analysis';
-import { Card } from '../common';
+import { Card } from '../common/Card';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
 import { isDeveloperDiagnosticAllowed, type DiagnosticAudience } from '../../utils/userFacingDataIssues';
 

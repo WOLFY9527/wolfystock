@@ -19,7 +19,7 @@ import {
   type QuotaEnforcementMode,
 } from '../api/adminCost';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert, Select } from '../components/common';
+import { ApiErrorAlert, Select } from '../components/common/ApiErrorAlert';
 import {
   TerminalButton,
   TerminalChip,

@@ -6,7 +6,7 @@ import type {
   StandardReportMarketBlock,
   StandardReportSummaryPanel,
 } from '../../types/analysis';
-import { Button, SupportPanel } from '../common';
+import { Button, SupportPanel } from '../common/Button';
 import { cn } from '../../utils/cn';
 import { useElementSize } from '../../hooks/useElementSize';
 

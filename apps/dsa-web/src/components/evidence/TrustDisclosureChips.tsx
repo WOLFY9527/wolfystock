@@ -1,4 +1,4 @@
-import { TerminalChip } from '../terminal';
+import { TerminalChip } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
 import {
   TRUST_DISCLOSURE_LABELS,

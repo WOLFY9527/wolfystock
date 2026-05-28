@@ -4,7 +4,7 @@
  * rail, spectral telemetry, and section scaffolds that stay readable in motion.
  */
 import type React from 'react';
-import { Button } from '../common';
+import { Button } from '../common/Button';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import type { RuntimeExecutionSummary, TaskInfo } from '../../types/analysis';
 import { buildTaskExecutionSummary } from '../../utils/runtimeExecution';

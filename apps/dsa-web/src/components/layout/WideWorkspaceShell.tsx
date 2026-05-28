@@ -1,5 +1,5 @@
 import type React from 'react';
-import { TerminalPageShell } from '../terminal';
+import { TerminalPageShell } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
 
 type WideWorkspaceProps = React.HTMLAttributes<HTMLDivElement> & {

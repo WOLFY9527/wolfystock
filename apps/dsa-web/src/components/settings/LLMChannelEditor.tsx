@@ -5,7 +5,7 @@ import { getParsedApiError } from '../../api/error';
 import { systemConfigApi } from '../../api/systemConfig';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import type { SystemConfigUpdateItem } from '../../types/systemConfig';
-import { ApiErrorAlert, Badge, Button, Input, Select, SupportBanner, SupportPanel } from '../common';
+import { ApiErrorAlert, Badge, Button, Input, Select, SupportBanner, SupportPanel } from '../common/ApiErrorAlert';
 
 type ChannelProtocol = 'openai' | 'deepseek' | 'gemini' | 'anthropic' | 'vertex_ai' | 'ollama';
 

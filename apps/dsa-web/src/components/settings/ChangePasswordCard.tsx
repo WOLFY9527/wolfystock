@@ -3,7 +3,7 @@ import { useState } from 'react';
 import type { ParsedApiError } from '../../api/error';
 import { isParsedApiError } from '../../api/error';
 import { useI18n } from '../../contexts/UiLanguageContext';
-import { useAuth } from '../../hooks';
+import { useAuth } from '../../hooks/useAuth';
 import { Input } from '../common';
 import { SettingsAlert } from './SettingsAlert';
 import { TerminalButton } from '../terminal';

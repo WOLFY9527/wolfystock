@@ -27,7 +27,7 @@ import {
   NotesList,
 } from './ScannerDisplayAtoms';
 import { ScannerScoreTrustStrip } from './ScannerScoreTrustStrip';
-import { TerminalButton } from '../terminal';
+import { TerminalButton } from '../terminal/TerminalPrimitives';
 
 type CandidateDetailOutcomeItem = {
   label: string;

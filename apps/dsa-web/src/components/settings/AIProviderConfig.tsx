@@ -1,6 +1,6 @@
 import type React from 'react';
 import type { RefObject } from 'react';
-import { Button } from '../common';
+import { Button } from '../common/Button';
 import { SettingsSectionCard } from './SettingsSectionCard';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;

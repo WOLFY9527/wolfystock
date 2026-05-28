@@ -9,7 +9,7 @@ import type {
 } from './MarketOverviewWorkbenchTopSurface';
 import { OfficialMacroAuthorityDiagnostics } from '../common/OfficialMacroAuthorityDiagnostics';
 import { buildOfficialMacroAuthorityDiagnosticsView, type OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';
-import { TerminalChip, TerminalDenseList, TerminalNotice, TerminalPanel, TerminalSectionHeader } from '../terminal';
+import { TerminalChip, TerminalDenseList, TerminalNotice, TerminalPanel, TerminalSectionHeader } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
 import { TrustDisclosureChips } from '../evidence/TrustDisclosureChips';
 import { marketIntelligenceReasonLabel, marketIntelligenceReasonLabels } from '../../utils/marketIntelligenceGuidance';

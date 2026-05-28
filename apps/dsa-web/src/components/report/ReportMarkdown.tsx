@@ -2,7 +2,7 @@ import type React from 'react';
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { historyApi } from '../../api/history';
 import { Drawer } from '../common/Drawer';
-import { SupportPanel } from '../common';
+import { SupportPanel } from '../common/SupportSurface';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
 import { localizeReportHeadingLabel, localizeReportTermLabel } from '../../utils/reportTerminology';
 import type { ReportLanguage, StandardReport } from '../../types/analysis';

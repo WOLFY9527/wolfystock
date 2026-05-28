@@ -1,6 +1,6 @@
 import type React from 'react';
 import { Suspense, lazy } from 'react';
-import { Button, Card } from '../../components/common';
+import { Button, Card } from '../common/Button';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 import {
   getDeterministicResultDensityCssVars,

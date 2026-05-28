@@ -11,7 +11,7 @@ import {
   type ProviderSlaReadinessItem,
 } from '../api/adminProviderCircuits';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import {
   TerminalButton,
   TerminalChip,

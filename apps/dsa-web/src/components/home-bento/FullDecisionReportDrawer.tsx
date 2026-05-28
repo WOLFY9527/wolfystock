@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useState } from 'react';
 import { Copy, Download, Printer } from 'lucide-react';
-import { Drawer } from '../common';
+import { Drawer } from '../common/Drawer';
 import type {
   AnalysisReport,
   StandardReport,

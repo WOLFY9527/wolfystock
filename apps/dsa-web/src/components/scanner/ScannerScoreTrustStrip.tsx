@@ -4,7 +4,7 @@ import type {
 } from '../../types/scanner';
 import type { TrustDisclosureBucket } from '../../utils/trustDisclosure';
 import { TrustDisclosureChips } from '../evidence/TrustDisclosureChips';
-import { TerminalChip } from '../terminal';
+import { TerminalChip } from '../terminal/TerminalPrimitives';
 
 type TrustSource = ScannerCandidate | ScannerCandidateDiagnostic | null | undefined;
 

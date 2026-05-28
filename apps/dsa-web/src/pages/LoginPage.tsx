@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, Input } from '../components/common';
+import { Button, Input } from '../components/common/Button';
 import type { ParsedApiError } from '../api/error';
 import { isParsedApiError } from '../api/error';
 import { SettingsAlert } from '../components/settings';

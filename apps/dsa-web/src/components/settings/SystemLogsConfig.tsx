@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Button, GlassCard } from '../common';
+import { Button, GlassCard } from '../common/Button';
 import { SettingsSectionCard } from './SettingsSectionCard';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
