@@ -2942,6 +2942,80 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertFalse(ai_theme["scoreContributionAllowed"])
         self.assertEqual(ai_theme["rankingLane"], "observation")
 
+    def test_rotation_evidence_snapshot_stays_diagnostic_only_with_active_provider_readiness_and_etf_spine(self) -> None:
+        stable_etfs = {"SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV"}
+
+        class StableOnlyAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                if symbol not in stable_etfs:
+                    return []
+                return _alpaca_bars(
+                    start_close=100.0,
+                    end_close={
+                        "5Min": 101.0,
+                        "15Min": 102.0,
+                        "1Hour": 103.0,
+                        "1Day": 104.0,
+                    }[timeframe],
+                )
+
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            StableOnlyAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=pd.DataFrame(),
+        ):
+            payload = MarketRotationRadarService(
+                quote_provider=load_rotation_radar_quotes,
+                now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+            ).get_rotation_radar()
+
+        snapshot = payload["metadata"]["rotationEvidenceSnapshot"]
+        provider_meta = payload["metadata"]["quoteProvider"]
+        diagnostics_spine = provider_meta["providerDiagnostics"]["etfAuthoritySpine"]
+        ai_theme = next(theme for theme in payload["themes"] if theme["id"] == "ai_applications")
+        claims = _forbidden_claims_by_name(snapshot)
+
+        self.assertEqual(provider_meta["quoteMode"], "configured")
+        self.assertTrue(provider_meta["providerDiagnostics"]["configuredProviderAttempted"])
+        self.assertTrue(provider_meta["providerDiagnostics"]["providerConstructed"])
+        self.assertEqual(provider_meta["providerDiagnostics"]["liveActivationStatus"], "partial")
+        self.assertFalse(provider_meta["sourceAuthorityAllowed"])
+        self.assertFalse(provider_meta["scoreContributionAllowed"])
+        self.assertTrue(diagnostics_spine["sourceAuthorityAllowed"])
+        self.assertTrue(diagnostics_spine["scoreContributionAllowed"])
+        self.assertTrue(payload["etfLeadershipDiagnostics"]["enabled"])
+
+        self.assertTrue(snapshot["diagnosticOnly"])
+        self.assertTrue(snapshot["observationOnly"])
+        self.assertFalse(snapshot["authorityGrant"])
+        self.assertFalse(snapshot["scoreContributionAllowed"])
+        self.assertFalse(snapshot["providerRuntimeChanged"])
+        self.assertFalse(snapshot["externalProviderCalls"])
+        self.assertFalse(snapshot["marketCacheMutation"])
+        self.assertIn("provider_readiness_observation_only", snapshot["reasonCodes"])
+        self.assertIn("etf_price_proxy_fund_flow_forbidden", snapshot["reasonCodes"])
+        self.assertFalse(claims["etf_price_proxy_as_fund_flow_evidence"]["reliableProvenanceAllowed"])
+        self.assertFalse(claims["etf_price_proxy_as_fund_flow_evidence"]["authorityGrant"])
+
+        self.assertEqual(payload["summary"]["eligibleThemeCount"], 0)
+        self.assertEqual(payload["summary"]["headlineEligibleThemeCount"], 0)
+        self.assertFalse(ai_theme["rankEligible"])
+        self.assertFalse(ai_theme["headlineEligible"])
+        self.assertFalse(ai_theme["scoreContributionAllowed"])
+        self.assertTrue(ai_theme["observationOnly"])
+        self.assertEqual(ai_theme["rankingLane"], "observation")
+        self.assertFalse(ai_theme["sourceAuthorityAllowed"])
+
     def test_stale_runtime_alpaca_windows_fail_close_service_authority(self) -> None:
         stale_as_of = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
 
