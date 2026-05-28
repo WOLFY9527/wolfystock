@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Activity, ExternalLink } from 'lucide-react';
 import { marketApi, type MarketDataReadinessCheck, type MarketDataReadinessResponse } from '../api/market';
 import {
@@ -1230,22 +1230,16 @@ const ProviderSetupChecklistPanel: React.FC<{
   isLoading: boolean;
   surfaceFocus: ProductSetupSurface | null;
 }> = ({ rows, checks, isLoading, surfaceFocus }) => {
-  const entries = useMemo(() => buildSetupChecklistEntries(rows, checks), [rows, checks]);
-  const visibleEntries = useMemo(
-    () => surfaceFocus ? entries.filter((entry) => entry.surface === surfaceFocus.label) : entries,
-    [entries, surfaceFocus],
-  );
-  const groups = useMemo(
-    () => CHECKLIST_SURFACE_ORDER
-      .map((surface) => ({
-        surface,
-        items: visibleEntries
-          .filter((entry) => entry.surface === surface)
-          .sort((left, right) => left.title.localeCompare(right.title)),
-      }))
-      .filter((group) => group.items.length > 0),
-    [visibleEntries],
-  );
+  const entries = buildSetupChecklistEntries(rows, checks);
+  const visibleEntries = surfaceFocus ? entries.filter((entry) => entry.surface === surfaceFocus.label) : entries;
+  const groups = CHECKLIST_SURFACE_ORDER
+    .map((surface) => ({
+      surface,
+      items: visibleEntries
+        .filter((entry) => entry.surface === surface)
+        .sort((left, right) => left.title.localeCompare(right.title)),
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <TerminalNestedBlock data-testid="market-provider-setup-checklist" className="mt-4 bg-black/10 px-3 py-3">
@@ -1700,16 +1694,14 @@ const MarketDataReadinessPanel: React.FC<{
   onSymbolSubmit: () => void;
 }> = ({ data, isLoading, error, symbolInput, onSymbolInputChange, onSymbolSubmit }) => {
   const checks = data?.checks ?? EMPTY_READINESS_CHECKS;
-  const groupedChecks = useMemo(() => {
-    return READINESS_DIAGNOSTIC_GROUPS
-      .map((group) => ({
-        ...group,
-        items: checks
-          .filter((check) => readinessDiagnosticGroupId(check) === group.id)
-          .sort((left, right) => left.severity.localeCompare(right.severity) || left.status.localeCompare(right.status) || readinessCheckName(left).localeCompare(readinessCheckName(right))),
-      }))
-      .filter((group) => group.items.length > 0);
-  }, [checks]);
+  const groupedChecks = READINESS_DIAGNOSTIC_GROUPS
+    .map((group) => ({
+      ...group,
+      items: checks
+        .filter((check) => readinessDiagnosticGroupId(check) === group.id)
+        .sort((left, right) => left.severity.localeCompare(right.severity) || left.status.localeCompare(right.status) || readinessCheckName(left).localeCompare(readinessCheckName(right))),
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <TerminalPanel as="section" className="col-span-12">
@@ -1946,11 +1938,11 @@ const MarketProviderOperationsPage: React.FC = () => {
   const readinessChecks = readiness?.checks ?? EMPTY_READINESS_CHECKS;
   const cacheStates = response?.cacheStates ?? EMPTY_PROVIDER_CACHE_STATES;
   const eventRollups = response?.eventRollups ?? EMPTY_PROVIDER_EVENT_ROLLUPS;
-  const summary = useMemo(() => normalizeSummary(response?.summary ?? SUMMARY_DEFAULTS), [response?.summary]);
+  const summary = normalizeSummary(response?.summary ?? SUMMARY_DEFAULTS);
   const degradedCount = summary.fallbackCount + summary.partialCount + summary.unavailableCount + summary.errorCount + summary.failureCount;
-  const preferredProvider = useMemo(() => selectPreferredProvider(items), [items]);
+  const preferredProvider = selectPreferredProvider(items);
 
-  const effectiveSelectedProviderKey = useMemo(() => {
+  const effectiveSelectedProviderKey = (() => {
     if (!items.length) {
       return null;
     }
@@ -1958,45 +1950,37 @@ const MarketProviderOperationsPage: React.FC = () => {
       return selectedProviderKey;
     }
     return providerKey(preferredProvider || items[0]);
-  }, [items, preferredProvider, selectedProviderKey]);
+  })();
 
-  const selectedItem = useMemo(
-    () => items.find((item) => providerKey(item) === effectiveSelectedProviderKey) || preferredProvider || null,
-    [effectiveSelectedProviderKey, items, preferredProvider],
-  );
+  const selectedItem = items.find((item) => providerKey(item) === effectiveSelectedProviderKey) || preferredProvider || null;
 
-  const topException = useMemo(() => {
+  const topException = (() => {
     const withReason = eventRollups.find((rollup) => rollup.topReasons.length) || null;
     if (withReason) return sanitizeOperatorText(withReason.topReasons[0]);
     const withItemError = items.find((item) => item.errorSummary || item.warning) || null;
     return withItemError ? lastFailureLabel(withItemError) : '暂无数据';
-  }, [eventRollups, items]);
+  })();
 
-  const operatorMetrics = useMemo(() => {
-    const totalItems = summary.totalItems || items.length;
-    const healthValue = totalItems > 0 ? `${formatNumber(summary.liveCount, 0)}/${formatNumber(totalItems, 0)} 实时` : '暂无数据';
-    const circuitValue = totalItems > 0 ? (degradedCount > 0 ? `${formatNumber(degradedCount, 0)} 降级` : '正常') : '待统计';
-    const cacheValue = cacheStates.length > 0
-      ? cacheStates.some((state) => state.isRefreshing)
-        ? '刷新中'
-        : cacheStates.some((state) => state.isFresh === false)
-          ? `${formatNumber(cacheStates.filter((state) => state.isFresh === false).length, 0)} 过期`
-          : `${formatNumber(cacheStates.length, 0)} 正常`
-      : '待统计';
+  const totalItems = summary.totalItems || items.length;
+  const healthValue = totalItems > 0 ? `${formatNumber(summary.liveCount, 0)}/${formatNumber(totalItems, 0)} 实时` : '暂无数据';
+  const circuitValue = totalItems > 0 ? (degradedCount > 0 ? `${formatNumber(degradedCount, 0)} 降级` : '正常') : '待统计';
+  const cacheValue = cacheStates.length > 0
+    ? cacheStates.some((state) => state.isRefreshing)
+      ? '刷新中'
+      : cacheStates.some((state) => state.isFresh === false)
+        ? `${formatNumber(cacheStates.filter((state) => state.isFresh === false).length, 0)} 过期`
+        : `${formatNumber(cacheStates.length, 0)} 正常`
+    : '待统计';
 
-    return [
-      { label: '数据源健康', value: healthValue, subvalue: totalItems > 0 ? `共 ${formatNumber(totalItems, 0)} 个数据源` : '暂无 provider 快照' },
-      { label: '熔断状态', value: circuitValue, subvalue: degradedCount > 0 ? '优先核对降级与失败路径' : '当前未见降级聚合' },
-      { label: '失败率', value: safeRatio(summary.failureCount, summary.eventCount), subvalue: summary.eventCount > 0 ? `事件 ${formatNumber(summary.eventCount, 0)}` : '待统计' },
-      { label: '缓存状态', value: cacheValue, subvalue: cacheStates.length > 0 ? `快照 ${formatNumber(cacheStates.length, 0)}` : '暂无缓存快照' },
-      { label: '最近异常', value: topException, subvalue: eventRollups.length > 0 ? '保留异常可见性，但不暴露敏感内容' : '窗口内暂无异常' },
-    ];
-  }, [cacheStates, degradedCount, eventRollups.length, items.length, summary, topException]);
+  const operatorMetrics = [
+    { label: '数据源健康', value: healthValue, subvalue: totalItems > 0 ? `共 ${formatNumber(totalItems, 0)} 个数据源` : '暂无 provider 快照' },
+    { label: '熔断状态', value: circuitValue, subvalue: degradedCount > 0 ? '优先核对降级与失败路径' : '当前未见降级聚合' },
+    { label: '失败率', value: safeRatio(summary.failureCount, summary.eventCount), subvalue: summary.eventCount > 0 ? `事件 ${formatNumber(summary.eventCount, 0)}` : '待统计' },
+    { label: '缓存状态', value: cacheValue, subvalue: cacheStates.length > 0 ? `快照 ${formatNumber(cacheStates.length, 0)}` : '暂无缓存快照' },
+    { label: '最近异常', value: topException, subvalue: eventRollups.length > 0 ? '保留异常可见性，但不暴露敏感内容' : '窗口内暂无异常' },
+  ];
 
-  const topSummary = useMemo(
-    () => buildProviderOpsTopSummary(items, matrixRows, readinessChecks),
-    [items, matrixRows, readinessChecks],
-  );
+  const topSummary = buildProviderOpsTopSummary(items, matrixRows, readinessChecks);
 
   return (
     <div data-testid="market-provider-operations-page" className="market-provider-operations-page flex min-h-0 w-full flex-1 flex-col overflow-y-auto no-scrollbar text-white">

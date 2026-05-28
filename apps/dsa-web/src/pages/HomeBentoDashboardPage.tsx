@@ -4409,16 +4409,10 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   } = useSafariWarmActivation<HTMLButtonElement>(() => setHistoryDrawerOpen(true));
   const registrationPath = '/login?mode=create&redirect=%2F';
   const homeChartLoadingLabel = language === 'en' ? 'Loading home price chart' : '正在加载首页价格图表';
-  const recentHistoryItems = useMemo(
-    () => historyItems.filter((item) => !item.isTest).slice(0, 8),
-    [historyItems],
-  );
-  const hasRunningTasks = useMemo(
-    () => activeTasks.some((task) => task.status === 'pending' || task.status === 'processing'),
-    [activeTasks],
-  );
+  const recentHistoryItems = historyItems.filter((item) => !item.isTest).slice(0, 8);
+  const hasRunningTasks = activeTasks.some((task) => task.status === 'pending' || task.status === 'processing');
   const selectedTicker = normalizeTickerQuery(selectedReport?.meta.stockCode);
-  const completedTaskReport = useMemo(() => {
+  const completedTaskReport = (() => {
     if (routeTaskId) {
       return activeTasks.find(
         (task) => task.taskId === routeTaskId && task.status === 'completed' && task.result?.report,
@@ -4431,8 +4425,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     return activeTasks.find(
       (task) => normalizeTickerQuery(task.stockCode) === taskTicker && task.status === 'completed' && task.result?.report,
     )?.result?.report || null;
-  }, [activeTasks, activeTicker, pendingAnalysisTicker, routeTaskId]);
-  const focusedTask = useMemo(() => {
+  })();
+  const focusedTask = (() => {
     if (routeTaskId) {
       const matchedById = activeTasks.find((task) => task.taskId === routeTaskId);
       if (matchedById) {
@@ -4447,7 +4441,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       }
     }
     return activeTasks[0] || null;
-  }, [activeTasks, activeTicker, pendingAnalysisTicker, routeTaskId]);
+  })();
   const isTaskAnalyzing = Boolean(
     (pendingAnalysisTicker || routeTaskId)
     && focusedTask
@@ -4506,34 +4500,30 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     return completedTaskReport || selectedReport || null;
   }, [activeTicker, completedTaskReport, routeSymbol, selectedReport, selectedTicker, traceFixtureReport]);
   const copy = dashboardData;
-  const standbyCopy = useMemo(() => (
-    locale === 'en'
-      ? {
-        analyzeButton: 'Analyze',
-        omnibarPlaceholder: 'Enter a valid ticker...',
-      }
-      : {
-        analyzeButton: '分析',
-        omnibarPlaceholder: '输入有效股票代码...',
-      }
-  ), [locale]);
+  const standbyCopy = locale === 'en'
+    ? {
+      analyzeButton: 'Analyze',
+      omnibarPlaceholder: 'Enter a valid ticker...',
+    }
+    : {
+      analyzeButton: '分析',
+      omnibarPlaceholder: '输入有效股票代码...',
+    };
   const activeDrawerPayload = activeDrawer && copy ? buildDrawerPayload(locale, copy, activeDrawer) : null;
-  const activeDecisionTrace = useMemo(() => (activeTraceReport ? getDecisionTrace(activeTraceReport) : undefined), [activeTraceReport]);
-  const activeReportQuality = useMemo(() => getReportQuality(activeTraceReport), [activeTraceReport]);
-  const activeDataQualityReport = useMemo(() => getDataQualityReport(activeTraceReport), [activeTraceReport]);
+  const activeDecisionTrace = activeTraceReport ? getDecisionTrace(activeTraceReport) : undefined;
+  const activeReportQuality = getReportQuality(activeTraceReport);
+  const activeDataQualityReport = getDataQualityReport(activeTraceReport);
   const sourceSummary = useMemo(
     () => buildTraceSummary(activeDecisionTrace, activeReportQuality, locale),
     [activeDecisionTrace, activeReportQuality, locale],
   );
   const hasActiveTraceReport = Boolean(activeTraceReport);
-  const reanalysisTicker = useMemo(() => {
-    const reportTicker = normalizeTickerQuery(activeTraceReport?.meta.stockCode);
-    const candidate = reportTicker || (hasActiveTraceReport ? '' : normalizeTickerQuery(dashboardData.ticker));
-    return TICKER_FORMAT_RE.test(candidate) ? candidate : '';
-  }, [activeTraceReport?.meta.stockCode, dashboardData.ticker, hasActiveTraceReport]);
+  const reportTicker = normalizeTickerQuery(activeTraceReport?.meta.stockCode);
+  const reanalysisCandidate = reportTicker || (hasActiveTraceReport ? '' : normalizeTickerQuery(dashboardData.ticker));
+  const reanalysisTicker = TICKER_FORMAT_RE.test(reanalysisCandidate) ? reanalysisCandidate : '';
   const shouldRenderDashboardPanels = !isGuest || Boolean(guestPreview || pendingAnalysisTicker);
   const guestPaywall = isGuest ? <GuestPaywallOverlay locale={locale} registrationPath={registrationPath} /> : null;
-  const deleteCopy = useMemo(() => ({
+  const deleteCopy = {
     title: t('home.deleteTitle'),
     single: t('home.deleteSingle'),
     multiple: (count: number) => t('home.deleteMultiple', { count }),
@@ -4543,7 +4533,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     clearVisible: t('home.deleteAll'),
     deleteOne: t('home.deleteOne'),
     visibleCount: t('home.visibleCount'),
-  }), [t]);
+  };
 
   useEffect(() => {
     document.title = copy.documentTitle;

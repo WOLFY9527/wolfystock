@@ -767,60 +767,55 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
     () => providedNormalized ?? normalizeDeterministicBacktestResult(run, language),
     [language, providedNormalized, run],
   );
-  const trades = useMemo(() => (Array.isArray(run.trades) ? run.trades : []), [run.trades]);
+  const trades = Array.isArray(run.trades) ? run.trades : [];
   const tradeSummary = useMemo(() => getTradeSummary(run, trades), [run, trades]);
   const attributionByMonth = useMemo(() => buildAttribution(trades, getTradeMonth), [trades]);
   const attributionByYear = useMemo(() => buildAttribution(trades, getTradeYear), [trades]);
   const attributionByExitReason = useMemo(() => buildAttribution(trades, (trade) => compactToken(trade.exitReason || trade.exitTrigger || trade.exitSignal)), [trades]);
   const attributionByHoldingBucket = useMemo(() => buildAttribution(trades, (trade) => holdingBucket(safeNumber(trade.holdingDays ?? trade.holdingCalendarDays ?? trade.holdingBars))), [trades]);
   const tradeEvents = useMemo(() => buildEvents(trades), [trades]);
-  const grossPnlTotal = useMemo(() => sumNullable(trades.map((trade) => safeNumber(trade.grossPnl))), [trades]);
-  const netPnlTotal = useMemo(() => sumNullable(trades.map(tradeNetPnl)), [trades]);
-  const feesTotal = useMemo(() => sumNullable(trades.map(tradeFees)), [trades]);
-  const slippageTotal = useMemo(() => sumNullable(trades.map(tradeSlippage)), [trades]);
-  const drawdown = useMemo(() => drawdownPeriod(normalized.rows), [normalized.rows]);
-  const bestTrade = useMemo(() => trades.reduce<RuleBacktestTradeItem | null>((best, trade) => {
+  const grossPnlTotal = sumNullable(trades.map((trade) => safeNumber(trade.grossPnl)));
+  const netPnlTotal = sumNullable(trades.map(tradeNetPnl));
+  const feesTotal = sumNullable(trades.map(tradeFees));
+  const slippageTotal = sumNullable(trades.map(tradeSlippage));
+  const drawdown = drawdownPeriod(normalized.rows);
+  const bestTrade = trades.reduce<RuleBacktestTradeItem | null>((best, trade) => {
     const value = getTradeReturn(trade);
     const bestValue = best ? getTradeReturn(best) : null;
     return value != null && (bestValue == null || value > bestValue) ? trade : best;
-  }, null), [trades]);
-  const worstTrade = useMemo(() => trades.reduce<RuleBacktestTradeItem | null>((worst, trade) => {
+  }, null);
+  const worstTrade = trades.reduce<RuleBacktestTradeItem | null>((worst, trade) => {
     const value = getTradeReturn(trade);
     const worstValue = worst ? getTradeReturn(worst) : null;
     return value != null && (worstValue == null || value < worstValue) ? trade : worst;
-  }, null), [trades]);
-  const consecutiveWins = useMemo(() => maxStreak(trades, (value) => value > 0), [trades]);
-  const consecutiveLosses = useMemo(() => maxStreak(trades, (value) => value < 0), [trades]);
+  }, null);
+  const consecutiveWins = maxStreak(trades, (value) => value > 0);
+  const consecutiveLosses = maxStreak(trades, (value) => value < 0);
   const metrics = useMemo(() => getMetricItems(normalized), [normalized]);
   const moreMetrics = useMemo(() => getMoreMetricItems(run, tradeSummary), [run, tradeSummary]);
   const dataQuality = useMemo(() => dataQualityEntries(run, normalized), [run, normalized]);
-  const assumptions = useMemo(() => assumptionEntries(run), [run]);
-  const dataQualityWarnings = useMemo(() => (run.dataQuality?.warnings || []).map(warningText), [run.dataQuality?.warnings]);
-  const executionWarnings = useMemo(() => {
-    const assumptionsPayload = (run.executionAssumptions || {}) as Record<string, unknown>;
-    const warnings = recordValue(assumptionsPayload, 'warnings') as Array<Record<string, unknown>> | null;
-    return Array.isArray(warnings) ? warnings.map(warningText) : [];
-  }, [run.executionAssumptions]);
+  const assumptions = assumptionEntries(run);
+  const dataQualityWarnings = (run.dataQuality?.warnings || []).map(warningText);
+  const assumptionsPayload = (run.executionAssumptions || {}) as Record<string, unknown>;
+  const executionWarningItems = recordValue(assumptionsPayload, 'warnings') as Array<Record<string, unknown>> | null;
+  const executionWarnings = Array.isArray(executionWarningItems) ? executionWarningItems.map(warningText) : [];
   const hasExplicitAssumptions = Object.keys(run.executionAssumptions || {}).length > 0;
   const diagnosisItems = useMemo(
     () => getDiagnosisItems(normalized, tradeSummary, dataQualityWarnings, executionWarnings, hasExplicitAssumptions),
     [dataQualityWarnings, executionWarnings, hasExplicitAssumptions, normalized, tradeSummary],
   );
-  const benchmarkVerdict = useMemo(
-    () => getBenchmarkVerdict(
-      normalized.metrics.totalReturnPct,
-      normalized.metrics.benchmarkReturnPct,
-      normalized.metrics.excessReturnVsBenchmarkPct,
-    ),
-    [normalized.metrics.benchmarkReturnPct, normalized.metrics.excessReturnVsBenchmarkPct, normalized.metrics.totalReturnPct],
+  const benchmarkVerdict = getBenchmarkVerdict(
+    normalized.metrics.totalReturnPct,
+    normalized.metrics.benchmarkReturnPct,
+    normalized.metrics.excessReturnVsBenchmarkPct,
   );
   const volatilityPct = safeNumber(run.summary?.volatilityPct ?? run.summary?.volatility);
-  const worstDailyReturn = useMemo(() => {
+  const worstDailyReturn = (() => {
     const values = normalized.rows
       .map((row) => row.dailyReturn)
       .filter((value): value is number => value != null && Number.isFinite(value));
     return values.length ? Math.min(...values) : null;
-  }, [normalized.rows]);
+  })();
   const visibleTrades = trades.slice(0, TRADE_ROW_LIMIT);
   const visibleLedgerRows = normalized.rows.slice(0, LEDGER_ROW_LIMIT);
   const statusLabel = getRuleRunStatusLabel(run.status, language);
