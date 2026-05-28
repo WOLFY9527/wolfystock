@@ -71,6 +71,8 @@ function formatNumberLike(value: unknown, options: NumberFormatOptions, extra: I
   }).format(numeric);
 }
 
+export const SHANGHAI_DATE_FMT = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' });
+
 export function formatMissing(value?: unknown): string {
   void value;
   return MISSING_VALUE;
@@ -176,7 +178,7 @@ export const toDateInputValue = (date: Date): string => {
 export const getRecentStartDate = (days: number): string => {
   const date = new Date();
   date.setDate(date.getDate() - days);
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(date);
+  return SHANGHAI_DATE_FMT.format(date);
 };
 
 /**
@@ -185,7 +187,7 @@ export const getRecentStartDate = (days: number): string => {
  * which stores and filters timestamps in server local time (Asia/Shanghai).
  */
 export const getTodayInShanghai = (): string =>
-  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
+  SHANGHAI_DATE_FMT.format(new Date());
 
 export const formatReportType = (value?: string): string => {
   if (!value) return MISSING_VALUE;
