@@ -279,7 +279,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const locationState = location.state as ResultPageLocationState | null;
   const initialRun = locationState?.initialRun || null;
   const resultMode: BacktestResultReportMode = locationState?.resultMode === 'simple' ? 'simple' : 'professional';
-  const parsedRunId = useMemo(() => Number.parseInt(runId || '', 10), [runId]);
+  const parsedRunId = Number.parseInt(runId || '', 10);
   const hasValidRunId = Number.isFinite(parsedRunId) && parsedRunId > 0;
 
   const [run, setRun] = useState<RuleBacktestRunResponse | null>(
