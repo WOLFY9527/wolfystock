@@ -391,6 +391,14 @@ def get_stock_intraday(
             interval=interval,
             range=range_period,
             source=result.get("source"),
+            source_type=result.get("sourceType") or result.get("source_type"),
+            freshness=result.get("freshness"),
+            is_fallback=result.get("isFallback") if "isFallback" in result else result.get("is_fallback"),
+            is_stale=result.get("isStale") if "isStale" in result else result.get("is_stale"),
+            is_partial=result.get("isPartial") if "isPartial" in result else result.get("is_partial"),
+            is_synthetic=result.get("isSynthetic") if "isSynthetic" in result else result.get("is_synthetic"),
+            is_unavailable=result.get("isUnavailable") if "isUnavailable" in result else result.get("is_unavailable"),
+            source_confidence=result.get("sourceConfidence") or result.get("source_confidence"),
             data=data,
         )
     except ValueError as e:

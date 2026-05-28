@@ -48,6 +48,7 @@ _SECRET_MARKERS = (
 )
 _URL_LIKE_HOST_RE = re.compile(r"^[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?(?:[/?#].*)?$")
 _CONFIDENCE_CAP_RULES = (
+    ("unavailable_source", 0.0),
     ("fallback_source", 0.4),
     ("stale_source", 0.6),
     ("partial_coverage", 0.7),
@@ -169,6 +170,7 @@ def _sanitize_field_refs(value: Any) -> dict[str, dict[str, str]]:
 
 def _active_cap_reasons(
     *,
+    is_unavailable: bool,
     is_fallback: bool,
     is_stale: bool,
     is_partial: bool,
@@ -178,6 +180,8 @@ def _active_cap_reasons(
     as_of: str | None,
 ) -> list[str]:
     reasons: list[str] = []
+    if is_unavailable or freshness == "unavailable":
+        reasons.append("unavailable_source")
     if is_fallback or freshness == "fallback":
         reasons.append("fallback_source")
     if is_stale or freshness == "stale":
@@ -212,12 +216,15 @@ def _cap_reason_and_value(confidence_weight: float, reasons: Sequence[str]) -> t
 def _normalized_freshness(
     raw_freshness: str,
     *,
+    is_unavailable: bool,
     is_fallback: bool,
     is_stale: bool,
     is_partial: bool,
     is_synthetic: bool,
     as_of: str | None,
 ) -> str:
+    if is_unavailable:
+        return "unavailable"
     if is_fallback:
         return "fallback"
     if is_stale:
@@ -247,6 +254,12 @@ def build_single_stock_evidence_contract(value: Mapping[str, Any] | None) -> dic
     observed_at = _sanitize_text(payload.get("observedAt"))
     generated_at = _sanitize_text(payload.get("generatedAt"))
     raw_freshness = _sanitize_freshness(payload.get("freshness"))
+    raw_provider_id = _text(payload.get("providerId")).lower()
+    raw_source_type = _text(payload.get("sourceType")).lower()
+    is_unavailable = raw_freshness == "unavailable" or raw_provider_id in {"missing", "unavailable"} or raw_source_type in {
+        "missing",
+        "unavailable",
+    }
     is_fallback = _bool(payload.get("isFallback"))
     is_stale = _bool(payload.get("isStale"))
     is_partial = _bool(payload.get("isPartial"))
@@ -254,6 +267,7 @@ def build_single_stock_evidence_contract(value: Mapping[str, Any] | None) -> dic
     confidence_weight = _float(payload.get("confidenceWeight"), default=1.0)
     freshness = _normalized_freshness(
         raw_freshness,
+        is_unavailable=is_unavailable,
         is_fallback=is_fallback,
         is_stale=is_stale,
         is_partial=is_partial,
@@ -261,6 +275,7 @@ def build_single_stock_evidence_contract(value: Mapping[str, Any] | None) -> dic
         as_of=as_of,
     )
     active_reasons = _active_cap_reasons(
+        is_unavailable=is_unavailable,
         is_fallback=is_fallback,
         is_stale=is_stale,
         is_partial=is_partial,

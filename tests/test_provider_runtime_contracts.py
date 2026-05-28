@@ -307,6 +307,10 @@ def test_stock_service_history_payload_preserves_aggregation_shape() -> None:
     assert payload["source"] == LOCAL_US_PARQUET_SOURCE
     assert payload["diagnostics"]["status"] == "ok"
     assert payload["sourceConfidence"]["source"] == LOCAL_US_PARQUET_SOURCE
+    assert payload["sourceConfidence"]["freshness"] == "fallback"
+    assert payload["sourceConfidence"]["isFallback"] is True
+    assert payload["sourceConfidence"]["confidenceWeight"] == 0.4
+    assert payload["sourceConfidence"]["capReason"] == "fallback_source"
     assert payload["data"] == [
         {
             "date": "2024-01-01",
@@ -434,7 +438,10 @@ def test_stock_service_us_daily_history_uses_persisted_rows_after_provider_failu
         assert payload["diagnostics"]["reason"] == "provider_failed_local_db_fallback"
         assert payload["diagnostics"]["localFallback"]["rows"] == 2
         assert payload["sourceConfidence"]["source"] == "local_db"
+        assert payload["sourceConfidence"]["freshness"] == "fallback"
         assert payload["sourceConfidence"]["isFallback"] is True
+        assert payload["sourceConfidence"]["confidenceWeight"] == 0.4
+        assert payload["sourceConfidence"]["capReason"] == "fallback_source"
         assert len(payload["data"]) == 2
         assert payload["data"][0]["open"] == 100.0
         assert payload["data"][1]["close"] == 102.25
@@ -490,8 +497,10 @@ def test_stock_service_us_daily_history_reports_unavailable_without_fake_ohlc_wh
     assert payload["diagnostics"]["status"] == "unavailable"
     assert payload["diagnostics"]["reason"] == "us_daily_history_unavailable"
     assert payload["diagnostics"]["providerTrace"] == provider_trace
+    assert payload["sourceConfidence"]["freshness"] == "unavailable"
     assert payload["sourceConfidence"]["isUnavailable"] is True
     assert payload["sourceConfidence"]["confidenceWeight"] == 0.0
+    assert payload["sourceConfidence"]["capReason"] == "unavailable_source"
     repo.get_recent_daily_rows.assert_called_once_with(code="ORCL", limit=365)
 
 

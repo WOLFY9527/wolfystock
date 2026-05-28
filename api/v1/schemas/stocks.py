@@ -158,11 +158,55 @@ class IntradayBar(BaseModel):
 class StockIntradayResponse(BaseModel):
     """股票日内行情响应"""
 
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_schema_extra={
+            "example": {
+                "stock_code": "AAPL",
+                "stock_name": "Apple",
+                "interval": "5m",
+                "range": "1d",
+                "source": "yfinance",
+                "sourceType": "unofficial_proxy",
+                "freshness": "delayed",
+                "isFallback": False,
+                "isStale": False,
+                "isPartial": False,
+                "isSynthetic": False,
+                "isUnavailable": False,
+                "sourceConfidence": {
+                    "source": "yfinance",
+                    "sourceLabel": "Yahoo Finance intraday proxy",
+                    "asOf": "2026-05-28T09:35:00+00:00",
+                    "freshness": "delayed",
+                    "isFallback": False,
+                    "isStale": False,
+                    "isPartial": False,
+                    "isSynthetic": False,
+                    "isUnavailable": False,
+                    "confidenceWeight": 0.7,
+                    "coverage": 1.0,
+                    "degradationReason": "delayed_source",
+                    "capReason": None,
+                },
+                "data": [],
+            }
+        },
+    )
+
     stock_code: str = Field(..., description="股票代码")
     stock_name: Optional[str] = Field(None, description="股票名称")
     interval: str = Field(..., description="分钟间隔")
     range: str = Field(..., description="时间范围")
     source: Optional[str] = Field(None, description="数据源")
+    source_type: Optional[str] = Field(None, alias="sourceType", description="数据源类型")
+    freshness: Optional[str] = Field(None, description="日内行情新鲜度标签")
+    is_fallback: Optional[bool] = Field(None, alias="isFallback", description="是否为 fallback 日内行情")
+    is_stale: Optional[bool] = Field(None, alias="isStale", description="是否已标记为 stale")
+    is_partial: Optional[bool] = Field(None, alias="isPartial", description="是否缺少部分 provenance 信息")
+    is_synthetic: Optional[bool] = Field(None, alias="isSynthetic", description="是否为合成/占位日内行情")
+    is_unavailable: Optional[bool] = Field(None, alias="isUnavailable", description="是否明确不可用")
+    source_confidence: Optional[Dict[str, Any]] = Field(None, alias="sourceConfidence", description="日内行情来源可信度元信息")
     data: List[IntradayBar] = Field(default_factory=list, description="分钟行情列表")
 
 

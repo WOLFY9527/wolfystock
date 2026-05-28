@@ -96,6 +96,28 @@ def test_get_intraday_data_uses_prepared_download_kwargs_without_mutation(
     assert prepared_calls == [("hk00700", "5m", "1d")]
     assert payload["stock_name"] == "NAME-hk00700"
     assert payload["source"] == "yfinance"
+    assert payload["source_type"] == "unofficial_proxy"
+    assert payload["freshness"] == "delayed"
+    assert payload["is_fallback"] is False
+    assert payload["is_stale"] is False
+    assert payload["is_partial"] is False
+    assert payload["is_synthetic"] is False
+    assert payload["is_unavailable"] is False
+    assert payload["sourceConfidence"] == {
+        "source": "yfinance",
+        "sourceLabel": "Yahoo Finance intraday proxy",
+        "asOf": "2026-05-12T09:35:00",
+        "freshness": "delayed",
+        "isFallback": False,
+        "isStale": False,
+        "isPartial": False,
+        "isSynthetic": False,
+        "isUnavailable": False,
+        "confidenceWeight": 0.7,
+        "coverage": 1.0,
+        "degradationReason": "delayed_source",
+        "capReason": None,
+    }
     assert len(payload["data"]) == 1
     assert dummy_yf.calls == [
         {

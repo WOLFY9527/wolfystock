@@ -177,7 +177,7 @@ def test_stale_or_partial_evidence_triggers_confidence_cap(
 
 
 @pytest.mark.parametrize(
-    ("payload", "expected_freshness", "expected_cap_reason"),
+    ("payload", "expected_freshness", "expected_cap_reason", "expected_confidence_weight"),
     [
         (
             {
@@ -192,6 +192,7 @@ def test_stale_or_partial_evidence_triggers_confidence_cap(
             },
             "synthetic",
             "synthetic_source",
+            0.2,
         ),
         (
             {
@@ -203,14 +204,29 @@ def test_stale_or_partial_evidence_triggers_confidence_cap(
                 "confidenceWeight": 0.99,
             },
             "unavailable",
-            None,
+            "unavailable_source",
+            0.0,
+        ),
+        (
+            {
+                "domain": "quote",
+                "symbol": "QQQ",
+                "providerId": "unavailable",
+                "sourceType": "missing",
+                "freshness": "unknown",
+                "confidenceWeight": 0.85,
+            },
+            "unavailable",
+            "unavailable_source",
+            0.0,
         ),
     ],
 )
 def test_synthetic_or_unavailable_evidence_never_claims_live_or_fresh_reliable(
     payload: dict[str, object],
     expected_freshness: str,
-    expected_cap_reason: str | None,
+    expected_cap_reason: str,
+    expected_confidence_weight: float,
 ) -> None:
     contract = build_single_stock_evidence_contract(payload)
     boundary = _boundary(contract, "live_or_fresh_reliable")
@@ -218,15 +234,11 @@ def test_synthetic_or_unavailable_evidence_never_claims_live_or_fresh_reliable(
     assert contract["authorityGrant"] is False
     assert contract["observationOnly"] is True
     assert contract["freshness"] == expected_freshness
+    assert contract["confidenceWeight"] == expected_confidence_weight
     assert boundary["allowed"] is False
-    if expected_cap_reason is None:
-        assert contract["capReason"] is None
-        assert contract["degradationReason"] is None
-        assert boundary["reasonCode"] == "freshness_not_proven"
-    else:
-        assert contract["capReason"] == expected_cap_reason
-        assert contract["degradationReason"] == expected_cap_reason
-        assert boundary["reasonCode"] == expected_cap_reason
+    assert contract["capReason"] == expected_cap_reason
+    assert contract["degradationReason"] == expected_cap_reason
+    assert boundary["reasonCode"] == expected_cap_reason
 
 
 def test_url_like_secret_like_and_payload_shaped_strings_are_sanitized() -> None:

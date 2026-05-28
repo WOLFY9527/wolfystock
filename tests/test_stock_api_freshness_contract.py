@@ -134,3 +134,78 @@ def test_quote_endpoint_can_surface_non_fresh_placeholder_metadata_without_404()
     assert payload["isPartial"] is True
     assert payload["isSynthetic"] is True
     assert payload["observedAt"] == payload["update_time"]
+
+
+def test_intraday_endpoint_preserves_old_fields_and_adds_proxy_provenance_metadata() -> None:
+    service = SimpleNamespace(
+        get_intraday_data=lambda stock_code, interval, range_period: {
+            "stock_code": stock_code,
+            "stock_name": "Apple",
+            "interval": interval,
+            "range": range_period,
+            "source": "yfinance",
+            "source_type": "unofficial_proxy",
+            "freshness": "delayed",
+            "is_fallback": False,
+            "is_stale": False,
+            "is_partial": False,
+            "is_synthetic": False,
+            "is_unavailable": False,
+            "sourceConfidence": {
+                "source": "yfinance",
+                "sourceLabel": "Yahoo Finance intraday proxy",
+                "asOf": "2026-05-28T09:35:00Z",
+                "freshness": "delayed",
+                "isFallback": False,
+                "isStale": False,
+                "isPartial": False,
+                "isSynthetic": False,
+                "isUnavailable": False,
+                "confidenceWeight": 0.7,
+                "coverage": 1.0,
+                "degradationReason": "delayed_source",
+                "capReason": None,
+            },
+            "data": [
+                {
+                    "time": "2026-05-28T09:35:00Z",
+                    "open": 214.1,
+                    "high": 214.8,
+                    "low": 213.9,
+                    "close": 214.5,
+                    "volume": 1200.0,
+                }
+            ],
+        }
+    )
+
+    with patch("api.v1.endpoints.stocks.StockService", return_value=service):
+        response = _client().get("/api/v1/stocks/AAPL/intraday", params={"interval": "5m", "range": "1d"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stock_code"] == "AAPL"
+    assert payload["stock_name"] == "Apple"
+    assert payload["interval"] == "5m"
+    assert payload["range"] == "1d"
+    assert payload["source"] == "yfinance"
+    assert payload["sourceType"] == "unofficial_proxy"
+    assert payload["freshness"] == "delayed"
+    assert payload["isFallback"] is False
+    assert payload["isStale"] is False
+    assert payload["isPartial"] is False
+    assert payload["isSynthetic"] is False
+    assert payload["isUnavailable"] is False
+    assert payload["sourceConfidence"]["source"] == "yfinance"
+    assert payload["sourceConfidence"]["asOf"] == "2026-05-28T09:35:00Z"
+    assert payload["sourceConfidence"]["freshness"] == "delayed"
+    assert payload["data"] == [
+        {
+            "time": "2026-05-28T09:35:00Z",
+            "open": 214.1,
+            "high": 214.8,
+            "low": 213.9,
+            "close": 214.5,
+            "volume": 1200.0,
+        }
+    ]

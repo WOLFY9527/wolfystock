@@ -16,7 +16,11 @@ from typing import Optional, Dict, Any, List
 import pandas as pd
 
 from src.repositories.stock_repo import StockRepository
-from src.services.source_confidence_contract import SourceConfidenceContract, SourceFreshness
+from src.services.source_confidence_contract import (
+    SourceConfidenceContract,
+    SourceFreshness,
+    coerce_source_confidence_contract,
+)
 from src.services.stock_service_provider_adapter import StockServiceProviderAdapter
 from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE, fetch_daily_history_with_local_us_fallback
 from src.utils.symbol_classification import is_us_stock_code
@@ -412,13 +416,26 @@ class StockService:
 
             if df is None or df.empty:
                 logger.warning("获取 %s intraday 数据为空", stock_code)
+                metadata = self._build_intraday_metadata(
+                    source="yfinance",
+                    as_of=None,
+                    has_data=False,
+                )
                 return {
                     "stock_code": stock_code,
                     "stock_name": manager.get_stock_name(stock_code),
                     "interval": interval,
                     "range": range_period,
                     "data": [],
-                    "source": "yfinance",
+                    "source": metadata["source"],
+                    "source_type": metadata["source_type"],
+                    "freshness": metadata["freshness"],
+                    "is_fallback": metadata["is_fallback"],
+                    "is_stale": metadata["is_stale"],
+                    "is_partial": metadata["is_partial"],
+                    "is_synthetic": metadata["is_synthetic"],
+                    "is_unavailable": metadata["is_unavailable"],
+                    "sourceConfidence": metadata["sourceConfidence"],
                 }
 
             df = df.reset_index()
@@ -441,6 +458,12 @@ class StockService:
                     "close": float(row.get("Close", 0)),
                     "volume": float(row.get("Volume", 0)) if row.get("Volume") is not None else None,
                 })
+            latest_timestamp = data[-1]["time"] if data else None
+            metadata = self._build_intraday_metadata(
+                source="yfinance",
+                as_of=latest_timestamp,
+                has_data=bool(data),
+            )
 
             return {
                 "stock_code": stock_code,
@@ -448,25 +471,60 @@ class StockService:
                 "interval": interval,
                 "range": range_period,
                 "data": data,
-                "source": "yfinance",
+                "source": metadata["source"],
+                "source_type": metadata["source_type"],
+                "freshness": metadata["freshness"],
+                "is_fallback": metadata["is_fallback"],
+                "is_stale": metadata["is_stale"],
+                "is_partial": metadata["is_partial"],
+                "is_synthetic": metadata["is_synthetic"],
+                "is_unavailable": metadata["is_unavailable"],
+                "sourceConfidence": metadata["sourceConfidence"],
             }
         except ImportError:
             logger.warning("yfinance 不可用，无法获取 intraday 数据")
+            metadata = self._build_intraday_metadata(
+                source="unavailable",
+                as_of=None,
+                has_data=False,
+            )
             return {
                 "stock_code": stock_code,
                 "interval": interval,
                 "range": range_period,
                 "data": [],
-                "source": "unavailable",
+                "source": metadata["source"],
+                "source_type": metadata["source_type"],
+                "freshness": metadata["freshness"],
+                "is_fallback": metadata["is_fallback"],
+                "is_stale": metadata["is_stale"],
+                "is_partial": metadata["is_partial"],
+                "is_synthetic": metadata["is_synthetic"],
+                "is_unavailable": metadata["is_unavailable"],
+                "sourceConfidence": metadata["sourceConfidence"],
             }
         except Exception as e:
             logger.error(f"获取 intraday 数据失败: {e}", exc_info=True)
+            metadata = self._build_intraday_metadata(
+                source="error",
+                as_of=None,
+                has_data=False,
+                degradation_reason="intraday_request_failed",
+            )
             return {
                 "stock_code": stock_code,
                 "interval": interval,
                 "range": range_period,
                 "data": [],
-                "source": "error",
+                "source": metadata["source"],
+                "source_type": metadata["source_type"],
+                "freshness": metadata["freshness"],
+                "is_fallback": metadata["is_fallback"],
+                "is_stale": metadata["is_stale"],
+                "is_partial": metadata["is_partial"],
+                "is_synthetic": metadata["is_synthetic"],
+                "is_unavailable": metadata["is_unavailable"],
+                "sourceConfidence": metadata["sourceConfidence"],
             }
 
     def _aggregate_history_frame(self, df: pd.DataFrame, period: str) -> pd.DataFrame:
@@ -646,7 +704,74 @@ class StockService:
             coverage=round(coverage, 4),
             degradation_reason=str(diagnostics.get("reason") or "") or None,
         )
-        return contract.to_dict()
+        return coerce_source_confidence_contract(contract).to_dict()
+
+    @staticmethod
+    def _build_intraday_metadata(
+        *,
+        source: Optional[str],
+        as_of: Optional[str],
+        has_data: bool,
+        degradation_reason: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        normalized_source = str(source or "").strip() or "unknown"
+        normalized_as_of = str(as_of or "").strip() or None
+        source_type = "provider_runtime"
+        freshness = SourceFreshness.UNKNOWN
+        is_partial = False
+        is_unavailable = not has_data
+        confidence_weight = 0.5 if has_data else 0.0
+        source_label = normalized_source.replace("_", " ").title()
+        coverage = 1.0 if has_data else 0.0
+
+        if normalized_source in {"yfinance", "yfinance_proxy"}:
+            source_type = "unofficial_proxy"
+            source_label = "Yahoo Finance intraday proxy"
+            freshness = SourceFreshness.DELAYED if has_data else SourceFreshness.UNAVAILABLE
+            confidence_weight = 0.7 if has_data else 0.0
+            degradation_reason = degradation_reason or ("delayed_source" if has_data else "provider_returned_empty_intraday")
+        elif normalized_source == "unavailable":
+            source_type = "unavailable"
+            source_label = "Unavailable intraday history"
+            freshness = SourceFreshness.UNAVAILABLE
+            degradation_reason = degradation_reason or "provider_runtime_unavailable"
+        elif normalized_source == "error":
+            source_type = "error"
+            source_label = "Intraday request error"
+            freshness = SourceFreshness.UNAVAILABLE
+            degradation_reason = degradation_reason or "intraday_request_failed"
+        elif has_data:
+            freshness = SourceFreshness.UNKNOWN
+        else:
+            freshness = SourceFreshness.UNAVAILABLE
+            is_partial = True
+            degradation_reason = degradation_reason or "intraday_data_unavailable"
+
+        source_confidence = coerce_source_confidence_contract(
+            SourceConfidenceContract(
+                source=normalized_source,
+                source_label=source_label,
+                as_of=normalized_as_of,
+                freshness=freshness,
+                is_partial=is_partial,
+                is_unavailable=is_unavailable,
+                confidence_weight=confidence_weight,
+                coverage=coverage,
+                degradation_reason=degradation_reason,
+            )
+        ).to_dict()
+
+        return {
+            "source": normalized_source,
+            "source_type": source_type,
+            "freshness": source_confidence["freshness"],
+            "is_fallback": source_confidence["isFallback"],
+            "is_stale": source_confidence["isStale"],
+            "is_partial": source_confidence["isPartial"],
+            "is_synthetic": source_confidence["isSynthetic"],
+            "is_unavailable": source_confidence["isUnavailable"],
+            "sourceConfidence": source_confidence,
+        }
 
     def _build_quote_metadata(
         self,
