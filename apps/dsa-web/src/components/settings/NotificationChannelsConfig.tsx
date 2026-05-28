@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, GlassCard, Input } from '../common';
 import type { SystemConfigItem, SystemConfigUpdateItem } from '../../types/systemConfig';
 import { SettingsSectionCard } from './SettingsSectionCard';
@@ -176,8 +176,9 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
   language = 'en',
   onSaveItems,
 }) => {
-  const itemByKey = useMemo(() => new Map(items.map((item) => [item.key, item])), [items]);
-  const initialDraft = useMemo(() => {
+  const itemByKey = new Map(items.map((item) => [item.key, item]));
+
+  const [draft, setDraft] = useState<Record<string, string>>(() => {
     const next: Record<string, string> = {};
     CHANNELS.forEach((channel) => {
       channel.fields.forEach((field) => {
@@ -185,13 +186,19 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
       });
     });
     return next;
-  }, [itemByKey]);
-  const [draft, setDraft] = useState<Record<string, string>>(initialDraft);
+  });
   const [savingChannelId, setSavingChannelId] = useState<string | null>(null);
 
   useEffect(() => {
-    setDraft(initialDraft);
-  }, [initialDraft]);
+    const currentByKey = new Map(items.map((item) => [item.key, item]));
+    const next: Record<string, string> = {};
+    CHANNELS.forEach((channel) => {
+      channel.fields.forEach((field) => {
+        next[field.key] = String(currentByKey.get(field.key)?.value ?? '');
+      });
+    });
+    setDraft(next);
+  }, [items]);
 
   const setFieldValue = (key: string, value: string) => {
     setDraft((previous) => ({

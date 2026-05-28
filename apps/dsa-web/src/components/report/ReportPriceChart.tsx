@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { stocksApi, type StockHistoryPoint, type StockIntradayPoint } from '../../api/stocks';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import type {
@@ -379,7 +379,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
   } | null>(null);
   const { ref: chartRef, size } = useElementSize<HTMLDivElement>();
 
-  const lockPageScroll = useCallback(() => {
+  const lockPageScroll = () => {
     if (typeof document === 'undefined') {
       return;
     }
@@ -394,9 +394,9 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
     document.body.style.touchAction = 'none';
-  }, []);
+  };
 
-  const unlockPageScroll = useCallback(() => {
+  const unlockPageScroll = () => {
     if (typeof document === 'undefined') {
       return;
     }
@@ -407,7 +407,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     document.documentElement.style.overflow = pageScrollLockStateRef.current.htmlOverflow;
     document.body.style.touchAction = pageScrollLockStateRef.current.bodyTouchAction;
     pageScrollLockStateRef.current = null;
-  }, []);
+  };
 
   useEffect(() => {
     setActiveView('minute1');
@@ -432,8 +432,17 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
   }, [stockCode]);
 
   useEffect(() => () => {
-    unlockPageScroll();
-  }, [unlockPageScroll]);
+    if (typeof document === 'undefined') {
+      return;
+    }
+    if (pageScrollLockStateRef.current == null) {
+      return;
+    }
+    document.body.style.overflow = pageScrollLockStateRef.current.bodyOverflow;
+    document.documentElement.style.overflow = pageScrollLockStateRef.current.htmlOverflow;
+    document.body.style.touchAction = pageScrollLockStateRef.current.bodyTouchAction;
+    pageScrollLockStateRef.current = null;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -591,12 +600,9 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     };
   })();
 
-  const volumeMax = useMemo(
-    () => Math.max(...visibleData.map((item) => item.volume || 0), 1),
-    [visibleData],
-  );
+  const volumeMax = Math.max(...visibleData.map((item) => item.volume || 0), 1);
 
-  const xAt = useCallback((index: number): number => {
+  const xAt = (index: number): number => {
     if (!chartGeometry) {
       return 0;
     }
@@ -604,25 +610,25 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
       return chartGeometry.plotLeft + chartGeometry.plotWidth / 2;
     }
     return chartGeometry.plotLeft + chartGeometry.step * index;
-  }, [chartGeometry, visibleData.length]);
+  };
 
-  const priceY = useCallback((value: number): number => {
+  const priceY = (value: number): number => {
     if (!chartGeometry || !priceDomain) {
       return 0;
     }
     const denominator = Math.max(priceDomain.max - priceDomain.min, 0.0001);
     return chartGeometry.priceTop + ((priceDomain.max - value) / denominator) * chartGeometry.priceHeight;
-  }, [chartGeometry, priceDomain]);
+  };
 
-  const volumeY = useCallback((value: number): number => {
+  const volumeY = (value: number): number => {
     if (!chartGeometry) {
       return 0;
     }
     const ratio = value <= 0 ? 0 : value / volumeMax;
     return chartGeometry.volumeBottom - ratio * chartGeometry.volumeHeight;
-  }, [chartGeometry, volumeMax]);
+  };
 
-  const priceTicks = useMemo(() => {
+  const priceTicks = (() => {
     if (!priceDomain) {
       return [];
     }
@@ -630,22 +636,13 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
       const ratio = index / 4;
       return priceDomain.max - (priceDomain.max - priceDomain.min) * ratio;
     });
-  }, [priceDomain]);
+  })();
 
-  const xTickIndices = useMemo(() => buildTickIndices(visibleData.length, 6), [visibleData.length]);
+  const xTickIndices = buildTickIndices(visibleData.length, 6);
 
-  const ma5Path = useMemo(
-    () => buildPath(visibleData.map((item, index) => ({ x: xAt(index), y: item.ma5 != null ? priceY(item.ma5) : undefined }))),
-    [priceY, visibleData, xAt],
-  );
-  const ma10Path = useMemo(
-    () => buildPath(visibleData.map((item, index) => ({ x: xAt(index), y: item.ma10 != null ? priceY(item.ma10) : undefined }))),
-    [priceY, visibleData, xAt],
-  );
-  const ma20Path = useMemo(
-    () => buildPath(visibleData.map((item, index) => ({ x: xAt(index), y: item.ma20 != null ? priceY(item.ma20) : undefined }))),
-    [priceY, visibleData, xAt],
-  );
+  const ma5Path = buildPath(visibleData.map((item, index) => ({ x: xAt(index), y: item.ma5 != null ? priceY(item.ma5) : undefined })));
+  const ma10Path = buildPath(visibleData.map((item, index) => ({ x: xAt(index), y: item.ma10 != null ? priceY(item.ma10) : undefined })));
+  const ma20Path = buildPath(visibleData.map((item, index) => ({ x: xAt(index), y: item.ma20 != null ? priceY(item.ma20) : undefined })));
 
   const resolveHoverIndex = (clientX: number): number | null => {
     if (!chartGeometry || !chartRef.current || visibleData.length === 0) {
@@ -659,14 +656,14 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     return clamp(Math.round((localX - chartGeometry.plotLeft) / chartGeometry.step), 0, visibleData.length - 1);
   };
 
-  const setViewWindow = useCallback((nextWindow: ViewWindow) => {
+  const setViewWindow = (nextWindow: ViewWindow) => {
     setViewWindowByView((current) => ({
       ...current,
       [activeView]: normalizeViewWindow(nextWindow, activeData.length),
     }));
-  }, [activeData.length, activeView]);
+  };
 
-  const zoomWindow = useCallback((direction: 'in' | 'out') => {
+  const zoomWindow = (direction: 'in' | 'out') => {
     if (activeData.length <= 8) {
       return;
     }
@@ -678,13 +675,13 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     const anchorIndex = hoveredIndex != null ? currentWindow.start + hoveredIndex : currentWindow.start + Math.floor(currentCount / 2);
     const nextStart = clamp(anchorIndex - Math.floor(nextCount / 2), 0, Math.max(activeData.length - nextCount, 0));
     setViewWindow({ start: nextStart, end: nextStart + nextCount - 1 });
-  }, [activeData.length, activeWindow, hoveredIndex, setViewWindow]);
+  };
 
-  const resetViewWindow = useCallback(() => {
+  const resetViewWindow = () => {
     setViewWindow(createDefaultViewWindow(activeView, activeData.length));
-  }, [activeData.length, activeView, setViewWindow]);
+  };
 
-  const visibleAnnotationLines = useMemo(() => annotationLines.filter((line) => {
+  const visibleAnnotationLines = annotationLines.filter((line) => {
     if (line.labelKey === 'chart.support') {
       return indicatorVisibility.support;
     }
@@ -695,7 +692,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
       return indicatorVisibility.entry;
     }
     return indicatorVisibility.targets;
-  }), [annotationLines, indicatorVisibility.entry, indicatorVisibility.resistance, indicatorVisibility.support, indicatorVisibility.targets]);
+  });
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (dragStateRef.current && chartGeometry) {
@@ -793,7 +790,24 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
       }
       event.preventDefault();
       event.stopPropagation();
-      zoomWindow(event.deltaY > 0 ? 'out' : 'in');
+      // Inline zoomWindow body
+      const direction = event.deltaY > 0 ? 'out' : 'in';
+      if (activeData.length <= 8) {
+        return;
+      }
+      const currentWindow = activeWindow;
+      const currentCount = Math.max(currentWindow.end - currentWindow.start + 1, 1);
+      const nextCount = direction === 'in'
+        ? Math.max(8, Math.round(currentCount * 0.8))
+        : Math.min(activeData.length, Math.round(currentCount * 1.25));
+      const anchorIndex = hoveredIndex != null ? currentWindow.start + hoveredIndex : currentWindow.start + Math.floor(currentCount / 2);
+      const nextStart = clamp(anchorIndex - Math.floor(nextCount / 2), 0, Math.max(activeData.length - nextCount, 0));
+      // Inline setViewWindow body
+      const nextWindow: ViewWindow = { start: nextStart, end: nextStart + nextCount - 1 };
+      setViewWindowByView((current) => ({
+        ...current,
+        [activeView]: normalizeViewWindow(nextWindow, activeData.length),
+      }));
     };
 
     stage.addEventListener('wheel', handleWheel, { passive: false });
@@ -805,26 +819,23 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
       stage.removeEventListener('touchstart', stopTouchPropagation);
       stage.removeEventListener('touchmove', preventTouchScroll);
     };
-  }, [zoomWindow]);
+  }, [activeData.length, activeView, activeWindow, hoveredIndex]);
 
   const chartShellClass = integrated
     ? 'theme-chart-shell report-hero-chart'
     : 'theme-chart-shell theme-panel-solid';
 
-  const legendItems = useMemo(() => {
-    const items = [
-      { label: t('chart.candles'), color: 'var(--theme-chart-bull)', key: 'candles' as IndicatorKey },
-      { label: t('chart.volumeBars'), color: 'var(--theme-chart-volume)', key: 'volume' as IndicatorKey },
-      { label: t('chart.ma5'), color: 'var(--theme-chart-ma5)', key: 'ma5' as IndicatorKey },
-      { label: t('chart.ma10'), color: 'var(--theme-chart-ma10)', key: 'ma10' as IndicatorKey },
-      { label: t('chart.ma20'), color: 'var(--theme-chart-ma20)', key: 'ma20' as IndicatorKey },
-      { label: t('chart.support'), color: 'var(--theme-chart-support)', key: 'support' as IndicatorKey },
-      { label: t('chart.resistance'), color: 'var(--theme-chart-resistance)', key: 'resistance' as IndicatorKey },
-      { label: t('chart.entry'), color: 'var(--theme-chart-entry)', key: 'entry' as IndicatorKey },
-      { label: t('chart.targetOne'), color: 'var(--theme-chart-target)', key: 'targets' as IndicatorKey },
-    ];
-    return items;
-  }, [t]);
+  const legendItems = [
+    { label: t('chart.candles'), color: 'var(--theme-chart-bull)', key: 'candles' as IndicatorKey },
+    { label: t('chart.volumeBars'), color: 'var(--theme-chart-volume)', key: 'volume' as IndicatorKey },
+    { label: t('chart.ma5'), color: 'var(--theme-chart-ma5)', key: 'ma5' as IndicatorKey },
+    { label: t('chart.ma10'), color: 'var(--theme-chart-ma10)', key: 'ma10' as IndicatorKey },
+    { label: t('chart.ma20'), color: 'var(--theme-chart-ma20)', key: 'ma20' as IndicatorKey },
+    { label: t('chart.support'), color: 'var(--theme-chart-support)', key: 'support' as IndicatorKey },
+    { label: t('chart.resistance'), color: 'var(--theme-chart-resistance)', key: 'resistance' as IndicatorKey },
+    { label: t('chart.entry'), color: 'var(--theme-chart-entry)', key: 'entry' as IndicatorKey },
+    { label: t('chart.targetOne'), color: 'var(--theme-chart-target)', key: 'targets' as IndicatorKey },
+  ];
 
   const activeViewConfig = VIEW_CONFIGS.find((item) => item.key === activeView);
   const compactContextLine = [
@@ -833,7 +844,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     summary?.snapshotTime ? `${t('chart.updated')} ${summary.snapshotTime}` : undefined,
   ].filter(Boolean).join(' · ');
 
-  const inspectorRows = useMemo(() => {
+  const inspectorRows = (() => {
     if (!activeBar) {
       return [];
     }
@@ -852,9 +863,9 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
         ].join(' / '),
       },
     ];
-  }, [activeBar, t]);
+  })();
 
-  const sessionMetricRows = useMemo(() => {
+  const sessionMetricRows = (() => {
     const metrics = market?.regularMetrics;
     const latestPrice = metrics?.price ?? parseNumericText(summary?.currentPrice);
     const prevClose = metrics?.prevClose;
@@ -878,7 +889,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
       { label: t('chart.turnover'), value: formatVolume(turnover) },
       ...(isFiniteNumber(vwap) ? [{ label: t('chart.vwap'), value: formatAxisPrice(vwap) }] : []),
     ];
-  }, [market?.regularMetrics, summary?.changeAmount, summary?.changePct, summary?.currentPrice, t]);
+  })();
 
   return (
     <div className={chartShellClass} data-testid="report-price-chart" data-language={language}>

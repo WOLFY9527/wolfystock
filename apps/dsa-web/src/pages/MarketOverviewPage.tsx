@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MarketDataMeta, MarketOverviewPanel } from '../api/marketOverview';
 import { marketOverviewApi } from '../api/marketOverview';
 import type {
@@ -652,7 +652,7 @@ function subscribeToCryptoStream(subscriber: CryptoStreamSubscriber): () => void
 const MarketOverviewPage = () => {
   const { language } = useI18n();
   const { isAdminMode, canReadProviders } = useProductSurface();
-  const initialLocalSnapshot = useMemo(() => buildInitialPanelsFromLocalSnapshot(), []);
+  const initialLocalSnapshot = buildInitialPanelsFromLocalSnapshot();
   const [panels, setPanels] = useState<PanelState>(initialLocalSnapshot.panels);
   const [loading, setLoading] = useState(initialLocalSnapshot.source !== 'local');
   const [localSnapshotSavedAt, setLocalSnapshotSavedAt] = useState<string | undefined>(initialLocalSnapshot.savedAt);
@@ -666,21 +666,21 @@ const MarketOverviewPage = () => {
   const latestPanelsRef = useRef(panels);
   const latestRefreshingPanelRef = useRef<PanelKey | null>(null);
 
-  const clearAutoRevalidateTimer = useCallback((panelKey: PanelKey) => {
+  const clearAutoRevalidateTimer = (panelKey: PanelKey) => {
     const timer = autoRevalidateTimersRef.current[panelKey];
     if (timer != null) {
       window.clearTimeout(timer);
       delete autoRevalidateTimersRef.current[panelKey];
     }
-  }, []);
+  };
 
   const resetAutoRevalidatePanel = useCallback((panelKey: PanelKey) => {
     clearAutoRevalidateTimer(panelKey);
     delete autoRevalidateAttemptsRef.current[panelKey];
     delete autoRevalidateInFlightRef.current[panelKey];
-  }, [clearAutoRevalidateTimer]);
+  }, []);
 
-  const loadPanels = useCallback(async (cancelledRef?: { current: boolean }) => {
+  const loadPanels = async (cancelledRef?: { current: boolean }) => {
     setLoading(true);
     const stagedRequests = MARKET_OVERVIEW_STAGED_REQUEST_GROUPS.flatMap((group) => group.requests);
     let remaining = MARKET_OVERVIEW_PRIMARY_REQUESTS.length + stagedRequests.length;
@@ -743,7 +743,7 @@ const MarketOverviewPage = () => {
     ));
 
     await Promise.allSettled([...primaryPromises, ...stagedPromises]);
-  }, []);
+  };
 
   const refreshPanel = useCallback(async (
     panelKey: PanelKey,
@@ -789,51 +789,6 @@ const MarketOverviewPage = () => {
     }
   }, []);
 
-  const scheduleAutoRevalidate = useCallback((panelKey: PanelKey) => {
-    const panelValue = latestPanelsRef.current[panelKey];
-    if (!shouldAutoRevalidatePanelValue(panelValue)) {
-      resetAutoRevalidatePanel(panelKey);
-      return;
-    }
-    if (latestRefreshingPanelRef.current === panelKey || autoRevalidateInFlightRef.current[panelKey]) {
-      return;
-    }
-    if (autoRevalidateTimersRef.current[panelKey] != null) {
-      return;
-    }
-    const attempts = autoRevalidateAttemptsRef.current[panelKey] ?? 0;
-    if (attempts >= AUTO_REVALIDATE_MAX_ATTEMPTS) {
-      return;
-    }
-    const loadPanel = getPanelLoader(panelKey);
-    if (!loadPanel) {
-      return;
-    }
-    const delayMs = attempts === 0 ? AUTO_REVALIDATE_INITIAL_DELAY_MS : AUTO_REVALIDATE_RETRY_DELAY_MS;
-    autoRevalidateTimersRef.current[panelKey] = window.setTimeout(() => {
-      delete autoRevalidateTimersRef.current[panelKey];
-      if (latestRefreshingPanelRef.current === panelKey || autoRevalidateInFlightRef.current[panelKey]) {
-        return;
-      }
-      if (!shouldAutoRevalidatePanelValue(latestPanelsRef.current[panelKey])) {
-        delete autoRevalidateAttemptsRef.current[panelKey];
-        return;
-      }
-      autoRevalidateAttemptsRef.current[panelKey] = attempts + 1;
-      autoRevalidateInFlightRef.current[panelKey] = true;
-      void refreshPanel(panelKey, loadPanel, { silent: true }).finally(() => {
-        delete autoRevalidateInFlightRef.current[panelKey];
-        setAutoRevalidateTick((currentTick) => currentTick + 1);
-      });
-    }, delayMs);
-  }, [refreshPanel, resetAutoRevalidatePanel]);
-
-  const refreshPollingGroup = useCallback((requests: PanelRequest[]) => {
-    requests.forEach(([panelKey, loadPanel]) => {
-      void refreshPanel(panelKey, loadPanel, { silent: true });
-    });
-  }, [refreshPanel]);
-
   useEffect(() => {
     const cancelledRef = { current: false };
 
@@ -846,7 +801,7 @@ const MarketOverviewPage = () => {
     return () => {
       cancelledRef.current = true;
     };
-  }, [loadPanels]);
+  }, []);
 
   useEffect(() => {
     writeLocalMarketOverviewSnapshot(panels);
@@ -862,19 +817,59 @@ const MarketOverviewPage = () => {
   }, [refreshingPanel]);
 
   useEffect(() => {
-    AUTO_REVALIDATE_PANEL_KEYS.forEach(scheduleAutoRevalidate);
-  }, [panels, refreshingPanel, autoRevalidateTick, scheduleAutoRevalidate]);
+    const schedulePanel = (panelKey: PanelKey) => {
+      const panelValue = latestPanelsRef.current[panelKey];
+      if (!shouldAutoRevalidatePanelValue(panelValue)) {
+        resetAutoRevalidatePanel(panelKey);
+        return;
+      }
+      if (latestRefreshingPanelRef.current === panelKey || autoRevalidateInFlightRef.current[panelKey]) {
+        return;
+      }
+      if (autoRevalidateTimersRef.current[panelKey] != null) {
+        return;
+      }
+      const attempts = autoRevalidateAttemptsRef.current[panelKey] ?? 0;
+      if (attempts >= AUTO_REVALIDATE_MAX_ATTEMPTS) {
+        return;
+      }
+      const loadPanel = getPanelLoader(panelKey);
+      if (!loadPanel) {
+        return;
+      }
+      const delayMs = attempts === 0 ? AUTO_REVALIDATE_INITIAL_DELAY_MS : AUTO_REVALIDATE_RETRY_DELAY_MS;
+      autoRevalidateTimersRef.current[panelKey] = window.setTimeout(() => {
+        delete autoRevalidateTimersRef.current[panelKey];
+        if (latestRefreshingPanelRef.current === panelKey || autoRevalidateInFlightRef.current[panelKey]) {
+          return;
+        }
+        if (!shouldAutoRevalidatePanelValue(latestPanelsRef.current[panelKey])) {
+          delete autoRevalidateAttemptsRef.current[panelKey];
+          return;
+        }
+        autoRevalidateAttemptsRef.current[panelKey] = attempts + 1;
+        autoRevalidateInFlightRef.current[panelKey] = true;
+        void refreshPanel(panelKey, loadPanel, { silent: true }).finally(() => {
+          delete autoRevalidateInFlightRef.current[panelKey];
+          setAutoRevalidateTick((currentTick) => currentTick + 1);
+        });
+      }, delayMs);
+    };
+    AUTO_REVALIDATE_PANEL_KEYS.forEach(schedulePanel);
+  }, [panels, refreshingPanel, autoRevalidateTick, refreshPanel, resetAutoRevalidatePanel]);
 
   useEffect(() => () => {
     AUTO_REVALIDATE_PANEL_KEYS.forEach((panelKey) => {
       clearAutoRevalidateTimer(panelKey);
     });
-  }, [clearAutoRevalidateTimer]);
+  }, []);
 
   useEffect(() => {
     const timers = MARKET_OVERVIEW_POLLING_GROUPS.map((group) => (
       window.setInterval(() => {
-        refreshPollingGroup(group.requests);
+        group.requests.forEach(([panelKey, loadPanel]) => {
+          void refreshPanel(panelKey, loadPanel, { silent: true });
+        });
       }, group.intervalMs)
     ));
     return () => {
@@ -882,7 +877,7 @@ const MarketOverviewPage = () => {
         window.clearInterval(timer);
       });
     };
-  }, [refreshPollingGroup]);
+  }, [refreshPanel]);
 
   useEffect(() => {
     return subscribeToCryptoStream(({ panel, status }) => {
@@ -897,14 +892,14 @@ const MarketOverviewPage = () => {
     });
   }, [resetAutoRevalidatePanel]);
 
-  const handleWorkbenchRefresh = useCallback((panelKey: PanelKey) => {
+  const handleWorkbenchRefresh = (panelKey: PanelKey) => {
     const loadPanel = getPanelLoader(panelKey);
     if (!loadPanel) {
       return;
     }
     resetAutoRevalidatePanel(panelKey);
     void refreshPanel(panelKey, loadPanel);
-  }, [refreshPanel, resetAutoRevalidatePanel]);
+  };
 
   return (
     <ConsumerWorkspaceScope className="min-h-0 flex-1">

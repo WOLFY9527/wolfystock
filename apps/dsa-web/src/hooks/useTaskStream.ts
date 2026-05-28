@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { analysisApi } from '../api/analysis';
 import { toCamelCase } from '../api/utils';
 import type { TaskInfo } from '../types/analysis';
@@ -83,6 +83,7 @@ export function useTaskStream(options: UseTaskStreamOptions = {}): UseTaskStream
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectRef = useRef<() => void>(() => {});
+  const disconnectRef = useRef<() => void>(() => {});
 
   // Store callbacks in a ref to avoid reconnecting on every render.
   const callbacksRef = useRef({
@@ -109,7 +110,7 @@ export function useTaskStream(options: UseTaskStreamOptions = {}): UseTaskStream
   });
 
   // Parse an SSE payload.
-  const parseEventData = useCallback((eventData: string): TaskInfo | null => {
+  const parseEventData = (eventData: string): TaskInfo | null => {
     try {
       const data = JSON.parse(eventData);
       return toCamelCase<TaskInfo>(data);
@@ -117,114 +118,111 @@ export function useTaskStream(options: UseTaskStreamOptions = {}): UseTaskStream
       console.error('Failed to parse SSE event data:', e);
       return null;
     }
-  }, []);
-
-  // Create an EventSource connection.
-  const connect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-
-    const url = analysisApi.getTaskStreamUrl();
-    const eventSource = new EventSource(url, { withCredentials: true });
-    eventSourceRef.current = eventSource;
-
-    // Connected event
-    eventSource.addEventListener('connected', () => {
-      setIsConnected(true);
-      callbacksRef.current.onConnected?.();
-    });
-
-    // Task created event
-    eventSource.addEventListener('task_created', (e) => {
-      const task = parseEventData(e.data);
-      if (task) callbacksRef.current.onTaskCreated?.(task);
-    });
-
-    // Task started event
-    eventSource.addEventListener('task_started', (e) => {
-      const task = parseEventData(e.data);
-      if (task) callbacksRef.current.onTaskStarted?.(task);
-    });
-
-    // Task updated event
-    eventSource.addEventListener('task_updated', (e) => {
-      const task = parseEventData(e.data);
-      if (task) callbacksRef.current.onTaskUpdated?.(task);
-    });
-
-    // Task completed event
-    eventSource.addEventListener('task_completed', (e) => {
-      const task = parseEventData(e.data);
-      if (task) callbacksRef.current.onTaskCompleted?.(task);
-    });
-
-    // Task failed event
-    eventSource.addEventListener('task_failed', (e) => {
-      const task = parseEventData(e.data);
-      if (task) callbacksRef.current.onTaskFailed?.(task);
-    });
-
-    // Heartbeat event used to keep the connection alive.
-    eventSource.addEventListener('heartbeat', () => {
-      // Optional place to record the latest heartbeat timestamp.
-    });
-
-    // Connection error handling
-    eventSource.onerror = (error) => {
-      setIsConnected(false);
-      callbacksRef.current.onError?.(error);
-
-      // Auto-reconnect via ref to avoid stale closure issues.
-      if (autoReconnect && enabled) {
-        eventSource.close();
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connectRef.current();
-        }, reconnectDelay);
-      }
-    };
-  }, [
-    autoReconnect,
-    reconnectDelay,
-    enabled,
-    parseEventData,
-  ]);
-
-  useEffect(() => {
-    connectRef.current = connect;
-  }, [connect]);
-
-  // Disconnect and defer the state update to avoid nested renders.
-  const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-    queueMicrotask(() => setIsConnected(false));
-  }, []);
-
-  // Reconnect
-  const reconnect = useCallback(() => {
-    disconnect();
-    connect();
-  }, [disconnect, connect]);
+  };
 
   // Connect or disconnect when the hook is enabled or disabled.
   useEffect(() => {
+    const doConnect = () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+
+      const url = analysisApi.getTaskStreamUrl();
+      const eventSource = new EventSource(url, { withCredentials: true });
+      eventSourceRef.current = eventSource;
+
+      // Connected event
+      eventSource.addEventListener('connected', () => {
+        setIsConnected(true);
+        callbacksRef.current.onConnected?.();
+      });
+
+      // Task created event
+      eventSource.addEventListener('task_created', (e) => {
+        const task = parseEventData(e.data);
+        if (task) callbacksRef.current.onTaskCreated?.(task);
+      });
+
+      // Task started event
+      eventSource.addEventListener('task_started', (e) => {
+        const task = parseEventData(e.data);
+        if (task) callbacksRef.current.onTaskStarted?.(task);
+      });
+
+      // Task updated event
+      eventSource.addEventListener('task_updated', (e) => {
+        const task = parseEventData(e.data);
+        if (task) callbacksRef.current.onTaskUpdated?.(task);
+      });
+
+      // Task completed event
+      eventSource.addEventListener('task_completed', (e) => {
+        const task = parseEventData(e.data);
+        if (task) callbacksRef.current.onTaskCompleted?.(task);
+      });
+
+      // Task failed event
+      eventSource.addEventListener('task_failed', (e) => {
+        const task = parseEventData(e.data);
+        if (task) callbacksRef.current.onTaskFailed?.(task);
+      });
+
+      // Heartbeat event used to keep the connection alive.
+      eventSource.addEventListener('heartbeat', () => {
+        // Optional place to record the latest heartbeat timestamp.
+      });
+
+      // Connection error handling
+      eventSource.onerror = (error) => {
+        setIsConnected(false);
+        callbacksRef.current.onError?.(error);
+
+        // Auto-reconnect via ref to avoid stale closure issues.
+        if (autoReconnect && enabled) {
+          eventSource.close();
+          reconnectTimeoutRef.current = setTimeout(() => {
+            connectRef.current();
+          }, reconnectDelay);
+        }
+      };
+    };
+
+    const doDisconnect = () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      queueMicrotask(() => setIsConnected(false));
+    };
+
+    connectRef.current = doConnect;
+    disconnectRef.current = doDisconnect;
+
     if (enabled) {
-      connect();
+      doConnect();
     } else {
-      disconnect();
+      doDisconnect();
     }
 
     return () => {
-      disconnect();
+      doDisconnect();
     };
-  }, [enabled, connect, disconnect]);
+  }, [enabled, autoReconnect, reconnectDelay]);
+
+  // Reconnect
+  const reconnect = () => {
+    disconnectRef.current();
+    connectRef.current();
+  };
+
+  // Disconnect and defer the state update to avoid nested renders.
+  const disconnect = () => {
+    disconnectRef.current();
+  };
 
   return {
     isConnected,

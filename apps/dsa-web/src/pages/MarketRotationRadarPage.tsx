@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Gauge, RefreshCcw, Search, SlidersHorizontal } from 'lucide-react';
 import { ApiErrorAlert } from '../components/common';
 import {
@@ -1138,7 +1138,7 @@ const MarketRotationRadarPage: React.FC = () => {
   const [selectedThemeId, setSelectedThemeId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const loadRadar = useCallback(async (market = selectedMarket) => {
+  const loadRadar = async (market = selectedMarket) => {
     setLoading(true);
     setError(null);
     try {
@@ -1151,31 +1151,32 @@ const MarketRotationRadarPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedMarket]);
+  };
 
   useEffect(() => {
-    void loadRadar(selectedMarket);
-  }, [loadRadar, selectedMarket]);
+    setLoading(true);
+    setError(null);
+    void marketRotationApi.getRotationRadar(selectedMarket).then(
+      (nextPayload) => {
+        setPayload(nextPayload);
+        setSelectedThemeId(nextPayload.themes[0]?.id || '');
+        setSearchQuery('');
+      },
+      (nextError) => {
+        setError({ ...getParsedApiError(nextError), title: '读取主题轮动雷达失败' });
+      },
+    ).finally(() => {
+      setLoading(false);
+    });
+  }, [selectedMarket]);
 
-  const rotationTiers = useMemo(() => (payload ? deriveRotationTiers(payload) : null), [payload]);
-  const headlineThemes = useMemo(
-    () => (payload && rotationTiers ? derivePrimaryDisplayThemes(payload, rotationTiers) : []),
-    [payload, rotationTiers],
-  );
-  const filteredThemes = useMemo(
-    () => (payload?.themes || []).filter((theme) => matchesSearch(theme, searchQuery)),
-    [payload?.themes, searchQuery],
-  );
+  const rotationTiers = payload ? deriveRotationTiers(payload) : null;
+  const headlineThemes = payload && rotationTiers ? derivePrimaryDisplayThemes(payload, rotationTiers) : [];
+  const filteredThemes = (payload?.themes || []).filter((theme) => matchesSearch(theme, searchQuery));
 
-  const selectedTheme = useMemo(
-    () => payload?.themes.find((theme) => theme.id === selectedThemeId) || payload?.themes[0],
-    [payload, selectedThemeId],
-  );
+  const selectedTheme = payload?.themes.find((theme) => theme.id === selectedThemeId) || payload?.themes[0];
   const libraryMode = rotationTiers?.libraryMode || false;
-  const rotationConclusion = useMemo(
-    () => (payload && rotationTiers ? deriveRotationConclusion(payload, rotationTiers) : null),
-    [payload, rotationTiers],
-  );
+  const rotationConclusion = payload && rotationTiers ? deriveRotationConclusion(payload, rotationTiers) : null;
   const primaryTierLabel = libraryMode ? '分类浏览' : rotationTiers?.confirmedLeaders.length ? '确认信号' : '观察信号';
   const marketLabelText = marketLabel(payload?.market || selectedMarket);
 

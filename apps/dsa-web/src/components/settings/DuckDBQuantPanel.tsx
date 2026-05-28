@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Disclosure, GlassCard, Input } from '../common';
 import { getApiErrorMessage } from '../../api/error';
 import {
@@ -119,7 +119,7 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
   const [busyAction, setBusyAction] = useState<ActionKey | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const explicitSymbols = useMemo(() => parseSymbolInput(symbolInput), [symbolInput]);
+  const explicitSymbols = parseSymbolInput(symbolInput);
   const enabled = health?.enabled ?? configEnabledState === 'enabled';
   const disabled = !enabled;
   const status = health?.status || coverage?.status || (configEnabledState === 'disabled' ? 'disabled' : 'unknown');
@@ -129,7 +129,7 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
   const noWriteLabel = disabled ? '未写入文件' : '写入需显式点击';
   const productionRuntimeChanged = comparison?.diagnostics?.productionRuntimeChanged === true;
 
-  const refreshReadOnly = useCallback(async () => {
+  const refreshReadOnly = async () => {
     setBusyAction('refresh');
     setMessage(null);
     try {
@@ -145,13 +145,29 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
     } finally {
       setBusyAction(null);
     }
-  }, []);
+  };
 
   useEffect(() => {
-    void refreshReadOnly();
-  }, [refreshReadOnly]);
+    void (async () => {
+      setBusyAction('refresh');
+      setMessage(null);
+      try {
+        const [nextHealth, nextCoverage] = await Promise.all([
+          quantApi.getDuckDBHealth(),
+          quantApi.getDuckDBCoverage(),
+        ]);
+        setHealth(nextHealth);
+        setCoverage(nextCoverage);
+        setMessage('健康与覆盖已刷新');
+      } catch (error) {
+        setMessage(`刷新失败：${getApiErrorMessage(error)}`);
+      } finally {
+        setBusyAction(null);
+      }
+    })();
+  }, []);
 
-  const runAction = useCallback(async (action: Exclude<ActionKey, 'refresh'>) => {
+  const runAction = async (action: Exclude<ActionKey, 'refresh'>) => {
     setBusyAction(action);
     setMessage(null);
     try {
@@ -210,7 +226,7 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
     } finally {
       setBusyAction(null);
     }
-  }, [disabled, explicitSymbols, refreshReadOnly]);
+  };
 
   return (
     <GlassCard className="px-4 py-4" data-testid="duckdb-quant-panel">

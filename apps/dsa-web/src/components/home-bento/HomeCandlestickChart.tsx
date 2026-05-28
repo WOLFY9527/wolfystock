@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts/core';
 import { BarChart, CandlestickChart, LineChart } from 'echarts/charts';
 import type { BarSeriesOption, CandlestickSeriesOption, LineSeriesOption } from 'echarts/charts';
@@ -514,37 +514,19 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
     setIndicatorVisibility(DEFAULT_INDICATORS);
   }, [ticker]);
 
-  const aggregatedCandles = useMemo(
-    () => aggregateCandles(dailyCandles, activeTimeframe),
-    [activeTimeframe, dailyCandles],
-  );
-  const candles = useMemo(
-    () => withIndicators(aggregatedCandles),
-    [aggregatedCandles],
-  );
-  const sourceHint = useMemo(
-    () => timeframeSourceHint(activeTimeframe, language === 'en' ? 'en' : 'zh'),
-    [activeTimeframe, language],
-  );
-  const vwapStatus = useMemo(
-    () => volumeSupportStatus(candles),
-    [candles],
-  );
-  const indicatorEnabledState = useMemo(() => ({
+  const aggregatedCandles = aggregateCandles(dailyCandles, activeTimeframe);
+  const candles = withIndicators(aggregatedCandles);
+  const sourceHint = timeframeSourceHint(activeTimeframe, language === 'en' ? 'en' : 'zh');
+  const vwapStatus = volumeSupportStatus(candles);
+  const indicatorEnabledState = {
     ma5: candles.some((item) => isFiniteNumber(item.ma5)),
     ma10: candles.some((item) => isFiniteNumber(item.ma10)),
     ma20: candles.some((item) => isFiniteNumber(item.ma20)),
     ma60: candles.some((item) => isFiniteNumber(item.ma60)),
     vwap: vwapStatus.available && candles.some((item) => isFiniteNumber(item.vwap)),
-  }), [candles, vwapStatus.available]);
-  const enabledIndicators = useMemo(
-    () => INDICATOR_CONFIGS.filter(({ key }) => indicatorVisibility[key] && indicatorEnabledState[key]),
-    [indicatorEnabledState, indicatorVisibility],
-  );
-  const unavailableState = useMemo(
-    () => buildUnavailableProductState(language === 'en' ? 'en' : 'zh'),
-    [language],
-  );
+  };
+  const enabledIndicators = INDICATOR_CONFIGS.filter(({ key }) => indicatorVisibility[key] && indicatorEnabledState[key]);
+  const unavailableState = buildUnavailableProductState(language === 'en' ? 'en' : 'zh');
 
   useEffect(() => {
     if (status !== 'ready' || !candles.length) {
@@ -557,7 +539,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
     });
   }, [activeTimeframe, candles.length, onContextChange, sourceHint, status]);
 
-  const option = useMemo<HomeChartOption | null>(() => {
+  const option: HomeChartOption | null = (() => {
     if (!candles.length) {
       return null;
     }
@@ -752,7 +734,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
         },
       ],
     };
-  }, [activeTimeframe, candles, currentPrice, enabledIndicators, locale, size.width]);
+  })();
 
   useEffect(() => {
     const host = chartNodeRef.current;
@@ -772,7 +754,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
     chartRef.current = null;
   }, []);
 
-  const handleMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!candles.length) {
       return;
     }
@@ -780,14 +762,14 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
     const width = rect.width || 1;
     const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / width));
     setHoveredIndex(Math.round(ratio * (candles.length - 1)));
-  }, [candles]);
+  };
 
-  const handleTimeframeChange = useCallback((nextTimeframe: HomeTimeframeKey) => {
+  const handleTimeframeChange = (nextTimeframe: HomeTimeframeKey) => {
     setActiveTimeframe(nextTimeframe);
     setHoveredIndex(null);
-  }, []);
+  };
 
-  const handleIndicatorToggle = useCallback((key: HomeIndicatorKey) => {
+  const handleIndicatorToggle = (key: HomeIndicatorKey) => {
     if (!indicatorEnabledState[key]) {
       return;
     }
@@ -795,7 +777,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       ...current,
       [key]: !current[key],
     }));
-  }, [indicatorEnabledState]);
+  };
 
   const hoveredCandle = hoveredIndex != null ? candles[hoveredIndex] : null;
   const enabledIndicatorLabels = enabledIndicators.map((item) => item.label).join(',');

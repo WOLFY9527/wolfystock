@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { getApiErrorMessage } from '../../api/error';
 import { stocksApi, type ExtractItem } from '../../api/stocks';
 import { SystemConfigConflictError } from '../../api/systemConfig';
@@ -104,61 +104,55 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [pasteText, setPasteText] = useState('');
 
-  const parseCurrentList = useCallback(() => {
+  const parseCurrentList = () => {
     return stockListValue
       .split(',')
       .map((c) => c.trim())
       .filter(Boolean);
-  }, [stockListValue]);
+  };
 
-  const addItems = useCallback((newItems: ExtractItem[]) => {
+  const addItems = (newItems: ExtractItem[]) => {
     setItems((prev) => mergeItems(prev, newItems));
-  }, []);
+  };
 
-  const handleImageFile = useCallback(
-    async (file: File) => {
-      const ext = '.' + (file.name.split('.').pop() ?? '').toLowerCase();
-      if (!IMG_EXT.includes(ext)) {
-        setError('图片仅支持 JPG、PNG、WebP、GIF');
-        return;
-      }
-      if (file.size > IMG_MAX) {
-        setError('图片不超过 5MB');
-        return;
-      }
-      setError(null);
-      setIsLoading(true);
-      try {
-        const res = await stocksApi.extractFromImage(file);
-        addItems(res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })));
-      } catch (e) {
-        setError(getApiErrorMessage(e, '识别失败，请重试'));
-      }
-      setIsLoading(false);
-    },
-    [addItems],
-  );
+  const handleImageFile = async (file: File) => {
+    const ext = '.' + (file.name.split('.').pop() ?? '').toLowerCase();
+    if (!IMG_EXT.includes(ext)) {
+      setError('图片仅支持 JPG、PNG、WebP、GIF');
+      return;
+    }
+    if (file.size > IMG_MAX) {
+      setError('图片不超过 5MB');
+      return;
+    }
+    setError(null);
+    setIsLoading(true);
+    try {
+      const res = await stocksApi.extractFromImage(file);
+      addItems(res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })));
+    } catch (e) {
+      setError(getApiErrorMessage(e, '识别失败，请重试'));
+    }
+    setIsLoading(false);
+  };
 
-  const handleDataFile = useCallback(
-    async (file: File) => {
-      if (file.size > FILE_MAX) {
-        setError('文件不超过 2MB');
-        return;
-      }
-      setError(null);
-      setIsLoading(true);
-      try {
-        const res = await stocksApi.parseImport(file);
-        addItems(res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })));
-      } catch (e) {
-        setError(getApiErrorMessage(e, '解析失败'));
-      }
-      setIsLoading(false);
-    },
-    [addItems],
-  );
+  const handleDataFile = async (file: File) => {
+    if (file.size > FILE_MAX) {
+      setError('文件不超过 2MB');
+      return;
+    }
+    setError(null);
+    setIsLoading(true);
+    try {
+      const res = await stocksApi.parseImport(file);
+      addItems(res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })));
+    } catch (e) {
+      setError(getApiErrorMessage(e, '解析失败'));
+    }
+    setIsLoading(false);
+  };
 
-  const handlePasteParse = useCallback(() => {
+  const handlePasteParse = () => {
     const t = pasteText.trim();
     if (!t) return;
     if (new Blob([t]).size > TEXT_MAX) {
@@ -179,59 +173,50 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
       .then(() => {
         setIsLoading(false);
       });
-  }, [pasteText, addItems]);
+  };
 
-  const onDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragging(false);
-      if (disabled || isLoading) return;
-      const f = e.dataTransfer?.files?.[0];
-      if (!f) return;
-      const ext = '.' + (f.name.split('.').pop() ?? '').toLowerCase();
-      if (IMG_EXT.includes(ext)) void handleImageFile(f);
-      else void handleDataFile(f);
-    },
-    [disabled, isLoading, handleImageFile, handleDataFile],
-  );
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (disabled || isLoading) return;
+    const f = e.dataTransfer?.files?.[0];
+    if (!f) return;
+    const ext = '.' + (f.name.split('.').pop() ?? '').toLowerCase();
+    if (IMG_EXT.includes(ext)) void handleImageFile(f);
+    else void handleDataFile(f);
+  };
 
-  const onImageInput = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const f = e.target.files?.[0];
-      if (f) void handleImageFile(f);
-      e.target.value = '';
-    },
-    [handleImageFile],
-  );
+  const onImageInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) void handleImageFile(f);
+    e.target.value = '';
+  };
 
-  const onDataFileInput = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const f = e.target.files?.[0];
-      if (f) void handleDataFile(f);
-      e.target.value = '';
-    },
-    [handleDataFile],
-  );
+  const onDataFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) void handleDataFile(f);
+    e.target.value = '';
+  };
 
-  const toggleChecked = useCallback((id: string) => {
+  const toggleChecked = (id: string) => {
     setItems((prev) => prev.map((p) => (p.id === id && p.code ? { ...p, checked: !p.checked } : p)));
-  }, []);
+  };
 
-  const toggleAll = useCallback((checked: boolean) => {
+  const toggleAll = (checked: boolean) => {
     setItems((prev) => prev.map((p) => (p.code ? { ...p, checked } : p)));
-  }, []);
+  };
 
-  const removeItem = useCallback((id: string) => {
+  const removeItem = (id: string) => {
     setItems((prev) => prev.filter((p) => p.id !== id));
-  }, []);
+  };
 
-  const clearAll = useCallback(() => {
+  const clearAll = () => {
     setItems([]);
     setPasteText('');
     setError(null);
-  }, []);
+  };
 
-  const mergeToWatchlist = useCallback(async () => {
+  const mergeToWatchlist = async () => {
     const toMerge = items.filter((i) => i.checked && i.code).map((i) => i.code!);
     if (toMerge.length === 0) return;
     const current = parseCurrentList();
@@ -254,7 +239,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
     } finally {
       setIsMerging(false);
     }
-  }, [items, onMergeStockList, parseCurrentList]);
+  };
 
   const validCount = items.filter((i) => i.code).length;
   const checkedCount = items.filter((i) => i.checked && i.code).length;

@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import type { ParsedApiError } from '../../api/error';
 import { getParsedApiError } from '../../api/error';
 import { ApiErrorAlert, Card, SupportPanel } from '../common';
@@ -24,7 +24,7 @@ export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, lan
   const [items, setItems] = useState<NewsIntelItem[]>([]);
   const [error, setError] = useState<ParsedApiError | null>(null);
 
-  const fetchNews = useCallback(async () => {
+  const fetchNews = async () => {
     if (!recordId) return;
     setIsLoading(true);
     setError(null);
@@ -37,16 +37,30 @@ export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, lan
     } finally {
       setIsLoading(false);
     }
-  }, [recordId, limit]);
+  };
 
   useEffect(() => {
     setItems([]);
     setError(null);
 
-    if (recordId) {
-      fetchNews();
+    if (!recordId) {
+      return;
     }
-  }, [recordId, fetchNews]);
+
+    setIsLoading(true);
+    setError(null);
+
+    void (async () => {
+      try {
+        const response = await historyApi.getNews(recordId, limit);
+        setItems(response.items || []);
+      } catch (err) {
+        setError(getParsedApiError(err));
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, [recordId, limit]);
 
   if (!recordId) {
     return null;
