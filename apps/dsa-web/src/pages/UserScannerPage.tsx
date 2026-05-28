@@ -2837,6 +2837,7 @@ const UserScannerPage: React.FC = () => {
                                 value={customThemeLabel}
                                 className="w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
                                 onChange={(event) => setCustomThemeLabel(event.target.value)}
+                                aria-label={language === 'en' ? 'AI custom theme name' : 'AI 自定义主题名称'}
                                 aria-invalid={Boolean(validationErrors.customThemeLabel)}
                                 aria-describedby={validationErrors.customThemeLabel ? 'scanner-ai-theme-label-error' : undefined}
                                 maxLength={80}
@@ -2851,6 +2852,7 @@ const UserScannerPage: React.FC = () => {
                                 data-testid="scanner-ai-theme-prompt-input"
                                 value={customThemePrompt}
                                 onChange={(event) => setCustomThemePrompt(event.target.value)}
+                                aria-label={language === 'en' ? 'AI custom theme criteria' : 'AI 自定义主题筛选条件'}
                                 aria-invalid={Boolean(validationErrors.customThemePrompt)}
                                 aria-describedby={validationErrors.customThemePrompt ? 'scanner-ai-theme-prompt-error' : undefined}
                                 maxLength={600}
@@ -2868,6 +2870,7 @@ const UserScannerPage: React.FC = () => {
                                 value={customThemeManualSymbols}
                                 className="w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
                                 onChange={(event) => setCustomThemeManualSymbols(event.target.value)}
+                                aria-label={language === 'en' ? 'Manual symbol additions' : '手动补充标的代码'}
                                 aria-invalid={Boolean(validationErrors.customThemeManualSymbols)}
                                 aria-describedby={validationErrors.customThemeManualSymbols ? 'scanner-ai-theme-manual-symbols-error' : undefined}
                                 placeholder={language === 'en' ? 'Optional: add symbols, e.g. NVDA PLTR' : '可选：手动补充代码，例如 NVDA PLTR'}
