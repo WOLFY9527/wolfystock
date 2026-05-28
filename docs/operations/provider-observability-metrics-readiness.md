@@ -16,7 +16,7 @@ Status: readiness note only. No production metrics stack is implemented or enabl
 - Provider Usage Ledger provides sanitized provider usage diagnostics.
 - Provider capability, source-confidence, and registry metadata document provider/source/freshness posture without granting runtime authority.
 - `scripts/diagnose_market_intelligence_runtime.py` emits sanitized runtime diagnostic JSON.
-- MarketCache exposes status and process-local event counters used for operational observation, including the current `marketCacheEventSummary` payload returned by `MarketProviderOperationsService`.
+- MarketCache exposes status and process-local event counters used for operational observation, including the current schema-exposed `marketCacheEventSummary` payload returned by `MarketProviderOperationsService` as an additive, read-only, diagnostic, admin-observability surface.
 - Market Overview, Scanner, Liquidity, Rotation, and Stocks already expose additive freshness/evidence/provider sidecars or snapshots for operator and user disclosure.
 - Prewarm, smoke, and diagnose scripts exist for bounded operational checks; they are not a metrics backend.
 
@@ -45,11 +45,11 @@ Diagnostic and provider metadata must remain observational only. They must not a
 
 This note does not implement or imply any exporter, tracing SDK, metrics middleware, or external monitoring sink.
 
-## Known follow-up to inspect later
+## Current contract note
 
-- `MarketProviderOperationsService` already returns `marketCacheEventSummary`.
-- The response schema may not yet declare that field.
-- A future sanitized admin payload contract task can inspect `api/v1/schemas/market_provider_operations.py` and `tests/api/test_market_provider_operations.py`.
+- `MarketProviderOperationsService` already returns `marketCacheEventSummary`, and the response schema now declares it.
+- That field remains additive, read-only, diagnostic, and admin-observability only; it does not grant provider authority or alter runtime, routing, scoring, budget, cache, or live-call semantics.
+- Future observability work should keep this sanitized admin payload boundary intact unless a separately scoped contract task says otherwise.
 
 ## Safest future implementation order
 
