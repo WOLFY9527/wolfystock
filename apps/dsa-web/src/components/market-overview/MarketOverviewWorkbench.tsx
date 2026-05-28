@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useCallback, useMemo, useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import type { MarketDataMeta, MarketOverviewItem, MarketOverviewPanel, MarketProviderHealthStatus } from '../../api/marketOverview';
 import type {
   CnShortSentimentResponse,
@@ -2045,20 +2045,20 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
   const [activeCategory, setActiveCategory] = useState<MarketOverviewTab>('all');
   const [exportSummaryFeedback, setExportSummaryFeedback] = useState<string | null>(null);
 
-  const categoryTabs = useMemo<MarketOverviewCategoryTabView[]>(() => [
+  const categoryTabs: MarketOverviewCategoryTabView[] = [
     { key: 'all', label: t('marketOverviewPage.categories.all') },
     { key: 'us', label: t('marketOverviewPage.categories.us') },
     { key: 'cn', label: t('marketOverviewPage.categories.cn') },
     { key: 'global', label: t('marketOverviewPage.categories.macro') },
     { key: 'crypto', label: t('marketOverviewPage.categories.crypto') },
-  ], [t]);
+  ];
 
   const activeTabConfig = MARKET_OVERVIEW_TAB_CONFIG[activeCategory];
-  const heroAnchors = useMemo(() => buildHeroAnchors(panels, activeTabConfig.pulse), [activeTabConfig.pulse, panels]);
-  const dataQuality = useMemo(() => summarizeDataQuality(panels), [panels]);
-  const coverageSummary = useMemo(() => summarizeCardCoverage(panels, CATEGORY_CARDS[activeCategory]), [activeCategory, panels]);
+  const heroAnchors = buildHeroAnchors(panels, activeTabConfig.pulse);
+  const dataQuality = summarizeDataQuality(panels);
+  const coverageSummary = summarizeCardCoverage(panels, CATEGORY_CARDS[activeCategory]);
   const activeCategoryLabel = categoryTabs.find((tab) => tab.key === activeCategory)?.label || '';
-  const exportSummaryText = useMemo(() => buildMarketOverviewSummaryText({
+  const exportSummaryText = buildMarketOverviewSummaryText({
     activeCategoryLabel,
     coverageSummary,
     dataQuality,
@@ -2066,7 +2066,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     language,
     temperature: panels.temperature,
     briefing: panels.briefing,
-  }), [activeCategoryLabel, coverageSummary, dataQuality, heroAnchors, language, panels.briefing, panels.temperature]);
+  });
   const activeRows = CATEGORY_LAYOUT[activeCategory];
 
   const globalIndicesCard = (
@@ -2528,18 +2528,18 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     );
   };
 
-  const handleExportSummary = useCallback(async () => {
+  const handleExportSummary = async () => {
     await navigator.clipboard.writeText(exportSummaryText);
     setExportSummaryFeedback(language === 'en' ? 'Summary copied' : '已复制摘要');
-  }, [exportSummaryText, language]);
+  };
 
-  const topLevelDataStatus = useMemo(() => summarizeTopLevelDataStatus({
+  const topLevelDataStatus = summarizeTopLevelDataStatus({
     activeCategory,
     panels,
     coverageSummary,
     loading,
     refreshingPanel,
-  }), [activeCategory, coverageSummary, loading, panels, refreshingPanel]);
+  });
   const marketDecision = buildMarketDecision({ activeCategory, panels, dataQuality, topLevelDataStatus });
   const decisionReliable = isTemperatureReliable(panels.temperature);
   const disabledLabel = temperatureDisabledStateLabel(panels.temperature);
