@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowDownUp,
   BookmarkPlus,
@@ -1774,7 +1774,7 @@ const UserScannerPage: React.FC = () => {
   const customSymbolTokenCount = getSymbolTokenCount(customSymbols);
   const customThemeManualSymbolTokenCount = getSymbolTokenCount(customThemeManualSymbols);
 
-  const handleMarketChange = useCallback((nextMarket: string) => {
+  const handleMarketChange = (nextMarket: string) => {
     const normalizedMarket = nextMarket === 'us' ? 'us' : nextMarket === 'hk' ? 'hk' : 'cn';
     const defaults = SCANNER_PROFILE_DEFAULTS[normalizedMarket];
     setMarket(normalizedMarket);
@@ -1784,7 +1784,7 @@ const UserScannerPage: React.FC = () => {
     setDetailLimit(defaults.detailLimit);
     setThemeId('');
     setValidationErrors({});
-  }, []);
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -1831,7 +1831,7 @@ const UserScannerPage: React.FC = () => {
     };
   }, []);
 
-  const loadRun = useCallback(async (runId: number) => {
+  const loadRun = async (runId: number) => {
     try {
       const response = await scannerApi.getRun(runId);
       setRunDetail(response);
@@ -1841,9 +1841,9 @@ const UserScannerPage: React.FC = () => {
     } catch (error) {
       setPageError(getParsedApiError(error));
     }
-  }, []);
+  };
 
-  const fetchHistory = useCallback(async (page = 1, preferredRunId?: number | null) => {
+  const fetchHistory = async (page = 1, preferredRunId?: number | null) => {
     setIsLoadingHistory(true);
     try {
       const response = await scannerApi.getRuns({
@@ -1875,7 +1875,7 @@ const UserScannerPage: React.FC = () => {
     } finally {
       setIsLoadingHistory(false);
     }
-  }, [loadRun, market, profile]);
+  };
 
   useEffect(() => {
     setRunDetail(null);
@@ -1889,7 +1889,7 @@ const UserScannerPage: React.FC = () => {
     void fetchHistory(1);
   }, [fetchHistory]);
 
-  const handleRun = useCallback(async () => {
+  const handleRun = async () => {
     const nextErrors: ScannerValidationErrors = {};
     const parsedShortlistSize = Number.parseInt(shortlistSize, 10);
     const parsedUniverseLimit = Number.parseInt(universeLimit, 10);
@@ -1942,9 +1942,9 @@ const UserScannerPage: React.FC = () => {
     } finally {
       setIsRunning(false);
     }
-  }, [customSymbolTokenCount, detailLimit, fetchHistory, language, market, parsedCustomSymbols, profile, scanScope, selectedTheme, shortlistSize, themeId, universeLimit]);
+  };
 
-  const handleGenerateTheme = useCallback(async () => {
+  const handleGenerateTheme = async () => {
     const label = customThemeLabel.trim();
     const prompt = customThemePrompt.trim();
     const nextErrors: ScannerValidationErrors = {};
@@ -1995,7 +1995,7 @@ const UserScannerPage: React.FC = () => {
     } finally {
       setIsGeneratingTheme(false);
     }
-  }, [customThemeLabel, customThemeManualSymbolTokenCount, customThemePrompt, language, market, parsedThemeManualSymbols]);
+  };
 
   const handleSortChange = (nextSortKey: SortKey) => {
     if (sortKey === nextSortKey) {
@@ -2007,7 +2007,7 @@ const UserScannerPage: React.FC = () => {
   };
 
   const totalHistoryPages = Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE));
-  const trackedWatchlistIdentitySet = useMemo(() => new Set(watchlistItems.map((item) => getWatchlistIdentity(item.market, item.symbol))), [watchlistItems]);
+  const trackedWatchlistIdentitySet = new Set(watchlistItems.map((item) => getWatchlistIdentity(item.market, item.symbol)));
   const {
     ref: runScannerButtonRef,
     onClick: handleRunScannerClick,
@@ -2190,7 +2190,7 @@ const UserScannerPage: React.FC = () => {
     };
   }, [historyItems, runDetail]);
 
-  const historyCards = useMemo(() => historyItems.map((item) => {
+  const historyCards = historyItems.map((item) => {
     const fallbackTitle = item.market === 'us'
       ? t('scanner.currentRunFallbackUs')
       : item.market === 'hk'
@@ -2225,23 +2225,20 @@ const UserScannerPage: React.FC = () => {
       matchedSymbols: matchedSymbols.slice(0, 10),
       overflowSymbolCount: Math.max(0, matchedSymbols.length - 10),
     } satisfies ScannerHistoryDrawerItem;
-  }), [historyItems, language, t]);
+  });
   const emptyStateTitle = language === 'en' ? 'No scan has run yet' : '尚未运行扫描';
   const emptyStateBody = language === 'en'
     ? 'Use the top command bar to check market, universe, detailed review, and shortlist controls.'
     : '先在顶部命令栏确认市场、范围、评估深度与候选上限。';
   const pageErrorSummary = pageError ? sanitizeScannerErrorSummary(pageError.message, language) || compactScannerStateLabel('failed', language) : null;
-  const workbenchEmptyState = useMemo(
-    () => buildScannerWorkbenchEmptyState({
+  const workbenchEmptyState = buildScannerWorkbenchEmptyState({
       candidateFilter,
       diagnosticCandidates,
       language,
       pageErrorSummary,
       runDetail,
-    }),
-    [candidateFilter, diagnosticCandidates, language, pageErrorSummary, runDetail],
-  );
-  const handleAnalyzeCandidate = useCallback(async (candidate: ScannerCandidate) => {
+    });
+  const handleAnalyzeCandidate = async (candidate: ScannerCandidate) => {
     setPendingAnalyzeSymbol(candidate.symbol);
     setActionNotice(null);
     try {
@@ -2266,9 +2263,9 @@ const UserScannerPage: React.FC = () => {
     } finally {
       setPendingAnalyzeSymbol((current) => (current === candidate.symbol ? null : current));
     }
-  }, [language, navigate]);
+  };
 
-  const handleCopyText = useCallback(async (text: string, nextCopiedKey: string) => {
+  const handleCopyText = async (text: string, nextCopiedKey: string) => {
     try {
       if (!navigator.clipboard?.writeText) {
         throw new Error(language === 'en' ? 'Clipboard is not available in this browser.' : '当前浏览器不支持剪贴板。');
@@ -2282,9 +2279,9 @@ const UserScannerPage: React.FC = () => {
         message: error instanceof Error ? error.message : (language === 'en' ? 'Copy failed.' : '复制失败。'),
       });
     }
-  }, [language]);
+  };
 
-  const handleExportRows = useCallback((rows: ScannerExportRow[], filename: string) => {
+  const handleExportRows = (rows: ScannerExportRow[], filename: string) => {
     try {
       downloadScannerCsv(filename, buildScannerCsv(rows));
       setActionNotice(null);
@@ -2294,9 +2291,9 @@ const UserScannerPage: React.FC = () => {
         message: error instanceof Error ? error.message : (language === 'en' ? 'Export failed.' : '导出失败。'),
       });
     }
-  }, [language]);
+  };
 
-  const handleTrackCandidate = useCallback(async (candidate: ScannerCandidate) => {
+  const handleTrackCandidate = async (candidate: ScannerCandidate) => {
     const candidateMarket = normalizeScannerMarket(runDetail?.market || market);
     if (!candidateMarket) return;
     const candidateIdentity = getWatchlistIdentity(candidateMarket, candidate.symbol);
@@ -2348,9 +2345,9 @@ const UserScannerPage: React.FC = () => {
     } finally {
       setPendingWatchlistIdentity((current) => (current === candidateIdentity ? null : current));
     }
-  }, [language, market, runDetail, trackedWatchlistIdentitySet]);
+  };
 
-  const handleBatchTrackCandidates = useCallback(async (batchKey: string, candidates: ScannerCandidate[]) => {
+  const handleBatchTrackCandidates = async (batchKey: string, candidates: ScannerCandidate[]) => {
     const candidateMarket = normalizeScannerMarket(runDetail?.market || market);
     if (!candidateMarket || !candidates.length) return;
     const uniqueCandidates = candidates.reduce<ScannerCandidate[]>((items, candidate) => {
@@ -2417,15 +2414,15 @@ const UserScannerPage: React.FC = () => {
     } finally {
       setPendingBatchWatchlistAction((current) => (current === batchKey ? null : current));
     }
-  }, [language, market, runDetail, trackedWatchlistIdentitySet]);
+  };
 
-  const getBacktestActionLabel = useCallback((item?: ScannerBacktestItem) => (
+  const getBacktestActionLabel = (item?: ScannerBacktestItem) => (
     item?.status === 'running' || item?.status === 'queued'
       ? (language === 'en' ? 'Running' : '运行中')
       : (language === 'en' ? 'Backtest' : '回测')
-  ), [language]);
+  );
 
-  const renderCandidateDetailPanel = useCallback((
+  const renderCandidateDetailPanel = (
     candidate: ScannerCandidate,
     isTracked: boolean,
     isTrackPending: boolean,
@@ -2611,20 +2608,7 @@ const UserScannerPage: React.FC = () => {
         </AdvancedDisclosure>
       </div>
     );
-  }, [
-    backtestUnavailableLabel,
-    copiedKey,
-    getBacktestActionLabel,
-    handleAnalyzeCandidate,
-    handleBacktestCandidate,
-    handleCopyText,
-    handleExportRows,
-    handleTrackCandidate,
-    language,
-    pendingAnalyzeSymbol,
-    runDetail,
-    watchlistAuthBlocked,
-  ]);
+  };
 
   const scannerScopeLabel = runDetail
     ? `${runDetail.market.toUpperCase()} · ${runDetail.universeType === 'theme' ? (language === 'en' ? 'Theme universe' : '主题标的池') : runDetail.universeType === 'custom' || runDetail.universeType === 'symbols' ? (language === 'en' ? 'Custom symbols' : '自定义标的') : (language === 'en' ? 'Default universe' : '默认市场池')}`
