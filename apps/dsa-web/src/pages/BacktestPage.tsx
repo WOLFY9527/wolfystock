@@ -500,7 +500,7 @@ const BacktestPage: React.FC = () => {
     }
   }, []);
 
-  const fetchSampleStatus = useCallback(async (code?: string) => {
+  const fetchSampleStatus = async (code?: string) => {
     if (!code) {
       setSampleStatus(null);
       setSampleStatusError(null);
@@ -517,7 +517,7 @@ const BacktestPage: React.FC = () => {
     } finally {
       setIsLoadingSampleStatus(false);
     }
-  }, []);
+  };
 
   const fetchRuleHistory = useCallback(async (page = 1, code?: string) => {
     setIsLoadingRuleHistory(true);
@@ -556,7 +556,7 @@ const BacktestPage: React.FC = () => {
     setCodeFilter(prefillCode);
   }, [applyRuleRunDraft, routeState, scannerHandoff]);
 
-  const fetchPerformance = useCallback(async (code?: string, windowBars?: number, options: { showNotice?: boolean } = {}) => {
+  const fetchPerformance = async (code?: string, windowBars?: number, options: { showNotice?: boolean } = {}) => {
     const { showNotice = true } = options;
     setIsLoadingPerf(true);
     const notices: string[] = [];
@@ -593,7 +593,7 @@ const BacktestPage: React.FC = () => {
     }
 
     setIsLoadingPerf(false);
-  }, [language]);
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -861,7 +861,7 @@ const BacktestPage: React.FC = () => {
     }
   };
 
-  const handleApplyRuleRewriteSuggestion = useCallback((value: string) => {
+  const handleApplyRuleRewriteSuggestion = (value: string) => {
     setRuleStrategyText(value);
     setRuleParsedStrategy(null);
     setRuleParseError(null);
@@ -870,14 +870,14 @@ const BacktestPage: React.FC = () => {
     setRuleCurrentStep('setup');
     setRuleParseSignature(null);
     setAppliedRewriteText(value);
-  }, []);
+  };
 
-  const handleRuleStrategyTextChange = useCallback((value: string) => {
+  const handleRuleStrategyTextChange = (value: string) => {
     setRuleStrategyText(value);
     if (appliedRewriteText != null) {
       setAppliedRewriteText(null);
     }
-  }, [appliedRewriteText]);
+  };
 
   const handleRunRuleBacktest = async () => {
     const strategySpec = getStrategyPreviewSpec(ruleParsedStrategy);
@@ -1158,18 +1158,18 @@ const BacktestPage: React.FC = () => {
     void fetchRuleHistory(1, nextCode || undefined);
   };
 
-  const handleToggleProMonteCarlo = useCallback((nextEnabled: boolean) => {
+  const handleToggleProMonteCarlo = (nextEnabled: boolean) => {
     setProMonteCarloEnabled(nextEnabled);
     if (nextEnabled) {
       setProMonteCarloSimulationCount((current) => current.trim() || PRO_MONTE_CARLO_SIMULATION_DEFAULT);
     }
-  }, []);
+  };
 
-  const handleToggleProWalkForwardPreset = useCallback((nextEnabled: boolean) => {
+  const handleToggleProWalkForwardPreset = (nextEnabled: boolean) => {
     setProWalkForwardPresetEnabled(nextEnabled);
-  }, []);
+  };
 
-  const handleProMonteCarloSimulationCountChange = useCallback((value: string) => {
+  const handleProMonteCarloSimulationCountChange = (value: string) => {
     if (!value.trim()) {
       setProMonteCarloSimulationCount('');
       return;
@@ -1184,18 +1184,18 @@ const BacktestPage: React.FC = () => {
       PRO_MONTE_CARLO_SIMULATION_MIN,
       PRO_MONTE_CARLO_SIMULATION_MAX,
     )));
-  }, []);
+  };
 
-  const handleProMonteCarloSimulationCountBlur = useCallback(() => {
+  const handleProMonteCarloSimulationCountBlur = () => {
     if (!proMonteCarloEnabled) return;
     setProMonteCarloSimulationCount((current) => {
       const parsed = Number.parseInt(current, 10);
       if (!Number.isFinite(parsed)) return PRO_MONTE_CARLO_SIMULATION_DEFAULT;
       return String(clampInteger(parsed, PRO_MONTE_CARLO_SIMULATION_MIN, PRO_MONTE_CARLO_SIMULATION_MAX));
     });
-  }, [proMonteCarloEnabled]);
+  };
 
-  const resetRuleFlow = useCallback(() => {
+  const resetRuleFlow = () => {
     setRuleParsedStrategy(null);
     setRuleConfirmed(false);
     setRuleRunError(null);
@@ -1208,7 +1208,7 @@ const BacktestPage: React.FC = () => {
     setProMonteCarloEnabled(false);
     setProMonteCarloSimulationCount('');
     setProWalkForwardPresetEnabled(false);
-  }, []);
+  };
   const moduleTabs = (
     <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.moduleTabsLabel')}>
       <button
