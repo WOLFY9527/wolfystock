@@ -865,6 +865,7 @@ class BacktestService:
                 end_date=end_date,
                 days=eval_window_days * 2,
                 log_context="[historical-eval fill]",
+                allow_provider_fallback=False,
             )
             if df is None or df.empty:
                 return None
@@ -914,6 +915,7 @@ class BacktestService:
                 end_date=end_date,
                 days=lookback_days,
                 log_context="[historical-eval warmup]",
+                allow_provider_fallback=False,
             )
             if df is None or df.empty:
                 return 0, None

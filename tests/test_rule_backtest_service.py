@@ -1320,6 +1320,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         fetch_mock.assert_called_once()
         self.assertEqual(fetch_mock.call_args.args[0], "AAPL")
         self.assertEqual(fetch_mock.call_args.kwargs["log_context"], "[rule-backtest date-range history]")
+        self.assertEqual(fetch_mock.call_args.kwargs["allow_provider_fallback"], False)
         self.assertEqual(response["code"], "AAPL")
         self.assertIsNone(response["no_result_reason"])
         self.assertGreater(len(response["equity_curve"]), 0)
@@ -1331,6 +1332,40 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(len(daily_rows), 24)
         self.assertEqual(daily_rows[0].date.isoformat(), "2024-01-01")
         self.assertEqual(daily_rows[-1].date.isoformat(), "2024-01-24")
+
+    def test_service_missing_us_history_does_not_invoke_provider_fallback(self) -> None:
+        self._allow_market_history_fetch()
+        service = RuleBacktestService(self.db)
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": self._temp_dir.name,
+                "US_STOCK_PARQUET_DIR": self._temp_dir.name,
+            },
+            clear=False,
+        ), patch("src.services.us_history_helper.DataFetcherManager") as manager_cls, patch.object(
+            service,
+            "_get_llm_adapter",
+            return_value=None,
+        ):
+            response = service.run_backtest(
+                code="AAPL",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                start_date="2024-01-05",
+                end_date="2024-01-24",
+                lookback_bars=10,
+                initial_capital=100000.0,
+                benchmark_mode="none",
+                confirmed=True,
+            )
+
+        manager_cls.assert_not_called()
+        self.assertEqual(response["code"], "AAPL")
+        self.assertEqual(response["no_result_reason"], "insufficient_history")
+        self.assertEqual(response["trade_count"], 0)
+        self.assertEqual(response["data_quality"]["bar_count"], 0)
+        self.assertEqual(response["data_quality"]["source"], "database_cache")
 
     def test_service_uses_market_appropriate_auto_benchmark_defaults(self) -> None:
         service = RuleBacktestService(self.db)

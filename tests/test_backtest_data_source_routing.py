@@ -3,9 +3,13 @@
 
 from __future__ import annotations
 
+from datetime import date
+from unittest.mock import patch
+
 import pytest
 
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
+from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
 
 
 @pytest.mark.parametrize("source", ["", "   ", None])
@@ -130,3 +134,53 @@ def test_yfinance_proxy_is_degraded_fill_only_not_reproducible_authority() -> No
     assert result.rejected is False
     assert result.source_type == "unofficial_proxy"
     assert "proxy_source_not_reproducible" in result.reason_codes
+
+
+def test_local_only_daily_history_helper_skips_provider_fallback_when_local_missing(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("LOCAL_US_PARQUET_DIR", str(tmp_path))
+    monkeypatch.setenv("US_STOCK_PARQUET_DIR", str(tmp_path))
+
+    with patch("src.services.us_history_helper.DataFetcherManager") as manager_cls:
+        df, source = fetch_daily_history_with_local_us_fallback(
+            "AAPL",
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 1, 31),
+            days=20,
+            log_context="[test local-only]",
+            allow_provider_fallback=False,
+        )
+
+    assert df is None
+    assert source is None
+    manager_cls.assert_not_called()
+
+
+def test_daily_history_helper_default_still_allows_provider_fallback_when_local_missing(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("LOCAL_US_PARQUET_DIR", str(tmp_path))
+    monkeypatch.setenv("US_STOCK_PARQUET_DIR", str(tmp_path))
+    calls = []
+
+    class RecordingManager:
+        def get_daily_data(self, **kwargs):
+            calls.append(kwargs)
+            return None, "yfinance"
+
+    df, source = fetch_daily_history_with_local_us_fallback(
+        "AAPL",
+        start_date=date(2024, 1, 1),
+        end_date=date(2024, 1, 31),
+        days=20,
+        manager=RecordingManager(),
+        log_context="[test default fallback]",
+    )
+
+    assert df is None
+    assert source == "yfinance"
+    assert calls == [
+        {
+            "stock_code": "AAPL",
+            "start_date": "2024-01-01",
+            "end_date": "2024-01-31",
+            "days": 20,
+        }
+    ]

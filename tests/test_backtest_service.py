@@ -39,6 +39,7 @@ class BacktestServiceTestCase(unittest.TestCase):
             return_value=(None, None),
         )
         self._history_fetch_patch.start()
+        self._history_fetch_patch_active = True
 
         # Ensure analysis is old enough for default min_age_days=14
         old_created_at = datetime(2024, 1, 1, 0, 0, 0)
@@ -84,7 +85,9 @@ class BacktestServiceTestCase(unittest.TestCase):
             session.commit()
 
     def tearDown(self) -> None:
-        self._history_fetch_patch.stop()
+        if getattr(self, "_history_fetch_patch_active", False):
+            self._history_fetch_patch.stop()
+            self._history_fetch_patch_active = False
         DatabaseManager.reset_instance()
         if self._original_database_path is None:
             os.environ.pop("DATABASE_PATH", None)
@@ -107,6 +110,11 @@ class BacktestServiceTestCase(unittest.TestCase):
     def _count_runs(self) -> int:
         with self.db.get_session() as session:
             return session.query(BacktestRun).count()
+
+    def _allow_history_fetch(self) -> None:
+        if getattr(self, "_history_fetch_patch_active", False):
+            self._history_fetch_patch.stop()
+            self._history_fetch_patch_active = False
 
     def test_force_semantics(self) -> None:
         service = BacktestService(self.db)
@@ -393,7 +401,7 @@ class BacktestServiceTestCase(unittest.TestCase):
         )
         service = BacktestService(self.db)
 
-        with patch("src.services.backtest_service.fetch_daily_history_with_local_us_fallback", return_value=(frame, "local_us_parquet")):
+        with patch("src.services.backtest_service.fetch_daily_history_with_local_us_fallback", return_value=(frame, "local_us_parquet")) as fetch_mock:
             prep = service.prepare_backtest_samples(code="AAPL", sample_count=2, eval_window_days=3, min_age_days=14)
 
         self.assertEqual(prep["requested_mode"], "local_first")
@@ -411,29 +419,22 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(status["excluded_recent_reason"], "evaluation_window_not_satisfied")
         self.assertEqual(status["pricing_resolved_source"], "LocalParquet")
         self.assertFalse(status["pricing_fallback_used"])
+        self.assertEqual(fetch_mock.call_args.kwargs["allow_provider_fallback"], False)
 
-    def test_prepare_samples_reports_fallback_used_on_us_api_fallback(self) -> None:
-        frame = pd.DataFrame(
-            [
-                {"date": "2024-01-01", "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 10},
-                {"date": "2024-01-02", "open": 101.0, "high": 102.0, "low": 100.0, "close": 101.0, "volume": 10},
-                {"date": "2024-01-03", "open": 102.0, "high": 103.0, "low": 101.0, "close": 102.0, "volume": 10},
-                {"date": "2024-01-04", "open": 103.0, "high": 104.0, "low": 102.0, "close": 103.0, "volume": 10},
-                {"date": "2024-01-05", "open": 104.0, "high": 105.0, "low": 103.0, "close": 104.0, "volume": 10},
-                {"date": "2024-01-08", "open": 105.0, "high": 106.0, "low": 104.0, "close": 105.0, "volume": 10},
-                {"date": "2024-01-09", "open": 106.0, "high": 107.0, "low": 105.0, "close": 106.0, "volume": 10},
-            ]
-        )
+    def test_prepare_samples_surfaces_missing_us_history_without_provider_fallback(self) -> None:
         service = BacktestService(self.db)
 
-        with patch("src.services.backtest_service.fetch_daily_history_with_local_us_fallback", return_value=(frame, "yfinance")):
+        with patch("src.services.backtest_service.fetch_daily_history_with_local_us_fallback", return_value=(None, None)) as fetch_mock:
             prep = service.prepare_backtest_samples(code="AAPL", sample_count=2, eval_window_days=3, min_age_days=14)
 
         self.assertEqual(prep["requested_mode"], "local_first")
-        self.assertEqual(prep["resolved_source"], "YfinanceFetcher")
-        self.assertTrue(prep["fallback_used"])
-        self.assertEqual(prep["pricing_resolved_source"], "YfinanceFetcher")
-        self.assertTrue(prep["pricing_fallback_used"])
+        self.assertEqual(prep["resolved_source"], "Unknown")
+        self.assertFalse(prep["fallback_used"])
+        self.assertEqual(prep["prepared"], 0)
+        self.assertEqual(prep["market_rows_saved"], 0)
+        self.assertEqual(prep["candidate_rows"], 0)
+        self.assertEqual(prep["no_result_reason"], "missing_market_history")
+        self.assertEqual(fetch_mock.call_args.kwargs["allow_provider_fallback"], False)
 
     def test_run_backtest_fetches_missing_us_history_via_shared_local_first_helper(self) -> None:
         with self.db.get_session() as session:
@@ -476,6 +477,7 @@ class BacktestServiceTestCase(unittest.TestCase):
             end_date=date(2024, 1, 31),
             days=6,
             log_context="[historical-eval fill]",
+            allow_provider_fallback=False,
         )
 
         with self.db.get_session() as session:
@@ -491,6 +493,50 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(data_quality["authority_status"], "allowed")
         self.assertEqual(data_quality["authority_source_type"], "cache_snapshot")
         self.assertEqual(data_quality["authority_reason_codes"], [])
+
+    def test_run_backtest_missing_us_history_does_not_invoke_provider_fallback(self) -> None:
+        with self.db.get_session() as session:
+            session.add(
+                AnalysisHistory(
+                    query_id="q-aapl-local-only-missing",
+                    code="AAPL",
+                    name="Apple",
+                    report_type="simple",
+                    sentiment_score=80,
+                    operation_advice="买入",
+                    trend_prediction="看多",
+                    analysis_summary="test",
+                    stop_loss=95.0,
+                    take_profit=110.0,
+                    created_at=datetime(2024, 1, 1, 0, 0, 0),
+                    context_snapshot='{"enhanced_context": {"date": "2024-01-01"}}',
+                )
+            )
+            session.commit()
+
+        self._allow_history_fetch()
+        service = BacktestService(self.db)
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": self._temp_dir.name,
+                "US_STOCK_PARQUET_DIR": self._temp_dir.name,
+            },
+            clear=False,
+        ), patch("src.services.us_history_helper.DataFetcherManager") as manager_cls:
+            stats = service.run_backtest(code="AAPL", force=False, eval_window_days=3, min_age_days=0, limit=10)
+
+        manager_cls.assert_not_called()
+        self.assertEqual(stats["processed"], 1)
+        self.assertEqual(stats["completed"], 0)
+        self.assertEqual(stats["insufficient"], 1)
+        self.assertFalse(stats["fallback_used"])
+
+        with self.db.get_session() as session:
+            daily_rows = session.query(StockDaily).filter(StockDaily.code == "AAPL").all()
+
+        self.assertEqual(daily_rows, [])
 
     def test_sample_status_reports_maturity_window_exclusion_for_recent_samples(self) -> None:
         recent_created_at = datetime.now() - timedelta(days=2)

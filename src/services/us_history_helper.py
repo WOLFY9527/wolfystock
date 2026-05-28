@@ -143,6 +143,7 @@ def fetch_daily_history_with_local_us_fallback(
     days: Optional[int] = None,
     manager: Optional[DataFetcherManager] = None,
     log_context: str = "[daily history]",
+    allow_provider_fallback: bool = True,
 ) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
     """Fetch daily bars with stored-first US parquet fallback semantics.
 
@@ -153,6 +154,8 @@ def fetch_daily_history_with_local_us_fallback(
         days: Optional max number of rows to keep from the tail of the window.
         manager: Optional fetch manager override for remote fallback reads.
         log_context: Short label appended to local-hit and fallback log lines.
+        allow_provider_fallback: Whether to call the remote provider fallback
+            when no local US parquet history is available.
 
     Returns:
         A tuple of ``(dataframe, source_name)``. ``dataframe`` is ``None`` when
@@ -195,6 +198,10 @@ def fetch_daily_history_with_local_us_fallback(
             local_history.path,
             local_history.error or local_history.status,
         )
+
+    if not allow_provider_fallback:
+        logger.info("%s provider fallback disabled for %s", log_context, normalized_code)
+        return None, None
 
     if normalized_code and is_us_stock_code(normalized_code):
         logger.info("%s API fallback for %s", log_context, normalized_code)

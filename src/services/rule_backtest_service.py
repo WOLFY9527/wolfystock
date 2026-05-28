@@ -2813,6 +2813,7 @@ class RuleBacktestService:
                     end_date=end_date,
                     days=max(load_count, (end_date - start_date).days + 5),
                     log_context="[rule-backtest date-range history]",
+                    allow_provider_fallback=False,
                 )
                 if df is None or df.empty:
                     return 0
@@ -2845,6 +2846,7 @@ class RuleBacktestService:
                 end_date=end_date,
                 days=load_count,
                 log_context="[rule-backtest history]",
+                allow_provider_fallback=False,
             )
             if df is None or df.empty:
                 return 0
