@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { BacktestDiagnosticWarning, RuleBacktestRunResponse, RuleBacktestTradeItem } from '../../types/backtest';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { EvidenceChips } from '../evidence/EvidenceChips';
@@ -763,17 +763,14 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [activeDetailTab, setActiveDetailTab] = useState<'trades' | 'risk' | 'params' | 'diagnostics'>('trades');
-  const normalized = useMemo(
-    () => providedNormalized ?? normalizeDeterministicBacktestResult(run, language),
-    [language, providedNormalized, run],
-  );
-  const trades = useMemo(() => (Array.isArray(run.trades) ? run.trades : []), [run.trades]);
-  const tradeSummary = useMemo(() => getTradeSummary(run, trades), [run, trades]);
-  const attributionByMonth = useMemo(() => buildAttribution(trades, getTradeMonth), [trades]);
-  const attributionByYear = useMemo(() => buildAttribution(trades, getTradeYear), [trades]);
-  const attributionByExitReason = useMemo(() => buildAttribution(trades, (trade) => compactToken(trade.exitReason || trade.exitTrigger || trade.exitSignal)), [trades]);
-  const attributionByHoldingBucket = useMemo(() => buildAttribution(trades, (trade) => holdingBucket(safeNumber(trade.holdingDays ?? trade.holdingCalendarDays ?? trade.holdingBars))), [trades]);
-  const tradeEvents = useMemo(() => buildEvents(trades), [trades]);
+  const normalized = providedNormalized ?? normalizeDeterministicBacktestResult(run, language);
+  const trades = Array.isArray(run.trades) ? run.trades : [];
+  const tradeSummary = getTradeSummary(run, trades);
+  const attributionByMonth = buildAttribution(trades, getTradeMonth);
+  const attributionByYear = buildAttribution(trades, getTradeYear);
+  const attributionByExitReason = buildAttribution(trades, (trade) => compactToken(trade.exitReason || trade.exitTrigger || trade.exitSignal));
+  const attributionByHoldingBucket = buildAttribution(trades, (trade) => holdingBucket(safeNumber(trade.holdingDays ?? trade.holdingCalendarDays ?? trade.holdingBars)));
+  const tradeEvents = buildEvents(trades);
   const grossPnlTotal = sumNullable(trades.map((trade) => safeNumber(trade.grossPnl)));
   const netPnlTotal = sumNullable(trades.map(tradeNetPnl));
   const feesTotal = sumNullable(trades.map(tradeFees));
@@ -791,21 +788,18 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
   }, null);
   const consecutiveWins = maxStreak(trades, (value) => value > 0);
   const consecutiveLosses = maxStreak(trades, (value) => value < 0);
-  const metrics = useMemo(() => getMetricItems(normalized), [normalized]);
-  const moreMetrics = useMemo(() => getMoreMetricItems(run, tradeSummary), [run, tradeSummary]);
-  const dataQuality = useMemo(() => dataQualityEntries(run, normalized), [run, normalized]);
+  const metrics = getMetricItems(normalized);
+  const moreMetrics = getMoreMetricItems(run, tradeSummary);
+  const dataQuality = dataQualityEntries(run, normalized);
   const assumptions = assumptionEntries(run);
   const dataQualityWarnings = (run.dataQuality?.warnings || []).map(warningText);
-  const executionWarnings = useMemo(() => {
+  const executionWarnings = (() => {
     const assumptionsPayload = (run.executionAssumptions || {}) as Record<string, unknown>;
     const executionWarningItems = recordValue(assumptionsPayload, 'warnings') as Array<Record<string, unknown>> | null;
     return Array.isArray(executionWarningItems) ? executionWarningItems.map(warningText) : [];
-  }, [run.executionAssumptions]);
+  })();
   const hasExplicitAssumptions = Object.keys(run.executionAssumptions || {}).length > 0;
-  const diagnosisItems = useMemo(
-    () => getDiagnosisItems(normalized, tradeSummary, dataQualityWarnings, executionWarnings, hasExplicitAssumptions),
-    [dataQualityWarnings, executionWarnings, hasExplicitAssumptions, normalized, tradeSummary],
-  );
+  const diagnosisItems = getDiagnosisItems(normalized, tradeSummary, dataQualityWarnings, executionWarnings, hasExplicitAssumptions);
   const benchmarkVerdict = getBenchmarkVerdict(
     normalized.metrics.totalReturnPct,
     normalized.metrics.benchmarkReturnPct,
@@ -825,28 +819,22 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
   const firstDate = normalized.viewerMeta.firstDate || run.startDate || run.periodStart || null;
   const lastDate = normalized.viewerMeta.lastDate || run.endDate || run.periodEnd || null;
   const dateRange = firstDate || lastDate ? `${firstDate || '--'} -> ${lastDate || '--'}` : '--';
-  const readinessSummary = useMemo(
-    () => normalizeBacktestReadiness(run, { maxLimitationLabels: 5 }),
-    [run],
-  );
+  const readinessSummary = normalizeBacktestReadiness(run, { maxLimitationLabels: 5 });
   const showReadinessChips = readinessSummary.posture !== 'unknown'
     || readinessSummary.confidenceCap != null
     || readinessSummary.limitationLabels.length > 0
     || readinessSummary.freshnessLabel != null;
   const hasTraceRows = hasExecutionTraceRows(run);
   const hasExplicitTraceRows = Array.isArray(run.executionTrace?.rows) && run.executionTrace.rows.length > 0;
-  const consumerReliabilityItems = useMemo(
-    () => getConsumerReliabilityItems({
-      run,
-      readinessSummary,
-      hasExplicitTraceRows,
-      hasExplicitAssumptions,
-      hasDataQualityEntries: dataQuality.length > 0,
-      dataQualityWarnings,
-      executionWarnings,
-    }),
-    [dataQuality.length, dataQualityWarnings, executionWarnings, hasExplicitAssumptions, hasExplicitTraceRows, readinessSummary, run],
-  );
+  const consumerReliabilityItems = getConsumerReliabilityItems({
+    run,
+    readinessSummary,
+    hasExplicitTraceRows,
+    hasExplicitAssumptions,
+    hasDataQualityEntries: dataQuality.length > 0,
+    dataQualityWarnings,
+    executionWarnings,
+  });
 
   const exportTrades = () => {
     downloadCsv(
