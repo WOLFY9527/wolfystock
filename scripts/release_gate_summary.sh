@@ -98,6 +98,45 @@ def numeric_or_text(value: str):
         return value
 
 
+BLOCKER_CLASSIFICATION_BY_ID = {
+    "mfa_pilot_acceptance": "external_manual",
+    "rbac_fallback_disable_switch": "external_manual",
+    "provider_credential_staging_dry_run": "external_manual",
+    "provider_staging_probe_artifact": "external_manual",
+    "provider_live_probe_opt_in_timeout": "external_manual",
+    "provider_circuit_controlled_enforcement": "external_manual",
+    "quota_pilot_acceptance": "external_manual",
+    "budget_alert_dry_run_acceptance": "external_manual",
+    "real_isolated_postgresql_restore_pitr": "external_manual",
+    "staging_ingress_smoke": "external_manual",
+    "public_api_frontend_no_secret_safety": "frontend_owned",
+    "supply_chain_dependency_build_artifact_safety": "internal_validation",
+    "incident_response_audit_evidence": "external_manual",
+    "ws2_sse_topology_polling_fallback": "intentional_policy",
+    "admin_log_retention_capacity_rehearsal": "internal_validation",
+    "portfolio_backtest_export_browser_proof": "frontend_owned",
+    "notifications_delivery_rehearsal": "external_manual",
+    "user_data_privacy_export_deletion_rehearsal": "internal_validation",
+    "market_data_freshness_fallback_evidence": "internal_validation",
+    "ai_report_guest_preview_safety": "frontend_owned",
+    "options_derivatives_safety": "intentional_policy",
+    "api_abuse_request_safety": "internal_validation",
+    "final_clean_full_ci_gate": "internal_validation",
+    "provider_operator_evidence": "external_manual",
+    "restore_pitr_operator_evidence": "external_manual",
+    "security_operator_acceptance": "external_manual",
+    "quota_budget_operator_evidence": "external_manual",
+    "staging_ingress_operator_evidence": "external_manual",
+    "ws2_sse_operator_decision_evidence": "intentional_policy",
+    "config_snapshot_evidence": "external_manual",
+    "manual_release_approval_review_record": "external_manual",
+}
+
+
+def classify_blocker(blocker_id: str) -> str:
+    return BLOCKER_CLASSIFICATION_BY_ID.get(blocker_id, "unknown")
+
+
 branch, base_ref, ahead, behind, staged, unstaged, untracked = sys.argv[1:8]
 dirty_total = int(staged) + int(unstaged) + int(untracked)
 
@@ -511,6 +550,9 @@ summary = {
         "productionDataPathsRead": False,
     },
 }
+
+for blocker in summary["hardBlockers"]:
+    blocker["blockerClassification"] = classify_blocker(blocker["id"])
 
 print(json.dumps(summary, indent=2, sort_keys=True))
 PY

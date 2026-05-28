@@ -39,6 +39,46 @@ EXPECTED_OPERATOR_CATEGORY_IDS = [
     "config_snapshot_evidence",
     "manual_release_approval_review_record",
 ]
+EXPECTED_BLOCKER_CLASSIFICATIONS = {
+    "mfa_pilot_acceptance": "external_manual",
+    "rbac_fallback_disable_switch": "external_manual",
+    "provider_credential_staging_dry_run": "external_manual",
+    "provider_staging_probe_artifact": "external_manual",
+    "provider_live_probe_opt_in_timeout": "external_manual",
+    "provider_circuit_controlled_enforcement": "external_manual",
+    "quota_pilot_acceptance": "external_manual",
+    "budget_alert_dry_run_acceptance": "external_manual",
+    "real_isolated_postgresql_restore_pitr": "external_manual",
+    "staging_ingress_smoke": "external_manual",
+    "public_api_frontend_no_secret_safety": "frontend_owned",
+    "supply_chain_dependency_build_artifact_safety": "internal_validation",
+    "incident_response_audit_evidence": "external_manual",
+    "ws2_sse_topology_polling_fallback": "intentional_policy",
+    "admin_log_retention_capacity_rehearsal": "internal_validation",
+    "portfolio_backtest_export_browser_proof": "frontend_owned",
+    "notifications_delivery_rehearsal": "external_manual",
+    "user_data_privacy_export_deletion_rehearsal": "internal_validation",
+    "market_data_freshness_fallback_evidence": "internal_validation",
+    "ai_report_guest_preview_safety": "frontend_owned",
+    "options_derivatives_safety": "intentional_policy",
+    "api_abuse_request_safety": "internal_validation",
+    "final_clean_full_ci_gate": "internal_validation",
+    "provider_operator_evidence": "external_manual",
+    "restore_pitr_operator_evidence": "external_manual",
+    "security_operator_acceptance": "external_manual",
+    "quota_budget_operator_evidence": "external_manual",
+    "staging_ingress_operator_evidence": "external_manual",
+    "ws2_sse_operator_decision_evidence": "intentional_policy",
+    "config_snapshot_evidence": "external_manual",
+    "manual_release_approval_review_record": "external_manual",
+}
+ALLOWED_BLOCKER_CLASSIFICATIONS = {
+    "internal_validation",
+    "external_manual",
+    "intentional_policy",
+    "frontend_owned",
+    "unknown",
+}
 
 
 def _run(cmd, cwd: Path, **kwargs):
@@ -150,6 +190,12 @@ def test_release_gate_summary_go_no_go_json_keeps_launch_blocked(tmp_path):
     blocker_ids = {item["id"] for item in summary["hardBlockers"]}
     assert set(EXPECTED_OPERATOR_CATEGORY_IDS) <= blocker_ids
     assert all(item["status"] == "blocking" for item in summary["hardBlockers"])
+    assert len(summary["hardBlockers"]) == len(EXPECTED_OPERATOR_CATEGORY_IDS)
+    blocker_classifications = {
+        item["id"]: item["blockerClassification"] for item in summary["hardBlockers"]
+    }
+    assert blocker_classifications == EXPECTED_BLOCKER_CLASSIFICATIONS
+    assert set(blocker_classifications.values()) <= ALLOWED_BLOCKER_CLASSIFICATIONS
     assert summary["operatorEvidencePack"] == {
         "finalStatus": "NO-GO",
         "releaseApproved": False,
