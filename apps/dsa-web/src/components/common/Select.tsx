@@ -1,4 +1,4 @@
-import React, { useId, useMemo, useState } from 'react';
+import React, { useId, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
@@ -96,23 +96,19 @@ export const Select: React.FC<SelectProps> = ({
   const invalid = props['aria-invalid'] === true || props['aria-invalid'] === 'true';
   const hasCustomChildren = React.Children.count(children) > 0;
 
-  const flattenedOptions = useMemo(() => {
-    if (hasCustomChildren) {
-      return flattenOptionChildren(children);
-    }
-
-    return [
+  const flattenedOptions = hasCustomChildren
+    ? flattenOptionChildren(children)
+    : [
       ...(resolvedPlaceholder ? [{ value: '', label: resolvedPlaceholder }] : []),
       ...(options ?? []),
     ];
-  }, [children, hasCustomChildren, options, resolvedPlaceholder]);
 
-  const selectedLabel = useMemo(() => {
-    const matched = flattenedOptions.find((option) => option.value === displayValue);
-    if (matched) return matched.label;
-    if (displayValue !== '') return displayValue;
-    return resolvedPlaceholder ?? '';
-  }, [displayValue, flattenedOptions, resolvedPlaceholder]);
+  const matched = flattenedOptions.find((option) => option.value === displayValue);
+  const selectedLabel = matched
+    ? matched.label
+    : displayValue !== ''
+      ? displayValue
+      : resolvedPlaceholder ?? '';
 
   return (
     <div className={cn('select-field flex min-w-0 w-full max-w-full flex-col', className)}>

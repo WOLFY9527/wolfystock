@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Activity, Radar, ShieldAlert, Waves, Wallet } from 'lucide-react';
 import { backtestApi } from '../../api/backtest';
 import { marketRotationApi } from '../../api/marketRotation';
@@ -466,10 +466,7 @@ export function AdminEvidenceDiagnosticsConsole() {
     };
   }, []);
 
-  const orderedSections = useMemo(
-    () => (['scanner', 'rotation', 'options', 'backtest', 'portfolio_risk'] as EngineId[]).map((id) => sections[id]),
-    [sections],
-  );
+  const orderedSections = (['scanner', 'rotation', 'options', 'backtest', 'portfolio_risk'] as EngineId[]).map((id) => sections[id]);
 
   const unavailableCount = orderedSections.filter((section) => section.state === 'error' || section.state === 'empty').length;
 

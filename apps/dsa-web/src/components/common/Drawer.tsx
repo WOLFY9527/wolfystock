@@ -4,7 +4,7 @@
  * with restrained header typography and lighter close controls.
  */
 import type React from 'react';
-import { useEffect, useCallback, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { cn } from '../../utils/cn';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { shouldApplySafariA11yGuard } from '../../hooks/useSafariInteractionReady';
@@ -54,31 +54,41 @@ export const Drawer: React.FC<DrawerProps> = ({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
-  const repaintTargets = useCallback(() => {
-    panelRef.current?.getBoundingClientRect();
-    void panelRef.current?.offsetHeight;
-    closeButtonRef.current?.getBoundingClientRect();
-    void closeButtonRef.current?.offsetHeight;
-  }, []);
 
-  // Close the drawer when Escape is pressed.
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
+  useEffect(() => {
+    if (closeTimerRef.current != null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+
+    if (!isOpen) {
+      backdropGuardRef.current = false;
+      setIsInteractionReady(false);
+      if (backdropGuardTimerRef.current != null) {
+        window.clearTimeout(backdropGuardTimerRef.current);
+        backdropGuardTimerRef.current = null;
       }
-    },
-    [onClose],
-  );
+      if (openMountFrameRef.current != null) {
+        window.cancelAnimationFrame(openMountFrameRef.current);
+        openMountFrameRef.current = null;
+      }
+      if (openReadyFrameRef.current != null) {
+        window.cancelAnimationFrame(openReadyFrameRef.current);
+        openReadyFrameRef.current = null;
+      }
+      if (interactionReadyTimerRef.current != null) {
+        window.clearTimeout(interactionReadyTimerRef.current);
+        interactionReadyTimerRef.current = null;
+      }
+      return;
+    }
 
-  const clearBackdropGuardTimer = useCallback(() => {
+    backdropGuardRef.current = true;
+    setIsInteractionReady(false);
     if (backdropGuardTimerRef.current != null) {
       window.clearTimeout(backdropGuardTimerRef.current);
       backdropGuardTimerRef.current = null;
     }
-  }, []);
-
-  const clearOpenWork = useCallback(() => {
     if (openMountFrameRef.current != null) {
       window.cancelAnimationFrame(openMountFrameRef.current);
       openMountFrameRef.current = null;
@@ -91,30 +101,6 @@ export const Drawer: React.FC<DrawerProps> = ({
       window.clearTimeout(interactionReadyTimerRef.current);
       interactionReadyTimerRef.current = null;
     }
-  }, []);
-
-  const clearCloseTimer = useCallback(() => {
-    if (closeTimerRef.current != null) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    clearCloseTimer();
-
-    if (!isOpen) {
-      backdropGuardRef.current = false;
-      setIsInteractionReady(false);
-      clearBackdropGuardTimer();
-      clearOpenWork();
-      return;
-    }
-
-    backdropGuardRef.current = true;
-    setIsInteractionReady(false);
-    clearBackdropGuardTimer();
-    clearOpenWork();
 
     backdropGuardTimerRef.current = window.setTimeout(() => {
       backdropGuardRef.current = false;
@@ -126,21 +112,41 @@ export const Drawer: React.FC<DrawerProps> = ({
       setIsMounted(true);
       openReadyFrameRef.current = window.requestAnimationFrame(() => {
         openReadyFrameRef.current = null;
-        repaintTargets();
+        panelRef.current?.getBoundingClientRect();
+        void panelRef.current?.offsetHeight;
+        closeButtonRef.current?.getBoundingClientRect();
+        void closeButtonRef.current?.offsetHeight;
         setUiState('open');
         interactionReadyTimerRef.current = window.setTimeout(() => {
           interactionReadyTimerRef.current = null;
-          repaintTargets();
+          panelRef.current?.getBoundingClientRect();
+          void panelRef.current?.offsetHeight;
+          closeButtonRef.current?.getBoundingClientRect();
+          void closeButtonRef.current?.offsetHeight;
           setIsInteractionReady(true);
         }, DRAWER_READY_DELAY_MS);
       });
     });
 
     return () => {
-      clearBackdropGuardTimer();
-      clearOpenWork();
+      if (backdropGuardTimerRef.current != null) {
+        window.clearTimeout(backdropGuardTimerRef.current);
+        backdropGuardTimerRef.current = null;
+      }
+      if (openMountFrameRef.current != null) {
+        window.cancelAnimationFrame(openMountFrameRef.current);
+        openMountFrameRef.current = null;
+      }
+      if (openReadyFrameRef.current != null) {
+        window.cancelAnimationFrame(openReadyFrameRef.current);
+        openReadyFrameRef.current = null;
+      }
+      if (interactionReadyTimerRef.current != null) {
+        window.clearTimeout(interactionReadyTimerRef.current);
+        interactionReadyTimerRef.current = null;
+      }
     };
-  }, [clearBackdropGuardTimer, clearCloseTimer, clearOpenWork, isOpen, repaintTargets]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen || !isMounted) {
@@ -153,33 +159,60 @@ export const Drawer: React.FC<DrawerProps> = ({
       setIsMounted(false);
     }, DRAWER_CLOSE_DELAY_MS);
 
-    return clearCloseTimer;
-  }, [clearCloseTimer, isMounted, isOpen]);
+    return () => {
+      if (closeTimerRef.current != null) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+    };
+  }, [isMounted, isOpen]);
 
   useEffect(() => () => {
-    clearBackdropGuardTimer();
-    clearOpenWork();
-    clearCloseTimer();
-  }, [clearBackdropGuardTimer, clearCloseTimer, clearOpenWork]);
+    if (backdropGuardTimerRef.current != null) {
+      window.clearTimeout(backdropGuardTimerRef.current);
+      backdropGuardTimerRef.current = null;
+    }
+    if (openMountFrameRef.current != null) {
+      window.cancelAnimationFrame(openMountFrameRef.current);
+      openMountFrameRef.current = null;
+    }
+    if (openReadyFrameRef.current != null) {
+      window.cancelAnimationFrame(openReadyFrameRef.current);
+      openReadyFrameRef.current = null;
+    }
+    if (interactionReadyTimerRef.current != null) {
+      window.clearTimeout(interactionReadyTimerRef.current);
+      interactionReadyTimerRef.current = null;
+    }
+    if (closeTimerRef.current != null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     if (!isMounted) {
       return;
     }
-    document.addEventListener('keydown', handleKeyDown);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
     activeDrawerCount++;
     if (activeDrawerCount === 1) {
       document.body.style.overflow = 'hidden';
     }
 
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keydown', onKeyDown);
       activeDrawerCount--;
       if (activeDrawerCount === 0) {
         document.body.style.overflow = '';
       }
     };
-  }, [isMounted, handleKeyDown]);
+  }, [isMounted, onClose]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -187,13 +220,16 @@ export const Drawer: React.FC<DrawerProps> = ({
     }
 
     let elapsedMs = 0;
-    const warmTargets = () => {
-      repaintTargets();
+    const forceReflow = () => {
+      panelRef.current?.getBoundingClientRect();
+      void panelRef.current?.offsetHeight;
+      closeButtonRef.current?.getBoundingClientRect();
+      void closeButtonRef.current?.offsetHeight;
     };
 
-    warmTargets();
+    forceReflow();
     const intervalId = window.setInterval(() => {
-      warmTargets();
+      forceReflow();
       elapsedMs += DRAWER_WARMUP_INTERVAL_MS;
       if (elapsedMs >= DRAWER_WARMUP_WINDOW_MS) {
         window.clearInterval(intervalId);
@@ -203,9 +239,9 @@ export const Drawer: React.FC<DrawerProps> = ({
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [isOpen, repaintTargets]);
+  }, [isOpen]);
 
-  const handleBackdropClick = useCallback(() => {
+  const handleBackdropClick = () => {
     if (!closeOnBackdropClick) {
       return;
     }
@@ -213,7 +249,7 @@ export const Drawer: React.FC<DrawerProps> = ({
       return;
     }
     onClose();
-  }, [closeOnBackdropClick, onClose]);
+  };
 
   if (!isMounted) return null;
 

@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Copy, Download, Printer } from 'lucide-react';
 import { Drawer } from '../common';
 import type {
@@ -368,9 +368,9 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
   report,
 }) => {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
-  const sections = useMemo(() => buildFullReportSections(report, dashboard), [dashboard, report]);
-  const identity = useMemo(() => buildReportIdentity(report, dashboard), [dashboard, report]);
-  const markdown = useMemo(() => buildInstitutionalReportMarkdown(report), [report]);
+  const sections = buildFullReportSections(report, dashboard);
+  const identity = buildReportIdentity(report, dashboard);
+  const markdown = buildInstitutionalReportMarkdown(report);
   const summarySection = sections.find((section) => section.id === 'summary');
   const riskSection = sections.find((section) => section.id === 'risks');
   const observationSection = sections.find((section) => section.id === 'observation-plan');

@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import type React from 'react';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import {
   getStoredUiLanguage,
   normalizeUiLanguage,
@@ -61,28 +61,28 @@ export const UiLanguageProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     document.documentElement.lang = normalizeUiLanguage(language);
   }, [language]);
 
-  const setLanguage = useCallback((nextLanguage: UiLanguage) => {
+  const setLanguage = (nextLanguage: UiLanguage) => {
     const normalized = normalizeUiLanguage(nextLanguage);
     syncCurrentPathToLanguage(normalized);
     setLanguageState(normalized);
-  }, []);
+  };
 
-  const toggleLanguage = useCallback(() => {
+  const toggleLanguage = () => {
     setLanguageState((current) => {
       const nextLanguage = current === 'zh' ? 'en' : 'zh';
       syncCurrentPathToLanguage(nextLanguage);
       return nextLanguage;
     });
-  }, []);
+  };
 
-  const t = useCallback((key: string, vars?: TranslateVars) => translate(language, key, vars), [language]);
+  const t = (key: string, vars?: TranslateVars) => translate(language, key, vars);
 
-  const value = useMemo<UiLanguageContextValue>(() => ({
+  const value: UiLanguageContextValue = {
     language,
     setLanguage,
     toggleLanguage,
     t,
-  }), [language, setLanguage, t, toggleLanguage]);
+  };
 
   return (
     <UiLanguageContext.Provider value={value}>

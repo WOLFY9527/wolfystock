@@ -2,10 +2,8 @@
 import type React from 'react';
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
-  useMemo,
   useState,
 } from 'react';
 import { ThemeProvider as NextThemesProvider, useTheme } from 'next-themes';
@@ -52,15 +50,12 @@ const ThemeStyleController: React.FC<{ children: React.ReactNode }> = ({ childre
     void setTheme(colorMode);
   }, [setTheme, themeStyle]);
 
-  const setThemeStyle = useCallback(() => undefined, []);
+  const setThemeStyle = () => undefined;
 
-  const contextValue = useMemo(
-    () => ({
-      themeStyle,
-      setThemeStyle,
-    }),
-    [themeStyle, setThemeStyle],
-  );
+  const contextValue = {
+    themeStyle,
+    setThemeStyle,
+  };
 
   return (
     <ThemeStyleContext.Provider value={contextValue}>
