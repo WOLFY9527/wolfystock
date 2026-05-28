@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { AnimatePresence, domAnimation, LazyMotion, m } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
@@ -399,7 +399,7 @@ const BacktestPage: React.FC = () => {
     slippage_bps_per_side: Number.parseFloat(ruleSlippageBps) || 0,
   };
 
-  const applyRuleRunDraft = useCallback((data: RuleBacktestRunResponse) => {
+  const applyRuleRunDraft = (data: RuleBacktestRunResponse) => {
     const parsedStrategyPayload = data.parsedStrategy as unknown as Record<string, unknown>;
     const detectedStrategyFamily = data.parsedStrategy.detectedStrategyFamily
       ?? (typeof parsedStrategyPayload.detected_strategy_family === 'string' ? parsedStrategyPayload.detected_strategy_family : undefined);
@@ -462,9 +462,9 @@ const BacktestPage: React.FC = () => {
     setRuleConfirmed(true);
     setRuleCurrentStep('strategy');
     setAppliedRewriteText(null);
-  }, []);
+  };
 
-  const fetchResults = useCallback(async (page = 1, code?: string, windowBars?: number, runId?: number | null) => {
+  const fetchResults = async (page = 1, code?: string, windowBars?: number, runId?: number | null) => {
     setIsLoadingResults(true);
     try {
       const response = await backtestApi.getResults({
@@ -483,9 +483,9 @@ const BacktestPage: React.FC = () => {
     } finally {
       setIsLoadingResults(false);
     }
-  }, []);
+  };
 
-  const fetchHistory = useCallback(async (page = 1, code?: string) => {
+  const fetchHistory = async (page = 1, code?: string) => {
     setIsLoadingHistory(true);
     try {
       const response = await backtestApi.getHistory({ code: code || undefined, page, limit: HISTORY_PAGE_SIZE });
@@ -498,7 +498,7 @@ const BacktestPage: React.FC = () => {
     } finally {
       setIsLoadingHistory(false);
     }
-  }, []);
+  };
 
   const fetchSampleStatus = async (code?: string) => {
     if (!code) {
@@ -519,7 +519,7 @@ const BacktestPage: React.FC = () => {
     }
   };
 
-  const fetchRuleHistory = useCallback(async (page = 1, code?: string) => {
+  const fetchRuleHistory = async (page = 1, code?: string) => {
     setIsLoadingRuleHistory(true);
     try {
       const response = await backtestApi.getRuleBacktestRuns({ code: code || undefined, page, limit: RULE_HISTORY_PAGE_SIZE });
@@ -532,7 +532,7 @@ const BacktestPage: React.FC = () => {
     } finally {
       setIsLoadingRuleHistory(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     const state = routeState as BacktestPageLocationState | null;

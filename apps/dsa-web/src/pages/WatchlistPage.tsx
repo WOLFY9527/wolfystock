@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useEffect, useState, type ComponentProps } from 'react';
 import {
   BarChart3,
   CheckSquare,
@@ -1012,14 +1012,8 @@ const WatchlistPage: React.FC = () => {
     }
   }, [activeItemId, filteredItems]);
 
-  const selectedItems = useMemo(
-    () => filteredItems.filter((item) => selectedIds.has(item.id)),
-    [filteredItems, selectedIds],
-  );
-  const activeItem = useMemo(
-    () => filteredItems.find((item) => item.id === activeItemId) ?? filteredItems[0] ?? null,
-    [activeItemId, filteredItems],
-  );
+  const selectedItems = filteredItems.filter((item) => selectedIds.has(item.id));
+  const activeItem = filteredItems.find((item) => item.id === activeItemId) ?? filteredItems[0] ?? null;
   const actionItems = useSelectedScope && selectedItems.length > 0 ? selectedItems : filteredItems;
   const actionScopeLabel = actionItems.length === 0
     ? copy.emptyFilteredSet

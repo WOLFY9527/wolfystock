@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -1131,31 +1131,31 @@ const AdminUsersPage: React.FC = () => {
     revoke_sessions: freshSecurityActionState(),
   });
 
-  const loadUsers = useCallback(() => {
+  const loadUsers = () => {
     if (!canReadUsers) return;
     setUsersState((state) => ({ ...state, loading: true, error: null }));
     void adminUsersApi.listUsers(filters)
       .then((data) => setUsersState({ loading: false, error: null, data }))
       .catch((error) => setUsersState({ loading: false, error: getParsedApiError(error), data: null }));
-  }, [canReadUsers, filters]);
+  };
 
-  const loadDetail = useCallback((targetUserId: string) => {
+  const loadDetail = (targetUserId: string) => {
     if (!canReadUsers) return;
     setDetailState((state) => ({ ...state, loading: true, error: null }));
     void adminUsersApi.getUserDetail(targetUserId)
       .then((data) => setDetailState({ loading: false, error: null, data }))
       .catch((error) => setDetailState({ loading: false, error: getParsedApiError(error), data: null }));
-  }, [canReadUsers]);
+  };
 
-  const loadActivity = useCallback((targetUserId: string) => {
+  const loadActivity = (targetUserId: string) => {
     if (!canReadUserActivity) return;
     setActivityState((state) => ({ ...state, loading: true, error: null }));
     void adminUsersApi.listUserActivity(targetUserId, activityFilters)
       .then((data) => setActivityState({ loading: false, error: null, data }))
       .catch((error) => setActivityState({ loading: false, error: getParsedApiError(error), data: null }));
-  }, [activityFilters, canReadUserActivity]);
+  };
 
-  const loadPortfolio = useCallback((targetUserId: string) => {
+  const loadPortfolio = (targetUserId: string) => {
     if (!canReadUserPortfolio) return;
     setPortfolioSummaryState((state) => ({ ...state, loading: true, error: null }));
     setHoldingsState((state) => ({ ...state, loading: true, error: null }));
@@ -1169,7 +1169,7 @@ const AdminUsersPage: React.FC = () => {
     void adminUsersApi.getAdminUserPortfolioActivity(targetUserId, { limit: 30, offset: 0 })
       .then((data) => setPortfolioActivityState({ loading: false, error: null, data }))
       .catch((error) => setPortfolioActivityState({ loading: false, error: sanitizedPortfolioError(error), data: null }));
-  }, [canReadUserPortfolio]);
+  };
 
   const updateSecurityAction = (key: SecurityActionKey, patch: Partial<SecurityActionFormState>) => {
     setSecurityActionState((state) => ({

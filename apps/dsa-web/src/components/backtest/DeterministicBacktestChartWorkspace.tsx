@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts/core';
 import { BarChart, LineChart } from 'echarts/charts';
 import type { ComposeOption, ECharts, SetOptionOpts } from 'echarts/core';
@@ -109,7 +109,7 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
     { label: language === 'en' ? 'Costs' : '交易成本', value: `${run.feeBps ?? 0} / ${run.slippageBps ?? 0} bps` },
   ];
 
-  const option = useMemo<EChartsOption>(() => {
+  const option: EChartsOption = (() => {
     const dates = rows.map((row) => row.date);
     const strategySeries = rows.map((row) => row.strategyCumReturn ?? null);
     const benchmarkSeries = rows.map((row) => row.benchmarkCumReturn ?? row.buyHoldCumReturn ?? null);
@@ -339,7 +339,7 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
         },
       ],
     };
-  }, [densityConfig.mode, language, rows]);
+  })();
 
   useEffect(() => {
     const host = containerRef.current;

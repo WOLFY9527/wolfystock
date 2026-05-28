@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { historyApi } from '../../api/history';
 import { Drawer } from '../common/Drawer';
 import { SupportPanel } from '../common';
@@ -57,15 +57,15 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
   const [isOpen, setIsOpen] = useState(true);
   const [hasOpenedTechnicalDetails, setHasOpenedTechnicalDetails] = useState(false);
 
-  const coverageAudit = useMemo(() => {
+  const coverageAudit = (() => {
     const mergedEntries = [
       ...collectMissingFieldEntriesFromStandardReport(standardReport),
       ...collectMissingFieldEntriesFromMarkdown(content),
     ];
     return buildMissingFieldAudit(mergedEntries);
-  }, [content, standardReport]);
+  })();
 
-  const localizedMarkdownContent = useMemo(() => {
+  const localizedMarkdownContent = (() => {
     if (normalizedLanguage !== 'zh') {
       return content;
     }
@@ -110,10 +110,10 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
         return translateTableHeaderLine(line);
       })
       .join('\n');
-  }, [content, normalizedLanguage]);
+  })();
 
   const coverageBuckets = coverageAudit.buckets.filter((bucket) => bucket.entries.length > 0);
-  const executiveSummary = useMemo(() => {
+  const executiveSummary = (() => {
     const summaryPanel = standardReport?.summaryPanel;
     const decisionPanel = standardReport?.decisionPanel;
     const reasonLayer = standardReport?.reasonLayer;
@@ -140,9 +140,9 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
       || (normalizedLanguage === 'en' ? 'No explicit risk item in the structured report.' : '结构化报告未给出明确风险条目。'),
     ).trim();
     return { firstLine, observation, confidence, keyRisk };
-  }, [content, normalizedLanguage, standardReport]);
+  })();
 
-  const coverageCategoryLabel = useCallback((category: MissingFieldCategory): string => {
+  const coverageCategoryLabel = (category: MissingFieldCategory): string => {
     if (category === 'integrated_unavailable') {
       return text.missingIntegratedUnavailable;
     }
@@ -156,14 +156,14 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
       return text.missingNotApplicable;
     }
     return text.missingOther;
-  }, [text]);
+  };
 
   // Handle close with animation
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     setIsOpen(false);
     // Delay actual close to allow animation to complete
     setTimeout(onClose, 300);
-  }, [onClose]);
+  };
 
   useEffect(() => {
     if (initialContent !== undefined) {

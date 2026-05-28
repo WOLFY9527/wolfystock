@@ -674,11 +674,11 @@ const MarketOverviewPage = () => {
     }
   };
 
-  const resetAutoRevalidatePanel = useCallback((panelKey: PanelKey) => {
+  const resetAutoRevalidatePanel = (panelKey: PanelKey) => {
     clearAutoRevalidateTimer(panelKey);
     delete autoRevalidateAttemptsRef.current[panelKey];
     delete autoRevalidateInFlightRef.current[panelKey];
-  }, []);
+  };
 
   const loadPanels = async (cancelledRef?: { current: boolean }) => {
     setLoading(true);
