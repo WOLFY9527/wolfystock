@@ -1242,7 +1242,7 @@ const RuleBacktestComparePage: React.FC = () => {
     }
   }, []);
 
-  const orderedItems = useMemo(() => orderCompareItems(response?.items || [], runIds), [response?.items, runIds]);
+  const orderedItems = orderCompareItems(response?.items || [], runIds);
   const baselineRunId = response?.comparisonSummary?.baseline.runId
     ?? response?.robustnessSummary?.baselineRunId
     ?? response?.comparisonProfile?.baselineRunId
@@ -1256,10 +1256,10 @@ const RuleBacktestComparePage: React.FC = () => {
   const parameterComparison = response?.parameterComparison || null;
   const marketCodeComparison = response?.marketCodeComparison || null;
   const periodComparison = response?.periodComparison || null;
-  const compareUrl = useMemo(() => {
+  const compareUrl = (() => {
     const query = searchParams.toString();
     return `${window.location.origin}/backtest/compare${query ? `?${query}` : ''}`;
-  }, [searchParams]);
+  })();
   const compareSummaryText = buildCompareShareSummary({
     runIds,
     baselineRunId,
@@ -1283,7 +1283,7 @@ const RuleBacktestComparePage: React.FC = () => {
     navigate(`/backtest/results/${runId}`);
   }, [navigate]);
 
-  const handleCopyText = useCallback(async (content: string, successMessage: string) => {
+  const handleCopyText = async (content: string, successMessage: string) => {
     try {
       if (!navigator.clipboard?.writeText) throw new Error('clipboard_unavailable');
       await navigator.clipboard.writeText(content);
@@ -1298,9 +1298,9 @@ const RuleBacktestComparePage: React.FC = () => {
       setCopyFeedback(null);
       copyResetTimerRef.current = null;
     }, 2000);
-  }, []);
+  };
 
-  const handleRemoveRun = useCallback((runId: number) => {
+  const handleRemoveRun = (runId: number) => {
     const nextRunIds = runIds.filter((id) => id !== runId);
     const nextParams = new URLSearchParams(searchParams);
     setResponse(null);
@@ -1310,16 +1310,16 @@ const RuleBacktestComparePage: React.FC = () => {
       nextParams.delete('runIds');
     }
     setSearchParams(nextParams);
-  }, [runIds, searchParams, setSearchParams]);
+  };
 
-  const handleMakeBaseline = useCallback((runId: number) => {
+  const handleMakeBaseline = (runId: number) => {
     if (runIds[0] === runId) return;
     const nextRunIds = [runId, ...runIds.filter((id) => id !== runId)];
     const nextParams = new URLSearchParams(searchParams);
     setResponse(null);
     nextParams.set('runIds', nextRunIds.join(','));
     setSearchParams(nextParams);
-  }, [runIds, searchParams, setSearchParams]);
+  };
 
   return (
     <main className="w-full overflow-x-hidden text-white">
