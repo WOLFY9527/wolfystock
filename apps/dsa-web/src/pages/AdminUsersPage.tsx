@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -1171,14 +1171,14 @@ const AdminUsersPage: React.FC = () => {
       .catch((error) => setPortfolioActivityState({ loading: false, error: sanitizedPortfolioError(error), data: null }));
   }, [canReadUserPortfolio]);
 
-  const updateSecurityAction = useCallback((key: SecurityActionKey, patch: Partial<SecurityActionFormState>) => {
+  const updateSecurityAction = (key: SecurityActionKey, patch: Partial<SecurityActionFormState>) => {
     setSecurityActionState((state) => ({
       ...state,
       [key]: { ...state[key], ...patch, error: patch.error === undefined ? state[key].error : patch.error },
     }));
-  }, []);
+  };
 
-  const submitSecurityAction = useCallback((key: SecurityActionKey) => {
+  const submitSecurityAction = (key: SecurityActionKey) => {
     if (!userId) return;
     const current = securityActionState[key];
     const reason = current.reason.trim();
@@ -1200,7 +1200,7 @@ const AdminUsersPage: React.FC = () => {
         ...state,
         [key]: { ...state[key], loading: false, error: sanitizedActionError(error), result: null },
       })));
-  }, [loadDetail, securityActionState, userId]);
+  };
 
   useEffect(() => {
     if (userId) return;
@@ -1250,7 +1250,7 @@ const AdminUsersPage: React.FC = () => {
       : '查看活动、组合或安全页签'
     : '打开用户详情或审计日志';
 
-  const content = useMemo(() => {
+  const content = (() => {
     if (!userId) {
       return <DirectoryView state={usersState} filters={filters} setFilters={setFilters} reload={loadUsers} canReadOpsLogs={canReadOpsLogs} />;
     }
@@ -1310,7 +1310,7 @@ const AdminUsersPage: React.FC = () => {
           : <DetailOverview detail={detailState.data} locale={language} canReadOpsLogs={canReadOpsLogs} />}
       </div>
     );
-  }, [activeDetailTab, activityFilters, activityState, canReadOpsLogs, canReadUserActivity, canReadUserPortfolio, canReadUsers, canWriteUserSecurity, detailState, directoryPath, filters, holdingsState, language, loadActivity, loadUsers, mode, navigate, portfolioActivityState, portfolioSummaryState, securityActionState, submitSecurityAction, updateSecurityAction, userId, usersState]);
+  })();
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto no-scrollbar">
