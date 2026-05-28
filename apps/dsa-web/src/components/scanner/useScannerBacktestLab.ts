@@ -86,12 +86,12 @@ export function useScannerBacktestLab({
     batchCandidatesBySource.top_5,
   ]);
 
-  const getRuntime = () => {
+  const getRuntime = useCallback(() => {
     if (!runtimeRef.current) {
       runtimeRef.current = loadScannerBacktestRuntime();
     }
     return runtimeRef.current;
-  };
+  }, []);
 
   const runScannerBacktests = useCallback(async (source: ScannerBacktestSource, candidates: ScannerCandidate[]) => {
     const targetCandidates = dedupeBacktestCandidates(candidates);
