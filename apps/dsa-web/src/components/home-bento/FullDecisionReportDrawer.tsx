@@ -16,6 +16,16 @@ import {
   readObjectField,
 } from '../../utils/homeReportIdentity';
 
+const REPORT_DATE_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
 type DashboardPayload = {
   ticker: string;
   decision: {
@@ -100,17 +110,15 @@ function getReportSource(report: AnalysisReport | null): StandardReport | undefi
 
 function listOrMissing(items?: Array<string | undefined | null>, fallback = '暂无明确记录'): string[] {
   const seen = new Set<string>();
-  const values = (items || [])
-    .map((item) => String(item || '').trim())
-    .filter(Boolean)
-    .filter((item) => {
-      const key = item.toLowerCase();
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    });
+  const values: string[] = [];
+  for (const raw of items || []) {
+    const item = String(raw || '').trim();
+    if (!item) continue;
+    const key = item.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    values.push(item);
+  }
   return values.length ? values : [fallback];
 }
 
@@ -140,15 +148,7 @@ function formatReportDateTime(value?: string): string {
   if (Number.isNaN(date.getTime())) {
     return text;
   }
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date);
+  return REPORT_DATE_FORMATTER.format(date);
 }
 
 function buildReportIdentity(report: AnalysisReport | null, dashboard?: DashboardPayload, override?: Partial<ReportIdentity>): ReportIdentity {
@@ -161,19 +161,17 @@ function buildReportIdentity(report: AnalysisReport | null, dashboard?: Dashboar
     || '';
   const dataSources = report?.decisionTrace?.dataSources || [];
   const providerSeen = new Set<string>();
-  const providers = dataSources
-    .map((source) => String(source.provider || source.name || '').trim())
-    .filter(Boolean)
-    .filter((provider) => {
-      const key = provider.toLowerCase();
-      if (providerSeen.has(key)) {
-        return false;
-      }
-      providerSeen.add(key);
-      return true;
-    })
-    .join(', ');
-  const statuses = dataSources.map((source) => source.status).filter(Boolean);
+  const providerParts: string[] = [];
+  for (const source of dataSources) {
+    const provider = String(source.provider || source.name || '').trim();
+    if (!provider) continue;
+    const key = provider.toLowerCase();
+    if (providerSeen.has(key)) continue;
+    providerSeen.add(key);
+    providerParts.push(provider);
+  }
+  const providers = providerParts.join(', ');
+  const statuses = dataSources.flatMap((source) => source.status ? [source.status] : []);
   const sourceStatus = statuses.length
     ? statuses.map((status) => {
       const normalized = String(status || '').trim().toLowerCase();
