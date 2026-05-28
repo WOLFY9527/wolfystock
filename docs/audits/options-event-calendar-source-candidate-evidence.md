@@ -1,6 +1,6 @@
 # Event Calendar Source Candidate Evidence
 
-Status: Draft worksheet for future evidence collection only
+Status: Observation-only worksheet; no repo-local authority path currently feasible
 Scope: docs-only worksheet for future `EventCalendarSourceCandidateEvidence`
 Non-goal: no authority grant, no runtime wiring, no registry/provider/gate/API change
 
@@ -16,8 +16,9 @@ This worksheet is:
 - not an authority grant
 - not decision readiness
 - not gate or recommendation readiness
+- not repo-local proof of feasible Options authority
 
-This worksheet must not be used as proof that any current provider, event feed, or timeline surface is authoritative.
+This worksheet must not be used as proof that any current repo-local provider, event feed, runtime projection, or timeline surface is authoritative.
 
 ## Current Repo Status
 
@@ -25,11 +26,12 @@ Current repository state remains observation-only and non-authoritative:
 
 - an event source-candidate gap contract exists
 - event source registry candidate metadata exists
-- runtime projections are local/offline diagnostics only
+- event helper/registry/runtime projection status is still diagnostic-only and non-authoritative
 - existing event intelligence DTO, timeline, and provider protocol code is observation scaffolding only
-- no current path proves licensed provider, exchange, issuer, or official-calendar authority
+- no current repo-local path proves licensed provider, exchange, issuer, or official-calendar authority
+- no current repo-local provider or source is feasible as Options authority without manual external verification and a later dedicated policy task
 
-Do not read current event presence, event counts, event types, timeline output, provider IDs, or provider protocol coverage as proof of source authority.
+Do not read current event presence, event counts, event types, timeline output, helper/runtime projection presence, provider IDs, or provider protocol coverage as proof of source authority.
 
 ## Required External Verification Groups
 
@@ -100,6 +102,9 @@ These are forbidden shortcuts for authority:
 - provider capabilities or provider capability metadata
 - provider self-claims or marketing language
 - current provider IDs
+- helper presence
+- runtime projection presence
+- operator summary completeness
 
 Checklist completeness, observed coverage, or DTO/protocol shape must not be treated as authority.
 
@@ -134,7 +139,7 @@ If any box remains unchecked, do not proceed to implementation.
 5. Runtime projection only after inert contract validation
    Any runtime-facing projection must wait until the inert contract is validated and still remains diagnostic-only.
 6. Authority grant only in a separate future policy task
-   Any authority decision requires a distinct policy task with explicit approval, verified facts, and separate validation.
+   Any authority decision requires a distinct policy task with explicit approval, completed manual external verification, verified facts, and separate validation.
 
 ## Locked Invariants
 

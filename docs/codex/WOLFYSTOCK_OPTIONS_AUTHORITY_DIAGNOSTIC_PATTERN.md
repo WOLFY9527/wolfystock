@@ -32,18 +32,22 @@ These diagnostics are:
 - offline by default
 - sanitized
 - diagnostic-only
+- observation-only
 
 They exist to explain whether current evidence is authoritative enough for future policy use. They do not create or change policy.
+Current repo-local evidence is not sufficient to treat any Options surface as authoritative. Any future authority requires manual external verification first and then a separate dedicated policy task.
 
 ## Locked invariants
 
 - Diagnostic output must never feed gates, recommendations, or `decisionGrade`.
 - Checklist completeness is diagnostic readiness only, not authority, not decision readiness, and not `decisionGrade`.
+- Runtime/helper/operator-summary completeness is diagnostic readiness only, not authority, not decision readiness, and not `decisionGrade`.
 - Coverage does not equal authority.
 - Provider self-claims are ignored.
 - Fixture, synthetic, fallback, dry-run, stub, adapter-contract, and request-shaped evidence is non-authoritative.
 - Authority requires an internal WolfyStock policy source.
 - No live calls by default.
+- No provider routing, budget, or live-call enablement.
 - No broker, order, trading, or portfolio mutation.
 
 ## Authority decision rule
@@ -56,6 +60,7 @@ Treat a surface as authoritative only when all conditions below are true:
 4. Required checklist and evidence families are complete where policy requires them.
 
 If coverage or checklist completeness exists without all four conditions, return a non-authoritative diagnostic state. Do not upgrade authority because a provider reports broad coverage, completeness, or authorization.
+If runtime/helper/operator-summary output exists without all four conditions, return a non-authoritative diagnostic state. Do not upgrade authority because a helper, projection, or operator summary exists.
 
 ## Checklist evidence families
 
@@ -63,7 +68,7 @@ Use checklist families as diagnostic structure only. They help explain readiness
 
 - Common families: provenance, entitlement, SLA/freshness
 - IV-rank families: methodology, lookback, IV evidence
-- event-calendar families: event taxonomy, confirmation, coverage scope
+- event-calendar families: event taxonomy, confirmation, timezone/session, coverage scope
 - expiration-calendar families: expiration taxonomy, adjusted deliverable, corporate-action evidence
 
 ## Current trilogy behavior
@@ -73,6 +78,7 @@ Current diagnostic behavior is input-dependent but diagnostic-only:
 - `iv-rank`, `event-calendar`, and `expiration-calendar` may emit `authorityEvidenceChecklist` or equivalent checklist/gap output when checklist evidence or policy context is supplied.
 - When that context is absent, a surface may still fall back to reason codes or checklist-family gap summaries.
 - Emitted checklist completeness remains diagnostic readiness only, not authority, not decision readiness, and not `decisionGrade`.
+- Event helper output, runtime projections, and compact operator summaries remain observation-only unless separate authority policy conditions are met later.
 
 ## Interpretation warning
 
@@ -85,6 +91,8 @@ Do not interpret any of the following as decision readiness:
 - event count or event type
 - current IV
 - provider capability metadata
+- helper/runtime projection presence
+- operator-summary completeness
 
 Those fields may describe diagnostic availability, sanitized evidence shape, or policy context. They must not be used as a proxy for gate readiness, recommendation readiness, or `decisionGrade`.
 
@@ -122,6 +130,7 @@ Notes:
 - `authorityEvidenceChecklist.present` indicates diagnostic checklist emission only, not authority or decision readiness.
 - `reasonCodes` should explain why evidence is non-authoritative without leaking runtime internals.
 - `requiredFutureAuthorityEvidence` should list what internal evidence would be needed before authority can be granted.
+- The field must not imply that current repo-local evidence is already feasible as authority.
 
 ## Reusable examples
 

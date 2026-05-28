@@ -1,6 +1,6 @@
 # Expiration Calendar Source Candidate Evidence
 
-Status: Draft checklist for future evidence collection only
+Status: Closest future onboarding candidate, but still blocked pending manual external verification
 Scope: docs-only packet definition for a future `ExpirationCalendarSourceCandidateEvidence`
 Non-goal: no authority grant, no runtime wiring, no registry/provider/gate/API change
 
@@ -16,8 +16,9 @@ This packet is:
 - not an authority grant
 - not decision readiness
 - not gate or recommendation readiness
+- not repo-local proof of feasible Options authority
 
-This packet must not be used as proof that any current provider or source is authoritative.
+This packet must not be used as proof that any current repo-local provider or source is authoritative.
 
 ## Current Repo Status
 
@@ -26,7 +27,8 @@ Current repository state remains observation-only and non-authoritative:
 - fixture-backed API/service expiration rows are observation-only
 - Tradier adapter-contract expiration rows are observation-only
 - runtime diagnostics are local/offline scaffolding
-- no current path proves OCC/OPRA/exchange/licensed-source authority
+- no current repo-local path proves OCC/OPRA/exchange/licensed-source authority
+- no current repo-local provider or source is feasible as Options authority without manual external verification and a later dedicated policy task
 
 Do not read current fixture rows, adapter-contract rows, provider IDs, or runtime diagnostic output as proof of production authority.
 
@@ -139,7 +141,7 @@ The packet should show whether each taxonomy is proven, missing, partial, or unv
 
 ## External Verification Worksheet
 
-Use this worksheet before any future feasibility claim about OCC/OPRA/exchange/licensed expiration-calendar access.
+Use this worksheet before any future feasibility claim about OCC/OPRA/exchange/licensed expiration-calendar access. Expiration calendar is the closest future onboarding candidate, but it remains blocked until this manual external verification is completed.
 
 | Check | Required evidence | Status |
 | --- | --- | --- |
@@ -190,6 +192,13 @@ This packet must not emit, imply, or unlock any of the following:
 - live-call enablement
 
 Coverage, provider capability metadata, provider self-claims, or checklist completeness must not be treated as authority.
+
+Also forbidden as authority proof:
+
+- adapter-contract shape
+- dry-run, fixture, synthetic, fallback, or request-shaped evidence
+- current provider IDs
+- runtime diagnostic presence or completeness
 
 ## Mocked Test Expectations For Later Inert Contract Work
 
@@ -252,7 +261,7 @@ Before any observation-only implementation is proposed, confirm:
 5. Runtime projection only after inert contract validation
    Any runtime-facing projection must wait until the inert contract is validated and still remains diagnostic-only.
 6. Authority grant only in a separate future policy task
-   Any authority decision requires a distinct policy task with explicit approval, verified facts, and separate validation.
+   Any authority decision requires a distinct policy task with explicit approval, completed manual external verification, verified facts, and separate validation.
 
 ## Locked Invariants
 

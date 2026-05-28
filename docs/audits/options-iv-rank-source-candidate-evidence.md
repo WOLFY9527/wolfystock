@@ -1,6 +1,6 @@
 # IV-Rank Source Candidate Evidence
 
-Status: Draft worksheet for future evidence collection only
+Status: Observation-only worksheet; no repo-local authority path currently feasible
 Scope: docs-only worksheet for future `IvRankSourceCandidateEvidence`
 Non-goal: no authority grant, no runtime wiring, no registry/provider/gate/API change
 
@@ -16,8 +16,9 @@ This worksheet is:
 - not an authority grant
 - not decision readiness
 - not gate or recommendation readiness
+- not repo-local proof of feasible Options authority
 
-This worksheet must not be used as proof that any current provider, source label, diagnostic, or local proxy is authoritative.
+This worksheet must not be used as proof that any current repo-local provider, source label, diagnostic, runtime summary, or local proxy is authoritative.
 
 ## Current Repo Status
 
@@ -28,8 +29,9 @@ Current repository state remains observation-only and non-authoritative:
 - runtime diagnostics are local/offline scaffolding
 - no current path proves provider-reported IV rank/percentile authority
 - no current path proves approved historical option-IV series authority
+- no current repo-local provider or source is feasible as Options authority without manual external verification and a later dedicated policy task
 
-Do not read current IV context, selected-contract context, Greeks, local proxies, runtime diagnostic output, provider IDs, provider capabilities, or docs as proof of source authority.
+Do not read current IV context, selected-contract context, Greeks, local proxies, runtime diagnostic output, compact operator-summary coverage, provider IDs, provider capabilities, or docs as proof of source authority.
 
 ## Required External Verification Groups
 
@@ -88,6 +90,8 @@ These are forbidden shortcuts for authority:
 - current provider IDs
 - docs-only evidence
 - coverage completeness
+- runtime or operator-summary completeness
+- dry-run, fixture, synthetic, fallback, adapter-contract, or request-shaped evidence
 
 Checklist completeness, observed coverage, provider capability metadata, provider self-claims, or documentation presence must not be treated as authority.
 
@@ -126,7 +130,7 @@ If any box remains unchecked, do not proceed to implementation, provider integra
 5. Runtime projection only after inert contract validation
    Any runtime-facing projection must wait until the inert contract is validated and still remains diagnostic-only.
 6. Authority grant only in a separate future policy task
-   Any authority decision requires a distinct policy task with explicit approval, verified facts, and separate validation.
+   Any authority decision requires a distinct policy task with explicit approval, completed manual external verification, verified facts, and separate validation.
 
 ## Locked Invariants
 
