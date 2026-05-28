@@ -1089,7 +1089,7 @@ const PortfolioPage: React.FC = () => {
     );
   };
 
-  const loadAccounts = useCallback(async () => {
+  const loadAccounts = async () => {
     try {
       const response = await portfolioApi.getAccounts(false);
       const items = response.accounts || [];
@@ -1110,9 +1110,9 @@ const PortfolioPage: React.FC = () => {
     } catch (err) {
       setError(getParsedApiError(err));
     }
-  }, []);
+  };
 
-  const loadBrokers = useCallback(async () => {
+  const loadBrokers = async () => {
     try {
       const response = await portfolioApi.listImportBrokers();
       const brokerItems = response.brokers || [];
@@ -1139,9 +1139,9 @@ const PortfolioPage: React.FC = () => {
           : FALLBACK_BROKERS[0].broker
       ));
     }
-  }, []);
+  };
 
-  const loadBrokerConnections = useCallback(async (accountId?: number) => {
+  const loadBrokerConnections = async (accountId?: number) => {
     if (!accountId) {
       setBrokerConnections([]);
       return;
@@ -1152,9 +1152,9 @@ const PortfolioPage: React.FC = () => {
     } catch {
       setBrokerConnections([]);
     }
-  }, []);
+  };
 
-  const loadSnapshotAndRisk = useCallback(async () => {
+  const loadSnapshotAndRisk = async () => {
     setIsLoading(true);
     setRiskWarning(null);
     try {
@@ -1180,9 +1180,9 @@ const PortfolioPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [copy.riskFallback, costMethod, queryAccountId]);
+  };
 
-  const loadEventsPage = useCallback(async (page: number) => {
+  const loadEventsPage = async (page: number) => {
 
     try {
       if (eventType === 'trade') {
@@ -1222,20 +1222,11 @@ const PortfolioPage: React.FC = () => {
     } catch (err) {
       setError(getParsedApiError(err));
     }
-  }, [
-    eventActionType,
-    eventDateFrom,
-    eventDateTo,
-    eventDirection,
-    eventSide,
-    eventSymbol,
-    eventType,
-    queryAccountId,
-  ]);
+  };
 
-  const loadEvents = useCallback(async () => {
+  const loadEvents = async () => {
     await loadEventsPage(eventPage);
-  }, [eventPage, loadEventsPage]);
+  };
 
   const refreshPortfolioData = useCallback(async (page = eventPage) => {
     await Promise.all([loadSnapshotAndRisk(), loadEventsPage(page)]);
@@ -1500,7 +1491,7 @@ const PortfolioPage: React.FC = () => {
     });
   }, []);
 
-  const openTradeVoidDialog = useCallback((item: PortfolioTradeListItem) => {
+  const openTradeVoidDialog = (item: PortfolioTradeListItem) => {
     setOpenTradeActionMenuId(null);
     setPendingDelete({
       eventType: 'trade',
@@ -1509,7 +1500,7 @@ const PortfolioPage: React.FC = () => {
       message: deleteTradeMessage,
       confirmText: voidTradeConfirmLabel,
     });
-  }, [deleteTradeMessage, deleteTradeTitle, voidTradeConfirmLabel]);
+  };
 
   const handleTradeEditSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
