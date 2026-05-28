@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import {
   BarChart3,
   CheckSquare,
@@ -897,23 +897,23 @@ const WatchlistPage: React.FC = () => {
     };
   }, [isGuest]);
 
-  const marketOptions = useMemo(() => {
+  const marketOptions = (() => {
     const markets = Array.from(new Set(items.map((item) => normalizeText(item.market).toLowerCase()).filter(Boolean))).sort();
     return [
       { value: 'all', label: copy.all },
       ...markets.map((market) => ({ value: market, label: formatMarket(market) })),
     ];
-  }, [copy.all, items]);
+  })();
 
-  const sourceOptions = useMemo(() => {
+  const sourceOptions = (() => {
     const sources = Array.from(new Set(items.map((item) => normalizeText(item.source).toLowerCase()).filter(Boolean))).sort();
     return [
       { value: 'all', label: copy.all },
       ...sources.map((source) => ({ value: source, label: formatWatchlistOrigin(source, language) })),
     ];
-  }, [copy.all, items, language]);
+  })();
 
-  const contextOptions = useMemo(() => {
+  const contextOptions = (() => {
     const options = new Map<string, string>();
     items.forEach((item) => {
       if (item.themeId) options.set(`theme:${item.themeId}`, `${copy.themePrefix}: ${item.themeId}`);
@@ -923,9 +923,9 @@ const WatchlistPage: React.FC = () => {
       { value: 'all', label: copy.all },
       ...Array.from(options.entries()).map(([value, label]) => ({ value, label })),
     ];
-  }, [copy.all, copy.themePrefix, copy.universePrefix, items]);
+  })();
 
-  const summary = useMemo(() => {
+  const summary = (() => {
     const markets = new Set(items.map((item) => normalizeText(item.market).toLowerCase()).filter(Boolean));
     const scannerSourced = items.filter((item) => normalizeText(item.source).toLowerCase() === 'scanner').length;
     const latestTime = items.map(getLatestIntelligenceTime).filter(Boolean).sort((left, right) => getTime(right) - getTime(left))[0] || null;
@@ -940,9 +940,9 @@ const WatchlistPage: React.FC = () => {
       failedOrNoData: items.filter(hasFailureOrNoData).length,
       latestTime,
     };
-  }, [items]);
+  })();
 
-  const filteredItems = useMemo(() => {
+  const filteredItems = (() => {
     const search = query.trim().toLowerCase();
     const rows = items.filter((item) => {
       const matchesSearch = !search
@@ -978,7 +978,7 @@ const WatchlistPage: React.FC = () => {
       if (sortKey === 'recentlyBacktested') return getTime(right.intelligence?.backtest?.testedAt) - getTime(left.intelligence?.backtest?.testedAt);
       return getItemTime(right) - getItemTime(left);
     });
-  }, [contextFilter, evidenceFilter, items, marketFilter, query, sortKey, sourceFilter]);
+  })();
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -1017,12 +1017,9 @@ const WatchlistPage: React.FC = () => {
     ? copy.emptyFilteredSet
     : `${useSelectedScope && selectedItems.length > 0 ? copy.scopeSelected : copy.scopeFiltered} ${actionItems.length} ${language === 'zh' ? '个标的' : 'symbols'}`;
   const isActionDisabled = actionItems.length === 0 || isBatchBacktesting || isBatchScanning;
-  const watchlistConclusion = useMemo(
-    () => buildWatchlistConclusion(filteredItems, language),
-    [filteredItems, language],
-  );
+  const watchlistConclusion = buildWatchlistConclusion(filteredItems, language);
 
-  const toggleSelected = useCallback((item: WatchlistItem) => {
+  const toggleSelected = (item: WatchlistItem) => {
     setSelectedIds((current) => {
       const next = new Set(current);
       if (next.has(item.id)) next.delete(item.id);
@@ -1030,9 +1027,9 @@ const WatchlistPage: React.FC = () => {
       setUseSelectedScope(next.size > 0);
       return next;
     });
-  }, []);
+  };
 
-  const handleAnalyze = useCallback(async (item: WatchlistItem) => {
+  const handleAnalyze = async (item: WatchlistItem) => {
     setPendingAnalyzeId(item.id);
     setNotice(null);
     try {
@@ -1055,9 +1052,9 @@ const WatchlistPage: React.FC = () => {
     } finally {
       setPendingAnalyzeId((current) => (current === item.id ? null : current));
     }
-  }, [copy.analyzeStarted, language, navigate]);
+  };
 
-  const handleRemove = useCallback(async (item: WatchlistItem) => {
+  const handleRemove = async (item: WatchlistItem) => {
     setPendingRemoveId(item.id);
     setNotice(null);
     try {
@@ -1069,9 +1066,9 @@ const WatchlistPage: React.FC = () => {
     } finally {
       setPendingRemoveId((current) => (current === item.id ? null : current));
     }
-  }, [copy.removed]);
+  };
 
-  const handleCopy = useCallback(async (item: WatchlistItem) => {
+  const handleCopy = async (item: WatchlistItem) => {
     try {
       if (!navigator.clipboard?.writeText) {
         throw new Error(copy.clipboardUnavailable);
@@ -1082,9 +1079,9 @@ const WatchlistPage: React.FC = () => {
     } catch (err) {
       setNotice({ tone: 'danger', message: err instanceof Error ? err.message : copy.copyFailed });
     }
-  }, [copy.clipboardUnavailable, copy.copied, copy.copyFailed]);
+  };
 
-  const handleRefreshIntelligence = useCallback(async () => {
+  const handleRefreshIntelligence = async () => {
     setNotice(null);
     try {
       const [listResponse, statusResponse] = await Promise.all([
@@ -1096,9 +1093,9 @@ const WatchlistPage: React.FC = () => {
     } catch (err) {
       setNotice({ tone: 'danger', message: getParsedApiError(err).message });
     }
-  }, []);
+  };
 
-  const handleRefreshScores = useCallback(async (targetItems?: WatchlistItem[]) => {
+  const handleRefreshScores = async (targetItems?: WatchlistItem[]) => {
     const targets = targetItems || items;
     if (targets.length === 0 || isBatchScanning) return;
     setRefreshingScores(true);
@@ -1158,9 +1155,9 @@ const WatchlistPage: React.FC = () => {
       setRefreshingScores(false);
       setIsBatchScanning(false);
     }
-  }, [copy.scanComplete, copy.scoreRefreshComplete, isBatchScanning, items]);
+  };
 
-  const handleBatchBacktestCurrentFilter = useCallback(async () => {
+  const handleBatchBacktestCurrentFilter = async () => {
     if (isBatchBacktesting) return;
     const uniqueItems = Array.from(
       new Map(actionItems.map((item) => [normalizeText(item.symbol).toUpperCase(), item])).values(),
@@ -1271,7 +1268,7 @@ const WatchlistPage: React.FC = () => {
     } finally {
       setIsBatchBacktesting(false);
     }
-  }, [actionItems, backtestSessionKeys, copy.batchBacktestComplete, copy.batchBacktestLabel, isBatchBacktesting]);
+  };
 
   if (isGuest) {
     return <ConsumerProtectedFrame moduleName={copy.signInModule} />;
