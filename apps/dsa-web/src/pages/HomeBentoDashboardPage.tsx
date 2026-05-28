@@ -1,5 +1,5 @@
 import type React from 'react';
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { History, Lock, MoreHorizontal, Search, Star, Upload } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
@@ -4167,10 +4167,7 @@ function InPlaceDecisionSkeleton({
     return () => window.clearInterval(timer);
   }, []);
 
-  const timelineStages = useMemo(
-    () => buildTimelineProgressState(locale, progressModules, message, progress, phaseTick),
-    [locale, progressModules, message, progress, phaseTick],
-  );
+  const timelineStages = buildTimelineProgressState(locale, progressModules, message, progress, phaseTick);
   const activeStage = timelineStages.find((stage) => stage.status === 'running') || timelineStages[0];
   const leadCopy = buildTimelineLeadCopy(locale, activeStage?.detail, message);
 
@@ -4377,12 +4374,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const routeTaskId = searchParams.get('task_id') || searchParams.get('taskId') || null;
   const routeSymbol = normalizeTickerQuery(searchParams.get('symbol') || undefined);
   const routeSource = searchParams.get('source') || null;
-  const traceFixtureReport = useMemo(
-    () => (!isGuest && (import.meta.env.DEV || import.meta.env.MODE === 'test') && searchParams.get('fixture') === 'analysis-trace')
-      ? buildDecisionTraceFixtureReport()
-      : null,
-    [isGuest, searchParams],
-  );
+  const traceFixtureReport = (!isGuest && (import.meta.env.DEV || import.meta.env.MODE === 'test') && searchParams.get('fixture') === 'analysis-trace')
+    ? buildDecisionTraceFixtureReport()
+    : null;
   const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
   const historyItems = useStockPoolStore((state) => state.historyItems);
   const selectedReport = useStockPoolStore((state) => state.selectedReport);
@@ -4450,7 +4444,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const isGuestAnalyzing = isGuest && isDashboardLoading;
   const isHomeAnalyzing = isGuestAnalyzing || (!isGuest && (isAnalyzing || isTaskAnalyzing || Boolean(pendingAnalysisTicker && isDashboardLoading)));
   const isBusy = isHomeAnalyzing || isDashboardLoading;
-  const dashboardData = useMemo<DashboardPayload>(() => {
+  const dashboardData: DashboardPayload = (() => {
     if (traceFixtureReport) {
       return buildDashboardFromReport(locale, traceFixtureReport);
     }
@@ -4480,8 +4474,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
 
     return buildInPlacePlaceholderDashboard(locale, effectiveTicker);
-  }, [activeTicker, completedTaskReport, guestPreview, isGuest, locale, pendingAnalysisTicker, recentHistoryItems, routeSymbol, selectedReport, selectedTicker, traceFixtureReport]);
-  const activeTraceReport = useMemo<AnalysisReport | null>(() => {
+  })();
+  const activeTraceReport: AnalysisReport | null = (() => {
     if (traceFixtureReport) {
       return traceFixtureReport;
     }
@@ -4498,7 +4492,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       return selectedReport;
     }
     return completedTaskReport || selectedReport || null;
-  }, [activeTicker, completedTaskReport, routeSymbol, selectedReport, selectedTicker, traceFixtureReport]);
+  })();
   const copy = dashboardData;
   const standbyCopy = locale === 'en'
     ? {
@@ -4513,10 +4507,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const activeDecisionTrace = activeTraceReport ? getDecisionTrace(activeTraceReport) : undefined;
   const activeReportQuality = getReportQuality(activeTraceReport);
   const activeDataQualityReport = getDataQualityReport(activeTraceReport);
-  const sourceSummary = useMemo(
-    () => buildTraceSummary(activeDecisionTrace, activeReportQuality, locale),
-    [activeDecisionTrace, activeReportQuality, locale],
-  );
+  const sourceSummary = buildTraceSummary(activeDecisionTrace, activeReportQuality, locale);
   const hasActiveTraceReport = Boolean(activeTraceReport);
   const reportTicker = normalizeTickerQuery(activeTraceReport?.meta.stockCode);
   const reanalysisCandidate = reportTicker || (hasActiveTraceReport ? '' : normalizeTickerQuery(dashboardData.ticker));
