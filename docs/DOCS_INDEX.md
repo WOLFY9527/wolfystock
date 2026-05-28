@@ -119,6 +119,8 @@ operator workflows.
   PostgreSQL CI triage.
 - [DuckDB Operator Smoke Guide](./operations/duckdb-operator-smoke-guide.md):
   local DuckDB diagnostics only.
+- [Provider Observability And Metrics Readiness](./operations/provider-observability-metrics-readiness.md):
+  current provider/admin observability posture and the gap to a real metrics stack.
 
 ## Historical Evidence
 
