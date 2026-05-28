@@ -199,6 +199,59 @@ def test_backtest_result_summary_golden_fixture_matches_public_readback_contract
     _assert_no_live_provider_authority(result)
 
 
+def test_rule_backtest_compute_golden_fixture_is_compact_deterministic_and_sanitized() -> None:
+    payload = _load_fixture("rule_backtest_compute_basic_long_cash.json")
+
+    assert payload["fixture_kind"] == "rule_backtest_compute_golden"
+    assert payload["fixture_version"] == "v1"
+    assert payload["scenario"] == "basic_long_cash_next_open_with_costs"
+    assert payload["strategy_text"] == "Buy when Close > MA3. Sell when Close < MA3."
+
+    inputs = payload["inputs"]
+    assert inputs["code"] == "SAFE"
+    assert inputs["lookback_bars"] == 20
+    assert inputs["execution"] == {"fee_bps": 2.5, "slippage_bps": 1.25}
+    assert inputs["date_window"] == {"start_date": "2024-01-01", "end_date": "2024-01-08"}
+    assert inputs["bars"]["start_date"] == "2024-01-01"
+    assert len(inputs["bars"]["open"]) == 8
+    assert len(inputs["bars"]["close"]) == 8
+
+    expected = payload["expected"]
+    assert expected["metrics"]["trade_count"] == 1
+    assert expected["metrics"]["bars_used"] == 8
+    assert expected["metrics"]["final_equity"] == 77620.334341
+    assert expected["metrics"]["total_return_pct"] == -22.3797
+    assert expected["metrics"]["max_drawdown_pct"] == 27.5272
+    assert len(expected["selected_equity_points"]) == 4
+    assert [point["date"] for point in expected["selected_equity_points"]] == [
+        "2024-01-04",
+        "2024-01-05",
+        "2024-01-06",
+        "2024-01-07",
+    ]
+    assert expected["trades"] == [
+        {
+            "entry_signal_date": "2024-01-04",
+            "entry_date": "2024-01-05",
+            "exit_signal_date": "2024-01-06",
+            "exit_date": "2024-01-07",
+            "entry_price": 11.2014,
+            "exit_price": 8.698912,
+            "return_pct": -22.3797,
+            "quantity": 8925.224191,
+            "fees": 44.403688,
+            "slippage": 22.201495,
+            "entry_reason": "signal_entry",
+            "exit_reason": "signal_exit",
+            "signal_reason": "rule_conditions",
+            "notes": "exit_signal_next_bar_open",
+        }
+    ]
+
+    _assert_no_sensitive_public_payload(payload)
+    _assert_no_live_provider_authority(payload)
+
+
 def test_execution_trace_export_fixture_freezes_compact_public_trace_shape() -> None:
     payload = _load_fixture("rule_backtest_execution_trace_dto.json")
 
@@ -493,6 +546,7 @@ def test_all_backtest_golden_fixtures_are_sanitized_and_explicitly_enumerated() 
     fixture_paths = sorted(FIXTURE_DIR.glob("*.json"))
 
     assert {path.name for path in fixture_paths} == {
+        "rule_backtest_compute_basic_long_cash.json",
         "rule_backtest_compare_dto.json",
         "rule_backtest_compare_heatmap_dto.json",
         "rule_backtest_execution_trace_dto.json",

@@ -1,0 +1,96 @@
+{
+  "fixture_kind": "rule_backtest_compute_golden",
+  "fixture_version": "v1",
+  "scenario": "basic_long_cash_next_open_with_costs",
+  "strategy_text": "Buy when Close > MA3. Sell when Close < MA3.",
+  "inputs": {
+    "code": "SAFE",
+    "initial_capital": 100000.0,
+    "lookback_bars": 20,
+    "date_window": {
+      "start_date": "2024-01-01",
+      "end_date": "2024-01-08"
+    },
+    "execution": {
+      "fee_bps": 2.5,
+      "slippage_bps": 1.25
+    },
+    "bars": {
+      "start_date": "2024-01-01",
+      "open": [10.0, 10.1, 9.9, 10.2, 11.2, 11.8, 8.7, 8.1],
+      "close": [10.0, 10.0, 10.0, 11.0, 12.0, 9.0, 8.0, 10.0]
+    }
+  },
+  "expected": {
+    "metrics": {
+      "initial_capital": 100000.0,
+      "final_equity": 77620.334341,
+      "total_return_pct": -22.3797,
+      "sharpe_ratio": -5.1156,
+      "benchmark_return_pct": 0.0,
+      "buy_and_hold_return_pct": 0.0,
+      "trade_count": 1,
+      "entry_signal_count": 1,
+      "win_count": 0,
+      "loss_count": 1,
+      "win_rate_pct": 0.0,
+      "avg_trade_return_pct": -22.3797,
+      "max_drawdown_pct": 27.5272,
+      "avg_holding_days": 2,
+      "avg_holding_bars": 2,
+      "avg_holding_calendar_days": 2,
+      "bars_used": 8,
+      "lookback_bars": 20,
+      "period_start": "2024-01-01",
+      "period_end": "2024-01-08"
+    },
+    "selected_equity_points": [
+      {
+        "date": "2024-01-04",
+        "action": null,
+        "signal_summary": "Close > MA3",
+        "position": 0.0,
+        "total_portfolio_value": 100000.0
+      },
+      {
+        "date": "2024-01-05",
+        "action": "buy",
+        "signal_summary": null,
+        "position": 1.0,
+        "total_portfolio_value": 107102.690287
+      },
+      {
+        "date": "2024-01-06",
+        "action": null,
+        "signal_summary": "Close < MA3",
+        "position": 1.0,
+        "total_portfolio_value": 80327.017715
+      },
+      {
+        "date": "2024-01-07",
+        "action": "sell",
+        "signal_summary": null,
+        "position": 0.0,
+        "total_portfolio_value": 77620.334341
+      }
+    ],
+    "trades": [
+      {
+        "entry_signal_date": "2024-01-04",
+        "entry_date": "2024-01-05",
+        "exit_signal_date": "2024-01-06",
+        "exit_date": "2024-01-07",
+        "entry_price": 11.2014,
+        "exit_price": 8.698912,
+        "return_pct": -22.3797,
+        "quantity": 8925.224191,
+        "fees": 44.403688,
+        "slippage": 22.201495,
+        "entry_reason": "signal_entry",
+        "exit_reason": "signal_exit",
+        "signal_reason": "rule_conditions",
+        "notes": "exit_signal_next_bar_open"
+      }
+    ]
+  }
+}
