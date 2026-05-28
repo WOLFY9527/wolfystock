@@ -2300,6 +2300,16 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             self.assertEqual(entries[0]["sourceTier"], "unofficial_public_api")
             self.assertEqual(entries[1]["capability"], "cn_realtime_snapshot")
             self.assertEqual(entries[1]["trustLevel"], "weak")
+            self.assertEqual(candidate["raw_score"], candidate["final_score"])
+            self.assertEqual(candidate["score"], candidate["raw_score"])
+            explainability = candidate["diagnostics"]["score_explainability"]
+            self.assertIsNone(explainability["cap_reason"])
+            self.assertIsNone(explainability["degradation_reason"])
+            self.assertEqual(explainability["score_confidence"], 1.0)
+            self.assertFalse(explainability["cap_applied"])
+            self.assertTrue(explainability["score_grade_allowed"])
+            self.assertTrue(explainability["source_confidence"]["scoreContributionAllowed"])
+            self.assertFalse(explainability["source_confidence"]["observationOnly"])
             self.assertIsNotNone(candidate["diagnostics"]["evidence_packet"]["providerObservation"])
             self.assertTrue(candidate["diagnostics"]["evidence_packet"]["providerObservation"]["observationOnly"])
 

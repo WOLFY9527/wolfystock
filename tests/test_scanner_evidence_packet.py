@@ -213,6 +213,74 @@ def test_build_scanner_evidence_packet_keeps_additive_provider_observation_metad
     assert packet["providerObservation"]["entries"][0]["trustLevel"] == "usable_with_caution"
 
 
+def test_build_scanner_evidence_packet_keeps_cn_public_proxy_observation_visible_without_score_mutation() -> None:
+    candidate = _candidate_fixture()
+    candidate["market"] = "cn"
+    candidate["symbol"] = "600001"
+    candidate["name"] = "算力龙头"
+    candidate["_diagnostics"]["history"] = {
+        "source": "local_db",
+        "latest_trade_date": "2026-05-08",
+        "rows": 130,
+    }
+    candidate["_diagnostics"]["quote_context"] = {
+        "available": True,
+        "source": "akshare",
+        "sourceType": "public_proxy",
+    }
+    candidate["_diagnostics"]["cn_provider_observation"] = {
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "entries": [
+            {
+                "stage": "snapshot",
+                "capability": "cn_realtime_snapshot",
+                "providerName": "akshare",
+                "sourceType": "public_proxy",
+                "sourceTier": "unofficial_public_api",
+                "trustLevel": "weak",
+                "observationOnly": True,
+                "scoreContributionAllowed": False,
+                "asOf": "2026-05-08",
+                "updatedAt": "2026-05-08T09:30:00+08:00",
+            }
+        ],
+    }
+
+    packet = build_scanner_evidence_packet(
+        candidate,
+        {
+            "market": "cn",
+            "run_id": 8,
+            "evidence_version": "scanner_evidence_v1",
+            "score_explainability": {
+                "raw_score": 81.6,
+                "final_score": 81.6,
+                "cap_reason": None,
+                "degradation_reason": None,
+                "score_confidence": 1.0,
+                "evidence_coverage": 1.0,
+                "source_confidence": {
+                    "scoreContributionAllowed": True,
+                    "observationOnly": False,
+                },
+            },
+        },
+    )
+
+    assert packet["score"] == 81.6
+    assert packet["rawScore"] == 81.6
+    assert packet["finalScore"] == 81.6
+    assert packet["capReason"] is None
+    assert packet["degradationReason"] is None
+    assert packet["scoreConfidence"] == 1.0
+    assert packet["userFacingLabels"] == ["依据完整"]
+    assert packet["providerObservation"]["observationOnly"] is True
+    assert packet["providerObservation"]["scoreContributionAllowed"] is False
+    assert packet["providerObservation"]["entries"][0]["providerName"] == "akshare"
+    assert packet["providerObservation"]["entries"][0]["sourceType"] == "public_proxy"
+
+
 def test_build_scanner_evidence_packet_preserves_baostock_scanner_diagnostics_sidecar_fields() -> None:
     candidate = _candidate_fixture()
     candidate["_diagnostics"]["cn_provider_observation"] = {
