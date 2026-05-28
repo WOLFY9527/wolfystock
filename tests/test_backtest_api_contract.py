@@ -1233,6 +1233,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
         )
         service.run_backtest.assert_not_called()
         self.assertEqual(len(background_tasks.tasks), 1)
+        background_task = background_tasks.tasks[0]
+        self.assertEqual(background_task.args, (123,))
+        self.assertEqual(background_task.kwargs, {})
+        self.assertEqual(json.loads(json.dumps(list(background_task.args))), [123])
 
     def test_run_rule_backtest_wait_mode_executes_inline(self) -> None:
         request = RuleBacktestRunRequest(
