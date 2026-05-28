@@ -59,6 +59,11 @@ EXPLICIT_AUTHENTICATED_ROUTE_EXCEPTIONS = {
         "capability_label": None,
         "note": "Backtest robustness evidence is authenticated-user scoped outside the admin control-plane inventory.",
     },
+    ("GET", "/api/v1/backtest/rule/runs/{run_id}/regime-attribution-readiness.json"): {
+        "auth_dependency_label": "authenticated_user",
+        "capability_label": None,
+        "note": "Backtest regime attribution readiness export is authenticated-user scoped outside the admin control-plane inventory.",
+    },
 }
 EXPECTED_TRANSITIONAL_ADMIN_USER_ALLOWLIST = {
     "agent.admin_send": {
