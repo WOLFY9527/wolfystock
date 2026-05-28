@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   adminLogsApi,
   type AdminDataMissingDrilldownItem,
@@ -1127,16 +1127,16 @@ const AdminLogsPage: React.FC = () => {
   const [detailError, setDetailError] = useState<ParsedApiError | null>(null);
   const skipDebugClickRef = useRef(false);
 
-  const loadStorageSummary = useCallback(async () => {
+  const loadStorageSummary = async () => {
     try {
       const response = await adminLogsApi.getStorageSummary();
       setStorageSummary(response);
     } catch {
       setStorageSummary(null);
     }
-  }, []);
+  };
 
-  const loadDataMissing = useCallback(async () => {
+  const loadDataMissing = async () => {
     if (activeTab === 'raw') {
       setDataMissingItems([]);
       return;
@@ -1153,9 +1153,9 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsLoadingDataMissing(false);
     }
-  }, [activeTab, sinceFilter]);
+  };
 
-  const loadOperatorIssues = useCallback(async () => {
+  const loadOperatorIssues = async () => {
     if (activeTab === 'raw') {
       setOperatorIssueItems([]);
       return;
@@ -1172,9 +1172,9 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsLoadingOperatorIssues(false);
     }
-  }, [activeTab, sinceFilter]);
+  };
 
-  const loadSessions = useCallback(async () => {
+  const loadSessions = async () => {
     setIsLoadingList(true);
     setError(null);
     try {
@@ -1229,7 +1229,7 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsLoadingList(false);
     }
-  }, [activeTab, categoryFilter, levelFilter, pageOffset, searchQuery, showDebugLogs, sinceFilter, statusFilter]);
+  };
 
   const previewCleanup = async () => {
     setIsCleanupBusy(true);
@@ -1404,7 +1404,7 @@ const AdminLogsPage: React.FC = () => {
     }
   };
 
-  const openIncidentTimeline = useCallback(async (lookup: IncidentLookupInput, contextLabel?: string) => {
+  const openIncidentTimeline = async (lookup: IncidentLookupInput, contextLabel?: string) => {
     const request = {
       sessionId: trimLookupValue(lookup.sessionId),
       requestId: trimLookupValue(lookup.requestId),
@@ -1429,7 +1429,7 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsIncidentLoading(false);
     }
-  }, [sinceFilter]);
+  };
 
   const openIncidentTimelineFromBusinessEvent = async (event: BusinessEvent) => {
     const lookup = buildIncidentLookupFromBusinessEvent(event);
