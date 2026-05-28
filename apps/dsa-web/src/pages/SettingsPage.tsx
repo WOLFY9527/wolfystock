@@ -4,7 +4,7 @@ import { PanelRightOpen } from 'lucide-react';
 import { getParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigValidationError } from '../api/systemConfig';
 import { ApiErrorAlert, Button, ConfirmDialog, Disclosure, Drawer, GlassCard, Input, Select } from '../components/common/ApiErrorAlert';
-import { PageBriefDrawer } from '../components/home-bento';
+import { PageBriefDrawer } from '../components/home-bento/PageBriefDrawer';
 import { useIsDesktopViewport } from '../components/layout/useIsDesktopViewport';
 import SystemControlPlane from '../components/settings/SystemControlPlane';
 import {

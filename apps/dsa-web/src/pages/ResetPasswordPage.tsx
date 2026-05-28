@@ -2,7 +2,7 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Input } from '../components/common/Button';
-import { SettingsAlert } from '../components/settings';
+import { SettingsAlert } from '../components/settings/SettingsAlert';
 import { authApi } from '../api/auth';
 import { getParsedApiError } from '../api/error';
 import { translate, type UiLanguage } from '../i18n/core';

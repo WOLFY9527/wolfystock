@@ -4,7 +4,7 @@ import { authApi } from '../../api/auth';
 import { getParsedApiError, isParsedApiError, type ParsedApiError } from '../../api/error';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { useAuth } from '../../hooks/useAuth';
-import { Badge, Button, Input, Checkbox } from '../common';
+import { Badge, Button, Input, Checkbox } from '../common/Badge';
 import { SettingsAlert } from './SettingsAlert';
 import { SettingsSectionCard } from './SettingsSectionCard';
 

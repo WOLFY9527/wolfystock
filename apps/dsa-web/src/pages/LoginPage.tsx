@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Input } from '../components/common/Button';
 import type { ParsedApiError } from '../api/error';
 import { isParsedApiError } from '../api/error';
-import { SettingsAlert } from '../components/settings';
+import { SettingsAlert } from '../components/settings/SettingsAlert';
 import { useAuth } from '../hooks';
 import { translate, type UiLanguage } from '../i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';

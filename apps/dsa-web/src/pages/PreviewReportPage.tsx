@@ -1,7 +1,7 @@
 import type React from 'react';
 import { Suspense, lazy, useEffect } from 'react';
 import { WorkspacePageHeader } from '../components/common/WorkspacePageHeader';
-import { TerminalPageShell } from '../components/terminal';
+import { TerminalPageShell } from '../components/terminal/TerminalPrimitives';
 import { previewChartFixtures, previewReport } from '../dev/reportPreviewFixture';
 import { normalizeFrontendReportContract } from '../api/reportNormalizer';
 import { useI18n } from '../contexts/UiLanguageContext';

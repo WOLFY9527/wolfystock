@@ -4,7 +4,7 @@ import type { ParsedApiError } from '../../api/error';
 import { isParsedApiError } from '../../api/error';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { useAuth } from '../../hooks/useAuth';
-import { Input } from '../common';
+import { Input } from '../common/Input';
 import { SettingsAlert } from './SettingsAlert';
 import { TerminalButton } from '../terminal';
 
