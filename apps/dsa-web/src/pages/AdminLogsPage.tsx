@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   adminLogsApi,
   type AdminDataMissingDrilldownItem,
@@ -1231,7 +1231,7 @@ const AdminLogsPage: React.FC = () => {
     }
   }, [activeTab, categoryFilter, levelFilter, pageOffset, searchQuery, showDebugLogs, sinceFilter, statusFilter]);
 
-  const previewCleanup = useCallback(async () => {
+  const previewCleanup = async () => {
     setIsCleanupBusy(true);
     setCleanupMessage(null);
     try {
@@ -1245,9 +1245,9 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsCleanupBusy(false);
     }
-  }, [locale]);
+  };
 
-  const previewCapacityCleanup = useCallback(async () => {
+  const previewCapacityCleanup = async () => {
     setIsCleanupBusy(true);
     setCleanupMessage(null);
     try {
@@ -1265,9 +1265,9 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsCleanupBusy(false);
     }
-  }, [locale]);
+  };
 
-  const confirmCleanup = useCallback(async () => {
+  const confirmCleanup = async () => {
     const expectedCount = cleanupPreview?.matchedLogCount ?? storageSummary?.logsOlderThanRetentionCount ?? 0;
     const cutoff = cleanupPreview?.cutoff || storageSummary?.retentionCutoff || '';
     const mode = cleanupPreview?.mode === 'capacity' ? 'capacity' : 'retention';
@@ -1307,7 +1307,7 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsCleanupBusy(false);
     }
-  }, [cleanupPreview, loadSessions, loadStorageSummary, locale, storageSummary]);
+  };
 
   useEffect(() => {
     document.title = t('adminLogs.documentTitle');
@@ -1333,7 +1333,7 @@ const AdminLogsPage: React.FC = () => {
     void loadOperatorIssues();
   }, [loadOperatorIssues]);
 
-  const filteredSessions = useMemo(() => {
+  const filteredSessions = (() => {
     const query = searchQuery.trim().toLowerCase();
     return sessions.filter((item) => {
       const summary = item.readableSummary || {};
@@ -1352,9 +1352,9 @@ const AdminLogsPage: React.FC = () => {
       const right = b.startedAt ? new Date(b.startedAt).getTime() : 0;
       return right - left;
     });
-  }, [categoryFilter, levelFilter, searchQuery, sessions, showDebugLogs]);
+  })();
 
-  const openDetail = useCallback(async (summary: ExecutionLogSessionSummary) => {
+  const openDetail = async (summary: ExecutionLogSessionSummary) => {
     setSelectedBusinessDetail(null);
     const mockDetail = MOCK_WOLFY_LOG_DETAILS.find((item) => item.sessionId === summary.sessionId);
     setSelectedDetail(mockDetail || {
@@ -1383,9 +1383,9 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsLoadingDetail(false);
     }
-  }, []);
+  };
 
-  const openBusinessDetail = useCallback(async (event: BusinessEvent) => {
+  const openBusinessDetail = async (event: BusinessEvent) => {
     setSelectedDetail(null);
     setSelectedBusinessDetail({
       ...event,
@@ -1402,7 +1402,7 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsLoadingDetail(false);
     }
-  }, []);
+  };
 
   const openIncidentTimeline = useCallback(async (lookup: IncidentLookupInput, contextLabel?: string) => {
     const request = {
@@ -1431,33 +1431,33 @@ const AdminLogsPage: React.FC = () => {
     }
   }, [sinceFilter]);
 
-  const openIncidentTimelineFromBusinessEvent = useCallback(async (event: BusinessEvent) => {
+  const openIncidentTimelineFromBusinessEvent = async (event: BusinessEvent) => {
     const lookup = buildIncidentLookupFromBusinessEvent(event);
     if (!lookup) return;
     await openIncidentTimeline(lookup, text(event.contextLabel || event.symbol || event.event));
-  }, [openIncidentTimeline]);
+  };
 
-  const openIncidentTimelineFromSession = useCallback(async (detail: ExecutionLogSessionSummary) => {
+  const openIncidentTimelineFromSession = async (detail: ExecutionLogSessionSummary) => {
     const lookup = buildIncidentLookupFromSession(detail);
     if (!lookup) return;
     await openIncidentTimeline(lookup, text(detail.code || detail.name || detail.readableSummary?.operationTarget));
-  }, [openIncidentTimeline]);
+  };
 
-  const openIncidentTimelineFromDrilldown = useCallback(async (item: AdminDataMissingDrilldownItem) => {
+  const openIncidentTimelineFromDrilldown = async (item: AdminDataMissingDrilldownItem) => {
     const lookup = buildIncidentLookupFromDrilldown(item);
     if (!lookup) return;
     await openIncidentTimeline(lookup, text(item.symbol || item.affectedSurface || item.missingDomain));
-  }, [openIncidentTimeline]);
+  };
 
-  const applyOperatorIssueFilter = useCallback((item: AdminOperatorIssueRollupItem) => {
+  const applyOperatorIssueFilter = (item: AdminOperatorIssueRollupItem) => {
     const query = operatorIssueFilterQuery(item);
     setActiveTab('data_source');
     setStatusFilter('all');
     setPageOffset(0);
     setSearchQuery(query);
-  }, []);
+  };
 
-  const openIncidentNavigation = useCallback(async (item: AdminIncidentTimelineItem) => {
+  const openIncidentNavigation = async (item: AdminIncidentTimelineItem) => {
     const nav = item.navigation || {};
     if (nav.businessEventId) {
       setIsIncidentDrawerOpen(false);
@@ -1494,11 +1494,11 @@ const AdminLogsPage: React.FC = () => {
         },
       });
     }
-  }, [businessEvents, openBusinessDetail, openDetail]);
+  };
 
-  const toggleDebugLogs = useCallback(() => {
+  const toggleDebugLogs = () => {
     setShowDebugLogs((current) => !current);
-  }, []);
+  };
 
   const drawerDetail = selectedDetail;
   const businessDetail = selectedBusinessDetail;
@@ -1525,17 +1525,17 @@ const AdminLogsPage: React.FC = () => {
   const rawTraceValue = readable.traceId || readable.requestId || readable.actorRequestId || drawerDetail?.queryId;
   const rawRootCause = text(readable.errorSummary || readable.topFailureReason || readable.eventMessage || readable.summaryParagraph, locale === 'zh' ? '原因未确认' : 'Reason unknown');
   const rawActorRole = String(readable.actorRole || '').trim().toLowerCase();
-  const incidentHooks = useMemo(() => {
+  const incidentHooks = (() => {
     const hooks = incidentTimeline?.hooks || [];
     return [...hooks].sort((left, right) => {
       const leftIndex = INCIDENT_KIND_ORDER.indexOf(left.kind as (typeof INCIDENT_KIND_ORDER)[number]);
       const rightIndex = INCIDENT_KIND_ORDER.indexOf(right.kind as (typeof INCIDENT_KIND_ORDER)[number]);
       return (leftIndex === -1 ? 99 : leftIndex) - (rightIndex === -1 ? 99 : rightIndex);
     });
-  }, [incidentTimeline]);
+  })();
   const canOpenBusinessIncident = Boolean(businessDetail && buildIncidentLookupFromBusinessEvent(businessDetail));
   const canOpenRawIncident = Boolean(drawerDetail && buildIncidentLookupFromSession(drawerDetail));
-  const computedSummary = useMemo(() => {
+  const computedSummary = (() => {
     const emptySummary = {
       errorCount: 0,
       warningCount: 0,
@@ -1592,8 +1592,8 @@ const AdminLogsPage: React.FC = () => {
       },
       { ...emptySummary },
     );
-  }, [activeTab, businessEvents, filteredSessions, summary]);
-  const healthSummary = useMemo<AdminLogHealthSummary>(() => {
+  })();
+  const healthSummary: AdminLogHealthSummary = (() => {
     const fallback: AdminLogHealthSummary = {
       totalEvents: activeTab === 'raw' ? filteredSessions.length : businessTotal,
       failedEvents: computedSummary.totalFailedCount || computedSummary.errorCount || 0,
@@ -1612,15 +1612,15 @@ const AdminLogsPage: React.FC = () => {
     };
     if (activeTab === 'raw') return summary?.healthSummary || fallback;
     return businessHealth || fallback;
-  }, [activeTab, businessHealth, businessTotal, computedSummary, filteredSessions.length, summary]);
-  const scannerSummary = useMemo(() => {
+  })();
+  const scannerSummary = (() => {
     const scannerEvents = businessEvents.filter((item) => item.category === 'scanner');
     const latest = scannerEvents[0] || null;
     const failed = scannerEvents.filter((item) => ['failed', 'error'].includes(normalizeStatus(item.status))).length;
     const success = scannerEvents.filter((item) => normalizeStatus(item.status) === 'success').length;
     const latestError = scannerEvents.find((item) => ['failed', 'error'].includes(normalizeStatus(item.status)));
     return { latest, failed, success, latestError };
-  }, [businessEvents]);
+  })();
   const topCategory = healthSummary.failuresByCategory?.[0];
   const latestCriticalError = healthSummary.latestCriticalError || healthSummary.topRecentErrors?.[0] || null;
   const currentStorageBytes = storageBytes(storageSummary);
