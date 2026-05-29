@@ -22,6 +22,7 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     create_rule_backtest_universe_job,
     get_backtest_performance,
     get_backtest_stock_performance,
+    get_rule_backtest_oos_parameter_readiness_json,
     get_rule_backtest_robustness_evidence_json,
     get_rule_backtest_regime_attribution_readiness_json,
     get_rule_backtest_execution_trace_csv,
@@ -56,6 +57,7 @@ from api.v1.schemas.backtest import (  # noqa: E402
     RuleBacktestUniverseJobResponse,
     RuleBacktestUniverseResultsResponse,
     RuleBacktestExecutionTraceExportResponse,
+    RuleBacktestOOSParameterReadinessExportResponse,
     RuleBacktestRegimeAttributionReadinessExportResponse,
     RuleBacktestRobustnessEvidenceExportResponse,
     RuleBacktestSupportExportIndexResponse,
@@ -865,6 +867,82 @@ class BacktestApiContractTestCase(unittest.TestCase):
             ],
         }
 
+    @staticmethod
+    def _oos_parameter_readiness_payload(
+        *,
+        oos_available: bool = True,
+        parameter_available: bool = False,
+    ) -> dict:
+        return {
+            "export_kind": "rule_backtest_oos_parameter_readiness",
+            "version": "v1",
+            "run_id": 123,
+            "code": "600519",
+            "status": "completed",
+            "timeframe": "daily",
+            "source": "stored_rule_backtest_support_projection",
+            "read_mode": "stored_first",
+            "stored_first": True,
+            "diagnostic_only": True,
+            "decision_grade": False,
+            "overall_state": "available" if oos_available and parameter_available else "partial",
+            "oos_readiness": {
+                "state": "available" if oos_available else "unavailable",
+                "source": "stored_robustness_analysis.walk_forward" if oos_available else "stored_robustness_analysis_missing",
+                "read_mode": "stored_first",
+                "availability_reason": (
+                    "stored_walk_forward_oos_evidence_present"
+                    if oos_available
+                    else "stored_robustness_analysis_missing"
+                ),
+                "diagnostic_only": True,
+                "decision_grade": False,
+                "evidence": {
+                    "contract_kind": "backtest_walk_forward_oos_diagnostic_evidence"
+                }
+                if oos_available
+                else None,
+            },
+            "parameter_readiness": {
+                "state": "available" if parameter_available else "unavailable",
+                "source": "stored_compare_summary" if parameter_available else "compare_summary_unavailable",
+                "read_mode": "stored_first",
+                "projection_source": (
+                    "caller_supplied_compare_summary"
+                    if parameter_available
+                    else "stored_first_no_compare_summary"
+                ),
+                "availability_reason": (
+                    "caller_supplied_compare_summary_present"
+                    if parameter_available
+                    else "stored_compare_summary_missing"
+                ),
+                "diagnostic_only": True,
+                "decision_grade": False,
+                "evidence": {
+                    "contract_kind": "backtest_parameter_stability_diagnostic_evidence"
+                }
+                if parameter_available
+                else None,
+            },
+            "guardrails": {
+                "engine_math_changed": False,
+                "optimizer_executed": False,
+                "parameter_sweep_executed": False,
+                "provider_calls_executed": False,
+                "winner_promotion": False,
+            },
+            "limitations": [
+                "diagnostic_readiness_projection_only",
+                "not_a_runtime_oos_or_parameter_stability_engine",
+                "no_strategy_execution",
+                "no_optimizer_execution",
+                "no_parameter_sweep_execution",
+                "no_winner_promotion",
+                "no_provider_calls",
+            ],
+        }
+
     @classmethod
     def _support_export_index_payload(cls, *, status: str = "completed", robustness_available: bool = True) -> dict:
         run_payload = cls._rule_run_payload(status=status)
@@ -937,6 +1015,26 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "endpoint_path": f"/api/v1/backtest/rule/runs/{run_id}/regime-attribution-readiness.json",
                     "payload_class": "compact",
                 },
+                {
+                    "key": "execution_model_metadata_json",
+                    "available": True,
+                    "availability_reason": "run_exists_execution_model_metadata_projection_available",
+                    "format": "json",
+                    "media_type": "application/json",
+                    "delivery_mode": "api",
+                    "endpoint_path": f"/api/v1/backtest/rule/runs/{run_id}/execution-model-metadata.json",
+                    "payload_class": "compact",
+                },
+                {
+                    "key": "oos_parameter_readiness_json",
+                    "available": True,
+                    "availability_reason": "run_exists_oos_parameter_readiness_projection_available",
+                    "format": "json",
+                    "media_type": "application/json",
+                    "delivery_mode": "api",
+                    "endpoint_path": f"/api/v1/backtest/rule/runs/{run_id}/oos-parameter-readiness.json",
+                    "payload_class": "compact",
+                },
             ],
         }
 
@@ -969,7 +1067,9 @@ class BacktestApiContractTestCase(unittest.TestCase):
         else:
             service.get_robustness_evidence_export_json.return_value = robustness_payload
         regime_readiness_payload = self._regime_attribution_readiness_payload()
+        oos_parameter_readiness_payload = self._oos_parameter_readiness_payload()
         service.get_regime_attribution_readiness_export.return_value = regime_readiness_payload
+        service.get_oos_parameter_readiness_export.return_value = oos_parameter_readiness_payload
 
         with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
             manifest_response = get_rule_backtest_support_bundle_manifest(123, db_manager=MagicMock())
@@ -982,16 +1082,41 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 123,
                 db_manager=MagicMock(),
             )
+            oos_parameter_readiness_response = get_rule_backtest_oos_parameter_readiness_json(
+                123,
+                db_manager=MagicMock(),
+            )
 
             self.assertEqual(manifest_response.run["id"], 123)
             self.assertEqual(reproducibility_response.run["id"], 123)
             self.assertEqual(export_index_response.run_id, 123)
             self.assertEqual(readiness_response.runId, 123)
+            self.assertEqual(oos_parameter_readiness_response.run_id, 123)
             self.assertEqual(manifest_response.run["status"], export_index_response.status)
             self.assertEqual(reproducibility_response.run["status"], export_index_response.status)
             self.assertTrue(readiness_response.diagnosticOnly)
             self.assertFalse(readiness_response.engineReexecuted)
             self.assertFalse(readiness_response.mathChanged)
+            self.assertTrue(oos_parameter_readiness_response.diagnostic_only)
+            self.assertFalse(oos_parameter_readiness_response.decision_grade)
+            self.assertEqual(oos_parameter_readiness_response.overall_state, "partial")
+            self.assertEqual(
+                oos_parameter_readiness_response.oos_readiness["source"],
+                "stored_robustness_analysis.walk_forward",
+            )
+            self.assertEqual(
+                oos_parameter_readiness_response.oos_readiness["evidence"]["contract_kind"],
+                "backtest_walk_forward_oos_diagnostic_evidence",
+            )
+            self.assertEqual(
+                oos_parameter_readiness_response.parameter_readiness["state"],
+                "unavailable",
+            )
+            self.assertEqual(
+                oos_parameter_readiness_response.parameter_readiness["availability_reason"],
+                "stored_compare_summary_missing",
+            )
+            self.assertIsNone(oos_parameter_readiness_response.parameter_readiness["evidence"])
             self.assertEqual(manifest_response.run_timing, reproducibility_response.run_timing)
             self.assertEqual(manifest_response.run_diagnostics, reproducibility_response.run_diagnostics)
             self.assertEqual(manifest_response.artifact_availability, reproducibility_response.artifact_availability)
@@ -1045,6 +1170,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "execution_trace_csv",
                     "robustness_evidence_json",
                     "regime_attribution_readiness_json",
+                    "execution_model_metadata_json",
+                    "oos_parameter_readiness_json",
                 ],
             )
             self.assertEqual(
@@ -1056,6 +1183,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "/api/v1/backtest/rule/runs/123/execution-trace.csv",
                     "/api/v1/backtest/rule/runs/123/robustness-evidence.json",
                     "/api/v1/backtest/rule/runs/123/regime-attribution-readiness.json",
+                    "/api/v1/backtest/rule/runs/123/execution-model-metadata.json",
+                    "/api/v1/backtest/rule/runs/123/oos-parameter-readiness.json",
                 ],
             )
             self.assertEqual(
@@ -1069,6 +1198,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     ("json", "application/json", "api", "heavy"),
                     ("csv", "text/csv", "api", "heavy"),
                     ("json", "application/json", "api", "heavy"),
+                    ("json", "application/json", "api", "compact"),
+                    ("json", "application/json", "api", "compact"),
                     ("json", "application/json", "api", "compact"),
                 ],
             )
@@ -2799,7 +2930,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertIsInstance(response, RuleBacktestSupportExportIndexResponse)
         self.assertEqual(response.run_id, 123)
         self.assertEqual(response.status, "completed")
-        self.assertEqual(len(response.exports), 6)
+        self.assertEqual(len(response.exports), 8)
         self.assertEqual(
             [item.key for item in response.exports],
             [
@@ -2809,6 +2940,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "execution_trace_csv",
                 "robustness_evidence_json",
                 "regime_attribution_readiness_json",
+                "execution_model_metadata_json",
+                "oos_parameter_readiness_json",
             ],
         )
         self.assertEqual(response.exports[0].key, "support_bundle_manifest_json")
@@ -2856,6 +2989,22 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(
             response.exports[5].endpoint_path,
             "/api/v1/backtest/rule/runs/123/regime-attribution-readiness.json",
+        )
+        self.assertEqual(response.exports[6].key, "execution_model_metadata_json")
+        self.assertTrue(response.exports[6].available)
+        self.assertEqual(response.exports[6].payload_class, "compact")
+        self.assertEqual(response.exports[6].delivery_mode, "api")
+        self.assertEqual(
+            response.exports[6].endpoint_path,
+            "/api/v1/backtest/rule/runs/123/execution-model-metadata.json",
+        )
+        self.assertEqual(response.exports[7].key, "oos_parameter_readiness_json")
+        self.assertTrue(response.exports[7].available)
+        self.assertEqual(response.exports[7].payload_class, "compact")
+        self.assertEqual(response.exports[7].delivery_mode, "api")
+        self.assertEqual(
+            response.exports[7].endpoint_path,
+            "/api/v1/backtest/rule/runs/123/oos-parameter-readiness.json",
         )
         service.get_support_export_index.assert_called_once_with(123)
 
@@ -2963,6 +3112,49 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertEqual(ctx.exception.detail["error"], "not_found")
         service.get_regime_attribution_readiness_export.assert_called_once_with(123)
+
+    def test_get_rule_backtest_oos_parameter_readiness_json_returns_partial_projection(self) -> None:
+        service = MagicMock()
+        service.get_oos_parameter_readiness_export.return_value = self._oos_parameter_readiness_payload()
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_oos_parameter_readiness_json(123, db_manager=MagicMock())
+
+        self.assertIsInstance(response, RuleBacktestOOSParameterReadinessExportResponse)
+        self.assertEqual(response.export_kind, "rule_backtest_oos_parameter_readiness")
+        self.assertEqual(response.read_mode, "stored_first")
+        self.assertTrue(response.stored_first)
+        self.assertTrue(response.diagnostic_only)
+        self.assertFalse(response.decision_grade)
+        self.assertEqual(response.overall_state, "partial")
+        self.assertEqual(response.oos_readiness["source"], "stored_robustness_analysis.walk_forward")
+        self.assertEqual(
+            response.oos_readiness["evidence"]["contract_kind"],
+            "backtest_walk_forward_oos_diagnostic_evidence",
+        )
+        self.assertEqual(response.parameter_readiness["state"], "unavailable")
+        self.assertEqual(
+            response.parameter_readiness["availability_reason"],
+            "stored_compare_summary_missing",
+        )
+        self.assertIsNone(response.parameter_readiness["evidence"])
+        self.assertFalse(response.guardrails["provider_calls_executed"])
+        self.assertFalse(response.guardrails["optimizer_executed"])
+        self.assertFalse(response.guardrails["parameter_sweep_executed"])
+        self.assertFalse(response.guardrails["winner_promotion"])
+        service.get_oos_parameter_readiness_export.assert_called_once_with(123)
+
+    def test_get_rule_backtest_oos_parameter_readiness_json_returns_not_found(self) -> None:
+        service = MagicMock()
+        service.get_oos_parameter_readiness_export.side_effect = ValueError("Run 123 not found.")
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            with self.assertRaises(HTTPException) as ctx:
+                get_rule_backtest_oos_parameter_readiness_json(123, db_manager=MagicMock())
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(ctx.exception.detail["error"], "not_found")
+        service.get_oos_parameter_readiness_export.assert_called_once_with(123)
 
     def test_get_rule_backtest_execution_trace_csv_returns_csv_response(self) -> None:
         service = MagicMock()

@@ -275,6 +275,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
     def _assert_export_payload_is_sanitized(self, payload: object) -> None:
         payload = self._payload_without_allowed_oos_authority_flags(payload)
         payload = self._payload_without_allowed_execution_model_guardrails(payload)
+        payload = self._payload_without_allowed_oos_parameter_readiness_guardrails(payload)
         serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
         for sentinel in RAW_PROVIDER_SENTINELS:
             self.assertNotIn(sentinel, serialized)
@@ -368,11 +369,17 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
     def _payload_without_allowed_oos_authority_flags(payload: object) -> object:
         normalized = copy.deepcopy(payload)
         if isinstance(normalized, dict):
-            evidence = normalized.get("walk_forward_oos_evidence")
-            if isinstance(evidence, dict):
-                authority = evidence.get("authority")
-                if isinstance(authority, dict) and authority.get("optimizer_executed") is False:
-                    authority.pop("optimizer_executed")
+            evidence_candidates = [normalized.get("walk_forward_oos_evidence")]
+            oos_readiness = normalized.get("oos_readiness")
+            if isinstance(oos_readiness, dict):
+                evidence_candidates.append(oos_readiness.get("evidence"))
+            for evidence in evidence_candidates:
+                if isinstance(evidence, dict):
+                    authority = evidence.get("authority")
+                    if isinstance(authority, dict):
+                        for key in ("optimizer_executed", "parameter_sweep_executed"):
+                            if authority.get(key) is False:
+                                authority.pop(key)
         return normalized
 
     @staticmethod
@@ -387,6 +394,27 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 for key in ("optimizer_executed", "parameter_sweep_executed", "winner_promotion"):
                     if guardrails.get(key) is False:
                         guardrails.pop(key)
+        return normalized
+
+    @staticmethod
+    def _payload_without_allowed_oos_parameter_readiness_guardrails(payload: object) -> object:
+        normalized = copy.deepcopy(payload)
+        if (
+            isinstance(normalized, dict)
+            and normalized.get("export_kind") == "rule_backtest_oos_parameter_readiness"
+        ):
+            guardrails = normalized.get("guardrails")
+            if isinstance(guardrails, dict):
+                for key in ("optimizer_executed", "parameter_sweep_executed", "winner_promotion"):
+                    if guardrails.get(key) is False:
+                        guardrails.pop(key)
+            limitations = normalized.get("limitations")
+            if isinstance(limitations, list):
+                normalized["limitations"] = [
+                    item
+                    for item in limitations
+                    if item not in {"no_optimizer_execution", "no_winner_promotion"}
+                ]
         return normalized
 
     def _fetch_support_bundle_surface(self, run_id: int) -> dict:
@@ -405,6 +433,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 "robustness_evidence_json",
                 "regime_attribution_readiness_json",
                 "execution_model_metadata_json",
+                "oos_parameter_readiness_json",
             ],
         )
         self.assertEqual(
@@ -418,6 +447,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 ("json", "application/json", "api", "heavy"),
                 ("csv", "text/csv", "api", "heavy"),
                 ("json", "application/json", "api", "heavy"),
+                ("json", "application/json", "api", "compact"),
                 ("json", "application/json", "api", "compact"),
                 ("json", "application/json", "api", "compact"),
             ],
@@ -459,17 +489,24 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         robustness_path = payloads["export_index"]["exports"][4]["endpoint_path"]
         readiness_path = payloads["export_index"]["exports"][5]["endpoint_path"]
         execution_model_metadata_path = payloads["export_index"]["exports"][6]["endpoint_path"]
+        oos_parameter_readiness_path = payloads["export_index"]["exports"][7]["endpoint_path"]
         trace_json_response = self.client.get(trace_json_path)
         trace_csv_response = self.client.get(trace_csv_path)
         robustness_response = self.client.get(robustness_path)
         readiness_response = self.client.get(readiness_path)
         execution_model_metadata_response = self.client.get(execution_model_metadata_path)
+        oos_parameter_readiness_response = self.client.get(oos_parameter_readiness_path)
         self.assertEqual(readiness_response.status_code, 200)
         self.assertEqual(
             service.get_regime_attribution_readiness_export(run_id),
             readiness_response.json(),
         )
         self.assertEqual(execution_model_metadata_response.status_code, 200)
+        self.assertEqual(oos_parameter_readiness_response.status_code, 200)
+        self.assertEqual(
+            service.get_oos_parameter_readiness_export(run_id),
+            oos_parameter_readiness_response.json(),
+        )
 
         if trace_available:
             self.assertEqual(service.get_execution_trace_export_json(run_id), trace_json_response.json())
@@ -532,6 +569,30 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
             execution_model_metadata["guardrails"]["future_semantic_changes_require_new_version"],
             True,
         )
+        oos_parameter_readiness = oos_parameter_readiness_response.json()
+        self.assertEqual(oos_parameter_readiness["export_kind"], "rule_backtest_oos_parameter_readiness")
+        self.assertEqual(oos_parameter_readiness["read_mode"], "stored_first")
+        self.assertTrue(oos_parameter_readiness["diagnostic_only"])
+        self.assertFalse(oos_parameter_readiness["decision_grade"])
+        self.assertIn(oos_parameter_readiness["overall_state"], {"partial", "unavailable"})
+        self.assertEqual(
+            oos_parameter_readiness["oos_readiness"]["source"],
+            "stored_robustness_analysis.walk_forward",
+        )
+        self.assertEqual(
+            oos_parameter_readiness["oos_readiness"]["evidence"]["contract_kind"],
+            "backtest_walk_forward_oos_diagnostic_evidence",
+        )
+        self.assertEqual(oos_parameter_readiness["parameter_readiness"]["state"], "unavailable")
+        self.assertEqual(
+            oos_parameter_readiness["parameter_readiness"]["availability_reason"],
+            "stored_compare_summary_missing",
+        )
+        self.assertIsNone(oos_parameter_readiness["parameter_readiness"]["evidence"])
+        self.assertFalse(oos_parameter_readiness["guardrails"]["provider_calls_executed"])
+        self.assertFalse(oos_parameter_readiness["guardrails"]["optimizer_executed"])
+        self.assertFalse(oos_parameter_readiness["guardrails"]["parameter_sweep_executed"])
+        self.assertFalse(oos_parameter_readiness["guardrails"]["winner_promotion"])
 
     def _assert_support_bundle_surface(
         self,
@@ -595,6 +656,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 f"/api/v1/backtest/rule/runs/{run_id}/robustness-evidence.json",
                 f"/api/v1/backtest/rule/runs/{run_id}/regime-attribution-readiness.json",
                 f"/api/v1/backtest/rule/runs/{run_id}/execution-model-metadata.json",
+                f"/api/v1/backtest/rule/runs/{run_id}/oos-parameter-readiness.json",
             ],
         )
         self.assertTrue(
@@ -611,11 +673,13 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         robustness_path = export_index["exports"][4]["endpoint_path"]
         readiness_path = export_index["exports"][5]["endpoint_path"]
         execution_model_metadata_path = export_index["exports"][6]["endpoint_path"]
+        oos_parameter_readiness_path = export_index["exports"][7]["endpoint_path"]
         trace_json_response = self.client.get(trace_json_path)
         trace_csv_response = self.client.get(trace_csv_path)
         robustness_response = self.client.get(robustness_path)
         readiness_response = self.client.get(readiness_path)
         execution_model_metadata_response = self.client.get(execution_model_metadata_path)
+        oos_parameter_readiness_response = self.client.get(oos_parameter_readiness_path)
         self.assertTrue(export_index["exports"][5]["available"])
         self.assertEqual(
             export_index["exports"][5]["availability_reason"],
@@ -626,8 +690,14 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
             export_index["exports"][6]["availability_reason"],
             "run_exists_execution_model_metadata_projection_available",
         )
+        self.assertTrue(export_index["exports"][7]["available"])
+        self.assertEqual(
+            export_index["exports"][7]["availability_reason"],
+            "run_exists_oos_parameter_readiness_projection_available",
+        )
         self.assertEqual(readiness_response.status_code, 200)
         self.assertEqual(execution_model_metadata_response.status_code, 200)
+        self.assertEqual(oos_parameter_readiness_response.status_code, 200)
         self.assertTrue(
             readiness_response.headers.get("content-type", "").startswith(
                 export_index["exports"][5]["media_type"]
@@ -638,8 +708,14 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 export_index["exports"][6]["media_type"]
             )
         )
+        self.assertTrue(
+            oos_parameter_readiness_response.headers.get("content-type", "").startswith(
+                export_index["exports"][7]["media_type"]
+            )
+        )
         payloads["regime_attribution_readiness"] = readiness_response.json()
         payloads["execution_model_metadata"] = execution_model_metadata_response.json()
+        payloads["oos_parameter_readiness"] = oos_parameter_readiness_response.json()
         self.assertTrue(payloads["regime_attribution_readiness"]["diagnosticOnly"])
         self.assertFalse(payloads["regime_attribution_readiness"]["engineReexecuted"])
         self.assertFalse(payloads["regime_attribution_readiness"]["mathChanged"])
@@ -662,6 +738,27 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
             payloads["execution_model_metadata"]["guardrails"]["provider_calls_executed"],
             False,
         )
+        self.assertEqual(
+            payloads["oos_parameter_readiness"]["export_kind"],
+            "rule_backtest_oos_parameter_readiness",
+        )
+        self.assertEqual(payloads["oos_parameter_readiness"]["read_mode"], "stored_first")
+        self.assertTrue(payloads["oos_parameter_readiness"]["diagnostic_only"])
+        self.assertFalse(payloads["oos_parameter_readiness"]["decision_grade"])
+        self.assertIn(payloads["oos_parameter_readiness"]["overall_state"], {"partial", "unavailable"})
+        self.assertEqual(
+            payloads["oos_parameter_readiness"]["oos_readiness"]["source"],
+            "stored_robustness_analysis.walk_forward",
+        )
+        self.assertEqual(
+            payloads["oos_parameter_readiness"]["parameter_readiness"]["state"],
+            "unavailable",
+        )
+        self.assertEqual(
+            payloads["oos_parameter_readiness"]["parameter_readiness"]["availability_reason"],
+            "stored_compare_summary_missing",
+        )
+        self.assertIsNone(payloads["oos_parameter_readiness"]["parameter_readiness"]["evidence"])
 
         if trace_available:
             self.assertTrue(export_index["exports"][2]["available"])
@@ -1014,6 +1111,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         self._assert_export_payload_is_sanitized(payloads["trace_csv_rows"])
         self._assert_export_payload_is_sanitized(payloads["regime_attribution_readiness"])
         self._assert_export_payload_is_sanitized(payloads["execution_model_metadata"])
+        self._assert_export_payload_is_sanitized(payloads["oos_parameter_readiness"])
 
         trace_execution_model = payloads["trace_json"]["execution_model"]
         self.assertEqual(trace_execution_model["signal_evaluation_timing"], "bar_close")

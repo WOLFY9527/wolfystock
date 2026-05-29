@@ -64,6 +64,16 @@ EXPLICIT_AUTHENTICATED_ROUTE_EXCEPTIONS = {
         "capability_label": None,
         "note": "Backtest regime attribution readiness export is authenticated-user scoped outside the admin control-plane inventory.",
     },
+    ("GET", "/api/v1/backtest/rule/runs/{run_id}/execution-model-metadata.json"): {
+        "auth_dependency_label": "authenticated_user",
+        "capability_label": None,
+        "note": "Backtest execution model metadata export is authenticated-user scoped outside the admin control-plane inventory.",
+    },
+    ("GET", "/api/v1/backtest/rule/runs/{run_id}/oos-parameter-readiness.json"): {
+        "auth_dependency_label": "authenticated_user",
+        "capability_label": None,
+        "note": "Backtest OOS parameter readiness export is authenticated-user scoped outside the admin control-plane inventory.",
+    },
 }
 EXPECTED_TRANSITIONAL_ADMIN_USER_ALLOWLIST = {
     "agent.admin_send": {

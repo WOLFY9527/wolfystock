@@ -1357,6 +1357,27 @@ class RuleBacktestExecutionModelMetadataExportResponse(BaseModel):
     guardrails: Dict[str, Any] = Field(default_factory=dict)
 
 
+class RuleBacktestOOSParameterReadinessExportResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    export_kind: str
+    version: str
+    run_id: int
+    code: Optional[str] = None
+    status: Optional[str] = None
+    timeframe: Optional[str] = None
+    source: str
+    read_mode: str
+    stored_first: bool
+    diagnostic_only: bool
+    decision_grade: bool
+    overall_state: str
+    oos_readiness: Dict[str, Any] = Field(default_factory=dict)
+    parameter_readiness: Dict[str, Any] = Field(default_factory=dict)
+    guardrails: Dict[str, Any] = Field(default_factory=dict)
+    limitations: List[str] = Field(default_factory=list)
+
+
 class RuleBacktestSupportExportIndexItem(BaseModel):
     key: str
     available: bool

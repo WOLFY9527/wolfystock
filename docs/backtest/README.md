@@ -42,11 +42,16 @@ public-safety wording.
   `execution_trace_csv`, `robustness_evidence_json` when stored robustness
   evidence exists, `regime_attribution_readiness_json` as a stored
   diagnostic/readiness projection rather than validated institutional PnL
-  attribution, and `execution_model_metadata_json` as a read-only v1 execution
-  model metadata projection. That metadata export documents the current/default
-  rule backtest execution assumptions and guardrails only; it does not imply
-  market impact, spread simulation, partial fills, PIT universe guarantees, or
-  decision-grade institutional execution realism.
+  attribution, `execution_model_metadata_json` as a read-only v1 execution
+  model metadata projection, and `oos_parameter_readiness_json` as a
+  diagnostic-only stored-first OOS/parameter-readiness projection. That
+  metadata export documents the current/default rule backtest execution
+  assumptions and guardrails only; the OOS/parameter export only re-exposes
+  stored walk-forward robustness evidence plus caller-supplied compare/parameter
+  evidence when present, and otherwise keeps the missing side explicit as
+  partial/unavailable. Neither export implies market impact, spread simulation,
+  partial fills, PIT universe guarantees, or decision-grade institutional
+  execution realism.
 - Backtest pages lead with result, risk metrics, assumptions, and evidence
   quality before export, rerun, trace, ledger, or raw controls.
 - Execution assumptions and data quality can be professional evidence when

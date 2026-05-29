@@ -9,11 +9,14 @@ import io
 import json
 from typing import Any, Callable, Mapping, Sequence
 
+from src.services.backtest_parameter_stability import build_parameter_stability_evidence_from_compare_summary
 from src.services.backtest_walkforward_oos import build_walk_forward_oos_evidence_from_stored_robustness
 from src.services.reason_code_vocabulary import classify_reason_codes
 
 RULE_BACKTEST_EXECUTION_MODEL_METADATA_VERSION = "v1"
 RULE_BACKTEST_EXECUTION_MODEL_EXPORT_KIND = "rule_backtest_execution_model_metadata"
+RULE_BACKTEST_OOS_PARAMETER_READINESS_VERSION = "v1"
+RULE_BACKTEST_OOS_PARAMETER_READINESS_EXPORT_KIND = "rule_backtest_oos_parameter_readiness"
 _RULE_BACKTEST_EXECUTION_MODEL_V1 = {
     "model_id": "rule_backtest_default_execution_model_v1",
     "version": RULE_BACKTEST_EXECUTION_MODEL_METADATA_VERSION,
@@ -61,6 +64,15 @@ _RULE_BACKTEST_EXECUTION_MODEL_V1_GUARDRAILS = {
     "silent_runtime_semantic_change_allowed": False,
     "future_semantic_changes_require_new_version": True,
     "future_versions_must_be_additive": True,
+}
+_RULE_BACKTEST_OOS_PARAMETER_READINESS_GUARDRAILS = {
+    "engine_reexecuted": False,
+    "strategy_execution_count": 0,
+    "optimizer_executed": False,
+    "parameter_sweep_executed": False,
+    "provider_calls_executed": False,
+    "winner_promotion": False,
+    "engine_math_changed": False,
 }
 
 
@@ -676,6 +688,16 @@ def build_support_export_index(run: Mapping[str, Any]) -> dict[str, Any]:
                 "endpoint_path": f"/api/v1/backtest/rule/runs/{resolved_run_id}/execution-model-metadata.json",
                 "payload_class": "compact",
             },
+            {
+                "key": "oos_parameter_readiness_json",
+                "available": True,
+                "availability_reason": "run_exists_oos_parameter_readiness_projection_available",
+                "format": "json",
+                "media_type": "application/json",
+                "delivery_mode": "api",
+                "endpoint_path": f"/api/v1/backtest/rule/runs/{resolved_run_id}/oos-parameter-readiness.json",
+                "payload_class": "compact",
+            },
         ],
     }
 
@@ -694,6 +716,173 @@ def build_execution_model_metadata_export(run: Mapping[str, Any]) -> dict[str, A
         "semantics": dict(_RULE_BACKTEST_EXECUTION_MODEL_V1_SEMANTICS),
         "guardrails": dict(_RULE_BACKTEST_EXECUTION_MODEL_V1_GUARDRAILS),
     }
+
+
+def build_oos_parameter_readiness_export(
+    run: Mapping[str, Any],
+    *,
+    compare_payload: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    oos_readiness = _build_oos_readiness_section(run)
+    parameter_readiness = _build_parameter_readiness_section(compare_payload)
+    return {
+        "export_kind": RULE_BACKTEST_OOS_PARAMETER_READINESS_EXPORT_KIND,
+        "version": RULE_BACKTEST_OOS_PARAMETER_READINESS_VERSION,
+        "run_id": int(run.get("id") or 0),
+        "code": run.get("code"),
+        "status": run.get("status"),
+        "timeframe": run.get("timeframe"),
+        "source": "stored_rule_backtest_support_projection",
+        "read_mode": "stored_first",
+        "stored_first": True,
+        "diagnostic_only": True,
+        "decision_grade": False,
+        "overall_state": _combine_readiness_states(
+            str(oos_readiness.get("state") or "unavailable"),
+            str(parameter_readiness.get("state") or "unavailable"),
+        ),
+        "oos_readiness": oos_readiness,
+        "parameter_readiness": parameter_readiness,
+        "guardrails": dict(_RULE_BACKTEST_OOS_PARAMETER_READINESS_GUARDRAILS),
+        "limitations": [
+            "diagnostic_readiness_projection_only",
+            "not_a_runtime_oos_or_parameter_stability_engine",
+            "no_strategy_execution",
+            "no_optimizer_execution",
+            "no_parameter_sweep_execution",
+            "no_winner_promotion",
+            "no_provider_calls",
+        ],
+    }
+
+
+def _build_oos_readiness_section(run: Mapping[str, Any]) -> dict[str, Any]:
+    robustness_payload = resolve_stored_robustness_evidence_payload(run)
+    oos_evidence = dict(robustness_payload.get("walk_forward_oos_evidence") or {}) if robustness_payload else {}
+    if not oos_evidence:
+        return {
+            "state": "unavailable",
+            "source": "stored_robustness_analysis_missing",
+            "read_mode": "stored_first",
+            "availability_reason": "stored_robustness_analysis_missing",
+            "diagnostic_only": True,
+            "decision_grade": False,
+            "evidence": None,
+        }
+
+    evidence_state = str(oos_evidence.get("state") or "diagnostic_unavailable")
+    return {
+        "state": _normalize_readiness_state(evidence_state),
+        "evidence_state": evidence_state,
+        "source": oos_evidence.get("source") or "stored_robustness_analysis.walk_forward",
+        "read_mode": oos_evidence.get("read_mode") or "stored_first",
+        "availability_reason": _oos_availability_reason(evidence_state),
+        "diagnostic_only": bool(oos_evidence.get("diagnostic_only", True)),
+        "decision_grade": bool(oos_evidence.get("decision_grade", False)),
+        "evidence": oos_evidence,
+    }
+
+
+def _build_parameter_readiness_section(compare_payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    evidence, projection_source = _resolve_parameter_readiness_evidence(compare_payload)
+    if not evidence:
+        return {
+            "state": "unavailable",
+            "source": "compare_summary_unavailable",
+            "read_mode": "stored_first",
+            "projection_source": "stored_first_no_compare_summary",
+            "availability_reason": "stored_compare_summary_missing",
+            "diagnostic_only": True,
+            "decision_grade": False,
+            "evidence": None,
+        }
+
+    evidence_state = str(evidence.get("state") or "diagnostic_unavailable")
+    return {
+        "state": _normalize_readiness_state(evidence_state),
+        "evidence_state": evidence_state,
+        "source": evidence.get("source") or "stored_compare_summary",
+        "read_mode": evidence.get("read_mode") or "stored_first",
+        "projection_source": projection_source,
+        "availability_reason": _parameter_availability_reason(
+            projection_source=projection_source,
+            state=evidence_state,
+        ),
+        "diagnostic_only": bool(evidence.get("diagnostic_only", True)),
+        "decision_grade": bool(evidence.get("decision_grade", False)),
+        "evidence": evidence,
+    }
+
+
+def _resolve_parameter_readiness_evidence(
+    compare_payload: Mapping[str, Any] | None,
+) -> tuple[dict[str, Any], str]:
+    payload = dict(compare_payload or {})
+    direct_evidence = payload.get("parameter_stability_evidence")
+    if isinstance(direct_evidence, Mapping) and dict(direct_evidence):
+        return dict(direct_evidence), "caller_supplied_parameter_stability_evidence"
+
+    if _looks_like_compare_payload(payload):
+        return (
+            build_parameter_stability_evidence_from_compare_summary(payload),
+            "caller_supplied_compare_summary",
+        )
+
+    return {}, "stored_first_no_compare_summary"
+
+
+def _looks_like_compare_payload(payload: Mapping[str, Any]) -> bool:
+    return any(
+        key in payload
+        for key in (
+            "requested_run_ids",
+            "resolved_run_ids",
+            "missing_run_ids",
+            "items",
+            "parameter_comparison",
+            "heatmap_projection",
+        )
+    )
+
+
+def _normalize_readiness_state(state: str) -> str:
+    normalized = str(state or "").strip().lower()
+    if normalized == "available":
+        return "available"
+    if normalized == "partial":
+        return "partial"
+    return "unavailable"
+
+
+def _combine_readiness_states(oos_state: str, parameter_state: str) -> str:
+    states = {_normalize_readiness_state(oos_state), _normalize_readiness_state(parameter_state)}
+    if states == {"available"}:
+        return "available"
+    if "available" in states or "partial" in states:
+        return "partial"
+    return "unavailable"
+
+
+def _oos_availability_reason(state: str) -> str:
+    normalized = _normalize_readiness_state(state)
+    if normalized == "available":
+        return "stored_walk_forward_oos_evidence_present"
+    if normalized == "partial":
+        return "stored_walk_forward_oos_evidence_partial"
+    return "stored_walk_forward_oos_evidence_missing"
+
+
+def _parameter_availability_reason(*, projection_source: str, state: str) -> str:
+    normalized = _normalize_readiness_state(state)
+    if normalized == "unavailable":
+        if projection_source == "caller_supplied_parameter_stability_evidence":
+            return "caller_supplied_parameter_stability_evidence_unavailable"
+        if projection_source == "caller_supplied_compare_summary":
+            return "caller_supplied_compare_summary_unavailable"
+        return "stored_compare_summary_missing"
+    if projection_source == "caller_supplied_parameter_stability_evidence":
+        return "caller_supplied_parameter_stability_evidence_present"
+    return "caller_supplied_compare_summary_present"
 
 
 def build_execution_trace_export_json_payload(

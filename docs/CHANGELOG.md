@@ -1,3 +1,6 @@
+## 2026-05-29
+- Backtest support bundle now exposes `oos_parameter_readiness_json` as an eighth stored-first diagnostic export at `GET /api/v1/backtest/rule/runs/{run_id}/oos-parameter-readiness.json`, projecting stored walk-forward OOS evidence plus caller-supplied compare/parameter evidence when available and keeping missing sides explicitly partial/unavailable without changing backtest math or provider/runtime semantics.
+
 ## 2026-05-22
 - Portfolio frontend types now include backend diagnostics/evidence metadata without accounting behavior changes.
 - Scanner ranking evidence now caps public proxy quote sources below full confidence.

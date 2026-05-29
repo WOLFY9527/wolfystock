@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from statistics import mean, pstdev
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from src.core.rule_backtest_engine import ExecutionModelConfig, ParsedStrategy, RuleBacktestEngine, RuleBacktestParser, _safe_float
 from src.repositories.rule_backtest_repo import RuleBacktestRepository
@@ -26,6 +26,7 @@ from src.services.rule_backtest_support_exports import (
     build_execution_trace_export_csv_text,
     build_execution_trace_export_json_payload,
     build_execution_trace_export_rows,
+    build_oos_parameter_readiness_export,
     build_regime_attribution_readiness_export,
     build_support_bundle_manifest,
     build_support_bundle_reproducibility_manifest,
@@ -10724,6 +10725,17 @@ class RuleBacktestService:
         if run is None:
             raise ValueError(f"Run {run_id} not found.")
         return build_regime_attribution_readiness_export(run)
+
+    def get_oos_parameter_readiness_export(
+        self,
+        run_id: int,
+        *,
+        compare_payload: Mapping[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        run = self.get_run(run_id)
+        if run is None:
+            raise ValueError(f"Run {run_id} not found.")
+        return build_oos_parameter_readiness_export(run, compare_payload=compare_payload)
 
     def parse_and_run_automated(
         self,
