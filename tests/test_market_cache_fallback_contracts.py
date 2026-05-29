@@ -9,6 +9,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -23,6 +24,24 @@ CN_TZ = timezone(timedelta(hours=8))
 
 def _json_round_trip(payload: dict) -> dict:
     return json.loads(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+
+def _strip_remote_runtime_fields(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_strip_remote_runtime_fields(item) for item in value]
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, item in value.items():
+            if key in {"isRefreshing", "lastError", "refreshError"}:
+                continue
+            sanitized[key] = _strip_remote_runtime_fields(item)
+        return sanitized
+    return value
+
+
+def _project_payload_for_remote_persistence(payload: dict) -> dict:
+    sanitized = _strip_remote_runtime_fields(payload)
+    return json.loads(json.dumps(sanitized, ensure_ascii=False, sort_keys=True))
 
 
 def test_cold_start_timeout_fallback_returns_quickly_and_is_not_live() -> None:
@@ -504,6 +523,68 @@ def test_market_overview_stale_refreshing_payload_round_trips_through_json() -> 
     assert service._market_cache.wait_for_refreshes(timeout=2)
 
 
+def test_market_overview_stale_refreshing_payload_projects_without_remote_refresh_state() -> None:
+    service = MarketOverviewService()
+    service._market_cache.clear()
+    service._market_data_cache.clear()
+    stale_as_of = datetime(2026, 5, 3, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service._market_cache.set(
+        "cn_indices",
+        {
+            "source": "sina",
+            "sourceLabel": "新浪财经",
+            "updatedAt": stale_as_of,
+            "asOf": stale_as_of,
+            "items": [
+                {
+                    "name": "上证指数",
+                    "symbol": "000001.SH",
+                    "value": 4100.0,
+                    "change": 1.0,
+                    "changePercent": 0.1,
+                    "sparkline": [4090.0, 4100.0],
+                    "source": "sina",
+                    "sourceLabel": "新浪财经",
+                    "asOf": stale_as_of,
+                }
+            ],
+        },
+        ttl_seconds=1,
+    )
+    entry = service._market_cache.get("cn_indices")
+    assert entry is not None
+    entry.expires_at = entry.fetched_at - timedelta(seconds=1)
+    refresh_started = threading.Event()
+    release_refresh = threading.Event()
+
+    def fetcher() -> dict:
+        refresh_started.set()
+        release_refresh.wait(2)
+        return {
+            "source": "sina",
+            "items": [{"symbol": "000001.SH", "value": 4200.0, "source": "sina"}],
+            "updatedAt": datetime(2026, 5, 28, 9, 31, tzinfo=CN_TZ).isoformat(timespec="seconds"),
+        }
+
+    with patch.object(service, "_fetch_cn_indices_snapshot", side_effect=fetcher):
+        payload = service.get_cn_indices()
+
+    assert refresh_started.wait(1)
+    projected = _project_payload_for_remote_persistence(payload)
+
+    assert projected["freshness"] == "stale"
+    assert projected["source"] == "sina"
+    assert projected["sourceLabel"] == "新浪财经"
+    assert projected["providerHealth"]["status"] == "refreshing"
+    assert "isRefreshing" not in projected
+    assert "isRefreshing" not in projected["evidenceSnapshot"]
+    assert "lastError" not in projected
+    assert "refreshError" not in projected
+
+    release_refresh.set()
+    assert service._market_cache.wait_for_refreshes(timeout=2)
+
+
 def test_market_overview_fallback_payload_round_trips_through_json() -> None:
     service = MarketOverviewService()
     service._market_cache.clear()
@@ -527,3 +608,23 @@ def test_market_overview_fallback_payload_round_trips_through_json() -> None:
     assert round_tripped["evidenceSnapshot"]["isFallback"] is True
     assert round_tripped["evidenceSnapshot"]["scoreReliabilityAllowed"] is False
     assert "isSynthetic" not in round_tripped
+
+
+def test_market_overview_fallback_payload_projects_without_persisting_last_error() -> None:
+    service = MarketOverviewService()
+    service._market_cache.clear()
+    service._market_data_cache.clear()
+
+    with patch.object(service, "_fetch_cn_breadth_snapshot", side_effect=RuntimeError("provider down")):
+        payload = service.get_cn_breadth()
+
+    projected = _project_payload_for_remote_persistence(payload)
+
+    assert projected["freshness"] == "fallback"
+    assert projected["source"] == "fallback"
+    assert projected["sourceLabel"] == "备用数据"
+    assert projected["providerHealth"]["status"] == "fallback"
+    assert projected["evidenceSnapshot"]["freshness"] == "fallback"
+    assert "lastError" not in projected
+    assert "refreshError" not in projected
+    assert "isRefreshing" not in projected

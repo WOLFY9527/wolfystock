@@ -9,6 +9,7 @@ import time
 import unittest
 from concurrent.futures import Future
 from datetime import timedelta
+from typing import Any
 from unittest.mock import Mock
 
 from src.services.market_cache import MarketCache
@@ -17,6 +18,101 @@ from src.services.llm_instrumentation import (
     set_llm_event_sink,
     snapshot_llm_event_counters,
 )
+
+
+def _assert_json_safe(value: Any, path: str = "root") -> None:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _assert_json_safe(item, f"{path}[{index}]")
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError(f"remote backend projection requires string keys at {path}")
+            _assert_json_safe(item, f"{path}.{key}")
+        return
+    raise TypeError(f"remote backend projection requires JSON-safe values, got {type(value).__name__} at {path}")
+
+
+def _sanitize_remote_value(value: Any, path: str = "root") -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, list):
+        return [_sanitize_remote_value(item, f"{path}[{index}]") for index, item in enumerate(value)]
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError(f"remote backend projection requires string keys at {path}")
+            sanitized[key] = _sanitize_remote_value(item, f"{path}.{key}")
+        return sanitized
+    raise TypeError(f"remote backend projection requires JSON-safe values, got {type(value).__name__} at {path}")
+
+
+def _project_remote_cache_entry(cache: MarketCache, entry: Any, *, is_stale: bool = False) -> dict:
+    sanitized = _sanitize_remote_value(entry.data)
+    if is_stale or entry.expires_at <= cache._now():
+        sanitized.setdefault("isStale", True)
+    sanitized.pop("isRefreshing", None)
+    sanitized.pop("lastError", None)
+    sanitized.pop("refreshError", None)
+    document = {
+        "key": entry.key,
+        "ttlSeconds": entry.ttl_seconds,
+        "fetchedAt": entry.fetched_at.isoformat(timespec="seconds"),
+        "expiresAt": entry.expires_at.isoformat(timespec="seconds"),
+        "data": sanitized,
+    }
+    _assert_json_safe(document)
+    return document
+
+
+class _RemoteBackendUnavailable(RuntimeError):
+    pass
+
+
+class _FakeRemoteMarketCacheBackend:
+    def __init__(self, *, fail_on_write: bool = False) -> None:
+        self.fail_on_write = fail_on_write
+        self.documents: dict[str, dict] = {}
+        self.read_calls = 0
+        self.write_calls = 0
+
+    def seed(self, key: str, document: dict) -> None:
+        self.documents[key] = json.loads(json.dumps(document, ensure_ascii=False, sort_keys=True))
+
+    def get(self, key: str) -> dict | None:
+        self.read_calls += 1
+        document = self.documents.get(key)
+        if document is None:
+            return None
+        return json.loads(json.dumps(document, ensure_ascii=False, sort_keys=True))
+
+    def persist(self, key: str, document: dict) -> None:
+        self.write_calls += 1
+        if self.fail_on_write:
+            raise _RemoteBackendUnavailable("redis backend unavailable")
+        self.documents[key] = json.loads(json.dumps(document, ensure_ascii=False, sort_keys=True))
+
+
+def _get_or_refresh_with_remote_backend_mirror(
+    cache: MarketCache,
+    backend: _FakeRemoteMarketCacheBackend,
+    key: str,
+    ttl_seconds: int,
+    fetcher,
+    **kwargs: Any,
+) -> dict:
+    payload = cache.get_or_refresh(key, ttl_seconds, fetcher, **kwargs)
+    entry = cache.get(key)
+    if entry is not None:
+        try:
+            backend.persist(key, _project_remote_cache_entry(cache, entry, is_stale=bool(payload.get("isStale"))))
+        except _RemoteBackendUnavailable:
+            pass
+    return payload
 
 
 class MarketCacheTestCase(unittest.TestCase):
@@ -442,7 +538,7 @@ class MarketCacheTestCase(unittest.TestCase):
         self.assertEqual(payload["value"], 1)
         self.assertEqual(self._event_counts().get("market_cache_hit"), 1)
 
-    def test_entry_metadata_can_be_projected_to_json_safe_shape(self) -> None:
+    def test_remote_projection_only_persists_json_safe_cache_contract(self) -> None:
         cache = MarketCache(max_workers=1)
         cache.set(
             "market_overview:indices",
@@ -508,34 +604,95 @@ class MarketCacheTestCase(unittest.TestCase):
             "executor": cache._executor,
             "fetcher": Mock(return_value={"source": "live"}),
         }
-        projected = {
-            "key": entry.key,
-            "ttlSeconds": entry.ttl_seconds,
-            "fetchedAt": entry.fetched_at.isoformat(timespec="seconds"),
-            "expiresAt": entry.expires_at.isoformat(timespec="seconds"),
-            "isRefreshing": entry.is_refreshing,
-            "lastError": entry.last_error,
-            "data": cache._payload(entry, is_stale=True),
+        projected = _project_remote_cache_entry(cache, entry, is_stale=True)
+
+        self.assertEqual(projected["key"], "market_overview:indices")
+        self.assertEqual(projected["data"]["freshness"], "partial")
+        self.assertTrue(projected["data"]["isStale"])
+        self.assertTrue(projected["data"]["isPartial"])
+        self.assertFalse(projected["data"]["isFallback"])
+        self.assertFalse(projected["data"]["isSynthetic"])
+        self.assertNotIn("isRefreshing", projected["data"])
+        self.assertNotIn("lastError", projected["data"])
+        self.assertNotIn("refreshError", projected["data"])
+        self.assertEqual(projected["data"]["source"], "mixed")
+        self.assertEqual(projected["data"]["sourceLabel"], "多来源")
+        self.assertEqual(projected["data"]["asOf"], "2026-05-28T09:30:00+08:00")
+        self.assertEqual(projected["data"]["updatedAt"], "2026-05-28T09:31:00+08:00")
+        self.assertEqual(projected["data"]["providerHealth"]["status"], "refreshing")
+        self.assertFalse(projected["data"]["evidenceSnapshot"]["scoreReliabilityAllowed"])
+        self.assertEqual(projected["data"]["sourceConfidence"]["freshness"], "partial")
+        self.assertTrue(all(name not in projected for name in runtime_only))
+
+    def test_remote_projection_rejects_non_json_process_local_state(self) -> None:
+        cache = MarketCache(max_workers=1)
+        invalid_cases = {
+            "callable": lambda: {"source": "binance"},
+            "lock": cache._lock_for("crypto"),
+            "future": Future(),
+            "executor": cache._executor,
+            "processLocal": object(),
         }
 
-        round_tripped = json.loads(json.dumps(projected, ensure_ascii=False, sort_keys=True))
+        for field_name, invalid_value in invalid_cases.items():
+            with self.subTest(field_name=field_name):
+                cache.set("crypto", {"source": "binance"}, ttl_seconds=30)
+                entry = cache.get("crypto")
+                self.assertIsNotNone(entry)
+                assert entry is not None
+                entry.data[field_name] = invalid_value
+                with self.assertRaisesRegex(TypeError, "JSON-safe"):
+                    _project_remote_cache_entry(cache, entry)
 
-        self.assertEqual(round_tripped["key"], "market_overview:indices")
-        self.assertEqual(round_tripped["data"]["freshness"], "partial")
-        self.assertTrue(round_tripped["data"]["isStale"])
-        self.assertTrue(round_tripped["data"]["isPartial"])
-        self.assertFalse(round_tripped["data"]["isFallback"])
-        self.assertFalse(round_tripped["data"]["isSynthetic"])
-        self.assertTrue(round_tripped["data"]["isRefreshing"])
-        self.assertEqual(round_tripped["data"]["lastError"], "provider timeout")
-        self.assertEqual(round_tripped["data"]["source"], "mixed")
-        self.assertEqual(round_tripped["data"]["sourceLabel"], "多来源")
-        self.assertEqual(round_tripped["data"]["asOf"], "2026-05-28T09:30:00+08:00")
-        self.assertEqual(round_tripped["data"]["updatedAt"], "2026-05-28T09:31:00+08:00")
-        self.assertEqual(round_tripped["data"]["providerHealth"]["status"], "refreshing")
-        self.assertFalse(round_tripped["data"]["evidenceSnapshot"]["scoreReliabilityAllowed"])
-        self.assertEqual(round_tripped["data"]["sourceConfidence"]["freshness"], "partial")
-        self.assertTrue(all(name not in projected for name in runtime_only))
+    def test_local_memory_cache_remains_authoritative_over_remote_backend(self) -> None:
+        cache = MarketCache(max_workers=1)
+        cache.set("crypto", {"source": "binance", "value": 1, "freshness": "live"}, ttl_seconds=30)
+        backend = _FakeRemoteMarketCacheBackend()
+        backend.seed(
+            "crypto",
+            {
+                "key": "crypto",
+                "ttlSeconds": 30,
+                "fetchedAt": "2026-05-29T09:30:00+08:00",
+                "expiresAt": "2026-05-29T09:31:00+08:00",
+                "data": {"source": "fallback", "value": 999, "freshness": "fallback", "isFallback": True},
+            },
+        )
+
+        payload = _get_or_refresh_with_remote_backend_mirror(
+            cache,
+            backend,
+            "crypto",
+            30,
+            Mock(side_effect=AssertionError("fresh local cache should stay authoritative")),
+        )
+
+        self.assertEqual(payload["source"], "binance")
+        self.assertEqual(payload["value"], 1)
+        self.assertEqual(payload["freshness"], "live")
+        self.assertEqual(backend.read_calls, 0)
+        self.assertEqual(backend.documents["crypto"]["data"]["source"], "binance")
+        self.assertEqual(backend.documents["crypto"]["data"]["value"], 1)
+
+    def test_remote_backend_failure_degrades_to_current_local_fallback_behavior(self) -> None:
+        cache = MarketCache(max_workers=1)
+        backend = _FakeRemoteMarketCacheBackend(fail_on_write=True)
+
+        payload = _get_or_refresh_with_remote_backend_mirror(
+            cache,
+            backend,
+            "cn_indices",
+            30,
+            Mock(side_effect=RuntimeError("provider down")),
+            fallback_factory=lambda: {"source": "fallback", "freshness": "fallback", "isFallback": True},
+        )
+
+        self.assertEqual(payload["source"], "fallback")
+        self.assertEqual(payload["freshness"], "fallback")
+        self.assertTrue(payload["isFallback"])
+        self.assertEqual(cache.get("cn_indices").data["source"], "fallback")
+        self.assertEqual(cache.get("cn_indices").data["freshness"], "fallback")
+        self.assertEqual(backend.write_calls, 1)
 
 
 if __name__ == "__main__":
