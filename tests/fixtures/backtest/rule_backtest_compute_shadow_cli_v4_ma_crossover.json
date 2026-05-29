@@ -1,0 +1,325 @@
+{
+  "contract_version": "shadow_cli_v4",
+  "case_id": "moving_average_crossover_fast_slow_long_cash",
+  "input": {
+    "contract_version": "shadow_cli_v4",
+    "case_id": "moving_average_crossover_fast_slow_long_cash",
+    "code": "SAFE",
+    "initial_capital": 100000.0,
+    "lookback_bars": 20,
+    "date_window": {
+      "start_date": "2024-01-01",
+      "end_date": "2024-01-10"
+    },
+    "execution_model": {
+      "version": "v1",
+      "timeframe": "daily",
+      "signal_evaluation_timing": "bar_close",
+      "entry_timing": "next_bar_open",
+      "exit_timing": "next_bar_open",
+      "entry_fill_price_basis": "open",
+      "exit_fill_price_basis": "open",
+      "position_sizing": "single_position_full_notional",
+      "fee_model": "bps_per_side",
+      "fee_bps_per_side": 2.5,
+      "slippage_model": "bps_per_side",
+      "slippage_bps_per_side": 1.25,
+      "market_rules": {
+        "trading_day_execution": "available_bars_only",
+        "terminal_bar_fill_fallback": "same_bar_close",
+        "window_end_position_handling": "force_flatten"
+      }
+    },
+    "parsed_strategy": {
+      "version": "v1",
+      "timeframe": "daily",
+      "source_text": "",
+      "normalized_text": "SMA3 上穿 SMA5 买入，SMA3 下穿 SMA5 卖出。",
+      "strategy_kind": "moving_average_crossover",
+      "entry": {
+        "type": "group",
+        "operator": "and",
+        "conditions": []
+      },
+      "exit": {
+        "type": "group",
+        "operator": "or",
+        "conditions": []
+      },
+      "max_lookback": 5,
+      "confidence": 1.0,
+      "needs_confirmation": false,
+      "ambiguities": [],
+      "summary": {
+        "entry": "买入条件：SMA3 上穿 SMA5",
+        "exit": "卖出条件：SMA3 下穿 SMA5",
+        "strategy": "均线交叉策略"
+      },
+      "executable": true,
+      "normalization_state": "ready",
+      "assumptions": [],
+      "assumption_groups": [],
+      "unsupported_reason": null,
+      "unsupported_details": [],
+      "unsupported_extensions": [],
+      "detected_strategy_family": "moving_average_crossover",
+      "core_intent_summary": "SMA3 上穿 SMA5 时做多，SMA3 下穿 SMA5 时回到现金。",
+      "interpretation_confidence": 1.0,
+      "supported_portion_summary": "仅覆盖 long_only、single_position_full_notional、next_bar_open 的 SMA fast/slow crossover 子集。",
+      "rewrite_suggestions": [],
+      "parse_warnings": [],
+      "strategy_spec": {
+        "version": "v1",
+        "strategy_type": "moving_average_crossover",
+        "strategy_family": "moving_average_crossover",
+        "symbol": "SAFE",
+        "timeframe": "daily",
+        "max_lookback": 5,
+        "date_range": {
+          "start_date": "2024-01-01",
+          "end_date": "2024-01-10"
+        },
+        "capital": {
+          "initial_capital": 100000.0,
+          "currency": "USD"
+        },
+        "costs": {
+          "fee_bps": 2.5,
+          "slippage_bps": 1.25
+        },
+        "signal": {
+          "indicator_family": "moving_average",
+          "fast_period": 3,
+          "slow_period": 5,
+          "fast_type": "simple",
+          "slow_type": "simple",
+          "entry_condition": "fast_crosses_above_slow",
+          "exit_condition": "fast_crosses_below_slow"
+        },
+        "execution": {
+          "frequency": "daily",
+          "signal_timing": "bar_close",
+          "fill_timing": "next_bar_open"
+        },
+        "position_behavior": {
+          "direction": "long_only",
+          "entry_sizing": "all_in",
+          "max_positions": 1,
+          "pyramiding": false
+        },
+        "end_behavior": {
+          "policy": "liquidate_at_end",
+          "price_basis": "close"
+        },
+        "support": {
+          "executable": true,
+          "normalization_state": "ready",
+          "requires_confirmation": false,
+          "unsupported_reason": null,
+          "detected_strategy_family": "moving_average_crossover"
+        }
+      }
+    },
+    "bars": [
+      {
+        "date": "2024-01-01",
+        "open": 10.0,
+        "high": 10.2,
+        "low": 9.8,
+        "close": 10.0,
+        "volume": 1000.0
+      },
+      {
+        "date": "2024-01-02",
+        "open": 10.0,
+        "high": 10.2,
+        "low": 9.8,
+        "close": 10.0,
+        "volume": 1001.0
+      },
+      {
+        "date": "2024-01-03",
+        "open": 10.0,
+        "high": 10.2,
+        "low": 9.8,
+        "close": 10.0,
+        "volume": 1002.0
+      },
+      {
+        "date": "2024-01-04",
+        "open": 10.0,
+        "high": 10.2,
+        "low": 9.8,
+        "close": 10.0,
+        "volume": 1003.0
+      },
+      {
+        "date": "2024-01-05",
+        "open": 10.0,
+        "high": 10.2,
+        "low": 9.8,
+        "close": 10.0,
+        "volume": 1004.0
+      },
+      {
+        "date": "2024-01-06",
+        "open": 10.5,
+        "high": 11.2,
+        "low": 10.3,
+        "close": 11.0,
+        "volume": 1005.0
+      },
+      {
+        "date": "2024-01-07",
+        "open": 11.5,
+        "high": 12.2,
+        "low": 11.3,
+        "close": 12.0,
+        "volume": 1006.0
+      },
+      {
+        "date": "2024-01-08",
+        "open": 11.8,
+        "high": 12.0,
+        "low": 8.8,
+        "close": 9.0,
+        "volume": 1007.0
+      },
+      {
+        "date": "2024-01-09",
+        "open": 8.5,
+        "high": 8.7,
+        "low": 7.8,
+        "close": 8.0,
+        "volume": 1008.0
+      },
+      {
+        "date": "2024-01-10",
+        "open": 8.2,
+        "high": 10.2,
+        "low": 8.0,
+        "close": 10.0,
+        "volume": 1009.0
+      }
+    ]
+  },
+  "expected_output": {
+    "contract_version": "shadow_cli_v4",
+    "case_id": "moving_average_crossover_fast_slow_long_cash",
+    "execution_model": {
+      "version": "v1",
+      "timeframe": "daily",
+      "signal_evaluation_timing": "bar_close",
+      "entry_timing": "next_bar_open",
+      "exit_timing": "next_bar_open",
+      "entry_fill_price_basis": "open",
+      "exit_fill_price_basis": "open",
+      "position_sizing": "single_position_full_notional",
+      "fee_model": "bps_per_side",
+      "fee_bps_per_side": 2.5,
+      "slippage_model": "bps_per_side",
+      "slippage_bps_per_side": 1.25,
+      "market_rules": {
+        "trading_day_execution": "available_bars_only",
+        "terminal_bar_fill_fallback": "same_bar_close",
+        "window_end_position_handling": "force_flatten"
+      }
+    },
+    "execution_assumptions": {
+      "timeframe": "daily",
+      "indicator_price_basis": "close",
+      "signal_evaluation_timing": "bar_close",
+      "entry_fill_timing": "next_bar_open",
+      "exit_fill_timing": "next_bar_open; same_bar_close",
+      "default_fill_price_basis": "open",
+      "position_sizing": "single_position_full_notional",
+      "fee_model": "bps_per_side",
+      "fee_bps_per_side": 2.5,
+      "slippage_model": "bps_per_side",
+      "slippage_bps_per_side": 1.25,
+      "benchmark_method": "buy_and_hold_same_window",
+      "benchmark_price_basis": "close"
+    },
+    "metrics": {
+      "initial_capital": 100000.0,
+      "final_equity": 71250.889614,
+      "total_return_pct": -28.7491,
+      "annualized_return_pct": null,
+      "sharpe_ratio": -5.9651,
+      "benchmark_return_pct": 0.0,
+      "excess_return_vs_benchmark_pct": -28.7491,
+      "buy_and_hold_return_pct": 0.0,
+      "excess_return_vs_buy_and_hold_pct": -28.7491,
+      "trade_count": 1,
+      "entry_signal_count": 1,
+      "win_count": 0,
+      "loss_count": 1,
+      "win_rate_pct": 0.0,
+      "avg_trade_return_pct": -28.7491,
+      "max_drawdown_pct": 33.3333,
+      "avg_holding_days": 3,
+      "avg_holding_bars": 3,
+      "avg_holding_calendar_days": 3,
+      "bars_used": 10,
+      "lookback_bars": 20,
+      "period_start": "2024-01-01",
+      "period_end": "2024-01-10"
+    },
+    "selected_equity_points": [
+      {
+        "date": "2024-01-06",
+        "executed_action": null,
+        "signal_summary": "买入条件：SMA3 上穿 SMA5",
+        "position_state": "flat",
+        "exposure_pct": 0.0,
+        "notes": null,
+        "total_portfolio_value": 100000.0
+      },
+      {
+        "date": "2024-01-07",
+        "executed_action": "buy",
+        "signal_summary": null,
+        "position_state": "long",
+        "exposure_pct": 1.0,
+        "notes": "moving_average_crossover_entry_next_bar_open",
+        "total_portfolio_value": 104308.707062
+      },
+      {
+        "date": "2024-01-09",
+        "executed_action": null,
+        "signal_summary": "卖出条件：SMA3 下穿 SMA5",
+        "position_state": "long",
+        "exposure_pct": 1.0,
+        "notes": null,
+        "total_portfolio_value": 69539.138041
+      },
+      {
+        "date": "2024-01-10",
+        "executed_action": "sell",
+        "signal_summary": null,
+        "position_state": "flat",
+        "exposure_pct": 0.0,
+        "notes": "moving_average_crossover_exit_next_bar_open",
+        "total_portfolio_value": 71250.889614
+      }
+    ],
+    "trades": [
+      {
+        "entry_signal_date": "2024-01-06",
+        "entry_date": "2024-01-07",
+        "exit_signal_date": "2024-01-09",
+        "exit_date": "2024-01-10",
+        "entry_price": 11.501437,
+        "exit_price": 8.198975,
+        "return_pct": -28.7491,
+        "quantity": 8692.392255,
+        "fees": 42.810928,
+        "slippage": 21.405016,
+        "entry_reason": "signal_entry",
+        "exit_reason": "signal_exit",
+        "signal_reason": "rule_conditions",
+        "notes": "moving_average_crossover_exit_next_bar_open"
+      }
+    ]
+  }
+}

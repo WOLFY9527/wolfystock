@@ -255,7 +255,20 @@ def test_rule_backtest_compute_golden_fixture_is_compact_deterministic_and_sanit
 def test_rule_backtest_shadow_cli_fixtures_are_parser_free_explicit_and_sanitized() -> None:
     expected_cases = {
         "rule_backtest_compute_shadow_cli_v1.json": {
+            "contract_version": "shadow_cli_v1",
             "case_id": "rule_conditions_close_vs_ma3_long_cash",
+            "date_window": {"start_date": "2024-01-01", "end_date": "2024-01-08"},
+            "strategy_kind": "rule_conditions",
+            "entry_text": "Close > MA3",
+            "exit_text": "Close < MA3",
+            "max_lookback": 3,
+            "strategy_spec": {
+                "strategy_type": "rule_conditions",
+                "indicator_family": "sma_close_rule_conditions",
+                "price_basis": "close",
+                "signal_window": 3,
+            },
+            "bars_count": 8,
             "trade_count": 1,
             "final_equity": 77620.334341,
             "total_return_pct": -22.3797,
@@ -281,7 +294,20 @@ def test_rule_backtest_shadow_cli_fixtures_are_parser_free_explicit_and_sanitize
             ],
         },
         "rule_backtest_compute_shadow_cli_v2.json": {
+            "contract_version": "shadow_cli_v1",
             "case_id": "rule_conditions_close_vs_ma3_no_trade",
+            "date_window": {"start_date": "2024-01-01", "end_date": "2024-01-08"},
+            "strategy_kind": "rule_conditions",
+            "entry_text": "Close > MA3",
+            "exit_text": "Close < MA3",
+            "max_lookback": 3,
+            "strategy_spec": {
+                "strategy_type": "rule_conditions",
+                "indicator_family": "sma_close_rule_conditions",
+                "price_basis": "close",
+                "signal_window": 3,
+            },
+            "bars_count": 8,
             "trade_count": 0,
             "final_equity": 100000.0,
             "total_return_pct": 0.0,
@@ -290,7 +316,20 @@ def test_rule_backtest_shadow_cli_fixtures_are_parser_free_explicit_and_sanitize
             "trades": [],
         },
         "rule_backtest_compute_shadow_cli_v3_terminal_forced_close.json": {
+            "contract_version": "shadow_cli_v1",
             "case_id": "rule_conditions_close_vs_ma3_terminal_forced_close",
+            "date_window": {"start_date": "2024-01-01", "end_date": "2024-01-08"},
+            "strategy_kind": "rule_conditions",
+            "entry_text": "Close > MA3",
+            "exit_text": "Close < MA3",
+            "max_lookback": 3,
+            "strategy_spec": {
+                "strategy_type": "rule_conditions",
+                "indicator_family": "sma_close_rule_conditions",
+                "price_basis": "close",
+                "signal_window": 3,
+            },
+            "bars_count": 8,
             "trade_count": 1,
             "final_equity": 126118.967526,
             "total_return_pct": 26.119,
@@ -315,6 +354,90 @@ def test_rule_backtest_shadow_cli_fixtures_are_parser_free_explicit_and_sanitize
                 }
             ],
         },
+        "rule_backtest_compute_shadow_cli_v4_ma_crossover.json": {
+            "contract_version": "shadow_cli_v4",
+            "case_id": "moving_average_crossover_fast_slow_long_cash",
+            "date_window": {"start_date": "2024-01-01", "end_date": "2024-01-10"},
+            "strategy_kind": "moving_average_crossover",
+            "entry_text": None,
+            "exit_text": None,
+            "max_lookback": 5,
+            "strategy_spec": {
+                "version": "v1",
+                "strategy_type": "moving_average_crossover",
+                "strategy_family": "moving_average_crossover",
+                "symbol": "SAFE",
+                "timeframe": "daily",
+                "max_lookback": 5,
+                "date_range": {
+                    "start_date": "2024-01-01",
+                    "end_date": "2024-01-10",
+                },
+                "capital": {
+                    "initial_capital": 100000.0,
+                    "currency": "USD",
+                },
+                "costs": {
+                    "fee_bps": 2.5,
+                    "slippage_bps": 1.25,
+                },
+                "signal": {
+                    "indicator_family": "moving_average",
+                    "fast_period": 3,
+                    "slow_period": 5,
+                    "fast_type": "simple",
+                    "slow_type": "simple",
+                    "entry_condition": "fast_crosses_above_slow",
+                    "exit_condition": "fast_crosses_below_slow",
+                },
+                "execution": {
+                    "frequency": "daily",
+                    "signal_timing": "bar_close",
+                    "fill_timing": "next_bar_open",
+                },
+                "position_behavior": {
+                    "direction": "long_only",
+                    "entry_sizing": "all_in",
+                    "max_positions": 1,
+                    "pyramiding": False,
+                },
+                "end_behavior": {
+                    "policy": "liquidate_at_end",
+                    "price_basis": "close",
+                },
+                "support": {
+                    "executable": True,
+                    "normalization_state": "ready",
+                    "requires_confirmation": False,
+                    "unsupported_reason": None,
+                    "detected_strategy_family": "moving_average_crossover",
+                },
+            },
+            "bars_count": 10,
+            "trade_count": 1,
+            "final_equity": 71250.889614,
+            "total_return_pct": -28.7491,
+            "selected_actions": [None, "buy", None, "sell"],
+            "selected_dates": ["2024-01-06", "2024-01-07", "2024-01-09", "2024-01-10"],
+            "trades": [
+                {
+                    "entry_signal_date": "2024-01-06",
+                    "entry_date": "2024-01-07",
+                    "exit_signal_date": "2024-01-09",
+                    "exit_date": "2024-01-10",
+                    "entry_price": 11.501437,
+                    "exit_price": 8.198975,
+                    "return_pct": -28.7491,
+                    "quantity": 8692.392255,
+                    "fees": 42.810928,
+                    "slippage": 21.405016,
+                    "entry_reason": "signal_entry",
+                    "exit_reason": "signal_exit",
+                    "signal_reason": "rule_conditions",
+                    "notes": "moving_average_crossover_exit_next_bar_open",
+                }
+            ],
+        },
     }
 
     for fixture_name, expected_case in expected_cases.items():
@@ -322,7 +445,7 @@ def test_rule_backtest_shadow_cli_fixtures_are_parser_free_explicit_and_sanitize
         payload = json.loads(fixture_path.read_text(encoding="utf-8"))
         serialized = fixture_path.read_text(encoding="utf-8").lower()
 
-        assert payload["contract_version"] == "shadow_cli_v1"
+        assert payload["contract_version"] == expected_case["contract_version"]
         assert payload["case_id"] == expected_case["case_id"]
         assert set(payload) == {"contract_version", "case_id", "input", "expected_output"}
         assert "strategy_text" not in serialized
@@ -337,25 +460,32 @@ def test_rule_backtest_shadow_cli_fixtures_are_parser_free_explicit_and_sanitize
         assert fixture_input["code"] == "SAFE"
         assert fixture_input["initial_capital"] == 100000.0
         assert fixture_input["lookback_bars"] == 20
-        assert fixture_input["date_window"] == {"start_date": "2024-01-01", "end_date": "2024-01-08"}
+        assert fixture_input["date_window"] == expected_case["date_window"]
         assert fixture_input["execution_model"]["entry_timing"] == "next_bar_open"
         assert fixture_input["execution_model"]["exit_timing"] == "next_bar_open"
         assert fixture_input["execution_model"]["market_rules"]["terminal_bar_fill_fallback"] == "same_bar_close"
-        assert fixture_input["parsed_strategy"]["strategy_kind"] == "rule_conditions"
-        assert fixture_input["parsed_strategy"]["entry"]["text"] == "Close > MA3"
-        assert fixture_input["parsed_strategy"]["exit"]["text"] == "Close < MA3"
-        assert fixture_input["parsed_strategy"]["max_lookback"] == 3
-        assert fixture_input["parsed_strategy"]["strategy_spec"] == {
-            "strategy_type": "rule_conditions",
-            "indicator_family": "sma_close_rule_conditions",
-            "price_basis": "close",
-            "signal_window": 3,
-        }
-        assert len(fixture_input["bars"]) == 8
+        assert fixture_input["parsed_strategy"]["strategy_kind"] == expected_case["strategy_kind"]
+        assert fixture_input["parsed_strategy"].get("entry", {}).get("text") == expected_case["entry_text"]
+        assert fixture_input["parsed_strategy"].get("exit", {}).get("text") == expected_case["exit_text"]
+        assert fixture_input["parsed_strategy"]["max_lookback"] == expected_case["max_lookback"]
+        assert fixture_input["parsed_strategy"]["strategy_spec"] == expected_case["strategy_spec"]
+        assert len(fixture_input["bars"]) == expected_case["bars_count"]
         assert all(
             set(bar) == {"date", "open", "high", "low", "close", "volume"}
             for bar in fixture_input["bars"]
         )
+        if expected_case["strategy_kind"] == "moving_average_crossover":
+            assert fixture_input["parsed_strategy"]["normalized_text"] == "SMA3 上穿 SMA5 买入，SMA3 下穿 SMA5 卖出。"
+            assert fixture_input["parsed_strategy"]["summary"] == {
+                "entry": "买入条件：SMA3 上穿 SMA5",
+                "exit": "卖出条件：SMA3 下穿 SMA5",
+                "strategy": "均线交叉策略",
+            }
+            assert fixture_input["parsed_strategy"]["executable"] is True
+            assert fixture_input["parsed_strategy"]["normalization_state"] == "ready"
+            assert fixture_input["parsed_strategy"]["assumptions"] == []
+            assert fixture_input["parsed_strategy"]["assumption_groups"] == []
+            assert fixture_input["parsed_strategy"]["detected_strategy_family"] == "moving_average_crossover"
 
         expected_output = payload["expected_output"]
         assert expected_output["contract_version"] == payload["contract_version"]
@@ -674,6 +804,7 @@ def test_all_backtest_golden_fixtures_are_sanitized_and_explicitly_enumerated() 
         "rule_backtest_compute_shadow_cli_v1.json",
         "rule_backtest_compute_shadow_cli_v2.json",
         "rule_backtest_compute_shadow_cli_v3_terminal_forced_close.json",
+        "rule_backtest_compute_shadow_cli_v4_ma_crossover.json",
         "rule_backtest_compare_dto.json",
         "rule_backtest_compare_heatmap_dto.json",
         "rule_backtest_execution_model_v1_metadata.json",

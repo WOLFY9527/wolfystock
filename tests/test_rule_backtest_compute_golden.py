@@ -165,19 +165,121 @@ def test_rule_backtest_compute_basic_long_cash_golden_fixture_matches_python_eng
 def test_rule_backtest_shadow_cli_fixtures_match_python_engine_without_parser() -> None:
     expected_cases = {
         "rule_backtest_compute_shadow_cli_v1.json": {
+            "contract_version": "shadow_cli_v1",
             "case_id": "rule_conditions_close_vs_ma3_long_cash",
+            "date_window": {"start_date": "2024-01-01", "end_date": "2024-01-08"},
+            "strategy_kind": "rule_conditions",
+            "entry_text": "Close > MA3",
+            "exit_text": "Close < MA3",
+            "max_lookback": 3,
+            "strategy_spec": {
+                "strategy_type": "rule_conditions",
+                "indicator_family": "sma_close_rule_conditions",
+                "price_basis": "close",
+                "signal_window": 3,
+            },
+            "bars_count": 8,
             "trade_count": 1,
             "selected_dates": ["2024-01-04", "2024-01-05", "2024-01-06", "2024-01-07"],
         },
         "rule_backtest_compute_shadow_cli_v2.json": {
+            "contract_version": "shadow_cli_v1",
             "case_id": "rule_conditions_close_vs_ma3_no_trade",
+            "date_window": {"start_date": "2024-01-01", "end_date": "2024-01-08"},
+            "strategy_kind": "rule_conditions",
+            "entry_text": "Close > MA3",
+            "exit_text": "Close < MA3",
+            "max_lookback": 3,
+            "strategy_spec": {
+                "strategy_type": "rule_conditions",
+                "indicator_family": "sma_close_rule_conditions",
+                "price_basis": "close",
+                "signal_window": 3,
+            },
+            "bars_count": 8,
             "trade_count": 0,
             "selected_dates": ["2024-01-04", "2024-01-05", "2024-01-06", "2024-01-07"],
         },
         "rule_backtest_compute_shadow_cli_v3_terminal_forced_close.json": {
+            "contract_version": "shadow_cli_v1",
             "case_id": "rule_conditions_close_vs_ma3_terminal_forced_close",
+            "date_window": {"start_date": "2024-01-01", "end_date": "2024-01-08"},
+            "strategy_kind": "rule_conditions",
+            "entry_text": "Close > MA3",
+            "exit_text": "Close < MA3",
+            "max_lookback": 3,
+            "strategy_spec": {
+                "strategy_type": "rule_conditions",
+                "indicator_family": "sma_close_rule_conditions",
+                "price_basis": "close",
+                "signal_window": 3,
+            },
+            "bars_count": 8,
             "trade_count": 1,
             "selected_dates": ["2024-01-05", "2024-01-06", "2024-01-07", "2024-01-08"],
+        },
+        "rule_backtest_compute_shadow_cli_v4_ma_crossover.json": {
+            "contract_version": "shadow_cli_v4",
+            "case_id": "moving_average_crossover_fast_slow_long_cash",
+            "date_window": {"start_date": "2024-01-01", "end_date": "2024-01-10"},
+            "strategy_kind": "moving_average_crossover",
+            "entry_text": None,
+            "exit_text": None,
+            "max_lookback": 5,
+            "strategy_spec": {
+                "version": "v1",
+                "strategy_type": "moving_average_crossover",
+                "strategy_family": "moving_average_crossover",
+                "symbol": "SAFE",
+                "timeframe": "daily",
+                "max_lookback": 5,
+                "date_range": {
+                    "start_date": "2024-01-01",
+                    "end_date": "2024-01-10",
+                },
+                "capital": {
+                    "initial_capital": 100000.0,
+                    "currency": "USD",
+                },
+                "costs": {
+                    "fee_bps": 2.5,
+                    "slippage_bps": 1.25,
+                },
+                "signal": {
+                    "indicator_family": "moving_average",
+                    "fast_period": 3,
+                    "slow_period": 5,
+                    "fast_type": "simple",
+                    "slow_type": "simple",
+                    "entry_condition": "fast_crosses_above_slow",
+                    "exit_condition": "fast_crosses_below_slow",
+                },
+                "execution": {
+                    "frequency": "daily",
+                    "signal_timing": "bar_close",
+                    "fill_timing": "next_bar_open",
+                },
+                "position_behavior": {
+                    "direction": "long_only",
+                    "entry_sizing": "all_in",
+                    "max_positions": 1,
+                    "pyramiding": False,
+                },
+                "end_behavior": {
+                    "policy": "liquidate_at_end",
+                    "price_basis": "close",
+                },
+                "support": {
+                    "executable": True,
+                    "normalization_state": "ready",
+                    "requires_confirmation": False,
+                    "unsupported_reason": None,
+                    "detected_strategy_family": "moving_average_crossover",
+                },
+            },
+            "bars_count": 10,
+            "trade_count": 1,
+            "selected_dates": ["2024-01-06", "2024-01-07", "2024-01-09", "2024-01-10"],
         },
     }
 
@@ -185,7 +287,7 @@ def test_rule_backtest_shadow_cli_fixtures_match_python_engine_without_parser() 
         fixture_text = _load_fixture_text(fixture_name)
         fixture = json.loads(fixture_text)
 
-        assert fixture["contract_version"] == "shadow_cli_v1"
+        assert fixture["contract_version"] == expected_case["contract_version"]
         assert fixture["case_id"] == expected_case["case_id"]
         assert "strategy_text" not in fixture_text
         assert "pyo3" not in fixture_text.lower()
@@ -195,16 +297,29 @@ def test_rule_backtest_shadow_cli_fixtures_match_python_engine_without_parser() 
 
         fixture_input = fixture["input"]
         expected_output = fixture["expected_output"]
-        assert fixture_input["parsed_strategy"]["strategy_kind"] == "rule_conditions"
-        assert fixture_input["parsed_strategy"]["entry"]["text"] == "Close > MA3"
-        assert fixture_input["parsed_strategy"]["exit"]["text"] == "Close < MA3"
-        assert fixture_input["parsed_strategy"]["max_lookback"] == 3
-        assert fixture_input["parsed_strategy"]["strategy_spec"]["strategy_type"] == "rule_conditions"
-        assert len(fixture_input["bars"]) == 8
+        assert fixture_input["date_window"] == expected_case["date_window"]
+        assert fixture_input["parsed_strategy"]["strategy_kind"] == expected_case["strategy_kind"]
+        assert fixture_input["parsed_strategy"].get("entry", {}).get("text") == expected_case["entry_text"]
+        assert fixture_input["parsed_strategy"].get("exit", {}).get("text") == expected_case["exit_text"]
+        assert fixture_input["parsed_strategy"]["max_lookback"] == expected_case["max_lookback"]
+        assert fixture_input["parsed_strategy"]["strategy_spec"] == expected_case["strategy_spec"]
+        assert len(fixture_input["bars"]) == expected_case["bars_count"]
         assert all(
             set(bar) == {"date", "open", "high", "low", "close", "volume"}
             for bar in fixture_input["bars"]
         )
+        if expected_case["strategy_kind"] == "moving_average_crossover":
+            assert fixture_input["parsed_strategy"]["normalized_text"] == "SMA3 上穿 SMA5 买入，SMA3 下穿 SMA5 卖出。"
+            assert fixture_input["parsed_strategy"]["summary"] == {
+                "entry": "买入条件：SMA3 上穿 SMA5",
+                "exit": "卖出条件：SMA3 下穿 SMA5",
+                "strategy": "均线交叉策略",
+            }
+            assert fixture_input["parsed_strategy"]["executable"] is True
+            assert fixture_input["parsed_strategy"]["normalization_state"] == "ready"
+            assert fixture_input["parsed_strategy"]["assumptions"] == []
+            assert fixture_input["parsed_strategy"]["assumption_groups"] == []
+            assert fixture_input["parsed_strategy"]["detected_strategy_family"] == "moving_average_crossover"
 
         engine = RuleBacktestEngine()
         result = engine.run(
