@@ -154,6 +154,43 @@ type PortfolioLanguage = 'zh' | 'en';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
 
+type TradeFormState = {
+  symbol: string;
+  tradeDate: string;
+  side: PortfolioSide;
+  currency: DisplayCurrency;
+  quantity: string;
+  price: string;
+  fee: string;
+  tax: string;
+  tradeUid: string;
+  note: string;
+};
+
+type CashFormState = {
+  eventDate: string;
+  direction: PortfolioCashDirection;
+  amount: string;
+  currency: string;
+  note: string;
+};
+
+type CorporateActionFormState = {
+  symbol: string;
+  effectiveDate: string;
+  actionType: PortfolioCorporateActionType;
+  cashDividendPerShare: string;
+  splitRatio: string;
+  note: string;
+};
+
+type AccountFormState = {
+  name: string;
+  broker: string;
+  market: 'cn' | 'hk' | 'us' | 'global';
+  baseCurrency: string;
+};
+
 function hasLimitedValuationConfidence(position: Pick<PortfolioPositionItem, 'valuationConfidence'>): boolean {
   return typeof position.valuationConfidence === 'number' && position.valuationConfidence < 1;
 }
@@ -901,6 +938,348 @@ function extractIbkrSyncConfig(connection?: PortfolioBrokerConnectionItem | null
   };
 }
 
+type PortfolioCopy = ReturnType<typeof getPortfolioCopy>;
+
+function PortfolioTradeActions({
+  item,
+  context,
+  isNarrowViewport,
+  openTradeActionMenuId,
+  voidedTradeLabel,
+  moreTradeActionsLabel,
+  editTradeActionLabel,
+  deleteTradeActionLabel,
+  onToggleMenu,
+  onEdit,
+  onVoid,
+}: {
+  item: PortfolioTradeListItem;
+  context: 'history' | 'recent';
+  isNarrowViewport: boolean;
+  openTradeActionMenuId: number | null;
+  voidedTradeLabel: string;
+  moreTradeActionsLabel: string;
+  editTradeActionLabel: string;
+  deleteTradeActionLabel: string;
+  onToggleMenu: (id: number) => void;
+  onEdit: (item: PortfolioTradeListItem) => void;
+  onVoid: (item: PortfolioTradeListItem) => void;
+}) {
+  if (item.isActive === false) {
+    return (
+      <TerminalChip variant="neutral" className="shrink-0">
+        {voidedTradeLabel}
+      </TerminalChip>
+    );
+  }
+
+  if (isNarrowViewport) {
+    const menuKey = `${context}-trade-${item.id}`;
+    const isOpen = openTradeActionMenuId === item.id;
+    return (
+      <div className="relative shrink-0">
+        <Button
+          type="button"
+          variant="ghost"
+          className={PORTFOLIO_TEXT_BUTTON_CLASS}
+          onClick={() => onToggleMenu(item.id)}
+        >
+          <MoreHorizontal className="size-3.5" aria-hidden="true" />
+          {moreTradeActionsLabel}
+        </Button>
+        {isOpen ? (
+          <TerminalNestedBlock
+            data-testid={`${menuKey}-menu`}
+            className="absolute right-0 z-20 mt-2 flex min-w-[132px] flex-col gap-1 bg-[#0f1726] p-2 shadow-2xl"
+          >
+            <Button type="button" variant="ghost" className="justify-start rounded-lg px-2 text-xs text-white/75" onClick={() => onEdit(item)}>
+              <PenSquare className="size-3.5" aria-hidden="true" />
+              {editTradeActionLabel}
+            </Button>
+            <Button type="button" variant="ghost" className="justify-start rounded-lg px-2 text-xs text-red-300 hover:text-red-200" onClick={() => onVoid(item)}>
+              <Trash2 className="size-3.5" aria-hidden="true" />
+              {deleteTradeActionLabel}
+            </Button>
+          </TerminalNestedBlock>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      <Button type="button" variant="ghost" className={PORTFOLIO_TEXT_BUTTON_CLASS} onClick={() => onEdit(item)}>
+        <PenSquare className="size-3.5" aria-hidden="true" />
+        {editTradeActionLabel}
+      </Button>
+      <Button type="button" variant="ghost" className={`${PORTFOLIO_TEXT_BUTTON_CLASS} text-red-300 hover:text-red-200`} onClick={() => onVoid(item)}>
+        <Trash2 className="size-3.5" aria-hidden="true" />
+        {deleteTradeActionLabel}
+      </Button>
+    </div>
+  );
+}
+
+function ManualTradeForm({
+  copy,
+  language,
+  tradeForm,
+  tradeCurrencyManuallyEdited,
+  writableAccountBaseCurrency,
+  writableAccountId,
+  tradeSubmitting,
+  tradeCurrencyHint,
+  tradeCurrencyWarning,
+  setTradeForm,
+  setTradeCurrencyManuallyEdited,
+  onSubmit,
+}: {
+  copy: PortfolioCopy;
+  language: PortfolioLanguage;
+  tradeForm: TradeFormState;
+  tradeCurrencyManuallyEdited: boolean;
+  writableAccountBaseCurrency?: string;
+  writableAccountId?: number;
+  tradeSubmitting: boolean;
+  tradeCurrencyHint: string;
+  tradeCurrencyWarning: string | null;
+  setTradeForm: React.Dispatch<React.SetStateAction<TradeFormState>>;
+  setTradeCurrencyManuallyEdited: React.Dispatch<React.SetStateAction<boolean>>;
+  onSubmit: React.FormEventHandler<HTMLFormElement>;
+}) {
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualTrade}</p>
+      <form onSubmit={onSubmit}>
+        <div className={PORTFOLIO_FORM_GRID_CLASS}>
+          <Input
+            label={copy.stockCode}
+            labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+            containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS}
+            className={PORTFOLIO_INPUT_CLASS}
+            placeholder={copy.symbolPlaceholder}
+            value={tradeForm.symbol}
+            onChange={(e) => {
+              const symbol = e.target.value;
+              setTradeForm((prev) => ({
+                ...prev,
+                symbol,
+                currency: tradeCurrencyManuallyEdited
+                  ? prev.currency
+                  : inferSettlementCurrency(symbol, writableAccountBaseCurrency),
+              }));
+            }}
+            required
+          />
+          <Input label={copy.tradeDate} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
+          <Select label={copy.sideLabel} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={tradeForm.side} onChange={(value) => setTradeForm((prev) => ({ ...prev, side: value as PortfolioSide }))} options={[{ value: 'buy', label: copy.buy }, { value: 'sell', label: copy.sell }]} />
+          <Select
+            label={copy.currency}
+            labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+            className={PORTFOLIO_SELECT_CLASS}
+            value={tradeForm.currency}
+            onChange={(value) => {
+              setTradeCurrencyManuallyEdited(true);
+              setTradeForm((prev) => ({ ...prev, currency: normalizePortfolioDisplayCurrency(value) }));
+            }}
+            options={PORTFOLIO_DISPLAY_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
+          />
+          <Input label={copy.quantity} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={tradeForm.quantity} onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
+          <Input label={copy.price} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={tradeForm.price} onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
+          <Input label={copy.feeOptional} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.optional} value={tradeForm.fee} onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
+          <Input label={copy.taxOptional} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.optional} value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
+          <Input label={copy.reference} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="text" placeholder={copy.optional} value={tradeForm.tradeUid} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeUid: e.target.value }))} />
+        </div>
+        <div className="mt-3 rounded-lg bg-white/[0.025] px-3 py-2 text-xs leading-5 text-white/45">
+          {tradeCurrencyHint}
+          {tradeCurrencyWarning ? (
+            <span className="mt-1 block text-amber-200">{tradeCurrencyWarning}</span>
+          ) : null}
+        </div>
+        <Input label={copy.note} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.optional} value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
+        {!writableAccountId ? (
+          <div className="mt-3 rounded-lg border border-amber-300/15 bg-amber-300/10 px-3 py-2 text-xs text-amber-200">
+            {language === 'zh' ? '请选择具体账户后保存持仓流水' : 'Select a specific account before saving holding records'}
+          </div>
+        ) : null}
+        <Button
+          type="submit"
+          variant="primary"
+          className={PORTFOLIO_SUBMIT_BUTTON_CLASS}
+          disabled={!writableAccountId || tradeSubmitting}
+          isLoading={tradeSubmitting}
+          loadingText={copy.refreshingData}
+        >
+          {copy.submitTrade}
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+function ManualCashForm({
+  copy,
+  cashForm,
+  snapshotCurrency,
+  writableAccountId,
+  setCashForm,
+  onSubmit,
+}: {
+  copy: PortfolioCopy;
+  cashForm: CashFormState;
+  snapshotCurrency: string;
+  writableAccountId?: number;
+  setCashForm: React.Dispatch<React.SetStateAction<CashFormState>>;
+  onSubmit: React.FormEventHandler<HTMLFormElement>;
+}) {
+  return (
+    <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-4" contentClassName="">
+      <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualCash}</p>
+      <form onSubmit={onSubmit}>
+        <div data-testid="portfolio-cash-amount-currency-grid" className={PORTFOLIO_FORM_GRID_CLASS}>
+          <Input label={copy.eventDate} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={cashForm.eventDate} onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
+          <Select label={copy.direction} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={cashForm.direction} onChange={(value) => setCashForm((prev) => ({ ...prev, direction: value as PortfolioCashDirection }))} options={[{ value: 'in', label: copy.cashIn }, { value: 'out', label: copy.cashOut }]} />
+          <Input label={copy.amount} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.01" placeholder="0.00" value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
+          <Select
+            data-testid="portfolio-cash-currency-select"
+            label={copy.currency}
+            labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+            className={PORTFOLIO_SELECT_CLASS}
+            value={cashForm.currency}
+            onChange={(value) => setCashForm((prev) => ({ ...prev, currency: value }))}
+            options={CASH_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
+            placeholder={copy.currencyOptional(snapshotCurrency)}
+          />
+        </div>
+        <Input label={copy.note} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.optional} value={cashForm.note} onChange={(e) => setCashForm((prev) => ({ ...prev, note: e.target.value }))} />
+        <Button type="submit" variant="primary" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId}>{copy.submitCash}</Button>
+      </form>
+    </SectionShell>
+  );
+}
+
+function ManualCorporateActionForm({
+  copy,
+  corpForm,
+  writableAccountId,
+  setCorpForm,
+  onSubmit,
+}: {
+  copy: PortfolioCopy;
+  corpForm: CorporateActionFormState;
+  writableAccountId?: number;
+  setCorpForm: React.Dispatch<React.SetStateAction<CorporateActionFormState>>;
+  onSubmit: React.FormEventHandler<HTMLFormElement>;
+}) {
+  return (
+    <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-4" contentClassName="">
+      <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualCorporate}</p>
+      <form onSubmit={onSubmit}>
+        <div className={PORTFOLIO_FORM_GRID_CLASS}>
+          <Input label={copy.stockCode} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.symbolPlaceholder} value={corpForm.symbol} onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+          <Input label={copy.effectiveDate} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={corpForm.effectiveDate} onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
+          <Select label={copy.actionType} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={corpForm.actionType} onChange={(value) => setCorpForm((prev) => ({ ...prev, actionType: value as PortfolioCorporateActionType }))} options={[{ value: 'cash_dividend', label: copy.cashDividend }, { value: 'split_adjustment', label: copy.splitAdjustment }]} />
+          <Input label={copy.dividendPerShare} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={corpForm.cashDividendPerShare} onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value }))} />
+          <Input label={copy.splitRatio} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="1.0000" value={corpForm.splitRatio} onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value }))} />
+        </div>
+        <Input label={copy.note} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.optional} value={corpForm.note} onChange={(e) => setCorpForm((prev) => ({ ...prev, note: e.target.value }))} />
+        <Button type="submit" variant="primary" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId}>{copy.submitCorporate}</Button>
+      </form>
+    </SectionShell>
+  );
+}
+
+function AccountManagementPanel({
+  copy,
+  language,
+  accounts,
+  showCreateAccount,
+  hasAccounts,
+  accountForm,
+  accountCreating,
+  accountCreateError,
+  accountCreateSuccess,
+  isLoading,
+  setAccountForm,
+  onToggleCreate,
+  onRefresh,
+  onSubmit,
+  onDeleteAccount,
+}: {
+  copy: PortfolioCopy;
+  language: PortfolioLanguage;
+  accounts: PortfolioAccountItem[];
+  showCreateAccount: boolean;
+  hasAccounts: boolean;
+  accountForm: AccountFormState;
+  accountCreating: boolean;
+  accountCreateError: string | null;
+  accountCreateSuccess: string | null;
+  isLoading: boolean;
+  setAccountForm: React.Dispatch<React.SetStateAction<AccountFormState>>;
+  onToggleCreate: () => void;
+  onRefresh: () => void;
+  onSubmit: React.FormEventHandler<HTMLFormElement>;
+  onDeleteAccount: (account: PortfolioAccountItem) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.createAccountTitle}</p>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            className={PORTFOLIO_SECONDARY_BUTTON_CLASS}
+            onClick={onToggleCreate}
+          >
+            {showCreateAccount ? copy.collapseCreate : copy.createAccount}
+          </Button>
+          <Button type="button" variant="ghost" className={PORTFOLIO_ICON_BUTTON_CLASS} onClick={onRefresh} disabled={isLoading} aria-label={isLoading ? copy.refreshingData : copy.refreshData} title={isLoading ? copy.refreshingData : copy.refreshData}>
+            <RefreshCw className={`size-4 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
+      {accountCreateError ? <div className="text-xs text-danger">{accountCreateError}</div> : null}
+      {accountCreateSuccess ? <div className="text-xs text-success">{accountCreateSuccess}</div> : null}
+      <div className="space-y-2">
+        {accounts.map((account) => (
+          <div key={account.id} className="theme-panel-subtle rounded-[16px] px-4 py-3 text-sm text-secondary-text">
+            <div className="flex items-center justify-between gap-3">
+              <span className="min-w-0 truncate text-foreground">{account.name}</span>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="font-mono text-muted-text">#{account.id}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={PORTFOLIO_DANGER_GHOST_CLASS}
+                  onClick={() => onDeleteAccount(account)}
+                  aria-label={language === 'en' ? `Delete ${account.name}` : `删除 ${account.name}`}
+                  title={copy.accountDeleteTitle}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                </Button>
+              </div>
+            </div>
+            <div className="mt-1 text-xs text-muted-text">{formatAccountMarketLabel(account.market, language)} · {account.baseCurrency} · {account.broker || '--'}</div>
+          </div>
+        ))}
+      </div>
+      {(showCreateAccount || !hasAccounts) ? (
+        <form className="space-y-3 rounded-xl border border-white/5 bg-white/[0.02] p-3" onSubmit={onSubmit}>
+          <Input label={language === 'zh' ? '账户名称' : 'Account name'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.accountNamePlaceholder} value={accountForm.name} onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input label={language === 'zh' ? '券商' : 'Broker'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.brokerPlaceholder} value={accountForm.broker} onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))} />
+            <Input label={language === 'zh' ? '基准币种' : 'Base currency'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.baseCurrencyPlaceholder} value={accountForm.baseCurrency} onChange={(e) => setAccountForm((prev) => ({ ...prev, baseCurrency: e.target.value.toUpperCase() }))} />
+          </div>
+          <Select label={language === 'zh' ? '市场范围' : 'Market'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={accountForm.market} onChange={(value) => setAccountForm((prev) => ({ ...prev, market: value as AccountFormState['market'] }))} options={[{ value: 'cn', label: copy.marketCn }, { value: 'hk', label: copy.marketHk }, { value: 'us', label: copy.marketUs }, { value: 'global', label: copy.marketGlobal }]} />
+          <Button type="submit" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} disabled={accountCreating}>{accountCreating ? copy.creatingAccount : copy.createAccount}</Button>
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
 const PortfolioPage: React.FC = () => {
   const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
@@ -919,7 +1298,7 @@ const PortfolioPage: React.FC = () => {
   const [accountCreating, setAccountCreating] = useState(false);
   const [accountCreateError, setAccountCreateError] = useState<string | null>(null);
   const [accountCreateSuccess, setAccountCreateSuccess] = useState<string | null>(null);
-  const [accountForm, setAccountForm] = useState({
+  const [accountForm, setAccountForm] = useState<AccountFormState>({
     name: '',
     broker: 'Demo',
     market: 'cn' as 'cn' | 'hk' | 'us' | 'global',
@@ -972,7 +1351,7 @@ const PortfolioPage: React.FC = () => {
     typeof window !== 'undefined' ? window.innerWidth <= 390 : false
   ));
 
-  const [tradeForm, setTradeForm] = useState({
+  const [tradeForm, setTradeForm] = useState<TradeFormState>({
     symbol: '',
     tradeDate: getTodayIso(),
     side: 'buy' as PortfolioSide,
@@ -985,14 +1364,14 @@ const PortfolioPage: React.FC = () => {
     note: '',
   });
   const [tradeCurrencyManuallyEdited, setTradeCurrencyManuallyEdited] = useState(false);
-  const [cashForm, setCashForm] = useState({
+  const [cashForm, setCashForm] = useState<CashFormState>({
     eventDate: getTodayIso(),
     direction: 'in' as PortfolioCashDirection,
     amount: '',
     currency: '',
     note: '',
   });
-  const [corpForm, setCorpForm] = useState({
+  const [corpForm, setCorpForm] = useState<CorporateActionFormState>({
     symbol: '',
     effectiveDate: getTodayIso(),
     actionType: 'cash_dividend' as PortfolioCorporateActionType,
@@ -1856,7 +2235,7 @@ const PortfolioPage: React.FC = () => {
   const emptyRecentActivityLabel = language === 'zh' ? '暂无历史记录' : 'No history yet';
   const viewFullHistoryLabel = language === 'zh' ? '查看全部历史' : 'View full history';
   const hideFullHistoryLabel = language === 'zh' ? '收起完整历史' : 'Hide full history';
-  const renderConvertedDisplay = (value: number, nativeCurrency: string) => {
+  const formatConvertedDisplay = (value: number, nativeCurrency: string) => {
     if (nativeCurrency === displayCurrency) {
       return null;
     }
@@ -2154,60 +2533,8 @@ const PortfolioPage: React.FC = () => {
   const hasFreshValuationState = !hasFxUnavailable && !hasPriceFallback && !snapshot?.fxStale && !hasLimitedConfidence;
   const holdingsTableStatusLabel = language === 'zh' ? '状态' : 'Status';
 
-  const renderTradeActions = (item: PortfolioTradeListItem, context: 'history' | 'recent') => {
-    if (item.isActive === false) {
-      return (
-        <TerminalChip variant="neutral" className="shrink-0">
-          {voidedTradeLabel}
-        </TerminalChip>
-      );
-    }
-
-    if (isNarrowViewport) {
-      const menuKey = `${context}-trade-${item.id}`;
-      const isOpen = openTradeActionMenuId === item.id;
-      return (
-        <div className="relative shrink-0">
-          <Button
-            type="button"
-            variant="ghost"
-            className={PORTFOLIO_TEXT_BUTTON_CLASS}
-            onClick={() => setOpenTradeActionMenuId((prev) => (prev === item.id ? null : item.id))}
-          >
-            <MoreHorizontal className="size-3.5" aria-hidden="true" />
-            {moreTradeActionsLabel}
-          </Button>
-          {isOpen ? (
-            <TerminalNestedBlock
-              data-testid={`${menuKey}-menu`}
-              className="absolute right-0 z-20 mt-2 flex min-w-[132px] flex-col gap-1 bg-[#0f1726] p-2 shadow-2xl"
-            >
-              <Button type="button" variant="ghost" className="justify-start rounded-lg px-2 text-xs text-white/75" onClick={() => openTradeEditor(item)}>
-                <PenSquare className="size-3.5" aria-hidden="true" />
-                {editTradeActionLabel}
-              </Button>
-              <Button type="button" variant="ghost" className="justify-start rounded-lg px-2 text-xs text-red-300 hover:text-red-200" onClick={() => openTradeVoidDialog(item)}>
-                <Trash2 className="size-3.5" aria-hidden="true" />
-                {deleteTradeActionLabel}
-              </Button>
-            </TerminalNestedBlock>
-          ) : null}
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex shrink-0 items-center gap-1">
-        <Button type="button" variant="ghost" className={PORTFOLIO_TEXT_BUTTON_CLASS} onClick={() => openTradeEditor(item)}>
-          <PenSquare className="size-3.5" aria-hidden="true" />
-          {editTradeActionLabel}
-        </Button>
-        <Button type="button" variant="ghost" className={`${PORTFOLIO_TEXT_BUTTON_CLASS} text-red-300 hover:text-red-200`} onClick={() => openTradeVoidDialog(item)}>
-          <Trash2 className="size-3.5" aria-hidden="true" />
-          {deleteTradeActionLabel}
-        </Button>
-      </div>
-    );
+  const handleToggleTradeActionMenu = (id: number) => {
+    setOpenTradeActionMenuId((prev) => (prev === id ? null : id));
   };
 
   const historyPanelContent = (
@@ -2275,7 +2602,19 @@ const PortfolioPage: React.FC = () => {
                       </div>
                       <div className="mt-1 text-xs text-muted-text">{item.tradeDate} · {item.quantity} @ {item.price}</div>
                     </div>
-                    {renderTradeActions(item, 'history')}
+                    <PortfolioTradeActions
+                      item={item}
+                      context="history"
+                      isNarrowViewport={isNarrowViewport}
+                      openTradeActionMenuId={openTradeActionMenuId}
+                      voidedTradeLabel={voidedTradeLabel}
+                      moreTradeActionsLabel={moreTradeActionsLabel}
+                      editTradeActionLabel={editTradeActionLabel}
+                      deleteTradeActionLabel={deleteTradeActionLabel}
+                      onToggleMenu={handleToggleTradeActionMenu}
+                      onEdit={openTradeEditor}
+                      onVoid={openTradeVoidDialog}
+                    />
                   </div>
                 </div>
               ))
@@ -2374,7 +2713,19 @@ const PortfolioPage: React.FC = () => {
               </div>
               <div className="flex shrink-0 items-start gap-2">
                 <span className="font-mono text-xs text-white/45">{item.currency}</span>
-                {renderTradeActions(item, 'recent')}
+                <PortfolioTradeActions
+                  item={item}
+                  context="recent"
+                  isNarrowViewport={isNarrowViewport}
+                  openTradeActionMenuId={openTradeActionMenuId}
+                  voidedTradeLabel={voidedTradeLabel}
+                  moreTradeActionsLabel={moreTradeActionsLabel}
+                  editTradeActionLabel={editTradeActionLabel}
+                  deleteTradeActionLabel={deleteTradeActionLabel}
+                  onToggleMenu={handleToggleTradeActionMenu}
+                  onEdit={openTradeEditor}
+                  onVoid={openTradeVoidDialog}
+                />
               </div>
             </div>
           ))}
@@ -2633,7 +2984,7 @@ const PortfolioPage: React.FC = () => {
                                   <td className="px-3 py-2 font-mono">{formatMoney(row.totalCost, row.currency)}</td>
                                   <td className="px-3 py-2 font-mono">
                                     {formatMoney(row.marketValueBase, row.valuationCurrency)}
-                                    {row.valuationCurrency !== displayCurrency ? <div className="mt-1 text-[11px] text-white/35">{renderConvertedDisplay(row.marketValueBase, row.valuationCurrency)}</div> : null}
+                                    {row.valuationCurrency !== displayCurrency ? <div className="mt-1 text-[11px] text-white/35">{formatConvertedDisplay(row.marketValueBase, row.valuationCurrency)}</div> : null}
                                     <div className={`mt-1 text-[11px] ${row.isPriceFallback ? 'text-amber-300' : 'text-white/35'}`}>
                                       {row.priceAsOf
                                         ? `${formatMoney(row.lastPrice, row.currency)} · ${language === 'zh' ? `截至 ${row.priceAsOf}` : `As of ${row.priceAsOf}`}`
@@ -3054,177 +3405,67 @@ const PortfolioPage: React.FC = () => {
                     />
                   </div>
                   {tradeType === 'stock' ? (
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualTrade}</p>
-                      <form onSubmit={handleTradeSubmit}>
-                        <div className={PORTFOLIO_FORM_GRID_CLASS}>
-                          <Input
-                            label={copy.stockCode}
-                            labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
-                            containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS}
-                            className={PORTFOLIO_INPUT_CLASS}
-                            placeholder={copy.symbolPlaceholder}
-                            value={tradeForm.symbol}
-                            onChange={(e) => {
-                              const symbol = e.target.value;
-                              setTradeForm((prev) => ({
-                                ...prev,
-                                symbol,
-                                currency: tradeCurrencyManuallyEdited
-                                  ? prev.currency
-                                  : inferSettlementCurrency(symbol, writableAccount?.baseCurrency),
-                              }));
-                            }}
-                            required
-                          />
-                          <Input label={copy.tradeDate} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
-                          <Select label={copy.sideLabel} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={tradeForm.side} onChange={(value) => setTradeForm((prev) => ({ ...prev, side: value as PortfolioSide }))} options={[{ value: 'buy', label: copy.buy }, { value: 'sell', label: copy.sell }]} />
-                          <Select
-                            label={copy.currency}
-                            labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
-                            className={PORTFOLIO_SELECT_CLASS}
-                            value={tradeForm.currency}
-                            onChange={(value) => {
-                              setTradeCurrencyManuallyEdited(true);
-                              setTradeForm((prev) => ({ ...prev, currency: normalizePortfolioDisplayCurrency(value) }));
-                            }}
-                            options={PORTFOLIO_DISPLAY_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
-                          />
-                          <Input label={copy.quantity} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={tradeForm.quantity} onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
-                          <Input label={copy.price} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={tradeForm.price} onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
-                          <Input label={copy.feeOptional} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.optional} value={tradeForm.fee} onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
-                          <Input label={copy.taxOptional} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.optional} value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
-                          <Input label={copy.reference} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="text" placeholder={copy.optional} value={tradeForm.tradeUid} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeUid: e.target.value }))} />
-                        </div>
-                        <div className="mt-3 rounded-lg bg-white/[0.025] px-3 py-2 text-xs leading-5 text-white/45">
-                          {tradeCurrencyHint}
-                          {tradeCurrencyWarning ? (
-                            <span className="mt-1 block text-amber-200">{tradeCurrencyWarning}</span>
-                          ) : null}
-                        </div>
-                        <Input label={copy.note} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.optional} value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
-                        {!writableAccountId ? (
-                          <div className="mt-3 rounded-lg border border-amber-300/15 bg-amber-300/10 px-3 py-2 text-xs text-amber-200">
-                            {language === 'zh' ? '请选择具体账户后保存持仓流水' : 'Select a specific account before saving holding records'}
-                          </div>
-                        ) : null}
-                        <Button
-                          type="submit"
-                          variant="primary"
-                          className={PORTFOLIO_SUBMIT_BUTTON_CLASS}
-                          disabled={!writableAccountId || tradeSubmitting}
-                          isLoading={tradeSubmitting}
-                          loadingText={copy.refreshingData}
-                        >
-                          {copy.submitTrade}
-                        </Button>
-                      </form>
-                    </div>
+                    <ManualTradeForm
+                      copy={copy}
+                      language={language}
+                      tradeForm={tradeForm}
+                      tradeCurrencyManuallyEdited={tradeCurrencyManuallyEdited}
+                      writableAccountBaseCurrency={writableAccount?.baseCurrency}
+                      writableAccountId={writableAccountId}
+                      tradeSubmitting={tradeSubmitting}
+                      tradeCurrencyHint={tradeCurrencyHint}
+                      tradeCurrencyWarning={tradeCurrencyWarning}
+                      setTradeForm={setTradeForm}
+                      setTradeCurrencyManuallyEdited={setTradeCurrencyManuallyEdited}
+                      onSubmit={handleTradeSubmit}
+                    />
                   ) : null}
 
                   {tradeType === 'fund' ? (
-                    <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-4" contentClassName="">
-                      <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualCash}</p>
-                      <form onSubmit={handleCashSubmit}>
-                        <div data-testid="portfolio-cash-amount-currency-grid" className={PORTFOLIO_FORM_GRID_CLASS}>
-                          <Input label={copy.eventDate} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={cashForm.eventDate} onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
-                          <Select label={copy.direction} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={cashForm.direction} onChange={(value) => setCashForm((prev) => ({ ...prev, direction: value as PortfolioCashDirection }))} options={[{ value: 'in', label: copy.cashIn }, { value: 'out', label: copy.cashOut }]} />
-                          <Input label={copy.amount} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.01" placeholder="0.00" value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
-                          <Select
-                            data-testid="portfolio-cash-currency-select"
-                            label={copy.currency}
-                            labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
-                            className={PORTFOLIO_SELECT_CLASS}
-                            value={cashForm.currency}
-                            onChange={(value) => setCashForm((prev) => ({ ...prev, currency: value }))}
-                            options={CASH_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
-                            placeholder={copy.currencyOptional(snapshotCurrency)}
-                          />
-                        </div>
-                        <Input label={copy.note} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.optional} value={cashForm.note} onChange={(e) => setCashForm((prev) => ({ ...prev, note: e.target.value }))} />
-                        <Button type="submit" variant="primary" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId}>{copy.submitCash}</Button>
-                      </form>
-                    </SectionShell>
+                    <ManualCashForm
+                      copy={copy}
+                      cashForm={cashForm}
+                      snapshotCurrency={snapshotCurrency}
+                      writableAccountId={writableAccountId}
+                      setCashForm={setCashForm}
+                      onSubmit={handleCashSubmit}
+                    />
                   ) : null}
 
                   {tradeType === 'corporate' ? (
-                    <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-4" contentClassName="">
-                      <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualCorporate}</p>
-                      <form onSubmit={handleCorporateSubmit}>
-                        <div className={PORTFOLIO_FORM_GRID_CLASS}>
-                          <Input label={copy.stockCode} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.symbolPlaceholder} value={corpForm.symbol} onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
-                          <Input label={copy.effectiveDate} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={corpForm.effectiveDate} onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
-                          <Select label={copy.actionType} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={corpForm.actionType} onChange={(value) => setCorpForm((prev) => ({ ...prev, actionType: value as PortfolioCorporateActionType }))} options={[{ value: 'cash_dividend', label: copy.cashDividend }, { value: 'split_adjustment', label: copy.splitAdjustment }]} />
-                          <Input label={copy.dividendPerShare} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={corpForm.cashDividendPerShare} onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value }))} />
-                          <Input label={copy.splitRatio} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="1.0000" value={corpForm.splitRatio} onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value }))} />
-                        </div>
-                        <Input label={copy.note} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.optional} value={corpForm.note} onChange={(e) => setCorpForm((prev) => ({ ...prev, note: e.target.value }))} />
-                        <Button type="submit" variant="primary" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId}>{copy.submitCorporate}</Button>
-                      </form>
-                    </SectionShell>
+                    <ManualCorporateActionForm
+                      copy={copy}
+                      corpForm={corpForm}
+                      writableAccountId={writableAccountId}
+                      setCorpForm={setCorpForm}
+                      onSubmit={handleCorporateSubmit}
+                    />
                   ) : null}
                 </div>
               ) : null}
 
               {leftTab === 'account' ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.createAccountTitle}</p>
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className={PORTFOLIO_SECONDARY_BUTTON_CLASS}
-                        onClick={() => {
-                          setShowCreateAccount((prev) => !prev);
-                          setAccountCreateError(null);
-                          setAccountCreateSuccess(null);
-                        }}
-                      >
-                        {showCreateAccount ? copy.collapseCreate : copy.createAccount}
-                      </Button>
-                      <Button type="button" variant="ghost" className={PORTFOLIO_ICON_BUTTON_CLASS} onClick={() => void handleRefresh()} disabled={isLoading} aria-label={isLoading ? copy.refreshingData : copy.refreshData} title={isLoading ? copy.refreshingData : copy.refreshData}>
-                        <RefreshCw className={`size-4 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
-                      </Button>
-                    </div>
-                  </div>
-                  {accountCreateError ? <div className="text-xs text-danger">{accountCreateError}</div> : null}
-                  {accountCreateSuccess ? <div className="text-xs text-success">{accountCreateSuccess}</div> : null}
-                  <div className="space-y-2">
-	                    {accounts.map((account) => (
-	                      <div key={account.id} className="theme-panel-subtle rounded-[16px] px-4 py-3 text-sm text-secondary-text">
-	                        <div className="flex items-center justify-between gap-3">
-	                          <span className="min-w-0 truncate text-foreground">{account.name}</span>
-	                          <div className="flex shrink-0 items-center gap-2">
-	                            <span className="font-mono text-muted-text">#{account.id}</span>
-	                            <Button
-	                              type="button"
-	                              variant="ghost"
-	                              className={PORTFOLIO_DANGER_GHOST_CLASS}
-	                              onClick={() => setPendingAccountDelete({ id: account.id, name: account.name })}
-	                              aria-label={language === 'en' ? `Delete ${account.name}` : `删除 ${account.name}`}
-	                              title={copy.accountDeleteTitle}
-	                            >
-	                              <Trash2 className="size-4" aria-hidden="true" />
-	                            </Button>
-	                          </div>
-	                        </div>
-                        <div className="mt-1 text-xs text-muted-text">{formatAccountMarketLabel(account.market, language)} · {account.baseCurrency} · {account.broker || '--'}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {(showCreateAccount || !hasAccounts) ? (
-                    <form className="space-y-3 rounded-xl border border-white/5 bg-white/[0.02] p-3" onSubmit={handleCreateAccount}>
-                      <Input label={language === 'zh' ? '账户名称' : 'Account name'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.accountNamePlaceholder} value={accountForm.name} onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))} />
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <Input label={language === 'zh' ? '券商' : 'Broker'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.brokerPlaceholder} value={accountForm.broker} onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))} />
-                        <Input label={language === 'zh' ? '基准币种' : 'Base currency'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.baseCurrencyPlaceholder} value={accountForm.baseCurrency} onChange={(e) => setAccountForm((prev) => ({ ...prev, baseCurrency: e.target.value.toUpperCase() }))} />
-                      </div>
-                      <Select label={language === 'zh' ? '市场范围' : 'Market'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={accountForm.market} onChange={(value) => setAccountForm((prev) => ({ ...prev, market: value as 'cn' | 'hk' | 'us' | 'global' }))} options={[{ value: 'cn', label: copy.marketCn }, { value: 'hk', label: copy.marketHk }, { value: 'us', label: copy.marketUs }, { value: 'global', label: copy.marketGlobal }]} />
-                      <Button type="submit" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} disabled={accountCreating}>{accountCreating ? copy.creatingAccount : copy.createAccount}</Button>
-                    </form>
-                  ) : null}
-                </div>
+                <AccountManagementPanel
+                  copy={copy}
+                  language={language}
+                  accounts={accounts}
+                  showCreateAccount={showCreateAccount}
+                  hasAccounts={hasAccounts}
+                  accountForm={accountForm}
+                  accountCreating={accountCreating}
+                  accountCreateError={accountCreateError}
+                  accountCreateSuccess={accountCreateSuccess}
+                  isLoading={isLoading}
+                  setAccountForm={setAccountForm}
+                  onToggleCreate={() => {
+                    setShowCreateAccount((prev) => !prev);
+                    setAccountCreateError(null);
+                    setAccountCreateSuccess(null);
+                  }}
+                  onRefresh={() => void handleRefresh()}
+                  onSubmit={handleCreateAccount}
+                  onDeleteAccount={(account) => setPendingAccountDelete({ id: account.id, name: account.name })}
+                />
               ) : null}
 
               {leftTab === 'sync' ? (
