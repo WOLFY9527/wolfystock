@@ -167,10 +167,17 @@ def test_rule_backtest_shadow_cli_fixtures_match_python_engine_without_parser() 
         "rule_backtest_compute_shadow_cli_v1.json": {
             "case_id": "rule_conditions_close_vs_ma3_long_cash",
             "trade_count": 1,
+            "selected_dates": ["2024-01-04", "2024-01-05", "2024-01-06", "2024-01-07"],
         },
         "rule_backtest_compute_shadow_cli_v2.json": {
             "case_id": "rule_conditions_close_vs_ma3_no_trade",
             "trade_count": 0,
+            "selected_dates": ["2024-01-04", "2024-01-05", "2024-01-06", "2024-01-07"],
+        },
+        "rule_backtest_compute_shadow_cli_v3_terminal_forced_close.json": {
+            "case_id": "rule_conditions_close_vs_ma3_terminal_forced_close",
+            "trade_count": 1,
+            "selected_dates": ["2024-01-05", "2024-01-06", "2024-01-07", "2024-01-08"],
         },
     }
 
@@ -236,12 +243,7 @@ def test_rule_backtest_shadow_cli_fixtures_match_python_engine_without_parser() 
             for point in result["equity_curve"]
             if point["date"] in {item["date"] for item in expected_output["selected_equity_points"]}
         ]
-        assert [point["date"] for point in actual_equity_points] == [
-            "2024-01-04",
-            "2024-01-05",
-            "2024-01-06",
-            "2024-01-07",
-        ]
+        assert [point["date"] for point in actual_equity_points] == expected_case["selected_dates"]
         for actual_point, expected_point in zip(actual_equity_points, expected_output["selected_equity_points"]):
             assert actual_point["date"] == expected_point["date"]
             assert actual_point["executed_action"] == expected_point["executed_action"]
@@ -263,3 +265,14 @@ def test_rule_backtest_shadow_cli_fixtures_match_python_engine_without_parser() 
             assert actual_trade["notes"] == expected_trade["notes"]
             for float_key in ("entry_price", "exit_price", "return_pct", "quantity", "fees", "slippage"):
                 _assert_close(actual_trade[float_key], expected_trade[float_key])
+
+        if expected_case["case_id"] == "rule_conditions_close_vs_ma3_terminal_forced_close":
+            terminal_point = result["equity_curve"][-1]
+            assert terminal_point["date"] == "2024-01-08"
+            assert terminal_point["executed_action"] == "forced_close"
+            assert terminal_point["notes"] == "forced_close_at_window_end"
+            assert terminal_point["position_state"] == "flat"
+            assert result["trades"][-1]["exit_signal_date"] == "2024-01-08"
+            assert result["trades"][-1]["exit_date"] == "2024-01-08"
+            assert result["trades"][-1]["exit_reason"] == "final_close"
+            assert result["trades"][-1]["notes"] == "forced_close_at_window_end"

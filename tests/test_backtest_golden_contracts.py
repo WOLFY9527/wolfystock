@@ -260,6 +260,7 @@ def test_rule_backtest_shadow_cli_fixtures_are_parser_free_explicit_and_sanitize
             "final_equity": 77620.334341,
             "total_return_pct": -22.3797,
             "selected_actions": [None, "buy", None, "sell"],
+            "selected_dates": ["2024-01-04", "2024-01-05", "2024-01-06", "2024-01-07"],
             "trades": [
                 {
                     "entry_signal_date": "2024-01-04",
@@ -285,7 +286,34 @@ def test_rule_backtest_shadow_cli_fixtures_are_parser_free_explicit_and_sanitize
             "final_equity": 100000.0,
             "total_return_pct": 0.0,
             "selected_actions": [None, None, None, None],
+            "selected_dates": ["2024-01-04", "2024-01-05", "2024-01-06", "2024-01-07"],
             "trades": [],
+        },
+        "rule_backtest_compute_shadow_cli_v3_terminal_forced_close.json": {
+            "case_id": "rule_conditions_close_vs_ma3_terminal_forced_close",
+            "trade_count": 1,
+            "final_equity": 126118.967526,
+            "total_return_pct": 26.119,
+            "selected_actions": [None, "buy", None, "forced_close"],
+            "selected_dates": ["2024-01-05", "2024-01-06", "2024-01-07", "2024-01-08"],
+            "trades": [
+                {
+                    "entry_signal_date": "2024-01-05",
+                    "entry_date": "2024-01-06",
+                    "exit_signal_date": "2024-01-08",
+                    "exit_date": "2024-01-08",
+                    "entry_price": 10.301288,
+                    "exit_price": 12.998375,
+                    "return_pct": 26.119,
+                    "quantity": 9705.098149,
+                    "fees": 56.531378,
+                    "slippage": 28.266098,
+                    "entry_reason": "signal_entry",
+                    "exit_reason": "final_close",
+                    "signal_reason": "rule_conditions",
+                    "notes": "forced_close_at_window_end",
+                }
+            ],
         },
     }
 
@@ -338,12 +366,7 @@ def test_rule_backtest_shadow_cli_fixtures_are_parser_free_explicit_and_sanitize
         assert expected_output["metrics"]["trade_count"] == expected_case["trade_count"]
         assert expected_output["metrics"]["final_equity"] == expected_case["final_equity"]
         assert expected_output["metrics"]["total_return_pct"] == expected_case["total_return_pct"]
-        assert [point["date"] for point in expected_output["selected_equity_points"]] == [
-            "2024-01-04",
-            "2024-01-05",
-            "2024-01-06",
-            "2024-01-07",
-        ]
+        assert [point["date"] for point in expected_output["selected_equity_points"]] == expected_case["selected_dates"]
         assert [point["executed_action"] for point in expected_output["selected_equity_points"]] == expected_case[
             "selected_actions"
         ]
@@ -650,6 +673,7 @@ def test_all_backtest_golden_fixtures_are_sanitized_and_explicitly_enumerated() 
         "rule_backtest_compute_basic_long_cash.json",
         "rule_backtest_compute_shadow_cli_v1.json",
         "rule_backtest_compute_shadow_cli_v2.json",
+        "rule_backtest_compute_shadow_cli_v3_terminal_forced_close.json",
         "rule_backtest_compare_dto.json",
         "rule_backtest_compare_heatmap_dto.json",
         "rule_backtest_execution_model_v1_metadata.json",

@@ -1,0 +1,266 @@
+{
+  "contract_version": "shadow_cli_v1",
+  "case_id": "rule_conditions_close_vs_ma3_terminal_forced_close",
+  "input": {
+    "contract_version": "shadow_cli_v1",
+    "case_id": "rule_conditions_close_vs_ma3_terminal_forced_close",
+    "code": "SAFE",
+    "initial_capital": 100000.0,
+    "lookback_bars": 20,
+    "date_window": {
+      "start_date": "2024-01-01",
+      "end_date": "2024-01-08"
+    },
+    "execution_model": {
+      "version": "v1",
+      "timeframe": "daily",
+      "signal_evaluation_timing": "bar_close",
+      "entry_timing": "next_bar_open",
+      "exit_timing": "next_bar_open",
+      "entry_fill_price_basis": "open",
+      "exit_fill_price_basis": "open",
+      "position_sizing": "single_position_full_notional",
+      "fee_model": "bps_per_side",
+      "fee_bps_per_side": 2.5,
+      "slippage_model": "bps_per_side",
+      "slippage_bps_per_side": 1.25,
+      "market_rules": {
+        "trading_day_execution": "available_bars_only",
+        "terminal_bar_fill_fallback": "same_bar_close",
+        "window_end_position_handling": "force_flatten"
+      }
+    },
+    "parsed_strategy": {
+      "version": "v1",
+      "timeframe": "daily",
+      "strategy_kind": "rule_conditions",
+      "entry": {
+        "type": "comparison",
+        "left": {
+          "kind": "indicator",
+          "indicator": "close"
+        },
+        "compare": ">",
+        "right": {
+          "kind": "indicator",
+          "indicator": "ma",
+          "period": 3
+        },
+        "text": "Close > MA3"
+      },
+      "exit": {
+        "type": "comparison",
+        "left": {
+          "kind": "indicator",
+          "indicator": "close"
+        },
+        "compare": "<",
+        "right": {
+          "kind": "indicator",
+          "indicator": "ma",
+          "period": 3
+        },
+        "text": "Close < MA3"
+      },
+      "max_lookback": 3,
+      "confidence": 1.0,
+      "needs_confirmation": false,
+      "ambiguities": [],
+      "summary": {
+        "entry": "买入条件：Close > MA3",
+        "exit": "卖出条件：Close < MA3"
+      },
+      "strategy_spec": {
+        "strategy_type": "rule_conditions",
+        "indicator_family": "sma_close_rule_conditions",
+        "price_basis": "close",
+        "signal_window": 3
+      }
+    },
+    "bars": [
+      {
+        "date": "2024-01-01",
+        "open": 10.0,
+        "high": 10.2,
+        "low": 9.8,
+        "close": 10.0,
+        "volume": 1000.0
+      },
+      {
+        "date": "2024-01-02",
+        "open": 10.0,
+        "high": 10.2,
+        "low": 9.8,
+        "close": 10.0,
+        "volume": 1001.0
+      },
+      {
+        "date": "2024-01-03",
+        "open": 10.0,
+        "high": 10.2,
+        "low": 9.8,
+        "close": 10.0,
+        "volume": 1002.0
+      },
+      {
+        "date": "2024-01-04",
+        "open": 10.0,
+        "high": 10.2,
+        "low": 9.8,
+        "close": 10.0,
+        "volume": 1003.0
+      },
+      {
+        "date": "2024-01-05",
+        "open": 10.1,
+        "high": 10.4,
+        "low": 9.9,
+        "close": 10.2,
+        "volume": 1004.0
+      },
+      {
+        "date": "2024-01-06",
+        "open": 10.3,
+        "high": 11.3,
+        "low": 10.1,
+        "close": 11.0,
+        "volume": 1005.0
+      },
+      {
+        "date": "2024-01-07",
+        "open": 11.2,
+        "high": 12.3,
+        "low": 11.0,
+        "close": 12.0,
+        "volume": 1006.0
+      },
+      {
+        "date": "2024-01-08",
+        "open": 12.2,
+        "high": 13.3,
+        "low": 12.0,
+        "close": 13.0,
+        "volume": 1007.0
+      }
+    ]
+  },
+  "expected_output": {
+    "contract_version": "shadow_cli_v1",
+    "case_id": "rule_conditions_close_vs_ma3_terminal_forced_close",
+    "execution_model": {
+      "version": "v1",
+      "timeframe": "daily",
+      "signal_evaluation_timing": "bar_close",
+      "entry_timing": "next_bar_open",
+      "exit_timing": "next_bar_open",
+      "entry_fill_price_basis": "open",
+      "exit_fill_price_basis": "open",
+      "position_sizing": "single_position_full_notional",
+      "fee_model": "bps_per_side",
+      "fee_bps_per_side": 2.5,
+      "slippage_model": "bps_per_side",
+      "slippage_bps_per_side": 1.25,
+      "market_rules": {
+        "trading_day_execution": "available_bars_only",
+        "terminal_bar_fill_fallback": "same_bar_close",
+        "window_end_position_handling": "force_flatten"
+      }
+    },
+    "execution_assumptions": {
+      "timeframe": "daily",
+      "indicator_price_basis": "close",
+      "signal_evaluation_timing": "bar_close",
+      "entry_fill_timing": "next_bar_open",
+      "exit_fill_timing": "next_bar_open; same_bar_close",
+      "default_fill_price_basis": "open",
+      "position_sizing": "single_position_full_notional",
+      "fee_model": "bps_per_side",
+      "fee_bps_per_side": 2.5,
+      "slippage_model": "bps_per_side",
+      "slippage_bps_per_side": 1.25,
+      "benchmark_method": "buy_and_hold_same_window",
+      "benchmark_price_basis": "close"
+    },
+    "metrics": {
+      "initial_capital": 100000.0,
+      "final_equity": 126118.967526,
+      "total_return_pct": 26.119,
+      "annualized_return_pct": null,
+      "sharpe_ratio": 13.5765,
+      "benchmark_return_pct": 30.0,
+      "excess_return_vs_benchmark_pct": -3.881,
+      "buy_and_hold_return_pct": 30.0,
+      "excess_return_vs_buy_and_hold_pct": -3.881,
+      "trade_count": 1,
+      "entry_signal_count": 1,
+      "win_count": 1,
+      "loss_count": 0,
+      "win_rate_pct": 100.0,
+      "avg_trade_return_pct": 26.119,
+      "max_drawdown_pct": 0.0375,
+      "avg_holding_days": 3,
+      "avg_holding_bars": 3,
+      "avg_holding_calendar_days": 2,
+      "bars_used": 8,
+      "lookback_bars": 20,
+      "period_start": "2024-01-01",
+      "period_end": "2024-01-08"
+    },
+    "selected_equity_points": [
+      {
+        "date": "2024-01-05",
+        "executed_action": null,
+        "signal_summary": "Close > MA3",
+        "position_state": "flat",
+        "exposure_pct": 0.0,
+        "notes": null,
+        "total_portfolio_value": 100000.0
+      },
+      {
+        "date": "2024-01-06",
+        "executed_action": "buy",
+        "signal_summary": null,
+        "position_state": "long",
+        "exposure_pct": 1.0,
+        "notes": "entry_signal_next_bar_open",
+        "total_portfolio_value": 106756.079639
+      },
+      {
+        "date": "2024-01-07",
+        "executed_action": null,
+        "signal_summary": null,
+        "position_state": "long",
+        "exposure_pct": 1.0,
+        "notes": null,
+        "total_portfolio_value": 116461.177788
+      },
+      {
+        "date": "2024-01-08",
+        "executed_action": "forced_close",
+        "signal_summary": null,
+        "position_state": "flat",
+        "exposure_pct": 0.0,
+        "notes": "forced_close_at_window_end",
+        "total_portfolio_value": 126118.967526
+      }
+    ],
+    "trades": [
+      {
+        "entry_signal_date": "2024-01-05",
+        "entry_date": "2024-01-06",
+        "exit_signal_date": "2024-01-08",
+        "exit_date": "2024-01-08",
+        "entry_price": 10.301288,
+        "exit_price": 12.998375,
+        "return_pct": 26.119,
+        "quantity": 9705.098149,
+        "fees": 56.531378,
+        "slippage": 28.266098,
+        "entry_reason": "signal_entry",
+        "exit_reason": "final_close",
+        "signal_reason": "rule_conditions",
+        "notes": "forced_close_at_window_end"
+      }
+    ]
+  }
+}

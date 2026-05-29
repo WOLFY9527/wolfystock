@@ -6,9 +6,10 @@ use crate::contract::{
 };
 
 const FLOAT_TOLERANCE: f64 = 1e-4;
-const SUPPORTED_CASE_IDS: [&str; 2] = [
+const SUPPORTED_CASE_IDS: [&str; 3] = [
     "rule_conditions_close_vs_ma3_long_cash",
     "rule_conditions_close_vs_ma3_no_trade",
+    "rule_conditions_close_vs_ma3_terminal_forced_close",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -624,10 +625,59 @@ fn compute_output(input: &FixtureInput) -> Result<ComputedOutput, String> {
     }
 
     if position {
-        return Err("supported subset unexpectedly reached terminal forced-close path".to_string());
+        let last_bar = input
+            .bars
+            .get(end_index)
+            .ok_or_else(|| "execution window ended without a terminal bar".to_string())?;
+        let state = active_trade
+            .as_ref()
+            .ok_or_else(|| "position state missing active trade at terminal close".to_string())?;
+        let base_fill_price = resolve_terminal_exit_fill_price(last_bar, &input.execution_model);
+        let effective_price = base_fill_price * (1.0 - slippage_rate);
+        let gross_proceeds = shares * effective_price;
+        let fee_amount = gross_proceeds * fee_rate;
+        let net_proceeds = gross_proceeds - fee_amount;
+        let exit_slippage_amount = shares * (base_fill_price - effective_price).max(0.0);
+        let holding_bars = (end_index - state.entry_fill_index).max(1) + 1;
+        let holding_calendar_days = (end_index - state.entry_fill_index).max(1);
+        holding_bar_samples.push(holding_bars);
+        holding_calendar_day_samples.push(holding_calendar_days);
+        cash = state.cash_buffer + net_proceeds;
+        trades.push(ExpectedTrade {
+            entry_signal_date: state.entry_signal_date.clone(),
+            entry_date: state.entry_date.clone(),
+            exit_signal_date: last_bar.date.clone(),
+            exit_date: last_bar.date.clone(),
+            entry_price: round6(state.entry_price),
+            exit_price: round6(effective_price),
+            return_pct: round4(((net_proceeds / state.entry_total_cost) - 1.0) * 100.0),
+            quantity: round6(shares),
+            fees: round6(state.entry_fee_amount + fee_amount),
+            slippage: round6(state.entry_slippage_amount + exit_slippage_amount),
+            entry_reason: "signal_entry".to_string(),
+            exit_reason: "final_close".to_string(),
+            signal_reason: "rule_conditions".to_string(),
+            notes: "forced_close_at_window_end".to_string(),
+        });
+
+        let drawdown_pct = if peak_equity > 0.0 {
+            ((cash / peak_equity) - 1.0) * 100.0
+        } else {
+            0.0
+        };
+        let last_point = equity_curve
+            .last_mut()
+            .ok_or_else(|| "terminal forced-close missing equity point".to_string())?;
+        last_point.executed_action = Some("forced_close".to_string());
+        last_point.position_state = "flat".to_string();
+        last_point.exposure_pct = 0.0;
+        last_point.notes = Some("forced_close_at_window_end".to_string());
+        last_point.total_portfolio_value = cash;
+        last_point.drawdown_pct = drawdown_pct;
+
     }
 
-    let selected_dates: HashSet<&str> = ["2024-01-04", "2024-01-05", "2024-01-06", "2024-01-07"]
+    let selected_dates: HashSet<&str> = selected_dates_for_case_id(&input.case_id)
         .into_iter()
         .collect();
     let selected_equity_points = equity_curve
@@ -815,6 +865,30 @@ fn resolve_exit_fill_price(bar: &Bar, execution_model: &ExecutionModel) -> f64 {
         bar.open
     } else {
         bar.close
+    }
+}
+
+fn resolve_terminal_exit_fill_price(bar: &Bar, execution_model: &ExecutionModel) -> f64 {
+    if execution_model
+        .market_rules
+        .terminal_bar_fill_fallback
+        .starts_with("same_bar_close")
+    {
+        bar.close
+    } else {
+        resolve_exit_fill_price(bar, execution_model)
+    }
+}
+
+fn selected_dates_for_case_id(case_id: &str) -> [&'static str; 4] {
+    match case_id {
+        "rule_conditions_close_vs_ma3_terminal_forced_close" => [
+            "2024-01-05",
+            "2024-01-06",
+            "2024-01-07",
+            "2024-01-08",
+        ],
+        _ => ["2024-01-04", "2024-01-05", "2024-01-06", "2024-01-07"],
     }
 }
 
