@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
@@ -271,7 +271,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { language, t } = useI18n();
-  const backtestCopy = (key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.${key}`, vars);
+  const backtestCopy = useCallback((key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.${key}`, vars), [t]);
   const resultPage = (key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.resultPage.${key}`, vars);
   const { runId } = useParams<{ runId: string }>();
   const locationState = location.state as ResultPageLocationState | null;
@@ -458,7 +458,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     label: backtestCopy(`resultPage.tabs.${key}`),
   }));
 
-  const fetchRun = async (options: { suppressLoading?: boolean } = {}) => {
+  const fetchRun = useCallback(async (options: { suppressLoading?: boolean } = {}) => {
     if (!hasValidRunId) return;
     const { suppressLoading = false } = options;
     if (!suppressLoading) setIsLoadingRun(true);
@@ -473,9 +473,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
     } finally {
       if (!suppressLoading) setIsLoadingRun(false);
     }
-  };
+  }, [hasValidRunId, parsedRunId]);
 
-  const fetchHistory = async (code?: string) => {
+  const fetchHistory = useCallback(async (code?: string) => {
     if (!code) {
       setHistoryItems([]);
       setHistoryError(null);
@@ -495,7 +495,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     } finally {
       setIsLoadingHistory(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!hasValidRunId) {
@@ -688,7 +688,10 @@ const DeterministicBacktestResultPage: React.FC = () => {
     )
     : resultPage('benchmarkNotes.pending');
   const normalized = run?.status === 'completed' ? normalizeDeterministicBacktestResult(run, language) : null;
-  const scenarioPlans: RuleScenarioPlan[] = run?.status === 'completed' ? getRuleScenarioPlans(run) : [];
+  const scenarioPlans: RuleScenarioPlan[] = useMemo(
+    () => run?.status === 'completed' ? getRuleScenarioPlans(run) : [],
+    [run],
+  );
   const selectedScenarioPlan = scenarioPlans.find((plan) => plan.id === selectedScenarioPlanId) || scenarioPlans[0] || null;
   useEffect(() => {
     if (!selectedScenarioPlanId && scenarioPlans[0]) {
