@@ -220,7 +220,7 @@ function StockAutocompleteInner({
   };
 
   // Delay closing on blur (avoid immediate close when clicking suggestion items)
-  const handleDelayedSuggestionsClose = () => {
+  const scheduleCloseSuggestions = () => {
     setTimeout(() => closeSuggestions(), 200);
   };
 
@@ -259,7 +259,7 @@ function StockAutocompleteInner({
             updateDropdownPosition();
           }
         }}
-        onBlur={handleDelayedSuggestionsClose}
+        onBlur={scheduleCloseSuggestions}
         placeholder={placeholder}
         aria-label={placeholder}
         disabled={disabled}

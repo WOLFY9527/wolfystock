@@ -34,17 +34,16 @@ export function SuggestionsList({
   }
 
   return (
-    <ul
+    <div
       id="suggestions-list"
       className="theme-dropdown-panel z-[100] max-h-60 overflow-y-auto no-scrollbar rounded-b-lg rounded-t-none border-x border-b"
       style={style}
       role="listbox"
     >
       {suggestions.map((suggestion, index) => (
-        <li
+        <div
           key={suggestion.canonicalCode}
           className="list-none"
-          role="presentation"
         >
           <button
             type="button"
@@ -75,9 +74,9 @@ export function SuggestionsList({
             {/* Match type badge */}
             <MatchTypeBadge matchType={suggestion.matchType} />
           </button>
-        </li>
+        </div>
       ))}
-    </ul>
+    </div>
   );
 }
 
