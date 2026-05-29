@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type React from 'react';
 import type { ParsedApiError } from '../../api/error';
 import { getParsedApiError } from '../../api/error';
@@ -854,7 +854,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
     setExpandedRows({});
   };
 
-  const addChannel = (presetKey?: string) => {
+  const addChannel = useCallback((presetKey?: string) => {
     const nextPresetKey = presetKey || addPreset;
     const preset = CHANNEL_PRESETS[nextPresetKey] || CHANNEL_PRESETS.custom;
     const baseName = nextPresetKey === 'custom' ? 'custom' : nextPresetKey;
@@ -888,7 +888,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
     window.setTimeout(() => {
       channelRowRefs.current[nextIndex]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 0);
-  };
+  }, [addPreset]);
   useEffect(() => {
     const requestedPreset = String(externalCreatePreset || '').trim().toLowerCase();
     if (!requestedPreset) return;

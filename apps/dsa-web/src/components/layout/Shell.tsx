@@ -3,7 +3,7 @@
  * unchanged while the shared frame owns the Linear OS canvas and rhythm.
  */
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, LockKeyhole, LogOut, Menu, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
@@ -225,7 +225,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     setRailOpen(false);
   };
 
-  const closeAccountMenu = (options?: { returnFocus?: boolean }) => {
+  const closeAccountMenu = useCallback((options?: { returnFocus?: boolean }) => {
     setAccountMenuOpen(false);
     setAccountMenuFocusIndex(null);
     if (options?.returnFocus) {
@@ -233,7 +233,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         accountTriggerRef.current?.focus();
       }, 0);
     }
-  };
+  }, [setAccountMenuOpen, setAccountMenuFocusIndex]);
 
   const openAccountMenu = (focusIndex = 0) => {
     setAccountMenuOpen(true);

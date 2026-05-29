@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import { getParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigValidationError } from '../api/systemConfig';
@@ -440,7 +440,7 @@ const SettingsPage: React.FC = () => {
   const rawActiveItems = itemsByCategory[activeCategory] || [];
   const rawActiveItemMap = new Map(rawActiveItems.map((item) => [item.key, String(item.value ?? '')]));
   const allItems = Object.values(itemsByCategory).flat();
-  const allItemMap = new Map(allItems.map((item) => [item.key, String(item.value ?? '')]));
+  const allItemMap = useMemo(() => new Map(allItems.map((item) => [item.key, String(item.value ?? '')])), [allItems]);
   const categoryDomainMap = (() => {
     const map = new Map<string, SettingsDomain>();
     categories.forEach((category) => {
@@ -452,7 +452,7 @@ const SettingsPage: React.FC = () => {
     return map;
   })();
   const domainCategories = categories.filter((category) => (categoryDomainMap.get(category.category) || 'advanced') === activeDomain);
-  const domainCategorySet = new Set(domainCategories.map((category) => category.category));
+  const domainCategorySet = useMemo(() => new Set(domainCategories.map((category) => category.category)), [domainCategories]);
   const hasConfiguredChannels = Boolean((rawActiveItemMap.get('LLM_CHANNELS') || '').trim());
   const hasLitellmConfig = Boolean((rawActiveItemMap.get('LITELLM_CONFIG') || '').trim());
   const rawEditableActiveItems = (itemsByCategory[activeCategory] || []).filter(isRawEditableConfigItem);
@@ -1012,19 +1012,19 @@ const SettingsPage: React.FC = () => {
     }
   }, [dataSourceLibraryDrawerOpen]);
 
-  const modelsForGateway = (gateway: string): string[] => (
+  const modelsForGateway = useCallback((gateway: string): string[] => (
     getGatewayModelOptions(
       gateway,
       aiGatewayModelMap,
       availableProviders.aiModels,
       aiSavedModels,
     )
-  );
+  ), [aiGatewayModelMap, availableProviders.aiModels, aiSavedModels]);
 
-  const resolveProviderDefaultModel = (gateway: string): string => {
+  const resolveProviderDefaultModel = useCallback((gateway: string): string => {
     const options = modelsForGateway(gateway);
     return options[0] || '';
-  };
+  }, [modelsForGateway]);
 
   const primaryGatewayModels = modelsForGateway(routingDraft.ai.primaryChannel);
 
@@ -1314,10 +1314,10 @@ const SettingsPage: React.FC = () => {
       taskRoutingDraft.stock_chat.gateway,
       taskRoutingDraft.backtest.gateway,
     ]);
-  const taskModelOptions = ({
+  const taskModelOptions = useMemo(() => ({
       stock_chat: modelsForGateway(taskRoutingDraft.stock_chat.gateway),
       backtest: modelsForGateway(taskRoutingDraft.backtest.gateway),
-    });
+    }), [modelsForGateway, taskRoutingDraft]);
   const taskModelCompatible = ({
       stock_chat: isGatewayModelCompatible(
         taskRoutingDraft.stock_chat.gateway,
@@ -1509,14 +1509,14 @@ const SettingsPage: React.FC = () => {
       { key: runtimeSummaryVisibilityKey, value: showRuntimeExecutionSummary ? 'true' : 'false' },
     ], t('settings.routeSaved'));
   };
-  const directProviderKeyValues = ({
+  const directProviderKeyValues = useMemo(() => ({
     aihubmix: allItemMap.get('AIHUBMIX_KEY') || '',
     gemini: allItemMap.get('GEMINI_API_KEY') || '',
     openai: allItemMap.get('OPENAI_API_KEY') || '',
     anthropic: allItemMap.get('ANTHROPIC_API_KEY') || '',
     deepseek: allItemMap.get('DEEPSEEK_API_KEY') || '',
     zhipu: allItemMap.get('ZHIPU_API_KEY') || '',
-  });
+  }), [allItemMap]);
   const [directProviderDraft, setDirectProviderDraft] = useState(directProviderKeyValues);
   const [quickProviderTestState, setQuickProviderTestState] = useState<Record<QuickProviderKey, QuickProviderTestState>>({
     aihubmix: { status: 'idle', text: '' },
