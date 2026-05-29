@@ -368,7 +368,7 @@ function summaryTitle(items: MarketRotationSummaryItem[], fallback: string): str
 }
 
 function deriveTopThemes(themes: MarketRotationTheme[], limit = TOP_THEME_LIMIT): MarketRotationTheme[] {
-  return [...themes]
+  return themes.slice()
     .sort((a, b) => {
       if (b.rotationScore !== a.rotationScore) {
         return b.rotationScore - a.rotationScore;

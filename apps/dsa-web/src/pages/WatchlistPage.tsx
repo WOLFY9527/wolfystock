@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useEffect, useState, type ComponentProps } from 'react';
 import {
   BarChart3,
   CheckSquare,
@@ -953,7 +953,7 @@ const WatchlistPage: React.FC = () => {
     ];
   })();
 
-  const summary = useMemo(() => {
+  const summary = (() => {
     const markets = new Set<string>();
     let scannerSourced = 0;
     let recent = 0;
@@ -987,9 +987,9 @@ const WatchlistPage: React.FC = () => {
       failedOrNoData,
       latestTime,
     };
-  }, [items]);
+  })();
 
-  const filteredItems = useMemo(() => {
+  const filteredItems = (() => {
     const search = query.trim().toLowerCase();
     const rows = items.filter((item) => {
       const matchesSearch = !search
@@ -1025,7 +1025,7 @@ const WatchlistPage: React.FC = () => {
       if (sortKey === 'recentlyBacktested') return getTime(right.intelligence?.backtest?.testedAt) - getTime(left.intelligence?.backtest?.testedAt);
       return getItemTime(right) - getItemTime(left);
     });
-  }, [items, query, marketFilter, sourceFilter, contextFilter, evidenceFilter, sortKey]);
+  })();
 
   useEffect(() => {
     setSelectedIds((current) => {
