@@ -293,6 +293,22 @@ summary = {
             ],
         },
         {
+            "id": "user_data_privacy_export_deletion_rehearsal_completed_foundation_evidence",
+            "blockerId": "user_data_privacy_export_deletion_rehearsal",
+            "status": "completed_foundation_evidence_only",
+            "foundationStatus": "completed",
+            "evidenceScope": "repo_local_offline_only",
+            "acceptedLaunchArtifactRequired": True,
+            "releaseApprovalEvidence": False,
+            "releaseApproved": False,
+            "evidence": [
+                "privacy export/deletion rehearsal anchors stay repo-local and offline only",
+                "destructive delete remains no-write/unsupported by current runtime posture unless future runtime design changes it",
+                "accepted sanitized launch artifact still required before this hard blocker can clear",
+                "no approval semantics granted and no accepted launch evidence implied",
+            ],
+        },
+        {
             "id": "provider_operator_evidence_validator",
             "status": "foundation_evidence_present",
             "evidence": [

@@ -83,6 +83,7 @@ EXPECTED_COMPLETED_FOUNDATION_BLOCKER_IDS = {
     "api_abuse_request_safety",
     "admin_log_retention_capacity_rehearsal",
     "market_data_freshness_fallback_evidence",
+    "user_data_privacy_export_deletion_rehearsal",
 }
 
 
@@ -243,6 +244,7 @@ def test_release_gate_summary_completed_foundation_evidence_stays_non_approving(
         "api_abuse_request_safety": "request-safety regression anchors stay repo-local and offline only",
         "admin_log_retention_capacity_rehearsal": "retention/capacity rehearsal anchors stay repo-local and offline only",
         "market_data_freshness_fallback_evidence": "freshness/fallback disclosure anchors stay repo-local and offline only",
+        "user_data_privacy_export_deletion_rehearsal": "privacy export/deletion rehearsal anchors stay repo-local and offline only",
     }
     for blocker_id, scope_note in expected_scope.items():
         foundation = support_by_blocker[blocker_id]
@@ -254,8 +256,11 @@ def test_release_gate_summary_completed_foundation_evidence_stays_non_approving(
         assert foundation["releaseApprovalEvidence"] is False
         assert foundation["releaseApproved"] is False
         assert any(scope_note == note for note in foundation["evidence"])
-        assert any("accepted launch artifact still required" in note for note in foundation["evidence"])
+        assert any("accepted" in note and "launch artifact still required" in note for note in foundation["evidence"])
         assert any("no approval semantics granted" in note for note in foundation["evidence"])
+        if blocker_id == "user_data_privacy_export_deletion_rehearsal":
+            assert any("destructive delete remains no-write/unsupported" in note for note in foundation["evidence"])
+            assert any("future runtime design changes" in note for note in foundation["evidence"])
 
     hard_blockers = {item["id"]: item for item in summary["hardBlockers"]}
     assert set(hard_blockers) == set(EXPECTED_OPERATOR_CATEGORY_IDS)
@@ -266,6 +271,12 @@ def test_release_gate_summary_completed_foundation_evidence_stays_non_approving(
 
     assert summary["finalStatus"] == "NO-GO"
     assert summary["releaseApproved"] is False
+
+    foundation_classifications = {
+        blocker_id: hard_blockers[blocker_id]["blockerClassification"]
+        for blocker_id in support_by_blocker
+    }
+    assert set(foundation_classifications.values()) == {"internal_validation"}
 
     unexpected_foundation_blockers = {
         item["blockerId"]: hard_blockers[item["blockerId"]]["blockerClassification"]
