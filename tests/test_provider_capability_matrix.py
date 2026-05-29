@@ -14,6 +14,7 @@ import pytest
 from data_provider.baostock_fetcher import BaostockFetcher
 from data_provider.akshare_fetcher import AkshareFetcher
 from data_provider.pytdx_fetcher import PytdxFetcher
+from src.contracts.source_confidence import SCORE_GRADE_TRUST_LEVELS
 from src.services.provider_capability_matrix import (
     FreshnessClass,
     ProviderDomain,
@@ -54,6 +55,44 @@ EXPECTED_PROVIDER_IDS = {
     "tavily",
     "social_sentiment",
     "local_inference",
+}
+
+KNOWN_SUPPORT_SOURCE_TYPES = {
+    "missing",
+    "official_public",
+    "public_proxy",
+}
+
+KNOWN_SUPPORT_FRESHNESS_EXPECTATIONS = {
+    "best_effort_public_web_quote_snapshot_and_daily_history",
+    "best_effort_realtime_quote_and_daily_history",
+    "continuous_session_or_delayed_fix_snapshot",
+    "daily_or_intraday_sector_theme_flow_snapshot",
+    "daily_or_weekly_public_release_lag",
+    "extended_hours_delayed_or_realtime_index_futures",
+    "licensed_daily_or_delayed_breadth_snapshot",
+    "licensed_daily_or_delayed_fund_flow",
+    "session_delayed_cross_border_flow_snapshot",
+    "session_delayed_or_daily_official_fixing",
+    "t_plus_1_or_delayed",
+}
+
+KNOWN_DIAGNOSTIC_FRESHNESS_EXPECTATIONS = {
+    "authorized_or_cached_option_chain_with_bid_ask_and_freshness_evidence",
+    "authorized_or_cached_option_chain_with_iv_greeks_and_freshness_evidence",
+    "authorized_or_cached_option_chain_with_iv_rank_history_and_freshness_evidence",
+    "authorized_or_cached_option_chain_with_oi_volume_and_freshness_evidence",
+    "disabled_live_stub_diagnostic_only",
+    "persisted_watchlist_refresh_window_and_freshness_audit",
+    "persisted_watchlist_snapshot_with_explicit_scanner_score_context",
+    "persisted_watchlist_source_confidence_and_cap_reason_preservation",
+    "stored_snapshot_with_benchmark_lineage_freshness_and_non_fallback_history",
+    "stored_snapshot_with_factor_lineage_freshness_and_non_fallback_inputs",
+    "stored_snapshot_with_lineage_freshness_and_non_fallback_fx_evidence",
+    "stored_snapshot_with_lineage_freshness_and_non_fallback_price_evidence",
+    "stored_snapshot_with_sector_industry_lineage_and_non_fallback_mappings",
+    "synthetic_fixture_and_dry_run_chain_only",
+    "watchlist_missing_or_stale_score_gap_projection",
 }
 
 FUTURE_AUTHORIZED_SUPPORT_CONTRACTS = {
@@ -385,6 +424,15 @@ def test_cn_provider_probe_contract_metadata_stays_in_lockstep(
     assert "exchange_authorized" not in {item.source_tier for item in contracts}
 
 
+def test_provider_capability_support_contracts_use_known_onboarding_vocabulary() -> None:
+    contracts = list_provider_capability_support_contracts()
+
+    assert {item.source_type for item in contracts} == KNOWN_SUPPORT_SOURCE_TYPES
+    assert {item.freshness_expectation for item in contracts} == KNOWN_SUPPORT_FRESHNESS_EXPECTATIONS
+    assert {item.observation_only for item in contracts} == {True}
+    assert {item.score_contribution_allowed for item in contracts} == {False}
+
+
 def test_provider_fit_metadata_helpers_are_deterministic_and_do_not_modify_runtime_capability_ids() -> None:
     first = list_provider_fit_metadata()
     second = list_provider_fit_metadata()
@@ -398,6 +446,28 @@ def test_provider_fit_metadata_helpers_are_deterministic_and_do_not_modify_runti
     assert len(list_provider_dry_run_probe_contracts()) == len(first)
     assert get_provider_capability("sec_edgar") is None
     assert get_provider_capability("coinbase_public") is None
+
+
+def test_diagnostic_fit_metadata_rows_remain_observation_only_and_non_authoritative() -> None:
+    diagnostic_rows = tuple(
+        item for item in list_provider_fit_metadata() if item.provider_category.endswith("_diagnostic_gap")
+    )
+
+    assert diagnostic_rows
+    assert {item.freshness_expectation for item in diagnostic_rows} == KNOWN_DIAGNOSTIC_FRESHNESS_EXPECTATIONS
+
+    for item in diagnostic_rows:
+        probe = get_provider_dry_run_probe_contract(item.provider_id)
+
+        assert item.observation_only is True
+        assert item.score_contribution_allowed is False
+        assert item.trust_level not in SCORE_GRADE_TRUST_LEVELS
+        assert item.degradation_reason == "provider_fit_metadata_only"
+        assert probe is not None
+        assert probe.observation_only is True
+        assert probe.score_contribution_allowed is False
+        assert probe.network_call_executed is False
+        assert probe.no_default_live_http_calls is True
 
 
 def test_provider_fit_metadata_includes_portfolio_watchlist_and_options_gap_rows() -> None:

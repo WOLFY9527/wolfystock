@@ -147,6 +147,91 @@ def test_degraded_sources_are_capped_and_cannot_masquerade_as_live_or_fresh(
     assert validate_source_confidence_contract(contract).is_valid is True
 
 
+@pytest.mark.parametrize(
+    ("payload", "expected_reason"),
+    [
+        (
+            {
+                "source": "fallback",
+                "sourceLabel": "Fallback",
+                "freshness": "live",
+                "isFallback": True,
+                "confidenceWeight": 1.0,
+                "coverage": 1.0,
+            },
+            "fallback_source",
+        ),
+        (
+            {
+                "source": "cache",
+                "sourceLabel": "Cache",
+                "freshness": "fresh",
+                "isStale": True,
+                "confidenceWeight": 0.95,
+                "coverage": 1.0,
+            },
+            "stale_source",
+        ),
+        (
+            {
+                "source": "mixed",
+                "sourceLabel": "Mixed",
+                "freshness": "live",
+                "isPartial": True,
+                "confidenceWeight": 0.9,
+                "coverage": 0.5,
+            },
+            "partial_coverage",
+        ),
+        (
+            {
+                "source": "unit_fixture",
+                "sourceLabel": "Unit Fixture",
+                "freshness": "live",
+                "isSynthetic": True,
+                "confidenceWeight": 0.9,
+                "coverage": 1.0,
+            },
+            "synthetic_source",
+        ),
+        (
+            {
+                "source": "unavailable",
+                "sourceLabel": "Unavailable",
+                "freshness": "fresh",
+                "isUnavailable": True,
+                "confidenceWeight": 0.9,
+                "coverage": 1.0,
+            },
+            "unavailable_source",
+        ),
+    ],
+)
+def test_degraded_cap_reason_vocabulary_stays_aligned_with_score_grade_authority_gate(
+    payload: dict[str, object],
+    expected_reason: str,
+) -> None:
+    contract = coerce_source_confidence_contract(payload)
+    result = evaluate_score_grade_source_authority(
+        source_type="score_grade",
+        source_tier="score_grade",
+        trust_level="score_grade_when_configured",
+        freshness=contract.freshness.value,
+        is_fallback=contract.is_fallback,
+        is_stale=contract.is_stale,
+        is_synthetic=contract.is_synthetic,
+        is_unavailable=contract.is_unavailable,
+        score_contribution_allowed=True,
+        source_authority_allowed=True,
+    )
+
+    assert contract.cap_reason == expected_reason
+    assert result == ScoreGradeSourceAuthorityResult(
+        allowed=False,
+        reason_codes=(expected_reason,),
+    )
+
+
 def test_validator_flags_raw_degraded_source_claiming_live_freshness() -> None:
     raw = SourceConfidenceContract(
         source="fallback",
