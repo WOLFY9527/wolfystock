@@ -1,6 +1,13 @@
 # MarketCache Redis Backend Boundary
 
-Status: design boundary only. Redis/Valkey is not implemented or enabled.
+Status: mirror-policy boundary only. A real Redis/Valkey adapter is deferred, not implemented, and not enabled.
+
+## Current remote seam
+
+- `MarketCache` currently exposes only a best-effort remote mirror seam behind `MarketCacheRemoteBackend`.
+- The default backend remains `NullMarketCacheRemoteBackend`, so current behavior stays local-only unless a caller injects a test double.
+- The seam is mirror-only: current runtime may project a JSON-safe document for persistence, but it does not read, hydrate, or re-authorize payloads from any remote store.
+- No Redis/Valkey package, import, env flag, config flag, or runtime enablement is required in the current implementation.
 
 ## Current MarketCache semantics to preserve
 
@@ -37,9 +44,13 @@ Status: design boundary only. Redis/Valkey is not implemented or enabled.
 ## Safest future implementation boundary
 
 - Any future Redis/Valkey work must stay behind the existing `MarketCache` API as a disabled-by-default adapter.
-- Default behavior must not change; the local in-memory backend remains the default.
+- Default behavior must not change; the local in-memory backend and default null remote backend remain authoritative.
 - A first remote backend may store only JSON-safe payload projections.
-- Distributed locking, distributed SWR, cross-process cold-start coalescing, lease ownership, and generation semantics are separate design problems and must be specified before enablement.
+- Remote reads, hydration, cache-warming authority, and fallback/live authority are out of scope for the first real adapter.
+- Distributed locking, distributed SWR, leases, and cross-process cold-start coalescing are separate design problems and must be specified before enablement.
+- A real network adapter must define explicit timeout, failure, and backpressure policy before enablement.
+- Request success must not depend on remote write success.
+- Remote persist must not become a provider route failure source.
 
 ## Explicitly forbidden in a first Redis implementation
 
@@ -55,4 +66,4 @@ Status: design boundary only. Redis/Valkey is not implemented or enabled.
 
 ## Operational rule
 
-- If future Redis/Valkey work needs config/env/dependencies/runtime changes outside this boundary, stop and open a separate scoped task instead of broadening the first backend pass.
+- If future Redis/Valkey work needs new env/config flags, dependencies, runtime enablement, timeout policy, or failure-handling semantics outside this boundary, stop and open a separate scoped task instead of broadening the mirror-policy pass.

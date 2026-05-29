@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import threading
 import time
@@ -24,8 +25,9 @@ class _RemoteBackendUnavailable(RuntimeError):
 
 
 class _FakeRemoteMarketCacheBackend(MarketCacheRemoteBackend):
-    def __init__(self, *, fail_on_write: bool = False) -> None:
+    def __init__(self, *, fail_on_write: bool = False, delay_on_write_seconds: float = 0.0) -> None:
         self.fail_on_write = fail_on_write
+        self.delay_on_write_seconds = delay_on_write_seconds
         self.documents: dict[str, dict] = {}
         self.read_calls = 0
         self.write_calls = 0
@@ -42,6 +44,8 @@ class _FakeRemoteMarketCacheBackend(MarketCacheRemoteBackend):
 
     def persist(self, key: str, document: dict) -> None:
         self.write_calls += 1
+        if self.delay_on_write_seconds > 0:
+            time.sleep(self.delay_on_write_seconds)
         if self.fail_on_write:
             raise _RemoteBackendUnavailable("redis backend unavailable")
         self.documents[key] = json.loads(json.dumps(document, ensure_ascii=False, sort_keys=True))
@@ -475,6 +479,24 @@ class MarketCacheTestCase(unittest.TestCase):
 
         self.assertIsInstance(cache._remote_backend, NullMarketCacheRemoteBackend)
 
+    def test_market_cache_remote_seam_requires_no_redis_dependency_or_env_flag(self) -> None:
+        import src.services.market_cache as market_cache_module
+
+        source = inspect.getsource(market_cache_module)
+        parameters = inspect.signature(MarketCache.__init__).parameters
+
+        self.assertNotIn("import redis", source)
+        self.assertNotIn("from redis", source)
+        self.assertNotIn("import valkey", source)
+        self.assertNotIn("from valkey", source)
+        self.assertNotIn("os.getenv", source)
+        self.assertEqual(
+            tuple(parameters.keys()),
+            ("self", "max_workers", "refresh_stale_after_seconds", "remote_backend"),
+        )
+        self.assertNotIn("redis_url", source.lower())
+        self.assertNotIn("valkey_url", source.lower())
+
     def test_remote_projection_only_persists_json_safe_cache_contract(self) -> None:
         cache = MarketCache(max_workers=1)
         cache.set(
@@ -626,6 +648,33 @@ class MarketCacheTestCase(unittest.TestCase):
         self.assertEqual(cache.get("cn_indices").data["source"], "fallback")
         self.assertEqual(cache.get("cn_indices").data["freshness"], "fallback")
         self.assertEqual(backend.write_calls, 1)
+
+    def test_slow_remote_backend_preserves_local_payload_semantics(self) -> None:
+        control_cache = MarketCache(max_workers=1)
+        backend = _FakeRemoteMarketCacheBackend(delay_on_write_seconds=0.01)
+        remote_cache = MarketCache(max_workers=1, remote_backend=backend)
+        seed_payload = {"source": "binance", "value": 7, "freshness": "live"}
+
+        control_cache.set("crypto", seed_payload, ttl_seconds=30)
+        remote_cache.set("crypto", seed_payload, ttl_seconds=30)
+
+        expected = control_cache.get_or_refresh(
+            "crypto",
+            30,
+            Mock(side_effect=AssertionError("fresh control cache should not fetch")),
+        )
+        actual = remote_cache.get_or_refresh(
+            "crypto",
+            30,
+            Mock(side_effect=AssertionError("fresh remote-backed cache should not fetch")),
+        )
+
+        self.assertEqual(actual, expected)
+        self.assertEqual(actual["source"], "binance")
+        self.assertEqual(actual["value"], 7)
+        self.assertEqual(actual["freshness"], "live")
+        self.assertEqual(backend.read_calls, 0)
+        self.assertGreaterEqual(backend.write_calls, 2)
 
 
 if __name__ == "__main__":
