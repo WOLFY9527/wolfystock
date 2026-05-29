@@ -97,6 +97,7 @@ function renderFieldControl(
         <input
           id={controlId}
           type="checkbox"
+          aria-label={item.key}
           className="settings-input-checkbox size-4 rounded border-border/70 bg-base"
           checked={checked}
           disabled={disabled || !schema?.isEditable}

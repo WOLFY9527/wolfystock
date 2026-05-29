@@ -452,6 +452,7 @@ const DataSourceLibraryDrawer: React.FC<DataSourceLibraryDrawerProps> = ({
                   <label htmlFor="ds-description" className={DRAWER_LABEL_CLASS}>{t('settings.dataSourceEditorDescription')}</label>
                   <textarea
                     id="ds-description"
+                    aria-label={t('settings.dataSourceEditorDescription')}
                     value={draft.description}
                     onChange={(event) => onDraftChange((prev) => ({ ...prev, description: event.target.value }))}
                     disabled={isSaving}

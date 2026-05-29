@@ -1252,6 +1252,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                         <label key={model} className="flex items-center gap-2 text-sm text-secondary-text">
                           <input
                             type="checkbox"
+                            aria-label={model}
                             className="settings-input-checkbox size-4 rounded border-border/70 bg-base"
                             checked={runtimeConfig.fallbackModels.includes(model)}
                             disabled={busy || model === runtimeConfig.primaryModel}
