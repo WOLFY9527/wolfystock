@@ -838,6 +838,7 @@ const QuotaDryRunPanel: React.FC = () => {
             max={2_000_000}
             value={tokenEstimateInput}
             onChange={(event) => setTokenEstimateInput(String(clampTokenEstimate(event.target.value)))}
+            aria-label="用量估算"
           />
         </label>
         <div className="min-w-0 xl:col-span-3">
@@ -868,6 +869,7 @@ const QuotaDryRunPanel: React.FC = () => {
             value={reservationId}
             onChange={(event) => setReservationId(event.target.value.slice(0, 128))}
             placeholder="试运行 reservation id"
+            aria-label="预占编号"
           />
         </label>
       ) : null}

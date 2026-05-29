@@ -5,7 +5,7 @@ import {
   ConsoleBoard,
   ConsoleContextRail,
 } from '../linear/LinearPrimitives';
-import { TerminalGrid } from '../terminal';
+import { TerminalGrid } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
 
 export type MarketOverviewContextHighlightView = {

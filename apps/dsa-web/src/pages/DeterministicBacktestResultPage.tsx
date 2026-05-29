@@ -69,7 +69,7 @@ import {
   ResearchConsoleShell,
   WolfyCommandBar,
 } from '../components/linear/LinearPrimitives';
-import { TerminalPageShell } from '../components/terminal';
+import { TerminalPageShell } from '../components/terminal/TerminalPrimitives';
 import { StatusBadge } from '../components/ui/StatusBadge';
 
 const RULE_POLL_INTERVAL_MS = 1800;

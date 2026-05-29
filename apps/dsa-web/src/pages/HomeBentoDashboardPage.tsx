@@ -15,7 +15,7 @@ import {
   CompactFilterBar,
   FixedRegionGrid,
   MetricStrip,
-} from '../components/linear';
+} from '../components/linear/LinearPrimitives';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useUiPreferences } from '../contexts/UiPreferencesContext';
@@ -146,14 +146,13 @@ function HomeCandlestickChartFallback({
   statusLabel: string;
 }) {
   return (
-    <div
+    <output
       className={cn(
-        'home-chart-well min-w-0 rounded-[14px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-3 py-2.5 shadow-[var(--wolfy-shadow-panel)]',
+        'block home-chart-well min-w-0 rounded-[14px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-3 py-2.5 shadow-[var(--wolfy-shadow-panel)]',
         className,
       )}
       style={style}
       data-testid="home-candlestick-chart-fallback"
-      role="status"
       aria-live="polite"
       aria-atomic="true"
       aria-busy="true"
@@ -199,7 +198,7 @@ function HomeCandlestickChartFallback({
           </div>
         </div>
       </div>
-    </div>
+    </output>
   );
 }
 
@@ -4956,6 +4955,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               <button
                 type="submit"
                 disabled={isBusy}
+                aria-label={locale === 'en' ? 'Analyze' : '分析'}
                 className="min-h-10 shrink-0 rounded-lg border border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] px-5 text-sm font-semibold text-white shadow-[0_0_22px_rgba(118,109,219,0.18)] transition-colors hover:bg-[#8178e7] disabled:cursor-wait disabled:bg-white/[0.05] disabled:text-white/42"
                 data-testid="home-bento-analyze-button"
               >
@@ -5204,7 +5204,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           <div className="flex min-w-0 items-start gap-4">
                             {readyCopy.ticker === 'ORCL' ? (
                               <div
-                                className="home-research-company-mark-oracle flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-[14px] border border-red-300/10 bg-[linear-gradient(145deg,#ff5b2d,#b51915)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_14px_34px_rgba(185,25,21,0.18)]"
+                                className="home-research-company-mark-oracle flex size-[72px] shrink-0 items-center justify-center rounded-[14px] border border-red-300/10 bg-[linear-gradient(145deg,#ff5b2d,#b51915)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_14px_34px_rgba(185,25,21,0.18)]"
                                 data-testid="home-research-company-mark"
                                 data-company-mark="oracle-logo"
                                 aria-label="Oracle"
@@ -5214,7 +5214,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                               </div>
                             ) : (
                               <div
-                                className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-[14px] border border-[color:var(--wolfy-border-subtle)] bg-[linear-gradient(145deg,rgba(118,109,219,0.34),rgba(23,31,54,0.92)_48%,rgba(75,94,172,0.28))] font-mono text-sm font-semibold text-white/88 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]"
+                                className="flex size-[72px] shrink-0 items-center justify-center rounded-[14px] border border-[color:var(--wolfy-border-subtle)] bg-[linear-gradient(145deg,rgba(118,109,219,0.34),rgba(23,31,54,0.92)_48%,rgba(75,94,172,0.28))] font-mono text-sm font-semibold text-white/88 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]"
                                 data-testid="home-research-company-mark"
                                 data-company-mark="fallback-monogram"
                                 aria-hidden="true"

@@ -29,11 +29,13 @@ import {
   DenseSecondaryDisclosure,
   DenseStatusStrip,
   DenseTableShell,
+} from '../components/terminal/DenseWorkbenchPrimitives';
+import {
   TerminalButton,
   TerminalChip,
   TerminalNotice,
   TerminalPanel,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import type { WatchlistItem } from '../types/watchlist';
@@ -1678,7 +1680,7 @@ const WatchlistPage: React.FC = () => {
                               aria-label={`${copy.copySymbol} ${item.symbol}`}
                               title={copiedId === item.id ? copy.copied : copy.copySymbol}
                               variant="compact"
-                              className="h-[34px] min-h-[34px] w-[34px] px-0 text-white/55"
+                              className="size-[34px] min-h-[34px] px-0 text-white/55"
                               onClick={() => void handleCopy(item)}
                             >
                               <Copy className="size-3.5" />
@@ -1687,7 +1689,7 @@ const WatchlistPage: React.FC = () => {
                               type="button"
                               aria-label={`${copy.remove} ${item.symbol}`}
                               variant="danger"
-                              className="h-[34px] min-h-[34px] w-[34px] px-0"
+                              className="size-[34px] min-h-[34px] px-0"
                               onClick={() => void handleRemove(item)}
                               disabled={pendingRemoveId === item.id}
                             >

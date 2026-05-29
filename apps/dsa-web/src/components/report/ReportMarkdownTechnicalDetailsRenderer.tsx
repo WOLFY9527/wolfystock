@@ -26,7 +26,7 @@ export const ReportMarkdownTechnicalDetailsRenderer: React.FC<ReportMarkdownTech
       prose-td:border prose-td:border-[var(--home-prose-border-strong)] prose-td:px-3 prose-td:py-2 prose-td:align-top
       prose-hr:my-6
       prose-a:no-underline hover:prose-a:underline
-      prose-blockquote:my-4 prose-blockquote:border-l-2 prose-blockquote:border-[var(--home-prose-blockquote-border)] prose-blockquote:bg-[var(--home-prose-blockquote-bg)] prose-blockquote:px-4 prose-blockquote:py-3 prose-blockquote:text-secondary-text
+      prose-blockquote:my-4 prose-blockquote:border-s-2 prose-blockquote:border-[var(--home-prose-blockquote-border)] prose-blockquote:bg-[var(--home-prose-blockquote-bg)] prose-blockquote:px-4 prose-blockquote:py-3 prose-blockquote:text-secondary-text
       break-words
     "
     data-testid="report-technical-details-renderer"

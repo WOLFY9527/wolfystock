@@ -894,18 +894,16 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoveredIndex(null)}
         >
-          <div
+          <figure
             ref={chartNodeRef}
             className="size-full"
-            role="img"
             aria-label={language === 'en' ? `Interactive ${activeTimeframe} OHLC candlestick chart` : `可交互 ${activeTimeframe} OHLC K 线图`}
             data-testid="home-candlestick-echarts-node"
           />
           {hoveredCandle ? (
-            <div
+            <output
               className="sr-only"
               data-testid="home-candlestick-hover-tooltip"
-              role="status"
               aria-live="polite"
             >
               <p className="font-medium text-white/88">
@@ -930,7 +928,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
                     .join(' · ')}
                 </p>
               ) : null}
-            </div>
+            </output>
           ) : null}
         </div>
       ) : (

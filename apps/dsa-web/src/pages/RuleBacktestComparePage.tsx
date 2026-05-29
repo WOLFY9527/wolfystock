@@ -20,7 +20,7 @@ import {
   KeyLevelStrip,
   ResearchConsoleShell,
   WolfyCommandBar,
-} from '../components/linear';
+} from '../components/linear/LinearPrimitives';
 import RuleBacktestCompareHeatmapProjectionPanel from '../components/backtest/RuleBacktestCompareHeatmapProjectionPanel';
 import {
   Banner,

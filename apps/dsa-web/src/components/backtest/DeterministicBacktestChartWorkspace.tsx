@@ -409,10 +409,9 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
             </div>
           </div>
           <div className="backtest-void-workspace__chart-shell">
-            <div
+            <figure
               ref={containerRef}
               className="backtest-void-workspace__chart-canvas"
-              role="img"
               aria-label={ctw(language, 'cumulativeReturnChartAria')}
             />
           </div>

@@ -465,7 +465,10 @@ export function ScannerCandidateDiagnosticRow({
     <article
       data-testid={`scanner-ranked-row-${candidate.symbol}`}
       data-selected={isSelectedCandidate ? 'true' : undefined}
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(); }}
       className={`cursor-pointer border-b border-white/7 px-3 py-2.5 text-sm transition-colors ${
         isSelectedCandidate
           ? 'bg-emerald-400/[0.045] shadow-[inset_2px_0_0_rgba(52,211,153,0.32)]'
@@ -476,26 +479,26 @@ export function ScannerCandidateDiagnosticRow({
         <div data-testid={`scanner-result-row-${candidate.symbol}`} className="contents">
           <div data-testid={`scanner-candidate-row-${candidate.symbol}`} className="contents">
           <div className="hidden min-w-0 items-center gap-3 md:grid md:grid-cols-[64px_minmax(180px,1fr)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)_auto]">
-            <div className="min-w-0" onClick={onSelect}>
+            <div className="min-w-0" role="button" tabIndex={0} onClick={onSelect} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(); }}>
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Rank' : '排名'}</p>
               <p className={`mt-1 font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-50' : 'text-white/72'}`}>
                 {candidate.rank ? `#${candidate.rank}` : '--'}
               </p>
             </div>
-            <div className="min-w-0" onClick={onSelect}>
+            <div className="min-w-0" role="button" tabIndex={0} onClick={onSelect} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(); }}>
               <p className={`truncate font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-50' : 'text-white'}`}>
                 {candidate.symbol || '--'}
               </p>
               <p className="truncate text-[11px] text-white/38">{displayName}</p>
               {comparisonLabel ? <p className="mt-1 truncate text-[10px] text-cyan-100/70">{comparisonLabel}</p> : null}
             </div>
-            <div className="min-w-0" onClick={onSelect}>
+            <div className="min-w-0" role="button" tabIndex={0} onClick={onSelect} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(); }}>
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Score' : '评分'}</p>
               <p className={`mt-1 font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-100' : 'text-white/78'}`}>{scoreLabel}</p>
               {scoreDelta ? <p className="text-[10px] text-white/36">{scoreDelta}</p> : null}
               <ScannerScoreTrustStrip sources={resolvedTrustSources} language={language} className="mt-1.5" testId={`scanner-score-trust-${candidate.symbol}`} />
             </div>
-            <div className="min-w-0" onClick={onSelect}>
+            <div className="min-w-0" role="button" tabIndex={0} onClick={onSelect} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(); }}>
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Status' : '状态'}</p>
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <span className={`inline-flex max-w-full rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] ${previewBadgeClassName}`}>
@@ -506,16 +509,16 @@ export function ScannerCandidateDiagnosticRow({
                 </span>
               </div>
             </div>
-            <div className="min-w-0" onClick={onSelect}>
+            <div className="min-w-0" role="button" tabIndex={0} onClick={onSelect} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(); }}>
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Key reason' : '关键原因'}</p>
               <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-white/68" title={keyReason}>{keyReason}</p>
             </div>
-            <div className="min-w-0" onClick={onSelect}>
+            <div className="min-w-0" role="button" tabIndex={0} onClick={onSelect} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(); }}>
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Data quality' : '数据质量'}</p>
               <p className="mt-1 truncate text-xs text-white/62" title={dataQualityLabel}>{dataQualityLabel}</p>
               {evidenceSummary ? <EvidenceChips summary={evidenceSummary} maxLabels={1} className="mt-1" /> : null}
             </div>
-            <div className="min-w-0" onClick={onSelect}>
+            <div className="min-w-0" role="button" tabIndex={0} onClick={onSelect} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(); }}>
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Watch / risk' : '观察 / 风险'}</p>
               <p className="mt-1 truncate text-xs text-white/72" title={watchSummary}>{watchSummary}</p>
               <p className="truncate text-[11px] text-white/38" title={rangeSummary}>{rangeSummary}</p>
@@ -535,7 +538,7 @@ export function ScannerCandidateDiagnosticRow({
           </div>
 
           <div className="grid gap-2 md:hidden">
-            <div className="flex min-w-0 items-start justify-between gap-3" onClick={onSelect}>
+            <div className="flex min-w-0 items-start justify-between gap-3" role="button" tabIndex={0} onClick={onSelect} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(); }}>
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
                   <span className={`font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-50' : 'text-white'}`}>
@@ -552,7 +555,7 @@ export function ScannerCandidateDiagnosticRow({
                 <p className="text-[10px] text-white/36">{candidate.rank ? `#${candidate.rank}` : '--'}</p>
               </div>
             </div>
-            <div className="grid gap-1.5 text-xs text-white/66" onClick={onSelect}>
+            <div className="grid gap-1.5 text-xs text-white/66" role="button" tabIndex={0} onClick={onSelect} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(); }}>
               <p title={keyReason}>{keyReason}</p>
               <p title={dataQualityLabel}>{dataQualityLabel}</p>
               <p title={watchSummary}>{watchSummary}</p>
@@ -666,7 +669,10 @@ export function ScannerCandidateCard({
   return (
     <article
       data-testid={`scanner-result-card-${candidateIdentity}`}
+      role="button"
+      tabIndex={0}
       onClick={() => onSelect()}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(); }}
       className="rounded-xl border border-white/5 bg-white/[0.02] p-3 transition-colors hover:border-white/16 hover:bg-white/[0.04]"
     >
       <div className="flex justify-between items-start gap-3">

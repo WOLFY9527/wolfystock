@@ -448,15 +448,15 @@ export const MetricCard: React.FC<{
 export const SummaryStrip: React.FC<{
   items: Array<{ label: string; value: string; note?: string }>;
 }> = ({ items }) => (
-  <div className="summary-strip" role="list">
+  <ul className="summary-strip">
     {items.map((item) => (
-      <div key={item.label} className="summary-strip__item" role="listitem">
+      <li key={item.label} className="summary-strip__item">
         <p className="summary-strip__label">{item.label}</p>
         <p className="summary-strip__value">{item.value}</p>
         {item.note ? <p className="summary-strip__note">{item.note}</p> : null}
-      </div>
+      </li>
     ))}
-  </div>
+  </ul>
 );
 
 export const Banner: React.FC<{

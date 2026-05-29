@@ -37,11 +37,10 @@ export const GlobalLoader: React.FC<GlobalLoaderProps> = ({ fading = false }) =>
   }, []);
 
   return (
-    <div
-      className={`fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden bg-black px-6 transition-opacity duration-500 ${
+    <output
+      className={`block fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden bg-black px-6 transition-opacity duration-300 ${
         fading ? 'pointer-events-none opacity-0' : 'opacity-100'
       }`}
-      role="status"
       aria-live="polite"
       aria-label="WolfyStock quant terminal boot sequence"
     >
@@ -134,7 +133,7 @@ export const GlobalLoader: React.FC<GlobalLoaderProps> = ({ fading = false }) =>
           </div>
         </div>
       </main>
-    </div>
+    </output>
   );
 };
 

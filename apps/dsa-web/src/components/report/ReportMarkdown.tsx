@@ -328,15 +328,14 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
                 {hasOpenedTechnicalDetails ? (
                   <Suspense
                     fallback={(
-                      <div
-                        role="status"
+                      <output
                         aria-live="polite"
                         aria-busy="true"
                         data-testid="report-technical-details-loading"
-                        className="rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/35 p-3 text-sm text-secondary-text"
+                        className="block rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/35 p-3 text-sm text-secondary-text"
                       >
                         {normalizedLanguage === 'en' ? 'Loading technical details…' : '正在加载技术细节…'}
-                      </div>
+                      </output>
                     )}
                   >
                     <LazyReportMarkdownTechnicalDetailsRenderer markdown={localizedMarkdownContent} />

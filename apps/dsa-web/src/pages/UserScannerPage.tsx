@@ -1512,11 +1512,10 @@ function PillTagGroup({
   return (
     <div className={compact ? 'flex min-w-0 flex-col gap-1 md:flex-row md:items-center md:gap-2' : 'flex min-w-0 flex-col gap-1.5'}>
       <span className={compact ? 'shrink-0 text-[10px] uppercase tracking-[0.16em] text-white/40' : 'text-[10px] uppercase tracking-[0.16em] text-white/40'}>{label}</span>
-      <div
+      <fieldset
         className={isMarketGroup
           ? 'ui-scroll-x-quiet flex min-w-0 max-w-full rounded-xl border border-white/5 bg-black/40 p-1'
-          : 'flex min-w-0 flex-wrap gap-1.5'}
-        role="group"
+          : 'border-0 p-0 flex min-w-0 flex-wrap gap-1.5'}
         aria-label={label}
         data-testid={testId}
       >
@@ -1540,7 +1539,7 @@ function PillTagGroup({
             </button>
           );
         })}
-      </div>
+      </fieldset>
     </div>
   );
 }
@@ -2922,6 +2921,7 @@ const UserScannerPage: React.FC = () => {
                               data-testid="scanner-custom-symbols-input"
                               value={customSymbols}
                               onChange={(event) => setCustomSymbols(event.target.value)}
+                              aria-label={language === 'en' ? 'Custom symbols' : '自定义代码'}
                               aria-invalid={Boolean(validationErrors.customSymbols)}
                               aria-describedby={validationErrors.customSymbols ? 'scanner-custom-symbols-error' : undefined}
                               rows={3}
@@ -2952,7 +2952,7 @@ const UserScannerPage: React.FC = () => {
                       <div className="flex min-w-0 flex-row flex-wrap items-center gap-2">
                         {runDetail && hasCandidateDiagnostics ? (
                           <div data-testid="scanner-compact-filter-bar" className="min-w-0">
-                            <div data-testid="scanner-candidate-filters" className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1 border-r border-white/10 pr-2" role="group" aria-label={language === 'en' ? 'Candidate view' : '候选视图'}>
+                            <fieldset data-testid="scanner-candidate-filters" className="border-0 p-0 ui-scroll-x-quiet flex min-w-0 max-w-full gap-1 border-r border-white/10 pr-2" aria-label={language === 'en' ? 'Candidate view' : '候选视图'}>
                               {([
                                 ['selected', language === 'en' ? 'Selected' : '入选'],
                                 ['pool', language === 'en' ? 'Candidate pool' : '候选池'],
@@ -2973,7 +2973,7 @@ const UserScannerPage: React.FC = () => {
                                   <span className="ui-truncate block">{label}</span>
                                 </button>
                               ))}
-                            </div>
+                            </fieldset>
                           </div>
                         ) : null}
                         <div data-testid="scanner-ranked-sortbar" className="flex flex-wrap items-center gap-1.5 text-xs text-white/42">
@@ -3087,7 +3087,6 @@ const UserScannerPage: React.FC = () => {
                             data-testid="scanner-ranked-list"
                             className="overflow-x-auto overscroll-x-contain rounded-xl border border-white/5 bg-white/[0.02] [-webkit-overflow-scrolling:touch]"
                             aria-label={language === 'en' ? 'Ranked scanner results' : '扫描排名结果'}
-                            tabIndex={0}
                           >
                             <div data-testid="scanner-result-table" className="contents md:block md:min-w-[1220px]">
                               <div className="hidden items-center gap-3 border-b border-white/5 bg-black/[0.18] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/38 md:grid md:grid-cols-[64px_minmax(180px,1fr)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)_auto]">

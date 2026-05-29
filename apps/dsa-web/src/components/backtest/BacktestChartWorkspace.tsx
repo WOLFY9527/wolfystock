@@ -215,7 +215,6 @@ function AdditiveDashboardPanels({
                   } focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(125,211,252,0.45)]`}
                   data-linked-highlight={activeRobustnessKey === row.key ? 'true' : undefined}
                   data-testid={`dashboard-robustness-row-${row.key}`}
-                  tabIndex={0}
                   aria-label={`${row.label} ${row.summary} ${row.detail}`}
                   aria-describedby={hoveredRobustnessRow?.key === row.key ? 'dashboard-robustness-hover-tooltip' : undefined}
                   onMouseEnter={() => activateRobustnessRow(row)}
@@ -276,7 +275,6 @@ function AdditiveDashboardPanels({
                   } focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(125,211,252,0.45)]`}
                   data-linked-highlight={activeRiskControlKey === row.key ? 'true' : undefined}
                   data-testid={`dashboard-risk-controls-row-${row.key}`}
-                  tabIndex={0}
                   aria-label={`${row.label} ${row.valueLabel}`}
                   aria-describedby={hoveredRiskControlRow?.key === row.key ? 'dashboard-risk-controls-hover-tooltip' : undefined}
                   onMouseEnter={() => activateRiskControlRow(row)}

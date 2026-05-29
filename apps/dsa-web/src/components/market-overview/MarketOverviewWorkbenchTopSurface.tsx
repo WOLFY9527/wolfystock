@@ -5,7 +5,7 @@ import {
   ConsoleBoard,
   KeyLevelStrip,
 } from '../linear/LinearPrimitives';
-import { TerminalChip, TerminalDisclosure, TerminalNotice } from '../terminal';
+import { TerminalChip, TerminalDisclosure, TerminalNotice } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
 import type { MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
 import type { OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';
@@ -766,18 +766,17 @@ const MarketDecisionSemanticsStrip: React.FC<{
 };
 
 const MarketDecisionDebugLoadingFallback: React.FC = () => (
-  <div
+  <output
     data-testid="market-decision-debug-loading"
-    role="status"
     aria-live="polite"
     aria-busy="true"
-    className="rounded-lg border border-white/[0.06] bg-black/10 p-3"
+    className="block rounded-lg border border-white/[0.06] bg-black/10 p-3"
   >
     <p className="text-[11px] font-semibold text-white/72">正在加载技术细节</p>
     <p className="mt-1 text-[11px] leading-5 text-white/42">
       保留当前方向摘要，补充可用性、来源覆盖与原因代码。
     </p>
-  </div>
+  </output>
 );
 
 const MarketOverviewCategoryControls: React.FC<{

@@ -703,6 +703,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           <label className="flex items-center gap-2.5 rounded-lg border border-white/5 bg-white/[0.02] p-3 text-sm text-white/70">
             <input
               type="checkbox"
+              aria-label={language === 'en' ? 'Confirm parse result' : '确认解析结果'}
               className={checkboxClass}
               checked={confirmed}
               disabled={!parsedStrategy || !parsedExecutable || parseStale}
@@ -829,7 +830,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             <input type="number" min={0} max={500} value={slippageBps} onChange={(event) => onSlippageBpsChange(event.target.value)} className={fieldClass} aria-label={language === 'en' ? 'Slippage BP' : '滑点 BP'} />
           ))}
           {renderField(language === 'en' ? 'Benchmark override' : '基准覆盖', (
-            <input value={benchmarkCode} onChange={(event) => onBenchmarkCodeChange(event.target.value.toUpperCase())} placeholder="QQQ / SPY / 000300" className={fieldClass} />
+            <input value={benchmarkCode} onChange={(event) => onBenchmarkCodeChange(event.target.value.toUpperCase())} placeholder="QQQ / SPY / 000300" className={fieldClass} aria-label={language === 'en' ? 'Benchmark override' : '基准覆盖'} />
           ))}
         </div>
         <p className="mt-4 truncate text-xs text-white/38">{language === 'en' ? 'Compact cost assumptions only; full result attribution remains on the result route.' : '这里只保留紧凑成本假设；完整归因留在结果页。'}</p>

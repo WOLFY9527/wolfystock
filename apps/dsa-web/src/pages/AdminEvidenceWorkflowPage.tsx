@@ -387,7 +387,6 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
                         {snippet.label}
                       </p>
                       <pre
-                        tabIndex={0}
                         role="group"
                         aria-label={`可复制命令：${snippet.label}`}
                         className="mt-3 max-w-full overflow-x-auto no-scrollbar whitespace-pre-wrap break-all rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 font-mono text-[11px] leading-5 text-cyan-100/86 outline-none transition-colors focus-visible:border-cyan-300/35 focus-visible:ring-2 focus-visible:ring-cyan-300/30"

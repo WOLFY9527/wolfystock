@@ -872,7 +872,6 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
             onChange={(event) => onStrategyTextChange(event.target.value)}
             onFocus={() => onStepChange('setup')}
             rows={8}
-            autoFocus={Boolean(appliedRewriteText)}
             className={`${compactInputClass} min-h-[220px] py-3 product-command-input--textarea`}
             placeholder={language === 'en' ? 'For example: Start with 100000, buy 100 shares of ORCL every trading day from 2025-01-01 to 2025-12-31, and stop when cash runs out' : '例如：资金100000，从2025-01-01到2025-12-31，每天买100股ORCL，买到资金耗尽为止'}
           />
@@ -1167,6 +1166,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
             <label className="product-checkbox-row mt-1">
               <input
                 type="checkbox"
+                aria-label={language === 'en' ? 'Confirm strategy parse result' : '确认策略解析结果'}
                 className={compactCheckboxClass}
                 checked={confirmed}
                 disabled={parseState === 'unsupported' || parseState === 'stale'}
@@ -1198,12 +1198,12 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
             <p className="mt-1 text-sm text-white/45">{language === 'en' ? 'The config page only launches runs. Full inspection still lives on the dedicated result route.' : '配置页只负责发起运行，完整分析仍在独立结果页完成。'}</p>
           </div>
         </div>
-        <div className="backtest-inline-status" role="status" aria-live="polite">
+        <output className="backtest-inline-status" aria-live="polite">
           <span className="backtest-inline-status__pill" data-tone={parseMeta.tone}>{language === 'en' ? 'Parse' : '解析'} · {parseMeta.label}</span>
           <span className="backtest-inline-status__pill" data-tone="info">{language === 'en' ? 'History' : '历史'} · {historyTotal}</span>
           {parseStale ? <span className="backtest-inline-status__pill" data-tone="warning">{language === 'en' ? 'Preview is stale' : '预览已过期'}</span> : null}
           {appliedRewriteText ? <span className="backtest-inline-status__pill" data-tone="info">{language === 'en' ? 'Rewrite applied' : '已应用改写'}</span> : null}
-        </div>
+        </output>
         <div className="preview-grid">
           <div className="preview-card">
             <p className="metric-card__label">{language === 'en' ? 'Ticker' : '标的'}</p>
